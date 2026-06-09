@@ -19,12 +19,12 @@ export type AsyncRoleQuery = SyncRoleQuery & {
 export const submitWorkCardQueryContract = {
   addInputButtonName: "Add input",
   dashboardRegionName: "you-agent-factory bento board",
-  requestNameFieldName: "Request name",
+  requestNameFieldName: /Request name/,
   requestFieldName: "Text item 1",
   submissionItemsListName: "Submission items",
   submitButtonName: "Submit work",
   submitWorkCardName: "Submit work",
-  workTypeFieldName: "Work type",
+  workTypeFieldName: /Work type/,
 } as const;
 
 export function getSubmitWorkCard<QueryScope extends SyncRoleQuery>(

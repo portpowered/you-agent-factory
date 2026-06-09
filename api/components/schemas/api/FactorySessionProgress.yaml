@@ -1,0 +1,21 @@
+type: object
+additionalProperties: false
+required:
+  - factoryState
+  - categories
+  - inFlightCount
+  - totalTokens
+properties:
+  factoryState:
+    type: string
+    description: Factory lifecycle state from the aggregate engine snapshot.
+  categories:
+    $ref: './StatusCategories.yaml'
+  inFlightCount:
+    type: integer
+    minimum: 0
+    description: Number of dispatches currently in flight for the session.
+  totalTokens:
+    type: integer
+    minimum: 0
+    description: Number of customer-visible work tokens in the current marking.

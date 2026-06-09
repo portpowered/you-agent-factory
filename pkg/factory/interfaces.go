@@ -20,8 +20,9 @@ type APIFactory interface {
 	SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
 
 	// SubscribeFactoryEvents returns canonical factory event history followed by
-	// live events. The live stream closes when ctx is canceled.
-	SubscribeFactoryEvents(ctx context.Context) (*interfaces.FactoryEventStream, error)
+	// live events. The live stream closes when ctx is canceled. When reconnect
+	// is non-nil, only events newer than the acknowledged cursor are replayed.
+	SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error)
 
 	// GetEngineStateSnapshot returns the aggregate observability snapshot for
 	// service-facing consumers.

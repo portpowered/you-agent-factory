@@ -6,6 +6,8 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workflowpolicy"
+	"github.com/portpowered/infinite-you/pkg/workflowvalidation"
 )
 
 const validationRoot = "factory"
@@ -16,6 +18,10 @@ func ValidateStructural(cfg *interfaces.FactoryConfig) Result {
 	if cfg == nil {
 		return Result{}
 	}
+	result := Result{Targets: OrchestratorTargets(cfg)}
+	if !IsPetriOrchestratorValidationScope(cfg) {
+		return result
+	}
 	var targets []Target
 	targets = append(targets, duplicateIdentifierTargets(cfg)...)
 	targets = append(targets, duplicateWorkStateTargets(cfg)...)
@@ -24,7 +30,8 @@ func ValidateStructural(cfg *interfaces.FactoryConfig) Result {
 	targets = append(targets, conflictingWorkstationOutputTargets(cfg)...)
 	targets = append(targets, missingOutcomeRouteTargets(cfg)...)
 	targets = append(targets, ManagedRuntimeDependencyTargets(cfg)...)
-	return Result{Targets: targets}
+	result.Targets = append(result.Targets, targets...)
+	return result
 }
 
 // Validate runs structural factory validation for a complete factory definition and
@@ -32,6 +39,9 @@ func ValidateStructural(cfg *interfaces.FactoryConfig) Result {
 func Validate(cfg *interfaces.FactoryConfig) Result {
 	result := ValidateStructural(cfg)
 	if cfg == nil {
+		return result
+	}
+	if !IsPetriOrchestratorValidationScope(cfg) {
 		return result
 	}
 	result.Targets = append(result.Targets, WorkTypeHandlingBehaviorTargets(cfg, WorkTypeHandlingBehaviorOptions{})...)
@@ -132,4 +142,284 @@ func invocationReturnTarget(code, field, message string) Target {
 		},
 		Path: fmt.Sprintf("%s.invocationReturn.%s", validationRoot, field),
 	}
+}
+
+
+func OrchestratorTargets(cfg *interfaces.FactoryConfig) []Target {
+	if cfg == nil {
+		return nil
+	}
+	if cfg.Orchestrator == nil {
+		return nil
+	}
+
+	var targets []Target
+	kind := strings.TrimSpace(cfg.Orchestrator.Kind)
+	if kind == "" {
+		return nil
+	}
+
+	canonicalKind := interfaces.StrictPublicFactoryOrchestratorKind(kind)
+	if canonicalKind == "" {
+		targets = append(targets, orchestratorTarget(
+			CodeOrchestratorUnsupportedKind,
+			"kind",
+			fmt.Sprintf("unsupported orchestrator.kind %q (supported: %q, %q)", kind, interfaces.OrchestratorKindPetri, interfaces.OrchestratorKindJavaScript),
+		))
+		return targets
+	}
+
+	switch canonicalKind {
+	case interfaces.OrchestratorKindPetri:
+		targets = append(targets, incompatibleJavaScriptOrchestratorTargets(cfg)...)
+	case interfaces.OrchestratorKindJavaScript:
+		targets = append(targets, incompatiblePetriOrchestratorTargets(cfg)...)
+		targets = append(targets, javascriptOrchestratorConfigTargets(cfg)...)
+	}
+	return targets
+}
+
+func incompatiblePetriOrchestratorTargets(cfg *interfaces.FactoryConfig) []Target {
+	var targets []Target
+	if cfg.Orchestrator != nil && cfg.Orchestrator.Petri != nil {
+		targets = append(targets, orchestratorTarget(
+			CodeOrchestratorIncompatiblePetriConfig,
+			"petri",
+			"orchestrator.petri is only valid when orchestrator.kind = PETRI",
+		))
+	}
+	if len(cfg.WorkTypes) > 0 {
+		targets = append(targets, orchestratorTarget(
+			CodeOrchestratorIncompatiblePetriField,
+			"workTypes",
+			"workTypes are only valid for orchestrator.kind = PETRI",
+		))
+	}
+	if len(cfg.Workers) > 0 {
+		targets = append(targets, orchestratorTarget(
+			CodeOrchestratorIncompatiblePetriField,
+			"workers",
+			"workers are only valid for orchestrator.kind = PETRI",
+		))
+	}
+	if len(cfg.Workstations) > 0 {
+		targets = append(targets, orchestratorTarget(
+			CodeOrchestratorIncompatiblePetriField,
+			"workstations",
+			"workstations are only valid for orchestrator.kind = PETRI",
+		))
+	}
+	return targets
+}
+
+func incompatibleJavaScriptOrchestratorTargets(cfg *interfaces.FactoryConfig) []Target {
+	if cfg.Orchestrator == nil || cfg.Orchestrator.JavaScript == nil {
+		return nil
+	}
+	return []Target{orchestratorTarget(
+		CodeOrchestratorIncompatibleJavaScriptConfig,
+		"javascript",
+		"orchestrator.javascript is only valid when orchestrator.kind = JAVASCRIPT",
+	)}
+}
+
+func javascriptOrchestratorConfigTargets(cfg *interfaces.FactoryConfig) []Target {
+	jsCfg := cfg.Orchestrator.JavaScript
+	if jsCfg == nil {
+		return []Target{orchestratorTarget(
+			CodeOrchestratorJavaScriptMissingConfig,
+			"javascript",
+			"orchestrator.javascript is required when orchestrator.kind = JAVASCRIPT",
+		)}
+	}
+
+	var targets []Target
+	sourceRef := strings.TrimSpace(jsCfg.SourceRef)
+	hasInline := jsCfg.InlineSource != nil && strings.TrimSpace(jsCfg.InlineSource.Inline) != ""
+	switch {
+	case sourceRef == "" && !hasInline:
+		targets = append(targets, orchestratorTarget(
+			CodeOrchestratorJavaScriptMissingSource,
+			"javascript.sourceRef",
+			"JavaScript factories require orchestrator.javascript.sourceRef or orchestrator.javascript.inlineSource",
+		))
+	case sourceRef != "" && hasInline:
+		targets = append(targets, orchestratorTarget(
+			CodeOrchestratorJavaScriptConflictingSource,
+			"javascript.sourceRef",
+			"JavaScript factories must declare either orchestrator.javascript.sourceRef or orchestrator.javascript.inlineSource, not both",
+		))
+	}
+	if jsCfg.InlineSource != nil {
+		encoding := strings.TrimSpace(jsCfg.InlineSource.Encoding)
+		if encoding != "" && encoding != interfaces.OrchestratorInlineEncoding {
+			targets = append(targets, orchestratorTarget(
+				CodeOrchestratorJavaScriptInvalidInlineEncoding,
+				"javascript.inlineSource.encoding",
+				fmt.Sprintf("orchestrator.javascript.inlineSource.encoding must be %q when provided", interfaces.OrchestratorInlineEncoding),
+			))
+		}
+	}
+	targets = append(targets, javascriptWorkflowConfigAndInlineTargets(jsCfg)...)
+	targets = append(targets, javascriptWorkflowPolicyTargets(jsCfg)...)
+	return targets
+}
+
+func javascriptWorkflowPolicyTargets(jsCfg *interfaces.FactoryOrchestratorJavaScriptConfig) []Target {
+	if jsCfg == nil {
+		return nil
+	}
+	resolution := workflowpolicy.ResolveFromFactoryDefault(jsCfg.DefaultPolicy)
+	return workflowPolicyIssuesToTargets(resolution.Issues)
+}
+
+func workflowPolicyIssuesToTargets(issues []workflowpolicy.Issue) []Target {
+	if len(issues) == 0 {
+		return nil
+	}
+	targets := make([]Target, 0, len(issues))
+	for _, issue := range issues {
+		targetPath := "javascript.defaultPolicy"
+		switch {
+		case issue.Path == "orchestrator.javascript.defaultPolicy":
+			targetPath = "javascript.defaultPolicy"
+		case strings.HasPrefix(issue.Path, "policy."):
+			targetPath = "javascript.defaultPolicy." + strings.TrimPrefix(issue.Path, "policy.")
+		}
+		targets = append(targets, Target{
+			Code:     issue.Code,
+			Severity: SeverityError,
+			Message:  issue.Message,
+			Path:     fmt.Sprintf("%s.orchestrator.%s", validationRoot, targetPath),
+			Subject: Subject{
+				Type:     SubjectTypeFactory,
+				ID:       "factory",
+				Location: SubjectLocationDefinition,
+			},
+		})
+	}
+	return targets
+}
+
+// WorkflowSourceTargets validates file-backed workflow source when a reader is provided.
+func WorkflowSourceTargets(jsCfg *interfaces.FactoryOrchestratorJavaScriptConfig, reader WorkflowSourceReader) []Target {
+	if jsCfg == nil || reader == nil {
+		return nil
+	}
+	sourceRef := strings.TrimSpace(jsCfg.SourceRef)
+	if sourceRef == "" {
+		return nil
+	}
+	if jsCfg.InlineSource != nil && strings.TrimSpace(jsCfg.InlineSource.Inline) != "" {
+		return nil
+	}
+	content, err := reader.ReadWorkflowSource(sourceRef)
+	if err != nil {
+		return []Target{workflowSourceTarget(workflowvalidation.Issue{
+			Code:    workflowvalidation.CodeSourceUnreadable,
+			Message: fmt.Sprintf("unable to read workflow source %q: %v", sourceRef, err),
+			Path:    "orchestrator.javascript.sourceRef",
+		})}
+	}
+	loaded, loadIssues := workflowvalidation.Load(workflowvalidation.LoadRequest{
+		SourceRef: sourceRef,
+		Content:   content,
+	})
+	if len(loadIssues) > 0 {
+		return workflowSourceIssuesToTargets(loadIssues)
+	}
+	if expectedHash := strings.TrimSpace(jsCfg.SourceHash); expectedHash != "" && expectedHash != loaded.SourceHash {
+		return []Target{workflowSourceTarget(workflowvalidation.Issue{
+			Code:    workflowvalidation.CodeSourceHashMismatch,
+			Message: fmt.Sprintf("orchestrator.javascript.sourceHash %q does not match loaded workflow source hash %q", expectedHash, loaded.SourceHash),
+			Path:    "orchestrator.javascript.sourceHash",
+		})}
+	}
+	fileResult := workflowvalidation.ValidateLoaded(loaded, workflowvalidation.Request{
+		ConfigPath: "orchestrator.javascript.sourceRef",
+		Metadata:   jsCfg.Metadata,
+		ArgsSchema: jsCfg.ArgsSchema,
+	})
+	return workflowSourceIssuesToTargets(fileResult.Issues)
+}
+
+func javascriptWorkflowConfigAndInlineTargets(jsCfg *interfaces.FactoryOrchestratorJavaScriptConfig) []Target {
+	if jsCfg == nil {
+		return nil
+	}
+	var targets []Target
+	configResult := workflowvalidation.Validate(workflowvalidation.Request{
+		ConfigPath: "orchestrator.javascript",
+		Metadata:   jsCfg.Metadata,
+		ArgsSchema: jsCfg.ArgsSchema,
+	})
+	targets = append(targets, workflowSourceIssuesToTargets(configResult.Issues)...)
+
+	if jsCfg.InlineSource == nil {
+		return targets
+	}
+	inline := strings.TrimSpace(jsCfg.InlineSource.Inline)
+	if inline == "" {
+		return targets
+	}
+	inlineResult := workflowvalidation.Validate(workflowvalidation.Request{
+		Source:     inline,
+		SourceRef:  "inline",
+		ConfigPath: "orchestrator.javascript.inlineSource",
+	})
+	targets = append(targets, workflowSourceIssuesToTargets(inlineResult.Issues)...)
+	return targets
+}
+
+func workflowSourceIssuesToTargets(issues []workflowvalidation.Issue) []Target {
+	if len(issues) == 0 {
+		return nil
+	}
+	targets := make([]Target, 0, len(issues))
+	for _, issue := range issues {
+		targets = append(targets, workflowSourceTarget(issue))
+	}
+	return targets
+}
+
+func workflowSourceTarget(issue workflowvalidation.Issue) Target {
+	targetPath := "javascript"
+	switch {
+	case strings.HasPrefix(issue.Path, "orchestrator.javascript."):
+		targetPath = strings.TrimPrefix(issue.Path, "orchestrator.")
+	case issue.Path == "inline":
+		targetPath = "javascript.inlineSource"
+	case issue.Path != "":
+		targetPath = "javascript.sourceRef"
+	}
+	return Target{
+		Code:     issue.Code,
+		Severity: SeverityError,
+		Message:  issue.Message + issue.LocationSuffix(),
+		Path:     fmt.Sprintf("%s.%s", validationRoot, targetPath),
+		Subject: Subject{
+			Type:     SubjectTypeFactory,
+			ID:       "factory",
+			Location: SubjectLocationDefinition,
+		},
+	}
+}
+
+func orchestratorTarget(code, path, message string) Target {
+	return Target{
+		Code:     code,
+		Severity: SeverityError,
+		Message:  message,
+		Subject: Subject{
+			Type:     SubjectTypeFactory,
+			ID:       "factory",
+			Location: SubjectLocationDefinition,
+		},
+		Path: fmt.Sprintf("%s.orchestrator.%s", validationRoot, path),
+	}
+}
+
+// IsPetriOrchestratorValidationScope reports whether Petri graph validation should run.
+func IsPetriOrchestratorValidationScope(cfg *interfaces.FactoryConfig) bool {
+	return interfaces.IsPetriOrchestratorFactory(cfg)
 }

@@ -1,0 +1,15 @@
+type: object
+additionalProperties: false
+properties:
+  secrets:
+    type: integer
+    format: int32
+    minimum: 0
+  paths:
+    type: integer
+    format: int32
+    minimum: 0
+  tokens:
+    type: integer
+    format: int32
+    minimum: 0

@@ -1,6 +1,6 @@
 import { expect, within } from "storybook/test";
 
-import "../../../../styles.css";
+import "../../../../../styles.css";
 import type {
   DashboardWorkItemRef,
   DashboardWorkMoveOperation,

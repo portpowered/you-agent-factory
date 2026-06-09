@@ -11,7 +11,8 @@ ui/dist/
 ui/dist_embed_generated.go
 ui/dist_stamp.go
 
-docs/temp
+docs/temp/*
+!docs/temp/dynamic-workflows-plan.md
 tasks/todo
 tasks/done
 factory/internal/**

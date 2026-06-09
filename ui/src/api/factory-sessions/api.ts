@@ -8,6 +8,11 @@ import {
 
 export type FactorySessionSummary =
   components["schemas"]["FactorySessionSummary"];
+export type FactorySession = components["schemas"]["FactorySession"];
+export type FactorySessionLiveResult =
+  components["schemas"]["FactorySessionLiveResult"];
+export type FactorySessionPartialResult =
+  components["schemas"]["FactorySessionPartialResult"];
 export type FactorySessionTarget =
   components["schemas"]["FactorySessionTarget"];
 export type FactorySessionTargetRef =
@@ -46,6 +51,18 @@ export interface OpenFactorySessionOptions {
 }
 
 export interface CloseFactorySessionOptions {
+  fetch?: typeof globalThis.fetch;
+}
+
+export interface GetFactorySessionOptions {
+  fetch?: typeof globalThis.fetch;
+}
+
+export interface GetFactorySessionResultOptions {
+  fetch?: typeof globalThis.fetch;
+}
+
+export interface GetFactorySessionPartialResultOptions {
   fetch?: typeof globalThis.fetch;
 }
 
@@ -193,6 +210,86 @@ export async function openFactorySession(
   return responseBody;
 }
 
+export async function getFactorySession(
+  sessionID: string,
+  options: GetFactorySessionOptions = {},
+): Promise<FactorySession> {
+  const fetchImplementation = options.fetch ?? globalThis.fetch;
+  if (typeof fetchImplementation !== "function") {
+    throw new FactorySessionsAPIError(
+      "Factory sessions are unavailable in this environment.",
+      {
+        code: "NETWORK_ERROR",
+      },
+    );
+  }
+
+  let response: Response;
+  try {
+    response = await fetchImplementation(
+      factoryAPIURL(
+        `${FACTORY_SESSIONS_ENDPOINT}/${encodeURIComponent(sessionID)}`,
+      ),
+      {
+        method: "GET",
+      },
+    );
+  } catch (error) {
+    throw new FactorySessionsAPIError(
+      "The dashboard could not reach the factory sessions API.",
+      {
+        code: "NETWORK_ERROR",
+        responseBody: error,
+      },
+    );
+  }
+
+  const responseBody = await readAPIResponseBody(response);
+  if (!response.ok) {
+    throw buildFactorySessionsAPIError(
+      response,
+      responseBody,
+      "The factory sessions API rejected the request.",
+    );
+  }
+
+  if (!isFactorySession(responseBody)) {
+    throw new FactorySessionsAPIError(
+      "The factory sessions API returned an invalid response.",
+      {
+        code: "INTERNAL_ERROR",
+        responseBody,
+        status: response.status,
+        statusText: response.statusText,
+      },
+    );
+  }
+
+  return responseBody;
+}
+
+export async function getFactorySessionResult(
+  sessionID: string,
+  options: GetFactorySessionResultOptions = {},
+): Promise<FactorySessionLiveResult> {
+  return readFactorySessionResultSurface(
+    sessionID,
+    "result",
+    options.fetch,
+  );
+}
+
+export async function getFactorySessionPartialResult(
+  sessionID: string,
+  options: GetFactorySessionPartialResultOptions = {},
+): Promise<FactorySessionPartialResult> {
+  return readFactorySessionResultSurface(
+    sessionID,
+    "partial-result",
+    options.fetch,
+  );
+}
+
 export async function closeFactorySession(
   sessionID: string,
   options: CloseFactorySessionOptions = {},
@@ -297,6 +394,74 @@ function isFactorySessionsAPIErrorTarget(
     return false;
   }
   return true;
+}
+
+async function readFactorySessionResultSurface<T extends FactorySessionLiveResult | FactorySessionPartialResult>(
+  sessionID: string,
+  surface: "result" | "partial-result",
+  fetchImplementation: typeof globalThis.fetch | undefined,
+): Promise<T> {
+  const fetchFn = fetchImplementation ?? globalThis.fetch;
+  if (typeof fetchFn !== "function") {
+    throw new FactorySessionsAPIError(
+      "Factory sessions are unavailable in this environment.",
+      {
+        code: "NETWORK_ERROR",
+      },
+    );
+  }
+
+  let response: Response;
+  try {
+    response = await fetchFn(
+      factoryAPIURL(
+        `${FACTORY_SESSIONS_ENDPOINT}/${encodeURIComponent(sessionID)}/${surface}`,
+      ),
+      {
+        method: "GET",
+      },
+    );
+  } catch (error) {
+    throw new FactorySessionsAPIError(
+      "The dashboard could not reach the factory sessions API.",
+      {
+        code: "NETWORK_ERROR",
+        responseBody: error,
+      },
+    );
+  }
+
+  const responseBody = await readAPIResponseBody(response);
+  if (!response.ok) {
+    throw buildFactorySessionsAPIError(
+      response,
+      responseBody,
+      "The factory sessions API rejected the request.",
+    );
+  }
+
+  if (!isAPIRecord(responseBody) || typeof responseBody.sessionId !== "string") {
+    throw new FactorySessionsAPIError(
+      "The factory sessions API returned an invalid response.",
+      {
+        code: "INTERNAL_ERROR",
+        responseBody,
+        status: response.status,
+        statusText: response.statusText,
+      },
+    );
+  }
+
+  return responseBody as T;
+}
+
+function isFactorySession(value: unknown): value is FactorySession {
+  return (
+    isAPIRecord(value) &&
+    typeof value.id === "string" &&
+    isAPIRecord(value.runtime) &&
+    typeof value.runtime.orchestratorKind === "string"
+  );
 }
 
 function isListFactorySessionsResponse(

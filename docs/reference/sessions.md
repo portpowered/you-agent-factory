@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-06-03
+last-modified: 2026-06-08
 doc-id: agent-factory/guides/sessions
 ---
 
@@ -28,6 +28,7 @@ see `you docs config`.
 | Read the active factory name and directory on a live host | [Factory query](#factory-query) |
 | Inspect lifecycle phase, engine activity, and token buckets | [Session status API](#session-status-api) |
 | Open the operator dashboard in a browser | [Dashboard](#dashboard) |
+| Inspect orchestrator-aware runtime for one live session | [Session show](#session-show) and `you docs orchestrators` |
 | Target a non-default session on submit or work commands | [`--server` and `--session`](#server-and-session-routing) |
 | Choose a run mode that stays up for later submissions | [Run modes](#run-modes) |
 
@@ -54,8 +55,12 @@ you session list --port 9090
 When sessions exist, stdout is a tab-separated table:
 
 ```text
-SESSION ID    PROJECT    FOLDER PATH    FACTORY DIR    DEFAULT    TARGET KIND    TARGET NAME
+SESSION ID    PROJECT    FOLDER PATH    FACTORY DIR    DEFAULT    ORCHESTRATOR KIND    TARGET KIND    TARGET NAME
 ```
+
+`ORCHESTRATOR KIND` is `PETRI` or `JAVASCRIPT` when the list response includes
+a runtime projection. Empty cells mean the host did not include runtime metadata
+for that summary row.
 
 When no sessions are open:
 
@@ -77,6 +82,31 @@ or `you run --dir <factory>` before retrying.
 Use the `SESSION ID` column when routing other commands with `--session` (for
 example `you submit --session session-beta` or `you work list --session session-beta`).
 On single-session local hosts the default compatibility session is often `~default`.
+
+## Session show
+
+`you session show` reads `GET /factory-sessions/{session_id}` for one live
+`FactorySession` projection, including orchestrator kind and kind-specific runtime
+fields.
+
+### Copy-paste examples
+
+```bash
+# Default compatibility session (~default).
+you session show
+
+# Named live session.
+you session show session-beta
+
+# API-shaped JSON.
+you --json session show session-beta
+```
+
+Human output uses `FactorySession` as the canonical runtime noun. Petri sessions
+show marking token counts and enabled transitions. JavaScript sessions show
+phase, checkpoint refs, child dispatch counts, and dynamic workflow shorthand
+only as JavaScript terminology. See `you docs orchestrators` for the accepted
+alias rules.
 
 ## Factory query
 
@@ -159,6 +189,13 @@ completion.
 Use the invocation API when you want one request to submit text input, wait for
 the factory's invocation policy to resolve, and return one canonical
 `primaryResult` without reconstructing work history yourself.
+
+Synchronous invocation and future `POST /factory-sessions/sync` style callers
+should treat `SESSION_COMPLETED` on the canonical `FactoryEvent` stream as the
+authoritative terminal marker for one durable `FactorySession` execution.
+`SESSION_RESULT_UPDATED` carries partial, final, or failed-with-partial customer
+result availability before that terminal marker. Legacy `RUN_REQUEST` and
+`RUN_RESPONSE` events remain compatibility surfaces during migration.
 
 ```http
 POST /factory-sessions/{session_id}/invocations
@@ -272,8 +309,27 @@ For steady operator loops (check running → submit → verify), prefer `you` or
 `you run --continuously`. See `you docs agents` for the full operator loop and
 pre-submit checklist.
 
+## Event stream lifecycle and reconnect
+
+API, CLI, dashboard, and future MCP tools observe the same canonical
+`FactoryEvent` stream for one live session.
+
+| Surface | How lifecycle is observed |
+|---------|---------------------------|
+| API | `GET /events` and `GET /factory-sessions/{session_id}/events` stream canonical lifecycle variants; reconnect with `after_event_id` or `after_sequence`. |
+| CLI | `you session show` prints lifecycle timestamps, dispatch status, artifact refs, and best-effort partial/final result refs from the session API. |
+| Dashboard | Replays lifecycle events into the timeline projection and shows reconnecting/stale, partial, and terminal states in the session lifecycle banner. |
+| MCP (planned) | Status/result/event tools should map `NOT_READY`, `PARTIAL`, `FINAL`, `FAILED_WITH_PARTIAL`, `INTERRUPTED`, and `RECONCILED` to the same `FactorySessionResultStatus` and dispatch status vocabulary as the session API and event stream. |
+
+Lifecycle brackets use `SESSION_STARTED`, `SESSION_RESULT_UPDATED`, and
+`SESSION_COMPLETED`. Orchestrator progress, dispatch queue/interruption/reconciliation,
+and `ARTIFACT_CREATED` events remain on the same stream so reconnect replay can rebuild
+phase, dispatch counts, artifact refs, and terminal outcomes without waiting for only
+`SESSION_COMPLETED`.
+
 ## Related Topics
 
+- `you docs orchestrators` — Factory, FactoryOrchestrator, FactorySession, Dispatch, FactoryArtifact, FactoryEvent, and dynamic workflow aliases
 - `you docs agents` — agent orientation, operator loop, and topic router
 - `you docs work` — `you submit`, `POST /factory-sessions/{session_id}/work`, and verification commands
 - `you docs config` — `factory.json` topology and portability

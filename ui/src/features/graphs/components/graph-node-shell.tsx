@@ -6,6 +6,7 @@ import { GraphNodeButton } from "./graph-node-button";
 
 export type PlaceNodeType =
   | "constraint"
+  | "doc"
   | "resource"
   | "statePosition"
   | "worker"

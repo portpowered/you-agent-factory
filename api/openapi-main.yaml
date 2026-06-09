@@ -88,6 +88,10 @@ paths:
       operationId: invokeFactorySessionBySessionId
       summary: Invoke one factory session and return its primary result
       description: >-
+        Live-session compatibility API for text-first invocations against an
+        already-open factory session. This route is not the primary durable
+        workflow execution entrypoint; use POST /factory-sessions/async or POST
+        /factory-sessions/sync for dynamic workflow-backed durable execution.
         Resolves one text-first invocation input, submits it to the selected live
         factory session, waits for terminal primary-result selection, and returns
         the result using the factory's invocationReturn policy. When
@@ -241,7 +245,10 @@ paths:
         - Runtime
       operationId: getEvents
       summary: Stream factory events
-      description: Streams current-process canonical factory events as default Server-Sent Events. Historical events are sent first in ascending tick order, followed by live events on the same connection.
+      description: Streams current-process canonical factory events as default Server-Sent Events. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
+      parameters:
+        - $ref: '#/components/parameters/AfterEventId'
+        - $ref: '#/components/parameters/AfterSequence'
       responses:
         '200':
           description: Factory event stream.
@@ -259,9 +266,11 @@ paths:
         - Runtime
       operationId: getEventsBySessionId
       summary: Stream factory events for one session
-      description: Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      description: Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
         - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/AfterEventId'
+        - $ref: '#/components/parameters/AfterSequence'
       responses:
         '200':
           description: Factory event stream for the targeted session.
@@ -456,6 +465,30 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /workflow-previews:
+    post:
+      tags:
+        - Workflows
+      operationId: previewWorkflow
+      summary: Preview workflow validation and policy
+      description: Resolves workflow source, validates JavaScript or TypeScript source without execution, and projects effective policy, artifact-root, and structured-result constraints for preview or session-start surfaces.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkflowPreviewRequest'
+      responses:
+        '200':
+          description: Shared workflow validation, source resolution, and policy preview contract.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkflowPreviewResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-validations:
     post:
       tags:
@@ -480,20 +513,102 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/async:
+    post:
+      tags:
+        - Factory
+      operationId: startDurableFactorySessionAsync
+      summary: Start durable factory session execution asynchronously
+      description: >-
+        Primary durable execution entrypoint for dynamic workflow-backed factory
+        sessions. Accepts the normalized FactorySessionExecutionRequest, resolves
+        the requested source, and returns session identity plus polling links
+        without waiting for terminal completion. WORKFLOW_FILE and WORKFLOW_NAME
+        sources resolve in order: project `.claude/workflows`, user
+        `~/.you-agent-factory/workflows`, package-relative workflow directories,
+        built-in/global JavaScript factories, then explicit factory lookup when
+        requested or required. Replaying the same requestId with the same
+        normalized source, args, orchestrator, and requested policy returns the
+        existing session instead of starting duplicate work. Reusing requestId
+        with materially different inputs returns 409 Conflict with
+        EXECUTION_REQUEST_ID_CONFLICT.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionExecutionRequest'
+      responses:
+        '202':
+          description: Durable session execution was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionExecutionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/ExecutionRequestIdConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/sync:
+    post:
+      tags:
+        - Factory
+      operationId: startDurableFactorySessionSync
+      summary: Start durable factory session execution synchronously
+      description: >-
+        Durable execution entrypoint that waits for terminal completion or a sync
+        timeout before returning. Accepts the same normalized
+        FactorySessionExecutionRequest as POST /factory-sessions/async and uses
+        the same workflow source resolution order and requestId idempotency
+        semantics. When the session reaches a terminal result before timeout, the
+        response includes FactorySessionResult. Timeout responses use
+        syncOutcome = TIMED_OUT and must not imply the session was canceled
+        unless wait.cancelOnTimeout was explicitly true in the request.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionExecutionRequest'
+      responses:
+        '200':
+          description: Sync durable execution completed, timed out, or returned while still running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionSyncExecutionResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/ExecutionRequestIdConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions:
     get:
       tags:
         - Factory
       operationId: listFactorySessions
-      summary: List live factory sessions
-      description: Lists every live factory session that the shared runtime host is currently keeping open, including the reserved default session.
+      summary: List factory sessions
+      description: >-
+        Lists factory sessions for the requested scope. live returns workspace
+        sessions kept open by the runtime host, including the reserved default
+        session. persisted returns durable execution sessions stored outside the
+        live workspace. all returns both live and persisted summaries. Persisted
+        summaries cover active, terminal, interrupted, and stale-lease durable
+        sessions without exposing raw workflow source or unrestricted host paths.
+      parameters:
+        - $ref: '#/components/parameters/FactorySessionListScope'
       responses:
         '200':
-          description: Live factory sessions that can be rendered as workspace tabs.
+          description: Factory session summaries for the requested scope.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListFactorySessionsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
     post:
@@ -501,7 +616,15 @@ paths:
         - Factory
       operationId: openFactorySession
       summary: Open another live factory session
-      description: Opens another live factory session from a folder path and optional target selection. When `validateOnly` is true, the request validates the folder and optional target selection without creating a session. When the folder exposes more than one runnable target and no explicit target was provided, the response returns typed target metadata instead of creating a session yet.
+      description: >-
+        Live-session compatibility API for opening workspace tabs from a folder
+        path and optional target selection. This route is not the primary durable
+        workflow execution entrypoint; use POST /factory-sessions/async or POST
+        /factory-sessions/sync for dynamic workflow-backed durable execution.
+        When `validateOnly` is true, the request validates the folder and optional
+        target selection without creating a session. When the folder exposes more
+        than one runnable target and no explicit target was provided, the response
+        returns typed target metadata instead of creating a session yet.
       requestBody:
         required: true
         content:
@@ -519,7 +642,443 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/result:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySessionResult
+      summary: Get one live factory session result
+      description: Returns the terminal session result for one live factory session. JavaScript workflow sessions expose final result and checkpoint artifact refs without raw checkpoint bodies or unrestricted host paths. Durable workflow execution results use GET /factory-sessions/{session_id}/results instead.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Terminal session result projection for the targeted live session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLiveResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/results:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySessionResults
+      summary: Get durable factory session results
+      description: >-
+        Returns final or partial durable workflow outputs for one factory session.
+        Supports mode=final|partial and includeArtifacts=true|false without requiring
+        clients to scrape event streams or logs. Non-ready, unavailable, and
+        failed-with-partial states return typed FactorySessionResult bodies with
+        session identity, current session status, and actionable failure or
+        availability details when known.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/FactorySessionResultMode'
+        - $ref: '#/components/parameters/FactorySessionResultIncludeArtifacts'
+      responses:
+        '200':
+          description: Durable session result retrieval response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/dispatches:
+    get:
+      tags:
+        - Factory
+      operationId: listFactorySessionDispatches
+      summary: List durable factory session dispatches
+      description: >-
+        Returns dispatch summaries for one factory session with dispatch id,
+        status, dispatch kind, phase, label, attempt, runner/model metadata when
+        available, provider-session correlation refs, usage, warnings, output
+        artifact ids, and failure details. Petri and JavaScript dispatches share
+        the neutral summary shape; orchestrator-specific detail is available on
+        GET /factory-sessions/{session_id}/dispatches/{dispatch_id}.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Dispatch summaries for the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFactorySessionDispatchesResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/dispatches/{dispatch_id}:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySessionDispatch
+      summary: Get one durable factory session dispatch
+      description: >-
+        Returns one dispatch detail for the targeted session. Petri transition
+        dispatches expose optional petri projections and JavaScript workflow
+        dispatches expose optional javascript projections without forcing
+        orchestrator-specific fields on neutral clients.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/DispatchID'
+      responses:
+        '200':
+          description: Dispatch detail for the targeted session and dispatch id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactoryDispatch'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/artifacts:
+    get:
+      tags:
+        - Factory
+      operationId: listFactorySessionArtifacts
+      summary: List durable factory session artifacts
+      description: >-
+        Returns artifact metadata for one factory session with artifact id, kind,
+        visibility, content hash, size, created time, dispatch relation,
+        secret-redaction counts, audit mode, and safe retrieval refs without
+        exposing unrestricted host filesystem paths by default.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Artifact metadata rows for the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFactorySessionArtifactsResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/artifacts/{artifact_id}:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySessionArtifact
+      summary: Get one durable factory session artifact
+      description: >-
+        Returns artifact metadata plus inlined content or a safe content ref
+        according to artifact visibility and payload size. Responses must not
+        expose unrestricted host filesystem paths by default.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/ArtifactID'
+      responses:
+        '200':
+          description: Artifact detail for the targeted session and artifact id.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionArtifactDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/approve:
+    post:
+      tags:
+        - Factory
+      operationId: approveFactorySession
+      summary: Approve one durable factory session
+      description: >-
+        Approves requested orchestrator policy for one durable factory session
+        in AWAITING_APPROVAL state. Returns the updated session or a typed
+        lifecycle-control outcome for no-op, invalid-state, terminal-session, or
+        conflict cases. Approval responses include the effective policy hash and
+        approval preview identity when available.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionApproveRequest'
+      responses:
+        '200':
+          description: Approval applied immediately or the session already satisfied the request.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '202':
+          description: Approval control request accepted asynchronously.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionLifecycleControlConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/pause:
+    post:
+      tags:
+        - Factory
+      operationId: pauseFactorySession
+      summary: Pause one durable factory session
+      description: >-
+        Pauses one durable factory session while preserving inspectable partial
+        results, dispatches, and artifacts. Returns the updated session or a
+        typed lifecycle-control outcome for no-op, invalid-state,
+        terminal-session, or conflict cases.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionLifecycleControlRequest'
+      responses:
+        '200':
+          description: Pause applied immediately or the session was already paused.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '202':
+          description: Pause control request accepted asynchronously.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionLifecycleControlConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/resume:
+    post:
+      tags:
+        - Factory
+      operationId: resumeFactorySession
+      summary: Resume one durable factory session
+      description: >-
+        Resumes one paused durable factory session while preserving inspectable
+        partial results, dispatches, and artifacts. Returns the updated session
+        or a typed lifecycle-control outcome for no-op, invalid-state,
+        terminal-session, or conflict cases.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionLifecycleControlRequest'
+      responses:
+        '200':
+          description: Resume applied immediately or the session was already running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '202':
+          description: Resume control request accepted asynchronously.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionLifecycleControlConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/cancel:
+    post:
+      tags:
+        - Factory
+      operationId: cancelFactorySession
+      summary: Cancel one durable factory session
+      description: >-
+        Requests graceful cancellation for one durable factory session while
+        preserving inspectable partial results, dispatches, and artifacts.
+        Returns the updated session or a typed lifecycle-control outcome for
+        no-op, invalid-state, terminal-session, or conflict cases.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionLifecycleControlRequest'
+      responses:
+        '200':
+          description: Cancel applied immediately or the session was already canceled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '202':
+          description: Cancel control request accepted asynchronously.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionLifecycleControlConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/terminate:
+    post:
+      tags:
+        - Factory
+      operationId: terminateFactorySession
+      summary: Terminate one durable factory session
+      description: >-
+        Forcefully terminates one durable factory session while preserving
+        inspectable partial results, dispatches, and artifacts. Returns the
+        updated session or a typed lifecycle-control outcome for no-op,
+        invalid-state, terminal-session, or conflict cases.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionLifecycleControlRequest'
+      responses:
+        '200':
+          description: Termination applied immediately or the session was already terminal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '202':
+          description: Terminate control request accepted asynchronously.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionLifecycleControlConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/retry-dispatch:
+    post:
+      tags:
+        - Factory
+      operationId: retryFactorySessionDispatch
+      summary: Retry one durable factory session dispatch
+      description: >-
+        Retries one failed or interrupted dispatch within the targeted durable
+        factory session. The response links the retry to the session and dispatch
+        state and preserves inspectable partial results, dispatches, and
+        artifacts after the control operation.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionRetryDispatchRequest'
+      responses:
+        '200':
+          description: Retry dispatch applied immediately or produced a typed no-op outcome.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '202':
+          description: Retry-dispatch control request accepted asynchronously.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionLifecycleControlConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/partial-result:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySessionPartialResult
+      summary: Get one factory session partial result
+      description: Returns the current partial result for one live JavaScript workflow session. Checkpoint artifact refs and summaries are returned without raw checkpoint bodies or unrestricted host paths.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Partial session result projection for the targeted live session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionPartialResult'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}:
+    get:
+      tags:
+        - Factory
+      operationId: getFactorySession
+      summary: Get one factory session
+      description: >-
+        Returns the canonical factory session inspection read model. Live
+        workspace sessions return the existing FactorySession projection with
+        orchestrator identity, lifecycle status, progress, budgets, usage, and
+        kind-specific runtime projections. Durable execution sessions return a
+        durable read model with status, resolved source ref/hash, phase
+        summaries, progress counts, budgets, usage, policy hash, artifact refs,
+        result summary, failure details, and lifecycle timestamps. Responses
+        expose public source refs and hashes without raw workflow source or
+        diagnostic artifacts.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      responses:
+        '200':
+          description: Canonical factory session inspection read model for the targeted session.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionGetResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
     delete:
       tags:
         - Factory
@@ -741,6 +1300,20 @@ components:
       $ref: './components/parameters/WorkListTraceId.yaml'
     WorkOrTokenID:
       $ref: './components/parameters/WorkOrTokenID.yaml'
+    FactorySessionListScope:
+      $ref: './components/parameters/FactorySessionListScope.yaml'
+    FactorySessionResultMode:
+      $ref: './components/parameters/FactorySessionResultMode.yaml'
+    FactorySessionResultIncludeArtifacts:
+      $ref: './components/parameters/FactorySessionResultIncludeArtifacts.yaml'
+    DispatchID:
+      $ref: './components/parameters/DispatchID.yaml'
+    ArtifactID:
+      $ref: './components/parameters/ArtifactID.yaml'
+    AfterEventId:
+      $ref: './components/parameters/AfterEventId.yaml'
+    AfterSequence:
+      $ref: './components/parameters/AfterSequence.yaml'
   responses:
     BadRequest:
       $ref: './components/responses/BadRequest.yaml'
@@ -758,6 +1331,10 @@ components:
       $ref: './components/responses/SaveCurrentFactoryConflict.yaml'
     MoveWorkConflict:
       $ref: './components/responses/MoveWorkConflict.yaml'
+    ExecutionRequestIdConflict:
+      $ref: './components/responses/ExecutionRequestIdConflict.yaml'
+    FactorySessionLifecycleControlConflict:
+      $ref: './components/responses/FactorySessionLifecycleControlConflict.yaml'
     InternalError:
       $ref: './components/responses/InternalError.yaml'
   schemas:
@@ -879,12 +1456,186 @@ components:
       $ref: './components/schemas/api/FactorySessionTarget.yaml'
     FactorySessionSummary:
       $ref: './components/schemas/api/FactorySessionSummary.yaml'
+    FactorySession:
+      $ref: './components/schemas/api/FactorySession.yaml'
+    FactorySessionRuntime:
+      $ref: './components/schemas/api/FactorySessionRuntime.yaml'
+    FactorySessionStatus:
+      $ref: './components/schemas/api/FactorySessionStatus.yaml'
+    FactorySessionProgress:
+      $ref: './components/schemas/api/FactorySessionProgress.yaml'
+    FactorySessionBudgets:
+      $ref: './components/schemas/api/FactorySessionBudgets.yaml'
+    FactorySessionUsage:
+      $ref: './components/schemas/api/FactorySessionUsage.yaml'
+    FactorySessionLifecycle:
+      $ref: './components/schemas/api/FactorySessionLifecycle.yaml'
+    FactorySessionPetriProjection:
+      $ref: './components/schemas/api/FactorySessionPetriProjection.yaml'
+    FactorySessionPetriEnabledTransition:
+      $ref: './components/schemas/api/FactorySessionPetriEnabledTransition.yaml'
+    FactorySessionJavaScriptProjection:
+      $ref: './components/schemas/api/FactorySessionJavaScriptProjection.yaml'
+    FactorySessionJavaScriptCheckpointRef:
+      $ref: './components/schemas/api/FactorySessionJavaScriptCheckpointRef.yaml'
+    FactorySessionJavaScriptScriptStatus:
+      $ref: './components/schemas/api/FactorySessionJavaScriptScriptStatus.yaml'
+    FactorySessionJavaScriptChildDispatchCounts:
+      $ref: './components/schemas/api/FactorySessionJavaScriptChildDispatchCounts.yaml'
+    FactorySessionLiveResult:
+      $ref: './components/schemas/api/FactorySessionLiveResult.yaml'
+    FactorySessionResult:
+      $ref: './components/schemas/api/FactorySessionResult.yaml'
+    FactorySessionResultMode:
+      $ref: './components/schemas/api/FactorySessionResultMode.yaml'
+    FactorySessionResultAvailabilityDetail:
+      $ref: './components/schemas/api/FactorySessionResultAvailabilityDetail.yaml'
+    FactorySessionDispatchSummary:
+      $ref: './components/schemas/api/FactorySessionDispatchSummary.yaml'
+    ListFactorySessionDispatchesResponse:
+      $ref: './components/schemas/api/ListFactorySessionDispatchesResponse.yaml'
+    FactorySessionArtifactRetrievalRef:
+      $ref: './components/schemas/api/FactorySessionArtifactRetrievalRef.yaml'
+    FactorySessionArtifactSummary:
+      $ref: './components/schemas/api/FactorySessionArtifactSummary.yaml'
+    FactorySessionArtifactDetail:
+      $ref: './components/schemas/api/FactorySessionArtifactDetail.yaml'
+    ListFactorySessionArtifactsResponse:
+      $ref: './components/schemas/api/ListFactorySessionArtifactsResponse.yaml'
+    FactorySessionPartialResult:
+      $ref: './components/schemas/api/FactorySessionPartialResult.yaml'
+    FactoryDispatch:
+      $ref: './components/schemas/data-models/FactoryDispatch.yaml'
+    FactoryDispatchKind:
+      $ref: './components/schemas/data-models/FactoryDispatchKind.yaml'
+    FactoryDispatchStatus:
+      $ref: './components/schemas/data-models/FactoryDispatchStatus.yaml'
+    FactoryDispatchJavaScriptTaskKind:
+      $ref: './components/schemas/data-models/FactoryDispatchJavaScriptTaskKind.yaml'
+    FactoryDispatchPetriProjection:
+      $ref: './components/schemas/data-models/FactoryDispatchPetriProjection.yaml'
+    FactoryDispatchJavaScriptProjection:
+      $ref: './components/schemas/data-models/FactoryDispatchJavaScriptProjection.yaml'
+    FactoryDispatchUsage:
+      $ref: './components/schemas/data-models/FactoryDispatchUsage.yaml'
+    FactoryDispatchWarning:
+      $ref: './components/schemas/data-models/FactoryDispatchWarning.yaml'
+    FactoryDispatchFailureDetail:
+      $ref: './components/schemas/data-models/FactoryDispatchFailureDetail.yaml'
+    FactoryArtifact:
+      $ref: './components/schemas/data-models/FactoryArtifact.yaml'
+    FactoryArtifactRef:
+      $ref: './components/schemas/data-models/FactoryArtifactRef.yaml'
+    FactoryArtifactKind:
+      $ref: './components/schemas/data-models/FactoryArtifactKind.yaml'
+    FactoryArtifactVisibility:
+      $ref: './components/schemas/data-models/FactoryArtifactVisibility.yaml'
+    FactoryArtifactAuditMode:
+      $ref: './components/schemas/data-models/FactoryArtifactAuditMode.yaml'
+    FactoryArtifactRedactionCounts:
+      $ref: './components/schemas/data-models/FactoryArtifactRedactionCounts.yaml'
+    FactoryArtifactCaptureMetadata:
+      $ref: './components/schemas/data-models/FactoryArtifactCaptureMetadata.yaml'
+    FactoryEventSessionResultStatus:
+      $ref: './components/schemas/events/FactoryEventSessionResultStatus.yaml'
+    OrchestratorPhaseStatus:
+      $ref: './components/schemas/events/OrchestratorPhaseStatus.yaml'
+    CheckpointResumabilityStatus:
+      $ref: './components/schemas/events/CheckpointResumabilityStatus.yaml'
+    DispatchReconciliationSource:
+      $ref: './components/schemas/events/DispatchReconciliationSource.yaml'
+    SessionStartedEventPayload:
+      $ref: './components/schemas/events/payloads/SessionStartedEventPayload.yaml'
+    SessionResultUpdatedEventPayload:
+      $ref: './components/schemas/events/payloads/SessionResultUpdatedEventPayload.yaml'
+    SessionCompletedEventPayload:
+      $ref: './components/schemas/events/payloads/SessionCompletedEventPayload.yaml'
+    OrchestratorPhaseChangedEventPayload:
+      $ref: './components/schemas/events/payloads/OrchestratorPhaseChangedEventPayload.yaml'
+    OrchestratorCheckpointWrittenEventPayload:
+      $ref: './components/schemas/events/payloads/OrchestratorCheckpointWrittenEventPayload.yaml'
+    DispatchQueuedEventPayload:
+      $ref: './components/schemas/events/payloads/DispatchQueuedEventPayload.yaml'
+    DispatchInterruptedEventPayload:
+      $ref: './components/schemas/events/payloads/DispatchInterruptedEventPayload.yaml'
+    DispatchReconciledEventPayload:
+      $ref: './components/schemas/events/payloads/DispatchReconciledEventPayload.yaml'
+    JavaScriptCheckpointRefEventPayload:
+      $ref: './components/schemas/events/payloads/JavaScriptCheckpointRefEventPayload.yaml'
+    JavaScriptPhaseChangeEventPayload:
+      $ref: './components/schemas/events/payloads/JavaScriptPhaseChangeEventPayload.yaml'
+    ArtifactCreatedEventPayload:
+      $ref: './components/schemas/events/payloads/ArtifactCreatedEventPayload.yaml'
     ListFactorySessionsResponse:
       $ref: './components/schemas/api/ListFactorySessionsResponse.yaml'
+    FactorySessionListScope:
+      $ref: './components/schemas/api/FactorySessionListScope.yaml'
+    FactorySessionDurableSummary:
+      $ref: './components/schemas/api/FactorySessionDurableSummary.yaml'
+    FactorySessionDurableReadModel:
+      $ref: './components/schemas/api/FactorySessionDurableReadModel.yaml'
+    FactorySessionGetResponse:
+      $ref: './components/schemas/api/FactorySessionGetResponse.yaml'
+    FactorySessionDurablePhaseSummary:
+      $ref: './components/schemas/api/FactorySessionDurablePhaseSummary.yaml'
+    FactorySessionDurableProgressCounts:
+      $ref: './components/schemas/api/FactorySessionDurableProgressCounts.yaml'
+    FactorySessionDurableActionAvailability:
+      $ref: './components/schemas/api/FactorySessionDurableActionAvailability.yaml'
+    FactorySessionDurableResultSummary:
+      $ref: './components/schemas/api/FactorySessionDurableResultSummary.yaml'
+    FactorySessionDurableFailureDetail:
+      $ref: './components/schemas/api/FactorySessionDurableFailureDetail.yaml'
+    FactorySessionDurableLifecycleTimestamps:
+      $ref: './components/schemas/api/FactorySessionDurableLifecycleTimestamps.yaml'
+    FactorySessionResultStatus:
+      $ref: './components/schemas/api/FactorySessionResultStatus.yaml'
     OpenFactorySessionRequest:
       $ref: './components/schemas/api/OpenFactorySessionRequest.yaml'
     OpenFactorySessionResponse:
       $ref: './components/schemas/api/OpenFactorySessionResponse.yaml'
+    FactorySessionExecutionRequest:
+      $ref: './components/schemas/api/FactorySessionExecutionRequest.yaml'
+    FactorySessionExecutionSource:
+      $ref: './components/schemas/api/FactorySessionExecutionSource.yaml'
+    FactorySessionExecutionSourceKind:
+      $ref: './components/schemas/api/FactorySessionExecutionSourceKind.yaml'
+    FactorySessionExecutionInlineWorkflow:
+      $ref: './components/schemas/api/FactorySessionExecutionInlineWorkflow.yaml'
+    FactorySessionRequestedPolicy:
+      $ref: './components/schemas/api/FactorySessionRequestedPolicy.yaml'
+    FactorySessionEffectivePolicy:
+      $ref: './components/schemas/api/FactorySessionEffectivePolicy.yaml'
+    FactorySessionWorkflowSourceResolutionOrder:
+      $ref: './components/schemas/api/FactorySessionWorkflowSourceResolutionOrder.yaml'
+    FactorySessionExecutionWaitOptions:
+      $ref: './components/schemas/api/FactorySessionExecutionWaitOptions.yaml'
+    FactorySessionResolvedSourceIdentity:
+      $ref: './components/schemas/api/FactorySessionResolvedSourceIdentity.yaml'
+    FactorySessionDurableLifecycleStatus:
+      $ref: './components/schemas/api/FactorySessionDurableLifecycleStatus.yaml'
+    FactorySessionExecutionLinks:
+      $ref: './components/schemas/api/FactorySessionExecutionLinks.yaml'
+    FactorySessionExecutionResponse:
+      $ref: './components/schemas/api/FactorySessionExecutionResponse.yaml'
+    FactorySessionSyncExecutionOutcome:
+      $ref: './components/schemas/api/FactorySessionSyncExecutionOutcome.yaml'
+    FactorySessionSyncExecutionResponse:
+      $ref: './components/schemas/api/FactorySessionSyncExecutionResponse.yaml'
+    FactorySessionLifecycleControlKind:
+      $ref: './components/schemas/api/FactorySessionLifecycleControlKind.yaml'
+    FactorySessionLifecycleControlOutcome:
+      $ref: './components/schemas/api/FactorySessionLifecycleControlOutcome.yaml'
+    FactorySessionLifecycleControlLinks:
+      $ref: './components/schemas/api/FactorySessionLifecycleControlLinks.yaml'
+    FactorySessionLifecycleControlRequest:
+      $ref: './components/schemas/api/FactorySessionLifecycleControlRequest.yaml'
+    FactorySessionApproveRequest:
+      $ref: './components/schemas/api/FactorySessionApproveRequest.yaml'
+    FactorySessionRetryDispatchRequest:
+      $ref: './components/schemas/api/FactorySessionRetryDispatchRequest.yaml'
+    FactorySessionLifecycleControlResponse:
+      $ref: './components/schemas/api/FactorySessionLifecycleControlResponse.yaml'
     LoadableProviderSessionRef:
       $ref: './components/schemas/api/LoadableProviderSessionRef.yaml'
     LoadableProviderSessionProvider:
@@ -1049,6 +1800,16 @@ components:
       $ref: './components/schemas/api/SaveFactoryForSessionRequest.yaml'
     Factory:
       $ref: './components/schemas/data-models/Factory.yaml'
+    FactoryOrchestrator:
+      $ref: './components/schemas/data-models/FactoryOrchestrator.yaml'
+    FactoryOrchestratorKind:
+      $ref: './components/schemas/data-models/FactoryOrchestratorKind.yaml'
+    FactoryOrchestratorPetriConfig:
+      $ref: './components/schemas/data-models/FactoryOrchestratorPetriConfig.yaml'
+    FactoryOrchestratorJavaScriptConfig:
+      $ref: './components/schemas/data-models/FactoryOrchestratorJavaScriptConfig.yaml'
+    FactoryOrchestratorJavaScriptInlineSource:
+      $ref: './components/schemas/data-models/FactoryOrchestratorJavaScriptInlineSource.yaml'
     InvocationReturn:
       $ref: './components/schemas/data-models/InvocationReturn.yaml'
     InvocationReturnPolicy:
@@ -1131,6 +1892,20 @@ components:
       $ref: './components/schemas/api/PromptTemplateValidationResult.yaml'
     PromptTemplateDiagnostic:
       $ref: './components/schemas/api/PromptTemplateDiagnostic.yaml'
+    WorkflowDiagnostic:
+      $ref: './components/schemas/api/WorkflowDiagnostic.yaml'
+    WorkflowArtifactRootDecision:
+      $ref: './components/schemas/api/WorkflowArtifactRootDecision.yaml'
+    WorkflowSourceResolution:
+      $ref: './components/schemas/api/WorkflowSourceResolution.yaml'
+    WorkflowResultConstraints:
+      $ref: './components/schemas/api/WorkflowResultConstraints.yaml'
+    WorkflowPolicyPreview:
+      $ref: './components/schemas/api/WorkflowPolicyPreview.yaml'
+    WorkflowPreviewRequest:
+      $ref: './components/schemas/api/WorkflowPreviewRequest.yaml'
+    WorkflowPreviewResult:
+      $ref: './components/schemas/api/WorkflowPreviewResult.yaml'
     FactoryValidationSeverity:
       $ref: './components/schemas/api/FactoryValidationSeverity.yaml'
     FactoryValidationSubjectType:

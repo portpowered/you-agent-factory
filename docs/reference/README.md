@@ -28,7 +28,8 @@ concept owners below when you need the complete customer-facing contract.
 | `mock-workers` | `--with-mock-workers` and the `mockWorkers` JSON contract | [Mock workers](mock-workers.md) |
 | `record-replay` | Default recording, `--record`, `--replay`, and `--no-record` | [Record and replay](record-replay.md) |
 | `work` | Submitted work: session-scoped work routes, tags, and batch cross-links | [Submitted work](work.md) |
-| `sessions` | Session list, factory query, status API, dashboard, and run modes | [Sessions](sessions.md) |
+| `sessions` | Session list, session show, factory query, status API, dashboard, and run modes | [Sessions](sessions.md) |
+| `orchestrators` | Factory orchestrator identity, FactorySession runtime nouns, dispatch/artifact/event aliases | [Orchestrators](orchestrators.md) |
 | `workstations` | Workstation kinds, routes, runtime fields, and scoped execution settings | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
 | `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Config](config.md) |
@@ -74,9 +75,12 @@ filesystem work around that invocation.
   routing behavior, runtime resources, and portability fields.
 - [Submitted work](work.md) owns `POST /factory-sessions/{session_id}/work`,
   submitted-work tags, and batch cross-links.
-- [Sessions](sessions.md) owns live session discovery, factory query, status API
-  fields, dashboard URL, and `--server` / `--session` routing for HTTP client
-  commands.
+- [Sessions](sessions.md) owns live session discovery, session show, factory query,
+  status API fields, dashboard URL, and `--server` / `--session` routing for HTTP
+  client commands.
+- [Orchestrators](orchestrators.md) owns `Factory`, `FactoryOrchestrator`,
+  `FactorySession`, `Dispatch`, `FactoryArtifact`, `FactoryEvent`, and accepted
+  dynamic workflow aliases.
 - [Workstations](workstations.md) owns workstation kinds, route fields, runtime
   step behavior, prompt/runtime fields, and workstation-scoped execution
   settings.

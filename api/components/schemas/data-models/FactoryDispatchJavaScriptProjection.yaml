@@ -1,0 +1,10 @@
+type: object
+additionalProperties: false
+required:
+  - taskKind
+properties:
+  taskKind:
+    $ref: './FactoryDispatchJavaScriptTaskKind.yaml'
+  taskLabel:
+    type: string
+    description: Customer-visible label for the JavaScript workflow task.

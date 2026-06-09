@@ -214,6 +214,9 @@ export function collectPendingRemovalNodeIds(
   for (const name of draft.removals.workstations) {
     pendingNodeIds.add(nodeKeyId({ kind: "workstation", name }));
   }
+  for (const targetPath of draft.removals.docs) {
+    pendingNodeIds.add(`doc:${targetPath}`);
+  }
 
   return pendingNodeIds;
 }

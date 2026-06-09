@@ -1,0 +1,14 @@
+type: object
+additionalProperties: false
+required:
+  - transitionId
+properties:
+  transitionId:
+    type: string
+    description: Petri transition identifier for this dispatch.
+  workstationName:
+    type: string
+    description: Workstation name that owns the transition.
+  workerType:
+    type: string
+    description: Worker type selected for the transition dispatch.

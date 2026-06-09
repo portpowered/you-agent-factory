@@ -1,9 +1,12 @@
 type: object
 additionalProperties: false
 description: >-
-  Canonical work marking position change. Operator moves use source api or cli;
-  automatic cascade propagation uses cascading-failure. FactoryEvent.context
-  carries workIds and optional requestId for operator idempotency.
+  Canonical Petri marking position change for work items in Petri-backed
+  factories. JavaScript workflow progress is represented by
+  JAVASCRIPT_PHASE_CHANGE events instead of WORK_STATE_CHANGE. Operator moves
+  use source api or cli; automatic cascade propagation uses cascading-failure.
+  FactoryEvent.context carries workIds and optional requestId for operator
+  idempotency.
 required:
   - workId
   - workTypeName

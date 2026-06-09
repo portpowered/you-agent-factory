@@ -251,6 +251,7 @@ describe("CurrentActivityGraphViewport React Flow errors", () => {
       now: Date.parse("2026-05-28T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectDoc: vi.fn(),
       onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
@@ -331,6 +332,10 @@ function renderViewport({
       hasPendingChanges={false}
       hiddenNodeClasses={new Set()}
       hideShowMenuOpen={false}
+      onClearPreferences={vi.fn()}
+      onSelectVisibilityPreset={vi.fn()}
+      preferencesDirty={false}
+      visibilityPreset="all"
       headingID="test-heading"
       imports={importController}
       initialFitViewKey="full-graph"

@@ -20,3 +20,5 @@ properties:
     type: string
   isDefault:
     type: boolean
+  runtime:
+    $ref: './FactorySessionRuntime.yaml'

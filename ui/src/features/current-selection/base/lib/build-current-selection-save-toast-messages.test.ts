@@ -12,4 +12,17 @@ describe("buildCurrentSelectionSaveToastMessages", () => {
       "Running factory saved. Senior Review was updated in the running factory definition.",
     );
   });
+
+  it("includes the doc display label in doc save success copy", () => {
+    const messages = buildCurrentSelectionSaveToastMessages({
+      entityDisplayName: "playbook.md",
+      entityKind: "doc",
+      locale: "en",
+    });
+
+    expect(messages.saveSuccessDescription).toBe(
+      "Running factory saved. playbook.md was updated in the running factory definition.",
+    );
+    expect(messages.saveFailedTitle).toBe("Doc save failed");
+  });
 });

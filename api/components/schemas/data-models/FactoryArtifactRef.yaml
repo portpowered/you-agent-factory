@@ -1,0 +1,21 @@
+type: object
+additionalProperties: false
+required:
+  - id
+  - kind
+  - visibility
+properties:
+  id:
+    type: string
+    description: Stable artifact identifier referenced by session projections.
+  kind:
+    $ref: './FactoryArtifactKind.yaml'
+  visibility:
+    $ref: './FactoryArtifactVisibility.yaml'
+  contentHash:
+    type: string
+    description: Stable hash of the stored artifact payload.
+  sizeBytes:
+    type: integer
+    format: int64
+    description: Stored artifact payload size in bytes.

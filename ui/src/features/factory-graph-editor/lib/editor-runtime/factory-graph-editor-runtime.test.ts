@@ -148,4 +148,62 @@ describe("factory graph editor runtime", () => {
 
     expect(statuses.get("writer")).toBe("active");
   });
+
+  it("returns an empty map when no factory definition is loaded", () => {
+    expect(
+      buildFactoryGraphWorkerStatusMap({
+        factoryDefinition: null,
+        snapshot: dashboardSnapshot(),
+      }),
+    ).toEqual(new Map());
+  });
+
+  it("ignores workstations without assigned workers and unmatched runtime signals", () => {
+    const definition: CanonicalFactoryDefinition = {
+      ...factoryDefinition,
+      workstations: [
+        ...factoryDefinition.workstations,
+        {
+          inputs: [{ state: "review", workType: "story" }],
+          name: "unassigned",
+          outputs: [{ state: "done", workType: "story" }],
+          type: "MODEL_WORKSTATION",
+          worker: "   ",
+        },
+      ],
+    };
+    const snapshot = dashboardSnapshot();
+    snapshot.runtime.workstation_requests_by_dispatch_id = {
+      ...snapshot.runtime.workstation_requests_by_dispatch_id,
+      "dispatch-unknown": {
+        counts: { dispatched_count: 1, errored_count: 1, responded_count: 1 },
+        dispatch_id: "dispatch-unknown",
+        request: {},
+        response: { failureReason: "Missing worker mapping." },
+        transition_id: "unknown-transition",
+        workstation_name: "missing",
+        workstation_node_id: "missing-node",
+        work_items: [],
+      },
+    };
+    snapshot.runtime.active_executions_by_dispatch_id = {
+      ...snapshot.runtime.active_executions_by_dispatch_id,
+      "dispatch-unknown-exec": {
+        dispatch_id: "dispatch-unknown-exec",
+        started_at: "2026-05-19T01:10:00Z",
+        transition_id: "unknown-transition",
+        workstation_name: "missing",
+        workstation_node_id: "missing-node",
+      },
+    };
+
+    const statuses = buildFactoryGraphWorkerStatusMap({
+      factoryDefinition: definition,
+      snapshot,
+    });
+
+    expect(statuses.get("writer")).toBe("active");
+    expect(statuses.get("reviewer")).toBe("errored");
+    expect(statuses.has("unassigned")).toBe(false);
+  });
 });

@@ -107,9 +107,9 @@ func TestList_HumanOutputRendersSessionTable(t *testing.T) {
 		t.Fatalf("List: %v", err)
 	}
 
-	want := "SESSION ID\tPROJECT\tFOLDER PATH\tFACTORY DIR\tDEFAULT\tTARGET KIND\tTARGET NAME\n" +
-		"~default\troot\t/workspace/root\t/workspace/root\tyes\tdefault\t\n" +
-		"session-beta\tbeta\t/workspace/root\t/workspace/root/beta\tno\tnamed\tbeta\n"
+	want := "SESSION ID\tPROJECT\tFOLDER PATH\tFACTORY DIR\tDEFAULT\tORCHESTRATOR KIND\tTARGET KIND\tTARGET NAME\n" +
+		"~default\troot\t/workspace/root\t/workspace/root\tyes\t\tdefault\t\n" +
+		"session-beta\tbeta\t/workspace/root\t/workspace/root/beta\tno\t\tnamed\tbeta\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}

@@ -68,6 +68,21 @@ function expandDispatchSection(
   return section;
 }
 
+function getDispatchHistoryCard(
+  container: QueryScope,
+  dispatchID: string,
+): HTMLElement {
+  const card = scopedQueries(container).getByRole("article", {
+    name: new RegExp(dispatchID),
+  });
+
+  if (!(card instanceof HTMLElement)) {
+    throw new Error(`expected dispatch history card for ${dispatchID}`);
+  }
+
+  return card;
+}
+
 function expandInferenceAttempt(
   container: HTMLElement,
   attemptNumber: number,
@@ -577,8 +592,23 @@ describe("WorkItemDetailCard summary", () => {
     });
     const primaryTitle = currentSelection.querySelector(".type-display-large");
     expect(primaryTitle?.textContent).toBe("Active Story");
+    const topLevelSummary = within(currentSelection)
+      .getAllByRole("region", { name: "Summary" })
+      .find(
+        (section) =>
+          section.getAttribute("aria-labelledby") ===
+          "current-selection-work-item-summary-heading",
+      );
+    if (!(topLevelSummary instanceof HTMLElement)) {
+      throw new Error("expected top-level Summary section");
+    }
+    expect(
+      within(topLevelSummary)
+        .getByRole("button", { name: "Collapse" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+
     for (const sectionName of [
-      "Summary",
       "Work contents",
       "Work relationships",
       "Workstation dispatches",
@@ -600,10 +630,7 @@ describe("WorkItemDetailCard summary", () => {
     const dispatchHistory = within(
       screen.getByRole("region", { name: "Workstation dispatches" }),
     );
-    const requestDetailsRegion = expandDispatchSection(
-      dispatchHistory,
-      "Request details",
-    );
+    const requestDetailsRegion = expandDispatchSection(dispatchHistory, "Summary");
     const requestDetails = within(requestDetailsRegion);
     const inferenceAttempts = within(
       expandDispatchSection(document.body, "Inference attempts"),
@@ -707,12 +734,11 @@ describe("WorkItemDetailCard summary", () => {
     const dispatchHistory = screen.getByRole("region", {
       name: "Workstation dispatches",
     });
-    const activeCard = within(dispatchHistory)
-      .getAllByText(dispatchID)[0]
-      .closest("article");
-    const historicalCard = within(dispatchHistory)
-      .getByText(historicalDispatchID)
-      .closest("article");
+    const activeCard = getDispatchHistoryCard(dispatchHistory, dispatchID);
+    const historicalCard = getDispatchHistoryCard(
+      dispatchHistory,
+      historicalDispatchID,
+    );
 
     if (
       !(activeCard instanceof HTMLElement) ||
@@ -987,7 +1013,7 @@ describe("WorkItemDetailCard summary", () => {
       screen.getByRole("region", { name: "Workstation dispatches" }),
     );
     const requestDetails = within(
-      expandDispatchSection(dispatchHistory, "Request details"),
+      expandDispatchSection(dispatchHistory, "Summary"),
     );
     const inferenceAttempts = within(
       expandDispatchSection(document.body, "Inference attempts"),
@@ -1062,7 +1088,7 @@ describe("WorkItemDetailCard summary", () => {
     const traceButton = within(
       expandDispatchSection(
         screen.getByRole("region", { name: "Workstation dispatches" }),
-        "Request details",
+        "Summary",
       ),
     ).getByRole("button", { name: "trace-active-story" });
 
@@ -1121,16 +1147,14 @@ describe("WorkItemDetailCard request-detail fallbacks", () => {
     const dispatchHistory = screen.getByRole("region", {
       name: "Workstation dispatches",
     });
-    const dispatchCard = within(dispatchHistory)
-      .getAllByText(dispatchID)[0]
-      .closest("article");
+    const dispatchCard = getDispatchHistoryCard(dispatchHistory, dispatchID);
 
     if (!(dispatchCard instanceof HTMLElement)) {
       throw new Error("expected markdown dispatch history card");
     }
 
     const requestDetails = within(
-      within(dispatchCard).getByRole("region", { name: "Request details" }),
+      within(dispatchCard).getByRole("region", { name: "Summary" }),
     );
 
     expect(
@@ -1732,7 +1756,7 @@ describe("WorkItemDetailCard localization", () => {
 
     const requestDetails = expandDispatchSection(
       dispatchCard,
-      "请求详情",
+      "摘要",
       "展开",
     );
     expect(within(requestDetails).getByText("开始时间")).toBeTruthy();
@@ -1811,12 +1835,11 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     const dispatchHistory = screen.getByRole("region", {
       name: "Workstation dispatches",
     });
-    const activeCard = within(dispatchHistory)
-      .getAllByText(dispatchID)[0]
-      .closest("article");
-    const historicalCard = within(dispatchHistory)
-      .getByText(historicalDispatchID)
-      .closest("article");
+    const activeCard = getDispatchHistoryCard(dispatchHistory, dispatchID);
+    const historicalCard = getDispatchHistoryCard(
+      dispatchHistory,
+      historicalDispatchID,
+    );
 
     if (
       !(activeCard instanceof HTMLElement) ||
@@ -1962,9 +1985,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     const dispatchHistory = screen.getByRole("region", {
       name: "Workstation dispatches",
     });
-    const dispatchCard = within(dispatchHistory)
-      .getAllByText(dispatchID)[0]
-      .closest("article");
+    const dispatchCard = getDispatchHistoryCard(dispatchHistory, dispatchID);
 
     if (!(dispatchCard instanceof HTMLElement)) {
       throw new Error(
@@ -2030,7 +2051,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
 
     const requestDetails = expandDispatchSection(
       dispatchCard,
-      "Request details",
+      "Summary",
     );
     const traceButton = within(requestDetails).getByRole("button", {
       name: "trace-active-story",
@@ -2121,7 +2142,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     ).toBeTruthy();
     const failedRequestDetails = expandDispatchSection(
       dispatchHistory,
-      "Request details",
+      "Summary",
     );
     expect(
       within(failedRequestDetails).getAllByRole("button", {
@@ -2161,9 +2182,10 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     const dispatchHistory = screen.getByRole("region", {
       name: "Workstation dispatches",
     });
-    const dispatchCard = within(dispatchHistory)
-      .getByText(dashboardWorkstationRequestFixtures.scriptPending.dispatch_id)
-      .closest("article");
+    const dispatchCard = getDispatchHistoryCard(
+      dispatchHistory,
+      dashboardWorkstationRequestFixtures.scriptPending.dispatch_id,
+    );
 
     if (!(dispatchCard instanceof HTMLElement)) {
       throw new Error("expected pending script dispatch history card");
@@ -2171,7 +2193,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
 
     const requestDetails = expandDispatchSection(
       dispatchCard,
-      "Request details",
+      "Summary",
     );
     expect(
       within(requestDetails).getByText(
@@ -2196,7 +2218,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(scriptAttempts.getByText("--work")).toBeTruthy();
     expect(
       within(
-        within(dispatchCard).getByRole("region", { name: "Request details" }),
+        within(dispatchCard).getByRole("region", { name: "Summary" }),
       ).queryByText("Resolved args"),
     ).toBeNull();
     expect(
@@ -2222,7 +2244,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     ).toBeNull();
   });
 
-  it("uses the selected work title as the dispatch heading while keeping the dispatch id secondary", () => {
+  it("uses the selected work title as the dispatch heading while keeping the dispatch id inside summary details", () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
 
@@ -2262,16 +2284,15 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(
       within(dispatchCard).getByText("Active Story", { selector: "strong" }),
     ).toBeTruthy();
-    expect(
-      within(dispatchCard).getByText(
-        dashboardWorkstationRequestFixtures.ready.dispatch_id,
-        { selector: "span" },
-      ),
-    ).toBeTruthy();
     const requestDetails = expandDispatchSection(
       dispatchCard,
-      "Request details",
+      "Summary",
     );
+    expect(
+      within(requestDetails).getByText(
+        dashboardWorkstationRequestFixtures.ready.dispatch_id,
+      ),
+    ).toBeTruthy();
     expect(within(requestDetails).getByText("Started at")).toBeTruthy();
     expect(
       within(getDetailRow(requestDetails, "Started at")).getByText(
@@ -2288,7 +2309,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(within(dispatchCard).queryByText("erroredCount")).toBeNull();
   });
 
-  it("falls back to the dispatch id as the title when no associated work label is available", () => {
+  it("falls back to the unknown-dispatch title while keeping the dispatch id in summary details when no associated work label is available", () => {
     const { dispatchID, execution, selectedNode, workItem } =
       getSelectedWorkItemFixture();
 
@@ -2327,19 +2348,22 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     const dispatchHistory = screen.getByRole("region", {
       name: "Workstation dispatches",
     });
-    const dispatchCard = within(dispatchHistory)
-      .getByText(dashboardWorkstationRequestFixtures.noResponse.dispatch_id)
-      .closest("article");
+    const dispatchCard = getDispatchHistoryCard(
+      dispatchHistory,
+      dashboardWorkstationRequestFixtures.noResponse.dispatch_id,
+    );
 
     if (!(dispatchCard instanceof HTMLElement)) {
       throw new Error("expected fallback-title dispatch history card");
     }
 
     expect(
-      within(dispatchCard).getByText(
-        dashboardWorkstationRequestFixtures.noResponse.dispatch_id,
-        { selector: "strong" },
-      ),
+      within(dispatchCard).getByText("Unknown dispatch", { selector: "strong" }),
+    ).toBeTruthy();
+    expect(
+      within(
+        expandDispatchSection(dispatchCard, "Summary"),
+      ).getByText(dashboardWorkstationRequestFixtures.noResponse.dispatch_id),
     ).toBeTruthy();
   });
 
@@ -2377,9 +2401,10 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     const dispatchHistory = screen.getByRole("region", {
       name: "Workstation dispatches",
     });
-    const dispatchCard = within(dispatchHistory)
-      .getByText(dashboardWorkstationRequestFixtures.scriptPending.dispatch_id)
-      .closest("article");
+    const dispatchCard = getDispatchHistoryCard(
+      dispatchHistory,
+      dashboardWorkstationRequestFixtures.scriptPending.dispatch_id,
+    );
 
     if (!(dispatchCard instanceof HTMLElement)) {
       throw new Error("expected fallback dispatch history card");
@@ -2387,7 +2412,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
 
     const fallbackRequestDetails = expandDispatchSection(
       dispatchCard,
-      "Request details",
+      "Summary",
     );
     expect(
       within(dispatchCard).getByRole("region", {
@@ -2468,9 +2493,10 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     const dispatchHistory = screen.getByRole("region", {
       name: "Workstation dispatches",
     });
-    const dispatchCard = within(dispatchHistory)
-      .getByText(dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id)
-      .closest("article");
+    const dispatchCard = getDispatchHistoryCard(
+      dispatchHistory,
+      dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id,
+    );
 
     if (!(dispatchCard instanceof HTMLElement)) {
       throw new Error("expected script success dispatch history card");
@@ -2478,7 +2504,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
 
     const requestDetails = expandDispatchSection(
       dispatchCard,
-      "Request details",
+      "Summary",
     );
     expect(
       within(requestDetails).getAllByText("Succeeded").length,
@@ -2505,7 +2531,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     expect(scriptAttempts.getAllByRole("article")).toHaveLength(2);
     expect(
       within(
-        within(dispatchCard).getByRole("region", { name: "Request details" }),
+        within(dispatchCard).getByRole("region", { name: "Summary" }),
       ).queryByText(
         dashboardWorkstationRequestFixtures.scriptSuccess.script_request
           ?.command ?? "",
@@ -2557,9 +2583,10 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     const dispatchHistory = screen.getByRole("region", {
       name: "Workstation dispatches",
     });
-    const dispatchCard = within(dispatchHistory)
-      .getByText(dashboardWorkstationRequestFixtures.scriptFailed.dispatch_id)
-      .closest("article");
+    const dispatchCard = getDispatchHistoryCard(
+      dispatchHistory,
+      dashboardWorkstationRequestFixtures.scriptFailed.dispatch_id,
+    );
 
     if (!(dispatchCard instanceof HTMLElement)) {
       throw new Error("expected script failure dispatch history card");
@@ -2567,7 +2594,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
 
     const requestDetails = expandDispatchSection(
       dispatchCard,
-      "Request details",
+      "Summary",
     );
     expect(
       within(requestDetails).getAllByText("Timed out").length,
@@ -2626,9 +2653,10 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     const dispatchHistory = screen.getByRole("region", {
       name: "Workstation dispatches",
     });
-    const dispatchCard = within(dispatchHistory)
-      .getAllByText(dashboardWorkstationRequestFixtures.rejected.dispatch_id)[0]
-      .closest("article");
+    const dispatchCard = getDispatchHistoryCard(
+      dispatchHistory,
+      dashboardWorkstationRequestFixtures.rejected.dispatch_id,
+    );
 
     if (!(dispatchCard instanceof HTMLElement)) {
       throw new Error("expected rejected dispatch history card");
@@ -2662,7 +2690,7 @@ describe("WorkItemDetailCard dispatch diagnostics", () => {
     ).toBeGreaterThan(0);
     expect(
       within(
-        within(dispatchCard).getByRole("region", { name: "Request details" }),
+        within(dispatchCard).getByRole("region", { name: "Summary" }),
       ).queryByText(
         "Inference request details are shown under Inference attempts.",
       ),
@@ -2713,9 +2741,10 @@ describe("WorkItemDetailCard localized dispatch diagnostics", () => {
     const dispatchHistory = screen.getByRole("region", {
       name: "ワークステーションのディスパッチ",
     });
-    const dispatchCard = within(dispatchHistory)
-      .getByText(dashboardWorkstationRequestFixtures.scriptPending.dispatch_id)
-      .closest("article");
+    const dispatchCard = getDispatchHistoryCard(
+      dispatchHistory,
+      dashboardWorkstationRequestFixtures.scriptPending.dispatch_id,
+    );
 
     if (!(dispatchCard instanceof HTMLElement)) {
       throw new Error("expected localized dispatch history card");
@@ -2723,7 +2752,7 @@ describe("WorkItemDetailCard localized dispatch diagnostics", () => {
 
     expect(
       within(dispatchCard).getByRole("region", {
-        name: "リクエストの詳細",
+        name: "概要",
       }),
     ).toBeTruthy();
     expect(
@@ -2743,7 +2772,7 @@ describe("WorkItemDetailCard localized dispatch diagnostics", () => {
     ).toBeNull();
     const localizedRequestDetails = expandDispatchSection(
       dispatchCard,
-      "リクエストの詳細",
+      "概要",
       "展開",
     );
     expect(
@@ -2821,9 +2850,10 @@ describe("WorkItemDetailCard localized script attempts", () => {
     const dispatchHistory = screen.getByRole("region", {
       name: "ワークステーションのディスパッチ",
     });
-    const dispatchCard = within(dispatchHistory)
-      .getByText(dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id)
-      .closest("article");
+    const dispatchCard = getDispatchHistoryCard(
+      dispatchHistory,
+      dashboardWorkstationRequestFixtures.scriptSuccess.dispatch_id,
+    );
 
     if (!(dispatchCard instanceof HTMLElement)) {
       throw new Error(

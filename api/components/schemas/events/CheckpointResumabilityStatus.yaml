@@ -1,0 +1,10 @@
+type: string
+description: Whether a recorded checkpoint can be used to resume session execution.
+enum:
+  - RESUMABLE
+  - NOT_RESUMABLE
+  - UNKNOWN
+x-enum-descriptions:
+  - The checkpoint can be used to resume execution.
+  - The checkpoint cannot be used to resume execution.
+  - Resumability could not be determined from replay-safe metadata.

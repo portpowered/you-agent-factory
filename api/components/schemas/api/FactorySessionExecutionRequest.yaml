@@ -1,0 +1,37 @@
+type: object
+additionalProperties: false
+required:
+  - requestId
+  - source
+description: >-
+  Normalized durable factory-session execution request shared by async and sync
+  start routes. Idempotency compares requestId against the normalized tuple of
+  source, args, orchestrator, and requestedPolicy. Replaying the same requestId
+  with the same normalized tuple returns the existing session or sync result
+  instead of starting duplicate work. Reusing requestId with a materially
+  different tuple returns 409 Conflict with EXECUTION_REQUEST_ID_CONFLICT.
+properties:
+  requestId:
+    type: string
+    minLength: 1
+    description: >-
+      Caller-supplied idempotency key. Normalization includes source kind and
+      kind-specific selector, JSON-canonical args, orchestrator when present,
+      and requestedPolicy when present (preferring policyHash when supplied).
+      Replays with the same normalized tuple return the existing session instead
+      of starting duplicate work.
+  source:
+    $ref: './FactorySessionExecutionSource.yaml'
+  args:
+    type: object
+    additionalProperties: true
+    description: Structured workflow invocation arguments validated by the resolved source.
+  orchestrator:
+    $ref: '../data-models/FactoryOrchestrator.yaml'
+    description: Optional orchestrator override when the resolved source does not fully determine orchestration.
+  requestedPolicy:
+    $ref: './FactorySessionRequestedPolicy.yaml'
+    description: Caller-requested orchestrator policy before approval, if required.
+  wait:
+    $ref: './FactorySessionExecutionWaitOptions.yaml'
+    description: Optional timeout and cancel-on-timeout behavior, primarily for sync execution.

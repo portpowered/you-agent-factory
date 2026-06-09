@@ -46,6 +46,10 @@ describe("buildCurrentSelectionSaveSuccessStableIdentity", () => {
       kind: "success",
       stableId: "work-state-save-success",
     });
+    expect(buildCurrentSelectionSaveSuccessStableIdentity("doc")).toEqual({
+      kind: "success",
+      stableId: "doc-save-success",
+    });
   });
 });
 

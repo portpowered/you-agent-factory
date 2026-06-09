@@ -92,12 +92,19 @@ export const Configured = {
         "Send a new request to the current factory from the dashboard.",
       ),
     ).toBeNull();
-    const workType = scope.getByRole("combobox", { name: "Work type" });
-    const requestName = scope.getByRole("textbox", { name: "Request name" });
+    const workType = scope.getByRole("combobox", { name: /Work type/ });
+    const requestName = scope.getByRole("textbox", { name: /Request name/ });
     const requestText = scope.getByRole("textbox", { name: "Text item 1" });
     const submitButton = scope.getByRole("button", { name: "Submit work" });
 
-    await expect(submitButton).toBeDisabled();
+    await expect(submitButton).toBeEnabled();
+    await userEvent.click(submitButton);
+    await expect(
+      scope.getByText("Choose a work type before submitting."),
+    ).toBeVisible();
+    await expect(
+      scope.getByText("Enter a request name before submitting."),
+    ).toBeVisible();
     await selectComboboxOption(userEvent, workType, "story");
     await userEvent.type(requestName, "Driver review");
     await userEvent.type(
@@ -118,10 +125,10 @@ export const Unconfigured = {
     const scope = within(card);
 
     await expect(
-      scope.getByRole("combobox", { name: "Work type" }),
+      scope.getByRole("combobox", { name: /Work type/ }),
     ).toBeDisabled();
     await expect(
-      scope.getByRole("textbox", { name: "Request name" }),
+      scope.getByRole("textbox", { name: /Request name/ }),
     ).toBeDisabled();
     await expect(
       scope.getByRole("textbox", { name: "Text item 1" }),
@@ -169,10 +176,10 @@ export const FailureRetry = {
     const scope = within(card);
 
     await expect(
-      scope.getByRole("combobox", { name: "Work type" }),
+      scope.getByRole("combobox", { name: /Work type/ }),
     ).toHaveTextContent("story");
     await expect(
-      scope.getByRole("textbox", { name: "Request name" }),
+      scope.getByRole("textbox", { name: /Request name/ }),
     ).toHaveValue("Retry dashboard request");
     await expect(
       scope.getByRole("textbox", { name: "Text item 1" }),
@@ -195,7 +202,7 @@ export const LocalizedZhCN = {
     const scope = within(card);
 
     await expect(
-      scope.getByRole("combobox", { name: "工作类型" }),
+      scope.getByRole("combobox", { name: /工作类型/ }),
     ).toBeVisible();
     await expect(
       scope.getByRole("textbox", { name: "请求名称" }),
@@ -206,7 +213,7 @@ export const LocalizedZhCN = {
     ).toBeVisible();
     await expect(
       scope.getByRole("button", { name: "提交工作" }),
-    ).toBeDisabled();
+    ).toBeEnabled();
   },
 };
 

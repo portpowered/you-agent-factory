@@ -1,0 +1,16 @@
+type: string
+description: >-
+  Sync durable execution wait outcome. TIMED_OUT does not imply the session was
+  canceled unless the request set wait.cancelOnTimeout to true.
+enum:
+  - COMPLETED
+  - TIMED_OUT
+  - STILL_RUNNING
+x-enum-varnames:
+  - FactorySessionSyncExecutionOutcomeCompleted
+  - FactorySessionSyncExecutionOutcomeTimedOut
+  - FactorySessionSyncExecutionOutcomeStillRunning
+x-enum-descriptions:
+  - The session reached a terminal result before the sync wait timeout.
+  - The sync wait ended by timeout before a terminal result was available.
+  - The sync wait ended while the session was still non-terminal and no timeout occurred.

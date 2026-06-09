@@ -11,7 +11,6 @@ import { resourceTokenCountFromSnapshot } from "../../resource-selection/lib/res
 import {
   findFactoryWorkerInSnapshot,
   findFactoryWorkTypeInSnapshot,
-  resolveDashboardSelection,
   workstationNamesReferencingWorkerInSnapshot,
 } from "../../state/dashboardSelection";
 import type {
@@ -35,55 +34,6 @@ import {
   terminalHistoryItemsForPlace,
   type WorkstationRequestLike,
 } from "./useCurrentSelection.helpers";
-
-export function useSelectionSynchronization({
-  projectedWorkstationRequestsByDispatchID,
-  replacePresent,
-  resetSelectionHistory,
-  selection,
-  snapshot,
-  terminalWorkDetail,
-  topologyFactory,
-}: {
-  projectedWorkstationRequestsByDispatchID:
-    | Record<string, DashboardWorkstationRequest>
-    | undefined;
-  replacePresent: (state: {
-    selection: DashboardSelection | null;
-    terminalWorkDetail: TerminalWorkDetail | null;
-  }) => void;
-  resetSelectionHistory: () => void;
-  selection: DashboardSelection | null;
-  snapshot: DashboardSnapshot | null | undefined;
-  terminalWorkDetail: TerminalWorkDetail | null;
-  topologyFactory?: DashboardSnapshot["factory"];
-}) {
-  useEffect(() => {
-    if (!snapshot) {
-      resetSelectionHistory();
-      return;
-    }
-
-    replacePresent({
-      selection: resolveDashboardSelection({
-        selection,
-        snapshot,
-        topologyFactory,
-        workstationRequestsByDispatchID:
-          projectedWorkstationRequestsByDispatchID,
-      }),
-      terminalWorkDetail,
-    });
-  }, [
-    projectedWorkstationRequestsByDispatchID,
-    replacePresent,
-    resetSelectionHistory,
-    selection,
-    snapshot,
-    terminalWorkDetail,
-    topologyFactory,
-  ]);
-}
 
 function useSelectedNode(
   selection: DashboardSelection | null,
@@ -367,6 +317,8 @@ export function useCurrentSelectionDerivedState({
       : selection?.kind === "workstation-request"
         ? (selection.request.work_items[0]?.work_id ?? null)
         : (terminalWorkDetail?.traceWorkID ?? null);
+  const selectedDocTargetPath =
+    selection?.kind === "doc" ? selection.targetPath : null;
   const { selectedResourceName, selectedResourceTokenCount } =
     useSelectedResourceRuntime(selection, snapshot);
   const {
@@ -424,6 +376,7 @@ export function useCurrentSelectionDerivedState({
     selectedWorkProviderSessions: work.selectedWorkProviderSessions,
     selectedWorkRequestHistory: work.selectedWorkRequestHistory,
     selectedWorkWorkstationRequests: work.selectedWorkWorkstationRequests,
+    selectedDocTargetPath,
     selectedResourceName,
     selectedResourceTokenCount,
     selectedWorker,

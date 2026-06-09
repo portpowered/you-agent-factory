@@ -161,7 +161,10 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     leaveDialogOpen: true,
     pendingRemovalIntent: null,
     saveEditableDefinition: { isPending: false },
-    saveSummary: { description: "Save pending route changes." },
+    saveSummary: {
+      confirmActionLabel: "Save topology",
+      description: "Save pending route changes.",
+    },
     setAddEntityDraft: vi.fn(),
     setAddEntityErrors: vi.fn(),
     setIsConfirmingLeaveEditor: vi.fn(),

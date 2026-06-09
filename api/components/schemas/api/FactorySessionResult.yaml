@@ -1,0 +1,47 @@
+type: object
+additionalProperties: false
+required:
+  - sessionId
+  - resultStatus
+description: >-
+  Durable factory-session result retrieval response for final or partial workflow
+  outputs. Non-ready, unavailable, and failed-with-partial states return typed
+  bodies with session identity, current session status, and actionable failure or
+  availability details when known.
+properties:
+  sessionId:
+    type: string
+    description: Stable durable factory-session identifier.
+  resultStatus:
+    $ref: './FactorySessionResultStatus.yaml'
+  sessionStatus:
+    $ref: './FactorySessionDurableLifecycleStatus.yaml'
+    description: Current durable session lifecycle status when known.
+  mode:
+    $ref: './FactorySessionResultMode.yaml'
+    description: Result retrieval mode echoed from the request.
+  includeArtifacts:
+    type: boolean
+    description: Whether artifact metadata was included in this response.
+  primaryResult:
+    $ref: '../data-models/WorkContent.yaml'
+    description: Primary workflow output when resultStatus is PARTIAL or FINAL.
+  artifactIds:
+    type: array
+    items:
+      type: string
+    description: >-
+      Artifact identifiers for materialized outputs when bodies are omitted or
+      includeArtifacts is false.
+  artifactRefs:
+    type: array
+    items:
+      $ref: '../data-models/FactoryArtifactRef.yaml'
+    description: >-
+      Artifact refs for large or non-text outputs when includeArtifacts is true.
+  failure:
+    $ref: './FactorySessionDurableFailureDetail.yaml'
+    description: Failure details when resultStatus is FAILED_WITH_PARTIAL.
+  availability:
+    $ref: './FactorySessionResultAvailabilityDetail.yaml'
+    description: Availability details when resultStatus is NOT_READY or UNAVAILABLE.

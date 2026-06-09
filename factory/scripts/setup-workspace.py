@@ -45,19 +45,81 @@ def read_prd(prd_path):
         return json.load(f)
 
 
-def sync_main(repo_root):
-    """Run git pull unless the repo has no upstream configured."""
-    result = run_git("pull", cwd=repo_root, check=False)
-    if result.returncode == 0:
-        return
+def origin_remote_exists(repo_root):
+    """Return True when the repository has an origin remote configured."""
+    result = run_git("remote", "get-url", "origin", cwd=repo_root, check=False)
+    return result.returncode == 0
 
-    stderr = result.stderr.lower()
-    if "there is no tracking information for the current branch" in stderr:
-        return
 
-    raise RuntimeError(
-        f"git pull failed (exit {result.returncode}): {result.stderr.strip()}"
+def origin_main_ref_exists(repo_root):
+    """Return True when refs/remotes/origin/main exists locally."""
+    result = run_git(
+        "rev-parse", "--verify", "refs/remotes/origin/main",
+        cwd=repo_root, check=False,
     )
+    return result.returncode == 0
+
+
+def local_main_is_ancestor_of_origin_main(repo_root):
+    """Return True when local main can be fast-forwarded to origin/main."""
+    result = run_git(
+        "merge-base", "--is-ancestor", "refs/heads/main", "refs/remotes/origin/main",
+        cwd=repo_root, check=False,
+    )
+    return result.returncode == 0
+
+
+def main_is_checked_out(repo_root):
+    """Return True when refs/heads/main is checked out in any linked worktree."""
+    result = run_git("worktree", "list", "--porcelain", cwd=repo_root, check=False)
+    if result.returncode != 0:
+        return True
+
+    for line in result.stdout.splitlines():
+        if line == "branch refs/heads/main":
+            return True
+    return False
+
+
+def fast_forward_local_main(repo_root, origin_main_sha):
+    """Update refs/heads/main to origin/main without checking out main."""
+    run_git("update-ref", "refs/heads/main", origin_main_sha, cwd=repo_root)
+
+
+def sync_main(repo_root):
+    """Fetch origin and sync local main when remote tracking is available."""
+    if not origin_remote_exists(repo_root):
+        return
+
+    fetch_result = run_git(
+        "fetch", "origin", "refs/heads/main:refs/remotes/origin/main",
+        cwd=repo_root, check=False,
+    )
+    if fetch_result.returncode != 0:
+        return
+
+    if not origin_main_ref_exists(repo_root):
+        return
+
+    if not branch_exists_locally(repo_root, "main"):
+        return
+
+    local_main_sha = run_git(
+        "rev-parse", "refs/heads/main", cwd=repo_root,
+    ).stdout.strip()
+    origin_main_sha = run_git(
+        "rev-parse", "refs/remotes/origin/main", cwd=repo_root,
+    ).stdout.strip()
+    if local_main_sha == origin_main_sha:
+        return
+
+    if not local_main_is_ancestor_of_origin_main(repo_root):
+        return
+
+    if main_is_checked_out(repo_root):
+        return
+
+    fast_forward_local_main(repo_root, origin_main_sha)
 
 
 def prune_worktrees(repo_root):

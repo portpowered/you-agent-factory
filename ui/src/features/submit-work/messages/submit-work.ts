@@ -22,6 +22,7 @@ export interface SubmitWorkMessages {
   requestHint?: string;
   requestItemLabel: (position: number) => string;
   requestNameLabel: string;
+  requestNameRequiredAffordance: string;
   requestNamePlaceholder: string;
   requestPlaceholder: string;
   selectWorkTypePlaceholder: string;
@@ -30,6 +31,7 @@ export interface SubmitWorkMessages {
   submittingAction: string;
   textItemTypeLabel: string;
   workTypeLabel: string;
+  workTypeRequiredAffordance: string;
   statusMessages: {
     emptyGuidance: string;
     errorFallback: string;
@@ -91,6 +93,7 @@ const submitWorkMessagesByLocale = {
       `Remove ${typeLabel.toLowerCase()} item ${position}`,
     replaceFileAction: "Replace file",
     requestNameLabel: "Request name",
+    requestNameRequiredAffordance: "required",
     requestNamePlaceholder: "Add a name for this request.",
     requestPlaceholder:
       "Optional: describe what you want this request to accomplish.",
@@ -101,6 +104,7 @@ const submitWorkMessagesByLocale = {
     submittingAction: "Submitting...",
     textItemTypeLabel: "Text",
     workTypeLabel: "Work type",
+    workTypeRequiredAffordance: "required",
     statusMessages: {
       emptyGuidance: "Choose a work type and enter a request name to continue.",
       errorFallback: "We couldn't submit your request. Try again in a moment.",
@@ -153,6 +157,7 @@ const submitWorkMessagesByLocale = {
     removeItemLabel: (typeLabel, position) => `移除${typeLabel}项 ${position}`,
     replaceFileAction: "替换文件",
     requestNameLabel: "请求名称",
+    requestNameRequiredAffordance: "必填",
     requestNamePlaceholder: "为此请求添加名称。",
     requestPlaceholder: "可选：描述你希望这个请求完成什么。",
     requestItemLabel: (position) => `文本项 ${position}`,
@@ -162,6 +167,7 @@ const submitWorkMessagesByLocale = {
     submittingAction: "正在提交...",
     textItemTypeLabel: "文本",
     workTypeLabel: "工作类型",
+    workTypeRequiredAffordance: "必填",
     statusMessages: {
       emptyGuidance: "先选择工作类型并填写请求名称，然后即可继续。",
       errorFallback: "无法提交你的请求。请稍后再试。",

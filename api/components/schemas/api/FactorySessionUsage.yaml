@@ -1,0 +1,10 @@
+type: object
+additionalProperties: false
+required:
+  - resources
+properties:
+  resources:
+    type: array
+    items:
+      $ref: '../shared/ResourceUsage.yaml'
+    description: Resource availability and consumption for the session runtime.

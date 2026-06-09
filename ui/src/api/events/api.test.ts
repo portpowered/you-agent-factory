@@ -81,6 +81,27 @@ describe("factory events API", () => {
     );
   });
 
+  it("appends reconnect query parameters when a cursor is provided", () => {
+    const onEvent = vi.fn();
+    const onStatusChange = vi.fn();
+    vi.stubGlobal("EventSource", MockEventSource);
+
+    const stream = openFactoryEventStream(
+      onEvent,
+      onStatusChange,
+      "session-beta",
+      { afterEventId: "event-3", afterSequence: 12 },
+    );
+
+    expect(stream?.url).toBe(
+      "/factory-sessions/session-beta/events?after_event_id=event-3&after_sequence=12",
+    );
+    expect(onStatusChange).toHaveBeenCalledWith(
+      "reconnecting",
+      "Reconnecting to factory events...",
+    );
+  });
+
   it("opens the session-scoped event stream when a non-default session is selected", () => {
     const onEvent = vi.fn();
     const onStatusChange = vi.fn();

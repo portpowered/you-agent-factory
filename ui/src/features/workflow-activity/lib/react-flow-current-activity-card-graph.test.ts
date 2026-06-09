@@ -22,6 +22,7 @@ import {
   buildCurrentActivityGraphLayoutFromFactory,
   dashboardWorkstationFromFactory,
 } from "./current-activity-factory-graph-layout";
+import { mergeDocNodesIntoGraphLayout } from "./current-activity-doc-graph-layout";
 import { buildGraphEdges } from "./react-flow-current-activity-card-edges";
 import {
   buildSemanticGraphHandles,
@@ -150,6 +151,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectDoc: vi.fn(),
       onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
@@ -445,6 +447,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectDoc: vi.fn(),
       onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
@@ -491,6 +494,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectDoc: vi.fn(),
       onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
@@ -527,6 +531,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectDoc: vi.fn(),
       onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType,
@@ -627,6 +632,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectDoc: vi.fn(),
       onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
@@ -699,6 +705,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectDoc: vi.fn(),
       onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
@@ -778,6 +785,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectDoc: vi.fn(),
       onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkstation: vi.fn(),
@@ -820,6 +828,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectDoc: vi.fn(),
       onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
@@ -889,6 +898,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectDoc: vi.fn(),
       onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
@@ -929,6 +939,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectDoc: vi.fn(),
       onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
@@ -1020,6 +1031,7 @@ describe("current activity graph editor handles", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectDoc: vi.fn(),
       onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
@@ -1599,6 +1611,7 @@ describe("current activity graph active item labels", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectDoc: vi.fn(),
       onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
@@ -1659,6 +1672,7 @@ describe("current activity graph active item labels", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectDoc: vi.fn(),
       onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
@@ -1737,6 +1751,7 @@ describe("current activity graph active item labels", () => {
       now: Date.parse("2026-05-24T00:00:00Z"),
       onSelectStateNode: vi.fn(),
       onSelectWorkID: vi.fn(),
+      onSelectDoc: vi.fn(),
       onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
@@ -1899,6 +1914,7 @@ describe("current activity graph active item labels", () => {
       },
     ];
     const nodes = buildCurrentActivityNodes({
+      onSelectDoc: vi.fn(),
       activeExecutionsByWorkstationNodeID: {},
       activeGraphHighlights: buildActiveGraphHighlights([], graphLayout.edges),
       activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
@@ -1934,6 +1950,110 @@ describe("current activity graph active item labels", () => {
         validationMessage: undefined,
         variant: "default",
       }),
+    );
+  });
+
+  it("renders bundled docs as distinct selectable doc nodes", async () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      supportingFiles: {
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Guide" },
+            targetPath: "factory/docs/guide.md",
+            type: "DOC",
+          },
+        ],
+      },
+    };
+    const topologyLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const graphLayout = mergeDocNodesIntoGraphLayout(topologyLayout, factory);
+    const onSelectDoc = vi.fn();
+
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {},
+      activeGraphHighlights: buildActiveGraphHighlights(
+        [],
+        graphLayout.edges,
+        graphLayout.nodes,
+      ),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      factoryDefinition: factory,
+      graphLayout,
+      now: Date.parse("2026-06-08T00:00:00Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectDoc,
+      onSelectResource: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: { kind: "doc", targetPath: "factory/docs/guide.md" },
+      snapshot: buildSampleFactorySnapshot(factory),
+      storedNodePositions: EMPTY_NODE_POSITIONS,
+    });
+
+    const docNode = nodes.find(
+      (node) => node.id === "doc:factory/docs/guide.md",
+    );
+
+    expect(docNode).toMatchObject({
+      type: "doc",
+      data: {
+        displayLabel: "guide.md",
+        kind: "doc",
+        onSelectDoc,
+        selectedDoc: true,
+        targetPath: "factory/docs/guide.md",
+      },
+    });
+  });
+
+  it("updates doc nodes when the saved factory document changes", async () => {
+    const factory = {
+      ...baseFactoryDefinition,
+      supportingFiles: {
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Overview" },
+            targetPath: "factory/docs/overview.md",
+            type: "DOC",
+          },
+        ],
+      },
+    };
+    const topologyLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const initialLayout = mergeDocNodesIntoGraphLayout(
+      topologyLayout,
+      factory,
+    );
+    const renamedFactory = {
+      ...factory,
+      supportingFiles: {
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Overview" },
+            targetPath: "factory/docs/guide.md",
+            type: "DOC",
+          },
+        ],
+      },
+    };
+    const refreshedLayout = mergeDocNodesIntoGraphLayout(
+      topologyLayout,
+      renamedFactory,
+    );
+
+    expect(initialLayout.nodes.map((node) => node.nodeId)).toContain(
+      "doc:factory/docs/overview.md",
+    );
+    expect(refreshedLayout.nodes.map((node) => node.nodeId)).toContain(
+      "doc:factory/docs/guide.md",
+    );
+    expect(refreshedLayout.nodes.map((node) => node.nodeId)).not.toContain(
+      "doc:factory/docs/overview.md",
     );
   });
 });

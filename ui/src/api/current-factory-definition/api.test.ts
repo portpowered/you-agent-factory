@@ -144,6 +144,73 @@ describe("current-factory-definition api", () => {
     });
   });
 
+  it("loads model-invoke capable current-factory documents through the API boundary", async () => {
+    const document = await getCurrentFactoryDocument({
+      fetch: vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            name: "tts-factory",
+            workers: [
+              {
+                name: "tts-worker",
+                type: "MODEL_WORKER",
+                operations: [
+                  {
+                    name: "TTS",
+                    inputs: [
+                      { name: "text", contentTypes: ["TEXT"], required: true },
+                    ],
+                    outputs: [{ name: "audio", contentTypes: ["AUDIO"] }],
+                  },
+                ],
+              },
+            ],
+            workstations: [
+              {
+                name: "speak-story",
+                type: "MODEL_INVOKE",
+                worker: "tts-worker",
+                operation: "TTS",
+                operationBindings: [
+                  {
+                    slot: "text",
+                    selector: { label: "utterance", type: "TEXT" },
+                  },
+                ],
+                inputs: [{ state: "init", workType: "story" }],
+                outputs: [{ state: "complete", workType: "story" }],
+              },
+            ],
+            workTypes: [],
+            version: {
+              logical: "3",
+              physical: "2026-06-08T11:34:00Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+            statusText: "OK",
+          },
+        ),
+      ),
+    });
+
+    expect(document.workers?.[0]?.operations?.[0]?.name).toBe("TTS");
+    expect(document.workstations?.[0]).toMatchObject({
+      type: "MODEL_INVOKE",
+      operation: "TTS",
+      operationBindings: [
+        {
+          slot: "text",
+          selector: { label: "utterance", type: "TEXT" },
+        },
+      ],
+    });
+  });
+
   it("uses the session-scoped editable-definition route for non-default sessions", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(

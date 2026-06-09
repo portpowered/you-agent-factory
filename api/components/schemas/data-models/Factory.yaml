@@ -125,6 +125,12 @@ properties:
   metadata:
     $ref: '../shared/StringMap.yaml'
     description: Free-form factory-level metadata carried through runtime serialization and replay diagnostics.
+  orchestrator:
+    $ref: './FactoryOrchestrator.yaml'
+    description: >-
+      Authored orchestrator identity for this factory. When omitted, existing
+      Petri factories load through compatibility defaulting to
+      orchestrator.kind = PETRI.
   inputTypes:
     type: array
     description: Named input kinds accepted by the factory. The default input type is implicit and must not be declared.

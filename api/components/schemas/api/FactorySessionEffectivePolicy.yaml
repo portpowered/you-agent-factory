@@ -1,0 +1,10 @@
+type: object
+additionalProperties: true
+description: >-
+  Effective approved orchestrator policy for one durable execution after any
+  required approval. Distinct from FactorySessionRequestedPolicy, which captures
+  caller intent before approval.
+properties:
+  policyHash:
+    type: string
+    description: Stable hash of the effective approved policy object when available.

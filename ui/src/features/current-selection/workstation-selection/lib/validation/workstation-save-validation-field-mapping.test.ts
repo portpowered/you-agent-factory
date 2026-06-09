@@ -94,6 +94,35 @@ describe("resolveWorkstationSaveValidationFieldName", () => {
     ).toBe("name");
   });
 
+  it("maps model invoke operation and binding validation targets", () => {
+    expect(
+      resolveWorkstationSaveValidationFieldName({
+        code: "workstation-model-invoke-operation",
+        message: "MODEL_INVOKE workstation requires an uppercase operation name.",
+        severity: "error",
+        subject: {
+          id: "operation",
+          location: "DEFINITION",
+          type: "WORKSTATION",
+        },
+      }),
+    ).toBe("operation");
+
+    expect(
+      resolveWorkstationSaveValidationFieldName({
+        code: "workstation-model-invoke-binding-empty",
+        message:
+          "operation binding must declare a selector, config content, or default content",
+        severity: "error",
+        subject: {
+          id: "operationBindings",
+          location: "DEFINITION",
+          type: "WORKSTATION",
+        },
+      }),
+    ).toBe("operationBindings");
+  });
+
   it("maps guard validation target codes onto guard field errors", () => {
     expect(
       resolveWorkstationSaveValidationFieldName({
@@ -166,6 +195,37 @@ describe("mapWorkstationSaveErrorToFieldErrors", () => {
       ),
     ).toEqual({
       name: "factory.workstations[1].name must be non-empty.",
+    });
+  });
+
+  it("maps model invoke operation and binding save messages onto field errors", () => {
+    expect(
+      mapWorkstationSaveErrorToFieldErrors(
+        new CurrentFactoryDefinitionError(
+          "factory.workstations[0](speak).operation is required.",
+          {
+            code: "BAD_REQUEST",
+            status: 400,
+          },
+        ),
+      ),
+    ).toEqual({
+      operation: "factory.workstations[0](speak).operation is required.",
+    });
+
+    expect(
+      mapWorkstationSaveErrorToFieldErrors(
+        new CurrentFactoryDefinitionError(
+          "factory.workstations[0](speak).operationBindings[1](text) must declare content.",
+          {
+            code: "BAD_REQUEST",
+            status: 400,
+          },
+        ),
+      ),
+    ).toEqual({
+      operationBindings:
+        "factory.workstations[0](speak).operationBindings[1](text) must declare content.",
     });
   });
 

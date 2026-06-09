@@ -56,6 +56,7 @@ const defaultDraftState = {
   baseDocument: null,
   draft: {
     additions: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -67,6 +68,7 @@ const defaultDraftState = {
       removals: [],
     },
     removals: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -148,6 +150,7 @@ function renderWorkflowActivityBentoCard({
           widgetInstanceID={widgetInstanceID}
           onSelectWorkID={vi.fn()}
           onSelectStateNode={vi.fn()}
+          onSelectDoc={vi.fn()}
           onSelectResource={vi.fn()}
           onSelectWorker={vi.fn()}
           onSelectWorkType={vi.fn()}
@@ -180,7 +183,8 @@ function renderDuplicateWorkflowActivityBentoCards(locale = "zh-CN") {
             widgetInstanceID="work-graph::primary"
             onSelectWorkID={vi.fn()}
             onSelectStateNode={vi.fn()}
-            onSelectResource={vi.fn()}
+            onSelectDoc={vi.fn()}
+          onSelectResource={vi.fn()}
             onSelectWorker={vi.fn()}
             onSelectWorkType={vi.fn()}
             onSelectWorkstation={vi.fn()}
@@ -194,7 +198,8 @@ function renderDuplicateWorkflowActivityBentoCards(locale = "zh-CN") {
             widgetInstanceID="work-graph::instance-1"
             onSelectWorkID={vi.fn()}
             onSelectStateNode={vi.fn()}
-            onSelectResource={vi.fn()}
+            onSelectDoc={vi.fn()}
+          onSelectResource={vi.fn()}
             onSelectWorker={vi.fn()}
             onSelectWorkType={vi.fn()}
             onSelectWorkstation={vi.fn()}
@@ -497,8 +502,14 @@ describe("WorkflowActivityBentoCard header actions", () => {
     const headerScope = within(graphHeader as HTMLElement);
     expect(headerScope.queryAllByRole("status")).toHaveLength(0);
     expect(
-      headerScope.queryByText(editorMessages.modeUnsavedChanges),
-    ).toBeNull();
+      headerScope.getByText(
+        editorMessages.dirtyStateSummary({
+          layoutDirty: false,
+          preferencesDirty: false,
+          topologyDirty: true,
+        }),
+      ),
+    ).toBeTruthy();
 
     const toggle = within(toolbar).getByRole("button", {
       name: editorMessages.modeLeaveEditor,

@@ -1,0 +1,47 @@
+type: object
+additionalProperties: false
+required:
+  - orchestratorKind
+  - status
+  - progress
+  - usage
+  - lifecycle
+properties:
+  orchestratorKind:
+    $ref: '../data-models/FactoryOrchestratorKind.yaml'
+  dialect:
+    type: string
+    description: JavaScript workflow dialect when orchestrator.kind = JAVASCRIPT.
+  sourceRef:
+    type: string
+    description: Authored JavaScript workflow source reference when applicable.
+  sourceHash:
+    type: string
+    description: Stable hash of the authored JavaScript workflow source.
+  policyHash:
+    type: string
+    description: Stable hash of the effective orchestrator policy.
+  status:
+    $ref: './FactorySessionStatus.yaml'
+  progress:
+    $ref: './FactorySessionProgress.yaml'
+  budgets:
+    $ref: './FactorySessionBudgets.yaml'
+  usage:
+    $ref: './FactorySessionUsage.yaml'
+  lifecycle:
+    $ref: './FactorySessionLifecycle.yaml'
+  petri:
+    $ref: './FactorySessionPetriProjection.yaml'
+  javascript:
+    $ref: './FactorySessionJavaScriptProjection.yaml'
+  dispatches:
+    type: array
+    items:
+      $ref: '../data-models/FactoryDispatch.yaml'
+    description: Shared dispatch projections for the session runtime.
+  artifacts:
+    type: array
+    items:
+      $ref: '../data-models/FactoryArtifact.yaml'
+    description: Shared artifact projections for the session runtime.

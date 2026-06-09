@@ -8,6 +8,7 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -19,6 +20,7 @@ import type { GraphLayout } from "../../flowchart/lib/layout";
 import type { CurrentActivityNode } from "../../flowchart/public";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { resolveStoredNodePositionsForGraphKey } from "../lib/bridge-graph-layout-positions";
+import { mergeDocNodesIntoGraphLayout } from "../lib/current-activity-doc-graph-layout";
 import { buildVisibleGraphEdgesWithDraft } from "../lib/react-flow-current-activity-card-draft-edges";
 import {
   buildGraphEdges,
@@ -31,22 +33,32 @@ import {
   buildHandleAssignments,
   EMPTY_NODE_POSITIONS,
 } from "../lib/react-flow-current-activity-card-graph";
+import {
+  createDefaultFactoryLayout,
+  factoryLayoutFromDefinition,
+} from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
+import {
+  graphNodePositionsFromCanonicalLayout,
+  mergeLegacyStoredGraphNodePositions,
+} from "../lib/layout/factory-graph-canonical-layout-positions";
 import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
-import { resolveObserveModeFactoryDefinition } from "./observe-mode-factory-definition";
+import { currentActivityCardDisplayFactoryDefinition } from "./current-activity-card-factory-definition";
 import {
   groupActiveExecutionsByWorkstationNodeID,
   useActiveExecutions,
 } from "./react-flow-current-activity-card-active-executions";
 import type { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
 import { useCurrentActivityGraphLayoutForFactory } from "./react-flow-current-activity-card-graph-layout";
+import { mergeBaseNodesWithPresentationPositions } from "../lib/layout/merge-base-nodes-with-presentation-positions";
 import { useTopologyStableFactoryForLayout } from "./use-topology-stable-factory-for-layout";
 
 export type CurrentActivityGraphViewModelInput = {
   editor: ReturnType<typeof useCurrentActivityGraphEditor>;
   locale?: string;
   now: number;
+  onSelectDoc: (targetPath: string) => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorkID: (
     workID: string,
@@ -69,6 +81,7 @@ function useCurrentActivityBaseNodes({
   graphLayout,
   locale,
   now,
+  onSelectDoc,
   onSelectResource,
   onSelectStateNode,
   onSelectWorkID,
@@ -81,6 +94,7 @@ function useCurrentActivityBaseNodes({
 }: Pick<
   CurrentActivityGraphViewModelInput,
   | "now"
+  | "onSelectDoc"
   | "onSelectResource"
   | "onSelectStateNode"
   | "onSelectWorkID"
@@ -120,6 +134,7 @@ function useCurrentActivityBaseNodes({
         graphLayout,
         locale,
         now,
+        onSelectDoc,
         onSelectResource,
         onSelectStateNode,
         onSelectWorkID,
@@ -139,6 +154,7 @@ function useCurrentActivityBaseNodes({
       graphLayout,
       locale,
       now,
+      onSelectDoc,
       onSelectResource,
       onSelectStateNode,
       onSelectWorkID,
@@ -172,68 +188,21 @@ function useActiveGraphHighlights({
   );
 }
 
-export function currentActivityCardFactoryDefinition(
-  editor: ReturnType<typeof useCurrentActivityGraphEditor>,
-  snapshot: DashboardSnapshot,
-  timelineMode: ReturnType<typeof useFactoryTimelineStore.getState>["mode"],
-): DashboardSnapshot["factory"] | null | undefined {
-  if (!editor.editorMode) {
-    if (editor.editableDefinitionQuery?.status !== "success") {
-      return snapshot.factory ?? null;
-    }
-
-    return observeModeFactoryDefinition(editor, snapshot, timelineMode);
-  }
-
-  if (editor.editableDefinitionQuery?.status !== "success") {
-    return null;
-  }
-
-  return editorModeFactoryDefinition(editor) ?? null;
-}
-
-function observeModeFactoryDefinition(
-  editor: ReturnType<typeof useCurrentActivityGraphEditor>,
-  snapshot: DashboardSnapshot,
-  timelineMode: ReturnType<typeof useFactoryTimelineStore.getState>["mode"],
-): DashboardSnapshot["factory"] | undefined {
-  const document = editor.editableDefinitionQuery?.data;
-  if (!document) {
-    return snapshot.factory;
-  }
-
-  return resolveObserveModeFactoryDefinition({
-    document,
-    snapshotFactory: snapshot.factory,
-    timelineMode,
-  });
-}
-
-function editorModeFactoryDefinition(
-  editor: ReturnType<typeof useCurrentActivityGraphEditor>,
-) {
-  return (
-    editor.draftState.pendingFactoryDefinition ??
-    editor.draftState.latestDocument ??
-    editor.draftState.baseDocument ??
-    undefined
-  );
-}
-
 function useCurrentActivityGraphNodePresentation(
   baseNodes: CurrentActivityNode[],
 ) {
   const [nodes, setNodes] = useState<CurrentActivityNode[]>([]);
+  const previousBaseNodesRef = useRef<CurrentActivityNode[]>([]);
 
   useEffect(() => {
     setNodes((currentNodes) => {
-      const currentPositions = new Map(
-        currentNodes.map((node) => [node.id, node.position]),
+      const mergedNodes = mergeBaseNodesWithPresentationPositions(
+        baseNodes,
+        previousBaseNodesRef.current,
+        currentNodes,
       );
-      return baseNodes.map((node) => ({
-        ...node,
-        position: currentPositions.get(node.id) ?? node.position,
-      }));
+      previousBaseNodesRef.current = baseNodes;
+      return mergedNodes;
     });
   }, [baseNodes]);
 
@@ -243,16 +212,15 @@ function useCurrentActivityGraphNodePresentation(
         applyNodeChanges(changes, currentNodes) as CurrentActivityNode[],
     );
   }, []);
-  const displayNodes = useMemo(() => {
-    const positionOverrides = new Map(
-      nodes.map((node) => [node.id, node.position] as const),
-    );
-
-    return baseNodes.map((node) => ({
-      ...node,
-      position: positionOverrides.get(node.id) ?? node.position,
-    }));
-  }, [baseNodes, nodes]);
+  const displayNodes = useMemo(
+    () =>
+      mergeBaseNodesWithPresentationPositions(
+        baseNodes,
+        previousBaseNodesRef.current,
+        nodes,
+      ),
+    [baseNodes, nodes],
+  );
 
   return { displayNodes, handleNodesChange };
 }
@@ -262,10 +230,10 @@ function useStableCurrentActivityGraphLayout(
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
 ) {
   const timelineMode = useFactoryTimelineStore((state) => state.mode);
-  const displayFactoryDefinition = currentActivityCardFactoryDefinition(
-    editor,
-    snapshot,
-    timelineMode,
+  const displayFactoryDefinition = useMemo(
+    () =>
+      currentActivityCardDisplayFactoryDefinition(editor, snapshot, timelineMode),
+    [editor, snapshot, timelineMode],
   );
   const layoutFactoryDefinition = useTopologyStableFactoryForLayout(
     displayFactoryDefinition,
@@ -274,6 +242,7 @@ function useStableCurrentActivityGraphLayout(
     snapshot,
     layoutFactoryDefinition,
     editor.hiddenNodeClasses,
+    editor.visibilityPreset,
   );
 
   return { displayFactoryDefinition, graphLayout };
@@ -323,10 +292,12 @@ function useInitialFitViewOptions(graphLayout: GraphLayout) {
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph view-model keeps observe/editor layout, doc projection, and node presentation wiring together.
 export function useCurrentActivityGraphViewModel({
   editor,
   locale,
   now,
+  onSelectDoc,
   onSelectResource,
   onSelectStateNode,
   onSelectWorkID,
@@ -341,8 +312,16 @@ export function useCurrentActivityGraphViewModel({
     () => groupActiveExecutionsByWorkstationNodeID(activeExecutions),
     [activeExecutions],
   );
-  const { displayFactoryDefinition, graphLayout } =
+  const { displayFactoryDefinition, graphLayout: topologyGraphLayout } =
     useStableCurrentActivityGraphLayout(snapshot, editor);
+  const graphLayout = useMemo(
+    () =>
+      mergeDocNodesIntoGraphLayout(
+        topologyGraphLayout,
+        displayFactoryDefinition,
+      ),
+    [displayFactoryDefinition, topologyGraphLayout],
+  );
   const graphKey = useMemo(
     () => currentActivityGraphKey(graphLayout),
     [graphLayout],
@@ -357,7 +336,7 @@ export function useCurrentActivityGraphViewModel({
   const bridgePositionsToGraphKey = useCurrentActivityGraphStore(
     (state) => state.bridgePositionsToGraphKey,
   );
-  const storedNodePositions = useMemo(
+  const legacyStoredNodePositions = useMemo(
     () =>
       graphKey
         ? resolveStoredNodePositionsForGraphKey(
@@ -368,6 +347,30 @@ export function useCurrentActivityGraphViewModel({
         : EMPTY_NODE_POSITIONS,
     [graphKey, layoutNodeIds, positionsByGraphKey],
   );
+  const storedNodePositions = useMemo(() => {
+    const canonicalLayout = editor.editorMode
+      ? (editor.layoutDraftState?.layout ?? createDefaultFactoryLayout())
+      : factoryLayoutFromDefinition(displayFactoryDefinition);
+    const canonicalPositions = graphNodePositionsFromCanonicalLayout(
+      graphLayout,
+      canonicalLayout,
+    );
+
+    if (editor.editorMode) {
+      return canonicalPositions;
+    }
+
+    return mergeLegacyStoredGraphNodePositions(
+      canonicalPositions,
+      legacyStoredNodePositions,
+    );
+  }, [
+    displayFactoryDefinition,
+    editor.editorMode,
+    editor.layoutDraftState?.layout,
+    graphLayout,
+    legacyStoredNodePositions,
+  ]);
   const setStoredNodePosition = useCurrentActivityGraphStore(
     (state) => state.setNodePosition,
   );
@@ -409,6 +412,7 @@ export function useCurrentActivityGraphViewModel({
     graphLayout,
     locale,
     now,
+    onSelectDoc,
     onSelectResource,
     onSelectStateNode,
     onSelectWorkID,
@@ -429,8 +433,12 @@ export function useCurrentActivityGraphViewModel({
     visibleGraphEdges,
   });
   const initialFitViewOptions = useInitialFitViewOptions(graphLayout);
+  const canonicalLayoutViewport = editor.editorMode
+    ? editor.layoutDraftState?.layout.viewport
+    : factoryLayoutFromDefinition(displayFactoryDefinition).viewport;
 
   return {
+    canonicalLayoutViewport,
     edges,
     graphKey,
     handleNodesChange,

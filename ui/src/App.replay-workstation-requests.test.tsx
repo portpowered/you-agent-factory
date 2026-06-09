@@ -115,6 +115,15 @@ function expandCurrentSelectionSection(
   return section;
 }
 
+function getDispatchCard(
+  currentSelection: HTMLElement,
+  dispatchID: string,
+): HTMLElement {
+  return within(currentSelection).getByRole("article", {
+    name: new RegExp(dispatchID),
+  });
+}
+
 describe("App replay workstation request flows", () => {
   registerAppDashboardTestLifecycle();
 
@@ -155,9 +164,10 @@ describe("App replay workstation request flows", () => {
       }),
     ).toBeNull();
     expect(
-      within(completedSelection).getAllByText(
+      getDispatchCard(
+        completedSelection,
         runtimeDetailsFixtureIDs.completedDispatchID,
-      ).length,
+      ),
     ).toBeTruthy();
     expect(
       within(completedSelection).getByRole("heading", {
@@ -215,10 +225,8 @@ describe("App replay workstation request flows", () => {
       }),
     ).toBeNull();
     expect(
-      within(pendingSelection).getAllByText(
-        runtimeDetailsFixtureIDs.activeDispatchID,
-      ).length,
-    ).toBeGreaterThan(0);
+      getDispatchCard(pendingSelection, runtimeDetailsFixtureIDs.activeDispatchID),
+    ).toBeTruthy();
     expectDefinitionValue(pendingSelection, "Workstation dispatches", "1");
     expect(
       within(pendingSelection).queryByText(

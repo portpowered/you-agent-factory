@@ -103,7 +103,7 @@ func TestMoveWork_SubscribeReceivesWorkStateChangeInOrder(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stream, err := f.SubscribeFactoryEvents(ctx)
+	stream, err := f.SubscribeFactoryEvents(ctx, nil, interfaces.FactoryEventReconnectScope{})
 	if err != nil {
 		t.Fatalf("SubscribeFactoryEvents: %v", err)
 	}

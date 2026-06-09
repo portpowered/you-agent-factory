@@ -1,0 +1,27 @@
+type: object
+additionalProperties: false
+description: >-
+  Orchestrator workflow phase transition recorded on the canonical factory event
+  stream. Current phase identity lives in FactoryEvent.context.
+required:
+  - phaseStatus
+properties:
+  previousPhaseId:
+    type: string
+    description: Previous workflow phase identifier when available.
+  previousPhaseName:
+    type: string
+    description: Previous workflow phase name when available.
+  phaseStatus:
+    $ref: '../OrchestratorPhaseStatus.yaml'
+  startedAt:
+    type: string
+    format: date-time
+    description: When the current phase started, when applicable.
+  completedAt:
+    type: string
+    format: date-time
+    description: When the previous phase completed, when applicable.
+  progressSummary:
+    type: string
+    description: Bounded customer-visible phase progress summary.

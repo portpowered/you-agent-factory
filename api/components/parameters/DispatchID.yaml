@@ -1,0 +1,6 @@
+name: dispatch_id
+in: path
+required: true
+description: Stable factory-session dispatch identifier.
+schema:
+  type: string

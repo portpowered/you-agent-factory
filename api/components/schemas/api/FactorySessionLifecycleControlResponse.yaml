@@ -1,0 +1,43 @@
+type: object
+additionalProperties: false
+required:
+  - sessionId
+  - operation
+  - outcome
+  - status
+properties:
+  sessionId:
+    type: string
+    description: Stable durable factory-session identifier.
+  operation:
+    $ref: './FactorySessionLifecycleControlKind.yaml'
+  outcome:
+    $ref: './FactorySessionLifecycleControlOutcome.yaml'
+  status:
+    $ref: './FactorySessionDurableLifecycleStatus.yaml'
+    description: Current durable session lifecycle status after evaluating the control request.
+  session:
+    $ref: './FactorySessionDurableReadModel.yaml'
+    description: Updated durable session read model when immediately available.
+  effectivePolicyHash:
+    type: string
+    description: >-
+      Stable hash of the effective approved orchestrator policy after approval or
+      other policy-affecting controls.
+  approvalPreviewId:
+    type: string
+    description: Approval preview identity associated with the approved policy when available.
+  dispatchId:
+    type: string
+    description: Target dispatch identifier for retry-dispatch controls.
+  retryDispatchId:
+    type: string
+    description: >-
+      Identifier of the dispatch created or selected by a retry-dispatch control
+      when the runtime materializes a distinct retry dispatch.
+  detail:
+    type: string
+    description: Optional human-readable detail explaining NO_OP or rejected outcomes.
+  links:
+    $ref: './FactorySessionLifecycleControlLinks.yaml'
+    description: Inspection links for session, results, dispatches, and artifacts.

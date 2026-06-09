@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/config/inboxgitkeep"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -119,6 +120,11 @@ func finalizeFactorySplitLayoutWrite(
 	sourceDir := strings.TrimSpace(opts.SourceDir)
 	if sourceDir != "" {
 		if err := copySupportedPortableBundledFilesFromSource(sourceDir, targetDir, cfg); err != nil {
+			return err
+		}
+	}
+	if opts.OverwriteExistingSplitFiles {
+		if err := pruneRemovedPortableBundledDocs(targetDir, cfg); err != nil {
 			return err
 		}
 	}
@@ -796,6 +802,16 @@ func GlobalNamedFactoryRootForHome(homeDir string) (string, error) {
 	return filepath.Join(trimmed, defaultNamedFactoryHomeDir, defaultGlobalNamedFactoryDir), nil
 }
 
+// GlobalWorkflowRootForHome builds the customer-owned global workflow lookup root
+// for a resolved home directory.
+func GlobalWorkflowRootForHome(homeDir string) (string, error) {
+	trimmed := strings.TrimSpace(homeDir)
+	if trimmed == "" {
+		return "", fmt.Errorf("user home directory is required")
+	}
+	return filepath.Join(trimmed, defaultNamedFactoryHomeDir, "workflows"), nil
+}
+
 // DefaultGlobalNamedFactoryRoot returns the default global named-factory root
 // under the current user's home directory.
 func DefaultGlobalNamedFactoryRoot() (string, error) {
@@ -950,7 +966,7 @@ func ensureDefaultInputChannelDirectories(targetDir string, cfg *interfaces.Fact
 const batchInputInboxChannelName = "BATCH"
 
 func ensureCanonicalInputInboxSentinels(targetDir string, cfg *interfaces.FactoryConfig) error {
-	if err := ensureInputInboxGitkeep(
+	if err := inboxgitkeep.EnsureInputInboxGitkeep(
 		targetDir,
 		filepath.Join(interfaces.InputsDir, batchInputInboxChannelName, interfaces.DefaultChannelName, ".gitkeep"),
 	); err != nil {
@@ -970,30 +986,9 @@ func ensureCanonicalInputInboxSentinels(targetDir string, cfg *interfaces.Factor
 			interfaces.DefaultChannelName,
 			".gitkeep",
 		)
-		if err := ensureInputInboxGitkeep(targetDir, relativePath); err != nil {
+		if err := inboxgitkeep.EnsureInputInboxGitkeep(targetDir, relativePath); err != nil {
 			return fmt.Errorf("ensure inputs/%s/%s .gitkeep: %w", workTypeName, interfaces.DefaultChannelName, err)
 		}
-	}
-	return nil
-}
-
-func ensureInputInboxGitkeep(targetDir, relativePath string) error {
-	path := filepath.Join(targetDir, relativePath)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("create %s parent directory: %w", relativePath, err)
-	}
-	info, err := os.Stat(path)
-	switch {
-	case err == nil:
-		if info.IsDir() {
-			return fmt.Errorf("%s exists as a directory", relativePath)
-		}
-		return nil
-	case !errors.Is(err, os.ErrNotExist):
-		return fmt.Errorf("stat %s: %w", relativePath, err)
-	}
-	if err := os.WriteFile(path, nil, 0o644); err != nil {
-		return fmt.Errorf("create %s: %w", relativePath, err)
 	}
 	return nil
 }

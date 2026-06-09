@@ -1,0 +1,7 @@
+description: >-
+  Factory session inspection response. Live workspace sessions return the
+  existing FactorySession projection. Durable execution sessions return the
+  durable read model.
+oneOf:
+  - $ref: './FactorySession.yaml'
+  - $ref: './FactorySessionDurableReadModel.yaml'

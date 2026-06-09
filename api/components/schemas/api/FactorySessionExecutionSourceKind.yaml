@@ -1,0 +1,22 @@
+type: string
+description: >-
+  Durable execution source category. Each kind selects which source field on
+  FactorySessionExecutionSource is authoritative for workflow resolution.
+enum:
+  - FACTORY_ID
+  - FACTORY_INLINE
+  - WORKFLOW_FILE
+  - WORKFLOW_NAME
+  - INLINE_WORKFLOW
+x-enum-varnames:
+  - FactorySessionExecutionSourceKindFactoryId
+  - FactorySessionExecutionSourceKindFactoryInline
+  - FactorySessionExecutionSourceKindWorkflowFile
+  - FactorySessionExecutionSourceKindWorkflowName
+  - FactorySessionExecutionSourceKindInlineWorkflow
+x-enum-descriptions:
+  - Resolve a stored named factory by customer-facing factory id.
+  - Resolve an inline factory definition supplied in the execution request.
+  - Resolve a workflow file using documented workflow search order.
+  - Resolve a workflow by authored workflow name using documented search order.
+  - Resolve inline workflow source supplied directly in the execution request.

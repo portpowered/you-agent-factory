@@ -184,6 +184,7 @@ export function initialFocusNodes(
     .filter(
       (node): node is PositionedPlaceNode =>
         node.nodeKind !== "workstation" &&
+        node.nodeKind !== "doc" &&
         node.place.state_category === "INITIAL",
     )
     .sort((left, right) => left.x - right.x || left.y - right.y)[0];

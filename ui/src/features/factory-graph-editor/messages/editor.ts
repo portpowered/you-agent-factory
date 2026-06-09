@@ -7,8 +7,16 @@ import type {
   FactoryGraphNodeKind,
   FactoryWorkState,
 } from "../lib/draft/factory-graph-draft-types";
+import type { components } from "../../../api/generated/openapi";
 import type { FactoryGraphAddEntityDraft } from "../lib/editor/factory-graph-editor-additions";
+import type {
+  FactoryGraphEditorDirtyState,
+  FactoryGraphSaveSummaryKind,
+} from "../lib/editor-runtime/factory-graph-editor-dirty-state";
 import type { FactoryGraphWorkerRuntimeStatus } from "../lib/editor-runtime/factory-graph-editor-runtime";
+
+type ModelOperationContentType =
+  components["schemas"]["ModelOperationContentType"];
 
 export interface FactoryGraphEditorMessages {
   addDialogAddEntityAction: string;
@@ -16,6 +24,10 @@ export interface FactoryGraphEditorMessages {
   addDialogAssignedWorkerPlaceholder: string;
   addDialogCancelAction: string;
   addDialogCapacityLabel: string;
+  addDialogDocContentHelp: string;
+  addDialogDocContentLabel: string;
+  addDialogDocFileNameHelp: string;
+  addDialogDocFileNameLabel: string;
   addDialogDescription: (kind: FactoryGraphAddEntityDraft["kind"]) => string;
   addDialogFirstStateHelp: string;
   addDialogFirstStateLabel: string;
@@ -24,6 +36,26 @@ export interface FactoryGraphEditorMessages {
   addDialogKindLabel: string;
   addDialogModelHelp: string;
   addDialogModelLabel: string;
+  addDialogModelOperationAddAction: string;
+  addDialogModelOperationHeading: (operationIndex: number) => string;
+  addDialogModelOperationInputsLabel: string;
+  addDialogModelOperationNameHelp: string;
+  addDialogModelOperationNameLabel: string;
+  addDialogModelOperationOutputsLabel: string;
+  addDialogModelOperationRemoveAction: string;
+  addDialogModelOperationSlotAddAction: (
+    direction: "input" | "output",
+  ) => string;
+  addDialogModelOperationSlotContentTypesLabel: string;
+  addDialogModelOperationSlotHeading: (
+    direction: "input" | "output",
+    slotIndex: number,
+  ) => string;
+  addDialogModelOperationSlotNameLabel: string;
+  addDialogModelOperationSlotRemoveAction: string;
+  addDialogModelOperationSlotRequiredLabel: string;
+  addDialogModelOperationsHelp: string;
+  addDialogModelOperationsLabel: string;
   addDialogPromptBodyEditorError: string;
   addDialogPromptBodyEditorLoading: string;
   addDialogPromptBodyHelp: string;
@@ -53,6 +85,13 @@ export interface FactoryGraphEditorMessages {
   draftActionsSaving: string;
   draftActionsTitle: string;
   edgeAriaLabel: (label: string, source: string, target: string) => string;
+  edgeWaypointAddLabel: string;
+  edgeWaypointHandleLabel: (index: number) => string;
+  edgeWaypointRemoveLabel: (index: number) => string;
+  edgeWaypointKindLabel: string;
+  edgeWaypointSelectedLabel: string;
+  edgeWaypointSourceLabel: string;
+  edgeWaypointTargetLabel: string;
   edgeKindLabel: (
     kind:
       | "worker-assignment"
@@ -99,14 +138,23 @@ export interface FactoryGraphEditorMessages {
   operationEdgeNotFound: (edgeId: string) => string;
   operationGraphEditsInvalid: string;
   operationNodeNotFound: (nodeId: string) => string;
-  saveConfirmAction: string;
+  saveConfirmAction: (kind: FactoryGraphSaveSummaryKind) => string;
   saveBlockedActiveWork: string;
   saveBlockedStaleDraft: string;
   saveConfirmTitle: string;
+  dirtyStateSummary: (dirtyState: FactoryGraphEditorDirtyState) => string;
   saveSummaryDescription: (summary: {
     changedEdges: number;
     createdEntities: number;
     removedEntities: number;
+  }) => string;
+  saveSummaryForDirtyState: (summary: {
+    changedEdges: number;
+    createdEntities: number;
+    dirtyState: FactoryGraphEditorDirtyState;
+    kind: FactoryGraphSaveSummaryKind;
+    removedEntities: number;
+    topologySummary: string;
   }) => string;
   stateCollapsed: string;
   stateTypeLabel: (stateType: FactoryWorkState["type"]) => string;
@@ -118,11 +166,19 @@ export interface FactoryGraphEditorMessages {
   toolbarConnectLabel: string;
   toolbarDeleteDescription: string;
   toolbarDeleteLabel: string;
+  toolbarRedoDescription: string;
+  toolbarRedoLabel: string;
+  toolbarResetLayoutDescription: string;
+  toolbarResetLayoutLabel: string;
+  toolbarUndoDescription: string;
+  toolbarUndoLabel: string;
   toolbarHideShowDescription: string;
   toolbarHideShowLabel: string;
   toolbarHideShowMenuAriaLabel: string;
   toolbarHideShowMenuDescription: string;
   toolbarHideShowMenuTitle: string;
+  toolbarClearPreferencesDescription: string;
+  toolbarClearPreferencesLabel: string;
   toolbarOpenAddMenuLabel: string;
   toolbarOpenHideShowMenuLabel: string;
   nodeClassVisibilityDescription: (kind: FactoryGraphNodeKind) => string;
@@ -170,12 +226,18 @@ export interface FactoryGraphEditorMessages {
     kind: FactoryGraphNodeKind,
   ) => string;
   removalEntityTitle: (label: string, kind: FactoryGraphNodeKind) => string;
+  removalDocConfirmLabel: (displayLabel: string) => string;
+  removalDocDescription: (targetPath: string) => string;
+  removalDocTitle: (displayLabel: string) => string;
   removalFallbackConfirmDescription: string;
   removalFallbackConfirmLabel: string;
   removalFallbackTitle: string;
   removalWorkerAssignedReason: (
     workstationCount: number,
     workerLabel: string,
+  ) => string;
+  localizeModelOperationContentType: (
+    contentType: ModelOperationContentType,
   ) => string;
   workerStatusLabel: (status: FactoryGraphWorkerRuntimeStatus) => string;
   workStatePhaseLegendAriaLabel: string;
@@ -184,6 +246,9 @@ export interface FactoryGraphEditorMessages {
 }
 
 function describeEnglishAddDialog(kind: FactoryGraphAddEntityDraft["kind"]) {
+  if (kind === "doc") {
+    return "Create a bundled doc under factory/docs with editable text before save.";
+  }
   if (kind === "workstation") {
     return "Create a pending workstation in the current graph draft.";
   }
@@ -202,6 +267,9 @@ function describeEnglishAddDialog(kind: FactoryGraphAddEntityDraft["kind"]) {
 function describeEnglishAddDialogTitle(
   kind: FactoryGraphAddEntityDraft["kind"],
 ) {
+  if (kind === "doc") {
+    return "Add doc";
+  }
   if (kind === "work-type") {
     return "Add work type";
   }
@@ -295,7 +363,7 @@ function describeEnglishSaveSummary(summary: {
   ].filter((segment) => segment !== null);
 
   if (segments.length === 0) {
-    return "No graph changes are pending.";
+    return "No graph topology changes are pending.";
   }
   if (segments.length === 1) {
     return `This save will apply ${segments[0]}.`;
@@ -305,10 +373,71 @@ function describeEnglishSaveSummary(summary: {
   return `This save will apply ${segments.slice(0, -1).join(", ")} and ${finalSegment}.`;
 }
 
+function describeEnglishSaveConfirmAction(kind: FactoryGraphSaveSummaryKind) {
+  switch (kind) {
+    case "layout-only":
+      return "Save layout";
+    case "topology-only":
+      return "Save topology";
+    case "mixed":
+      return "Save changes";
+    case "preferences-only":
+      return "Save preferences";
+    case "none":
+      return "Save changes";
+  }
+}
+
+function describeEnglishDirtyStateSummary(
+  dirtyState: FactoryGraphEditorDirtyState,
+) {
+  if (dirtyState.preferencesDirty && !dirtyState.layoutDirty && !dirtyState.topologyDirty) {
+    return "Private view preferences changed";
+  }
+  if (dirtyState.layoutDirty && dirtyState.topologyDirty) {
+    return "Unsaved layout and topology changes";
+  }
+  if (dirtyState.layoutDirty) {
+    return "Unsaved layout changes";
+  }
+  if (dirtyState.topologyDirty) {
+    return "Unsaved topology changes";
+  }
+  return "Unsaved changes";
+}
+
+function describeEnglishSaveSummaryForDirtyState(summary: {
+  changedEdges: number;
+  createdEntities: number;
+  dirtyState: FactoryGraphEditorDirtyState;
+  kind: FactoryGraphSaveSummaryKind;
+  removedEntities: number;
+  topologySummary: string;
+}) {
+  switch (summary.kind) {
+    case "preferences-only":
+      return "Visibility and filter preferences changed for your view only. They stay private and are not saved into the shared factory document.";
+    case "layout-only":
+      return "This save will update shared graph layout positions and viewport. Factory topology stays unchanged.";
+    case "topology-only":
+      return summary.topologySummary;
+    case "mixed":
+      return `This save will update shared graph layout and apply topology changes: ${summary.topologySummary.replace(/^This save will apply /, "").replace(/\.$/, "")}.`;
+    case "none":
+      return "No shared factory document changes are pending.";
+  }
+}
+
 function describeEnglishAddMenuAction(
   kind: FactoryGraphAddEntityDraft["kind"],
 ) {
   switch (kind) {
+    case "doc":
+      return {
+        description:
+          "Add a bundled documentation file under factory/docs with editable text.",
+        label: "Doc",
+      };
     case "workstation":
       return {
         description:
@@ -415,6 +544,23 @@ function describeEnglishStateType(stateType: FactoryWorkState["type"]) {
   return stateType;
 }
 
+function describeEnglishModelOperationContentType(
+  contentType: ModelOperationContentType,
+) {
+  switch (contentType) {
+    case "TEXT":
+      return "Text";
+    case "IMAGE":
+      return "Image";
+    case "AUDIO":
+      return "Audio";
+    case "JSON":
+      return "JSON";
+    case "BINARY":
+      return "Binary";
+  }
+}
+
 function describeEnglishWorkStatePhaseLegendLabel(
   stateType: FactoryWorkState["type"],
 ) {
@@ -438,6 +584,12 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogAssignedWorkerPlaceholder: "Select a worker",
       addDialogCancelAction: "Cancel",
       addDialogCapacityLabel: "Capacity",
+      addDialogDocContentHelp:
+        "Optional UTF-8 text saved with the bundled doc entry.",
+      addDialogDocContentLabel: "Doc text",
+      addDialogDocFileNameHelp:
+        "Saved under factory/docs/. Include the file extension.",
+      addDialogDocFileNameLabel: "File name",
       addDialogDescription: describeEnglishAddDialog,
       addDialogFirstStateHelp:
         "New work types start with one required ordered state.",
@@ -449,6 +601,26 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogModelHelp:
         "The model identifier saved on the new `MODEL_WORKER`.",
       addDialogModelLabel: "Model",
+      addDialogModelOperationAddAction: "Add operation",
+      addDialogModelOperationHeading: (operationIndex) =>
+        `Operation ${operationIndex + 1}`,
+      addDialogModelOperationInputsLabel: "Input slots",
+      addDialogModelOperationNameHelp:
+        "Use uppercase names such as TTS or ASR.",
+      addDialogModelOperationNameLabel: "Operation name",
+      addDialogModelOperationOutputsLabel: "Output slots",
+      addDialogModelOperationRemoveAction: "Remove operation",
+      addDialogModelOperationSlotAddAction: (direction) =>
+        direction === "input" ? "Add input slot" : "Add output slot",
+      addDialogModelOperationSlotContentTypesLabel: "Content types",
+      addDialogModelOperationSlotHeading: (direction, slotIndex) =>
+        `${direction === "input" ? "Input" : "Output"} slot ${slotIndex + 1}`,
+      addDialogModelOperationSlotNameLabel: "Slot name",
+      addDialogModelOperationSlotRemoveAction: "Remove slot",
+      addDialogModelOperationSlotRequiredLabel: "Required input slot",
+      addDialogModelOperationsHelp:
+        "Declare provider-agnostic operations with typed input and output slots for MODEL_INVOKE workstations.",
+      addDialogModelOperationsLabel: "Model operations",
       addDialogPromptBodyEditorError:
         "The prompt editor could not start. Edit the prompt text below while we recover.",
       addDialogPromptBodyEditorLoading: "Starting the prompt editor.",
@@ -483,6 +655,13 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       draftActionsTitle: "Pending graph changes",
       edgeAriaLabel: (label, source, target) =>
         `${label} from ${source} to ${target}`,
+      edgeWaypointAddLabel: "Add waypoint",
+      edgeWaypointHandleLabel: (index) => `Move edge waypoint ${index + 1}`,
+      edgeWaypointRemoveLabel: (index) => `Remove waypoint ${index + 1}`,
+      edgeWaypointKindLabel: "Kind",
+      edgeWaypointSelectedLabel: "Selected edge route",
+      edgeWaypointSourceLabel: "Source",
+      edgeWaypointTargetLabel: "Target",
       edgeKindLabel: describeEnglishEdgeKind,
       flowConnectionHint: "Use labeled anchors for compatible connections.",
       flowPendingLabel: "Pending",
@@ -528,13 +707,15 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         "Graph edits must be valid before they can be applied.",
       operationNodeNotFound: (nodeId) =>
         `Graph node "${nodeId}" was not found.`,
-      saveConfirmAction: "Save topology",
+      dirtyStateSummary: describeEnglishDirtyStateSummary,
+      saveConfirmAction: describeEnglishSaveConfirmAction,
       saveBlockedActiveWork:
         "Topology save is unavailable while active work is still running in this factory.",
       saveBlockedStaleDraft:
         "A newer factory topology arrived while this draft was open. Refresh or discard before saving.",
       saveConfirmTitle: "Save factory graph changes?",
       saveSummaryDescription: describeEnglishSaveSummary,
+      saveSummaryForDirtyState: describeEnglishSaveSummaryForDirtyState,
       stateCollapsed: "Collapsed",
       stateTypeLabel: describeEnglishStateType,
       stateVisible: "Visible",
@@ -545,12 +726,22 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarConnectLabel: "Connect",
       toolbarDeleteDescription: "Remove",
       toolbarDeleteLabel: "Delete",
+      toolbarRedoDescription: "Redo the last undone layout change",
+      toolbarRedoLabel: "Redo",
+      toolbarResetLayoutDescription:
+        "Reset node positions to the saved shared layout baseline",
+      toolbarResetLayoutLabel: "Reset layout",
+      toolbarUndoDescription: "Undo the last layout change",
+      toolbarUndoLabel: "Undo",
       toolbarHideShowDescription: "Show",
       toolbarHideShowLabel: "Show or hide",
       toolbarHideShowMenuAriaLabel: "Factory graph node class visibility menu",
       toolbarHideShowMenuDescription:
         "Toggle which node classes appear on the graph. Hidden classes stay out of the view until you show them again.",
       toolbarHideShowMenuTitle: "Hide or show node classes",
+      toolbarClearPreferencesDescription:
+        "Restore the shared authored graph view for this factory. Private visibility and filter choices are cleared.",
+      toolbarClearPreferencesLabel: "Clear private view preferences",
       toolbarOpenAddMenuLabel: "Add",
       toolbarOpenHideShowMenuLabel: "Show or hide",
       nodeClassVisibilityDescription: describeEnglishNodeClassVisibility,
@@ -648,6 +839,10 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       removalEdgeTitle: (edgeLabel) => `Remove ${edgeLabel}?`,
       removalEntityConfirmLabel: (label, kind) => `Delete ${label} ${kind}`,
       removalEntityTitle: (label, kind) => `Remove ${label} ${kind}?`,
+      removalDocConfirmLabel: (displayLabel) => `Delete ${displayLabel} doc`,
+      removalDocDescription: (targetPath) =>
+        `This removes the bundled doc at ${targetPath} from the current factory draft.`,
+      removalDocTitle: (displayLabel) => `Remove ${displayLabel} doc?`,
       removalFallbackConfirmDescription:
         "Remove this graph entity from the current draft.",
       removalFallbackConfirmLabel: "Delete entity",
@@ -657,6 +852,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
           workstationCount,
           "workstation",
         )}. Reassign or remove those workstations before deleting ${workerLabel}.`,
+      localizeModelOperationContentType:
+        describeEnglishModelOperationContentType,
       workerStatusLabel: describeEnglishWorkerStatus,
       workStatePhaseLegendAriaLabel: "Work state lifecycle colors",
       workStatePhaseLegendLabel: describeEnglishWorkStatePhaseLegendLabel,
@@ -669,7 +866,15 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogAssignedWorkerPlaceholder: "选择一个工作者",
       addDialogCancelAction: "取消",
       addDialogCapacityLabel: "容量",
+      addDialogDocContentHelp: "保存到捆绑文档条目的可选 UTF-8 文本。",
+      addDialogDocContentLabel: "文档文本",
+      addDialogDocFileNameHelp:
+        "保存到 factory/docs/ 下。请包含文件扩展名。",
+      addDialogDocFileNameLabel: "文件名",
       addDialogDescription: (kind) => {
+        if (kind === "doc") {
+          return "在 factory/docs 下创建可在保存前编辑文本的捆绑文档。";
+        }
         if (kind === "workstation") {
           return "在当前图草稿中创建一个待处理工作站。";
         }
@@ -691,6 +896,25 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogKindLabel: "类型",
       addDialogModelHelp: "将保存到新 `MODEL_WORKER` 上的模型标识符。",
       addDialogModelLabel: "模型",
+      addDialogModelOperationAddAction: "添加操作",
+      addDialogModelOperationHeading: (operationIndex) =>
+        `操作 ${operationIndex + 1}`,
+      addDialogModelOperationInputsLabel: "输入槽位",
+      addDialogModelOperationNameHelp: "请使用大写名称，例如 TTS 或 ASR。",
+      addDialogModelOperationNameLabel: "操作名称",
+      addDialogModelOperationOutputsLabel: "输出槽位",
+      addDialogModelOperationRemoveAction: "移除操作",
+      addDialogModelOperationSlotAddAction: (direction) =>
+        direction === "input" ? "添加输入槽位" : "添加输出槽位",
+      addDialogModelOperationSlotContentTypesLabel: "内容类型",
+      addDialogModelOperationSlotHeading: (direction, slotIndex) =>
+        `${direction === "input" ? "输入" : "输出"}槽位 ${slotIndex + 1}`,
+      addDialogModelOperationSlotNameLabel: "槽位名称",
+      addDialogModelOperationSlotRemoveAction: "移除槽位",
+      addDialogModelOperationSlotRequiredLabel: "必填输入槽位",
+      addDialogModelOperationsHelp:
+        "为 MODEL_INVOKE 工作站声明带有类型化输入和输出槽位的提供方无关操作。",
+      addDialogModelOperationsLabel: "模型操作",
       addDialogPromptBodyEditorError:
         "提示词编辑器无法启动。请先在下方编辑提示正文，我们稍后会恢复编辑器。",
       addDialogPromptBodyEditorLoading: "正在启动提示词编辑器。",
@@ -698,6 +922,9 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogPromptBodyLabel: "提示正文",
       addDialogStateTypeLabel: "状态类型",
       addDialogTitle: (kind) => {
+        if (kind === "doc") {
+          return "添加文档";
+        }
         if (kind === "work-type") {
           return "添加工作类型";
         }
@@ -710,6 +937,12 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogWorkTypePlaceholder: "选择一个工作类型",
       addMenuAction: (kind) => {
         switch (kind) {
+          case "doc":
+            return {
+              description:
+                "在 factory/docs 下添加可编辑文本的捆绑文档文件。",
+              label: "文档",
+            };
           case "workstation":
             return {
               description: "创建一个待处理工作站并分配现有工作者。",
@@ -815,6 +1048,13 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       draftActionsTitle: "待处理图更改",
       edgeAriaLabel: (label, source, target) =>
         `${label}：从 ${source} 到 ${target}`,
+      edgeWaypointAddLabel: "添加路径点",
+      edgeWaypointHandleLabel: (index) => `移动边路径点 ${index + 1}`,
+      edgeWaypointRemoveLabel: (index) => `移除路径点 ${index + 1}`,
+      edgeWaypointKindLabel: "类型",
+      edgeWaypointSelectedLabel: "已选边路由",
+      edgeWaypointSourceLabel: "来源",
+      edgeWaypointTargetLabel: "目标",
       edgeKindLabel: (kind) => {
         switch (kind) {
           case "worker-assignment":
@@ -889,7 +1129,39 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       operationEdgeNotFound: (edgeId) => `未找到图边“${edgeId}”。`,
       operationGraphEditsInvalid: "图编辑必须有效后才能应用。",
       operationNodeNotFound: (nodeId) => `未找到图节点“${nodeId}”。`,
-      saveConfirmAction: "保存拓扑",
+      dirtyStateSummary: (dirtyState) => {
+        if (
+          dirtyState.preferencesDirty &&
+          !dirtyState.layoutDirty &&
+          !dirtyState.topologyDirty
+        ) {
+          return "私有视图偏好已更改";
+        }
+        if (dirtyState.layoutDirty && dirtyState.topologyDirty) {
+          return "未保存的布局和拓扑更改";
+        }
+        if (dirtyState.layoutDirty) {
+          return "未保存的布局更改";
+        }
+        if (dirtyState.topologyDirty) {
+          return "未保存的拓扑更改";
+        }
+        return "未保存的更改";
+      },
+      saveConfirmAction: (kind) => {
+        switch (kind) {
+          case "layout-only":
+            return "保存布局";
+          case "topology-only":
+            return "保存拓扑";
+          case "mixed":
+            return "保存更改";
+          case "preferences-only":
+            return "保存偏好";
+          case "none":
+            return "保存更改";
+        }
+      },
       saveBlockedActiveWork: "此工厂仍有活动工作在运行，因此无法保存拓扑。",
       saveBlockedStaleDraft:
         "此草稿打开后收到了更新的工厂拓扑。请先刷新或放弃再保存。",
@@ -906,13 +1178,27 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         ].filter((segment) => segment !== null);
 
         if (segments.length === 0) {
-          return "没有待处理的图更改。";
+          return "没有待处理的图拓扑更改。";
         }
         if (segments.length === 1) {
           return `此保存将应用 ${segments[0]}。`;
         }
         const finalSegment = segments[segments.length - 1];
         return `此保存将应用 ${segments.slice(0, -1).join("、")} 和 ${finalSegment}。`;
+      },
+      saveSummaryForDirtyState: (summary) => {
+        switch (summary.kind) {
+          case "preferences-only":
+            return "可见性和筛选偏好仅针对你的视图更改。它们会保持私有，不会保存到共享工厂文档中。";
+          case "layout-only":
+            return "此保存将更新共享图布局位置和视口。工厂拓扑保持不变。";
+          case "topology-only":
+            return summary.topologySummary;
+          case "mixed":
+            return `此保存将更新共享图布局并应用拓扑更改：${summary.topologySummary.replace(/^此保存将应用 /, "").replace(/\.$/, "")}。`;
+          case "none":
+            return "没有待处理的共享工厂文档更改。";
+        }
       },
       stateCollapsed: "已折叠",
       stateTypeLabel: (stateType) => {
@@ -935,12 +1221,21 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarConnectLabel: "连接",
       toolbarDeleteDescription: "从图中删除节点或边",
       toolbarDeleteLabel: "删除",
+      toolbarRedoDescription: "重做上一条已撤销的布局更改",
+      toolbarRedoLabel: "重做",
+      toolbarResetLayoutDescription: "将节点位置重置为已保存的共享布局基线",
+      toolbarResetLayoutLabel: "重置布局",
+      toolbarUndoDescription: "撤销上一条布局更改",
+      toolbarUndoLabel: "撤销",
       toolbarHideShowDescription: "在图上显示或隐藏节点类别",
       toolbarHideShowLabel: "显示或隐藏",
       toolbarHideShowMenuAriaLabel: "工厂图节点类别可见性菜单",
       toolbarHideShowMenuDescription:
         "切换哪些节点类别显示在图上。隐藏的类别会保持不可见，直到你再次显示它们。",
       toolbarHideShowMenuTitle: "隐藏或显示节点类别",
+      toolbarClearPreferencesDescription:
+        "恢复此工厂的共享创作图视图。私有的可见性和筛选选择将被清除。",
+      toolbarClearPreferencesLabel: "清除私有视图偏好",
       toolbarOpenAddMenuLabel: "添加",
       toolbarOpenHideShowMenuLabel: "显示或隐藏",
       nodeClassVisibilityDescription: (kind) => {
@@ -1039,11 +1334,29 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         `删除 ${label} ${getFactoryGraphEditorMessages("zh-CN").kindLabel(kind)}`,
       removalEntityTitle: (label, kind) =>
         `移除 ${label} ${getFactoryGraphEditorMessages("zh-CN").kindLabel(kind)}？`,
+      removalDocConfirmLabel: (displayLabel) => `删除 ${displayLabel} 文档`,
+      removalDocDescription: (targetPath) =>
+        `这将从当前工厂草稿中移除位于 ${targetPath} 的捆绑文档。`,
+      removalDocTitle: (displayLabel) => `移除 ${displayLabel} 文档？`,
       removalFallbackConfirmDescription: "从当前草稿中移除此图实体。",
       removalFallbackConfirmLabel: "删除实体",
       removalFallbackTitle: "移除图实体？",
       removalWorkerAssignedReason: (workstationCount, workerLabel) =>
         `此工作者仍分配给 ${workstationCount} 个工作站。删除 ${workerLabel} 前，请重新分配或移除这些工作站。`,
+      localizeModelOperationContentType: (contentType) => {
+        switch (contentType) {
+          case "TEXT":
+            return "文本";
+          case "IMAGE":
+            return "图像";
+          case "AUDIO":
+            return "音频";
+          case "JSON":
+            return "JSON";
+          case "BINARY":
+            return "二进制";
+        }
+      },
       workerStatusLabel: (status) => {
         switch (status) {
           case "active":

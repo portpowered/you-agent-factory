@@ -1,0 +1,8 @@
+name: mode
+in: query
+required: false
+description: >-
+  Optional durable result retrieval mode. Defaults to final for terminal outputs.
+  partial returns the latest partial workflow output when available.
+schema:
+  $ref: '../schemas/api/FactorySessionResultMode.yaml'

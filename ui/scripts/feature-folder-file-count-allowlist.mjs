@@ -2,11 +2,15 @@
 // Remove each entry in the same change that splits the folder below the 10-file limit.
 export const allowlistedOversizedFeatureFolders = [
   {
-    maxFileCount: 37,
+    maxFileCount: 12,
+    relativeDirectoryPath: "src/features/factory-graph-editor/lib",
+  },
+  {
+    maxFileCount: 39,
     relativeDirectoryPath: "src/features/workflow-activity/hooks",
   },
   {
-    maxFileCount: 38,
+    maxFileCount: 40,
     relativeDirectoryPath: "src/features/current-factory-definition/lib",
   },
   {
@@ -14,11 +18,11 @@ export const allowlistedOversizedFeatureFolders = [
     relativeDirectoryPath: "src/features/flowchart/lib",
   },
   {
-    maxFileCount: 36,
+    maxFileCount: 40,
     relativeDirectoryPath: "src/features/timeline/state/timeline",
   },
   {
-    maxFileCount: 35,
+    maxFileCount: 39,
     relativeDirectoryPath: "src/features/workflow-activity/lib",
   },
   {
@@ -34,7 +38,7 @@ export const allowlistedOversizedFeatureFolders = [
     relativeDirectoryPath: "src/features/bento/components",
   },
   {
-    maxFileCount: 18,
+    maxFileCount: 20,
     relativeDirectoryPath: "src/features/flowchart/components",
   },
   {

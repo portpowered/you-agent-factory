@@ -1,0 +1,10 @@
+type: string
+description: Canonical workflow phase lifecycle status for orchestrator phase events.
+enum:
+  - ACTIVE
+  - COMPLETED
+  - SKIPPED
+x-enum-descriptions:
+  - The phase is currently active.
+  - The phase completed successfully.
+  - The phase was skipped without execution.

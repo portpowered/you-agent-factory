@@ -7,3 +7,4 @@
  * and import adapters call normalization here then delegate network I/O elsewhere.
  */
 export * from "./api";
+export * from "./preserve-bundled-files";

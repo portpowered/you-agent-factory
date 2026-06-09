@@ -93,7 +93,6 @@ export function DispatchHistoryCard({
       }
     >
       <DispatchHistoryHeader
-        dispatchID={request.dispatch_id}
         isCurrentDispatch={isCurrentDispatch}
         messages={messages}
         title={title}
@@ -201,25 +200,17 @@ function buildDispatchHistoryView(
 }
 
 function DispatchHistoryHeader({
-  dispatchID,
   isCurrentDispatch,
   messages,
   title,
 }: {
-  dispatchID: string | undefined;
   isCurrentDispatch: boolean;
   messages: CurrentSelectionDispatchHistoryMessages;
   title: string | undefined;
 }) {
-  const subtitle =
-    dispatchID && title && dispatchID !== title ? (
-      <span>{dispatchID}</span>
-    ) : undefined;
-
   return (
     <CurrentSelectionHistoryCardHeader
-      subtitle={subtitle}
-      title={title || dispatchID || messages.unknownDispatchTitle}
+      title={title || messages.unknownDispatchTitle}
       titleClassName="type-headline-large"
       trailingContent={
         isCurrentDispatch ? (
@@ -265,7 +256,7 @@ function DispatchSummarySection({
 
   return (
     <CurrentSelectionExpandableSection
-      title={messages.requestDetailsTitle}
+      title={messages.summaryHeading}
       toggleLabel={(expanded) =>
         expanded ? messages.collapseAction : messages.expandAction
       }
@@ -336,6 +327,7 @@ function DispatchRequestContent({
 }) {
   return (
     <div className="grid gap-2">
+      <CurrentSelectionLabel>{messages.requestDetailsTitle}</CurrentSelectionLabel>
       {view.isScriptBackedRequest ? (
         <DetailCopy>{messages.promptDetailsNotApplicable}</DetailCopy>
       ) : null}
@@ -417,9 +409,7 @@ function DispatchTraceContent({
 }) {
   return (
     <div className="grid gap-2">
-      <CurrentSelectionLabel>
-        {messages.traceDetailsTitle}
-      </CurrentSelectionLabel>
+      <CurrentSelectionLabel>{messages.traceDetailsTitle}</CurrentSelectionLabel>
       <DispatchWorkItemDetailRow
         items={view.outputWorkItems}
         label={messages.outputWorkLabel}

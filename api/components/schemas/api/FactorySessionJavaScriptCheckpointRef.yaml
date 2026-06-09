@@ -1,0 +1,21 @@
+type: object
+additionalProperties: false
+required:
+  - id
+properties:
+  id:
+    type: string
+    description: Stable checkpoint identifier referenced by the session runtime.
+  label:
+    type: string
+    description: Customer-visible checkpoint label.
+  timestamp:
+    type: string
+    format: date-time
+    description: When the checkpoint was recorded.
+  summary:
+    type: string
+    description: Short customer-visible checkpoint summary without raw VM state.
+  artifactRef:
+    $ref: '../data-models/FactoryArtifactRef.yaml'
+    description: Orchestrator-owned checkpoint artifact metadata without raw VM state.

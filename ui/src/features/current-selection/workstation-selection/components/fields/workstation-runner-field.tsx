@@ -3,10 +3,12 @@ import { resolveRunnerSelection } from "../../../../current-factory-definition/l
 import {
   getRunnerDisplayName,
   getRunnerMetadata,
-  type RunnerID,
 } from "../../editing/runner-metadata";
 import type { WorkstationDetailCardProps } from "../../lib/keys/detail-card-types";
-import { isOpenApiRunnerID } from "../../messages/runner-openapi-enums";
+import {
+  type ApiRunnerID,
+  isOpenApiRunnerID,
+} from "../../messages/runner-openapi-enums";
 import type { getWorkstationDetailMessages } from "../../messages/workstation-detail";
 
 type ReadyEditableConfigurationState = Extract<
@@ -50,7 +52,7 @@ export function EditableConfigurationRunnerField({
         id="editable-workstation-runner"
         onValueChange={(nextValue) =>
           state.onRunnerChange(
-            nextValue === null ? null : (nextValue as RunnerID),
+            nextValue === null ? null : (nextValue as ApiRunnerID),
           )
         }
         options={state.initialValues.runnerOptions.map((runnerID) => ({

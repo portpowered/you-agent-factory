@@ -92,7 +92,7 @@ func serviceNamedFactoryPayloadWithBundledInput(t *testing.T, project string) []
 				"type":       "INPUT",
 				"targetPath": "factory/inputs/task/default/stale.md",
 				"content": map[string]any{
-					"encoding": string(factoryapi.Utf8),
+					"encoding": string(factoryapi.BundledFileContentEncodingUtf8),
 					"inline":   "stale starter\n",
 				},
 			},
@@ -144,7 +144,7 @@ func serviceNamedFactoryContractWithBundledFiles(t *testing.T, name string) fact
 					"type":       "ROOT_HELPER",
 					"targetPath": "Makefile",
 					"content": map[string]any{
-						"encoding": string(factoryapi.Utf8),
+						"encoding": string(factoryapi.BundledFileContentEncodingUtf8),
 						"inline":   "test:\n\tgo test ./...\n",
 					},
 				},
@@ -152,7 +152,7 @@ func serviceNamedFactoryContractWithBundledFiles(t *testing.T, name string) fact
 					"type":       "DOC",
 					"targetPath": "factory/docs/README.md",
 					"content": map[string]any{
-						"encoding": string(factoryapi.Utf8),
+						"encoding": string(factoryapi.BundledFileContentEncodingUtf8),
 						"inline":   "# Portable factory\n",
 					},
 				},
@@ -160,7 +160,7 @@ func serviceNamedFactoryContractWithBundledFiles(t *testing.T, name string) fact
 					"type":       "SCRIPT",
 					"targetPath": "factory/scripts/execute-story.ps1",
 					"content": map[string]any{
-						"encoding": string(factoryapi.Utf8),
+						"encoding": string(factoryapi.BundledFileContentEncodingUtf8),
 						"inline":   servicePortableBundledScriptBody,
 					},
 				},
@@ -168,7 +168,7 @@ func serviceNamedFactoryContractWithBundledFiles(t *testing.T, name string) fact
 					"type":       "INPUT",
 					"targetPath": "factory/inputs/task/default/starter.md",
 					"content": map[string]any{
-						"encoding": string(factoryapi.Utf8),
+						"encoding": string(factoryapi.BundledFileContentEncodingUtf8),
 						"inline":   "starter work\n",
 					},
 				},
@@ -289,7 +289,7 @@ func (f *aggregateSnapshotFactory) SubmitWorkRequest(ctx context.Context, reques
 	}
 	return result, nil
 }
-func (f *aggregateSnapshotFactory) SubscribeFactoryEvents(context.Context) (*interfaces.FactoryEventStream, error) {
+func (f *aggregateSnapshotFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
 }
 func (f *aggregateSnapshotFactory) Pause(context.Context) error { return f.pauseErr }
@@ -326,7 +326,7 @@ func (f *runtimeMetricsObserverFactory) Run(context.Context) error { return nil 
 func (f *runtimeMetricsObserverFactory) SubmitWorkRequest(context.Context, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
 	return interfaces.WorkRequestSubmitResult{}, nil
 }
-func (f *runtimeMetricsObserverFactory) SubscribeFactoryEvents(context.Context) (*interfaces.FactoryEventStream, error) {
+func (f *runtimeMetricsObserverFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
 }
 func (f *runtimeMetricsObserverFactory) Pause(context.Context) error { return nil }

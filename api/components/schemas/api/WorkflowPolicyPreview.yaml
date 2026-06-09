@@ -1,0 +1,53 @@
+type: object
+additionalProperties: false
+required:
+  - effectivePolicy
+  - policyHash
+  - maxChildCount
+  - maxConcurrency
+  - deniedCapabilities
+  - validationIssues
+properties:
+  effectivePolicy:
+    type: object
+    additionalProperties: true
+    description: Effective bounded workflow policy for preview or session start.
+  policyHash:
+    type: string
+    description: Stable hash of the effective policy document.
+  maxChildCount:
+    type: integer
+    description: Maximum child agent count allowed by effective policy.
+  maxConcurrency:
+    type: integer
+    description: Maximum concurrent child dispatches allowed by effective policy.
+  deniedCapabilities:
+    type: array
+    description: Capabilities denied by the effective policy before runtime execution.
+    items:
+      $ref: './WorkflowDiagnostic.yaml'
+  validationIssues:
+    type: array
+    description: Policy validation issues for the requested or factory default policy.
+    items:
+      $ref: './WorkflowDiagnostic.yaml'
+  runnerDecision:
+    type: object
+    additionalProperties: true
+    description: Optional runner allowlist decision for preview surfaces.
+  modelDecision:
+    type: object
+    additionalProperties: true
+    description: Optional model allowlist decision for preview surfaces.
+  profileDecision:
+    type: object
+    additionalProperties: true
+    description: Optional route profile allowlist decision for preview surfaces.
+  timeoutDecisions:
+    type: object
+    additionalProperties: true
+    description: Timeout and budget decisions for preview surfaces.
+  budgetDecisions:
+    type: object
+    additionalProperties: true
+    description: Child and concurrency budget decisions for preview surfaces.

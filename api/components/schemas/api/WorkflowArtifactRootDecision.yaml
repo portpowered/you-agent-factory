@@ -1,0 +1,18 @@
+type: object
+additionalProperties: false
+required:
+  - requested
+  - allowed
+properties:
+  requested:
+    type: string
+    description: Artifact root requested with the workflow source.
+  effective:
+    type: string
+    description: Normalized artifact root when allowed.
+  allowed:
+    type: boolean
+    description: True when the artifact root satisfies policy checks.
+  diagnostic:
+    $ref: './WorkflowDiagnostic.yaml'
+    description: Diagnostic explaining artifact-root rejection when present.

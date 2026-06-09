@@ -35,6 +35,9 @@ type FactorySaveAPI interface {
 // SessionAPI is the factory-session inventory and lifecycle seam.
 type SessionAPI interface {
 	ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error)
+	GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error)
+	GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error)
+	GetFactorySessionPartialResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionPartialResult, error)
 	OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
 	CloseFactorySession(ctx context.Context, sessionID string) error
 }
@@ -43,7 +46,7 @@ type SessionAPI interface {
 type WorkAPI interface {
 	SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
 	MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error)
-	SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error)
+	SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error)
 	GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 }
 
@@ -51,6 +54,43 @@ type WorkAPI interface {
 // transport to submit one logical input and return the selected primary result.
 type InvocationAPI interface {
 	InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (FactoryInvocationResult, error)
+}
+
+// DurableSessionLifecycleAPI is the shared durable session read and lifecycle
+// control seam for pause, resume, cancel, terminate, approve, and retry-dispatch.
+type DurableSessionLifecycleAPI interface {
+	GetDurableFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySessionDurableReadModel, error)
+	PauseDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	ResumeDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	CancelDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	TerminateDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	ApproveDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionApproveRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	RetryDurableFactorySessionDispatch(ctx context.Context, sessionID string, request factoryapi.FactorySessionRetryDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+}
+
+// DurableSessionExecutionAPI is the shared durable factory-session execution start
+// seam for async and sync dynamic workflow sessions. Live-session open and
+// invocation remain on SessionAPI and InvocationAPI.
+type DurableSessionExecutionAPI interface {
+	StartDurableFactorySessionAsync(ctx context.Context, request factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionExecutionResponse, error)
+	StartDurableFactorySessionSync(ctx context.Context, request factoryapi.FactorySessionExecutionRequest) (factoryapi.FactorySessionSyncExecutionResponse, error)
+}
+
+// DurableSessionListingAPI is the shared scoped session listing seam for live and
+// persisted durable execution sessions.
+type DurableSessionListingAPI interface {
+	ListDurableFactorySessions(ctx context.Context, params factoryapi.ListFactorySessionsParams) (factoryapi.ListFactorySessionsResponse, error)
+}
+
+// DurableSessionProjectionAPI is the shared durable session result, dispatch,
+// artifact, and event replay seam for dynamic workflow inspection.
+type DurableSessionProjectionAPI interface {
+	GetDurableFactorySessionResult(ctx context.Context, sessionID string, params factoryapi.GetFactorySessionResultsParams) (factoryapi.FactorySessionResult, error)
+	ListDurableFactorySessionDispatches(ctx context.Context, sessionID string) (factoryapi.ListFactorySessionDispatchesResponse, error)
+	GetDurableFactorySessionDispatch(ctx context.Context, sessionID, dispatchID string) (factoryapi.FactoryDispatch, error)
+	ListDurableFactorySessionArtifacts(ctx context.Context, sessionID string) (factoryapi.ListFactorySessionArtifactsResponse, error)
+	GetDurableFactorySessionArtifact(ctx context.Context, sessionID, artifactID string) (factoryapi.FactorySessionArtifactDetail, error)
+	ReadDurableFactorySessionEvents(ctx context.Context, sessionID string, params factoryapi.GetEventsBySessionIdParams) (*interfaces.FactoryEventStream, error)
 }
 
 // APISurface is the runtime seam consumed by the Agent Factory API server.
@@ -116,6 +156,14 @@ var ErrCurrentFactoryNotFound = errors.New("current factory not found")
 // ErrFactorySessionNotFound reports that no live session matched the requested
 // public session identifier.
 var ErrFactorySessionNotFound = errors.New("factory session not found")
+
+// ErrInvalidEventReconnectCursor reports that the reconnect cursor did not
+// match any recorded event in the targeted stream.
+var ErrInvalidEventReconnectCursor = errors.New("invalid event reconnect cursor")
+
+// ErrFactorySessionResultUnavailable reports that the requested session does not
+// expose JavaScript result or partial-result reads.
+var ErrFactorySessionResultUnavailable = errors.New("factory session result unavailable")
 
 // ErrFactoryVersionStale reports that a complete current-factory
 // save was based on an older factory definition version than the current one.

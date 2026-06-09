@@ -1,0 +1,15 @@
+type: object
+additionalProperties: false
+required:
+  - encoding
+  - inline
+description: Inline JavaScript workflow source carried directly in the factory definition.
+properties:
+  encoding:
+    type: string
+    enum:
+      - utf-8
+    description: Declared content encoding for the inline workflow source.
+  inline:
+    type: string
+    description: Inline JavaScript workflow source text.

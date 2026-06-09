@@ -1,6 +1,7 @@
 package apicontract_test
 
 import (
+	"encoding/json"
 	"os"
 	"reflect"
 	"strings"
@@ -79,6 +80,11 @@ func assertUnifiedEventSchemasPresent(t *testing.T, schemas map[string]any) {
 		"ScriptRequestEventPayload", "ScriptResponseEventPayload", "InferenceOutcome", "ScriptExecutionOutcome", "ScriptFailureType",
 		"DispatchResponseEventPayload", "WorkStateChangeEventPayload", "WorkStateChangeSource",
 		"FactoryStateResponseEventPayload", "RunResponseEventPayload",
+		"FactoryEventSessionResultStatus", "OrchestratorPhaseStatus", "CheckpointResumabilityStatus", "DispatchReconciliationSource",
+		"SessionStartedEventPayload", "SessionResultUpdatedEventPayload", "SessionCompletedEventPayload",
+		"OrchestratorPhaseChangedEventPayload", "OrchestratorCheckpointWrittenEventPayload",
+		"DispatchQueuedEventPayload", "DispatchInterruptedEventPayload", "DispatchReconciledEventPayload",
+		"JavaScriptCheckpointRefEventPayload", "JavaScriptPhaseChangeEventPayload", "ArtifactCreatedEventPayload",
 	} {
 		if _, ok := schemas[schema]; !ok {
 			t.Fatalf("components.schemas.%s is missing", schema)
@@ -117,9 +123,56 @@ func assertUnifiedEventContext(t *testing.T, schemas map[string]any) {
 	context := schemaObject(t, schemas, "FactoryEventContext")
 	assertRequiredFields(t, context, "sequence", "tick", "eventTime")
 	contextProperties := schemaProperties(t, context, "FactoryEventContext")
-	assertSchemaPropertiesPresent(t, contextProperties, "FactoryEventContext", "eventTime", "requestId", "traceIds", "workIds", "dispatchId", "currentChainingTraceId")
+	assertSchemaPropertiesPresent(
+		t,
+		contextProperties,
+		"FactoryEventContext",
+		"eventTime",
+		"sessionId",
+		"sessionSequence",
+		"orchestratorKind",
+		"orchestratorDialect",
+		"phaseId",
+		"phaseName",
+		"checkpointId",
+		"requestId",
+		"traceIds",
+		"workIds",
+		"dispatchId",
+		"currentChainingTraceId",
+		"source",
+	)
 	assertStringArrayProperty(t, contextProperties, "previousChainingTraceIds")
-	assertPropertiesAbsent(t, contextProperties, "FactoryEventContext", "event_time", "request_id", "trace_ids", "work_ids", "dispatch_id")
+	assertPropertyRef(t, contextProperties, "orchestratorKind", "#/components/schemas/FactoryOrchestratorKind")
+	assertPropertiesAbsent(
+		t,
+		contextProperties,
+		"FactoryEventContext",
+		"event_time",
+		"request_id",
+		"trace_ids",
+		"work_ids",
+		"dispatch_id",
+		"session_id",
+		"orchestrator_kind",
+	)
+	assertSessionLifecyclePayloadsOmitContextIdentityFields(t, schemas)
+}
+
+func assertSessionLifecyclePayloadsOmitContextIdentityFields(t *testing.T, schemas map[string]any) {
+	t.Helper()
+	for schemaName, forbidden := range map[string][]string{
+		"SessionStartedEventPayload":             {"sessionId", "orchestratorKind", "orchestratorDialect"},
+		"SessionResultUpdatedEventPayload":       {"sessionId", "orchestratorKind"},
+		"SessionCompletedEventPayload":           {"sessionId", "orchestratorKind"},
+		"OrchestratorPhaseChangedEventPayload":   {"sessionId", "phaseId", "phaseName"},
+		"OrchestratorCheckpointWrittenEventPayload": {"sessionId", "checkpointId", "phaseId", "phaseName"},
+		"DispatchQueuedEventPayload":             {"sessionId", "dispatchId", "phaseId", "phaseName"},
+		"DispatchInterruptedEventPayload":        {"sessionId", "dispatchId"},
+		"DispatchReconciledEventPayload":         {"sessionId", "dispatchId"},
+	} {
+		assertPropertiesAbsent(t, schemaProperties(t, schemaObject(t, schemas, schemaName), schemaName), schemaName, forbidden...)
+	}
 }
 
 func assertUnifiedRunRequestEvent(t *testing.T, schemas map[string]any) {
@@ -482,5 +535,100 @@ func assertCanonicalFactoryEventFixtureEnvelope(t *testing.T, index int, event m
 	}
 	if _, ok := event["id"].(string); !ok {
 		t.Fatalf("canonical event vocabulary fixture event %d id = %T, want string", index, event["id"])
+	}
+}
+func loadCanonicalFactoryEventVocabularyFixture(t *testing.T) []map[string]any {
+	t.Helper()
+	fixtureBytes, err := os.ReadFile("../testdata/canonical-event-vocabulary-stream.json")
+	if err != nil {
+		t.Fatalf("read canonical event vocabulary fixture: %v", err)
+	}
+	assertJSONStringLiteralMissing(t, string(fixtureBytes), retiredFactoryEventTypeValues...)
+
+	var fixture []map[string]any
+	if err := json.Unmarshal(fixtureBytes, &fixture); err != nil {
+		t.Fatalf("parse canonical event vocabulary fixture: %v", err)
+	}
+	if len(fixture) != len(canonicalFactoryEventTypeValues) {
+		t.Fatalf("canonical event vocabulary fixture length = %d, want %d", len(fixture), len(canonicalFactoryEventTypeValues))
+	}
+	return fixture
+}
+
+func assertPropertiesAbsent(t *testing.T, properties map[string]any, schemaName string, fields ...string) {
+	t.Helper()
+	for _, field := range fields {
+		if _, ok := properties[field]; ok {
+			t.Fatalf("%s.properties.%s must not be advertised", schemaName, field)
+		}
+	}
+}
+
+func assertJSONStringLiteralMissing(t *testing.T, haystack string, needles ...string) {
+	t.Helper()
+	for _, needle := range needles {
+		if strings.Contains(haystack, `"`+needle+`"`) {
+			t.Fatalf("unexpected retired string %q found in fixture", needle)
+		}
+	}
+}
+
+func assertStringSetsMatch(t *testing.T, got []string, want []string) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("string set length = %d, want %d", len(got), len(want))
+	}
+	gotCounts := make(map[string]int, len(got))
+	for _, value := range got {
+		gotCounts[value]++
+	}
+	for _, value := range want {
+		if gotCounts[value] == 0 {
+			t.Fatalf("string set is missing %q", value)
+		}
+		gotCounts[value]--
+	}
+	for value, remaining := range gotCounts {
+		if remaining != 0 {
+			t.Fatalf("string set contains unexpected count for %q: %d", value, remaining)
+		}
+	}
+}
+
+func assertNoDispatchConfigCopies(t *testing.T, properties map[string]any, schemaName string) {
+	t.Helper()
+	for _, field := range []string{
+		"model",
+		"provider",
+		"promptFile",
+		"promptTemplate",
+		"outputSchema",
+		"worktree",
+		"workingDirectory",
+		"workerType",
+		"workstationName",
+		"workstationType",
+	} {
+		if _, ok := properties[field]; ok {
+			t.Fatalf("%s.properties.%s duplicates Worker or Workstation configuration", schemaName, field)
+		}
+	}
+}
+
+func assertJSONKeysAbsent(t *testing.T, object map[string]any, name string, keys ...string) {
+	t.Helper()
+	for _, key := range keys {
+		if _, ok := object[key]; ok {
+			t.Fatalf("%s.%s must not be present", name, key)
+		}
+	}
+}
+
+func assertJSONKeysPresent(t *testing.T, object map[string]any, name string, keys ...string) {
+	t.Helper()
+	for _, key := range keys {
+		if _, ok := object[key]; !ok {
+			t.Fatalf("%s.%s is missing", name, key)
+		}
 	}
 }

@@ -15,6 +15,7 @@ import {
 } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import type {
   GraphLayout,
+  PositionedDocNode,
   PositionedEdge,
   PositionedNode,
   PositionedPlaceNode,
@@ -448,6 +449,7 @@ interface BuildCurrentActivityNodesInput {
   graphLayout: GraphLayout;
   locale?: string;
   now: number;
+  onSelectDoc: (targetPath: string) => void;
   onSelectResource: (resourceName: string) => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorkID: (
@@ -652,6 +654,50 @@ function buildPlaceNode(
   };
 }
 
+function buildDocNode(
+  positionedNode: PositionedDocNode,
+  input: BuildCurrentActivityNodesInput,
+): CurrentActivityNode {
+  const wireSelectionHandlers = shouldWireGraphNodeSelectionHandlers(
+    input.editor,
+  );
+
+  return {
+    className: "border-0 bg-transparent p-0 text-on-surface",
+    data: {
+      displayLabel: positionedNode.displayLabel,
+      factoryGraphNodeId: positionedNode.nodeId,
+      handles: [],
+      kind: "doc",
+      locale: input.locale,
+      ...(wireSelectionHandlers
+        ? { onSelectDoc: input.onSelectDoc }
+        : {}),
+      selectedDoc:
+        input.selection?.kind === "doc" &&
+        input.selection.targetPath === positionedNode.targetPath,
+      targetPath: positionedNode.targetPath,
+    },
+    draggable: true,
+    height: positionedNode.height,
+    id: positionedNode.nodeId,
+    initialHeight: positionedNode.height,
+    initialWidth: positionedNode.width,
+    measured: {
+      height: positionedNode.height,
+      width: positionedNode.width,
+    },
+    position: nodePosition(
+      positionedNode.nodeId,
+      { x: positionedNode.x, y: positionedNode.y },
+      input.storedNodePositions,
+    ),
+    selectable: true,
+    type: "doc",
+    width: positionedNode.width,
+  };
+}
+
 function buildWorkstationNode(
   positionedNode: PositionedWorkstationNode,
   input: BuildCurrentActivityNodesInput,
@@ -762,6 +808,7 @@ export function buildCurrentActivityNodes({
   graphLayout,
   locale,
   now,
+  onSelectDoc,
   onSelectResource,
   onSelectStateNode,
   onSelectWorkID,
@@ -794,6 +841,7 @@ export function buildCurrentActivityNodes({
     graphLayout,
     locale,
     now,
+    onSelectDoc,
     onSelectResource,
     onSelectStateNode,
     onSelectWorkID,
@@ -807,6 +855,11 @@ export function buildCurrentActivityNodes({
 
   for (const positionedNode of graphLayout.nodes) {
     if (resourceAliases.has(positionedNode.nodeId)) {
+      continue;
+    }
+
+    if (positionedNode.nodeKind === "doc") {
+      nextNodes.push(buildDocNode(positionedNode, input));
       continue;
     }
 

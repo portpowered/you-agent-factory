@@ -6,6 +6,7 @@ import {
   browserScenarioTimeoutMs,
   buildTimeoutMs,
   expectNoBrowserErrors,
+  fillModelWorkerAddOperationDraft,
   fillWorkstationPromptBody,
   modelProviderOptionLabel,
   openBrowserPage,
@@ -287,7 +288,12 @@ async function addWorker(
     modelProviderOptionLabel(modelProvider),
   );
   await addDialog.getByRole("textbox", { name: "Model" }).fill(model);
+  await fillModelWorkerAddOperationDraft(addDialog);
   await addDialog.getByRole("button", { name: "Add entity" }).click();
+  await addDialog.waitFor({
+    state: "hidden",
+    timeout: uiInteractionTimeoutMs,
+  });
 }
 
 async function addWorkstation(page, toolbar, { body, name }) {

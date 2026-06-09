@@ -1,0 +1,11 @@
+type: string
+description: Visibility boundary for one factory artifact projection.
+enum:
+  - PUBLIC
+  - INTERNAL_CHECKPOINT
+x-enum-varnames:
+  - FactoryArtifactVisibilityPUBLIC
+  - FactoryArtifactVisibilityINTERNALCHECKPOINT
+x-enum-descriptions:
+  - Customer-visible artifact metadata and authorized content access.
+  - Orchestrator-owned checkpoint payload kept behind refs and internal store records.

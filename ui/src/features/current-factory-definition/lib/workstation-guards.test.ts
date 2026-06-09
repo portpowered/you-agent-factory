@@ -117,9 +117,12 @@ describe("workstation-guards draft equality and rename", () => {
       ],
       inputs: [],
       name: "Alpha",
+      operation: "",
+      operationBindings: [],
       prompt: "",
       runnerName: null,
       workerName: "w",
+      workstationType: "MODEL_WORKSTATION" as const,
     };
     const right = {
       ...left,

@@ -1502,6 +1502,7 @@ func (s *stubModelService) InvokeModel(_ context.Context, modelName string, requ
 
 type stubFactoryCoordinator struct {
 	listSessionsResult factoryapi.ListFactorySessionsResponse
+	getSessionResult   factoryapi.FactorySession
 	openResult         factoryapi.OpenFactorySessionResponse
 	currentFactory     factoryapi.Factory
 	workSubmitResult   interfaces.WorkRequestSubmitResult
@@ -1523,6 +1524,22 @@ func (s *stubFactoryCoordinator) ActivateNamedFactory(_ context.Context, name st
 func (s *stubFactoryCoordinator) ListFactorySessions(context.Context) (factoryapi.ListFactorySessionsResponse, error) {
 	s.calls = append(s.calls, "list-sessions")
 	return s.listSessionsResult, nil
+}
+
+func (s *stubFactoryCoordinator) GetFactorySession(_ context.Context, sessionID string) (factoryapi.FactorySession, error) {
+	s.calls = append(s.calls, "get-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.getSessionResult, nil
+}
+
+func (s *stubFactoryCoordinator) GetFactorySessionResult(context.Context, string) (factoryapi.FactorySessionLiveResult, error) {
+	s.calls = append(s.calls, "get-session-result")
+	return factoryapi.FactorySessionLiveResult{}, nil
+}
+
+func (s *stubFactoryCoordinator) GetFactorySessionPartialResult(context.Context, string) (factoryapi.FactorySessionPartialResult, error) {
+	s.calls = append(s.calls, "get-session-partial-result")
+	return factoryapi.FactorySessionPartialResult{}, nil
 }
 
 func (s *stubFactoryCoordinator) OpenFactorySession(_ context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
@@ -1557,7 +1574,7 @@ func (s *stubFactoryCoordinator) MoveWorkForSession(_ context.Context, sessionID
 	return s.moveResult, nil
 }
 
-func (s *stubFactoryCoordinator) SubscribeFactoryEventsForSession(_ context.Context, sessionID string) (*interfaces.FactoryEventStream, error) {
+func (s *stubFactoryCoordinator) SubscribeFactoryEventsForSession(_ context.Context, sessionID string, _ *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
 	s.calls = append(s.calls, "subscribe-session-events")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
 	return s.eventStream, nil
@@ -1711,7 +1728,7 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	if _, err := svc.MoveWorkForSession(context.Background(), "session-a", "work-1", "done", "request-2"); err != nil {
 		t.Fatalf("MoveWorkForSession: %v", err)
 	}
-	if _, err := svc.SubscribeFactoryEventsForSession(context.Background(), "session-a"); err != nil {
+	if _, err := svc.SubscribeFactoryEventsForSession(context.Background(), "session-a", nil); err != nil {
 		t.Fatalf("SubscribeFactoryEventsForSession: %v", err)
 	}
 	snapshot, err := svc.GetEngineStateSnapshotForSession(context.Background(), "session-a")

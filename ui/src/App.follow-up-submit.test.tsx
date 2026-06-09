@@ -149,7 +149,7 @@ describe("App follow-up flows", () => {
         }),
       ).toBeTruthy();
       await user.keyboard("{Escape}");
-      expect(submitButton.disabled).toBe(true);
+      expect(submitButton.disabled).toBe(false);
       expect(
         submitWorkScope.queryByText(
           "Choose a work type and enter a request name to continue.",

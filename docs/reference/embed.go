@@ -7,6 +7,6 @@ import "embed"
 // PackagedTopics is the embedded markdown for every topic registered in
 // pkg/cli/docs. Authoritative content lives only in this directory.
 var (
-	//go:embed agents.md authoring-factories.md batch-inputs.md config.md guards.md mock-workers.md models.md packaged-tts.md record-replay.md relationships.md resources.md sessions.md templates.md work.md workers.md workstations.md
+	//go:embed agents.md authoring-factories.md batch-inputs.md config.md guards.md mock-workers.md models.md orchestrators.md packaged-tts.md record-replay.md relationships.md resources.md sessions.md templates.md work.md workers.md workstations.md
 	PackagedTopics embed.FS
 )

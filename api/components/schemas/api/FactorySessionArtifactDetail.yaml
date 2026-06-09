@@ -1,0 +1,53 @@
+type: object
+additionalProperties: false
+required:
+  - sessionId
+  - id
+  - kind
+  - visibility
+description: >-
+  Durable factory-session artifact detail with metadata and either inlined
+  content or a safe retrieval ref according to visibility and payload size.
+properties:
+  sessionId:
+    type: string
+    description: Stable factory-session identifier that owns the artifact.
+  id:
+    type: string
+    description: Stable artifact identifier.
+  kind:
+    $ref: '../data-models/FactoryArtifactKind.yaml'
+  visibility:
+    $ref: '../data-models/FactoryArtifactVisibility.yaml'
+  label:
+    type: string
+    description: Customer-visible artifact label.
+  summary:
+    type: string
+    description: Customer-visible artifact summary.
+  contentHash:
+    type: string
+    description: Stable hash of the stored artifact payload.
+  sizeBytes:
+    type: integer
+    format: int64
+    description: Stored artifact payload size in bytes.
+  createdAt:
+    type: string
+    format: date-time
+    description: Timestamp when the artifact was created or captured.
+  dispatchId:
+    type: string
+    description: Dispatch identifier that produced the artifact when applicable.
+  auditMode:
+    $ref: '../data-models/FactoryArtifactAuditMode.yaml'
+  redactionCounts:
+    $ref: '../data-models/FactoryArtifactRedactionCounts.yaml'
+  captureMetadata:
+    $ref: '../data-models/FactoryArtifactCaptureMetadata.yaml'
+  content:
+    $ref: '../data-models/WorkContent.yaml'
+    description: Inlined artifact content when visibility and size allow direct return.
+  contentRef:
+    $ref: './FactorySessionArtifactRetrievalRef.yaml'
+    description: Safe retrieval reference when content is omitted from the response body.

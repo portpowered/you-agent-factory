@@ -375,5 +375,267 @@
       "state": "COMPLETED",
       "reason": "all work finished"
     }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-session-started",
+    "type": "SESSION_STARTED",
+    "context": {
+      "sequence": 15,
+      "tick": 4,
+      "eventTime": "2026-04-21T12:00:09Z",
+      "sessionId": "session-alpha",
+      "sessionSequence": 0,
+      "orchestratorKind": "JAVASCRIPT",
+      "orchestratorDialect": "workflow-v1",
+      "source": "api"
+    },
+    "payload": {
+      "factoryId": "factory-alpha",
+      "sourceRef": "workflow/main.js",
+      "sourceHash": "sha256:source",
+      "policyHash": "sha256:policy",
+      "argsDigest": "sha256:args",
+      "startedAt": "2026-04-21T12:00:09Z"
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-session-result-updated",
+    "type": "SESSION_RESULT_UPDATED",
+    "context": {
+      "sequence": 16,
+      "tick": 5,
+      "eventTime": "2026-04-21T12:00:10Z",
+      "sessionId": "session-alpha",
+      "sessionSequence": 1,
+      "orchestratorKind": "JAVASCRIPT",
+      "phaseId": "phase-plan",
+      "phaseName": "plan",
+      "source": "api"
+    },
+    "payload": {
+      "resultStatus": "PARTIAL",
+      "artifactIds": ["artifact-partial-1"],
+      "resultSummary": [
+        {
+          "type": "TEXT",
+          "text": "Planning summary"
+        }
+      ]
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-session-completed",
+    "type": "SESSION_COMPLETED",
+    "context": {
+      "sequence": 17,
+      "tick": 6,
+      "eventTime": "2026-04-21T12:00:11Z",
+      "sessionId": "session-alpha",
+      "sessionSequence": 2,
+      "orchestratorKind": "JAVASCRIPT",
+      "source": "api"
+    },
+    "payload": {
+      "finalStatus": "FINISHED",
+      "completedAt": "2026-04-21T12:00:11Z",
+      "durationMillis": 2000,
+      "resultStatus": "FINAL",
+      "artifactIds": ["artifact-result-1"],
+      "dispatchCounts": {
+        "queued": 0,
+        "running": 0,
+        "completed": 2
+      }
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-orchestrator-phase-changed",
+    "type": "ORCHESTRATOR_PHASE_CHANGED",
+    "context": {
+      "sequence": 18,
+      "tick": 6,
+      "eventTime": "2026-04-21T12:00:11Z",
+      "sessionId": "session-alpha",
+      "sessionSequence": 3,
+      "orchestratorKind": "JAVASCRIPT",
+      "phaseId": "phase-execute",
+      "phaseName": "execute",
+      "source": "api"
+    },
+    "payload": {
+      "previousPhaseId": "phase-plan",
+      "previousPhaseName": "plan",
+      "phaseStatus": "ACTIVE",
+      "startedAt": "2026-04-21T12:00:11Z",
+      "progressSummary": "Entered execute phase"
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-orchestrator-checkpoint-written",
+    "type": "ORCHESTRATOR_CHECKPOINT_WRITTEN",
+    "context": {
+      "sequence": 19,
+      "tick": 6,
+      "eventTime": "2026-04-21T12:00:12Z",
+      "sessionId": "session-alpha",
+      "sessionSequence": 4,
+      "orchestratorKind": "JAVASCRIPT",
+      "phaseId": "phase-execute",
+      "phaseName": "execute",
+      "checkpointId": "ckpt-2",
+      "source": "api"
+    },
+    "payload": {
+      "label": "after-plan",
+      "timestamp": "2026-04-21T12:00:12Z",
+      "sourceHash": "sha256:source",
+      "runtimeSnapshotDigest": "sha256:snapshot",
+      "artifactRef": {
+        "id": "artifact-ckpt-2",
+        "kind": "CHECKPOINT",
+        "visibility": "INTERNAL_CHECKPOINT",
+        "contentHash": "sha256:checkpoint-body",
+        "sizeBytes": 128
+      },
+      "resumabilityStatus": "RESUMABLE"
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-dispatch-queued",
+    "type": "DISPATCH_QUEUED",
+    "context": {
+      "sequence": 20,
+      "tick": 7,
+      "eventTime": "2026-04-21T12:00:13Z",
+      "sessionId": "session-alpha",
+      "sessionSequence": 5,
+      "orchestratorKind": "JAVASCRIPT",
+      "phaseId": "phase-execute",
+      "phaseName": "execute",
+      "dispatchId": "dispatch-child-1",
+      "source": "api"
+    },
+    "payload": {
+      "dispatchKind": "JAVASCRIPT_AGENT",
+      "label": "summarize findings",
+      "queuePosition": 0,
+      "promptDigest": "sha256:prompt",
+      "schemaDigest": "sha256:schema",
+      "inputWorkIds": ["work-1"]
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-dispatch-interrupted",
+    "type": "DISPATCH_INTERRUPTED",
+    "context": {
+      "sequence": 21,
+      "tick": 7,
+      "eventTime": "2026-04-21T12:00:14Z",
+      "sessionId": "session-alpha",
+      "sessionSequence": 6,
+      "orchestratorKind": "JAVASCRIPT",
+      "dispatchId": "dispatch-child-1",
+      "source": "api"
+    },
+    "payload": {
+      "reason": "provider disconnected",
+      "observedStatus": "FAILED",
+      "interruptedAt": "2026-04-21T12:00:14Z",
+      "retryPlanned": true
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-dispatch-reconciled",
+    "type": "DISPATCH_RECONCILED",
+    "context": {
+      "sequence": 22,
+      "tick": 8,
+      "eventTime": "2026-04-21T12:00:15Z",
+      "sessionId": "session-alpha",
+      "sessionSequence": 7,
+      "orchestratorKind": "JAVASCRIPT",
+      "dispatchId": "dispatch-child-1",
+      "source": "replay"
+    },
+    "payload": {
+      "reconciledStatus": "COMPLETED",
+      "reconciliationSource": "PROVIDER_SESSION",
+      "replayed": true,
+      "artifactIds": ["artifact-result-1"]
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-javascript-checkpoint-ref",
+    "type": "JAVASCRIPT_CHECKPOINT_REF",
+    "context": {
+      "sequence": 23,
+      "tick": 8,
+      "eventTime": "2026-04-21T12:00:16Z"
+    },
+    "payload": {
+      "checkpointId": "ckpt-1",
+      "label": "after-plan",
+      "summary": "Completed planning phase",
+      "timestamp": "2026-04-21T12:00:10Z",
+      "artifactRef": {
+        "id": "artifact-ckpt-1",
+        "kind": "CHECKPOINT",
+        "visibility": "INTERNAL_CHECKPOINT",
+        "contentHash": "sha256:checkpoint-body",
+        "sizeBytes": 128
+      }
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-javascript-phase-change",
+    "type": "JAVASCRIPT_PHASE_CHANGE",
+    "context": {
+      "sequence": 24,
+      "tick": 9,
+      "eventTime": "2026-04-21T12:00:17Z"
+    },
+    "payload": {
+      "phase": "execute",
+      "phases": ["plan", "execute"],
+      "argsDigest": "sha256:args",
+      "scriptStatus": "RUNNING",
+      "childDispatchCounts": {
+        "queued": 1,
+        "running": 2,
+        "completed": 3
+      }
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-artifact-created",
+    "type": "ARTIFACT_CREATED",
+    "context": {
+      "sequence": 25,
+      "tick": 9,
+      "eventTime": "2026-04-21T12:00:18Z"
+    },
+    "payload": {
+      "artifact": {
+        "id": "artifact-result-1",
+        "kind": "FINAL_RESULT",
+        "visibility": "PUBLIC",
+        "label": "Review summary",
+        "summary": "Completed review findings",
+        "contentHash": "sha256:result-body",
+        "sizeBytes": 512
+      },
+      "capturedAt": "2026-04-21T12:00:12Z"
+    }
   }
 ]

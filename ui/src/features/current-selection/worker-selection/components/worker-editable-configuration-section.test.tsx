@@ -1,19 +1,15 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
 
-import type { CanonicalFactoryDefinition } from "../../../../api/factory-definition/api";
-import {
-  EMPTY_HOSTED_LINEAR_EDITABLE_DRAFT_FIELDS,
-  EMPTY_HOSTED_LINEAR_EDITABLE_VALUES,
-} from "../../../current-factory-definition/lib/worker-editable-values";
 import type { EditableWorkerConfigurationState } from "../lib/detail-card-types";
-import { getWorkerDetailMessages } from "../messages/worker-detail";
 import { WorkerEditableConfigurationSection } from "./worker-editable-configuration-section";
-
-const messages = getWorkerDetailMessages();
+import {
+  buildReadyWorkerEditableConfigurationState,
+  workerEditableConfigurationSectionMessages as messages,
+} from "./worker-editable-configuration-section.test-helpers";
 
 let restoreBrowserShims: (() => void) | undefined;
 
@@ -26,78 +22,6 @@ afterEach(() => {
   restoreBrowserShims?.();
   restoreBrowserShims = undefined;
 });
-
-function buildReadyWorkerEditableConfigurationState(
-  workstationNames: string[],
-): Extract<EditableWorkerConfigurationState, { status: "ready" }> {
-  return {
-    canSave: true,
-    draft: {
-      argsText: "",
-      body: "",
-      command: "",
-      executorProvider: null,
-      model: "gpt-5.5",
-      modelLocality: null,
-      modelProvider: "CURSOR",
-      name: "reviewer",
-      provider: null,
-      skipPermissions: false,
-      stopToken: "",
-      timeoutAmount: "",
-      timeoutUnit: "m",
-      type: "MODEL_WORKER",
-      ...EMPTY_HOSTED_LINEAR_EDITABLE_DRAFT_FIELDS,
-    },
-    hasValidationErrors: false,
-    initialValues: {
-      args: [],
-      body: null,
-      command: null,
-      executorProvider: null,
-      model: "gpt-5.5",
-      modelLocality: null,
-      modelProvider: "CURSOR",
-      name: "reviewer",
-      provider: null,
-      skipPermissions: null,
-      stopToken: null,
-      timeout: null,
-      type: "MODEL_WORKER",
-      workerName: "reviewer",
-      workstationNames,
-      ...EMPTY_HOSTED_LINEAR_EDITABLE_VALUES,
-    },
-    isDirty: true,
-    onArgsTextChange: vi.fn(),
-    onAuthSecretRefChange: vi.fn(),
-    onBodyChange: vi.fn(),
-    onCommandChange: vi.fn(),
-    onExecutorProviderChange: vi.fn(),
-    onLinearClaimAssigneeFieldChange: vi.fn(),
-    onLinearMappingStateChange: vi.fn(),
-    onLinearMappingWorkTypeChange: vi.fn(),
-    onLinearPollIntervalChange: vi.fn(),
-    onLinearStateIdsTextChange: vi.fn(),
-    onLinearTeamIdsTextChange: vi.fn(),
-    onModelChange: vi.fn(),
-    onModelLocalityChange: vi.fn(),
-    onModelProviderChange: vi.fn(),
-    onNameChange: vi.fn(),
-    onProviderChange: vi.fn(),
-    onSkipPermissionsChange: vi.fn(),
-    onStopTokenChange: vi.fn(),
-    onTimeoutAmountChange: vi.fn(),
-    onTimeoutUnitChange: vi.fn(),
-    markChangesSaved: vi.fn(),
-    onResetToLatest: vi.fn(),
-    onTypeChange: vi.fn(),
-    overwriteFieldNames: [],
-    pendingFactoryDefinition: {} as CanonicalFactoryDefinition,
-    status: "ready",
-    validationErrors: {},
-  };
-}
 
 describe("WorkerEditableConfigurationSection shared-impact warnings", () => {
   it("shows worker save-impact warning when multiple workstations reference the worker", () => {
@@ -177,54 +101,6 @@ describe("WorkerEditableConfigurationSection timeout control", () => {
     expect(
       screen.getByRole("spinbutton", { name: messages.timeoutFieldLabel }),
     ).toBeInTheDocument();
-  });
-});
-
-describe("WorkerEditableConfigurationSection skipPermissions control", () => {
-  it("shows the permission bypass toggle for model workers", () => {
-    render(
-      <WorkerEditableConfigurationSection
-        messages={messages}
-        state={buildReadyWorkerEditableConfigurationState(["Review"])}
-        workerName="reviewer"
-      />,
-    );
-
-    expect(
-      screen.getByRole("checkbox", {
-        name: messages.skipPermissionsFieldLabel,
-      }),
-    ).toBeInTheDocument();
-  });
-
-  it("does not show the permission bypass toggle for script workers", () => {
-    const scriptWorkerState: Extract<
-      EditableWorkerConfigurationState,
-      { status: "ready" }
-    > = {
-      ...buildReadyWorkerEditableConfigurationState(["Review"]),
-      draft: {
-        ...buildReadyWorkerEditableConfigurationState(["Review"]).draft,
-        model: "",
-        modelProvider: null,
-        type: "SCRIPT_WORKER",
-        command: "node",
-      },
-    };
-
-    render(
-      <WorkerEditableConfigurationSection
-        messages={messages}
-        state={scriptWorkerState}
-        workerName="reviewer"
-      />,
-    );
-
-    expect(
-      screen.queryByRole("checkbox", {
-        name: messages.skipPermissionsFieldLabel,
-      }),
-    ).toBeNull();
   });
 });
 

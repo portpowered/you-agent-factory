@@ -1,0 +1,15 @@
+type: object
+additionalProperties: false
+properties:
+  reason:
+    type: string
+    description: Stable failure reason code when the session failed or was interrupted.
+  message:
+    type: string
+    description: Customer-visible failure message.
+  errorClass:
+    type: string
+    description: Provider or runtime error class when available.
+  partialResultAvailable:
+    type: boolean
+    description: Whether partial results remain inspectable after the failure.

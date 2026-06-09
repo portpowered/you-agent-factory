@@ -94,14 +94,12 @@ describe("SelectedWorkDispatchHistorySection", () => {
     expect(title.className).toContain("type-headline-large");
     expect(within(historyCard).getByText("Current dispatch")).toBeTruthy();
     expect(within(historyCard).queryByText("Workstation")).toBeNull();
-    expect(
-      within(historyCard).getByRole("heading", { name: "Request details" }),
-    ).toBeTruthy();
+    expect(within(historyCard).getByRole("heading", { name: "Summary" })).toBeTruthy();
     const header = title.closest("div");
     expect(header?.parentElement?.className).toContain("justify-between");
 
     const requestDetailsSection = within(historyCard)
-      .getByRole("heading", { name: "Request details" })
+      .getByRole("heading", { name: "Summary" })
       .closest("section");
     if (!requestDetailsSection) {
       throw new Error("expected request details section");
@@ -111,7 +109,7 @@ describe("SelectedWorkDispatchHistorySection", () => {
       within(requestDetailsSection).getByRole("button", { name: "Expand" }),
     );
 
-    expect(within(historyCard).getAllByText("dispatch-card").length).toBe(2);
+    expect(within(historyCard).getAllByText("dispatch-card").length).toBe(1);
     expect(within(historyCard).getByText("Request details")).toBeTruthy();
   });
 });

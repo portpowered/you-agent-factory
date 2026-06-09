@@ -602,6 +602,28 @@ Use this contract when you want a canonical portable `factory.json` to collect,
 carry, and restore supporting files across `config flatten`, `config expand`,
 and `LoadRuntimeConfig(...)` without redefining the manifest shape.
 
+- Checked-in files under `factory/docs/**` are bundled by default. `config
+  flatten` and the first load of a split layout discover those docs and add them
+  to `supportingFiles.bundledFiles` when the manifest does not already list DOC
+  entries.
+- After a factory lists DOC entries in `supportingFiles.bundledFiles`, the
+  manifest is authoritative for dashboard/API saves: create, rename, edit, and
+  delete operations round-trip through `PUT /factory-sessions/{id}/factory` and
+  update the saved current-factory document version without requiring a full page
+  reload.
+- Implicit default bundling (checked-in docs discovered on disk) is separate
+  from explicit dashboard edits to bundled docs. Dashboard edits persist DOC
+  entries in the manifest and materialize or prune the matching files under
+  `factory/docs/**` on save.
+- In the dashboard, bundled docs appear as **doc nodes** in the current activity
+  graph. Selecting a doc node opens the current-selection doc editor so you can
+  rename the file under `factory/docs/**` and edit UTF-8 text with the same
+  Monaco surface used for other factory text. Graph editor mode also supports
+  add and delete flows for docs before you save the factory document.
+- Workstation prompt authoring surfaces include attached docs in Monaco
+  suggestions. Inserted references use the canonical `{{ index .Docs
+  "factory/docs/<name>" }}` syntax and are validated against the current
+  factory's bundled DOC manifest.
 - `config flatten` adds supported `factory/scripts/**` and `factory/docs/**`
   to `supportingFiles.bundledFiles` automatically for checked-in `factory/`
   layouts. Root helper files such as `Makefile` are opt-in `ROOT_HELPER`

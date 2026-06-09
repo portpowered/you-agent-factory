@@ -6,8 +6,10 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	generated "github.com/portpowered/infinite-you/pkg/api/generated"
 	"gopkg.in/yaml.v3"
 )
 
@@ -34,7 +36,25 @@ func TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete(t *testing.T) 
 	assertEnumValues(t, schemaObject(t, schemas, "FactoryEventType"), "FactoryEventType", canonicalFactoryEventTypeValues)
 
 	contextProperties := schemaProperties(t, schemaObject(t, schemas, "FactoryEventContext"), "FactoryEventContext")
-	assertSchemaPropertiesPresent(t, contextProperties, "FactoryEventContext", "eventTime", "requestId", "traceIds", "workIds", "dispatchId", "currentChainingTraceId")
+	assertSchemaPropertiesPresent(
+		t,
+		contextProperties,
+		"FactoryEventContext",
+		"eventTime",
+		"sessionId",
+		"sessionSequence",
+		"orchestratorKind",
+		"orchestratorDialect",
+		"phaseId",
+		"phaseName",
+		"checkpointId",
+		"requestId",
+		"traceIds",
+		"workIds",
+		"dispatchId",
+		"currentChainingTraceId",
+		"source",
+	)
 	assertStringArrayProperty(t, contextProperties, "previousChainingTraceIds")
 
 	assertBundledEventPayloadRefs(t, schemas)
@@ -67,6 +87,19 @@ func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 		"WorkStateChangeSource":                 "./components/schemas/events/WorkStateChangeSource.yaml",
 		"FactoryStateResponseEventPayload":      "./components/schemas/events/payloads/FactoryStateResponseEventPayload.yaml",
 		"RunResponseEventPayload":               "./components/schemas/events/payloads/RunResponseEventPayload.yaml",
+		"FactoryEventSessionResultStatus":       "./components/schemas/events/FactoryEventSessionResultStatus.yaml",
+		"OrchestratorPhaseStatus":               "./components/schemas/events/OrchestratorPhaseStatus.yaml",
+		"CheckpointResumabilityStatus":          "./components/schemas/events/CheckpointResumabilityStatus.yaml",
+		"DispatchReconciliationSource":          "./components/schemas/events/DispatchReconciliationSource.yaml",
+		"SessionStartedEventPayload":            "./components/schemas/events/payloads/SessionStartedEventPayload.yaml",
+		"SessionResultUpdatedEventPayload":      "./components/schemas/events/payloads/SessionResultUpdatedEventPayload.yaml",
+		"SessionCompletedEventPayload":          "./components/schemas/events/payloads/SessionCompletedEventPayload.yaml",
+		"OrchestratorPhaseChangedEventPayload":  "./components/schemas/events/payloads/OrchestratorPhaseChangedEventPayload.yaml",
+		"OrchestratorCheckpointWrittenEventPayload": "./components/schemas/events/payloads/OrchestratorCheckpointWrittenEventPayload.yaml",
+		"DispatchQueuedEventPayload":            "./components/schemas/events/payloads/DispatchQueuedEventPayload.yaml",
+		"DispatchInterruptedEventPayload":       "./components/schemas/events/payloads/DispatchInterruptedEventPayload.yaml",
+		"DispatchReconciledEventPayload":        "./components/schemas/events/payloads/DispatchReconciledEventPayload.yaml",
+		"JavaScriptCheckpointRefEventPayload":   "./components/schemas/events/payloads/JavaScriptCheckpointRefEventPayload.yaml",
 		"InferenceOutcome":                      "./components/schemas/events/InferenceOutcome.yaml",
 		"ScriptExecutionOutcome":                "./components/schemas/events/ScriptExecutionOutcome.yaml",
 		"ScriptFailureType":                     "./components/schemas/events/ScriptFailureType.yaml",
@@ -472,5 +505,255 @@ func assertGeneratedFactoryLoopBreakerPayload(t *testing.T, payload map[string]a
 	}
 	if got, ok := guard["maxVisits"].(float64); !ok || int(got) != 3 {
 		t.Fatalf("generated.Factory workstation guard maxVisits = %#v, want %d", guard["maxVisits"], 3)
+	}
+}
+func TestOpenAPIContract_FactoryExposesOrchestratorSchema(t *testing.T) {
+	schemas := loadBundledOpenAPIComponentSchemas(t)
+	assertSchemaPropertyRef(t, schemas, "Factory", "orchestrator", "#/components/schemas/FactoryOrchestrator")
+	assertSchemaPropertyRef(t, schemas, "FactoryOrchestrator", "kind", "#/components/schemas/FactoryOrchestratorKind")
+	assertSchemaPropertyRef(t, schemas, "FactoryOrchestrator", "petri", "#/components/schemas/FactoryOrchestratorPetriConfig")
+	assertSchemaPropertyRef(t, schemas, "FactoryOrchestrator", "javascript", "#/components/schemas/FactoryOrchestratorJavaScriptConfig")
+	assertEnumValues(t, schemaObject(t, schemas, "FactoryOrchestratorKind"), "FactoryOrchestratorKind", []string{"PETRI", "JAVASCRIPT"})
+}
+
+func TestGeneratedFactoryContracts_OrchestratorTypesAgreeWithOpenAPI(t *testing.T) {
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.Factory{}), "Orchestrator", reflect.TypeOf((*factoryapi.FactoryOrchestrator)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactoryOrchestrator{}), "Kind", reflect.TypeOf(factoryapi.FactoryOrchestratorKind("")))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactoryOrchestrator{}), "Petri", reflect.TypeOf((*factoryapi.FactoryOrchestratorPetriConfig)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactoryOrchestrator{}), "Javascript", reflect.TypeOf((*factoryapi.FactoryOrchestratorJavaScriptConfig)(nil)))
+}
+
+func TestGeneratedFactoryContracts_JavaScriptOrchestratorRoundTrip(t *testing.T) {
+	argsSchema := map[string]any{"type": "object"}
+	defaultPolicy := map[string]any{"maxAgents": 2}
+	factory := factoryapi.Factory{
+		Name: "dynamic-workflow",
+		Orchestrator: &factoryapi.FactoryOrchestrator{
+			Kind: factoryapi.JAVASCRIPT,
+			Javascript: &factoryapi.FactoryOrchestratorJavaScriptConfig{
+				SourceRef:     stringPtr("factory/workflows/review.js"),
+				Entrypoint:    stringPtr("main"),
+				ArgsSchema:    &argsSchema,
+				DefaultPolicy: &defaultPolicy,
+			},
+		},
+	}
+
+	encoded, err := json.Marshal(factory)
+	if err != nil {
+		t.Fatalf("marshal generated JavaScript factory: %v", err)
+	}
+	var decoded factoryapi.Factory
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("unmarshal generated JavaScript factory: %v", err)
+	}
+	if decoded.Orchestrator == nil || decoded.Orchestrator.Kind != factoryapi.JAVASCRIPT {
+		t.Fatalf("decoded orchestrator = %#v, want JAVASCRIPT", decoded.Orchestrator)
+	}
+	if decoded.Orchestrator.Javascript == nil || decoded.Orchestrator.Javascript.SourceRef == nil {
+		t.Fatalf("decoded javascript config = %#v", decoded.Orchestrator.Javascript)
+	}
+}
+
+func TestOpenAPIContract_FactorySessionExposesRuntimeProjectionSchema(t *testing.T) {
+	schemas := loadBundledOpenAPIComponentSchemas(t)
+	assertSchemaPropertyRef(t, schemas, "FactorySession", "runtime", "#/components/schemas/FactorySessionRuntime")
+	assertSchemaPropertyRef(t, schemas, "FactorySessionSummary", "runtime", "#/components/schemas/FactorySessionRuntime")
+	assertSchemaPropertyRef(t, schemas, "FactorySessionRuntime", "orchestratorKind", "#/components/schemas/FactoryOrchestratorKind")
+	assertSchemaPropertyRef(t, schemas, "FactorySessionRuntime", "status", "#/components/schemas/FactorySessionStatus")
+	assertSchemaPropertyRef(t, schemas, "FactorySessionRuntime", "petri", "#/components/schemas/FactorySessionPetriProjection")
+	assertSchemaPropertyRef(t, schemas, "FactorySessionRuntime", "javascript", "#/components/schemas/FactorySessionJavaScriptProjection")
+	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionStatus"), "FactorySessionStatus", []string{"ACTIVE", "IDLE", "FINISHED"})
+}
+
+func TestGeneratedFactorySessionContracts_RuntimeTypesAgreeWithOpenAPI(t *testing.T) {
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySession{}), "Runtime", reflect.TypeOf(factoryapi.FactorySessionRuntime{}))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionSummary{}), "Runtime", reflect.TypeOf((*factoryapi.FactorySessionRuntime)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "OrchestratorKind", reflect.TypeOf(factoryapi.FactoryOrchestratorKind("")))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "Petri", reflect.TypeOf((*factoryapi.FactorySessionPetriProjection)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "Javascript", reflect.TypeOf((*factoryapi.FactorySessionJavaScriptProjection)(nil)))
+}
+
+func TestGeneratedFactorySessionContracts_JavaScriptRuntimeRoundTrip(t *testing.T) {
+	phase := "review"
+	argsDigest := "sha256:args"
+	checkpoints := []factoryapi.FactorySessionJavaScriptCheckpointRef{{Id: "ckpt-1"}}
+	session := factoryapi.FactorySession{
+		Id: "session-js",
+		Target: factoryapi.FactorySessionTargetRef{
+			Kind: factoryapi.FactorySessionTargetRefKindDefault,
+		},
+		FactoryDir: "/factories/js",
+		FolderPath: "/workspace",
+		Project:    "dynamic-workflow",
+		Runtime: factoryapi.FactorySessionRuntime{
+			OrchestratorKind: factoryapi.JAVASCRIPT,
+			Status:           factoryapi.FactorySessionStatusIDLE,
+			Progress: factoryapi.FactorySessionProgress{
+				FactoryState:  "UNKNOWN",
+				Categories:    factoryapi.StatusCategories{},
+				InFlightCount: 0,
+				TotalTokens:   0,
+			},
+			Usage: factoryapi.FactorySessionUsage{Resources: []factoryapi.ResourceUsage{}},
+			Lifecycle: factoryapi.FactorySessionLifecycle{
+				StartedAt: time.Date(2026, 6, 8, 14, 0, 0, 0, time.UTC),
+				UpdatedAt: time.Date(2026, 6, 8, 14, 0, 0, 0, time.UTC),
+			},
+			Javascript: &factoryapi.FactorySessionJavaScriptProjection{
+				Phase:      &phase,
+				Phases:     []string{"plan", "review"},
+				ArgsDigest: &argsDigest,
+				Checkpoints: &checkpoints,
+				ScriptStatus: factoryapi.FactorySessionJavaScriptScriptStatusRUNNING,
+				ChildDispatchCounts: factoryapi.FactorySessionJavaScriptChildDispatchCounts{
+					Queued: 1, Running: 0, Completed: 2,
+				},
+			},
+		},
+	}
+	encoded, err := json.Marshal(session)
+	if err != nil {
+		t.Fatalf("marshal generated JavaScript session: %v", err)
+	}
+	var decoded factoryapi.FactorySession
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("unmarshal generated JavaScript session: %v", err)
+	}
+	if decoded.Runtime.Javascript == nil || decoded.Runtime.OrchestratorKind != factoryapi.JAVASCRIPT {
+		t.Fatalf("decoded session runtime = %#v", decoded.Runtime)
+	}
+}
+
+func TestOpenAPIContract_CheckpointSchemasExposeArtifactMetadataOnly(t *testing.T) {
+	schemas := loadBundledOpenAPIComponentSchemas(t)
+	assertSchemaPropertyRef(t, schemas, "FactorySessionJavaScriptCheckpointRef", "artifactRef", "#/components/schemas/FactoryArtifactRef")
+	assertSchemaPropertyRef(t, schemas, "FactorySessionLiveResult", "resultArtifactRef", "#/components/schemas/FactoryArtifactRef")
+	assertSchemaPropertyRef(t, schemas, "FactorySessionPartialResult", "partialResultArtifactRef", "#/components/schemas/FactoryArtifactRef")
+	assertSchemaPropertyRef(t, schemas, "JavaScriptCheckpointRefEventPayload", "artifactRef", "#/components/schemas/FactoryArtifactRef")
+	assertEnumValues(t, schemaObject(t, schemas, "FactoryArtifactVisibility"), "FactoryArtifactVisibility", []string{"PUBLIC", "INTERNAL_CHECKPOINT"})
+	assertEnumValues(t, schemaObject(t, schemas, "FactoryArtifactKind"), "FactoryArtifactKind", []string{
+		"FINAL_RESULT",
+		"CHILD_RESULT",
+		"FINDING",
+		"PATCH",
+		"LOG",
+		"DATASET",
+		"CHECKPOINT",
+		"WORKTREE_SUMMARY",
+	})
+}
+
+func TestGeneratedCheckpointContracts_ArtifactTypesAgreeWithOpenAPI(t *testing.T) {
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionJavaScriptCheckpointRef{}), "ArtifactRef", reflect.TypeOf((*factoryapi.FactoryArtifactRef)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionLiveResult{}), "ResultArtifactRef", reflect.TypeOf((*factoryapi.FactoryArtifactRef)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionPartialResult{}), "PartialResultArtifactRef", reflect.TypeOf((*factoryapi.FactoryArtifactRef)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.JavaScriptCheckpointRefEventPayload{}), "ArtifactRef", reflect.TypeOf(factoryapi.FactoryArtifactRef{}))
+}
+
+func TestOpenAPIContract_FactoryDispatchAndArtifactSchemasExposeSharedProjectionFields(t *testing.T) {
+	schemas := loadBundledOpenAPIComponentSchemas(t)
+	runtimeSchema := schemaObject(t, schemas, "FactorySessionRuntime")
+	runtimeProperties, _ := runtimeSchema["properties"].(map[string]any)
+	assertArrayItemRef(t, runtimeProperties, "dispatches", "#/components/schemas/FactoryDispatch")
+	assertArrayItemRef(t, runtimeProperties, "artifacts", "#/components/schemas/FactoryArtifact")
+	assertSchemaPropertyRef(t, schemas, "FactoryDispatch", "orchestratorKind", "#/components/schemas/FactoryOrchestratorKind")
+	assertSchemaPropertyRef(t, schemas, "FactoryDispatch", "dispatchKind", "#/components/schemas/FactoryDispatchKind")
+	assertSchemaPropertyRef(t, schemas, "FactoryDispatch", "status", "#/components/schemas/FactoryDispatchStatus")
+	assertSchemaPropertyRef(t, schemas, "FactoryDispatch", "petri", "#/components/schemas/FactoryDispatchPetriProjection")
+	assertSchemaPropertyRef(t, schemas, "FactoryDispatch", "javascript", "#/components/schemas/FactoryDispatchJavaScriptProjection")
+	assertSchemaPropertyRef(t, schemas, "FactoryArtifact", "kind", "#/components/schemas/FactoryArtifactKind")
+	assertSchemaPropertyRef(t, schemas, "FactoryArtifact", "visibility", "#/components/schemas/FactoryArtifactVisibility")
+	assertSchemaPropertyRef(t, schemas, "FactoryArtifact", "auditMode", "#/components/schemas/FactoryArtifactAuditMode")
+	assertEnumValues(t, schemaObject(t, schemas, "FactoryDispatchKind"), "FactoryDispatchKind", []string{
+		"PETRI_TRANSITION",
+		"JAVASCRIPT_AGENT",
+		"JAVASCRIPT_VERIFY",
+		"JAVASCRIPT_SYNTHESIZE",
+		"JAVASCRIPT_TOOL",
+		"JAVASCRIPT_SCRIPT",
+		"JAVASCRIPT_SYSTEM",
+	})
+	assertEnumValues(t, schemaObject(t, schemas, "FactoryDispatchStatus"), "FactoryDispatchStatus", []string{
+		"QUEUED", "RUNNING", "COMPLETED", "FAILED",
+	})
+	assertEnumValues(t, schemaObject(t, schemas, "FactoryArtifactKind"), "FactoryArtifactKind", []string{
+		"FINAL_RESULT",
+		"CHILD_RESULT",
+		"FINDING",
+		"PATCH",
+		"LOG",
+		"DATASET",
+		"CHECKPOINT",
+		"WORKTREE_SUMMARY",
+	})
+}
+
+func TestGeneratedDispatchArtifactContracts_RuntimeTypesAgreeWithOpenAPI(t *testing.T) {
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "Dispatches", reflect.TypeOf((*[]factoryapi.FactoryDispatch)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "Artifacts", reflect.TypeOf((*[]factoryapi.FactoryArtifact)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactoryDispatch{}), "Petri", reflect.TypeOf((*factoryapi.FactoryDispatchPetriProjection)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactoryDispatch{}), "Javascript", reflect.TypeOf((*factoryapi.FactoryDispatchJavaScriptProjection)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactoryArtifact{}), "AuditMode", reflect.TypeOf((*factoryapi.FactoryArtifactAuditMode)(nil)))
+}
+
+func TestGeneratedDispatchArtifactContracts_PetriAndJavaScriptRoundTrip(t *testing.T) {
+	label := "process"
+	phase := "review"
+	dispatches := []factoryapi.FactoryDispatch{{
+		Id:               "dispatch-petri-1",
+		SessionId:        "~default",
+		OrchestratorKind: factoryapi.PETRI,
+		DispatchKind:     factoryapi.FactoryDispatchKindPETRITRANSITION,
+		Status:           factoryapi.FactoryDispatchStatusRUNNING,
+		Label:            &label,
+		Petri: &factoryapi.FactoryDispatchPetriProjection{
+			TransitionId: "tr-process",
+		},
+	}, {
+		Id:               "dispatch-agent-1",
+		SessionId:        "session-js",
+		OrchestratorKind: factoryapi.JAVASCRIPT,
+		DispatchKind:     factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
+		Status:           factoryapi.FactoryDispatchStatusCOMPLETED,
+		Phase:            &phase,
+		Javascript: &factoryapi.FactoryDispatchJavaScriptProjection{
+			TaskKind: factoryapi.FactoryDispatchJavaScriptTaskKindAGENT,
+		},
+	}}
+	auditMode := factoryapi.FactoryArtifactAuditModeREDACTED
+	artifacts := []factoryapi.FactoryArtifact{{
+		Id:         "artifact-child-1",
+		Kind:       factoryapi.FactoryArtifactKindCHILDRESULT,
+		Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC,
+		AuditMode:  &auditMode,
+	}}
+	runtime := factoryapi.FactorySessionRuntime{
+		OrchestratorKind: factoryapi.JAVASCRIPT,
+		Status:           factoryapi.FactorySessionStatusIDLE,
+		Progress: factoryapi.FactorySessionProgress{
+			FactoryState:  "UNKNOWN",
+			Categories:    factoryapi.StatusCategories{},
+			InFlightCount: 0,
+			TotalTokens:   0,
+		},
+		Usage:     factoryapi.FactorySessionUsage{Resources: []factoryapi.ResourceUsage{}},
+		Lifecycle: factoryapi.FactorySessionLifecycle{StartedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()},
+		Dispatches: &dispatches,
+		Artifacts:  &artifacts,
+	}
+	encoded, err := json.Marshal(runtime)
+	if err != nil {
+		t.Fatalf("marshal generated runtime: %v", err)
+	}
+	var decoded factoryapi.FactorySessionRuntime
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatalf("unmarshal generated runtime: %v", err)
+	}
+	if decoded.Dispatches == nil || len(*decoded.Dispatches) != 2 {
+		t.Fatalf("decoded dispatches = %#v, want two entries", decoded.Dispatches)
+	}
+	if decoded.Artifacts == nil || len(*decoded.Artifacts) != 1 {
+		t.Fatalf("decoded artifacts = %#v, want one entry", decoded.Artifacts)
 	}
 }

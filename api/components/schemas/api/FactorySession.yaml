@@ -1,0 +1,25 @@
+type: object
+additionalProperties: false
+required:
+  - id
+  - target
+  - folderPath
+  - factoryDir
+  - project
+  - isDefault
+  - runtime
+properties:
+  id:
+    type: string
+  target:
+    $ref: './FactorySessionTargetRef.yaml'
+  folderPath:
+    type: string
+  factoryDir:
+    type: string
+  project:
+    type: string
+  isDefault:
+    type: boolean
+  runtime:
+    $ref: './FactorySessionRuntime.yaml'

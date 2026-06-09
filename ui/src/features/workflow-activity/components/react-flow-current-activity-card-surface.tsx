@@ -5,7 +5,7 @@ import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { AlertPanel } from "../../../components/ui";
 import { FactoryGraphEditorNotice } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { CURRENT_ACTIVITY_NODE_TYPES } from "../../flowchart/public";
+import { NODE_TYPES } from "../../flowchart/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
 import type { useCurrentActivityGraphViewModel } from "../hooks/react-flow-current-activity-card-graph-view-model";
@@ -15,6 +15,9 @@ import {
   saveErrorNoticeMessages,
   validationMessagesForGraphSelection,
 } from "../lib/react-flow-current-activity-card-validation";
+import { createDefaultFactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
+import { FACTORY_GRAPH_EDGE_TYPES } from "../../graphs/public";
+import { useFactoryGraphEdgeWaypointEditor } from "../../factory-graph-editor/hooks/layout/factory-graph-edge-waypoint-editor-hook";
 import { GraphEditorPlacementRegistrar } from "./graph-editor-placement-context";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
@@ -87,6 +90,20 @@ export function CurrentActivityGraphSurface({
     hasFailureMessages: saveFailureMessages.length > 0,
     saveAttemptRevision: editor.saveAttemptRevision,
   });
+  const waypointEditor = useFactoryGraphEdgeWaypointEditor({
+    activeTool: editor.activeTool,
+    addEdgeWaypoint: editor.addEdgeWaypoint,
+    canInteractWithEditor: editor.canInteractWithEditor,
+    editorMode: editor.editorMode,
+    handleEditorEdgeDelete: editor.handleEditorEdgeDelete,
+    layout: editor.layoutDraftState?.layout ?? createDefaultFactoryLayout(),
+    locale,
+    moveEdgeWaypoint: editor.moveEdgeWaypoint,
+    removeEdgeWaypoint: editor.removeEdgeWaypoint,
+    nodes: graph.nodes,
+  });
+  const viewportEdges = waypointEditor.decorateEditorEdges(graph.edges);
+
   if (!snapshotHasObserverGraph(snapshot) && !editor.editorMode) {
     return <EmptyCurrentActivityState locale={locale} />;
   }
@@ -158,6 +175,9 @@ export function CurrentActivityGraphSurface({
         flowContainerRef={flowContainerRef}
         flowInstanceRef={flowInstanceRef}
         graphKey={graph.graphKey}
+        moveLayoutNode={
+          editor.editorMode ? editor.moveLayoutNode : undefined
+        }
         nodes={graph.nodes}
         setStoredNodePosition={graph.setStoredNodePosition}
         storedNodePositions={storedNodePositions}
@@ -166,12 +186,15 @@ export function CurrentActivityGraphSurface({
         activeTool={editor.activeTool}
         addMenuActions={editor.addMenuActions}
         canInteractWithEditor={editor.canInteractWithEditor}
+        canRedoLayout={editor.layoutDraftState?.canRedoLayout ?? false}
         canSaveDraft={editor.canSaveDraft}
+        canUndoLayout={editor.layoutDraftState?.canUndoLayout ?? false}
         editorUnavailableClassifierWorkstationName={
           editor.editorUnavailableClassifierWorkstationName
         }
         editorMode={editor.editorMode}
-        edges={graph.edges}
+        edgeTypes={FACTORY_GRAPH_EDGE_TYPES}
+        edges={viewportEdges}
         flowContainerRef={flowContainerRef}
         flowInstanceRef={flowInstanceRef}
         graphKey={graph.graphKey}
@@ -181,27 +204,48 @@ export function CurrentActivityGraphSurface({
         handleSaveDraft={() => {
           editor.setIsConfirmingSave(true);
         }}
-        hasPendingChanges={editor.draftState.hasChanges}
+        hasPendingChanges={
+          editor.draftState.hasChanges ||
+          (editor.layoutDraftState?.layoutDirty ?? false)
+        }
         headingID={headingID}
         imports={imports}
+        canonicalLayoutViewport={graph.canonicalLayoutViewport}
         initialFitViewKey={graph.initialFitViewKey}
         initialFitViewOptions={graph.initialFitViewOptions}
         isSavingDraft={editor.saveEditableDefinition.isPending}
         locale={locale}
-        nodeTypes={CURRENT_ACTIVITY_NODE_TYPES}
+        nodeTypes={NODE_TYPES}
         nodes={graph.nodes}
         onAddAction={editor.handleAddEntityAction}
         onAddMenuOpenChange={editor.setAddMenuOpen}
         hiddenNodeClasses={editor.hiddenNodeClasses}
         hideShowMenuOpen={editor.hideShowMenuOpen}
+        onClearPreferences={editor.resetPreferences}
         onHideShowMenuOpenChange={editor.setHideShowMenuOpen}
+        onSelectVisibilityPreset={editor.setVisibilityPreset}
         onToggleHiddenNodeClass={editor.toggleHiddenNodeClass}
+        preferencesDirty={editor.dirtyStateSummary.preferencesDirty}
+        visibilityPreset={editor.visibilityPreset}
         onConnect={editor.handleEditorConnect}
-        onEditorEdgeClick={editor.handleEditorEdgeDelete}
+        onEditorEdgeClick={waypointEditor.handleEditorEdgeClick}
+        onEditorEdgeDoubleClick={waypointEditor.handleEditorEdgeDoubleClick}
+        onMoveEdgeWaypoint={waypointEditor.handleMoveSelectedEdgeWaypoint}
+        onRemoveEdgeWaypoint={waypointEditor.handleRemoveSelectedEdgeWaypoint}
+        selectedEdgeWaypoints={waypointEditor.selectedEdgeWaypoints}
+        selectedWaypointEdgeId={waypointEditor.selectedWaypointEdgeId}
+        waypointAriaLabel={waypointEditor.waypointAriaLabel}
+        waypointControls={waypointEditor.waypointControls}
         onEditorNodeClick={editor.handleEditorNodeDelete}
         onSelectTool={editor.setActiveTool}
         openAddMenu={editor.addMenuOpen}
         saveDisabledReason={editor.saveBlockedReason}
+        moveLayoutNode={editor.moveLayoutNode}
+        moveLayoutNodesByDelta={editor.moveLayoutNodesByDelta}
+        onRedoLayout={editor.redoLayout}
+        onResetLayout={editor.resetLayout}
+        onUndoLayout={editor.undoLayout}
+        updateLayoutViewport={editor.updateLayoutViewport}
         setStoredNodePosition={graph.setStoredNodePosition}
       />
     </div>

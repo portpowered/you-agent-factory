@@ -21,6 +21,12 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	assertPublishedSurfaceSchemas(t, schemas)
 	assertSubmitWorkSurfaceSchemas(t, schemas)
 	assertInvocationSurfaceSchemas(t, schemas, paths)
+	assertDurableExecutionSurfaceSchemas(t, schemas, paths)
+	assertDurableSourceResolutionAndIdempotencySurfaceSchemas(t, schemas, paths)
+	assertDurableSessionReadSurfaceSchemas(t, schemas, paths)
+	assertDurableSessionResultSurfaceSchemas(t, schemas, paths)
+	assertDurableSessionDispatchArtifactSurfaceSchemas(t, schemas, paths)
+	assertDurableSessionLifecycleControlSurfaceSchemas(t, schemas, paths)
 	assertWorkRequestSurfaceSchemas(t, schemas)
 	assertWorkContentSurfaceSchemas(t, schemas)
 	assertWorkstationSurfaceSchemas(t, schemas)
@@ -665,7 +671,7 @@ func assertErrorSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	if !ok {
 		t.Fatalf("components.schemas.ErrorResponse.properties.code.enum is missing")
 	}
-	for _, code := range []string{"BAD_REQUEST", "INVALID_FACTORY_NAME", "FACTORY_ALREADY_EXISTS", "INVALID_FACTORY", "FACTORY_NOT_IDLE", "NOT_FOUND", "INTERNAL_ERROR"} {
+	for _, code := range []string{"BAD_REQUEST", "INVALID_FACTORY_NAME", "FACTORY_ALREADY_EXISTS", "INVALID_FACTORY", "FACTORY_NOT_IDLE", "EXECUTION_REQUEST_ID_CONFLICT", "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED", "NOT_FOUND", "INTERNAL_ERROR"} {
 		if !containsString(codeEnum, code) {
 			t.Fatalf("components.schemas.ErrorResponse.properties.code.enum is missing %q", code)
 		}

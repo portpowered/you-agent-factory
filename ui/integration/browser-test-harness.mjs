@@ -53,6 +53,11 @@ export async function fillWorkstationPromptBody(scope, text) {
   }
 }
 
+/** Check a shared styled checkbox whose native input is visually hidden. */
+export async function checkStyledCheckbox(checkboxLocator) {
+  await checkboxLocator.check({ force: true });
+}
+
 /** Select a Radix/shadcn combobox option by visible option label. */
 export async function selectComboboxOption(combobox, optionName) {
   const page = combobox.page();
@@ -65,6 +70,54 @@ export async function selectLabeledComboboxOption(scope, label, optionName) {
   await selectComboboxOption(
     scope.getByRole("combobox", { name: label }),
     optionName,
+  );
+}
+
+/** Fill the default model-worker operation contract in the add-worker dialog. */
+export async function fillModelWorkerAddOperationDraft(
+  scope,
+  {
+    inputSlotName = "text",
+    operationName = "TTS",
+    outputSlotName = "audio",
+  } = {},
+) {
+  const addOperationButton = scope.getByRole("button", {
+    name: "Add operation",
+  });
+  await addOperationButton.scrollIntoViewIfNeeded();
+  await addOperationButton.click();
+
+  const operationNameField = scope.locator(
+    "#factory-graph-add-model-operation-name-0",
+  );
+  await operationNameField.scrollIntoViewIfNeeded();
+  await operationNameField.waitFor({
+    state: "visible",
+    timeout: uiInteractionTimeoutMs,
+  });
+  await operationNameField.fill(operationName);
+
+  const inputSlotNameField = scope.locator(
+    "#factory-graph-add-model-operation-input-slot-name-0",
+  );
+  await inputSlotNameField.scrollIntoViewIfNeeded();
+  await inputSlotNameField.fill(inputSlotName);
+  await checkStyledCheckbox(
+    scope.locator(
+      "#factory-graph-add-model-operation-input-slot-0-content-type-TEXT",
+    ),
+  );
+
+  const outputSlotNameField = scope.locator(
+    "#factory-graph-add-model-operation-output-slot-name-0",
+  );
+  await outputSlotNameField.scrollIntoViewIfNeeded();
+  await outputSlotNameField.fill(outputSlotName);
+  await checkStyledCheckbox(
+    scope.locator(
+      "#factory-graph-add-model-operation-output-slot-0-content-type-AUDIO",
+    ),
   );
 }
 

@@ -1,0 +1,12 @@
+type: string
+description: Source that produced a dispatch reconciliation fact.
+enum:
+  - STREAM_REPLAY
+  - PROVIDER_SESSION
+  - DURABLE_STATE
+  - RUNTIME_RECONCILER
+x-enum-descriptions:
+  - Reconciliation facts were emitted while replaying missed stream events.
+  - Reconciliation facts were derived from provider-session state.
+  - Reconciliation facts were derived from durable dispatch state.
+  - Reconciliation facts were produced by the runtime reconciler after a stream drop.

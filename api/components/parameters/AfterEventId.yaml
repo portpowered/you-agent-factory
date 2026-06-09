@@ -1,0 +1,8 @@
+name: after_event_id
+in: query
+required: false
+description: >-
+  Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream
+  replays only events recorded after this stable event identifier.
+schema:
+  type: string

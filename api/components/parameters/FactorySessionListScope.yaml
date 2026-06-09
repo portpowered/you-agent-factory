@@ -1,0 +1,8 @@
+name: scope
+in: query
+required: false
+description: >-
+  Optional session list scope. Defaults to live for backward-compatible live
+  workspace session listing.
+schema:
+  $ref: '../schemas/api/FactorySessionListScope.yaml'

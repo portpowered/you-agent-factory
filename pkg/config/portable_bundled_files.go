@@ -25,8 +25,10 @@ const portableBundledBatchInputDirName = "BATCH"
 
 // ApplySupportedPortableBundledFiles merges supported portable bundled files
 // discovered on disk into cfg, optionally inlining file content for API/export
-// callers that need a self-contained manifest.
-func ApplySupportedPortableBundledFiles(factoryDir string, cfg *interfaces.FactoryConfig, includeInlineContent bool) error {
+// callers that need a self-contained manifest. When discoverUnlistedDocs is
+// false and the manifest already lists DOC entries, only manifest-listed docs
+// are merged from disk so authored deletes and renames stay authoritative.
+func ApplySupportedPortableBundledFiles(factoryDir string, cfg *interfaces.FactoryConfig, includeInlineContent bool, discoverUnlistedDocs bool) error {
 	if cfg == nil {
 		return nil
 	}
@@ -47,7 +49,11 @@ func ApplySupportedPortableBundledFiles(factoryDir string, cfg *interfaces.Facto
 	if cfg.ResourceManifest == nil {
 		cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{}
 	}
-	cfg.ResourceManifest.BundledFiles = mergePortableBundledFiles(cfg.ResourceManifest.BundledFiles, collected)
+	cfg.ResourceManifest.BundledFiles = mergePortableBundledFiles(
+		cfg.ResourceManifest.BundledFiles,
+		collected,
+		discoverUnlistedDocs,
+	)
 	return nil
 }
 
@@ -78,7 +84,7 @@ func ApplySharedFactoryStarterWork(factoryDir string, cfg *interfaces.FactoryCon
 	if cfg.ResourceManifest == nil {
 		cfg.ResourceManifest = &interfaces.PortableResourceManifestConfig{}
 	}
-	cfg.ResourceManifest.BundledFiles = mergePortableBundledFiles(existing, collected)
+	cfg.ResourceManifest.BundledFiles = mergePortableBundledFiles(existing, collected, true)
 	return nil
 }
 
@@ -293,7 +299,9 @@ func collectPortableBundledRootHelperFile(sourcePath, targetPath string) (interf
 	}, true, nil
 }
 
-func mergePortableBundledFiles(existing, collected []interfaces.BundledFileConfig) []interfaces.BundledFileConfig {
+func mergePortableBundledFiles(existing, collected []interfaces.BundledFileConfig, discoverUnlistedDocs bool) []interfaces.BundledFileConfig {
+	collected = filterCollectedPortableBundledFiles(existing, collected, discoverUnlistedDocs)
+
 	byTarget := make(map[string]interfaces.BundledFileConfig, len(existing)+len(collected))
 	for _, bundledFile := range existing {
 		byTarget[bundledFile.TargetPath] = bundledFile
@@ -313,6 +321,85 @@ func mergePortableBundledFiles(existing, collected []interfaces.BundledFileConfi
 		merged = append(merged, byTarget[target])
 	}
 	return merged
+}
+
+func filterCollectedPortableBundledFiles(existing, collected []interfaces.BundledFileConfig, discoverUnlistedDocs bool) []interfaces.BundledFileConfig {
+	if discoverUnlistedDocs || len(collected) == 0 {
+		return collected
+	}
+
+	manifestDocPaths := manifestDocTargetPaths(existing)
+	if len(manifestDocPaths) == 0 {
+		return collected
+	}
+
+	filtered := make([]interfaces.BundledFileConfig, 0, len(collected))
+	for _, bundledFile := range collected {
+		if bundledFile.Type == interfaces.BundledFileTypeDoc && !manifestDocPaths[bundledFile.TargetPath] {
+			continue
+		}
+		filtered = append(filtered, bundledFile)
+	}
+	return filtered
+}
+
+func manifestDocTargetPaths(bundledFiles []interfaces.BundledFileConfig) map[string]bool {
+	paths := make(map[string]bool)
+	for _, bundledFile := range bundledFiles {
+		if bundledFile.Type == interfaces.BundledFileTypeDoc {
+			paths[bundledFile.TargetPath] = true
+		}
+	}
+	return paths
+}
+
+func pruneRemovedPortableBundledDocs(factoryDir string, cfg *interfaces.FactoryConfig) error {
+	layout, ok := portableBundledLayoutForFactoryDir(factoryDir)
+	if !ok {
+		return nil
+	}
+
+	docsDir := filepath.Join(layout.factoryDir, "docs")
+	info, err := os.Stat(docsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("stat portable bundled docs directory %s: %w", docsDir, err)
+	}
+	if !info.IsDir() {
+		return nil
+	}
+
+	allowed := manifestDocTargetPaths(nil)
+	if cfg != nil && cfg.ResourceManifest != nil {
+		allowed = manifestDocTargetPaths(cfg.ResourceManifest.BundledFiles)
+	}
+
+	return filepath.WalkDir(docsDir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || !entry.Type().IsRegular() {
+			return nil
+		}
+		if isPortableBundledIgnoredFile(filepath.Base(path)) {
+			return nil
+		}
+
+		relativePath, err := filepath.Rel(docsDir, path)
+		if err != nil {
+			return fmt.Errorf("resolve bundled doc path %s: %w", path, err)
+		}
+		targetPath := filepath.ToSlash(filepath.Join(portableBundledDocRoot, relativePath))
+		if allowed[targetPath] {
+			return nil
+		}
+		if err := os.Remove(path); err != nil {
+			return fmt.Errorf("remove bundled doc %s: %w", path, err)
+		}
+		return nil
+	})
 }
 
 func removeBundledFilesByType(bundledFiles []interfaces.BundledFileConfig, fileType string) []interfaces.BundledFileConfig {

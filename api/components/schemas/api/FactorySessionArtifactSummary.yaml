@@ -1,0 +1,41 @@
+type: object
+additionalProperties: false
+required:
+  - id
+  - kind
+  - visibility
+description: >-
+  Durable factory-session artifact metadata for list responses without raw
+  artifact bodies or unrestricted host filesystem paths.
+properties:
+  id:
+    type: string
+    description: Stable artifact identifier.
+  kind:
+    $ref: '../data-models/FactoryArtifactKind.yaml'
+  visibility:
+    $ref: '../data-models/FactoryArtifactVisibility.yaml'
+  label:
+    type: string
+    description: Customer-visible artifact label.
+  contentHash:
+    type: string
+    description: Stable hash of the stored artifact payload.
+  sizeBytes:
+    type: integer
+    format: int64
+    description: Stored artifact payload size in bytes.
+  createdAt:
+    type: string
+    format: date-time
+    description: Timestamp when the artifact was created or captured.
+  dispatchId:
+    type: string
+    description: Dispatch identifier that produced the artifact when applicable.
+  auditMode:
+    $ref: '../data-models/FactoryArtifactAuditMode.yaml'
+  redactionCounts:
+    $ref: '../data-models/FactoryArtifactRedactionCounts.yaml'
+  retrievalRef:
+    $ref: './FactorySessionArtifactRetrievalRef.yaml'
+    description: Safe retrieval reference when artifact content is not inlined.

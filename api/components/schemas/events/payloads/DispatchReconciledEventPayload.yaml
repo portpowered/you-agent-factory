@@ -1,0 +1,31 @@
+type: object
+additionalProperties: false
+description: >-
+  Dispatch reconciliation recorded on the canonical factory event stream.
+  Dispatch identity lives in FactoryEvent.context.
+required:
+  - reconciledStatus
+  - reconciliationSource
+  - replayed
+properties:
+  reconciledStatus:
+    $ref: '../../data-models/FactoryDispatchStatus.yaml'
+  reconciliationSource:
+    $ref: '../DispatchReconciliationSource.yaml'
+  replayed:
+    type: boolean
+    description: Whether reconciliation facts were emitted during stream replay.
+  usage:
+    $ref: '../../data-models/FactoryDispatchUsage.yaml'
+    description: Usage summary after reconciliation when available.
+  resultArtifactRef:
+    $ref: '../../data-models/FactoryArtifactRef.yaml'
+    description: Result artifact reference without raw artifact bodies.
+  artifactIds:
+    type: array
+    items:
+      type: string
+    description: Artifact identifiers produced or updated by reconciliation.
+  failureDetail:
+    $ref: '../../data-models/FactoryDispatchFailureDetail.yaml'
+    description: Canonical failure details when reconciliation failed.

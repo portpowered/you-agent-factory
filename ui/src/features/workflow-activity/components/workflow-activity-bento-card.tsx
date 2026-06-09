@@ -8,6 +8,7 @@ import type { CurrentActivityImportController } from "../hooks/current-activity-
 import { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { useFactoryGraphTopologyEditorBridge } from "../state/factory-graph-topology-editor-bridge";
+import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 import {
   type CurrentActivitySelection,
   ReactFlowCurrentActivityCardView,
@@ -18,6 +19,7 @@ interface WorkflowActivityBentoCardProps {
   importController: CurrentActivityImportController;
   locale?: string;
   now: number;
+  onDocAdded?: (targetPath: string) => void;
   onNodeRemovedFromDraft?: (nodeId: string) => void;
   selection: DashboardSelection | null;
   snapshot: DashboardSnapshot;
@@ -25,6 +27,7 @@ interface WorkflowActivityBentoCardProps {
     workID: string,
     hint?: { dispatchID?: string; nodeID?: string },
   ) => void;
+  onSelectDoc: (targetPath: string) => void;
   onSelectResource: (resourceName: string) => void;
   onSelectStateNode: (placeId: string) => void;
   onSelectWorker: (workerName: string) => void;
@@ -38,11 +41,13 @@ export function WorkflowActivityBentoCard({
   importController,
   locale,
   now,
+  onDocAdded,
   onNodeRemovedFromDraft,
   selection,
   snapshot,
   widgetInstanceID,
   onSelectWorkID,
+  onSelectDoc,
   onSelectResource,
   onSelectStateNode,
   onSelectWorker,
@@ -58,6 +63,7 @@ export function WorkflowActivityBentoCard({
     snapshot,
     locale,
     sessionID,
+    onDocAdded,
     onNodeRemovedFromDraft,
   );
 
@@ -97,7 +103,26 @@ export function WorkflowActivityBentoCard({
       bodyScroll={false}
       chromeDensity="compact"
       className="h-full max-h-full min-h-0 overflow-hidden"
-      headerAction={headerAction}
+      headerAction={
+        <CurrentActivityGraphHeaderActions
+          key={`graph-editor-header-${editor.editorMode}-${editor.draftState.hasChanges}-${editor.layoutDraftState.layoutDirty}-${editor.dirtyStateSummary.preferencesDirty}`}
+          compact
+          dirtyState={editor.dirtyStateSummary}
+          editorMode={editor.editorMode}
+          editorUnavailableClassifierWorkstationName={
+            editor.editorUnavailableClassifierWorkstationName
+          }
+          hasChanges={editor.draftState.hasChanges}
+          headerActions={headerAction}
+          isDefinitionLoading={
+            editor.editableDefinitionQuery.status === "pending"
+          }
+          loadErrorMessage={editor.editableDefinitionQuery.error?.message}
+          locale={locale}
+          onToggle={editor.handleEditorModeToggle}
+          showModeToggle={false}
+        />
+      }
       style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
       title={messages.widgetTitle}
     >
@@ -115,6 +140,7 @@ export function WorkflowActivityBentoCard({
           snapshot={snapshot}
           widgetInstanceID={widgetInstanceID}
           onSelectWorkID={onSelectWorkID}
+          onSelectDoc={onSelectDoc}
           onSelectResource={onSelectResource}
           onSelectStateNode={onSelectStateNode}
           onSelectWorker={onSelectWorker}
@@ -134,6 +160,7 @@ function toCurrentActivitySelection(
   }
 
   if (
+    selection?.kind === "doc" ||
     selection?.kind === "worker" ||
     selection?.kind === "resource" ||
     selection?.kind === "work-type"

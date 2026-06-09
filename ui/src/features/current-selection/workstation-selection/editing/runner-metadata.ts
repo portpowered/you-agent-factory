@@ -1,14 +1,14 @@
-import type { components } from "../../../../api/generated/openapi";
-import { OPENAPI_RUNNER_IDS } from "../messages/runner-openapi-enums";
-
-export type RunnerID = components["schemas"]["RunnerID"];
+import {
+  type ApiRunnerID,
+  OPENAPI_RUNNER_IDS,
+} from "../messages/runner-openapi-enums";
 
 export interface RunnerMetadata {
   displayName: string;
-  id: RunnerID;
+  id: ApiRunnerID;
 }
 
-const BUILT_IN_RUNNER_METADATA: Record<RunnerID, RunnerMetadata> = {
+const BUILT_IN_RUNNER_METADATA: Record<ApiRunnerID, RunnerMetadata> = {
   codex: {
     displayName: "Codex",
     id: "codex",
@@ -31,7 +31,7 @@ const BUILT_IN_RUNNER_METADATA: Record<RunnerID, RunnerMetadata> = {
   },
 };
 
-export const BUILT_IN_RUNNER_IDS: RunnerID[] = [...OPENAPI_RUNNER_IDS];
+export const BUILT_IN_RUNNER_IDS: ApiRunnerID[] = [...OPENAPI_RUNNER_IDS];
 
 export function getRunnerMetadata(
   runnerID: string | null | undefined,
@@ -40,7 +40,7 @@ export function getRunnerMetadata(
     return null;
   }
 
-  return BUILT_IN_RUNNER_METADATA[runnerID as RunnerID] ?? null;
+  return BUILT_IN_RUNNER_METADATA[runnerID as ApiRunnerID] ?? null;
 }
 
 export function getRunnerDisplayName(

@@ -1,0 +1,10 @@
+type: string
+description: Canonical lifecycle status for one live factory session runtime.
+enum:
+  - ACTIVE
+  - IDLE
+  - FINISHED
+x-enum-descriptions:
+  - The session runtime is actively processing work.
+  - The session runtime is available but not currently processing work.
+  - The session runtime has reached a terminal finished state.

@@ -43,6 +43,33 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, result.FactoryValidationResult())
 }
 
+// PreviewWorkflow handles POST /workflow-previews using the shared workflow preview contract.
+func (s *Server) PreviewWorkflow(w http.ResponseWriter, r *http.Request) {
+	req, err := decodeStrictJSON[factoryapi.WorkflowPreviewRequest](r.Body)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+
+	previewInput, err := apisurface.WorkflowPreviewRequestFromAPI(req)
+	if err != nil {
+		var validationErr *apisurface.RequestValidationError
+		if errors.As(err, &validationErr) {
+			s.writeError(w, http.StatusBadRequest, validationErr.Error(), "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+
+	result := apisurface.WorkflowPreviewResultFromPreview(apisurface.BuildWorkflowPreview(previewInput))
+	s.writeJSON(w, http.StatusOK, result)
+}
+
 func decodeNamedFactoryBody(body io.Reader) (factoryapi.Factory, error) {
 	return decodeStrictJSON[factoryapi.Factory](body)
 }
@@ -55,18 +82,165 @@ func (s *Server) requireSessionRuntime(w http.ResponseWriter) (apisurface.Sessio
 	return s.sessionRuntime, true
 }
 
-func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request, params factoryapi.ListFactorySessionsParams) {
+	scope := factoryapi.FactorySessionListScopeLive
+	if params.Scope != nil {
+		scope = *params.Scope
+	}
+	switch scope {
+	case factoryapi.FactorySessionListScopeLive,
+		factoryapi.FactorySessionListScopePersisted,
+		factoryapi.FactorySessionListScopeAll:
+	default:
+		s.writeError(w, http.StatusBadRequest, "scope must be live, persisted, or all", "BAD_REQUEST")
+		return
+	}
+
+	response := factoryapi.ListFactorySessionsResponse{Scope: &scope}
+	if scope == factoryapi.FactorySessionListScopePersisted {
+		emptyDurableSessions := []factoryapi.FactorySessionDurableSummary{}
+		response.Sessions = []factoryapi.FactorySessionSummary{}
+		response.DurableSessions = &emptyDurableSessions
+		s.writeJSON(w, http.StatusOK, response)
+		return
+	}
+
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
 		return
 	}
-	response, err := sessionRuntime.ListFactorySessions(r.Context())
+	liveResponse, err := sessionRuntime.ListFactorySessions(r.Context())
 	if err != nil {
 		s.logger.Error("list factory sessions failed", zap.Error(err))
 		s.writeError(w, http.StatusInternalServerError, "failed to list factory sessions", "INTERNAL_ERROR")
 		return
 	}
+	response.Sessions = liveResponse.Sessions
+	if scope == factoryapi.FactorySessionListScopeAll {
+		emptyDurableSessions := []factoryapi.FactorySessionDurableSummary{}
+		response.DurableSessions = &emptyDurableSessions
+	}
 	s.writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+	response, err := sessionRuntime.GetFactorySession(r.Context(), string(sessionID))
+	if err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+			return
+		}
+		s.logger.Error("get factory session failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to get factory session", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) GetFactorySessionResult(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+	response, err := sessionRuntime.GetFactorySessionResult(r.Context(), string(sessionID))
+	if err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) || errors.Is(err, apisurface.ErrFactorySessionResultUnavailable) {
+			s.writeError(w, http.StatusNotFound, "factory session result not found", "NOT_FOUND")
+			return
+		}
+		s.logger.Error("get factory session result failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to get factory session result", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) GetFactorySessionResults(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, params factoryapi.GetFactorySessionResultsParams) {
+	_ = sessionID
+	_ = params
+	s.writeError(w, http.StatusNotImplemented, "durable factory session result retrieval is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) ListFactorySessionDispatches(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	_ = sessionID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session dispatch listing is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) GetFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, dispatchID factoryapi.DispatchID) {
+	_ = sessionID
+	_ = dispatchID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session dispatch retrieval is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) ListFactorySessionArtifacts(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	_ = sessionID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session artifact listing is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) GetFactorySessionArtifact(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, artifactID factoryapi.ArtifactID) {
+	_ = sessionID
+	_ = artifactID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session artifact retrieval is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+	response, err := sessionRuntime.GetFactorySessionPartialResult(r.Context(), string(sessionID))
+	if err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) || errors.Is(err, apisurface.ErrFactorySessionResultUnavailable) {
+			s.writeError(w, http.StatusNotFound, "factory session partial result not found", "NOT_FOUND")
+			return
+		}
+		s.logger.Error("get factory session partial result failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to get factory session partial result", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) ApproveFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	_ = sessionID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session approval is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) PauseFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	_ = sessionID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session pause is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) ResumeFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	_ = sessionID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session resume is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) CancelFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	_ = sessionID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session cancel is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) TerminateFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	_ = sessionID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session terminate is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) RetryFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	_ = sessionID
+	s.writeError(w, http.StatusNotImplemented, "durable factory session retry-dispatch is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request) {
+	s.writeError(w, http.StatusNotImplemented, "durable factory session execution is not implemented", "INTERNAL_ERROR")
+}
+
+func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.Request) {
+	s.writeError(w, http.StatusNotImplemented, "durable factory session execution is not implemented", "INTERNAL_ERROR")
 }
 
 func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
@@ -165,7 +339,10 @@ func (s *Server) GetCurrentFactoryWorkstationPromptTemplateContractBySessionId(w
 		return
 	}
 
-	contract := workerprompting.BuildPromptTemplateContract(len(workstation.Inputs))
+	contract := workerprompting.BuildPromptTemplateContract(
+		len(workstation.Inputs),
+		currentFactoryBundledDocTargetPaths(namedFactory),
+	)
 	s.writeJSON(w, http.StatusOK, promptTemplateContractResponse(contract))
 }
 
@@ -189,7 +366,12 @@ func (s *Server) ValidateCurrentFactoryWorkstationPromptTemplateBySessionId(w ht
 		return
 	}
 
-	result := workerprompting.ValidatePromptTemplate(req.Prompt, len(workstation.Inputs))
+	docPaths := currentFactoryBundledDocTargetPaths(namedFactory)
+	result := workerprompting.ValidatePromptTemplate(
+		req.Prompt,
+		len(workstation.Inputs),
+		docPaths,
+	)
 	s.writeJSON(w, http.StatusOK, promptTemplateValidationResultResponse(result))
 }
 
@@ -322,6 +504,25 @@ func decodeSaveCurrentFactoryBody(body io.Reader) (factoryapi.SaveCurrentFactory
 
 func decodePromptTemplateValidationRequestBody(body io.Reader) (factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody, error) {
 	return decodeStrictJSON[factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody](body)
+}
+
+func currentFactoryBundledDocTargetPaths(factory factoryapi.Factory) []string {
+	if factory.SupportingFiles == nil || factory.SupportingFiles.BundledFiles == nil {
+		return nil
+	}
+
+	paths := make([]string, 0, len(*factory.SupportingFiles.BundledFiles))
+	for _, bundledFile := range *factory.SupportingFiles.BundledFiles {
+		if bundledFile.Type != factoryapi.BundledFileTypeDOC {
+			continue
+		}
+		if bundledFile.TargetPath == "" {
+			continue
+		}
+		paths = append(paths, bundledFile.TargetPath)
+	}
+
+	return paths
 }
 
 func currentFactoryWorkstation(factory factoryapi.Factory, workstationName string) (factoryapi.Workstation, bool) {

@@ -1,3 +1,4 @@
+import type { FactoryValidationTarget } from "../../../../api/factory-validation";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 import {
   buildDraftAppliedFactoryDefinition,
@@ -29,11 +30,26 @@ import {
   createFactoryGraphWorkstationResolver,
 } from "../editor/factory-graph-editor-connections";
 import {
+  applyFactoryGraphDocRemoval,
+  buildFactoryGraphDocRemovalIntent,
+  parseFactoryBundledDocNodeId,
+} from "../factory-graph-doc-editor";
+import {
   applyFactoryGraphEntityRemoval,
   buildFactoryGraphEdgeRemovalIntent,
   buildFactoryGraphRemovalIntent,
 } from "../editor-runtime/factory-graph-editor-removals";
-import { materializeFactoryGraphEntityIdsForSave } from "../operations/factory-graph-public-ids";
+import {
+  applyPendingFactoryLayout,
+  type FactoryLayout,
+  factoryLayoutFromDefinition,
+  hasFactoryLayoutChanges,
+} from "../layout/factory-graph-layout-operations";
+import {
+  factoryLayoutTopologyEdgeIds,
+  preparePendingFactoryLayoutForSave,
+} from "../layout/factory-graph-layout-validation";
+import { materializeFactoryGraphEntityIdsForSave } from "./factory-graph-public-ids";
 
 export {
   type FactoryGraphReactFlowEdge,
@@ -58,6 +74,7 @@ export type FactoryGraphOperationResult<T> =
   | {
       ok: true;
       value: T;
+      layoutOutcomes?: FactoryValidationTarget[];
     }
   | {
       message: string;
@@ -120,7 +137,8 @@ export function addFactoryGraphNode(options: {
     currentFactoryDefinition,
     options.locale,
   );
-  const firstFieldError = Object.values(fieldErrors).find(Boolean);
+  const firstFieldError =
+    resolveFirstFactoryGraphAddFieldErrorMessage(fieldErrors);
 
   if (firstFieldError) {
     return {
@@ -147,6 +165,34 @@ export function removeFactoryGraphNode(options: {
   nodeId: string;
 }): FactoryGraphOperationResult<FactoryGraphDraft> {
   const messages = getFactoryGraphEditorMessages(options.locale);
+  const docTargetPath = parseFactoryBundledDocNodeId(options.nodeId);
+  if (docTargetPath) {
+    const docIntent = buildFactoryGraphDocRemovalIntent(options);
+    if (!docIntent) {
+      return {
+        message: messages.operationNodeNotFound(options.nodeId),
+        ok: false,
+        reason: "NODE_NOT_FOUND",
+      };
+    }
+    if (docIntent.ineligibleReason) {
+      return {
+        message: docIntent.ineligibleReason,
+        ok: false,
+        reason: "BLOCKED_REMOVAL",
+      };
+    }
+
+    return {
+      ok: true,
+      value: applyFactoryGraphDocRemoval(
+        options.draft,
+        options.baseFactoryDefinition,
+        docIntent.targetPath,
+      ),
+    };
+  }
+
   const intent = buildFactoryGraphRemovalIntent(options);
   if (!intent) {
     return {
@@ -315,6 +361,7 @@ export function disconnectFactoryGraphEdge(options: {
 export function applyFactoryGraphPendingEdits(options: {
   baseFactoryDefinition: CanonicalFactoryDefinition;
   draft: FactoryGraphDraft;
+  pendingLayout?: FactoryLayout | null;
   locale?: string | null;
 }): FactoryGraphOperationResult<CanonicalFactoryDefinition> {
   const validationErrors = validateFactoryGraphDraft(
@@ -333,13 +380,51 @@ export function applyFactoryGraphPendingEdits(options: {
     };
   }
 
+  const baseLayout = factoryLayoutFromDefinition(options.baseFactoryDefinition);
+  const nextFactoryDefinition = buildDraftAppliedFactoryDefinition(
+    options.baseFactoryDefinition,
+    options.draft,
+  );
+  const validEdgeIds = factoryLayoutTopologyEdgeIds(
+    buildFactoryGraphTopologyFromDefinition(nextFactoryDefinition),
+  );
+  const preparedPendingLayoutResult =
+    options.pendingLayout == null
+      ? null
+      : preparePendingFactoryLayoutForSave(options.pendingLayout, validEdgeIds);
+  const preparedPendingLayout = preparedPendingLayoutResult?.layout ?? null;
+  const layoutOutcomes = preparedPendingLayoutResult?.layoutOutcomes;
+  const nextDefinition =
+    preparedPendingLayout &&
+    hasFactoryLayoutChanges(baseLayout, preparedPendingLayout)
+      ? applyPendingFactoryLayout(
+          nextFactoryDefinition,
+          preparedPendingLayout,
+        )
+      : nextFactoryDefinition;
+
   return {
     ok: true,
-    value: materializeFactoryGraphEntityIdsForSave(
-      buildDraftAppliedFactoryDefinition(
-        options.baseFactoryDefinition,
-        options.draft,
-      ),
-    ),
+    value: materializeFactoryGraphEntityIdsForSave(nextDefinition),
+    ...(layoutOutcomes && layoutOutcomes.length > 0
+      ? { layoutOutcomes }
+      : {}),
   };
+}
+
+function resolveFirstFactoryGraphAddFieldErrorMessage(
+  fieldErrors: FactoryGraphAddEntityFieldErrors,
+): string | undefined {
+  for (const value of Object.values(fieldErrors)) {
+    if (!value) {
+      continue;
+    }
+    if (typeof value === "string") {
+      return value;
+    }
+    if (typeof value.summary === "string" && value.summary.length > 0) {
+      return value.summary;
+    }
+  }
+  return undefined;
 }

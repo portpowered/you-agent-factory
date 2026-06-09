@@ -1,0 +1,16 @@
+type: object
+additionalProperties: false
+required:
+  - kind
+description: >-
+  Authored orchestrator identity for one factory. When omitted, existing Petri
+  factories load through compatibility defaulting to orchestrator.kind = PETRI.
+properties:
+  kind:
+    $ref: './FactoryOrchestratorKind.yaml'
+  petri:
+    $ref: './FactoryOrchestratorPetriConfig.yaml'
+    description: Petri-specific orchestrator configuration. Required only when kind = PETRI and additional Petri options are authored.
+  javascript:
+    $ref: './FactoryOrchestratorJavaScriptConfig.yaml'
+    description: JavaScript-specific orchestrator configuration. Required when kind = JAVASCRIPT.

@@ -18,8 +18,9 @@ const fixtureState = vi.hoisted(() => ({
       | typeof divergentDocumentPlaneFactoryDocument
       | undefined,
     draft: {
-      additions: {
-        resources: [],
+    additions: {
+      docs: [],
+      resources: [],
         workers: [],
         workStates: [],
         workTypes: [],
@@ -30,6 +31,7 @@ const fixtureState = vi.hoisted(() => ({
         removals: [],
       },
       removals: {
+        docs: [],
         resources: [],
         workers: [],
         workStates: [],
@@ -96,6 +98,26 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
       clearSaveFeedback: vi.fn(),
     },
     draftState: fixtureState.draftState,
+    layoutDraftState: {
+      hasChanges: false,
+      layoutDirty: false,
+    },
+    pendingState: {
+      dirtyState: {
+        layoutDirty: false,
+        preferencesDirty: false,
+        topologyDirty: fixtureState.draftState.hasChanges,
+      },
+      hasChanges: fixtureState.draftState.hasChanges,
+      hasLayoutChanges: false,
+      hasPortableDocumentChanges: fixtureState.draftState.hasChanges,
+      hasPreferenceChanges: false,
+      hasTopologyChanges: fixtureState.draftState.hasChanges,
+      layoutDirty: false,
+      pendingFactoryDefinition: fixtureState.draftState.pendingFactoryDefinition,
+      preferencesDirty: false,
+      topologyDirty: fixtureState.draftState.hasChanges,
+    },
     saveMutation: {
       error: fixtureState.saveEditableDefinition.error,
       isPending: fixtureState.saveEditableDefinition.isPending,

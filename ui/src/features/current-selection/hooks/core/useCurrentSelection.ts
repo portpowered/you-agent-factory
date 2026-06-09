@@ -28,9 +28,10 @@ import type { WorkSelectionHint } from "./useCurrentSelection.actions";
 import { useCurrentSelectionActions } from "./useCurrentSelection.actions";
 import {
   useCurrentSelectionDerivedState,
-  useSelectionSynchronization,
   useTerminalWorkDetailCleanup,
 } from "./useCurrentSelection.derived";
+import { useSelectionSynchronization } from "../useCurrentSelection.synchronization";
+import { useGraphEditorPendingFactoryBridge } from "../../../workflow-activity/state/graph-editor-pending-factory-bridge";
 import {
   resolveProjectedWorkstationRequestsByDispatchID,
   type WorkstationRequestLike,
@@ -83,8 +84,11 @@ export interface CurrentSelectionState {
   ) => void;
   selectWorkstation: (nodeId: string) => void;
   selectWorkstationRequest: (request: DashboardWorkstationRequest) => void;
+  selectDoc: (targetPath: string) => void;
   selectResource: (resourceName: string) => void;
   selectWorker: (workerName: string) => void;
+  selectedDocTargetPath: string | null;
+  clearSelectedDocIfMatching: (targetPath: string) => void;
   clearSelectedFactoryGraphNodeIfMatching: (nodeId: string) => void;
   clearSelectedStateNodeIfMatching: (placeId: string) => void;
   clearSelectedWorkerIfMatching: (workerName: string) => void;
@@ -136,6 +140,9 @@ export function useCurrentSelection({
     );
   const currentFactoryDocumentQuery = useCurrentFactoryDocument();
   const topologyFactory = currentFactoryDocumentQuery.data ?? undefined;
+  const pendingFactoryDefinition = useGraphEditorPendingFactoryBridge(
+    (state) => state.pendingFactoryDefinition,
+  );
 
   useEffect(() => {
     if (sessionChanged) {
@@ -145,6 +152,7 @@ export function useCurrentSelection({
   }, [sessionChanged, sessionID, store.resetSelectionHistory]);
 
   useSelectionSynchronization({
+    pendingFactoryDefinition: pendingFactoryDefinition ?? undefined,
     projectedWorkstationRequestsByDispatchID,
     replacePresent: store.replacePresent,
     resetSelectionHistory: store.resetSelectionHistory,
@@ -201,6 +209,7 @@ export function useCurrentSelection({
     selectedWorkProviderSessions: derived.selectedWorkProviderSessions,
     selectedWorkRequestHistory: derived.selectedWorkRequestHistory,
     selectedWorkWorkstationRequests: derived.selectedWorkWorkstationRequests,
+    selectedDocTargetPath: derived.selectedDocTargetPath,
     selectedResourceName: derived.selectedResourceName,
     selectedResourceTokenCount: derived.selectedResourceTokenCount,
     selectedWorker: derived.selectedWorker,
@@ -216,10 +225,12 @@ export function useCurrentSelection({
     selectWorkItem: actions.selectWorkItem,
     selectWorkstation: actions.selectWorkstation,
     selectWorkstationRequest: actions.selectWorkstationRequest,
+    clearSelectedDocIfMatching: actions.clearSelectedDocIfMatching,
     clearSelectedFactoryGraphNodeIfMatching:
       actions.clearSelectedFactoryGraphNodeIfMatching,
     clearSelectedStateNodeIfMatching: actions.clearSelectedStateNodeIfMatching,
     clearSelectedWorkerIfMatching: actions.clearSelectedWorkerIfMatching,
+    selectDoc: actions.selectDoc,
     selectResource: actions.selectResource,
     selectWorker: actions.selectWorker,
     selectWorkType: actions.selectWorkType,

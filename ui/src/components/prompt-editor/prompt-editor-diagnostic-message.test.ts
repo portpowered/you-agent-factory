@@ -27,4 +27,19 @@ describe("formatSyntaxDiagnosticMessage", () => {
       "Unexpected EOF in if block.",
     );
   });
+
+  it("returns malformed template messages without a line separator unchanged", () => {
+    expect(
+      formatSyntaxDiagnosticMessage("template: prompt:missing-separator"),
+    ).toBe("template: prompt:missing-separator");
+  });
+
+  it("returns template messages with invalid line numbers unchanged", () => {
+    expect(formatSyntaxDiagnosticMessage("template: prompt:0: bad")).toBe(
+      "template: prompt:0: bad",
+    );
+    expect(formatSyntaxDiagnosticMessage("template: prompt:abc: bad")).toBe(
+      "template: prompt:abc: bad",
+    );
+  });
 });

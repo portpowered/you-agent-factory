@@ -20,6 +20,13 @@ describe("factory graph operations worker assignment", () => {
         model: "gpt-5-mini",
         modelProvider: "CURSOR",
         name: "reviewer",
+        operations: [
+          {
+            name: "REVIEW",
+            inputs: [{ name: "text", contentTypes: ["TEXT"], required: true }],
+            outputs: [{ name: "result", contentTypes: ["TEXT"] }],
+          },
+        ],
         workerType: "MODEL_WORKER",
       },
     });

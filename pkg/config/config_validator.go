@@ -415,8 +415,23 @@ func ruleBundledFilesWithContentValidator(cfg *interfaces.FactoryConfig, validat
 	}
 
 	var findings []Finding
+	seenTargetPaths := make(map[string]int, len(cfg.ResourceManifest.BundledFiles))
 	for i, file := range cfg.ResourceManifest.BundledFiles {
 		basePath := fmt.Sprintf("resourceManifest.bundledFiles[%d]", i)
+		if previousIndex, ok := seenTargetPaths[file.TargetPath]; ok {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     basePath + ".targetPath",
+				Message: fmt.Sprintf(
+					"targetPath %q collides with resourceManifest.bundledFiles[%d]",
+					file.TargetPath,
+					previousIndex,
+				),
+				Rule: "bundled-file-target-duplicate",
+			})
+		} else {
+			seenTargetPaths[file.TargetPath] = i
+		}
 		findings = append(findings, validateBundledFileType(basePath, file)...)
 		findings = append(findings, validateBundledFileTarget(basePath, file)...)
 		findings = append(findings, validateContent(basePath, file)...)

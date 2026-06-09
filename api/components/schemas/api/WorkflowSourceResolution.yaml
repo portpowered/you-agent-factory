@@ -1,0 +1,40 @@
+type: object
+additionalProperties: false
+required:
+  - requestKind
+  - found
+properties:
+  requestKind:
+    type: string
+    description: Requested workflow source kind.
+  requestValue:
+    type: string
+    description: Original requested workflow source value.
+  resolvedKind:
+    type: string
+    description: Resolved workflow source kind.
+  lookupStage:
+    type: string
+    description: Ordered lookup stage that supplied the resolved source.
+  sourceRef:
+    type: string
+    description: Safe resolved workflow source reference.
+  sourceHash:
+    type: string
+    description: Stable hash of the authored workflow source.
+  orchestratorKind:
+    type: string
+    description: Resolved orchestrator kind for the workflow source.
+  dialect:
+    type: string
+    description: Resolved workflow dialect label.
+  found:
+    type: boolean
+    description: True when a workflow source was resolved.
+  diagnostics:
+    type: array
+    description: Lookup or conflict diagnostics when source resolution fails or conflicts.
+    items:
+      $ref: './WorkflowDiagnostic.yaml'
+  artifactRoot:
+    $ref: './WorkflowArtifactRootDecision.yaml'

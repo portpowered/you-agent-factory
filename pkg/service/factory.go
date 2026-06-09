@@ -133,9 +133,10 @@ type runtimeBundleBuildInput struct {
 }
 
 type liveSessionState struct {
-	bundle *factoryRuntimeBundle
-	handle *liveRuntimeHandle
-	spec   *runtimebuild.SessionBuildSpec
+	bundle              *factoryRuntimeBundle
+	handle              *liveRuntimeHandle
+	spec                *runtimebuild.SessionBuildSpec
+	javascriptCheckpoints *factorysessions.JavaScriptCheckpointStore
 }
 
 // FactoryService is an instantiation of a factory along with its runtime

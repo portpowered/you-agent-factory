@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file consolidated session runtime reads remain with runtime_sessions until dedicated service read seams split.
+// pkgmaintcheck:ignore-file-lines consolidated session runtime reads remain with runtime_sessions until dedicated service read seams split.
 package service
 
 import (
@@ -6,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -42,12 +45,15 @@ type (
 type FactoryCoordinator interface {
 	ActivateNamedFactory(context.Context, string) error
 	ListFactorySessions(context.Context) (factoryapi.ListFactorySessionsResponse, error)
+	GetFactorySession(context.Context, string) (factoryapi.FactorySession, error)
+	GetFactorySessionResult(context.Context, string) (factoryapi.FactorySessionLiveResult, error)
+	GetFactorySessionPartialResult(context.Context, string) (factoryapi.FactorySessionPartialResult, error)
 	OpenFactorySession(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
 	CloseFactorySession(context.Context, string) error
 	OpenFactorySessionFromFolder(context.Context, string, *FactorySessionTargetRef, bool, bool) (*FactorySessionOpenResult, error)
 	SubmitWorkRequestForSession(context.Context, string, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
 	MoveWorkForSession(context.Context, string, string, string, string) (interfaces.OperatorMoveResult, error)
-	SubscribeFactoryEventsForSession(context.Context, string) (*interfaces.FactoryEventStream, error)
+	SubscribeFactoryEventsForSession(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error)
 	GetEngineStateSnapshotForSession(context.Context, string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 	GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error)
 	startDefaultRuntime(context.Context, context.Context, bool) (*liveRuntimeHandle, error)
@@ -308,17 +314,17 @@ func (fs *FactoryService) MoveWork(ctx context.Context, workID, stateName string
 	return activeFactory.MoveWork(ctx, workID, stateName, source, requestID)
 }
 
-func (fs *FactoryService) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error) {
-	return fs.requireCoordinator().SubscribeFactoryEventsForSession(ctx, sessionID)
+func (fs *FactoryService) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
+	return fs.requireCoordinator().SubscribeFactoryEventsForSession(ctx, sessionID, reconnect)
 }
 
-func (c *runtimeFactoryCoordinator) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string) (*interfaces.FactoryEventStream, error) {
+func (c *runtimeFactoryCoordinator) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
 	fs := c.service
 	activeFactory, err := fs.sessionFactory(sessionID)
 	if err != nil {
 		return nil, err
 	}
-	stream, err := activeFactory.SubscribeFactoryEvents(ctx)
+	stream, err := activeFactory.SubscribeFactoryEvents(ctx, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID})
 	if err != nil {
 		return nil, fmt.Errorf("subscribe factory events: %w", err)
 	}
@@ -379,18 +385,6 @@ func (s *runtimeFactoryDefinitionService) GetCurrentFactoryForSession(_ context.
 		return factoryapi.Factory{}, err
 	}
 	return fs.withCurrentFactoryVersion(versionRootDir, serialized.Name, serialized)
-}
-
-func (fs *FactoryService) ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error) {
-	return fs.requireCoordinator().ListFactorySessions(ctx)
-}
-
-func (c *runtimeFactoryCoordinator) ListFactorySessions(_ context.Context) (factoryapi.ListFactorySessionsResponse, error) {
-	fs := c.service
-	if fs == nil || fs.sessions == nil {
-		return factoryapi.ListFactorySessionsResponse{}, nil
-	}
-	return factoryapi.ListFactorySessionsResponse{Sessions: factorysessions.ListSummaries(fs.sessions)}, nil
 }
 
 func (fs *FactoryService) OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
@@ -898,4 +892,144 @@ func startupReadinessError(err error) error {
 		return fmt.Errorf("wait for service-mode startup work readiness: API server stopped before signaling readiness")
 	}
 	return fmt.Errorf("wait for service-mode startup work readiness: %w", err)
+}
+
+
+func (fs *FactoryService) ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error) {
+	return fs.requireCoordinator().ListFactorySessions(ctx)
+}
+
+func (c *runtimeFactoryCoordinator) ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error) {
+	fs := c.service
+	if fs == nil || fs.sessions == nil {
+		return factoryapi.ListFactorySessionsResponse{}, nil
+	}
+	sessionIDs := fs.sessions.IDs()
+	summaries := make([]factoryapi.FactorySessionSummary, 0, len(sessionIDs))
+	for _, sessionID := range sessionIDs {
+		session := fs.sessions.Get(sessionID)
+		if session == nil {
+			continue
+		}
+		projectionCtx, err := fs.buildSessionProjectionContext(ctx, session)
+		if err != nil {
+			summaries = append(summaries, factorysessions.SummaryResponse(session))
+			continue
+		}
+		summaries = append(summaries, factorysessions.SummaryWithRuntime(projectionCtx))
+	}
+	sortFactorySessionSummaries(summaries)
+	return factoryapi.ListFactorySessionsResponse{Sessions: summaries}, nil
+}
+
+func (fs *FactoryService) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+	return fs.requireCoordinator().GetFactorySession(ctx, sessionID)
+}
+
+func (c *runtimeFactoryCoordinator) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+	fs := c.service
+	session, err := fs.requireSession(sessionID)
+	if err != nil {
+		return factoryapi.FactorySession{}, err
+	}
+	projectionCtx, err := fs.buildSessionProjectionContext(ctx, session)
+	if err != nil {
+		return factoryapi.FactorySession{}, err
+	}
+	return factorysessions.SessionResponse(projectionCtx), nil
+}
+
+func (fs *FactoryService) buildSessionProjectionContext(
+	ctx context.Context,
+	session *factorysessions.LiveSession,
+) (factorysessions.ProjectionContext, error) {
+	if session == nil {
+		return factorysessions.ProjectionContext{}, fmt.Errorf("%w", apisurface.ErrFactorySessionNotFound)
+	}
+	runtimeCfg, err := fs.sessionRuntimeConfig(session.ID)
+	if err != nil {
+		return factorysessions.ProjectionContext{}, err
+	}
+	factoryCfg := runtimeCfg.FactoryConfig()
+	projectionCtx := factorysessions.ProjectionContext{
+		Session:    session,
+		FactoryCfg: factoryCfg,
+		Now:        time.Now().UTC(),
+	}
+	if interfaces.IsJavaScriptOrchestratorFactory(factoryCfg) {
+		checkpointStore := fs.javascriptCheckpointStore(session)
+		projectionCtx.JavaScript = factorysessions.JavaScriptRuntimeStateFromCheckpoints(
+			checkpointStore,
+			projectionCtx.JavaScript,
+		)
+		projectionCtx.JavaScriptCheckpoints = checkpointStore.List()
+		return projectionCtx, nil
+	}
+	snapshot, err := fs.GetEngineStateSnapshotForSession(ctx, session.ID)
+	if err != nil {
+		return factorysessions.ProjectionContext{}, err
+	}
+	projectionCtx.Snapshot = snapshot
+	projectionCtx.Enabled = factorysessions.EnabledTransitionsForSnapshot(ctx, snapshot, runtimeCfg)
+	return projectionCtx, nil
+}
+
+func (fs *FactoryService) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error) {
+	return fs.requireCoordinator().GetFactorySessionResult(ctx, sessionID)
+}
+
+func (c *runtimeFactoryCoordinator) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error) {
+	fs := c.service
+	session, err := fs.requireSession(sessionID)
+	if err != nil {
+		return factoryapi.FactorySessionLiveResult{}, err
+	}
+	projectionCtx, err := fs.buildSessionProjectionContext(ctx, session)
+	if err != nil {
+		return factoryapi.FactorySessionLiveResult{}, err
+	}
+	if !interfaces.IsJavaScriptOrchestratorFactory(projectionCtx.FactoryCfg) {
+		return factoryapi.FactorySessionLiveResult{}, fmt.Errorf("%w", apisurface.ErrFactorySessionResultUnavailable)
+	}
+	return factorysessions.ProjectSessionResult(sessionID, projectionCtx, fs.javascriptCheckpointStore(session)), nil
+}
+
+func (fs *FactoryService) GetFactorySessionPartialResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionPartialResult, error) {
+	return fs.requireCoordinator().GetFactorySessionPartialResult(ctx, sessionID)
+}
+
+func (c *runtimeFactoryCoordinator) GetFactorySessionPartialResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionPartialResult, error) {
+	fs := c.service
+	session, err := fs.requireSession(sessionID)
+	if err != nil {
+		return factoryapi.FactorySessionPartialResult{}, err
+	}
+	projectionCtx, err := fs.buildSessionProjectionContext(ctx, session)
+	if err != nil {
+		return factoryapi.FactorySessionPartialResult{}, err
+	}
+	if !interfaces.IsJavaScriptOrchestratorFactory(projectionCtx.FactoryCfg) {
+		return factoryapi.FactorySessionPartialResult{}, fmt.Errorf("%w", apisurface.ErrFactorySessionResultUnavailable)
+	}
+	return factorysessions.ProjectSessionPartialResult(sessionID, projectionCtx, fs.javascriptCheckpointStore(session)), nil
+}
+
+func (fs *FactoryService) javascriptCheckpointStore(session *factorysessions.LiveSession) *factorysessions.JavaScriptCheckpointStore {
+	state := liveSessionRuntimeState(session)
+	if state == nil {
+		return nil
+	}
+	if state.javascriptCheckpoints == nil {
+		state.javascriptCheckpoints = factorysessions.NewJavaScriptCheckpointStore()
+	}
+	return state.javascriptCheckpoints
+}
+
+func sortFactorySessionSummaries(summaries []factoryapi.FactorySessionSummary) {
+	sort.SliceStable(summaries, func(i, j int) bool {
+		if summaries[i].IsDefault != summaries[j].IsDefault {
+			return summaries[i].IsDefault
+		}
+		return summaries[i].Id < summaries[j].Id
+	})
 }

@@ -1,0 +1,19 @@
+type: object
+additionalProperties: false
+required:
+  - sessionId
+  - status
+properties:
+  sessionId:
+    type: string
+    description: Live factory session identifier for this result read.
+  status:
+    $ref: './FactorySessionStatus.yaml'
+  resultArtifactRef:
+    $ref: '../data-models/FactoryArtifactRef.yaml'
+    description: Final result artifact reference without raw checkpoint bodies.
+  checkpointRefs:
+    type: array
+    items:
+      $ref: './FactorySessionJavaScriptCheckpointRef.yaml'
+    description: Checkpoint refs associated with the terminal session result.

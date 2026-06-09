@@ -64,6 +64,7 @@ const editableDocument: CanonicalFactoryDefinition & {
 function createEmptyDraft() {
   return {
     additions: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -75,6 +76,7 @@ function createEmptyDraft() {
       removals: [],
     },
     removals: {
+      docs: [],
       resources: [],
       workers: [],
       workStates: [],
@@ -105,6 +107,7 @@ const hookState = vi.hoisted(() => ({
     baseDocument: null as CanonicalFactoryDefinition | null,
     draft: {
       additions: {
+        docs: [],
         resources: [],
         workers: [],
         workStates: [],
@@ -116,6 +119,7 @@ const hookState = vi.hoisted(() => ({
         removals: [],
       },
       removals: {
+        docs: [],
         resources: [],
         workers: [],
         workStates: [],
@@ -203,6 +207,26 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
       clearSaveFeedback: vi.fn(),
     },
     draftState: hookState.draftState,
+    layoutDraftState: {
+      hasChanges: false,
+      layoutDirty: false,
+    },
+    pendingState: {
+      dirtyState: {
+        layoutDirty: false,
+        preferencesDirty: false,
+        topologyDirty: hookState.draftState.hasChanges,
+      },
+      hasChanges: hookState.draftState.hasChanges,
+      hasLayoutChanges: false,
+      hasPortableDocumentChanges: hookState.draftState.hasChanges,
+      hasPreferenceChanges: false,
+      hasTopologyChanges: hookState.draftState.hasChanges,
+      layoutDirty: false,
+      pendingFactoryDefinition: hookState.draftState.pendingFactoryDefinition,
+      preferencesDirty: false,
+      topologyDirty: hookState.draftState.hasChanges,
+    },
     saveMutation: {
       error: hookState.saveEditableDefinition.error,
       isPending: hookState.saveEditableDefinition.isPending,

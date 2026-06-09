@@ -1,0 +1,28 @@
+type: object
+additionalProperties: false
+description: >-
+  Session execution start recorded on the canonical factory event stream.
+  Session and orchestrator identity live in FactoryEvent.context; this payload
+  carries replay-safe factory and source facts only.
+required:
+  - startedAt
+properties:
+  factoryId:
+    type: string
+    description: Stable factory identifier for the session runtime.
+  sourceRef:
+    type: string
+    description: Authored workflow or factory source reference when applicable.
+  sourceHash:
+    type: string
+    description: Stable hash of the authored source material.
+  policyHash:
+    type: string
+    description: Stable hash of the effective orchestrator policy.
+  argsDigest:
+    type: string
+    description: Stable digest of effective session arguments.
+  startedAt:
+    type: string
+    format: date-time
+    description: When durable session execution started.

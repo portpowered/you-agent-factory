@@ -32,4 +32,12 @@ const (
 	CodeLayoutUnknownGroupMemberReference       = "factory.layout.unknownGroupMemberReference"
 	CodeLayoutUnsupportedSchemaVersion          = "factory.layout.unsupportedSchemaVersion"
 	CodeLayoutInvalidGeometry                   = "factory.layout.invalidGeometry"
+	CodeOrchestratorUnsupportedKind             = "factory.orchestrator.unsupportedKind"
+	CodeOrchestratorIncompatiblePetriConfig     = "factory.orchestrator.incompatiblePetriConfig"
+	CodeOrchestratorIncompatibleJavaScriptConfig = "factory.orchestrator.incompatibleJavaScriptConfig"
+	CodeOrchestratorIncompatiblePetriField      = "factory.orchestrator.incompatiblePetriField"
+	CodeOrchestratorJavaScriptMissingConfig     = "factory.orchestrator.javascriptMissingConfig"
+	CodeOrchestratorJavaScriptMissingSource     = "factory.orchestrator.javascriptMissingSource"
+	CodeOrchestratorJavaScriptConflictingSource = "factory.orchestrator.javascriptConflictingSource"
+	CodeOrchestratorJavaScriptInvalidInlineEncoding = "factory.orchestrator.javascriptInvalidInlineEncoding"
 )

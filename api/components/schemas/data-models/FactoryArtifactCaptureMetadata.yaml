@@ -1,0 +1,13 @@
+type: object
+additionalProperties: false
+properties:
+  capturedAt:
+    type: string
+    format: date-time
+    description: Timestamp when the artifact payload was captured.
+  sourceDispatchId:
+    type: string
+    description: Dispatch identifier that produced the artifact when applicable.
+  mimeType:
+    type: string
+    description: MIME type of the stored artifact payload when known.

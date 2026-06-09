@@ -20,7 +20,11 @@ const WORKSTATION_GUARD_TARGET_FIELD_BY_CODE: Record<string, string> = {
 
 const FACTORY_WORKSTATION_GUARD_PATH =
   /factory\.workstations\[\d+\]\.guards\[(\d+)\]\.([a-zA-Z.]+)/;
+const FACTORY_WORKSTATION_OPERATION_BINDINGS_PATH =
+  /factory\.workstations\[\d+\](?:\([^)]+\))?\.operationBindings\[\d+\]/;
 const FACTORY_WORKSTATION_NAME_PATH = /factory\.workstations\[\d+\]\.name/;
+const FACTORY_WORKSTATION_OPERATION_PATH =
+  /factory\.workstations\[\d+\](?:\([^)]+\))?\.operation/;
 const FACTORY_INPUT_GUARD_PATH =
   /factory\.workstations\[\d+\]\.inputs\[(\d+)\]\.guards\[\d+\]\.([a-zA-Z]+)/;
 const WORKSTATION_DUPLICATE_IDENTIFIER_CODE = "factory.duplicateIdentifier";
@@ -56,6 +60,15 @@ export function resolveWorkstationSaveValidationFieldName(
     }
     if (subjectID === "behavior") {
       return "behavior";
+    }
+    if (subjectID === "operation") {
+      return "operation";
+    }
+    if (
+      subjectID === "operationbindings" ||
+      subjectID.endsWith(".operationbindings")
+    ) {
+      return "operationBindings";
     }
     if (subjectID === "body" || subjectID === "prompt") {
       return "prompt";
@@ -156,6 +169,18 @@ function mapWorkstationSaveErrorMessageToFieldErrors(
   if (FACTORY_WORKSTATION_NAME_PATH.test(message)) {
     return {
       name: message,
+    };
+  }
+
+  if (FACTORY_WORKSTATION_OPERATION_BINDINGS_PATH.test(message)) {
+    return {
+      operationBindings: message,
+    };
+  }
+
+  if (FACTORY_WORKSTATION_OPERATION_PATH.test(message)) {
+    return {
+      operation: message,
     };
   }
 

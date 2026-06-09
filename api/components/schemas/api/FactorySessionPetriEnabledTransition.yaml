@@ -1,0 +1,12 @@
+type: object
+additionalProperties: false
+required:
+  - transitionId
+  - workerType
+properties:
+  transitionId:
+    type: string
+    description: Enabled Petri transition identifier.
+  workerType:
+    type: string
+    description: Worker type bound to the enabled transition.

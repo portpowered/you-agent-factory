@@ -1,9 +1,14 @@
 import type { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
-import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
+import type {
+  FactoryGraphEditorTool,
+  FactoryGraphEditorVisibilityPreset,
+} from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import type { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
+import type { useFactoryGraphLayoutDraftState } from "../../factory-graph-editor/hooks/layout/factory-graph-layout-draft-hook";
 import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { useFactoryValidation } from "../../factory-graph-editor/hooks/validation/use-factory-validation";
+import type { FactoryGraphEditorDirtyState } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphNodeKind,
@@ -25,7 +30,35 @@ export function buildCurrentActivityGraphEditorValue(args: {
   documentSave: FactoryDocumentSaveState;
   connectionNotice: string | null;
   currentFactoryDefinition: CanonicalFactoryDefinition | null;
+  dirtyStateSummary: FactoryGraphEditorDirtyState;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
+  layoutDraftState: ReturnType<typeof useFactoryGraphLayoutDraftState>;
+  addEdgeWaypoint: (
+    edgeId: string,
+    position: { x: number; y: number },
+    insertIndex?: number,
+  ) => void;
+  moveEdgeWaypoint: (
+    edgeId: string,
+    waypointIndex: number,
+    position: { x: number; y: number },
+  ) => void;
+  removeEdgeWaypoint: (edgeId: string, waypointIndex: number) => void;
+  moveLayoutNode: (nodeId: string, position: { x: number; y: number }) => void;
+  moveLayoutNodesByDelta: (
+    nodeIds: readonly string[],
+    delta: { x: number; y: number },
+    resolvedPositionsByNodeId: ReadonlyMap<string, { x: number; y: number }>,
+  ) => void;
+  redoLayout: () => void;
+  resetLayout: () => void;
+  resetPreferences: () => void;
+  undoLayout: () => void;
+  updateLayoutViewport: (viewport: {
+    x: number;
+    y: number;
+    zoom: number;
+  }) => void;
   editableDefinitionQuery: ReturnType<typeof useCurrentFactoryDocument>;
   editorUnavailableClassifierWorkstationName?: string;
   editorMode: boolean;
@@ -72,7 +105,9 @@ export function buildCurrentActivityGraphEditorValue(args: {
   hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
   hideShowMenuOpen: boolean;
   setHideShowMenuOpen: (open: boolean) => void;
+  setVisibilityPreset: (preset: FactoryGraphEditorVisibilityPreset) => void;
   toggleHiddenNodeClass: (kind: FactoryGraphNodeKind) => void;
+  visibilityPreset: FactoryGraphEditorVisibilityPreset;
 }) {
   return {
     activeTool: args.activeTool,
@@ -87,7 +122,19 @@ export function buildCurrentActivityGraphEditorValue(args: {
     documentSave: args.documentSave,
     connectionNotice: args.connectionNotice,
     currentFactoryDefinition: args.currentFactoryDefinition,
+    dirtyStateSummary: args.dirtyStateSummary,
     draftState: args.draftState,
+    layoutDraftState: args.layoutDraftState,
+    addEdgeWaypoint: args.addEdgeWaypoint,
+    moveEdgeWaypoint: args.moveEdgeWaypoint,
+    removeEdgeWaypoint: args.removeEdgeWaypoint,
+    moveLayoutNode: args.moveLayoutNode,
+    moveLayoutNodesByDelta: args.moveLayoutNodesByDelta,
+    redoLayout: args.redoLayout,
+    resetLayout: args.resetLayout,
+    resetPreferences: args.resetPreferences,
+    undoLayout: args.undoLayout,
+    updateLayoutViewport: args.updateLayoutViewport,
     editableDefinitionQuery: args.editableDefinitionQuery,
     editorUnavailableClassifierWorkstationName:
       args.editorUnavailableClassifierWorkstationName,
@@ -131,6 +178,8 @@ export function buildCurrentActivityGraphEditorValue(args: {
     hiddenNodeClasses: args.hiddenNodeClasses,
     hideShowMenuOpen: args.hideShowMenuOpen,
     setHideShowMenuOpen: args.setHideShowMenuOpen,
+    setVisibilityPreset: args.setVisibilityPreset,
     toggleHiddenNodeClass: args.toggleHiddenNodeClass,
+    visibilityPreset: args.visibilityPreset,
   };
 }
