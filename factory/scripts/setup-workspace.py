@@ -45,19 +45,30 @@ def read_prd(prd_path):
         return json.load(f)
 
 
-def sync_main(repo_root):
-    """Run git pull unless the repo has no upstream configured."""
-    result = run_git("pull", cwd=repo_root, check=False)
-    if result.returncode == 0:
-        return
+def origin_remote_exists(repo_root):
+    """Return True when the repository has an origin remote configured."""
+    result = run_git("remote", "get-url", "origin", cwd=repo_root, check=False)
+    return result.returncode == 0
 
-    stderr = result.stderr.lower()
-    if "there is no tracking information for the current branch" in stderr:
-        return
 
-    raise RuntimeError(
-        f"git pull failed (exit {result.returncode}): {result.stderr.strip()}"
+def origin_main_ref_exists(repo_root):
+    """Return True when refs/remotes/origin/main exists locally."""
+    result = run_git(
+        "rev-parse", "--verify", "refs/remotes/origin/main",
+        cwd=repo_root, check=False,
     )
+    return result.returncode == 0
+
+
+def sync_main(repo_root):
+    """Fetch origin and sync local main when remote tracking is available."""
+    if not origin_remote_exists(repo_root):
+        return
+
+    run_git("fetch", "origin", cwd=repo_root, check=False)
+
+    if not origin_main_ref_exists(repo_root):
+        return
 
 
 def prune_worktrees(repo_root):
