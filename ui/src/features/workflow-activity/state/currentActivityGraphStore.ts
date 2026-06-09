@@ -122,11 +122,38 @@ export const useCurrentActivityGraphStore = create<CurrentActivityGraphState>()(
     }),
     {
       name: CURRENT_ACTIVITY_GRAPH_STORAGE_KEY,
+      migrate: (persistedState) => {
+        if (
+          !persistedState ||
+          typeof persistedState !== "object" ||
+          Array.isArray(persistedState)
+        ) {
+          return {
+            positionsByGraphKey: {},
+            viewportByGraphKey: {},
+          };
+        }
+
+        const positionsByGraphKey =
+          "positionsByGraphKey" in persistedState &&
+          persistedState.positionsByGraphKey &&
+          typeof persistedState.positionsByGraphKey === "object" &&
+          !Array.isArray(persistedState.positionsByGraphKey)
+            ? persistedState.positionsByGraphKey
+            : {};
+
+        return {
+          positionsByGraphKey,
+          viewportByGraphKey: {},
+        };
+      },
       partialize: (state) => ({
         positionsByGraphKey: state.positionsByGraphKey,
-        viewportByGraphKey: state.viewportByGraphKey,
+        // Viewport handoff should survive mode switches in-memory, but not
+        // override authored factory layout after a fresh page load.
       }),
       storage: createJSONStorage(() => window.localStorage),
+      version: 2,
     },
   ),
 );

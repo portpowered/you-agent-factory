@@ -504,7 +504,7 @@ describe("WorkflowActivityBentoCard header actions", () => {
     expect(
       headerScope.getByText(
         editorMessages.dirtyStateSummary({
-          layoutDirty: false,
+          layoutDirty: true,
           preferencesDirty: false,
           topologyDirty: true,
         }),

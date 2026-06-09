@@ -18,7 +18,6 @@ import type {
 } from "../../../api/dashboard/types";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import type { CurrentActivityNode } from "../../flowchart/public";
-import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import { resolveStoredNodePositionsForGraphKey } from "../lib/bridge-graph-layout-positions";
 import { mergeDocNodesIntoGraphLayout } from "../lib/current-activity-doc-graph-layout";
 import { buildVisibleGraphEdgesWithDraft } from "../lib/react-flow-current-activity-card-draft-edges";
@@ -57,6 +56,7 @@ import type { useCurrentActivityGraphEditor } from "./react-flow-current-activit
 import { useCurrentActivityGraphLayoutForFactory } from "./react-flow-current-activity-card-graph-layout";
 import { mergeBaseNodesWithPresentationPositions } from "../lib/layout/merge-base-nodes-with-presentation-positions";
 import { useTopologyStableFactoryForLayout } from "./use-topology-stable-factory-for-layout";
+import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 
 export type CurrentActivityGraphViewModelInput = {
   editor: ReturnType<typeof useCurrentActivityGraphEditor>;
@@ -234,11 +234,9 @@ function useStableCurrentActivityGraphLayout(
   editor: ReturnType<typeof useCurrentActivityGraphEditor>,
 ) {
   const timelineMode = useFactoryTimelineStore((state) => state.mode);
-  const displayFactoryDefinition = useMemo(
-    () =>
-      currentActivityCardDisplayFactoryDefinition(editor, snapshot, timelineMode),
-    [editor, snapshot, timelineMode],
-  );
+  const displayFactoryDefinition =
+    editor.viewState?.displayFactoryDefinition ??
+    currentActivityCardDisplayFactoryDefinition(editor, snapshot, timelineMode);
   const layoutFactoryDefinition = useTopologyStableFactoryForLayout(
     displayFactoryDefinition,
   );
@@ -364,13 +362,27 @@ export function useCurrentActivityGraphViewModel({
 
     return viewportByGraphKey[graphKey] ?? null;
   }, [graphKey, viewportByGraphKey]);
+  const canonicalLayoutFactoryDefinition = useMemo(
+    () =>
+      editor.editorMode
+        ? displayFactoryDefinition
+        : (editor.viewState?.savedFactoryDocument ??
+          editor.viewState?.baseFactoryDocument ??
+          displayFactoryDefinition),
+    [
+      displayFactoryDefinition,
+      editor.editorMode,
+      editor.viewState?.baseFactoryDocument,
+      editor.viewState?.savedFactoryDocument,
+    ],
+  );
   const canonicalLayout = useMemo(
     () =>
       editor.editorMode
         ? (editor.layoutDraftState?.layout ?? createDefaultFactoryLayout())
-        : factoryLayoutFromDefinition(displayFactoryDefinition),
+        : factoryLayoutFromDefinition(canonicalLayoutFactoryDefinition),
     [
-      displayFactoryDefinition,
+      canonicalLayoutFactoryDefinition,
       editor.editorMode,
       editor.layoutDraftState?.layout,
     ],
@@ -514,7 +526,7 @@ export function useCurrentActivityGraphViewModel({
   const canonicalLayoutViewport = editor.editorMode
     ? (editor.layoutDraftState?.layout.viewport ?? storedViewport)
     : (storedViewport ??
-      factoryLayoutFromDefinition(displayFactoryDefinition).viewport);
+      factoryLayoutFromDefinition(canonicalLayoutFactoryDefinition).viewport);
 
   return {
     canonicalLayoutViewport,

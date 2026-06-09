@@ -165,6 +165,41 @@ describe("observe-mode live doc projection", () => {
     expect(listFactoryBundledDocs(displayFactory)).toEqual([]);
   });
 
+  it("keeps snapshot layout for observer projection when cached document data omits layout", () => {
+    const editor = {
+      draftState: {},
+      editableDefinitionQuery: {
+        data: {
+          ...savedFactoryDocument,
+          layout: undefined,
+        },
+        status: "success" as const,
+      },
+      editorMode: false,
+    };
+    const snapshotFactory = {
+      ...timelineFactory,
+      layout: {
+        nodes: [
+          {
+            id: "workstation:plan",
+            position: { x: 420, y: 180 },
+          },
+        ],
+        schemaVersion: 1,
+        viewport: { x: 18, y: 22, zoom: 1.15 },
+      },
+    };
+
+    const displayFactory = currentActivityCardFactoryDefinition(
+      editor as never,
+      { factory: snapshotFactory } as never,
+      "current",
+    );
+
+    expect(displayFactory?.layout).toEqual(snapshotFactory.layout);
+  });
+
   it("keeps bundled docs when FACTORY_CHANGE sync completes after the factory GET lands", () => {
     const queryClient = new QueryClient();
     const initialFactory = preserveExistingBundledFilesWhenAbsent(

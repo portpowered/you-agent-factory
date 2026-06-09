@@ -202,9 +202,11 @@ describe("CurrentActivityGraphSurface", () => {
   it("renders shared-surface notices and forwards viewport editor actions", () => {
     const editor = createEditorStub();
     const graph = createGraphStub();
+    const discardPendingChanges = vi.fn();
 
     render(
       <CurrentActivityGraphSurface
+        discardPendingChanges={discardPendingChanges}
         editor={editor as never}
         graph={graph as never}
         imports={{} as never}
@@ -259,7 +261,8 @@ describe("CurrentActivityGraphSurface", () => {
     );
 
     expect(editor.setIsConfirmingSave).toHaveBeenCalledWith(true);
-    expect(editor.handleDiscardPendingChanges).toHaveBeenCalledTimes(1);
+    expect(discardPendingChanges).toHaveBeenCalledTimes(1);
+    expect(editor.handleDiscardPendingChanges).not.toHaveBeenCalled();
     expect(editor.handleAddEntityAction).toHaveBeenCalledTimes(1);
     expect(editor.setAddMenuOpen).toHaveBeenCalledWith(true);
     expect(editor.handleEditorConnect).toHaveBeenCalledTimes(1);

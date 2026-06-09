@@ -1,8 +1,7 @@
-import { Handle, Position } from "@xyflow/react";
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { cn } from "../../../lib/cn";
-import { GraphNodeButton } from "./graph-node-button";
+import { GraphNodeHandleBadge } from "./graph-node-handle-badge";
 
 export type PlaceNodeType =
   | "constraint"
@@ -72,25 +71,13 @@ export function ActivityGraphNodeShell({
   return (
     <article
       className={cn(
-        "flex h-full min-w-0 w-full flex-col gap-1 overflow-visible rounded-lg border border-outline bg-surface p-3 text-on-surface",
+        "relative flex h-full min-w-0 w-full overflow-visible rounded-lg border border-outline bg-surface text-on-surface",
         className,
       )}
       data-current-activity-node-type={nodeType}
     >
-      {leftHandles.map((handle, handleNumber) => (
-        <NodeHandleBadge
-          handle={handle}
-          key={handle.id}
-          top={handlePosition(handleNumber, leftHandles.length)}
-        />
-      ))}
-      {rightHandles.map((handle, handleNumber) => (
-        <NodeHandleBadge
-          handle={handle}
-          key={handle.id}
-          top={handlePosition(handleNumber, rightHandles.length)}
-        />
-      ))}
+      <NodeHandleRail handles={leftHandles} side="left" />
+      <NodeHandleRail handles={rightHandles} side="right" />
       {activeZAxisIncompleteHints
         ? zAxisHintSlots.map((slot) => (
             <ZAxisIncompleteHintOrb
@@ -102,8 +89,57 @@ export function ActivityGraphNodeShell({
             />
           ))
         : null}
-      {children}
+      <div
+        className={cn(
+          "flex h-full min-w-0 w-full flex-col gap-1 py-3",
+          leftHandles.length > 0 ? "pl-6 pr-3" : "px-3",
+          rightHandles.length > 0 && leftHandles.length > 0
+            ? "pr-6"
+            : rightHandles.length > 0
+              ? "pl-3 pr-6"
+              : null,
+        )}
+      >
+        {children}
+      </div>
     </article>
+  );
+}
+
+function NodeHandleRail({
+  handles,
+  side,
+}: {
+  handles: ActivityGraphNodeHandle[];
+  side: "left" | "right";
+}) {
+  if (handles.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className={cn(
+        "pointer-events-none absolute inset-y-0 z-20 w-6",
+        side === "left" ? "left-0" : "right-0",
+      )}
+      data-node-handle-rail={side}
+    >
+      {handles.map((handle, index) => (
+        <div
+          className={cn(
+            "absolute top-0 flex -translate-y-1/2",
+            side === "left"
+              ? "left-0 w-full justify-start pl-1"
+              : "right-0 w-full justify-end pr-1",
+          )}
+          key={handle.id}
+          style={{ top: handlePosition(index, handles.length) }}
+        >
+          <GraphNodeHandleBadge handle={handle} />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -153,122 +189,4 @@ function ZAxisIncompleteHintOrb({
       />
     </span>
   );
-}
-
-function NodeHandleBadge({
-  handle,
-  top,
-}: {
-  handle: ActivityGraphNodeHandle;
-  top: string;
-}) {
-  const position = handle.side === "left" ? Position.Left : Position.Right;
-  if (handle.hidden) {
-    return (
-      <Handle
-        className="pointer-events-none opacity-0"
-        id={handle.id}
-        isConnectable={handle.connectable ?? false}
-        position={position}
-        style={{ top }}
-        type={handle.type}
-      />
-    );
-  }
-  const wrapperClassName =
-    handle.side === "left"
-      ? "-translate-x-1 flex-row"
-      : "translate-x-1 flex-row-reverse";
-  const dotClassName = handleDotClassName(handle);
-  const dotStyle = handleDotStyle(handle);
-
-  return (
-    <div
-      className={cn(
-        "pointer-events-none absolute top-0 z-20 flex -translate-y-1/2 items-center",
-        handle.side === "left" ? "left-0" : "right-0",
-        wrapperClassName,
-      )}
-      style={{ top }}
-    >
-      <Handle
-        className={cn("pointer-events-auto !h-2.5 !w-2.5 !border-0 opacity-0")}
-        id={handle.id}
-        isConnectable={handle.connectable ?? true}
-        position={position}
-        type={handle.type}
-      />
-      <GraphNodeButton
-        aria-invalid={handle.validationError ? true : undefined}
-        aria-label={handle.buttonAriaLabel}
-        aria-pressed={handle.buttonPressed}
-        className={cn(
-          "pointer-events-auto -m-1 grid h-5 w-5 place-items-center rounded-full transition focus-visible:outline-2 focus-visible:outline-af-focus-ring disabled:cursor-not-allowed disabled:bg-surface-container-low disabled:text-on-surface-disabled",
-          handle.validationError &&
-            "ring-2 ring-af-danger-border motion-safe:animate-pulse",
-        )}
-        disabled={handle.buttonDisabled}
-        onClick={handle.onButtonClick}
-        title={handle.buttonTitle ?? handle.validationMessage}
-      >
-        <span
-          aria-hidden="true"
-          className={cn(
-            "block h-2.5 w-2.5 rounded-full border border-surface shadow-sm transition",
-            dotClassName,
-            handle.variant === "selected" &&
-              "scale-125 shadow-[0_0_0_3px_var(--color-primary-container)]",
-            handle.variant === "valid-target" &&
-              "scale-125 shadow-[0_0_0_3px_var(--color-success-container)]",
-            handle.variant === "error" &&
-              "scale-125 border-af-danger-border bg-error-container shadow-[0_0_0_3px_var(--color-error-container)] motion-safe:animate-pulse",
-          )}
-          style={dotStyle}
-        />
-      </GraphNodeButton>
-    </div>
-  );
-}
-
-function handleDotStyle(
-  handle: ActivityGraphNodeHandle,
-): CSSProperties | undefined {
-  if (
-    handle.id === "workstation-resource-source" ||
-    handle.id === "workstation-resource-target"
-  ) {
-    return {
-      backgroundColor: "var(--color-on-inverse)",
-      borderColor: "var(--color-on-surface)",
-    };
-  }
-
-  return undefined;
-}
-
-function handleDotClassName(handle: ActivityGraphNodeHandle): string {
-  if (handle.variant === "error") {
-    return "bg-error";
-  }
-
-  if (handle.variant === "muted") {
-    return "bg-outline-variant";
-  }
-
-  if (
-    handle.id === "workstation-resource-source" ||
-    handle.id === "workstation-resource-target"
-  ) {
-    return "bg-on-inverse";
-  }
-
-  if (handle.variant === "selected") {
-    return "bg-primary";
-  }
-
-  if (handle.variant === "valid-target") {
-    return "bg-success";
-  }
-
-  return "bg-on-surface";
 }

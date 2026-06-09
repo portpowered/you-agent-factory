@@ -115,7 +115,7 @@ export function WorkflowActivityBentoCard({
           hasChanges={editor.draftState.hasChanges}
           headerActions={headerAction}
           isDefinitionLoading={
-            editor.editableDefinitionQuery.status === "pending"
+            editor.viewState.editableDefinitionQuery?.status === "pending"
           }
           loadErrorMessage={editor.editableDefinitionQuery.error?.message}
           locale={locale}

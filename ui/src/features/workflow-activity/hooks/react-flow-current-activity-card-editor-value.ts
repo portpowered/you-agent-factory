@@ -18,6 +18,7 @@ import type { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/li
 import type { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import type { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import type { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
+import type { CurrentActivityFactoryGraphViewState } from "./use-current-activity-factory-graph-view-state";
 
 export function buildCurrentActivityGraphEditorValue(args: {
   activeTool: FactoryGraphEditorTool;
@@ -108,6 +109,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
   setVisibilityPreset: (preset: FactoryGraphEditorVisibilityPreset) => void;
   toggleHiddenNodeClass: (kind: FactoryGraphNodeKind) => void;
   visibilityPreset: FactoryGraphEditorVisibilityPreset;
+  viewState: CurrentActivityFactoryGraphViewState;
 }) {
   return {
     activeTool: args.activeTool,
@@ -181,5 +183,6 @@ export function buildCurrentActivityGraphEditorValue(args: {
     setVisibilityPreset: args.setVisibilityPreset,
     toggleHiddenNodeClass: args.toggleHiddenNodeClass,
     visibilityPreset: args.visibilityPreset,
+    viewState: args.viewState,
   };
 }

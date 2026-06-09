@@ -547,10 +547,10 @@ export function CurrentActivityGraphViewport({
               onMoveEnd={(_, viewport) => {
                 if (skipNextViewportMoveEndRef.current) {
                   skipNextViewportMoveEndRef.current = false;
-                } else {
-                  setStoredViewport(graphKey, viewport);
+                  return;
                 }
 
+                setStoredViewport(graphKey, viewport);
                 if (editorMode && updateLayoutViewport) {
                   updateLayoutViewport(viewport);
                 }

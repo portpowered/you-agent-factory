@@ -8,3 +8,4 @@
  */
 export * from "./api";
 export * from "./preserve-bundled-files";
+export * from "./preserve-layout";

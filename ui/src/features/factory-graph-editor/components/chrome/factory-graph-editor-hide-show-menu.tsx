@@ -94,7 +94,6 @@ export function FactoryGraphEditorHideShowMenu({
             type="button"
           >
             <FactoryGraphEditorMenuItemCopy
-              description={messages.toolbarClearPreferencesDescription}
               label={messages.toolbarClearPreferencesLabel}
             />
           </FactoryGraphEditorMenuItemButton>

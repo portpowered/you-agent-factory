@@ -20,12 +20,16 @@ function createEditorStub(
     editorMode?: boolean;
   } = {},
 ) {
+  const editableDefinitionQueryData =
+    overrides.editableDefinitionQuery &&
+    "data" in overrides.editableDefinitionQuery
+      ? overrides.editableDefinitionQuery.data
+      : baseFactoryDefinitionDocument;
+
   return {
     draftState: overrides.draftState ?? createMockGraphEditorDraftState(),
     editableDefinitionQuery: {
-      data:
-        overrides.editableDefinitionQuery?.data ??
-        baseFactoryDefinitionDocument,
+      data: editableDefinitionQueryData,
       status: overrides.editableDefinitionQuery?.status ?? "success",
     },
     editorMode: overrides.editorMode ?? false,
@@ -46,6 +50,44 @@ describe("currentActivityCardFactoryDefinition", () => {
         "current",
       ),
     ).toEqual(snapshot.factory);
+  });
+
+  it("returns the saved factory document in observe mode while the query is pending when shared draft state already has it", () => {
+    const savedDocument = {
+      ...baseFactoryDefinitionDocument,
+      layout: {
+        nodes: [
+          {
+            id: "workstation:draft",
+            position: { x: 540, y: 260 },
+          },
+        ],
+        schemaVersion: 1 as const,
+        viewport: { x: 14, y: 18, zoom: 1.2 },
+      },
+    };
+    const snapshot = {
+      ...structuredClone(singleNodeDashboardSnapshot),
+      factory: {
+        ...savedDocument,
+        layout: undefined,
+      },
+    };
+
+    expect(
+      currentActivityCardFactoryDefinition(
+        createEditorStub({
+          draftState: createMockGraphEditorDraftState({
+            baseDocument: savedDocument,
+            latestDocument: savedDocument,
+          }),
+          editableDefinitionQuery: { data: undefined, status: "pending" },
+          editorMode: false,
+        }),
+        snapshot,
+        "current",
+      ),
+    ).toEqual(savedDocument);
   });
 
   it("returns the saved factory document in observe mode once the scoped factory document succeeds", () => {
@@ -187,6 +229,46 @@ describe("currentActivityCardFactoryDefinition bundled docs", () => {
     ).toMatchObject({
       supportingFiles: savedDocument.supportingFiles,
       workstations: snapshot.factory?.workstations,
+    });
+  });
+
+  it("keeps snapshot layout in observe mode when the saved document omits it", () => {
+    const snapshot = structuredClone(singleNodeDashboardSnapshot);
+    if (!snapshot.factory) {
+      throw new Error("expected snapshot factory fixture");
+    }
+
+    snapshot.factory.layout = {
+      nodes: [
+        {
+          id: "workstation:draft",
+          position: { x: 480, y: 240 },
+        },
+      ],
+      schemaVersion: 1,
+      viewport: { x: 10, y: 20, zoom: 1.25 },
+    };
+
+    const savedDocument = {
+      ...sessionFactoryDocumentFromSnapshot(snapshot),
+    };
+    delete savedDocument.layout;
+
+    expect(
+      currentActivityCardFactoryDefinition(
+        createEditorStub({
+          editableDefinitionQuery: {
+            data: savedDocument,
+            status: "success",
+          },
+          editorMode: false,
+        }),
+        snapshot,
+        "current",
+      ),
+    ).toMatchObject({
+      layout: snapshot.factory.layout,
+      workstations: savedDocument.workstations,
     });
   });
 });

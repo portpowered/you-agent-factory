@@ -99,6 +99,47 @@ function EditorModeStory() {
   );
 }
 
+function ToolbarModeTransitionStory() {
+  const [editorMode, setEditorMode] = useState(false);
+  const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [hideShowMenuOpen, setHideShowMenuOpen] = useState(false);
+
+  return (
+    <div className="grid gap-4 p-6">
+      <div className="relative min-h-56 overflow-hidden rounded-[1.5rem] border border-outline bg-surface-container-low">
+        <div
+          aria-label="Graph jitter probe surface"
+          className="absolute inset-0 rounded-[1.5rem] bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.14),_transparent_52%),linear-gradient(180deg,_rgba(255,255,255,0.04),_transparent)]"
+        />
+        <FactoryGraphEditorToolbar
+          activeTool={activeTool}
+          addMenuActions={[...ADD_MENU_ACTIONS]}
+          canInteract={true}
+          canDiscard={true}
+          canSave={true}
+          editModeToggle={{
+            editorMode,
+            hasChanges: false,
+            onToggle: () => setEditorMode((current) => !current),
+          }}
+          hasPendingChanges={false}
+          hideShowMenuOpen={hideShowMenuOpen}
+          onDiscard={() => {}}
+          onAddAction={() => {}}
+          onAddMenuOpenChange={setAddMenuOpen}
+          onHideShowMenuOpenChange={setHideShowMenuOpen}
+          onSave={() => {}}
+          onSelectTool={setActiveTool}
+          onToggleHiddenNodeClass={() => {}}
+          openAddMenu={addMenuOpen}
+          visible={editorMode}
+        />
+      </div>
+    </div>
+  );
+}
+
 function AddMenuOpenStory() {
   return (
     <div className="grid gap-4 p-6">
@@ -271,6 +312,10 @@ export const EditorMode = {
       within(toolbar).getByRole("button", { name: "Discard changes" }),
     ).toBeVisible();
   },
+};
+
+export const ToolbarModeTransition = {
+  render: () => <ToolbarModeTransitionStory />,
 };
 
 export const AddMenuOpen = {

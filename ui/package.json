@@ -31,6 +31,7 @@
     "storybook:prompt-syntax-save-check": "node scripts/run-prompt-syntax-save-browser-check.mjs",
     "storybook:checkbox-consistency-check": "node scripts/run-checkbox-consistency-browser-check.mjs",
     "storybook:current-selection-save-notifications-check": "node scripts/run-current-selection-save-notifications-browser-check.mjs",
+    "storybook:factory-graph-toolbar-jitter-check": "bun run build-storybook && node scripts/run-factory-graph-toolbar-jitter-browser-check.mjs",
     "storybook:responsive-check": "node scripts/run-storybook-responsive-check.mjs",
     "storybook:serve-static": "http-server storybook-static -p 6008 -a 127.0.0.1 -s",
     "storybook:wait-for-index": "wait-on --timeout 30000 http://127.0.0.1:6008/index.json",

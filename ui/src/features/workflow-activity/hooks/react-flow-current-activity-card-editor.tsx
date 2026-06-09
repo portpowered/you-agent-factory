@@ -11,6 +11,7 @@ import { buildCurrentActivityGraphEditorValue } from "./react-flow-current-activ
 import { useGraphEditorControllers } from "./use-graph-editor-controllers";
 import { useGraphEditorSaveFlow } from "./use-graph-editor-save-flow";
 import { useGraphEditorSession } from "./use-graph-editor-session";
+import { useCurrentActivityFactoryGraphViewState } from "./use-current-activity-factory-graph-view-state";
 import { useHiddenFactoryGraphNodeClasses } from "./use-hidden-factory-graph-node-classes";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph editor hook wires session, controllers, and save flow into one card value model.
@@ -48,6 +49,14 @@ export function useCurrentActivityGraphEditor(
     editableGraph.layoutDraftState.layout,
     editorMode,
   );
+  const viewState = useCurrentActivityFactoryGraphViewState(
+    {
+      draftState,
+      editableDefinitionQuery: currentFactoryQuery,
+      editorMode,
+    },
+    snapshot,
+  );
   const session = useGraphEditorSession({
     activeTool,
     draftState,
@@ -56,7 +65,7 @@ export function useCurrentActivityGraphEditor(
     layoutDraftState: editableGraph.layoutDraftState,
     locale,
     ...leaveEditorBridge.sessionCallbacks,
-    projectedFactory: snapshot.factory,
+    projectedFactory: viewState.persistedFactoryDefinition ?? snapshot.factory,
     saveEditableDefinition,
     setActiveTool,
     setEditorMode,
@@ -117,13 +126,13 @@ export function useCurrentActivityGraphEditor(
   useEffect(() => {
     const pendingFactoryBridge = useGraphEditorPendingFactoryBridge.getState();
     pendingFactoryBridge.setPendingFactoryDefinition(
-      editorMode ? session.currentFactoryDefinition : null,
+      editorMode ? viewState.currentFactoryDefinition : null,
     );
 
     return () => {
       pendingFactoryBridge.setPendingFactoryDefinition(null);
     };
-  }, [editorMode, session.currentFactoryDefinition]);
+  }, [editorMode, viewState.currentFactoryDefinition]);
 
   useEffect(() => {
     const normalizedScopeKey = factoryDocumentScopeKey ?? null;
@@ -152,7 +161,7 @@ export function useCurrentActivityGraphEditor(
     canSaveDraft: saveFlow.canSaveDraft,
     documentSave: editableGraph.saveState.documentSave,
     connectionNotice: controllers.connectionNotice,
-    currentFactoryDefinition: session.currentFactoryDefinition,
+    currentFactoryDefinition: viewState.currentFactoryDefinition,
     draftState,
     dirtyStateSummary: editableGraph.pendingState.dirtyState,
     layoutDraftState: editableGraph.layoutDraftState,
@@ -206,5 +215,6 @@ export function useCurrentActivityGraphEditor(
     setVisibilityPreset,
     toggleHiddenNodeClass,
     visibilityPreset,
+    viewState,
   });
 }

@@ -195,10 +195,12 @@ describe("CurrentActivityGraphEditorDialogs", () => {
   it("wires import, save, discard, and add-entity dialog actions on the shared editor surface", () => {
     const editor = createEditorStub();
     const imports = createImportsStub();
+    const discardEditorChanges = vi.fn();
 
     render(
       <CurrentActivityGraphEditorDialogs
         currentSessionFactoryName="alpha"
+        discardEditorChanges={discardEditorChanges}
         editor={editor as never}
         imports={imports as never}
         readyImportPreviewState={imports.importPreviewState}
@@ -235,7 +237,8 @@ describe("CurrentActivityGraphEditorDialogs", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Trigger leave discard" }),
     );
-    expect(editor.handleDiscardEditorChanges).toHaveBeenCalledTimes(1);
+    expect(discardEditorChanges).toHaveBeenCalledTimes(1);
+    expect(editor.handleDiscardEditorChanges).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Trigger leave save" }));
     expect(editor.handleSaveBeforeLeavingEditor).toHaveBeenCalledTimes(1);

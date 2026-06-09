@@ -15,9 +15,12 @@ import {
   useCurrentActivityImportController,
 } from "../hooks/current-activity-import-controller";
 import { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
-import { useCurrentActivityGraphViewModel } from "../hooks/react-flow-current-activity-card-graph-view-model";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
+import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
+import {
+  useCurrentActivityGraphCardViewModel,
+} from "../hooks/use-current-activity-graph-card-view-model";
 import { GraphEditorPlacementProvider } from "./graph-editor-placement-context";
 import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
 import { CurrentActivityGraphSaveNotifications } from "./react-flow-current-activity-card-save-notifications";
@@ -120,7 +123,7 @@ export function ReactFlowCurrentActivityCardView(
   const { headingID } = useCurrentActivityAccessibilityIDs(
     props.widgetInstanceID,
   );
-  const graph = useCurrentActivityGraphViewModel({ ...props, editor });
+  const viewModel = useCurrentActivityGraphCardViewModel({ ...props, editor });
   const fallbackImportController = useCurrentActivityImportController({
     activateFactory: props.activateFactory,
     locale: props.locale,
@@ -134,6 +137,24 @@ export function ReactFlowCurrentActivityCardView(
     imports.importPreviewState.status === "ready"
       ? imports.importPreviewState
       : null;
+  const clearStoredNodePositions = useCurrentActivityGraphStore(
+    (state) => state.clearNodePositions,
+  );
+  const clearStoredViewport = useCurrentActivityGraphStore(
+    (state) => state.clearViewport,
+  );
+  const discardGraphPresentationState = () => {
+    clearStoredNodePositions(viewModel.nodes.map((node) => node.id));
+    clearStoredViewport(viewModel.graphKey);
+  };
+  const handleDiscardPendingChanges = () => {
+    discardGraphPresentationState();
+    viewModel.handleDiscardPendingChanges();
+  };
+  const handleDiscardEditorChanges = () => {
+    discardGraphPresentationState();
+    viewModel.handleDiscardEditorChanges();
+  };
 
   return (
     <GraphEditorPlacementProvider>
@@ -155,8 +176,8 @@ export function ReactFlowCurrentActivityCardView(
           />
         )}
         <CurrentActivityGraphSurface
-          editor={editor}
-          graph={graph}
+          discardPendingChanges={handleDiscardPendingChanges}
+          viewModel={viewModel}
           headingID={headingID}
           imports={imports}
           locale={props.locale}
@@ -164,12 +185,13 @@ export function ReactFlowCurrentActivityCardView(
           snapshot={props.snapshot}
         />
         <CurrentActivityGraphSaveNotifications
-          editor={editor}
+          viewModel={viewModel}
           locale={props.locale}
         />
         <CurrentActivityGraphEditorDialogs
           currentSessionFactoryName={props.snapshot.factory?.name ?? "factory"}
-          editor={editor}
+          discardEditorChanges={handleDiscardEditorChanges}
+          viewModel={viewModel}
           imports={imports}
           locale={props.locale}
           readyImportPreviewState={readyImportPreviewState}
