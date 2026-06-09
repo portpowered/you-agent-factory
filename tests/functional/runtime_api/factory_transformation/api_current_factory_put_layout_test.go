@@ -149,6 +149,265 @@ func TestCurrentFactoryPUT_PrunesStaleLayoutAndReturnsLayoutOutcomes(t *testing.
 	}
 }
 
+func TestCurrentFactoryPUT_AcceptsPortableLayoutVariants(t *testing.T) {
+	rootDir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(rootDir, interfaces.FactoryConfigFile),
+		functionalNamedFactoryPayloadWithWorkType(t, "root-runtime", "root-task"),
+		0o644,
+	); err != nil {
+		t.Fatalf("write default factory config: %v", err)
+	}
+
+	server := startFactoryTransformationServer(t, rootDir)
+
+	cases := []struct {
+		name                string
+		nodes               []map[string]any
+		edges               []map[string]any
+		assertSavedLayout   func(t *testing.T, layout *factoryapi.FactoryLayout)
+		assertPersistedBody func(t *testing.T, layout map[string]any)
+	}{
+		{
+			name: "multiple nodes with size",
+			nodes: []map[string]any{
+				{
+					"id":       "workstation:plan-task",
+					"position": map[string]any{"x": 144, "y": 288},
+					"size":     map[string]any{"width": 320, "height": 180},
+				},
+				{
+					"id":       "workstation:review-task",
+					"position": map[string]any{"x": 544, "y": 288},
+					"size":     map[string]any{"width": 300, "height": 160},
+				},
+			},
+			edges: []map[string]any{
+				{"id": "workstation-output:workstation:plan-task->work-state:story:draft"},
+				{"id": "workstation-output:workstation:review-task->work-state:story:done"},
+			},
+			assertSavedLayout: func(t *testing.T, layout *factoryapi.FactoryLayout) {
+				t.Helper()
+				if layout == nil || layout.Nodes == nil || len(*layout.Nodes) != 2 {
+					t.Fatalf("layout nodes = %#v, want 2", layout)
+				}
+				if (*layout.Nodes)[0].Size == nil || (*layout.Nodes)[0].Size.Width != 320 {
+					t.Fatalf("first layout node size = %#v, want width 320", (*layout.Nodes)[0].Size)
+				}
+				if (*layout.Nodes)[1].Size == nil || (*layout.Nodes)[1].Size.Height != 160 {
+					t.Fatalf("second layout node size = %#v, want height 160", (*layout.Nodes)[1].Size)
+				}
+			},
+			assertPersistedBody: func(t *testing.T, layout map[string]any) {
+				t.Helper()
+				nodes := layout["nodes"].([]any)
+				second := nodes[1].(map[string]any)
+				size := second["size"].(map[string]any)
+				if size["width"] != float64(300) || size["height"] != float64(160) {
+					t.Fatalf("persisted second node size = %#v, want width 300 height 160", size)
+				}
+			},
+		},
+		{
+			name: "edge with one waypoint",
+			nodes: []map[string]any{
+				{"id": "workstation:plan-task", "position": map[string]any{"x": 144, "y": 288}, "size": map[string]any{"width": 320, "height": 180}},
+				{"id": "workstation:review-task", "position": map[string]any{"x": 544, "y": 288}, "size": map[string]any{"width": 300, "height": 160}},
+			},
+			edges: []map[string]any{
+				{
+					"id": "workstation-output:workstation:plan-task->work-state:story:draft",
+					"waypoints": []map[string]any{
+						{"x": 420, "y": 310},
+					},
+				},
+			},
+			assertSavedLayout: func(t *testing.T, layout *factoryapi.FactoryLayout) {
+				t.Helper()
+				waypoints := (*layout.Edges)[0].Waypoints
+				if waypoints == nil || len(*waypoints) != 1 || (*waypoints)[0].X != 420 || (*waypoints)[0].Y != 310 {
+					t.Fatalf("layout edge waypoints = %#v, want one waypoint at 420,310", waypoints)
+				}
+			},
+			assertPersistedBody: func(t *testing.T, layout map[string]any) {
+				t.Helper()
+				edges := layout["edges"].([]any)
+				waypoints := edges[0].(map[string]any)["waypoints"].([]any)
+				if len(waypoints) != 1 {
+					t.Fatalf("persisted waypoints = %#v, want 1", waypoints)
+				}
+			},
+		},
+		{
+			name: "edge with multiple waypoints",
+			nodes: []map[string]any{
+				{"id": "workstation:plan-task", "position": map[string]any{"x": 144, "y": 288}, "size": map[string]any{"width": 320, "height": 180}},
+				{"id": "workstation:review-task", "position": map[string]any{"x": 544, "y": 288}, "size": map[string]any{"width": 300, "height": 160}},
+			},
+			edges: []map[string]any{
+				{
+					"id": "workstation-output:workstation:review-task->work-state:story:done",
+					"waypoints": []map[string]any{
+						{"x": 700, "y": 260},
+						{"x": 760, "y": 220},
+					},
+				},
+			},
+			assertSavedLayout: func(t *testing.T, layout *factoryapi.FactoryLayout) {
+				t.Helper()
+				waypoints := (*layout.Edges)[0].Waypoints
+				if waypoints == nil || len(*waypoints) != 2 {
+					t.Fatalf("layout edge waypoints = %#v, want 2", waypoints)
+				}
+				if (*waypoints)[1].X != 760 || (*waypoints)[1].Y != 220 {
+					t.Fatalf("second layout waypoint = %#v, want 760,220", (*waypoints)[1])
+				}
+			},
+			assertPersistedBody: func(t *testing.T, layout map[string]any) {
+				t.Helper()
+				edges := layout["edges"].([]any)
+				waypoints := edges[0].(map[string]any)["waypoints"].([]any)
+				if len(waypoints) != 2 {
+					t.Fatalf("persisted waypoints = %#v, want 2", waypoints)
+				}
+			},
+		},
+		{
+			name: "multiple nodes without size",
+			nodes: []map[string]any{
+				{
+					"id":       "workstation:plan-task",
+					"position": map[string]any{"x": 144, "y": 288},
+				},
+				{
+					"id":       "workstation:review-task",
+					"position": map[string]any{"x": 544, "y": 288},
+				},
+			},
+			edges: []map[string]any{
+				{"id": "workstation-output:workstation:plan-task->work-state:story:draft"},
+			},
+			assertSavedLayout: func(t *testing.T, layout *factoryapi.FactoryLayout) {
+				t.Helper()
+				if layout == nil || layout.Nodes == nil || len(*layout.Nodes) != 2 {
+					t.Fatalf("layout nodes = %#v, want 2", layout)
+				}
+				if (*layout.Nodes)[0].Size != nil || (*layout.Nodes)[1].Size != nil {
+					t.Fatalf("layout node sizes = %#v, want omitted sizes", *layout.Nodes)
+				}
+			},
+			assertPersistedBody: func(t *testing.T, layout map[string]any) {
+				t.Helper()
+				nodes := layout["nodes"].([]any)
+				for _, nodeValue := range nodes {
+					node := nodeValue.(map[string]any)
+					if _, ok := node["size"]; ok {
+						t.Fatalf("persisted sizeless node = %#v, want size omitted", node)
+					}
+				}
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			current := getCurrentFactory(t, server.URL())
+			body, err := json.Marshal(layoutVariantFactorySaveBody(t, current, tc.nodes, tc.edges))
+			if err != nil {
+				t.Fatalf("marshal current factory save with layout variant: %v", err)
+			}
+
+			saved := saveCurrentFactoryDefinition(t, server.URL(), string(body))
+			tc.assertSavedLayout(t, saved.Layout)
+
+			reloaded := getCurrentFactory(t, server.URL())
+			tc.assertSavedLayout(t, reloaded.Layout)
+
+			factoryJSON, err := os.ReadFile(filepath.Join(rootDir, interfaces.FactoryConfigFile))
+			if err != nil {
+				t.Fatalf("ReadFile(factory.json): %v", err)
+			}
+			var persisted map[string]any
+			if err := json.Unmarshal(factoryJSON, &persisted); err != nil {
+				t.Fatalf("Unmarshal(factory.json): %v", err)
+			}
+			layout := persisted["layout"].(map[string]any)
+			tc.assertPersistedBody(t, layout)
+		})
+	}
+}
+
+func TestCurrentFactoryPUT_AcceptsLayoutNodeMissingSize(t *testing.T) {
+	rootDir := t.TempDir()
+	if err := os.WriteFile(
+		filepath.Join(rootDir, interfaces.FactoryConfigFile),
+		functionalNamedFactoryPayloadWithWorkType(t, "root-runtime", "root-task"),
+		0o644,
+	); err != nil {
+		t.Fatalf("write default factory config: %v", err)
+	}
+
+	server := startFactoryTransformationServer(t, rootDir)
+	current := getCurrentFactory(t, server.URL())
+
+	body, err := json.Marshal(map[string]any{
+		"name":    "UNDEFINED",
+		"id":      "root-runtime",
+		"version": versionDocument(advancedFactoryVersion(t, current.Version)),
+		"layout": map[string]any{
+			"schemaVersion": 1,
+			"nodes": []map[string]any{{
+				"id": "workstation:plan-task",
+				"position": map[string]any{
+					"x": 144,
+					"y": 288,
+				},
+			}},
+			"viewport": map[string]any{
+				"x":    40,
+				"y":    60,
+				"zoom": 0.85,
+			},
+		},
+		"workTypes": []map[string]any{{
+			"name": "story",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "done", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name":             "planner",
+			"type":             "MODEL_WORKER",
+			"modelProvider":    "CLAUDE",
+			"executorProvider": "SCRIPT_WRAP",
+			"model":            "claude-sonnet-4-20250514",
+			"body":             "You are the planner.",
+		}},
+		"workstations": []map[string]any{{
+			"name":     "plan-task",
+			"behavior": "STANDARD",
+			"type":     "MODEL_WORKSTATION",
+			"worker":   "planner",
+			"body":     "Plan the work.",
+			"inputs":   []map[string]string{{"workType": "story", "state": "init"}},
+			"outputs":  []map[string]string{{"workType": "story", "state": "done"}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal current factory save with malformed layout node: %v", err)
+	}
+
+	saved := saveCurrentFactoryDefinition(t, server.URL(), string(body))
+	if saved.Layout == nil || saved.Layout.Nodes == nil || len(*saved.Layout.Nodes) != 1 {
+		t.Fatalf("saved layout nodes = %#v, want one sizeless node", saved.Layout)
+	}
+	if (*saved.Layout.Nodes)[0].Size != nil {
+		t.Fatalf("saved layout node size = %#v, want omitted size", (*saved.Layout.Nodes)[0].Size)
+	}
+}
+
 func staleLayoutPruningFactorySaveBody(t *testing.T, current factoryapi.Factory) map[string]any {
 	t.Helper()
 
@@ -208,6 +467,81 @@ func staleLayoutPruningFactorySaveBody(t *testing.T, current factoryapi.Factory)
 			"inputs":   []map[string]string{{"workType": "story", "state": "init"}},
 			"outputs":  []map[string]string{{"workType": "story", "state": "done"}},
 		}},
+	}
+}
+
+func layoutVariantFactorySaveBody(
+	t *testing.T,
+	current factoryapi.Factory,
+	nodes []map[string]any,
+	edges []map[string]any,
+) map[string]any {
+	t.Helper()
+
+	return map[string]any{
+		"name":    "UNDEFINED",
+		"id":      "root-runtime",
+		"version": versionDocument(advancedFactoryVersion(t, current.Version)),
+		"layout": map[string]any{
+			"schemaVersion": 1,
+			"nodes":         nodes,
+			"edges":         edges,
+			"viewport": map[string]any{
+				"x":    40,
+				"y":    60,
+				"zoom": 0.85,
+			},
+			"preferences": map[string]any{
+				"direction": "RIGHT",
+			},
+		},
+		"workTypes": []map[string]any{{
+			"name": "story",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "draft", "type": "PROCESSING"},
+				{"name": "done", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]any{
+			{
+				"name":             "planner",
+				"type":             "MODEL_WORKER",
+				"modelProvider":    "CLAUDE",
+				"executorProvider": "SCRIPT_WRAP",
+				"model":            "claude-sonnet-4-20250514",
+				"body":             "You are the planner.",
+			},
+			{
+				"name":             "reviewer",
+				"type":             "MODEL_WORKER",
+				"modelProvider":    "CLAUDE",
+				"executorProvider": "SCRIPT_WRAP",
+				"model":            "claude-sonnet-4-20250514",
+				"body":             "You are the reviewer.",
+			},
+		},
+		"workstations": []map[string]any{
+			{
+				"name":     "plan-task",
+				"behavior": "STANDARD",
+				"type":     "MODEL_WORKSTATION",
+				"worker":   "planner",
+				"body":     "Plan the work.",
+				"inputs":   []map[string]string{{"workType": "story", "state": "init"}},
+				"outputs":  []map[string]string{{"workType": "story", "state": "draft"}},
+			},
+			{
+				"name":     "review-task",
+				"behavior": "STANDARD",
+				"type":     "MODEL_WORKSTATION",
+				"worker":   "reviewer",
+				"body":     "Review the work.",
+				"inputs":   []map[string]string{{"workType": "story", "state": "draft"}},
+				"outputs":  []map[string]string{{"workType": "story", "state": "done"}},
+			},
+		},
 	}
 }
 

@@ -210,7 +210,7 @@ func validateLayoutNodeArray(parent map[string]any, key string, path string) err
 		if err := validateOptionalPointObject(node, "position", nodePath, true); err != nil {
 			return err
 		}
-		if err := validateOptionalSizeObject(node, "size", nodePath, true); err != nil {
+		if err := validateOptionalSizeObject(node, "size", nodePath, false); err != nil {
 			return err
 		}
 	}

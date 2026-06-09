@@ -135,6 +135,52 @@ func TestFactoryConfigFromOpenAPIJSON_MapsPortableLayoutContract(t *testing.T) {
 	}
 }
 
+func TestFactoryConfigFromOpenAPIJSON_AllowsPortableLayoutNodesWithoutSize(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"layout-factory",
+		"layout":{
+			"schemaVersion":1,
+			"nodes":[
+				{"id":"workstation:review","position":{"x":420,"y":180}},
+				{"id":"workstation:approve","position":{"x":620,"y":220}}
+			],
+			"edges":[{"id":"workstation-output:workstation:review->work-state:task:done","waypoints":[{"x":540,"y":220},{"x":580,"y":240}]}],
+			"viewport":{"x":0,"y":0,"zoom":1}
+		},
+		"workTypes": [{"id":"task","name":"task","states":[{"id":"ready","name":"ready","type":"INITIAL"},{"id":"done","name":"done","type":"TERMINAL"}]}],
+		"workers": [{"id":"writer","name":"writer","type":"MODEL_WORKER"}],
+		"workstations": [{
+			"id":"review",
+			"name":"review",
+			"worker":"writer",
+			"inputs":[{"workType":"task","state":"ready"}],
+			"outputs":[{"workType":"task","state":"done"}]
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	if cfg.Layout == nil || len(cfg.Layout.Nodes) != 2 {
+		t.Fatalf("layout nodes = %#v, want 2 nodes", cfg.Layout)
+	}
+	if cfg.Layout.Nodes[0].Size != nil || cfg.Layout.Nodes[1].Size != nil {
+		t.Fatalf("layout node sizes = %#v, want sizeless nodes", cfg.Layout.Nodes)
+	}
+	if len(cfg.Layout.Edges) != 1 || len(cfg.Layout.Edges[0].Waypoints) != 2 {
+		t.Fatalf("layout edges = %#v, want one edge with two waypoints", cfg.Layout.Edges)
+	}
+
+	public := FactoryConfigToOpenAPI(cfg)
+	if public.Layout == nil || public.Layout.Nodes == nil || len(*public.Layout.Nodes) != 2 {
+		t.Fatalf("public layout nodes = %#v, want 2", public.Layout)
+	}
+	if (*public.Layout.Nodes)[0].Size != nil || (*public.Layout.Nodes)[1].Size != nil {
+		t.Fatalf("public layout node sizes = %#v, want omitted sizes", *public.Layout.Nodes)
+	}
+}
+
 func TestFactoryConfigFromOpenAPIJSON_RejectsMalformedPortableLayoutContract(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"layout-factory",

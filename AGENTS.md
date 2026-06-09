@@ -1,5 +1,5 @@
 
-This project is infinite-you, an AI agent factory intended to schedule and orchestrate AI. 
+This project is you-agent-factory, an AI agent factory intended to schedule and orchestrate AI. 
 The goal of the project generally is to rapidly allow customers to deploy lots of AI concurrently so 
 as to maximize their overall productivity. 
 

@@ -1,11 +1,14 @@
 package factory_transformation
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
@@ -152,6 +155,63 @@ func TestCurrentFactoryPUT_RejectsDuplicateDocTargetPaths(t *testing.T) {
 		http.StatusBadRequest,
 	)
 	resp.Body.Close()
+}
+
+func TestCurrentFactoryPUT_ShellEscapedBundledInlineReplayReturnsPayloadInvalid(t *testing.T) {
+	rootDir := t.TempDir()
+	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+
+	server := startFactoryTransformationServer(t, rootDir)
+	current := getCurrentFactory(t, server.URL())
+	if current.Version == nil {
+		t.Fatal("current factory version = nil, want version metadata for save")
+	}
+
+	// This mirrors a common replay mistake from copy-as-curl artifacts: the
+	// bundled file inline content still contains shell-style \' escaping instead
+	// of valid JSON string content, so the request fails at payload decoding
+	// before factory validation runs.
+	body := `{
+		"mode":"REPLACE_CURRENT",
+		"factory":{
+			"name":"alpha",
+			"version":{"physical":"` + current.Version.Physical.UTC().Add(time.Nanosecond).Format(time.RFC3339Nano) + `","logical":"` + strconv.FormatInt(current.Version.Logical.Int64()+1, 10) + `"},
+			"workTypes":[{"name":"alpha-task","states":[
+				{"name":"init","type":"INITIAL"},
+				{"name":"complete","type":"TERMINAL"},
+				{"name":"failed","type":"FAILED"}
+			]}],
+			"workers":[{"name":"planner","type":"MODEL_WORKER","modelProvider":"CLAUDE","executorProvider":"SCRIPT_WRAP","model":"claude-sonnet-4-20250514","body":"Plan work."}],
+			"workstations":[{"name":"plan-task","behavior":"STANDARD","type":"MODEL_WORKSTATION","worker":"planner","inputs":[{"workType":"alpha-task","state":"init"}],"outputs":[{"workType":"alpha-task","state":"complete"}]}],
+			"supportingFiles":{"bundledFiles":[
+				{"type":"SCRIPT","targetPath":"factory/scripts/setup-workspace.py","content":{"encoding":"utf-8","inline":"print(\'setup\')\n"}}
+			]}
+		}
+	}`
+
+	req, err := http.NewRequest(http.MethodPut, server.URL()+"/factory-sessions/~default/factory", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("new malformed current factory save request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT /factory-sessions/~default/factory: %v", err)
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		resp.Body.Close()
+		t.Fatalf("PUT /factory-sessions/~default/factory status = %d, want 400", resp.StatusCode)
+	}
+
+	var errResp factoryapi.ErrorResponse
+	decodeJSONResponse(t, resp, &errResp, "decode malformed bundled inline save response")
+	if errResp.Code != factoryapi.BADREQUEST {
+		t.Fatalf("error code = %q, want BAD_REQUEST", errResp.Code)
+	}
+	if errResp.Targets == nil || !hasValidationTargetCode(*errResp.Targets, "factory.payload.invalid") {
+		t.Fatalf("error targets = %#v, want factory.payload.invalid decode target", errResp.Targets)
+	}
 }
 
 func currentFactoryDocumentWithBundledDocs(t *testing.T, current factoryapi.Factory, bundledFiles []map[string]any) string {

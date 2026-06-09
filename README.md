@@ -1,19 +1,19 @@
-# infinite-you
+# you-agent-factory
 
 [![CI](https://github.com/portpowered/you-agent-factory/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/portpowered/you-agent-factory/actions/workflows/ci.yml)
 [![Latest Release](https://img.shields.io/github/v/release/portpowered/you-agent-factory?display_name=tag)](https://github.com/portpowered/you-agent-factory/releases)
 [![Go Version](https://img.shields.io/badge/go-1.24-00ADD8?logo=go)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE.md)
 
-**infinite-you** is an AI agent factory for scheduling and orchestrating concurrent AI work—the `you` CLI and dashboard let you run many agents at once instead of babysitting each task manually.
+**you-agent-factory** is an AI agent factory for scheduling and orchestrating concurrent AI work—the `you` CLI and dashboard let you run many agents at once instead of babysitting each task manually.
 
-![infinite-you dashboard showing concurrent agent workstations, live work routing, and factory flow status](./docs/internal/resources/dashboard.png)
+![you-agent-factory dashboard showing concurrent agent workstations, live work routing, and factory flow status](./docs/internal/resources/dashboard.png)
 
 ## Why?
 
 Leverage.
 
-With **infinite-you**, you codify your process into a workflow with different `AGENTS.md` files and run them as wrappers around OpenAI Codex or other agent backends.
+With **you-agent-factory**, you codify your process into a workflow with different `AGENTS.md` files and run them as wrappers around OpenAI Codex or other agent backends.
 
 For example:
 
@@ -66,7 +66,7 @@ you docs workstation
 
 ## Features
 
-infinite-you is a factory runtime: you define how work moves between workstations, and the `you` CLI plus dashboard schedule concurrent agent runs against that flow.
+you-agent-factory is a factory runtime: you define how work moves between workstations, and the `you` CLI plus dashboard schedule concurrent agent runs against that flow.
 
 - **Concurrent agent execution** — Run many agents at once across workstations; the dashboard shows live routing, session status, and factory flow state.
 - **Workflow customization** — Model processes as config (`factory.json`, workstation routes, `AGENTS.md`) instead of a fixed pipeline; adapt write/review loops, cron triggers, git worktrees, or other patterns to your repo.
@@ -83,11 +83,11 @@ Deeper product documentation:
 
 ## Comparison
 
-How **infinite-you** fits next to nearby agent and workflow orchestrators. Dimensions focus on execution model, workflow flexibility, agent-harness support, and operational weight—not “best tool” claims. For a longer maintainer write-up, see [Comparing orchestration systems](./docs/comparatives/comparing-systems.md).
+How **you-agent-factory** fits next to nearby agent and workflow orchestrators. Dimensions focus on execution model, workflow flexibility, agent-harness support, and operational weight—not “best tool” claims. For a longer maintainer write-up, see [Comparing orchestration systems](./docs/comparatives/comparing-systems.md).
 
 | System | Execution model | Workflow shape | Agent harness | Durability / ops weight | Reference |
 | --- | --- | --- | --- | --- | --- |
-| **infinite-you** | Self-hosted `you` runtime and dashboard route work through factory workstations | Custom in-repo flow (`factory.json`, `AGENTS.md`, routes) without a fixed pipeline | Codex, Claude, and shell workers wired through factory config | Lightweight local runtime; no built-in durable workflow engine | [Architecture](./docs/architecture/architecture.md) · [Comparing systems](./docs/comparatives/comparing-systems.md) |
+| **you-agent-factory** | Self-hosted `you` runtime and dashboard route work through factory workstations | Custom in-repo flow (`factory.json`, `AGENTS.md`, routes) without a fixed pipeline | Codex, Claude, and shell workers wired through factory config | Lightweight local runtime; no built-in durable workflow engine | [Architecture](./docs/architecture/architecture.md) · [Comparing systems](./docs/comparatives/comparing-systems.md) |
 | **[Gastown](https://github.com/steveyegge/gastown)** | Mayor-led multi-agent workspace with git-backed hooks and worktrees | Opinionated mayor/beads/convoy coordination around git | Hooks inject context into Claude Code, Copilot, Codex, and peers | Git/worktree persistence; heavier git + beads/dolt stack | [Gastown](https://github.com/steveyegge/gastown) |
 | **[Symphony](https://github.com/openai/symphony)** | Long-running orchestrator polls issue trackers and runs per-issue workspaces | Policy in-repo (`WORKFLOW.md`); spec-driven daemon workflow | Codex app-server sessions in isolated workspaces | Elixir daemon with supervision/retries; tracker-centric | [Symphony](https://github.com/openai/symphony) |
 | **[Factory](https://factory.ai/)** | Droid Missions orchestrator with Mission Control for multi-day projects | Milestone/feature decomposition with validation contracts | Droid workers with MCP, skills, hooks, and custom droids | Productized orchestration with milestone validation loops | [Factory Missions](https://docs.factory.ai/cli/features/missions) |
@@ -97,7 +97,7 @@ How **infinite-you** fits next to nearby agent and workflow orchestrators. Dimen
 
 ## References
 
-- [Comparing orchestration systems](./docs/comparatives/comparing-systems.md) — background on how infinite-you relates to nearby agent and workflow tools
+- [Comparing orchestration systems](./docs/comparatives/comparing-systems.md) — background on how you-agent-factory relates to nearby agent and workflow tools
 - [Authoring factories](./docs/reference/authoring-factories.md) — primary guide for defining and running factories
 - [CLI reference index](./docs/reference/README.md) — packaged `you docs` topics and links to customer-facing guides
 - [Work submission](./docs/reference/work.md) — `you submit`, batch inputs, and dashboard submission
@@ -113,4 +113,4 @@ Maintainers: edit packaged reference docs under [`docs/reference/`](./docs/refer
 
 This repository is released under the [MIT License](./LICENSE.md).
 
-The README hero image (`docs/internal/resources/dashboard.png`) and the animated demo (`docs/internal/resources/dashboard.gif`) are screenshots maintained in this repository and depict the infinite-you dashboard UI.
+The README hero image (`docs/internal/resources/dashboard.png`) and the animated demo (`docs/internal/resources/dashboard.gif`) are screenshots maintained in this repository and depict the you-agent-factory dashboard UI.
