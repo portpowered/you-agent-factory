@@ -9,6 +9,7 @@ import {
 import {
   buildWorkflowPreviewQueryKey,
   useWorkflowPreview,
+  workflowPreviewQueryOptions,
 } from "./useWorkflowPreview";
 
 vi.mock("../../../api/workflow-preview", async () => {
@@ -75,6 +76,48 @@ describe("buildWorkflowPreviewQueryKey", () => {
       "",
     ]);
   });
+
+  it("includes inline source and artifact root segments in the query key", () => {
+    expect(
+      buildWorkflowPreviewQueryKey({
+        sourceKind: "INLINE_WORKFLOW",
+        projectRoot: "/tmp/project",
+        inlineSource: "phase('setup');",
+        artifactRoot: "/tmp/artifacts",
+      }),
+    ).toEqual([
+      "workflow-preview",
+      "INLINE_WORKFLOW",
+      "/tmp/project",
+      "",
+      "phase('setup');",
+      "/tmp/artifacts",
+    ]);
+  });
+
+  it("fills omitted optional request fields with empty query-key segments", () => {
+    expect(
+      buildWorkflowPreviewQueryKey({
+        sourceKind: "WORKFLOW_FILE",
+      }),
+    ).toEqual(["workflow-preview", "WORKFLOW_FILE", "", "", "", ""]);
+  });
+});
+
+describe("workflowPreviewQueryOptions", () => {
+  it("throws when fetchQuery runs without a request", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          retry: false,
+        },
+      },
+    });
+
+    await expect(
+      queryClient.fetchQuery(workflowPreviewQueryOptions(null)),
+    ).rejects.toThrow("workflow preview request is required");
+  });
 });
 
 describe("useWorkflowPreview", () => {
@@ -90,6 +133,20 @@ describe("useWorkflowPreview", () => {
 
     expect(previewWorkflow).not.toHaveBeenCalled();
     expect(result.current.status).toBe("pending");
+  });
+
+  it("does not fetch when the query is disabled", () => {
+    const request = {
+      sourceKind: "WORKFLOW_NAME" as const,
+      projectRoot: "/tmp/project",
+      sourceValue: "review",
+    };
+
+    renderHook(() => useWorkflowPreview(request, false), {
+      wrapper: createWrapper(),
+    });
+
+    expect(previewWorkflow).not.toHaveBeenCalled();
   });
 
   it("fetches preview data for one workflow request", async () => {

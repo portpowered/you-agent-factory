@@ -87,6 +87,9 @@ describe("useDashboardTimelineMemoryDebug", () => {
     await waitFor(() => {
       expect(window[FACTORY_TIMELINE_DEBUG_GLOBAL]).toBeDefined();
     });
+    expect(
+      window[FACTORY_TIMELINE_DEBUG_GLOBAL]?.summarize().eventCount,
+    ).toBe(1);
     expect(window[FACTORY_TIMELINE_DEBUG_GLOBAL]?.options).toEqual(DEBUG_ON);
     expect(
       window.localStorage.getItem(FACTORY_TIMELINE_DEBUG_STORAGE_KEY),

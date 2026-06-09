@@ -1,5 +1,24 @@
 import { useDashboardBentoStore } from "./dashboardBentoStore";
 
+describe("useDashboardBentoStore selectedTraceID", () => {
+  beforeEach(() => {
+    useDashboardBentoStore.setState({
+      refreshToken: 0,
+      selectedTraceID: null,
+    });
+  });
+
+  it("stores and clears the selected trace id", () => {
+    useDashboardBentoStore.getState().setSelectedTraceID("trace-123");
+
+    expect(useDashboardBentoStore.getState().selectedTraceID).toBe("trace-123");
+
+    useDashboardBentoStore.getState().resetSelectedTraceID();
+
+    expect(useDashboardBentoStore.getState().selectedTraceID).toBeNull();
+  });
+});
+
 describe("useDashboardBentoStore refreshToken", () => {
   beforeEach(() => {
     useDashboardBentoStore.setState({

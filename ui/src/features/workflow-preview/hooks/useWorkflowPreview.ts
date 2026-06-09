@@ -18,11 +18,11 @@ export function buildWorkflowPreviewQueryKey(request: WorkflowPreviewRequest) {
   ] as const;
 }
 
-export function useWorkflowPreview(
+export function workflowPreviewQueryOptions(
   request: WorkflowPreviewRequest | null,
   isEnabled = true,
 ) {
-  return useQuery<WorkflowPreviewResult, WorkflowPreviewAPIError>({
+  return {
     queryKey: request
       ? buildWorkflowPreviewQueryKey(request)
       : (["workflow-preview", "missing-request"] as const),
@@ -36,5 +36,14 @@ export function useWorkflowPreview(
     gcTime: 0,
     refetchOnWindowFocus: false,
     retry: false,
-  });
+  } as const;
+}
+
+export function useWorkflowPreview(
+  request: WorkflowPreviewRequest | null,
+  isEnabled = true,
+) {
+  return useQuery<WorkflowPreviewResult, WorkflowPreviewAPIError>(
+    workflowPreviewQueryOptions(request, isEnabled),
+  );
 }

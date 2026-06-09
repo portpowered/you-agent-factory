@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: panel loading, success, and error states share one mocked preview harness.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -7,6 +8,7 @@ import {
   previewWorkflow,
   workflowPreviewAPIErrorMessages,
 } from "../../../api/workflow-preview";
+import * as workflowPreviewHooks from "../hooks/useWorkflowPreview";
 import { WorkflowPreviewPanel } from "./workflow-preview-panel";
 
 vi.mock("../../../api/workflow-preview", async () => {
@@ -35,6 +37,20 @@ function createWrapper() {
 describe("WorkflowPreviewPanel", () => {
   beforeEach(() => {
     vi.mocked(previewWorkflow).mockReset();
+  });
+
+  it("shows an empty state when the workflow name is only whitespace", () => {
+    render(
+      <WorkflowPreviewPanel
+        projectRoot="/tmp/project"
+        sourceKind="WORKFLOW_NAME"
+        sourceValue="   "
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    expect(screen.getByTestId("workflow-preview-empty")).toBeTruthy();
+    expect(previewWorkflow).not.toHaveBeenCalled();
   });
 
   it("shows an empty state before a workflow request is provided", () => {
@@ -94,6 +110,8 @@ describe("WorkflowPreviewPanel", () => {
     expect(screen.getByText("Workflow preview passed.")).toBeTruthy();
     expect(screen.getByText(/Source hash: sha256:abc/)).toBeTruthy();
     expect(screen.getByText(/Policy hash: sha256:policy/)).toBeTruthy();
+    expect(screen.getByText(/Structured JSON required/)).toBeTruthy();
+    expect(screen.getByText(/max embedded bytes 65536/)).toBeTruthy();
   });
 
   it("shows validation and denied capability diagnostics on failure", async () => {
@@ -239,7 +257,116 @@ describe("WorkflowPreviewPanel", () => {
     expect(screen.getByText(/line 3, column 5/)).toBeTruthy();
   });
 
-  it("formats diagnostics with line-only locations", async () => {
+  it("renders the resolved source ref when preview data includes one", async () => {
+    vi.mocked(previewWorkflow).mockResolvedValue({
+      valid: true,
+      sourceResolution: {
+        found: true,
+        requestKind: "WORKFLOW_NAME",
+        sourceRef: ".claude/workflows/review.js",
+        sourceHash: "sha256:abc",
+      },
+      sourceValidationIssues: [],
+      policyPreview: {
+        effectivePolicy: { mode: "READ_ONLY" },
+        policyHash: "sha256:policy",
+        maxChildCount: 16,
+        maxConcurrency: 4,
+        deniedCapabilities: [],
+        validationIssues: [],
+      },
+      resultConstraints: {
+        requiresStructuredCloneableJson: true,
+        artifactUriScheme: "you-artifact",
+        maxEmbeddedBytes: 65536,
+        rejectedValueKinds: ["function"],
+      },
+    });
+
+    render(
+      <WorkflowPreviewPanel
+        projectRoot="/tmp/project"
+        sourceKind="WORKFLOW_NAME"
+        sourceValue="review"
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Source ref:/)).toBeTruthy();
+    });
+    expect(screen.getByText(/\.claude\/workflows\/review\.js/)).toBeTruthy();
+  });
+
+  it("renders nothing when preview data is unexpectedly missing", () => {
+    const useWorkflowPreviewSpy = vi
+      .spyOn(workflowPreviewHooks, "useWorkflowPreview")
+      .mockReturnValue({
+        isLoading: false,
+        isError: false,
+        data: undefined,
+        error: null,
+        status: "success",
+      } as ReturnType<typeof workflowPreviewHooks.useWorkflowPreview>);
+
+    try {
+      const { container } = render(
+        <WorkflowPreviewPanel
+          projectRoot="/tmp/project"
+          sourceKind="WORKFLOW_NAME"
+          sourceValue="review"
+        />,
+        { wrapper: createWrapper() },
+      );
+
+      expect(container.firstChild).toBeNull();
+    } finally {
+      useWorkflowPreviewSpy.mockRestore();
+    }
+  });
+
+  it("renders when optional diagnostics arrays are omitted", async () => {
+    vi.mocked(previewWorkflow).mockResolvedValue({
+      valid: true,
+      sourceResolution: {
+        found: true,
+        requestKind: "WORKFLOW_NAME",
+        sourceHash: "sha256:abc",
+      },
+      sourceValidationIssues: [],
+      policyPreview: {
+        effectivePolicy: { mode: "READ_ONLY" },
+        policyHash: "sha256:policy",
+        maxChildCount: 16,
+        maxConcurrency: 4,
+        validationIssues: [],
+      },
+      resultConstraints: {
+        requiresStructuredCloneableJson: true,
+        artifactUriScheme: "you-artifact",
+        maxEmbeddedBytes: 65536,
+        rejectedValueKinds: ["function"],
+      },
+    });
+
+    render(
+      <WorkflowPreviewPanel
+        projectRoot="/tmp/project"
+        sourceKind="WORKFLOW_NAME"
+        sourceValue="review"
+      />,
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("workflow-preview-success")).toBeTruthy();
+    });
+
+    expect(screen.queryByText("Source resolution")).toBeNull();
+    expect(screen.queryByText("Denied capabilities")).toBeNull();
+  });
+
+  it("formats diagnostics with path prefixes and line-only locations", async () => {
     vi.mocked(previewWorkflow).mockResolvedValue({
       valid: false,
       sourceResolution: {
@@ -250,6 +377,7 @@ describe("WorkflowPreviewPanel", () => {
         {
           code: "workflow.source.syntaxError",
           message: "unexpected token",
+          path: "orchestrator.javascript",
           line: 9,
         },
       ],
@@ -279,7 +407,10 @@ describe("WorkflowPreviewPanel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText(/\(line 9\)/)).toBeTruthy();
+      expect(
+        screen.getByText(/orchestrator\.javascript: workflow\.source\.syntaxError/),
+      ).toBeTruthy();
     });
+    expect(screen.getByText(/\(line 9\)/)).toBeTruthy();
   });
 });

@@ -150,42 +150,42 @@ vi.mock("../../dashboard/session/dashboard-session-provider", () => ({
   }),
 }));
 
+const defaultTimelineStoreState = {
+  events: [] as [],
+  selectedTick: 1,
+  worldViewCache: {
+    1: {
+      runtime: {
+        active_workstation_node_ids: [],
+        in_flight_dispatch_count: 0,
+        session: {
+          completed_count: 0,
+          dispatched_count: 0,
+          failed_count: 0,
+          has_data: true,
+        },
+        workstation_requests_by_dispatch_id: {},
+      },
+      tick_count: 1,
+      topology: {
+        edges: [],
+        submit_work_types: [],
+        workstation_node_ids: [],
+        workstation_nodes_by_id: {},
+      },
+      uptime_seconds: 0,
+      workstationRequestsByDispatchID: {},
+    },
+  },
+};
+
+let timelineStoreState: typeof defaultTimelineStoreState =
+  defaultTimelineStoreState;
+
 vi.mock("../../timeline/state/factoryTimelineStore", () => ({
   useFactoryTimelineStore: (
-    selector: (state: {
-      events: [];
-      selectedTick: number;
-      worldViewCache: Record<number, unknown>;
-    }) => unknown,
-  ) =>
-    selector({
-      events: [],
-      selectedTick: 1,
-      worldViewCache: {
-        1: {
-          runtime: {
-            active_workstation_node_ids: [],
-            in_flight_dispatch_count: 0,
-            session: {
-              completed_count: 0,
-              dispatched_count: 0,
-              failed_count: 0,
-              has_data: true,
-            },
-            workstation_requests_by_dispatch_id: {},
-          },
-          tick_count: 1,
-          topology: {
-            edges: [],
-            submit_work_types: [],
-            workstation_node_ids: [],
-            workstation_nodes_by_id: {},
-          },
-          uptime_seconds: 0,
-          workstationRequestsByDispatchID: {},
-        },
-      },
-    }),
+    selector: (state: typeof defaultTimelineStoreState) => unknown,
+  ) => selector(timelineStoreState),
 }));
 
 vi.mock("../../trace-drilldown/hooks/useTraceDrilldown", () => ({
@@ -344,12 +344,26 @@ vi.mock("../../dashboard-add-card/components/inline-add-widget-card", () => ({
   ),
 }));
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: dashboard bento widget integration cases share one mock harness.
 describe("DashboardBento", () => {
   beforeEach(() => {
     addDashboardWidget.mockReset();
     removeDashboardWidget.mockReset();
     mockUseCurrentActivityImportController.mockClear();
     mockDashboardLayout = DEFAULT_DASHBOARD_LAYOUT;
+    timelineStoreState = defaultTimelineStoreState;
+  });
+
+  it("renders nothing while the selected timeline snapshot is unavailable", () => {
+    timelineStoreState = {
+      events: [],
+      selectedTick: 99,
+      worldViewCache: {},
+    };
+
+    const { container } = render(<DashboardBento />);
+
+    expect(container.firstChild).toBeNull();
   });
 
   it("threads scoped rawSessionID into the import controller from useDashboardSession", () => {
