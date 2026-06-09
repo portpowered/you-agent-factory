@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 )
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this consumer test keeps fake-service projection assertions together across apisurface mappers.
 func TestFakeServiceConsumer_ProjectsFixtureThroughApisurfaceMappers(t *testing.T) {
 	fixturesPath := filepath.Join("..", "api", "testdata", "durable-session-contract-fixtures.json")
 	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)

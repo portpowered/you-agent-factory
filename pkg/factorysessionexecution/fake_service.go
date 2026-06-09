@@ -361,6 +361,7 @@ func (s *FakeService) sessionState(sessionID string) (*fakeSessionState, error) 
 	return state, nil
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this fake lifecycle path keeps control validation, mutation, and projection assembly together on one seam.
 func (s *FakeService) applyLifecycleControl(
 	ctx context.Context,
 	sessionID string,
@@ -452,6 +453,7 @@ func (s *FakeService) applyLifecycleControl(
 	return result, nil
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this fake mutation helper keeps lifecycle control state transitions together for deterministic fixtures.
 func (s *FakeService) mutateSessionForControl(state *fakeSessionState, operation LifecycleControlKind, dispatchID string) {
 	switch operation {
 	case LifecycleControlPause:

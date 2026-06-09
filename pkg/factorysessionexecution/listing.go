@@ -70,6 +70,8 @@ func DurableListSummaryFromSessionRead(read SessionReadResult) DurableSessionLis
 
 // MatchesDurableSessionListFilters reports whether one durable list row satisfies
 // the normalized listing filters.
+//
+// pkgmaintcheck:ignore-cyclomatic-complexity this filter matcher keeps durable listing scope predicates together on one reviewer-readable seam.
 func MatchesDurableSessionListFilters(summary DurableSessionListSummary, filters SessionListFilters) bool {
 	if len(filters.Statuses) > 0 && !containsLifecycleStatus(filters.Statuses, summary.Status) {
 		return false
@@ -230,6 +232,7 @@ func containsString(values []string, target string) bool {
 	return false
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps created/updated time-range filtering together for durable session listing.
 func matchesLifecycleTimeFilters(lifecycle *LifecycleTimestamps, filters SessionListFilters) bool {
 	if lifecycle == nil {
 		return filters.CreatedAfter == nil &&

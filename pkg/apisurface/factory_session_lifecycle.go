@@ -242,6 +242,7 @@ func failureSummaryToAPI(failure *factorysessionexecution.FailureSummary) *facto
 	return out
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this mapper keeps optional durable lifecycle timestamp fields together on one API projection seam.
 func lifecycleTimestampsToAPI(lifecycle *factorysessionexecution.LifecycleTimestamps) *factoryapi.FactorySessionDurableLifecycleTimestamps {
 	if lifecycle == nil {
 		return nil

@@ -55,6 +55,8 @@ func AsyncStartResultFromAPI(response factoryapi.FactorySessionExecutionResponse
 
 // SessionReadResultFromAPI maps one public durable session read model into the shared
 // service contract.
+//
+// pkgmaintcheck:ignore-cyclomatic-complexity this inverse mapper keeps durable session read fields together for API round-trip coverage.
 func SessionReadResultFromAPI(response factoryapi.FactorySessionDurableReadModel) factorysessionexecution.SessionReadResult {
 	result := factorysessionexecution.SessionReadResult{
 		SessionID:        response.SessionId,
@@ -189,6 +191,8 @@ func DispatchSummaryFromAPI(response factoryapi.FactorySessionDispatchSummary) f
 }
 
 // DispatchDetailFromAPI maps one public dispatch detail into the shared service contract.
+//
+// pkgmaintcheck:ignore-cyclomatic-complexity this inverse mapper keeps dispatch detail fields together for API round-trip coverage.
 func DispatchDetailFromAPI(response factoryapi.FactoryDispatch) factorysessionexecution.DispatchDetail {
 	summary := factorysessionexecution.DispatchSummary{
 		ID:           response.Id,

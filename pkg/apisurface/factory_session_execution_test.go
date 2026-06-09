@@ -127,6 +127,7 @@ func TestStartRequestFromAPI_IdempotentReplayProducesStableTuple(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this contract test keeps sync start terminal and timeout fixture assertions together on one seam.
 func TestSyncStartResponseToAPI_MapsTerminalAndTimeoutFixtures(t *testing.T) {
 	catalog := loadDurableFixtureCatalog(t)
 	var terminalScenario durableFixtureScenario

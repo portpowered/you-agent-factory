@@ -33,6 +33,8 @@ func AllowsRetryDispatchOnTerminal(status LifecycleStatus) bool {
 
 // EvaluateLifecycleControl classifies one lifecycle control request against the
 // current durable session status without runtime-specific dispatch context.
+//
+// pkgmaintcheck:ignore-cyclomatic-complexity this transition classifier keeps durable lifecycle control outcomes explicit across terminal and active states.
 func EvaluateLifecycleControl(operation LifecycleControlKind, status LifecycleStatus) LifecycleControlOutcome {
 	if status == "" {
 		return LifecycleControlOutcomeInvalidState

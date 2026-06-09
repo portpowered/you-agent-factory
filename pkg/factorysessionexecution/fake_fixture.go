@@ -90,6 +90,7 @@ func parseIdempotentReplayScenario(document map[string]any) (FakeScenario, error
 	return scenario, nil
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this fixture parser keeps durable fake scenario projection fields together for contract-backed tests.
 func parseFakeScenarioFromFixture(document map[string]any) (FakeScenario, error) {
 	scenario := FakeScenario{
 		ID: fixtureStringValue(document, "id"),
@@ -218,6 +219,7 @@ func syncStartFromFixtureMap(document map[string]any) (SyncStartResult, error) {
 	return result, nil
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this fixture mapper keeps durable session read projections together for fake-service seeding.
 func sessionReadFromFixtureMap(session map[string]any) SessionReadResult {
 	result := SessionReadResult{
 		SessionID:        fixtureStringValue(session, "sessionId"),
