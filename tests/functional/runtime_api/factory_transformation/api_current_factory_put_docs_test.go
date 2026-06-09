@@ -236,8 +236,37 @@ func currentFactoryDocumentWithBundledDocs(t *testing.T, current factoryapi.Fact
 	return string(body)
 }
 
+func currentFactoryDocumentWithBundledDocsAndLayout(
+	t *testing.T,
+	current factoryapi.Factory,
+	bundledFiles []map[string]any,
+	layout map[string]any,
+) string {
+	t.Helper()
+
+	body, err := json.Marshal(current)
+	if err != nil {
+		t.Fatalf("marshal current factory document: %v", err)
+	}
+	var document map[string]any
+	if err := json.Unmarshal(body, &document); err != nil {
+		t.Fatalf("decode current factory document: %v", err)
+	}
+	document["version"] = versionDocument(advancedFactoryVersion(t, current.Version))
+	document["supportingFiles"] = map[string]any{
+		"bundledFiles": bundledFiles,
+	}
+	document["layout"] = layout
+	body, err = json.Marshal(document)
+	if err != nil {
+		t.Fatalf("marshal current factory document with bundled docs and layout: %v", err)
+	}
+	return string(body)
+}
+
 func docBundledFileEntry(targetPath, inline string) map[string]any {
 	return map[string]any{
+		"id":         targetPath,
 		"type":       "DOC",
 		"targetPath": targetPath,
 		"content": map[string]string{
@@ -249,6 +278,7 @@ func docBundledFileEntry(targetPath, inline string) map[string]any {
 
 func scriptBundledFileEntry(targetPath, inline string) map[string]any {
 	return map[string]any{
+		"id":         targetPath,
 		"type":       "SCRIPT",
 		"targetPath": targetPath,
 		"content": map[string]string{
@@ -281,6 +311,9 @@ func assertDocBundledFileInline(t *testing.T, factory factoryapi.Factory, target
 	if bundledFile.Type != factoryapi.BundledFileTypeDOC {
 		t.Fatalf("bundled file %q type = %q, want DOC", targetPath, bundledFile.Type)
 	}
+	if bundledFile.Id == nil || *bundledFile.Id != targetPath {
+		t.Fatalf("doc bundled file %q id = %#v, want %q", targetPath, bundledFile.Id, targetPath)
+	}
 	if bundledFile.Content.Inline != wantInline {
 		t.Fatalf("doc bundled file %q inline = %q, want %q", targetPath, bundledFile.Content.Inline, wantInline)
 	}
@@ -294,6 +327,9 @@ func assertScriptBundledFileInline(t *testing.T, factory factoryapi.Factory, tar
 	}
 	if bundledFile.Type != factoryapi.BundledFileTypeSCRIPT {
 		t.Fatalf("bundled file %q type = %q, want SCRIPT", targetPath, bundledFile.Type)
+	}
+	if bundledFile.Id == nil || *bundledFile.Id != targetPath {
+		t.Fatalf("script bundled file %q id = %#v, want %q", targetPath, bundledFile.Id, targetPath)
 	}
 	if bundledFile.Content.Inline != wantInline {
 		t.Fatalf("script bundled file %q inline = %q, want %q", targetPath, bundledFile.Content.Inline, wantInline)
