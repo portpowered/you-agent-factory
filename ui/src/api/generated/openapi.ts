@@ -1371,8 +1371,6 @@ export interface components {
       /** @description Live factory session identifier for this result read. */
       sessionId: string;
       status: components["schemas"]["FactorySessionStatus"];
-      /** @description Structured JSON-compatible workflow result projected through WorkContent parts. */
-      primaryResult?: components["schemas"]["WorkContent"];
       /** @description Final result artifact reference without raw checkpoint bodies. */
       resultArtifactRef?: components["schemas"]["FactoryArtifactRef"];
       /** @description Checkpoint refs associated with the terminal session result. */
