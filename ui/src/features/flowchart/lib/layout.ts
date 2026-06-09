@@ -51,6 +51,7 @@ export type PositionedNode =
   | PositionedWorkstationNode;
 
 export interface PositionedEdge {
+  canonicalEdgeId?: string;
   edgeId: string;
   fromNodeId: string;
   label: string;

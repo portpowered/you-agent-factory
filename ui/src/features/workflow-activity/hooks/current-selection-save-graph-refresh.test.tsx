@@ -1,5 +1,5 @@
 import { renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
@@ -10,11 +10,10 @@ import {
   currentFactoryDocument,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft.test-helpers";
 import { buildFactoryGraphLayoutTopologyKey } from "../../factory-graph-editor/lib/operations/factory-graph-topology-impact";
-import * as currentActivityFactoryGraphLayout from "../lib/current-activity-factory-graph-layout";
 import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
+import { currentActivityCardFactoryDefinition } from "./current-activity-card-factory-definition";
 import type { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
 import { useCurrentActivityGraphLayoutForFactory } from "./react-flow-current-activity-card-graph-layout";
-import { currentActivityCardFactoryDefinition } from "./current-activity-card-factory-definition";
 import { useTopologyStableFactoryForLayout } from "./use-topology-stable-factory-for-layout";
 
 function cloneSavedDocument(
@@ -29,10 +28,8 @@ function createObserverEditorStub(savedDocument: CurrentFactoryDocument) {
       baseDocument: savedDocument,
       latestDocument: savedDocument,
     }),
-    editableDefinitionQuery: {
-      data: savedDocument,
-      status: "success" as const,
-    },
+    editableFactoryDocument: savedDocument,
+    editableFactoryDocumentStatus: "success" as const,
     editorMode: false,
     hiddenNodeClasses: new Set(),
   } as unknown as ReturnType<typeof useCurrentActivityGraphEditor>;
@@ -47,8 +44,7 @@ function useObserverGraphAfterCurrentSelectionSave({
 }) {
   const editor = createObserverEditorStub(savedDocument);
   const displayFactory =
-    currentActivityCardFactoryDefinition(editor, snapshot, "current") ??
-    undefined;
+    currentActivityCardFactoryDefinition(editor, snapshot) ?? undefined;
   const layoutFactory = useTopologyStableFactoryForLayout(displayFactory);
   const graphLayout = useCurrentActivityGraphLayoutForFactory(
     snapshot,
@@ -80,28 +76,12 @@ function buildStaleSnapshotFactoryDocument(
   return snapshot;
 }
 
-function firstWorkType(document: CurrentFactoryDocument) {
-  const workType = document.workTypes?.[0];
-  if (!workType) {
-    throw new Error("expected work type fixture");
-  }
-  return workType;
-}
-
 function firstWorkstation(document: CurrentFactoryDocument) {
   const workstation = document.workstations?.[0];
   if (!workstation) {
     throw new Error("expected workstation fixture");
   }
   return workstation;
-}
-
-function firstWorker(document: CurrentFactoryDocument) {
-  const worker = document.workers?.[0];
-  if (!worker) {
-    throw new Error("expected worker fixture");
-  }
-  return worker;
 }
 
 function afterWorkstationWorkerAssignmentSave(
@@ -126,79 +106,6 @@ function afterWorkstationWorkerAssignmentSave(
   return next;
 }
 
-function afterWorkerResourceLinkSave(
-  previous: CurrentFactoryDocument,
-): CurrentFactoryDocument {
-  const next = cloneSavedDocument(previous);
-  next.workers = [
-    {
-      ...firstWorker(previous),
-      resources: [{ name: "gpu" }],
-    },
-  ];
-  next.version = { logical: "7", physical: "2026-06-01T13:00:00Z" };
-  return next;
-}
-
-function afterWorkTypeAddSave(
-  previous: CurrentFactoryDocument,
-): CurrentFactoryDocument {
-  const next = cloneSavedDocument(previous);
-  next.workTypes = [
-    ...(next.workTypes ?? []),
-    {
-      name: "bug",
-      states: [{ name: "open", type: "INITIAL" }],
-    },
-  ];
-  next.version = { logical: "8", physical: "2026-06-01T14:00:00Z" };
-  return next;
-}
-
-function afterWorkStateAddSave(
-  previous: CurrentFactoryDocument,
-): CurrentFactoryDocument {
-  const next = cloneSavedDocument(previous);
-  const workType = firstWorkType(previous);
-  next.workTypes = [
-    {
-      ...workType,
-      states: [...workType.states, { name: "review", type: "PROCESSING" }],
-    },
-  ];
-  next.version = { logical: "9", physical: "2026-06-01T15:00:00Z" };
-  return next;
-}
-
-function afterResourceAddSave(
-  previous: CurrentFactoryDocument,
-): CurrentFactoryDocument {
-  const next = cloneSavedDocument(previous);
-  next.resources = [
-    ...(next.resources ?? []),
-    {
-      capacity: 4,
-      name: "disk",
-    },
-  ];
-  next.version = { logical: "10", physical: "2026-06-01T16:00:00Z" };
-  return next;
-}
-
-function afterWorkstationPromptOnlySave(
-  previous: CurrentFactoryDocument,
-): CurrentFactoryDocument {
-  const next = cloneSavedDocument(previous);
-  next.workstations = [
-    {
-      ...firstWorkstation(previous),
-      body: "Updated workstation instructions.",
-    },
-  ];
-  next.version = { logical: "11", physical: "2026-06-01T17:00:00Z" };
-  return next;
-}
-
 async function waitForGraphNodes(result: {
   current: ReturnType<typeof useObserverGraphAfterCurrentSelectionSave>;
 }) {
@@ -207,59 +114,12 @@ async function waitForGraphNodes(result: {
   });
 }
 
-const topologySaveCases = [
-  [
-    "workstation worker assignment",
-    afterWorkstationWorkerAssignmentSave,
-    (before: string[], after: string[]) => {
-      expect(after).toContain("worker:reviewer");
-      expect(after).not.toEqual(before);
-    },
-  ],
-  [
-    "worker resource link",
-    afterWorkerResourceLinkSave,
-    (before: string[], after: string[]) => {
-      expect(after).toContain("worker-resource:resource:gpu->worker:writer");
-      expect(before).not.toContain(
-        "worker-resource:resource:gpu->worker:writer",
-      );
-    },
-  ],
-  [
-    "work type add",
-    afterWorkTypeAddSave,
-    (before: string[], after: string[]) => {
-      expect(after).toContain("work-type:bug");
-      expect(after).not.toEqual(before);
-    },
-  ],
-  [
-    "work state add",
-    afterWorkStateAddSave,
-    (before: string[], after: string[]) => {
-      expect(after).toContain("work-state:story:review");
-      expect(after).not.toEqual(before);
-    },
-  ],
-  [
-    "resource add",
-    afterResourceAddSave,
-    (before: string[], after: string[]) => {
-      expect(after).toContain("resource:disk");
-      expect(after).not.toEqual(before);
-    },
-  ],
-] as const;
-
 describe("current-selection save graph refresh", () => {
   beforeEach(() => {
     window.localStorage.clear();
   });
 
-  it.each(
-    topologySaveCases,
-  )("refreshes observer graph layout after topology-affecting %s save", async (_label, applySave, assertRefresh) => {
+  it("keeps observer graph layout tied to the event-computed snapshot while saved document data changes", async () => {
     const snapshot = buildStaleSnapshotFactoryDocument();
     const initialDocument = cloneSavedDocument();
     const { result, rerender } = renderHook(
@@ -276,61 +136,24 @@ describe("current-selection save graph refresh", () => {
       ...result.current.nodeIds,
       ...result.current.edgeIds,
     ];
+    const layoutTopologyKeyBeforeSave = result.current.layoutTopologyKey;
 
     rerender({
-      savedDocument: applySave(initialDocument),
+      savedDocument: afterWorkstationWorkerAssignmentSave(initialDocument),
     });
-
-    await waitFor(() => {
-      assertRefresh(graphIdsBeforeSave, [
-        ...result.current.nodeIds,
-        ...result.current.edgeIds,
-      ]);
-    });
-    expect(result.current.layoutTopologyKey).not.toBe(
-      buildFactoryGraphLayoutTopologyKey(initialDocument),
-    );
-  });
-
-  it("keeps graph layout topology key stable after non-topology workstation prompt save", async () => {
-    const buildLayoutSpy = vi.spyOn(
-      currentActivityFactoryGraphLayout,
-      "buildCurrentActivityGraphLayoutFromFactory",
-    );
-    const snapshot = buildStaleSnapshotFactoryDocument();
-    const initialDocument = cloneSavedDocument();
-    const promptOnlyDocument = afterWorkstationPromptOnlySave(initialDocument);
-
-    expect(buildFactoryGraphLayoutTopologyKey(initialDocument)).toBe(
-      buildFactoryGraphLayoutTopologyKey(promptOnlyDocument),
-    );
-
-    const { result, rerender } = renderHook(
-      ({ savedDocument }) =>
-        useObserverGraphAfterCurrentSelectionSave({
-          savedDocument,
-          snapshot,
-        }),
-      { initialProps: { savedDocument: initialDocument } },
-    );
-
-    await waitForGraphNodes(result);
-    const graphKeyBeforeSave = result.current.graphKey;
-    const layoutTopologyKeyBeforeSave = result.current.layoutTopologyKey;
-    const callsAfterInitialRender = buildLayoutSpy.mock.calls.length;
-
-    rerender({ savedDocument: promptOnlyDocument });
 
     await waitForGraphNodes(result);
 
+    expect([...result.current.nodeIds, ...result.current.edgeIds]).toEqual(
+      graphIdsBeforeSave,
+    );
     expect(result.current.layoutTopologyKey).toBe(layoutTopologyKeyBeforeSave);
-    expect(result.current.graphKey).toBe(graphKeyBeforeSave);
-    expect(buildLayoutSpy.mock.calls.length).toBe(callsAfterInitialRender);
-
-    buildLayoutSpy.mockRestore();
+    expect(result.current.layoutTopologyKey).toBe(
+      buildFactoryGraphLayoutTopologyKey(snapshot.factory ?? {}),
+    );
   });
 
-  it("renders graph nodes from the saved document when the snapshot factory remains stale", async () => {
+  it("renders graph nodes from the event snapshot and updates after the event-computed factory changes", async () => {
     const snapshot = buildStaleSnapshotFactoryDocument();
     snapshot.factory = {
       ...structuredClone(baseFactoryDefinition),
@@ -350,12 +173,31 @@ describe("current-selection save graph refresh", () => {
       cloneSavedDocument(),
     );
 
-    const { result } = renderHook(() =>
-      useObserverGraphAfterCurrentSelectionSave({
-        savedDocument,
-        snapshot,
-      }),
+    const { result, rerender } = renderHook(
+      (props: {
+        savedDocument: CurrentFactoryDocument;
+        snapshot: DashboardSnapshot;
+      }) => useObserverGraphAfterCurrentSelectionSave(props),
+      {
+        initialProps: {
+          savedDocument,
+          snapshot,
+        },
+      },
     );
+
+    await waitFor(() => {
+      expect(result.current.nodeIds).toContain("workstation:stale-only");
+    });
+    expect(result.current.nodeIds).not.toContain("worker:reviewer");
+
+    rerender({
+      savedDocument,
+      snapshot: {
+        ...snapshot,
+        factory: savedDocument,
+      },
+    });
 
     await waitFor(() => {
       expect(result.current.nodeIds).toContain("worker:reviewer");

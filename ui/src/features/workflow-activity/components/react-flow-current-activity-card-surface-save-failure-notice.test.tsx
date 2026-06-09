@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { createDefaultFactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
@@ -41,11 +42,14 @@ vi.mock("./react-flow-current-activity-card-viewport", () => ({
   CurrentActivityGraphViewport: () => <div data-testid="graph-viewport" />,
 }));
 
-function createEditorStub(overrides: Record<string, unknown> = {}) {
-  return {
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: fixture mirrors the card view-model surface for this focused notice test.
+function createViewModelStub(overrides: Record<string, unknown> = {}) {
+  const canonicalLayout = createDefaultFactoryLayout();
+  const base = {
     activeTool: null,
     addMenuActions: [],
     addMenuOpen: false,
+    addEdgeWaypoint: vi.fn(),
     blockedRemovalReason: null,
     canInteractWithEditor: true,
     canSaveDraft: true,
@@ -57,19 +61,41 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
       topologyDirty: true,
     },
     draftState: { hasChanges: true, pendingFactoryDefinition: null },
+    edges: [],
+    canonicalLayoutViewport: null,
+    graphKey: "graph-key",
+    graphState: {
+      canonicalLayout,
+      canonicalLayoutViewport: null,
+      displayFactoryDefinition: semanticWorkflowDashboardSnapshot.factory,
+      graphLayout: { edges: [], nodes: [] },
+      topologyGraphLayout: { edges: [], nodes: [] },
+    },
     handleDiscardPendingChanges: vi.fn(),
     handleEditorConnect: vi.fn(),
     handleEditorEdgeDelete: vi.fn(),
     handleEditorNodeDelete: vi.fn(),
+    handleNodesChange: vi.fn(),
     hiddenNodeClasses: new Set(),
     hideShowMenuOpen: false,
+    initialFitViewKey: "full-graph",
+    initialFitViewOptions: { padding: 0.18 },
     layoutDraftState: {
       canRedoLayout: false,
       canUndoLayout: false,
       layoutDirty: false,
     },
+    layoutControls: {
+      canMoveLayout: true,
+      canRedo: false,
+      canUndo: false,
+      currentLayout: canonicalLayout,
+    },
+    moveEdgeWaypoint: vi.fn(),
     moveLayoutNode: vi.fn(),
     moveLayoutNodesByDelta: vi.fn(),
+    nodes: [],
+    removeEdgeWaypoint: vi.fn(),
     redoLayout: vi.fn(),
     resetLayout: vi.fn(),
     resetPreferences: vi.fn(),
@@ -94,19 +120,60 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
       error: null,
       isPending: false,
     },
+    validationFactoryDefinition: semanticWorkflowDashboardSnapshot.factory,
+    validationProjection: projectFactoryValidationTargets([]),
+    validationTargets: [],
     ...overrides,
   };
-}
+  const saveMutation = base.saveEditableDefinition as {
+    error?: unknown;
+    isPending?: boolean;
+  };
 
-function createGraphStub() {
   return {
-    edges: [],
-    graphKey: "graph-key",
-    handleNodesChange: vi.fn(),
-    initialFitViewKey: "full-graph",
-    initialFitViewOptions: { padding: 0.18 },
-    nodes: [],
-    setStoredNodePosition: vi.fn(),
+    ...base,
+    addControls: {
+      actions: base.addMenuActions,
+      isMenuOpen: base.addMenuOpen,
+      setMenuOpen: base.setAddMenuOpen,
+      startAction:
+        (base as { handleAddEntityAction?: unknown }).handleAddEntityAction ??
+        vi.fn(),
+      ...((base as { addControls?: object }).addControls ?? {}),
+    },
+    saveControls: {
+      canSave: base.canSaveDraft,
+      feedback:
+        (base as { documentSave?: unknown }).documentSave ??
+        ({ status: "idle" } as const),
+      requestConfirmation:
+        (base as { requestSaveConfirmation?: unknown })
+          .requestSaveConfirmation ?? vi.fn(),
+      ...((base as { saveControls?: object }).saveControls ?? {}),
+    },
+    validationControls: {
+      factoryDefinition:
+        (base as { validationFactoryDefinition?: unknown })
+          .validationFactoryDefinition ??
+        semanticWorkflowDashboardSnapshot.factory,
+      projection:
+        (base as { validationProjection?: unknown }).validationProjection ??
+        projectFactoryValidationTargets([]),
+      targets:
+        (base as { validationTargets?: unknown[] }).validationTargets ?? [],
+      ...((base as { validationControls?: object }).validationControls ?? {}),
+    },
+    status: {
+      hasDocumentBackedLayoutDraft: true,
+      hasLayoutChanges: false,
+      hasSharedGraphChanges: true,
+      hasTopologyChanges: true,
+      isDefinitionLoading: false,
+      isSaving: saveMutation.isPending ?? false,
+      preferencesDirty: false,
+      saveError: saveMutation.error ?? null,
+      ...((base as { status?: object }).status ?? {}),
+    },
   };
 }
 
@@ -123,8 +190,8 @@ describe("CurrentActivityGraphSurface save failure notice", () => {
 
     const { rerender } = render(
       <CurrentActivityGraphSurface
-        editor={
-          createEditorStub({
+        viewModel={
+          createViewModelStub({
             saveAttemptRevision: 1,
             saveEditableDefinition: {
               error: saveError,
@@ -132,7 +199,6 @@ describe("CurrentActivityGraphSurface save failure notice", () => {
             },
           }) as never
         }
-        graph={createGraphStub() as never}
         imports={{} as never}
         selection={null}
         snapshot={semanticWorkflowDashboardSnapshot}
@@ -147,8 +213,8 @@ describe("CurrentActivityGraphSurface save failure notice", () => {
 
     rerender(
       <CurrentActivityGraphSurface
-        editor={
-          createEditorStub({
+        viewModel={
+          createViewModelStub({
             saveAttemptRevision: 1,
             saveEditableDefinition: {
               error: saveError,
@@ -156,7 +222,6 @@ describe("CurrentActivityGraphSurface save failure notice", () => {
             },
           }) as never
         }
-        graph={createGraphStub() as never}
         imports={{} as never}
         selection={null}
         snapshot={semanticWorkflowDashboardSnapshot}
@@ -166,8 +231,8 @@ describe("CurrentActivityGraphSurface save failure notice", () => {
 
     rerender(
       <CurrentActivityGraphSurface
-        editor={
-          createEditorStub({
+        viewModel={
+          createViewModelStub({
             saveAttemptRevision: 2,
             saveEditableDefinition: {
               error: saveError,
@@ -175,7 +240,6 @@ describe("CurrentActivityGraphSurface save failure notice", () => {
             },
           }) as never
         }
-        graph={createGraphStub() as never}
         imports={{} as never}
         selection={null}
         snapshot={semanticWorkflowDashboardSnapshot}

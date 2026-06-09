@@ -19,8 +19,11 @@ export type ActivityGraphNodeSurfaceTone =
   | "neutral"
   | "neutralHigh"
   | "primary"
+  | "resource"
   | "success"
-  | "warning";
+  | "warning"
+  | "workState"
+  | "workstation";
 
 const BADGE_WEIGHT_CLASS_NAME: Record<ActivityGraphNodeBadgeWeight, string> = {
   body: "font-mono text-[0.68rem]",
@@ -29,12 +32,17 @@ const BADGE_WEIGHT_CLASS_NAME: Record<ActivityGraphNodeBadgeWeight, string> = {
 };
 const SURFACE_TONE_CLASS_NAME: Record<ActivityGraphNodeSurfaceTone, string> = {
   danger: "border-af-danger-border bg-error-container",
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   info: "border-info-border bg-info-container",
   neutral: "border-outline bg-surface",
   neutralHigh: "border-outline-variant bg-surface-container-high",
   primary: "border-primary bg-primary-container",
+  resource: "border-outline bg-background",
   success: "border-af-success-border bg-success-container",
   warning: "border-af-warning-border bg-warning-container",
+  // hardcoded-ui-copy-exception: non-product-diagnostic
+  workState: "border-info-border bg-info-container",
+  workstation: "border-outline-variant bg-surface-container-highest",
 };
 
 export function activityGraphNodeTitleClassName(className?: string) {

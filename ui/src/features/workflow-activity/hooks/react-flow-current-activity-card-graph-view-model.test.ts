@@ -1,41 +1,43 @@
+import { act, renderHook } from "@testing-library/react";
+import type { NodeChange } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 
 import { singleNodeDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import {
+  baseFactoryDefinition,
   baseFactoryDefinitionDocument,
   buildDivergentPlaneDashboardSnapshot,
   createMockGraphEditorDraftState,
   divergentDocumentPlaneFactoryDocument,
 } from "../../../testing/graph-editor-harness";
 import { sessionFactoryDocumentFromSnapshot } from "../../../testing/session-factory-mocks";
+import type { GraphLayout } from "../../flowchart/lib/layout";
 import { currentActivityCardFactoryDefinition } from "./current-activity-card-factory-definition";
+import { useCurrentActivityGraphViewModel } from "./react-flow-current-activity-card-graph-view-model";
 
 function createEditorStub(
   overrides: {
     draftState?: ReturnType<typeof createMockGraphEditorDraftState>;
-    editableDefinitionQuery?: {
-      data?: typeof baseFactoryDefinitionDocument;
-      status: "error" | "pending" | "success";
-    };
+    editableFactoryDocument?: typeof baseFactoryDefinitionDocument;
+    editableFactoryDocumentStatus?: "error" | "pending" | "success";
     editorMode?: boolean;
   } = {},
 ) {
-  const editableDefinitionQueryData =
-    overrides.editableDefinitionQuery &&
-    "data" in overrides.editableDefinitionQuery
-      ? overrides.editableDefinitionQuery.data
+  const editableFactoryDocument =
+    "editableFactoryDocument" in overrides
+      ? overrides.editableFactoryDocument
       : baseFactoryDefinitionDocument;
 
   return {
     draftState: overrides.draftState ?? createMockGraphEditorDraftState(),
-    editableDefinitionQuery: {
-      data: editableDefinitionQueryData,
-      status: overrides.editableDefinitionQuery?.status ?? "success",
-    },
+    editableFactoryDocument,
+    editableFactoryDocumentStatus:
+      overrides.editableFactoryDocumentStatus ?? "success",
     editorMode: overrides.editorMode ?? false,
   } as Parameters<typeof currentActivityCardFactoryDefinition>[0];
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: this suite keeps the factory selection contract cases together.
 describe("currentActivityCardFactoryDefinition", () => {
   it("returns the timeline snapshot in observe mode while the scoped factory document is pending", () => {
     const snapshot = structuredClone(singleNodeDashboardSnapshot);
@@ -43,16 +45,15 @@ describe("currentActivityCardFactoryDefinition", () => {
     expect(
       currentActivityCardFactoryDefinition(
         createEditorStub({
-          editableDefinitionQuery: { status: "pending" },
+          editableFactoryDocumentStatus: "pending",
           editorMode: false,
         }),
         snapshot,
-        "current",
       ),
     ).toEqual(snapshot.factory);
   });
 
-  it("returns the saved factory document in observe mode while the query is pending when shared draft state already has it", () => {
+  it("returns the event-computed snapshot factory in observe mode while shared draft state has a saved document", () => {
     const savedDocument = {
       ...baseFactoryDefinitionDocument,
       layout: {
@@ -81,31 +82,28 @@ describe("currentActivityCardFactoryDefinition", () => {
             baseDocument: savedDocument,
             latestDocument: savedDocument,
           }),
-          editableDefinitionQuery: { data: undefined, status: "pending" },
+          editableFactoryDocument: undefined,
+          editableFactoryDocumentStatus: "pending",
           editorMode: false,
         }),
         snapshot,
-        "current",
       ),
-    ).toEqual(savedDocument);
+    ).toEqual(snapshot.factory);
   });
 
-  it("returns the saved factory document in observe mode once the scoped factory document succeeds", () => {
+  it("returns the event-computed snapshot factory in observe mode once the scoped factory document succeeds", () => {
     const snapshot = buildDivergentPlaneDashboardSnapshot();
 
     expect(
       currentActivityCardFactoryDefinition(
         createEditorStub({
-          editableDefinitionQuery: {
-            data: divergentDocumentPlaneFactoryDocument,
-            status: "success",
-          },
+          editableFactoryDocument: divergentDocumentPlaneFactoryDocument,
+          editableFactoryDocumentStatus: "success",
           editorMode: false,
         }),
         snapshot,
-        "current",
       ),
-    ).toEqual(divergentDocumentPlaneFactoryDocument);
+    ).toEqual(snapshot.factory);
   });
 
   it("returns null in editor mode while the scoped factory document is pending", () => {
@@ -114,11 +112,10 @@ describe("currentActivityCardFactoryDefinition", () => {
     expect(
       currentActivityCardFactoryDefinition(
         createEditorStub({
-          editableDefinitionQuery: { status: "pending" },
+          editableFactoryDocumentStatus: "pending",
           editorMode: true,
         }),
         snapshot,
-        "current",
       ),
     ).toBeNull();
   });
@@ -134,11 +131,10 @@ describe("currentActivityCardFactoryDefinition", () => {
       currentActivityCardFactoryDefinition(
         createEditorStub({
           draftState,
-          editableDefinitionQuery: { status: "success" },
+          editableFactoryDocumentStatus: "success",
           editorMode: true,
         }),
         snapshot,
-        "current",
       ),
     ).toEqual(baseFactoryDefinitionDocument);
   });
@@ -185,14 +181,11 @@ describe("currentActivityCardFactoryDefinition", () => {
       currentActivityCardFactoryDefinition(
         createEditorStub({
           draftState,
-          editableDefinitionQuery: {
-            data: savedAfterTopologyChange,
-            status: "success",
-          },
+          editableFactoryDocument: savedAfterTopologyChange,
+          editableFactoryDocumentStatus: "success",
           editorMode: true,
         }),
         snapshot,
-        "current",
       ),
     ).toEqual(pendingDraft);
   });
@@ -217,14 +210,11 @@ describe("currentActivityCardFactoryDefinition bundled docs", () => {
     expect(
       currentActivityCardFactoryDefinition(
         createEditorStub({
-          editableDefinitionQuery: {
-            data: savedDocument,
-            status: "success",
-          },
+          editableFactoryDocument: savedDocument,
+          editableFactoryDocumentStatus: "success",
           editorMode: false,
         }),
         snapshot,
-        "fixed",
       ),
     ).toMatchObject({
       supportingFiles: savedDocument.supportingFiles,
@@ -257,18 +247,137 @@ describe("currentActivityCardFactoryDefinition bundled docs", () => {
     expect(
       currentActivityCardFactoryDefinition(
         createEditorStub({
-          editableDefinitionQuery: {
-            data: savedDocument,
-            status: "success",
-          },
+          editableFactoryDocument: savedDocument,
+          editableFactoryDocumentStatus: "success",
           editorMode: false,
         }),
         snapshot,
-        "current",
       ),
     ).toMatchObject({
       layout: snapshot.factory.layout,
       workstations: savedDocument.workstations,
+    });
+  });
+});
+
+describe("useCurrentActivityGraphViewModel node state", () => {
+  it("keeps node positions from the graph projection instead of React Flow presentation changes", () => {
+    const graphLayout: GraphLayout = {
+      edges: [],
+      height: 360,
+      nodes: [
+        {
+          column: 0,
+          height: 120,
+          nodeId: "work-state:story:queued",
+          nodeKind: "state_position",
+          place: {
+            kind: "work_state",
+            place_id: "story:queued",
+            state_value: "queued",
+            type_id: "story",
+          },
+          row: 0,
+          width: 140,
+          x: 120,
+          y: 80,
+        },
+        {
+          column: 1,
+          height: 160,
+          nodeId: "workstation:review",
+          nodeKind: "workstation",
+          row: 0,
+          width: 220,
+          workstationNodeId: "review",
+          x: 360,
+          y: 120,
+        },
+      ],
+      width: 600,
+    };
+    const editor = {
+      activeTool: null,
+      canInteractWithEditor: true,
+      editorMode: true,
+      graphState: {
+        canonicalLayout: {
+          nodes: [
+            {
+              id: "work-state:story:queued",
+              position: { x: 120, y: 80 },
+            },
+            {
+              id: "workstation:review",
+              position: { x: 360, y: 120 },
+            },
+          ],
+          schemaVersion: 1,
+        },
+        canonicalLayoutViewport: null,
+        displayFactoryDefinition: baseFactoryDefinition,
+        graphLayout,
+        pendingAdditionEdgeIds: new Set<string>(),
+        positionedGraphLayout: graphLayout,
+        renderedLayout: { schemaVersion: 1 },
+        topologyGraphLayout: graphLayout,
+        visibleGraphEdges: [],
+      },
+      handleConnectionAnchorClick: vi.fn(),
+      pendingConnectionSource: null,
+      validationTargets: [],
+    };
+    const snapshot = {
+      ...structuredClone(singleNodeDashboardSnapshot),
+      factory: baseFactoryDefinition,
+      runtime: {
+        ...singleNodeDashboardSnapshot.runtime,
+        in_flight_dispatch_count: 0,
+      },
+    };
+    const noop = vi.fn();
+    const { result } = renderHook(() =>
+      useCurrentActivityGraphViewModel({
+        editor: editor as Parameters<
+          typeof useCurrentActivityGraphViewModel
+        >[0]["editor"],
+        now: 0,
+        onSelectDoc: noop,
+        onSelectResource: noop,
+        onSelectStateNode: noop,
+        onSelectWorkID: noop,
+        onSelectWorker: noop,
+        onSelectWorkType: noop,
+        onSelectWorkstation: noop,
+        selection: null,
+        snapshot,
+      }),
+    );
+    const workStateNode = () =>
+      result.current.nodes.find(
+        (node) => node.id === "work-state:story:queued",
+      );
+
+    expect(workStateNode()?.position).toEqual({ x: 120, y: 80 });
+
+    act(() => {
+      result.current.handleNodesChange([
+        {
+          id: "work-state:story:queued",
+          position: { x: 999, y: 999 },
+          type: "position",
+        },
+        {
+          id: "work-state:story:queued",
+          selected: true,
+          type: "select",
+        },
+      ] satisfies NodeChange[]);
+    });
+
+    expect(workStateNode()).toMatchObject({
+      position: { x: 120, y: 80 },
+      selected: true,
     });
   });
 });

@@ -130,8 +130,8 @@ function NodeHandleRail({
           className={cn(
             "absolute top-0 flex -translate-y-1/2",
             side === "left"
-              ? "left-0 w-full justify-start pl-1"
-              : "right-0 w-full justify-end pr-1",
+              ? "left-0 -translate-x-1/2"
+              : "right-0 translate-x-1/2",
           )}
           key={handle.id}
           style={{ top: handlePosition(index, handles.length) }}

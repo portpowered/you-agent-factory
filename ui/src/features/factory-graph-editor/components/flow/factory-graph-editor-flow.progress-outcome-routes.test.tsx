@@ -1,6 +1,6 @@
 import "@xyflow/react/dist/style.css";
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { Background, ReactFlow, ReactFlowProvider } from "@xyflow/react";
 
 import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
@@ -17,6 +17,18 @@ import {
   FACTORY_GRAPH_EDITOR_EDGE_TYPES,
   FACTORY_GRAPH_EDITOR_NODE_TYPES,
 } from "../flow/factory-graph-editor-flow";
+
+function queryHandleByLabel(label: string) {
+  return document.querySelector(`[aria-label="${label}"]`);
+}
+
+async function findHandleByLabel(label: string) {
+  await waitFor(() => {
+    expect(queryHandleByLabel(label)).not.toBeNull();
+  });
+
+  return queryHandleByLabel(label);
+}
 
 const PROGRESS_OUTCOME_ROUTE_TOPOLOGY: FactoryGraphTopology = {
   edges: [],
@@ -288,16 +300,10 @@ describe("factory graph editor progress outcome route handles", () => {
       workstations: [standardProcessorWithoutStopWords],
     });
 
-    await screen.findByRole("button", { name: "Connect: draft Success" });
-    expect(
-      screen.getByRole("button", { name: "Connect: draft Failure" }),
-    ).not.toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Connect: draft Continue" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Connect: draft Reject" }),
-    ).toBeNull();
+    await findHandleByLabel("Connect: draft Success");
+    expect(queryHandleByLabel("Connect: draft Failure")).not.toBeNull();
+    expect(queryHandleByLabel("Connect: draft Continue")).toBeNull();
+    expect(queryHandleByLabel("Connect: draft Reject")).toBeNull();
 
     expect(
       container.querySelectorAll("[data-z-axis-incomplete-hint]"),
@@ -309,10 +315,8 @@ describe("factory graph editor progress outcome route handles", () => {
       factoryDefinition: factoryWithWorkerStopToken,
     });
 
-    await screen.findByRole("button", { name: "Connect: draft Continue" });
-    expect(
-      screen.getByRole("button", { name: "Connect: draft Reject" }),
-    ).not.toBeNull();
+    await findHandleByLabel("Connect: draft Continue");
+    expect(queryHandleByLabel("Connect: draft Reject")).not.toBeNull();
     expect(
       container.querySelectorAll("[data-z-axis-incomplete-hint]"),
     ).toHaveLength(0);
@@ -323,10 +327,8 @@ describe("factory graph editor progress outcome route handles", () => {
       workstations: [standardProcessorWithStopWords],
     });
 
-    await screen.findByRole("button", { name: "Connect: draft Continue" });
-    expect(
-      screen.getByRole("button", { name: "Connect: draft Reject" }),
-    ).not.toBeNull();
+    await findHandleByLabel("Connect: draft Continue");
+    expect(queryHandleByLabel("Connect: draft Reject")).not.toBeNull();
     expect(
       container.querySelectorAll("[data-z-axis-incomplete-hint]"),
     ).toHaveLength(0);
@@ -338,13 +340,9 @@ describe("factory graph editor progress outcome route handles", () => {
       { validationProjection: onRejectionValidationProjection },
     );
 
-    await screen.findByRole("button", { name: "Connect: draft Success" });
-    expect(
-      screen.queryByRole("button", { name: "Connect: draft Continue" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Connect: draft Reject" }),
-    ).toBeNull();
+    await findHandleByLabel("Connect: draft Success");
+    expect(queryHandleByLabel("Connect: draft Continue")).toBeNull();
+    expect(queryHandleByLabel("Connect: draft Reject")).toBeNull();
     expect(
       container.querySelectorAll("[data-z-axis-incomplete-hint]"),
     ).toHaveLength(0);
@@ -354,7 +352,7 @@ describe("factory graph editor progress outcome route handles", () => {
       ),
     ).toHaveLength(0);
     expect(
-      container.querySelectorAll('[aria-invalid="true"].ring-af-danger-border'),
+      container.querySelectorAll('[data-node-handle-invalid="true"]'),
     ).toHaveLength(0);
   });
 
@@ -367,18 +365,11 @@ describe("factory graph editor progress outcome route handles", () => {
       },
     );
 
-    const outputHandle = await screen.findByRole("button", {
-      name: "missing output routes",
-    });
-    expect(outputHandle.className).toContain("ring-af-danger-border");
+    const outputHandle = await screen.findByTitle("missing output routes");
     expect(outputHandle.getAttribute("aria-invalid")).toBe("true");
+    expect(queryHandleByLabel("missing output routes")).toBe(outputHandle);
     expect(
-      screen.queryByRole("button", {
-        name: /missing output routes|missing failure route/i,
-      }),
-    ).toBe(outputHandle);
-    expect(
-      container.querySelectorAll('[aria-invalid="true"].ring-af-danger-border'),
+      container.querySelectorAll('[data-node-handle-invalid="true"]'),
     ).toHaveLength(1);
   });
 
@@ -388,10 +379,7 @@ describe("factory graph editor progress outcome route handles", () => {
       { validationProjection: onRejectionValidationProjection },
     );
 
-    const rejectHandle = await screen.findByRole("button", {
-      name: "missing reject route",
-    });
-    expect(rejectHandle.className).toContain("ring-af-danger-border");
+    const rejectHandle = await screen.findByTitle("missing reject route");
     expect(rejectHandle.getAttribute("aria-invalid")).toBe("true");
     expect(
       container.querySelectorAll("[data-z-axis-incomplete-hint]"),
@@ -408,22 +396,12 @@ describe("factory graph editor logical-move progress outcome route handles", () 
       { topology: logicalMoveComparisonTopology },
     );
 
-    await screen.findByRole("button", { name: "Connect: router Success" });
-    expect(
-      screen.getByRole("button", { name: "Connect: router Input" }),
-    ).not.toBeNull();
-    expect(
-      screen.getByRole("button", { name: "Connect: router Resource" }),
-    ).not.toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Connect: router Failure" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Connect: router Continue" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Connect: router Reject" }),
-    ).toBeNull();
+    await findHandleByLabel("Connect: router Success");
+    expect(queryHandleByLabel("Connect: router Input")).not.toBeNull();
+    expect(queryHandleByLabel("Connect: router Resource")).not.toBeNull();
+    expect(queryHandleByLabel("Connect: router Failure")).toBeNull();
+    expect(queryHandleByLabel("Connect: router Continue")).toBeNull();
+    expect(queryHandleByLabel("Connect: router Reject")).toBeNull();
   });
 
   it("shows missingOutputRoutes validation on the output handle for routeless LOGICAL_MOVE workstations", async () => {
@@ -435,22 +413,13 @@ describe("factory graph editor logical-move progress outcome route handles", () 
       },
     );
 
-    const outputHandle = await screen.findByRole("button", {
-      name: "missing output routes",
-    });
-    expect(outputHandle.className).toContain("ring-af-danger-border");
+    const outputHandle = await screen.findByTitle("missing output routes");
     expect(outputHandle.getAttribute("aria-invalid")).toBe("true");
+    expect(queryHandleByLabel("Connect tool: router Failure")).toBeNull();
+    expect(queryHandleByLabel("Connect tool: router Continue")).toBeNull();
+    expect(queryHandleByLabel("Connect tool: router Reject")).toBeNull();
     expect(
-      screen.queryByRole("button", { name: "Connect tool: router Failure" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Connect tool: router Continue" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Connect tool: router Reject" }),
-    ).toBeNull();
-    expect(
-      container.querySelectorAll('[aria-invalid="true"].ring-af-danger-border'),
+      container.querySelectorAll('[data-node-handle-invalid="true"]'),
     ).toHaveLength(1);
     expect(
       container.querySelectorAll(
@@ -470,26 +439,14 @@ describe("factory graph editor logical-move progress outcome route handles", () 
       { topology: logicalMoveComparisonTopology },
     );
 
-    await screen.findByRole("button", { name: "Connect: draft Success" });
-    expect(
-      screen.getByRole("button", { name: "Connect: draft Failure" }),
-    ).not.toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Connect: draft Continue" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Connect: draft Reject" }),
-    ).toBeNull();
+    await findHandleByLabel("Connect: draft Success");
+    expect(queryHandleByLabel("Connect: draft Failure")).not.toBeNull();
+    expect(queryHandleByLabel("Connect: draft Continue")).toBeNull();
+    expect(queryHandleByLabel("Connect: draft Reject")).toBeNull();
 
-    await screen.findByRole("button", { name: "Connect: router Success" });
-    expect(
-      screen.queryByRole("button", { name: "Connect: router Failure" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Connect: router Continue" }),
-    ).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: "Connect: router Reject" }),
-    ).toBeNull();
+    await findHandleByLabel("Connect: router Success");
+    expect(queryHandleByLabel("Connect: router Failure")).toBeNull();
+    expect(queryHandleByLabel("Connect: router Continue")).toBeNull();
+    expect(queryHandleByLabel("Connect: router Reject")).toBeNull();
   });
 });

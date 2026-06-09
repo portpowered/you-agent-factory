@@ -14,7 +14,6 @@ import {
   buildCurrentActivityNodes,
   buildHandleAssignments,
   buildVisibleGraphEdges,
-  EMPTY_NODE_POSITIONS,
 } from "../lib/react-flow-current-activity-card-graph";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
@@ -262,7 +261,6 @@ describe("CurrentActivityGraphViewport React Flow errors", () => {
         runtime: { place_token_counts: {} },
         topology: { workstation_nodes_by_id: {} },
       } as never,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
     const edges = buildGraphEdges(
       buildActiveGraphHighlights([], visibleGraphEdges),
@@ -325,7 +323,6 @@ function renderViewport({
       editorMode={false}
       edges={edges}
       flowContainerRef={flowContainerRef}
-      graphKey="test-graph"
       handleDiscardPendingChanges={vi.fn()}
       handleNodesChange={vi.fn()}
       handleSaveDraft={vi.fn()}
@@ -345,7 +342,6 @@ function renderViewport({
       onHideShowMenuOpenChange={vi.fn()}
       onToggleHiddenNodeClass={vi.fn()}
       onSelectTool={vi.fn()}
-      setStoredNodePosition={vi.fn()}
     />,
   );
 }

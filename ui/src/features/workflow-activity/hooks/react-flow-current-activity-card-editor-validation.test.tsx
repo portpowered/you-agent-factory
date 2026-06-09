@@ -366,10 +366,8 @@ describe("useCurrentActivityGraphEditor live validation refresh", () => {
     );
 
     expect(result.current.canInteractWithEditor).toBe(true);
-    expect(result.current.draftState.pendingFactoryDefinition).toEqual(
-      pendingAfterAdd,
-    );
-    expect(result.current.draftState.hasChanges).toBe(true);
+    expect(result.current.validationFactoryDefinition).toEqual(pendingAfterAdd);
+    expect(result.current.status.hasTopologyChanges).toBe(true);
   });
 
   it("revalidates after a connect mutation while editor interactions stay available", async () => {
@@ -441,7 +439,7 @@ describe("useCurrentActivityGraphEditor live validation refresh", () => {
     );
 
     expect(result.current.canInteractWithEditor).toBe(true);
-    expect(result.current.draftState.pendingFactoryDefinition).toEqual(
+    expect(result.current.validationFactoryDefinition).toEqual(
       pendingConnected,
     );
   });

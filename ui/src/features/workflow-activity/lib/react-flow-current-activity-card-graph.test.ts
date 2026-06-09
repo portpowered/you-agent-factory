@@ -1,7 +1,10 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: shared graph-handle and pending-edge coverage stays grouped around one layout fixture seam.
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { DashboardSnapshot } from "../../../api/dashboard/types";
+import type {
+  DashboardActiveExecution,
+  DashboardSnapshot,
+} from "../../../api/dashboard/types";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import { factoryFromDashboardTopology } from "../../../components/dashboard/fixtures";
@@ -18,11 +21,11 @@ import {
 } from "../../factory-graph-editor/lib/operations/factory-graph-customer-display";
 import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import { buildGraphLayout } from "../../flowchart/lib/layout";
+import { mergeDocNodesIntoGraphLayout } from "./current-activity-doc-graph-layout";
 import {
   buildCurrentActivityGraphLayoutFromFactory,
   dashboardWorkstationFromFactory,
 } from "./current-activity-factory-graph-layout";
-import { mergeDocNodesIntoGraphLayout } from "./current-activity-doc-graph-layout";
 import { buildGraphEdges } from "./react-flow-current-activity-card-edges";
 import {
   buildSemanticGraphHandles,
@@ -34,7 +37,6 @@ import {
   buildCurrentActivityNodes,
   buildHandleAssignments,
   buildVisibleGraphEdges,
-  EMPTY_NODE_POSITIONS,
 } from "./react-flow-current-activity-card-graph";
 
 function loadSampleFactoryDefinition(): CanonicalFactoryDefinition {
@@ -97,6 +99,67 @@ function resourceFamilyNodeIds(nodeIds: string[], resourceName: string) {
 }
 
 describe("current activity graph editor handles", () => {
+  it("marks factory-derived workstation nodes active from runtime execution ids", async () => {
+    const factory = baseFactoryDefinition;
+    const graphLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(factory);
+    const visibleGraphEdges = buildVisibleGraphEdges(graphLayout);
+    const activeExecution = {
+      dispatch_id: "dispatch-review-active",
+      started_at: "2026-06-09T00:00:00Z",
+      transition_id: "draft",
+      workstation_name: "draft",
+      workstation_node_id: "draft",
+      work_items: [
+        {
+          display_name: "Active Story",
+          work_id: "work-active-story",
+          work_type_id: "story",
+        },
+      ],
+    } satisfies DashboardActiveExecution;
+    const snapshot = {
+      ...buildSampleFactorySnapshot(factory),
+      topology: {
+        edges: [],
+        workstation_node_ids: [],
+        workstation_nodes_by_id: {},
+      },
+    } satisfies DashboardSnapshot;
+
+    const nodes = buildCurrentActivityNodes({
+      activeExecutionsByWorkstationNodeID: {
+        draft: [activeExecution],
+      },
+      activeGraphHighlights: buildActiveGraphHighlights(
+        [activeExecution],
+        visibleGraphEdges,
+        graphLayout.nodes,
+      ),
+      activeItemLabelsByPlaceId: buildActiveItemLabelsByPlaceId([]),
+      graphLayout,
+      now: Date.parse("2026-06-09T00:00:04Z"),
+      onSelectStateNode: vi.fn(),
+      onSelectWorkID: vi.fn(),
+      onSelectDoc: vi.fn(),
+      onSelectResource: vi.fn(),
+      onSelectWorker: vi.fn(),
+      onSelectWorkType: vi.fn(),
+      onSelectWorkstation: vi.fn(),
+      selection: { kind: "node", nodeId: "draft" },
+      snapshot,
+    });
+
+    expect(
+      nodes.find((node) => node.id === "workstation:draft")?.data,
+    ).toMatchObject({
+      active: true,
+      activeFlow: true,
+      selectedWorkstation: true,
+      workstation: expect.objectContaining({ node_id: "draft" }),
+    });
+  });
+
   it("projects work-state state_category on factory graph layout place nodes", async () => {
     const factory = factoryFromDashboardTopology(
       mediumBranchingDashboardTopology,
@@ -158,7 +221,6 @@ describe("current activity graph editor handles", () => {
       onSelectWorkstation: vi.fn(),
       selection: resolvedSelection,
       snapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
 
     expect(resolvedSelection).toEqual({
@@ -217,7 +279,6 @@ describe("current activity graph editor handles", () => {
       onSelectWorkstation: vi.fn(),
       selection: resolvedSelection,
       snapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
 
     expect(resolvedSelection).toEqual({
@@ -454,7 +515,6 @@ describe("current activity graph editor handles", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
 
     expect(nodes.find((node) => node.id === "work-type:task")).toMatchObject({
@@ -501,7 +561,6 @@ describe("current activity graph editor handles", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
 
     expect(
@@ -538,7 +597,6 @@ describe("current activity graph editor handles", () => {
       onSelectWorkstation: vi.fn(),
       selection: { kind: "work-type", workTypeName: "task" },
       snapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
 
     const workTypeNode = nodes.find((node) => node.id === "work-type:task");
@@ -585,7 +643,6 @@ describe("current activity graph editor handles", () => {
       onSelectWorkstation,
       selection: { kind: "work-type", workTypeName: "task" },
       snapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
 
     const workTypeNode = nodes.find((node) => node.id === "work-type:task");
@@ -639,7 +696,6 @@ describe("current activity graph editor handles", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
 
     const workerNode = nodes.find((node) => node.id === "worker:processor");
@@ -712,7 +768,6 @@ describe("current activity graph editor handles", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: semanticWorkflowDashboardSnapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
     const edges = buildGraphEdges(
       buildActiveGraphHighlights([], visibleGraphEdges),
@@ -795,7 +850,6 @@ describe("current activity graph editor handles", () => {
         runtime: { place_token_counts: {} },
         topology: { workstation_nodes_by_id: {} },
       } as never,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
 
     expect(
@@ -839,7 +893,6 @@ describe("current activity graph editor handles", () => {
         runtime: { place_token_counts: {} },
         topology: { workstation_nodes_by_id: {} },
       } as never,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
 
     expect(
@@ -905,7 +958,6 @@ describe("current activity graph editor handles", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: semanticWorkflowDashboardSnapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
 
     expect(
@@ -946,7 +998,6 @@ describe("current activity graph editor handles", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: semanticWorkflowDashboardSnapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
     const edges = buildGraphEdges(
       buildActiveGraphHighlights([], visibleGraphEdges),
@@ -1038,7 +1089,6 @@ describe("current activity graph editor handles", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: semanticWorkflowDashboardSnapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
     const edges = buildGraphEdges(
       buildActiveGraphHighlights([], visibleGraphEdges),
@@ -1153,7 +1203,6 @@ describe("current activity graph editor handles", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
     const workstationNode = nodes.find(
       (node) => node.id === "workstation:draft",
@@ -1198,7 +1247,6 @@ describe("current activity graph editor handles", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
     const reviewNode = nodes.find((node) => node.id === "workstation:review");
     const rejectionHandle = reviewNode?.data.handles?.find(
@@ -1256,7 +1304,6 @@ describe("current activity graph editor handles", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
     const workstationNode = nodes.find(
       (node) => node.id === "workstation:draft",
@@ -1297,7 +1344,6 @@ describe("current activity graph editor handles", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
     const workstationNode = nodes.find(
       (node) => node.id === "workstation:draft",
@@ -1352,7 +1398,6 @@ describe("current activity graph editor handles", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
     const editorNodes = buildCurrentActivityNodes({
       activeExecutionsByWorkstationNodeID: {},
@@ -1375,7 +1420,6 @@ describe("current activity graph editor handles", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
     expect(
       visibleGraphEdges.some((edge) => edge.outcomeKind === "rejected"),
@@ -1484,7 +1528,6 @@ describe("current activity graph editor handles", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
     const edges = buildGraphEdges(
       buildActiveGraphHighlights([], visibleGraphEdges),
@@ -1618,7 +1661,6 @@ describe("current activity graph active item labels", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: buildSampleFactorySnapshot(factory),
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
 
     expect(
@@ -1679,7 +1721,6 @@ describe("current activity graph active item labels", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: buildSampleFactorySnapshot(factory),
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
 
     expect(
@@ -1758,7 +1799,6 @@ describe("current activity graph active item labels", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: buildSampleFactorySnapshot(factory),
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
     const processNode = nodes.find((node) => node.id === "workstation:process");
     const reviewNode = nodes.find((node) => node.id === "workstation:review");
@@ -1936,7 +1976,6 @@ describe("current activity graph active item labels", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: buildSampleFactorySnapshot(factory),
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
     const reviewNode = nodes.find((node) => node.id === "workstation:review");
     const rejectionHandle = reviewNode?.data.handles?.find(
@@ -1991,7 +2030,6 @@ describe("current activity graph active item labels", () => {
       onSelectWorkstation: vi.fn(),
       selection: { kind: "doc", targetPath: "factory/docs/guide.md" },
       snapshot: buildSampleFactorySnapshot(factory),
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
 
     const docNode = nodes.find(
@@ -2025,10 +2063,7 @@ describe("current activity graph active item labels", () => {
     };
     const topologyLayout =
       await buildCurrentActivityGraphLayoutFromFactory(factory);
-    const initialLayout = mergeDocNodesIntoGraphLayout(
-      topologyLayout,
-      factory,
-    );
+    const initialLayout = mergeDocNodesIntoGraphLayout(topologyLayout, factory);
     const renamedFactory = {
       ...factory,
       supportingFiles: {

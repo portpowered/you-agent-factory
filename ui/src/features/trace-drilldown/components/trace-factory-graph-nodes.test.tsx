@@ -3,9 +3,9 @@ import userEvent from "@testing-library/user-event";
 import type { NodeProps } from "@xyflow/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { WORK_RELATION_NODE_TYPES } from "../../graphs/public";
 import type { TraceDispatchFlowNode } from "../lib/trace-dispatch-factory-graph-flow";
 import type { TraceRelationFlowNode } from "../lib/trace-relation-factory-graph-flow";
-import { WORK_RELATION_NODE_TYPES } from "../../graphs/public";
 import { TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES } from "./trace-dispatch-factory-graph-node";
 
 const DispatchNode = TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES.workstation;
@@ -107,7 +107,7 @@ describe("Trace dispatch factory graph node", () => {
       throw new Error("Expected dispatch node shell to render.");
     }
     expect(node.className).toContain(
-      "af-current-activity-node-surface-neutral",
+      "border-outline-variant bg-surface-container-highest",
     );
     expect(node.className).toContain("border-info-border");
     expect(node.className).not.toContain("shadow-af-card");
@@ -149,7 +149,7 @@ describe("Trace dispatch factory graph node", () => {
       throw new Error("Expected dispatch node shell to render.");
     }
     expect(node.className).toContain(
-      "af-current-activity-node-surface-neutral",
+      "border-outline-variant bg-surface-container-highest",
     );
     expect(node.className).toContain("border-info-border");
     expect(node.className).not.toContain("shadow-af-card");
@@ -274,7 +274,8 @@ describe("Trace relation factory graph node", () => {
     if (!node) {
       throw new Error("Expected relation node shell to render.");
     }
-    expect(node.className).toContain("border-af-danger-border");
+    expect(node.className).toContain("border-info-border");
+    expect(node.className).toContain("bg-info-container");
     expect(node.className).toContain("shadow-none");
     expect(node.className).not.toContain("shadow-af-card");
     expect(node.className).not.toContain("shadow-af-panel");

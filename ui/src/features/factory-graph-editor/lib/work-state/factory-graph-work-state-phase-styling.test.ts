@@ -9,26 +9,13 @@ import {
 
 describe("factory graph work state phase styling", () => {
   it.each([
-    ["INITIAL", "border-info-border bg-info-container", "queue", "text-info"],
-    [
-      "PROCESSING",
-      "border-af-warning-border bg-warning-container",
-      "processing",
-      "text-warning",
-    ],
-    [
-      "TERMINAL",
-      "border-af-success-border bg-success-container",
-      "terminal",
-      "text-success",
-    ],
-    [
-      "FAILED",
-      "border-af-danger-border bg-error-container",
-      "failed",
-      "text-error",
-    ],
-  ] as const)("maps %s to phase surface and icon styling", (type, surfaceClass, iconKind, iconClass) => {
+    ["INITIAL", "queue", "text-info"],
+    ["PROCESSING", "processing", "text-warning"],
+    ["TERMINAL", "terminal", "text-success"],
+    ["FAILED", "failed", "text-error"],
+  ] as const)("maps %s to phase surface and icon styling", (type, iconKind, iconClass) => {
+    const surfaceClass = "border-info-border bg-info-container";
+
     expect(workStatePhaseSurfaceClassName(type)).toBe(surfaceClass);
     expect(workStatePhaseSwatchClassName(type)).toBe(surfaceClass);
     expect(workStatePhaseSemanticIconKind(type)).toBe(iconKind);
@@ -37,7 +24,7 @@ describe("factory graph work state phase styling", () => {
 
   it("falls back to neutral styling when workStateType is missing", () => {
     expect(workStatePhaseSurfaceClassName(undefined)).toBe(
-      "border-outline-variant bg-surface-container-high",
+      "border-info-border bg-info-container",
     );
     expect(workStatePhaseSemanticIconKind(undefined)).toBe("queue");
     expect(workStatePhaseSemanticIconClassName(undefined)).toBe(

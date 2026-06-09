@@ -4,31 +4,28 @@ import { CurrentFactoryDefinitionError } from "../../../api/current-factory-defi
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { AlertPanel } from "../../../components/ui";
 import { FactoryGraphEditorNotice } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
+import { useFactoryGraphEdgeWaypointEditor } from "../../factory-graph-editor/hooks/layout/factory-graph-edge-waypoint-editor-hook";
+import { decorateProjectedEdgesWithWaypoints } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-edge-waypoint-projection";
+import type { FactoryGraphReactFlowEdge } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-projection";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { NODE_TYPES } from "../../flowchart/public";
+import { FACTORY_GRAPH_EDGE_TYPES } from "../../graphs/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
-import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
-import type { useCurrentActivityGraphViewModel } from "../hooks/react-flow-current-activity-card-graph-view-model";
 import type { CurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
 import { shouldShowGraphSaveFailureNotice } from "../lib/graph-save-failure-notice-visibility";
+import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import {
   mergeFactoryValidationTargets,
   saveErrorNoticeMessages,
   validationMessagesForGraphSelection,
 } from "../lib/react-flow-current-activity-card-validation";
-import { createDefaultFactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
-import { FACTORY_GRAPH_EDGE_TYPES } from "../../graphs/public";
-import { useFactoryGraphEdgeWaypointEditor } from "../../factory-graph-editor/hooks/layout/factory-graph-edge-waypoint-editor-hook";
 import { GraphEditorPlacementRegistrar } from "./graph-editor-placement-context";
-import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
-import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph surface keeps editor notices, validation, and viewport wiring together.
+type CurrentActivityGraphSurfaceModel = CurrentActivityGraphCardViewModel;
+
 export function CurrentActivityGraphSurface({
   discardPendingChanges,
-  editor,
-  graph,
   viewModel,
   headingID,
   imports,
@@ -37,34 +34,51 @@ export function CurrentActivityGraphSurface({
   snapshot,
 }: {
   discardPendingChanges?: () => void;
-  editor?: ReturnType<typeof useCurrentActivityGraphEditor>;
-  graph?: ReturnType<typeof useCurrentActivityGraphViewModel>;
-  viewModel?: CurrentActivityGraphCardViewModel;
+  viewModel: CurrentActivityGraphCardViewModel;
   headingID: string;
   imports: CurrentActivityImportController;
   locale?: string;
   selection: CurrentActivitySelection | null;
   snapshot: DashboardSnapshot;
 }) {
-  const model =
-    viewModel ??
-    (editor && graph
-      ? {
-          ...editor,
-          ...graph,
-        }
-      : null);
-  if (!model) {
-    return null;
-  }
+  return (
+    <CurrentActivityGraphSurfaceContent
+      discardPendingChanges={discardPendingChanges}
+      headingID={headingID}
+      imports={imports}
+      locale={locale}
+      model={viewModel}
+      selection={selection}
+      snapshot={snapshot}
+    />
+  );
+}
+
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph surface keeps editor notices, validation, and viewport wiring together.
+function CurrentActivityGraphSurfaceContent({
+  discardPendingChanges,
+  headingID,
+  imports,
+  locale,
+  model,
+  selection,
+  snapshot,
+}: {
+  discardPendingChanges?: () => void;
+  headingID: string;
+  imports: CurrentActivityImportController;
+  locale?: string;
+  model: CurrentActivityGraphSurfaceModel;
+  selection: CurrentActivitySelection | null;
+  snapshot: DashboardSnapshot;
+}) {
   const messages = getFactoryGraphEditorMessages(locale);
   const flowContainerRef = useRef<HTMLElement | null>(null);
   const flowInstanceRef = useRef<ReactFlowInstance | null>(null);
-  const storedNodePositions = model.storedNodePositions;
-  const saveError = model.saveEditableDefinition.error;
+  const saveError = model.status.saveError;
   const editorValidationProjection = useMemo(() => {
     if (!model.editorMode) {
-      return model.structuralValidation.projection;
+      return model.validationControls.projection;
     }
 
     const saveErrorTargets =
@@ -72,26 +86,19 @@ export function CurrentActivityGraphSurface({
         ? (saveError.targets ?? [])
         : [];
     return mergeFactoryValidationTargets(
-      model.structuralValidation.targets,
+      model.validationControls.targets,
       saveErrorTargets,
     );
   }, [
     model.editorMode,
-    model.structuralValidation.projection,
-    model.structuralValidation.targets,
+    model.validationControls.projection,
+    model.validationControls.targets,
     saveError,
   ]);
   const validationSelectionMessages = model.editorMode
     ? validationMessagesForGraphSelection({
         factoryDefinition:
-          model.viewState?.pendingFactoryDefinition ??
-          model.draftState.pendingFactoryDefinition ??
-          model.viewState?.currentFactoryDefinition ??
-          model.currentFactoryDefinition ??
-          (model.editorMode
-            ? undefined
-            : (model.viewState?.persistedFactoryDefinition ??
-              snapshot.factory)),
+          model.validationControls.factoryDefinition ?? undefined,
         projection: editorValidationProjection,
         selectionNodeId:
           selection?.kind === "node" ? selection.nodeId : undefined,
@@ -112,26 +119,31 @@ export function CurrentActivityGraphSurface({
     hasFailureMessages: saveFailureMessages.length > 0,
     saveAttemptRevision: model.saveAttemptRevision,
   });
+  const layoutControls = model.layoutControls;
+  const removalControls = model.removalControls;
+  const currentLayout = layoutControls.currentLayout;
   const waypointEditor = useFactoryGraphEdgeWaypointEditor({
     activeTool: model.activeTool,
-    addEdgeWaypoint: model.addEdgeWaypoint,
+    addEdgeWaypoint: layoutControls.addEdgeWaypoint,
     canInteractWithEditor: model.canInteractWithEditor,
     editorMode: model.editorMode,
-    handleEditorEdgeDelete: model.handleEditorEdgeDelete,
-    layout:
-      model.layoutDraftState?.layout ?? createDefaultFactoryLayout(),
+    handleEditorEdgeDelete: removalControls.deleteEdge,
+    layout: currentLayout,
     locale,
-    moveEdgeWaypoint: model.moveEdgeWaypoint,
-    removeEdgeWaypoint: model.removeEdgeWaypoint,
+    moveEdgeWaypoint: layoutControls.moveEdgeWaypoint,
+    removeEdgeWaypoint: layoutControls.removeEdgeWaypoint,
     nodes: model.nodes,
   });
-  const viewportEdges = waypointEditor.decorateEditorEdges(model.edges);
-  const clearStoredViewport = useCurrentActivityGraphStore(
-    (state) => state.clearViewport,
+  const viewportEdges = useMemo(
+    () =>
+      decorateProjectedEdgesWithWaypoints({
+        edges: model.edges as FactoryGraphReactFlowEdge[],
+        layout: currentLayout,
+        selectedWaypointEdgeId: waypointEditor.selectedWaypointEdgeId,
+      }),
+    [currentLayout, model.edges, waypointEditor.selectedWaypointEdgeId],
   );
-  const setStoredViewport = useCurrentActivityGraphStore(
-    (state) => state.setViewport,
-  );
+  const canPersistLayoutChanges = layoutControls.canMoveLayout;
 
   if (!snapshotHasObserverGraph(snapshot) && !model.editorMode) {
     return <EmptyCurrentActivityState locale={locale} />;
@@ -168,12 +180,12 @@ export function CurrentActivityGraphSurface({
           </ul>
         </FactoryGraphEditorNotice>
       ) : null}
-      {model.blockedRemovalReason ? (
+      {removalControls.blockedReason ? (
         <FactoryGraphEditorNotice
           title={messages.noticeRemovalBlockedTitle}
           tone="warning"
         >
-          {model.blockedRemovalReason}
+          {removalControls.blockedReason}
         </FactoryGraphEditorNotice>
       ) : null}
       {model.connectionNotice ? (
@@ -184,7 +196,7 @@ export function CurrentActivityGraphSurface({
           {model.connectionNotice}
         </FactoryGraphEditorNotice>
       ) : null}
-      {model.hasActiveWork && model.draftState.hasChanges ? (
+      {model.hasActiveWork && model.status.hasTopologyChanges ? (
         <FactoryGraphEditorNotice
           title={messages.noticeTopologyBlockedTitle}
           tone="danger"
@@ -203,21 +215,18 @@ export function CurrentActivityGraphSurface({
       <GraphEditorPlacementRegistrar
         flowContainerRef={flowContainerRef}
         flowInstanceRef={flowInstanceRef}
-        graphKey={model.graphKey}
         moveLayoutNode={
-          model.editorMode ? model.moveLayoutNode : undefined
+          canPersistLayoutChanges ? layoutControls.moveNode : undefined
         }
         nodes={model.nodes}
-        setStoredNodePosition={model.setStoredNodePosition}
-        storedNodePositions={storedNodePositions}
       />
       <CurrentActivityGraphViewport
         activeTool={model.activeTool}
-        addMenuActions={model.addMenuActions}
+        addMenuActions={model.addControls.actions}
         canInteractWithEditor={model.canInteractWithEditor}
-        canRedoLayout={model.layoutDraftState?.canRedoLayout ?? false}
-        canSaveDraft={model.canSaveDraft}
-        canUndoLayout={model.layoutDraftState?.canUndoLayout ?? false}
+        canRedoLayout={layoutControls.canRedo}
+        canSaveDraft={model.saveControls.canSave}
+        canUndoLayout={layoutControls.canUndo}
         editorUnavailableClassifierWorkstationName={
           model.editorUnavailableClassifierWorkstationName
         }
@@ -226,37 +235,31 @@ export function CurrentActivityGraphSurface({
         edges={viewportEdges}
         flowContainerRef={flowContainerRef}
         flowInstanceRef={flowInstanceRef}
-        graphKey={model.graphKey}
         handleDiscardPendingChanges={
           discardPendingChanges ?? model.handleDiscardPendingChanges
         }
         handleEditorModeToggle={model.handleEditorModeToggle}
         handleNodesChange={model.handleNodesChange}
-        handleSaveDraft={() => {
-          model.setIsConfirmingSave(true);
-        }}
-        hasPendingChanges={
-          model.draftState.hasChanges ||
-          (model.layoutDraftState?.layoutDirty ?? false)
-        }
+        handleSaveDraft={model.saveControls.requestConfirmation}
+        hasPendingChanges={model.status.hasSharedGraphChanges}
         headingID={headingID}
         imports={imports}
         canonicalLayoutViewport={model.canonicalLayoutViewport}
         initialFitViewKey={model.initialFitViewKey}
         initialFitViewOptions={model.initialFitViewOptions}
-        isSavingDraft={model.saveEditableDefinition.isPending}
+        isSavingDraft={model.status.isSaving}
         locale={locale}
         nodeTypes={NODE_TYPES}
         nodes={model.nodes}
-        onAddAction={model.handleAddEntityAction}
-        onAddMenuOpenChange={model.setAddMenuOpen}
+        onAddAction={model.addControls.startAction}
+        onAddMenuOpenChange={model.addControls.setMenuOpen}
         hiddenNodeClasses={model.hiddenNodeClasses}
         hideShowMenuOpen={model.hideShowMenuOpen}
         onClearPreferences={model.resetPreferences}
         onHideShowMenuOpenChange={model.setHideShowMenuOpen}
         onSelectVisibilityPreset={model.setVisibilityPreset}
         onToggleHiddenNodeClass={model.toggleHiddenNodeClass}
-        preferencesDirty={model.dirtyStateSummary.preferencesDirty}
+        preferencesDirty={model.status.preferencesDirty}
         visibilityPreset={model.visibilityPreset}
         onConnect={model.handleEditorConnect}
         onEditorEdgeClick={waypointEditor.handleEditorEdgeClick}
@@ -267,21 +270,22 @@ export function CurrentActivityGraphSurface({
         selectedWaypointEdgeId={waypointEditor.selectedWaypointEdgeId}
         waypointAriaLabel={waypointEditor.waypointAriaLabel}
         waypointControls={waypointEditor.waypointControls}
-        onEditorNodeClick={model.handleEditorNodeDelete}
+        onEditorNodeClick={removalControls.deleteNode}
         onSelectTool={model.setActiveTool}
-        openAddMenu={model.addMenuOpen}
+        openAddMenu={model.addControls.isMenuOpen}
         saveDisabledReason={model.saveBlockedReason}
-        moveLayoutNode={model.moveLayoutNode}
-        moveLayoutNodesByDelta={model.moveLayoutNodesByDelta}
-        onRedoLayout={model.redoLayout}
-        onResetLayout={() => {
-          clearStoredViewport(model.graphKey);
-          model.resetLayout();
-        }}
-        onUndoLayout={model.undoLayout}
-        updateLayoutViewport={model.updateLayoutViewport}
-        setStoredNodePosition={model.setStoredNodePosition}
-        setStoredViewport={setStoredViewport}
+        moveLayoutNode={
+          canPersistLayoutChanges ? layoutControls.moveNode : undefined
+        }
+        moveLayoutNodesByDelta={
+          canPersistLayoutChanges ? layoutControls.moveNodesByDelta : undefined
+        }
+        onRedoLayout={layoutControls.redo}
+        onResetLayout={layoutControls.reset}
+        onUndoLayout={layoutControls.undo}
+        updateLayoutViewport={
+          canPersistLayoutChanges ? layoutControls.updateViewport : undefined
+        }
       />
     </div>
   );

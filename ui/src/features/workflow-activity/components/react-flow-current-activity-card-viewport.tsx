@@ -12,7 +12,12 @@ import {
   type ReactFlowInstance,
   type XYPosition,
 } from "@xyflow/react";
-import { type MutableRefObject, useCallback, useRef, type KeyboardEvent } from "react";
+import {
+  type KeyboardEvent,
+  type MutableRefObject,
+  useCallback,
+  useRef,
+} from "react";
 import {
   DashboardGraphBackground,
   DashboardGraphControls,
@@ -25,23 +30,25 @@ import {
   FactoryGraphEditorVisibilityPanel,
   type FactoryGraphEditorVisibilityPreset,
 } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
+import { FactoryGraphEdgeWaypointControls } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-controls";
+import { FactoryGraphEdgeWaypointLayer } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-layer";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/editor/factory-graph-editor-connections";
-import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import type {
+  FactoryLayoutPoint,
+  FactoryLayoutViewport,
+} from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import {
   isFactoryGraphEditorRedoKeyboardEvent,
   isFactoryGraphEditorUndoKeyboardEvent,
   shouldHandleFactoryGraphEditorKeyboardShortcut,
 } from "../../factory-graph-editor/lib/layout/history/factory-graph-layout-keyboard-shortcuts";
-import { FactoryGraphEdgeWaypointControls } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-controls";
-import { FactoryGraphEdgeWaypointLayer } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-layer";
-import type { FactoryLayoutPoint } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { GraphViewportSurface } from "../../graphs/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
-import { handleCurrentActivityReactFlowError } from "../lib/react-flow-current-activity-card-errors";
 import { useCanonicalLayoutViewportSync } from "../lib/layout/use-canonical-layout-viewport-sync";
+import { handleCurrentActivityReactFlowError } from "../lib/react-flow-current-activity-card-errors";
 import { useMeasuredCurrentActivityGraphViewport } from "../lib/use-measured-current-activity-graph-viewport";
-import type { FactoryLayoutViewport } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import {
   DashboardFlowAxisLegend,
   getDefaultDashboardFlowAxisLegendEdgeItems,
@@ -52,7 +59,6 @@ import {
   GraphDropOverlay,
   graphDropStateAttribute,
 } from "./react-flow-current-activity-card-import";
-import type { GraphViewportPosition } from "../state/currentActivityGraphStore";
 
 function CurrentActivityGraphEditorChrome(props: {
   activeTool: "add" | "connect" | "delete" | null;
@@ -139,25 +145,20 @@ function buildVisibilityPresetOptions(
 ) {
   const messages = getFactoryGraphEditorMessages(locale);
 
-  return (
-    [
-      "all",
-      "workflow",
-      "execution",
-      "infrastructure",
-    ] as const
-  ).map((key) => ({
-    key,
-    label:
-      key === "all"
-        ? messages.visibilityPresetAllLabel
-        : key === "workflow"
-          ? messages.visibilityPresetWorkflowLabel
-          : key === "execution"
-            ? messages.visibilityPresetExecutionLabel
-            : messages.visibilityPresetInfrastructureLabel,
-    selected: visibilityPreset === key,
-  }));
+  return (["all", "workflow", "execution", "infrastructure"] as const).map(
+    (key) => ({
+      key,
+      label:
+        key === "all"
+          ? messages.visibilityPresetAllLabel
+          : key === "workflow"
+            ? messages.visibilityPresetWorkflowLabel
+            : key === "execution"
+              ? messages.visibilityPresetExecutionLabel
+              : messages.visibilityPresetInfrastructureLabel,
+      selected: visibilityPreset === key,
+    }),
+  );
 }
 
 function buildCurrentActivityIsValidConnection({
@@ -172,7 +173,7 @@ function buildCurrentActivityIsValidConnection({
   return (connection) => {
     if (
       !editorMode ||
-      activeTool !== "connect" ||
+      activeTool === "delete" ||
       !connection.source ||
       !connection.sourceHandle ||
       !connection.target ||
@@ -219,6 +220,13 @@ function factoryGraphNodeIdForRenderedNode(nodes: Node[], nodeId: string) {
 }
 
 function factoryGraphEdgeIdForRenderedEdge(nodes: Node[], edge: Edge) {
+  const factoryGraphEdgeId = (
+    edge.data as { factoryGraphEdgeId?: string } | undefined
+  )?.factoryGraphEdgeId;
+  if (factoryGraphEdgeId) {
+    return factoryGraphEdgeId;
+  }
+
   const edgeKind = edge.id.split(":")[0];
   if (!edgeKind || !edge.source || !edge.target) {
     return edge.id;
@@ -250,7 +258,6 @@ export function CurrentActivityGraphViewport({
   preferencesDirty,
   visibilityPreset,
   edges,
-  graphKey,
   handleNodesChange,
   hasPendingChanges,
   headingID,
@@ -286,8 +293,6 @@ export function CurrentActivityGraphViewport({
   moveLayoutNode,
   moveLayoutNodesByDelta,
   updateLayoutViewport,
-  setStoredNodePosition,
-  setStoredViewport,
   flowContainerRef,
   flowInstanceRef,
 }: {
@@ -305,11 +310,12 @@ export function CurrentActivityGraphViewport({
   hideShowMenuOpen: boolean;
   editorMode: boolean;
   onClearPreferences: () => void;
-  onSelectVisibilityPreset: (preset: FactoryGraphEditorVisibilityPreset) => void;
+  onSelectVisibilityPreset: (
+    preset: FactoryGraphEditorVisibilityPreset,
+  ) => void;
   preferencesDirty: boolean;
   visibilityPreset: FactoryGraphEditorVisibilityPreset;
   edges: Edge[];
-  graphKey: string;
   handleNodesChange: (changes: NodeChange[]) => void;
   hasPendingChanges: boolean;
   headingID: string;
@@ -368,16 +374,11 @@ export function CurrentActivityGraphViewport({
     delta: XYPosition,
     resolvedPositionsByNodeId: ReadonlyMap<string, XYPosition>,
   ) => void;
-  updateLayoutViewport?: (viewport: { x: number; y: number; zoom: number }) => void;
-  setStoredNodePosition: (
-    graphKey: string,
-    nodeId: string,
-    position: XYPosition,
-  ) => void;
-  setStoredViewport: (
-    graphKey: string,
-    viewport: GraphViewportPosition,
-  ) => void;
+  updateLayoutViewport?: (viewport: {
+    x: number;
+    y: number;
+    zoom: number;
+  }) => void;
   flowContainerRef?: MutableRefObject<HTMLElement | null>;
   flowInstanceRef?: MutableRefObject<ReactFlowInstance | null>;
 }) {
@@ -419,7 +420,10 @@ export function CurrentActivityGraphViewport({
   );
   const handleEditorCanvasKeyDown = useCallback(
     (event: KeyboardEvent<HTMLElement>) => {
-      if (!editorMode || !shouldHandleFactoryGraphEditorKeyboardShortcut(event.target)) {
+      if (
+        !editorMode ||
+        !shouldHandleFactoryGraphEditorKeyboardShortcut(event.target)
+      ) {
         return;
       }
 
@@ -503,7 +507,7 @@ export function CurrentActivityGraphViewport({
               nodeTypes={nodeTypes}
               nodes={nodes}
               edgesFocusable={editorMode}
-              nodesConnectable={editorMode && activeTool === "connect"}
+              nodesConnectable={editorMode && activeTool !== "delete"}
               onConnect={handleConnect}
               onInit={(instance) => {
                 if (flowInstanceRef) {
@@ -550,10 +554,7 @@ export function CurrentActivityGraphViewport({
                   return;
                 }
 
-                setStoredViewport(graphKey, viewport);
-                if (editorMode && updateLayoutViewport) {
-                  updateLayoutViewport(viewport);
-                }
+                updateLayoutViewport?.(viewport);
               }}
               onNodeDragStart={(_, node) => {
                 if (!editorMode) {
@@ -588,7 +589,7 @@ export function CurrentActivityGraphViewport({
                 const factoryGraphNodeId = (
                   node.data as { factoryGraphNodeId?: string } | undefined
                 )?.factoryGraphNodeId;
-                if (editorMode && moveLayoutNode && factoryGraphNodeId) {
+                if (moveLayoutNode && factoryGraphNodeId) {
                   const dragSession = dragSessionRef.current;
                   dragSessionRef.current = null;
                   if (
@@ -597,7 +598,9 @@ export function CurrentActivityGraphViewport({
                     moveLayoutNodesByDelta
                   ) {
                     const startPosition =
-                      dragSession.startPositionsByNodeId.get(factoryGraphNodeId);
+                      dragSession.startPositionsByNodeId.get(
+                        factoryGraphNodeId,
+                      );
                     if (startPosition) {
                       moveLayoutNodesByDelta(
                         dragSession.factoryGraphNodeIds,
@@ -613,10 +616,6 @@ export function CurrentActivityGraphViewport({
 
                   moveLayoutNode(factoryGraphNodeId, node.position);
                   return;
-                }
-
-                if (graphKey) {
-                  setStoredNodePosition(graphKey, node.id, node.position);
                 }
               }}
               onNodesChange={handleNodesChange}

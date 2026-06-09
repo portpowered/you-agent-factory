@@ -5,8 +5,6 @@
 @import "./styles/typography-role-tokens.css";
 @import "./styles/typography-role-utilities.css";
 @import "./styles/layout-role-tokens.css";
-@import "./styles/current-activity-graph-nodes.css";
-@import "./styles/tick-slider.css";
 
 @source "./**/*.{ts,tsx}";
 
@@ -216,17 +214,6 @@
 
   .af-dashboard-supporting-code {
     @apply font-mono text-code-small text-code;
-  }
-
-  .af-chart-grid-surface {
-    background-image:
-      linear-gradient(var(--color-af-chart-grid-line) 1px, transparent 1px),
-      linear-gradient(
-        90deg,
-        var(--color-af-chart-grid-line) 1px,
-        transparent 1px
-      );
-    background-size: 48px 32px;
   }
 
   .af-dashboard-widget-subtitle {

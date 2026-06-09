@@ -296,8 +296,8 @@ describe("TraceRelationFlow", () => {
     if (!implementNode) {
       throw new Error("Expected selectable relation node shell to render.");
     }
-    expect(implementNode.className).toContain("border-af-success-border");
-    expect(implementNode.className).toContain("bg-success-container");
+    expect(implementNode.className).toContain("border-info-border");
+    expect(implementNode.className).toContain("bg-info-container");
     expect(within(implementButton).getByText("Implement story")).toBeTruthy();
     expect(screen.queryByText("Parent-child")).toBeNull();
     expect(screen.queryByText("Done")).toBeNull();

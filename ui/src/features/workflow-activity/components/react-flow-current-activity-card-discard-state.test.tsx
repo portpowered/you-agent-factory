@@ -1,9 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
-import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import { ReactFlowCurrentActivityCardView } from "./react-flow-current-activity-card";
 
 vi.mock("./react-flow-current-activity-card-surface", () => ({
@@ -32,23 +31,6 @@ vi.mock("./react-flow-current-activity-card-editor-dialogs", () => ({
 
 vi.mock("./react-flow-current-activity-card-save-notifications", () => ({
   CurrentActivityGraphSaveNotifications: () => null,
-}));
-
-vi.mock("../hooks/react-flow-current-activity-card-graph-view-model", () => ({
-  useCurrentActivityGraphViewModel: () => ({
-    edges: [],
-    graphKey: "graph-key",
-    handleNodesChange: vi.fn(),
-    initialFitViewKey: "full-graph",
-    initialFitViewOptions: { padding: 0.18 },
-    nodes: [
-      {
-        id: "workstation:review",
-      },
-    ],
-    setStoredNodePosition: vi.fn(),
-    storedNodePositions: {},
-  }),
 }));
 
 vi.mock("../hooks/current-activity-import-controller", () => ({
@@ -83,33 +65,19 @@ function createImportController(): CurrentActivityImportController {
   };
 }
 
-function createEditorStub() {
+function createViewModelStub() {
   return {
     handleDiscardEditorChanges: vi.fn(),
     handleDiscardPendingChanges: vi.fn(),
   };
 }
 
-describe("ReactFlowCurrentActivityCardView discard state cleanup", () => {
-  beforeEach(() => {
-    useCurrentActivityGraphStore.setState({
-      positionsByGraphKey: {
-        "graph-key": {
-          "workstation:review": { x: 240, y: 180 },
-        },
-      },
-      viewportByGraphKey: {
-        "graph-key": { x: 10, y: 20, zoom: 1.2 },
-      },
-    });
-  });
-
-  it("clears stored positions and viewport before toolbar discard", () => {
-    const editor = createEditorStub();
+describe("ReactFlowCurrentActivityCardView discard routing", () => {
+  it("routes toolbar discard to the editor pending-change handler", () => {
+    const viewModel = createViewModelStub();
 
     render(
       <ReactFlowCurrentActivityCardView
-        editor={editor as never}
         importController={createImportController()}
         now={Date.now()}
         onSelectDoc={vi.fn()}
@@ -122,6 +90,7 @@ describe("ReactFlowCurrentActivityCardView discard state cleanup", () => {
         selection={null}
         showHeaderActions={false}
         snapshot={semanticWorkflowDashboardSnapshot}
+        viewModel={viewModel as never}
         widgetInstanceID="test"
       />,
     );
@@ -130,21 +99,14 @@ describe("ReactFlowCurrentActivityCardView discard state cleanup", () => {
       screen.getByRole("button", { name: "Trigger surface discard" }),
     );
 
-    expect(editor.handleDiscardPendingChanges).toHaveBeenCalledTimes(1);
-    expect(
-      useCurrentActivityGraphStore.getState().positionsByGraphKey["graph-key"],
-    ).toBeUndefined();
-    expect(
-      useCurrentActivityGraphStore.getState().viewportByGraphKey["graph-key"],
-    ).toBeUndefined();
+    expect(viewModel.handleDiscardPendingChanges).toHaveBeenCalledTimes(1);
   });
 
-  it("clears stored positions and viewport before leave-dialog discard", () => {
-    const editor = createEditorStub();
+  it("routes leave-dialog discard to the editor discard handler", () => {
+    const viewModel = createViewModelStub();
 
     render(
       <ReactFlowCurrentActivityCardView
-        editor={editor as never}
         importController={createImportController()}
         now={Date.now()}
         onSelectDoc={vi.fn()}
@@ -157,6 +119,7 @@ describe("ReactFlowCurrentActivityCardView discard state cleanup", () => {
         selection={null}
         showHeaderActions={false}
         snapshot={semanticWorkflowDashboardSnapshot}
+        viewModel={viewModel as never}
         widgetInstanceID="test"
       />,
     );
@@ -165,12 +128,6 @@ describe("ReactFlowCurrentActivityCardView discard state cleanup", () => {
       screen.getByRole("button", { name: "Trigger dialog discard" }),
     );
 
-    expect(editor.handleDiscardEditorChanges).toHaveBeenCalledTimes(1);
-    expect(
-      useCurrentActivityGraphStore.getState().positionsByGraphKey["graph-key"],
-    ).toBeUndefined();
-    expect(
-      useCurrentActivityGraphStore.getState().viewportByGraphKey["graph-key"],
-    ).toBeUndefined();
+    expect(viewModel.handleDiscardEditorChanges).toHaveBeenCalledTimes(1);
   });
 });

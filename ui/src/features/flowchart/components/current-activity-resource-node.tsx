@@ -6,7 +6,10 @@ import { GraphNodeButton } from "../../graphs/public";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
 import { currentActivityGraphNodeHoverClassName } from "../lib/current-activity-graph-hover";
 import { getActivityGraphMessages } from "../messages/activity-graph";
-import { ActivityGraphNodeBadge } from "./current-activity-node-chrome";
+import {
+  ActivityGraphNodeBadge,
+  activityGraphNodeSurfaceClassName,
+} from "./current-activity-node-chrome";
 import type { ActivityGraphNodeHandle } from "./current-activity-node-shell";
 import { ActivityGraphNodeShell } from "./current-activity-node-shell";
 import { GraphSemanticIcon } from "./graph-semantic-icon";
@@ -46,7 +49,8 @@ export function ResourceNodeView({
   return (
     <ActivityGraphNodeShell
       className={cn(
-        "af-current-activity-node-surface-resource border-outline-variant justify-center text-left text-on-surface",
+        activityGraphNodeSurfaceClassName("resource"),
+        "justify-center text-left text-on-surface",
         currentActivityGraphNodeHoverClassName({
           activeFlow: data.activeFlow,
           muted: data.muted,

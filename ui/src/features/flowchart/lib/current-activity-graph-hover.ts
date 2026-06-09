@@ -5,23 +5,28 @@ export interface CurrentActivityGraphNodeHoverState {
   validationError?: boolean;
 }
 
+export type CurrentActivityGraphNodeHoverSurface = "primary" | "warning";
+
 /** Accent border/shadow applied on pointer hover when higher-priority states are absent. */
-const CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASS =
-  "transition-[border-color,box-shadow] hover:border-primary hover:shadow-af-accent-chip";
+const CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASSES: Record<
+  CurrentActivityGraphNodeHoverSurface,
+  string
+> = {
+  primary:
+    "transition-[background-color,border-color,box-shadow,opacity] hover:border-primary hover:bg-primary-container hover:opacity-100 hover:shadow-af-accent-chip",
+  warning:
+    "transition-[background-color,border-color,box-shadow,opacity] hover:border-primary hover:bg-warning-container hover:opacity-100 hover:shadow-af-accent-chip",
+};
 
 export function currentActivityGraphNodeHoverClassName(
   state: CurrentActivityGraphNodeHoverState,
+  surface: CurrentActivityGraphNodeHoverSurface = "warning",
 ): string | undefined {
-  if (
-    state.muted ||
-    state.selected ||
-    state.validationError ||
-    state.activeFlow
-  ) {
+  if (state.selected || state.validationError) {
     return undefined;
   }
 
-  return CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASS;
+  return CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASSES[surface];
 }
 
 export interface CurrentActivityGraphEdgeHoverState {

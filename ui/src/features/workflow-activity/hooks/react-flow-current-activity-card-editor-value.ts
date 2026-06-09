@@ -1,4 +1,3 @@
-import type { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { FactoryDocumentSaveState } from "../../current-selection/base/public";
 import type {
   FactoryGraphEditorTool,
@@ -8,19 +7,22 @@ import type { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks
 import type { useFactoryGraphLayoutDraftState } from "../../factory-graph-editor/hooks/layout/factory-graph-layout-draft-hook";
 import type { EditableFactoryGraphSaveMutation } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { useFactoryValidation } from "../../factory-graph-editor/hooks/validation/use-factory-validation";
-import type { FactoryGraphEditorDirtyState } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphNodeKind,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import type { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
+import type { FactoryGraphEditorDirtyState } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state";
 import type { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import type { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
+import type { CurrentActivityFactoryDocumentQuery } from "./current-activity-factory-document-state";
 import type { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import type { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
 import type { CurrentActivityFactoryGraphViewState } from "./use-current-activity-factory-graph-view-state";
+import type { CurrentActivityGraphFlowProjection } from "./use-current-activity-graph-flow-projection";
 
-export function buildCurrentActivityGraphEditorValue(args: {
+type BuildCurrentActivityGraphEditorValueArgs = {
   activeTool: FactoryGraphEditorTool;
   addEntityController: ReturnType<typeof useFactoryGraphAddEntityController>;
   addMenuActions: ReturnType<typeof buildFactoryGraphAddEntityMenuActions>;
@@ -34,6 +36,8 @@ export function buildCurrentActivityGraphEditorValue(args: {
   dirtyStateSummary: FactoryGraphEditorDirtyState;
   draftState: ReturnType<typeof useFactoryGraphDraftState>;
   layoutDraftState: ReturnType<typeof useFactoryGraphLayoutDraftState>;
+  graphState: CurrentActivityGraphFlowProjection;
+  locale?: string | null;
   addEdgeWaypoint: (
     edgeId: string,
     position: { x: number; y: number },
@@ -60,7 +64,7 @@ export function buildCurrentActivityGraphEditorValue(args: {
     y: number;
     zoom: number;
   }) => void;
-  editableDefinitionQuery: ReturnType<typeof useCurrentFactoryDocument>;
+  editableDefinitionQuery: CurrentActivityFactoryDocumentQuery;
   editorUnavailableClassifierWorkstationName?: string;
   editorMode: boolean;
   handleCancelRemoval: () => void;
@@ -110,9 +114,136 @@ export function buildCurrentActivityGraphEditorValue(args: {
   toggleHiddenNodeClass: (kind: FactoryGraphNodeKind) => void;
   visibilityPreset: FactoryGraphEditorVisibilityPreset;
   viewState: CurrentActivityFactoryGraphViewState;
-}) {
+};
+
+function buildCurrentActivityGraphEditorStatus(
+  args: BuildCurrentActivityGraphEditorValueArgs,
+) {
+  const messages = getFactoryGraphEditorMessages(args.locale);
+  const hasTopologyChanges = args.draftState.hasChanges;
+  const hasLayoutChanges = args.layoutDraftState.layoutDirty;
+  const hasSharedGraphChanges = hasTopologyChanges || hasLayoutChanges;
+  const hasAnyChanges =
+    hasSharedGraphChanges || args.dirtyStateSummary.preferencesDirty;
+
+  return {
+    dirtySummary: hasAnyChanges
+      ? messages.dirtyStateSummary(args.dirtyStateSummary)
+      : null,
+    hasDocumentBackedLayoutDraft: args.draftState.source === "current-factory",
+    hasLayoutChanges,
+    hasSharedGraphChanges,
+    hasTopologyChanges,
+    isDefinitionLoading: args.editableDefinitionQuery.status === "pending",
+    loadErrorMessage: args.editableDefinitionQuery.error?.message,
+    preferencesDirty: args.dirtyStateSummary.preferencesDirty,
+    saveError: args.saveEditableDefinition.error ?? null,
+    isSaving: args.saveEditableDefinition.isPending,
+  };
+}
+
+function buildCurrentActivityGraphLayoutControls(
+  args: BuildCurrentActivityGraphEditorValueArgs,
+) {
+  return {
+    addEdgeWaypoint: args.addEdgeWaypoint,
+    canMoveLayout: args.draftState.source === "current-factory",
+    canRedo: args.layoutDraftState.canRedoLayout,
+    canUndo: args.layoutDraftState.canUndoLayout,
+    currentLayout: args.graphState.renderedLayout,
+    moveEdgeWaypoint: args.moveEdgeWaypoint,
+    moveNode: args.moveLayoutNode,
+    moveNodesByDelta: args.moveLayoutNodesByDelta,
+    redo: args.redoLayout,
+    removeEdgeWaypoint: args.removeEdgeWaypoint,
+    reset: args.resetLayout,
+    undo: args.undoLayout,
+    updateViewport: args.updateLayoutViewport,
+  };
+}
+
+function buildCurrentActivityGraphSaveControls(
+  args: BuildCurrentActivityGraphEditorValueArgs,
+) {
+  return {
+    canSave: args.canSaveDraft,
+    cancelConfirmation: args.cancelSaveConfirmation,
+    confirmSave: args.handleSaveDraft,
+    feedback: args.documentSave,
+    isConfirming: args.isConfirmingSave,
+    requestConfirmation: () => {
+      args.setIsConfirmingSave(true);
+    },
+    saveBeforeLeaving: args.handleSaveBeforeLeavingEditor,
+    summary: args.saveSummary,
+  };
+}
+
+function buildCurrentActivityGraphValidationControls(
+  args: BuildCurrentActivityGraphEditorValueArgs,
+) {
+  return {
+    factoryDefinition:
+      args.viewState.pendingFactoryDefinition ??
+      args.currentFactoryDefinition ??
+      args.graphState.displayFactoryDefinition ??
+      null,
+    projection: args.structuralValidation.projection,
+    targets: args.structuralValidation.targets,
+  };
+}
+
+function buildCurrentActivityGraphAddControls(
+  args: BuildCurrentActivityGraphEditorValueArgs,
+) {
+  return {
+    actions: args.addMenuActions,
+    currentFactoryDefinition: args.currentFactoryDefinition,
+    draft: args.addEntityController.addEntityDraft,
+    errors: args.addEntityController.addEntityErrors,
+    isDialogOpen: args.addEntityController.addEntityDraft !== null,
+    isMenuOpen: args.addEntityController.addMenuOpen,
+    closeDialog: () => {
+      args.addEntityController.setAddEntityDraft(null);
+      args.addEntityController.setAddEntityErrors({});
+    },
+    setMenuOpen: args.addEntityController.setAddMenuOpen,
+    startAction: args.addEntityController.handleAddEntityAction,
+    submit: args.addEntityController.handleAddEntitySubmit,
+    updateDraft: (draft: typeof args.addEntityController.addEntityDraft) => {
+      args.addEntityController.setAddEntityDraft(draft);
+      args.addEntityController.setAddEntityErrors({});
+    },
+  };
+}
+
+function buildCurrentActivityGraphRemovalControls(
+  args: BuildCurrentActivityGraphEditorValueArgs,
+) {
+  return {
+    blockedReason: args.blockedRemovalReason,
+    pendingIntent: args.pendingRemovalIntent,
+    cancel: args.handleCancelRemoval,
+    confirm: args.handleConfirmRemoval,
+    deleteEdge: args.handleEditorEdgeDelete,
+    deleteNode: args.handleEditorNodeDelete,
+    requestSelectionNodeRemoval: args.handleSelectionNodeDelete,
+  };
+}
+
+export function buildCurrentActivityGraphEditorValue(
+  args: BuildCurrentActivityGraphEditorValueArgs,
+) {
+  const addControls = buildCurrentActivityGraphAddControls(args);
+  const status = buildCurrentActivityGraphEditorStatus(args);
+  const layoutControls = buildCurrentActivityGraphLayoutControls(args);
+  const removalControls = buildCurrentActivityGraphRemovalControls(args);
+  const saveControls = buildCurrentActivityGraphSaveControls(args);
+  const validationControls = buildCurrentActivityGraphValidationControls(args);
+
   return {
     activeTool: args.activeTool,
+    addControls,
     addEntityDraft: args.addEntityController.addEntityDraft,
     addEntityErrors: args.addEntityController.addEntityErrors,
     addMenuActions: args.addMenuActions,
@@ -124,20 +255,19 @@ export function buildCurrentActivityGraphEditorValue(args: {
     documentSave: args.documentSave,
     connectionNotice: args.connectionNotice,
     currentFactoryDefinition: args.currentFactoryDefinition,
-    dirtyStateSummary: args.dirtyStateSummary,
-    draftState: args.draftState,
-    layoutDraftState: args.layoutDraftState,
+    graphState: args.graphState,
+    layoutControls,
     addEdgeWaypoint: args.addEdgeWaypoint,
     moveEdgeWaypoint: args.moveEdgeWaypoint,
     removeEdgeWaypoint: args.removeEdgeWaypoint,
     moveLayoutNode: args.moveLayoutNode,
     moveLayoutNodesByDelta: args.moveLayoutNodesByDelta,
     redoLayout: args.redoLayout,
+    requestSaveConfirmation: saveControls.requestConfirmation,
     resetLayout: args.resetLayout,
     resetPreferences: args.resetPreferences,
     undoLayout: args.undoLayout,
     updateLayoutViewport: args.updateLayoutViewport,
-    editableDefinitionQuery: args.editableDefinitionQuery,
     editorUnavailableClassifierWorkstationName:
       args.editorUnavailableClassifierWorkstationName,
     editorMode: args.editorMode,
@@ -162,8 +292,10 @@ export function buildCurrentActivityGraphEditorValue(args: {
     leaveDialogOpen: args.isConfirmingLeaveEditor,
     pendingConnectionSource: args.pendingConnectionSource,
     pendingRemovalIntent: args.pendingRemovalIntent,
+    removalControls,
     saveAttemptRevision: args.saveAttemptRevision,
     saveBlockedReason: args.saveBlockedReason,
+    saveControls,
     saveEditableDefinition: args.saveEditableDefinition,
     saveSummary: args.saveSummary,
     setActiveTool: args.setActiveTool,
@@ -172,17 +304,20 @@ export function buildCurrentActivityGraphEditorValue(args: {
     setAddMenuOpen: args.addEntityController.setAddMenuOpen,
     setBlockedRemovalReason: args.setBlockedRemovalReason,
     setConnectionNotice: args.setConnectionNotice,
-    setIsConfirmingSave: args.setIsConfirmingSave,
     setIsConfirmingLeaveEditor: args.setIsConfirmingLeaveEditor,
     setPendingRemovalEdgeId: args.setPendingRemovalEdgeId,
     setPendingRemovalNodeId: args.setPendingRemovalNodeId,
     structuralValidation: args.structuralValidation,
+    status,
+    validationControls,
+    validationFactoryDefinition: validationControls.factoryDefinition,
+    validationProjection: validationControls.projection,
+    validationTargets: validationControls.targets,
     hiddenNodeClasses: args.hiddenNodeClasses,
     hideShowMenuOpen: args.hideShowMenuOpen,
     setHideShowMenuOpen: args.setHideShowMenuOpen,
     setVisibilityPreset: args.setVisibilityPreset,
     toggleHiddenNodeClass: args.toggleHiddenNodeClass,
     visibilityPreset: args.visibilityPreset,
-    viewState: args.viewState,
   };
 }

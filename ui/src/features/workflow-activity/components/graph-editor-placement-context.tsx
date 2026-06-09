@@ -6,7 +6,6 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -18,8 +17,6 @@ import {
   resolveInitialPlacementTopLeft,
   viewportCenterInFlowCoordinates,
 } from "../lib/graph-editor-add-node-placement";
-import { graphKeyAfterAddingNode } from "../lib/react-flow-current-activity-card-keys";
-import type { GraphNodePositions } from "../state/currentActivityGraphStore";
 
 export interface GraphEditorPlacementApi {
   placeAddedNode: (draft: FactoryGraphAddEntityDraft) => void;
@@ -59,39 +56,18 @@ export function GraphEditorPlacementProvider({
 export function GraphEditorPlacementRegistrar({
   flowContainerRef,
   flowInstanceRef,
-  graphKey,
   moveLayoutNode,
   nodes,
-  setStoredNodePosition,
-  storedNodePositions,
 }: {
   flowContainerRef: MutableRefObject<HTMLElement | null>;
   flowInstanceRef: MutableRefObject<ReactFlowInstance | null>;
-  graphKey: string;
   moveLayoutNode?: (nodeId: string, position: { x: number; y: number }) => void;
   nodes: readonly CurrentActivityNode[];
-  setStoredNodePosition: (
-    graphKey: string,
-    nodeId: string,
-    position: { x: number; y: number },
-  ) => void;
-  storedNodePositions: GraphNodePositions;
 }) {
   const apiRef = useContext(GraphEditorPlacementContext);
   const [pendingPlacement, setPendingPlacement] = useState<{
     draft: FactoryGraphAddEntityDraft;
-    storageGraphKey: string;
   } | null>(null);
-  const placementInput = useMemo(
-    () => ({
-      graphKey,
-      nodes,
-      setStoredNodePosition,
-      storedNodePositions,
-    }),
-    [graphKey, nodes, setStoredNodePosition, storedNodePositions],
-  );
-
   useLayoutEffect(() => {
     if (!apiRef) {
       return;
@@ -99,17 +75,15 @@ export function GraphEditorPlacementRegistrar({
 
     apiRef.current = {
       placeAddedNode: (draft) => {
-        const nodeId = factoryGraphNodeIdForAddEntityDraft(draft);
         setPendingPlacement({
           draft,
-          storageGraphKey: graphKeyAfterAddingNode(graphKey, nodeId),
         });
       },
     };
-  }, [apiRef, graphKey]);
+  }, [apiRef]);
 
   useEffect(() => {
-    if (!pendingPlacement || !placementInput.graphKey) {
+    if (!pendingPlacement) {
       return;
     }
 
@@ -121,8 +95,7 @@ export function GraphEditorPlacementRegistrar({
 
     const topLeft = resolveInitialPlacementTopLeft({
       draft: pendingPlacement.draft,
-      nodes: placementInput.nodes,
-      storedPositions: placementInput.storedNodePositions,
+      nodes,
       viewportCenter: viewportCenterInFlowCoordinates(
         flowInstance,
         flowContainer,
@@ -136,20 +109,14 @@ export function GraphEditorPlacementRegistrar({
     const nodeId = factoryGraphNodeIdForAddEntityDraft(pendingPlacement.draft);
     if (moveLayoutNode) {
       moveLayoutNode(nodeId, topLeft);
-    } else {
-      placementInput.setStoredNodePosition(
-        pendingPlacement.storageGraphKey,
-        nodeId,
-        topLeft,
-      );
     }
     setPendingPlacement(null);
   }, [
     flowContainerRef,
     flowInstanceRef,
     moveLayoutNode,
+    nodes,
     pendingPlacement,
-    placementInput,
   ]);
 
   return null;

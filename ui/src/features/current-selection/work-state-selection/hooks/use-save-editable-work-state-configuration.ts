@@ -1,7 +1,6 @@
 import { useCallback, useMemo } from "react";
 
 import type { CurrentFactoryDefinitionError } from "../../../../api/current-factory-definition";
-import { useCurrentActivityGraphStore } from "../../../workflow-activity/state/currentActivityGraphStore";
 import { useScopedFactoryDocumentSave } from "../../base/hooks/useScopedFactoryDocumentSave";
 import type {
   EditableWorkStateConfigurationState,
@@ -77,13 +76,6 @@ export function useSaveEditableWorkStateConfiguration({
         editableConfigurationState.markChangesSaved();
         const savedStateName = editableConfigurationState.draft.name.trim();
         if (savedStateName.length > 0 && savedStateName !== originalStateName) {
-          useCurrentActivityGraphStore
-            .getState()
-            .migrateWorkStateNodePositions({
-              nextStateName: savedStateName,
-              previousStateName: originalStateName,
-              workTypeName,
-            });
           onWorkStateRenamed?.(`${workTypeName}:${savedStateName}`);
         }
       },

@@ -6,13 +6,14 @@ import type { DashboardSelection } from "../../current-selection/public";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
+import { useCurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { useFactoryGraphTopologyEditorBridge } from "../state/factory-graph-topology-editor-bridge";
-import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 import {
   type CurrentActivitySelection,
   ReactFlowCurrentActivityCardView,
 } from "./react-flow-current-activity-card";
+import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
 
 interface WorkflowActivityBentoCardProps {
   headerAction?: ReactNode;
@@ -66,28 +67,43 @@ export function WorkflowActivityBentoCard({
     onDocAdded,
     onNodeRemovedFromDraft,
   );
+  const currentActivitySelection = toCurrentActivitySelection(selection);
+  const viewModel = useCurrentActivityGraphCardViewModel({
+    editor,
+    locale,
+    now,
+    onSelectDoc,
+    onSelectResource,
+    onSelectStateNode,
+    onSelectWorkID,
+    onSelectWorker,
+    onSelectWorkType,
+    onSelectWorkstation,
+    selection: currentActivitySelection,
+    snapshot,
+  });
 
   useEffect(() => {
-    if (!editor.editorMode) {
+    if (!viewModel.editorMode) {
       setTopologyEditorBridgeHandlers(null);
       return;
     }
 
     setTopologyEditorBridgeHandlers({
-      blockedRemovalReason: editor.blockedRemovalReason,
-      canInteractWithEditor: editor.canInteractWithEditor,
-      editorMode: editor.editorMode,
-      requestNodeRemoval: editor.handleSelectionNodeDelete,
+      blockedRemovalReason: viewModel.removalControls.blockedReason,
+      canInteractWithEditor: viewModel.canInteractWithEditor,
+      editorMode: viewModel.editorMode,
+      requestNodeRemoval: viewModel.removalControls.requestSelectionNodeRemoval,
     });
 
     return () => {
       setTopologyEditorBridgeHandlers(null);
     };
   }, [
-    editor.blockedRemovalReason,
-    editor.canInteractWithEditor,
-    editor.editorMode,
-    editor.handleSelectionNodeDelete,
+    viewModel.removalControls.blockedReason,
+    viewModel.removalControls.requestSelectionNodeRemoval,
+    viewModel.canInteractWithEditor,
+    viewModel.editorMode,
     setTopologyEditorBridgeHandlers,
   ]);
 
@@ -105,21 +121,19 @@ export function WorkflowActivityBentoCard({
       className="h-full max-h-full min-h-0 overflow-hidden"
       headerAction={
         <CurrentActivityGraphHeaderActions
-          key={`graph-editor-header-${editor.editorMode}-${editor.draftState.hasChanges}-${editor.layoutDraftState.layoutDirty}-${editor.dirtyStateSummary.preferencesDirty}`}
+          key={`graph-editor-header-${viewModel.editorMode}-${viewModel.status.hasTopologyChanges}-${viewModel.status.hasLayoutChanges}-${viewModel.status.preferencesDirty}`}
           compact
-          dirtyState={editor.dirtyStateSummary}
-          editorMode={editor.editorMode}
+          dirtySummary={viewModel.status.dirtySummary}
+          editorMode={viewModel.editorMode}
           editorUnavailableClassifierWorkstationName={
-            editor.editorUnavailableClassifierWorkstationName
+            viewModel.editorUnavailableClassifierWorkstationName
           }
-          hasChanges={editor.draftState.hasChanges}
+          hasChanges={viewModel.status.hasSharedGraphChanges}
           headerActions={headerAction}
-          isDefinitionLoading={
-            editor.viewState.editableDefinitionQuery?.status === "pending"
-          }
-          loadErrorMessage={editor.editableDefinitionQuery.error?.message}
+          isDefinitionLoading={viewModel.status.isDefinitionLoading}
+          loadErrorMessage={viewModel.status.loadErrorMessage}
           locale={locale}
-          onToggle={editor.handleEditorModeToggle}
+          onToggle={viewModel.handleEditorModeToggle}
           showModeToggle={false}
         />
       }
@@ -131,13 +145,13 @@ export function WorkflowActivityBentoCard({
         style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
       >
         <ReactFlowCurrentActivityCardView
-          editor={editor}
           importController={importController}
           locale={locale}
           now={now}
-          selection={toCurrentActivitySelection(selection)}
+          selection={currentActivitySelection}
           showHeaderActions={false}
           snapshot={snapshot}
+          viewModel={viewModel}
           widgetInstanceID={widgetInstanceID}
           onSelectWorkID={onSelectWorkID}
           onSelectDoc={onSelectDoc}

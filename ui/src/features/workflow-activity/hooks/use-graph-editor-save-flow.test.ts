@@ -84,12 +84,15 @@ function buildEditableGraph(): EditableFactoryGraphViewModel {
     actions: {
       discard: fixtureState.draftState.resetDraft,
       save: async () => {
-        if (!fixtureState.draftState.pendingFactoryDefinition) {
+        const factory =
+          fixtureState.draftState.pendingFactoryDefinition ??
+          fixtureState.draftState.latestDocument;
+        if (!factory) {
           return false;
         }
         await fixtureState.saveEditableDefinition.saveAsync({
           baseVersion: fixtureState.draftState.latestDocument?.version,
-          factory: fixtureState.draftState.pendingFactoryDefinition,
+          factory,
         });
         fixtureState.draftState.replaceDraft(createEmptyFactoryGraphDraft());
         return true;
@@ -103,15 +106,15 @@ function buildEditableGraph(): EditableFactoryGraphViewModel {
         preferencesDirty: fixtureState.preferencesDirty,
         topologyDirty: fixtureState.topologyDirty,
       },
-      hasChanges:
-        fixtureState.layoutDirty || fixtureState.topologyDirty,
+      hasChanges: fixtureState.layoutDirty || fixtureState.topologyDirty,
       hasLayoutChanges: fixtureState.layoutDirty,
       hasPortableDocumentChanges:
         fixtureState.layoutDirty || fixtureState.topologyDirty,
       hasPreferenceChanges: fixtureState.preferencesDirty,
       hasTopologyChanges: fixtureState.topologyDirty,
       layoutDirty: fixtureState.layoutDirty,
-      pendingFactoryDefinition: fixtureState.draftState.pendingFactoryDefinition,
+      pendingFactoryDefinition:
+        fixtureState.draftState.pendingFactoryDefinition,
       preferencesDirty: fixtureState.preferencesDirty,
       topologyDirty: fixtureState.topologyDirty,
     },
@@ -119,7 +122,6 @@ function buildEditableGraph(): EditableFactoryGraphViewModel {
     saveState: {
       canSave:
         (fixtureState.layoutDirty || fixtureState.topologyDirty) &&
-        fixtureState.draftState.pendingFactoryDefinition !== null &&
         fixtureState.draftState.latestDocument !== null &&
         !fixtureState.saveStateIsStale,
       documentSave: fixtureState.documentSave,
@@ -191,6 +193,7 @@ describe("useGraphEditorSaveFlow", () => {
 
   it("describes layout-only saves in the confirmation summary", () => {
     fixtureState.layoutDirty = true;
+    fixtureState.draftState.pendingFactoryDefinition = null;
 
     const { result } = renderSaveFlow(0);
 

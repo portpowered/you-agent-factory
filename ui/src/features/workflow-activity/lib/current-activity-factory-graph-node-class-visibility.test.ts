@@ -5,7 +5,6 @@ import { buildGraphEdges } from "./react-flow-current-activity-card-edges";
 import {
   buildCurrentActivityNodes,
   buildHandleAssignments,
-  EMPTY_NODE_POSITIONS,
 } from "./react-flow-current-activity-card-graph";
 
 const workstationChainFactory = {
@@ -89,7 +88,6 @@ async function expectBypassEdgesRenderWithHandles(
     onSelectWorkstation: () => undefined,
     selection: null,
     snapshot: workstationChainSnapshot(workstationChainFactory),
-    storedNodePositions: EMPTY_NODE_POSITIONS,
   });
   const handleAssignments = buildHandleAssignments(
     hiddenStateLayout.edges,

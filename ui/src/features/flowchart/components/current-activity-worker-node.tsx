@@ -43,7 +43,7 @@ export function WorkerNodeView({ data }: NodeProps<CurrentActivityWorkerNode>) {
   return (
     <ActivityGraphNodeShell
       className={cn(
-        "af-current-activity-node-surface-worker justify-center text-left text-on-surface",
+        "justify-center border-af-worker-border bg-tertiary-container text-left text-on-surface",
         currentActivityGraphNodeHoverClassName({
           activeFlow: data.activeFlow,
           muted: data.muted,

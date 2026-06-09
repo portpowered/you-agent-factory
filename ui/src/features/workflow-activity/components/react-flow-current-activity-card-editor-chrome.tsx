@@ -2,17 +2,13 @@ import { type ReactNode, useCallback, useState } from "react";
 
 import { DashboardActionRow } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
+import { buildDocTargetPathFromFileName } from "../../current-factory-definition/lib/doc-editable-values";
 import {
   FactoryGraphEditorModeToggle,
   FactoryGraphEditorStatus,
   type FactoryGraphEditorTool,
 } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
-import {
-  type FactoryGraphEditorDirtyState,
-  hasAnyFactoryGraphEditorChanges,
-} from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state";
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import { buildDocTargetPathFromFileName } from "../../current-factory-definition/lib/doc-editable-values";
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
   createFactoryGraphAddEntityDraft,
@@ -21,6 +17,10 @@ import {
   type FactoryGraphAddEntityKind,
   validateFactoryGraphAddEntityDraft,
 } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
+import {
+  type FactoryGraphEditorDirtyState,
+  hasAnyFactoryGraphEditorChanges,
+} from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { useGraphEditorPlaceAddedNode } from "./graph-editor-placement-context";
 
@@ -125,18 +125,20 @@ const MODE_TOGGLE_COMPACT_DIRTY_CLASS = "size-8 rounded-md";
 function CurrentActivityGraphHeaderDirtySummary({
   className,
   dirtyState,
+  dirtySummary,
   hasChanges,
   locale,
 }: {
   className?: string;
   dirtyState?: FactoryGraphEditorDirtyState;
+  dirtySummary?: string | null;
   hasChanges: boolean;
   locale?: string;
 }) {
   const messages = getFactoryGraphEditorMessages(locale);
   const hasDirtyIndicator = dirtyState
     ? hasAnyFactoryGraphEditorChanges(dirtyState)
-    : hasChanges;
+    : Boolean(dirtySummary) || hasChanges;
 
   if (!hasDirtyIndicator) {
     return null;
@@ -144,9 +146,10 @@ function CurrentActivityGraphHeaderDirtySummary({
 
   return (
     <span className={cn("text-on-surface-variant", className)}>
-      {dirtyState
-        ? messages.dirtyStateSummary(dirtyState)
-        : messages.modeUnsavedChanges}
+      {dirtySummary ??
+        (dirtyState
+          ? messages.dirtyStateSummary(dirtyState)
+          : messages.modeUnsavedChanges)}
     </span>
   );
 }
@@ -154,6 +157,7 @@ function CurrentActivityGraphHeaderDirtySummary({
 export function CurrentActivityGraphHeaderActions({
   compact = false,
   dirtyState,
+  dirtySummary,
   editorMode,
   editorUnavailableClassifierWorkstationName,
   headerActions,
@@ -166,6 +170,7 @@ export function CurrentActivityGraphHeaderActions({
 }: {
   compact?: boolean;
   dirtyState?: FactoryGraphEditorDirtyState;
+  dirtySummary?: string | null;
   editorMode: boolean;
   editorUnavailableClassifierWorkstationName?: string;
   headerActions?: ReactNode;
@@ -185,7 +190,7 @@ export function CurrentActivityGraphHeaderActions({
         );
   const hasDirtyIndicator = dirtyState
     ? hasAnyFactoryGraphEditorChanges(dirtyState)
-    : hasChanges;
+    : Boolean(dirtySummary) || hasChanges;
 
   return (
     <DashboardActionRow
@@ -236,6 +241,7 @@ export function CurrentActivityGraphHeaderActions({
           <CurrentActivityGraphHeaderDirtySummary
             className={compact ? STATUS_PILL_COMPACT_CLASS : undefined}
             dirtyState={dirtyState}
+            dirtySummary={dirtySummary}
             hasChanges={hasDirtyIndicator}
             locale={locale}
           />

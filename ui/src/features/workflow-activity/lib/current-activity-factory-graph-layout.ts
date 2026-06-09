@@ -7,6 +7,7 @@ import type {
   StateCategory,
 } from "../../../api/dashboard/types";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
+import type { FactoryGraphEditorVisibilityPreset } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-graph";
 import {
   type FactoryGraphEdge,
@@ -15,11 +16,10 @@ import {
   type FactoryGraphTopology,
   parseFactoryGraphWorkstationNodeId,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
-import type { FactoryGraphEditorVisibilityPreset } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import { FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND } from "../../factory-graph-editor/lib/editor/factory-graph-editor-layout";
 import { filterFactoryGraphTopologyForCustomerDisplay } from "../../factory-graph-editor/lib/operations/factory-graph-customer-display";
-import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/work-state/factory-graph-node-class-visibility";
 import { projectFactoryGraphByVisibilityPreset } from "../../factory-graph-editor/lib/preferences/factory-graph-visibility-preset-projection";
+import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/work-state/factory-graph-node-class-visibility";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { buildLayeredGraphLayout } from "../../flowchart/lib/layered-layout";
 import type { GraphLayout, PositionedNode } from "../../flowchart/lib/layout";
@@ -41,6 +41,7 @@ interface FactoryGraphSeedNode {
 }
 
 interface FactoryGraphSeedEdge {
+  canonicalEdgeId?: string;
   edgeId: string;
   fromNodeId: string;
   id: string;
@@ -440,6 +441,7 @@ function seedEdgeFromFactoryGraphEdge(
     : placeKindForFactoryGraphNodeKind(targetNode.kind);
 
   return {
+    canonicalEdgeId: edge.id,
     edgeId,
     fromNodeId,
     id: edgeId,
@@ -505,6 +507,7 @@ function toPositionedEdges(
       (edge) => nodesById.has(edge.fromNodeId) && nodesById.has(edge.toNodeId),
     )
     .map((edge) => ({
+      canonicalEdgeId: edge.canonicalEdgeId,
       edgeId: edge.edgeId,
       fromNodeId: edge.fromNodeId,
       label: edge.label,

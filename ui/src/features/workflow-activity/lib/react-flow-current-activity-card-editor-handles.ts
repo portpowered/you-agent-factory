@@ -163,7 +163,7 @@ export function resolveZAxisIncompleteHints(args: {
     args.nodeKind !== "workstation" ||
     !args.connectionAnchorContext ||
     args.editor?.editorMode !== true ||
-    args.editor.activeTool !== "connect" ||
+    args.editor.activeTool === "delete" ||
     !args.editor.canInteractWithEditor
   ) {
     return null;
@@ -205,7 +205,7 @@ export function buildSemanticGraphHandles(args: {
   const connectable =
     args.editor?.editorMode === true &&
     args.editor.canInteractWithEditor &&
-    args.editor.activeTool === "connect";
+    args.editor.activeTool !== "delete";
 
   const workstation = args.connectionAnchorContext?.workstation;
   const supportsProgressOutcomeRoutes =

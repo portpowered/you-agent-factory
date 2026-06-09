@@ -3,12 +3,12 @@ import { isFactoryDocumentSaveSubmitting } from "../../current-selection/base/ho
 import { useScopedFactoryDocumentSave } from "../../current-selection/base/public";
 import { mapGraphSaveOutcomeToDocumentSaveState } from "../lib/document-save/graph-document-save-state";
 import { createEmptyFactoryGraphDraft } from "../lib/draft/factory-graph-draft-types";
+import { factoryLayoutFromDefinition } from "../lib/layout/factory-graph-layout-operations";
 import {
   applyFactoryGraphPendingEdits,
   type FactoryGraphOperationResult,
 } from "../lib/operations/factory-graph-operations";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
-import { factoryLayoutFromDefinition } from "../lib/layout/factory-graph-layout-operations";
 import type { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
 import type { useFactoryGraphLayoutDraftState } from "./layout/factory-graph-layout-draft-hook";
 
@@ -31,8 +31,7 @@ export function useEditableFactoryGraphSaveController({
     result: FactoryGraphOperationResult<never> | null,
   ) => void;
 }) {
-  const hasPendingEdits =
-    draftState.hasChanges || layoutDraftState.hasChanges;
+  const hasPendingEdits = draftState.hasChanges || layoutDraftState.hasChanges;
   const messages = getFactoryGraphEditorMessages(locale);
   const scopedDocumentSave = useScopedFactoryDocumentSave({
     fallbackErrorMessage:
@@ -56,7 +55,6 @@ export function useEditableFactoryGraphSaveController({
   const canSave =
     factoryDocumentScopeKey !== null &&
     hasPendingEdits &&
-    draftState.pendingFactoryDefinition !== null &&
     draftState.validationErrors.length === 0 &&
     draftState.latestDocument !== null &&
     activeWorkCount === 0 &&

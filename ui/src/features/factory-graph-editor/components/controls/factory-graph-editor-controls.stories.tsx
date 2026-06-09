@@ -109,7 +109,6 @@ function ToolbarModeTransitionStory() {
     <div className="grid gap-4 p-6">
       <div className="relative min-h-56 overflow-hidden rounded-[1.5rem] border border-outline bg-surface-container-low">
         <div
-          aria-label="Graph jitter probe surface"
           className="absolute inset-0 rounded-[1.5rem] bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.14),_transparent_52%),linear-gradient(180deg,_rgba(255,255,255,0.04),_transparent)]"
         />
         <FactoryGraphEditorToolbar

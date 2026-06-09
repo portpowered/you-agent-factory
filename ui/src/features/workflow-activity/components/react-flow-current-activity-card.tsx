@@ -15,18 +15,17 @@ import {
   useCurrentActivityImportController,
 } from "../hooks/current-activity-import-controller";
 import { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
-import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
-import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
-import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import {
+  type CurrentActivityGraphCardViewModel,
   useCurrentActivityGraphCardViewModel,
 } from "../hooks/use-current-activity-graph-card-view-model";
+import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
+import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { GraphEditorPlacementProvider } from "./graph-editor-placement-context";
 import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
 import { CurrentActivityGraphSaveNotifications } from "./react-flow-current-activity-card-save-notifications";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
-export { useCurrentActivityGraphViewModel } from "../hooks/react-flow-current-activity-card-graph-view-model";
 export {
   currentActivityGraphKey,
   currentActivityTopologyKey,
@@ -104,10 +103,15 @@ export function ReactFlowCurrentActivityCard(
     props.locale,
     sessionID,
   );
+  const viewModel = useCurrentActivityGraphCardViewModel({
+    ...props,
+    editor,
+  });
+
   return (
     <ReactFlowCurrentActivityCardView
       {...props}
-      editor={editor}
+      viewModel={viewModel}
       showHeaderActions
     />
   );
@@ -115,15 +119,14 @@ export function ReactFlowCurrentActivityCard(
 
 export function ReactFlowCurrentActivityCardView(
   props: ReactFlowCurrentActivityCardProps & {
-    editor: ReturnType<typeof useCurrentActivityGraphEditor>;
+    viewModel: CurrentActivityGraphCardViewModel;
     showHeaderActions?: boolean;
   },
 ) {
-  const { editor, showHeaderActions = false } = props;
+  const { viewModel, showHeaderActions = false } = props;
   const { headingID } = useCurrentActivityAccessibilityIDs(
     props.widgetInstanceID,
   );
-  const viewModel = useCurrentActivityGraphCardViewModel({ ...props, editor });
   const fallbackImportController = useCurrentActivityImportController({
     activateFactory: props.activateFactory,
     locale: props.locale,
@@ -137,22 +140,10 @@ export function ReactFlowCurrentActivityCardView(
     imports.importPreviewState.status === "ready"
       ? imports.importPreviewState
       : null;
-  const clearStoredNodePositions = useCurrentActivityGraphStore(
-    (state) => state.clearNodePositions,
-  );
-  const clearStoredViewport = useCurrentActivityGraphStore(
-    (state) => state.clearViewport,
-  );
-  const discardGraphPresentationState = () => {
-    clearStoredNodePositions(viewModel.nodes.map((node) => node.id));
-    clearStoredViewport(viewModel.graphKey);
-  };
   const handleDiscardPendingChanges = () => {
-    discardGraphPresentationState();
     viewModel.handleDiscardPendingChanges();
   };
   const handleDiscardEditorChanges = () => {
-    discardGraphPresentationState();
     viewModel.handleDiscardEditorChanges();
   };
 

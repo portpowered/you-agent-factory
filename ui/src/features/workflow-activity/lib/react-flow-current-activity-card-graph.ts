@@ -22,13 +22,9 @@ import type {
   PositionedWorkstationNode,
 } from "../../flowchart/lib/layout";
 import type { CurrentActivityNode } from "../../flowchart/public";
-import type { CurrentActivitySelection } from "../components/react-flow-current-activity-card";
-import type {
-  GraphNodePosition,
-  GraphNodePositions,
-} from "../state/currentActivityGraphStore";
 import { findFactoryWorkstationByNodeId } from "./current-activity-factory-graph-layout";
 import { resolveFactoryGraphPlaceNode } from "./current-activity-factory-graph-node-ids";
+import type { GraphNodePosition } from "./layout/graph-node-positions";
 import {
   authoredProgressOutcomeSourceHandlesByWorkstationNodeId,
   buildSemanticGraphHandles,
@@ -38,6 +34,7 @@ import {
   shouldWireGraphNodeSelectionHandlers,
   supportedSemanticHandleIdsForEdge,
 } from "./react-flow-current-activity-card-editor-handles";
+import type { CurrentActivitySelection } from "./react-flow-current-activity-card-types";
 
 export function projectCurrentActivityGraphValidation(
   validationTargets: readonly FactoryValidationTarget[] = [],
@@ -64,7 +61,6 @@ export const EMPTY_GRAPH_LAYOUT: GraphLayout = {
   nodes: [],
   width: 0,
 };
-export const EMPTY_NODE_POSITIONS: GraphNodePositions = {};
 
 export interface HandleAssignments {
   sourceHandlesByEdgeId: Map<string, string>;
@@ -419,25 +415,6 @@ export function buildActiveItemLabelsByPlaceId(
   return labelsByPlaceId;
 }
 
-function finitePosition(
-  position: GraphNodePosition | undefined,
-): position is GraphNodePosition {
-  return (
-    position !== undefined &&
-    Number.isFinite(position.x) &&
-    Number.isFinite(position.y)
-  );
-}
-
-function nodePosition(
-  nodeId: string,
-  fallback: GraphNodePosition,
-  storedPositions: GraphNodePositions,
-): GraphNodePosition {
-  const storedPosition = storedPositions[nodeId];
-  return finitePosition(storedPosition) ? storedPosition : fallback;
-}
-
 interface BuildCurrentActivityNodesInput {
   activeExecutionsByWorkstationNodeID: Record<
     string,
@@ -462,14 +439,10 @@ interface BuildCurrentActivityNodesInput {
   editor?: CurrentActivityEditorState;
   selection: CurrentActivitySelection | null;
   snapshot: DashboardSnapshot;
-  storedNodePositions: GraphNodePositions;
   validationTargets?: readonly FactoryValidationTarget[];
 }
 
-function buildPlaceNodeShell(
-  positionedNode: PositionedPlaceNode,
-  input: BuildCurrentActivityNodesInput,
-) {
+function buildPlaceNodeShell(positionedNode: PositionedPlaceNode) {
   return {
     className: "border-0 bg-transparent p-0 text-on-surface",
     draggable: true,
@@ -478,11 +451,7 @@ function buildPlaceNodeShell(
     initialHeight: positionedNode.height,
     initialWidth: positionedNode.width,
     measured: { height: positionedNode.height, width: positionedNode.width },
-    position: nodePosition(
-      positionedNode.nodeId,
-      { x: positionedNode.x, y: positionedNode.y },
-      input.storedNodePositions,
-    ),
+    position: { x: positionedNode.x, y: positionedNode.y },
     width: positionedNode.width,
   };
 }
@@ -542,7 +511,7 @@ function buildPlaceNode(
   validationProjection: FactoryValidationGraphProjection | undefined,
 ): CurrentActivityNode {
   const factoryGraphNode = resolveFactoryGraphPlaceNode(positionedNode.place);
-  const basePlaceNode = buildPlaceNodeShell(positionedNode, input);
+  const basePlaceNode = buildPlaceNodeShell(positionedNode);
   const { basePlaceData, factoryGraphNodeId, place } = buildPlaceNodeData(
     positionedNode,
     input,
@@ -670,9 +639,7 @@ function buildDocNode(
       handles: [],
       kind: "doc",
       locale: input.locale,
-      ...(wireSelectionHandlers
-        ? { onSelectDoc: input.onSelectDoc }
-        : {}),
+      ...(wireSelectionHandlers ? { onSelectDoc: input.onSelectDoc } : {}),
       selectedDoc:
         input.selection?.kind === "doc" &&
         input.selection.targetPath === positionedNode.targetPath,
@@ -687,11 +654,7 @@ function buildDocNode(
       height: positionedNode.height,
       width: positionedNode.width,
     },
-    position: nodePosition(
-      positionedNode.nodeId,
-      { x: positionedNode.x, y: positionedNode.y },
-      input.storedNodePositions,
-    ),
+    position: { x: positionedNode.x, y: positionedNode.y },
     selectable: true,
     type: "doc",
     width: positionedNode.width,
@@ -728,13 +691,20 @@ function buildWorkstationNode(
   const wireSelectionHandlers = shouldWireGraphNodeSelectionHandlers(
     input.editor,
   );
+  const runtimeWorkstationNodeId = positionedNode.workstationNodeId;
+  const normalizedWorkstation = {
+    ...workstation,
+    node_id: runtimeWorkstationNodeId,
+    transition_id: workstation.transition_id || runtimeWorkstationNodeId,
+  };
   const executions =
-    input.activeExecutionsByWorkstationNodeID[workstation.node_id] ?? [];
-  const position = nodePosition(
-    positionedNode.nodeId,
-    { x: positionedNode.x, y: positionedNode.y },
-    input.storedNodePositions,
-  );
+    input.activeExecutionsByWorkstationNodeID[runtimeWorkstationNodeId] ??
+    input.activeExecutionsByWorkstationNodeID[workstation.node_id] ??
+    [];
+  const position: GraphNodePosition = {
+    x: positionedNode.x,
+    y: positionedNode.y,
+  };
 
   return {
     className: "border-0 bg-transparent p-0 text-on-surface",
@@ -775,13 +745,13 @@ function buildWorkstationNode(
         : {}),
       selectedWorkID:
         input.selection?.kind === "work-item" &&
-        input.selection.nodeId === workstation.node_id
+        input.selection.nodeId === runtimeWorkstationNodeId
           ? input.selection.workID
           : null,
       selectedWorkstation:
         input.selection?.kind === "node" &&
-        input.selection.nodeId === workstation.node_id,
-      workstation,
+        input.selection.nodeId === runtimeWorkstationNodeId,
+      workstation: normalizedWorkstation,
     },
     draggable: true,
     height: positionedNode.height,
@@ -817,7 +787,6 @@ export function buildCurrentActivityNodes({
   onSelectWorkstation,
   selection,
   snapshot,
-  storedNodePositions,
   validationTargets,
 }: BuildCurrentActivityNodesInput): CurrentActivityNode[] {
   const validationProjection = resolveCurrentActivityValidationProjection({
@@ -850,7 +819,6 @@ export function buildCurrentActivityNodes({
     onSelectWorkstation,
     selection,
     snapshot,
-    storedNodePositions,
   } satisfies BuildCurrentActivityNodesInput;
 
   for (const positionedNode of graphLayout.nodes) {

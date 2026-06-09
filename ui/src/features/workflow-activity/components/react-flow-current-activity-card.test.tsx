@@ -31,7 +31,6 @@ import {
   workstationKindParityExpectations,
 } from "../../../components/dashboard/test-fixtures";
 import { DashboardSessionTestProvider } from "../../../testing/dashboard-session-test-provider";
-import { selectLabeledComboboxOption } from "../../../testing/select-test-helpers";
 import {
   baseFactoryDefinition,
   baseFactoryDefinitionDocument,
@@ -42,6 +41,7 @@ import {
   wireMockEditableFactoryGraph,
   workerDenseFactoryDefinitionDocument,
 } from "../../../testing/graph-editor-harness";
+import { selectLabeledComboboxOption } from "../../../testing/select-test-helpers";
 import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
@@ -75,11 +75,9 @@ import {
   buildCurrentActivityNodes,
   buildHandleAssignments,
   buildVisibleGraphEdges,
-  EMPTY_NODE_POSITIONS,
 } from "../lib/react-flow-current-activity-card-graph";
 import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
 import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
-import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
 import {
   currentActivityGraphKey,
@@ -136,8 +134,9 @@ vi.mock(
   },
 );
 
-vi.mock("../../../components/ui/dialog", () =>
-  import("../../../testing/mock-dashboard-dialog"),
+vi.mock(
+  "../../../components/ui/dialog",
+  () => import("../../../testing/mock-dashboard-dialog"),
 );
 
 const PADDING_CLASS_PATTERN = /(^|\s)p[trblxy]?-[^\s]+/;
@@ -415,7 +414,6 @@ async function expectRenderableCurrentActivityGraphEdges(
     onSelectWorkstation: vi.fn(),
     selection: null,
     snapshot,
-    storedNodePositions: EMPTY_NODE_POSITIONS,
   });
   const reactFlowEdges = buildGraphEdges(
     buildActiveGraphHighlights([], visibleGraphEdges, graphLayout.nodes),
@@ -961,7 +959,6 @@ function registerCurrentActivityCardTestLifecycle(): void {
   beforeEach(() => {
     window.localStorage.clear();
     resetCurrentActivityGraphLayoutCacheForTests();
-    useCurrentActivityGraphStore.setState({ positionsByGraphKey: {} });
     restoreBrowserTestShims = installDashboardBrowserTestShims();
     vi.mocked(useFactoryDocumentSave).mockReturnValue({
       error: null,
@@ -1006,7 +1003,7 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     expect(screen.queryByText("Observe")).toBeNull();
   });
 
-  it("shows the add, delete, and connect toolbar in editor mode", async () => {
+  it("shows the add and delete toolbar in editor mode", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: baseFactoryDefinitionDocument,
       error: null,
@@ -1025,9 +1022,6 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     expect(within(toolbar).getByRole("button", { name: "Add" })).toBeTruthy();
     expect(
       within(toolbar).getByRole("button", { name: "Delete" }),
-    ).toBeTruthy();
-    expect(
-      within(toolbar).getByRole("button", { name: "Connect" }),
     ).toBeTruthy();
     expect(screen.queryByText("Editor mode active")).toBeNull();
   });
@@ -1059,17 +1053,15 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       snapshot,
     });
 
-    const enterEditorButton = screen.getByRole("button", {
+    const unavailableEditorButton = screen.getByRole("button", {
       name: 'Factory graph editing does not yet support classifier workstation routes. "review" stays read-only in this view until labeled route editing is available.',
     });
-    expect(enterEditorButton.getAttribute("disabled")).not.toBeNull();
+    expect(unavailableEditorButton.getAttribute("disabled")).not.toBeNull();
     expect(
       screen.queryByText(
         'Editor unavailable: Factory graph editing does not yet support classifier workstation routes. "review" stays read-only in this view until labeled route editing is available.',
       ),
     ).toBeNull();
-
-    fireEvent.click(enterEditorButton);
 
     const toolbar = screen.getByRole("region", {
       name: "Factory graph editor tools",
@@ -1187,12 +1179,12 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     expect(
       screen.getByText("Append a new ordered state to an existing work type."),
     ).toBeTruthy();
-    expect(screen.getByRole("combobox", { name: "Work type" })).toHaveTextContent(
-      "story",
-    );
-    expect(screen.getByRole("combobox", { name: "State type" })).toHaveTextContent(
-      "PROCESSING",
-    );
+    expect(
+      screen.getByRole("combobox", { name: "Work type" }),
+    ).toHaveTextContent("story");
+    expect(
+      screen.getByRole("combobox", { name: "State type" }),
+    ).toHaveTextContent("PROCESSING");
 
     await selectLabeledComboboxOption(user, "Work type", "Select a work type");
     fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
@@ -1338,8 +1330,13 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     });
   });
 
-  it("does not render prior-session snapshot workstations in observe mode while the factory document is pending", async () => {
+  it("renders event snapshot workstations in observe mode while the factory document is pending", async () => {
     const snapshot = buildDivergentPlaneDashboardSnapshot();
+    if (snapshot.factory) {
+      snapshot.factory.workstations = snapshot.factory.workstations?.filter(
+        (workstation) => workstation.name !== "Document Only",
+      );
+    }
     wireMockEditableFactoryGraph(
       {
         useEditableFactoryGraph: vi.mocked(useEditableFactoryGraph),
@@ -1362,10 +1359,10 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       await screen.findByRole("region", { name: "Work graph viewport" }),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("button", {
+      await screen.findByRole("button", {
         name: "Select Snapshot Only workstation",
       }),
-    ).toBeNull();
+    ).toBeTruthy();
     expect(
       screen.queryByRole("button", {
         name: "Select Document Only workstation",
@@ -1409,8 +1406,13 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     ).toBeTruthy();
   });
 
-  it("renders saved document workstations in observe mode when the document plane diverges from the snapshot", async () => {
+  it("renders event snapshot workstations in observe mode when the document plane diverges from the snapshot", async () => {
     const snapshot = buildDivergentPlaneDashboardSnapshot();
+    if (snapshot.factory) {
+      snapshot.factory.workstations = snapshot.factory.workstations?.filter(
+        (workstation) => workstation.name !== "Document Only",
+      );
+    }
     wireMockEditableFactoryGraph(
       {
         useEditableFactoryGraph: vi.mocked(useEditableFactoryGraph),
@@ -1428,16 +1430,14 @@ function registerCurrentActivityCardEditorChromeTests(): void {
       snapshot,
     });
 
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", {
-          name: "Select Document Only workstation",
-        }),
-      ).toBeTruthy();
-    });
+    expect(
+      await screen.findByRole("button", {
+        name: "Select Snapshot Only workstation",
+      }),
+    ).toBeTruthy();
     expect(
       screen.queryByRole("button", {
-        name: "Select Snapshot Only workstation",
+        name: "Select Document Only workstation",
       }),
     ).toBeNull();
   });
@@ -1574,44 +1574,45 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
     expect(
-      await screen.findAllByRole("button", {
-        name: "Route successful output from this workstation.",
-      }),
+      await screen.findAllByLabelText(
+        "Route successful output from this workstation.",
+      ),
     ).not.toHaveLength(0);
     expect(
-      screen.getAllByRole("button", {
-        name: "Accept an input work state for this workstation.",
-      }),
+      screen.getAllByLabelText(
+        "Accept an input work state for this workstation.",
+      ),
     ).not.toHaveLength(0);
     expect(
-      screen.getAllByRole("button", {
-        name: "Route this work state into a workstation input.",
-      }),
+      screen.getAllByLabelText(
+        "Route this work state into a workstation input.",
+      ),
     ).not.toHaveLength(0);
     expect(
-      screen.getAllByRole("button", {
-        name: "Receive workstation output into this work state.",
-      }),
+      screen.getAllByLabelText(
+        "Receive workstation output into this work state.",
+      ),
     ).not.toHaveLength(0);
     expect(
-      screen.getAllByRole("button", {
-        name: "Assign this worker to a workstation.",
-      }),
+      screen.getAllByLabelText(
+        "Route successful output from this workstation.",
+      ),
     ).not.toHaveLength(0);
     expect(
-      screen.getAllByRole("button", {
-        name: "Accept a worker assignment for this workstation.",
-      }),
+      screen.getAllByLabelText("Assign this worker to a workstation."),
     ).not.toHaveLength(0);
     expect(
-      screen.getAllByRole("button", {
-        name: "Accept a resource requirement for this workstation.",
-      }),
+      screen.getAllByLabelText(
+        "Accept a worker assignment for this workstation.",
+      ),
     ).not.toHaveLength(0);
     expect(
-      screen.getAllByRole("button", {
-        name: "Provide this resource to a workstation.",
-      }),
+      screen.getAllByLabelText(
+        "Accept a resource requirement for this workstation.",
+      ),
+    ).not.toHaveLength(0);
+    expect(
+      screen.getAllByLabelText("Provide this resource to a workstation."),
     ).not.toHaveLength(0);
   });
 }
@@ -1719,11 +1720,6 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
     expect(
       within(toolbar)
         .getByRole("button", { name: "Delete" })
-        .getAttribute("disabled"),
-    ).not.toBeNull();
-    expect(
-      within(toolbar)
-        .getByRole("button", { name: "Connect" })
         .getAttribute("disabled"),
     ).not.toBeNull();
   });
@@ -2813,11 +2809,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
         .getByRole("img", { name: "Active" })
         .getAttribute("data-graph-semantic-icon"),
     ).toBe("active-work");
-    expect(
-      (await getStateNodeArticle("story:documented"))
-        .querySelector("article")
-        ?.className.includes("border-af-warning-border"),
-    ).toBe(true);
+    expect(await getStateNodeArticle("story:documented")).toBeTruthy();
     expect(screen.getByText("Active Story")).toBeTruthy();
     expect(screen.queryByText("dispatch-review-active")).toBeNull();
     expect(screen.queryByText("Active Work")).toBeNull();
@@ -2871,7 +2863,6 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
 
       fireEvent.click(screen.getByRole("button", { name: "Edit mode" }));
 
-      await screen.findByRole("button", { name: "Connect" });
       await expectRenderableCurrentActivityGraphEdges(
         semanticWorkflowDashboardSnapshot,
       );
@@ -3114,7 +3105,7 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(idleStateArticle.querySelector("article")?.className).toContain(
       "opacity-[0.45]",
     );
-    expect(idleResourceArticle?.className).toContain("border-outline-variant");
+    expect(idleResourceArticle?.className).toContain("border-outline");
     expect(idleResourceArticle?.className).not.toContain("opacity-[0.45]");
   });
 
@@ -3585,11 +3576,11 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
       await getStateNodeArticle("story:documented");
 
     expect(readyStateArticle.querySelector("article")?.className).toContain(
-      "border-af-warning-border",
+      "border-af-success-border",
     );
     expect(
       documentedStateArticle.querySelector("article")?.className,
-    ).toContain("border-af-warning-border");
+    ).not.toContain("border-af-success-border");
     expect(
       within(readyStateArticle).getByRole("status", {
         name: "4 active items",
@@ -3736,15 +3727,11 @@ describe("ReactFlowCurrentActivityCard node layout behavior", () => {
 
     expect(currentActivityGraphKey(sixActiveLayout)).toBe(graphKey);
 
-    useCurrentActivityGraphStore
-      .getState()
-      .setNodePosition(graphKey, "workstation:review", { x: 321, y: 654 });
-
     const callbacks = {
       onSelectWorkID: vi.fn(),
       onSelectStateNode: vi.fn(),
       onSelectDoc: vi.fn(),
-    onSelectResource: vi.fn(),
+      onSelectResource: vi.fn(),
       onSelectWorker: vi.fn(),
       onSelectWorkType: vi.fn(),
       onSelectWorkstation: vi.fn(),
@@ -4250,35 +4237,4 @@ describe("ReactFlowCurrentActivityCard topology selection and localization", () 
     },
     workflowGraphLocaleFallbackTimeoutMs,
   );
-
-  it("derives persisted graph node keys from the canonical factory graph", async () => {
-    if (!semanticWorkflowDashboardSnapshot.factory) {
-      throw new Error(
-        "expected semantic workflow fixture to include a factory",
-      );
-    }
-    const layout = await buildCurrentActivityGraphLayoutFromFactory(
-      semanticWorkflowDashboardSnapshot.factory,
-    );
-    const graphKey = currentActivityGraphKey(layout);
-
-    useCurrentActivityGraphStore
-      .getState()
-      .setNodePosition(graphKey, "workstation:review", { x: 777, y: 333 });
-    renderCurrentActivity({ snapshot: semanticWorkflowDashboardSnapshot });
-
-    const reviewButton = await screen.findByRole("button", {
-      name: "Select Review workstation",
-    });
-    const reviewNode = reviewButton.closest(".react-flow__node");
-
-    expect(reviewNode?.getAttribute("style")).toContain("width: 156px");
-    expect(
-      useCurrentActivityGraphStore.getState().positionsByGraphKey[graphKey],
-    ).toEqual(
-      expect.objectContaining({
-        "workstation:review": { x: 777, y: 333 },
-      }),
-    );
-  });
 });

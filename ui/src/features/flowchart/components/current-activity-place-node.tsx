@@ -17,7 +17,10 @@ import { GraphNodeButton } from "../../graphs/public";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
 import { currentActivityGraphNodeHoverClassName } from "../lib/current-activity-graph-hover";
 import { getActivityGraphMessages } from "../messages/activity-graph";
-import { ActivityGraphNodeBadge } from "./current-activity-node-chrome";
+import {
+  ActivityGraphNodeBadge,
+  activityGraphNodeSurfaceClassName,
+} from "./current-activity-node-chrome";
 import {
   type ActivityGraphNodeHandle,
   ActivityGraphNodeShell,
@@ -163,12 +166,13 @@ function placeNodeClassName(place: DashboardPlaceRef): string {
   }
 
   if (place.kind === "resource") {
-    // hardcoded-ui-copy-exception: non-product-diagnostic
-    return "af-current-activity-node-surface-resource text-on-surface";
+    return cn(activityGraphNodeSurfaceClassName("resource"), "text-on-surface");
   }
 
-  // hardcoded-ui-copy-exception: non-product-diagnostic
-  return "border-dashed af-current-activity-node-surface-info text-on-surface";
+  return cn(
+    activityGraphNodeSurfaceClassName("info"),
+    "border-dashed text-on-surface",
+  );
 }
 
 function placeSemanticIconKind(

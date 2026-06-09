@@ -37,11 +37,11 @@ import type { FactoryGraphWorkStateType } from "../../lib/work-state/factory-gra
 type FactoryGraphEditorNode = FactoryGraphReactFlowNode;
 
 const KIND_CLASS: Record<FactoryGraphNodeKind, string> = {
-  resource: activityGraphNodeSurfaceClassName("success"),
+  resource: activityGraphNodeSurfaceClassName("resource"),
   worker: activityGraphNodeSurfaceClassName("info"),
-  workstation: activityGraphNodeSurfaceClassName("primary"),
+  workstation: activityGraphNodeSurfaceClassName("workstation"),
   "work-type": "border-outline bg-surface-container-low",
-  "work-state": activityGraphNodeSurfaceClassName("neutralHigh"),
+  "work-state": activityGraphNodeSurfaceClassName("workState"),
 };
 
 export const FACTORY_GRAPH_EDITOR_NODE_TYPES = {

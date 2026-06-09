@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: toolbar controls share stateful harnesses and interaction coverage in one focused suite.
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
@@ -117,7 +118,6 @@ describe("factory graph editor toolbar controls", () => {
 
     const showButton = screen.getByRole("button", { name: "Show or hide" });
     const modeButton = screen.getByRole("button", { name: "Edit mode" });
-    const connectButton = screen.getByRole("button", { name: "Connect" });
     const deleteButton = screen.getByRole("button", { name: "Delete" });
     const discardButton = screen.getByRole("button", {
       name: "Discard changes",
@@ -130,12 +130,10 @@ describe("factory graph editor toolbar controls", () => {
     expect(addButton.textContent).toBe("");
     expect(showButton.textContent).toBe("");
     expect(modeButton.textContent).toBe("");
-    expect(connectButton.textContent).toBe("");
     expect(deleteButton.textContent).toBe("");
     expect(discardButton.textContent).toBe("");
     expect(saveButton.textContent).toBe("");
     expect(showButton.getAttribute("aria-pressed")).toBe("false");
-    expect(connectButton.getAttribute("aria-pressed")).toBe("false");
     expect(modeButton.getAttribute("aria-pressed")).toBe("false");
     expect(saveButton).toBeTruthy();
     expect(
@@ -144,11 +142,7 @@ describe("factory graph editor toolbar controls", () => {
     expect(addButton.className).toContain("h-10");
     expect(showButton.className).toContain("h-10");
     expect(modeButton.className).toContain("h-10");
-    expect(connectButton.className).toContain("h-10");
     expect(deleteButton.className).toContain("h-10");
-
-    await user.click(connectButton);
-    expect(connectButton.getAttribute("aria-pressed")).toBe("true");
 
     await user.tab();
     await user.tab();
@@ -297,10 +291,6 @@ describe("factory graph editor toolbar tooltip placement", () => {
       {
         buttonName: "Delete",
         tooltipName: "Remove",
-      },
-      {
-        buttonName: "Connect",
-        tooltipName: "Connect",
       },
       {
         buttonName: "Show or hide",

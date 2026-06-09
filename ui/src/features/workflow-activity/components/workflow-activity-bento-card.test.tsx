@@ -184,7 +184,7 @@ function renderDuplicateWorkflowActivityBentoCards(locale = "zh-CN") {
             onSelectWorkID={vi.fn()}
             onSelectStateNode={vi.fn()}
             onSelectDoc={vi.fn()}
-          onSelectResource={vi.fn()}
+            onSelectResource={vi.fn()}
             onSelectWorker={vi.fn()}
             onSelectWorkType={vi.fn()}
             onSelectWorkstation={vi.fn()}
@@ -199,7 +199,7 @@ function renderDuplicateWorkflowActivityBentoCards(locale = "zh-CN") {
             onSelectWorkID={vi.fn()}
             onSelectStateNode={vi.fn()}
             onSelectDoc={vi.fn()}
-          onSelectResource={vi.fn()}
+            onSelectResource={vi.fn()}
             onSelectWorker={vi.fn()}
             onSelectWorkType={vi.fn()}
             onSelectWorkstation={vi.fn()}
@@ -504,7 +504,7 @@ describe("WorkflowActivityBentoCard header actions", () => {
     expect(
       headerScope.getByText(
         editorMessages.dirtyStateSummary({
-          layoutDirty: true,
+          layoutDirty: false,
           preferencesDirty: false,
           topologyDirty: true,
         }),

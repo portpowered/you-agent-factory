@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { graphEditorNodeDimensionsForKind } from "../lib/graph-editor-node-placement";
-import { graphKeyAfterAddingNode } from "../lib/react-flow-current-activity-card-keys";
 import {
   GraphEditorPlacementProvider,
   GraphEditorPlacementRegistrar,
@@ -42,10 +41,8 @@ function TriggerWorkstationPlacement() {
 }
 
 describe("GraphEditorPlacementRegistrar regression", () => {
-  it("stores add placement under the post-add graph key from the live viewport center", async () => {
-    const setStoredNodePosition = vi.fn();
-    const graphKey =
-      "worker:writer|workstation:draft::workstation-input:place:story:queued->workstation:draft";
+  it("places added nodes in the canonical layout from the live viewport center", async () => {
+    const moveLayoutNode = vi.fn();
     const workstationSize = graphEditorNodeDimensionsForKind("workstation");
     const screenCenter = { x: 500, y: 350 };
     const flowCenter = { x: 300, y: 200 };
@@ -71,10 +68,8 @@ describe("GraphEditorPlacementRegistrar regression", () => {
           <GraphEditorPlacementRegistrar
             flowContainerRef={flowContainerRef}
             flowInstanceRef={flowInstanceRef}
-            graphKey={graphKey}
+            moveLayoutNode={moveLayoutNode}
             nodes={[]}
-            setStoredNodePosition={setStoredNodePosition}
-            storedNodePositions={{}}
           />
           <TriggerWorkstationPlacement />
         </div>
@@ -91,14 +86,8 @@ describe("GraphEditorPlacementRegistrar regression", () => {
       x: flowCenter.x - workstationSize.width / 2,
       y: flowCenter.y - workstationSize.height / 2,
     };
-    const storageGraphKey = graphKeyAfterAddingNode(
-      graphKey,
-      "workstation:review",
-    );
-
     await waitFor(() => {
-      expect(setStoredNodePosition).toHaveBeenCalledWith(
-        storageGraphKey,
+      expect(moveLayoutNode).toHaveBeenCalledWith(
         "workstation:review",
         expectedTopLeft,
       );

@@ -23,12 +23,12 @@ import { useCurrentFactoryDocument } from "../../current-factory-definition/hook
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { materializeFactoryGraphEntityIdsForSave } from "../../factory-graph-editor/lib/operations/factory-graph-public-ids";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
-import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import { useGraphEditorPendingFactoryBridge } from "../state/graph-editor-pending-factory-bridge";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
 
-vi.mock("../../../components/ui/dialog", () =>
-  import("../../../testing/mock-dashboard-dialog"),
+vi.mock(
+  "../../../components/ui/dialog",
+  () => import("../../../testing/mock-dashboard-dialog"),
 );
 
 vi.mock("@xyflow/react", async () => {
@@ -264,7 +264,6 @@ let saveAsync: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   window.localStorage.clear();
-  useCurrentActivityGraphStore.setState({ positionsByGraphKey: {} });
   restoreBrowserTestShims = installDashboardBrowserTestShims();
   vi.mocked(useCurrentFactoryDocument).mockReturnValue({
     data: editableFactoryDocument,
@@ -445,7 +444,6 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     enterEditorMode();
 
     await screen.findByRole("button", { name: "work-state:story:qa" });
-    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
 
     expect(screen.getByTestId("valid-qa-output-connection").textContent).toBe(
       "true",
@@ -468,7 +466,6 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
   it("shows validation feedback and leaves graph edges unchanged for invalid connects", async () => {
     renderCurrentActivity();
     enterEditorMode();
-    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
 
     expect(
       screen.queryByRole("button", {
@@ -550,11 +547,15 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     });
     await waitFor(() => {
       expect(
-        within(toolbar).queryByRole("button", { name: "Discard changes" }),
-      ).toBeNull();
+        within(toolbar)
+          .getByRole("button", { name: "Discard changes" })
+          .getAttribute("disabled"),
+      ).not.toBeNull();
       expect(
-        within(toolbar).queryByRole("button", { name: "Save changes" }),
-      ).toBeNull();
+        within(toolbar)
+          .getByRole("button", { name: "Save changes" })
+          .getAttribute("disabled"),
+      ).not.toBeNull();
     });
   });
 
@@ -573,7 +574,9 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
 
     expect(
-      await screen.findByRole("button", { name: "doc:factory/docs/playbook.md" }),
+      await screen.findByRole("button", {
+        name: "doc:factory/docs/playbook.md",
+      }),
     ).toBeTruthy();
     await waitFor(() => {
       expect(
@@ -638,7 +641,6 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     enterEditorMode();
 
     await screen.findByRole("button", { name: "work-state:story:qa" });
-    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Mock connect review to QA" }),
     );
@@ -715,7 +717,6 @@ describe("ReactFlowCurrentActivityCard distinct workstation ID editing", () => {
     expect(
       screen.queryByRole("button", { name: "workstation:review" }),
     ).toBeNull();
-    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Mock connect review to QA" }),
     );

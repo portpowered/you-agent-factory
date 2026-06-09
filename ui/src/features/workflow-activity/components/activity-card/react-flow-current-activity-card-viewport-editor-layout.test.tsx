@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { Node } from "@xyflow/react";
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 
 import type { CurrentActivityImportController } from "../../hooks/current-activity-import-controller";
 import { CurrentActivityGraphViewport } from "../react-flow-current-activity-card-viewport";
@@ -39,16 +39,8 @@ vi.mock("@xyflow/react", async () => {
         _event: unknown,
         viewport: { x: number; y: number; zoom: number },
       ) => void;
-      onNodeDragStart?: (
-        _event: unknown,
-        node: Node,
-        nodes: Node[],
-      ) => void;
-      onNodeDragStop?: (
-        _event: unknown,
-        node: Node,
-        nodes: Node[],
-      ) => void;
+      onNodeDragStart?: (_event: unknown, node: Node, nodes: Node[]) => void;
+      onNodeDragStop?: (_event: unknown, node: Node, nodes: Node[]) => void;
     }) => {
       useEffect(() => {
         onInit?.({
@@ -78,7 +70,9 @@ vi.mock("@xyflow/react", async () => {
           </button>
           <button
             onClick={() => {
-              const draggedNodes = (nodes ?? []).filter((node) => node.selected);
+              const draggedNodes = (nodes ?? []).filter(
+                (node) => node.selected,
+              );
               const primaryNode = draggedNodes[0] ?? nodes?.[0];
               if (!primaryNode) {
                 return;
@@ -190,12 +184,10 @@ describe("CurrentActivityGraphViewport canonical viewport sync", () => {
   });
 
   it("persists viewport panning into canonical layout in editor mode", () => {
-    const setStoredViewport = vi.fn();
     const updateLayoutViewport = vi.fn();
 
     renderViewport({
       editorMode: true,
-      setStoredViewport,
       updateLayoutViewport,
     });
 
@@ -206,24 +198,19 @@ describe("CurrentActivityGraphViewport canonical viewport sync", () => {
       y: 34,
       zoom: 1.25,
     });
-    expect(setStoredViewport).toHaveBeenCalledWith("test-graph", {
-      x: 12,
-      y: 34,
-      zoom: 1.25,
-    });
   });
 
-  it("persists viewport panning in observe mode for editor handoff", () => {
-    const setStoredViewport = vi.fn();
+  it("persists viewport panning into canonical layout in observe mode", () => {
+    const updateLayoutViewport = vi.fn();
 
     renderViewport({
       editorMode: false,
-      setStoredViewport,
+      updateLayoutViewport,
     });
 
     fireEvent.click(screen.getByRole("button", { name: "pan-viewport" }));
 
-    expect(setStoredViewport).toHaveBeenCalledWith("test-graph", {
+    expect(updateLayoutViewport).toHaveBeenCalledWith({
       x: 12,
       y: 34,
       zoom: 1.25,
@@ -312,7 +299,9 @@ describe("CurrentActivityGraphViewport editor layout interactions", () => {
       ],
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "drag-selected-nodes" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "drag-selected-nodes" }),
+    );
 
     expect(moveLayoutNodesByDelta).toHaveBeenCalledWith(
       ["workstation:draft", "work-state:story:queued"],
@@ -337,37 +326,14 @@ describe("CurrentActivityGraphViewport editor layout interactions", () => {
       ],
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "drag-selected-nodes" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "drag-selected-nodes" }),
+    );
 
     expect(moveLayoutNode).toHaveBeenCalledWith("workstation:draft", {
       x: 20,
       y: 14,
     });
-  });
-
-  it("falls back to stored node positions when editor layout handlers are absent", () => {
-    const setStoredNodePosition = vi.fn();
-
-    renderViewport({
-      editorMode: false,
-      nodes: [
-        {
-          data: { factoryGraphNodeId: "workstation:draft" },
-          id: "workstation:draft",
-          position: { x: 0, y: 0 },
-          selected: true,
-        },
-      ],
-      setStoredNodePosition,
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "drag-selected-nodes" }));
-
-    expect(setStoredNodePosition).toHaveBeenCalledWith(
-      "test-graph",
-      "workstation:draft",
-      { x: 16, y: 8 },
-    );
   });
 });
 
@@ -376,23 +342,20 @@ function renderViewport({
   canUndoLayout = false,
   canonicalLayoutViewport = null,
   editorMode = false,
+  includeMoveLayoutNode = true,
   moveLayoutNode = vi.fn(),
   moveLayoutNodesByDelta = vi.fn(),
   nodes = [],
   onRedoLayout = vi.fn(),
   onUndoLayout = vi.fn(),
-  setStoredNodePosition = vi.fn(),
-  setStoredViewport = vi.fn(),
   updateLayoutViewport = vi.fn(),
 }: {
   canRedoLayout?: boolean;
   canUndoLayout?: boolean;
   canonicalLayoutViewport?: { x: number; y: number; zoom: number } | null;
   editorMode?: boolean;
-  moveLayoutNode?: (
-    nodeId: string,
-    position: { x: number; y: number },
-  ) => void;
+  includeMoveLayoutNode?: boolean;
+  moveLayoutNode?: (nodeId: string, position: { x: number; y: number }) => void;
   moveLayoutNodesByDelta?: (
     nodeIds: readonly string[],
     delta: { x: number; y: number },
@@ -401,16 +364,6 @@ function renderViewport({
   nodes?: Node[];
   onRedoLayout?: () => void;
   onUndoLayout?: () => void;
-  setStoredNodePosition?: (
-    graphKey: string,
-    nodeId: string,
-    position: { x: number; y: number },
-  ) => void;
-  setStoredViewport?: (graphKey: string, viewport: {
-    x: number;
-    y: number;
-    zoom: number;
-  }) => void;
   updateLayoutViewport?: (viewport: {
     x: number;
     y: number;
@@ -441,7 +394,6 @@ function renderViewport({
       edges={[]}
       flowContainerRef={flowContainerRef}
       flowInstanceRef={flowInstanceRef}
-      graphKey="test-graph"
       handleDiscardPendingChanges={vi.fn()}
       handleEditorModeToggle={vi.fn()}
       handleNodesChange={vi.fn()}
@@ -457,7 +409,7 @@ function renderViewport({
       imports={importController}
       initialFitViewKey="full-graph"
       initialFitViewOptions={{ padding: 0.18 }}
-      moveLayoutNode={moveLayoutNode}
+      moveLayoutNode={includeMoveLayoutNode ? moveLayoutNode : undefined}
       moveLayoutNodesByDelta={moveLayoutNodesByDelta}
       nodeTypes={{}}
       nodes={nodes}
@@ -468,8 +420,6 @@ function renderViewport({
       onToggleHiddenNodeClass={vi.fn()}
       onUndoLayout={onUndoLayout}
       onSelectTool={vi.fn()}
-      setStoredNodePosition={setStoredNodePosition}
-      setStoredViewport={setStoredViewport}
       updateLayoutViewport={updateLayoutViewport}
     />,
   );

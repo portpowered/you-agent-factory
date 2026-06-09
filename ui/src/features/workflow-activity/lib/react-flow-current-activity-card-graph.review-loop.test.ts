@@ -11,7 +11,6 @@ import {
   buildCurrentActivityNodes,
   buildHandleAssignments,
   buildVisibleGraphEdges,
-  EMPTY_NODE_POSITIONS,
 } from "./react-flow-current-activity-card-graph";
 import { loadFactoryGraphOnrejectionEdgeReproductionFactory } from "./test-data/factory-graph-onrejection-edge-reproduction.fixture";
 
@@ -100,13 +99,12 @@ function buildReviewLoopActivityNodes(
     onSelectStateNode: vi.fn(),
     onSelectWorkID: vi.fn(),
     onSelectDoc: vi.fn(),
-      onSelectResource: vi.fn(),
+    onSelectResource: vi.fn(),
     onSelectWorker: vi.fn(),
     onSelectWorkType: vi.fn(),
     onSelectWorkstation: vi.fn(),
     selection: null,
     snapshot: context.snapshot,
-    storedNodePositions: EMPTY_NODE_POSITIONS,
   });
 }
 

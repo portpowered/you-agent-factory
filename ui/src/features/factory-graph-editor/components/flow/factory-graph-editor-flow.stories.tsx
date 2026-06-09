@@ -740,18 +740,19 @@ export const WorkStateLifecyclePhases = {
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
-    const expectPhaseBorder = async (label: string, borderClass: string) => {
+    const expectPhaseSurface = async (label: string) => {
       const node = (await canvas.findByText(label)).closest("article");
       if (!node) {
         throw new Error(`Expected work-state node for ${label}`);
       }
-      await expect(node.className).toContain(borderClass);
+      await expect(node.className).toContain("border-info-border");
+      await expect(node.className).toContain("bg-info-container");
     };
 
-    await expectPhaseBorder("story:queued", "border-info-border");
-    await expectPhaseBorder("story:review", "border-af-warning-border");
-    await expectPhaseBorder("story:done", "border-af-success-border");
-    await expectPhaseBorder("story:failed", "border-af-danger-border");
+    await expectPhaseSurface("story:queued");
+    await expectPhaseSurface("story:review");
+    await expectPhaseSurface("story:done");
+    await expectPhaseSurface("story:failed");
 
     const legend = canvasElement.querySelector(
       "[data-factory-graph-work-state-phase-legend]",

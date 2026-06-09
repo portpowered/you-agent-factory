@@ -3,8 +3,11 @@ import {
   preserveExistingBundledFilesWhenAbsent,
   preserveExistingLayoutWhenAbsent,
 } from "../../../api/factory-definition";
-import type { FactoryTimelineMode } from "../../timeline/state/factoryTimelineStore";
-import { resolveObserveModeFactoryDefinition } from "./observe-mode-factory-definition";
+
+type CurrentActivityFactoryDefinition = NonNullable<
+  DashboardSnapshot["factory"]
+>;
+type CurrentActivityFactoryDocumentStatus = "error" | "pending" | "success";
 
 export interface CurrentActivityFactoryGraphSource {
   draftState: {
@@ -12,10 +15,8 @@ export interface CurrentActivityFactoryGraphSource {
     latestDocument?: DashboardSnapshot["factory"] | null;
     pendingFactoryDefinition?: DashboardSnapshot["factory"] | null;
   };
-  editableDefinitionQuery?: {
-    data?: DashboardSnapshot["factory"] | null;
-    status?: "error" | "pending" | "success";
-  } | null;
+  editableFactoryDocument?: DashboardSnapshot["factory"] | null;
+  editableFactoryDocumentStatus?: CurrentActivityFactoryDocumentStatus;
   editorMode: boolean;
 }
 
@@ -23,7 +24,7 @@ function observeModeSavedFactoryDocument(
   source: CurrentActivityFactoryGraphSource,
 ) {
   return (
-    source.editableDefinitionQuery?.data ??
+    source.editableFactoryDocument ??
     source.draftState.latestDocument ??
     source.draftState.baseDocument ??
     undefined
@@ -84,7 +85,7 @@ function preserveObserverModeFactoryMetadata({
   snapshotFactory,
 }: {
   documentFactory: DashboardSnapshot["factory"] | null | undefined;
-  incoming: DashboardSnapshot["factory"];
+  incoming: CurrentActivityFactoryDefinition;
   snapshotFactory: DashboardSnapshot["factory"] | null | undefined;
 }) {
   return preserveExistingBundledFilesWhenAbsent(
@@ -96,45 +97,42 @@ function preserveObserverModeFactoryMetadata({
 function observeModeFactoryDefinition(
   source: CurrentActivityFactoryGraphSource,
   snapshot: DashboardSnapshot,
-  timelineMode: FactoryTimelineMode,
 ): DashboardSnapshot["factory"] | undefined {
   const document = observeModeSavedFactoryDocument(source);
-  if (!document) {
-    return snapshot.factory;
+  const eventComputedFactory = snapshot.factory ?? document;
+  if (!eventComputedFactory) {
+    return undefined;
   }
-
-  const resolvedFactory = resolveObserveModeFactoryDefinition({
-    document,
-    snapshotFactory: snapshot.factory,
-    timelineMode,
-  });
 
   return preserveObserverModeFactoryMetadata({
     documentFactory: document,
-    incoming: resolvedFactory,
+    incoming: eventComputedFactory,
     snapshotFactory: snapshot.factory,
   });
 }
 
-function editorModeFactoryDefinition(source: CurrentActivityFactoryGraphSource) {
+function editorModeFactoryDefinition(
+  source: CurrentActivityFactoryGraphSource,
+) {
   return currentActivityCardCurrentFactoryDefinition(source) ?? undefined;
 }
 
 export function currentActivityCardFactoryDefinition(
   source: CurrentActivityFactoryGraphSource,
   snapshot: DashboardSnapshot,
-  timelineMode: FactoryTimelineMode,
 ): DashboardSnapshot["factory"] | null | undefined {
   if (!source.editorMode) {
     const document = observeModeSavedFactoryDocument(source);
     if (!document) {
-      return observeModeFactoryWithBundledDocs(snapshot.factory, document) ?? null;
+      return (
+        observeModeFactoryWithBundledDocs(snapshot.factory, document) ?? null
+      );
     }
 
-    return observeModeFactoryDefinition(source, snapshot, timelineMode);
+    return observeModeFactoryDefinition(source, snapshot);
   }
 
-  if (source.editableDefinitionQuery?.status !== "success") {
+  if (source.editableFactoryDocumentStatus !== "success") {
     return null;
   }
 
@@ -144,13 +142,11 @@ export function currentActivityCardFactoryDefinition(
 export function currentActivityCardDisplayFactoryDefinition(
   source: CurrentActivityFactoryGraphSource,
   snapshot: DashboardSnapshot,
-  timelineMode: FactoryTimelineMode,
 ): DashboardSnapshot["factory"] | null | undefined {
   const document = observeModeSavedFactoryDocument(source);
   const resolvedFactory = currentActivityCardFactoryDefinition(
     source,
     snapshot,
-    timelineMode,
   );
 
   if (source.editorMode) {

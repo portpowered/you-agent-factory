@@ -1,69 +1,48 @@
 import { describe, expect, it } from "vitest";
 
-import { createDefaultFactoryLayout } from "../../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
-import {
-  mergeFactoryLayoutWithNodePositions,
-  overlayGraphNodePositions,
-  selectHydratableGraphNodePositions,
-} from "./factory-graph-canonical-layout-positions";
+import type { GraphLayout } from "../../../flowchart/lib/layout";
+import { graphNodePositionsFromCanonicalLayout } from "./factory-graph-canonical-layout-positions";
 
-describe("selectHydratableGraphNodePositions", () => {
-  it("keeps only temporary positions that differ from the canonical layout", () => {
-    expect(
-      selectHydratableGraphNodePositions(
+describe("graphNodePositionsFromCanonicalLayout", () => {
+  it("projects canonical layout node positions with auto-layout fallback", () => {
+    const graphLayout = {
+      edges: [],
+      height: 300,
+      nodes: [
         {
-          "workstation:draft": { x: 120, y: 80 },
+          height: 100,
+          nodeId: "workstation:draft",
+          nodeKind: "workstation",
+          width: 160,
+          workstationNodeId: "draft",
+          x: 10,
+          y: 20,
         },
         {
-          "doc:factory/docs/guide.md": { x: 640, y: 220 },
-          "workstation:draft": { x: 360, y: 140 },
-          "worker:writer": { x: Number.NaN, y: 0 },
+          height: 80,
+          nodeId: "worker:writer",
+          nodeKind: "worker",
+          width: 120,
+          x: 30,
+          y: 40,
         },
-      ),
-    ).toEqual({
-      "doc:factory/docs/guide.md": { x: 640, y: 220 },
-      "workstation:draft": { x: 360, y: 140 },
-    });
-  });
-});
+      ],
+      width: 400,
+    } as GraphLayout;
 
-describe("overlayGraphNodePositions", () => {
-  it("prefers hydrated temporary positions over the canonical projection", () => {
     expect(
-      overlayGraphNodePositions(
-        {
-          "doc:factory/docs/guide.md": { x: 420, y: 0 },
-          "workstation:draft": { x: 120, y: 80 },
-        },
-        {
-          "doc:factory/docs/guide.md": { x: 640, y: 220 },
-        },
-      ),
-    ).toEqual({
-      "doc:factory/docs/guide.md": { x: 640, y: 220 },
-      "workstation:draft": { x: 120, y: 80 },
-    });
-  });
-});
-
-describe("mergeFactoryLayoutWithNodePositions", () => {
-  it("hydrates temporary positions into the editor layout draft", () => {
-    expect(
-      mergeFactoryLayoutWithNodePositions(createDefaultFactoryLayout(), {
-        "doc:factory/docs/guide.md": { x: 640, y: 220 },
-        "workstation:draft": { x: 360, y: 140 },
+      graphNodePositionsFromCanonicalLayout(graphLayout, {
+        nodes: [
+          {
+            id: "workstation:draft",
+            position: { x: 120, y: 80 },
+          },
+        ],
+        schemaVersion: 1,
       }),
-    ).toMatchObject({
-      nodes: expect.arrayContaining([
-        {
-          id: "doc:factory/docs/guide.md",
-          position: { x: 640, y: 220 },
-        },
-        {
-          id: "workstation:draft",
-          position: { x: 360, y: 140 },
-        },
-      ]),
+    ).toEqual({
+      "worker:writer": { x: 30, y: 40 },
+      "workstation:draft": { x: 120, y: 80 },
     });
   });
 });

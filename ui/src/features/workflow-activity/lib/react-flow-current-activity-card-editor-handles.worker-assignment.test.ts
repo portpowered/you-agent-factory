@@ -15,7 +15,6 @@ import {
   buildActiveItemLabelsByPlaceId,
   buildCurrentActivityNodes,
   buildVisibleGraphEdges,
-  EMPTY_NODE_POSITIONS,
 } from "./react-flow-current-activity-card-graph";
 
 const logicalMoveContext = factoryGraphConnectionAnchorContext({
@@ -334,7 +333,6 @@ it("builds current-activity workstation nodes without worker-assignment handles 
       },
       uptime_seconds: 0,
     },
-    storedNodePositions: EMPTY_NODE_POSITIONS,
   });
 
   const logicalMoveHandles = handleIds(

@@ -11,7 +11,6 @@ import {
 import { workStateFieldValidationTarget } from "../../../../testing/factory-validation-target-fixtures";
 import * as factoryDocumentSaveHooks from "../../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { useDashboardSessionStore } from "../../../dashboard/state/dashboardSessionStore";
-import { useCurrentActivityGraphStore } from "../../../workflow-activity/state/currentActivityGraphStore";
 import type { EditableWorkStateConfigurationState } from "../lib/detail-card-types";
 import { useSaveEditableWorkStateConfiguration } from "./use-save-editable-work-state-configuration";
 
@@ -167,8 +166,6 @@ describe("useSaveEditableWorkStateConfiguration", () => {
   it("updates work state selection after a successful rename save", async () => {
     const markChangesSaved = vi.fn();
     const onWorkStateRenamed = vi.fn();
-    const migrateWorkStateNodePositions = vi.fn();
-    useCurrentActivityGraphStore.setState({ migrateWorkStateNodePositions });
     const saveMutation = mockFactoryDocumentSave({ mode: "success" });
     vi.spyOn(
       factoryDocumentSaveHooks,
@@ -220,11 +217,6 @@ describe("useSaveEditableWorkStateConfiguration", () => {
     });
 
     expect(markChangesSaved).toHaveBeenCalledTimes(1);
-    expect(migrateWorkStateNodePositions).toHaveBeenCalledWith({
-      nextStateName: "ready",
-      previousStateName: "queued",
-      workTypeName: "story",
-    });
     expect(onWorkStateRenamed).toHaveBeenCalledWith("story:ready");
   });
 

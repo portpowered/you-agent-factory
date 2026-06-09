@@ -8,8 +8,7 @@ import {
 import { createDefaultFactoryLayout } from "../../lib/layout/factory-graph-layout-operations";
 import { useFactoryGraphEdgeWaypointEditor } from "./factory-graph-edge-waypoint-editor-hook";
 
-const EDGE_ID =
-  "workstation-output:workstation:draft->work-state:story:done";
+const EDGE_ID = "workstation-output:workstation:draft->work-state:story:done";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: waypoint editor hook scenarios stay grouped around one hook contract.
 describe("useFactoryGraphEdgeWaypointEditor", () => {
@@ -102,7 +101,7 @@ describe("useFactoryGraphEdgeWaypointEditor", () => {
     expect(removeEdgeWaypoint).toHaveBeenNthCalledWith(2, EDGE_ID, 1);
   });
 
-  it("moves, double-clicks, decorates edges, and clears waypoint selection", () => {
+  it("moves, double-clicks, and clears waypoint selection", () => {
     const addEdgeWaypoint = vi.fn();
     const moveEdgeWaypoint = vi.fn();
     const layout = addFactoryLayoutEdgeWaypoint(
@@ -110,19 +109,6 @@ describe("useFactoryGraphEdgeWaypointEditor", () => {
       EDGE_ID,
       { x: 10, y: 20 },
     );
-    const projectedEdge = {
-      id: EDGE_ID,
-      source: "workstation:draft",
-      target: "work-state:story:done",
-      data: {
-        active: false,
-        alwaysShowLabel: false,
-        kind: "workstation-output" as const,
-        label: "output",
-        pendingStatus: "none" as const,
-      },
-    };
-
     const { result } = renderHook(() =>
       useFactoryGraphEdgeWaypointEditor({
         activeTool: null,
@@ -155,19 +141,25 @@ describe("useFactoryGraphEdgeWaypointEditor", () => {
       result.current.handleEditorEdgeClick(EDGE_ID);
     });
     act(() => {
-      result.current.handleMoveSelectedEdgeWaypoint(EDGE_ID, 0, { x: 50, y: 60 });
+      result.current.handleMoveSelectedEdgeWaypoint(EDGE_ID, 0, {
+        x: 50,
+        y: 60,
+      });
       result.current.handleEditorEdgeDoubleClick(EDGE_ID, { x: 70, y: 80 });
       result.current.waypointControls?.onAddWaypoint();
       result.current.clearSelectedWaypointEdge();
     });
 
     expect(moveEdgeWaypoint).toHaveBeenCalledWith(EDGE_ID, 0, { x: 50, y: 60 });
-    expect(addEdgeWaypoint).toHaveBeenNthCalledWith(1, EDGE_ID, { x: 70, y: 80 });
-    expect(addEdgeWaypoint).toHaveBeenNthCalledWith(2, EDGE_ID, { x: 100, y: 50 });
+    expect(addEdgeWaypoint).toHaveBeenNthCalledWith(1, EDGE_ID, {
+      x: 70,
+      y: 80,
+    });
+    expect(addEdgeWaypoint).toHaveBeenNthCalledWith(2, EDGE_ID, {
+      x: 100,
+      y: 50,
+    });
     expect(result.current.selectedWaypointEdgeId).toBeNull();
-    expect(
-      result.current.decorateEditorEdges([projectedEdge])[0]?.data?.waypoints,
-    ).toEqual([{ x: 10, y: 20 }]);
   });
 
   it("routes delete-tool edge clicks to edge deletion", () => {

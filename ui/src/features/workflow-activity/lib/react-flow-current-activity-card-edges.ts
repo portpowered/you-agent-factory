@@ -155,6 +155,9 @@ export function buildGraphEdges(
         .filter(Boolean)
         .join(" "),
       id: edge.edgeId,
+      data: {
+        factoryGraphEdgeId: edge.canonicalEdgeId,
+      },
       label: edgeLabel(edge, activeFlow),
       labelBgStyle: {
         fill: "var(--color-surface)",

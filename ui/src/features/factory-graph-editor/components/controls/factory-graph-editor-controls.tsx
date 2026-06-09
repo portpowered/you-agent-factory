@@ -21,7 +21,6 @@ import { FactoryGraphEditorHideShowMenu } from "../chrome/factory-graph-editor-h
 import { FactoryGraphEditorModeToggle } from "../chrome/factory-graph-editor-mode-controls";
 import { FactoryGraphEditorTooltipActionButton } from "../chrome/factory-graph-editor-tooltip-button";
 import {
-  ConnectIcon,
   DiscardIcon,
   RedoIcon,
   ResetLayoutIcon,
@@ -63,8 +62,6 @@ const TOOLBAR_ACTIONS_CLASS =
   "flex flex-nowrap items-center gap-2 border-l border-outline pl-2 max-md:ml-auto";
 const EDITOR_CONTROLS_TRANSITION_CLASS =
   "grid min-h-10 max-h-11 min-w-0 self-center overflow-hidden transition-[max-width,opacity] duration-200 ease-out motion-reduce:transition-none";
-const EDITOR_CONTROLS_ROW_CLASS =
-  "flex min-h-10 max-h-11 min-w-max flex-nowrap items-center gap-2 overflow-hidden";
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: toolbar composes edit-mode toggle, hide/show, and layout history controls.
 export function FactoryGraphEditorToolbar({
   activeTool,
@@ -176,7 +173,7 @@ export function FactoryGraphEditorToolbar({
         }
       >
         <div
-          className={EDITOR_CONTROLS_ROW_CLASS}
+          className="flex min-h-10 max-h-11 min-w-max flex-nowrap items-center gap-2 overflow-hidden"
           data-toolbar-editor-controls-row=""
         >
           <FactoryGraphEditorAddMenu
@@ -197,17 +194,6 @@ export function FactoryGraphEditorToolbar({
               onSelectTool(activeTool === "delete" ? null : "delete")
             }
             tone={activeTool === "delete" ? "secondary" : "outline"}
-          />
-          <FactoryGraphEditorToolbarButton
-            active={activeTool === "connect"}
-            description={messages.toolbarConnectDescription}
-            disabled={toolbarButtonsDisabled}
-            icon={<ConnectIcon />}
-            label={messages.toolbarConnectLabel}
-            onClick={() =>
-              onSelectTool(activeTool === "connect" ? null : "connect")
-            }
-            tone={activeTool === "connect" ? "secondary" : "outline"}
           />
           <FactoryGraphEditorToolbarButton
             active={false}

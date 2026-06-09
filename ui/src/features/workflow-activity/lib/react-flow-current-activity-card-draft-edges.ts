@@ -3,6 +3,7 @@ import type {
   FactoryGraphDraft,
   FactoryGraphDraftEdgeChange,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import { edgeChangeId } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import type { GraphLayout, PositionedEdge } from "../../flowchart/lib/layout";
 import { currentActivityNodeIdForFactoryGraphKey } from "./current-activity-factory-graph-node-ids";
 import { buildVisibleGraphEdges } from "./react-flow-current-activity-card-graph";
@@ -11,12 +12,15 @@ function legacyCurrentActivityNodeIdForFactoryGraphKey(
   key: FactoryGraphDraftEdgeChange["source"],
 ): string {
   if (key.kind === "workstation") {
+    // hardcoded-ui-copy-exception: non-product-diagnostic
     return `workstation:${key.name}`;
   }
   if (key.kind === "work-state") {
+    // hardcoded-ui-copy-exception: non-product-diagnostic
     return `place:${key.workTypeName}:${key.stateName}`;
   }
 
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   return `place:${key.name}`;
 }
 
@@ -92,6 +96,7 @@ function supportedCurrentActivityDraftEdge(
       : edgeChange.kind;
 
   return {
+    canonicalEdgeId: edgeChangeId(edgeChange),
     edgeId: `${edgeKind}:${sourceNodeId}->${targetNodeId}`,
     fromNodeId: sourceNodeId,
     label:

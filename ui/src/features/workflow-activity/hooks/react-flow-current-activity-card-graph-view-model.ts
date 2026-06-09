@@ -1,16 +1,5 @@
-import {
-  applyNodeChanges,
-  type FitViewOptions,
-  type NodeChange,
-} from "@xyflow/react";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import type { FitViewOptions, NodeChange } from "@xyflow/react";
+import { useCallback, useMemo, useState } from "react";
 
 import type {
   DashboardActiveExecution,
@@ -18,48 +7,36 @@ import type {
 } from "../../../api/dashboard/types";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import type { CurrentActivityNode } from "../../flowchart/public";
-import { resolveStoredNodePositionsForGraphKey } from "../lib/bridge-graph-layout-positions";
-import { mergeDocNodesIntoGraphLayout } from "../lib/current-activity-doc-graph-layout";
-import { buildVisibleGraphEdgesWithDraft } from "../lib/react-flow-current-activity-card-draft-edges";
 import {
   buildGraphEdges,
   initialFocusNodes,
 } from "../lib/react-flow-current-activity-card-edges";
+import type { CurrentActivityEditorState } from "../lib/react-flow-current-activity-card-editor-handles";
 import {
   buildActiveGraphHighlights,
   buildActiveItemLabelsByPlaceId,
   buildCurrentActivityNodes,
   buildHandleAssignments,
-  EMPTY_NODE_POSITIONS,
 } from "../lib/react-flow-current-activity-card-graph";
-import {
-  createDefaultFactoryLayout,
-  factoryLayoutFromDefinition,
-  updateFactoryLayoutViewport,
-} from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
-import {
-  graphNodePositionsFromCanonicalLayout,
-  mergeFactoryLayoutWithNodePositions,
-  mergeLegacyStoredGraphNodePositions,
-  overlayGraphNodePositions,
-  selectHydratableGraphNodePositions,
-} from "../lib/layout/factory-graph-canonical-layout-positions";
 import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
-import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
-import { currentActivityCardDisplayFactoryDefinition } from "./current-activity-card-factory-definition";
 import {
   groupActiveExecutionsByWorkstationNodeID,
   useActiveExecutions,
 } from "./react-flow-current-activity-card-active-executions";
-import type { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
-import { useCurrentActivityGraphLayoutForFactory } from "./react-flow-current-activity-card-graph-layout";
-import { mergeBaseNodesWithPresentationPositions } from "../lib/layout/merge-base-nodes-with-presentation-positions";
-import { useTopologyStableFactoryForLayout } from "./use-topology-stable-factory-for-layout";
-import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
+import type { CurrentActivityGraphFlowProjection } from "./use-current-activity-graph-flow-projection";
+
+export type CurrentActivityGraphViewModelEditorInput = Omit<
+  CurrentActivityEditorState,
+  "onConnectionAnchorClick" | "validationTargets"
+> & {
+  graphState: CurrentActivityGraphFlowProjection;
+  handleConnectionAnchorClick: CurrentActivityEditorState["onConnectionAnchorClick"];
+  validationTargets?: CurrentActivityEditorState["validationTargets"];
+};
 
 export type CurrentActivityGraphViewModelInput = {
-  editor: ReturnType<typeof useCurrentActivityGraphEditor>;
+  editor: CurrentActivityGraphViewModelEditorInput;
   locale?: string;
   now: number;
   onSelectDoc: (targetPath: string) => void;
@@ -94,7 +71,6 @@ function useCurrentActivityBaseNodes({
   onSelectWorkstation,
   selection,
   snapshot,
-  storedNodePositions,
 }: Pick<
   CurrentActivityGraphViewModelInput,
   | "now"
@@ -115,10 +91,9 @@ function useCurrentActivityBaseNodes({
   >;
   activeGraphHighlights: ReturnType<typeof buildActiveGraphHighlights>;
   activeItemLabelsByPlaceId: ReturnType<typeof buildActiveItemLabelsByPlaceId>;
-  editor: ReturnType<typeof useCurrentActivityGraphEditor>;
+  editor: CurrentActivityGraphViewModelEditorInput;
   factoryDefinition?: DashboardSnapshot["factory"];
   graphLayout: GraphLayout;
-  storedNodePositions: typeof EMPTY_NODE_POSITIONS;
 }) {
   return useMemo<CurrentActivityNode[]>(
     () =>
@@ -132,7 +107,7 @@ function useCurrentActivityBaseNodes({
           editorMode: editor.editorMode,
           onConnectionAnchorClick: editor.handleConnectionAnchorClick,
           pendingConnectionSource: editor.pendingConnectionSource,
-          validationTargets: editor.structuralValidation.targets,
+          validationTargets: editor.validationTargets,
         },
         factoryDefinition,
         graphLayout,
@@ -147,7 +122,6 @@ function useCurrentActivityBaseNodes({
         onSelectWorkstation,
         selection,
         snapshot,
-        storedNodePositions,
       }),
     [
       activeExecutionsByWorkstationNodeID,
@@ -167,7 +141,6 @@ function useCurrentActivityBaseNodes({
       onSelectWorkstation,
       selection,
       snapshot,
-      storedNodePositions,
     ],
   );
 }
@@ -195,59 +168,61 @@ function useActiveGraphHighlights({
 function useCurrentActivityGraphNodePresentation(
   baseNodes: CurrentActivityNode[],
 ) {
-  const [nodes, setNodes] = useState<CurrentActivityNode[]>([]);
-  const previousBaseNodesRef = useRef<CurrentActivityNode[]>([]);
-
-  useEffect(() => {
-    setNodes((currentNodes) => {
-      const mergedNodes = mergeBaseNodesWithPresentationPositions(
-        baseNodes,
-        previousBaseNodesRef.current,
-        currentNodes,
-      );
-      previousBaseNodesRef.current = baseNodes;
-      return mergedNodes;
-    });
-  }, [baseNodes]);
+  const [selectedNodeIds, setSelectedNodeIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
 
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    setNodes(
-      (currentNodes) =>
-        applyNodeChanges(changes, currentNodes) as CurrentActivityNode[],
-    );
+    setSelectedNodeIds((currentSelectedNodeIds) => {
+      let nextSelectedNodeIds: Set<string> | null = null;
+
+      for (const change of changes) {
+        if (
+          change.type !== "select" &&
+          change.type !== "remove" &&
+          change.type !== "add" &&
+          change.type !== "replace"
+        ) {
+          continue;
+        }
+
+        nextSelectedNodeIds ??= new Set(currentSelectedNodeIds);
+
+        if (change.type === "select") {
+          if (change.selected) {
+            nextSelectedNodeIds.add(change.id);
+          } else {
+            nextSelectedNodeIds.delete(change.id);
+          }
+          continue;
+        }
+
+        if (change.type === "remove") {
+          nextSelectedNodeIds.delete(change.id);
+          continue;
+        }
+
+        const selected = change.item.selected === true;
+        if (selected) {
+          nextSelectedNodeIds.add(change.item.id);
+        } else {
+          nextSelectedNodeIds.delete(change.item.id);
+        }
+      }
+
+      return nextSelectedNodeIds ?? currentSelectedNodeIds;
+    });
   }, []);
   const displayNodes = useMemo(
     () =>
-      mergeBaseNodesWithPresentationPositions(
-        baseNodes,
-        previousBaseNodesRef.current,
-        nodes,
-      ),
-    [baseNodes, nodes],
+      baseNodes.map((node) => ({
+        ...node,
+        selected: selectedNodeIds.has(node.id),
+      })),
+    [baseNodes, selectedNodeIds],
   );
 
   return { displayNodes, handleNodesChange };
-}
-
-function useStableCurrentActivityGraphLayout(
-  snapshot: DashboardSnapshot,
-  editor: ReturnType<typeof useCurrentActivityGraphEditor>,
-) {
-  const timelineMode = useFactoryTimelineStore((state) => state.mode);
-  const displayFactoryDefinition =
-    editor.viewState?.displayFactoryDefinition ??
-    currentActivityCardDisplayFactoryDefinition(editor, snapshot, timelineMode);
-  const layoutFactoryDefinition = useTopologyStableFactoryForLayout(
-    displayFactoryDefinition,
-  );
-  const graphLayout = useCurrentActivityGraphLayoutForFactory(
-    snapshot,
-    layoutFactoryDefinition,
-    editor.hiddenNodeClasses,
-    editor.visibilityPreset,
-  );
-
-  return { displayFactoryDefinition, graphLayout };
 }
 
 function useCurrentActivityGraphEdges({
@@ -294,7 +269,6 @@ function useInitialFitViewOptions(graphLayout: GraphLayout) {
   );
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph view-model keeps observe/editor layout, doc projection, and node presentation wiring together.
 export function useCurrentActivityGraphViewModel({
   editor,
   locale,
@@ -314,179 +288,26 @@ export function useCurrentActivityGraphViewModel({
     () => groupActiveExecutionsByWorkstationNodeID(activeExecutions),
     [activeExecutions],
   );
-  const { displayFactoryDefinition, graphLayout: topologyGraphLayout } =
-    useStableCurrentActivityGraphLayout(snapshot, editor);
-  const graphLayout = useMemo(
-    () =>
-      mergeDocNodesIntoGraphLayout(
-        topologyGraphLayout,
-        displayFactoryDefinition,
-      ),
-    [displayFactoryDefinition, topologyGraphLayout],
-  );
+  const {
+    canonicalLayoutViewport,
+    displayFactoryDefinition,
+    graphLayout,
+    pendingAdditionEdgeIds,
+    positionedGraphLayout,
+    visibleGraphEdges,
+  } = editor.graphState;
   const graphKey = useMemo(
     () => currentActivityGraphKey(graphLayout),
     [graphLayout],
   );
-  const layoutNodeIds = useMemo(
-    () => graphLayout.nodes.map((node) => node.nodeId),
-    [graphLayout.nodes],
-  );
-  const positionsByGraphKey = useCurrentActivityGraphStore(
-    (state) => state.positionsByGraphKey,
-  );
-  const viewportByGraphKey = useCurrentActivityGraphStore(
-    (state) => state.viewportByGraphKey,
-  );
-  const bridgePositionsToGraphKey = useCurrentActivityGraphStore(
-    (state) => state.bridgePositionsToGraphKey,
-  );
-  const clearNodePositions = useCurrentActivityGraphStore(
-    (state) => state.clearNodePositions,
-  );
-  const legacyStoredNodePositions = useMemo(
-    () =>
-      graphKey
-        ? resolveStoredNodePositionsForGraphKey(
-            positionsByGraphKey,
-            graphKey,
-            layoutNodeIds,
-          )
-        : EMPTY_NODE_POSITIONS,
-    [graphKey, layoutNodeIds, positionsByGraphKey],
-  );
-  const storedViewport = useMemo(() => {
-    if (!graphKey) {
-      return null;
-    }
-
-    return viewportByGraphKey[graphKey] ?? null;
-  }, [graphKey, viewportByGraphKey]);
-  const canonicalLayoutFactoryDefinition = useMemo(
-    () =>
-      editor.editorMode
-        ? displayFactoryDefinition
-        : (editor.viewState?.savedFactoryDocument ??
-          editor.viewState?.baseFactoryDocument ??
-          displayFactoryDefinition),
-    [
-      displayFactoryDefinition,
-      editor.editorMode,
-      editor.viewState?.baseFactoryDocument,
-      editor.viewState?.savedFactoryDocument,
-    ],
-  );
-  const canonicalLayout = useMemo(
-    () =>
-      editor.editorMode
-        ? (editor.layoutDraftState?.layout ?? createDefaultFactoryLayout())
-        : factoryLayoutFromDefinition(canonicalLayoutFactoryDefinition),
-    [
-      canonicalLayoutFactoryDefinition,
-      editor.editorMode,
-      editor.layoutDraftState?.layout,
-    ],
-  );
-  const canonicalPositions = useMemo(
-    () => graphNodePositionsFromCanonicalLayout(graphLayout, canonicalLayout),
-    [canonicalLayout, graphLayout],
-  );
-  const hydratableLegacyPositions = useMemo(
-    () =>
-      editor.editorMode
-        ? selectHydratableGraphNodePositions(
-            canonicalPositions,
-            legacyStoredNodePositions,
-          )
-        : EMPTY_NODE_POSITIONS,
-    [canonicalPositions, editor.editorMode, legacyStoredNodePositions],
-  );
-  const storedNodePositions = useMemo(() => {
-    if (editor.editorMode) {
-      return overlayGraphNodePositions(
-        canonicalPositions,
-        hydratableLegacyPositions,
-      );
-    }
-
-    return mergeLegacyStoredGraphNodePositions(
-      canonicalPositions,
-      legacyStoredNodePositions,
-    );
-  }, [
-    hydratableLegacyPositions,
-    editor.editorMode,
-    canonicalPositions,
-    legacyStoredNodePositions,
-  ]);
-  const setStoredNodePosition = useCurrentActivityGraphStore(
-    (state) => state.setNodePosition,
-  );
-
-  useLayoutEffect(() => {
-    if (!graphKey || layoutNodeIds.length === 0) {
-      return;
-    }
-
-    bridgePositionsToGraphKey(graphKey, layoutNodeIds);
-  }, [bridgePositionsToGraphKey, graphKey, layoutNodeIds]);
-  useEffect(() => {
-    if (!editor.editorMode) {
-      return;
-    }
-
-    const nodeIds = Object.keys(hydratableLegacyPositions);
-    if (nodeIds.length === 0) {
-      return;
-    }
-
-    editor.layoutDraftState.replaceLayout(
-      mergeFactoryLayoutWithNodePositions(
-        editor.layoutDraftState.layout,
-        hydratableLegacyPositions,
-      ),
-    );
-    clearNodePositions(nodeIds);
-  }, [
-    clearNodePositions,
-    editor.editorMode,
-    editor.layoutDraftState,
-    hydratableLegacyPositions,
-  ]);
-  useEffect(() => {
-    if (!editor.editorMode || !storedViewport) {
-      return;
-    }
-
-    const currentViewport = editor.layoutDraftState.layout.viewport;
-    if (
-      currentViewport &&
-      currentViewport.x === storedViewport.x &&
-      currentViewport.y === storedViewport.y &&
-      currentViewport.zoom === storedViewport.zoom
-    ) {
-      return;
-    }
-
-    editor.layoutDraftState.replaceLayout(
-      updateFactoryLayoutViewport(editor.layoutDraftState.layout, storedViewport),
-    );
-  }, [editor.editorMode, editor.layoutDraftState, storedViewport]);
-  const { pendingAdditionEdgeIds, visibleGraphEdges } = useMemo(
-    () =>
-      buildVisibleGraphEdgesWithDraft({
-        draft: editor.draftState.draft,
-        graphLayout,
-      }),
-    [editor.draftState.draft, graphLayout],
-  );
   const handleAssignments = useMemo(
-    () => buildHandleAssignments(visibleGraphEdges, graphLayout.nodes),
-    [graphLayout.nodes, visibleGraphEdges],
+    () =>
+      buildHandleAssignments(visibleGraphEdges, positionedGraphLayout.nodes),
+    [positionedGraphLayout.nodes, visibleGraphEdges],
   );
   const activeGraphHighlights = useActiveGraphHighlights({
     activeExecutions,
-    graphLayout,
+    graphLayout: positionedGraphLayout,
     visibleGraphEdges,
   });
   const activeItemLabelsByPlaceId = useMemo(
@@ -499,7 +320,7 @@ export function useCurrentActivityGraphViewModel({
     activeItemLabelsByPlaceId,
     editor,
     factoryDefinition: displayFactoryDefinition ?? undefined,
-    graphLayout,
+    graphLayout: positionedGraphLayout,
     locale,
     now,
     onSelectDoc,
@@ -511,7 +332,6 @@ export function useCurrentActivityGraphViewModel({
     onSelectWorkstation,
     selection,
     snapshot,
-    storedNodePositions,
   });
   const { displayNodes, handleNodesChange } =
     useCurrentActivityGraphNodePresentation(baseNodes);
@@ -523,10 +343,6 @@ export function useCurrentActivityGraphViewModel({
     visibleGraphEdges,
   });
   const initialFitViewOptions = useInitialFitViewOptions(graphLayout);
-  const canonicalLayoutViewport = editor.editorMode
-    ? (editor.layoutDraftState?.layout.viewport ?? storedViewport)
-    : (storedViewport ??
-      factoryLayoutFromDefinition(canonicalLayoutFactoryDefinition).viewport);
 
   return {
     canonicalLayoutViewport,
@@ -538,7 +354,5 @@ export function useCurrentActivityGraphViewModel({
       "full-graph",
     initialFitViewOptions,
     nodes: displayNodes,
-    setStoredNodePosition,
-    storedNodePositions,
   };
 }

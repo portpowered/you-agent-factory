@@ -3,6 +3,7 @@ import { act, renderHook } from "@testing-library/react";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { CanonicalFactoryDefinition } from "../../api/current-factory-definition";
+import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
   readGraphDraftHasPendingChanges,
@@ -128,7 +129,7 @@ const hookState = vi.hoisted(() => ({
 vi.mock(
   "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
   () => ({
-    useCurrentFactoryDocument: () => hookState.currentFactoryQuery,
+    useCurrentFactoryDocument: vi.fn(() => hookState.currentFactoryQuery),
   }),
 );
 
@@ -145,12 +146,15 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
       discard: hookState.draftState.resetDraft,
       resetLayout: vi.fn(),
       save: async () => {
-        if (!hookState.draftState.pendingFactoryDefinition) {
+        const factory =
+          hookState.draftState.pendingFactoryDefinition ??
+          hookState.draftState.latestDocument;
+        if (!factory) {
           return false;
         }
         await hookState.saveEditableDefinition.saveAsync({
           baseVersion: hookState.draftState.latestDocument?.version,
-          factory: hookState.draftState.pendingFactoryDefinition,
+          factory,
         });
         hookState.draftState.replaceDraft(createEmptyFactoryGraphDraft());
         return true;
@@ -197,8 +201,7 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
         hookState.layoutDraftState.layoutDirty || hookState.layoutDirty,
       pendingFactoryDefinition: hookState.draftState.pendingFactoryDefinition,
       preferencesDirty: hookState.preferencesDirty,
-      topologyDirty:
-        hookState.draftState.hasChanges || hookState.topologyDirty,
+      topologyDirty: hookState.draftState.hasChanges || hookState.topologyDirty,
     },
     saveMutation: {
       error: hookState.saveEditableDefinition.error,
@@ -211,7 +214,6 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
           hookState.layoutDirty ||
           hookState.draftState.hasChanges ||
           hookState.topologyDirty) &&
-        hookState.draftState.pendingFactoryDefinition !== null &&
         hookState.draftState.latestDocument !== null &&
         hookState.draftState.validationErrors.length === 0 &&
         !hookState.saveStateIsStale,
@@ -278,13 +280,17 @@ vi.mock(
   }),
 );
 
-vi.mock("./react-flow-current-activity-card-editor-value", () => ({
-  buildCurrentActivityGraphEditorValue: (value: Record<string, unknown>) =>
-    value,
-}));
+vi.mock("./react-flow-current-activity-card-editor-value", async () => {
+  const actual = await vi.importActual(
+    "./react-flow-current-activity-card-editor-value",
+  );
+
+  return actual;
+});
 
 describe("useCurrentActivityGraphEditor", () => {
   beforeEach(() => {
+    vi.mocked(useCurrentFactoryDocument).mockClear();
     useFactoryGraphTopologyEditorBridge.setState({
       graphDraftHasPendingChanges: false,
       handlers: null,
@@ -322,6 +328,55 @@ describe("useCurrentActivityGraphEditor", () => {
     hookState.documentSave = { status: "idle" };
     hookState.unsupportedFromDefinition = undefined;
     hookState.saveStateIsStale = false;
+  });
+
+  it("does not enable the current factory document query while read mode has a versioned event factory", () => {
+    hookState.currentFactoryQuery = {
+      data: undefined,
+      status: "pending",
+    };
+    const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+    snapshot.factory = {
+      ...fixtureState.baseFactoryDefinition,
+      version: {
+        logical: "7",
+        physical: "2026-06-09T00:00:00Z",
+      },
+    };
+
+    const { result } = renderHook(() =>
+      useCurrentActivityGraphEditor(snapshot),
+    );
+
+    expect(useCurrentFactoryDocument).toHaveBeenLastCalledWith(false);
+    expect(result.current.status.isDefinitionLoading).toBe(false);
+    expect(result.current.graphState.displayFactoryDefinition).toMatchObject({
+      version: {
+        logical: "7",
+        physical: "2026-06-09T00:00:00Z",
+      },
+    });
+  });
+
+  it("waits until edit intent before enabling the current factory document query when the event factory has no version", () => {
+    hookState.currentFactoryQuery = {
+      data: undefined,
+      status: "pending",
+    };
+    const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+    snapshot.factory = fixtureState.baseFactoryDefinition;
+
+    const { result } = renderHook(() =>
+      useCurrentActivityGraphEditor(snapshot),
+    );
+
+    expect(useCurrentFactoryDocument).toHaveBeenLastCalledWith(false);
+
+    act(() => {
+      result.current.handleEditorModeToggle();
+    });
+
+    expect(useCurrentFactoryDocument).toHaveBeenLastCalledWith(true);
   });
 
   it("enters and leaves editor mode while resetting transient state", () => {
@@ -442,7 +497,7 @@ describe("useCurrentActivityGraphEditor", () => {
     );
 
     act(() => {
-      result.current.setIsConfirmingSave(true);
+      result.current.requestSaveConfirmation();
     });
     rerender();
     expect(result.current.isConfirmingSave).toBe(true);
@@ -474,7 +529,7 @@ describe("useCurrentActivityGraphEditor", () => {
       result.current.handleEditorModeToggle();
       result.current.setActiveTool("connect");
       result.current.setIsConfirmingLeaveEditor(true);
-      result.current.setIsConfirmingSave(true);
+      result.current.requestSaveConfirmation();
     });
     hookState.draftState.hasChanges = true;
     rerender({ factoryDocumentScopeKey: "session-alpha" });

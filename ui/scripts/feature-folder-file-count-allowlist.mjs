@@ -6,7 +6,7 @@ export const allowlistedOversizedFeatureFolders = [
     relativeDirectoryPath: "src/features/factory-graph-editor/lib",
   },
   {
-    maxFileCount: 39,
+    maxFileCount: 41,
     relativeDirectoryPath: "src/features/workflow-activity/hooks",
   },
   {
@@ -38,7 +38,7 @@ export const allowlistedOversizedFeatureFolders = [
     relativeDirectoryPath: "src/features/bento/components",
   },
   {
-    maxFileCount: 20,
+    maxFileCount: 21,
     relativeDirectoryPath: "src/features/flowchart/components",
   },
   {

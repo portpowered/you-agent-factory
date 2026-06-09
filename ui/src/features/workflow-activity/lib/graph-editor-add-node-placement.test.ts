@@ -82,7 +82,6 @@ describe("resolveInitialPlacementTopLeft for docs", () => {
     const topLeft = resolveInitialPlacementTopLeft({
       draft: docDraft,
       nodes: [],
-      storedPositions: {},
       viewportCenter: { x: 640, y: 360 },
     });
 
@@ -105,7 +104,6 @@ describe("resolveInitialPlacementTopLeft", () => {
     const topLeft = resolveInitialPlacementTopLeft({
       draft: workerDraft,
       nodes: [],
-      storedPositions: {},
       viewportCenter: { x: 500, y: 300 },
     });
 
@@ -113,19 +111,6 @@ describe("resolveInitialPlacementTopLeft", () => {
       x: 500 - workerSize.width / 2,
       y: 300 - workerSize.height / 2,
     });
-  });
-
-  it("skips placement when the new node already has a stored position", () => {
-    const topLeft = resolveInitialPlacementTopLeft({
-      draft: workerDraft,
-      nodes: [],
-      storedPositions: {
-        "worker:reviewer": { x: 12, y: 34 },
-      },
-      viewportCenter: { x: 500, y: 300 },
-    });
-
-    expect(topLeft).toBeNull();
   });
 
   it("nudges away from occupied nodes at the viewport center", () => {
@@ -138,7 +123,6 @@ describe("resolveInitialPlacementTopLeft", () => {
     const topLeft = resolveInitialPlacementTopLeft({
       draft: workerDraft,
       nodes,
-      storedPositions: {},
       viewportCenter: { x: 500, y: 300 },
     });
 
@@ -156,7 +140,6 @@ describe("resolveInitialPlacementTopLeft", () => {
     const topLeft = resolveInitialPlacementTopLeft({
       draft: workerDraft,
       nodes,
-      storedPositions: {},
       viewportCenter: { x: 500, y: 300 },
     });
 
@@ -177,25 +160,21 @@ describe("resolveInitialPlacementTopLeft", () => {
     const workerNear = resolveInitialPlacementTopLeft({
       draft: workerDraft,
       nodes: [],
-      storedPositions: {},
       viewportCenter: nearCenter,
     });
     const workerFar = resolveInitialPlacementTopLeft({
       draft: workerDraft,
       nodes: [],
-      storedPositions: {},
       viewportCenter: farCenter,
     });
     const workstationNear = resolveInitialPlacementTopLeft({
       draft: workstationDraft,
       nodes: [],
-      storedPositions: {},
       viewportCenter: nearCenter,
     });
     const workstationFar = resolveInitialPlacementTopLeft({
       draft: workstationDraft,
       nodes: [],
-      storedPositions: {},
       viewportCenter: farCenter,
     });
 
@@ -224,7 +203,6 @@ describe("resolveInitialPlacementTopLeft for workstations", () => {
     const topLeft = resolveInitialPlacementTopLeft({
       draft: workstationDraft,
       nodes: [],
-      storedPositions: {},
       viewportCenter,
     });
 
@@ -246,7 +224,6 @@ describe("resolveInitialPlacementTopLeft for workstations", () => {
     const topLeft = resolveInitialPlacementTopLeft({
       draft: workstationDraft,
       nodes,
-      storedPositions: {},
       viewportCenter,
     });
 

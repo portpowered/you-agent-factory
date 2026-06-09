@@ -54,7 +54,7 @@ function handleFactoryGraphConnectionAnchorClick(
     workstationResolver: FactoryGraphConnectionResolver;
   },
 ): void {
-  if (!canInteractWithEditor || activeTool !== "connect") {
+  if (!canInteractWithEditor || activeTool === "delete") {
     return;
   }
 
@@ -136,10 +136,10 @@ export function useFactoryGraphConnectionController({
     ],
   );
   useEffect(() => {
-    if (activeTool !== "connect") {
+    if (!canInteractWithEditor || activeTool === "delete") {
       setPendingConnectionSource(null);
     }
-  }, [activeTool]);
+  }, [activeTool, canInteractWithEditor]);
   const commitConnection = useCallback(
     (connection: {
       sourceAnchorId: string;
@@ -161,7 +161,7 @@ export function useFactoryGraphConnectionController({
     (connection: Connection) => {
       if (
         !canInteractWithEditor ||
-        activeTool !== "connect" ||
+        activeTool === "delete" ||
         !connection.source ||
         !connection.sourceHandle ||
         !connection.target ||

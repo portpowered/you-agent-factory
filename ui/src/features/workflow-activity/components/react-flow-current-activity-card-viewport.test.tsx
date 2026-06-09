@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { Edge, Node } from "@xyflow/react";
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
@@ -44,32 +44,32 @@ vi.mock("@xyflow/react", async () => {
       }, [onInit]);
 
       return (
-      <div
-        className={className}
-        data-default-viewport={JSON.stringify(defaultViewport ?? null)}
-        data-fit-view={String(fitView ?? false)}
-        data-testid="mock-react-flow"
-      >
-        {(nodes ?? []).map((node) => (
-          <button
-            key={node.id}
-            onClick={() => onNodeClick?.(null, { id: node.id })}
-            type="button"
-          >
-            {node.id}
-          </button>
-        ))}
-        {(edges ?? []).map((edge) => (
-          <button
-            key={edge.id}
-            onClick={() => onEdgeClick?.(null, edge)}
-            type="button"
-          >
-            {edge.id}
-          </button>
-        ))}
-        {children}
-      </div>
+        <div
+          className={className}
+          data-default-viewport={JSON.stringify(defaultViewport ?? null)}
+          data-fit-view={String(fitView ?? false)}
+          data-testid="mock-react-flow"
+        >
+          {(nodes ?? []).map((node) => (
+            <button
+              key={node.id}
+              onClick={() => onNodeClick?.(null, { id: node.id })}
+              type="button"
+            >
+              {node.id}
+            </button>
+          ))}
+          {(edges ?? []).map((edge) => (
+            <button
+              key={edge.id}
+              onClick={() => onEdgeClick?.(null, edge)}
+              type="button"
+            >
+              {edge.id}
+            </button>
+          ))}
+          {children}
+        </div>
       );
     },
   };
@@ -312,6 +312,38 @@ describe("CurrentActivityGraphViewport", () => {
     );
   });
 
+  it("uses factory graph edge data as the canonical editor edge id", async () => {
+    const handleEditorEdgeClick = vi.fn();
+
+    renderViewport({
+      activeTool: "delete",
+      editorMode: true,
+      edges: [
+        {
+          data: {
+            factoryGraphEdgeId:
+              "workstation-input:work-state:story:queued->workstation:review",
+          },
+          id: "workstation-resource:resource:story->workstation:review",
+          source: "resource:story",
+          target: "workstation:review",
+        },
+      ],
+      nodes: [],
+      onEditorEdgeClick: handleEditorEdgeClick,
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "workstation-resource:resource:story->workstation:review",
+      }),
+    );
+
+    expect(handleEditorEdgeClick).toHaveBeenCalledWith(
+      "workstation-input:work-state:story:queued->workstation:review",
+    );
+  });
+
   it("does not delete graph entities while outside editor mode", async () => {
     const handleEditorNodeClick = vi.fn();
     const handleEditorEdgeClick = vi.fn();
@@ -396,7 +428,6 @@ function renderViewport({
       editorMode={editorMode}
       edges={edges}
       flowContainerRef={flowContainerRef}
-      graphKey="test-graph"
       handleDiscardPendingChanges={vi.fn()}
       handleEditorModeToggle={vi.fn()}
       handleNodesChange={vi.fn()}
@@ -419,7 +450,6 @@ function renderViewport({
       onHideShowMenuOpenChange={vi.fn()}
       onToggleHiddenNodeClass={vi.fn()}
       onSelectTool={vi.fn()}
-      setStoredNodePosition={vi.fn()}
     />,
   );
 }
