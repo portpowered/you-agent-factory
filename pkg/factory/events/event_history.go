@@ -116,17 +116,14 @@ func (h *FactoryEventHistory) Subscribe(
 	h.mu.Lock()
 	events := make([]factoryapi.FactoryEvent, len(h.events))
 	copy(events, h.events)
-	h.mu.Unlock()
-
 	if reconnect != nil {
 		replayed, err := BuildReconnectReplay(events, *reconnect, scope)
 		if err != nil {
+			h.mu.Unlock()
 			return interfaces.FactoryEventStream{}, err
 		}
 		events = replayed
 	}
-
-	h.mu.Lock()
 	id := h.nextID
 	h.nextID++
 	subscription := &eventHistorySubscription{

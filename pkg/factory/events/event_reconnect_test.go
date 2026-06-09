@@ -3,6 +3,8 @@ package events
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -47,6 +49,65 @@ func TestFactoryEventHistory_Subscribe_InvalidReconnectCursorDoesNotRegisterStre
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for live event on valid subscriber after invalid reconnect attempt")
 	}
+}
+
+func TestFactoryEventHistory_Subscribe_DoesNotMissEventsDuringRegistration(t *testing.T) {
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+	history.RecordInitialStructure()
+
+	const attempts = 64
+	var wg sync.WaitGroup
+	for i := 0; i < attempts; i++ {
+		wg.Add(1)
+		go func(attempt int) {
+			defer wg.Done()
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			stream, err := history.Subscribe(ctx, nil, interfaces.FactoryEventReconnectScope{})
+			if err != nil {
+				t.Errorf("Subscribe attempt %d: %v", attempt, err)
+				return
+			}
+
+			eventID := fmt.Sprintf("factory-event/factory-state-change/%d/%s", attempt, interfaces.FactoryStateRunning)
+			history.RecordFactoryStateChange(
+				attempt,
+				interfaces.FactoryStateIdle,
+				interfaces.FactoryStateRunning,
+				fmt.Sprintf("subscribe-race-%d", attempt),
+				time.Unix(int64(attempt+1), 0).UTC(),
+			)
+
+			received := make(map[string]struct{}, len(stream.History)+attempts)
+			for _, event := range stream.History {
+				received[event.Id] = struct{}{}
+			}
+			if _, ok := received[eventID]; ok {
+				return
+			}
+
+			deadline := time.After(time.Second)
+			for {
+				select {
+				case event, ok := <-stream.Events:
+					if !ok {
+						t.Errorf("attempt %d: stream closed before event %s arrived", attempt, eventID)
+						return
+					}
+					received[event.Id] = struct{}{}
+					if _, found := received[eventID]; found {
+						return
+					}
+				case <-deadline:
+					t.Errorf("attempt %d: missed event %s between replay snapshot and live delivery", attempt, eventID)
+					return
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
 }
 
 func TestBuildReconnectReplay_AfterEventIDReturnsOnlyNewerEvents(t *testing.T) {
