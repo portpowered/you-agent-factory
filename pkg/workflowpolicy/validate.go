@@ -28,64 +28,102 @@ var (
 
 func validatePolicyMap(document map[string]any, deploymentCap int) []Issue {
 	var issues []Issue
-	if value, ok := document["mode"]; ok {
-		mode, ok := value.(string)
-		if !ok || strings.TrimSpace(mode) != ModeReadOnly {
-			issues = append(issues, Issue{
-				Code:    CodeUnsupportedPolicyMode,
-				Message: fmt.Sprintf("policy.mode must be %q for the read-only MVP default", ModeReadOnly),
-				Path:    "policy.mode",
-			})
-		}
+	issues = append(issues, validatePolicyModeOverride(document)...)
+	issues = append(issues, validatePolicyDeniedFlagOverrides(document)...)
+	issues = append(issues, validatePolicyWritableRootOverride(document)...)
+	issues = append(issues, validatePolicyConcurrencyOverride(document)...)
+	issues = append(issues, validatePolicyMaxAgentsOverride(document, deploymentCap)...)
+	return issues
+}
+
+func validatePolicyModeOverride(document map[string]any) []Issue {
+	value, ok := document["mode"]
+	if !ok {
+		return nil
 	}
+	mode, ok := value.(string)
+	if ok && strings.TrimSpace(mode) == ModeReadOnly {
+		return nil
+	}
+	return []Issue{{
+		Code:    CodeUnsupportedPolicyMode,
+		Message: fmt.Sprintf("policy.mode must be %q for the read-only MVP default", ModeReadOnly),
+		Path:    "policy.mode",
+	}}
+}
+
+func validatePolicyDeniedFlagOverrides(document map[string]any) []Issue {
+	var issues []Issue
 	for field, capability := range map[string]string{
 		"allowNetwork":          "network access",
 		"allowConnectors":       "connectors",
 		"allowDangerFullAccess": "danger-full-access",
 	} {
-		if value, ok := document[field]; ok {
-			allowed, ok := value.(bool)
-			if ok && allowed {
-				issues = append(issues, validateDeniedFlag(field, capability))
-			}
+		value, ok := document[field]
+		if !ok {
+			continue
 		}
-	}
-	if value, ok := document["writableRoots"]; ok {
-		if roots, ok := value.([]any); ok && len(roots) > 0 {
-			issues = append(issues, Issue{
-				Code:    CodeWritableRootsReadOnly,
-				Message: "writableRoots are not allowed when policy.mode is READ_ONLY",
-				Path:    "policy.writableRoots",
-			})
-		}
-	}
-	if value, ok := document["concurrency"]; ok {
-		concurrency, ok := asInt(value)
-		if !ok || concurrency <= 0 {
-			issues = append(issues, Issue{
-				Code:    CodeInvalidConcurrency,
-				Message: "concurrency must be greater than zero",
-				Path:    "policy.concurrency",
-			})
-		}
-	}
-	if value, ok := document["maxAgents"]; ok {
-		maxAgents, ok := asInt(value)
-		if !ok || maxAgents <= 0 {
-			issues = append(issues, Issue{
-				Code:    CodeInvalidMaxAgents,
-				Message: "maxAgents must be greater than zero",
-				Path:    "policy.maxAgents",
-			})
-		} else if maxAgents > deploymentCap {
-			issues = append(issues, Issue{
-				Code:    CodeExcessiveMaxAgents,
-				Message: fmt.Sprintf("maxAgents %d exceeds deployment cap %d", maxAgents, deploymentCap),
-				Path:    "policy.maxAgents",
-			})
+		allowed, ok := value.(bool)
+		if ok && allowed {
+			issues = append(issues, validateDeniedFlag(field, capability))
 		}
 	}
 	return issues
+}
+
+func validatePolicyWritableRootOverride(document map[string]any) []Issue {
+	value, ok := document["writableRoots"]
+	if !ok {
+		return nil
+	}
+	roots, ok := value.([]any)
+	if !ok || len(roots) == 0 {
+		return nil
+	}
+	return []Issue{{
+		Code:    CodeWritableRootsReadOnly,
+		Message: "writableRoots are not allowed when policy.mode is READ_ONLY",
+		Path:    "policy.writableRoots",
+	}}
+}
+
+func validatePolicyConcurrencyOverride(document map[string]any) []Issue {
+	value, ok := document["concurrency"]
+	if !ok {
+		return nil
+	}
+	concurrency, ok := asInt(value)
+	if ok && concurrency > 0 {
+		return nil
+	}
+	return []Issue{{
+		Code:    CodeInvalidConcurrency,
+		Message: "concurrency must be greater than zero",
+		Path:    "policy.concurrency",
+	}}
+}
+
+func validatePolicyMaxAgentsOverride(document map[string]any, deploymentCap int) []Issue {
+	value, ok := document["maxAgents"]
+	if !ok {
+		return nil
+	}
+	maxAgents, ok := asInt(value)
+	if !ok || maxAgents <= 0 {
+		return []Issue{{
+			Code:    CodeInvalidMaxAgents,
+			Message: "maxAgents must be greater than zero",
+			Path:    "policy.maxAgents",
+		}}
+	}
+	if maxAgents > deploymentCap {
+		return []Issue{{
+			Code:    CodeExcessiveMaxAgents,
+			Message: fmt.Sprintf("maxAgents %d exceeds deployment cap %d", maxAgents, deploymentCap),
+			Path:    "policy.maxAgents",
+		}}
+	}
+	return nil
 }
 
 func asInt(value any) (int, bool) {
