@@ -1,4 +1,4 @@
-package apisurface_test
+package factorysession_test
 
 import (
 	"encoding/json"
@@ -8,7 +8,8 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
+	apisurface "github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 )
 
@@ -32,7 +33,7 @@ type durableFixtureIdempotentReplay struct {
 
 func loadDurableFixtureCatalog(t *testing.T) durableFixtureCatalog {
 	t.Helper()
-	path := filepath.Join("..", "api", "testdata", "durable-session-contract-fixtures.json")
+	path := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read fixtures: %v", err)
@@ -70,7 +71,7 @@ func TestStartRequestFromAPI_NormalizesAsyncAcceptedFixture(t *testing.T) {
 		t.Fatal("missing petri-running-one-dispatch fixture")
 	}
 
-	request, err := apisurface.StartRequestFromAPI(decodeExecutionRequest(t, scenario.ExecutionRequest))
+	request, err := factorysession.StartRequestFromAPI(decodeExecutionRequest(t, scenario.ExecutionRequest))
 	if err != nil {
 		t.Fatalf("StartRequestFromAPI: %v", err)
 	}
@@ -83,7 +84,7 @@ func TestStartRequestFromAPI_NormalizesAsyncAcceptedFixture(t *testing.T) {
 }
 
 func TestStartRequestFromAPI_RejectsMissingRequestID(t *testing.T) {
-	_, err := apisurface.StartRequestFromAPI(factoryapi.FactorySessionExecutionRequest{
+	_, err := factorysession.StartRequestFromAPI(factoryapi.FactorySessionExecutionRequest{
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind:      factoryapi.FactorySessionExecutionSourceKindFactoryId,
 			FactoryId: strPtr("factory"),
@@ -105,11 +106,11 @@ func TestStartRequestFromAPI_IdempotentReplayProducesStableTuple(t *testing.T) {
 	catalog := loadDurableFixtureCatalog(t)
 	request := decodeExecutionRequest(t, catalog.IdempotentReplay.ExecutionRequest)
 
-	first, err := apisurface.StartRequestFromAPI(request)
+	first, err := factorysession.StartRequestFromAPI(request)
 	if err != nil {
 		t.Fatalf("first StartRequestFromAPI: %v", err)
 	}
-	second, err := apisurface.StartRequestFromAPI(request)
+	second, err := factorysession.StartRequestFromAPI(request)
 	if err != nil {
 		t.Fatalf("second StartRequestFromAPI: %v", err)
 	}
@@ -178,7 +179,7 @@ func TestSyncStartResponseToAPI_MapsTerminalAndTimeoutFixtures(t *testing.T) {
 		}
 	}
 
-	terminalMapped := apisurface.SyncStartResponseToAPI(terminalResult)
+	terminalMapped := factorysession.SyncStartResponseToAPI(terminalResult)
 	if terminalMapped.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeCompleted {
 		t.Fatalf("syncOutcome = %q, want COMPLETED", terminalMapped.SyncOutcome)
 	}
@@ -194,7 +195,7 @@ func TestSyncStartResponseToAPI_MapsTerminalAndTimeoutFixtures(t *testing.T) {
 	if err := json.Unmarshal(timeoutEncoded, &timeoutExpected); err != nil {
 		t.Fatalf("decode timeout fixture: %v", err)
 	}
-	timeoutMapped := apisurface.SyncStartResponseToAPI(factorysessionexecution.SyncStartResult{
+	timeoutMapped := factorysession.SyncStartResponseToAPI(factorysessionexecution.SyncStartResult{
 		AsyncStartResult: factorysessionexecution.AsyncStartResult{
 			SessionID:        timeoutExpected.SessionId,
 			Status:           string(timeoutExpected.Status),
@@ -226,4 +227,11 @@ func TestSyncStartResponseToAPI_MapsTerminalAndTimeoutFixtures(t *testing.T) {
 
 func strPtr(value string) *string {
 	return &value
+}
+
+func deref(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }

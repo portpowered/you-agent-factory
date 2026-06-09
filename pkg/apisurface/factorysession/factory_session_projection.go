@@ -1,4 +1,4 @@
-package apisurface
+package factorysession
 
 import (
 	"encoding/json"

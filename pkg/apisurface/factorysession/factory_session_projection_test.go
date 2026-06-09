@@ -1,4 +1,4 @@
-package apisurface_test
+package factorysession_test
 
 import (
 	"encoding/json"
@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 )
 
@@ -14,7 +14,7 @@ func TestResultResponseToAPI_MapsProjectionFixtures(t *testing.T) {
 	catalog := loadDurableFixtureCatalog(t)
 
 	notReady := findScenario(t, catalog, "petri-running-one-dispatch")
-	notReadyMapped := apisurface.ResultResponseToAPI(resultFromFixture(notReady["result"].(map[string]any)))
+	notReadyMapped := factorysession.ResultResponseToAPI(resultFromFixture(notReady["result"].(map[string]any)))
 	if notReadyMapped.ResultStatus != factoryapi.FactorySessionResultStatusNotReady {
 		t.Fatalf("not-ready status = %q", notReadyMapped.ResultStatus)
 	}
@@ -23,7 +23,7 @@ func TestResultResponseToAPI_MapsProjectionFixtures(t *testing.T) {
 	}
 
 	partial := findScenario(t, catalog, "javascript-running-n-dispatch")
-	partialMapped := apisurface.ResultResponseToAPI(resultFromFixture(partial["result"].(map[string]any)))
+	partialMapped := factorysession.ResultResponseToAPI(resultFromFixture(partial["result"].(map[string]any)))
 	if partialMapped.ResultStatus != factoryapi.FactorySessionResultStatusPartial {
 		t.Fatalf("partial status = %q", partialMapped.ResultStatus)
 	}
@@ -32,7 +32,7 @@ func TestResultResponseToAPI_MapsProjectionFixtures(t *testing.T) {
 	}
 
 	final := findScenario(t, catalog, "petri-succeeded-one-dispatch")
-	finalMapped := apisurface.ResultResponseToAPI(resultFromFixture(final["result"].(map[string]any)))
+	finalMapped := factorysession.ResultResponseToAPI(resultFromFixture(final["result"].(map[string]any)))
 	if finalMapped.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
 		t.Fatalf("final status = %q", finalMapped.ResultStatus)
 	}
@@ -41,7 +41,7 @@ func TestResultResponseToAPI_MapsProjectionFixtures(t *testing.T) {
 	}
 
 	failedPartial := findScenario(t, catalog, "javascript-failed-with-partial")
-	failedMapped := apisurface.ResultResponseToAPI(resultFromFixture(failedPartial["result"].(map[string]any)))
+	failedMapped := factorysession.ResultResponseToAPI(resultFromFixture(failedPartial["result"].(map[string]any)))
 	if failedMapped.ResultStatus != factoryapi.FactorySessionResultStatusFailedWithPartial {
 		t.Fatalf("failed-with-partial status = %q", failedMapped.ResultStatus)
 	}
@@ -50,7 +50,7 @@ func TestResultResponseToAPI_MapsProjectionFixtures(t *testing.T) {
 	}
 
 	unavailable := findScenario(t, catalog, "petri-canceled")
-	unavailableMapped := apisurface.ResultResponseToAPI(resultFromFixture(unavailable["result"].(map[string]any)))
+	unavailableMapped := factorysession.ResultResponseToAPI(resultFromFixture(unavailable["result"].(map[string]any)))
 	if unavailableMapped.ResultStatus != factoryapi.FactorySessionResultStatusUnavailable {
 		t.Fatalf("unavailable status = %q", unavailableMapped.ResultStatus)
 	}
@@ -60,7 +60,7 @@ func TestListDispatchesResponseToAPI_MapsQueuedRunningAndFailedFixtures(t *testi
 	catalog := loadDurableFixtureCatalog(t)
 
 	running := findScenario(t, catalog, "javascript-running-n-dispatch")
-	runningMapped := apisurface.ListDispatchesResponseToAPI(listDispatchesFromFixture(running))
+	runningMapped := factorysession.ListDispatchesResponseToAPI(listDispatchesFromFixture(running))
 	if len(runningMapped.Dispatches) != 3 {
 		t.Fatalf("dispatch count = %d, want 3", len(runningMapped.Dispatches))
 	}
@@ -69,7 +69,7 @@ func TestListDispatchesResponseToAPI_MapsQueuedRunningAndFailedFixtures(t *testi
 	}
 
 	failed := findScenario(t, catalog, "javascript-failed-with-partial")
-	failedMapped := apisurface.ListDispatchesResponseToAPI(listDispatchesFromFixture(failed))
+	failedMapped := factorysession.ListDispatchesResponseToAPI(listDispatchesFromFixture(failed))
 	if len(failedMapped.Dispatches) != 2 {
 		t.Fatalf("dispatch count = %d, want 2", len(failedMapped.Dispatches))
 	}
@@ -82,13 +82,13 @@ func TestDispatchDetailResponseToAPI_MapsPetriAndJavaScriptFixtures(t *testing.T
 	catalog := loadDurableFixtureCatalog(t)
 
 	petri := findScenario(t, catalog, "petri-succeeded-one-dispatch")
-	petriMapped := apisurface.DispatchDetailResponseToAPI(dispatchDetailFromFixture(petri["dispatchDetail"].(map[string]any)))
+	petriMapped := factorysession.DispatchDetailResponseToAPI(dispatchDetailFromFixture(petri["dispatchDetail"].(map[string]any)))
 	if petriMapped.Petri == nil || petriMapped.Petri.TransitionId != "transition-plan-task" {
 		t.Fatalf("petri projection = %#v", petriMapped.Petri)
 	}
 
 	javascript := findScenario(t, catalog, "javascript-running-n-dispatch")
-	javascriptMapped := apisurface.DispatchDetailResponseToAPI(dispatchDetailFromFixture(javascript["dispatchDetail"].(map[string]any)))
+	javascriptMapped := factorysession.DispatchDetailResponseToAPI(dispatchDetailFromFixture(javascript["dispatchDetail"].(map[string]any)))
 	if javascriptMapped.Javascript == nil || javascriptMapped.Javascript.TaskKind != factoryapi.FactoryDispatchJavaScriptTaskKindVERIFY {
 		t.Fatalf("javascript projection = %#v", javascriptMapped.Javascript)
 	}
@@ -98,7 +98,7 @@ func TestArtifactProjectionToAPI_MapsSummaryAndDetailFixtures(t *testing.T) {
 	catalog := loadDurableFixtureCatalog(t)
 
 	succeeded := findScenario(t, catalog, "petri-succeeded-one-dispatch")
-	listMapped := apisurface.ListArtifactsResponseToAPI(listArtifactsFromFixture(succeeded))
+	listMapped := factorysession.ListArtifactsResponseToAPI(listArtifactsFromFixture(succeeded))
 	if len(listMapped.Artifacts) != 1 {
 		t.Fatalf("artifact count = %d, want 1", len(listMapped.Artifacts))
 	}
@@ -106,7 +106,7 @@ func TestArtifactProjectionToAPI_MapsSummaryAndDetailFixtures(t *testing.T) {
 		t.Fatal("artifact retrievalRef missing")
 	}
 
-	detailMapped := apisurface.ArtifactDetailResponseToAPI(artifactDetailFromFixture(succeeded["artifactDetail"].(map[string]any)))
+	detailMapped := factorysession.ArtifactDetailResponseToAPI(artifactDetailFromFixture(succeeded["artifactDetail"].(map[string]any)))
 	if detailMapped.Content == nil || len(*detailMapped.Content) == 0 {
 		t.Fatal("artifact detail content missing")
 	}
@@ -114,7 +114,7 @@ func TestArtifactProjectionToAPI_MapsSummaryAndDetailFixtures(t *testing.T) {
 
 func TestResultRequestFromAPI_RejectsInvalidMode(t *testing.T) {
 	mode := factoryapi.FactorySessionResultMode("invalid")
-	_, err := apisurface.ResultRequestFromAPI(factoryapi.GetFactorySessionResultsParams{Mode: &mode})
+	_, err := factorysession.ResultRequestFromAPI(factoryapi.GetFactorySessionResultsParams{Mode: &mode})
 	if err == nil {
 		t.Fatal("error = nil, want validation error")
 	}

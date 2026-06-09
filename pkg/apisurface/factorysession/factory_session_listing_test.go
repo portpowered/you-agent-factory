@@ -1,17 +1,17 @@
-package apisurface_test
+package factorysession_test
 
 import (
 	"errors"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/workflowsource"
 )
 
 func TestListSessionsRequestFromAPI_DefaultsToLiveScope(t *testing.T) {
-	request, err := apisurface.ListSessionsRequestFromAPI(factoryapi.ListFactorySessionsParams{})
+	request, err := factorysession.ListSessionsRequestFromAPI(factoryapi.ListFactorySessionsParams{})
 	if err != nil {
 		t.Fatalf("ListSessionsRequestFromAPI: %v", err)
 	}
@@ -22,7 +22,7 @@ func TestListSessionsRequestFromAPI_DefaultsToLiveScope(t *testing.T) {
 
 func TestListSessionsRequestFromAPI_RejectsUnsupportedScope(t *testing.T) {
 	scope := factoryapi.FactorySessionListScope("workspace")
-	_, err := apisurface.ListSessionsRequestFromAPI(factoryapi.ListFactorySessionsParams{Scope: &scope})
+	_, err := factorysession.ListSessionsRequestFromAPI(factoryapi.ListFactorySessionsParams{Scope: &scope})
 	if err == nil {
 		t.Fatal("error = nil, want validation error")
 	}
@@ -40,7 +40,7 @@ func TestDurableSessionSummaryToAPI_MapsListSummaryFixtures(t *testing.T) {
 		t.Fatal("missing listSummary fixture")
 	}
 
-	mapped := apisurface.DurableSessionSummaryToAPI(durableListSummaryFromFixture(listSummary))
+	mapped := factorysession.DurableSessionSummaryToAPI(durableListSummaryFromFixture(listSummary))
 	if mapped.SessionId != "dur-sess-petri-success-001" {
 		t.Fatalf("sessionId = %q", mapped.SessionId)
 	}
@@ -80,7 +80,7 @@ func TestListSessionsResponseToAPI_ScopedPersistedAndAll(t *testing.T) {
 		},
 	}
 
-	persisted := apisurface.ListSessionsResponseToAPI(
+	persisted := factorysession.ListSessionsResponseToAPI(
 		factorysessionexecution.ApplySessionListScope(base, factorysessionexecution.ListSessionsRequest{
 			Scope: factorysessionexecution.SessionListScopePersisted,
 		}),
@@ -95,7 +95,7 @@ func TestListSessionsResponseToAPI_ScopedPersistedAndAll(t *testing.T) {
 		t.Fatalf("durableSessions = %#v, want one persisted row", persisted.DurableSessions)
 	}
 
-	all := apisurface.ListSessionsResponseToAPI(
+	all := factorysession.ListSessionsResponseToAPI(
 		factorysessionexecution.ApplySessionListScope(base, factorysessionexecution.ListSessionsRequest{
 			Scope: factorysessionexecution.SessionListScopeAll,
 		}),

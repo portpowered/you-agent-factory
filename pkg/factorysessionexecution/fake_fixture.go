@@ -619,3 +619,281 @@ func cloneFixtureMap(values map[string]any) map[string]any {
 	}
 	return cloned
 }
+
+// FakeScenario is one deterministic durable-session projection bundle used by
+// FakeService. Scenarios are keyed by execution requestId for start routing.
+type FakeScenario struct {
+	ID        string
+	RequestID string
+	Session   SessionReadResult
+	Dispatches []DispatchSummary
+	DispatchDetails map[string]DispatchDetail
+	Artifacts []ArtifactSummary
+	ArtifactDetails map[string]ArtifactDetail
+	Result    ResultReadResult
+	Events    []json.RawMessage
+	AsyncStart *AsyncStartResult
+	SyncStart  *SyncStartResult
+	ListSummary *DurableSessionListSummary
+}
+
+type fakeSessionState struct {
+	scenarioID      string
+	session         SessionReadResult
+	dispatches      []DispatchSummary
+	dispatchDetails map[string]DispatchDetail
+	artifacts       []ArtifactSummary
+	artifactDetails map[string]ArtifactDetail
+	result          ResultReadResult
+	events          []json.RawMessage
+}
+
+func fakeSessionStateFromScenario(scenario FakeScenario) *fakeSessionState {
+	state := &fakeSessionState{
+		scenarioID:      scenario.ID,
+		session:         cloneSessionRead(scenario.Session),
+		dispatches:      cloneDispatchSummaries(scenario.Dispatches),
+		dispatchDetails: cloneDispatchDetails(scenario.DispatchDetails),
+		artifacts:       cloneArtifactSummaries(scenario.Artifacts),
+		artifactDetails: cloneArtifactDetails(scenario.ArtifactDetails),
+		result:          cloneResultRead(scenario.Result),
+		events:          append([]json.RawMessage(nil), scenario.Events...),
+	}
+	if len(state.events) == 0 {
+		state.events = deriveProjectionEvents(state.session, state.result)
+	}
+	return state
+}
+
+func cloneSessionRead(session SessionReadResult) SessionReadResult {
+	cloned := session
+	cloned.ResolvedSource = cloneResolvedSource(session.ResolvedSource)
+	cloned.Policy = clonePolicyProjection(session.Policy)
+	if session.Progress != nil {
+		progress := *session.Progress
+		cloned.Progress = &progress
+	}
+	if session.ResultSummary != nil {
+		summary := *session.ResultSummary
+		cloned.ResultSummary = &summary
+	}
+	if session.Failure != nil {
+		failure := *session.Failure
+		cloned.Failure = &failure
+	}
+	if session.Lifecycle != nil {
+		lifecycle := *session.Lifecycle
+		cloned.Lifecycle = &lifecycle
+	}
+	cloned.PhaseSummaries = append([]PhaseSummary(nil), session.PhaseSummaries...)
+	cloned.ArtifactRefs = append([]ArtifactRefSummary(nil), session.ArtifactRefs...)
+	cloned.Links = session.Links
+	return cloned
+}
+
+func cloneResolvedSource(source ResolvedSource) ResolvedSource {
+	cloned := source
+	cloned.ResolutionOrder = append([]string(nil), source.ResolutionOrder...)
+	if len(source.Metadata) > 0 {
+		cloned.Metadata = make(map[string]string, len(source.Metadata))
+		for key, value := range source.Metadata {
+			cloned.Metadata[key] = value
+		}
+	}
+	return cloned
+}
+
+func clonePolicyProjection(policy PolicyProjection) PolicyProjection {
+	cloned := PolicyProjection{
+		EffectiveHash: policy.EffectiveHash,
+	}
+	if len(policy.Requested) > 0 {
+		cloned.Requested = cloneArgs(policy.Requested)
+	}
+	if len(policy.Effective) > 0 {
+		cloned.Effective = cloneArgs(policy.Effective)
+	}
+	return cloned
+}
+
+func cloneDispatchSummaries(dispatches []DispatchSummary) []DispatchSummary {
+	if len(dispatches) == 0 {
+		return nil
+	}
+	cloned := make([]DispatchSummary, len(dispatches))
+	copy(cloned, dispatches)
+	return cloned
+}
+
+func cloneDispatchDetails(details map[string]DispatchDetail) map[string]DispatchDetail {
+	if len(details) == 0 {
+		return nil
+	}
+	cloned := make(map[string]DispatchDetail, len(details))
+	for key, value := range details {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func cloneArtifactSummaries(artifacts []ArtifactSummary) []ArtifactSummary {
+	if len(artifacts) == 0 {
+		return nil
+	}
+	cloned := make([]ArtifactSummary, len(artifacts))
+	copy(cloned, artifacts)
+	return cloned
+}
+
+func cloneArtifactDetails(details map[string]ArtifactDetail) map[string]ArtifactDetail {
+	if len(details) == 0 {
+		return nil
+	}
+	cloned := make(map[string]ArtifactDetail, len(details))
+	for key, value := range details {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func cloneResultRead(result ResultReadResult) ResultReadResult {
+	cloned := result
+	if len(result.PrimaryResult) > 0 {
+		cloned.PrimaryResult = append(json.RawMessage(nil), result.PrimaryResult...)
+	}
+	cloned.ArtifactIDs = append([]string(nil), result.ArtifactIDs...)
+	cloned.ArtifactRefs = append([]ArtifactRefSummary(nil), result.ArtifactRefs...)
+	if result.Failure != nil {
+		failure := *result.Failure
+		cloned.Failure = &failure
+	}
+	if result.Availability != nil {
+		availability := *result.Availability
+		cloned.Availability = &availability
+	}
+	return cloned
+}
+
+func deriveProjectionEvents(session SessionReadResult, result ResultReadResult) []json.RawMessage {
+	events := []json.RawMessage{
+		json.RawMessage(`{"type":"SESSION_STARTED","payload":{"sessionId":"` + session.SessionID + `"}}`),
+	}
+	if result.ResultStatus != "" {
+		payload, err := json.Marshal(map[string]any{
+			"type": "SESSION_RESULT_UPDATED",
+			"payload": map[string]any{
+				"sessionId":    session.SessionID,
+				"resultStatus": string(result.ResultStatus),
+			},
+		})
+		if err == nil {
+			events = append(events, payload)
+		}
+	}
+	if IsTerminalLifecycleStatus(session.Status) {
+		payload, err := json.Marshal(map[string]any{
+			"type": "SESSION_COMPLETED",
+			"payload": map[string]any{
+				"sessionId": session.SessionID,
+				"status":    string(session.Status),
+			},
+		})
+		if err == nil {
+			events = append(events, payload)
+		}
+	}
+	return events
+}
+// BuiltinInterruptedRecoverableScenario is a deterministic JavaScript session that
+// was interrupted with a stale lease and remains recoverable for persisted listing.
+func BuiltinInterruptedRecoverableScenario() FakeScenario {
+	startedAt := time.Date(2026, 6, 8, 10, 0, 0, 0, time.UTC)
+	interruptedAt := time.Date(2026, 6, 8, 10, 5, 0, 0, time.UTC)
+	sessionID := "dur-sess-js-interrupted-001"
+	links := InspectionLinksForSession(sessionID, true)
+	session := SessionReadResult{
+		SessionID:        sessionID,
+		Status:           LifecycleStatusInterrupted,
+		OrchestratorKind: "JAVASCRIPT",
+		Dialect:          "you-workflow-v1",
+		ResolvedSource: ResolvedSource{
+			Kind:       workflowsource.KindWorkflowName,
+			SourceRef:  "workflow/recoverable-audit",
+			SourceHash: "sha256:js-workflow-recoverable-audit",
+			Dialect:    "you-workflow-v1",
+		},
+		SourceHash: "sha256:js-workflow-recoverable-audit",
+		Phase:      "audit",
+		Progress: &ProgressCounts{
+			TotalDispatches:     2,
+			CompletedDispatches: 1,
+			FailedDispatches:    0,
+			InFlightDispatches:  0,
+		},
+		ResultSummary: &ResultSummary{
+			ResultStatus: string(ResultStatusPartial),
+			Summary:      "Interrupted after partial audit progress.",
+		},
+		StaleLease: true,
+		Lifecycle: &LifecycleTimestamps{
+			StartedAt:     &startedAt,
+			InterruptedAt: &interruptedAt,
+			UpdatedAt:     &interruptedAt,
+		},
+		Links: links,
+	}
+	result := ResultReadResult{
+		SessionID:     sessionID,
+		ResultStatus:  ResultStatusPartial,
+		SessionStatus: LifecycleStatusInterrupted,
+		Mode:          ResultModePartial,
+		PrimaryResult: json.RawMessage(`[{"type":"text","text":"Partial audit notes before interruption."}]`),
+	}
+	dispatches := []DispatchSummary{
+		{
+			ID:           "disp-js-interrupted-001",
+			Status:       DispatchStatusCompleted,
+			DispatchKind: "JAVASCRIPT_AGENT",
+			Phase:        "plan",
+			Label:        "plan-audit",
+			Attempt:      1,
+		},
+		{
+			ID:           "disp-js-interrupted-002",
+			Status:       DispatchStatusCanceled,
+			DispatchKind: "JAVASCRIPT_AGENT",
+			Phase:        "audit",
+			Label:        "audit",
+			Attempt:      1,
+		},
+	}
+	listSummary := DurableListSummaryFromSessionRead(session)
+	return FakeScenario{
+		ID:        "javascript-interrupted-recoverable",
+		RequestID: "req-js-interrupted-001",
+		Session:   session,
+		Dispatches: dispatches,
+		DispatchDetails: map[string]DispatchDetail{
+			"disp-js-interrupted-002": {
+				DispatchSummary:  dispatches[1],
+				SessionID:        sessionID,
+				OrchestratorKind: "JAVASCRIPT",
+				JavaScript: &DispatchJavaScriptProjection{
+					TaskKind:  "AGENT",
+					TaskLabel: "audit",
+				},
+			},
+		},
+		Result:      result,
+		ListSummary: &listSummary,
+		AsyncStart: &AsyncStartResult{
+			SessionID:        sessionID,
+			Status:           string(LifecycleStatusInterrupted),
+			OrchestratorKind: "JAVASCRIPT",
+			Dialect:          "you-workflow-v1",
+			ResolvedSource:   session.ResolvedSource,
+			SourceHash:       session.SourceHash,
+			Links:            links,
+		},
+	}
+}

@@ -1,4 +1,4 @@
-package apisurface_test
+package factorysession_test
 
 import (
 	"encoding/json"
@@ -10,7 +10,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/workflowsource"
 )
@@ -23,7 +23,7 @@ func TestSessionReadResponseToAPI_MapsRunningFixture(t *testing.T) {
 		t.Fatal("missing session fixture")
 	}
 
-	mapped := apisurface.SessionReadResponseToAPI(sessionReadFromFixture(sessionFixture))
+	mapped := factorysession.SessionReadResponseToAPI(sessionReadFromFixture(sessionFixture))
 	if mapped.SessionId != "dur-sess-petri-run-001" {
 		t.Fatalf("sessionId = %q", mapped.SessionId)
 	}
@@ -46,7 +46,7 @@ func TestLifecycleControlResponseToAPI_MapsPauseCancelAndRetryFixtures(t *testin
 	if !ok {
 		t.Fatal("missing pause lifecycleControl fixture")
 	}
-	pauseMapped := apisurface.LifecycleControlResponseToAPI(lifecycleControlFromFixture(pauseControl))
+	pauseMapped := factorysession.LifecycleControlResponseToAPI(lifecycleControlFromFixture(pauseControl))
 	if pauseMapped.Operation != factoryapi.FactorySessionLifecycleControlKindPause {
 		t.Fatalf("operation = %q, want PAUSE", pauseMapped.Operation)
 	}
@@ -59,7 +59,7 @@ func TestLifecycleControlResponseToAPI_MapsPauseCancelAndRetryFixtures(t *testin
 	if !ok {
 		t.Fatal("missing cancel lifecycleControl fixture")
 	}
-	cancelMapped := apisurface.LifecycleControlResponseToAPI(lifecycleControlFromFixture(cancelControl))
+	cancelMapped := factorysession.LifecycleControlResponseToAPI(lifecycleControlFromFixture(cancelControl))
 	if cancelMapped.Status != factoryapi.FactorySessionDurableLifecycleStatusCanceling {
 		t.Fatalf("status = %q, want CANCELING", cancelMapped.Status)
 	}
@@ -69,7 +69,7 @@ func TestLifecycleControlResponseToAPI_MapsPauseCancelAndRetryFixtures(t *testin
 	if !ok {
 		t.Fatal("missing retry lifecycleControl fixture")
 	}
-	retryMapped := apisurface.LifecycleControlResponseToAPI(lifecycleControlFromFixture(retryControl))
+	retryMapped := factorysession.LifecycleControlResponseToAPI(lifecycleControlFromFixture(retryControl))
 	if retryMapped.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeTerminalSession {
 		t.Fatalf("outcome = %q, want TERMINAL_SESSION", retryMapped.Outcome)
 	}
@@ -79,7 +79,7 @@ func TestLifecycleControlResponseToAPI_MapsPauseCancelAndRetryFixtures(t *testin
 }
 
 func TestRetryDispatchRequestFromAPI_RequiresDispatchID(t *testing.T) {
-	_, err := apisurface.RetryDispatchRequestFromAPI(factoryapi.FactorySessionRetryDispatchRequest{})
+	_, err := factorysession.RetryDispatchRequestFromAPI(factoryapi.FactorySessionRetryDispatchRequest{})
 	if err == nil {
 		t.Fatal("error = nil, want validation error")
 	}
@@ -101,7 +101,7 @@ func TestEvaluateLifecycleControlFromServiceSpec_MatchesRetryTerminalFixture(t *
 
 func findScenario(t *testing.T, catalog durableFixtureCatalog, id string) map[string]any {
 	t.Helper()
-	path := filepath.Join("..", "api", "testdata", "durable-session-contract-fixtures.json")
+	path := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read fixtures: %v", err)

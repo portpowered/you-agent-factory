@@ -1,4 +1,4 @@
-package apisurface
+package factorysession
 
 import (
 	"encoding/json"
@@ -7,6 +7,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/workflowsource"
 )
 
@@ -28,7 +29,7 @@ func StartRequestFromAPI(req factoryapi.FactorySessionExecutionRequest) (factory
 	if req.Orchestrator != nil {
 		encoded, marshalErr := json.Marshal(req.Orchestrator)
 		if marshalErr != nil {
-			return factorysessionexecution.StartRequest{}, &RequestValidationError{Message: "orchestrator must be a JSON object"}
+			return factorysessionexecution.StartRequest{}, &apisurface.RequestValidationError{Message: "orchestrator must be a JSON object"}
 		}
 		startReq.Orchestrator = &factorysessionexecution.OrchestratorOverride{
 			Kind: string(req.Orchestrator.Kind),
@@ -123,11 +124,11 @@ func executionSourceFromAPI(source factoryapi.FactorySessionExecutionSource) (fa
 		}, nil
 	case workflowsource.KindFactoryInline:
 		if source.FactoryInline == nil {
-			return factorysessionexecution.Source{}, &RequestValidationError{Message: "source.factoryInline is required when source.kind is FACTORY_INLINE"}
+			return factorysessionexecution.Source{}, &apisurface.RequestValidationError{Message: "source.factoryInline is required when source.kind is FACTORY_INLINE"}
 		}
 		encoded, marshalErr := json.Marshal(source.FactoryInline)
 		if marshalErr != nil {
-			return factorysessionexecution.Source{}, &RequestValidationError{Message: "source.factoryInline must be a JSON object"}
+			return factorysessionexecution.Source{}, &apisurface.RequestValidationError{Message: "source.factoryInline must be a JSON object"}
 		}
 		return factorysessionexecution.Source{
 			Kind:          kind,
@@ -145,7 +146,7 @@ func executionSourceFromAPI(source factoryapi.FactorySessionExecutionSource) (fa
 		}, nil
 	case workflowsource.KindInlineWorkflow:
 		if source.InlineWorkflow == nil {
-			return factorysessionexecution.Source{}, &RequestValidationError{Message: "source.inlineWorkflow is required when source.kind is INLINE_WORKFLOW"}
+			return factorysessionexecution.Source{}, &apisurface.RequestValidationError{Message: "source.inlineWorkflow is required when source.kind is INLINE_WORKFLOW"}
 		}
 		inline := &factorysessionexecution.InlineWorkflowSource{
 			InlineSource: strings.TrimSpace(source.InlineWorkflow.InlineSource.Inline),
@@ -164,7 +165,7 @@ func executionSourceFromAPI(source factoryapi.FactorySessionExecutionSource) (fa
 			InlineWorkflow: inline,
 		}, nil
 	default:
-		return factorysessionexecution.Source{}, &RequestValidationError{Message: "source.kind is invalid"}
+		return factorysessionexecution.Source{}, &apisurface.RequestValidationError{Message: "source.kind is invalid"}
 	}
 }
 
@@ -177,7 +178,7 @@ func executionSourceKindFromAPI(kind factoryapi.FactorySessionExecutionSourceKin
 		workflowsource.KindInlineWorkflow:
 		return workflowsource.Kind(strings.TrimSpace(string(kind))), nil
 	default:
-		return "", &RequestValidationError{Message: "source.kind must be one of FACTORY_ID, FACTORY_INLINE, WORKFLOW_FILE, WORKFLOW_NAME, or INLINE_WORKFLOW"}
+		return "", &apisurface.RequestValidationError{Message: "source.kind must be one of FACTORY_ID, FACTORY_INLINE, WORKFLOW_FILE, WORKFLOW_NAME, or INLINE_WORKFLOW"}
 	}
 }
 

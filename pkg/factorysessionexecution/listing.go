@@ -4,6 +4,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/portpowered/infinite-you/pkg/workflowsource"
 )
 
 // IsPersistedListCandidate reports whether one durable session belongs in the
@@ -300,4 +302,167 @@ func latestLifecycleTimestamp(lifecycle *LifecycleTimestamps) *time.Time {
 		}
 	}
 	return latest
+}
+
+// SessionListScope selects which factory sessions a list request returns.
+type SessionListScope string
+
+const (
+	SessionListScopeLive      SessionListScope = "live"
+	SessionListScopePersisted SessionListScope = "persisted"
+	SessionListScopeAll       SessionListScope = "all"
+)
+
+// DefaultSessionListScope is live for backward-compatible live workspace session listing.
+const DefaultSessionListScope = SessionListScopeLive
+
+// SessionListFilters narrows scoped session listing without requiring clients to
+// parse session internals.
+type SessionListFilters struct {
+	Statuses          []LifecycleStatus
+	OrchestratorKinds []string
+	SourceKind        workflowsource.Kind
+	SourceRef         string
+	ProjectBoundary   string
+	Recoverable       *bool
+	StaleLease        *bool
+	CreatedAfter      *time.Time
+	CreatedBefore     *time.Time
+	UpdatedAfter      *time.Time
+	UpdatedBefore     *time.Time
+}
+
+// ListSessionsRequest is the shared scoped session listing request consumed by API,
+// CLI, MCP, and UI transports.
+type ListSessionsRequest struct {
+	Scope   SessionListScope
+	Filters SessionListFilters
+}
+
+// LiveSessionSummary is the shared live workspace session row for scope=live and
+// scope=all responses. Live-session open and invocation remain separate from
+// durable execution listing.
+type LiveSessionSummary struct {
+	ID         string
+	FactoryDir string
+	FolderPath string
+	Project    string
+	IsDefault  bool
+}
+
+// SessionActionAvailability exposes which lifecycle controls are currently valid
+// for one listed durable session.
+type SessionActionAvailability struct {
+	CanPause         bool
+	CanResume        bool
+	CanCancel        bool
+	CanTerminate     bool
+	CanApprove       bool
+	CanRetryDispatch bool
+}
+
+// DurableSessionListSummary is the shared durable session list row with enough
+// summary data for API, CLI, MCP, and UI to show status, result readiness,
+// dispatch counts, artifact counts, lease/recoverability, and action availability.
+type DurableSessionListSummary struct {
+	SessionID        string
+	Status           LifecycleStatus
+	OrchestratorKind string
+	Dialect          string
+	ResolvedSource   ResolvedSource
+	SourceHash       string
+	Policy           PolicyProjection
+	Phase            string
+	Progress         *ProgressCounts
+	ResultSummary    *ResultSummary
+	ArtifactCount    int
+	StaleLease       bool
+	Recoverable      bool
+	Lifecycle        *LifecycleTimestamps
+	Links            InspectionLinks
+	Actions          SessionActionAvailability
+}
+
+// ListSessionsResult is the shared scoped session listing outcome.
+type ListSessionsResult struct {
+	Scope           SessionListScope
+	LiveSessions    []LiveSessionSummary
+	DurableSessions []DurableSessionListSummary
+}
+// NormalizeListSessionsRequest validates and normalizes one scoped session list request.
+func NormalizeListSessionsRequest(req ListSessionsRequest) (ListSessionsRequest, error) {
+	scope := req.Scope
+	if scope == "" {
+		scope = DefaultSessionListScope
+	}
+	switch scope {
+	case SessionListScopeLive, SessionListScopePersisted, SessionListScopeAll:
+	default:
+		return ListSessionsRequest{}, NewValidationError("scope", "scope must be live, persisted, or all")
+	}
+
+	filters, err := normalizeSessionListFilters(req.Filters)
+	if err != nil {
+		return ListSessionsRequest{}, err
+	}
+	return ListSessionsRequest{
+		Scope:   scope,
+		Filters: filters,
+	}, nil
+}
+
+func normalizeSessionListFilters(filters SessionListFilters) (SessionListFilters, error) {
+	normalized := SessionListFilters{
+		SourceKind:      filters.SourceKind,
+		SourceRef:       strings.TrimSpace(filters.SourceRef),
+		ProjectBoundary: strings.TrimSpace(filters.ProjectBoundary),
+		Recoverable:     filters.Recoverable,
+		StaleLease:      filters.StaleLease,
+		CreatedAfter:    filters.CreatedAfter,
+		CreatedBefore:   filters.CreatedBefore,
+		UpdatedAfter:    filters.UpdatedAfter,
+		UpdatedBefore:   filters.UpdatedBefore,
+	}
+	if len(filters.Statuses) > 0 {
+		normalized.Statuses = append([]LifecycleStatus(nil), filters.Statuses...)
+	}
+	if len(filters.OrchestratorKinds) > 0 {
+		normalized.OrchestratorKinds = make([]string, 0, len(filters.OrchestratorKinds))
+		for _, kind := range filters.OrchestratorKinds {
+			trimmed := strings.TrimSpace(kind)
+			if trimmed != "" {
+				normalized.OrchestratorKinds = append(normalized.OrchestratorKinds, trimmed)
+			}
+		}
+	}
+	if filters.SourceKind != "" && !isKnownWorkflowSourceKind(filters.SourceKind) {
+		return SessionListFilters{}, NewValidationError("filters.sourceKind", "unsupported source kind")
+	}
+	if err := validateTimeRange("filters.created", normalized.CreatedAfter, normalized.CreatedBefore); err != nil {
+		return SessionListFilters{}, err
+	}
+	if err := validateTimeRange("filters.updated", normalized.UpdatedAfter, normalized.UpdatedBefore); err != nil {
+		return SessionListFilters{}, err
+	}
+	return normalized, nil
+}
+
+func isKnownWorkflowSourceKind(kind workflowsource.Kind) bool {
+	switch kind {
+	case workflowsource.KindFactoryID,
+		workflowsource.KindFactoryInline,
+		workflowsource.KindWorkflowFile,
+		workflowsource.KindWorkflowName,
+		workflowsource.KindInlineWorkflow:
+		return true
+	default:
+		return false
+	}
+}
+
+func validateTimeRange(field string, after, before *time.Time) error {
+	if after != nil && before != nil && after.After(*before) {
+		return NewValidationError(field, "after must be before or equal to before")
+	}
+	return nil
 }

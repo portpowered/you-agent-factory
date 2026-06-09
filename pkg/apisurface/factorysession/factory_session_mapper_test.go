@@ -1,4 +1,4 @@
-package apisurface_test
+package factorysession_test
 
 import (
 	"context"
@@ -9,7 +9,8 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
+	apisurface "github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 )
 
@@ -97,7 +98,7 @@ func TestDurableSessionMapperRoundTrip_DispatchCountCoverage(t *testing.T) {
 }
 
 func TestDurableSessionMapperRoundTrip_FakeServiceProjections(t *testing.T) {
-	fixturesPath := filepath.Join("..", "api", "testdata", "durable-session-contract-fixtures.json")
+	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
 	if err != nil {
 		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
@@ -116,7 +117,7 @@ func TestDurableSessionMapperRoundTrip_FakeServiceProjections(t *testing.T) {
 			if !ok {
 				t.Fatal("missing executionRequest")
 			}
-			request, err := apisurface.StartRequestFromAPI(decodeExecutionRequest(t, executionRequest))
+			request, err := factorysession.StartRequestFromAPI(decodeExecutionRequest(t, executionRequest))
 			if err != nil {
 				t.Fatalf("StartRequestFromAPI: %v", err)
 			}
@@ -125,25 +126,25 @@ func TestDurableSessionMapperRoundTrip_FakeServiceProjections(t *testing.T) {
 			if err != nil {
 				t.Fatalf("StartAsync: %v", err)
 			}
-			assertAsyncStartMapperRoundTrip(t, scenarioID, mustFixtureMap(t, apisurface.AsyncStartResponseToAPI(started)))
+			assertAsyncStartMapperRoundTrip(t, scenarioID, mustFixtureMap(t, factorysession.AsyncStartResponseToAPI(started)))
 
 			read, err := service.GetSession(context.Background(), started.SessionID)
 			if err != nil {
 				t.Fatalf("GetSession: %v", err)
 			}
-			assertSessionReadMapperRoundTrip(t, scenarioID, mustFixtureMap(t, apisurface.SessionReadResponseToAPI(read)))
+			assertSessionReadMapperRoundTrip(t, scenarioID, mustFixtureMap(t, factorysession.SessionReadResponseToAPI(read)))
 
 			result, err := service.GetResult(context.Background(), started.SessionID, factorysessionexecution.ResultRequest{})
 			if err != nil {
 				t.Fatalf("GetResult: %v", err)
 			}
-			assertResultMapperRoundTrip(t, scenarioID, mustFixtureMap(t, apisurface.ResultResponseToAPI(result)))
+			assertResultMapperRoundTrip(t, scenarioID, mustFixtureMap(t, factorysession.ResultResponseToAPI(result)))
 
 			dispatches, err := service.ListDispatches(context.Background(), started.SessionID)
 			if err != nil {
 				t.Fatalf("ListDispatches: %v", err)
 			}
-			mappedDispatches := apisurface.ListDispatchesResponseToAPI(dispatches)
+			mappedDispatches := factorysession.ListDispatchesResponseToAPI(dispatches)
 			assertDispatchListMapperRoundTrip(t, scenarioID, map[string]any{"sessionId": started.SessionID}, fixtureDispatchRows(mappedDispatches.Dispatches))
 		})
 	}
@@ -165,7 +166,7 @@ func TestArtifactDetailCaptureMetadataRoundTrip(t *testing.T) {
 		},
 	}
 
-	domain, err := apisurface.ArtifactDetailFromAPI(apiValue)
+	domain, err := factorysession.ArtifactDetailFromAPI(apiValue)
 	if err != nil {
 		t.Fatalf("ArtifactDetailFromAPI: %v", err)
 	}
@@ -176,7 +177,7 @@ func TestArtifactDetailCaptureMetadataRoundTrip(t *testing.T) {
 		t.Fatalf("domain captureMetadata.sourceDispatchId = %v, want %q", got, dispatchID)
 	}
 
-	mapped := apisurface.ArtifactDetailResponseToAPI(domain)
+	mapped := factorysession.ArtifactDetailResponseToAPI(domain)
 	if mapped.CaptureMetadata == nil {
 		t.Fatal("mapped captureMetadata = nil, want populated metadata")
 	}
@@ -193,7 +194,7 @@ func TestArtifactDetailCaptureMetadataRoundTrip(t *testing.T) {
 
 func TestDurableSessionMapperBoundaryValidation(t *testing.T) {
 	t.Run("unsupported source kind", func(t *testing.T) {
-		_, err := apisurface.StartRequestFromAPI(factoryapi.FactorySessionExecutionRequest{
+		_, err := factorysession.StartRequestFromAPI(factoryapi.FactorySessionExecutionRequest{
 			RequestId: "req-invalid-source",
 			Source: factoryapi.FactorySessionExecutionSource{
 				Kind: factoryapi.FactorySessionExecutionSourceKind("HOST_PATH"),
@@ -204,7 +205,7 @@ func TestDurableSessionMapperBoundaryValidation(t *testing.T) {
 
 	t.Run("invalid result mode", func(t *testing.T) {
 		mode := factoryapi.FactorySessionResultMode("invalid")
-		_, err := apisurface.ResultRequestFromAPI(factoryapi.GetFactorySessionResultsParams{Mode: &mode})
+		_, err := factorysession.ResultRequestFromAPI(factoryapi.GetFactorySessionResultsParams{Mode: &mode})
 		var validationErr *factorysessionexecution.ValidationError
 		if !errors.As(err, &validationErr) {
 			t.Fatalf("error = %T, want ValidationError", err)
@@ -213,7 +214,7 @@ func TestDurableSessionMapperBoundaryValidation(t *testing.T) {
 
 	t.Run("unsupported list scope", func(t *testing.T) {
 		scope := factoryapi.FactorySessionListScope("workspace")
-		_, err := apisurface.ListSessionsRequestFromAPI(factoryapi.ListFactorySessionsParams{Scope: &scope})
+		_, err := factorysession.ListSessionsRequestFromAPI(factoryapi.ListFactorySessionsParams{Scope: &scope})
 		var validationErr *factorysessionexecution.ValidationError
 		if !errors.As(err, &validationErr) {
 			t.Fatalf("error = %T, want ValidationError", err)
@@ -222,7 +223,7 @@ func TestDurableSessionMapperBoundaryValidation(t *testing.T) {
 
 	t.Run("negative event reconnect sequence", func(t *testing.T) {
 		sequence := factoryapi.AfterSequence(-1)
-		_, err := apisurface.EventReconnectRequestFromAPI(factoryapi.GetEventsBySessionIdParams{AfterSequence: &sequence})
+		_, err := factorysession.EventReconnectRequestFromAPI(factoryapi.GetEventsBySessionIdParams{AfterSequence: &sequence})
 		var validationErr *factorysessionexecution.ValidationError
 		if !errors.As(err, &validationErr) {
 			t.Fatalf("error = %T, want ValidationError", err)
@@ -230,7 +231,7 @@ func TestDurableSessionMapperBoundaryValidation(t *testing.T) {
 	})
 
 	t.Run("malformed artifact retrieval ref", func(t *testing.T) {
-		_, err := apisurface.ArtifactSummaryFromAPI(factoryapi.FactorySessionArtifactSummary{
+		_, err := factorysession.ArtifactSummaryFromAPI(factoryapi.FactorySessionArtifactSummary{
 			Id:         "art-001",
 			Kind:       factoryapi.FactoryArtifactKindCHECKPOINT,
 			Visibility: factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT,
@@ -243,7 +244,7 @@ func TestDurableSessionMapperBoundaryValidation(t *testing.T) {
 }
 
 func TestControlErrorToAPI_MapsTerminalSessionOutcome(t *testing.T) {
-	mapped := apisurface.ControlErrorToAPI("dur-sess-js-success-002", &factorysessionexecution.ControlError{
+	mapped := factorysession.ControlErrorToAPI("dur-sess-js-success-002", &factorysessionexecution.ControlError{
 		Operation: factorysessionexecution.LifecycleControlRetryDispatch,
 		Outcome:   factorysessionexecution.LifecycleControlOutcomeTerminalSession,
 		Message:   "session is terminal",
@@ -257,7 +258,7 @@ func TestControlErrorToAPI_MapsTerminalSessionOutcome(t *testing.T) {
 }
 
 func TestOrchestratorOverrideFromAPI_PreservesKindAndPayload(t *testing.T) {
-	override, err := apisurface.OrchestratorOverrideFromAPI(factoryapi.FactoryOrchestrator{
+	override, err := factorysession.OrchestratorOverrideFromAPI(factoryapi.FactoryOrchestrator{
 		Kind: factoryapi.JAVASCRIPT,
 	})
 	if err != nil {
@@ -280,7 +281,7 @@ func assertAsyncStartMapperRoundTrip(t *testing.T, label string, fixture map[str
 	var apiValue factoryapi.FactorySessionExecutionResponse
 	decodeFixture(t, fixture, &apiValue, label+" async response")
 	assertMapperRoundTrip(t, label+" async response", apiValue, func(value factoryapi.FactorySessionExecutionResponse) factoryapi.FactorySessionExecutionResponse {
-		return apisurface.AsyncStartResponseToAPI(apisurface.AsyncStartResultFromAPI(value))
+		return factorysession.AsyncStartResponseToAPI(factorysession.AsyncStartResultFromAPI(value))
 	}, assertAsyncStartFieldsPreserved)
 }
 
@@ -289,7 +290,7 @@ func assertSessionReadMapperRoundTrip(t *testing.T, label string, fixture map[st
 	var apiValue factoryapi.FactorySessionDurableReadModel
 	decodeFixture(t, fixture, &apiValue, label+" session")
 	assertMapperRoundTrip(t, label+" session", apiValue, func(value factoryapi.FactorySessionDurableReadModel) factoryapi.FactorySessionDurableReadModel {
-		return apisurface.SessionReadResponseToAPI(apisurface.SessionReadResultFromAPI(value))
+		return factorysession.SessionReadResponseToAPI(factorysession.SessionReadResultFromAPI(value))
 	}, assertSessionReadFieldsPreserved)
 }
 
@@ -298,7 +299,7 @@ func assertListSummaryMapperRoundTrip(t *testing.T, label string, fixture map[st
 	var apiValue factoryapi.FactorySessionDurableSummary
 	decodeFixture(t, fixture, &apiValue, label+" list summary")
 	assertMapperRoundTrip(t, label+" list summary", apiValue, func(value factoryapi.FactorySessionDurableSummary) factoryapi.FactorySessionDurableSummary {
-		return apisurface.DurableSessionSummaryToAPI(apisurface.DurableSessionListSummaryFromAPI(value))
+		return factorysession.DurableSessionSummaryToAPI(factorysession.DurableSessionListSummaryFromAPI(value))
 	}, assertListSummaryFieldsPreserved)
 }
 
@@ -307,7 +308,7 @@ func assertResultMapperRoundTrip(t *testing.T, label string, fixture map[string]
 	var apiValue factoryapi.FactorySessionResult
 	decodeFixture(t, fixture, &apiValue, label+" result")
 	assertMapperRoundTrip(t, label+" result", apiValue, func(value factoryapi.FactorySessionResult) factoryapi.FactorySessionResult {
-		return apisurface.ResultResponseToAPI(apisurface.ResultReadResultFromAPI(value))
+		return factorysession.ResultResponseToAPI(factorysession.ResultReadResultFromAPI(value))
 	}, assertResultFieldsPreserved)
 }
 
@@ -328,9 +329,9 @@ func assertDispatchListMapperRoundTrip(t *testing.T, label string, scenario map[
 	assertMapperRoundTrip(t, label+" dispatch list", apiValue, func(value factoryapi.ListFactorySessionDispatchesResponse) factoryapi.ListFactorySessionDispatchesResponse {
 		domain := factorysessionexecution.ListDispatchesResult{SessionID: value.SessionId}
 		for _, dispatch := range value.Dispatches {
-			domain.Dispatches = append(domain.Dispatches, apisurface.DispatchSummaryFromAPI(dispatch))
+			domain.Dispatches = append(domain.Dispatches, factorysession.DispatchSummaryFromAPI(dispatch))
 		}
-		return apisurface.ListDispatchesResponseToAPI(domain)
+		return factorysession.ListDispatchesResponseToAPI(domain)
 	}, assertDispatchListFieldsPreserved)
 }
 
@@ -339,7 +340,7 @@ func assertDispatchDetailMapperRoundTrip(t *testing.T, label string, fixture map
 	var apiValue factoryapi.FactoryDispatch
 	decodeFixture(t, fixture, &apiValue, label+" dispatch detail")
 	assertMapperRoundTrip(t, label+" dispatch detail", apiValue, func(value factoryapi.FactoryDispatch) factoryapi.FactoryDispatch {
-		return apisurface.DispatchDetailResponseToAPI(apisurface.DispatchDetailFromAPI(value))
+		return factorysession.DispatchDetailResponseToAPI(factorysession.DispatchDetailFromAPI(value))
 	}, assertDispatchDetailFieldsPreserved)
 }
 
@@ -360,13 +361,13 @@ func assertArtifactListMapperRoundTrip(t *testing.T, label string, scenario map[
 	assertMapperRoundTrip(t, label+" artifact list", apiValue, func(value factoryapi.ListFactorySessionArtifactsResponse) factoryapi.ListFactorySessionArtifactsResponse {
 		domain := factorysessionexecution.ListArtifactsResult{SessionID: value.SessionId}
 		for _, artifact := range value.Artifacts {
-			summary, err := apisurface.ArtifactSummaryFromAPI(artifact)
+			summary, err := factorysession.ArtifactSummaryFromAPI(artifact)
 			if err != nil {
 				t.Fatalf("%s artifact summary from API: %v", label, err)
 			}
 			domain.Artifacts = append(domain.Artifacts, summary)
 		}
-		return apisurface.ListArtifactsResponseToAPI(domain)
+		return factorysession.ListArtifactsResponseToAPI(domain)
 	}, assertArtifactListFieldsPreserved)
 }
 
@@ -375,11 +376,11 @@ func assertArtifactDetailMapperRoundTrip(t *testing.T, label string, fixture map
 	var apiValue factoryapi.FactorySessionArtifactDetail
 	decodeFixture(t, fixture, &apiValue, label+" artifact detail")
 	assertMapperRoundTrip(t, label+" artifact detail", apiValue, func(value factoryapi.FactorySessionArtifactDetail) factoryapi.FactorySessionArtifactDetail {
-		domain, err := apisurface.ArtifactDetailFromAPI(value)
+		domain, err := factorysession.ArtifactDetailFromAPI(value)
 		if err != nil {
 			t.Fatalf("%s artifact detail from API: %v", label, err)
 		}
-		return apisurface.ArtifactDetailResponseToAPI(domain)
+		return factorysession.ArtifactDetailResponseToAPI(domain)
 	}, assertArtifactDetailFieldsPreserved)
 }
 
@@ -388,7 +389,7 @@ func assertLifecycleControlMapperRoundTrip(t *testing.T, label string, fixture m
 	var apiValue factoryapi.FactorySessionLifecycleControlResponse
 	decodeFixture(t, fixture, &apiValue, label+" lifecycle control")
 	assertMapperRoundTrip(t, label+" lifecycle control", apiValue, func(value factoryapi.FactorySessionLifecycleControlResponse) factoryapi.FactorySessionLifecycleControlResponse {
-		return apisurface.LifecycleControlResponseToAPI(apisurface.LifecycleControlResultFromAPI(value))
+		return factorysession.LifecycleControlResponseToAPI(factorysession.LifecycleControlResultFromAPI(value))
 	}, assertLifecycleControlFieldsPreserved)
 }
 

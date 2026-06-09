@@ -1,4 +1,4 @@
-package apisurface
+package factorysession
 
 import (
 	"encoding/json"
@@ -7,6 +7,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/workflowsource"
 )
 
@@ -15,7 +16,7 @@ import (
 func OrchestratorOverrideFromAPI(orchestrator factoryapi.FactoryOrchestrator) (*factorysessionexecution.OrchestratorOverride, error) {
 	encoded, err := json.Marshal(orchestrator)
 	if err != nil {
-		return nil, &RequestValidationError{Message: "orchestrator must be a JSON object"}
+		return nil, &apisurface.RequestValidationError{Message: "orchestrator must be a JSON object"}
 	}
 	return &factorysessionexecution.OrchestratorOverride{
 		Kind: string(orchestrator.Kind),
@@ -686,10 +687,10 @@ func artifactCaptureMetadataFromAPI(metadata *factoryapi.FactoryArtifactCaptureM
 func artifactRetrievalRefFromAPI(ref factoryapi.FactorySessionArtifactRetrievalRef) (*factorysessionexecution.ArtifactRetrievalRef, error) {
 	href := strings.TrimSpace(ref.Href)
 	if href == "" {
-		return nil, &RequestValidationError{Message: "artifact retrieval ref href is required"}
+		return nil, &apisurface.RequestValidationError{Message: "artifact retrieval ref href is required"}
 	}
 	if strings.Contains(href, "://") || strings.HasPrefix(href, "/var/") || strings.HasPrefix(href, "file:") {
-		return nil, &RequestValidationError{Message: "artifact retrieval ref href must be an API-relative path"}
+		return nil, &apisurface.RequestValidationError{Message: "artifact retrieval ref href must be an API-relative path"}
 	}
 	result := &factorysessionexecution.ArtifactRetrievalRef{Href: href}
 	if ref.Method != nil {
