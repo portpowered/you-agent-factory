@@ -4,7 +4,7 @@ Operator-facing planning record for the Dynamic Workflows v0 program. This
 document tracks batch completion, cross-surface contract posture, and the
 recommended next batch for maintainers scheduling factory work.
 
-**Last updated:** 2026-06-09 (Batch 001 retro — cross-surface gap inventory)
+**Last updated:** 2026-06-09 (Batch 001 retro — Batch 002 go/no-go recommendation)
 
 ## Program overview
 
@@ -315,7 +315,97 @@ Evidence sources: `api/openapi.yaml`, `pkg/factorysessionexecution/`, `pkg/apisu
 | List filter model in service without OpenAPI params | Non-blocking | OpenAPI ↔ service |
 | Fixture gaps (events, approval, STILL_RUNNING, interrupted in JSON) | Mixed | Fixtures ↔ all surfaces |
 
-Stubbed transport gaps are **expected Batch 001 follow-up for Batch 002 wiring**, not permission to redefine schemas. Blocking items above are the inputs for the go/no-go recommendation in the next retro story.
+Stubbed transport gaps are **expected Batch 001 follow-up for Batch 002 wiring**, not permission to redefine schemas. Blocking items above are the inputs for the go/no-go recommendation below.
+
+## Batch 002 go/no-go recommendation
+
+**Recommendation: No-go** — do **not** schedule Batch 002 fake-session skeleton work as the
+immediate next batch. Schedule a **contract-repair batch** first to close the blocking
+cross-surface mismatches inventoried above, then re-run this checklist before skeleton
+handler wiring.
+
+### Evidence
+
+The Batch 001 completion checklist shows contract surfaces landed (✅) while durable
+transport remains stubbed (🔌). That split is healthy and **not** the reason for no-go.
+The gap inventory identifies **twelve blocking mismatches** across OpenAPI, service,
+mappers, events, and fixtures that would invalidate Batch 002's stated goals:
+
+1. Prove round-trip through apisurface mappers and contract fixtures.
+2. Emit or consume `FactoryEvent` payloads consistent with durable read models.
+3. Wire handlers to `factorysessionexecution.Service` without redefining schemas.
+
+If Batch 002 proceeds now, skeleton consumers would exercise **wrong terminal status
+enums**, **invalid event envelopes**, **incomplete error mappings**, and **fixture
+scenarios that cannot prove event round-trip** — masking regressions until persistence
+or real runtime lands.
+
+### Blocking findings (must close in contract-repair batch)
+
+| # | Finding | Surfaces | Why it blocks skeleton work |
+|---|---------|----------|------------------------------|
+| B1 | `SessionCompletedEventPayload.finalStatus` uses live `FactorySessionStatus` instead of durable lifecycle enum | OpenAPI events ↔ fake projections | Terminal session facts cannot correlate REST reads with event stream |
+| B2 | `FactoryEventSessionResultStatus` omits `NOT_READY` / `UNAVAILABLE` | OpenAPI events ↔ `GET /results` | Result availability cannot round-trip between events and REST |
+| B3 | `deriveProjectionEvents` emits non-canonical `FactoryEvent` documents (`status` vs `finalStatus`, missing envelope) | fake service ↔ apisurface ↔ fixtures | Event reads will fail mapper unmarshaling once handlers wire up |
+| B4 | Contract fixtures lack canonical `events[]` arrays | fixtures ↔ fake ↔ apisurface | Cannot prove event round-trip from JSON catalog — only invalid synthetics |
+| B5 | No `AWAITING_APPROVAL` fixture scenario | fixtures ↔ OpenAPI enum ↔ controls | Approval control skeleton cannot be fixture-tested |
+| B6 | `ControlErrorToAPI` omits required `status` on lifecycle control responses | apisurface ↔ OpenAPI | Error responses violate required response schema |
+| B7 | Control `requestId` conflict has no distinct OpenAPI `ErrorResponse.code` | OpenAPI ↔ `ErrControlRequestIDConflict` | Idempotency replay vs true conflict cannot be distinguished at API boundary |
+| B8 | Workflow source resolution documented on durable start but not called from service start path | OpenAPI ↔ `workflowsource` ↔ service | Skeleton start would skip validation/resolution contract Batch 001 defined |
+| B9 | `ReadEvents` validates reconnect cursor but returns full list | OpenAPI ↔ service | Event reconnect contract is false once routes delegate to service |
+| B10 | `GetResult` ignores `mode` / `includeArtifacts` shaping | OpenAPI ↔ service | Result read contract diverges from schema parameters |
+| B11 | `budgets` / `usage` required on durable read model but absent from service/mappers | OpenAPI ↔ service ↔ apisurface | Durable `GET` responses cannot satisfy schema on wire-up |
+| B12 | `providerSessionRefs` on dispatch schemas absent from service/mappers/fixtures | OpenAPI ↔ service ↔ apisurface ↔ fixtures | Dispatch correlation refs drop on round-trip |
+
+Items marked **Blocking (on wire-up)** in the inventory (B11, durable `GET` union routing)
+are included here because Batch 002's core deliverable **is** wire-up; they cannot be
+deferred past skeleton work without shipping schema-invalid responses.
+
+### Non-blocking follow-ups (safe to carry into Batch 002 after repair)
+
+| Finding | Class | Carry-forward rationale |
+|---------|-------|-------------------------|
+| Durable handlers return `501` / empty persisted listings | Stubbed transport | Expected Batch 001 state; Batch 002 wiring target after contracts stabilize |
+| `FactorySessionExecutionLinks` lacks `dispatches`/`artifacts` vs lifecycle control links | Non-blocking | Asymmetric link shapes are documented; skeleton can start with narrower start links |
+| Service list filters richer than OpenAPI list params | Non-blocking | Filters work in service tests; API query params can land later |
+| `RETRY_DISPATCH` fake vs service rule drift on active sessions | Non-blocking | Fake behavior can align during skeleton without schema change |
+| Dual phase event models (`ORCHESTRATOR_PHASE_CHANGED` vs `JAVASCRIPT_PHASE_CHANGE`) | Non-blocking | Both in schema oneOf; client guidance can follow skeleton |
+| Interrupted/recoverable, `STILL_RUNNING` sync, incomplete lifecycle control fixture matrix, reconnect cursor fixtures, list-filter fixtures | Non-blocking | Expand fixture catalog during or after skeleton; not schema blockers |
+| `EventReadResponseToAPI` / `SyncStartResponseToAPI` silent drop on unmarshal failure | Non-blocking | Tighten once canonical events land (B3/B4) |
+
+### Smallest contract-repair batch (before Batch 002 skeleton)
+
+Schedule one focused batch — **not** a broad refactor — with this minimum scope:
+
+1. **OpenAPI repairs:** align `SessionCompletedEventPayload.finalStatus` and
+   `FactoryEventSessionResultStatus` with durable REST enums; add distinct
+   `FACTORY_SESSION_CONTROL_REQUEST_ID_CONFLICT` (or equivalent) for control
+   `requestId` reuse with different tuples.
+2. **Fake + fixtures:** rewrite `deriveProjectionEvents` to emit canonical envelopes;
+   add `events[]` to fixture scenarios; add `AWAITING_APPROVAL` scenario.
+3. **Service seams:** call workflow source resolution from start path; enforce
+   `ReadEvents` cursor filtering; honor `GetResult` `mode`/`includeArtifacts`; add
+   `budgets`/`usage` and `providerSessionRefs` to projections.
+4. **Mappers:** map new fields; fix `ControlErrorToAPI` required `status`; regenerate
+   contracts if OpenAPI changes.
+5. **Verification:** extend contract/fake-consumer tests to prove event and durable-read
+   round-trips for at least running, `AWAITING_APPROVAL`, and terminal scenarios.
+
+Estimated posture: **one vertically sliced contract batch** touching the five surfaces
+already named in this plan — smaller than Batch 002 skeleton (which also spans
+CLI/MCP/UI) but mandatory so skeleton work does not encode broken contracts.
+
+### Re-entry criteria for Batch 002 (Go)
+
+After contract-repair merges, treat Batch 002 as **Go** when:
+
+- Blocking table B1–B12 rows are closed or explicitly downgraded with reviewer sign-off.
+- `durable-session-contract-fixtures.json` includes canonical `events[]` for representative
+  scenarios and an `AWAITING_APPROVAL` row.
+- Fake-service + mapper round-trip tests pass for durable session get, result, dispatch,
+  artifact, event, and lifecycle control paths without schema workarounds.
+- Transport stubs (501 handlers, empty persisted listing) remain the **only** deliberate
+  gaps — wired in Batch 002 skeleton against the repaired contract kernel.
 
 ### Product behavior goals (in scope for the program)
 
@@ -362,15 +452,16 @@ work can proceed or whether a **contract-repair batch** must close blocking
 gaps across OpenAPI, `factorysessionexecution.Service`, apisurface mappers,
 `FactoryEvent` payloads, and durable session fixtures first.
 
-The **cross-surface contract gap inventory** above classifies blocking vs
-non-blocking vs stubbed-transport findings. The next retro story will add an
-explicit go/no-go recommendation for Batch 002 using that inventory.
+**Current decision (2026-06-09 UTC):** **No-go** for Batch 002 skeleton now;
+schedule the **smallest contract-repair batch** described in
+[Batch 002 go/no-go recommendation](#batch-002-gono-go-recommendation) before
+fake-session handler/CLI/MCP/UI skeleton work. Transport stubs from the
+checklist remain Batch 002 wiring targets **after** repair.
 
 The **Batch 001 completion checklist** is the authoritative record of what
-merged in PRs #767–#776. Treat Batch 001 as **contract-complete at the schema
-and service-interface layer** and Batch 002 as **blocked only by documented
-contract conflicts** in the gap inventory, not by the transport stubs listed in
-the checklist.
+merged in PRs #767–#776. Treat Batch 001 as **contract-complete at the
+interface-definition layer** but **not** safe for skeleton wire-up until
+blocking inventory rows B1–B12 are resolved.
 
 ### Related references
 
