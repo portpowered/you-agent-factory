@@ -56,6 +56,18 @@ type InvocationAPI interface {
 	InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (FactoryInvocationResult, error)
 }
 
+// DurableSessionLifecycleAPI is the shared durable session read and lifecycle
+// control seam for pause, resume, cancel, terminate, approve, and retry-dispatch.
+type DurableSessionLifecycleAPI interface {
+	GetDurableFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySessionDurableReadModel, error)
+	PauseDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	ResumeDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	CancelDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	TerminateDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	ApproveDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionApproveRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	RetryDurableFactorySessionDispatch(ctx context.Context, sessionID string, request factoryapi.FactorySessionRetryDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+}
+
 // DurableSessionExecutionAPI is the shared durable factory-session execution start
 // seam for async and sync dynamic workflow sessions. Live-session open and
 // invocation remain on SessionAPI and InvocationAPI.
