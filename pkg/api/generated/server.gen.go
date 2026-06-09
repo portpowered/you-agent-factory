@@ -1672,6 +1672,27 @@ type FactorySessionDispatchSummary struct {
 	Warnings *[]FactoryDispatchWarning `json:"warnings,omitempty"`
 }
 
+// FactorySessionDurableActionAvailability Lifecycle controls currently available for one listed durable factory session.
+type FactorySessionDurableActionAvailability struct {
+	// CanApprove True when approval is currently required and available.
+	CanApprove *bool `json:"canApprove,omitempty"`
+
+	// CanCancel True when cancel is currently valid for the session status.
+	CanCancel *bool `json:"canCancel,omitempty"`
+
+	// CanPause True when pause is currently valid for the session status.
+	CanPause *bool `json:"canPause,omitempty"`
+
+	// CanResume True when resume is currently valid for the session status.
+	CanResume *bool `json:"canResume,omitempty"`
+
+	// CanRetryDispatch True when retry-dispatch is currently valid for the session status.
+	CanRetryDispatch *bool `json:"canRetryDispatch,omitempty"`
+
+	// CanTerminate True when terminate is currently valid for the session status.
+	CanTerminate *bool `json:"canTerminate,omitempty"`
+}
+
 // FactorySessionDurableFailureDetail defines model for FactorySessionDurableFailureDetail.
 type FactorySessionDurableFailureDetail struct {
 	// ErrorClass Provider or runtime error class when available.
@@ -1823,6 +1844,12 @@ type FactorySessionDurableResultSummary struct {
 
 // FactorySessionDurableSummary defines model for FactorySessionDurableSummary.
 type FactorySessionDurableSummary struct {
+	// Actions Lifecycle controls currently available for one listed durable factory session.
+	Actions *FactorySessionDurableActionAvailability `json:"actions,omitempty"`
+
+	// ArtifactCount Number of customer-visible artifacts associated with the session.
+	ArtifactCount *int `json:"artifactCount,omitempty"`
+
 	// Dialect Resolved orchestrator dialect when orchestratorKind = JAVASCRIPT.
 	Dialect *string `json:"dialect,omitempty"`
 
@@ -1839,11 +1866,19 @@ type FactorySessionDurableSummary struct {
 	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
 	OrchestratorKind FactoryOrchestratorKind `json:"orchestratorKind"`
 
+	// Phase Current workflow phase when execution is in progress.
+	Phase    *string                              `json:"phase,omitempty"`
+	Progress *FactorySessionDurableProgressCounts `json:"progress,omitempty"`
+
+	// Recoverable True when the durable session is interrupted or has a stale lease while still appearing active.
+	Recoverable *bool `json:"recoverable,omitempty"`
+
 	// RequestedPolicy Caller-requested orchestrator policy for one durable execution before approval. Runtimes may require approval before this payload becomes effective. Responses return the approved policy separately as FactorySessionEffectivePolicy.
 	RequestedPolicy *FactorySessionRequestedPolicy `json:"requestedPolicy,omitempty"`
 
 	// ResolvedSource Resolved durable execution source identity exposed to API clients without raw workflow source, unrestricted host paths, or diagnostic artifacts.
 	ResolvedSource FactorySessionResolvedSourceIdentity `json:"resolvedSource"`
+	ResultSummary  *FactorySessionDurableResultSummary  `json:"resultSummary,omitempty"`
 
 	// SessionId Stable durable factory-session identifier.
 	SessionId string `json:"sessionId"`

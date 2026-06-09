@@ -1928,6 +1928,15 @@ export interface components {
       effectivePolicy?: components["schemas"]["FactorySessionEffectivePolicy"];
       /** @description Stable hash of the effective approved orchestrator policy when available. Mirrors effectivePolicy.policyHash when both are present. */
       effectivePolicyHash?: string;
+      /** @description Current workflow phase when execution is in progress. */
+      phase?: string;
+      progress?: components["schemas"]["FactorySessionDurableProgressCounts"];
+      resultSummary?: components["schemas"]["FactorySessionDurableResultSummary"];
+      /** @description Number of customer-visible artifacts associated with the session. */
+      artifactCount?: number;
+      /** @description True when the durable session is interrupted or has a stale lease while still appearing active. */
+      recoverable?: boolean;
+      actions?: components["schemas"]["FactorySessionDurableActionAvailability"];
       /** @description True when the durable session lease is stale or interrupted while status still appears active. */
       staleLease?: boolean;
       lifecycle?: components["schemas"]["FactorySessionDurableLifecycleTimestamps"];
@@ -1995,6 +2004,21 @@ export interface components {
       inFlightDispatches?: number;
       /** @description Number of workflow phases represented in phase summaries. */
       phaseCount?: number;
+    };
+    /** @description Lifecycle controls currently available for one listed durable factory session. */
+    FactorySessionDurableActionAvailability: {
+      /** @description True when pause is currently valid for the session status. */
+      canPause?: boolean;
+      /** @description True when resume is currently valid for the session status. */
+      canResume?: boolean;
+      /** @description True when cancel is currently valid for the session status. */
+      canCancel?: boolean;
+      /** @description True when terminate is currently valid for the session status. */
+      canTerminate?: boolean;
+      /** @description True when approval is currently required and available. */
+      canApprove?: boolean;
+      /** @description True when retry-dispatch is currently valid for the session status. */
+      canRetryDispatch?: boolean;
     };
     FactorySessionDurableResultSummary: {
       resultStatus: components["schemas"]["FactorySessionResultStatus"];

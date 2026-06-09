@@ -99,7 +99,20 @@
         "effectivePolicy": {
           "policyHash": "eff-policy-petri-run"
         },
-        "effectivePolicyHash": "eff-policy-petri-run"
+        "effectivePolicyHash": "eff-policy-petri-run",
+        "phase": "triage",
+        "progress": {
+          "totalDispatches": 1,
+          "inFlightDispatches": 1
+        },
+        "resultSummary": {
+          "resultStatus": "NOT_READY"
+        },
+        "actions": {
+          "canPause": true,
+          "canCancel": true,
+          "canTerminate": true
+        }
       },
       "dispatches": [
         {
@@ -224,6 +237,19 @@
           "kind": "FACTORY_ID",
           "sourceRef": "factory/customer-support-triage",
           "sourceHash": "sha256:petri-factory-001"
+        },
+        "progress": {
+          "totalDispatches": 1,
+          "completedDispatches": 1
+        },
+        "resultSummary": {
+          "resultStatus": "FINAL",
+          "summary": "Ticket triaged and resolved."
+        },
+        "artifactCount": 1,
+        "recoverable": false,
+        "actions": {
+          "canRetryDispatch": false
         }
       },
       "dispatches": [
@@ -279,6 +305,11 @@
         "createdAt": "2026-06-08T10:05:00Z",
         "dispatchId": "disp-petri-success-001",
         "auditMode": "REDACTED",
+        "captureMetadata": {
+          "capturedAt": "2026-06-08T10:05:00Z",
+          "sourceDispatchId": "disp-petri-success-001",
+          "mimeType": "text/plain"
+        },
         "content": [
           {
             "type": "text",

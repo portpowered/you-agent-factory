@@ -32,6 +32,24 @@ properties:
     description: >-
       Stable hash of the effective approved orchestrator policy when available.
       Mirrors effectivePolicy.policyHash when both are present.
+  phase:
+    type: string
+    description: Current workflow phase when execution is in progress.
+  progress:
+    $ref: './FactorySessionDurableProgressCounts.yaml'
+  resultSummary:
+    $ref: './FactorySessionDurableResultSummary.yaml'
+  artifactCount:
+    type: integer
+    minimum: 0
+    description: Number of customer-visible artifacts associated with the session.
+  recoverable:
+    type: boolean
+    description: >-
+      True when the durable session is interrupted or has a stale lease while
+      still appearing active.
+  actions:
+    $ref: './FactorySessionDurableActionAvailability.yaml'
   staleLease:
     type: boolean
     description: >-
