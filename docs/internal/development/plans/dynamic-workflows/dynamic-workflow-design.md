@@ -9,7 +9,7 @@ The core idea is deliberately narrow:
 - The durable factory/session/work/dispatch model remains canonical.
 - A `Factory` is the authored definition of one orchestration. It can use the current Petri-style orchestrator, a JavaScript orchestrator, or a future stream/task orchestrator.
 - A `FactorySession` is one running instance of one factory, regardless of orchestrator kind.
-- A dynamic workflow is a JavaScript-orchestrated factory whose source may be a Claude-compatible workflow file, inline workflow source, a saved project workflow, a saved personal workflow, or a built-in/global workflow.
+- A dynamic workflow is customer shorthand for a JavaScript-orchestrated `Factory`, not a separate runtime product. Its source may be a Claude-compatible workflow file, inline workflow source, a saved project workflow, a saved personal workflow, or a built-in/global workflow.
 - The JavaScript runtime coordinates phases, script variables, checkpoints, and child-agent fan-out. The shared execution loop remains responsible for factory sessions, dispatches, worker/provider invocations, event streams, persistence, API transport, CLI commands, logs, metrics, and worker/provider execution.
 - MCP is an additional interface point over the same API/service contracts, not a separate runtime.
 
@@ -285,45 +285,65 @@ Do not place raw JavaScript VM state into the general engine snapshot. Persist c
    - Owns orchestration decisions only: what dispatches should be created, when phases/checkpoints advance, and when the session is terminal.
    - Does not duplicate session lifecycle, dispatch execution, worker/provider invocation, provider sessions, events, logs, metrics, artifacts, or API/CLI/MCP transport.
 
-2. `pkg/orchestrators/javascript/runtime_subsystems`
-   - Implements the shared `pkg/orchestrators` interface for JavaScript/Claude-compatible workflow files.
-   - Owns `goja` execution, deterministic host APIs, sandbox policy, phase state, checkpoint hooks, and resume summaries.
-   - Does not directly call providers, subprocesses, or the filesystem except through injected host capabilities.
+2. `pkg/orchestrators/javascript/source`
+   - Owns JavaScript orchestrator source loading and resolution: inline source, saved workflow names, Claude-compatible paths, package-relative workflow directories, and artifact-root boundaries.
+   - Normalizes resolved source into orchestrator-owned `WorkflowSource` values before validation or session start.
+   - Does not own AST validation, policy resolution, preview projection, or runtime execution.
 
-3. `pkg/orchestrators/javascript/store`
-   - Owns durable orchestrator-specific session state such as JavaScript source snapshots, phase summaries, checkpoints, artifacts, and replay indexes.
-   - Stores only projected/resumable state; raw VM state is not part of the general session snapshot.
-
-4. `pkg/orchestrators/javascript/validator`
+3. `pkg/orchestrators/javascript/validation`
    - Parses JavaScript workflow source into an AST-like validation model.
    - Mirrors the existing config parser/validator style: parse first, produce path/source-location-aware validation diagnostics second, and keep execution out of validation.
    - Validates `meta`, `args` schema, primitive usage shape, supported globals, forbidden direct host access, and policy compatibility before session start.
 
-5. `pkg/orchestrators/petri`
+4. `pkg/orchestrators/javascript/store`
+   - Owns durable orchestrator-specific session state such as JavaScript source snapshots, phase summaries, checkpoints, artifacts, and replay indexes.
+   - Stores only projected/resumable state; raw VM state is not part of the general session snapshot.
+
+5. `pkg/orchestrators/javascript/policy`
+   - Validates declared capabilities and effective session policy.
+   - Resolves requested policy into the effective session policy and blocks disallowed host operations.
+   - Does not own preview projection or result validation.
+
+6. `pkg/orchestrators/javascript/preview`
+   - Owns Factory preview and Factory Session preview preparation for JavaScript orchestrator factories.
+   - Projects validation, policy, source, and cost/approval signals into preview responses without starting a session.
+   - Does not own public REST transport or standalone workflow-preview product routes.
+
+7. `pkg/orchestrators/javascript/result`
+   - Owns JavaScript orchestrator result validation and projection: structured-cloneable final results, worker output schema checks, artifact URI normalization, and result hashes.
+   - Does not own dispatch execution or provider-session capture.
+
+8. `pkg/orchestrators/javascript/runtime_subsystems`
+   - Implements the shared `pkg/orchestrators` interface for JavaScript/Claude-compatible workflow files.
+   - Owns `goja` execution, deterministic host APIs, sandbox policy enforcement hooks, phase state, checkpoint hooks, and resume summaries.
+   - Does not directly call providers, subprocesses, or the filesystem except through injected host capabilities.
+
+9. `pkg/orchestrators/petri`
    - Moves the current Petri orchestration into the same orchestrator structure.
-   - Suggested subpackages: `runtime_subsystems`, `core_data_models`, `store`, and `validator`.
+   - Suggested subpackages: `runtime_subsystems`, `core_data_models`, `store`, and `validation`.
    - Keeps existing behavior while making Petri one orchestrator kind rather than the implicit definition of a factory.
 
-6. `pkg/factory/subsystems/javascript`
+10. `pkg/factory/subsystems/javascript`
    - Wires JavaScript orchestrator factories into factory/session runtime construction.
    - Inherits the shared subsystem shape used by new factory subsystems.
 
-7. `pkg/factory/subsystems/petri`
+11. `pkg/factory/subsystems/petri`
    - Wires Petri orchestrator factories into factory/session runtime construction.
    - Owns compatibility/defaulting for existing `factory.json` files that do not yet declare `orchestrator.kind`.
 
-8. `pkg/orchestrators/javascript/policy`
-   - Validates declared capabilities and effective session policy.
-   - Produces approval previews and blocks disallowed host operations.
-
-9. `pkg/mcp`
+12. `pkg/mcp`
    - Exposes MCP tools/resources/prompts over the same service layer used by CLI/API/UI.
    - Should share normal backend session runtime/server instancing whenever practical.
    - Supports stdio and HTTP/SSE transport if the repo's server architecture supports both cleanly.
 
-10. `examples/workflows`
+13. `examples/workflows`
    - Stores curated sample workflow files and fixture projects.
    - Includes Bun-inspired migration, fan-out audit, adversarial verification, tournament, and loop-until-done examples.
+
+JavaScript orchestrator ownership rule:
+
+- Validation, source loading, storage, policy, result validation, and preview preparation belong under `pkg/orchestrators/javascript` subpackages.
+- Root `pkg/workflow*` packages are transitional Batch 001 surfaces and are not the intended final ownership boundary for JavaScript orchestration.
 
 ### Core Loop Boundary
 
@@ -750,9 +770,25 @@ The exact package names may shift during implementation, but these function boun
 - Add `func DispatchEventPayload(...)`.
 - Add `func FactoryArtifactEventPayload(...)`.
 
+### Source Loading
+
+`pkg/orchestrators/javascript/source/resolve.go`
+
+- `func ResolveWorkflowSource(ctx context.Context, request SourceRequest) (WorkflowSource, error)`
+- `func LookupSavedWorkflow(name string, lookup LookupContext) (WorkflowSource, error)`
+- `func ResolveClaudeCompatiblePath(projectPath string, name string) (WorkflowSource, error)`
+- `func ResolveArtifactRoot(request SourceRequest, policy EffectivePolicy) (ArtifactRoot, error)`
+- `func NormalizeInlineSource(source string) (WorkflowSource, error)`
+
+Acceptance:
+
+- Source resolution order matches CLI/API/MCP normalization rules.
+- Resolved source includes stable refs, hashes, and lookup provenance before validation.
+- Artifact roots are policy-checked and outside the target repository by default.
+
 ### Validation
 
-`pkg/orchestrators/javascript/validator/validator.go`
+`pkg/orchestrators/javascript/validation/validate.go`
 
 - `func ParseWorkflowSource(source WorkflowSource) (WorkflowAST, []ValidationIssue)`
 - `func ValidateWorkflowAST(ast WorkflowAST, policy interfaces.FactoryOrchestratorPolicyConfig) []ValidationIssue`
@@ -763,7 +799,7 @@ The exact package names may shift during implementation, but these function boun
 - `func ValidateJavaScriptResourceReferences(factory interfaces.FactoryConfig) []ValidationIssue`
 - `func ValidateJavaScriptRunnerReferences(factory interfaces.FactoryConfig) []ValidationIssue`
 
-`pkg/orchestrators/petri/validator/validator.go`
+`pkg/orchestrators/petri/validation/validate.go`
 
 - `func ValidatePetriOrchestratorConfig(config interfaces.FactoryOrchestratorConfig) []ValidationIssue`
 - `func ValidatePetriCoreDataModels(factory interfaces.FactoryConfig) []ValidationIssue`
@@ -807,19 +843,46 @@ Acceptance:
 - Store operations are atomic enough for resume and concurrent task completion.
 - Store test fixtures cover fresh session, resumed session, concurrent dispatch updates, artifact retrieval, and corrupted checkpoint handling.
 
-### Policy And Preview
+### Policy
 
 `pkg/orchestrators/javascript/policy/policy.go`
 
 - `func ResolveEffectivePolicy(request RequestedPolicy, factory interfaces.FactoryConfig, user PolicySubject) (EffectivePolicy, error)`
 - `func ValidateCapabilityRequest(policy EffectivePolicy, request HostCapabilityRequest) error`
-- `func BuildApprovalPreview(source WorkflowSource, params json.RawMessage, policy EffectivePolicy) (WorkflowPreview, error)`
-- `func EstimateWorkflowCost(preview WorkflowPreview, policy EffectivePolicy) WorkflowCostEstimate`
-- `func RequireApproval(preview WorkflowPreview, policy EffectivePolicy) bool`
 - `func StablePolicyHash(policy EffectivePolicy) string`
 - `func ResolveRouteProfile(options AgentRunOptions, policy EffectivePolicy) (AgentRunOptions, error)`
 - `func ResolveOutputAuditMode(policy EffectivePolicy) OutputAuditMode`
 - `func RedactPolicyDiagnostics(policy EffectivePolicy) map[string]string`
+
+### Preview Preparation
+
+`pkg/orchestrators/javascript/preview/build.go`
+
+- `func BuildFactoryPreview(source WorkflowSource, params json.RawMessage, policy EffectivePolicy) (FactoryPreview, error)`
+- `func BuildFactorySessionPreview(source WorkflowSource, params json.RawMessage, policy EffectivePolicy) (FactorySessionPreview, error)`
+- `func EstimateFactorySessionCost(preview FactorySessionPreview, policy EffectivePolicy) FactorySessionCostEstimate`
+- `func RequireApproval(preview FactorySessionPreview, policy EffectivePolicy) bool`
+- `func ProjectPreviewConstraints(preview FactorySessionPreview) PreviewConstraints`
+
+Acceptance:
+
+- Preview preparation reports max children, max concurrency, runners, worktree behavior, token budget, timeout, and requested host capabilities.
+- Preview responses use Factory and Factory Session preview semantics rather than a standalone workflow-preview product model.
+
+### Result Validation
+
+`pkg/orchestrators/javascript/result/validate.go`
+
+- `func ValidateStructuredCloneable(value any) error`
+- `func ValidateWorkerOutput(schema json.RawMessage, value any) (any, error)`
+- `func ProjectFinalResult(content []interfaces.WorkContentPart) (FactoryResultProjection, error)`
+- `func NormalizeArtifactURI(uri string) (string, error)`
+- `func ResultHash(content any) string`
+
+Acceptance:
+
+- Invalid worker output and non-cloneable final results become explicit failures with path-aware diagnostics.
+- Result projection preserves canonical `Work`, `FactoryArtifact`, and `FactoryEvent` semantics.
 
 `pkg/orchestrators/javascript/store/artifact_hygiene.go`
 
@@ -834,7 +897,6 @@ Acceptance:
 
 Acceptance:
 
-- Preview reports max children, max concurrency, runners, worktree behavior, token budget, timeout, and requested host capabilities.
 - Disallowed filesystem/network/process access fails before runtime execution.
 - Policy hashes are stable across map ordering.
 - Secret-like prompt, result, stdout, stderr, event, and artifact content is suppressed or redacted according to output audit mode.
@@ -1083,7 +1145,7 @@ Acceptance:
 
 - `func workflowListTool(ctx context.Context, args ToolArgs) (ToolResult, error)`
 - `func workflowValidateTool(ctx context.Context, args ToolArgs) (ToolResult, error)`
-- `func workflowPreviewTool(ctx context.Context, args ToolArgs) (ToolResult, error)`
+- `func factorySessionPreviewTool(ctx context.Context, args ToolArgs) (ToolResult, error)`
 - `func workflowRunTool(ctx context.Context, args ToolArgs) (ToolResult, error)`
 - `func workflowStatusTool(ctx context.Context, args ToolArgs) (ToolResult, error)`
 - `func workflowTasksTool(ctx context.Context, args ToolArgs) (ToolResult, error)`
@@ -1103,7 +1165,7 @@ Acceptance:
 - `listDynamicWorkflows`
 - `getDynamicWorkflow`
 - `validateDynamicWorkflow`
-- `previewDynamicWorkflow`
+- `previewFactorySession`
 - `startDynamicWorkflowRun`
 - `getDynamicWorkflowRun`
 - `listDynamicWorkflowTasks`
@@ -1137,7 +1199,7 @@ Acceptance:
 - `DynamicWorkflowRunList`
 - `DynamicWorkflowRunDetail`
 - `DynamicWorkflowRunToolbar`
-- `DynamicWorkflowPreviewDialog`
+- `FactorySessionPreviewDialog`
 - `DynamicWorkflowApprovalPanel`
 - `DynamicWorkflowTaskTable`
 - `DynamicWorkflowTaskDetail`
