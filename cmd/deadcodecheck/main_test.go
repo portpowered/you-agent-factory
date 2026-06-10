@@ -360,8 +360,14 @@ func TestEnsureGoTypesAliasEnabled(t *testing.T) {
 }
 
 func TestNormalizeReport(t *testing.T) {
-	if got := normalizeReport("pkg\\foo.go: Example\r\npkg\\bar.go: Other"); got != "pkg/foo.go: Example\npkg/bar.go: Other\n" {
+	if got := normalizeReport("pkg\\foo.go: Example\r\npkg\\bar.go: Other"); got != "pkg/bar.go: Other\npkg/foo.go: Example\n" {
 		t.Fatalf("normalizeReport() = %q", got)
+	}
+}
+
+func TestNormalizeReportSortsAndTrimsFindings(t *testing.T) {
+	if got := normalizeReport("\npkg/zeta.go: Later  \n pkg/alpha.go: First\n"); got != "pkg/alpha.go: First\npkg/zeta.go: Later\n" {
+		t.Fatalf("normalizeReport() sorted output = %q", got)
 	}
 }
 

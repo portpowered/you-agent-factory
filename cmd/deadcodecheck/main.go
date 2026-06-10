@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 )
 
@@ -115,10 +116,17 @@ func normalizeReport(report string) string {
 	report = strings.ReplaceAll(report, "\r\n", "\n")
 	report = strings.ReplaceAll(report, "\r", "\n")
 	report = strings.ReplaceAll(report, "\\", "/")
-	if report != "" && !strings.HasSuffix(report, "\n") {
-		report += "\n"
+	report = strings.TrimSpace(report)
+	if report == "" {
+		return ""
 	}
-	return report
+
+	lines := strings.Split(report, "\n")
+	for index, line := range lines {
+		lines[index] = strings.TrimSpace(line)
+	}
+	slices.Sort(lines)
+	return strings.Join(lines, "\n") + "\n"
 }
 
 func countFindings(report string) int {
