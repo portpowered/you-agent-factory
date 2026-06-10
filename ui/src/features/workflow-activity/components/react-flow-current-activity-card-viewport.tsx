@@ -16,6 +16,7 @@ import {
   type KeyboardEvent,
   type MutableRefObject,
   useCallback,
+  useEffect,
   useRef,
 } from "react";
 import {
@@ -225,6 +226,11 @@ type CurrentActivityGraphViewportAddControls = {
   isMenuOpen?: boolean;
   setMenuOpen?: (open: boolean) => void;
   startAction?: (actionID: string) => void;
+  updatePlacementViewport?: (viewport: {
+    height: number;
+    viewport: { x: number; y: number; zoom: number };
+    width: number;
+  }) => void;
 };
 
 type CurrentActivityGraphViewportSaveControls = {
@@ -378,6 +384,26 @@ export function CurrentActivityGraphViewport({
   const updateLayoutViewport = canPersistLayoutChanges
     ? layoutControls.updateViewport
     : undefined;
+  const updatePlacementViewport = addControls.updatePlacementViewport;
+  const reportPlacementViewport = useCallback(
+    (viewport: { x: number; y: number; zoom: number }) => {
+      if (!graphViewport.ready) {
+        return;
+      }
+
+      updatePlacementViewport?.({
+        height: graphViewport.height,
+        viewport,
+        width: graphViewport.width,
+      });
+    },
+    [
+      graphViewport.height,
+      graphViewport.ready,
+      graphViewport.width,
+      updatePlacementViewport,
+    ],
+  );
   useCanonicalLayoutViewportSync({
     canonicalLayoutViewport,
     fitViewOptions: layoutControls.initialFitViewOptions,
@@ -385,6 +411,17 @@ export function CurrentActivityGraphViewport({
     skipNextViewportMoveEndRef,
     viewportResetKey: layoutControls.initialFitViewKey,
   });
+  useEffect(() => {
+    const flowInstance = flowInstanceRef?.current;
+    if (!flowInstance) {
+      if (canonicalLayoutViewport) {
+        reportPlacementViewport(canonicalLayoutViewport);
+      }
+      return;
+    }
+
+    reportPlacementViewport(flowInstance.getViewport());
+  }, [canonicalLayoutViewport, flowInstanceRef, reportPlacementViewport]);
   const handleConnect = useCallback(
     (connection: Connection) => {
       onConnect?.({
@@ -505,6 +542,7 @@ export function CurrentActivityGraphViewport({
                 if (flowInstanceRef) {
                   flowInstanceRef.current = instance;
                 }
+                reportPlacementViewport(instance.getViewport());
               }}
               onError={handleCurrentActivityReactFlowError}
               onEdgeClick={(_, edge) => {
@@ -541,6 +579,7 @@ export function CurrentActivityGraphViewport({
                 }
               }}
               onMoveEnd={(_, viewport) => {
+                reportPlacementViewport(viewport);
                 if (skipNextViewportMoveEndRef.current) {
                   skipNextViewportMoveEndRef.current = false;
                   return;

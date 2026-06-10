@@ -1,118 +1,16 @@
-import { type ReactNode, useCallback, useState } from "react";
+import type { ReactNode } from "react";
 
 import { DashboardActionRow } from "../../../components/ui";
 import { cn } from "../../../lib/cn";
-import { buildDocTargetPathFromFileName } from "../../current-factory-definition/lib/doc-editable-values";
 import {
   FactoryGraphEditorModeToggle,
   FactoryGraphEditorStatus,
-  type FactoryGraphEditorTool,
 } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
-import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
-import {
-  createFactoryGraphAddEntityDraft,
-  type FactoryGraphAddEntityDraft,
-  type FactoryGraphAddEntityFieldErrors,
-  type FactoryGraphAddEntityKind,
-  validateFactoryGraphAddEntityDraft,
-} from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
 import {
   type FactoryGraphEditorDirtyState,
   hasAnyFactoryGraphEditorChanges,
 } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import { useGraphEditorPlaceAddedNode } from "./graph-editor-placement-context";
-
-export function useFactoryGraphAddEntityController({
-  currentFactoryDefinition,
-  editableGraph,
-  onDocAdded,
-  setActiveTool,
-}: {
-  currentFactoryDefinition: CanonicalFactoryDefinition | null;
-  editableGraph: EditableFactoryGraphViewModel;
-  onDocAdded?: (targetPath: string) => void;
-  setActiveTool: (tool: FactoryGraphEditorTool) => void;
-}) {
-  const [addMenuOpen, setAddMenuOpen] = useState(false);
-  const [addEntityDraft, setAddEntityDraft] =
-    useState<FactoryGraphAddEntityDraft | null>(null);
-  const [addEntityErrors, setAddEntityErrors] =
-    useState<FactoryGraphAddEntityFieldErrors>({});
-  const placeAddedNode = useGraphEditorPlaceAddedNode();
-
-  const handleAddEntityAction = useCallback(
-    (actionID: string) => {
-      setActiveTool("add");
-      setAddEntityDraft(
-        createFactoryGraphAddEntityDraft(
-          actionID as FactoryGraphAddEntityKind,
-          currentFactoryDefinition,
-        ),
-      );
-      setAddEntityErrors({});
-      setAddMenuOpen(false);
-    },
-    [currentFactoryDefinition, setActiveTool],
-  );
-
-  const handleAddEntitySubmit = useCallback(() => {
-    if (addEntityDraft === null) {
-      return;
-    }
-
-    const validationErrors = validateFactoryGraphAddEntityDraft(
-      addEntityDraft,
-      currentFactoryDefinition,
-    );
-    if (Object.keys(validationErrors).length > 0) {
-      setAddEntityErrors(validationErrors);
-      return;
-    }
-
-    const addResult = editableGraph.actions.addNode(addEntityDraft);
-    if (!addResult.ok) {
-      setAddEntityErrors(addResult.fieldErrors ?? { name: addResult.message });
-      return;
-    }
-
-    placeAddedNode?.(addEntityDraft);
-    if (addEntityDraft.kind === "doc") {
-      onDocAdded?.(
-        buildDocTargetPathFromFileName(addEntityDraft.fileName.trim()),
-      );
-    }
-    setActiveTool(null);
-    setAddEntityDraft(null);
-    setAddEntityErrors({});
-  }, [
-    addEntityDraft,
-    currentFactoryDefinition,
-    editableGraph.actions,
-    onDocAdded,
-    placeAddedNode,
-    setActiveTool,
-  ]);
-
-  const reset = useCallback(() => {
-    setAddMenuOpen(false);
-    setAddEntityDraft(null);
-    setAddEntityErrors({});
-  }, []);
-
-  return {
-    addEntityDraft,
-    addEntityErrors,
-    addMenuOpen,
-    handleAddEntityAction,
-    handleAddEntitySubmit,
-    reset,
-    setAddEntityDraft,
-    setAddEntityErrors,
-    setAddMenuOpen,
-  };
-}
 
 const FACTORY_GRAPH_HEADER_ACTIONS_CLASS = "min-w-0 justify-end";
 const FACTORY_GRAPH_HEADER_ACTIONS_COMPACT_CLASS = "gap-1.5";

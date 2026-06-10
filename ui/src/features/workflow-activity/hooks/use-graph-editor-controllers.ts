@@ -7,9 +7,9 @@ import type {
   CanonicalFactoryDefinition,
   FactoryGraphNodeKind,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
-import { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
+import { useFactoryGraphAddEntityController } from "./use-current-activity-graph-add-controller";
 
 export function useGraphEditorControllers({
   activeTool,

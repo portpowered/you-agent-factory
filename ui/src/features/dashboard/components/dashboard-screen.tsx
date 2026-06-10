@@ -10,7 +10,6 @@ import {
 import { useDashboardSnapshot } from "../hooks/useDashboardSnapshot";
 import { useDashboardWorldView } from "../hooks/useDashboardWorldView";
 import { DashboardSessionProvider } from "../session/dashboard-session-provider";
-import { DashboardSessionLifecycleBanner } from "./dashboard-session-lifecycle-banner";
 
 const DASHBOARD_SHELL_CLASS = "min-h-screen overflow-x-hidden p-2";
 
@@ -33,7 +32,7 @@ function DashboardScreenContent({ locale }: DashboardScreenProps = {}) {
     locale: resolvedLocale,
     refreshToken,
   });
-  const { streamState } = useDashboardWorldView();
+  useDashboardWorldView();
   const messages = getHeaderControlsMessages(resolvedLocale);
 
   if (isInitialLoading) {

@@ -264,69 +264,69 @@ describe("currentActivityCardFactoryDefinition bundled docs", () => {
   });
 });
 
-describe("useCurrentActivityGraphViewModel node state", () => {
-  function renderGraphViewModelWithLayout(
-    graphLayout: GraphLayout,
-    options: {
-      renderedLayout?: FactoryLayout;
-      selectedWaypointEdgeId?: string | null;
-      visibleGraphEdges?: GraphLayout["edges"];
-    } = {},
-  ) {
-    const editor = {
-      activeTool: null,
-      canInteractWithEditor: true,
-      editorMode: true,
-      graphProjection: {
-        canonicalLayoutViewport: null,
-        displayFactoryDefinition: baseFactoryDefinition,
-        graphLayout,
-        pendingAdditionEdgeIds: new Set<string>(),
-        positionedGraphLayout: graphLayout,
-        renderedLayout: options.renderedLayout ?? { schemaVersion: 1 },
-        visibleGraphEdges: options.visibleGraphEdges ?? [],
-      },
-      handleConnectionAnchorClick: vi.fn(),
-      pendingConnectionSource: null,
-      selectedWaypointEdgeId: options.selectedWaypointEdgeId,
-      validationTargets: [],
-    };
-    const snapshot = {
-      ...structuredClone(singleNodeDashboardSnapshot),
-      factory: baseFactoryDefinition,
-      runtime: {
-        ...singleNodeDashboardSnapshot.runtime,
-        in_flight_dispatch_count: 0,
-      },
-    };
-    const noop = vi.fn();
+function renderGraphViewModelWithLayout(
+  graphLayout: GraphLayout,
+  options: {
+    renderedLayout?: FactoryLayout;
+    selectedWaypointEdgeId?: string | null;
+    visibleGraphEdges?: GraphLayout["edges"];
+  } = {},
+) {
+  const editor = {
+    activeTool: null,
+    canInteractWithEditor: true,
+    editorMode: true,
+    graphProjection: {
+      canonicalLayoutViewport: null,
+      displayFactoryDefinition: baseFactoryDefinition,
+      graphLayout,
+      pendingAdditionEdgeIds: new Set<string>(),
+      positionedGraphLayout: graphLayout,
+      renderedLayout: options.renderedLayout ?? { schemaVersion: 1 },
+      visibleGraphEdges: options.visibleGraphEdges ?? [],
+    },
+    handleConnectionAnchorClick: vi.fn(),
+    pendingConnectionSource: null,
+    selectedWaypointEdgeId: options.selectedWaypointEdgeId,
+    validationTargets: [],
+  };
+  const snapshot = {
+    ...structuredClone(singleNodeDashboardSnapshot),
+    factory: baseFactoryDefinition,
+    runtime: {
+      ...singleNodeDashboardSnapshot.runtime,
+      in_flight_dispatch_count: 0,
+    },
+  };
+  const noop = vi.fn();
 
-    return renderHook(
-      ({ currentGraphLayout }: { currentGraphLayout: GraphLayout }) =>
-        useCurrentActivityGraphViewModel({
-          editor: {
-            ...editor,
-            graphProjection: {
-              ...editor.graphProjection,
-              graphLayout: currentGraphLayout,
-              positionedGraphLayout: currentGraphLayout,
-            },
-          } as Parameters<typeof useCurrentActivityGraphViewModel>[0]["editor"],
-          now: 0,
-          onSelectDoc: noop,
-          onSelectResource: noop,
-          onSelectStateNode: noop,
-          onSelectWorkID: noop,
-          onSelectWorker: noop,
-          onSelectWorkType: noop,
-          onSelectWorkstation: noop,
-          selection: null,
-          snapshot,
-        }),
-      { initialProps: { currentGraphLayout: graphLayout } },
-    );
-  }
+  return renderHook(
+    ({ currentGraphLayout }: { currentGraphLayout: GraphLayout }) =>
+      useCurrentActivityGraphViewModel({
+        editor: {
+          ...editor,
+          graphProjection: {
+            ...editor.graphProjection,
+            graphLayout: currentGraphLayout,
+            positionedGraphLayout: currentGraphLayout,
+          },
+        } as Parameters<typeof useCurrentActivityGraphViewModel>[0]["editor"],
+        now: 0,
+        onSelectDoc: noop,
+        onSelectResource: noop,
+        onSelectStateNode: noop,
+        onSelectWorkID: noop,
+        onSelectWorker: noop,
+        onSelectWorkType: noop,
+        onSelectWorkstation: noop,
+        selection: null,
+        snapshot,
+      }),
+    { initialProps: { currentGraphLayout: graphLayout } },
+  );
+}
 
+describe("useCurrentActivityGraphViewModel node positions", () => {
   it("applies transient React Flow positions while preserving graph projection as the reset boundary", () => {
     const graphLayout: GraphLayout = {
       edges: [],
@@ -406,7 +406,9 @@ describe("useCurrentActivityGraphViewModel node state", () => {
       selected: true,
     });
   });
+});
 
+describe("useCurrentActivityGraphViewModel edge waypoints", () => {
   it("decorates React Flow edges with waypoints from the rendered graph layout", () => {
     const edgeId = "workstation-output:workstation:review->work-state:story:done";
     const graphLayout: GraphLayout = {

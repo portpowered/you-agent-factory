@@ -16,7 +16,6 @@ import {
   moveFactoryLayoutNode,
 } from "../factory-graph-layout-operations";
 import { buildFactoryGraphSaveSummary } from "../../editor-runtime/factory-graph-editor-save-summary";
-import { FACTORY_LAYOUT_VALIDATION_CODE } from "../factory-graph-layout-validation";
 
 const EDGE_ID =
   "workstation-output:workstation:draft->work-state:story:done";

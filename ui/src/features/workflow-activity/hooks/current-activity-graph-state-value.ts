@@ -15,9 +15,9 @@ import type { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-
 import type { FactoryGraphEditorDirtyState } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state";
 import type { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
-import type { useFactoryGraphAddEntityController } from "../components/react-flow-current-activity-card-editor-chrome";
 import type { useFactoryGraphConnectionController } from "./react-flow-current-activity-card-editor-connections";
 import type { useFactoryGraphRemovalController } from "./react-flow-current-activity-card-editor-removals";
+import type { useFactoryGraphAddEntityController } from "./use-current-activity-graph-add-controller";
 import type { CurrentActivityGraphFlowProjection } from "./use-current-activity-graph-flow-projection";
 import type { CurrentActivityGraphLayoutState } from "./use-current-activity-graph-render-state";
 
@@ -303,7 +303,7 @@ function buildCurrentActivityGraphEditorControls(
 
 export function buildCurrentActivityGraphStateValue(
   args: BuildCurrentActivityGraphStateValueArgs,
-) {
+): CurrentActivityGraphStateValue {
   const addControls = buildCurrentActivityGraphAddControls(args);
   const editorControls = buildCurrentActivityGraphEditorControls(args);
   const connectionControls = buildCurrentActivityGraphConnectionControls(args);
@@ -329,4 +329,50 @@ export function buildCurrentActivityGraphStateValue(
     validationControls,
     visibilityControls,
   };
+}
+
+export type CurrentActivityGraphStatus = ReturnType<
+  typeof buildCurrentActivityGraphStatus
+>;
+export type CurrentActivityGraphLayoutControls = ReturnType<
+  typeof buildCurrentActivityGraphLayoutControls
+>;
+export type CurrentActivityGraphSaveControls = ReturnType<
+  typeof buildCurrentActivityGraphSaveControls
+>;
+export type CurrentActivityGraphConnectionControls = ReturnType<
+  typeof buildCurrentActivityGraphConnectionControls
+>;
+export type CurrentActivityGraphLeaveControls = ReturnType<
+  typeof buildCurrentActivityGraphLeaveControls
+>;
+export type CurrentActivityGraphValidationControls = ReturnType<
+  typeof buildCurrentActivityGraphValidationControls
+>;
+export type CurrentActivityGraphAddControls = ReturnType<
+  typeof buildCurrentActivityGraphAddControls
+>;
+export type CurrentActivityGraphRemovalControls = ReturnType<
+  typeof buildCurrentActivityGraphRemovalControls
+>;
+export type CurrentActivityGraphVisibilityControls = ReturnType<
+  typeof buildCurrentActivityGraphVisibilityControls
+>;
+export type CurrentActivityGraphEditorControls = ReturnType<
+  typeof buildCurrentActivityGraphEditorControls
+>;
+
+export interface CurrentActivityGraphStateValue {
+  addControls: CurrentActivityGraphAddControls;
+  connectionControls: CurrentActivityGraphConnectionControls;
+  editorControls: CurrentActivityGraphEditorControls;
+  edgeWaypointControls: ReturnType<typeof useFactoryGraphEdgeWaypointEditor>;
+  graphProjection: CurrentActivityGraphFlowProjection;
+  layoutControls: CurrentActivityGraphLayoutControls;
+  leaveControls: CurrentActivityGraphLeaveControls;
+  removalControls: CurrentActivityGraphRemovalControls;
+  saveControls: CurrentActivityGraphSaveControls;
+  status: CurrentActivityGraphStatus;
+  validationControls: CurrentActivityGraphValidationControls;
+  visibilityControls: CurrentActivityGraphVisibilityControls;
 }

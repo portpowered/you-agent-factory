@@ -262,7 +262,7 @@ vi.mock(
   }),
 );
 
-vi.mock("../components/react-flow-current-activity-card-editor-chrome", () => ({
+vi.mock("./use-current-activity-graph-add-controller", () => ({
   useFactoryGraphAddEntityController: () => hookState.addEntityController,
 }));
 
@@ -371,7 +371,9 @@ describe("useCurrentActivityGraphState live validation refresh", () => {
     );
 
     expect(result.current.editorControls.canInteract).toBe(true);
-    expect(result.current.validationControls.factoryDefinition).toEqual(pendingAfterAdd);
+    expect(result.current.validationControls.factoryDefinition).toEqual(
+      pendingAfterAdd,
+    );
     expect(result.current.status.hasTopologyChanges).toBe(true);
   });
 

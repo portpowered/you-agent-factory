@@ -10,6 +10,8 @@ import {
   factoryGraphNodeIdForAddEntityDraft,
   occupiedRectsFromRenderedNodes,
   resolveInitialPlacementTopLeft,
+  resolveInitialPlacementTopLeftForViewport,
+  viewportCenterFromPlacementViewport,
 } from "./graph-editor-add-node-placement";
 import { graphEditorNodeDimensionsForKind } from "./graph-editor-node-placement";
 
@@ -184,6 +186,40 @@ describe("resolveInitialPlacementTopLeft", () => {
     expect(workerFar).not.toBeNull();
     expect(workstationNear).not.toBeNull();
     expect(workstationFar).not.toBeNull();
+  });
+});
+
+describe("viewportCenterFromPlacementViewport", () => {
+  it("converts measured viewport size and React Flow transform into flow coordinates", () => {
+    expect(
+      viewportCenterFromPlacementViewport({
+        height: 800,
+        viewport: { x: -100, y: -50, zoom: 2 },
+        width: 1000,
+      }),
+    ).toEqual({ x: 300, y: 225 });
+  });
+
+  it("resolves top-left placement from the current viewport snapshot", () => {
+    const workerSize = graphEditorNodeDimensionsForKind("worker");
+    const topLeft = resolveInitialPlacementTopLeftForViewport({
+      draft: {
+        kind: "worker",
+        model: "gpt",
+        name: "reviewer",
+      },
+      nodes: [],
+      placementViewport: {
+        height: 800,
+        viewport: { x: -100, y: -50, zoom: 2 },
+        width: 1000,
+      },
+    });
+
+    expect(topLeft).toEqual({
+      x: 300 - workerSize.width / 2,
+      y: 225 - workerSize.height / 2,
+    });
   });
 });
 

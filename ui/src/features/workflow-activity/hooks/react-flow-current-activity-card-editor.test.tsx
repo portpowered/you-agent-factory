@@ -246,7 +246,7 @@ vi.mock(
   }),
 );
 
-vi.mock("../components/react-flow-current-activity-card-editor-chrome", () => ({
+vi.mock("./use-current-activity-graph-add-controller", () => ({
   useFactoryGraphAddEntityController: () => hookState.addEntityController,
 }));
 
@@ -281,9 +281,7 @@ vi.mock(
 );
 
 vi.mock("./current-activity-graph-state-value", async () => {
-  const actual = await vi.importActual(
-    "./current-activity-graph-state-value",
-  );
+  const actual = await vi.importActual("./current-activity-graph-state-value");
 
   return actual;
 });
@@ -344,13 +342,13 @@ describe("useCurrentActivityGraphState", () => {
       },
     };
 
-    const { result } = renderHook(() =>
-      useCurrentActivityGraphState(snapshot),
-    );
+    const { result } = renderHook(() => useCurrentActivityGraphState(snapshot));
 
     expect(useCurrentFactoryDocument).not.toHaveBeenCalled();
     expect(result.current.status.isDefinitionLoading).toBe(false);
-    expect(result.current.graphProjection.displayFactoryDefinition).toMatchObject({
+    expect(
+      result.current.graphProjection.displayFactoryDefinition,
+    ).toMatchObject({
       version: {
         logical: "7",
         physical: "2026-06-09T00:00:00Z",
@@ -366,9 +364,7 @@ describe("useCurrentActivityGraphState", () => {
     const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
     snapshot.factory = fixtureState.baseFactoryDefinition;
 
-    const { result } = renderHook(() =>
-      useCurrentActivityGraphState(snapshot),
-    );
+    const { result } = renderHook(() => useCurrentActivityGraphState(snapshot));
 
     expect(useCurrentFactoryDocument).not.toHaveBeenCalled();
 
@@ -458,9 +454,7 @@ describe("useCurrentActivityGraphState", () => {
     snapshot.runtime.in_flight_dispatch_count = 2;
     hookState.draftState.hasChanges = true;
 
-    const { result } = renderHook(() =>
-      useCurrentActivityGraphState(snapshot),
-    );
+    const { result } = renderHook(() => useCurrentActivityGraphState(snapshot));
 
     expect(result.current.status.hasActiveWork).toBe(true);
     expect(result.current.saveControls.canSave).toBe(false);
@@ -475,9 +469,7 @@ describe("useCurrentActivityGraphState", () => {
     hookState.draftState.hasChanges = true;
     hookState.saveStateIsStale = true;
 
-    const { result } = renderHook(() =>
-      useCurrentActivityGraphState(snapshot),
-    );
+    const { result } = renderHook(() => useCurrentActivityGraphState(snapshot));
 
     expect(result.current.status.isStaleDraft).toBe(true);
     expect(result.current.saveControls.canSave).toBe(false);
@@ -605,9 +597,7 @@ describe("useCurrentActivityGraphState", () => {
     const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
     snapshot.runtime.in_flight_dispatch_count = 0;
 
-    const { result } = renderHook(() =>
-      useCurrentActivityGraphState(snapshot),
-    );
+    const { result } = renderHook(() => useCurrentActivityGraphState(snapshot));
 
     act(() => {
       result.current.editorControls.toggleMode();

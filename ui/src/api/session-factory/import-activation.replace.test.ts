@@ -111,7 +111,7 @@ describe("session factory import activation replace-current default session", ()
   });
 });
 
-describe("session factory import activation replace-current scoped session", () => {
+describe("session factory import activation replace-current scoped session route", () => {
   it("activates an imported factory through the session-scoped PUT route for non-default sessions", async () => {
     const fetchMock = vi
       .fn()
@@ -199,6 +199,9 @@ describe("session factory import activation replace-current scoped session", () 
     );
   });
 
+});
+
+describe("session factory import activation replace-current supplied baseline", () => {
   it("uses a supplied current document as the replace-current write baseline", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       new Response(

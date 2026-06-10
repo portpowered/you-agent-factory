@@ -5,8 +5,6 @@ import {
   CURRENT_SELECTION_CHECKBOX_STORY_ID,
   FACTORY_GRAPH_EDITOR_CHECKBOX_STORY_ID,
   verifyCheckboxConsistencyStories,
-  verifyCurrentSelectionCheckboxSurface,
-  verifyFactoryGraphEditorCheckboxSurface,
 } from "./verify-checkbox-consistency-storybook-responsive.mjs";
 
 describe("verify-checkbox-consistency-storybook-responsive", () => {

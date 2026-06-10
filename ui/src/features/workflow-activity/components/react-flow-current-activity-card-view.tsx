@@ -16,7 +16,6 @@ import {
 import type { CurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
-import { GraphEditorPlacementProvider } from "./graph-editor-placement-context";
 import { CurrentActivityGraphEditorDialogs } from "./react-flow-current-activity-card-editor-dialogs";
 import { CurrentActivityGraphSaveNotifications } from "./react-flow-current-activity-card-save-notifications";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
@@ -113,46 +112,44 @@ export function ReactFlowCurrentActivityCardView(
   };
 
   return (
-    <GraphEditorPlacementProvider>
-      <DashboardPanelShell
-        aria-labelledby={headingID}
-        className="relative flex h-full max-h-full min-h-0 min-w-0 flex-col overflow-hidden"
-        style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
-      >
-        {showHeaderActions ? (
-          <CurrentActivityCardHeading
-            headingID={headingID}
-            locale={props.locale}
-          />
-        ) : (
-          <CurrentActivityCardHeading
-            headingID={headingID}
-            hidden
-            locale={props.locale}
-          />
-        )}
-        <CurrentActivityGraphSurface
-          viewModel={viewModel}
+    <DashboardPanelShell
+      aria-labelledby={headingID}
+      className="relative flex h-full max-h-full min-h-0 min-w-0 flex-col overflow-hidden"
+      style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
+    >
+      {showHeaderActions ? (
+        <CurrentActivityCardHeading
           headingID={headingID}
-          imports={imports}
-          locale={props.locale}
-          selection={props.selection}
-          snapshot={props.snapshot}
-        />
-        <CurrentActivityGraphSaveNotifications
-          viewModel={viewModel}
           locale={props.locale}
         />
-        <CurrentActivityGraphEditorDialogs
-          currentSessionFactoryName={props.snapshot.factory?.name ?? "factory"}
-          discardEditorChanges={handleDiscardEditorChanges}
-          viewModel={viewModel}
-          imports={imports}
+      ) : (
+        <CurrentActivityCardHeading
+          headingID={headingID}
+          hidden
           locale={props.locale}
-          readyImportPreviewState={readyImportPreviewState}
-          shouldRenderImportPreviewDialog={shouldRenderImportPreviewDialog}
         />
-      </DashboardPanelShell>
-    </GraphEditorPlacementProvider>
+      )}
+      <CurrentActivityGraphSurface
+        viewModel={viewModel}
+        headingID={headingID}
+        imports={imports}
+        locale={props.locale}
+        selection={props.selection}
+        snapshot={props.snapshot}
+      />
+      <CurrentActivityGraphSaveNotifications
+        viewModel={viewModel}
+        locale={props.locale}
+      />
+      <CurrentActivityGraphEditorDialogs
+        currentSessionFactoryName={props.snapshot.factory?.name ?? "factory"}
+        discardEditorChanges={handleDiscardEditorChanges}
+        viewModel={viewModel}
+        imports={imports}
+        locale={props.locale}
+        readyImportPreviewState={readyImportPreviewState}
+        shouldRenderImportPreviewDialog={shouldRenderImportPreviewDialog}
+      />
+    </DashboardPanelShell>
   );
 }

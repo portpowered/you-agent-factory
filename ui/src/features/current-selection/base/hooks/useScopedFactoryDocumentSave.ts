@@ -11,6 +11,7 @@ import {
 import type {
   CanonicalFactoryDefinition,
   CurrentFactoryDefinitionError,
+  CurrentFactoryDocument,
   CurrentFactoryVersion,
 } from "../../../../api/current-factory-definition";
 import { useFactoryDocumentSave } from "../../../current-factory-definition/public";
@@ -20,7 +21,7 @@ import type { FactoryDocumentSaveState } from "./factory-document-save-types";
 export interface ScopedFactoryDocumentSaveRequest {
   baseVersion: CurrentFactoryVersion;
   factory: CanonicalFactoryDefinition;
-  onSaved?: () => void;
+  onSaved?: (document: CurrentFactoryDocument) => void;
   previousFactory: CanonicalFactoryDefinition;
   scopeKey: string;
 }
@@ -229,14 +230,14 @@ async function executeScopedFactoryDocumentSave<
   saveInFlightRef.current = true;
   setSubmittingScopeKey(request.scopeKey);
   try {
-    await saveAsync({
+    const document = await saveAsync({
       baseVersion: request.baseVersion,
       factory: request.factory,
     });
     if (activeScopeKeyRef.current !== request.scopeKey) {
       return;
     }
-    request.onSaved?.();
+    request.onSaved?.(document);
     setIsConfirming(false);
     setSubmittingScopeKey(null);
     setLastFailedScope(null);

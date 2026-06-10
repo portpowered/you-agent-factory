@@ -5,6 +5,7 @@ import { buildFactoryGraphLayoutTopologyKey } from "../../factory-graph-editor/l
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import * as currentActivityFactoryGraphLayout from "../lib/current-activity-factory-graph-layout";
 import {
+  resetCurrentActivityGraphLayoutCacheForTests,
   useCurrentActivityGraphLayoutForFactory,
 } from "./react-flow-current-activity-card-graph-layout";
 
@@ -37,6 +38,7 @@ vi.mock("../../flowchart/lib/layout", async () => {
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: edit-mode layout override cases share one mocked buildGraphLayout harness.
 describe("useCurrentActivityGraphLayout", () => {
   beforeEach(() => {
+    resetCurrentActivityGraphLayoutCacheForTests();
     mockBuildGraphLayout.mockReset();
     window.localStorage.clear();
   });
@@ -321,10 +323,70 @@ describe("useCurrentActivityGraphLayout", () => {
 
     buildLayoutSpy.mockRestore();
   });
+
+  it("drops stale resource nodes immediately when factory-change topology removes them", async () => {
+    const snapshot: DashboardSnapshot = {
+      ...structuredClone(singleNodeDashboardSnapshot),
+      factory: undefined,
+      topology: {
+        edges: [],
+        workstation_node_ids: [],
+        workstation_nodes_by_id: {},
+      },
+    };
+    const initialFactory: NonNullable<DashboardSnapshot["factory"]> = {
+      name: "factory-stream-delete-regression",
+      resources: [
+        { capacity: 1, name: "rge" },
+        { capacity: 1, name: "asdasd" },
+      ],
+      version: {
+        logical: "1",
+        physical: "2026-06-10T10:37:07.833698Z",
+      },
+    };
+    const deletedResourceFactory: NonNullable<DashboardSnapshot["factory"]> = {
+      ...initialFactory,
+      resources: [{ capacity: 1, name: "asdasd" }],
+      version: {
+        logical: "2",
+        physical: "2026-06-10T10:37:39.734365Z",
+      },
+    };
+
+    const { result, rerender } = renderHook(
+      ({ factoryOverride }) =>
+        useCurrentActivityGraphLayoutForFactory(snapshot, factoryOverride),
+      {
+        initialProps: {
+          factoryOverride: initialFactory,
+        },
+      },
+    );
+
+    await waitFor(() => {
+      expect(result.current.nodes.map((node) => node.nodeId)).toEqual(
+        expect.arrayContaining(["resource:asdasd", "resource:rge"]),
+      );
+    });
+
+    rerender({ factoryOverride: deletedResourceFactory });
+
+    expect(result.current.nodes.map((node) => node.nodeId)).not.toContain(
+      "resource:rge",
+    );
+
+    await waitFor(() => {
+      expect(result.current.nodes.map((node) => node.nodeId)).toEqual([
+        "resource:asdasd",
+      ]);
+    });
+  });
 });
 
 describe("useCurrentActivityGraphLayoutForFactory legacy routes", () => {
   beforeEach(() => {
+    resetCurrentActivityGraphLayoutCacheForTests();
     mockBuildGraphLayout.mockReset();
     window.localStorage.clear();
   });

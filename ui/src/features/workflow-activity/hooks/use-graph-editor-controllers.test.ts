@@ -29,7 +29,7 @@ const fixtureState = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("../components/react-flow-current-activity-card-editor-chrome", () => ({
+vi.mock("./use-current-activity-graph-add-controller", () => ({
   useFactoryGraphAddEntityController: () => fixtureState.addEntityController,
 }));
 

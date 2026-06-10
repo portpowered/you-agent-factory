@@ -2,7 +2,10 @@ import { useCallback, useMemo } from "react";
 import { isFactoryDocumentSaveSubmitting } from "../../current-selection/base/hooks/factory-document-save-types";
 import { useScopedFactoryDocumentSave } from "../../current-selection/base/public";
 import { mapGraphSaveOutcomeToDocumentSaveState } from "../lib/document-save/graph-document-save-state";
-import { createEmptyFactoryGraphDraft } from "../lib/draft/factory-graph-draft-types";
+import type {
+  CanonicalFactoryDefinition,
+  CurrentFactoryDocument,
+} from "../lib/draft/factory-graph-draft-types";
 import { factoryLayoutFromDefinition } from "../lib/layout/factory-graph-layout-operations";
 import {
   applyFactoryGraphPendingEdits,
@@ -138,8 +141,10 @@ function useSaveEditableFactoryGraph({
       baseVersion: draftState.latestDocument.version,
       factory: saveInput.value,
       previousFactory: draftState.latestDocument,
-      onSaved: () => {
-        draftState.replaceDraft(createEmptyFactoryGraphDraft());
+      onSaved: (savedDocument) => {
+        draftState.adoptSavedFactoryDocument(
+          savedFactoryGraphDocument(saveInput.value, savedDocument),
+        );
         layoutDraftState.adoptSavedLayout(
           factoryLayoutFromDefinition(saveInput.value),
         );
@@ -158,6 +163,16 @@ function useSaveEditableFactoryGraph({
     locale,
     setBlockedOperation,
   ]);
+}
+
+function savedFactoryGraphDocument(
+  savedFactory: CanonicalFactoryDefinition,
+  savedDocument: CurrentFactoryDocument,
+): CurrentFactoryDocument {
+  return {
+    ...savedFactory,
+    version: savedDocument.version,
+  };
 }
 
 function isFactoryGraphDraftStale(

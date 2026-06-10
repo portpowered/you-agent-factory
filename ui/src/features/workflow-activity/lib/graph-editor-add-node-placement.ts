@@ -19,6 +19,16 @@ import {
 } from "./graph-editor-node-placement";
 import type { GraphNodePosition } from "./layout/graph-node-positions";
 
+export interface GraphEditorAddNodePlacementViewport {
+  height: number;
+  viewport: {
+    x: number;
+    y: number;
+    zoom: number;
+  };
+  width: number;
+}
+
 export function factoryGraphNodeIdForAddEntityDraft(
   draft: FactoryGraphAddEntityDraft,
 ): string {
@@ -118,6 +128,21 @@ export function viewportCenterInFlowCoordinates(
   });
 }
 
+export function viewportCenterFromPlacementViewport(
+  placementViewport: GraphEditorAddNodePlacementViewport,
+): FlowPoint {
+  const zoom =
+    Number.isFinite(placementViewport.viewport.zoom) &&
+    placementViewport.viewport.zoom > 0
+      ? placementViewport.viewport.zoom
+      : 1;
+
+  return {
+    x: (placementViewport.width / 2 - placementViewport.viewport.x) / zoom,
+    y: (placementViewport.height / 2 - placementViewport.viewport.y) / zoom,
+  };
+}
+
 export function resolveInitialPlacementTopLeft(input: {
   draft: FactoryGraphAddEntityDraft;
   nodes: readonly Node[];
@@ -139,4 +164,18 @@ export function resolveInitialPlacementTopLeft(input: {
   });
 
   return topLeftFromAxisAlignedRectCenter(placement.center, candidateSize);
+}
+
+export function resolveInitialPlacementTopLeftForViewport(input: {
+  draft: FactoryGraphAddEntityDraft;
+  nodes: readonly Node[];
+  placementViewport: GraphEditorAddNodePlacementViewport;
+}): GraphNodePosition | null {
+  return resolveInitialPlacementTopLeft({
+    draft: input.draft,
+    nodes: input.nodes,
+    viewportCenter: viewportCenterFromPlacementViewport(
+      input.placementViewport,
+    ),
+  });
 }

@@ -15,7 +15,6 @@ import {
   Textarea,
 } from "../../../../components/ui";
 
-const FACTORY_GRAPH_ADD_INPUT_CLASS = "bg-surface";
 
 export function FactoryGraphEditorAddField({
   children,
@@ -80,7 +79,7 @@ export function FactoryGraphEditorTextareaField({
     >
       <Textarea
         aria-label={label}
-        className={FACTORY_GRAPH_ADD_INPUT_CLASS}
+        className={"bg-surface"}
         id={inputId}
         onChange={(event) => {
           onChange(event.currentTarget.value);
@@ -117,7 +116,7 @@ export function FactoryGraphEditorTextField({
     >
       <Input
         aria-label={label}
-        className={FACTORY_GRAPH_ADD_INPUT_CLASS}
+        className={"bg-surface"}
         id={inputId}
         inputMode={inputMode}
         onChange={(event) => {
@@ -224,7 +223,7 @@ export function FactoryGraphEditorPromptBodyField({
       <MonacoPromptEditor
         ariaLabel={label}
         autocompleteState={factoryGraphAddPromptAutocompleteState}
-        className={FACTORY_GRAPH_ADD_INPUT_CLASS}
+        className={"bg-surface"}
         loadingMessage={loadingMessage}
         modelPath={FACTORY_GRAPH_ADD_WORKSTATION_PROMPT_MODEL_PATH}
         onChange={onChange}

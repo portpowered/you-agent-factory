@@ -58,7 +58,7 @@ function buildCurrentSelection(
   overrides: Partial<CurrentSelectionState> = {},
 ): CurrentSelectionState {
   const currentFactoryDefinition =
-    overrides.currentFactoryDefinition ?? resolveCurrentFactoryDocumentForTest();
+    overrides.currentFactoryDefinition ?? buildEditableFactoryDefinition();
   const selectedWorkerName =
     overrides.selectedWorkerName ??
     (overrides.selection?.kind === "worker"
@@ -122,13 +122,6 @@ function buildCurrentSelection(
     undoSelection: () => undefined,
     ...overrides,
   };
-}
-
-function resolveCurrentFactoryDocumentForTest(): CurrentFactoryDocument {
-  const queryResult = useCurrentFactoryDocument(false) as {
-    data?: CurrentFactoryDocument;
-  };
-  return queryResult.data ?? buildEditableFactoryDefinition();
 }
 
 function buildSelectedWorkItemFixture() {

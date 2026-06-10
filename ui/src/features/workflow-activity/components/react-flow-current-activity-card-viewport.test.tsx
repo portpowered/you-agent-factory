@@ -32,6 +32,7 @@ vi.mock("@xyflow/react", async () => {
       onEdgeClick?: (_event: unknown, edge: Edge) => void;
       onInit?: (instance: {
         fitView: () => Promise<boolean>;
+        getViewport: () => { x: number; y: number; zoom: number };
         setViewport: () => Promise<boolean>;
       }) => void;
       onNodeClick?: (_event: unknown, node: { id: string }) => void;
@@ -39,6 +40,7 @@ vi.mock("@xyflow/react", async () => {
       useEffect(() => {
         onInit?.({
           fitView: async () => true,
+          getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
           setViewport: async () => true,
         });
       }, [onInit]);

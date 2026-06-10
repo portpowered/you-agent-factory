@@ -20,7 +20,6 @@ import {
   saveErrorNoticeMessages,
   validationMessagesForGraphSelection,
 } from "../lib/react-flow-current-activity-card-validation";
-import { GraphEditorPlacementRegistrar } from "./graph-editor-placement-context";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 type CurrentActivityGraphSurfaceModel = CurrentActivityGraphCardViewModel;
@@ -188,14 +187,6 @@ function CurrentActivityGraphSurfaceContent({
       className="relative grid max-h-full min-h-0 flex-1 overflow-hidden"
       style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
     >
-      <GraphEditorPlacementRegistrar
-        flowContainerRef={flowContainerRef}
-        flowInstanceRef={flowInstanceRef}
-        moveLayoutNode={
-          layoutControls.canMoveLayout ? layoutControls.moveNode : undefined
-        }
-        nodes={model.nodes}
-      />
       <CurrentActivityGraphViewport
         addControls={model.addControls}
         editorControls={editorControls}
@@ -218,9 +209,7 @@ function CurrentActivityGraphSurfaceContent({
         onEditorEdgeDoubleClick={
           edgeWaypointControls.handleEditorEdgeDoubleClick
         }
-        onMoveEdgeWaypoint={
-          edgeWaypointControls.handleMoveSelectedEdgeWaypoint
-        }
+        onMoveEdgeWaypoint={edgeWaypointControls.handleMoveSelectedEdgeWaypoint}
         onRemoveEdgeWaypoint={
           edgeWaypointControls.handleRemoveSelectedEdgeWaypoint
         }
@@ -263,10 +252,13 @@ function CurrentActivityGraphEditorNoticePanel({
     <SurfacePanel
       asChild
       className={cn(
+        // tailwind-exception: intrinsic-sizing
         "pointer-events-auto absolute right-4 top-4 z-30 max-h-[calc(100%-6rem)] overflow-hidden shadow-af-panel backdrop-blur-[16px]",
+        // tailwind-exception: intrinsic-sizing
         expanded
           ? "w-[min(24rem,calc(100%-2rem))]"
-          : "w-auto max-w-[calc(100%-2rem)]",
+          : // tailwind-exception: intrinsic-sizing
+            "w-auto max-w-[calc(100%-2rem)]",
       )}
       padding="compact"
       radius="2xl"
@@ -306,6 +298,7 @@ function CurrentActivityGraphEditorNoticePanel({
         </div>
         {expanded ? (
           <div
+            // tailwind-exception: intrinsic-sizing
             className="mt-2 max-h-[min(28rem,calc(100vh-14rem))] overflow-y-auto pr-1"
             id={contentID}
           >

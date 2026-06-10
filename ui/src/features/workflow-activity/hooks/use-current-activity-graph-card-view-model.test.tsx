@@ -1,7 +1,8 @@
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import type { Edge, Node } from "@xyflow/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { graphEditorNodeDimensionsForKind } from "../lib/graph-editor-node-placement";
 import { useCurrentActivityGraphCardViewModel } from "./use-current-activity-graph-card-view-model";
 
 const graphViewModelMock = vi.hoisted(() => ({
@@ -93,7 +94,7 @@ function graphControllerFixture() {
   };
 }
 
-describe("useCurrentActivityGraphCardViewModel", () => {
+describe("useCurrentActivityGraphCardViewModel waypoint state", () => {
   beforeEach(() => {
     graphViewModelMock.useCurrentActivityGraphViewModel.mockReset();
   });
@@ -162,6 +163,76 @@ describe("useCurrentActivityGraphCardViewModel", () => {
         ?.editor,
     ).toMatchObject({
       selectedWaypointEdgeId: edgeLayoutId,
+    });
+  });
+});
+
+describe("useCurrentActivityGraphCardViewModel add placement", () => {
+  beforeEach(() => {
+    graphViewModelMock.useCurrentActivityGraphViewModel.mockReset();
+  });
+
+  it("resolves add submit placement from the latest viewport snapshot and rendered nodes", () => {
+    const submit = vi.fn();
+    const nodes: Node[] = [];
+    graphViewModelMock.useCurrentActivityGraphViewModel.mockReturnValue({
+      canonicalLayoutViewport: null,
+      edges: [],
+      graphKey: "graph-key",
+      handleNodesChange: vi.fn(),
+      initialFitViewKey: "graph-key",
+      initialFitViewOptions: { padding: 0.18 },
+      nodes,
+    });
+
+    const graphController = {
+      ...graphControllerFixture(),
+      addControls: {
+        draft: {
+          kind: "worker",
+          model: "gpt",
+          modelProvider: "CURSOR",
+          name: "reviewer",
+          workerType: "MODEL_WORKER",
+        },
+        submit,
+      },
+    };
+    const { result } = renderHook(() =>
+      useCurrentActivityGraphCardViewModel({
+        graphController,
+        locale: "en",
+        now: Date.parse("2026-06-10T00:00:00Z"),
+        onSelectDoc: vi.fn(),
+        onSelectResource: vi.fn(),
+        onSelectStateNode: vi.fn(),
+        onSelectWorkID: vi.fn(),
+        onSelectWorker: vi.fn(),
+        onSelectWorkstation: vi.fn(),
+        onSelectWorkType: vi.fn(),
+        selection: null,
+        snapshot: { factory: undefined } as never,
+      } as never),
+    );
+
+    act(() => {
+      result.current.addControls.updatePlacementViewport({
+        height: 800,
+        viewport: { x: -100, y: -50, zoom: 2 },
+        width: 1000,
+      });
+    });
+    act(() => {
+      result.current.addControls.submit();
+    });
+
+    const workerSize = graphEditorNodeDimensionsForKind("worker");
+    expect(submit).toHaveBeenCalledWith({
+      nodeId: "worker:reviewer",
+      position: {
+        x: 300 - workerSize.width / 2,
+        y: 225 - workerSize.height / 2,
+      },
     });
   });
 });

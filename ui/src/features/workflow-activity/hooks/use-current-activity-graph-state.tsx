@@ -7,10 +7,13 @@ import { useFactoryGraphTopologyEditorBridge } from "../state/factory-graph-topo
 import { useGraphEditorPendingFactoryBridge } from "../state/graph-editor-pending-factory-bridge";
 import { useCurrentActivityFactoryDocumentState } from "./current-activity-factory-document-state";
 import { buildCurrentActivityGraphStatusState } from "./current-activity-graph-editor-status-state";
+import {
+  buildCurrentActivityGraphStateValue,
+  type CurrentActivityGraphStateValue,
+} from "./current-activity-graph-state-value";
 import { useDraftAppliedFactoryValidation } from "./react-flow-current-activity-card-editor-draft-validation";
 import { useCurrentActivityEditableGraph } from "./react-flow-current-activity-card-editor-editable-graph";
 import { useGraphEditorLeaveEditorBridge } from "./react-flow-current-activity-card-editor-save-flow";
-import { buildCurrentActivityGraphStateValue } from "./current-activity-graph-state-value";
 import { useCurrentActivityGraphRenderState } from "./use-current-activity-graph-render-state";
 import { useGraphEditorControllers } from "./use-graph-editor-controllers";
 import { useGraphEditorSaveFlow } from "./use-graph-editor-save-flow";
@@ -24,7 +27,7 @@ export function useCurrentActivityGraphState(
   factoryDocumentScopeKey?: string | null,
   onDocAdded?: (targetPath: string) => void,
   onNodeRemovedFromDraft?: (nodeId: string) => void,
-) {
+): CurrentActivityGraphStateValue {
   const [editorMode, setEditorMode] = useState(false);
   const [activeTool, setActiveTool] = useState<FactoryGraphEditorTool>(null);
   const {
@@ -259,6 +262,4 @@ export function useCurrentActivityGraphState(
   });
 }
 
-export type CurrentActivityGraphState = ReturnType<
-  typeof useCurrentActivityGraphState
->;
+export type CurrentActivityGraphState = CurrentActivityGraphStateValue;

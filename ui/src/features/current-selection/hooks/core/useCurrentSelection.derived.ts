@@ -6,11 +6,6 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
-import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
-import type {
-  FactoryResource,
-  FactoryWorker,
-} from "../../../../api/events/types";
 import {
   findFactoryBundledDocFile,
   type FactoryBundledDocFile,
@@ -22,9 +17,6 @@ import {
 } from "../../resource-selection/lib/resource-detail-values";
 import {
   findFactoryResourceInSnapshot,
-  findFactoryWorkerInSnapshot,
-  findFactoryWorkTypeInSnapshot,
-  workstationNamesReferencingWorkerInSnapshot,
 } from "../../state/dashboardSelection";
 import type {
   DashboardSelection,
@@ -47,6 +39,10 @@ import {
   terminalHistoryItemsForPlace,
   type WorkstationRequestLike,
 } from "./useCurrentSelection.helpers";
+import {
+  resolveCurrentFactoryDocumentFromSnapshot,
+  useSelectedWorkerAndWorkTypeData,
+} from "./useCurrentSelection.selection-metadata";
 
 function useSelectedNode(
   selection: DashboardSelection | null,
@@ -63,17 +59,6 @@ function useSelectedNode(
     return snapshot.topology.workstation_nodes_by_id[selection.nodeId] ?? null;
   }
   return null;
-}
-
-function resolveCurrentFactoryDocumentFromSnapshot(
-  snapshot: DashboardSnapshot | null | undefined,
-): CurrentFactoryDocument | null {
-  const factory = snapshot?.factory;
-  if (!factory?.version) {
-    return null;
-  }
-
-  return factory as CurrentFactoryDocument;
 }
 
 function useSelectedStatePlaceData({
@@ -257,50 +242,6 @@ function useSelectedWorkData({
     selectedWorkProviderSessions,
     selectedWorkRequestHistory,
     selectedWorkWorkstationRequests,
-  };
-}
-
-function useSelectedWorkerAndWorkTypeData(
-  selection: DashboardSelection | null,
-  snapshot: DashboardSnapshot | null | undefined,
-) {
-  const selectedWorkerName =
-    selection?.kind === "worker" ? selection.workerName : null;
-  const selectedWorkTypeName =
-    selection?.kind === "work-type" ? selection.workTypeName : null;
-  const selectedWorkType = useMemo(() => {
-    if (!snapshot || !selectedWorkTypeName) {
-      return null;
-    }
-
-    return (
-      findFactoryWorkTypeInSnapshot(snapshot, selectedWorkTypeName) ?? null
-    );
-  }, [selectedWorkTypeName, snapshot]);
-  const selectedWorker = useMemo((): FactoryWorker | null => {
-    if (!snapshot || !selectedWorkerName) {
-      return null;
-    }
-
-    return findFactoryWorkerInSnapshot(snapshot, selectedWorkerName) ?? null;
-  }, [selectedWorkerName, snapshot]);
-  const selectedWorkerWorkstationNames = useMemo(() => {
-    if (!snapshot || !selectedWorkerName) {
-      return [];
-    }
-
-    return workstationNamesReferencingWorkerInSnapshot(
-      snapshot,
-      selectedWorkerName,
-    );
-  }, [selectedWorkerName, snapshot]);
-
-  return {
-    selectedWorker,
-    selectedWorkerName,
-    selectedWorkerWorkstationNames,
-    selectedWorkType,
-    selectedWorkTypeName,
   };
 }
 

@@ -60,6 +60,8 @@ export function useWorkflowTopologyAsyncCache<TLayout, TResult>({
       };
     }
 
+    setValue(fallbackValue);
+
     const inFlightLayout =
       cache.inFlightByTopologyKey.get(topologyKey) ?? loadLayoutRef.current();
     cache.inFlightByTopologyKey.set(topologyKey, inFlightLayout);

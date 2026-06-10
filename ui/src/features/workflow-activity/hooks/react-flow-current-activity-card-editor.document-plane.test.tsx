@@ -18,9 +18,9 @@ const fixtureState = vi.hoisted(() => ({
       | typeof divergentDocumentPlaneFactoryDocument
       | undefined,
     draft: {
-    additions: {
-      docs: [],
-      resources: [],
+      additions: {
+        docs: [],
+        resources: [],
         workers: [],
         workStates: [],
         workTypes: [],
@@ -114,7 +114,8 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
       hasPreferenceChanges: false,
       hasTopologyChanges: fixtureState.draftState.hasChanges,
       layoutDirty: false,
-      pendingFactoryDefinition: fixtureState.draftState.pendingFactoryDefinition,
+      pendingFactoryDefinition:
+        fixtureState.draftState.pendingFactoryDefinition,
       preferencesDirty: false,
       topologyDirty: fixtureState.draftState.hasChanges,
     },
@@ -148,7 +149,7 @@ vi.mock(
   }),
 );
 
-vi.mock("../components/react-flow-current-activity-card-editor-chrome", () => ({
+vi.mock("./use-current-activity-graph-add-controller", () => ({
   useFactoryGraphAddEntityController: () => ({
     reset: vi.fn(),
   }),
@@ -237,9 +238,9 @@ describe("useCurrentActivityGraphState document plane", () => {
       result.current.editorControls.toggleMode();
     });
 
-    expect(result.current.editorControls.unavailableClassifierWorkstationName).toBe(
-      "Document Only",
-    );
+    expect(
+      result.current.editorControls.unavailableClassifierWorkstationName,
+    ).toBe("Document Only");
     expect(result.current.editorControls.canInteract).toBe(false);
   });
 
@@ -300,8 +301,8 @@ describe("useCurrentActivityGraphState document plane", () => {
     );
 
     expect(result.current.editorControls.isEditing).toBe(false);
-    expect(result.current.editorControls.unavailableClassifierWorkstationName).toBe(
-      "Review",
-    );
+    expect(
+      result.current.editorControls.unavailableClassifierWorkstationName,
+    ).toBe("Review");
   });
 });

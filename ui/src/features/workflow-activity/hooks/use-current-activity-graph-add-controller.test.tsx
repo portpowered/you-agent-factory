@@ -2,18 +2,7 @@ import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
-import { GraphEditorPlacementProvider } from "./graph-editor-placement-context";
-import { useFactoryGraphAddEntityController } from "./react-flow-current-activity-card-editor-chrome";
-
-const placeAddedNode = vi.fn();
-
-vi.mock("./graph-editor-placement-context", async () => {
-  const actual = await vi.importActual("./graph-editor-placement-context");
-  return {
-    ...actual,
-    useGraphEditorPlaceAddedNode: () => placeAddedNode,
-  };
-});
+import { useFactoryGraphAddEntityController } from "./use-current-activity-graph-add-controller";
 
 function buildEditableGraph(): EditableFactoryGraphViewModel {
   return {
@@ -22,6 +11,7 @@ function buildEditableGraph(): EditableFactoryGraphViewModel {
       connectNodes: vi.fn(),
       discard: vi.fn(),
       disconnectEdge: vi.fn(),
+      moveLayoutNode: vi.fn(),
       removeNode: vi.fn(),
       save: vi.fn(async () => true),
       updateNodeField: vi.fn(),
@@ -32,14 +22,12 @@ function buildEditableGraph(): EditableFactoryGraphViewModel {
 describe("useFactoryGraphAddEntityController doc add flow", () => {
   it("opens a doc add draft from the add menu", () => {
     const setActiveTool = vi.fn();
-    const { result } = renderHook(
-      () =>
-        useFactoryGraphAddEntityController({
-          currentFactoryDefinition: { name: "factory", workTypes: [] },
-          editableGraph: buildEditableGraph(),
-          setActiveTool,
-        }),
-      { wrapper: GraphEditorPlacementProvider },
+    const { result } = renderHook(() =>
+      useFactoryGraphAddEntityController({
+        currentFactoryDefinition: { name: "factory", workTypes: [] },
+        editableGraph: buildEditableGraph(),
+        setActiveTool,
+      }),
     );
 
     act(() => {
@@ -57,25 +45,22 @@ describe("useFactoryGraphAddEntityController doc add flow", () => {
 });
 
 describe("useFactoryGraphAddEntityController add submit", () => {
-  it("places a newly added node after a successful add submit", () => {
-    placeAddedNode.mockReset();
+  it("applies resolved layout placement after a successful add submit", () => {
     const editableGraph = buildEditableGraph();
     const setActiveTool = vi.fn();
 
-    const { result } = renderHook(
-      () =>
-        useFactoryGraphAddEntityController({
-          currentFactoryDefinition: {
-            name: "factory",
-            resources: [],
-            workers: [],
-            workTypes: [],
-            workstations: [],
-          },
-          editableGraph,
-          setActiveTool,
-        }),
-      { wrapper: GraphEditorPlacementProvider },
+    const { result } = renderHook(() =>
+      useFactoryGraphAddEntityController({
+        currentFactoryDefinition: {
+          name: "factory",
+          resources: [],
+          workers: [],
+          workTypes: [],
+          workstations: [],
+        },
+        editableGraph,
+        setActiveTool,
+      }),
     );
 
     act(() => {
@@ -88,37 +73,35 @@ describe("useFactoryGraphAddEntityController add submit", () => {
     });
 
     act(() => {
-      result.current.handleAddEntitySubmit();
+      result.current.handleAddEntitySubmit({
+        nodeId: "worker:reviewer",
+        position: { x: 120, y: 240 },
+      });
     });
 
     expect(editableGraph.actions.addNode).toHaveBeenCalledTimes(1);
-    expect(placeAddedNode).toHaveBeenCalledWith({
-      kind: "worker",
-      model: "gpt",
-      modelProvider: "CURSOR",
-      name: "reviewer",
-    });
+    expect(editableGraph.actions.moveLayoutNode).toHaveBeenCalledWith(
+      "worker:reviewer",
+      { x: 120, y: 240 },
+    );
     expect(setActiveTool).toHaveBeenCalledWith(null);
   });
 
   it("routes successful doc adds through onDocAdded with the canonical target path", () => {
-    placeAddedNode.mockReset();
     const editableGraph = buildEditableGraph();
     const onDocAdded = vi.fn();
     const setActiveTool = vi.fn();
 
-    const { result } = renderHook(
-      () =>
-        useFactoryGraphAddEntityController({
-          currentFactoryDefinition: {
-            name: "factory",
-            workTypes: [],
-          },
-          editableGraph,
-          onDocAdded,
-          setActiveTool,
-        }),
-      { wrapper: GraphEditorPlacementProvider },
+    const { result } = renderHook(() =>
+      useFactoryGraphAddEntityController({
+        currentFactoryDefinition: {
+          name: "factory",
+          workTypes: [],
+        },
+        editableGraph,
+        onDocAdded,
+        setActiveTool,
+      }),
     );
 
     act(() => {
@@ -134,24 +117,18 @@ describe("useFactoryGraphAddEntityController add submit", () => {
     });
 
     expect(onDocAdded).toHaveBeenCalledWith("factory/docs/playbook.md");
-    expect(placeAddedNode).toHaveBeenCalledWith({
-      fileName: "playbook.md",
-      inlineContent: "# Playbook\n",
-      kind: "doc",
-    });
+    expect(editableGraph.actions.moveLayoutNode).not.toHaveBeenCalled();
   });
 
   it("ignores submit when no add draft is active", () => {
     const editableGraph = buildEditableGraph();
 
-    const { result } = renderHook(
-      () =>
-        useFactoryGraphAddEntityController({
-          currentFactoryDefinition: { name: "factory", workTypes: [] },
-          editableGraph,
-          setActiveTool: vi.fn(),
-        }),
-      { wrapper: GraphEditorPlacementProvider },
+    const { result } = renderHook(() =>
+      useFactoryGraphAddEntityController({
+        currentFactoryDefinition: { name: "factory", workTypes: [] },
+        editableGraph,
+        setActiveTool: vi.fn(),
+      }),
     );
 
     act(() => {
@@ -167,26 +144,24 @@ describe("useFactoryGraphAddEntityController doc validation", () => {
     const editableGraph = buildEditableGraph();
     const setActiveTool = vi.fn();
 
-    const { result } = renderHook(
-      () =>
-        useFactoryGraphAddEntityController({
-          currentFactoryDefinition: {
-            name: "factory",
-            supportingFiles: {
-              bundledFiles: [
-                {
-                  content: { encoding: "utf-8", inline: "# Guide\n" },
-                  targetPath: "factory/docs/guide.md",
-                  type: "DOC",
-                },
-              ],
-            },
-            workTypes: [],
+    const { result } = renderHook(() =>
+      useFactoryGraphAddEntityController({
+        currentFactoryDefinition: {
+          name: "factory",
+          supportingFiles: {
+            bundledFiles: [
+              {
+                content: { encoding: "utf-8", inline: "# Guide\n" },
+                targetPath: "factory/docs/guide.md",
+                type: "DOC",
+              },
+            ],
           },
-          editableGraph,
-          setActiveTool,
-        }),
-      { wrapper: GraphEditorPlacementProvider },
+          workTypes: [],
+        },
+        editableGraph,
+        setActiveTool,
+      }),
     );
 
     act(() => {
@@ -215,14 +190,12 @@ describe("useFactoryGraphAddEntityController doc validation", () => {
       ok: false,
     }));
 
-    const { result } = renderHook(
-      () =>
-        useFactoryGraphAddEntityController({
-          currentFactoryDefinition: { name: "factory", workTypes: [] },
-          editableGraph,
-          setActiveTool: vi.fn(),
-        }),
-      { wrapper: GraphEditorPlacementProvider },
+    const { result } = renderHook(() =>
+      useFactoryGraphAddEntityController({
+        currentFactoryDefinition: { name: "factory", workTypes: [] },
+        editableGraph,
+        setActiveTool: vi.fn(),
+      }),
     );
 
     act(() => {

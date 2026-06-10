@@ -30,6 +30,7 @@ vi.mock("@xyflow/react", async () => {
       nodes?: Node[];
       onInit?: (instance: {
         fitView: () => Promise<boolean>;
+        getViewport: () => { x: number; y: number; zoom: number };
         setViewport: (
           viewport: { x: number; y: number; zoom: number },
           options?: { duration?: number },
@@ -48,6 +49,7 @@ vi.mock("@xyflow/react", async () => {
             onMoveEnd?.(null, { x: 0, y: 0, zoom: 1 });
             return true;
           },
+          getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
           setViewport: async (viewport) => {
             onMoveEnd?.(null, viewport);
             return true;
@@ -200,6 +202,22 @@ describe("CurrentActivityGraphViewport canonical viewport sync", () => {
     });
   });
 
+  it("reports the latest placement viewport for add-node placement", () => {
+    const updatePlacementViewport = vi.fn();
+
+    renderViewport({
+      updatePlacementViewport,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "pan-viewport" }));
+
+    expect(updatePlacementViewport).toHaveBeenLastCalledWith({
+      height: 720,
+      viewport: { x: 12, y: 34, zoom: 1.25 },
+      width: 1280,
+    });
+  });
+
   it("persists viewport panning into canonical layout in observe mode", () => {
     const updateLayoutViewport = vi.fn();
 
@@ -349,6 +367,7 @@ function renderViewport({
   onRedoLayout = vi.fn(),
   onUndoLayout = vi.fn(),
   updateLayoutViewport = vi.fn(),
+  updatePlacementViewport = vi.fn(),
 }: {
   canRedoLayout?: boolean;
   canUndoLayout?: boolean;
@@ -369,11 +388,17 @@ function renderViewport({
     y: number;
     zoom: number;
   }) => void;
+  updatePlacementViewport?: (viewport: {
+    height: number;
+    viewport: { x: number; y: number; zoom: number };
+    width: number;
+  }) => void;
 } = {}) {
   const flowContainerRef = { current: null as HTMLElement | null };
   const flowInstanceRef = {
     current: null as {
       fitView: () => Promise<boolean>;
+      getViewport: () => { x: number; y: number; zoom: number };
       setViewport: (
         viewport: { x: number; y: number; zoom: number },
         options?: { duration?: number },
@@ -383,7 +408,7 @@ function renderViewport({
 
   return render(
     <CurrentActivityGraphViewport
-      addControls={{}}
+      addControls={{ updatePlacementViewport }}
       editorControls={{
         activeTool: null,
         canInteract: true,
