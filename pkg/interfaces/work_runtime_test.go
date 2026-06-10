@@ -499,10 +499,8 @@ func TestWorkDispatch_JSONOmitsWorkerOwnedFieldsByDefault(t *testing.T) {
 	}
 }
 
-func TestWorkDispatch_StoresDispatchOwnedFields(t *testing.T) {
-	t.Parallel()
-
-	got := marshalPayload(t, testWorkDispatch())
+func assertWorkDispatchJSONScalarFields(t *testing.T, got map[string]any) {
+	t.Helper()
 
 	for key, want := range map[string]any{
 		"dispatch_id":               "dispatch-1",
@@ -516,11 +514,10 @@ func TestWorkDispatch_StoresDispatchOwnedFields(t *testing.T) {
 			t.Fatalf("%s = %q, want %q", key, got[key], want)
 		}
 	}
+}
 
-	previous, ok := got["previous_chaining_trace_ids"].([]any)
-	if !ok || len(previous) != 2 || previous[0] != "chain-a" || previous[1] != "chain-b" {
-		t.Fatalf("previous_chaining_trace_ids = %#v, want [chain-a chain-b]", got["previous_chaining_trace_ids"])
-	}
+func assertWorkDispatchJSONExecutionSection(t *testing.T, got map[string]any) {
+	t.Helper()
 
 	execSection, ok := got["execution"].(map[string]any)
 	if !ok || execSection["current_tick"] != float64(14) || execSection["request_id"] != "req-1" {
@@ -530,6 +527,10 @@ func TestWorkDispatch_StoresDispatchOwnedFields(t *testing.T) {
 	if !ok || len(workIDs) != 2 || workIDs[0] != "w1" || workIDs[1] != "w2" {
 		t.Fatalf("execution.work_ids = %#v, want [w1 w2]", execSection["work_ids"])
 	}
+}
+
+func assertWorkDispatchJSONInputTokens(t *testing.T, got map[string]any) {
+	t.Helper()
 
 	tokens, ok := got["input_tokens"].([]any)
 	if !ok || len(tokens) != 1 {
@@ -539,6 +540,21 @@ func TestWorkDispatch_StoresDispatchOwnedFields(t *testing.T) {
 	if !ok || token["id"] != "token-1" {
 		t.Fatalf("input_tokens[0] = %#v, want id token-1", tokens[0])
 	}
+}
+
+func TestWorkDispatch_StoresDispatchOwnedFields(t *testing.T) {
+	t.Parallel()
+
+	got := marshalPayload(t, testWorkDispatch())
+	assertWorkDispatchJSONScalarFields(t, got)
+
+	previous, ok := got["previous_chaining_trace_ids"].([]any)
+	if !ok || len(previous) != 2 || previous[0] != "chain-a" || previous[1] != "chain-b" {
+		t.Fatalf("previous_chaining_trace_ids = %#v, want [chain-a chain-b]", got["previous_chaining_trace_ids"])
+	}
+
+	assertWorkDispatchJSONExecutionSection(t, got)
+	assertWorkDispatchJSONInputTokens(t, got)
 
 	bindings, ok := got["input_bindings"].(map[string]any)
 	if !ok || len(bindings) != 1 {
