@@ -516,8 +516,14 @@ func assertFlattenedCanonicalBoundaryPayload(t *testing.T, flattened []byte) {
 
 func TestFactoryConfigMapper_ExpandRejectsRetiredExhaustionRulesWithMigrationGuidance(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
-
-	raw := []byte(`{
+	retiredRules := `[{
+		"name":"execute-story-loop-breaker",
+		"watchWorkstation":"execute-story",
+		"maxVisits":3,
+		"source":{"workType":"story","state":"init"},
+		"target":{"workType":"story","state":"failed"}
+	}]`
+	factoryBase := `{
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"failed","type":"FAILED"}]}],
 		"workers": [{"name":"executor"}],
 		"workstations": [{
@@ -526,31 +532,35 @@ func TestFactoryConfigMapper_ExpandRejectsRetiredExhaustionRulesWithMigrationGui
 			"worker":"executor",
 			"inputs":[{"workType":"story","state":"init"}],
 			"outputs":[{"workType":"story","state":"init"}]
-		}],
-		"exhaustionRules": [{
-			"name":"execute-story-loop-breaker",
-			"watchWorkstation":"execute-story",
-			"maxVisits":3,
-			"source":{"workType":"story","state":"init"},
-			"target":{"workType":"story","state":"failed"}
-		}]
-	}`)
+		}]}`
 
-	_, err := mapper.Expand(raw)
-	if err == nil {
-		t.Fatal("expected retired exhaustion_rules field to be rejected")
-	}
-	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
-		t.Fatalf("expected generated boundary context, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "exhaustion_rules is retired") {
-		t.Fatalf("expected retired exhaustion_rules error, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "guarded LOGICAL_MOVE workstation") {
-		t.Fatalf("expected LOGICAL_MOVE migration guidance, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "visit_count guard") {
-		t.Fatalf("expected visit_count migration guidance, got %v", err)
+	for _, tc := range []struct {
+		name  string
+		field string
+	}{
+		{name: "camelCase exhaustionRules", field: "exhaustionRules"},
+		{name: "snake_case exhaustion_rules", field: "exhaustion_rules"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			raw := []byte(strings.TrimSpace(factoryBase[:len(factoryBase)-1]) + `,"` + tc.field + `":` + retiredRules + `}`)
+
+			_, err := mapper.Expand(raw)
+			if err == nil {
+				t.Fatalf("expected retired %s field to be rejected", tc.field)
+			}
+			if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
+				t.Fatalf("expected generated boundary context, got %v", err)
+			}
+			if !strings.Contains(err.Error(), "exhaustion_rules is retired") {
+				t.Fatalf("expected retired exhaustion_rules error, got %v", err)
+			}
+			if !strings.Contains(err.Error(), "guarded LOGICAL_MOVE workstation") {
+				t.Fatalf("expected LOGICAL_MOVE migration guidance, got %v", err)
+			}
+			if !strings.Contains(err.Error(), "visit_count guard") {
+				t.Fatalf("expected visit_count migration guidance, got %v", err)
+			}
+		})
 	}
 }
 

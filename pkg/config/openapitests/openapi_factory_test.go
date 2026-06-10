@@ -912,7 +912,14 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredFanInFieldAtBoundary(t *t
 }
 
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredExhaustionRulesFieldAtBoundary(t *testing.T) {
-	cfgJSON := []byte(`{
+	retiredRules := `[{
+		"name":"execute-story-loop-breaker",
+		"watchWorkstation":"execute-story",
+		"maxVisits":3,
+		"source":{"workType":"story","state":"init"},
+		"target":{"workType":"story","state":"failed"}
+	}]`
+	factoryBase := `{
 		"name":"retired-exhaustion-rules-factory",
 		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"failed","type":"FAILED"}]}],
 		"workers": [{"name":"executor"}],
@@ -921,25 +928,29 @@ func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredExhaustionRulesFieldAtBou
 			"worker":"executor",
 			"inputs":[{"workType":"story","state":"init"}],
 			"outputs":[{"workType":"story","state":"failed"}]
-		}],
-		"exhaustionRules": [{
-			"name":"execute-story-loop-breaker",
-			"watchWorkstation":"execute-story",
-			"maxVisits":3,
-			"source":{"workType":"story","state":"init"},
-			"target":{"workType":"story","state":"failed"}
-		}]
-	}`)
+		}]}`
 
-	_, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
-	if err == nil {
-		t.Fatal("expected retired exhaustionRules field to fail at generated boundary")
-	}
-	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
-		t.Fatalf("expected generated boundary context, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "exhaustion_rules is retired") {
-		t.Fatalf("expected retired exhaustion_rules message, got %v", err)
+	for _, tc := range []struct {
+		name  string
+		field string
+	}{
+		{name: "camelCase exhaustionRules", field: "exhaustionRules"},
+		{name: "snake_case exhaustion_rules", field: "exhaustion_rules"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfgJSON := []byte(strings.TrimSpace(factoryBase[:len(factoryBase)-1]) + `,"` + tc.field + `":` + retiredRules + `}`)
+
+			_, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+			if err == nil {
+				t.Fatalf("expected retired %s field to fail at generated boundary", tc.field)
+			}
+			if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
+				t.Fatalf("expected generated boundary context, got %v", err)
+			}
+			if !strings.Contains(err.Error(), "exhaustion_rules is retired") {
+				t.Fatalf("expected retired exhaustion_rules message, got %v", err)
+			}
+		})
 	}
 }
 
