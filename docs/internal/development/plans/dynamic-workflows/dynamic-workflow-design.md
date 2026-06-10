@@ -1145,7 +1145,7 @@ Acceptance:
 
 - `func workflowListTool(ctx context.Context, args ToolArgs) (ToolResult, error)`
 - `func workflowValidateTool(ctx context.Context, args ToolArgs) (ToolResult, error)`
-- `func workflowPreviewTool(ctx context.Context, args ToolArgs) (ToolResult, error)`
+- `func factorySessionPreviewTool(ctx context.Context, args ToolArgs) (ToolResult, error)`
 - `func workflowRunTool(ctx context.Context, args ToolArgs) (ToolResult, error)`
 - `func workflowStatusTool(ctx context.Context, args ToolArgs) (ToolResult, error)`
 - `func workflowTasksTool(ctx context.Context, args ToolArgs) (ToolResult, error)`
@@ -1165,7 +1165,7 @@ Acceptance:
 - `listDynamicWorkflows`
 - `getDynamicWorkflow`
 - `validateDynamicWorkflow`
-- `previewDynamicWorkflow`
+- `previewFactorySession`
 - `startDynamicWorkflowRun`
 - `getDynamicWorkflowRun`
 - `listDynamicWorkflowTasks`
@@ -1199,7 +1199,7 @@ Acceptance:
 - `DynamicWorkflowRunList`
 - `DynamicWorkflowRunDetail`
 - `DynamicWorkflowRunToolbar`
-- `DynamicWorkflowPreviewDialog`
+- `FactorySessionPreviewDialog`
 - `DynamicWorkflowApprovalPanel`
 - `DynamicWorkflowTaskTable`
 - `DynamicWorkflowTaskDetail`
