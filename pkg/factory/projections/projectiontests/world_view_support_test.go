@@ -56,6 +56,122 @@ func TestBuildFactoryWorldView_ProjectsCanonicalDispatchAndProviderSessionInputs
 	assertCanonicalDispatchProviderSessionProjection(t, BuildFactoryWorldView(completedState))
 }
 
+func TestBuildFactoryWorldView_MarshaledDashboardSurfacesExposeCanonicalTopologyAndRuntime(t *testing.T) {
+	t0 := time.Date(2026, 4, 16, 8, 0, 0, 0, time.UTC)
+
+	t.Run("topology_submit_work_types", func(t *testing.T) {
+		state, err := ReconstructFactoryWorldState(
+			[]factoryapi.FactoryEvent{initialStructureEvent(t0)},
+			0,
+		)
+		if err != nil {
+			t.Fatalf("ReconstructFactoryWorldState: %v", err)
+		}
+		view := BuildFactoryWorldView(state)
+		topology := marshalWorldViewTopologyJSON(t, view.Topology)
+		submitWorkTypes, ok := topology["submit_work_types"].([]any)
+		if !ok || len(submitWorkTypes) == 0 {
+			t.Fatalf("submit_work_types = %#v, want non-empty slice", topology["submit_work_types"])
+		}
+		first, ok := submitWorkTypes[0].(map[string]any)
+		if !ok || first["work_type_name"] != "task" {
+			t.Fatalf("submit_work_types[0] = %#v, want task work_type_name", submitWorkTypes[0])
+		}
+		if _, ok := view.Topology.WorkstationNodesByID["t-review"]; !ok {
+			t.Fatalf("workstation nodes = %#v, want t-review topology node", view.Topology.WorkstationNodesByID)
+		}
+	})
+
+	t.Run("completed_runtime_session", func(t *testing.T) {
+		events := canonicalDispatchProviderSessionProjectionEvents(t0)
+		state, err := ReconstructFactoryWorldState(events, 3)
+		if err != nil {
+			t.Fatalf("ReconstructFactoryWorldState: %v", err)
+		}
+		runtime := marshalWorldViewRuntimeJSON(t, BuildFactoryWorldView(state).Runtime)
+		assertWorldViewJSONKeysAbsent(t, runtime, "workstation_requests_by_dispatch_id")
+		session, ok := runtime["session"].(map[string]any)
+		if !ok {
+			t.Fatalf("session = %#v, want object", runtime["session"])
+		}
+		assertWorldViewJSONKeysPresent(t, session, "dispatch_history", "provider_sessions")
+		assertWorldViewJSONKeysAbsent(t, session,
+			"completed_work_labels",
+			"failed_work_labels",
+			"failed_work_details_by_work_id",
+		)
+		history, ok := session["dispatch_history"].([]any)
+		if !ok || len(history) == 0 {
+			t.Fatalf("dispatch_history = %#v, want one completion", session["dispatch_history"])
+		}
+	})
+
+	t.Run("active_execution_consumed_inputs", func(t *testing.T) {
+		events := canonicalDispatchProviderSessionProjectionEvents(t0)
+		state, err := ReconstructFactoryWorldState(events, 2)
+		if err != nil {
+			t.Fatalf("ReconstructFactoryWorldState: %v", err)
+		}
+		runtime := marshalWorldViewRuntimeJSON(t, BuildFactoryWorldView(state).Runtime)
+		executions, ok := runtime["active_executions_by_dispatch_id"].(map[string]any)
+		if !ok || len(executions) != 1 {
+			t.Fatalf("active_executions_by_dispatch_id = %#v, want dispatch-1", runtime["active_executions_by_dispatch_id"])
+		}
+		execution, ok := executions["dispatch-1"].(map[string]any)
+		if !ok {
+			t.Fatalf("dispatch-1 execution = %#v, want object", executions["dispatch-1"])
+		}
+		consumedInputs, ok := execution["consumed_inputs"].([]any)
+		if !ok || len(consumedInputs) != 1 {
+			t.Fatalf("consumed_inputs = %#v, want one traced input", execution["consumed_inputs"])
+		}
+		assertWorldViewJSONKeysAbsent(t, execution, "consumed_tokens", "output_mutations")
+	})
+
+	t.Run("inference_attempts_by_dispatch", func(t *testing.T) {
+		exitCode := 1
+		events := []factoryapi.FactoryEvent{
+			initialStructureEvent(t0),
+			workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"}),
+			workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
+				DispatchID:   "dispatch-1",
+				TransitionID: "t-review",
+				Workstation:  interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+				Inputs: []interfaces.WorkstationInput{{
+					TokenID:  "work-1",
+					PlaceID:  "task:init",
+					WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"},
+				}},
+			}),
+			inferenceRequestEvent(3, t0.Add(3*time.Second), factoryapi.InferenceRequestEventPayload{
+				InferenceRequestId: "dispatch-1/inference-request/1",
+				Attempt:            1,
+			}),
+			inferenceResponseEvent(4, t0.Add(4*time.Second), factoryapi.InferenceResponseEventPayload{
+				InferenceRequestId: "dispatch-1/inference-request/1",
+				Attempt:            1,
+				Outcome:            factoryapi.InferenceOutcomeFailed,
+				DurationMillis:     875,
+				ExitCode:           &exitCode,
+				ErrorClass:         stringPtrForProjectionTest("rate_limited"),
+			}),
+		}
+		state, err := ReconstructFactoryWorldState(events, 4)
+		if err != nil {
+			t.Fatalf("ReconstructFactoryWorldState: %v", err)
+		}
+		runtime := marshalWorldViewRuntimeJSON(t, BuildFactoryWorldView(state).Runtime)
+		attemptsByDispatch, ok := runtime["inference_attempts_by_dispatch_id"].(map[string]any)
+		if !ok {
+			t.Fatalf("inference_attempts_by_dispatch_id = %#v, want map", runtime["inference_attempts_by_dispatch_id"])
+		}
+		dispatchAttempts, ok := attemptsByDispatch["dispatch-1"].(map[string]any)
+		if !ok || len(dispatchAttempts) != 1 {
+			t.Fatalf("dispatch-1 inference attempts = %#v, want one attempt", attemptsByDispatch["dispatch-1"])
+		}
+	})
+}
+
 func TestBuildFactoryWorldView_HidesSystemTimeWorkFromNormalDashboardProjection(t *testing.T) {
 	t0 := time.Date(2026, 4, 18, 9, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
@@ -704,4 +820,52 @@ func containsString(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func marshalWorldViewTopologyJSON(t *testing.T, topology interfaces.FactoryWorldTopologyView) map[string]any {
+	t.Helper()
+
+	payload, err := json.Marshal(topology)
+	if err != nil {
+		t.Fatalf("marshal topology: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(payload, &got); err != nil {
+		t.Fatalf("unmarshal topology: %v", err)
+	}
+	return got
+}
+
+func marshalWorldViewRuntimeJSON(t *testing.T, runtime interfaces.FactoryWorldRuntimeView) map[string]any {
+	t.Helper()
+
+	payload, err := json.Marshal(runtime)
+	if err != nil {
+		t.Fatalf("marshal runtime: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(payload, &got); err != nil {
+		t.Fatalf("unmarshal runtime: %v", err)
+	}
+	return got
+}
+
+func assertWorldViewJSONKeysAbsent(t *testing.T, payload map[string]any, keys ...string) {
+	t.Helper()
+
+	for _, key := range keys {
+		if _, ok := payload[key]; ok {
+			t.Fatalf("did not expect %q in payload: %#v", key, payload)
+		}
+	}
+}
+
+func assertWorldViewJSONKeysPresent(t *testing.T, payload map[string]any, keys ...string) {
+	t.Helper()
+
+	for _, key := range keys {
+		if _, ok := payload[key]; !ok {
+			t.Fatalf("expected %q in payload: %#v", key, payload)
+		}
+	}
 }
