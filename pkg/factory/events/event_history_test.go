@@ -56,6 +56,98 @@ func TestFactoryEventHistory_RecordInitialStructure_UsesRuntimeConfigProjection(
 	}
 }
 
+func TestFactoryEventHistory_RecordInitialStructure_IncludesEditableFactoryDocumentMetadata(t *testing.T) {
+	versionTime := time.Date(2026, 6, 9, 12, 30, 0, 0, time.UTC)
+	runtimeConfig := eventHistoryRuntimeConfig{
+		Factory: &interfaces.FactoryConfig{
+			Name: "editable-factory",
+			Version: &interfaces.FactoryVersion{
+				Logical:  42,
+				Physical: versionTime,
+			},
+			ResourceManifest: &interfaces.PortableResourceManifestConfig{
+				BundledFiles: []interfaces.BundledFileConfig{
+					{
+						Type:       interfaces.BundledFileTypeScript,
+						TargetPath: "factory/scripts/run.sh",
+						Content: interfaces.BundledFileContentConfig{
+							Encoding: interfaces.BundledFileEncodingUTF8,
+							Inline:   "echo run\n",
+						},
+					},
+				},
+			},
+			Layout: &interfaces.FactoryLayoutConfig{
+				SchemaVersion: interfaces.SupportedFactoryLayoutSchemaVersion,
+				Edges: []interfaces.FactoryLayoutEdgeConfig{{
+					ID: "edge:review->done",
+					Waypoints: []interfaces.FactoryLayoutPointConfig{
+						{X: 10, Y: 20},
+					},
+				}},
+				Viewport: &interfaces.FactoryLayoutViewportConfig{
+					X:    100,
+					Y:    -40,
+					Zoom: 1.25,
+				},
+			},
+		},
+	}
+	history := NewFactoryEventHistory(
+		eventHistoryProjectionNet(),
+		func() time.Time { return time.Unix(0, 0).UTC() },
+		runtimeConfig,
+	)
+
+	history.RecordInitialStructure()
+
+	events := history.Events()
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	payload, err := events[0].Payload.AsInitialStructureRequestEventPayload()
+	if err != nil {
+		t.Fatalf("initial structure payload: %v", err)
+	}
+	assertInitialStructureFactoryVersion(t, payload, versionTime)
+	assertInitialStructureBundledFile(t, payload)
+	assertInitialStructureFactoryLayout(t, payload)
+}
+
+func assertInitialStructureFactoryVersion(t *testing.T, payload factoryapi.InitialStructureRequestEventPayload, versionTime time.Time) {
+	t.Helper()
+	if payload.Factory.Version == nil || payload.Factory.Version.Logical.Int64() != 42 || !payload.Factory.Version.Physical.Equal(versionTime) {
+		t.Fatalf("factory version = %#v, want logical=42 physical=%s", payload.Factory.Version, versionTime)
+	}
+}
+
+func assertInitialStructureBundledFile(t *testing.T, payload factoryapi.InitialStructureRequestEventPayload) {
+	t.Helper()
+	if payload.Factory.SupportingFiles == nil || payload.Factory.SupportingFiles.BundledFiles == nil || len(*payload.Factory.SupportingFiles.BundledFiles) != 1 {
+		t.Fatalf("supporting files = %#v, want one bundled file", payload.Factory.SupportingFiles)
+	}
+	bundledFile := (*payload.Factory.SupportingFiles.BundledFiles)[0]
+	if bundledFile.TargetPath != "factory/scripts/run.sh" || bundledFile.Content.Inline != "echo run\n" {
+		t.Fatalf("bundled file = %#v, want script content", bundledFile)
+	}
+}
+
+func assertInitialStructureFactoryLayout(t *testing.T, payload factoryapi.InitialStructureRequestEventPayload) {
+	t.Helper()
+	if payload.Factory.Layout == nil || payload.Factory.Layout.Viewport == nil {
+		t.Fatalf("layout = %#v, want viewport", payload.Factory.Layout)
+	}
+	if payload.Factory.Layout.Viewport.X != 100 || payload.Factory.Layout.Viewport.Y != -40 || payload.Factory.Layout.Viewport.Zoom != 1.25 {
+		t.Fatalf("viewport = %#v, want persisted viewport", payload.Factory.Layout.Viewport)
+	}
+	if payload.Factory.Layout.Edges == nil || len(*payload.Factory.Layout.Edges) != 1 || (*payload.Factory.Layout.Edges)[0].Waypoints == nil {
+		t.Fatalf("layout edges = %#v, want waypoint edge", payload.Factory.Layout.Edges)
+	}
+	if waypoint := (*(*payload.Factory.Layout.Edges)[0].Waypoints)[0]; waypoint.X != 10 || waypoint.Y != 20 {
+		t.Fatalf("waypoint = %#v, want persisted waypoint", waypoint)
+	}
+}
+
 func TestFactoryEventHistory_SubscribeCancelClosesStreamWithoutPanickingAppenders(t *testing.T) {
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
@@ -747,83 +839,6 @@ func unsafeDiagnosticEventValues() []string {
 		"raw environment value must stay private",
 		"AGENT_FACTORY_AUTH_TOKEN",
 		"panic stack should not be dashboard-facing",
-	}
-}
-
-func TestFailureDetailsForResult_NonFailedResultsOmitFailureDetails(t *testing.T) {
-	reason, message := failureDetailsForResult(interfaces.WorkResult{
-		DispatchID:   "dispatch-rejected",
-		TransitionID: "build",
-		Outcome:      interfaces.OutcomeRejected,
-		Feedback:     "needs revision",
-	})
-
-	if reason != "" || message != "" {
-		t.Fatalf("failure details = %q/%q, want empty for rejected result", reason, message)
-	}
-}
-
-func TestFailureDetailsForResult_FailedWorkerErrorUsesStableFailureDetails(t *testing.T) {
-	reason, message := failureDetailsForResult(interfaces.WorkResult{
-		DispatchID:   "dispatch-worker-error",
-		TransitionID: "build",
-		Outcome:      interfaces.OutcomeFailed,
-		Error:        "script exited with code 1",
-	})
-
-	if reason != failureReasonWorkerError {
-		t.Fatalf("failure reason = %q, want %q", reason, failureReasonWorkerError)
-	}
-	if message != "script exited with code 1" {
-		t.Fatalf("failure message = %q, want script error", message)
-	}
-}
-
-func TestFailureDetailsForResult_FailureMetadataOverridesWorkerErrorReason(t *testing.T) {
-	reason, message := failureDetailsForResult(interfaces.WorkResult{
-		DispatchID:      "dispatch-timeout",
-		TransitionID:    "build",
-		Outcome:         interfaces.OutcomeFailed,
-		Error:           "provider error: timeout: context deadline exceeded",
-		FailureMetadata: &interfaces.WorkFailureMetadata{Type: interfaces.WorkFailureTypeTimeout},
-	})
-
-	if reason != string(interfaces.WorkFailureTypeTimeout) {
-		t.Fatalf("failure reason = %q, want %q", reason, interfaces.WorkFailureTypeTimeout)
-	}
-	if message != "provider error: timeout: context deadline exceeded" {
-		t.Fatalf("failure message = %q, want preserved rendered timeout text", message)
-	}
-}
-
-func TestFailureDetailsForResult_ClassifierInvalidOutputPreservesRawOutputEvidence(t *testing.T) {
-	reason, message := failureDetailsForResult(interfaces.WorkResult{
-		DispatchID:   "dispatch-classifier-invalid",
-		TransitionID: "classify",
-		Outcome:      interfaces.OutcomeFailed,
-		Error:        `classifier output invalid: expected plain string label (raw output: "{\"label\":\"approved\"}")`,
-	})
-
-	if reason != failureReasonWorkerError {
-		t.Fatalf("failure reason = %q, want %q", reason, failureReasonWorkerError)
-	}
-	if !strings.Contains(message, `raw output: "{\"label\":\"approved\"}"`) {
-		t.Fatalf("failure message = %q, want raw output evidence", message)
-	}
-}
-
-func TestFailureDetailsForResult_FailedWithoutDetailsUsesUnavailableMessage(t *testing.T) {
-	reason, message := failureDetailsForResult(interfaces.WorkResult{
-		DispatchID:   "dispatch-unknown",
-		TransitionID: "build",
-		Outcome:      interfaces.OutcomeFailed,
-	})
-
-	if reason != failureReasonUnknown {
-		t.Fatalf("failure reason = %q, want %q", reason, failureReasonUnknown)
-	}
-	if message != failureMessageUnavailable {
-		t.Fatalf("failure message = %q, want unavailable message", message)
 	}
 }
 

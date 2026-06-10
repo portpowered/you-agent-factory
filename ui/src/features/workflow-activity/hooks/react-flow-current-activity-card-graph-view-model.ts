@@ -26,11 +26,21 @@ import {
 } from "./react-flow-current-activity-card-active-executions";
 import type { CurrentActivityGraphFlowProjection } from "./use-current-activity-graph-flow-projection";
 
+export type CurrentActivityGraphRenderProjection = Pick<
+  CurrentActivityGraphFlowProjection,
+  | "canonicalLayoutViewport"
+  | "displayFactoryDefinition"
+  | "graphLayout"
+  | "pendingAdditionEdgeIds"
+  | "positionedGraphLayout"
+  | "visibleGraphEdges"
+>;
+
 export type CurrentActivityGraphViewModelEditorInput = Omit<
   CurrentActivityEditorState,
   "onConnectionAnchorClick" | "validationTargets"
 > & {
-  graphState: CurrentActivityGraphFlowProjection;
+  graphProjection: CurrentActivityGraphRenderProjection;
   handleConnectionAnchorClick: CurrentActivityEditorState["onConnectionAnchorClick"];
   validationTargets?: CurrentActivityEditorState["validationTargets"];
 };
@@ -295,7 +305,7 @@ export function useCurrentActivityGraphViewModel({
     pendingAdditionEdgeIds,
     positionedGraphLayout,
     visibleGraphEdges,
-  } = editor.graphState;
+  } = editor.graphProjection;
   const graphKey = useMemo(
     () => currentActivityGraphKey(graphLayout),
     [graphLayout],

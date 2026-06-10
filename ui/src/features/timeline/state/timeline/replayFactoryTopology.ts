@@ -42,6 +42,16 @@ function workstationRouteIOs(
   return Array.isArray(value) ? value : [value];
 }
 
+function workstationInputIO(workstation: FactoryWorkstation): WorkstationIO[] {
+  return workstationRouteIOs(
+    (
+      workstation as FactoryWorkstation & {
+        inputs?: WorkstationIO[] | WorkstationIO | null;
+      }
+    ).inputs,
+  );
+}
+
 function workstationFailureIO(
   workstation: FactoryWorkstation,
 ): WorkstationIO[] {
@@ -119,7 +129,7 @@ function isPublicWorkstationIO(io: { workType?: string }): boolean {
 function projectWorkstationTopology(
   workstation: FactoryWorkstation,
 ): NonNullable<ProjectedInitialStructure["workstations"]>[number] {
-  const inputs = workstation.inputs.filter(isPublicWorkstationIO);
+  const inputs = workstationInputIO(workstation).filter(isPublicWorkstationIO);
   const outputs = workstationOutputIO(workstation).filter(
     isPublicWorkstationIO,
   );
@@ -178,7 +188,7 @@ export function normalizeFactoryPayload(
   }
   for (const workstation of factoryWorkstations(factory)) {
     for (const io of [
-      ...workstation.inputs,
+      ...workstationInputIO(workstation),
       ...workstationOutputIO(workstation),
       ...workstationContinueIO(workstation),
       ...workstationFailureIO(workstation),

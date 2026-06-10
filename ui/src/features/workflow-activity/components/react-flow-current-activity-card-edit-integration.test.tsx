@@ -40,6 +40,7 @@ vi.mock("@xyflow/react", async () => {
     Controls: () => <div data-testid="graph-controls" />,
     ReactFlow: ({
       children,
+      defaultViewport,
       edges,
       isValidConnection,
       nodes,
@@ -48,7 +49,9 @@ vi.mock("@xyflow/react", async () => {
       onNodeClick,
     }: {
       children: React.ReactNode;
+      defaultViewport?: { x: number; y: number; zoom: number };
       edges?: Array<{
+        data?: Record<string, unknown>;
         id: string;
         source?: string;
         sourceHandle?: string | null;
@@ -64,6 +67,7 @@ vi.mock("@xyflow/react", async () => {
       nodes?: Array<{
         data?: Record<string, unknown>;
         id: string;
+        position?: { x: number; y: number };
       }>;
       onConnect?: (connection: {
         source?: string | null;
@@ -79,7 +83,12 @@ vi.mock("@xyflow/react", async () => {
         "workstation:review";
 
       return (
-        <div data-testid="mock-react-flow">
+        <div
+          data-edges={JSON.stringify(edges ?? [])}
+          data-nodes={JSON.stringify(nodes ?? [])}
+          data-testid="mock-react-flow"
+          data-viewport={JSON.stringify(defaultViewport ?? null)}
+        >
           <ul aria-label="Rendered graph nodes">
             {(nodes ?? []).map((node) => (
               <li key={node.id}>
@@ -303,6 +312,91 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     );
     expect(edge.getAttribute("data-source-handle")).not.toMatch(/^out-/);
     expect(edge.getAttribute("data-target-handle")).not.toMatch(/^in-/);
+  });
+
+  it("renders factory graph changes from the event-computed factory snapshot", async () => {
+    const changedFactoryDocument: CurrentFactoryDocument = {
+      ...editableFactoryDocument,
+      layout: {
+        edges: [
+          {
+            id: "workstation-output:workstation:qa->work-state:story:done",
+            waypoints: [{ x: 320, y: 180 }],
+          },
+        ],
+        nodes: [
+          {
+            id: "workstation:qa",
+            position: { x: 640, y: 260 },
+          },
+          {
+            id: "worker:critic",
+            position: { x: 420, y: 420 },
+          },
+        ],
+        schemaVersion: 1,
+        viewport: { x: -220, y: 75, zoom: 0.8 },
+      },
+      version: {
+        logical: "9",
+        physical: "2026-06-09T12:00:00Z",
+      },
+      workers: [
+        ...(editableFactoryDocument.workers ?? []),
+        {
+          model: "gpt-5",
+          name: "critic",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        ...(editableFactoryDocument.workstations ?? []),
+        {
+          inputs: [{ state: "qa", workType: "story" }],
+          name: "qa",
+          outputs: [{ state: "done", workType: "story" }],
+          type: "MODEL_WORKSTATION",
+          worker: "critic",
+        },
+      ],
+    };
+
+    renderCurrentActivity(createSnapshot(changedFactoryDocument));
+
+    expect(
+      await screen.findByRole("button", { name: "workstation:qa" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "worker:critic" })).toBeTruthy();
+
+    const reactFlow = screen.getByTestId("mock-react-flow");
+    expect(JSON.parse(reactFlow.dataset.viewport ?? "null")).toEqual({
+      x: -220,
+      y: 75,
+      zoom: 0.8,
+    });
+
+    const renderedNodes = JSON.parse(reactFlow.dataset.nodes ?? "[]") as Array<{
+      id: string;
+      position?: { x: number; y: number };
+    }>;
+    expect(
+      renderedNodes.find((node) => node.id === "workstation:qa")?.position,
+    ).toEqual({ x: 640, y: 260 });
+    expect(
+      renderedNodes.find((node) => node.id === "worker:critic")?.position,
+    ).toEqual({ x: 420, y: 420 });
+
+    const renderedEdges = JSON.parse(reactFlow.dataset.edges ?? "[]") as Array<{
+      data?: { waypoints?: Array<{ x: number; y: number }> };
+      id: string;
+    }>;
+    expect(
+      renderedEdges.find(
+        (edge) =>
+          edge.id ===
+          "workstation-output:workstation:qa->work-state:story:done",
+      )?.data?.waypoints,
+    ).toEqual([{ x: 320, y: 180 }]);
   });
 
   it("renders newly added graph nodes after add-node interactions", async () => {

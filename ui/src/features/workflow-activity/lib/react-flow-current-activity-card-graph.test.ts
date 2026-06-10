@@ -98,6 +98,26 @@ function resourceFamilyNodeIds(nodeIds: string[], resourceName: string) {
   );
 }
 
+describe("dashboardWorkstationFromFactory", () => {
+  it("normalizes legacy single input routes", () => {
+    const workstation = dashboardWorkstationFromFactory({
+      inputs: { state: "queued", workType: "story" },
+      name: "draft",
+      outputs: [],
+    } as CanonicalFactoryDefinition["workstations"][number]);
+
+    expect(workstation.input_place_ids).toEqual(["story:queued"]);
+    expect(workstation.input_places).toEqual([
+      {
+        kind: "work_state",
+        place_id: "story:queued",
+        state_value: "queued",
+        type_id: "story",
+      },
+    ]);
+  });
+});
+
 describe("current activity graph editor handles", () => {
   it("marks factory-derived workstation nodes active from runtime execution ids", async () => {
     const factory = baseFactoryDefinition;

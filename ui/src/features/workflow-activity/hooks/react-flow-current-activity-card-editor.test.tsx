@@ -330,7 +330,7 @@ describe("useCurrentActivityGraphEditor", () => {
     hookState.saveStateIsStale = false;
   });
 
-  it("does not enable the current factory document query while read mode has a versioned event factory", () => {
+  it("uses the versioned event factory without calling the current factory document query", () => {
     hookState.currentFactoryQuery = {
       data: undefined,
       status: "pending",
@@ -348,7 +348,7 @@ describe("useCurrentActivityGraphEditor", () => {
       useCurrentActivityGraphEditor(snapshot),
     );
 
-    expect(useCurrentFactoryDocument).toHaveBeenLastCalledWith(false);
+    expect(useCurrentFactoryDocument).not.toHaveBeenCalled();
     expect(result.current.status.isDefinitionLoading).toBe(false);
     expect(result.current.graphState.displayFactoryDefinition).toMatchObject({
       version: {
@@ -358,7 +358,7 @@ describe("useCurrentActivityGraphEditor", () => {
     });
   });
 
-  it("waits until edit intent before enabling the current factory document query when the event factory has no version", () => {
+  it("does not call the current factory document query when entering editor mode without a versioned event factory", () => {
     hookState.currentFactoryQuery = {
       data: undefined,
       status: "pending",
@@ -370,13 +370,14 @@ describe("useCurrentActivityGraphEditor", () => {
       useCurrentActivityGraphEditor(snapshot),
     );
 
-    expect(useCurrentFactoryDocument).toHaveBeenLastCalledWith(false);
+    expect(useCurrentFactoryDocument).not.toHaveBeenCalled();
 
     act(() => {
       result.current.handleEditorModeToggle();
     });
 
-    expect(useCurrentFactoryDocument).toHaveBeenLastCalledWith(true);
+    expect(useCurrentFactoryDocument).not.toHaveBeenCalled();
+    expect(result.current.status.isDefinitionLoading).toBe(true);
   });
 
   it("enters and leaves editor mode while resetting transient state", () => {

@@ -1334,15 +1334,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     relativeFilePath:
-      "src/features/workflow-activity/hooks/current-activity-factory-document-state.ts",
-    importSpecifiers: [
-      "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
       "src/features/workflow-activity/hooks/factory-graph-editor-availability.ts",
     importSpecifiers: [
       "../../factory-graph-editor/lib/draft/factory-graph-draft-types",

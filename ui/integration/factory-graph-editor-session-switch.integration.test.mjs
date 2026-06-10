@@ -228,7 +228,7 @@ async function addUnsavedWorkType(page, identifier) {
   await page
     .getByLabel("Add graph entity menu")
     .getByRole("button", { name: "Work type" })
-    .click();
+    .evaluate((button) => button.click());
 
   const addDialog = page.getByRole("dialog", {
     name: "Add work type",

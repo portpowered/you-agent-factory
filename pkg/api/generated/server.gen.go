@@ -994,8 +994,8 @@ type Factory struct {
 	InvocationReturn *InvocationReturn `json:"invocationReturn,omitempty"`
 
 	// Layout Non-executable portable graph editor layout metadata keyed by canonical graph ids.
-	Layout *FactoryLayout `json:"layout,omitempty"`
-	Metadata       *StringMap                 `json:"metadata,omitempty"`
+	Layout   *FactoryLayout `json:"layout,omitempty"`
+	Metadata *StringMap     `json:"metadata,omitempty"`
 
 	// Name Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 	Name FactoryName `json:"name"`

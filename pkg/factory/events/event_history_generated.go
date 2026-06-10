@@ -1,8 +1,10 @@
 package events
 
 import (
+	"sort"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/api/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -16,12 +18,14 @@ func generatedFactory(payload interfaces.InitialStructurePayload) factoryapi.Fac
 	workstations := generatedWorkstations(payload.Workstations, payload.Places)
 
 	return factoryapi.Factory{
-		Name:         generatedFactoryName(payload.Name),
-		Layout:       generatedFactoryLayout(payload.Layout),
-		Resources:    slicePtr(resources),
-		WorkTypes:    slicePtr(workTypes),
-		Workers:      slicePtr(workers),
-		Workstations: slicePtr(workstations),
+		Name:            generatedFactoryName(payload.Name),
+		Version:         generatedFactoryVersion(payload.Version),
+		Layout:          generatedFactoryLayout(payload.Layout),
+		Resources:       slicePtr(resources),
+		SupportingFiles: generatedFactoryResourceManifest(payload.ResourceManifest),
+		WorkTypes:       slicePtr(workTypes),
+		Workers:         slicePtr(workers),
+		Workstations:    slicePtr(workstations),
 	}
 }
 
@@ -30,6 +34,65 @@ func generatedFactoryName(name string) factoryapi.FactoryName {
 		return "factory"
 	}
 	return factoryapi.FactoryName(name)
+}
+
+func generatedFactoryVersion(version *interfaces.FactoryVersion) *factoryapi.HybridLogicalTimestamp {
+	if version == nil {
+		return nil
+	}
+	return &factoryapi.HybridLogicalTimestamp{
+		Logical:  apitypes.Int64String(version.Logical),
+		Physical: interfaces.CanonicalEventTime(version.Physical),
+	}
+}
+
+func generatedFactoryResourceManifest(manifest *interfaces.PortableResourceManifestConfig) *factoryapi.ResourceManifest {
+	if manifest == nil {
+		return nil
+	}
+	return &factoryapi.ResourceManifest{
+		RequiredTools: generatedFactoryRequiredTools(manifest.RequiredTools),
+		BundledFiles:  generatedFactoryBundledFiles(manifest.BundledFiles),
+	}
+}
+
+func generatedFactoryRequiredTools(requiredTools []interfaces.RequiredToolConfig) *[]factoryapi.RequiredTool {
+	if len(requiredTools) == 0 {
+		return nil
+	}
+	out := make([]factoryapi.RequiredTool, len(requiredTools))
+	for i, tool := range requiredTools {
+		out[i] = factoryapi.RequiredTool{
+			Name:        tool.Name,
+			Command:     tool.Command,
+			Purpose:     stringPtrIfNotEmpty(tool.Purpose),
+			VersionArgs: stringSlicePtr(tool.VersionArgs),
+		}
+	}
+	return &out
+}
+
+func generatedFactoryBundledFiles(bundledFiles []interfaces.BundledFileConfig) *[]factoryapi.BundledFile {
+	if len(bundledFiles) == 0 {
+		return nil
+	}
+	sorted := append([]interfaces.BundledFileConfig(nil), bundledFiles...)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].TargetPath < sorted[j].TargetPath
+	})
+	out := make([]factoryapi.BundledFile, len(sorted))
+	for i, file := range sorted {
+		out[i] = factoryapi.BundledFile{
+			Id:         stringPtrIfNotEmpty(interfaces.CanonicalBundledFileID(file.ID, file.TargetPath)),
+			Type:       factoryapi.BundledFileType(file.Type),
+			TargetPath: file.TargetPath,
+			Content: factoryapi.BundledFileContent{
+				Encoding: factoryapi.BundledFileContentEncoding(file.Content.Encoding),
+				Inline:   file.Content.Inline,
+			},
+		}
+	}
+	return &out
 }
 
 func generatedFactoryLayout(layout *interfaces.FactoryLayoutConfig) *factoryapi.FactoryLayout {

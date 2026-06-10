@@ -73,10 +73,10 @@ flowchart TD
   subgraph ViewModel["Card View Model"]
     vm["useCurrentActivityGraphCardViewModel"]:::client
     publicData["Public render data\nnodes, edges, viewport, notices"]:::client
-    publicCommands["Public commands\nonViewportChanged, onNodeMoved,\nonSave, onDiscard, onConnect"]:::client
-    publicStatus["Public status\nisDirty, canSave, editorMode,\nsaveBlockedReason"]:::client
+    publicControls["Grouped public controls\neditorControls, layoutControls,\nsaveControls, addControls"]:::client
+    publicStatus["Public status\nisDirty, canSave,\nsaveBlockedReason"]:::client
     vm --> publicData
-    vm --> publicCommands
+    vm --> publicControls
     vm --> publicStatus
   end
 
@@ -95,10 +95,10 @@ flowchart TD
   vm --> toolbar
   vm --> dialogs
 
-  viewportView -- "React Flow events" --> publicCommands
-  toolbar -- "save/discard/edit actions" --> publicCommands
-  dialogs -- "confirm/cancel" --> publicCommands
-  publicCommands --> commands
+  viewportView -- "React Flow events" --> publicControls
+  toolbar -- "save/discard/edit actions" --> publicControls
+  dialogs -- "confirm/cancel" --> publicControls
+  publicControls --> commands
 
   classDef cloud fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d
   classDef client fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
@@ -205,11 +205,16 @@ classDiagram
     nodes
     edges
     viewport
-    editorMode
-    isDirty
-    canSave
+    status
     saveBlockedReason
-    actions
+    editorControls
+    layoutControls
+    saveControls
+    leaveControls
+    addControls
+    removalControls
+    validationControls
+    visibilityControls
   }
 
   CloudFactoryJson --> CurrentFactoryDocument : GET current factory
@@ -329,9 +334,18 @@ the raw editor/controller object.
 
 Viewport components should also receive grouped control objects from the card
 view model. The graph surface should pass `addControls`, `saveControls`,
-`layoutControls`, and `visibilityControls` into the viewport instead of fanning
-them back out into legacy-shaped save, add-menu, undo/redo, viewport,
-node-move, hide/show, or visibility-preference props.
+`layoutControls`, `visibilityControls`, and `editorControls` into the viewport
+instead of fanning them back out into legacy-shaped save, add-menu, undo/redo,
+viewport, node-move, hide/show, visibility-preference, mode-toggle, active-tool,
+or interaction-availability props.
+
+Editor mode UI should consume `editorControls` for `activeTool`,
+`canInteract`, `connectionNotice`, `isEditing`, `toggleMode`,
+`discardPendingChanges`, `selectTool`, and editor-unavailable messaging.
+Components should not read top-level `editorMode`, `activeTool`,
+`canInteractWithEditor`, `connectionNotice`,
+`editorUnavailableClassifierWorkstationName`, `handleEditorModeToggle`,
+`handleDiscardPendingChanges`, or `setActiveTool` from the public card model.
 
 The card component module should export the card and stable shared types only.
 Lower-level projection hooks should stay imported from their owning hook modules
@@ -573,18 +587,21 @@ Components should follow these rules:
 
 | Component layer | May read | May write |
 | --- | --- | --- |
-| React Flow view | `model.nodes`, `model.edges`, `model.viewport`, UI booleans | only call semantic model commands |
-| Surface / toolbar | `model.canSave`, `model.isDirty`, `model.editorMode`, notices | only call semantic model commands |
+| React Flow view | `model.nodes`, `model.edges`, `model.canonicalLayoutViewport`, grouped controls | only call semantic model commands |
+| Surface / toolbar | `model.status`, `model.editorControls`, notices, grouped controls | only call semantic model commands |
 | Projection hook | canonical graph state, snapshot, runtime activity | no durable writes |
 | Graph state hook | API document, draft state, layout draft, runtime blockers | owns all durable or saveable mutations |
 
-The public editor/card model should not expose raw `draftState`, `layoutDraftState`, `editableDefinitionQuery`, or `viewState`. If a component or projection needs information from those internals, graph state should promote a semantic field such as `status`, `layoutControls`, `graphState`, or a named command.
+The public editor/card model should not expose raw `draftState`, `layoutDraftState`, `editableDefinitionQuery`, or `viewState`. If a component or projection needs information from those internals, graph state should promote a semantic field such as `status`, `editorControls`, `layoutControls`, `leaveControls`, a narrow graph render projection, or a named command.
 
 The view may render projected state, but it should not mutate projected state as a durable source of truth. React Flow state is a library projection. Events from React Flow must be translated into graph commands, such as `updateViewport`, `moveNode`, `connect`, or `remove`.
 
 View components should call named commands for UI state transitions as well.
 For example, opening save confirmation should be exposed as a command such as
 `requestSaveConfirmation`, not as a raw setter like `setIsConfirmingSave(true)`.
+Leave confirmation should likewise use `leaveControls` rather than raw fields
+such as `leaveDialogOpen`, `setIsConfirmingLeaveEditor`, or
+`handleDiscardEditorChanges`.
 
 ## Save And Dirty Selectors
 
@@ -673,17 +690,25 @@ type CurrentActivityGraphCardModel = {
   nodes: CurrentActivityNode[];
   edges: Edge[];
   viewport: FactoryLayoutViewport | null;
-  editorMode: boolean;
   status: CurrentActivityGraphStatus;
-  actions: {
-    enterEditMode(): void;
-    exitEditMode(): void;
-    save(): Promise<boolean>;
-    discard(): void;
+  editorControls: {
+    isEditing: boolean;
+    toggleMode(): void;
+    discardPendingChanges(): void;
+  };
+  saveControls: {
+    canSave: boolean;
+    requestConfirmation(): void;
+    confirmSave(): Promise<boolean>;
+  };
+  leaveControls: {
+    isOpen: boolean;
+    cancel(): void;
+    discardChanges(): void;
+  };
+  layoutControls: {
     updateViewport(viewport: FactoryLayoutViewport): void;
     moveNode(nodeId: string, position: FactoryLayoutPoint): void;
-    connect(connection: Connection): void;
-    removeSelection(): void;
   };
 };
 ```

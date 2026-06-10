@@ -41,42 +41,44 @@ vi.mock(
 
 vi.mock("./react-flow-current-activity-card-viewport", () => ({
   CurrentActivityGraphViewport: ({
-    handleDiscardPendingChanges,
-    handleSaveDraft,
-    onAddAction,
-    onAddMenuOpenChange,
+    addControls,
+    editorControls,
     onConnect,
     onEditorEdgeClick,
     onEditorNodeClick,
-    onSelectTool,
+    saveControls,
     saveDisabledReason,
   }: {
-    handleDiscardPendingChanges: () => void;
-    handleSaveDraft: () => void;
-    onAddAction: () => void;
-    onAddMenuOpenChange: (open: boolean) => void;
+    addControls: {
+      setMenuOpen: (open: boolean) => void;
+      startAction: () => void;
+    };
+    editorControls: {
+      discardPendingChanges: () => void;
+      selectTool: (tool: string) => void;
+    };
     onConnect: () => void;
     onEditorEdgeClick: () => void;
     onEditorNodeClick: () => void;
-    onSelectTool: (tool: string) => void;
+    saveControls: { requestConfirmation: () => void };
     saveDisabledReason: string | null;
   }) => (
     <div
       data-disabled-reason={saveDisabledReason ?? ""}
       data-testid="graph-viewport"
     >
-      <button onClick={handleSaveDraft} type="button">
+      <button onClick={saveControls.requestConfirmation} type="button">
         Trigger save confirm
       </button>
-      <button onClick={handleDiscardPendingChanges} type="button">
+      <button onClick={editorControls.discardPendingChanges} type="button">
         Trigger discard
       </button>
-      <button onClick={onAddAction} type="button">
+      <button onClick={addControls.startAction} type="button">
         Trigger add action
       </button>
       <button
         onClick={() => {
-          onAddMenuOpenChange(true);
+          addControls.setMenuOpen(true);
         }}
         type="button"
       >
@@ -93,7 +95,7 @@ vi.mock("./react-flow-current-activity-card-viewport", () => ({
       </button>
       <button
         onClick={() => {
-          onSelectTool("connect");
+          editorControls.selectTool("connect");
         }}
         type="button"
       >
@@ -148,6 +150,7 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     },
     handleAddEntityAction: vi.fn(),
     handleDiscardPendingChanges: vi.fn(),
+    handleEditorModeToggle: vi.fn(),
     handleEditorConnect: vi.fn(),
     handleEditorEdgeDelete: vi.fn(),
     handleEditorNodeDelete: vi.fn(),
@@ -205,6 +208,19 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
       startAction: merged.handleAddEntityAction,
       ...((merged as { addControls?: object }).addControls ?? {}),
     },
+    editorControls: {
+      activeTool: merged.activeTool,
+      canInteract: merged.canInteractWithEditor,
+      connectionNotice: merged.connectionNotice,
+      discardPendingChanges: merged.handleDiscardPendingChanges,
+      isEditing: merged.editorMode,
+      selectTool: merged.setActiveTool,
+      toggleMode: merged.handleEditorModeToggle,
+      unavailableClassifierWorkstationName:
+        (merged as { editorUnavailableClassifierWorkstationName?: string })
+          .editorUnavailableClassifierWorkstationName,
+      ...((merged as { editorControls?: object }).editorControls ?? {}),
+    },
     graphState: {
       canonicalLayout,
       canonicalLayoutViewport: null,
@@ -228,14 +244,48 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
       currentLayout: canonicalLayout,
       ...((merged as { layoutControls?: object }).layoutControls ?? {}),
     },
+    removalControls: {
+      blockedReason: merged.blockedRemovalReason,
+      cancel:
+        (merged as { handleCancelRemoval?: unknown }).handleCancelRemoval ??
+        vi.fn(),
+      confirm:
+        (merged as { handleConfirmRemoval?: unknown }).handleConfirmRemoval ??
+        vi.fn(),
+      deleteEdge: merged.handleEditorEdgeDelete,
+      deleteNode: merged.handleEditorNodeDelete,
+      pendingIntent:
+        (merged as { pendingRemovalIntent?: unknown }).pendingRemovalIntent ??
+        null,
+      requestSelectionNodeRemoval:
+        (merged as { handleSelectionNodeDelete?: unknown })
+          .handleSelectionNodeDelete ?? vi.fn(),
+      ...((merged as { removalControls?: object }).removalControls ?? {}),
+    },
+    visibilityControls: {
+      hiddenNodeClasses: merged.hiddenNodeClasses,
+      isDirty: false,
+      isMenuOpen: merged.hideShowMenuOpen,
+      preset: merged.visibilityPreset,
+      resetPreferences: merged.resetPreferences,
+      setMenuOpen: merged.setHideShowMenuOpen,
+      setPreset: merged.setVisibilityPreset,
+      toggleHiddenNodeClass: merged.toggleHiddenNodeClass,
+      ...((merged as { visibilityControls?: object }).visibilityControls ?? {}),
+    },
     status: {
       hasDocumentBackedLayoutDraft: draftState.source === "current-factory",
+      hasActiveWork: merged.hasActiveWork,
       hasLayoutChanges,
       hasSharedGraphChanges: hasTopologyChanges || hasLayoutChanges,
       hasTopologyChanges,
       isDefinitionLoading: false,
+      isStaleDraft: merged.isStaleDraft,
       isSaving: saveMutation.isPending ?? false,
       preferencesDirty: false,
+      saveBlockedReason:
+        (merged as { saveBlockedReason?: string | null }).saveBlockedReason ??
+        null,
       saveError: saveMutation.error ?? null,
       ...((merged as { status?: object }).status ?? {}),
     },
@@ -362,8 +412,8 @@ describe("CurrentActivityGraphSurface", () => {
     expect(viewModel.handleAddEntityAction).toHaveBeenCalledTimes(1);
     expect(viewModel.setAddMenuOpen).toHaveBeenCalledWith(true);
     expect(viewModel.handleEditorConnect).toHaveBeenCalledTimes(1);
-    expect(viewModel.handleEditorEdgeDelete).toHaveBeenCalledTimes(1);
-    expect(viewModel.handleEditorNodeDelete).toHaveBeenCalledTimes(1);
+    expect(viewModel.removalControls.deleteEdge).toHaveBeenCalledTimes(1);
+    expect(viewModel.removalControls.deleteNode).toHaveBeenCalledTimes(1);
     expect(viewModel.setActiveTool).toHaveBeenCalledWith("connect");
   });
 

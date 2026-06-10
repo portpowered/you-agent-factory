@@ -81,17 +81,20 @@ export function pruneFactoryLayoutEdgesForTopology(
 
   const prunedEdgeIds: string[] = [];
   const keptEdges: FactoryLayoutEdge[] = [];
+  let didChange = false;
 
   for (const edge of edges) {
     if (!edge.id || !validEdgeIds.has(edge.id)) {
       if (edge.id) {
         prunedEdgeIds.push(edge.id);
       }
+      didChange = true;
       continue;
     }
 
     if (edgeLayoutEntryHasInvalidWaypointGeometry(edge)) {
       prunedEdgeIds.push(edge.id);
+      didChange = true;
       continue;
     }
 
@@ -105,17 +108,20 @@ export function pruneFactoryLayoutEdgesForTopology(
       isValidFactoryLayoutPoint(edge.labelPosition)
     ) {
       nextEdge.labelPosition = edge.labelPosition;
+    } else if (edge.labelPosition) {
+      didChange = true;
     }
 
     if (!nextEdge.waypoints?.length && !nextEdge.labelPosition) {
       prunedEdgeIds.push(edge.id);
+      didChange = true;
       continue;
     }
 
     keptEdges.push(nextEdge);
   }
 
-  if (keptEdges.length === edges.length && prunedEdgeIds.length === 0) {
+  if (!didChange && keptEdges.length === edges.length) {
     return { layout, prunedEdgeIds };
   }
 

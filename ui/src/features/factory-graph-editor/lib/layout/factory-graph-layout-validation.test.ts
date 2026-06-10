@@ -344,7 +344,7 @@ describe("factory-graph-layout-validation", () => {
 
   it.each([
     {
-      name: "drops a valid edge when label position is non-finite even if waypoints are finite",
+      name: "drops non-finite label position while preserving finite authored waypoints",
       layout: {
         schemaVersion: 1,
         edges: [
@@ -355,8 +355,13 @@ describe("factory-graph-layout-validation", () => {
           },
         ],
       } satisfies ReturnType<typeof createDefaultFactoryLayout>,
-      expectedPrunedEdgeIds: [VALID_EDGE_ID],
-      expectedEdges: undefined,
+      expectedPrunedEdgeIds: [],
+      expectedEdges: [
+        {
+          id: VALID_EDGE_ID,
+          waypoints: [{ x: 100, y: 120 }],
+        },
+      ],
     },
     {
       name: "preserves duplicate finite waypoints on valid edges while pruning a stale sibling",

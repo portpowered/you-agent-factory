@@ -55,6 +55,44 @@ it("derives graph relations from legacy singular workstation route objects", () 
   );
 });
 
+it("builds pending definitions from legacy singular workstation route objects", () => {
+  const draft = createEmptyFactoryGraphDraft();
+  draft.edgeChanges.additions.push({
+    kind: "workstation-input",
+    source: {
+      kind: "work-state",
+      stateName: "done",
+      workTypeName: "story",
+    },
+    target: {
+      kind: "workstation",
+      name: "draft",
+    },
+  });
+  const pendingFactoryDefinition = buildPendingFactoryDefinition(
+    {
+      ...baseFactoryDefinition,
+      workstations: [
+        {
+          inputs: { state: "queued", workType: "story" },
+          name: "draft",
+          outputs: { state: "done", workType: "story" },
+          worker: "writer",
+        } as NonNullable<typeof baseFactoryDefinition.workstations>[number],
+      ],
+    },
+    draft,
+  );
+
+  expect(pendingFactoryDefinition?.workstations?.[0]?.inputs).toEqual([
+    { state: "queued", workType: "story" },
+    { state: "done", workType: "story" },
+  ]);
+  expect(pendingFactoryDefinition?.workstations?.[0]?.outputs).toEqual([
+    { state: "done", workType: "story" },
+  ]);
+});
+
 it("builds a pending full factory definition while preserving untouched content", () => {
   const draft = createEmptyFactoryGraphDraft();
   draft.additions.workers.push({

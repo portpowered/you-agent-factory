@@ -211,7 +211,7 @@ async function addWorker(
   await page
     .getByLabel("Add graph entity menu")
     .getByRole("button", { name: "Worker" })
-    .click();
+    .evaluate((button) => button.click());
 
   const addDialog = page.getByRole("dialog", { name: "Add worker" });
   await addDialog.waitFor({

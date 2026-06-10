@@ -38,7 +38,6 @@ export function useCurrentActivityGraphEditor(
   } = useHiddenFactoryGraphNodeClasses(factoryDocumentScopeKey);
   const leaveEditorBridge = useGraphEditorLeaveEditorBridge();
   const factoryDocumentState = useCurrentActivityFactoryDocumentState({
-    enabled: editorMode && snapshot.factory?.version == null,
     eventFactory: snapshot.factory,
   });
   const { editableDefinitionQuery, editableGraph, saveEditableDefinition } =

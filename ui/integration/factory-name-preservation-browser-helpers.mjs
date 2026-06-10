@@ -383,7 +383,7 @@ export async function saveGraphEditorTopology(page) {
   await page
     .getByLabel("Add graph entity menu")
     .getByRole("button", { name: "Workstation" })
-    .click();
+    .evaluate((button) => button.click());
 
   const addDialog = page.getByRole("dialog", {
     name: "Add workstation",

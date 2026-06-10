@@ -82,17 +82,18 @@ export function WorkflowActivityBentoCard({
     selection: currentActivitySelection,
     snapshot,
   });
+  const editorControls = viewModel.editorControls;
 
   useEffect(() => {
-    if (!viewModel.editorMode) {
+    if (!editorControls.isEditing) {
       setTopologyEditorBridgeHandlers(null);
       return;
     }
 
     setTopologyEditorBridgeHandlers({
       blockedRemovalReason: viewModel.removalControls.blockedReason,
-      canInteractWithEditor: viewModel.canInteractWithEditor,
-      editorMode: viewModel.editorMode,
+      canInteractWithEditor: editorControls.canInteract,
+      editorMode: editorControls.isEditing,
       requestNodeRemoval: viewModel.removalControls.requestSelectionNodeRemoval,
     });
 
@@ -102,8 +103,8 @@ export function WorkflowActivityBentoCard({
   }, [
     viewModel.removalControls.blockedReason,
     viewModel.removalControls.requestSelectionNodeRemoval,
-    viewModel.canInteractWithEditor,
-    viewModel.editorMode,
+    editorControls.canInteract,
+    editorControls.isEditing,
     setTopologyEditorBridgeHandlers,
   ]);
 
@@ -121,19 +122,19 @@ export function WorkflowActivityBentoCard({
       className="h-full max-h-full min-h-0 overflow-hidden"
       headerAction={
         <CurrentActivityGraphHeaderActions
-          key={`graph-editor-header-${viewModel.editorMode}-${viewModel.status.hasTopologyChanges}-${viewModel.status.hasLayoutChanges}-${viewModel.status.preferencesDirty}`}
+          key={`graph-editor-header-${editorControls.isEditing}-${viewModel.status.hasTopologyChanges}-${viewModel.status.hasLayoutChanges}-${viewModel.status.preferencesDirty}`}
           compact
           dirtySummary={viewModel.status.dirtySummary}
-          editorMode={viewModel.editorMode}
+          editorMode={editorControls.isEditing}
           editorUnavailableClassifierWorkstationName={
-            viewModel.editorUnavailableClassifierWorkstationName
+            editorControls.unavailableClassifierWorkstationName
           }
           hasChanges={viewModel.status.hasSharedGraphChanges}
           headerActions={headerAction}
           isDefinitionLoading={viewModel.status.isDefinitionLoading}
           loadErrorMessage={viewModel.status.loadErrorMessage}
           locale={locale}
-          onToggle={viewModel.handleEditorModeToggle}
+          onToggle={editorControls.toggleMode}
           showModeToggle={false}
         />
       }

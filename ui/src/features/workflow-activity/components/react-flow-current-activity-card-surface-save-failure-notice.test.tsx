@@ -74,6 +74,7 @@ function createViewModelStub(overrides: Record<string, unknown> = {}) {
     handleDiscardPendingChanges: vi.fn(),
     handleEditorConnect: vi.fn(),
     handleEditorEdgeDelete: vi.fn(),
+    handleEditorModeToggle: vi.fn(),
     handleEditorNodeDelete: vi.fn(),
     handleNodesChange: vi.fn(),
     hiddenNodeClasses: new Set(),
@@ -132,6 +133,19 @@ function createViewModelStub(overrides: Record<string, unknown> = {}) {
 
   return {
     ...base,
+    editorControls: {
+      activeTool: base.activeTool,
+      canInteract: base.canInteractWithEditor,
+      connectionNotice: base.connectionNotice,
+      discardPendingChanges: base.handleDiscardPendingChanges,
+      isEditing: base.editorMode,
+      selectTool: base.setActiveTool,
+      toggleMode: base.handleEditorModeToggle,
+      unavailableClassifierWorkstationName:
+        (base as { editorUnavailableClassifierWorkstationName?: string })
+          .editorUnavailableClassifierWorkstationName,
+      ...((base as { editorControls?: object }).editorControls ?? {}),
+    },
     addControls: {
       actions: base.addMenuActions,
       isMenuOpen: base.addMenuOpen,
@@ -151,6 +165,35 @@ function createViewModelStub(overrides: Record<string, unknown> = {}) {
           .requestSaveConfirmation ?? vi.fn(),
       ...((base as { saveControls?: object }).saveControls ?? {}),
     },
+    removalControls: {
+      blockedReason: base.blockedRemovalReason,
+      cancel:
+        (base as { handleCancelRemoval?: unknown }).handleCancelRemoval ??
+        vi.fn(),
+      confirm:
+        (base as { handleConfirmRemoval?: unknown }).handleConfirmRemoval ??
+        vi.fn(),
+      deleteEdge: base.handleEditorEdgeDelete,
+      deleteNode: base.handleEditorNodeDelete,
+      pendingIntent:
+        (base as { pendingRemovalIntent?: unknown }).pendingRemovalIntent ??
+        null,
+      requestSelectionNodeRemoval:
+        (base as { handleSelectionNodeDelete?: unknown })
+          .handleSelectionNodeDelete ?? vi.fn(),
+      ...((base as { removalControls?: object }).removalControls ?? {}),
+    },
+    visibilityControls: {
+      hiddenNodeClasses: base.hiddenNodeClasses,
+      isDirty: false,
+      isMenuOpen: base.hideShowMenuOpen,
+      preset: base.visibilityPreset,
+      resetPreferences: base.resetPreferences,
+      setMenuOpen: base.setHideShowMenuOpen,
+      setPreset: base.setVisibilityPreset,
+      toggleHiddenNodeClass: base.toggleHiddenNodeClass,
+      ...((base as { visibilityControls?: object }).visibilityControls ?? {}),
+    },
     validationControls: {
       factoryDefinition:
         (base as { validationFactoryDefinition?: unknown })
@@ -165,12 +208,17 @@ function createViewModelStub(overrides: Record<string, unknown> = {}) {
     },
     status: {
       hasDocumentBackedLayoutDraft: true,
+      hasActiveWork: base.hasActiveWork,
       hasLayoutChanges: false,
       hasSharedGraphChanges: true,
       hasTopologyChanges: true,
       isDefinitionLoading: false,
+      isStaleDraft: base.isStaleDraft,
       isSaving: saveMutation.isPending ?? false,
       preferencesDirty: false,
+      saveBlockedReason:
+        (base as { saveBlockedReason?: string | null }).saveBlockedReason ??
+        null,
       saveError: saveMutation.error ?? null,
       ...((base as { status?: object }).status ?? {}),
     },

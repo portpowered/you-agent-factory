@@ -66,9 +66,15 @@ function createImportController(): CurrentActivityImportController {
 }
 
 function createViewModelStub() {
+  const discardPendingChanges = vi.fn();
+  const discardEditorChanges = vi.fn();
   return {
-    handleDiscardEditorChanges: vi.fn(),
-    handleDiscardPendingChanges: vi.fn(),
+    editorControls: {
+      discardPendingChanges,
+    },
+    leaveControls: {
+      discardChanges: discardEditorChanges,
+    },
   };
 }
 
@@ -99,7 +105,9 @@ describe("ReactFlowCurrentActivityCardView discard routing", () => {
       screen.getByRole("button", { name: "Trigger surface discard" }),
     );
 
-    expect(viewModel.handleDiscardPendingChanges).toHaveBeenCalledTimes(1);
+    expect(
+      viewModel.editorControls.discardPendingChanges,
+    ).toHaveBeenCalledTimes(1);
   });
 
   it("routes leave-dialog discard to the editor discard handler", () => {
@@ -128,6 +136,6 @@ describe("ReactFlowCurrentActivityCardView discard routing", () => {
       screen.getByRole("button", { name: "Trigger dialog discard" }),
     );
 
-    expect(viewModel.handleDiscardEditorChanges).toHaveBeenCalledTimes(1);
+    expect(viewModel.leaveControls.discardChanges).toHaveBeenCalledTimes(1);
   });
 });

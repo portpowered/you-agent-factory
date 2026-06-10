@@ -421,24 +421,31 @@ function renderViewport({
 
   return render(
     <CurrentActivityGraphViewport
-      activeTool={activeTool}
-      canInteractWithEditor={true}
-      canSaveDraft={false}
-      editorUnavailableClassifierWorkstationName={undefined}
-      editorMode={editorMode}
+      addControls={{}}
+      editorControls={{
+        activeTool,
+        canInteract: true,
+        discardPendingChanges: vi.fn(),
+        isEditing: editorMode,
+        selectTool: vi.fn(),
+        toggleMode: vi.fn(),
+        unavailableClassifierWorkstationName: undefined,
+      }}
       edges={edges}
       flowContainerRef={flowContainerRef}
-      handleDiscardPendingChanges={vi.fn()}
-      handleEditorModeToggle={vi.fn()}
       handleNodesChange={vi.fn()}
-      handleSaveDraft={vi.fn()}
       hasPendingChanges={false}
-      hiddenNodeClasses={new Set()}
-      hideShowMenuOpen={false}
-      onClearPreferences={vi.fn()}
-      onSelectVisibilityPreset={vi.fn()}
-      preferencesDirty={false}
-      visibilityPreset="all"
+      layoutControls={{
+        canMoveLayout: false,
+        canRedo: false,
+        canUndo: false,
+        moveNode: vi.fn(),
+        moveNodesByDelta: vi.fn(),
+        redo: vi.fn(),
+        reset: vi.fn(),
+        undo: vi.fn(),
+        updateViewport: vi.fn(),
+      }}
       headingID="test-heading"
       imports={importController}
       initialFitViewKey="full-graph"
@@ -447,9 +454,17 @@ function renderViewport({
       nodes={nodes}
       onEditorEdgeClick={onEditorEdgeClick}
       onEditorNodeClick={onEditorNodeClick}
-      onHideShowMenuOpenChange={vi.fn()}
-      onToggleHiddenNodeClass={vi.fn()}
-      onSelectTool={vi.fn()}
+      saveControls={{ canSave: false, requestConfirmation: vi.fn() }}
+      visibilityControls={{
+        hiddenNodeClasses: new Set(),
+        isDirty: false,
+        isMenuOpen: false,
+        preset: "all",
+        resetPreferences: vi.fn(),
+        setMenuOpen: vi.fn(),
+        setPreset: vi.fn(),
+        toggleHiddenNodeClass: vi.fn(),
+      }}
     />,
   );
 }

@@ -131,12 +131,15 @@ function buildCurrentActivityGraphEditorStatus(
       ? messages.dirtyStateSummary(args.dirtyStateSummary)
       : null,
     hasDocumentBackedLayoutDraft: args.draftState.source === "current-factory",
+    hasActiveWork: args.hasActiveWork,
     hasLayoutChanges,
     hasSharedGraphChanges,
     hasTopologyChanges,
     isDefinitionLoading: args.editableDefinitionQuery.status === "pending",
+    isStaleDraft: args.isStaleDraft,
     loadErrorMessage: args.editableDefinitionQuery.error?.message,
     preferencesDirty: args.dirtyStateSummary.preferencesDirty,
+    saveBlockedReason: args.saveBlockedReason,
     saveError: args.saveEditableDefinition.error ?? null,
     isSaving: args.saveEditableDefinition.isPending,
   };
@@ -176,6 +179,18 @@ function buildCurrentActivityGraphSaveControls(
     },
     saveBeforeLeaving: args.handleSaveBeforeLeavingEditor,
     summary: args.saveSummary,
+  };
+}
+
+function buildCurrentActivityGraphLeaveControls(
+  args: BuildCurrentActivityGraphEditorValueArgs,
+) {
+  return {
+    cancel: () => {
+      args.setIsConfirmingLeaveEditor(false);
+    },
+    discardChanges: args.handleDiscardEditorChanges,
+    isOpen: args.isConfirmingLeaveEditor,
   };
 }
 
@@ -231,15 +246,49 @@ function buildCurrentActivityGraphRemovalControls(
   };
 }
 
+function buildCurrentActivityGraphVisibilityControls(
+  args: BuildCurrentActivityGraphEditorValueArgs,
+) {
+  return {
+    hiddenNodeClasses: args.hiddenNodeClasses,
+    isDirty: args.dirtyStateSummary.preferencesDirty,
+    isMenuOpen: args.hideShowMenuOpen,
+    preset: args.visibilityPreset,
+    resetPreferences: args.resetPreferences,
+    setMenuOpen: args.setHideShowMenuOpen,
+    setPreset: args.setVisibilityPreset,
+    toggleHiddenNodeClass: args.toggleHiddenNodeClass,
+  };
+}
+
+function buildCurrentActivityGraphEditorControls(
+  args: BuildCurrentActivityGraphEditorValueArgs,
+) {
+  return {
+    activeTool: args.activeTool,
+    canInteract: args.canInteractWithEditor,
+    connectionNotice: args.connectionNotice,
+    discardPendingChanges: args.handleDiscardPendingChanges,
+    isEditing: args.editorMode,
+    selectTool: args.setActiveTool,
+    toggleMode: args.handleEditorModeToggle,
+    unavailableClassifierWorkstationName:
+      args.editorUnavailableClassifierWorkstationName,
+  };
+}
+
 export function buildCurrentActivityGraphEditorValue(
   args: BuildCurrentActivityGraphEditorValueArgs,
 ) {
   const addControls = buildCurrentActivityGraphAddControls(args);
+  const editorControls = buildCurrentActivityGraphEditorControls(args);
   const status = buildCurrentActivityGraphEditorStatus(args);
   const layoutControls = buildCurrentActivityGraphLayoutControls(args);
+  const leaveControls = buildCurrentActivityGraphLeaveControls(args);
   const removalControls = buildCurrentActivityGraphRemovalControls(args);
   const saveControls = buildCurrentActivityGraphSaveControls(args);
   const validationControls = buildCurrentActivityGraphValidationControls(args);
+  const visibilityControls = buildCurrentActivityGraphVisibilityControls(args);
 
   return {
     activeTool: args.activeTool,
@@ -255,8 +304,10 @@ export function buildCurrentActivityGraphEditorValue(
     documentSave: args.documentSave,
     connectionNotice: args.connectionNotice,
     currentFactoryDefinition: args.currentFactoryDefinition,
+    editorControls,
     graphState: args.graphState,
     layoutControls,
+    leaveControls,
     addEdgeWaypoint: args.addEdgeWaypoint,
     moveEdgeWaypoint: args.moveEdgeWaypoint,
     removeEdgeWaypoint: args.removeEdgeWaypoint,
@@ -319,5 +370,6 @@ export function buildCurrentActivityGraphEditorValue(
     setVisibilityPreset: args.setVisibilityPreset,
     toggleHiddenNodeClass: args.toggleHiddenNodeClass,
     visibilityPreset: args.visibilityPreset,
+    visibilityControls,
   };
 }

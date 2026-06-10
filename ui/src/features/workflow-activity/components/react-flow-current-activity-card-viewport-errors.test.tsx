@@ -317,31 +317,47 @@ function renderViewport({
 
   return render(
     <CurrentActivityGraphViewport
-      activeTool={null}
-      canInteractWithEditor={false}
-      canSaveDraft={false}
-      editorMode={false}
+      addControls={{}}
+      editorControls={{
+        activeTool: null,
+        canInteract: false,
+        discardPendingChanges: vi.fn(),
+        isEditing: false,
+        selectTool: vi.fn(),
+        toggleMode: vi.fn(),
+      }}
       edges={edges}
       flowContainerRef={flowContainerRef}
-      handleDiscardPendingChanges={vi.fn()}
       handleNodesChange={vi.fn()}
-      handleSaveDraft={vi.fn()}
       hasPendingChanges={false}
-      hiddenNodeClasses={new Set()}
-      hideShowMenuOpen={false}
-      onClearPreferences={vi.fn()}
-      onSelectVisibilityPreset={vi.fn()}
-      preferencesDirty={false}
-      visibilityPreset="all"
+      layoutControls={{
+        canMoveLayout: false,
+        canRedo: false,
+        canUndo: false,
+        moveNode: vi.fn(),
+        moveNodesByDelta: vi.fn(),
+        redo: vi.fn(),
+        reset: vi.fn(),
+        undo: vi.fn(),
+        updateViewport: vi.fn(),
+      }}
       headingID="test-heading"
       imports={importController}
       initialFitViewKey="full-graph"
       initialFitViewOptions={{ padding: 0.18 }}
       nodeTypes={{}}
       nodes={nodes}
-      onHideShowMenuOpenChange={vi.fn()}
-      onToggleHiddenNodeClass={vi.fn()}
-      onSelectTool={vi.fn()}
+      saveControls={{ canSave: false, requestConfirmation: vi.fn() }}
+      visibilityControls={{
+        hiddenNodeClasses: new Set(),
+        isDirty: false,
+        isMenuOpen: false,
+        preset: "all",
+        resetPreferences: vi.fn(),
+        setMenuOpen: vi.fn(),
+        setPreset: vi.fn(),
+        toggleHiddenNodeClass: vi.fn(),
+      }}
     />,
   );
 }

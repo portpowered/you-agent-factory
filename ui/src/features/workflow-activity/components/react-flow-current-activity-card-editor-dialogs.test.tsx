@@ -204,6 +204,32 @@ function createViewModelStub(overrides: Record<string, unknown> = {}) {
       summary: merged.saveSummary,
       ...((merged as { saveControls?: object }).saveControls ?? {}),
     },
+    leaveControls: {
+      cancel: () => {
+        (merged.setIsConfirmingLeaveEditor as (open: boolean) => void)(false);
+      },
+      discardChanges: merged.handleDiscardEditorChanges,
+      isOpen: merged.leaveDialogOpen,
+      ...((merged as { leaveControls?: object }).leaveControls ?? {}),
+    },
+    removalControls: {
+      blockedReason:
+        (merged as { blockedRemovalReason?: unknown }).blockedRemovalReason ??
+        null,
+      cancel: merged.handleCancelRemoval,
+      confirm: merged.handleConfirmRemoval,
+      deleteEdge:
+        (merged as { handleEditorEdgeDelete?: unknown })
+          .handleEditorEdgeDelete ?? vi.fn(),
+      deleteNode:
+        (merged as { handleEditorNodeDelete?: unknown })
+          .handleEditorNodeDelete ?? vi.fn(),
+      pendingIntent: merged.pendingRemovalIntent,
+      requestSelectionNodeRemoval:
+        (merged as { handleSelectionNodeDelete?: unknown })
+          .handleSelectionNodeDelete ?? vi.fn(),
+      ...((merged as { removalControls?: object }).removalControls ?? {}),
+    },
     status: {
       isSaving: saveMutation.isPending ?? false,
       saveError: saveMutation.error ?? null,
@@ -277,7 +303,7 @@ describe("CurrentActivityGraphEditorDialogs", () => {
       screen.getByRole("button", { name: "Trigger leave discard" }),
     );
     expect(discardEditorChanges).toHaveBeenCalledTimes(1);
-    expect(viewModel.handleDiscardEditorChanges).not.toHaveBeenCalled();
+    expect(viewModel.leaveControls.discardChanges).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Trigger leave save" }));
     expect(viewModel.handleSaveBeforeLeavingEditor).toHaveBeenCalledTimes(1);
@@ -337,14 +363,14 @@ describe("CurrentActivityGraphEditorDialogs", () => {
         name: /Remove story work-type\? cancel/i,
       }),
     );
-    expect(viewModel.handleCancelRemoval).toHaveBeenCalledTimes(1);
+    expect(viewModel.removalControls.cancel).toHaveBeenCalledTimes(1);
 
     fireEvent.click(
       screen.getByRole("button", {
         name: /Remove story work-type\? confirm/i,
       }),
     );
-    expect(viewModel.handleConfirmRemoval).toHaveBeenCalledTimes(1);
+    expect(viewModel.removalControls.confirm).toHaveBeenCalledTimes(1);
   });
 
   it("suppresses save-dismiss callbacks while a save is pending and skips optional import chrome when disabled", () => {

@@ -61,6 +61,11 @@ const editableDocument: CanonicalFactoryDefinition & {
   },
 };
 
+const editableDashboardSnapshot = {
+  ...semanticWorkflowDashboardSnapshot,
+  factory: editableDocument,
+};
+
 function createEmptyDraft() {
   return {
     additions: {
@@ -337,7 +342,7 @@ describe("useCurrentActivityGraphEditor live validation refresh", () => {
     );
 
     const { rerender, result } = renderHook(
-      () => useCurrentActivityGraphEditor(semanticWorkflowDashboardSnapshot),
+      () => useCurrentActivityGraphEditor(editableDashboardSnapshot),
       { wrapper: createWrapper(queryClient) },
     );
 
@@ -404,7 +409,7 @@ describe("useCurrentActivityGraphEditor live validation refresh", () => {
     };
 
     const { rerender, result } = renderHook(
-      () => useCurrentActivityGraphEditor(semanticWorkflowDashboardSnapshot),
+      () => useCurrentActivityGraphEditor(editableDashboardSnapshot),
       { wrapper: createWrapper(queryClient) },
     );
 

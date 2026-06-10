@@ -141,10 +141,10 @@ export function ReactFlowCurrentActivityCardView(
       ? imports.importPreviewState
       : null;
   const handleDiscardPendingChanges = () => {
-    viewModel.handleDiscardPendingChanges();
+    viewModel.editorControls.discardPendingChanges();
   };
   const handleDiscardEditorChanges = () => {
-    viewModel.handleDiscardEditorChanges();
+    viewModel.leaveControls.discardChanges();
   };
 
   return (

@@ -451,15 +451,12 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
       canInteractWithEditor: false,
       draftState: defaultDraftState,
       editorMode: false,
-      graphState: {
-        canonicalLayout: { schemaVersion: 1 },
+      graphProjection: {
         canonicalLayoutViewport: null,
         displayFactoryDefinition: null,
         graphLayout: { edges: [], height: 0, nodes: [], width: 0 },
         pendingAdditionEdgeIds: new Set<string>(),
         positionedGraphLayout: { edges: [], height: 0, nodes: [], width: 0 },
-        renderedLayout: { schemaVersion: 1 },
-        topologyGraphLayout: { edges: [], height: 0, nodes: [], width: 0 },
         visibleGraphEdges: [],
       },
       handleConnectionAnchorClick: vi.fn(),
@@ -850,16 +847,16 @@ function renderViewport({
   activeTool?: "add" | "connect" | "delete" | null;
   addMenuActions?: Parameters<
     typeof CurrentActivityGraphViewport
-  >[0]["addMenuActions"];
+  >[0]["addControls"]["actions"];
   editorMode?: boolean;
   includeMoveLayoutNode?: boolean;
   moveLayoutNode?: Parameters<
     typeof CurrentActivityGraphViewport
-  >[0]["moveLayoutNode"];
+  >[0]["layoutControls"]["moveNode"];
   nodes?: Parameters<typeof CurrentActivityGraphViewport>[0]["nodes"];
   onAddAction?: Parameters<
     typeof CurrentActivityGraphViewport
-  >[0]["onAddAction"];
+  >[0]["addControls"]["startAction"];
   onConnect?: Parameters<typeof CurrentActivityGraphViewport>[0]["onConnect"];
   onEditorEdgeClick?: Parameters<
     typeof CurrentActivityGraphViewport
@@ -872,37 +869,55 @@ function renderViewport({
 
   return render(
     <CurrentActivityGraphViewport
-      activeTool={activeTool}
-      addMenuActions={addMenuActions}
-      canInteractWithEditor={editorMode}
-      canSaveDraft={false}
-      editorMode={editorMode}
+      addControls={{
+        actions: addMenuActions,
+        isMenuOpen: false,
+        setMenuOpen: vi.fn(),
+        startAction: onAddAction,
+      }}
+      editorControls={{
+        activeTool,
+        canInteract: editorMode,
+        discardPendingChanges: vi.fn(),
+        isEditing: editorMode,
+        selectTool: vi.fn(),
+        toggleMode: vi.fn(),
+      }}
       edges={[]}
       flowContainerRef={flowContainerRef}
-      handleDiscardPendingChanges={vi.fn()}
       handleNodesChange={vi.fn()}
-      handleSaveDraft={vi.fn()}
       hasPendingChanges={false}
       headingID="test-heading"
-      hiddenNodeClasses={new Set()}
-      hideShowMenuOpen={false}
-      onClearPreferences={vi.fn()}
-      onSelectVisibilityPreset={vi.fn()}
-      preferencesDirty={false}
-      visibilityPreset="all"
+      layoutControls={{
+        canMoveLayout: includeMoveLayoutNode,
+        canRedo: false,
+        canUndo: false,
+        moveNode: moveLayoutNode,
+        moveNodesByDelta: vi.fn(),
+        redo: vi.fn(),
+        reset: vi.fn(),
+        undo: vi.fn(),
+        updateViewport: vi.fn(),
+      }}
       imports={mockImportController}
       initialFitViewKey="full-graph"
       initialFitViewOptions={{ padding: 0.18 }}
-      moveLayoutNode={includeMoveLayoutNode ? moveLayoutNode : undefined}
       nodeTypes={{}}
       nodes={nodes}
-      onAddAction={onAddAction}
       onConnect={onConnect}
       onEditorEdgeClick={onEditorEdgeClick}
       onEditorNodeClick={onEditorNodeClick}
-      onHideShowMenuOpenChange={vi.fn()}
-      onToggleHiddenNodeClass={vi.fn()}
-      onSelectTool={vi.fn()}
+      saveControls={{ canSave: false, requestConfirmation: vi.fn() }}
+      visibilityControls={{
+        hiddenNodeClasses: new Set(),
+        isDirty: false,
+        isMenuOpen: false,
+        preset: "all",
+        resetPreferences: vi.fn(),
+        setMenuOpen: vi.fn(),
+        setPreset: vi.fn(),
+        toggleHiddenNodeClass: vi.fn(),
+      }}
     />,
   );
 }

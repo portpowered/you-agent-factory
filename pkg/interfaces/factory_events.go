@@ -27,15 +27,17 @@ type FactoryEventStream struct {
 
 // InitialStructurePayload describes the topology available before work moves.
 type InitialStructurePayload struct {
-	Name         string               `json:"name,omitempty"`
-	Resources    []FactoryResource    `json:"resources,omitempty"`
-	Constraints  []FactoryConstraint  `json:"constraints,omitempty"`
-	Layout       *FactoryLayoutConfig `json:"layout,omitempty"`
-	Workers      []FactoryWorker      `json:"workers,omitempty"`
-	WorkTypes    []FactoryWorkType    `json:"work_types,omitempty"`
-	Workstations []FactoryWorkstation `json:"workstations,omitempty"`
-	Places       []FactoryPlace       `json:"places,omitempty"`
-	Relations    []FactoryRelation    `json:"relations,omitempty"`
+	Name             string                          `json:"name,omitempty"`
+	Version          *FactoryVersion                 `json:"version,omitempty"`
+	Resources        []FactoryResource               `json:"resources,omitempty"`
+	ResourceManifest *PortableResourceManifestConfig `json:"resource_manifest,omitempty"`
+	Constraints      []FactoryConstraint             `json:"constraints,omitempty"`
+	Layout           *FactoryLayoutConfig            `json:"layout,omitempty"`
+	Workers          []FactoryWorker                 `json:"workers,omitempty"`
+	WorkTypes        []FactoryWorkType               `json:"work_types,omitempty"`
+	Workstations     []FactoryWorkstation            `json:"workstations,omitempty"`
+	Places           []FactoryPlace                  `json:"places,omitempty"`
+	Relations        []FactoryRelation               `json:"relations,omitempty"`
 }
 
 // WorkInputPayload describes a work item submitted to the factory.

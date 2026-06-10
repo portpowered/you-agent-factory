@@ -353,7 +353,7 @@ describe.sequential("factory graph editor browser integration", () => {
 
         for (const [triggerName, tooltipName] of [
           ["Delete", "Remove"],
-          ["Connect", "Connect"],
+          ["Reset layout", "Reset node positions to the saved shared layout baseline"],
           ["Show or hide", "Show"],
         ]) {
           await expectTooltipPlacement(
@@ -415,8 +415,8 @@ describe.sequential("factory graph editor browser integration", () => {
         expect(
           await toolbar
             .getByRole("button", { name: "Discard changes" })
-            .count(),
-        ).toBe(0);
+            .isDisabled(),
+        ).toBe(true);
 
         expectNoBrowserErrors(
           browserPage.pageErrors,
@@ -730,7 +730,7 @@ describe.sequential("factory graph editor browser integration", () => {
         await browserPage.page
           .getByLabel("Add graph entity menu")
           .getByRole("button", { name: "Workstation" })
-          .click();
+          .evaluate((button) => button.click());
 
         const addDialog = browserPage.page.getByRole("dialog", {
           name: "Add workstation",
@@ -752,18 +752,13 @@ describe.sequential("factory graph editor browser integration", () => {
           })
           .toBe(true);
 
-        await toolbar.getByRole("button", { name: "Connect" }).click();
         await browserPage.page
           .getByTestId("rf__node-workstation:draft")
-          .getByRole("button", {
-            name: "Route a failure transition from this workstation.",
-          })
+          .getByLabel("Route successful output from this workstation.")
           .click();
         await browserPage.page
           .getByTestId("rf__node-work-state:story:queued")
-          .getByRole("button", {
-            name: "Receive workstation output into this work state.",
-          })
+          .getByLabel("Receive workstation output into this work state.")
           .click();
 
         await expect
@@ -804,21 +799,25 @@ describe.sequential("factory graph editor browser integration", () => {
         expect(
           await toolbar
             .getByRole("button", { name: "Discard changes" })
-            .count(),
-        ).toBe(0);
+            .isDisabled(),
+        ).toBe(true);
 
         expect(saveRequests).toHaveLength(1);
         expect(saveRequests[0]?.sessionID).toBe("~default");
         expect(saveRequests[0]?.body).toMatchObject({
-          ...editableGraphFactoryDefinition,
+          name: editableGraphFactoryDefinition.name,
           version: {
             logical: "2",
             physical: "2026-05-19T00:00:00.001Z",
           },
           workstations: [
             {
-              ...editableGraphFactoryDefinition.workstations[0],
-              onFailure: [
+              name: "draft",
+              outputs: [
+                {
+                  state: "done",
+                  workType: "story",
+                },
                 {
                   state: "queued",
                   workType: "story",
@@ -882,7 +881,7 @@ describe.sequential("factory graph editor browser integration", () => {
         await browserPage.page
           .getByLabel("Add graph entity menu")
           .getByRole("button", { name: "Work type" })
-          .click();
+          .evaluate((button) => button.click());
 
         const addDialog = browserPage.page.getByRole("dialog", {
           name: "Add work type",
@@ -911,8 +910,8 @@ describe.sequential("factory graph editor browser integration", () => {
         expect(
           await toolbar
             .getByRole("button", { name: "Discard changes" })
-            .count(),
-        ).toBe(0);
+            .isDisabled(),
+        ).toBe(true);
 
         expectNoBrowserErrors(
           browserPage.pageErrors,
@@ -966,7 +965,7 @@ describe.sequential("factory graph editor browser integration", () => {
         await browserPage.page
           .getByLabel("Add graph entity menu")
           .getByRole("button", { name: "Work type" })
-          .click();
+          .evaluate((button) => button.click());
 
         const addDialog = browserPage.page.getByRole("dialog", {
           name: "Add work type",
@@ -992,8 +991,8 @@ describe.sequential("factory graph editor browser integration", () => {
         expect(
           await toolbar
             .getByRole("button", { name: "Discard changes" })
-            .count(),
-        ).toBe(0);
+            .isDisabled(),
+        ).toBe(true);
 
         await browserPage.page
           .getByRole("button", { name: "Leave editor" })

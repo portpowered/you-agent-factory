@@ -300,27 +300,12 @@ describe("useCurrentActivityGraphViewModel node state", () => {
       activeTool: null,
       canInteractWithEditor: true,
       editorMode: true,
-      graphState: {
-        canonicalLayout: {
-          nodes: [
-            {
-              id: "work-state:story:queued",
-              position: { x: 120, y: 80 },
-            },
-            {
-              id: "workstation:review",
-              position: { x: 360, y: 120 },
-            },
-          ],
-          schemaVersion: 1,
-        },
+      graphProjection: {
         canonicalLayoutViewport: null,
         displayFactoryDefinition: baseFactoryDefinition,
         graphLayout,
         pendingAdditionEdgeIds: new Set<string>(),
         positionedGraphLayout: graphLayout,
-        renderedLayout: { schemaVersion: 1 },
-        topologyGraphLayout: graphLayout,
         visibleGraphEdges: [],
       },
       handleConnectionAnchorClick: vi.fn(),

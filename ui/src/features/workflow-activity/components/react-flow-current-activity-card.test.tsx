@@ -213,7 +213,7 @@ function currentFactoryDocumentFromSnapshot(
 
 function dashboardSnapshotWithEditableFactory(): DashboardSnapshot {
   const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
-  snapshot.factory = structuredClone(baseFactoryDefinition);
+  snapshot.factory = structuredClone(baseFactoryDefinitionDocument);
   return snapshot;
 }
 
@@ -711,7 +711,11 @@ function dashboardSnapshotWithActiveWorkItemCount(
 
   snapshot.runtime.in_flight_dispatch_count = count;
 
-  return refreshFactoryFromTopology(snapshot);
+  const refreshedSnapshot = refreshFactoryFromTopology(snapshot);
+  if (refreshedSnapshot.factory) {
+    refreshedSnapshot.factory.version = baseFactoryDefinitionDocument.version;
+  }
+  return refreshedSnapshot;
 }
 
 function dashboardSnapshotWithActiveImplementWorkstation(): DashboardSnapshot {
@@ -1390,9 +1394,9 @@ function registerCurrentActivityCardEditorChromeTests(): void {
         ],
       },
     };
+    snapshot.factory = savedDocument;
 
     renderCurrentActivity({
-      currentFactoryDocument: savedDocument,
       snapshot,
     });
 

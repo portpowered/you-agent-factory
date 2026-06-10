@@ -525,13 +525,14 @@ function toPositionedEdges(
 export function dashboardWorkstationFromFactory(
   workstation: FactoryWorkstation,
 ): DashboardWorkstationNode {
+  const inputRoutes = normalizedWorkstationRoute(workstation.inputs) ?? [];
   const outputRoutes = dashboardWorkstationOutputRoutes(workstation);
 
   return {
-    input_place_ids: (workstation.inputs ?? []).map((input) =>
+    input_place_ids: inputRoutes.map((input) =>
       workStatePlaceId(workstationIOWorkType(input), input.state),
     ),
-    input_places: (workstation.inputs ?? []).map((input) => ({
+    input_places: inputRoutes.map((input) => ({
       kind: "work_state",
       place_id: workStatePlaceId(workstationIOWorkType(input), input.state),
       state_value: input.state,

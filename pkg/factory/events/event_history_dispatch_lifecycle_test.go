@@ -1,6 +1,7 @@
 package events
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -152,5 +153,82 @@ func assertDispatchLifecycleEventType(
 	}
 	if event.Context.DispatchId == nil || *event.Context.DispatchId != "dispatch-js-1" {
 		t.Fatalf("dispatch id = %#v, want dispatch-js-1 for %s", event.Context.DispatchId, wantType)
+	}
+}
+
+func TestFailureDetailsForResult_NonFailedResultsOmitFailureDetails(t *testing.T) {
+	reason, message := failureDetailsForResult(interfaces.WorkResult{
+		DispatchID:   "dispatch-rejected",
+		TransitionID: "build",
+		Outcome:      interfaces.OutcomeRejected,
+		Feedback:     "needs revision",
+	})
+
+	if reason != "" || message != "" {
+		t.Fatalf("failure details = %q/%q, want empty for rejected result", reason, message)
+	}
+}
+
+func TestFailureDetailsForResult_FailedWorkerErrorUsesStableFailureDetails(t *testing.T) {
+	reason, message := failureDetailsForResult(interfaces.WorkResult{
+		DispatchID:   "dispatch-worker-error",
+		TransitionID: "build",
+		Outcome:      interfaces.OutcomeFailed,
+		Error:        "script exited with code 1",
+	})
+
+	if reason != failureReasonWorkerError {
+		t.Fatalf("failure reason = %q, want %q", reason, failureReasonWorkerError)
+	}
+	if message != "script exited with code 1" {
+		t.Fatalf("failure message = %q, want script error", message)
+	}
+}
+
+func TestFailureDetailsForResult_FailureMetadataOverridesWorkerErrorReason(t *testing.T) {
+	reason, message := failureDetailsForResult(interfaces.WorkResult{
+		DispatchID:      "dispatch-timeout",
+		TransitionID:    "build",
+		Outcome:         interfaces.OutcomeFailed,
+		Error:           "provider error: timeout: context deadline exceeded",
+		FailureMetadata: &interfaces.WorkFailureMetadata{Type: interfaces.WorkFailureTypeTimeout},
+	})
+
+	if reason != string(interfaces.WorkFailureTypeTimeout) {
+		t.Fatalf("failure reason = %q, want %q", reason, interfaces.WorkFailureTypeTimeout)
+	}
+	if message != "provider error: timeout: context deadline exceeded" {
+		t.Fatalf("failure message = %q, want preserved rendered timeout text", message)
+	}
+}
+
+func TestFailureDetailsForResult_ClassifierInvalidOutputPreservesRawOutputEvidence(t *testing.T) {
+	reason, message := failureDetailsForResult(interfaces.WorkResult{
+		DispatchID:   "dispatch-classifier-invalid",
+		TransitionID: "classify",
+		Outcome:      interfaces.OutcomeFailed,
+		Error:        `classifier output invalid: expected plain string label (raw output: "{\"label\":\"approved\"}")`,
+	})
+
+	if reason != failureReasonWorkerError {
+		t.Fatalf("failure reason = %q, want %q", reason, failureReasonWorkerError)
+	}
+	if !strings.Contains(message, `raw output: "{\"label\":\"approved\"}"`) {
+		t.Fatalf("failure message = %q, want raw output evidence", message)
+	}
+}
+
+func TestFailureDetailsForResult_FailedWithoutDetailsUsesUnavailableMessage(t *testing.T) {
+	reason, message := failureDetailsForResult(interfaces.WorkResult{
+		DispatchID:   "dispatch-unknown",
+		TransitionID: "build",
+		Outcome:      interfaces.OutcomeFailed,
+	})
+
+	if reason != failureReasonUnknown {
+		t.Fatalf("failure reason = %q, want %q", reason, failureReasonUnknown)
+	}
+	if message != failureMessageUnavailable {
+		t.Fatalf("failure message = %q, want unavailable message", message)
 	}
 }

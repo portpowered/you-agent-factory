@@ -383,44 +383,52 @@ function renderViewport({
 
   return render(
     <CurrentActivityGraphViewport
-      activeTool={null}
-      canInteractWithEditor={true}
-      canRedoLayout={canRedoLayout}
-      canSaveDraft={false}
-      canUndoLayout={canUndoLayout}
+      addControls={{}}
       canonicalLayoutViewport={canonicalLayoutViewport}
-      editorUnavailableClassifierWorkstationName={undefined}
-      editorMode={editorMode}
+      editorControls={{
+        activeTool: null,
+        canInteract: true,
+        discardPendingChanges: vi.fn(),
+        isEditing: editorMode,
+        selectTool: vi.fn(),
+        toggleMode: vi.fn(),
+        unavailableClassifierWorkstationName: undefined,
+      }}
       edges={[]}
       flowContainerRef={flowContainerRef}
       flowInstanceRef={flowInstanceRef}
-      handleDiscardPendingChanges={vi.fn()}
-      handleEditorModeToggle={vi.fn()}
       handleNodesChange={vi.fn()}
-      handleSaveDraft={vi.fn()}
       hasPendingChanges={false}
-      hiddenNodeClasses={new Set()}
-      hideShowMenuOpen={false}
-      onClearPreferences={vi.fn()}
-      onSelectVisibilityPreset={vi.fn()}
-      preferencesDirty={false}
-      visibilityPreset="all"
       headingID="test-heading"
       imports={importController}
       initialFitViewKey="full-graph"
       initialFitViewOptions={{ padding: 0.18 }}
-      moveLayoutNode={includeMoveLayoutNode ? moveLayoutNode : undefined}
-      moveLayoutNodesByDelta={moveLayoutNodesByDelta}
+      layoutControls={{
+        canMoveLayout: includeMoveLayoutNode,
+        canRedo: canRedoLayout,
+        canUndo: canUndoLayout,
+        moveNode: moveLayoutNode,
+        moveNodesByDelta: moveLayoutNodesByDelta,
+        redo: onRedoLayout,
+        reset: vi.fn(),
+        undo: onUndoLayout,
+        updateViewport: updateLayoutViewport,
+      }}
       nodeTypes={{}}
       nodes={nodes}
       onEditorEdgeClick={vi.fn()}
       onEditorNodeClick={vi.fn()}
-      onHideShowMenuOpenChange={vi.fn()}
-      onRedoLayout={onRedoLayout}
-      onToggleHiddenNodeClass={vi.fn()}
-      onUndoLayout={onUndoLayout}
-      onSelectTool={vi.fn()}
-      updateLayoutViewport={updateLayoutViewport}
+      saveControls={{ canSave: false, requestConfirmation: vi.fn() }}
+      visibilityControls={{
+        hiddenNodeClasses: new Set(),
+        isDirty: false,
+        isMenuOpen: false,
+        preset: "all",
+        resetPreferences: vi.fn(),
+        setMenuOpen: vi.fn(),
+        setPreset: vi.fn(),
+        toggleHiddenNodeClass: vi.fn(),
+      }}
     />,
   );
 }

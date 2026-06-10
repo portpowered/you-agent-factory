@@ -76,8 +76,9 @@ function CurrentActivityGraphSurfaceContent({
   const flowContainerRef = useRef<HTMLElement | null>(null);
   const flowInstanceRef = useRef<ReactFlowInstance | null>(null);
   const saveError = model.status.saveError;
+  const editorControls = model.editorControls;
   const editorValidationProjection = useMemo(() => {
-    if (!model.editorMode) {
+    if (!editorControls.isEditing) {
       return model.validationControls.projection;
     }
 
@@ -90,12 +91,12 @@ function CurrentActivityGraphSurfaceContent({
       saveErrorTargets,
     );
   }, [
-    model.editorMode,
+    editorControls.isEditing,
     model.validationControls.projection,
     model.validationControls.targets,
     saveError,
   ]);
-  const validationSelectionMessages = model.editorMode
+  const validationSelectionMessages = editorControls.isEditing
     ? validationMessagesForGraphSelection({
         factoryDefinition:
           model.validationControls.factoryDefinition ?? undefined,
@@ -106,7 +107,7 @@ function CurrentActivityGraphSurfaceContent({
           selection?.kind === "state-node" ? selection.placeId : undefined,
       })
     : [];
-  const saveFailureMessages = model.editorMode
+  const saveFailureMessages = editorControls.isEditing
     ? saveErrorNoticeMessages(saveError)
     : [];
   const [dismissedSaveFailureRevision, setDismissedSaveFailureRevision] =
@@ -123,10 +124,10 @@ function CurrentActivityGraphSurfaceContent({
   const removalControls = model.removalControls;
   const currentLayout = layoutControls.currentLayout;
   const waypointEditor = useFactoryGraphEdgeWaypointEditor({
-    activeTool: model.activeTool,
+    activeTool: editorControls.activeTool,
     addEdgeWaypoint: layoutControls.addEdgeWaypoint,
-    canInteractWithEditor: model.canInteractWithEditor,
-    editorMode: model.editorMode,
+    canInteractWithEditor: editorControls.canInteract,
+    editorMode: editorControls.isEditing,
     handleEditorEdgeDelete: removalControls.deleteEdge,
     layout: currentLayout,
     locale,
@@ -143,9 +144,8 @@ function CurrentActivityGraphSurfaceContent({
       }),
     [currentLayout, model.edges, waypointEditor.selectedWaypointEdgeId],
   );
-  const canPersistLayoutChanges = layoutControls.canMoveLayout;
 
-  if (!snapshotHasObserverGraph(snapshot) && !model.editorMode) {
+  if (!snapshotHasObserverGraph(snapshot) && !editorControls.isEditing) {
     return <EmptyCurrentActivityState locale={locale} />;
   }
 
@@ -188,15 +188,15 @@ function CurrentActivityGraphSurfaceContent({
           {removalControls.blockedReason}
         </FactoryGraphEditorNotice>
       ) : null}
-      {model.connectionNotice ? (
+      {editorControls.connectionNotice ? (
         <FactoryGraphEditorNotice
           title={messages.noticeConnectionBlockedTitle}
           tone="warning"
         >
-          {model.connectionNotice}
+          {editorControls.connectionNotice}
         </FactoryGraphEditorNotice>
       ) : null}
-      {model.hasActiveWork && model.status.hasTopologyChanges ? (
+      {model.status.hasActiveWork && model.status.hasTopologyChanges ? (
         <FactoryGraphEditorNotice
           title={messages.noticeTopologyBlockedTitle}
           tone="danger"
@@ -204,7 +204,7 @@ function CurrentActivityGraphSurfaceContent({
           {messages.noticeTopologyBlockedDescription}
         </FactoryGraphEditorNotice>
       ) : null}
-      {model.isStaleDraft ? (
+      {model.status.isStaleDraft ? (
         <FactoryGraphEditorNotice
           title={messages.noticeStaleTitle}
           tone="warning"
@@ -216,31 +216,22 @@ function CurrentActivityGraphSurfaceContent({
         flowContainerRef={flowContainerRef}
         flowInstanceRef={flowInstanceRef}
         moveLayoutNode={
-          canPersistLayoutChanges ? layoutControls.moveNode : undefined
+          layoutControls.canMoveLayout ? layoutControls.moveNode : undefined
         }
         nodes={model.nodes}
       />
       <CurrentActivityGraphViewport
-        activeTool={model.activeTool}
-        addMenuActions={model.addControls.actions}
-        canInteractWithEditor={model.canInteractWithEditor}
-        canRedoLayout={layoutControls.canRedo}
-        canSaveDraft={model.saveControls.canSave}
-        canUndoLayout={layoutControls.canUndo}
-        editorUnavailableClassifierWorkstationName={
-          model.editorUnavailableClassifierWorkstationName
-        }
-        editorMode={model.editorMode}
+        addControls={model.addControls}
+        editorControls={{
+          ...editorControls,
+          discardPendingChanges:
+            discardPendingChanges ?? editorControls.discardPendingChanges,
+        }}
         edgeTypes={FACTORY_GRAPH_EDGE_TYPES}
         edges={viewportEdges}
         flowContainerRef={flowContainerRef}
         flowInstanceRef={flowInstanceRef}
-        handleDiscardPendingChanges={
-          discardPendingChanges ?? model.handleDiscardPendingChanges
-        }
-        handleEditorModeToggle={model.handleEditorModeToggle}
         handleNodesChange={model.handleNodesChange}
-        handleSaveDraft={model.saveControls.requestConfirmation}
         hasPendingChanges={model.status.hasSharedGraphChanges}
         headingID={headingID}
         imports={imports}
@@ -248,19 +239,11 @@ function CurrentActivityGraphSurfaceContent({
         initialFitViewKey={model.initialFitViewKey}
         initialFitViewOptions={model.initialFitViewOptions}
         isSavingDraft={model.status.isSaving}
+        layoutControls={layoutControls}
         locale={locale}
         nodeTypes={NODE_TYPES}
         nodes={model.nodes}
-        onAddAction={model.addControls.startAction}
-        onAddMenuOpenChange={model.addControls.setMenuOpen}
-        hiddenNodeClasses={model.hiddenNodeClasses}
-        hideShowMenuOpen={model.hideShowMenuOpen}
-        onClearPreferences={model.resetPreferences}
-        onHideShowMenuOpenChange={model.setHideShowMenuOpen}
-        onSelectVisibilityPreset={model.setVisibilityPreset}
-        onToggleHiddenNodeClass={model.toggleHiddenNodeClass}
-        preferencesDirty={model.status.preferencesDirty}
-        visibilityPreset={model.visibilityPreset}
+        visibilityControls={model.visibilityControls}
         onConnect={model.handleEditorConnect}
         onEditorEdgeClick={waypointEditor.handleEditorEdgeClick}
         onEditorEdgeDoubleClick={waypointEditor.handleEditorEdgeDoubleClick}
@@ -271,21 +254,8 @@ function CurrentActivityGraphSurfaceContent({
         waypointAriaLabel={waypointEditor.waypointAriaLabel}
         waypointControls={waypointEditor.waypointControls}
         onEditorNodeClick={removalControls.deleteNode}
-        onSelectTool={model.setActiveTool}
-        openAddMenu={model.addControls.isMenuOpen}
-        saveDisabledReason={model.saveBlockedReason}
-        moveLayoutNode={
-          canPersistLayoutChanges ? layoutControls.moveNode : undefined
-        }
-        moveLayoutNodesByDelta={
-          canPersistLayoutChanges ? layoutControls.moveNodesByDelta : undefined
-        }
-        onRedoLayout={layoutControls.redo}
-        onResetLayout={layoutControls.reset}
-        onUndoLayout={layoutControls.undo}
-        updateLayoutViewport={
-          canPersistLayoutChanges ? layoutControls.updateViewport : undefined
-        }
+        saveControls={model.saveControls}
+        saveDisabledReason={model.status.saveBlockedReason}
       />
     </div>
   );

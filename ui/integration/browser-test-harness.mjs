@@ -420,6 +420,56 @@ function cloneVersion(version) {
   };
 }
 
+function replayEventLineWithFactoryVersion(line, version) {
+  let event;
+  try {
+    event = JSON.parse(line);
+  } catch {
+    return line;
+  }
+
+  if (
+    !event ||
+    typeof event !== "object" ||
+    !event.payload ||
+    typeof event.payload !== "object" ||
+    !event.payload.factory ||
+    typeof event.payload.factory !== "object" ||
+    event.payload.factory.version !== undefined
+  ) {
+    return line;
+  }
+
+  return JSON.stringify({
+    ...event,
+    payload: {
+      ...event.payload,
+      factory: {
+        ...event.payload.factory,
+        version: cloneVersion(version),
+      },
+    },
+  });
+}
+
+function buildSavedFactoryReplayLine(factory, version) {
+  return JSON.stringify({
+    context: {
+      eventTime: version.physical,
+      sequence: 1,
+      tick: 1,
+    },
+    id: `saved-factory-${version.logical}`,
+    payload: {
+      factory: {
+        ...factory,
+        version: cloneVersion(version),
+      },
+    },
+    type: "FACTORY_CHANGE",
+  });
+}
+
 function buildSessionMap(sessions, currentFactory, currentFactoryBySessionID) {
   const defaultSession =
     sessions.find((session) => session.id === defaultFactorySessionID) ??
@@ -885,6 +935,9 @@ export async function startFactoryApiServer({
         }
         sessionState.currentFactory = factory;
         bumpEditableFactoryDefinitionVersion(sessionID);
+        sessionState.eventLines = [
+          buildSavedFactoryReplayLine(sessionState.currentFactory, sessionState.version),
+        ];
         response.writeHead(200, {
           "Access-Control-Allow-Origin": "*",
           "Content-Type": "application/json",
@@ -971,7 +1024,12 @@ export async function startFactoryApiServer({
               }
             }
           }
-          response.write(`data: ${line}\n\n`);
+          response.write(
+            `data: ${replayEventLineWithFactoryVersion(
+              line,
+              sessionState.version,
+            )}\n\n`,
+          );
           await delay(replayDelayMs);
         }
         if (pauseBeforeTick !== null && !pauseReached) {

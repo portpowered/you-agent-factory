@@ -31,6 +31,7 @@ export function CurrentActivityGraphEditorDialogs({
   const messages = getFactoryGraphEditorMessages(locale);
   const addControls = viewModel.addControls;
   const isSaving = viewModel.status.isSaving;
+  const leaveControls = viewModel.leaveControls;
   const removalControls = viewModel.removalControls;
   const saveControls = viewModel.saveControls;
   const isSaveBusy =
@@ -63,15 +64,15 @@ export function CurrentActivityGraphEditorDialogs({
       ) : null}
       <FactoryGraphEditorLeaveDialog
         canSave={saveControls.canSave}
-        isOpen={viewModel.leaveDialogOpen}
+        isOpen={leaveControls.isOpen}
         isSaving={isSaving}
         locale={locale}
         onCancel={() => {
           if (!isSaving) {
-            viewModel.setIsConfirmingLeaveEditor(false);
+            leaveControls.cancel();
           }
         }}
-        onDiscard={discardEditorChanges ?? viewModel.handleDiscardEditorChanges}
+        onDiscard={discardEditorChanges ?? leaveControls.discardChanges}
         onSave={() => {
           void saveControls.saveBeforeLeaving();
         }}

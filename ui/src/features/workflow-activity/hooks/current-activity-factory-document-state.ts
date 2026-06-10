@@ -4,8 +4,6 @@ import type {
   CurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import { preserveExistingBundledFilesWhenAbsent } from "../../../api/factory-definition";
-import { useCurrentFactoryDocument } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 
 export interface CurrentActivityFactoryDocumentQuery {
   data?: CurrentFactoryDocument;
@@ -14,60 +12,48 @@ export interface CurrentActivityFactoryDocumentQuery {
 }
 
 export interface CurrentActivityFactoryDocumentState {
-  /**
-   * Transitional current-factory document read. Graph render state should prefer
-   * event-computed factory data; this document remains the edit/save baseline for
-   * version metadata and bundled files until the stream contract carries them.
-   */
+  /** Event-computed factory document used as the edit/save baseline. */
   currentFactoryDocument?: CurrentFactoryDocument;
   editableDefinitionQuery: CurrentActivityFactoryDocumentQuery;
 }
 
 export function useCurrentActivityFactoryDocumentState({
-  enabled = true,
   eventFactory,
 }: {
-  enabled?: boolean;
   eventFactory?: DashboardSnapshot["factory"] | null;
 } = {}): CurrentActivityFactoryDocumentState {
-  const editableDefinitionQuery = useCurrentFactoryDocument(enabled);
   const eventFactoryDocument = useMemo(
-    () =>
-      eventFactory
-        ? toCurrentFactoryDocumentFromEventFactory(
-            eventFactory,
-            editableDefinitionQuery.data,
-          )
-        : null,
-    [editableDefinitionQuery.data, eventFactory],
+    () => (eventFactory ? toCurrentFactoryDocumentFromEventFactory(eventFactory) : null),
+    [eventFactory],
   );
-  const currentFactoryDocument =
-    eventFactoryDocument ?? editableDefinitionQuery.data;
-  const resolvedDefinitionQuery =
-    useMemo((): CurrentActivityFactoryDocumentQuery => {
-      if (!eventFactoryDocument) {
-        return editableDefinitionQuery;
-      }
 
+  const editableDefinitionQuery = useMemo((): CurrentActivityFactoryDocumentQuery => {
+    if (eventFactoryDocument) {
       return {
         data: eventFactoryDocument,
         error: null,
         status: "success",
       };
-    }, [editableDefinitionQuery, eventFactoryDocument]);
+    }
+
+    return {
+      data: undefined,
+      error: null,
+      status: "pending",
+    };
+  }, [eventFactoryDocument]);
 
   return useMemo(
     () => ({
-      currentFactoryDocument,
-      editableDefinitionQuery: resolvedDefinitionQuery,
+      currentFactoryDocument: eventFactoryDocument ?? undefined,
+      editableDefinitionQuery,
     }),
-    [currentFactoryDocument, resolvedDefinitionQuery],
+    [editableDefinitionQuery, eventFactoryDocument],
   );
 }
 
 function toCurrentFactoryDocumentFromEventFactory(
   eventFactory: NonNullable<DashboardSnapshot["factory"]>,
-  cachedDocument: CurrentFactoryDocument | undefined,
 ): CurrentFactoryDocument | null {
   const version = eventFactory.version;
   if (
@@ -80,13 +66,8 @@ function toCurrentFactoryDocumentFromEventFactory(
     return null;
   }
 
-  const withBundledFiles = preserveExistingBundledFilesWhenAbsent(
-    eventFactory,
-    cachedDocument,
-  );
-
   return {
-    ...withBundledFiles,
+    ...eventFactory,
     version: {
       logical: String(version.logical),
       physical: version.physical,
