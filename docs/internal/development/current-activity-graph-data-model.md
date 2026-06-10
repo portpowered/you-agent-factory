@@ -23,7 +23,7 @@ flowchart LR
 flowchart TD
   factoryJson["Cloud factory.json\nsaved topology + layout"]:::cloud
   eventStream["Cloud event stream\nFactoryEvent SSE"]:::cloud
-  readApi["GET current factory\ngetCurrentFactoryDocument\ntransitional fallback only"]:::cloud
+  readApi["GET current factory\ngetCurrentFactoryDocument\nexplicit export/current-factory tools"]:::cloud
   writeApi["PUT session factory\nsaveFactoryForSessionDocument"]:::cloud
 
   eventHook["useFactoryEventStream\nopenFactoryEventStream"]:::client
@@ -31,40 +31,40 @@ flowchart TD
   worldState["Computed world state\nbuildFactoryTimelineSnapshot"]:::client
   snapshot["Computed dashboard snapshot\nselected tick runtime view"]:::client
 
-  readHook["useCurrentFactoryDocument\ntransitional fallback only"]:::client
+  readHook["useCurrentFactoryDocument\nlegacy explicit document cache"]:::client
   writeHook["useFactoryDocumentSave"]:::client
 
   factoryJson --> eventStream --> eventHook --> timelineStore --> worldState --> snapshot
-  eventHook -- "factoryChange cache sync" --> readHook
-  readApi -. "should not be render/edit baseline" .-> readHook -. fallback .-> controller
+  eventHook -- "factoryChange cache sync\nno implicit document refetch" --> readHook
+  readApi -. "not graph render/edit baseline" .-> readHook
   writeHook --> writeApi --> factoryJson
   snapshot --> controller
   snapshot --> projection
 
   subgraph State["Graph State / Controller"]
-    controller["useCurrentActivityGraphState\ncurrent name: useCurrentActivityGraphEditor"]:::client
+    controller["useCurrentActivityGraphState\ngraph state/controller boundary"]:::client
     durable["Saved factory document cache\nFactory + layout"]:::client
     modified["Modified document draft\nTopology draft + layout draft"]:::client
+    computedLayout["Computed layout\nmodified layout > saved layout > auto layout"]:::client
+    visibleEdges["Resolved visible graph edges\nsaved edges + draft additions/removals"]:::client
     selectors["Semantic selectors\nisDirty, canSave, canDiscard,\nisStale, hasActiveWork, canInteract"]:::client
     commands["Semantic commands\nsave, discard, enterEditMode,\nexitEditMode, updateViewport,\nmoveNode, connect, remove"]:::client
     controller --> durable
     controller --> modified
+    controller --> computedLayout
+    controller --> visibleEdges
     controller --> selectors
     controller --> commands
     commands -- "save" --> writeHook
   end
 
   subgraph Projection["Graph Flow Projection"]
-    projection["useCurrentActivityGraphFlowProjection\ncomputed layout + visible graph edges"]:::client
-    computedLayout["Computed layout\nmodified layout > saved layout > auto layout"]:::client
+    projection["useCurrentActivityGraphFlowProjection\nrender projection from resolved graph state"]:::client
     renderedLayout["Rendered layout\ncomputed layout pruned to visible graph edges"]:::client
-    visibleEdges["Computed visible graph edges\nsaved edges + draft additions/removals"]:::client
     flowNodes["Computed React Flow nodes"]:::client
     flowEdges["Computed React Flow edges"]:::client
     viewport["Computed visible viewport"]:::client
-    projection --> computedLayout
     projection --> renderedLayout
-    projection --> visibleEdges
     projection --> flowNodes
     projection --> flowEdges
     projection --> viewport
@@ -88,6 +88,8 @@ flowchart TD
   end
 
   controller --> projection
+  computedLayout --> projection
+  visibleEdges --> projection
   controller --> vm
   projection --> vm
   vm --> surface
@@ -223,7 +225,8 @@ classDiagram
   FactoryTimelineStore --> ComputedWorldState : buildFactoryTimelineSnapshot
   ComputedWorldState --> ComputedDashboardSnapshot : projectSnapshot
   CurrentFactoryDocument --> CurrentFactoryDocumentCache : useCurrentFactoryDocument
-  CurrentFactoryDocumentCache --> CurrentActivityGraphState : document input
+  ComputedDashboardSnapshot --> CurrentFactoryDocument : event-computed factory
+  CurrentFactoryDocumentCache ..> CurrentActivityGraphState : deprecated for dashboard render/edit
   ComputedDashboardSnapshot --> CurrentActivityGraphState : runtime blockers
   ComputedDashboardSnapshot --> CurrentActivityGraphProjection : runtime decoration
   CurrentFactoryDocument --> FactoryLayout : contains
@@ -256,19 +259,19 @@ flowchart LR
     streamHook["useFactoryEventStream\nconnects stream + queues events"]:::client
     timeline["useFactoryTimelineStore\nstores events + selected tick"]:::client
     timelineProjection["buildFactoryTimelineSnapshot\nreconstructWorldState + projectSnapshot"]:::client
-    currentFactoryHook["useCurrentFactoryDocument\nReact Query read cache"]:::client
+    currentFactoryHook["useCurrentFactoryDocument\nlegacy explicit read cache"]:::client
     saveHook["useFactoryDocumentSave\nReact Query mutation + cache sync"]:::client
-    editable["useCurrentActivityEditableGraph\nuses event-backed document\nfalls back to current factory GET"]:::client
-    graphState["useCurrentActivityGraphState\ncurrent: useCurrentActivityGraphEditor\nowns mode, tools, save flow, validation, commands"]:::client
+    editable["useCurrentActivityEditableGraph\nuses event-backed document"]:::client
+    graphState["useCurrentActivityGraphState\nowns mode, tools, save flow,\nvalidation, commands"]:::client
     saveFlow["useGraphEditorSaveFlow\nsave, discard, leave confirmation,\nblocked reason"]:::client
     controllers["useGraphEditorControllers\nadd, connect, delete, selection removal"]:::client
     viewState["useCurrentActivityFactoryGraphViewState\nsaved/current/display factory selection"]:::client
-    projection["useCurrentActivityGraphFlowProjection\ncomputes layout, positions,\nand visible graph edges"]:::client
+    projection["useCurrentActivityGraphFlowProjection\npositions nodes and renders\nresolved layout/edges"]:::client
     cardVM["useCurrentActivityGraphCardViewModel\nsingle public model for views"]:::client
   end
 
   eventApi --> streamHook --> timeline --> timelineProjection --> projection
-  getFactory --> currentFactoryHook --> editable
+  getFactory -. "explicit export/current-factory surfaces" .-> currentFactoryHook
   saveHook --> saveFactory
   editable --> graphState
   saveFlow --> graphState
@@ -287,7 +290,7 @@ Recommended naming direction:
 
 | Current name | Intended role | Better name |
 | --- | --- | --- |
-| `useCurrentActivityGraphEditor` | Stateful graph controller used by read and edit modes | `useCurrentActivityGraphState` or `useCurrentActivityGraphController` |
+| `useCurrentActivityGraphState` | Stateful graph controller used by read and edit modes | keep name |
 | `useCurrentActivityGraphFlowProjection` | Computed graph projection: layout precedence, node positions, visible edges, rendered layout | keep name |
 | `useCurrentActivityGraphViewModel` | React Flow node/edge decoration from the graph projection and runtime snapshot | rename toward `useCurrentActivityReactFlowProjection` once callers are flatter |
 | `useCurrentActivityGraphCardViewModel` | Public component-facing model | keep name; graph surface, dialogs, and notifications consume this model directly |
@@ -375,7 +378,7 @@ that snapshot as input instead of reading `useFactoryTimelineStore` themselves.
 | Direction | Cloud surface | API function | Client hook / caller | Client state affected |
 | --- | --- | --- | --- | --- |
 | Cloud to client | Session event stream `/events` | `openFactoryEventStream` | `useFactoryEventStream` | `useFactoryTimelineStore`, dashboard stream status, current factory query cache on `factoryChange` |
-| Cloud to client | Current session factory document | `getCurrentFactoryDocument` | `useCurrentFactoryDocument` | Transitional fallback only; should not be required for graph render or edit baseline |
+| Cloud to client | Current session factory document | `getCurrentFactoryDocument` | `useCurrentFactoryDocument` | Explicit export/current-factory API surfaces and import target discovery only; not dashboard graph render/edit, current-activity import activation, or current-selection detail baseline |
 | Client to cloud | Session factory save | `saveFactoryForSessionDocument` | `useFactoryDocumentSave`, called through editable graph save flow | Cloud `factory.json`, React Query current factory document cache |
 
 The event stream is cloud-backed input, but the dashboard snapshot used by current activity is client-computed from events:
@@ -415,13 +418,15 @@ Current audit result:
 | --- | --- | --- |
 | Can the runtime dashboard snapshot be rendered from events? | Yes | `useDashboardSnapshot` opens `useFactoryEventStream`; `useFactoryTimelineStore` stores events; `buildFactoryTimelineSnapshot` replays events into `WorldState` / `DashboardSnapshot`. |
 | Does the event stream carry factory topology changes? | Yes | `RUN_REQUEST`, `INITIAL_STRUCTURE_REQUEST`, and `FACTORY_CHANGE` all carry `factory`; `replayWorldState` assigns `state.factory` and topology from those payloads. |
-| Does the factory schema include graph layout? | Yes | `Factory.layout` is part of the generated OpenAPI factory schema, so viewport and layout can be event-sourced when included in event payloads. |
+| Does the factory schema include graph layout? | Yes | `Factory.layout` is part of the generated OpenAPI factory schema. Functional tests assert initial-structure and factory-change events include layout nodes, edge waypoints, groups, viewport, and preferences. |
 | Does current activity read-mode graph rendering prefer the event-computed factory? | Yes | `currentActivityCardFactoryDefinition` now uses `snapshot.factory` as the observe-mode topology/layout source and only preserves bundled docs from the current-factory document. |
-| Does current activity still ping for the current factory document? | Only as a fallback | `useCurrentActivityFactoryDocumentState` now keeps `useCurrentFactoryDocument` disabled while read mode has an event-computed factory with version metadata; it synthesizes the editor baseline from `snapshot.factory` and only enables the GET after edit intent when the event factory cannot provide a versioned baseline. |
-| Do other dashboard paths still ping for current factory document? | Yes | Current selection detail/edit hooks, export/import activation, and several editable configuration hooks call `useCurrentFactoryDocument` or `getCurrentFactoryDocument`. |
-| Is SSE currently guaranteed to include every editable document field? | Not fully | Client code preserves existing bundled files because event-stream and timeline snapshot factories may omit `supportingFiles.bundledFiles`; factory-change events without `version` invalidate the document query. |
+| Does current activity still ping for the current factory document? | No | `useCurrentActivityFactoryDocumentState` synthesizes the editor baseline from `snapshot.factory`; invariant search has no `useCurrentFactoryDocument` or `getCurrentFactoryDocument` calls under `workflow-activity`. |
+| Does current selection core still ping for topology state? | No | `useCurrentSelection` now uses the event-computed `snapshot.factory` for selection synchronization instead of subscribing to `useCurrentFactoryDocument`. |
+| Do other dashboard paths still ping for current factory document? | No for render/edit paths | Current-selection read-only detail and editable configuration hooks now use the event-computed factory document carried on `CurrentSelectionState`; invariant search has no `useCurrentFactoryDocument` or `getCurrentFactoryDocument` calls under dashboard/current-selection production rendering paths. Current-activity import activation passes the event-computed document as the write baseline. Explicit export/current-factory API helpers and import target discovery still use GET paths as user-requested document operations. |
+| Is SSE currently guaranteed to include every editable graph document field? | Yes for the graph/editor path | Service-managed initial-structure and factory-change events emit an editable factory snapshot with version, topology, layout, and inline bundled files. Runtime configs can stay thin internally, but the public event payload is rehydrated for event-sourced graph/edit state. |
 
-To make the no-ping rule complete for the graph/editor path, the event stream contract needs to guarantee that the latest event-computed factory document contains:
+The no-ping rule for the graph/editor path depends on the event stream contract
+guaranteeing that the latest event-computed factory document contains:
 
 - full topology
 - full `layout`, including viewport
@@ -430,7 +435,16 @@ To make the no-ping rule complete for the graph/editor path, the event stream co
 - ordered `FACTORY_CHANGE` events relative to runtime events
 - historical replay on connection and reconnect with no gaps
 
-Current activity graph state is already event-first for versioned stream factories: read mode does not enable the current-factory GET, and edit/save can use the event-computed factory as its document baseline. Once the bundled-file and version guarantees are universal, `getCurrentFactoryDocument` should be removed from current activity graph state and treated only as an explicit user-request fallback for non-live workflows such as export, if any remain.
+Current activity graph state and current-selection detail/edit state are
+event-first for versioned stream factories: read mode does not enable the
+current-factory GET, edit/save can use the event-computed factory as its
+document baseline, current-activity import activation can write from that same
+event-computed baseline, and selected
+worker/resource/doc/work-type/work-state/workstation editors receive their
+saved baseline through `CurrentSelectionState`. `getCurrentFactoryDocument`
+should remain an explicit user-request path for non-live document operations
+such as export/current-factory tools and import target discovery, not a render
+baseline.
 
 ## Deprecated Connections
 
@@ -459,7 +473,7 @@ Deprecated dependencies:
 | Observe mode chooses topology/layout from `CurrentFactoryDocument` | Lets a GET-backed document override the event-computed runtime view | Observe mode uses `snapshot.factory`; the document may only decorate bundled docs or provide fallback when no snapshot factory exists |
 | Projection reads `CurrentFactoryDocument` directly | Makes projection choose between saved, modified, and fallback factory state | Graph state exposes `displayFactoryDefinition`, `topologyFactoryDefinition`, and `computedLayout` |
 | Projection or components read saved layout and layout draft separately | Recreates persistence precedence outside the state owner | Graph state exposes `computedLayout`, `renderedLayout`, and `computedViewport` |
-| Projection reads topology draft edge changes directly | Makes React Flow projection decide how saved graph state and modified graph state combine | Graph state exposes `visibleGraphEdges` and `pendingAdditionEdgeIds` |
+| Projection reads topology draft edge changes directly | Makes React Flow projection decide how saved graph state and modified graph state combine | Graph state owns the draft merge and exposes resolved edge state to projection |
 | Components read `draftState`, `layoutDraftState`, dirty summaries, document queries, or `pendingFactoryDefinition` | Couples UI controls to internal persistence mechanics | Components read `model.status` and call `model.actions` |
 | Components accept separate editor and projection props | Lets views recreate the state/projection merge outside the card view-model boundary | `CurrentActivityGraphSurface` receives only `CurrentActivityGraphCardViewModel` |
 | Save enablement reads topology draft details | Layout-only edits can diverge from topology-only predicates | Save enablement reads semantic selectors such as `isDirty`, `isValid`, and `hasActiveWork` |
