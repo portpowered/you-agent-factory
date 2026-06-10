@@ -323,14 +323,14 @@ func TestFlattenFactoryConfig_CheckedInFactoryBundlesOverviewDoc(t *testing.T) {
 		t.Fatalf("overview bundled type = %q, want %q", overview.Type, interfaces.BundledFileTypeDoc)
 	}
 	for _, want := range []string{
-		"# Repository Maintainer Factory Overview",
-		"you run --dir ./factory",
+		"# Factory Overview",
+		"Awesome AI Agent Factories",
 		"thoughts:init",
 		"factory/inputs/BATCH/default/",
 		"you docs agents",
-		"## Agent submission policy",
-		"## Submission recipes (this factory)",
-		"## Operator loop (maintainer factory)",
+		"## Phase Control",
+		"## Batch Submission",
+		"## Quality Gates",
 	} {
 		if !strings.Contains(overview.Content.Inline, want) {
 			t.Fatalf("overview inline missing %q:\n%s", want, overview.Content.Inline)
