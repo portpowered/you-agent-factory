@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -23,6 +24,7 @@ var (
 	exitFunc                     = os.Exit
 	stdout             io.Writer = os.Stdout
 	stderr             io.Writer = os.Stderr
+	positionPattern             = regexp.MustCompile(`:(\d+):(\d+):`)
 )
 
 func main() {
@@ -123,7 +125,7 @@ func normalizeReport(report string) string {
 
 	lines := strings.Split(report, "\n")
 	for index, line := range lines {
-		lines[index] = strings.TrimSpace(line)
+		lines[index] = positionPattern.ReplaceAllString(strings.TrimSpace(line), ":")
 	}
 	slices.Sort(lines)
 	return strings.Join(lines, "\n") + "\n"
