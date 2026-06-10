@@ -15,6 +15,7 @@ import {
   startFactoryApiServer,
   uiInteractionTimeoutMs,
 } from "./browser-test-harness.mjs";
+import { waitForDashboardReady } from "./factory-name-preservation-browser-helpers.mjs";
 
 const editableGraphFactoryDefinition = {
   metadata: {
@@ -443,7 +444,8 @@ async function saveGraphDraft(page, toolbar) {
     })
     .toBe(true);
 
-  await saveChangesButton.click();
+  await saveChangesButton.focus();
+  await saveChangesButton.press("Enter");
   const saveDialog = page.getByRole("dialog", {
     name: "Save factory graph changes?",
   });
@@ -465,10 +467,6 @@ async function saveGraphDraft(page, toolbar) {
     { timeout: uiInteractionTimeoutMs },
   );
   await confirmButton.click();
-  await saveDialog.waitFor({
-    state: "hidden",
-    timeout: uiInteractionTimeoutMs,
-  });
   const saveResponse = await saveResponsePromise;
   if (!saveResponse.ok()) {
     throw new Error(
@@ -513,10 +511,7 @@ describe.sequential("factory graph editor node placement browser integration", (
       const browserPage = await openBrowserPage();
 
       try {
-        await browserPage.page.goto(preview.previewURL, {
-          waitUntil: "domcontentloaded",
-        });
-        await server.replayCompleted;
+        await waitForDashboardReady(browserPage.page, preview.previewURL, server);
 
         const toolbar = await enterGraphEditor(browserPage.page);
         await panGraphViewport(browserPage.page, -220, 160);
@@ -576,10 +571,7 @@ describe.sequential("factory graph editor node placement browser integration", (
       const browserPage = await openBrowserPage();
 
       try {
-        await browserPage.page.goto(preview.previewURL, {
-          waitUntil: "domcontentloaded",
-        });
-        await server.replayCompleted;
+        await waitForDashboardReady(browserPage.page, preview.previewURL, server);
 
         const toolbar = await enterGraphEditor(browserPage.page);
         await addWorker(browserPage.page, toolbar, { name: "center-anchor" });
@@ -644,10 +636,7 @@ describe.sequential("factory graph editor node placement browser integration", (
       const browserPage = await openBrowserPage();
 
       try {
-        await browserPage.page.goto(preview.previewURL, {
-          waitUntil: "domcontentloaded",
-        });
-        await server.replayCompleted;
+        await waitForDashboardReady(browserPage.page, preview.previewURL, server);
 
         const toolbar = await enterGraphEditor(browserPage.page);
         await panGraphViewport(browserPage.page, -180, 140);
@@ -723,10 +712,7 @@ describe.sequential("factory graph editor node placement browser integration", (
       const browserPage = await openBrowserPage();
 
       try {
-        await browserPage.page.goto(preview.previewURL, {
-          waitUntil: "domcontentloaded",
-        });
-        await server.replayCompleted;
+        await waitForDashboardReady(browserPage.page, preview.previewURL, server);
 
         const toolbar = await enterGraphEditor(browserPage.page);
         await addResource(browserPage.page, toolbar, { name: "extra-gpu" });
