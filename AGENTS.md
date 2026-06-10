@@ -1,57 +1,175 @@
+# Repository Agent Instructions
 
-This project is you-agent-factory, an AI agent factory intended to schedule and orchestrate AI. 
-The goal of the project generally is to rapidly allow customers to deploy lots of AI concurrently so 
-as to maximize their overall productivity. 
+This repository is `you-agent-factory`: a Go, OpenAPI, and React system for
+scheduling and orchestrating many AI workers concurrently through the `you` CLI,
+backend runtime, and dashboard.
 
-It borrows heavily from the general best practices for manufacturing and engineering for its structures.
+The product model is a factory: users define work types, work states,
+workstations, workers, guards, resources, and orchestration policy. The runtime
+turns submitted work and worker output into ordered events, then derives live
+and historical world state from that event stream.
 
-## technologies
+## Current Architecture
 
-The main technologies that are used are: 
-1. golang backend server + CLI
-2. website via react
-3. api defined via openAPI
+- The backend core is an event-first factory runtime. Workers and agents do not
+  mutate canonical state directly; they emit outputs that re-enter the runtime
+  as events.
+- `FactoryService` coordinates APIs, CLI calls, session registries, persistence,
+  runtime construction, and model/runtime dependencies. Per-session runtime
+  state belongs to the session runtime, not the service coordinator.
+- Public terminology is defined in
+  `docs/architecture/data-model.md`: `Factory`, `Factory Session`, `Current
+  Factory`, `Work`, `Work Request`, and `Provider Session`.
+- The customer-facing model hides the internal Petri-net implementation.
+  Internal packages can use tokens, places, transitions, markings, and guards;
+  public docs and API surfaces should prefer customer-facing vocabulary.
+- Factory events and projections are canonical for replay, dashboard state,
+  session lifecycle, dispatch lifecycle, work payload lineage, and historical
+  inspection.
+- The frontend consumes generated OpenAPI types and event streams, derives
+  client-side dashboard/editor projections, and sends user actions back through
+  API requests. The backend remains authoritative for runtime state.
+- OpenAPI is authored in component fragments under `api/components/` and bundled
+  into `api/openapi.yaml`; generated Go and TypeScript clients are derived from
+  that contract.
 
-## repo structure
+Read these architecture notes when the work touches their area:
 
-docs/ -> general documentation about the package, best practices for users, etc
-docs/architecture/ -> architecture notes and data model writeups
-docs/internal/ -> internal maintainer-only documentation, standards, resources, and process guidance
-docs/internal/development/ -> active engineering notes, inventories, audits, and implementation closeout docs
-docs/internal/processes/ -> process-specific reference docs and relevant-file maps
-docs/internal/resources/ -> internal documentation assets and screenshots
-docs/internal/standards/ -> coding and workflow standards that should guide changes
-docs/reference/ -> canonical reference markdown (also embedded for `you docs <topic>`; edit here only)
+- `docs/architecture/architecture.md` for backend loop, service/session
+  boundaries, event stream, frontend composition, and graph-editor state flow.
+- `docs/architecture/data-model.md` for public resource vocabulary and the
+  customer/internal data-model split.
+- `docs/architecture/invocation-contract.md` for `you run --factory`,
+  invocation input resolution, return policy, and CLI/API equivalence.
+- `docs/architecture/managed-model-runtime.md` for managed runtime identity,
+  readiness, lifecycle, pull/install outcomes, and invocation gating.
+- `docs/internal/processes/api-relevant-files.md` when changing public REST
+  contract, generated OpenAPI types, factory-session surfaces, events, managed
+  runtime surfaces, workflow preview/session APIs, or dashboard API consumers.
+- `docs/internal/processes/invocation-relevant-files.md` when changing
+  invocation input, return-policy, or primary-result behavior.
 
-pkg/ -> golang codebase for backend server, CLI
-pkg/api/ -> API-facing server code, generated contracts, and API test data
-pkg/apisurface/ -> public request/response surface and boundary shaping
-pkg/cli/ -> CLI flows for init, run, submit, config, dashboard, and factory commands
-pkg/config/ -> configuration parsing, runtime config, projections, and scheduler/state helpers
-pkg/factory/ -> factory execution context, engine, runtime, and workstation config plumbing
-pkg/interfaces/ -> shared interface definitions across subsystems
-pkg/internal/ -> internal-only backend implementation details such as submission handling
-pkg/listeners/ -> listener implementations and event ingestion hooks
-pkg/service/ -> service-layer orchestration and backend coordination
-pkg/workers/ -> worker runtime behavior and related test data
+## Standards
 
-ui/ -> website codebase
-ui/src/ -> React app source for API access, components, features, hooks, state, testing, and shared types
-ui/scripts/ -> frontend build and tooling scripts
-ui/integration/ -> integration-oriented frontend test assets
-ui/.storybook/ -> Storybook configuration for UI component development
+Start with `docs/internal/standards/STANDARDS.md`, then read the relevant
+standard before changing code:
 
-api/ -> openapi schema defining backend server API, used to generate code on website/backend
-tests -> general tests for the backend as well as stress, and integration tests
-factory/ -> automated code processes that bootstraps infinite-you with infinite-you
-cmd/ -> golang entrypoints for cli and server and whatnot
-examples/ -> example factory directories of infinite-you
+- `docs/internal/standards/code/code-review-standards.md` for reviews and PR
+  quality gates.
+- `docs/internal/standards/code/general-backend-standards.md` for Go backend,
+  state management, architecture, linting, testing, CI, and complexity.
+- `docs/internal/standards/code/general-website-standards.md` for React,
+  accessibility, responsive design, styling, state, performance, and tests.
+- `docs/internal/standards/code/planning-standards.md` for PRDs, work stories,
+  acceptance criteria, and implementation plans.
 
+Treat files under `docs/internal/standards/` as normative. Development notes and
+process maps can provide examples and file inventories, but they do not override
+the standards.
 
-## standards
-please read the appropriate standards when performing the appropriate operation
-1. docs/internal/standards/code/code-review-standards.md for when reviewing changes
-2. docs/internal/standards/code/general-backend-standards.md for when modifying the backend
-3. docs/internal/standards/code/general-website-standards.md for when modifying the frontend
-4. docs/internal/standards/code/planning-standards.md for writing plans.
-5. docs/internal/development/work-session-runtime-feature-guide.md when changing work items, factory sessions, canonical FactoryEvents, marking moves, pause behavior, or dashboard/runtime projections of work position.
+## Repository Map
+
+- `api/` contains the authored OpenAPI entrypoint, component fragments,
+  reusable parameters/responses/schemas, and generated bundled contract.
+- `cmd/` contains Go command entrypoints and maintenance tools, including the
+  main `you` binary under `cmd/factory/`.
+- `docs/` contains public docs, architecture notes, comparison docs, examples,
+  and internal maintainer standards/process docs.
+- `docs/reference/` is the canonical packaged `you docs <topic>` markdown.
+  Edit reference topics there, not in generated or embedded copies.
+- `examples/` contains example factory directories.
+- `factory/` contains this repository's checked-in factory scaffold and
+  factory-local docs.
+- `pkg/api/` contains HTTP handlers, generated server contracts, API boundary
+  tests, OpenAPI contract tests, server tests, and API test data.
+- `pkg/apisurface/` contains mapping and normalization at the public API
+  boundary. Prefer this layer for transport-independent request/response
+  shaping.
+- `pkg/cli/` contains CLI commands and CLI adapters for shared service logic.
+- `pkg/config/` contains factory config loading, persistence, mapping,
+  validation entrypoints, built-in factory layout, and runtime config
+  projections.
+- `pkg/factory/` contains the core runtime engine, event history, projections,
+  requests, validation, scheduling, subsystems, runtime support, and workstation
+  config plumbing.
+- `pkg/factorysessions/` and `pkg/factorysessionexecution/` contain
+  session-level projection/read models and durable/live session execution
+  contracts.
+- `pkg/interfaces/` contains shared domain interfaces and public-ish runtime
+  types used across subsystems.
+- `pkg/invocations/`, `pkg/workcontent/`, `pkg/workquery/`, and
+  `pkg/materialize/` contain shared work and invocation helpers.
+- `pkg/localmodels/` contains managed model runtime catalog, readiness,
+  lifecycle, source resolution, cache, pull, and invocation support.
+- `pkg/petri/` contains internal Petri-net primitives.
+- `pkg/service/` coordinates backend service behavior across sessions,
+  runtime construction, model catalog, replay, ingestion, and factory save or
+  validation flows.
+- `pkg/workers/`, `pkg/hostedworkers/`, and `pkg/packagedfactories/` contain
+  worker execution, provider integration, mock workers, worktrees, hosted
+  workers, and packaged factory support.
+- `pkg/workflowpreview/`, `pkg/workflowpolicy/`, `pkg/workflowresult/`,
+  `pkg/workflowsource/`, and `pkg/workflowvalidation/` contain JavaScript
+  workflow preview, policy, result, source lookup, and validation logic.
+- `tests/` contains broader functional, release, smoke, and integration tests.
+- `ui/` contains the React dashboard, generated TypeScript OpenAPI types,
+  feature modules, shared components, theme/styles, Storybook, and frontend
+  tests.
+
+## API And Code Generation
+
+- Author OpenAPI changes in `api/openapi-main.yaml` and component fragments
+  under `api/components/`.
+- Do not hand-edit generated files:
+  - `api/openapi.yaml`
+  - `pkg/api/generated/server.gen.go`
+  - `pkg/generatedclient/client.gen.go`
+  - `ui/src/api/generated/openapi.ts`
+- Run `make generate-api` after OpenAPI changes.
+- For API surface changes, update the matching `pkg/api` handlers,
+  `pkg/apisurface` mappers/normalizers, generated clients, UI API adapters, and
+  contract tests as applicable.
+- Run `make api-smoke` for public REST contract changes when feasible.
+
+## Documentation
+
+- Public packaged CLI docs live in `docs/reference/` and are embedded for
+  `you docs <topic>`.
+- Run `make docs-reference-smoke` after changing `docs/reference/` or packaged
+  docs behavior.
+- Run `make readme-check` after changing README structure or linked README
+  assets.
+- Keep root docs as routing/index material. Avoid duplicating long customer
+  guides or feature inventories outside their canonical docs.
+
+## Verification
+
+Choose the narrowest useful verification for the change, then broaden when the
+surface area is shared or public:
+
+- `make test` runs the short Go suite.
+- `make ui-test` runs the frontend unit suite.
+- `make ui-lint` runs frontend lint and UI boundary checks.
+- `make lint` runs the repository lint suite.
+- `make verify-fast` runs dashboard typecheck, short UI/unit tests, and short
+  Go tests.
+- `make verify-pr` runs the broader PR verification tier.
+- `make test-full`, `make test-functional`, `make test-ui-coverage`, and
+  specialty Make targets are available for higher-risk runtime, API, or UI
+  changes.
+
+When changing frontend behavior, run focused UI tests where possible and inspect
+the UI in a browser for layout-sensitive work. When changing event replay,
+factory sessions, dispatch lifecycle, or projections, add or update projection
+and replay tests near the affected package.
+
+## Working Rules
+
+- Preserve user work in the tree. Do not revert unrelated changes.
+- Prefer existing package boundaries and local helpers over new abstractions.
+- Keep generated files in sync with their source contracts.
+- Keep public resource names aligned with `docs/architecture/data-model.md`.
+- Keep CLI and API behavior equivalent when shared contracts say they are
+  equivalent, especially invocation behavior.
+- Use `rg`/`rg --files` for code discovery.
+- Add tests proportional to the risk and blast radius of the change.
