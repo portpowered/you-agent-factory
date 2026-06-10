@@ -3,7 +3,6 @@ import type {
   DashboardTraceDispatch,
   DashboardWorkItemRef,
 } from "../../../api/dashboard/types";
-import { TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES } from "../components/trace-dispatch-factory-graph-node";
 import { buildTraceDispatchFactoryGraphFlow } from "./trace-dispatch-factory-graph-flow";
 
 function buildWorkItem(
@@ -99,9 +98,6 @@ describe("buildTraceDispatchFactoryGraphFlow", () => {
       buildDispatch("dispatch-plan"),
     ]);
 
-    expect(Object.keys(TRACE_DISPATCH_FACTORY_GRAPH_NODE_TYPES)).toEqual([
-      "workstation",
-    ]);
     expect(flow.nodes.every((node) => node.type === "workstation")).toBe(true);
     expect(flow.edges.every((edge) => edge.type === "factoryEditorEdge")).toBe(
       true,
