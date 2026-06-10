@@ -523,8 +523,21 @@ func TestWorkDispatch_StoresDispatchOwnedFields(t *testing.T) {
 	}
 
 	execSection, ok := got["execution"].(map[string]any)
-	if !ok || execSection["current_tick"] != float64(14) {
-		t.Fatalf("execution = %#v, want current_tick 14", got["execution"])
+	if !ok || execSection["current_tick"] != float64(14) || execSection["request_id"] != "req-1" {
+		t.Fatalf("execution = %#v, want current_tick 14 and request_id req-1", got["execution"])
+	}
+	workIDs, ok := execSection["work_ids"].([]any)
+	if !ok || len(workIDs) != 2 || workIDs[0] != "w1" || workIDs[1] != "w2" {
+		t.Fatalf("execution.work_ids = %#v, want [w1 w2]", execSection["work_ids"])
+	}
+
+	tokens, ok := got["input_tokens"].([]any)
+	if !ok || len(tokens) != 1 {
+		t.Fatalf("input_tokens = %#v, want one token", got["input_tokens"])
+	}
+	token, ok := tokens[0].(map[string]any)
+	if !ok || token["id"] != "token-1" {
+		t.Fatalf("input_tokens[0] = %#v, want id token-1", tokens[0])
 	}
 
 	bindings, ok := got["input_bindings"].(map[string]any)
@@ -544,6 +557,9 @@ func TestCloneWorkDispatch_DetachesWorkerBoundarySlicesAndMaps(t *testing.T) {
 	clone.InputTokens[0] = map[string]any{"id": "changed"}
 	clone.InputBindings["source"][0] = "changed"
 
+	if original.InputTokens[0].(map[string]any)["id"] != "token-1" {
+		t.Fatalf("input tokens mutated original: %#v", original.InputTokens)
+	}
 	if original.PreviousChainingTraceIDs[0] != "chain-a" {
 		t.Fatalf("previous chaining IDs mutated original: %#v", original.PreviousChainingTraceIDs)
 	}
