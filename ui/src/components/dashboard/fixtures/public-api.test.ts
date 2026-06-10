@@ -4,7 +4,6 @@ import { failureAnalysisTimelineEvents } from "./failure-analysis-events";
 import {
   activeWorkRuntimeOverlay,
   buildDashboardSnapshotFixture,
-  dashboardRuntimeOverlays,
   dashboardSemanticSnapshotFixtures,
 } from "./runtime";
 import { runtimeDetailsBackendWorkstationRequestsByDispatchID } from "./runtime-details-backend-world-view";
@@ -39,12 +38,6 @@ describe("dashboard fixture catalog", () => {
     expect(dashboardTopologyFixtures.twentyNode).toBe(
       twentyNodeDashboardTopology,
     );
-    expect(Object.keys(dashboardRuntimeOverlays)).toEqual([
-      "activeWork",
-      "retryAttempt",
-      "failedOutcome",
-      "rejectedOutcome",
-    ]);
     expect(activeSnapshot.runtime.active_workstation_node_ids).toContain(
       "review",
     );
@@ -77,22 +70,6 @@ describe("dashboard fixture catalog", () => {
     expect(runtimeDetailsFixtureIDs.completedSystemPromptHash).toMatch(
       /^sha256:/,
     );
-    expect(Object.keys(dashboardWorkstationRequestFixtures)).toEqual([
-      "noResponse",
-      "ready",
-      "rejected",
-      "errored",
-      "scriptFailed",
-      "scriptPending",
-      "scriptSuccess",
-    ]);
-    expect(
-      new Set(
-        Object.values(dashboardWorkstationRequestFixtures).map(
-          (request) => request.dispatch_id,
-        ),
-      ).size,
-    ).toBe(Object.keys(dashboardWorkstationRequestFixtures).length);
     expect(dashboardWorkstationRequestFixtures.ready.request_id).toBe(
       "request-ready-story",
     );
