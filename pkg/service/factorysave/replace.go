@@ -70,7 +70,11 @@ func (s *Service) replaceCurrentFactoryLayoutLocked(
 		if err := requireFreshEditableFactoryVersionAtRoot(s.host, request.Version, sessionRootDir, current.Name); err != nil {
 			return err
 		}
-		nextVersion := nextEditableFactoryVersion(current.Version, s.now().Now().UTC())
+		currentVersion, err := s.host.CurrentFactoryDefinitionVersionAtRoot(sessionRootDir, current.Name)
+		if err != nil {
+			return err
+		}
+		nextVersion := nextEditableFactoryVersion(&currentVersion, s.now().Now().UTC())
 		prepared, err := preparePersistedFactoryPayload(string(current.Name), sanitized, nextVersion)
 		if err != nil {
 			return err

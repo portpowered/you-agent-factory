@@ -52,6 +52,36 @@ func TestCurrentFactoryPUT_SaveEditableCurrentFactoryDefinitionEmitsCanonicalFac
 	}
 }
 
+func TestCurrentFactoryPUT_FactoryChangeVersionsAdvanceOnEverySave(t *testing.T) {
+	rootDir := t.TempDir()
+	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+
+	server := startFactoryTransformationServer(t, rootDir)
+
+	current := getCurrentFactory(t, server.URL())
+	firstSaved := saveCurrentFactoryDefinition(t, server.URL(), functionalNamedFactoryBody("alpha", "story", advancedFactoryVersion(t, current.Version)))
+	firstChange := requireLatestFactoryChange(t, server.GetFactoryEvents(t))
+	firstPayload, err := firstChange.Payload.AsFactoryChangeEventPayload()
+	if err != nil {
+		t.Fatalf("decode first factory-change payload: %v", err)
+	}
+	assertFactoryChangeVersion(t, firstPayload.Factory, firstSaved)
+	if firstPayload.Factory.Version.Logical != current.Version.Logical+1 {
+		t.Fatalf("first factory-change logical version = %d, want %d", firstPayload.Factory.Version.Logical, current.Version.Logical+1)
+	}
+
+	secondSaved := saveCurrentFactoryDefinition(t, server.URL(), functionalNamedFactoryBody("alpha", "article", advancedFactoryVersion(t, firstSaved.Version)))
+	secondChange := requireLatestFactoryChange(t, server.GetFactoryEvents(t))
+	secondPayload, err := secondChange.Payload.AsFactoryChangeEventPayload()
+	if err != nil {
+		t.Fatalf("decode second factory-change payload: %v", err)
+	}
+	assertFactoryChangeVersion(t, secondPayload.Factory, secondSaved)
+	if secondPayload.Factory.Version.Logical != firstPayload.Factory.Version.Logical+1 {
+		t.Fatalf("second factory-change logical version = %d, want %d", secondPayload.Factory.Version.Logical, firstPayload.Factory.Version.Logical+1)
+	}
+}
+
 func TestCurrentFactoryPUT_SaveDefaultFactoryDefinitionPersistsAndRunsReplacement(t *testing.T) {
 	rootDir := t.TempDir()
 	if err := os.WriteFile(
@@ -848,6 +878,17 @@ func requireFactoryChangeAfter(t *testing.T, before []factoryapi.FactoryEvent, a
 		}
 	}
 	t.Fatalf("factory-change event not found after save; before=%d after=%d", len(before), len(after))
+	return factoryapi.FactoryEvent{}
+}
+
+func requireLatestFactoryChange(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.FactoryEvent {
+	t.Helper()
+	for i := len(events) - 1; i >= 0; i-- {
+		if events[i].Type == factoryapi.FactoryEventTypeFactoryChange {
+			return events[i]
+		}
+	}
+	t.Fatalf("factory-change event not found; events=%d", len(events))
 	return factoryapi.FactoryEvent{}
 }
 

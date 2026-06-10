@@ -636,8 +636,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogModelOperationSlotRemoveAction: "Remove slot",
       addDialogModelOperationSlotRequiredLabel: "Required input slot",
       addDialogModelOperationsHelp:
-        "Declare provider-agnostic operations with typed input and output slots for MODEL_INVOKE workstations.",
-      addDialogModelOperationsLabel: "Model operations",
+        "Optionally declare provider-agnostic operations with typed input and output slots for MODEL_INVOKE workstations.",
+      addDialogModelOperationsLabel: "Model operations (optional)",
       addDialogPromptBodyEditorError:
         "The prompt editor could not start. Edit the prompt text below while we recover.",
       addDialogPromptBodyEditorLoading: "Starting the prompt editor.",
@@ -941,8 +941,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogModelOperationSlotRemoveAction: "移除槽位",
       addDialogModelOperationSlotRequiredLabel: "必填输入槽位",
       addDialogModelOperationsHelp:
-        "为 MODEL_INVOKE 工作站声明带有类型化输入和输出槽位的提供方无关操作。",
-      addDialogModelOperationsLabel: "模型操作",
+        "可选择为 MODEL_INVOKE 工作站声明带有类型化输入和输出槽位的提供方无关操作。",
+      addDialogModelOperationsLabel: "模型操作（可选）",
       addDialogPromptBodyEditorError:
         "提示词编辑器无法启动。请先在下方编辑提示正文，我们稍后会恢复编辑器。",
       addDialogPromptBodyEditorLoading: "正在启动提示词编辑器。",

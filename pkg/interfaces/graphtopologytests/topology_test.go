@@ -52,6 +52,7 @@ func TestBuildPendingFactoryGraphTopology_UsesCanonicalNodeAndEdgeIDs(t *testing
 
 	wantNodes := []string{
 		"doc:factory/docs/guide.md",
+		"doc:factory/scripts/setup.py",
 		"script:factory/scripts/setup.py",
 		"resource:resource-slot",
 		"work-type:work-type-story",

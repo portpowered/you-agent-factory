@@ -1,11 +1,11 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import { ModelOperationContentType } from "../../../api/generated/openapi";
-import { createEmptyFactoryGraphAddModelOperationDraft } from "./factory-graph-add-model-operation-draft";
 import { createEmptyFactoryGraphDraft } from "./draft/factory-graph-draft-types";
 import {
   applyFactoryGraphAddEntityDraft,
   validateFactoryGraphAddEntityDraft,
 } from "./editor/factory-graph-editor-additions";
+import { createEmptyFactoryGraphAddModelOperationDraft } from "./factory-graph-add-model-operation-draft";
 
 const baseFactoryDefinition: CanonicalFactoryDefinition = {
   name: "Current Factory",
@@ -39,7 +39,7 @@ const baseFactoryDefinition: CanonicalFactoryDefinition = {
 };
 
 describe("factory graph editor additions model operations", () => {
-  it("rejects model workers with zero operations", () => {
+  it("allows model workers with zero operations", () => {
     expect(
       validateFactoryGraphAddEntityDraft(
         {
@@ -54,11 +54,7 @@ describe("factory graph editor additions model operations", () => {
         },
         baseFactoryDefinition,
       ),
-    ).toMatchObject({
-      modelOperations: {
-        summary: "Add at least one model-invocation operation.",
-      },
-    });
+    ).toEqual({});
   });
 
   it("rejects invalid model operation contracts on model workers", () => {

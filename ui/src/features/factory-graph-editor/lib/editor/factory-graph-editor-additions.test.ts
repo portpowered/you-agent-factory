@@ -76,7 +76,7 @@ describe("factory graph editor additions", () => {
     });
   });
 
-  it("allows provider-only worker adds and rejects missing model provider", () => {
+  it("allows provider-only worker adds without operations and rejects missing model provider", () => {
     expect(
       validateFactoryGraphAddEntityDraft(
         {
@@ -86,7 +86,7 @@ describe("factory graph editor additions", () => {
           model: "",
           modelProvider: "CURSOR",
           name: "reviewer",
-          operations: [minimalModelWorkerOperation],
+          operations: [],
           workerType: "MODEL_WORKER",
         },
         baseFactoryDefinition,
@@ -108,9 +108,6 @@ describe("factory graph editor additions", () => {
         baseFactoryDefinition,
       ),
     ).toEqual({
-      modelOperations: {
-        summary: "Add at least one model-invocation operation.",
-      },
       modelProvider: "Select a model provider for the new worker.",
     });
   });

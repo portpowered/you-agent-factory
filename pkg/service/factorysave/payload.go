@@ -3,6 +3,7 @@ package factorysave
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -47,7 +48,7 @@ func withCanonicalFactoryVersion(
 		return nil, fmt.Errorf("unmarshal canonical factory payload: %w", err)
 	}
 	decoded["version"] = map[string]any{
-		"logical":  version.Logical.Int64(),
+		"logical":  strconv.FormatInt(version.Logical.Int64(), 10),
 		"physical": version.Physical.UTC().Format(time.RFC3339Nano),
 	}
 	payload, err := json.Marshal(decoded)

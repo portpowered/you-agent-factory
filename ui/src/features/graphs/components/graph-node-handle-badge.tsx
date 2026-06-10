@@ -37,32 +37,32 @@ export function GraphNodeHandleBadge({ handle }: GraphNodeHandleBadgeProps) {
       <Handle
         aria-invalid={handle.validationError ? true : undefined}
         aria-label={handle.buttonAriaLabel}
-        className="pointer-events-auto absolute !top-1/2 !h-full !w-full !border-0 opacity-0"
+        className={cn(
+          "pointer-events-auto absolute !top-1/2 !h-5 !w-5 !border-0 !bg-transparent",
+          "before:pointer-events-none before:absolute before:top-1/2 before:h-2.5 before:w-2.5 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-full before:border before:border-surface before:bg-[var(--node-handle-background)] before:shadow-sm before:transition before:content-['']",
+          handle.side === "left" ? "before:left-0" : "before:left-full",
+          handle.buttonPressed &&
+            "before:scale-125 before:shadow-[0_0_0_3px_var(--color-primary-container)]",
+          handle.variant === "valid-target" &&
+            "before:scale-125 before:shadow-[0_0_0_3px_var(--color-success-container)]",
+          handle.variant === "error" &&
+            "before:border-af-danger-border before:shadow-[0_0_0_3px_var(--color-error-container)] motion-safe:before:animate-pulse",
+          handle.validationError &&
+            "before:ring-2 before:ring-af-danger-border motion-safe:before:animate-pulse",
+        )}
         id={handle.id}
         isConnectable={handle.connectable ?? true}
         onClick={handle.onButtonClick}
         position={position}
-        style={overlayHandleStyle}
+        style={
+          {
+            ...overlayHandleStyle,
+            "--node-handle-background": handleDotColor(tone),
+            opacity: handle.buttonDisabled ? 0.45 : undefined,
+          } as CSSProperties
+        }
         title={handle.buttonTitle ?? handle.validationMessage}
         type={handle.type}
-      />
-      <span
-        aria-hidden="true"
-        className={cn(
-          "block h-2.5 w-2.5 rounded-full border border-surface shadow-sm transition",
-          handle.buttonPressed &&
-            "scale-125 shadow-[0_0_0_3px_var(--color-primary-container)]",
-          handle.variant === "valid-target" &&
-            "scale-125 shadow-[0_0_0_3px_var(--color-success-container)]",
-          handle.variant === "error" &&
-            "border-af-danger-border shadow-[0_0_0_3px_var(--color-error-container)] motion-safe:animate-pulse",
-          handle.validationError &&
-            "ring-2 ring-af-danger-border motion-safe:animate-pulse",
-        )}
-        style={{
-          ...handleDotStyle(tone),
-          opacity: handle.buttonDisabled ? 0.45 : undefined,
-        }}
       />
     </div>
   );
@@ -118,34 +118,27 @@ function handleTone(
   return "default";
 }
 
-function handleDotStyle(tone: ReturnType<typeof handleTone>): CSSProperties {
+function handleDotColor(tone: ReturnType<typeof handleTone>): string {
   switch (tone) {
     case "assignment":
-      return semanticDotStyle("var(--color-success)");
+      return "var(--color-success)";
     case "continue":
-      return semanticDotStyle("var(--color-secondary)");
+      return "var(--color-secondary)";
     case "failure":
-      return semanticDotStyle("var(--color-error)");
+      return "var(--color-error)";
     case "input":
-      return semanticDotStyle("var(--color-success)");
+      return "var(--color-success)";
     case "output":
-      return semanticDotStyle("var(--color-success)");
+      return "var(--color-success)";
     case "rejection":
-      return semanticDotStyle("var(--color-warning)");
+      return "var(--color-warning)";
     case "resource":
-      return semanticDotStyle("var(--color-black)");
+      return "var(--color-black)";
     case "worker":
-      return semanticDotStyle("var(--color-purple-500)");
+      return "var(--color-purple-500)";
     default:
-      return semanticDotStyle("var(--color-success)");
+      return "var(--color-success)";
   }
-}
-
-function semanticDotStyle(backgroundColor: string): CSSProperties {
-  return {
-    backgroundColor,
-    borderColor: "var(--color-surface)",
-  };
 }
 
 function anchoredHandleStyle(

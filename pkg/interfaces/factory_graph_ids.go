@@ -119,9 +119,7 @@ func BuildPendingFactoryGraphTopology(cfg *FactoryConfig) PendingFactoryGraphTop
 	index := buildFactoryGraphEntityIndex(cfg)
 	if cfg.ResourceManifest != nil {
 		for _, bundledFile := range cfg.ResourceManifest.BundledFiles {
-			if nodeID := CanonicalBundledFileGraphNodeID(bundledFile); nodeID != "" {
-				topology.NodeIDs[nodeID] = struct{}{}
-			}
+			addPendingBundledFileGraphNodes(&topology, bundledFile)
 		}
 	}
 	for _, resource := range cfg.Resources {
@@ -164,6 +162,21 @@ func BuildPendingFactoryGraphTopology(cfg *FactoryConfig) PendingFactoryGraphTop
 		appendPendingWorkstationIOEdges(&topology, cfg.WorkTypes, "workstation-on-rejection", workstation.OnRejection, workstationNodeID, false)
 	}
 	return topology
+}
+
+func addPendingBundledFileGraphNodes(topology *PendingFactoryGraphTopology, bundledFile BundledFileConfig) {
+	if nodeID := CanonicalBundledFileGraphNodeID(bundledFile); nodeID != "" {
+		topology.NodeIDs[nodeID] = struct{}{}
+	}
+
+	// Older graph-editor drafts represented every bundled file as a doc node.
+	// Keep accepting those persisted layout references while canonical callers
+	// migrate SCRIPT, INPUT, and ROOT_HELPER files to their typed node kinds.
+	targetPath := strings.TrimSpace(bundledFile.TargetPath)
+	if bundledFile.Type == BundledFileTypeDoc || targetPath == "" {
+		return
+	}
+	topology.NodeIDs[CanonicalFactoryGraphNodeID("doc", targetPath)] = struct{}{}
 }
 
 type factoryGraphEntityIndex struct {

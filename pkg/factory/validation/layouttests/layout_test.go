@@ -181,6 +181,25 @@ func TestValidate_UnknownBundledDocLayoutNodeBlocksTopologyValidation(t *testing
 	validationassert.HasDomainTargetCode(t, result.BlockingTargets(), factoryvalidation.CodeLayoutUnknownNodeReference)
 }
 
+func TestValidate_LegacyBundledScriptDocLayoutNodeMatchesPendingTopology(t *testing.T) {
+	t.Parallel()
+
+	cfg := validLayoutFactoryConfig()
+	cfg.ResourceManifest.BundledFiles = append(cfg.ResourceManifest.BundledFiles, interfaces.BundledFileConfig{
+		Type:       interfaces.BundledFileTypeScript,
+		TargetPath: "factory/scripts/setup-workspace.py",
+	})
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+		ID:       "doc:factory/scripts/setup-workspace.py",
+		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
+	})
+
+	result := factoryvalidation.Validate(cfg)
+	if result.HasTargets() {
+		t.Fatalf("validation targets = %#v, want none for legacy bundled script layout node", result.Targets)
+	}
+}
+
 func TestValidate_InvalidTopologyStillReportsBlockingTargetsSeparatelyFromLayout(t *testing.T) {
 	t.Parallel()
 
@@ -237,6 +256,30 @@ func TestPruneLayout_RemovesStaleNodeEdgeAndGroupMemberReferences(t *testing.T) 
 	}
 	if len(cfg.Layout.Groups[0].NodeIDs) != 1 || cfg.Layout.Groups[0].NodeIDs[0] != "workstation:plan-task" {
 		t.Fatalf("group nodeIds = %#v, want only plan-task", cfg.Layout.Groups[0].NodeIDs)
+	}
+}
+
+func TestPruneLayout_PreservesLegacyBundledScriptDocLayoutNode(t *testing.T) {
+	t.Parallel()
+
+	cfg := validLayoutFactoryConfig()
+	cfg.ResourceManifest.BundledFiles = append(cfg.ResourceManifest.BundledFiles, interfaces.BundledFileConfig{
+		Type:       interfaces.BundledFileTypeScript,
+		TargetPath: "factory/scripts/setup-workspace.py",
+	})
+	cfg.Layout.Nodes = append(cfg.Layout.Nodes, interfaces.FactoryLayoutNodeConfig{
+		ID:       "doc:factory/scripts/setup-workspace.py",
+		Position: interfaces.FactoryLayoutPointConfig{X: 1, Y: 2},
+	})
+
+	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
+	result := factoryvalidation.PruneLayout(cfg, topology)
+
+	if result.HasTargets() {
+		t.Fatalf("prune targets = %#v, want none for legacy bundled script layout node", result.Targets)
+	}
+	if len(cfg.Layout.Nodes) != 2 {
+		t.Fatalf("nodes after prune = %#v, want workstation and legacy bundled script nodes", cfg.Layout.Nodes)
 	}
 }
 
