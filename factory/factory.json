@@ -1,25 +1,407 @@
 {
-  "name": "factory",
+  "layout": {
+    "edges": [
+      {
+        "id": "workstation-on-failure:workstation:process-\u003ework-state:task:failed",
+        "waypoints": [
+          {
+            "x": 1012.9581,
+            "y": 1697.4542
+          },
+          {
+            "x": 1493.5426,
+            "y": 1703.4154
+          }
+        ]
+      },
+      {
+        "id": "worker-assignment:worker:planner-\u003eworkstation:plan",
+        "waypoints": [
+          {
+            "x": 112.65571,
+            "y": 690.0842
+          },
+          {
+            "x": 356.5797,
+            "y": 657.4032
+          }
+        ]
+      },
+      {
+        "id": "workstation-output:workstation:setup-workspace-\u003ework-state:task:init",
+        "waypoints": [
+          {
+            "x": 1096.0092,
+            "y": 927.48413
+          },
+          {
+            "x": 387.62253,
+            "y": 1099.8002
+          }
+        ]
+      },
+      {
+        "id": "workstation-on-rejection:workstation:process-\u003ework-state:task:init",
+        "waypoints": [
+          {
+            "x": 881.63214,
+            "y": 1596.0082
+          },
+          {
+            "x": 493.8324,
+            "y": 1592.3182
+          }
+        ]
+      },
+      {
+        "id": "workstation-on-continue:workstation:process-\u003ework-state:task:init",
+        "waypoints": [
+          {
+            "x": 900.4263,
+            "y": 1687.9353
+          },
+          {
+            "x": 474.39767,
+            "y": 1642.4059
+          }
+        ]
+      },
+      {
+        "id": "workstation-on-failure:workstation:review-\u003ework-state:task:failed",
+        "waypoints": [
+          {
+            "x": 1512.497,
+            "y": 1163.5251
+          }
+        ]
+      },
+      {
+        "id": "worker-assignment:worker:planner-\u003eworkstation:ideafy",
+        "waypoints": [
+          {
+            "x": -165.4157,
+            "y": 403.01138
+          }
+        ]
+      }
+    ],
+    "nodes": [
+      {
+        "id": "work-state:task:init",
+        "position": {
+          "x": 405.65985,
+          "y": 1215.4137
+        }
+      },
+      {
+        "id": "workstation:process",
+        "position": {
+          "x": 658.37067,
+          "y": 1364.6238
+        }
+      },
+      {
+        "id": "work-state:task:in-review",
+        "position": {
+          "x": 871.73926,
+          "y": 1238.3519
+        }
+      },
+      {
+        "id": "workstation:review",
+        "position": {
+          "x": 1057.9973,
+          "y": 996.76105
+        }
+      },
+      {
+        "id": "work-state:task:to-complete",
+        "position": {
+          "x": 1297.1531,
+          "y": 1001.3931
+        }
+      },
+      {
+        "id": "workstation:consume",
+        "position": {
+          "x": 1590.3287,
+          "y": 740.2323
+        }
+      },
+      {
+        "id": "work-state:idea:complete",
+        "position": {
+          "x": 1831.8229,
+          "y": 652.5907
+        }
+      },
+      {
+        "id": "work-state:task:complete",
+        "position": {
+          "x": 1837.1075,
+          "y": 873.6861
+        }
+      },
+      {
+        "id": "workstation:executor-loop-breaker",
+        "position": {
+          "x": 1317.772,
+          "y": 1268.3641
+        }
+      },
+      {
+        "id": "workstation:review-loop-breaker",
+        "position": {
+          "x": 1322.3112,
+          "y": 1485.6381
+        }
+      },
+      {
+        "id": "work-state:task:failed",
+        "position": {
+          "x": 1545.67,
+          "y": 1395.8154
+        }
+      },
+      {
+        "id": "worker:planner",
+        "position": {
+          "x": -327.3692,
+          "y": 536.3977
+        }
+      },
+      {
+        "id": "work-state:idea:init",
+        "position": {
+          "x": 207.18465,
+          "y": 537.6868
+        }
+      },
+      {
+        "id": "workstation:setup-workspace",
+        "position": {
+          "x": 890.29266,
+          "y": 666.99066
+        }
+      },
+      {
+        "id": "workstation:plan",
+        "position": {
+          "x": 443.23663,
+          "y": 500.62946
+        }
+      },
+      {
+        "id": "resource:executor-slot",
+        "position": {
+          "x": -52.0331,
+          "y": 822.9173
+        }
+      },
+      {
+        "id": "worker:processor",
+        "position": {
+          "x": 198.61653,
+          "y": 1350.9248
+        }
+      },
+      {
+        "id": "work-state:thoughts:init",
+        "position": {
+          "x": -145.77621,
+          "y": 236.81143
+        }
+      },
+      {
+        "id": "workstation:though-retrigger",
+        "position": {
+          "x": -400.54874,
+          "y": 209.49779
+        }
+      },
+      {
+        "id": "work-state:plan:failed",
+        "position": {
+          "x": 1148.0361,
+          "y": 755.14417
+        }
+      },
+      {
+        "id": "work-state:plan:complete",
+        "position": {
+          "x": 1131.654,
+          "y": 636.92615
+        }
+      },
+      {
+        "id": "work-state:idea:to-complete",
+        "position": {
+          "x": 1228.7927,
+          "y": 521.1127
+        }
+      },
+      {
+        "id": "work-state:idea:failed",
+        "position": {
+          "x": 689.6315,
+          "y": 827.3711
+        }
+      },
+      {
+        "id": "workstation:ideafy",
+        "position": {
+          "x": 179.52827,
+          "y": 227.3
+        }
+      },
+      {
+        "id": "work-state:thoughts:complete",
+        "position": {
+          "x": 411.98337,
+          "y": 224.1949
+        }
+      },
+      {
+        "id": "work-state:thoughts:failed",
+        "position": {
+          "x": 408.30487,
+          "y": 351.1999
+        }
+      },
+      {
+        "id": "work-type:thoughts",
+        "position": {
+          "x": 30.237309,
+          "y": 141.55646
+        }
+      },
+      {
+        "id": "work-type:cron-triggers",
+        "position": {
+          "x": -414.0603,
+          "y": 109.72197
+        }
+      },
+      {
+        "id": "work-type:idea",
+        "position": {
+          "x": 209.54546,
+          "y": 473.2427
+        }
+      },
+      {
+        "id": "work-type:plan",
+        "position": {
+          "x": 686.8879,
+          "y": 567.1333
+        }
+      },
+      {
+        "id": "work-type:task",
+        "position": {
+          "x": 411.49585,
+          "y": 1146.3815
+        }
+      },
+      {
+        "id": "doc:factory/docs/batch-inputs.md",
+        "position": {
+          "x": 224.6678,
+          "y": 118.099464
+        }
+      },
+      {
+        "id": "doc:factory/scripts/setup-workspace.py",
+        "position": {
+          "x": 887.17816,
+          "y": 573.83527
+        }
+      },
+      {
+        "id": "doc:factory/docs/overview.md",
+        "position": {
+          "x": 918.0403,
+          "y": 342.30057
+        }
+      },
+      {
+        "id": "resource:concurrent-planners",
+        "position": {
+          "x": -79.439995,
+          "y": 376.17307
+        }
+      },
+      {
+        "id": "work-type:review",
+        "position": {
+          "x": 1060.1134,
+          "y": 926.79584
+        }
+      },
+      {
+        "id": "work-state:review:init",
+        "position": {
+          "x": 712.10455,
+          "y": 1085.8364
+        }
+      },
+      {
+        "id": "work-state:plan:init",
+        "position": {
+          "x": 696.7295,
+          "y": 732.20715
+        }
+      },
+      {
+        "id": "work-state:review:complete",
+        "position": {
+          "x": 1285.809,
+          "y": 897.4673
+        }
+      },
+      {
+        "id": "work-state:review:fin",
+        "position": {
+          "x": 1343.6841,
+          "y": 1151.1926
+        }
+      }
+    ],
+    "schemaVersion": 1,
+    "viewport": {
+      "x": -286.87537,
+      "y": -542.9691,
+      "zoom": 1.0755962
+    }
+  },
+  "name": "UNDEFINED",
   "resources": [
     {
-      "capacity": 10,
+      "capacity": 8,
+      "id": "executor-slot",
       "name": "executor-slot"
+    },
+    {
+      "capacity": 1,
+      "id": "concurrent-planners",
+      "name": "concurrent-planners"
     }
   ],
   "supportingFiles": {
     "bundledFiles": [
       {
         "content": {
-          "encoding": "utf-8",
-          "inline": "asda"
+          "encoding": "utf-8"
         },
-        "targetPath": "Makefile",
-        "type": "ROOT_HELPER"
+        "id": "factory/docs/batch-inputs.md",
+        "targetPath": "factory/docs/batch-inputs.md",
+        "type": "DOC"
       },
       {
         "content": {
           "encoding": "utf-8"
         },
+        "id": "factory/docs/overview.md",
         "targetPath": "factory/docs/overview.md",
         "type": "DOC"
       },
@@ -27,172 +409,138 @@
         "content": {
           "encoding": "utf-8"
         },
-        "targetPath": "factory/docs/planning.md",
-        "type": "DOC"
-      },
-      {
-        "content": {
-          "encoding": "utf-8"
-        },
-        "targetPath": "factory/inputs/plan/default/prd-cron-logical-move-output-route-validation.md",
-        "type": "INPUT"
-      },
-      {
-        "content": {
-          "encoding": "utf-8"
-        },
-        "targetPath": "factory/inputs/plan/default/prd-cursor-agent-session-metrics.md",
-        "type": "INPUT"
-      },
-      {
-        "content": {
-          "encoding": "utf-8"
-        },
-        "targetPath": "factory/inputs/plan/default/prd-dashboard-ui-nit-cleanup-bundle.md",
-        "type": "INPUT"
-      },
-      {
-        "content": {
-          "encoding": "utf-8"
-        },
-        "targetPath": "factory/inputs/plan/default/prd-factory-graph-add-node-placement.md",
-        "type": "INPUT"
-      },
-      {
-        "content": {
-          "encoding": "utf-8"
-        },
-        "targetPath": "factory/inputs/plan/default/prd-material-color-role-migration.md",
-        "type": "INPUT"
-      },
-      {
-        "content": {
-          "encoding": "utf-8"
-        },
-        "targetPath": "factory/inputs/plan/default/prd-subprocess-success-cleanup.md",
-        "type": "INPUT"
-      },
-      {
-        "content": {
-          "encoding": "utf-8"
-        },
-        "targetPath": "factory/inputs/plan/default/prd-worker-runtime-configuration.md",
-        "type": "INPUT"
-      },
-      {
-        "content": {
-          "encoding": "utf-8"
-        },
-        "targetPath": "factory/inputs/plan/default/prd-workstation-guard-selector-autocomplete.md",
-        "type": "INPUT"
-      },
-      {
-        "content": {
-          "encoding": "utf-8"
-        },
+        "id": "factory/scripts/setup-workspace.py",
         "targetPath": "factory/scripts/setup-workspace.py",
         "type": "SCRIPT"
       }
     ]
   },
   "version": {
-    "logical": 1780219232503513601,
-    "physical": "2026-06-05T10:45:12.725426Z"
+    "logical": "1780219232503513623",
+    "physical": "2026-06-10T13:30:57.292557Z"
   },
   "workTypes": [
     {
+      "id": "thoughts",
       "name": "thoughts",
       "states": [
         {
+          "id": "init",
           "name": "init",
           "type": "INITIAL"
         },
         {
+          "id": "complete",
           "name": "complete",
           "type": "TERMINAL"
         },
         {
+          "id": "failed",
           "name": "failed",
           "type": "FAILED"
         }
       ]
     },
     {
+      "id": "task",
       "name": "task",
       "states": [
         {
+          "id": "init",
           "name": "init",
           "type": "INITIAL"
         },
         {
+          "id": "in-review",
           "name": "in-review",
           "type": "PROCESSING"
         },
         {
+          "id": "to-complete",
           "name": "to-complete",
           "type": "PROCESSING"
         },
         {
+          "id": "complete",
           "name": "complete",
           "type": "TERMINAL"
         },
         {
+          "id": "failed",
           "name": "failed",
           "type": "FAILED"
         }
       ]
     },
     {
+      "id": "idea",
       "name": "idea",
       "states": [
         {
+          "id": "init",
           "name": "init",
           "type": "INITIAL"
         },
         {
+          "id": "to-complete",
           "name": "to-complete",
           "type": "PROCESSING"
         },
         {
+          "id": "complete",
           "name": "complete",
           "type": "TERMINAL"
         },
         {
+          "id": "failed",
           "name": "failed",
           "type": "FAILED"
         }
       ]
     },
     {
+      "id": "plan",
       "name": "plan",
       "states": [
         {
+          "id": "init",
           "name": "init",
           "type": "INITIAL"
         },
         {
+          "id": "complete",
           "name": "complete",
           "type": "TERMINAL"
         },
         {
+          "id": "failed",
           "name": "failed",
           "type": "FAILED"
         }
       ]
     },
     {
+      "id": "cron-triggers",
       "name": "cron-triggers",
+      "states": []
+    },
+    {
+      "id": "review",
+      "name": "review",
       "states": [
         {
+          "id": "init",
           "name": "init",
           "type": "INITIAL"
         },
         {
+          "id": "complete",
           "name": "complete",
           "type": "TERMINAL"
         },
         {
-          "name": "failed",
+          "id": "fin",
+          "name": "fin",
           "type": "FAILED"
         }
       ]
@@ -201,6 +549,7 @@
   "workers": [
     {
       "executorProvider": "SCRIPT_WRAP",
+      "id": "processor",
       "modelProvider": "CURSOR",
       "name": "processor",
       "skipPermissions": true,
@@ -213,20 +562,23 @@
         "{{ (index .Inputs 0).Name }}"
       ],
       "command": "python3",
+      "id": "workspace-setup",
       "name": "workspace-setup",
       "type": "SCRIPT_WORKER"
     },
     {
+      "executorProvider": "SCRIPT_WRAP",
+      "id": "planner",
       "modelProvider": "CODEX",
       "name": "planner",
-      "type": "MODEL_WORKER",
       "skipPermissions": true,
       "stopToken": "\u003cCOMPLETE\u003e",
-      "executorProvider": "SCRIPT_WRAP"
+      "type": "MODEL_WORKER"
     }
   ],
   "workstations": [
     {
+      "id": "ideafy",
       "inputs": [
         {
           "state": "init",
@@ -249,13 +601,14 @@
       "resources": [
         {
           "capacity": 1,
-          "name": "executor-slot"
+          "name": "concurrent-planners"
         }
       ],
       "type": "MODEL_WORKSTATION",
-      "worker": "processor"
+      "worker": "planner"
     },
     {
+      "id": "plan",
       "inputs": [
         {
           "state": "init",
@@ -295,6 +648,7 @@
       "worker": "planner"
     },
     {
+      "id": "consume",
       "inputs": [
         {
           "guards": [
@@ -326,6 +680,7 @@
       "worker": ""
     },
     {
+      "id": "setup-workspace",
       "inputs": [
         {
           "state": "init",
@@ -354,6 +709,7 @@
     },
     {
       "behavior": "REPEATER",
+      "id": "process",
       "inputs": [
         {
           "state": "init",
@@ -383,6 +739,10 @@
         {
           "state": "in-review",
           "workType": "task"
+        },
+        {
+          "state": "init",
+          "workType": "review"
         }
       ],
       "resources": [
@@ -396,10 +756,15 @@
       "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
     },
     {
+      "id": "review",
       "inputs": [
         {
           "state": "in-review",
           "workType": "task"
+        },
+        {
+          "state": "init",
+          "workType": "review"
         }
       ],
       "name": "review",
@@ -407,6 +772,10 @@
         {
           "state": "failed",
           "workType": "task"
+        },
+        {
+          "state": "fin",
+          "workType": "review"
         }
       ],
       "onRejection": [
@@ -419,6 +788,10 @@
         {
           "state": "to-complete",
           "workType": "task"
+        },
+        {
+          "state": "complete",
+          "workType": "review"
         }
       ],
       "resources": [
@@ -432,40 +805,6 @@
       "workingDirectory": ".claude/worktrees/{{ (index .Inputs 0).Name }}"
     },
     {
-      "behavior": "CRON",
-      "cron": {
-        "schedule": "0 */1 * * *"
-      },
-      "inputs": [],
-      "name": "cleaner",
-      "onFailure": [
-        {
-          "state": "failed",
-          "workType": "cron-triggers"
-        }
-      ],
-      "onRejection": [
-        {
-          "state": "failed",
-          "workType": "cron-triggers"
-        }
-      ],
-      "outputs": [
-        {
-          "state": "complete",
-          "workType": "cron-triggers"
-        }
-      ],
-      "resources": [
-        {
-          "capacity": 1,
-          "name": "executor-slot"
-        }
-      ],
-      "type": "MODEL_WORKSTATION",
-      "worker": "processor"
-    },
-    {
       "guards": [
         {
           "maxVisits": 50,
@@ -473,6 +812,7 @@
           "workstation": "process"
         }
       ],
+      "id": "executor-loop-breaker",
       "inputs": [
         {
           "state": "init",
@@ -497,6 +837,7 @@
           "workstation": "review"
         }
       ],
+      "id": "review-loop-breaker",
       "inputs": [
         {
           "state": "in-review",
@@ -508,6 +849,23 @@
         {
           "state": "failed",
           "workType": "task"
+        }
+      ],
+      "type": "LOGICAL_MOVE",
+      "worker": ""
+    },
+    {
+      "behavior": "CRON",
+      "cron": {
+        "schedule": "0 * * * *"
+      },
+      "id": "though-retrigger",
+      "inputs": [],
+      "name": "though-retrigger",
+      "outputs": [
+        {
+          "state": "init",
+          "workType": "thoughts"
         }
       ],
       "type": "LOGICAL_MOVE",

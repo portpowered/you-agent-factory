@@ -1,189 +1,167 @@
-# Repository Maintainer Factory Overview
+# Factory Overview
 
-This directory (`./factory/`) is the checked-in **you-agent-factory** repository
-maintainer workflow. Read this file and `factory.json` before submitting work;
-do not guess `workTypeName`, inbox paths, or pipeline stages from repository
-layout alone.
+This factory coordinates autonomous work for **Awesome AI Agent Factories**: a
+curated Awesome List for agent-factory coordination, orchestration, and flows—
+theories, frameworks, benchmarks, research, and writing about managing groups of
+AI agents. The ideafy workstation is
+the meta-planner. It chooses phase-scoped batches, submits ideas, and records
+progress. Executors implement PRD stories in worktrees. Review gates the
+resulting PRs.
 
-For generic agent orientation across any factory, run `you docs agents`. For
-`factory.json` field contracts and portability, run `you docs config`. For
-submitted-work and batch ingress contracts, run `you docs work` and
-`you docs batch-inputs`.
+## Read First
 
-## Quick start
+Before submitting work, read:
 
-From the repository root:
+* `factory/factory.json`
+* `factory/workstations/ideafy/AGENTS.md`
+* `docs/internal/customer-ask.md`
+* `docs/internal/checklist.md`
+* `docs/internal/progress.txt`
+* `factory/docs/batch-inputs.md`
+* `factory/docs/batch-input-example.json`
+* `you docs agents`
+* `you docs batch-inputs`
 
-```bash
-you run --dir ./factory
+Contributor-facing docs that shape list work:
+
+* `README.md`
+* `CONTRIBUTING.md` — ten curated README categories (Theories through Related Lists), entry format, and **Local checks** (`make check`, `make test`, `make all`, optional `make lint` / `make links`, GitHub Actions table)
+* `docs/taxonomy.md` — category definitions aligned with README section headings and CONTRIBUTING
+* `docs/review-policy.md` — maintainer checklist and `resource:*` labels for the same ten categories
+
+## Phase Control
+
+Current phase authorization and the Awesome List build goal live in:
+
+```txt
+docs/internal/customer-ask.md
 ```
 
-To submit a batch file while starting or against a running factory:
+`docs/internal/checklist.md` tracks phase progress against that ask.
+`docs/internal/progress.txt` is the meta-planner append-only run log.
 
-```bash
-you run --work ./factory/inputs/BATCH/default/<request_id>.json --dir ./factory
+Phases 1–10 cover README foundation, governance, review process, Makefile and
+Go README checks, GitHub Actions, templates, initial content seeding, category
+definitions, maintenance, and public launch. The meta-planner may dry-run batches
+during planning. Always dry-run a batch before real submission:
+
+```sh
+you submit batch --dry-run <path>
 ```
 
-Use `you docs record-replay` when you need recording or replay flags for local
-runs.
+Do not submit a real batch until the active phase in `customer-ask.md` and the
+current customer conversation agree the next slice of work is ready.
 
-## How work moves
+## Work Types
 
-Pipeline derived from the live `factory.json` in this directory:
+Configured work types:
 
-```
-thoughts:init → [ideafy] → thoughts:complete
-idea:init → [plan] → idea:to-complete + plan:init
-plan:init → [setup-workspace] → plan:complete + task:init
-task:init → [process] → task:in-review → [review] → task:to-complete
-                 ↑                         |
-                 └──── onRejection ────────┘ (back to task:init)
-[task:in-review + idea:to-complete] → [consume] → task:complete + idea:complete
+```txt
+thoughts       meta-planner loopback work
+idea           product/implementation idea submitted by ideafy
+plan           PRD planning output from an idea
+task           executor/review implementation work
+cron-triggers  runtime trigger type
 ```
 
-Guarded `LOGICAL_MOVE` loop breakers bound retries:
+Use `idea`, singular, for implementation proposals.
+Use `thoughts`, plural, for ideafy loopback.
 
-| Workstation | Guard | Effect |
-|-------------|-------|--------|
-| `executor-loop-breaker` | `VISIT_COUNT` on `process`, max 50 | `task:init` → `task:failed` |
-| `review-loop-breaker` | `VISIT_COUNT` on `review`, max 10 | `task:in-review` → `task:failed` |
+## Workstation Flow
 
-The `cleaner` workstation runs on a cron schedule and completes
-`cron-triggers:complete` work for housekeeping.
+```txt
+thoughts:init -> ideafy -> thoughts:complete
 
-## Work types and initial states
-
-| Work type | Initial state | Terminal / failure states |
-|-----------|---------------|---------------------------|
-| `thoughts` | `init` | `complete`, `failed` |
-| `idea` | `init` | `to-complete`, `complete`, `failed` |
-| `plan` | `init` | `complete`, `failed` |
-| `task` | `init` | `in-review`, `to-complete`, `complete`, `failed` |
-| `cron-triggers` | `init` | `complete`, `failed` |
-
-Workstation prompts live under `factory/workstations/<name>/AGENTS.md`. Worker
-backends live under `factory/workers/<name>/AGENTS.md`.
-
-## Read before you submit
-
-1. Run `you docs agents` for the end-to-end agent playbook.
-2. Open `factory.json` in this directory.
-3. Read this overview and the workstation `AGENTS.md` for the step you will run.
-4. Confirm the target `workTypeName` and inbox path from **Agent submission
-   policy** and the tables below — do not infer names from other repositories or
-   examples.
-5. For batch JSON, follow `you docs batch-inputs` (`you docs batch-work` is a
-   byte-identical alias).
-
-Planner workstations enqueue work; executor workstations run inference or
-scripts at bound workers. See `you docs agents` § Planner vs Executor and
-`docs/reference/authoring-agents-md.md` for prompt file shape.
-
-## Agent submission policy
-
-Use this policy when choosing `workTypeName` and ingress. It matches the
-pipeline and work-type tables above; the inbox table below lists paths.
-
-- **Default — `idea`:** Submit new maintainer work as **`idea`**: standalone
-  markdown under `factory/inputs/idea/default/` or
-  `you submit --work-type-name idea` (with `--name` and `--payload` as needed).
-- **`thoughts`:** Only for large, ambiguous customer asks that need **ideafy**
-  breakdown into multiple ideas — not routine features or docs.
-- **`task`:** Only to **unstick** stuck or failed work: failed tokens, review
-  loops that are not progressing, or recovery after **`executor-loop-breaker`**
-  or **`review-loop-breaker`** routes work to `task:failed`. Do **not** use
-  `task` for greenfield features, documentation, or normal pipeline progression.
-- **`plan`:** Rarely submit standalone plans; the pipeline normally spawns
-  **`plan`** work from accepted ideas.
-- **Batch JSON:** Use `factory/inputs/BATCH/default/{requestId}.json` only when
-  the request needs **`DEPENDS_ON`**, **`PARENT_CHILD`**, or multiple work types
-  in one `FACTORY_REQUEST_BATCH` (see `you docs batch-inputs` and
-  `you docs relationships`).
-
-## Submission recipes (this factory)
-
-Pick a row by goal; do not route greenfield features or docs to **`task`**.
-
-| Goal | Work type | Ingress |
-|------|-----------|---------|
-| New feature or documentation | `idea` | `you submit --work-type-name idea` (with `--name` and `--payload` as needed) or markdown under `factory/inputs/idea/default/` |
-| Large, ambiguous multi-area customer ask | `thoughts` | Markdown under `factory/inputs/thoughts/default/` |
-| Unstick failed or looped implementation | `task` | Markdown under `factory/inputs/task/default/` or `you submit --work-type-name task` (with `--name` and `--payload` as needed) |
-| Ordered multi-item or mixed-type request | Batch (`FACTORY_REQUEST_BATCH`) | `factory/inputs/BATCH/default/{requestId}.json` |
-
-## Input layout
-
-Seed checked-in repository work under:
-
-| Inbox | Use when |
-|-------|----------|
-| `factory/inputs/thoughts/default/` | Ideation markdown for `thoughts` work |
-| `factory/inputs/idea/default/` | Standalone idea markdown (default for new ideas) |
-| `factory/inputs/plan/default/` | Standalone plan markdown |
-| `factory/inputs/task/default/` | Standalone task markdown |
-| `factory/inputs/BATCH/default/` | `FACTORY_REQUEST_BATCH` JSON when you need dependency ordering or mixed work types in one request |
-
-Each canonical inbox is kept in git by a tracked `.gitkeep` sentinel so the
-directory exists in clean checkouts. Files inside those folders are
-repository-local working state, not generated starter payloads from
-`you init`.
-
-Authoring guidance:
-
-- Default to **one standalone markdown idea file** under
-  `factory/inputs/idea/default/` (see **Agent submission policy** — new work is
-  **`idea`**, not **`task`**).
-- Use `factory/inputs/BATCH/default/` only when the request needs `DEPENDS_ON`,
-  `PARENT_CHILD`, or multiple work types in one batch (see `you docs
-  relationships`).
-
-## Operator loop (maintainer factory)
-
-Short loop for submitting and verifying maintainer work against a **running**
-factory (see `you docs agents` § Is the factory running?):
-
-1. **`you session list`** — confirm the service is listening and a session is
-   open. Connection refused means start `you run --dir ./factory` (or
-   `you run --continuously`) before submitting.
-2. **Submit an idea** — default path for new work: CLI or inbox markdown under
-   `factory/inputs/idea/default/` (see **Submission recipes** above).
-3. **Verify acceptance** — use one or more of:
-   - **`GET /factory-sessions/{session_id}/status`** — `factoryState` and
-     `runtimeStatus` show whether the runtime accepted work and is processing
-     (session id is often `~default` on single-session hosts).
-   - **Dashboard** — `http://localhost:7437/dashboard/ui` on the same host/port
-     as the API (adjust for `--server` / `--port`).
-   - **`you work list`** — when the listing is populated, locate the submitted
-     item by name or `workId` from the submit response.
-
-Example CLI submit:
-
-```bash
-you submit --name my-idea --work-type-name idea --payload path/to.md
+idea:init -> plan -> idea:to-complete + plan:init
+plan:init -> setup-workspace -> plan:complete + task:init
+task:init -> process -> task:in-review
+task:in-review -> review -> task:to-complete
+idea:to-complete + task:to-complete with the same name -> consume
 ```
 
+Executor and review workstations run in worktrees under
+`.claude/worktrees/<work-item-name>/`, created by `factory/scripts/setup-workspace.py`.
 
-## Maintainer notes
+## Batch Submission
 
-- Packaged CLI reference (`you docs <topic>`): edit `docs/reference/<topic>.md`
-  only, run `make docs-reference-smoke`, then ship. Do not copy topics into
-  `pkg/cli/docs/`; the CLI embeds this directory via `docs/reference/embed.go`.
-- Maintainer control surface: `factory/internal/{asks,view,progress,meta}.md`
-  (may be gitignored locally; align all four when updating maintainer state).
-- Process/review semantics: `docs/internal/development/process-review-loop-contract.md`.
-- Replay samples: `factory/logs/agent-fails.json` and
-  `factory/logs/agent-fails.replay.json` exercise event-stream → replay conversion.
-- Resource capacity: `executor-slot` (capacity 10) gates model workstations.
+Use the canonical `FACTORY_REQUEST_BATCH` shape from `you docs batch-inputs`.
+Human-readable notes live in `factory/docs/batch-inputs.md`.
 
-## Related `you docs` topics
+For a running factory, prefer:
 
-| Need | Command |
-|------|---------|
-| Agent orientation | `you docs agents` |
-| `factory.json` topology and portability | `you docs config` |
-| Factory sessions and liveness | `you session list` (`you docs sessions` not packaged yet — see **Operator loop** and `you docs agents`) |
-| Submitted work and `POST /work` | `you docs work` |
-| Batch ingress and inboxes | `you docs batch-inputs` |
-| Relations in batch JSON | `you docs relationships` |
-| Guards and loop breakers | `you docs guards` |
-| Authoring a new factory | `you docs authoring-factories` |
+```sh
+you submit batch <path>
+```
+
+Always dry-run first:
+
+```sh
+you submit batch --dry-run <path>
+```
+
+For watched-folder operator ingress, use:
+
+```txt
+factory/inputs/BATCH/default/<request_id>.json
+```
+
+The checked-in example is:
+
+```txt
+factory/docs/batch-input-example.json
+```
+
+## State Inspection
+
+Use:
+
+```sh
+you work list
+you session list
+```
+
+`you work list` shows durable work state. `you session list` shows active or
+recent runtime sessions. Check both before deciding that work is stuck or before
+submitting a new batch.
+
+## Repair
+
+Use:
+
+```sh
+you work move
+```
+
+only for deliberate workflow repair. Record every manual move in
+`docs/internal/progress.txt` with the work item, old state, new state, reason,
+and expected next workstation. Do not use work moves to skip implementation,
+review, or validation.
+
+## Local State Files
+
+Planner-owned state under `docs/internal/`:
+
+```txt
+docs/internal/customer-ask.md  current phase authorization and Awesome List build goal
+docs/internal/checklist.md     high-level phase and customer-ask tracking (meta-planner)
+docs/internal/progress.txt     append-only meta-planner progress log (meta-planner)
+```
+
+The meta-planner creates and maintains `checklist.md` and `progress.txt` when
+they are not already present. Task executors append to the worktree `progress.txt`
+at the repository root during implementation batches.
+
+## Quality Gates
+
+Before opening or merging reconciliation PRs, run from the repository root:
+
+```sh
+make check   # or make all — same README validation
+make test
+git diff --check
+```
+
+Optional pre-submit targets (`make lint`, `make links`) and GitHub workflow
+gates are documented in `CONTRIBUTING.md` **Local checks** and **GitHub Actions**.
+These commands mirror the Go README checks in `internal/checks`, `go test ./...`,
+and whitespace hygiene enforced in CI.

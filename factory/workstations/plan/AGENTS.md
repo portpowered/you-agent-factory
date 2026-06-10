@@ -58,7 +58,9 @@ Please convert the file into the corresponding `tasks/todo/{{ (index .Inputs 0).
 
 The JSON file must be implementation-ready and contain:
 - `project`
-- `branchName` using `ralph/<feature-name-kebab-case>`
+- `branchName` using the exact work item name `{{ (index .Inputs 0).Name }}`.
+  The setup-workspace step uses the PRD/work item name as the git branch and
+  worktree name, so `branchName` must stay aligned with that value.
 - `description`
 - `context.customerAsk`
 - `context.problem`
@@ -97,7 +99,7 @@ Add priority levels to tasks so users can focus on what matters most. Tasks can 
 
 ## User Stories
 
-### US-001: Add priority field to database
+### <SOME_SHORT_NAME>-001: Add priority field to database
 **Description:** As a developer, I need to store task priority so it persists across sessions.
 
 **Acceptance Criteria:**
@@ -105,7 +107,7 @@ Add priority levels to tasks so users can focus on what matters most. Tasks can 
 - [ ] Generate and run migration successfully
 - [ ] Typecheck passes
 
-### US-002: Display priority indicator on task cards
+### <SOME_SHORT_NAME>-002: Display priority indicator on task cards
 **Description:** As a user, I want to see task priority at a glance so I know what needs attention first.
 
 **Acceptance Criteria:**
@@ -114,7 +116,7 @@ Add priority levels to tasks so users can focus on what matters most. Tasks can 
 - [ ] Typecheck passes
 - [ ] Verify in browser using dev-browser skill
 
-### US-003: Add priority selector to task edit
+### <SOME_SHORT_NAME>-003: Add priority selector to task edit
 **Description:** As a user, I want to change a task's priority when editing it.
 
 **Acceptance Criteria:**
@@ -124,7 +126,7 @@ Add priority levels to tasks so users can focus on what matters most. Tasks can 
 - [ ] Typecheck passes
 - [ ] Verify in browser using dev-browser skill
 
-### US-004: Filter tasks by priority
+### <SOME_SHORT_NAME>-004: Filter tasks by priority
 **Description:** As a user, I want to filter the task list to see only high-priority items when I'm focused.
 
 **Acceptance Criteria:**
@@ -171,7 +173,7 @@ Add priority levels to tasks so users can focus on what matters most. Tasks can 
 ```json
 {
   "project": "[Project Name]",
-  "branchName": "ralph/[feature-name-kebab-case]",
+  "branchName": "{{ (index .Inputs 0).Name }}",
   "description": "[Feature description from PRD title/intro]",
   "userStories": [
     {
