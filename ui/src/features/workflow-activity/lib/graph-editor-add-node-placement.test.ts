@@ -5,11 +5,13 @@ import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/
 import {
   CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
   CURRENT_ACTIVITY_DOC_NODE_WIDTH,
-} from "./current-activity-doc-graph-layout";
+} from "./current-activity-factory-graph-layout";
 import {
   factoryGraphNodeIdForAddEntityDraft,
   occupiedRectsFromRenderedNodes,
   resolveInitialPlacementTopLeft,
+  resolveInitialPlacementTopLeftForViewport,
+  viewportCenterFromPlacementViewport,
 } from "./graph-editor-add-node-placement";
 import { graphEditorNodeDimensionsForKind } from "./graph-editor-node-placement";
 
@@ -82,7 +84,6 @@ describe("resolveInitialPlacementTopLeft for docs", () => {
     const topLeft = resolveInitialPlacementTopLeft({
       draft: docDraft,
       nodes: [],
-      storedPositions: {},
       viewportCenter: { x: 640, y: 360 },
     });
 
@@ -105,7 +106,6 @@ describe("resolveInitialPlacementTopLeft", () => {
     const topLeft = resolveInitialPlacementTopLeft({
       draft: workerDraft,
       nodes: [],
-      storedPositions: {},
       viewportCenter: { x: 500, y: 300 },
     });
 
@@ -113,19 +113,6 @@ describe("resolveInitialPlacementTopLeft", () => {
       x: 500 - workerSize.width / 2,
       y: 300 - workerSize.height / 2,
     });
-  });
-
-  it("skips placement when the new node already has a stored position", () => {
-    const topLeft = resolveInitialPlacementTopLeft({
-      draft: workerDraft,
-      nodes: [],
-      storedPositions: {
-        "worker:reviewer": { x: 12, y: 34 },
-      },
-      viewportCenter: { x: 500, y: 300 },
-    });
-
-    expect(topLeft).toBeNull();
   });
 
   it("nudges away from occupied nodes at the viewport center", () => {
@@ -138,7 +125,6 @@ describe("resolveInitialPlacementTopLeft", () => {
     const topLeft = resolveInitialPlacementTopLeft({
       draft: workerDraft,
       nodes,
-      storedPositions: {},
       viewportCenter: { x: 500, y: 300 },
     });
 
@@ -156,7 +142,6 @@ describe("resolveInitialPlacementTopLeft", () => {
     const topLeft = resolveInitialPlacementTopLeft({
       draft: workerDraft,
       nodes,
-      storedPositions: {},
       viewportCenter: { x: 500, y: 300 },
     });
 
@@ -177,25 +162,21 @@ describe("resolveInitialPlacementTopLeft", () => {
     const workerNear = resolveInitialPlacementTopLeft({
       draft: workerDraft,
       nodes: [],
-      storedPositions: {},
       viewportCenter: nearCenter,
     });
     const workerFar = resolveInitialPlacementTopLeft({
       draft: workerDraft,
       nodes: [],
-      storedPositions: {},
       viewportCenter: farCenter,
     });
     const workstationNear = resolveInitialPlacementTopLeft({
       draft: workstationDraft,
       nodes: [],
-      storedPositions: {},
       viewportCenter: nearCenter,
     });
     const workstationFar = resolveInitialPlacementTopLeft({
       draft: workstationDraft,
       nodes: [],
-      storedPositions: {},
       viewportCenter: farCenter,
     });
 
@@ -205,6 +186,40 @@ describe("resolveInitialPlacementTopLeft", () => {
     expect(workerFar).not.toBeNull();
     expect(workstationNear).not.toBeNull();
     expect(workstationFar).not.toBeNull();
+  });
+});
+
+describe("viewportCenterFromPlacementViewport", () => {
+  it("converts measured viewport size and React Flow transform into flow coordinates", () => {
+    expect(
+      viewportCenterFromPlacementViewport({
+        height: 800,
+        viewport: { x: -100, y: -50, zoom: 2 },
+        width: 1000,
+      }),
+    ).toEqual({ x: 300, y: 225 });
+  });
+
+  it("resolves top-left placement from the current viewport snapshot", () => {
+    const workerSize = graphEditorNodeDimensionsForKind("worker");
+    const topLeft = resolveInitialPlacementTopLeftForViewport({
+      draft: {
+        kind: "worker",
+        model: "gpt",
+        name: "reviewer",
+      },
+      nodes: [],
+      placementViewport: {
+        height: 800,
+        viewport: { x: -100, y: -50, zoom: 2 },
+        width: 1000,
+      },
+    });
+
+    expect(topLeft).toEqual({
+      x: 300 - workerSize.width / 2,
+      y: 225 - workerSize.height / 2,
+    });
   });
 });
 
@@ -224,7 +239,6 @@ describe("resolveInitialPlacementTopLeft for workstations", () => {
     const topLeft = resolveInitialPlacementTopLeft({
       draft: workstationDraft,
       nodes: [],
-      storedPositions: {},
       viewportCenter,
     });
 
@@ -246,7 +260,6 @@ describe("resolveInitialPlacementTopLeft for workstations", () => {
     const topLeft = resolveInitialPlacementTopLeft({
       draft: workstationDraft,
       nodes,
-      storedPositions: {},
       viewportCenter,
     });
 

@@ -1,0 +1,98 @@
+{
+  "requestId": "dynamic-workflows-v0-contract-kernel-001",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "contract-data-model-orchestrators",
+      "workTypeName": "idea",
+      "payload": "Dynamic workflows Batch 001: update the data model around Factory, FactorySession, FactoryOrchestrator, Dispatch, FactoryArtifact, JavaScript state projections, raw checkpoint refs, and Petri terminology boundaries. Keep FactorySession as the canonical runtime object and JavaScript workflows as JAVASCRIPT orchestrator-backed factories."
+    },
+    {
+      "name": "contract-openapi-session-execution",
+      "workTypeName": "idea",
+      "payload": "Dynamic workflows Batch 001: define OpenAPI schemas and routes for POST /factory-sessions/async, POST /factory-sessions/sync, session get/list, results, dispatches, artifacts, lifecycle controls, source resolution, idempotency requestId, and generated fixtures."
+    },
+    {
+      "name": "contract-event-stream-session-lifecycle",
+      "workTypeName": "idea",
+      "payload": "Dynamic workflows Batch 001: define FactoryEvent additions for SESSION_STARTED, SESSION_RESULT_UPDATED, SESSION_COMPLETED, ORCHESTRATOR_PHASE_CHANGED, ORCHESTRATOR_CHECKPOINT_WRITTEN, DISPATCH_QUEUED, DISPATCH_INTERRUPTED, DISPATCH_RECONCILED, ARTIFACT_CREATED, reconnect semantics, and event replay expectations."
+    },
+    {
+      "name": "contract-service-seams",
+      "workTypeName": "idea",
+      "payload": "Dynamic workflows Batch 001: define service interfaces for session start/status/result/control, fake service injection, dispatch/result/artifact projections, session listing scopes, and apisurface mappers. Optimize for API, CLI, MCP, and UI sharing one service contract."
+    },
+    {
+      "name": "contract-validation-policy-stub",
+      "workTypeName": "idea",
+      "payload": "Dynamic workflows Batch 001: define first-pass workflow source validation, JavaScript/TypeScript loader expectations, policy defaults, source lookup order, artifact URI conventions, structured JSON result constraints, and bounded read-only MVP defaults."
+    },
+    {
+      "name": "ideafy-loopback-dynamic-workflows-v0-contract-kernel-001",
+      "workTypeName": "thoughts",
+      "payload": "Loop back after Batch 001 completes. Review the completed contract-kernel ideas, update docs/temp/dynamic-workflows-plan.md and any checklist/progress notes, identify contract conflicts or missing schema/event fields, and prepare the next coherent fake-session/interface skeleton batch. If the contract is not stable enough for parallel work, recommend a contract repair batch instead."
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "contract-openapi-session-execution",
+      "targetWorkName": "contract-data-model-orchestrators",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "contract-event-stream-session-lifecycle",
+      "targetWorkName": "contract-data-model-orchestrators",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "contract-service-seams",
+      "targetWorkName": "contract-openapi-session-execution",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "contract-service-seams",
+      "targetWorkName": "contract-event-stream-session-lifecycle",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "contract-validation-policy-stub",
+      "targetWorkName": "contract-data-model-orchestrators",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "ideafy-loopback-dynamic-workflows-v0-contract-kernel-001",
+      "targetWorkName": "contract-data-model-orchestrators",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "ideafy-loopback-dynamic-workflows-v0-contract-kernel-001",
+      "targetWorkName": "contract-openapi-session-execution",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "ideafy-loopback-dynamic-workflows-v0-contract-kernel-001",
+      "targetWorkName": "contract-event-stream-session-lifecycle",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "ideafy-loopback-dynamic-workflows-v0-contract-kernel-001",
+      "targetWorkName": "contract-service-seams",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "ideafy-loopback-dynamic-workflows-v0-contract-kernel-001",
+      "targetWorkName": "contract-validation-policy-stub",
+      "requiredState": "complete"
+    }
+  ]
+}

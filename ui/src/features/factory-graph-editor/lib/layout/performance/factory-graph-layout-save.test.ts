@@ -16,7 +16,6 @@ import {
   moveFactoryLayoutNode,
 } from "../factory-graph-layout-operations";
 import { buildFactoryGraphSaveSummary } from "../../editor-runtime/factory-graph-editor-save-summary";
-import { FACTORY_LAYOUT_VALIDATION_CODE } from "../factory-graph-layout-validation";
 
 const EDGE_ID =
   "workstation-output:workstation:draft->work-state:story:done";
@@ -157,16 +156,5 @@ describe("factory graph layout save", () => {
     }
 
     expect(saveInput.value.layout?.edges).toBeUndefined();
-    expect(saveInput.layoutOutcomes).toEqual([
-      expect.objectContaining({
-        code: FACTORY_LAYOUT_VALIDATION_CODE.unknownEdgeReference,
-        severity: "warning",
-        subject: {
-          id: FAILURE_EDGE_ID,
-          location: "REFERENCE",
-          type: "FACTORY",
-        },
-      }),
-    ]);
   });
 });

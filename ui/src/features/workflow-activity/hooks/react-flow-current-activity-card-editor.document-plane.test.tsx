@@ -6,7 +6,7 @@ import {
   buildDivergentSnapshotPlaneFactory,
   divergentDocumentPlaneFactoryDocument,
 } from "../../../testing/graph-editor-harness";
-import { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
+import { useCurrentActivityGraphState } from "./use-current-activity-graph-state";
 
 const fixtureState = vi.hoisted(() => ({
   currentFactoryQuery: {
@@ -18,9 +18,9 @@ const fixtureState = vi.hoisted(() => ({
       | typeof divergentDocumentPlaneFactoryDocument
       | undefined,
     draft: {
-    additions: {
-      docs: [],
-      resources: [],
+      additions: {
+        docs: [],
+        resources: [],
         workers: [],
         workStates: [],
         workTypes: [],
@@ -114,7 +114,8 @@ vi.mock("../../factory-graph-editor/hooks/use-editable-factory-graph", () => ({
       hasPreferenceChanges: false,
       hasTopologyChanges: fixtureState.draftState.hasChanges,
       layoutDirty: false,
-      pendingFactoryDefinition: fixtureState.draftState.pendingFactoryDefinition,
+      pendingFactoryDefinition:
+        fixtureState.draftState.pendingFactoryDefinition,
       preferencesDirty: false,
       topologyDirty: fixtureState.draftState.hasChanges,
     },
@@ -148,7 +149,7 @@ vi.mock(
   }),
 );
 
-vi.mock("../components/react-flow-current-activity-card-editor-chrome", () => ({
+vi.mock("./use-current-activity-graph-add-controller", () => ({
   useFactoryGraphAddEntityController: () => ({
     reset: vi.fn(),
   }),
@@ -195,12 +196,7 @@ vi.mock(
   }),
 );
 
-vi.mock("./react-flow-current-activity-card-editor-value", () => ({
-  buildCurrentActivityGraphEditorValue: (value: Record<string, unknown>) =>
-    value,
-}));
-
-describe("useCurrentActivityGraphEditor document plane", () => {
+describe("useCurrentActivityGraphState document plane", () => {
   beforeEach(() => {
     resetDivergentDocumentFixtureState();
   });
@@ -235,17 +231,17 @@ describe("useCurrentActivityGraphEditor document plane", () => {
     const snapshot = buildDivergentPlaneDashboardSnapshot();
 
     const { result } = renderHook(() =>
-      useCurrentActivityGraphEditor(snapshot, "en", "session-alpha"),
+      useCurrentActivityGraphState(snapshot, "en", "session-alpha"),
     );
 
     act(() => {
-      result.current.handleEditorModeToggle();
+      result.current.editorControls.toggleMode();
     });
 
-    expect(result.current.editorUnavailableClassifierWorkstationName).toBe(
-      "Document Only",
-    );
-    expect(result.current.canInteractWithEditor).toBe(false);
+    expect(
+      result.current.editorControls.unavailableClassifierWorkstationName,
+    ).toBe("Document Only");
+    expect(result.current.editorControls.canInteract).toBe(false);
   });
 
   it("allows editor entry when only the snapshot plane has a classifier workstation", () => {
@@ -268,17 +264,17 @@ describe("useCurrentActivityGraphEditor document plane", () => {
     snapshot.factory = snapshotFactory;
 
     const { result } = renderHook(() =>
-      useCurrentActivityGraphEditor(snapshot, "en", "session-alpha"),
+      useCurrentActivityGraphState(snapshot, "en", "session-alpha"),
     );
 
     act(() => {
-      result.current.handleEditorModeToggle();
+      result.current.editorControls.toggleMode();
     });
 
     expect(
-      result.current.editorUnavailableClassifierWorkstationName,
+      result.current.editorControls.unavailableClassifierWorkstationName,
     ).toBeUndefined();
-    expect(result.current.canInteractWithEditor).toBe(true);
+    expect(result.current.editorControls.canInteract).toBe(true);
   });
 
   it("evaluates observe-mode classifier availability from the snapshot factory while the document is still loading", () => {
@@ -301,12 +297,12 @@ describe("useCurrentActivityGraphEditor document plane", () => {
     };
 
     const { result } = renderHook(() =>
-      useCurrentActivityGraphEditor(snapshot, "en", "session-alpha"),
+      useCurrentActivityGraphState(snapshot, "en", "session-alpha"),
     );
 
-    expect(result.current.editorMode).toBe(false);
-    expect(result.current.editorUnavailableClassifierWorkstationName).toBe(
-      "Review",
-    );
+    expect(result.current.editorControls.isEditing).toBe(false);
+    expect(
+      result.current.editorControls.unavailableClassifierWorkstationName,
+    ).toBe("Review");
   });
 });

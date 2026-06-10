@@ -380,7 +380,16 @@ function createMockLayoutDraftState() {
       state.layoutDirty = false;
     }),
     undoLayout: vi.fn(),
-    updateViewport: vi.fn(),
+    updateViewport: vi.fn(
+      (viewport: { x: number; y: number; zoom: number }) => {
+        state.layout = {
+          ...state.layout,
+          viewport,
+        };
+        state.hasChanges = true;
+        state.layoutDirty = true;
+      },
+    ),
   };
 
   return state;
@@ -481,7 +490,6 @@ function createMockEditableFactoryGraphActions(
       if (
         options.factoryDocumentScopeKey == null ||
         !hasPendingEdits ||
-        !draftState.pendingFactoryDefinition ||
         !draftState.latestDocument ||
         activeWorkCount > 0
       ) {
@@ -590,7 +598,6 @@ export function createMockEditableFactoryGraph(
         return (
           options.factoryDocumentScopeKey != null &&
           (draftState.hasChanges || layoutDraftState.hasChanges) &&
-          draftState.pendingFactoryDefinition !== null &&
           draftState.latestDocument !== null &&
           activeWorkCount === 0 &&
           !isStale

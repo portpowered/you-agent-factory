@@ -1,4 +1,6 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: factory graph editor copy stays consolidated so message keys and locale fallbacks remain auditable during hardcoded-copy cleanup.
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: factory graph editor copy stays consolidated so message keys and locale fallbacks remain auditable during hardcoded-copy cleanup.
+
+import type { components } from "../../../api/generated/openapi";
 import {
   type LocalizedMessageCatalog,
   resolveLocalizedMessages,
@@ -7,7 +9,6 @@ import type {
   FactoryGraphNodeKind,
   FactoryWorkState,
 } from "../lib/draft/factory-graph-draft-types";
-import type { components } from "../../../api/generated/openapi";
 import type { FactoryGraphAddEntityDraft } from "../lib/editor/factory-graph-editor-additions";
 import type {
   FactoryGraphEditorDirtyState,
@@ -124,6 +125,10 @@ export interface FactoryGraphEditorMessages {
   noticeEmptyMessage: string;
   noticeEmptyTitle: string;
   noticeDismissLabel: string;
+  noticePanelCollapseLabel: string;
+  noticePanelCount: (count: number) => string;
+  noticePanelExpandLabel: string;
+  noticePanelTitle: string;
   noticeRemovalBlockedTitle: string;
   noticeSaveFailedAffectedSummary: (labels: string) => string;
   noticeSaveFailedTitle: string;
@@ -199,6 +204,12 @@ export interface FactoryGraphEditorMessages {
   ) => string;
   validationMissingRequiredIdentifier: (kind: FactoryGraphNodeKind) => string;
   validationMissingWorkerAssignment: (workstationName: string) => string;
+  validationUnknownWorkstationRoute: (input: {
+    routeField: string;
+    stateName: string;
+    workstationName: string;
+    workTypeName: string;
+  }) => string;
   validationUnknownEdgeNode: (
     relationship: string,
     which: "source" | "target",
@@ -281,6 +292,8 @@ function describeEnglishAddDialogTitle(
 
 function describeEnglishKind(kind: FactoryGraphNodeKind) {
   switch (kind) {
+    case "doc":
+      return "Doc";
     case "resource":
       return "Resource";
     case "worker":
@@ -391,7 +404,11 @@ function describeEnglishSaveConfirmAction(kind: FactoryGraphSaveSummaryKind) {
 function describeEnglishDirtyStateSummary(
   dirtyState: FactoryGraphEditorDirtyState,
 ) {
-  if (dirtyState.preferencesDirty && !dirtyState.layoutDirty && !dirtyState.topologyDirty) {
+  if (
+    dirtyState.preferencesDirty &&
+    !dirtyState.layoutDirty &&
+    !dirtyState.topologyDirty
+  ) {
     return "Private view preferences changed";
   }
   if (dirtyState.layoutDirty && dirtyState.topologyDirty) {
@@ -619,8 +636,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogModelOperationSlotRemoveAction: "Remove slot",
       addDialogModelOperationSlotRequiredLabel: "Required input slot",
       addDialogModelOperationsHelp:
-        "Declare provider-agnostic operations with typed input and output slots for MODEL_INVOKE workstations.",
-      addDialogModelOperationsLabel: "Model operations",
+        "Optionally declare provider-agnostic operations with typed input and output slots for MODEL_INVOKE workstations.",
+      addDialogModelOperationsLabel: "Model operations (optional)",
       addDialogPromptBodyEditorError:
         "The prompt editor could not start. Edit the prompt text below while we recover.",
       addDialogPromptBodyEditorLoading: "Starting the prompt editor.",
@@ -687,6 +704,11 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         "The factory has not published any workstation graph yet.",
       noticeEmptyTitle: "No workflow topology loaded",
       noticeDismissLabel: "Dismiss",
+      noticePanelCollapseLabel: "Collapse editor alerts",
+      noticePanelCount: (count) =>
+        count === 1 ? "1 issue" : `${count} issues`,
+      noticePanelExpandLabel: "Expand editor alerts",
+      noticePanelTitle: "Editor alerts",
       noticeRemovalBlockedTitle: "Removal blocked",
       noticeSaveFailedAffectedSummary: (labels) => `Affected: ${labels}`,
       noticeSaveFailedTitle: "Topology save failed",
@@ -763,6 +785,13 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         `${kind} identifiers are required before save.`,
       validationMissingWorkerAssignment: (workstationName) =>
         `Workstation "${workstationName}" must keep one worker assignment.`,
+      validationUnknownWorkstationRoute: ({
+        routeField,
+        stateName,
+        workstationName,
+        workTypeName,
+      }) =>
+        `Workstation "${workstationName}" ${routeField} references unknown work state "${workTypeName}:${stateName}".`,
       validationUnknownEdgeNode: (relationship, which) =>
         `Relationship "${relationship}" references an unknown ${which} node.`,
       removalDescription: ({
@@ -868,8 +897,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogCapacityLabel: "容量",
       addDialogDocContentHelp: "保存到捆绑文档条目的可选 UTF-8 文本。",
       addDialogDocContentLabel: "文档文本",
-      addDialogDocFileNameHelp:
-        "保存到 factory/docs/ 下。请包含文件扩展名。",
+      addDialogDocFileNameHelp: "保存到 factory/docs/ 下。请包含文件扩展名。",
       addDialogDocFileNameLabel: "文件名",
       addDialogDescription: (kind) => {
         if (kind === "doc") {
@@ -913,8 +941,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogModelOperationSlotRemoveAction: "移除槽位",
       addDialogModelOperationSlotRequiredLabel: "必填输入槽位",
       addDialogModelOperationsHelp:
-        "为 MODEL_INVOKE 工作站声明带有类型化输入和输出槽位的提供方无关操作。",
-      addDialogModelOperationsLabel: "模型操作",
+        "可选择为 MODEL_INVOKE 工作站声明带有类型化输入和输出槽位的提供方无关操作。",
+      addDialogModelOperationsLabel: "模型操作（可选）",
       addDialogPromptBodyEditorError:
         "提示词编辑器无法启动。请先在下方编辑提示正文，我们稍后会恢复编辑器。",
       addDialogPromptBodyEditorLoading: "正在启动提示词编辑器。",
@@ -939,8 +967,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         switch (kind) {
           case "doc":
             return {
-              description:
-                "在 factory/docs 下添加可编辑文本的捆绑文档文件。",
+              description: "在 factory/docs 下添加可编辑文本的捆绑文档文件。",
               label: "文档",
             };
           case "workstation":
@@ -1082,6 +1109,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       flowRemovingLabel: "移除中",
       kindLabel: (kind) => {
         switch (kind) {
+          case "doc":
+            return "文档";
           case "resource":
             return "资源";
           case "worker":
@@ -1112,6 +1141,10 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       noticeEmptyMessage: "该工厂尚未发布任何工作站图。",
       noticeEmptyTitle: "尚未加载工作流拓扑",
       noticeDismissLabel: "关闭",
+      noticePanelCollapseLabel: "折叠编辑器提醒",
+      noticePanelCount: (count) => `${count} 个问题`,
+      noticePanelExpandLabel: "展开编辑器提醒",
+      noticePanelTitle: "编辑器提醒",
       noticeRemovalBlockedTitle: "移除被阻止",
       noticeSaveFailedAffectedSummary: (labels) => `受影响项：${labels}`,
       noticeSaveFailedTitle: "拓扑保存失败",
@@ -1259,6 +1292,13 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
         `保存前必须填写${getFactoryGraphEditorMessages("zh-CN").kindLabel(kind)}标识符。`,
       validationMissingWorkerAssignment: (workstationName) =>
         `工作站“${workstationName}”必须保留一个工作者分配。`,
+      validationUnknownWorkstationRoute: ({
+        routeField,
+        stateName,
+        workstationName,
+        workTypeName,
+      }) =>
+        `工作站“${workstationName}”的 ${routeField} 引用了未知工作状态“${workTypeName}:${stateName}”。`,
       validationUnknownEdgeNode: (relationship, which) =>
         `关系“${relationship}”引用了未知的${which === "source" ? "源" : "目标"}节点。`,
       removalDescription: ({

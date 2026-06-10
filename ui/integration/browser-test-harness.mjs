@@ -420,6 +420,90 @@ function cloneVersion(version) {
   };
 }
 
+function replayEventLineWithFactoryVersion(line, version) {
+  let event;
+  try {
+    event = JSON.parse(line);
+  } catch {
+    return line;
+  }
+
+  if (
+    !event ||
+    typeof event !== "object" ||
+    !event.payload ||
+    typeof event.payload !== "object" ||
+    !event.payload.factory ||
+    typeof event.payload.factory !== "object" ||
+    event.payload.factory.version !== undefined
+  ) {
+    return line;
+  }
+
+  return JSON.stringify({
+    ...event,
+    payload: {
+      ...event.payload,
+      factory: {
+        ...event.payload.factory,
+        version: cloneVersion(version),
+      },
+    },
+  });
+}
+
+function _buildSavedFactoryReplayLine(factory, version) {
+  return JSON.stringify({
+    context: {
+      eventTime: version.physical,
+      sequence: 1,
+      tick: 1,
+    },
+    id: `saved-factory-${version.logical}`,
+    payload: {
+      factory: {
+        ...factory,
+        version: cloneVersion(version),
+      },
+    },
+    type: "FACTORY_CHANGE",
+  });
+}
+
+function buildSavedFactoryReplayLines(factory, version) {
+  return [
+    JSON.stringify({
+      context: {
+        eventTime: version.physical,
+        sequence: 1,
+        tick: 1,
+      },
+      id: `saved-structure-${version.logical}`,
+      payload: {
+        factory: {
+          ...factory,
+          version: cloneVersion(version),
+        },
+      },
+      type: "INITIAL_STRUCTURE_REQUEST",
+    }),
+    JSON.stringify({
+      context: {
+        eventTime: version.physical,
+        sequence: 2,
+        tick: 2,
+      },
+      id: `saved-factory-state-${version.logical}`,
+      payload: {
+        previousState: "RUNNING",
+        reason: "saved fixture ready",
+        state: "FINISHED",
+      },
+      type: "FACTORY_STATE_RESPONSE",
+    }),
+  ];
+}
+
 function buildSessionMap(sessions, currentFactory, currentFactoryBySessionID) {
   const defaultSession =
     sessions.find((session) => session.id === defaultFactorySessionID) ??
@@ -852,11 +936,26 @@ export async function startFactoryApiServer({
         const factory =
           parsedBody &&
           typeof parsedBody === "object" &&
-          parsedBody.factory &&
-          typeof parsedBody.factory === "object"
-            ? parsedBody.factory
+          parsedBody.factoryDefinition &&
+          typeof parsedBody.factoryDefinition === "object"
+            ? parsedBody.factoryDefinition
+            : parsedBody &&
+                typeof parsedBody === "object" &&
+                parsedBody.factory &&
+                typeof parsedBody.factory === "object"
+              ? parsedBody.factory
             : parsedBody;
-        if (!factory || typeof factory !== "object" || factory.name == null) {
+        const normalizedFactory =
+          factory && typeof factory === "object"
+            ? {
+                ...(sessionState.currentFactory?.name != null &&
+                factory.name == null
+                  ? { name: sessionState.currentFactory.name }
+                  : null),
+                ...factory,
+              }
+            : null;
+        if (!normalizedFactory || normalizedFactory.name == null) {
           response.writeHead(400, {
             "Access-Control-Allow-Origin": "*",
             "Content-Type": "application/json",
@@ -872,7 +971,7 @@ export async function startFactoryApiServer({
 
         if (onSaveCurrentFactory) {
           await onSaveCurrentFactory({
-            body: factory,
+            body: normalizedFactory,
             mode:
               parsedBody &&
               typeof parsedBody === "object" &&
@@ -883,8 +982,12 @@ export async function startFactoryApiServer({
             sessionID,
           });
         }
-        sessionState.currentFactory = factory;
+        sessionState.currentFactory = normalizedFactory;
         bumpEditableFactoryDefinitionVersion(sessionID);
+        sessionState.eventLines = buildSavedFactoryReplayLines(
+          sessionState.currentFactory,
+          sessionState.version,
+        );
         response.writeHead(200, {
           "Access-Control-Allow-Origin": "*",
           "Content-Type": "application/json",
@@ -971,7 +1074,12 @@ export async function startFactoryApiServer({
               }
             }
           }
-          response.write(`data: ${line}\n\n`);
+          response.write(
+            `data: ${replayEventLineWithFactoryVersion(
+              line,
+              sessionState.version,
+            )}\n\n`,
+          );
           await delay(replayDelayMs);
         }
         if (pauseBeforeTick !== null && !pauseReached) {

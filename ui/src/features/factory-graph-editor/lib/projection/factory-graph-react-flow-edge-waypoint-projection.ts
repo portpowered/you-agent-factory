@@ -1,8 +1,7 @@
 import type { Edge } from "@xyflow/react";
-
+import type { FactoryGraphEdgeKind } from "../draft/factory-graph-draft-types";
 import { factoryLayoutEdgeWaypoints } from "../layout/factory-graph-layout-edge-waypoints";
 import type { FactoryLayout } from "../layout/factory-graph-layout-operations";
-import type { FactoryGraphEdgeKind } from "../draft/factory-graph-draft-types";
 import type { FactoryGraphReactFlowEdge } from "./factory-graph-react-flow-projection";
 
 export type FactoryGraphReactFlowEdgeIdentity = {
@@ -12,6 +11,12 @@ export type FactoryGraphReactFlowEdgeIdentity = {
   sourceHandle: string | null | undefined;
   target: string;
   targetHandle: string | null | undefined;
+};
+
+type WaypointDecoratedEdgeData = NonNullable<
+  FactoryGraphReactFlowEdge["data"]
+> & {
+  factoryGraphEdgeId?: string;
 };
 
 export function factoryGraphReactFlowEdgeIdentity(
@@ -31,33 +36,32 @@ export function factoryGraphReactFlowEdgeIdentity(
 
 export function decorateProjectedEdgesWithWaypoints(input: {
   edges: readonly FactoryGraphReactFlowEdge[];
-  editorMode: boolean;
   layout: FactoryLayout;
   selectedWaypointEdgeId?: string | null;
 }): FactoryGraphReactFlowEdge[] {
-  if (!input.editorMode) {
-    return [...input.edges];
-  }
-
   return input.edges.map((edge): FactoryGraphReactFlowEdge => {
-    const data = edge.data;
-    if (!data) {
+    const data = (edge.data ?? {}) as Partial<WaypointDecoratedEdgeData>;
+    const layoutEdgeId = data.factoryGraphEdgeId ?? edge.id;
+    const waypoints = factoryLayoutEdgeWaypoints(input.layout, layoutEdgeId);
+    const selected =
+      edge.id === input.selectedWaypointEdgeId ||
+      layoutEdgeId === input.selectedWaypointEdgeId;
+    if (!waypoints && !selected) {
       return edge;
     }
-
-    const waypoints = factoryLayoutEdgeWaypoints(input.layout, edge.id);
 
     return {
       ...edge,
       data: {
-        active: data.active,
-        alwaysShowLabel: data.alwaysShowLabel,
+        ...data,
+        active: data.active ?? false,
+        alwaysShowLabel: data.alwaysShowLabel ?? false,
         kind: data.kind,
-        label: data.label,
-        pendingStatus: data.pendingStatus,
+        label: data.label ?? (typeof edge.label === "string" ? edge.label : ""),
+        pendingStatus: data.pendingStatus ?? "none",
         waypoints,
       },
-      selected: edge.id === input.selectedWaypointEdgeId,
+      selected,
       type: "factoryEditorEdge",
     };
   });

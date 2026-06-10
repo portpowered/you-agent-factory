@@ -8,6 +8,10 @@ export interface FactoryBundledDoc {
   targetPath: string;
 }
 
+export type FactoryBundledDocFile = NonNullable<
+  NonNullable<CanonicalFactoryDefinition["supportingFiles"]>["bundledFiles"]
+>[number];
+
 export function factoryBundledDocNodeId(targetPath: string): string {
   // hardcoded-ui-copy-exception: non-product-diagnostic
   return `doc:${targetPath}`;
@@ -54,6 +58,16 @@ export function listFactoryBundledDocs(
 
   return docs.sort((left, right) =>
     left.targetPath.localeCompare(right.targetPath),
+  );
+}
+
+export function findFactoryBundledDocFile(
+  factory: CanonicalFactoryDefinition | null | undefined,
+  targetPath: string,
+): FactoryBundledDocFile | undefined {
+  return (factory?.supportingFiles?.bundledFiles ?? []).find(
+    (bundledFile) =>
+      bundledFile.type === "DOC" && bundledFile.targetPath === targetPath,
   );
 }
 

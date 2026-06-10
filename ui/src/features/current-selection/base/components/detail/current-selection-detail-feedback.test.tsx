@@ -30,4 +30,14 @@ describe("CurrentSelectionDetailFeedback", () => {
     expect(alert.textContent).toBe("Definition unavailable.");
     expect(alert.className).toContain("text-on-error-container");
   });
+
+  it("renders danger feedback with status semantics when requested", () => {
+    render(
+      <CurrentSelectionDetailFeedback role="status" tone="danger">
+        Definition changed.
+      </CurrentSelectionDetailFeedback>,
+    );
+
+    expect(screen.getByRole("status").textContent).toBe("Definition changed.");
+  });
 });

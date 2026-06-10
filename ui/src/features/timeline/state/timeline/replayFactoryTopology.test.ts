@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   factoryWorkStateName,
   factoryWorkToItem,
+  normalizeFactoryPayload,
   outputPlaceForWorkstation,
   seedResourceOccupancy,
 } from "./replayFactoryTopology";
@@ -86,6 +87,44 @@ describe("seedResourceOccupancy", () => {
 });
 
 describe("timeline factory topology helpers", () => {
+  it("normalizes legacy single workstation route IOs", () => {
+    const topology = normalizeFactoryPayload({
+      factory: {
+        name: "legacy-routes",
+        resources: [],
+        workers: [],
+        workstations: [
+          {
+            inputs: { state: "queued", workType: "story" },
+            name: "draft",
+            outputs: { state: "done", workType: "story" },
+          },
+        ],
+        workTypes: [
+          {
+            name: "story",
+            states: [
+              { name: "queued", type: "INITIAL" },
+              { name: "done", type: "TERMINAL" },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(topology.workstations).toEqual([
+      expect.objectContaining({
+        id: "draft",
+        input_place_ids: ["story:queued"],
+        output_place_ids: ["story:done"],
+      }),
+    ]);
+    expect(topology.places?.map((place) => place.id)).toEqual([
+      "story:done",
+      "story:queued",
+    ]);
+  });
+
   it("falls back across legacy work shapes and workstation rejection routes", () => {
     const state = replayStateWithResourcePlaces();
     state.topology.places = [

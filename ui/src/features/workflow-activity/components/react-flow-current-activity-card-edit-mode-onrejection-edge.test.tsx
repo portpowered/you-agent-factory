@@ -24,7 +24,6 @@ import { useEditableFactoryGraph } from "../../factory-graph-editor/hooks/use-ed
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { dashboardWorkstationFromFactory } from "../lib/current-activity-factory-graph-layout";
 import { loadFactoryGraphOnrejectionEdgeReproductionFactory } from "../lib/test-data/factory-graph-onrejection-edge-reproduction.fixture";
-import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
 
 const reportedReactFlowErrors: Array<{ errorId: string; message: string }> = [];
@@ -231,7 +230,6 @@ let restoreBrowserTestShims: (() => void) | null = null;
 beforeEach(() => {
   reportedReactFlowErrors.length = 0;
   window.localStorage.clear();
-  useCurrentActivityGraphStore.setState({ positionsByGraphKey: {} });
   restoreBrowserTestShims = installDashboardBrowserTestShims();
 
   const factoryDocument = reproductionFactoryDocument();

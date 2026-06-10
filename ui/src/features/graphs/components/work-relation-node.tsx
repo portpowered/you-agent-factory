@@ -39,7 +39,7 @@ export function WorkRelationNodeView({ data }: NodeProps<WorkRelationNode>) {
     RELATION_NODE_CLASS,
     data.isSelectedWork
       ? RELATION_NODE_SELECTED_CLASS
-      : relationNodeToneClassName(data.relationStates),
+      : relationNodeToneClassName(data.kind, data.relationStates),
     data.selectable ? RELATION_NODE_ACTIVE_CLASS : undefined,
   );
   const content = (
@@ -91,6 +91,8 @@ function relationShellNodeType(
   kind: FactoryGraphNodeKind,
 ): PlaceNodeType | "workstation" {
   switch (kind) {
+    case "doc":
+      return "doc";
     case "work-state":
       return "statePosition";
     case "work-type":
@@ -127,7 +129,24 @@ function relationStateToneClassName(
   return "warning";
 }
 
-function relationNodeToneClassName(relationStates: string[]): string {
+function relationNodeToneClassName(
+  kind: FactoryGraphNodeKind,
+  relationStates: string[],
+): string {
+  switch (kind) {
+    case "doc":
+      return activityGraphNodeSurfaceClassName("neutral");
+    case "resource":
+      return activityGraphNodeSurfaceClassName("resource");
+    case "work-state":
+      return activityGraphNodeSurfaceClassName("workState");
+    case "workstation":
+      return activityGraphNodeSurfaceClassName("workstation");
+    case "worker":
+    case "work-type":
+      break;
+  }
+
   const primaryState = relationStates[0];
   if (!primaryState) {
     return activityGraphNodeSurfaceClassName("neutral");

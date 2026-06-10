@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: toolbar controls share stateful harnesses and interaction coverage in one focused suite.
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
@@ -47,14 +48,13 @@ function renderToolbar({
             },
           ]}
           canInteract={true}
-          canSave={true}
-          canDiscard={true}
+          canSave={hasPendingChanges}
+          canDiscard={hasPendingChanges}
           editModeToggle={{
             editorMode: editMode,
             hasChanges: hasPendingChanges,
             onToggle: onToggleEditMode,
           }}
-          hasPendingChanges={hasPendingChanges}
           hiddenNodeClasses={hiddenNodeClasses}
           hideShowMenuOpen={hideShowMenuOpen}
           hideShowVisible={hideShowVisible}
@@ -115,32 +115,33 @@ describe("factory graph editor toolbar controls", () => {
 
     renderToolbar();
 
+    const showButton = screen.getByRole("button", { name: "Show or hide" });
     const modeButton = screen.getByRole("button", { name: "Edit mode" });
-    const connectButton = screen.getByRole("button", { name: "Connect" });
     const deleteButton = screen.getByRole("button", { name: "Delete" });
+    const discardButton = screen.getByRole("button", {
+      name: "Discard changes",
+    });
     const saveButton = screen.getByRole("button", { name: "Save changes" });
     const addButton = screen.getByRole("button", {
       name: "Add",
     });
 
     expect(addButton.textContent).toBe("");
+    expect(showButton.textContent).toBe("");
     expect(modeButton.textContent).toBe("");
-    expect(connectButton.textContent).toBe("");
     expect(deleteButton.textContent).toBe("");
+    expect(discardButton.textContent).toBe("");
     expect(saveButton.textContent).toBe("");
-    expect(connectButton.getAttribute("aria-pressed")).toBe("false");
+    expect(showButton.getAttribute("aria-pressed")).toBe("false");
     expect(modeButton.getAttribute("aria-pressed")).toBe("false");
     expect(saveButton).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Discard changes" }),
     ).toBeTruthy();
     expect(addButton.className).toContain("h-10");
+    expect(showButton.className).toContain("h-10");
     expect(modeButton.className).toContain("h-10");
-    expect(connectButton.className).toContain("h-10");
     expect(deleteButton.className).toContain("h-10");
-
-    await user.click(connectButton);
-    expect(connectButton.getAttribute("aria-pressed")).toBe("true");
 
     await user.tab();
     await user.tab();
@@ -291,16 +292,16 @@ describe("factory graph editor toolbar tooltip placement", () => {
         tooltipName: "Remove",
       },
       {
-        buttonName: "Connect",
-        tooltipName: "Connect",
-      },
-      {
         buttonName: "Show or hide",
         tooltipName: "Show",
       },
       {
         buttonName: "Save changes",
         tooltipName: "Save changes",
+      },
+      {
+        buttonName: "Discard changes",
+        tooltipName: "Discard changes",
       },
     ] as const;
 
@@ -319,6 +320,20 @@ describe("factory graph editor toolbar tooltip placement", () => {
 });
 
 describe("factory graph editor toolbar action-row composition", () => {
+  it("renders show before edit in the toolbar frame", () => {
+    renderToolbar();
+
+    const toolbar = screen.getByRole("region", {
+      name: "Factory graph editor tools",
+    });
+    const buttonNames = within(toolbar)
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label"));
+
+    expect(buttonNames[0]).toBe("Show or hide");
+    expect(buttonNames[buttonNames.length - 1]).toBe("Edit mode");
+  });
+
   it("renders discard and save actions when pending changes exist", () => {
     renderToolbar();
 
@@ -346,19 +361,28 @@ describe("factory graph editor toolbar action-row composition", () => {
     ).toBeTruthy();
   });
 
-  it("omits the draft action section when no pending changes exist", () => {
+  it("keeps disabled draft actions mounted when no pending changes exist", () => {
     renderToolbar({ hasPendingChanges: false });
 
     const toolbar = screen.getByRole("region", {
       name: "Factory graph editor tools",
     });
+    const sections = toolbar.querySelectorAll(
+      "[data-dashboard-action-row-section]",
+    );
+    const discardButton = within(toolbar).getByRole("button", {
+      name: "Discard changes",
+    });
+    const saveButton = within(toolbar).getByRole("button", {
+      name: "Save changes",
+    });
 
-    expect(
-      toolbar.querySelectorAll("[data-dashboard-action-row-section]"),
-    ).toHaveLength(0);
-    expect(
-      within(toolbar).queryByRole("button", { name: "Discard changes" }),
-    ).toBeNull();
+    expect(sections).toHaveLength(1);
+    expect(sections[0]?.getAttribute("data-dashboard-action-row-section")).toBe(
+      "actions",
+    );
+    expect(discardButton.getAttribute("disabled")).not.toBeNull();
+    expect(saveButton.getAttribute("disabled")).not.toBeNull();
     expect(within(toolbar).queryByRole("status")).toBeNull();
   });
 });
@@ -394,6 +418,24 @@ describe("factory graph editor status and popover controls", () => {
         })
         .getAttribute("disabled"),
     ).not.toBeNull();
+  });
+
+  it("treats preferences-only state as active instead of unsaved", () => {
+    render(
+      <FactoryGraphEditorStatus
+        dirtyState={{
+          layoutDirty: false,
+          preferencesDirty: true,
+          topologyDirty: false,
+        }}
+        editorMode
+        hasChanges={false}
+        isDefinitionLoading={false}
+      />,
+    );
+
+    expect(screen.getByText("Editor mode active")).toBeTruthy();
+    expect(screen.queryByText("Private view preferences changed")).toBeNull();
   });
 
   it("keeps action popovers keyboard reachable without right-click", async () => {
@@ -473,11 +515,18 @@ describe("factory graph editor hide/show controls", () => {
   it("renders hide/show in observer mode without editor tools", () => {
     renderToolbar({ hideShowVisible: true, visible: false });
 
-    expect(screen.getByRole("button", { name: "Edit mode" })).toBeTruthy();
+    const toolbar = screen.getByRole("region", {
+      name: "Factory graph editor tools",
+    });
+
     expect(
       screen.getByRole("button", {
         name: "Show or hide",
       }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit mode" })).toBeTruthy();
+    expect(
+      toolbar.querySelector("[data-toolbar-editor-controls='collapsed']"),
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();

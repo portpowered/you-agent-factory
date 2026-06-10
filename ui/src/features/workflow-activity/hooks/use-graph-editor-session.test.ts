@@ -1,12 +1,10 @@
 import { act, renderHook } from "@testing-library/react";
 
-import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import { useGraphEditorSession } from "./use-graph-editor-session";
 
 const fixtureState = vi.hoisted(() => ({
-  draftState: {
-    hasChanges: false,
-    pendingFactoryDefinition: {
+  sessionState: {
+    currentFactoryDefinition: {
       name: "Current Factory",
       resources: [],
       version: { logical: "1", physical: "2026-05-25T00:00:00Z" },
@@ -14,9 +12,11 @@ const fixtureState = vi.hoisted(() => ({
       workTypes: [],
       workstations: [],
     },
-    latestDocument: null,
-    baseDocument: null,
-  } as EditableFactoryGraphViewModel["draftState"],
+    definitionStatus: "success",
+    hasPendingGraphChanges: false,
+    isSaving: false,
+    projectedFactory: undefined,
+  },
 }));
 
 function renderSession(editorMode = false) {
@@ -27,17 +27,12 @@ function renderSession(editorMode = false) {
 
   const hook = renderHook(() =>
     useGraphEditorSession({
-      activeTool: null,
-      draftState: fixtureState.draftState,
-      editableDefinitionQuery: { status: "success" } as never,
+      activeTool: null as never,
       editorMode,
-      layoutDraftState: {
-        hasChanges: false,
-        layoutDirty: false,
-      } as EditableFactoryGraphViewModel["layoutDraftState"],
+      locale: null,
       onAttemptLeaveEditor,
       onLeaveEditor,
-      saveEditableDefinition: { isPending: false } as never,
+      sessionState: fixtureState.sessionState,
       setActiveTool,
       setEditorMode,
     }),
@@ -53,7 +48,7 @@ function renderSession(editorMode = false) {
 
 describe("useGraphEditorSession", () => {
   beforeEach(() => {
-    fixtureState.draftState.hasChanges = false;
+    fixtureState.sessionState.hasPendingGraphChanges = false;
   });
 
   it("enters editor mode when toggling from observe mode", () => {
@@ -70,7 +65,7 @@ describe("useGraphEditorSession", () => {
   });
 
   it("opens leave confirmation instead of exiting when the draft has changes", () => {
-    fixtureState.draftState.hasChanges = true;
+    fixtureState.sessionState.hasPendingGraphChanges = true;
     const { hook, onAttemptLeaveEditor, onLeaveEditor, setEditorMode } =
       renderSession(true);
 

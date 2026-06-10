@@ -14,7 +14,6 @@ import {
   buildCurrentActivityNodes,
   buildHandleAssignments,
   buildVisibleGraphEdges,
-  EMPTY_NODE_POSITIONS,
 } from "../lib/react-flow-current-activity-card-graph";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
@@ -262,7 +261,6 @@ describe("CurrentActivityGraphViewport React Flow errors", () => {
         runtime: { place_token_counts: {} },
         topology: { workstation_nodes_by_id: {} },
       } as never,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
     const edges = buildGraphEdges(
       buildActiveGraphHighlights([], visibleGraphEdges),
@@ -319,33 +317,47 @@ function renderViewport({
 
   return render(
     <CurrentActivityGraphViewport
-      activeTool={null}
-      canInteractWithEditor={false}
-      canSaveDraft={false}
-      editorMode={false}
+      addControls={{}}
+      editorControls={{
+        activeTool: null,
+        canInteract: false,
+        discardPendingChanges: vi.fn(),
+        isEditing: false,
+        selectTool: vi.fn(),
+        toggleMode: vi.fn(),
+      }}
       edges={edges}
       flowContainerRef={flowContainerRef}
-      graphKey="test-graph"
-      handleDiscardPendingChanges={vi.fn()}
       handleNodesChange={vi.fn()}
-      handleSaveDraft={vi.fn()}
       hasPendingChanges={false}
-      hiddenNodeClasses={new Set()}
-      hideShowMenuOpen={false}
-      onClearPreferences={vi.fn()}
-      onSelectVisibilityPreset={vi.fn()}
-      preferencesDirty={false}
-      visibilityPreset="all"
+      layoutControls={{
+        canMoveLayout: false,
+        canRedo: false,
+        canUndo: false,
+        initialFitViewKey: "full-graph",
+        initialFitViewOptions: { padding: 0.18 },
+        moveNode: vi.fn(),
+        moveNodesByDelta: vi.fn(),
+        redo: vi.fn(),
+        reset: vi.fn(),
+        undo: vi.fn(),
+        updateViewport: vi.fn(),
+      }}
       headingID="test-heading"
       imports={importController}
-      initialFitViewKey="full-graph"
-      initialFitViewOptions={{ padding: 0.18 }}
       nodeTypes={{}}
       nodes={nodes}
-      onHideShowMenuOpenChange={vi.fn()}
-      onToggleHiddenNodeClass={vi.fn()}
-      onSelectTool={vi.fn()}
-      setStoredNodePosition={vi.fn()}
+      saveControls={{ canSave: false, requestConfirmation: vi.fn() }}
+      visibilityControls={{
+        hiddenNodeClasses: new Set(),
+        isDirty: false,
+        isMenuOpen: false,
+        preset: "all",
+        resetPreferences: vi.fn(),
+        setMenuOpen: vi.fn(),
+        setPreset: vi.fn(),
+        toggleHiddenNodeClass: vi.fn(),
+      }}
     />,
   );
 }

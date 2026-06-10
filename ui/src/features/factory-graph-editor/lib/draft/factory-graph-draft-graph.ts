@@ -31,6 +31,7 @@ export function buildFactoryGraphTopologyFromDefinition(
   const edges = new Map<string, FactoryGraphEdge>();
   const entityIndex = indexFactoryGraphEntities(factoryDefinition);
 
+  appendSupportingFileNodes(factoryDefinition, nodes);
   appendResourceNodes(factoryDefinition, entityIndex, nodes);
   appendWorkerNodes(factoryDefinition, entityIndex, nodes, edges);
   appendWorkTypeNodes(factoryDefinition, entityIndex, nodes, edges);
@@ -44,6 +45,27 @@ export function buildFactoryGraphTopologyFromDefinition(
       left.id.localeCompare(right.id),
     ),
   };
+}
+
+function appendSupportingFileNodes(
+  factoryDefinition: CanonicalFactoryDefinition,
+  nodes: NodeMap,
+) {
+  for (const bundledFile of factoryDefinition.supportingFiles?.bundledFiles ??
+    []) {
+    const targetPath = bundledFile.targetPath?.trim();
+    if (!targetPath) {
+      continue;
+    }
+
+    const key: FactoryGraphNodeReference = {
+      id: targetPath,
+      kind: "doc",
+      name: targetPath,
+      sourceFileType: bundledFile.type,
+    };
+    nodes.set(nodeKeyId(key), buildNode(key));
+  }
 }
 
 function appendResourceNodes(

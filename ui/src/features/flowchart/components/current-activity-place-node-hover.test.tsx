@@ -7,7 +7,7 @@ import type { StatePositionNodeData } from "./current-activity-place-node";
 import { StatePositionNodeView } from "./current-activity-place-node";
 
 const CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASS =
-  "transition-[border-color,box-shadow] hover:border-primary hover:shadow-af-accent-chip";
+  "transition-[background-color,border-color,box-shadow,opacity] hover:border-primary hover:bg-warning-container hover:opacity-100 hover:shadow-af-accent-chip";
 
 vi.mock("@xyflow/react", () => ({
   Handle: ({ id }: { id: string }) => <div data-testid={`handle-${id}`} />,
@@ -67,10 +67,31 @@ describe("CurrentActivity place node hover emphasis", () => {
     const shell = nodeShell(container);
 
     expect(shell?.className).toContain("hover:border-primary");
+    expect(shell?.className).toContain("hover:bg-warning-container");
     expect(shell?.className).toContain(CURRENT_ACTIVITY_GRAPH_NODE_HOVER_CLASS);
   });
 
-  it("suppresses accent hover classes when selected, active-flow, validation-error, or muted", () => {
+  it("keeps accent hover classes when active-flow or muted", () => {
+    const place: DashboardPlaceRef = {
+      kind: "work_state",
+      place_id: "story:ready",
+      state_category: "INITIAL",
+      state_value: "ready",
+      type_id: "story",
+    };
+
+    for (const overrides of [{ activeFlow: true }, { muted: true }] as const) {
+      const { container } = render(
+        <StatePositionNodeView {...statePositionNodeProps(place, overrides)} />,
+      );
+      const shell = nodeShell(container);
+
+      expect(shell?.className).toContain("hover:border-primary");
+      expect(shell?.className).toContain("hover:bg-warning-container");
+    }
+  });
+
+  it("suppresses accent hover classes when selected or validation-error", () => {
     const place: DashboardPlaceRef = {
       kind: "work_state",
       place_id: "story:ready",
@@ -81,8 +102,6 @@ describe("CurrentActivity place node hover emphasis", () => {
 
     for (const overrides of [
       { selectedStateNode: true },
-      { activeFlow: true },
-      { muted: true },
       { onSelectStateNode: () => undefined, validationError: true },
     ] as const) {
       const { container } = render(

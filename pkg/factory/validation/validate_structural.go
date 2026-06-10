@@ -688,9 +688,6 @@ func buildValidPlaces(cfg *interfaces.FactoryConfig) map[string]bool {
 			places[placeKey(workType.Name, state.Name)] = true
 		}
 	}
-	for _, resource := range cfg.Resources {
-		places[fmt.Sprintf("%s:available", resource.Name)] = true
-	}
 	return places
 }
 

@@ -210,7 +210,7 @@ func validateLayoutNodeArray(parent map[string]any, key string, path string) err
 		if err := validateOptionalPointObject(node, "position", nodePath, true); err != nil {
 			return err
 		}
-		if err := validateOptionalSizeObject(node, "size", nodePath, true); err != nil {
+		if err := validateOptionalSizeObject(node, "size", nodePath, false); err != nil {
 			return err
 		}
 	}
@@ -807,6 +807,7 @@ func bundledFilesAPIFromInternal(bundledFiles []interfaces.BundledFileConfig) *[
 	values := make([]factoryapi.BundledFile, len(sorted))
 	for i, file := range sorted {
 		values[i] = factoryapi.BundledFile{
+			Id:         stringPtrIfNotEmpty(interfaces.CanonicalBundledFileID(file.ID, file.TargetPath)),
 			Type:       factoryapi.BundledFileType(file.Type),
 			TargetPath: file.TargetPath,
 			Content:    bundledFileContentAPIFromInternal(file),

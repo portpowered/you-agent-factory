@@ -24,8 +24,11 @@ describe("activityGraphNodeSurfaceClassName", () => {
     ["neutral", "border-outline bg-surface"],
     ["neutralHigh", "border-outline-variant bg-surface-container-high"],
     ["primary", "border-primary bg-primary-container"],
+    ["resource", "border-outline bg-background"],
     ["success", "border-af-success-border bg-success-container"],
     ["warning", "border-af-warning-border bg-warning-container"],
+    ["workState", "border-info-border bg-info-container"],
+    ["workstation", "border-outline-variant bg-surface-container-highest"],
   ] as const)("maps %s graph surfaces", (tone, expectedClassName) => {
     expect(activityGraphNodeSurfaceClassName(tone)).toBe(expectedClassName);
   });

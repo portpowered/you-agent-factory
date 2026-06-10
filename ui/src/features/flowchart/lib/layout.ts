@@ -41,6 +41,7 @@ export interface PositionedWorkstationNode extends PositionedBaseNode {
 
 export interface PositionedDocNode extends PositionedBaseNode {
   displayLabel: string;
+  fileType?: string;
   nodeKind: "doc";
   targetPath: string;
 }
@@ -51,6 +52,7 @@ export type PositionedNode =
   | PositionedWorkstationNode;
 
 export interface PositionedEdge {
+  canonicalEdgeId?: string;
   edgeId: string;
   fromNodeId: string;
   label: string;

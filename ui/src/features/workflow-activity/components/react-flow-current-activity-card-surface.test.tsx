@@ -1,80 +1,52 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: surface coverage keeps related shared graph scenarios in one fixture file.
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import { CurrentFactoryDefinitionError } from "../../../api/current-factory-definition";
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
+import { createDefaultFactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
-vi.mock(
-  "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
-  () => ({
-    FactoryGraphEditorNotice: ({
-      children,
-      dismissLabel,
-      onDismiss,
-      title,
-      tone,
-    }: {
-      children: React.ReactNode;
-      dismissLabel?: string;
-      onDismiss?: () => void;
-      title: string;
-      tone: string;
-    }) => (
-      <section
-        data-testid={`notice-${tone}`}
-        role={tone === "danger" ? "alert" : "status"}
-      >
-        <h3>{title}</h3>
-        <div>{children}</div>
-        {onDismiss && dismissLabel ? (
-          <button aria-label={dismissLabel} onClick={onDismiss} type="button">
-            {dismissLabel}
-          </button>
-        ) : null}
-      </section>
-    ),
-  }),
-);
-
 vi.mock("./react-flow-current-activity-card-viewport", () => ({
   CurrentActivityGraphViewport: ({
-    handleDiscardPendingChanges,
-    handleSaveDraft,
-    onAddAction,
-    onAddMenuOpenChange,
+    addControls,
+    editorControls,
     onConnect,
     onEditorEdgeClick,
     onEditorNodeClick,
-    onSelectTool,
+    saveControls,
     saveDisabledReason,
   }: {
-    handleDiscardPendingChanges: () => void;
-    handleSaveDraft: () => void;
-    onAddAction: () => void;
-    onAddMenuOpenChange: (open: boolean) => void;
+    addControls: {
+      setMenuOpen: (open: boolean) => void;
+      startAction: () => void;
+    };
+    editorControls: {
+      discardPendingChanges: () => void;
+      selectTool: (tool: string) => void;
+    };
     onConnect: () => void;
     onEditorEdgeClick: () => void;
     onEditorNodeClick: () => void;
-    onSelectTool: (tool: string) => void;
+    saveControls: { requestConfirmation: () => void };
     saveDisabledReason: string | null;
   }) => (
     <div
       data-disabled-reason={saveDisabledReason ?? ""}
       data-testid="graph-viewport"
     >
-      <button onClick={handleSaveDraft} type="button">
+      <button onClick={saveControls.requestConfirmation} type="button">
         Trigger save confirm
       </button>
-      <button onClick={handleDiscardPendingChanges} type="button">
+      <button onClick={editorControls.discardPendingChanges} type="button">
         Trigger discard
       </button>
-      <button onClick={onAddAction} type="button">
+      <button onClick={addControls.startAction} type="button">
         Trigger add action
       </button>
       <button
         onClick={() => {
-          onAddMenuOpenChange(true);
+          addControls.setMenuOpen(true);
         }}
         type="button"
       >
@@ -91,7 +63,7 @@ vi.mock("./react-flow-current-activity-card-viewport", () => ({
       </button>
       <button
         onClick={() => {
-          onSelectTool("connect");
+          editorControls.selectTool("connect");
         }}
         type="button"
       >
@@ -101,8 +73,9 @@ vi.mock("./react-flow-current-activity-card-viewport", () => ({
   ),
 }));
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: fixture mirrors the editor/view-model surface contract for component tests.
 function createEditorStub(overrides: Record<string, unknown> = {}) {
-  return {
+  const base = {
     activeTool: "delete",
     addEdgeWaypoint: vi.fn(),
     moveEdgeWaypoint: vi.fn(),
@@ -120,8 +93,17 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
       preferencesDirty: false,
       topologyDirty: true,
     },
-    draftState: { hasChanges: true, pendingFactoryDefinition: null },
-    layoutDraftState: { hasChanges: false },
+    draftState: {
+      hasChanges: true,
+      pendingFactoryDefinition: null,
+      source: "current-factory",
+    },
+    layoutDraftState: {
+      canRedoLayout: false,
+      canUndoLayout: false,
+      hasChanges: false,
+      layoutDirty: false,
+    },
     moveLayoutNode: vi.fn(),
     editorMode: true,
     structuralValidation: {
@@ -136,6 +118,7 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     },
     handleAddEntityAction: vi.fn(),
     handleDiscardPendingChanges: vi.fn(),
+    handleEditorModeToggle: vi.fn(),
     handleEditorConnect: vi.fn(),
     handleEditorEdgeDelete: vi.fn(),
     handleEditorNodeDelete: vi.fn(),
@@ -150,26 +133,174 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
       error: null,
       isPending: false,
     },
+    requestSaveConfirmation: vi.fn(),
     setActiveTool: vi.fn(),
     setAddMenuOpen: vi.fn(),
     setHideShowMenuOpen: vi.fn(),
-    setIsConfirmingSave: vi.fn(),
     setVisibilityPreset: vi.fn(),
     resetPreferences: vi.fn(),
     toggleHiddenNodeClass: vi.fn(),
+  };
+  const merged = {
+    ...base,
     ...overrides,
+  };
+  const draftState = merged.draftState as {
+    hasChanges?: boolean;
+    pendingFactoryDefinition?: unknown;
+    source?: string;
+  };
+  const layoutDraftState = merged.layoutDraftState as {
+    canRedoLayout?: boolean;
+    canUndoLayout?: boolean;
+    layoutDirty?: boolean;
+  };
+  const hasTopologyChanges = draftState.hasChanges ?? false;
+  const hasLayoutChanges = layoutDraftState.layoutDirty ?? false;
+  const canonicalLayout = createDefaultFactoryLayout();
+  const structuralValidation = merged.structuralValidation as {
+    projection?: unknown;
+    targets?: readonly unknown[];
+  };
+  const saveMutation = merged.saveEditableDefinition as {
+    error?: unknown;
+    isPending?: boolean;
+  };
+
+  return {
+    ...merged,
+    addControls: {
+      actions: merged.addMenuActions,
+      isMenuOpen: merged.addMenuOpen,
+      setMenuOpen: merged.setAddMenuOpen,
+      startAction: merged.handleAddEntityAction,
+      ...((merged as { addControls?: object }).addControls ?? {}),
+    },
+    editorControls: {
+      activeTool: merged.activeTool,
+      canInteract: merged.canInteractWithEditor,
+      connect: merged.handleEditorConnect,
+      connectionNotice: merged.connectionNotice,
+      discardPendingChanges: merged.handleDiscardPendingChanges,
+      isEditing: merged.editorMode,
+      selectTool: merged.setActiveTool,
+      toggleMode: merged.handleEditorModeToggle,
+      unavailableClassifierWorkstationName: (
+        merged as { editorUnavailableClassifierWorkstationName?: string }
+      ).editorUnavailableClassifierWorkstationName,
+      ...((merged as { editorControls?: object }).editorControls ?? {}),
+    },
+    edgeWaypointControls: {
+      handleEditorEdgeClick: merged.handleEditorEdgeDelete,
+      handleEditorEdgeDoubleClick: vi.fn(),
+      handleMoveSelectedEdgeWaypoint: vi.fn(),
+      handleRemoveSelectedEdgeWaypoint: vi.fn(),
+      selectedEdgeWaypoints: [],
+      selectedWaypointEdgeId: null,
+      waypointAriaLabel: vi.fn(),
+      waypointControls: null,
+      ...((merged as { edgeWaypointControls?: object })
+        .edgeWaypointControls ?? {}),
+    },
+    graphState: {
+      canonicalLayout,
+      canonicalLayoutViewport: null,
+      displayFactoryDefinition: semanticWorkflowDashboardSnapshot.factory,
+      graphLayout: { edges: [], nodes: [] },
+      ...((merged as { graphState?: object }).graphState ?? {}),
+    },
+    saveControls: {
+      attemptRevision: merged.saveAttemptRevision,
+      canSave: merged.canSaveDraft,
+      feedback:
+        (merged as { documentSave?: unknown }).documentSave ??
+        ({ status: "idle" } as const),
+      requestConfirmation: merged.requestSaveConfirmation,
+      ...((merged as { saveControls?: object }).saveControls ?? {}),
+    },
+    layoutControls: {
+      canMoveLayout: draftState.source === "current-factory",
+      canRedo: layoutDraftState.canRedoLayout ?? false,
+      canUndo: layoutDraftState.canUndoLayout ?? false,
+      currentLayout: canonicalLayout,
+      initialFitViewKey: "full-graph",
+      initialFitViewOptions: { padding: 0.18 },
+      ...((merged as { layoutControls?: object }).layoutControls ?? {}),
+    },
+    removalControls: {
+      blockedReason: merged.blockedRemovalReason,
+      cancel:
+        (merged as { handleCancelRemoval?: unknown }).handleCancelRemoval ??
+        vi.fn(),
+      confirm:
+        (merged as { handleConfirmRemoval?: unknown }).handleConfirmRemoval ??
+        vi.fn(),
+      deleteEdge: merged.handleEditorEdgeDelete,
+      deleteNode: merged.handleEditorNodeDelete,
+      pendingIntent:
+        (merged as { pendingRemovalIntent?: unknown }).pendingRemovalIntent ??
+        null,
+      requestSelectionNodeRemoval:
+        (merged as { handleSelectionNodeDelete?: unknown })
+          .handleSelectionNodeDelete ?? vi.fn(),
+      ...((merged as { removalControls?: object }).removalControls ?? {}),
+    },
+    visibilityControls: {
+      hiddenNodeClasses: merged.hiddenNodeClasses,
+      isDirty: false,
+      isMenuOpen: merged.hideShowMenuOpen,
+      preset: merged.visibilityPreset,
+      resetPreferences: merged.resetPreferences,
+      setMenuOpen: merged.setHideShowMenuOpen,
+      setPreset: merged.setVisibilityPreset,
+      toggleHiddenNodeClass: merged.toggleHiddenNodeClass,
+      ...((merged as { visibilityControls?: object }).visibilityControls ?? {}),
+    },
+    status: {
+      hasDocumentBackedLayoutDraft: draftState.source === "current-factory",
+      hasActiveWork: merged.hasActiveWork,
+      hasLayoutChanges,
+      hasSharedGraphChanges: hasTopologyChanges || hasLayoutChanges,
+      hasTopologyChanges,
+      isDefinitionLoading: false,
+      isStaleDraft: merged.isStaleDraft,
+      isSaving: saveMutation.isPending ?? false,
+      preferencesDirty: false,
+      saveBlockedReason:
+        (merged as { saveBlockedReason?: string | null }).saveBlockedReason ??
+        null,
+      saveError: saveMutation.error ?? null,
+      ...((merged as { status?: object }).status ?? {}),
+    },
+    validationControls: {
+      draftErrors: [],
+      factoryDefinition:
+        (merged as { validationFactoryDefinition?: unknown })
+          .validationFactoryDefinition ??
+        draftState.pendingFactoryDefinition ??
+        merged.currentFactoryDefinition ??
+        semanticWorkflowDashboardSnapshot.factory,
+      projection: structuralValidation.projection,
+      targets: structuralValidation.targets ?? [],
+      ...((merged as { validationControls?: object }).validationControls ?? {}),
+    },
   };
 }
 
 function createGraphStub() {
   return {
+    canonicalLayoutViewport: null,
     edges: [],
     graphKey: "graph-key",
     handleNodesChange: vi.fn(),
-    initialFitViewKey: "full-graph",
-    initialFitViewOptions: { padding: 0.18 },
     nodes: [],
-    setStoredNodePosition: vi.fn(),
+  };
+}
+
+function createViewModelStub(overrides: Record<string, unknown> = {}) {
+  return {
+    ...createEditorStub(overrides),
+    ...createGraphStub(),
   };
 }
 
@@ -182,8 +313,7 @@ describe("CurrentActivityGraphSurface", () => {
 
     render(
       <CurrentActivityGraphSurface
-        editor={createEditorStub({ editorMode: false }) as never}
-        graph={createGraphStub() as never}
+        viewModel={createViewModelStub({ editorMode: false }) as never}
         imports={{} as never}
         selection={null}
         snapshot={snapshot}
@@ -200,13 +330,11 @@ describe("CurrentActivityGraphSurface", () => {
   });
 
   it("renders shared-surface notices and forwards viewport editor actions", () => {
-    const editor = createEditorStub();
-    const graph = createGraphStub();
+    const viewModel = createViewModelStub();
 
     render(
       <CurrentActivityGraphSurface
-        editor={editor as never}
-        graph={graph as never}
+        viewModel={viewModel as never}
         imports={{} as never}
         selection={null}
         snapshot={semanticWorkflowDashboardSnapshot}
@@ -258,14 +386,14 @@ describe("CurrentActivityGraphSurface", () => {
       screen.getByRole("button", { name: "Trigger tool select" }),
     );
 
-    expect(editor.setIsConfirmingSave).toHaveBeenCalledWith(true);
-    expect(editor.handleDiscardPendingChanges).toHaveBeenCalledTimes(1);
-    expect(editor.handleAddEntityAction).toHaveBeenCalledTimes(1);
-    expect(editor.setAddMenuOpen).toHaveBeenCalledWith(true);
-    expect(editor.handleEditorConnect).toHaveBeenCalledTimes(1);
-    expect(editor.handleEditorEdgeDelete).toHaveBeenCalledTimes(1);
-    expect(editor.handleEditorNodeDelete).toHaveBeenCalledTimes(1);
-    expect(editor.setActiveTool).toHaveBeenCalledWith("connect");
+    expect(viewModel.requestSaveConfirmation).toHaveBeenCalledTimes(1);
+    expect(viewModel.handleDiscardPendingChanges).toHaveBeenCalledTimes(1);
+    expect(viewModel.handleAddEntityAction).toHaveBeenCalledTimes(1);
+    expect(viewModel.setAddMenuOpen).toHaveBeenCalledWith(true);
+    expect(viewModel.handleEditorConnect).toHaveBeenCalledTimes(1);
+    expect(viewModel.removalControls.deleteEdge).toHaveBeenCalledTimes(1);
+    expect(viewModel.removalControls.deleteNode).toHaveBeenCalledTimes(1);
+    expect(viewModel.setActiveTool).toHaveBeenCalledWith("connect");
   });
 
   it("renders workstation validation messages in the failure notice when a marked workstation is selected", () => {
@@ -286,8 +414,8 @@ describe("CurrentActivityGraphSurface", () => {
 
     render(
       <CurrentActivityGraphSurface
-        editor={
-          createEditorStub({
+        viewModel={
+          createViewModelStub({
             blockedRemovalReason: null,
             connectionNotice: null,
             currentFactoryDefinition: semanticWorkflowDashboardSnapshot.factory,
@@ -300,7 +428,6 @@ describe("CurrentActivityGraphSurface", () => {
             },
           }) as never
         }
-        graph={createGraphStub() as never}
         imports={{} as never}
         selection={{ kind: "node", nodeId: "review" }}
         snapshot={semanticWorkflowDashboardSnapshot}
@@ -310,6 +437,46 @@ describe("CurrentActivityGraphSurface", () => {
     expect(screen.getByText("Factory validation issue")).toBeTruthy();
     expect(
       screen.getByText('Workstation "review" must define a failure route.'),
+    ).toBeTruthy();
+  });
+
+  it("renders draft validation errors in the failure notice without requiring a selection", () => {
+    render(
+      <CurrentActivityGraphSurface
+        viewModel={
+          createViewModelStub({
+            blockedRemovalReason: null,
+            connectionNotice: null,
+            draftState: { hasChanges: true },
+            hasActiveWork: false,
+            isStaleDraft: false,
+            validationControls: {
+              draftErrors: [
+                {
+                  code: "MISSING_REQUIRED_FIELD",
+                  field: "worker",
+                  message:
+                    'Workstation "review" must assign a worker before saving.',
+                  target: {
+                    id: "workstation:review",
+                    kind: "node",
+                  },
+                },
+              ],
+            },
+          }) as never
+        }
+        imports={{} as never}
+        selection={null}
+        snapshot={semanticWorkflowDashboardSnapshot}
+      />,
+    );
+
+    expect(screen.getByText("Factory validation issue")).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Workstation "review" must assign a worker before saving.',
+      ),
     ).toBeTruthy();
   });
 
@@ -331,8 +498,8 @@ describe("CurrentActivityGraphSurface", () => {
 
     render(
       <CurrentActivityGraphSurface
-        editor={
-          createEditorStub({
+        viewModel={
+          createViewModelStub({
             blockedRemovalReason: null,
             connectionNotice: null,
             currentFactoryDefinition: semanticWorkflowDashboardSnapshot.factory,
@@ -345,7 +512,6 @@ describe("CurrentActivityGraphSurface", () => {
             },
           }) as never
         }
-        graph={createGraphStub() as never}
         imports={{} as never}
         selection={{ kind: "node", nodeId: "work-type:story" }}
         snapshot={semanticWorkflowDashboardSnapshot}
@@ -376,8 +542,8 @@ describe("CurrentActivityGraphSurface", () => {
 
     render(
       <CurrentActivityGraphSurface
-        editor={
-          createEditorStub({
+        viewModel={
+          createViewModelStub({
             blockedRemovalReason: null,
             connectionNotice: null,
             currentFactoryDefinition: semanticWorkflowDashboardSnapshot.factory,
@@ -390,7 +556,6 @@ describe("CurrentActivityGraphSurface", () => {
             },
           }) as never
         }
-        graph={createGraphStub() as never}
         imports={{} as never}
         selection={{ kind: "state-node", placeId: "story:queued" }}
         snapshot={semanticWorkflowDashboardSnapshot}
@@ -429,8 +594,8 @@ describe("CurrentActivityGraphSurface", () => {
 
     render(
       <CurrentActivityGraphSurface
-        editor={
-          createEditorStub({
+        viewModel={
+          createViewModelStub({
             blockedRemovalReason: null,
             connectionNotice: null,
             currentFactoryDefinition: semanticWorkflowDashboardSnapshot.factory,
@@ -447,7 +612,6 @@ describe("CurrentActivityGraphSurface", () => {
             },
           }) as never
         }
-        graph={createGraphStub() as never}
         imports={{} as never}
         selection={{ kind: "node", nodeId: "workstation:process" }}
         snapshot={semanticWorkflowDashboardSnapshot}
@@ -467,8 +631,8 @@ describe("CurrentActivityGraphSurface", () => {
   it("does not render save success inside the graph card", () => {
     render(
       <CurrentActivityGraphSurface
-        editor={
-          createEditorStub({
+        viewModel={
+          createViewModelStub({
             blockedRemovalReason: null,
             connectionNotice: null,
             draftState: { hasChanges: false },
@@ -480,7 +644,6 @@ describe("CurrentActivityGraphSurface", () => {
             },
           }) as never
         }
-        graph={createGraphStub() as never}
         imports={{} as never}
         selection={null}
         snapshot={semanticWorkflowDashboardSnapshot}

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isOpenApiRunnerID,
   localizeRunnerSelectionSourceValue,
+  normalizeRunnerID,
   OPENAPI_RUNNER_IDS,
 } from "./runner-openapi-enums";
 
@@ -21,6 +22,9 @@ describe("runner OpenAPI enum localization", () => {
     expect(localizeRunnerSelectionSourceValue("legacy_provider", "ja")).toBe(
       "ワーカー provider",
     );
+    expect(localizeRunnerSelectionSourceValue("workstation", "fr")).toBe(
+      "Workstation",
+    );
     expect(localizeRunnerSelectionSourceValue("future-source", "en")).toBe(
       "Unknown type: future-source",
     );
@@ -30,5 +34,10 @@ describe("runner OpenAPI enum localization", () => {
     expect(isOpenApiRunnerID("cursor-cli")).toBe(true);
     expect(isOpenApiRunnerID(" CURSOR-CLI ")).toBe(true);
     expect(isOpenApiRunnerID("claude")).toBe(false);
+  });
+
+  it("normalizes runner IDs before persistence checks", () => {
+    expect(normalizeRunnerID(" CURSOR-CLI ")).toBe("cursor-cli");
+    expect(normalizeRunnerID(null)).toBe("");
   });
 });

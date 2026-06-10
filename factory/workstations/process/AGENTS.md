@@ -4,7 +4,9 @@ You are an autonomous coding agent working on a software project.
 
 1. Read the PRD at `prd.json` (in the current working directory)
 2. Read the progress log at `progress.txt` 
-3. Check you're on the correct branch from PRD `branchName`. If not, check it out or create from main.
+3. Check you're on the branch named by PRD `branchName`. For this factory,
+   `branchName` should match the PRD/work item name because
+   `setup-workspace.py` creates worktrees from the PRD name.
 4. Do the following: 
 4.1. See if there is an existing PR for this commit and check if there is any feedback. If there is feedback address it. Use PR conversation comments as the single feedback channel for this workflow.
 4.2. Pick the **highest priority** user story where `passes: false`, 
@@ -128,3 +130,23 @@ If you discover a **reusable pattern** that future iterations should know, add i
 ```
 
 Only add patterns that are **general and reusable**, not story-specific details.
+
+
+## server instantiates
+  When starting local servers for verification:
+  - Never use a shared default port such as 3000 without first checking whether it is already occupied.
+  - Prefer a unique port per work item, for example 3100-3999.
+  - Every `curl` must use `--max-time 10` or shorter.
+  - Every long-running server must be started in a cleanup trap and killed before the command exits.
+  - Do not leave `bun run dev`, `bun run start`, Storybook, Playwright, or HTTP servers running after verification.
+
+  Use command patterns like:
+
+  PORT=3456
+  bun run start -- -p "$PORT" &
+  server_pid=$!
+  trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+
+  sleep 4
+  curl --fail --silent --show-error --max-time 10 \
+    "http://127.0.0.1:$PORT/docs/modules/grouped-query-attention"

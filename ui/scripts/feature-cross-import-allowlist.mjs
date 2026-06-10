@@ -252,13 +252,127 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     relativeFilePath:
+      "src/features/current-selection/doc-selection/lib/detail-card-types.ts",
+    importSpecifiers: ["../../../workflow-activity/lib/factory-bundled-docs"],
+    reason:
+      "Legacy cross-feature bundled-doc reuse while workflow-activity/public boundaries are still being established.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/hooks/core/useCurrentSelection.derived.ts",
+    importSpecifiers: ["../../../workflow-activity/lib/factory-bundled-docs"],
+    reason:
+      "Legacy cross-feature bundled-doc reuse while workflow-activity/public boundaries are still being established.",
+  },
+  {
+    relativeFilePath:
       "src/features/current-selection/hooks/core/useCurrentSelection.ts",
     importSpecifiers: [
-      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
+      "../../../workflow-activity/lib/factory-bundled-docs",
       "../../../terminal-work/lib/types",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/components/react-flow-current-activity-card-view.tsx",
+    importSpecifiers: [
+      "../../import/hooks/use-factory-png-drop",
+      "../../import/lib/factory-import-save-choice",
+      "../../import/lib/factory-png-import",
+    ],
+    reason:
+      "Current workflow-activity import flow still depends on import feature internals pending a public boundary.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/hooks/current-activity-graph-editor-status-state.ts",
+    importSpecifiers: [
+      "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state",
+    ],
+    reason:
+      "Workflow-activity graph editor state currently reuses factory-graph-editor internals pending a public boundary split.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/hooks/current-activity-graph-state-value.ts",
+    importSpecifiers: [
+      "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
+      "../../factory-graph-editor/hooks/layout/factory-graph-edge-waypoint-editor-hook",
+      "../../factory-graph-editor/hooks/validation/use-factory-validation",
+      "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
+      "../../factory-graph-editor/lib/editor/factory-graph-editor-additions",
+      "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state",
+      "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary",
+      "../../factory-graph-editor/messages/editor",
+    ],
+    reason:
+      "Workflow-activity graph editor state currently reuses factory-graph-editor internals pending a public boundary split.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/hooks/use-current-activity-graph-add-controller.ts",
+    importSpecifiers: [
+      "../../current-factory-definition/lib/doc-editable-values",
+      "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
+      "../../factory-graph-editor/hooks/use-editable-factory-graph-types",
+      "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
+      "../../factory-graph-editor/lib/editor/factory-graph-editor-additions",
+    ],
+    reason:
+      "Workflow-activity graph editor state currently reuses factory-graph-editor internals pending a public boundary split.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/hooks/react-flow-current-activity-card-editor-editable-graph.ts",
+    importSpecifiers: [
+      "../../factory-graph-editor/hooks/use-editable-factory-graph-types",
+    ],
+    reason:
+      "Workflow-activity graph editor state currently reuses factory-graph-editor internals pending a public boundary split.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/hooks/react-flow-current-activity-card-graph-view-model.ts",
+    importSpecifiers: [
+      "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
+      "../../factory-graph-editor/lib/layout/factory-graph-layout-operations",
+      "../../factory-graph-editor/lib/projection/factory-graph-react-flow-edge-waypoint-projection",
+      "../../factory-graph-editor/lib/projection/factory-graph-react-flow-projection",
+    ],
+    reason:
+      "Workflow-activity graph view-model currently reuses factory-graph-editor internals pending a public boundary split.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/hooks/use-current-activity-graph-flow-projection.ts",
+    importSpecifiers: ["../../flowchart/lib/layout"],
+    reason:
+      "Workflow-activity graph projection currently reuses flowchart layout internals pending a public boundary split.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/hooks/use-current-activity-graph-render-state.ts",
+    importSpecifiers: [
+      "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
+      "../../factory-graph-editor/hooks/validation/use-factory-validation",
+      "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
+      "../../factory-graph-editor/lib/layout/factory-graph-layout-operations",
+      "../../flowchart/lib/layout",
+    ],
+    reason:
+      "Workflow-activity graph render state currently reuses factory-graph-editor and flowchart internals pending public boundaries.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/hooks/use-current-activity-graph-state.tsx",
+    importSpecifiers: [
+      "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
+      "../../factory-graph-editor/hooks/layout/factory-graph-edge-waypoint-editor-hook",
+    ],
+    reason:
+      "Workflow-activity graph state currently reuses factory-graph-editor internals pending a public boundary split.",
   },
   {
     relativeFilePath:
@@ -289,17 +403,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/current-selection/resource-selection/hooks/use-editable-resource-configuration-state.ts",
     importSpecifiers: [
-      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
       "../../../current-factory-definition/lib/resource-editable-values",
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
-      "src/features/current-selection/resource-selection/hooks/use-resource-detail-state.ts",
-    importSpecifiers: [
-      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
@@ -362,17 +466,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/current-selection/work-state-selection/hooks/use-editable-work-state-configuration-state.ts",
     importSpecifiers: [
-      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
       "../../../current-factory-definition/lib/work-state-editable-values",
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
-      "src/features/current-selection/work-state-selection/hooks/use-save-editable-work-state-configuration.ts",
-    importSpecifiers: [
-      "../../../workflow-activity/state/currentActivityGraphStore",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
@@ -442,7 +536,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/current-selection/work-type-selection/hooks/use-editable-work-type-configuration-state.ts",
     importSpecifiers: [
-      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
       "../../../current-factory-definition/lib/work-type-editable-validation",
       "../../../current-factory-definition/lib/work-type-editable-values",
     ],
@@ -492,17 +585,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/current-selection/worker-selection/hooks/use-editable-worker-configuration-state.ts",
     importSpecifiers: [
-      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
       "../../../current-factory-definition/lib/worker-editable-values",
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
-      "src/features/current-selection/worker-selection/hooks/use-worker-detail-state.ts",
-    importSpecifiers: [
-      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
@@ -652,7 +735,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/current-selection/workstation-selection/hooks/editable-workstation-ready-configuration-state.ts",
     importSpecifiers: [
-      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
       "../../../current-factory-definition/lib/workstation-behavior",
       "../../../current-factory-definition/lib/workstation-editable-values",
       "../../../current-factory-definition/lib/workstation-guards",
@@ -667,7 +749,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/current-selection/workstation-selection/hooks/use-editable-workstation-configuration-state.ts",
     importSpecifiers: [
-      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
       "../../../current-factory-definition/lib/workstation-behavior",
       "../../../current-factory-definition/lib/workstation-editable-values",
       "../../../current-factory-definition/lib/workstation-guards",
@@ -1225,22 +1306,10 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     relativeFilePath:
-      "src/features/workflow-activity/components/graph-editor-placement-context.tsx",
-    importSpecifiers: [
-      "../../factory-graph-editor/lib/editor/factory-graph-editor-additions",
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
       "src/features/workflow-activity/components/react-flow-current-activity-card-editor-chrome.tsx",
     importSpecifiers: [
       "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
-      "../../factory-graph-editor/hooks/use-editable-factory-graph-types",
-      "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
       "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state",
-      "../../factory-graph-editor/lib/editor/factory-graph-editor-additions",
       "../../factory-graph-editor/messages/editor",
     ],
     reason:
@@ -1282,12 +1351,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   {
     relativeFilePath:
       "src/features/workflow-activity/components/react-flow-current-activity-card-surface.tsx",
-    importSpecifiers: [
-      "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
-      "../../factory-graph-editor/hooks/layout/factory-graph-edge-waypoint-editor-hook",
-      "../../factory-graph-editor/lib/layout/factory-graph-layout-operations",
-      "../../factory-graph-editor/messages/editor",
-    ],
+    importSpecifiers: ["../../factory-graph-editor/messages/editor"],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
   },
@@ -1311,12 +1375,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   {
     relativeFilePath:
       "src/features/workflow-activity/components/react-flow-current-activity-card.tsx",
-    importSpecifiers: [
-      "../../dashboard/session/dashboard-session-provider",
-      "../../import/hooks/use-factory-png-drop",
-      "../../import/lib/factory-import-save-choice",
-      "../../import/lib/factory-png-import",
-    ],
+    importSpecifiers: ["../../dashboard/session/dashboard-session-provider"],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
   },
@@ -1345,16 +1404,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "src/features/workflow-activity/hooks/factory-graph-editor-availability.ts",
     importSpecifiers: [
       "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
-      "src/features/workflow-activity/hooks/observe-mode-factory-definition.ts",
-    importSpecifiers: [
-      "../../factory-graph-editor/lib/operations/factory-graph-topology-impact",
-      "../../timeline/state/factoryTimelineStore",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
@@ -1390,18 +1439,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/workflow-activity/hooks/react-flow-current-activity-card-editor-editable-graph.ts",
     importSpecifiers: [
-      "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
       "../../factory-graph-editor/hooks/use-editable-factory-graph",
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
-      "src/features/workflow-activity/hooks/react-flow-current-activity-card-editor-layout.ts",
-    importSpecifiers: [
-      "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
-      "../../factory-graph-editor/lib/editor/factory-graph-editor-layout",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
@@ -1420,33 +1458,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     relativeFilePath:
-      "src/features/workflow-activity/hooks/react-flow-current-activity-card-editor-value.ts",
-    importSpecifiers: [
-      "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-      "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
-      "../../factory-graph-editor/hooks/factory-graph-draft-hook",
-      "../../factory-graph-editor/hooks/layout/factory-graph-layout-draft-hook",
-      "../../factory-graph-editor/hooks/use-editable-factory-graph-types",
-      "../../factory-graph-editor/hooks/validation/use-factory-validation",
-      "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
-      "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state",
-      "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary",
-      "../../factory-graph-editor/lib/editor/factory-graph-editor-additions",
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
-      "src/features/workflow-activity/hooks/react-flow-current-activity-card-editor.tsx",
-    importSpecifiers: [
-      "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
       "src/features/workflow-activity/hooks/react-flow-current-activity-card-graph-layout.ts",
     importSpecifiers: [
       "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
@@ -1459,19 +1470,20 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     relativeFilePath:
-      "src/features/workflow-activity/hooks/current-activity-card-factory-definition.ts",
-    importSpecifiers: ["../../timeline/state/factoryTimelineStore"],
+      "src/features/workflow-activity/hooks/use-current-activity-graph-flow-projection.ts",
+    importSpecifiers: [
+      "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
+      "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
+      "../../factory-graph-editor/lib/layout/factory-graph-layout-operations",
+      "../../factory-graph-editor/lib/layout/factory-graph-layout-validation",
+    ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
   },
   {
     relativeFilePath:
       "src/features/workflow-activity/hooks/react-flow-current-activity-card-graph-view-model.ts",
-    importSpecifiers: [
-      "../../factory-graph-editor/lib/layout/factory-graph-layout-operations",
-      "../../flowchart/lib/layout",
-      "../../timeline/state/factoryTimelineStore",
-    ],
+    importSpecifiers: ["../../flowchart/lib/layout"],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
   },
@@ -1503,9 +1515,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/workflow-activity/hooks/use-graph-editor-session.ts",
     importSpecifiers: [
-      "../../current-factory-definition/hooks/useCurrentFactoryDefinition",
       "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
-      "../../factory-graph-editor/hooks/use-editable-factory-graph-types",
       "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
       "../../factory-graph-editor/lib/editor/factory-graph-editor-additions",
     ],
@@ -1595,15 +1605,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     importSpecifiers: [
       "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
       "../../factory-graph-editor/lib/editor/factory-graph-editor-layout",
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath:
-      "src/features/workflow-activity/lib/migrate-work-state-graph-layout-positions.ts",
-    importSpecifiers: [
-      "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
@@ -1724,7 +1725,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/current-selection/doc-selection/hooks/use-doc-detail-state.ts",
     importSpecifiers: [
-      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
       "../../../workflow-activity/lib/factory-bundled-docs",
       "../../../workflow-activity/state/graph-editor-pending-factory-bridge",
     ],
@@ -1735,7 +1735,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/current-selection/doc-selection/hooks/use-editable-doc-configuration-state.ts",
     importSpecifiers: [
-      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
       "../../../current-factory-definition/lib/doc-editable-values",
     ],
     reason:
@@ -1805,26 +1804,10 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   },
   {
     relativeFilePath:
-      "src/features/workflow-activity/components/react-flow-current-activity-card-editor-chrome.tsx",
-    importSpecifiers: [
-      "../../current-factory-definition/lib/doc-editable-values",
-    ],
-    reason:
-      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
-  },
-  {
-    relativeFilePath:
       "src/features/workflow-activity/hooks/react-flow-current-activity-card-editor-removals.ts",
     importSpecifiers: [
       "../../factory-graph-editor/lib/factory-graph-doc-editor",
     ],
-    reason:
-      "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
-  },
-  {
-    relativeFilePath:
-      "src/features/workflow-activity/lib/current-activity-doc-graph-layout.ts",
-    importSpecifiers: ["../../flowchart/lib/layout"],
     reason:
       "Doc-nodes cross-feature internal import debt from factory/docs dashboard graph and current-selection flows. Route reuse through public/ boundaries in a follow-up structural cleanup.",
   },

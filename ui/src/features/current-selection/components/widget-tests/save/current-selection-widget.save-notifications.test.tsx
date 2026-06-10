@@ -118,6 +118,7 @@ describe("CurrentSelectionWidget save notification delivery", () => {
     renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
+          currentFactoryDefinition: buildDetailCardEditableFactoryDocument(),
           selectedWorkerName: "reviewer",
           selection: { kind: "worker", workerName: "reviewer" },
         })}
@@ -173,6 +174,7 @@ describe("CurrentSelectionWidget save notification delivery", () => {
     renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
+          currentFactoryDefinition: buildDetailCardMultiResourceFactoryDocument(),
           selectedResourceName: "agent-slot",
           selection: { kind: "resource", resourceName: "agent-slot" },
         })}
@@ -214,6 +216,7 @@ describe("CurrentSelectionWidget save notification delivery", () => {
     renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
+          currentFactoryDefinition: buildDetailCardMultiResourceFactoryDocument(),
           selectedResourceName: "agent-slot",
           selection: { kind: "resource", resourceName: "agent-slot" },
         })}
@@ -274,6 +277,7 @@ describe("CurrentSelectionWidget save notification delivery", () => {
     rerender(
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
+          currentFactoryDefinition: buildDetailCardEditableFactoryDocument(),
           selectedWorkerName: "reviewer",
           selection: { kind: "worker", workerName: "reviewer" },
         })}

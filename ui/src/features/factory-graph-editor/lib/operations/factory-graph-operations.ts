@@ -1,10 +1,10 @@
-import type { FactoryValidationTarget } from "../../../../api/factory-validation";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 import {
   buildDraftAppliedFactoryDefinition,
   buildPendingFactoryDefinition,
 } from "../draft/factory-graph-draft-apply";
 import { buildFactoryGraphTopologyFromDefinition } from "../draft/factory-graph-draft-graph";
+import { removeInternalSystemTimeFactoryGraph } from "../draft/factory-graph-draft-save-sanitizer";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
@@ -30,15 +30,15 @@ import {
   createFactoryGraphWorkstationResolver,
 } from "../editor/factory-graph-editor-connections";
 import {
-  applyFactoryGraphDocRemoval,
-  buildFactoryGraphDocRemovalIntent,
-  parseFactoryBundledDocNodeId,
-} from "../factory-graph-doc-editor";
-import {
   applyFactoryGraphEntityRemoval,
   buildFactoryGraphEdgeRemovalIntent,
   buildFactoryGraphRemovalIntent,
 } from "../editor-runtime/factory-graph-editor-removals";
+import {
+  applyFactoryGraphDocRemoval,
+  buildFactoryGraphDocRemovalIntent,
+  parseFactoryBundledDocNodeId,
+} from "../factory-graph-doc-editor";
 import {
   applyPendingFactoryLayout,
   type FactoryLayout,
@@ -74,7 +74,6 @@ export type FactoryGraphOperationResult<T> =
   | {
       ok: true;
       value: T;
-      layoutOutcomes?: FactoryValidationTarget[];
     }
   | {
       message: string;
@@ -393,22 +392,17 @@ export function applyFactoryGraphPendingEdits(options: {
       ? null
       : preparePendingFactoryLayoutForSave(options.pendingLayout, validEdgeIds);
   const preparedPendingLayout = preparedPendingLayoutResult?.layout ?? null;
-  const layoutOutcomes = preparedPendingLayoutResult?.layoutOutcomes;
   const nextDefinition =
     preparedPendingLayout &&
     hasFactoryLayoutChanges(baseLayout, preparedPendingLayout)
-      ? applyPendingFactoryLayout(
-          nextFactoryDefinition,
-          preparedPendingLayout,
-        )
+      ? applyPendingFactoryLayout(nextFactoryDefinition, preparedPendingLayout)
       : nextFactoryDefinition;
 
   return {
     ok: true,
-    value: materializeFactoryGraphEntityIdsForSave(nextDefinition),
-    ...(layoutOutcomes && layoutOutcomes.length > 0
-      ? { layoutOutcomes }
-      : {}),
+    value: materializeFactoryGraphEntityIdsForSave(
+      removeInternalSystemTimeFactoryGraph(nextDefinition),
+    ),
   };
 }
 

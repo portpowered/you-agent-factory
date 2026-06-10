@@ -6,12 +6,17 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
-import type { FactoryWorker } from "../../../../api/events/types";
-import { resourceTokenCountFromSnapshot } from "../../resource-selection/lib/resource-detail-values";
 import {
-  findFactoryWorkerInSnapshot,
-  findFactoryWorkTypeInSnapshot,
-  workstationNamesReferencingWorkerInSnapshot,
+  findFactoryBundledDocFile,
+  type FactoryBundledDocFile,
+} from "../../../workflow-activity/lib/factory-bundled-docs";
+import {
+  resourceTokenCountFromSnapshot,
+  workerNamesReferencingResourceInFactoryDefinition,
+  workstationNamesReferencingResourceInFactoryDefinition,
+} from "../../resource-selection/lib/resource-detail-values";
+import {
+  findFactoryResourceInSnapshot,
 } from "../../state/dashboardSelection";
 import type {
   DashboardSelection,
@@ -34,6 +39,10 @@ import {
   terminalHistoryItemsForPlace,
   type WorkstationRequestLike,
 } from "./useCurrentSelection.helpers";
+import {
+  resolveCurrentFactoryDocumentFromSnapshot,
+  useSelectedWorkerAndWorkTypeData,
+} from "./useCurrentSelection.selection-metadata";
 
 function useSelectedNode(
   selection: DashboardSelection | null,
@@ -111,15 +120,39 @@ function useSelectedResourceRuntime(
 
   return useMemo(() => {
     if (!selectedResourceName) {
-      return { selectedResourceName: null, selectedResourceTokenCount: null };
+      return {
+        selectedResource: null,
+        selectedResourceName: null,
+        selectedResourceTokenCount: null,
+        selectedResourceWorkerNames: [],
+        selectedResourceWorkstationNames: [],
+      };
     }
 
+    const selectedResource = snapshot
+      ? (findFactoryResourceInSnapshot(snapshot, selectedResourceName) ?? null)
+      : null;
+    const factory = snapshot?.factory;
+
     return {
+      selectedResource,
       selectedResourceName,
       selectedResourceTokenCount: resourceTokenCountFromSnapshot(
         snapshot,
         selectedResourceName,
       ),
+      selectedResourceWorkerNames: factory
+        ? workerNamesReferencingResourceInFactoryDefinition(
+            factory,
+            selectedResourceName,
+          )
+        : [],
+      selectedResourceWorkstationNames: factory
+        ? workstationNamesReferencingResourceInFactoryDefinition(
+            factory,
+            selectedResourceName,
+          )
+        : [],
     };
   }, [selectedResourceName, snapshot]);
 }
@@ -212,50 +245,6 @@ function useSelectedWorkData({
   };
 }
 
-function useSelectedWorkerAndWorkTypeData(
-  selection: DashboardSelection | null,
-  snapshot: DashboardSnapshot | null | undefined,
-) {
-  const selectedWorkerName =
-    selection?.kind === "worker" ? selection.workerName : null;
-  const selectedWorkTypeName =
-    selection?.kind === "work-type" ? selection.workTypeName : null;
-  const selectedWorkType = useMemo(() => {
-    if (!snapshot || !selectedWorkTypeName) {
-      return null;
-    }
-
-    return (
-      findFactoryWorkTypeInSnapshot(snapshot, selectedWorkTypeName) ?? null
-    );
-  }, [selectedWorkTypeName, snapshot]);
-  const selectedWorker = useMemo((): FactoryWorker | null => {
-    if (!snapshot || !selectedWorkerName) {
-      return null;
-    }
-
-    return findFactoryWorkerInSnapshot(snapshot, selectedWorkerName) ?? null;
-  }, [selectedWorkerName, snapshot]);
-  const selectedWorkerWorkstationNames = useMemo(() => {
-    if (!snapshot || !selectedWorkerName) {
-      return [];
-    }
-
-    return workstationNamesReferencingWorkerInSnapshot(
-      snapshot,
-      selectedWorkerName,
-    );
-  }, [selectedWorkerName, snapshot]);
-
-  return {
-    selectedWorker,
-    selectedWorkerName,
-    selectedWorkerWorkstationNames,
-    selectedWorkType,
-    selectedWorkTypeName,
-  };
-}
-
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: derived selection state composes node, state, work, worker, resource, and work-type projections in one return surface.
 export function useCurrentSelectionDerivedState({
   projectedWorkstationRequestsByDispatchID,
@@ -271,6 +260,8 @@ export function useCurrentSelectionDerivedState({
   terminalWorkDetail: TerminalWorkDetail | null;
 }) {
   const selectedNode = useSelectedNode(selection, snapshot);
+  const currentFactoryDefinition =
+    resolveCurrentFactoryDocumentFromSnapshot(snapshot);
   const selectedWorkstationRequest =
     selection?.kind === "workstation-request" ? selection.request : null;
   const selectedStatePlace =
@@ -319,8 +310,22 @@ export function useCurrentSelectionDerivedState({
         : (terminalWorkDetail?.traceWorkID ?? null);
   const selectedDocTargetPath =
     selection?.kind === "doc" ? selection.targetPath : null;
-  const { selectedResourceName, selectedResourceTokenCount } =
-    useSelectedResourceRuntime(selection, snapshot);
+  const selectedDocBundledFile = useMemo((): FactoryBundledDocFile | null => {
+    if (!snapshot || !selectedDocTargetPath) {
+      return null;
+    }
+
+    return (
+      findFactoryBundledDocFile(snapshot.factory, selectedDocTargetPath) ?? null
+    );
+  }, [selectedDocTargetPath, snapshot]);
+  const {
+    selectedResource,
+    selectedResourceName,
+    selectedResourceTokenCount,
+    selectedResourceWorkerNames,
+    selectedResourceWorkstationNames,
+  } = useSelectedResourceRuntime(selection, snapshot);
   const {
     selectedWorker,
     selectedWorkerName,
@@ -360,6 +365,7 @@ export function useCurrentSelectionDerivedState({
   return {
     completedWorkItems,
     completedWorkLabels,
+    currentFactoryDefinition,
     failedWorkItems,
     failedWorkLabels,
     selectedNode,
@@ -376,9 +382,13 @@ export function useCurrentSelectionDerivedState({
     selectedWorkProviderSessions: work.selectedWorkProviderSessions,
     selectedWorkRequestHistory: work.selectedWorkRequestHistory,
     selectedWorkWorkstationRequests: work.selectedWorkWorkstationRequests,
+    selectedDocBundledFile,
     selectedDocTargetPath,
+    selectedResource,
     selectedResourceName,
     selectedResourceTokenCount,
+    selectedResourceWorkerNames,
+    selectedResourceWorkstationNames,
     selectedWorker,
     selectedWorkerName,
     selectedWorkerWorkstationNames,

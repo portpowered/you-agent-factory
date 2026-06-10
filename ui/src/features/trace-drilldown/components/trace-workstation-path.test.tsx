@@ -580,7 +580,7 @@ describe("TraceWorkstationPath semantics", () => {
       throw new Error("Expected accepted workstation node to render.");
     }
     expect(acceptedNode.className).toContain(
-      "af-current-activity-node-surface-neutral",
+      "border-outline-variant bg-surface-container-highest",
     );
     expect(acceptedNode.className).toContain("border-info-border");
 
@@ -589,7 +589,7 @@ describe("TraceWorkstationPath semantics", () => {
       throw new Error("Expected failed workstation node to render.");
     }
     expect(failedNode.className).toContain(
-      "af-current-activity-node-surface-neutral",
+      "border-outline-variant bg-surface-container-highest",
     );
     expect(failedNode.className).toContain("border-info-border");
   });

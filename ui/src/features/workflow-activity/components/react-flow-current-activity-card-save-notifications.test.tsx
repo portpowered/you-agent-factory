@@ -16,8 +16,8 @@ vi.mock("sonner", () => ({
   },
 }));
 
-function createEditorStub(overrides: Record<string, unknown> = {}) {
-  return {
+function createViewModelStub(overrides: Record<string, unknown> = {}) {
+  const merged = {
     documentSave: { status: "idle" },
     draftState: { hasChanges: false },
     saveAttemptRevision: 0,
@@ -25,6 +25,28 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
       error: null,
     },
     ...overrides,
+  };
+  const hasTopologyChanges =
+    (merged.draftState as { hasChanges?: boolean }).hasChanges ?? false;
+  const saveMutation = merged.saveEditableDefinition as {
+    error?: unknown;
+    isPending?: boolean;
+  };
+
+  return {
+    ...merged,
+    saveControls: {
+      attemptRevision: merged.saveAttemptRevision,
+      feedback: merged.documentSave,
+      ...((merged as { saveControls?: object }).saveControls ?? {}),
+    },
+    status: {
+      hasSharedGraphChanges: hasTopologyChanges,
+      hasTopologyChanges,
+      isSaving: saveMutation.isPending ?? false,
+      saveError: saveMutation.error ?? null,
+      ...((merged as { status?: object }).status ?? {}),
+    },
   };
 }
 
@@ -36,8 +58,8 @@ describe("CurrentActivityGraphSaveNotifications", () => {
   it("calls the sonner success hook when scoped document save succeeds", () => {
     render(
       <CurrentActivityGraphSaveNotifications
-        editor={
-          createEditorStub({
+        viewModel={
+          createViewModelStub({
             documentSave: { status: "success" },
             saveAttemptRevision: 1,
           }) as never
@@ -57,8 +79,8 @@ describe("CurrentActivityGraphSaveNotifications", () => {
   it("calls the sonner error hook when scoped document save fails", () => {
     render(
       <CurrentActivityGraphSaveNotifications
-        editor={
-          createEditorStub({
+        viewModel={
+          createViewModelStub({
             documentSave: {
               errorMessage: "The graph is invalid.",
               status: "error",
@@ -90,8 +112,8 @@ describe("CurrentActivityGraphSaveNotifications", () => {
 
     render(
       <CurrentActivityGraphSaveNotifications
-        editor={
-          createEditorStub({
+        viewModel={
+          createViewModelStub({
             documentSave: {
               message:
                 "The factory definition changed while you were editing. Refresh or discard your draft before saving.",
@@ -119,16 +141,16 @@ describe("CurrentActivityGraphSaveNotifications", () => {
   });
 
   it("does not repeat the same save notification across rerenders with the same attempt revision", () => {
-    const editor = createEditorStub({
+    const viewModel = createViewModelStub({
       documentSave: { status: "success" },
       saveAttemptRevision: 1,
     });
     const { rerender } = render(
-      <CurrentActivityGraphSaveNotifications editor={editor as never} />,
+      <CurrentActivityGraphSaveNotifications viewModel={viewModel as never} />,
     );
 
     rerender(
-      <CurrentActivityGraphSaveNotifications editor={editor as never} />,
+      <CurrentActivityGraphSaveNotifications viewModel={viewModel as never} />,
     );
 
     expect(toast.success).toHaveBeenCalledTimes(1);
@@ -137,8 +159,8 @@ describe("CurrentActivityGraphSaveNotifications", () => {
   it("calls toast.error twice for the same message on distinct save attempts", () => {
     const { rerender } = render(
       <CurrentActivityGraphSaveNotifications
-        editor={
-          createEditorStub({
+        viewModel={
+          createViewModelStub({
             documentSave: {
               errorMessage: "The graph is invalid.",
               status: "error",
@@ -156,8 +178,8 @@ describe("CurrentActivityGraphSaveNotifications", () => {
 
     rerender(
       <CurrentActivityGraphSaveNotifications
-        editor={
-          createEditorStub({
+        viewModel={
+          createViewModelStub({
             documentSave: {
               errorMessage: "The graph is invalid.",
               status: "error",

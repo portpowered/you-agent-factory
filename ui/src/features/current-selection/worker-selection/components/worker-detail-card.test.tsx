@@ -166,6 +166,34 @@ function buildFactoryDocument(
   };
 }
 
+function buildWorkerContext(
+  workerName: string,
+  factoryDocument: CurrentFactoryDocument = buildFactoryDocument(),
+) {
+  return {
+    worker:
+      factoryDocument.workers?.find(
+        (candidate) => candidate.name === workerName,
+      ) ?? undefined,
+    workstationNames:
+      factoryDocument.workstations
+        ?.filter((workstation) => workstation.worker === workerName)
+        .map((workstation) => workstation.name) ?? [],
+  };
+}
+
+function renderReadOnlyWorkerDetailCard(
+  workerName: string,
+  factoryDocument: CurrentFactoryDocument = buildFactoryDocument(),
+) {
+  return render(
+    <WorkerDetailCard
+      workerName={workerName}
+      {...buildWorkerContext(workerName, factoryDocument)}
+    />,
+  );
+}
+
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: WorkerDetailCard coverage keeps loading, ready, and editable state regressions together.
 describe("WorkerDetailCard", () => {
   beforeEach(() => {
@@ -173,7 +201,13 @@ describe("WorkerDetailCard", () => {
   });
 
   it("shows loading state while the current factory document is pending", () => {
-    render(<WorkerDetailCard workerName="reviewer" />);
+    render(
+      <WorkerDetailCard
+        editableConfigurationState={{ status: "loading" }}
+        workerName="reviewer"
+        {...buildWorkerContext("reviewer")}
+      />,
+    );
 
     expectPrimaryWorkerTitle("reviewer");
     expect(
@@ -185,23 +219,25 @@ describe("WorkerDetailCard", () => {
     ).toBe("true");
     expect(
       screen.getByText(
-        "Loading the current factory definition for this worker.",
+        "Loading editable worker configuration.",
       ),
     ).toBeTruthy();
   });
 
   it("shows error state when the current factory document fails to load", () => {
-    mockFactoryDocumentQuery({
-      error: { message: "Factory unavailable" },
-      isError: true,
-      isPending: false,
-      status: "error",
-    } as never);
-
-    render(<WorkerDetailCard workerName="reviewer" />);
+    render(
+      <WorkerDetailCard
+        editableConfigurationState={{
+          errorMessage: "Factory unavailable",
+          status: "error",
+        }}
+        workerName="reviewer"
+        {...buildWorkerContext("reviewer")}
+      />,
+    );
 
     expect(screen.getByRole("alert").textContent).toContain(
-      "Worker definition unavailable.",
+      "Worker configuration unavailable.",
     );
     expect(screen.getByRole("alert").textContent).toContain(
       "Factory unavailable",
@@ -216,7 +252,7 @@ describe("WorkerDetailCard", () => {
       status: "success",
     } as never);
 
-    render(<WorkerDetailCard workerName="missing-worker" />);
+    renderReadOnlyWorkerDetailCard("missing-worker");
 
     expect(
       screen.getByText(
@@ -233,7 +269,7 @@ describe("WorkerDetailCard", () => {
       status: "success",
     } as never);
 
-    render(<WorkerDetailCard workerName="reviewer" />);
+    renderReadOnlyWorkerDetailCard("reviewer");
 
     expectPrimaryWorkerTitle("reviewer");
     expect(
@@ -320,6 +356,7 @@ describe("WorkerDetailCard", () => {
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
         workerName="reviewer"
+        {...buildWorkerContext("reviewer")}
       />,
     );
 
@@ -415,6 +452,7 @@ describe("WorkerDetailCard", () => {
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
         workerName="reviewer"
+        {...buildWorkerContext("reviewer")}
       />,
     );
 
@@ -434,17 +472,19 @@ describe("WorkerDetailCard", () => {
   });
 
   it("does not list referencing workstations outside the editable configuration section", () => {
+    const factoryDocument = buildFactoryDocument({
+      workers: [{ name: "script-runner", type: "SCRIPT_WORKER" }],
+      workstations: [{ id: "run", name: "Run", worker: "script-runner" }],
+    });
+
     mockFactoryDocumentQuery({
-      data: buildFactoryDocument({
-        workers: [{ name: "script-runner", type: "SCRIPT_WORKER" }],
-        workstations: [{ id: "run", name: "Run", worker: "script-runner" }],
-      }),
+      data: factoryDocument,
       isPending: false,
       isSuccess: true,
       status: "success",
     } as never);
 
-    render(<WorkerDetailCard workerName="script-runner" />);
+    renderReadOnlyWorkerDetailCard("script-runner", factoryDocument);
 
     expect(
       screen.queryByRole("heading", { name: "Referencing workstations" }),
@@ -527,6 +567,7 @@ describe("WorkerDetailCard", () => {
           canSave: true,
         })}
         workerName="reviewer"
+        {...buildWorkerContext("reviewer")}
       />,
     );
 
@@ -635,6 +676,7 @@ describe("WorkerDetailCard", () => {
           onSave,
         })}
         workerName="reviewer"
+        {...buildWorkerContext("reviewer")}
       />,
     );
 
@@ -742,6 +784,7 @@ describe("WorkerDetailCard", () => {
         }}
         saveState={{ status: "success" }}
         workerName="reviewer"
+        {...buildWorkerContext("reviewer")}
       />,
     );
 
@@ -823,6 +866,7 @@ describe("WorkerDetailCard", () => {
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
         workerName="reviewer"
+        {...buildWorkerContext("reviewer")}
       />,
     );
 
@@ -909,6 +953,7 @@ describe("WorkerDetailCard", () => {
           canSave: true,
         })}
         workerName="reviewer"
+        {...buildWorkerContext("reviewer")}
       />,
     );
 
@@ -1009,17 +1054,19 @@ describe("WorkerDetailCard", () => {
       validationErrors: {},
     };
 
+    const factoryDocument = buildFactoryDocument({
+      workers: [
+        {
+          name: "linear-bot",
+          provider: "LINEAR",
+          type: "HOSTED_WORKER",
+        },
+      ],
+      workstations: [{ id: "sync", name: "Sync", worker: "linear-bot" }],
+    });
+
     mockFactoryDocumentQuery({
-      data: buildFactoryDocument({
-        workers: [
-          {
-            name: "linear-bot",
-            provider: "LINEAR",
-            type: "HOSTED_WORKER",
-          },
-        ],
-        workstations: [{ id: "sync", name: "Sync", worker: "linear-bot" }],
-      }),
+      data: factoryDocument,
       isPending: false,
       isSuccess: true,
       status: "success",
@@ -1029,6 +1076,7 @@ describe("WorkerDetailCard", () => {
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
         workerName="linear-bot"
+        {...buildWorkerContext("linear-bot", factoryDocument)}
       />,
     );
 
@@ -1103,18 +1151,20 @@ describe("WorkerDetailCard", () => {
       validationErrors: {},
     };
 
+    const factoryDocument = buildFactoryDocument({
+      workers: [
+        {
+          body: "Run the check",
+          command: "make check",
+          name: "script-runner",
+          type: "SCRIPT_WORKER",
+        },
+      ],
+      workstations: [{ id: "run", name: "Run", worker: "script-runner" }],
+    });
+
     mockFactoryDocumentQuery({
-      data: buildFactoryDocument({
-        workers: [
-          {
-            body: "Run the check",
-            command: "make check",
-            name: "script-runner",
-            type: "SCRIPT_WORKER",
-          },
-        ],
-        workstations: [{ id: "run", name: "Run", worker: "script-runner" }],
-      }),
+      data: factoryDocument,
       isPending: false,
       isSuccess: true,
       status: "success",
@@ -1124,6 +1174,7 @@ describe("WorkerDetailCard", () => {
       <WorkerDetailCard
         editableConfigurationState={editableConfigurationState}
         workerName="script-runner"
+        {...buildWorkerContext("script-runner", factoryDocument)}
       />,
     );
 
@@ -1225,6 +1276,7 @@ describe("WorkerDetailCard", () => {
           status: "warning",
         }}
         workerName="reviewer"
+        {...buildWorkerContext("reviewer")}
       />,
     );
 
@@ -1310,6 +1362,7 @@ describe("WorkerDetailCard", () => {
           status: "error",
         }}
         workerName="reviewer"
+        {...buildWorkerContext("reviewer")}
       />,
     );
 
@@ -1392,6 +1445,7 @@ describe("WorkerDetailCard", () => {
         editableConfigurationState={editableConfigurationState}
         headerAction={buildWorkerHeaderActions({ canSave: true })}
         workerName="reviewer"
+        {...buildWorkerContext("reviewer")}
       />,
     );
 
@@ -1487,6 +1541,7 @@ describe("WorkerDetailCard", () => {
         editableConfigurationState={editableConfigurationState}
         headerAction={buildWorkerHeaderActions({ canSave: false })}
         workerName="reviewer"
+        {...buildWorkerContext("reviewer")}
       />,
     );
 

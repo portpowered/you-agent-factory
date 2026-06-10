@@ -5,19 +5,21 @@ import { FactoryGraphEditorLeaveDialog } from "../../factory-graph-editor/compon
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { FactoryImportPreviewDialog } from "../../import/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
-import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
+import type { CurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
 import { GraphImportErrorPanel } from "./react-flow-current-activity-card-import";
 
 export function CurrentActivityGraphEditorDialogs({
   currentSessionFactoryName,
-  editor,
+  discardEditorChanges,
+  viewModel,
   imports,
   locale,
   readyImportPreviewState,
   shouldRenderImportPreviewDialog,
 }: {
   currentSessionFactoryName: string;
-  editor: ReturnType<typeof useCurrentActivityGraphEditor>;
+  discardEditorChanges?: () => void;
+  viewModel: CurrentActivityGraphCardViewModel;
   imports: CurrentActivityImportController;
   locale?: string;
   readyImportPreviewState: Extract<
@@ -27,6 +29,14 @@ export function CurrentActivityGraphEditorDialogs({
   shouldRenderImportPreviewDialog: boolean;
 }) {
   const messages = getFactoryGraphEditorMessages(locale);
+  const addControls = viewModel.addControls;
+  const isSaving = viewModel.status.isSaving;
+  const leaveControls = viewModel.leaveControls;
+  const removalControls = viewModel.removalControls;
+  const saveControls = viewModel.saveControls;
+  const isSaveBusy =
+    isSaving || isFactoryDocumentSaveSubmitting(saveControls.feedback);
+
   return (
     <>
       {shouldRenderImportPreviewDialog && readyImportPreviewState ? (
@@ -53,78 +63,68 @@ export function CurrentActivityGraphEditorDialogs({
         />
       ) : null}
       <FactoryGraphEditorLeaveDialog
-        canSave={editor.canSaveDraft}
-        isOpen={editor.leaveDialogOpen}
-        isSaving={editor.saveEditableDefinition.isPending}
+        canSave={saveControls.canSave}
+        isOpen={leaveControls.isOpen}
+        isSaving={isSaving}
         locale={locale}
         onCancel={() => {
-          if (!editor.saveEditableDefinition.isPending) {
-            editor.setIsConfirmingLeaveEditor(false);
+          if (!isSaving) {
+            leaveControls.cancel();
           }
         }}
-        onDiscard={editor.handleDiscardEditorChanges}
+        onDiscard={discardEditorChanges ?? leaveControls.discardChanges}
         onSave={() => {
-          void editor.handleSaveBeforeLeavingEditor();
+          void saveControls.saveBeforeLeaving();
         }}
       />
       <FactoryGraphEditorConfirmationDialog
         cancelLabel={messages.leaveDialogKeepEditing}
-        confirmLabel={editor.saveSummary.confirmActionLabel}
-        description={editor.saveSummary.description}
-        isBusy={
-          editor.saveEditableDefinition.isPending ||
-          isFactoryDocumentSaveSubmitting(editor.documentSave)
-        }
-        isOpen={editor.isConfirmingSave}
+        confirmLabel={saveControls.summary.confirmActionLabel}
+        description={saveControls.summary.description}
+        isBusy={isSaveBusy}
+        isOpen={saveControls.isConfirming}
         onCancel={() => {
-          if (
-            !editor.saveEditableDefinition.isPending &&
-            !isFactoryDocumentSaveSubmitting(editor.documentSave)
-          ) {
-            editor.cancelSaveConfirmation();
+          if (!isSaveBusy) {
+            saveControls.cancelConfirmation();
           }
         }}
         onConfirm={() => {
-          void editor.handleSaveDraft();
+          void saveControls.confirmSave();
         }}
         title={messages.saveConfirmTitle}
       />
       <FactoryGraphEditorConfirmationDialog
         cancelLabel={messages.leaveDialogKeepEditing}
         confirmLabel={
-          editor.pendingRemovalIntent?.confirmLabel ??
+          removalControls.pendingIntent?.confirmLabel ??
           messages.removalFallbackConfirmLabel
         }
         confirmTone="destructive"
         description={
-          editor.pendingRemovalIntent?.confirmDescription ??
+          removalControls.pendingIntent?.confirmDescription ??
           messages.removalFallbackConfirmDescription
         }
         isOpen={Boolean(
-          editor.pendingRemovalIntent &&
-            !editor.pendingRemovalIntent.ineligibleReason,
+          removalControls.pendingIntent &&
+            !removalControls.pendingIntent.ineligibleReason,
         )}
-        onCancel={editor.handleCancelRemoval}
-        onConfirm={editor.handleConfirmRemoval}
+        onCancel={removalControls.cancel}
+        onConfirm={removalControls.confirm}
         title={
-          editor.pendingRemovalIntent?.title ?? messages.removalFallbackTitle
+          removalControls.pendingIntent?.title ?? messages.removalFallbackTitle
         }
       />
       <FactoryGraphEditorAddEntityDialog
-        currentFactoryDefinition={editor.currentFactoryDefinition}
-        draft={editor.addEntityDraft}
-        errors={editor.addEntityErrors}
-        isOpen={editor.addEntityDraft !== null}
+        currentFactoryDefinition={addControls.currentFactoryDefinition}
+        draft={addControls.draft}
+        errors={addControls.errors}
+        isOpen={addControls.isDialogOpen}
         locale={locale}
         onChange={(draft) => {
-          editor.setAddEntityDraft(draft);
-          editor.setAddEntityErrors({});
+          addControls.updateDraft(draft);
         }}
-        onClose={() => {
-          editor.setAddEntityDraft(null);
-          editor.setAddEntityErrors({});
-        }}
-        onSubmit={editor.handleAddEntitySubmit}
+        onClose={addControls.closeDialog}
+        onSubmit={addControls.submit}
       />
     </>
   );

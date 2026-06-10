@@ -12,7 +12,7 @@ import {
 import { cn } from "../../../lib/cn";
 import type { WorkstationProgressOutcomeRouteContext } from "../../current-factory-definition/lib/workstation-progress-outcome-routes";
 import {
-  ActivityGraphNodeBadge,
+  activityGraphNodeSurfaceClassName,
   activityGraphNodeTitleClassName,
 } from "../../flowchart/components/current-activity-node-chrome";
 import { CurrentActivityWorkProgressMarker } from "../../flowchart/components/current-activity-work-progress-marker";
@@ -85,12 +85,15 @@ export function WorkstationNodeView({
     data.workstation.transition_id ||
     data.workstation.node_id;
   const nodeClassName = cn(
-    "af-current-activity-node-surface-neutral min-w-0 w-full justify-start overflow-hidden border-2",
-    currentActivityGraphNodeHoverClassName({
-      activeFlow: data.activeFlow,
-      muted: data.muted,
-      selected: data.selectedWorkstation || selectedWork,
-    }),
+    activityGraphNodeSurfaceClassName("workstation"),
+    "min-w-0 w-full justify-start overflow-hidden border-2",
+    currentActivityGraphNodeHoverClassName(
+      {
+        muted: data.muted,
+        selected: data.selectedWorkstation,
+      },
+      "primary",
+    ),
     exhaustionRule
       ? "border-dashed border-af-danger-border"
       : "border-info-border",
@@ -399,6 +402,8 @@ function WorkstationHeaderContent({
   semanticIconMetadata: ReturnType<typeof workstationGraphPresentation>;
   workstationTitle: string;
 }) {
+  const messages = getActivityGraphMessages(data.locale);
+
   return (
     <>
       <span
@@ -420,17 +425,12 @@ function WorkstationHeaderContent({
         {workstationTitle}
       </span>
       {data.active ? (
-        <ActivityGraphNodeBadge
-          className="min-h-5 shrink-0 justify-center px-1.5"
-          tone="success"
-        >
-          <GraphSemanticIcon
-            className="h-3.5 w-3.5 text-success"
-            kind="active-work"
-            label={getActivityGraphMessages(data.locale).activeBadgeLabel}
-            locale={data.locale}
-          />
-        </ActivityGraphNodeBadge>
+        <GraphSemanticIcon
+          className="h-4 w-4 shrink-0 text-success"
+          kind="active-work"
+          label={messages.activeBadgeLabel}
+          locale={data.locale}
+        />
       ) : null}
     </>
   );

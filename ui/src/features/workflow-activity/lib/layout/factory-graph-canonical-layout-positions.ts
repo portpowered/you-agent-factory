@@ -3,7 +3,7 @@ import {
   resolveProjectedLayoutPositions,
 } from "../../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import type { GraphLayout } from "../../../flowchart/lib/layout";
-import type { GraphNodePositions } from "../../state/currentActivityGraphStore";
+import type { GraphNodePositions } from "./graph-node-positions";
 
 export function graphNodePositionsFromCanonicalLayout(
   graphLayout: GraphLayout,
@@ -19,14 +19,4 @@ export function graphNodePositionsFromCanonicalLayout(
   });
 
   return Object.fromEntries(projected);
-}
-
-export function mergeLegacyStoredGraphNodePositions(
-  canonicalPositions: GraphNodePositions,
-  legacyStoredPositions: GraphNodePositions,
-): GraphNodePositions {
-  return {
-    ...legacyStoredPositions,
-    ...canonicalPositions,
-  };
 }

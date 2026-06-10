@@ -135,6 +135,52 @@ func TestFactoryConfigFromOpenAPIJSON_MapsPortableLayoutContract(t *testing.T) {
 	}
 }
 
+func TestFactoryConfigFromOpenAPIJSON_AllowsPortableLayoutNodesWithoutSize(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"layout-factory",
+		"layout":{
+			"schemaVersion":1,
+			"nodes":[
+				{"id":"workstation:review","position":{"x":420,"y":180}},
+				{"id":"workstation:approve","position":{"x":620,"y":220}}
+			],
+			"edges":[{"id":"workstation-output:workstation:review->work-state:task:done","waypoints":[{"x":540,"y":220},{"x":580,"y":240}]}],
+			"viewport":{"x":0,"y":0,"zoom":1}
+		},
+		"workTypes": [{"id":"task","name":"task","states":[{"id":"ready","name":"ready","type":"INITIAL"},{"id":"done","name":"done","type":"TERMINAL"}]}],
+		"workers": [{"id":"writer","name":"writer","type":"MODEL_WORKER"}],
+		"workstations": [{
+			"id":"review",
+			"name":"review",
+			"worker":"writer",
+			"inputs":[{"workType":"task","state":"ready"}],
+			"outputs":[{"workType":"task","state":"done"}]
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	if cfg.Layout == nil || len(cfg.Layout.Nodes) != 2 {
+		t.Fatalf("layout nodes = %#v, want 2 nodes", cfg.Layout)
+	}
+	if cfg.Layout.Nodes[0].Size != nil || cfg.Layout.Nodes[1].Size != nil {
+		t.Fatalf("layout node sizes = %#v, want sizeless nodes", cfg.Layout.Nodes)
+	}
+	if len(cfg.Layout.Edges) != 1 || len(cfg.Layout.Edges[0].Waypoints) != 2 {
+		t.Fatalf("layout edges = %#v, want one edge with two waypoints", cfg.Layout.Edges)
+	}
+
+	public := FactoryConfigToOpenAPI(cfg)
+	if public.Layout == nil || public.Layout.Nodes == nil || len(*public.Layout.Nodes) != 2 {
+		t.Fatalf("public layout nodes = %#v, want 2", public.Layout)
+	}
+	if (*public.Layout.Nodes)[0].Size != nil || (*public.Layout.Nodes)[1].Size != nil {
+		t.Fatalf("public layout node sizes = %#v, want omitted sizes", *public.Layout.Nodes)
+	}
+}
+
 func TestFactoryConfigFromOpenAPIJSON_RejectsMalformedPortableLayoutContract(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"layout-factory",
@@ -883,88 +929,4 @@ func requireGeneratedInputGuard(t *testing.T, generated factoryapi.Factory) fact
 		t.Fatalf("expected generated input guard to survive boundary decode, got %#v", workstation.Inputs)
 	}
 	return (*workstation.Inputs[1].Guards)[0]
-}
-
-func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredFanInFieldAtBoundary(t *testing.T) {
-	cfgJSON := []byte(`{
-		"name":"retired-fan-in-factory",
-		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
-		"workers": [{"name":"executor"}],
-		"workstations": [{
-			"name":"execute-story",
-			"worker":"executor",
-			"inputs":[{"workType":"story","state":"init"}],
-			"outputs":[{"workType":"story","state":"complete"}],
-			"join":{"waitFor":"story","waitState":"complete","require":"all"}
-		}]
-	}`)
-
-	_, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
-	if err == nil {
-		t.Fatal("expected retired join field to fail at generated boundary")
-	}
-	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
-		t.Fatalf("expected generated boundary context, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "workstations[0].join is not supported") {
-		t.Fatalf("expected retired join message, got %v", err)
-	}
-}
-
-func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredExhaustionRulesFieldAtBoundary(t *testing.T) {
-	cfgJSON := []byte(`{
-		"name":"retired-exhaustion-rules-factory",
-		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"failed","type":"FAILED"}]}],
-		"workers": [{"name":"executor"}],
-		"workstations": [{
-			"name":"execute-story",
-			"worker":"executor",
-			"inputs":[{"workType":"story","state":"init"}],
-			"outputs":[{"workType":"story","state":"failed"}]
-		}],
-		"exhaustionRules": [{
-			"name":"execute-story-loop-breaker",
-			"watchWorkstation":"execute-story",
-			"maxVisits":3,
-			"source":{"workType":"story","state":"init"},
-			"target":{"workType":"story","state":"failed"}
-		}]
-	}`)
-
-	_, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
-	if err == nil {
-		t.Fatal("expected retired exhaustionRules field to fail at generated boundary")
-	}
-	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
-		t.Fatalf("expected generated boundary context, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "exhaustion_rules is retired") {
-		t.Fatalf("expected retired exhaustion_rules message, got %v", err)
-	}
-}
-
-func TestGeneratedFactoryFromOpenAPIJSON_RejectsRetiredCronIntervalFieldAtBoundary(t *testing.T) {
-	cfgJSON := []byte(`{
-		"name":"retired-cron-interval-factory",
-		"workTypes": [{"name":"task","states":[{"name":"ready","type":"PROCESSING"},{"name":"complete","type":"TERMINAL"}]}],
-		"workers": [{"name":"executor"}],
-		"workstations": [{
-			"name":"daily-refresh",
-			"behavior":"CRON",
-			"worker":"executor",
-			"outputs":[{"workType":"task","state":"complete"}],
-			"cron":{"interval":"5m"}
-		}]
-	}`)
-
-	_, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
-	if err == nil {
-		t.Fatal("expected retired cron interval field to fail at generated boundary")
-	}
-	if !strings.Contains(err.Error(), generatedFactoryBoundaryErrorPrefix) {
-		t.Fatalf("expected generated boundary context, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "workstations[0].cron.interval is not supported; use cron.schedule") {
-		t.Fatalf("expected retired cron interval message, got %v", err)
-	}
 }

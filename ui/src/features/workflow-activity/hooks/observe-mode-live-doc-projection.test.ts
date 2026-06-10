@@ -72,6 +72,7 @@ function factoryChangeEvent(factory: typeof timelineFactory) {
   } as const;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: this regression keeps the event stream, query cache, and graph projection flow in one harness.
 describe("observe-mode live doc projection", () => {
   it("keeps bundled docs for graph projection after event-stream cache sync and factory GET", () => {
     const queryClient = new QueryClient();
@@ -104,18 +105,14 @@ describe("observe-mode live doc projection", () => {
       currentFactoryDocumentQueryKey(sessionID),
     );
     const editor = {
-      draftState: {},
-      editableDefinitionQuery: {
-        data: document,
-        status: "success" as const,
-      },
+      editableFactoryDocument: document,
+      editableFactoryDocumentStatus: "success" as const,
       editorMode: false,
     };
 
     const displayFactory = currentActivityCardFactoryDefinition(
-      editor as never,
+      editor,
       { factory: timelineFactory } as never,
-      "current",
     );
 
     expect(listFactoryBundledDocs(displayFactory)).toEqual([
@@ -126,18 +123,14 @@ describe("observe-mode live doc projection", () => {
 
   it("uses bundled docs from cached document data while the factory query is still pending", () => {
     const editor = {
-      draftState: {},
-      editableDefinitionQuery: {
-        data: savedFactoryDocument,
-        status: "pending" as const,
-      },
+      editableFactoryDocument: savedFactoryDocument,
+      editableFactoryDocumentStatus: "pending" as const,
       editorMode: false,
     };
 
     const displayFactory = currentActivityCardFactoryDefinition(
-      editor as never,
+      editor,
       { factory: timelineFactory } as never,
-      "current",
     );
 
     expect(listFactoryBundledDocs(displayFactory)).toEqual([
@@ -148,21 +141,48 @@ describe("observe-mode live doc projection", () => {
 
   it("does not invent bundled docs before the saved factory document is available", () => {
     const editor = {
-      draftState: {},
-      editableDefinitionQuery: {
-        data: undefined,
-        status: "pending" as const,
-      },
+      editableFactoryDocument: undefined,
+      editableFactoryDocumentStatus: "pending" as const,
       editorMode: false,
     };
 
     const displayFactory = currentActivityCardFactoryDefinition(
-      editor as never,
+      editor,
       { factory: timelineFactory } as never,
-      "current",
     );
 
     expect(listFactoryBundledDocs(displayFactory)).toEqual([]);
+  });
+
+  it("keeps snapshot layout for observer projection when cached document data omits layout", () => {
+    const editor = {
+      editableFactoryDocument: {
+        ...savedFactoryDocument,
+        layout: undefined,
+      },
+      editableFactoryDocumentStatus: "success" as const,
+      editorMode: false,
+    };
+    const snapshotFactory = {
+      ...timelineFactory,
+      layout: {
+        nodes: [
+          {
+            id: "workstation:plan",
+            position: { x: 420, y: 180 },
+          },
+        ],
+        schemaVersion: 1,
+        viewport: { x: 18, y: 22, zoom: 1.15 },
+      },
+    };
+
+    const displayFactory = currentActivityCardFactoryDefinition(
+      editor,
+      { factory: snapshotFactory } as never,
+    );
+
+    expect(displayFactory?.layout).toEqual(snapshotFactory.layout);
   });
 
   it("keeps bundled docs when FACTORY_CHANGE sync completes after the factory GET lands", () => {

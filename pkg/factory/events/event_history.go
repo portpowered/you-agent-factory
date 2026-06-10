@@ -45,15 +45,16 @@ type eventHistorySubscription struct {
 // FactoryEventHistory stores the current-process canonical event history.
 // It is intentionally in-memory and unbounded for the event-stream MVP.
 type FactoryEventHistory struct {
-	mu             sync.RWMutex
-	net            *state.Net
-	runtimeConfig  interfaces.RuntimeDefinitionLookup
-	factoryRunner  string
-	now            func() time.Time
-	events         []factoryapi.FactoryEvent
-	recorders      []func(factoryapi.FactoryEvent)
-	nextID         int
-	streams        map[int]*eventHistorySubscription
+	mu                  sync.RWMutex
+	net                 *state.Net
+	runtimeConfig       interfaces.RuntimeDefinitionLookup
+	factoryRunner       string
+	initialFactory      *factoryapi.Factory
+	now                 func() time.Time
+	events              []factoryapi.FactoryEvent
+	recorders           []func(factoryapi.FactoryEvent)
+	nextID              int
+	streams             map[int]*eventHistorySubscription
 	runRecordedAt       time.Time
 	hasRunRequest       bool
 	hasRunResponse      bool
@@ -86,6 +87,18 @@ func (h *FactoryEventHistory) SetFactoryRunnerOverride(runnerID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.factoryRunner = interfaces.NormalizeRunnerID(runnerID)
+}
+
+// SetInitialStructureFactory overrides the public factory snapshot emitted by
+// INITIAL_STRUCTURE. Runtime callers can keep execution configs thin while
+// service callers expose an editable event-sourced document.
+func (h *FactoryEventHistory) SetInitialStructureFactory(factory factoryapi.Factory) {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.initialFactory = &factory
 }
 
 // Events returns the recorded events in append order.
@@ -185,11 +198,17 @@ func (h *FactoryEventHistory) RecordInitialStructure() {
 	}
 	eventTime := interfaces.CanonicalEventTime(h.now())
 	payload := projections.ProjectInitialStructure(h.net, h.runtimeConfig)
+	factory := generatedFactory(payload)
+	h.mu.RLock()
+	if h.initialFactory != nil {
+		factory = *h.initialFactory
+	}
+	h.mu.RUnlock()
 	h.appendGenerated(factoryEvent(
 		factoryapi.FactoryEventTypeInitialStructureRequest,
 		eventIDInitialStructure,
 		factoryapi.FactoryEventContext{Tick: 0, EventTime: eventTime},
-		factoryapi.InitialStructureRequestEventPayload{Factory: generatedFactory(payload)},
+		factoryapi.InitialStructureRequestEventPayload{Factory: factory},
 	))
 }
 

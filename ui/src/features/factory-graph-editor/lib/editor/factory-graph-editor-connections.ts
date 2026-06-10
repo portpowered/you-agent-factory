@@ -59,6 +59,7 @@ const ANCHORS_BY_KIND: Record<
   FactoryGraphNodeKind,
   FactoryGraphConnectionAnchor[]
 > = {
+  doc: [],
   resource: [
     {
       description: "",

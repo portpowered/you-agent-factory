@@ -15,10 +15,12 @@ export function WorkerDetailCard({
   locale,
   saveState,
   widgetId = "current-selection",
+  worker,
   workerName,
+  workstationNames,
 }: WorkerDetailCardProps) {
   const messages = getWorkerDetailMessages(locale);
-  const detailState = useWorkerDetailState(workerName);
+  const detailState = useWorkerDetailState({ worker, workstationNames });
 
   return (
     <SelectionDetailLayout headerAction={headerAction} widgetId={widgetId}>

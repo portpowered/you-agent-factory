@@ -2,13 +2,16 @@ import { useCallback, useMemo } from "react";
 import { isFactoryDocumentSaveSubmitting } from "../../current-selection/base/hooks/factory-document-save-types";
 import { useScopedFactoryDocumentSave } from "../../current-selection/base/public";
 import { mapGraphSaveOutcomeToDocumentSaveState } from "../lib/document-save/graph-document-save-state";
-import { createEmptyFactoryGraphDraft } from "../lib/draft/factory-graph-draft-types";
+import type {
+  CanonicalFactoryDefinition,
+  CurrentFactoryDocument,
+} from "../lib/draft/factory-graph-draft-types";
+import { factoryLayoutFromDefinition } from "../lib/layout/factory-graph-layout-operations";
 import {
   applyFactoryGraphPendingEdits,
   type FactoryGraphOperationResult,
 } from "../lib/operations/factory-graph-operations";
 import { getFactoryGraphEditorMessages } from "../messages/editor";
-import { factoryLayoutFromDefinition } from "../lib/layout/factory-graph-layout-operations";
 import type { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
 import type { useFactoryGraphLayoutDraftState } from "./layout/factory-graph-layout-draft-hook";
 
@@ -31,8 +34,7 @@ export function useEditableFactoryGraphSaveController({
     result: FactoryGraphOperationResult<never> | null,
   ) => void;
 }) {
-  const hasPendingEdits =
-    draftState.hasChanges || layoutDraftState.hasChanges;
+  const hasPendingEdits = draftState.hasChanges || layoutDraftState.hasChanges;
   const messages = getFactoryGraphEditorMessages(locale);
   const scopedDocumentSave = useScopedFactoryDocumentSave({
     fallbackErrorMessage:
@@ -56,7 +58,6 @@ export function useEditableFactoryGraphSaveController({
   const canSave =
     factoryDocumentScopeKey !== null &&
     hasPendingEdits &&
-    draftState.pendingFactoryDefinition !== null &&
     draftState.validationErrors.length === 0 &&
     draftState.latestDocument !== null &&
     activeWorkCount === 0 &&
@@ -140,8 +141,10 @@ function useSaveEditableFactoryGraph({
       baseVersion: draftState.latestDocument.version,
       factory: saveInput.value,
       previousFactory: draftState.latestDocument,
-      onSaved: () => {
-        draftState.replaceDraft(createEmptyFactoryGraphDraft());
+      onSaved: (savedDocument) => {
+        draftState.adoptSavedFactoryDocument(
+          savedFactoryGraphDocument(saveInput.value, savedDocument),
+        );
         layoutDraftState.adoptSavedLayout(
           factoryLayoutFromDefinition(saveInput.value),
         );
@@ -160,6 +163,16 @@ function useSaveEditableFactoryGraph({
     locale,
     setBlockedOperation,
   ]);
+}
+
+function savedFactoryGraphDocument(
+  savedFactory: CanonicalFactoryDefinition,
+  savedDocument: CurrentFactoryDocument,
+): CurrentFactoryDocument {
+  return {
+    ...savedFactory,
+    version: savedDocument.version,
+  };
 }
 
 function isFactoryGraphDraftStale(

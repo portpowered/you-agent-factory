@@ -37,13 +37,11 @@ describe("graph editor add placement regression", () => {
     const nearTopLeft = resolveInitialPlacementTopLeft({
       draft,
       nodes: [],
-      storedPositions: {},
       viewportCenter: prePanCenter,
     });
     const farTopLeft = resolveInitialPlacementTopLeft({
       draft,
       nodes: [],
-      storedPositions: {},
       viewportCenter: postPanCenter,
     });
 
@@ -65,7 +63,6 @@ describe("graph editor add placement regression", () => {
         workerName: "writer",
       },
       nodes: [],
-      storedPositions: {},
       viewportCenter,
     });
 

@@ -19,7 +19,7 @@ import {
 } from "../../flowchart/lib/workstation-icon-metadata";
 import type { ReadFactoryImportFile } from "../../import/hooks/use-factory-png-drop";
 import type { FactoryPngImportValue } from "../../import/lib/factory-png-import";
-import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
+import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
 
 interface CurrentActivityStoryProps {

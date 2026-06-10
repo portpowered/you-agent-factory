@@ -314,6 +314,7 @@ type RequiredToolConfig struct {
 // BundledFileConfig declares one portable file payload and its factory-relative
 // restoration target.
 type BundledFileConfig struct {
+	ID         string                   `json:"id,omitempty"`
 	Type       string                   `json:"type"`
 	TargetPath string                   `json:"targetPath"`
 	Content    BundledFileContentConfig `json:"content"`
@@ -615,9 +616,9 @@ type ModelOperationSlot struct {
 }
 
 const (
-	OrchestratorKindPetri       = "PETRI"
-	OrchestratorKindJavaScript  = "JAVASCRIPT"
-	OrchestratorInlineEncoding  = "utf-8"
+	OrchestratorKindPetri      = "PETRI"
+	OrchestratorKindJavaScript = "JAVASCRIPT"
+	OrchestratorInlineEncoding = "utf-8"
 )
 
 // FactoryOrchestratorConfig is the authored orchestrator identity for one factory.
@@ -632,14 +633,14 @@ type FactoryOrchestratorPetriConfig struct{}
 
 // FactoryOrchestratorJavaScriptConfig carries JavaScript workflow source identity and policy.
 type FactoryOrchestratorJavaScriptConfig struct {
-	Dialect       string                                      `json:"dialect,omitempty"`
-	SourceRef     string                                      `json:"sourceRef,omitempty"`
-	InlineSource  *FactoryOrchestratorJavaScriptInlineSource  `json:"inlineSource,omitempty"`
-	SourceHash    string                                      `json:"sourceHash,omitempty"`
-	Entrypoint    string                                      `json:"entrypoint,omitempty"`
-	Metadata      map[string]string                           `json:"metadata,omitempty"`
-	ArgsSchema    json.RawMessage                             `json:"argsSchema,omitempty"`
-	DefaultPolicy json.RawMessage                             `json:"defaultPolicy,omitempty"`
+	Dialect       string                                     `json:"dialect,omitempty"`
+	SourceRef     string                                     `json:"sourceRef,omitempty"`
+	InlineSource  *FactoryOrchestratorJavaScriptInlineSource `json:"inlineSource,omitempty"`
+	SourceHash    string                                     `json:"sourceHash,omitempty"`
+	Entrypoint    string                                     `json:"entrypoint,omitempty"`
+	Metadata      map[string]string                          `json:"metadata,omitempty"`
+	ArgsSchema    json.RawMessage                            `json:"argsSchema,omitempty"`
+	DefaultPolicy json.RawMessage                            `json:"defaultPolicy,omitempty"`
 }
 
 // FactoryOrchestratorJavaScriptInlineSource carries inline workflow source text.

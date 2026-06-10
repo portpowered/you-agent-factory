@@ -10,7 +10,6 @@ import {
   buildTimeoutMs,
   defaultFactorySessionID,
   expectNoBrowserErrors,
-  loadReplayLines,
   openBrowserPage,
   startBrowserPreview,
   startFactoryApiServer,
@@ -21,6 +20,7 @@ import {
   editableGraphFactoryDefinition,
   editableGraphFactoryReplayLines,
   exportFactoryDefinition,
+  exportFactoryReplayLines,
   exportFactoryPngFromDashboard,
   installCapturedDownloadHook,
   openImportDialogForDroppedPng,
@@ -97,7 +97,7 @@ describe.sequential("factory name preservation browser integration", () => {
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
         currentFactory: exportFactoryDefinition,
-        eventLines: await loadReplayLines("graph-state-smoke-replay.jsonl"),
+        eventLines: exportFactoryReplayLines,
         onSaveCurrentFactory: async (request) => {
           sessionFactoryPutRequests.push(request);
         },
@@ -140,11 +140,24 @@ describe.sequential("factory name preservation browser integration", () => {
         await importDialog
           .getByRole("button", { name: "Confirm import" })
           .click();
-        await expect
-          .poll(async () => sessionFactoryPutRequests.length, {
-            timeout: uiInteractionTimeoutMs,
-          })
-          .toBe(1);
+        const importOutcome = await Promise.race([
+          (async () => {
+            await expect.poll(async () => sessionFactoryPutRequests.length, {
+              timeout: uiInteractionTimeoutMs,
+            }).toBe(1);
+            return "request";
+          })(),
+          importDialog
+            .getByRole("alert")
+            .waitFor({
+              state: "visible",
+              timeout: uiInteractionTimeoutMs,
+            })
+            .then(() => "error"),
+        ]);
+        if (importOutcome === "error") {
+          throw new Error(await importDialog.getByRole("alert").innerText());
+        }
         await importDialog.waitFor({
           state: "hidden",
           timeout: uiInteractionTimeoutMs,
@@ -184,7 +197,7 @@ describe.sequential("factory name preservation browser integration", () => {
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
         currentFactory: exportFactoryDefinition,
-        eventLines: await loadReplayLines("graph-state-smoke-replay.jsonl"),
+        eventLines: exportFactoryReplayLines,
         onSaveCurrentFactory: async (request) => {
           sessionFactoryPutRequests.push(request);
         },
@@ -224,8 +237,21 @@ describe.sequential("factory name preservation browser integration", () => {
           });
 
         await importDialog
+          .getByRole("radiogroup", { name: "Import save choice" })
           .getByRole("radio", { name: "Create new named factory" })
-          .check();
+          .click();
+        await expect
+          .poll(
+            async () =>
+              await importDialog
+                .getByRole("radiogroup", { name: "Import save choice" })
+                .getByRole("radio", { name: "Create new named factory" })
+                .isChecked(),
+            {
+              timeout: uiInteractionTimeoutMs,
+            },
+          )
+          .toBe(true);
         const resolvedCreateName = await importDialog
           .getByText("New factory name", { exact: true })
           .locator("xpath=following-sibling::span[1]")
@@ -234,11 +260,24 @@ describe.sequential("factory name preservation browser integration", () => {
         await importDialog
           .getByRole("button", { name: "Confirm import" })
           .click();
-        await expect
-          .poll(async () => sessionFactoryPutRequests.length, {
-            timeout: uiInteractionTimeoutMs,
-          })
-          .toBe(1);
+        const importOutcome = await Promise.race([
+          (async () => {
+            await expect.poll(async () => sessionFactoryPutRequests.length, {
+              timeout: uiInteractionTimeoutMs,
+            }).toBe(1);
+            return "request";
+          })(),
+          importDialog
+            .getByRole("alert")
+            .waitFor({
+              state: "visible",
+              timeout: uiInteractionTimeoutMs,
+            })
+            .then(() => "error"),
+        ]);
+        if (importOutcome === "error") {
+          throw new Error(await importDialog.getByRole("alert").innerText());
+        }
         await importDialog.waitFor({
           state: "hidden",
           timeout: uiInteractionTimeoutMs,

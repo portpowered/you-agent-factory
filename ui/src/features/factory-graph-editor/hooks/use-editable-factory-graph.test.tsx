@@ -6,13 +6,13 @@ import {
 } from "../../../testing/editable-factory-graph-hook-test-helpers";
 import { mockFactoryDocumentSave } from "../../../testing/factory-document-save-mocks";
 import {
-  baseFactoryDefinition,
-  currentFactoryDocument,
-} from "../lib/draft/factory-graph-draft.test-helpers";
-import {
   createHookTestGraphEditorDraftState,
   type MockGraphEditorDraftState,
 } from "../../../testing/graph-editor-harness";
+import {
+  baseFactoryDefinition,
+  currentFactoryDocument,
+} from "../lib/draft/factory-graph-draft.test-helpers";
 import { createEmptyFactoryGraphDraft } from "../lib/draft/factory-graph-draft-types";
 import { useEditableFactoryGraph } from "./use-editable-factory-graph";
 
@@ -185,13 +185,60 @@ describe("useEditableFactoryGraph", () => {
         ]),
       }),
     });
-    expect(hookState.draftState.replaceDraft).toHaveBeenCalledWith(
-      createEmptyFactoryGraphDraft(),
-    );
     await waitFor(() => {
       expect(result.current.saveState.documentSave).toEqual({
         status: "success",
       });
+    });
+    expect(hookState.draftState.adoptSavedFactoryDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resources: expect.arrayContaining([
+          expect.objectContaining({ name: "review-slot" }),
+        ]),
+        version: expect.objectContaining({
+          logical: "7",
+          physical: "2026-05-23T15:52:00Z",
+        }),
+      }),
+    );
+  });
+
+  it("allows saving a viewport-only layout change without topology edits", async () => {
+    const saveMutation = setupEditableFactoryGraphSaveTestEnvironment(
+      mockFactoryDocumentSave({ mode: "success" }),
+    );
+    hookState.draftState.pendingFactoryDefinition = null;
+
+    const { result } = renderEditableFactoryGraphHook({
+      currentFactoryDocument: currentFactoryDocument,
+      factoryDocumentScopeKey: "session-graph",
+    });
+
+    act(() => {
+      result.current.actions.updateLayoutViewport({
+        x: 48,
+        y: 96,
+        zoom: 1.25,
+      });
+    });
+
+    expect(result.current.pendingState.layoutDirty).toBe(true);
+    expect(result.current.pendingState.topologyDirty).toBe(false);
+    expect(result.current.saveState.canSave).toBe(true);
+
+    let didSave = false;
+    await act(async () => {
+      didSave = await result.current.actions.save();
+    });
+
+    expect(didSave).toBe(true);
+    expect(saveMutation.saveAsync).toHaveBeenCalledWith({
+      baseVersion: currentFactoryDocument.version,
+      factory: expect.objectContaining({
+        layout: expect.objectContaining({
+          viewport: { x: 48, y: 96, zoom: 1.25 },
+        }),
+      }),
     });
   });
 

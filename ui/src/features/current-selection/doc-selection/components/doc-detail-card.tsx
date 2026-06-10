@@ -15,11 +15,15 @@ export function DocDetailCard({
   headerAction,
   locale,
   saveState,
+  savedBundledDoc,
   targetPath,
   widgetId = "current-selection",
 }: DocDetailCardProps) {
   const messages = getDocDetailMessages(locale);
-  const detailState = useDocDetailState(targetPath, locale);
+  const detailState = useDocDetailState(
+    { savedBundledDoc, targetPath },
+    locale,
+  );
   const title =
     detailState.status === "ready"
       ? detailState.displayLabel

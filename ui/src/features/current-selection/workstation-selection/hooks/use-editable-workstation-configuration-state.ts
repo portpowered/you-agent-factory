@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { workstationBehaviorRequiresPrompt } from "../../../current-factory-definition/lib/workstation-behavior";
 import {
   isModelInvokeWorkstationType,
@@ -42,13 +42,13 @@ export function useEditableWorkstationConfigurationState(
   selection: DashboardSelection | null,
   selectedNode: DashboardWorkstationNode | null,
   locale?: string | null,
+  editableDefinition?: CurrentFactoryDocument | null,
 ): EditableWorkstationConfigurationState | undefined {
   const isNodeSelection = selection?.kind === "node" && selectedNode != null;
   const messages = getWorkstationDetailMessages(locale);
-  const editableDefinition = useCurrentFactoryDocument(isNodeSelection);
   const { selectedEditableValues, sessionState, setSessionState } =
     useEditableWorkstationSession(
-      editableDefinition.data,
+      editableDefinition,
       selectedNode,
       selection,
     );
@@ -81,18 +81,11 @@ export function useEditableWorkstationConfigurationState(
     return undefined;
   }
 
-  if (editableDefinition.isPending) {
+  if (!editableDefinition) {
     return { status: "loading" };
   }
 
-  if (editableDefinition.isError) {
-    return {
-      errorMessage: editableDefinition.error.message,
-      status: "error",
-    };
-  }
-
-  if (!editableDefinition.data || !selectedEditableValues || !sessionState) {
+  if (!selectedEditableValues || !sessionState) {
     return {
       message: messages.editableConfigurationEmpty,
       status: "empty",
@@ -116,14 +109,14 @@ export function useEditableWorkstationConfigurationState(
     messages,
     {
       originalWorkstationName: selectedEditableValues.workstationName,
-      workstationNames: (editableDefinition.data.workstations ?? []).map(
+      workstationNames: (editableDefinition.workstations ?? []).map(
         (workstation) => workstation.name,
       ),
     },
   );
 
   return buildReadyEditableWorkstationConfigurationState({
-    editableDefinition: editableDefinition.data,
+    editableDefinition,
     messages,
     promptHelpState,
     promptValidationState,
@@ -136,7 +129,7 @@ export function useEditableWorkstationConfigurationState(
 }
 
 function useEditableWorkstationSession(
-  editableDefinition: ReturnType<typeof useCurrentFactoryDocument>["data"],
+  editableDefinition: CurrentFactoryDocument | null | undefined,
   selectedNode: DashboardWorkstationNode | null,
   selection: DashboardSelection | null,
 ) {

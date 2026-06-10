@@ -6,7 +6,6 @@ import {
   browserScenarioTimeoutMs,
   buildTimeoutMs,
   expectNoBrowserErrors,
-  loadReplayLines,
   openBrowserPage,
   startBrowserPreview,
   startFactoryApiServer,
@@ -15,10 +14,94 @@ import {
 
 const defaultFactoryDefinition = {
   name: "Browser Session Harness Factory",
+  workers: [
+    {
+      model: "gpt-5",
+      name: "writer",
+      type: "MODEL_WORKER",
+    },
+  ],
+  workTypes: [
+    {
+      name: "story",
+      states: [
+        {
+          name: "queued",
+          type: "INITIAL",
+        },
+        {
+          name: "done",
+          type: "TERMINAL",
+        },
+      ],
+    },
+  ],
+  workstations: [
+    {
+      body: "Draft the story.",
+      inputs: [
+        {
+          state: "queued",
+          workType: "story",
+        },
+      ],
+      name: "draft",
+      outputs: [
+        {
+          state: "done",
+          workType: "story",
+        },
+      ],
+      type: "MODEL_WORKSTATION",
+      worker: "writer",
+    },
+  ],
 };
 
 const openedFactoryDefinition = {
   name: "Opened Review Factory",
+  workers: [
+    {
+      model: "gpt-5",
+      name: "review-writer",
+      type: "MODEL_WORKER",
+    },
+  ],
+  workTypes: [
+    {
+      name: "review-story",
+      states: [
+        {
+          name: "queued",
+          type: "INITIAL",
+        },
+        {
+          name: "done",
+          type: "TERMINAL",
+        },
+      ],
+    },
+  ],
+  workstations: [
+    {
+      body: "Review the story.",
+      inputs: [
+        {
+          state: "queued",
+          workType: "review-story",
+        },
+      ],
+      name: "session-review",
+      outputs: [
+        {
+          state: "done",
+          workType: "review-story",
+        },
+      ],
+      type: "MODEL_WORKSTATION",
+      worker: "review-writer",
+    },
+  ],
 };
 
 const betaSessionID = "session-beta";
@@ -71,6 +154,37 @@ function renameReplayWorkstation(lines, workstationName) {
   });
 }
 
+function buildReplayLines(factoryDefinition) {
+  return [
+    JSON.stringify({
+      context: {
+        eventTime: "2026-05-19T15:00:00Z",
+        sequence: 1,
+        tick: 1,
+      },
+      id: `session-tabs-${factoryDefinition.name}`,
+      payload: {
+        factory: factoryDefinition,
+      },
+      type: "INITIAL_STRUCTURE_REQUEST",
+    }),
+    JSON.stringify({
+      context: {
+        eventTime: "2026-05-19T15:00:01Z",
+        sequence: 2,
+        tick: 2,
+      },
+      id: `session-tabs-ready-${factoryDefinition.name}`,
+      payload: {
+        previousState: "RUNNING",
+        reason: "fixture ready",
+        state: "FINISHED",
+      },
+      type: "FACTORY_STATE_RESPONSE",
+    }),
+  ];
+}
+
 describe.sequential("dashboard session tabs browser integration", () => {
   let preview = null;
 
@@ -88,13 +202,13 @@ describe.sequential("dashboard session tabs browser integration", () => {
     async () => {
       const openSessionRequests = [];
       const sessionReplayLines = renameReplayWorkstation(
-        await loadReplayLines("graph-state-smoke-replay.jsonl"),
+        buildReplayLines(openedFactoryDefinition),
         "Session Review",
       );
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
         currentFactory: defaultFactoryDefinition,
-        eventLines: await loadReplayLines("graph-state-smoke-replay.jsonl"),
+        eventLines: buildReplayLines(defaultFactoryDefinition),
         eventLinesBySessionID: {
           "session-review": sessionReplayLines,
         },
@@ -141,6 +255,9 @@ describe.sequential("dashboard session tabs browser integration", () => {
         await browserPage.page.goto(preview.previewURL, {
           waitUntil: "domcontentloaded",
         });
+        await browserPage.page
+          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await browserPage.page
           .getByRole("button", { name: "Open another session" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
@@ -216,9 +333,7 @@ describe.sequential("dashboard session tabs browser integration", () => {
   it(
     "shows outline active session tab styling and moves selection across preloaded tabs",
     async () => {
-      const replayLines = await loadReplayLines(
-        "graph-state-smoke-replay.jsonl",
-      );
+      const replayLines = buildReplayLines(defaultFactoryDefinition);
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
         currentFactory: defaultFactoryDefinition,
@@ -237,6 +352,9 @@ describe.sequential("dashboard session tabs browser integration", () => {
         await browserPage.page.goto(preview.previewURL, {
           waitUntil: "domcontentloaded",
         });
+        await browserPage.page
+          .getByRole("heading", { level: 1, name: "U", exact: true })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
         const rootTab = browserPage.page.getByRole("tab", { name: "root" });
         const betaTab = browserPage.page.getByRole("tab", { name: "beta" });

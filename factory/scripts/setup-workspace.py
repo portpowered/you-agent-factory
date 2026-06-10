@@ -3,9 +3,9 @@
 
 Usage: python scripts/agents/setup-workspace.py <prd-name>
 
-Reads the PRD from tasks/todo/<prd-name>.json, extracts the branchName,
-syncs main, creates or reuses a git worktree, copies the PRD (and optional
-.md) into the worktree root, and prints a JSON result to stdout.
+Reads tasks/todo/<prd-name>.json, uses <prd-name> as the branch/worktree name,
+syncs main, creates or reuses a git worktree, copies the PRD (and optional .md)
+into the worktree root, and prints a JSON result to stdout.
 
 Exit 0 on success (stdout = JSON blob), exit 1 on failure (stderr = error).
 """
@@ -45,81 +45,19 @@ def read_prd(prd_path):
         return json.load(f)
 
 
-def origin_remote_exists(repo_root):
-    """Return True when the repository has an origin remote configured."""
-    result = run_git("remote", "get-url", "origin", cwd=repo_root, check=False)
-    return result.returncode == 0
-
-
-def origin_main_ref_exists(repo_root):
-    """Return True when refs/remotes/origin/main exists locally."""
-    result = run_git(
-        "rev-parse", "--verify", "refs/remotes/origin/main",
-        cwd=repo_root, check=False,
-    )
-    return result.returncode == 0
-
-
-def local_main_is_ancestor_of_origin_main(repo_root):
-    """Return True when local main can be fast-forwarded to origin/main."""
-    result = run_git(
-        "merge-base", "--is-ancestor", "refs/heads/main", "refs/remotes/origin/main",
-        cwd=repo_root, check=False,
-    )
-    return result.returncode == 0
-
-
-def main_is_checked_out(repo_root):
-    """Return True when refs/heads/main is checked out in any linked worktree."""
-    result = run_git("worktree", "list", "--porcelain", cwd=repo_root, check=False)
-    if result.returncode != 0:
-        return True
-
-    for line in result.stdout.splitlines():
-        if line == "branch refs/heads/main":
-            return True
-    return False
-
-
-def fast_forward_local_main(repo_root, origin_main_sha):
-    """Update refs/heads/main to origin/main without checking out main."""
-    run_git("update-ref", "refs/heads/main", origin_main_sha, cwd=repo_root)
-
-
 def sync_main(repo_root):
-    """Fetch origin and sync local main when remote tracking is available."""
-    if not origin_remote_exists(repo_root):
+    """Run git pull unless the repo has no upstream configured."""
+    result = run_git("pull", cwd=repo_root, check=False)
+    if result.returncode == 0:
         return
 
-    fetch_result = run_git(
-        "fetch", "origin", "refs/heads/main:refs/remotes/origin/main",
-        cwd=repo_root, check=False,
+    stderr = result.stderr.lower()
+    if "there is no tracking information for the current branch" in stderr:
+        return
+
+    raise RuntimeError(
+        f"git pull failed (exit {result.returncode}): {result.stderr.strip()}"
     )
-    if fetch_result.returncode != 0:
-        return
-
-    if not origin_main_ref_exists(repo_root):
-        return
-
-    if not branch_exists_locally(repo_root, "main"):
-        return
-
-    local_main_sha = run_git(
-        "rev-parse", "refs/heads/main", cwd=repo_root,
-    ).stdout.strip()
-    origin_main_sha = run_git(
-        "rev-parse", "refs/remotes/origin/main", cwd=repo_root,
-    ).stdout.strip()
-    if local_main_sha == origin_main_sha:
-        return
-
-    if not local_main_is_ancestor_of_origin_main(repo_root):
-        return
-
-    if main_is_checked_out(repo_root):
-        return
-
-    fast_forward_local_main(repo_root, origin_main_sha)
 
 
 def prune_worktrees(repo_root):
@@ -235,16 +173,16 @@ def main():
     if not prd_md_path.exists():
         prd_md_path = None
 
-    # Read PRD and extract branch name.
+    # Read the PRD to catch malformed input; the branch name is the work item name.
     try:
-        prd = read_prd(prd_json_path)
+        read_prd(prd_json_path)
     except (json.JSONDecodeError, OSError) as e:
         print(f"Failed to read PRD: {e}", file=sys.stderr)
         sys.exit(1)
 
     branch = f"{prd_name}"
     if not branch:
-        print("PRD missing 'branchName' field", file=sys.stderr)
+        print("PRD name must not be empty", file=sys.stderr)
         sys.exit(1)
 
     # Sync main and prune worktrees.

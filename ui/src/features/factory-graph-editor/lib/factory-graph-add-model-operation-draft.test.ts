@@ -6,10 +6,8 @@ import {
 } from "./factory-graph-add-model-operation-draft";
 
 describe("factory graph add model operation draft", () => {
-  it("requires at least one operation for model worker contracts", () => {
-    expect(validateFactoryGraphAddModelOperationsDraft([])).toEqual({
-      summary: "Add at least one model-invocation operation.",
-    });
+  it("allows model workers without model operation contracts", () => {
+    expect(validateFactoryGraphAddModelOperationsDraft([])).toEqual({});
   });
 
   it("validates uppercase operation names, slot uniqueness, and required slot contracts", () => {

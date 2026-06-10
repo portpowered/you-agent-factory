@@ -21,6 +21,9 @@ describe("FactoryGraphEditorFloatingSurface", () => {
     expect(surface.className).toContain("bg-surface-container-high");
     expect(surface.className).toContain("shadow-af-panel");
     expect(surface.className).toContain("bottom-4");
+    expect(surface.className).toContain("flex-nowrap");
+    expect(surface.className).toContain("max-md:flex-nowrap");
+    expect(surface.className).not.toContain("max-md:flex-wrap");
     expect(surface.className).toContain("px-3");
   });
 

@@ -13,13 +13,19 @@ function nodeVisibleForVisibilityPreset(
       return true;
     case "workflow":
       return (
-        kind === "workstation" || kind === "work-type" || kind === "work-state"
+        kind === "doc" ||
+        kind === "workstation" ||
+        kind === "work-type" ||
+        kind === "work-state"
       );
     case "execution":
       return kind === "workstation" || kind === "work-state";
     case "infrastructure":
       return (
-        kind === "resource" || kind === "worker" || kind === "workstation"
+        kind === "doc" ||
+        kind === "resource" ||
+        kind === "worker" ||
+        kind === "workstation"
       );
   }
 }

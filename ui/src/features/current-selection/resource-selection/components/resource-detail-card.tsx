@@ -14,13 +14,20 @@ export function ResourceDetailCard({
   editableConfigurationState,
   headerAction,
   locale,
+  resource,
   resourceName,
   saveState,
   tokenCount = null,
   widgetId = "current-selection",
+  workerNames,
+  workstationNames,
 }: ResourceDetailCardProps) {
   const messages = getResourceDetailMessages(locale);
-  const detailState = useResourceDetailState(resourceName);
+  const detailState = useResourceDetailState({
+    resource,
+    workerNames,
+    workstationNames,
+  });
 
   return (
     <SelectionDetailLayout headerAction={headerAction} widgetId={widgetId}>

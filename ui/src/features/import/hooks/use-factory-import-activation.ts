@@ -1,8 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 
-import { getCurrentFactoryDocument } from "../../../api/current-factory-definition";
+import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import {
+  activateImportedFactoryDocumentForSession,
   activateImportedFactoryForSession,
   type ImportFactoryValue,
   SessionFactoryAPIError,
@@ -19,6 +20,7 @@ export interface UseFactoryImportActivationOptions {
   activateFactory?: (
     input: FactoryImportConfirmInput,
   ) => Promise<ImportFactoryValue>;
+  currentFactoryDocument?: CurrentFactoryDocument | null;
   onActivated?: (value: ImportFactoryValue) => void;
   sessionID?: string | null;
 }
@@ -33,6 +35,7 @@ const IDLE_ACTIVATION_STATE: FactoryImportActivationState = { status: "idle" };
 
 export function useFactoryImportActivation({
   activateFactory: activateFactoryOverride,
+  currentFactoryDocument,
   onActivated,
   sessionID,
 }: UseFactoryImportActivationOptions = {}): UseFactoryImportActivationResult {
@@ -52,19 +55,39 @@ export function useFactoryImportActivation({
   const [activationError, setActivationError] =
     useState<SessionFactoryAPIError | null>(null);
   const mutation = useMutation({
-    mutationFn: (input: FactoryImportConfirmInput) => activateFactory(input),
+    mutationFn: async (input: FactoryImportConfirmInput) => {
+      if (activateFactoryOverride || !currentFactoryDocument) {
+        return {
+          activatedFactory: await activateFactory(input),
+          savedDocument: null,
+        };
+      }
+
+      const savedDocument = await activateImportedFactoryDocumentForSession(
+        input.value.factory,
+        {
+          choice: input.choice,
+          createFactoryName: input.createFactoryName,
+          currentDocument: currentFactoryDocument,
+          existingFactoryNames: input.existingFactoryNames,
+          sessionID,
+        },
+      );
+
+      return {
+        activatedFactory: currentFactoryDocumentToImportValue(savedDocument),
+        savedDocument,
+      };
+    },
     onError: (error) => {
       setActivationError(normalizeActivationError(error));
     },
-    onSuccess: async (value) => {
+    onSuccess: async ({ activatedFactory, savedDocument }) => {
       setActivationError(null);
-      try {
-        const document = await getCurrentFactoryDocument({ sessionID });
-        syncCurrentFactoryDocumentCache(queryClient, sessionID, document);
-      } catch {
-        // Activation already persisted; cache sync failures should not block UI success.
+      if (savedDocument) {
+        syncCurrentFactoryDocumentCache(queryClient, sessionID, savedDocument);
       }
-      onActivated?.(value);
+      onActivated?.(activatedFactory);
     },
   });
 
@@ -99,6 +122,13 @@ export function useFactoryImportActivation({
     activationState,
     clearActivationError,
   };
+}
+
+function currentFactoryDocumentToImportValue(
+  document: CurrentFactoryDocument,
+): ImportFactoryValue {
+  const { version: _version, ...factoryValue } = document;
+  return factoryValue;
 }
 
 function normalizeActivationError(error: unknown): SessionFactoryAPIError {

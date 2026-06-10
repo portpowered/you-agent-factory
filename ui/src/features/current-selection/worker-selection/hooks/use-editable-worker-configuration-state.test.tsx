@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { DashboardSelection } from "../../base/state/selection-types";
-import { useEditableWorkerConfigurationState } from "./use-editable-worker-configuration-state";
+import { useEditableWorkerConfigurationState as useEditableWorkerConfigurationStateImplementation } from "./use-editable-worker-configuration-state";
 
 vi.mock(
   "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
@@ -40,6 +40,23 @@ function buildFactoryDocument(
     workTypes: [],
     ...overrides,
   };
+}
+
+function useEditableWorkerConfigurationState(
+  selection: DashboardSelection | null,
+  workerName: string | null,
+  locale?: string | null,
+) {
+  const currentFactoryDocument = useCurrentFactoryDocument(false) as {
+    data?: CurrentFactoryDocument;
+  };
+
+  return useEditableWorkerConfigurationStateImplementation(
+    selection,
+    workerName,
+    locale,
+    currentFactoryDocument.data,
+  );
 }
 
 describe("useEditableWorkerConfigurationState", () => {

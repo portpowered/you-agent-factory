@@ -810,6 +810,9 @@ func assertFlattenedPortableResourceManifestPayload(t *testing.T, payload map[st
 func assertBundledFilePayload(t *testing.T, payload map[string]any, wantType, wantTargetPath string, wantInline string) {
 	t.Helper()
 
+	if got := payload["id"]; got != wantTargetPath {
+		t.Fatalf("bundled file id = %#v, want %q", got, wantTargetPath)
+	}
 	if got := payload["type"]; got != wantType {
 		t.Fatalf("bundled file type = %#v, want %q", got, wantType)
 	}
@@ -843,11 +846,20 @@ func assertExpandedPortableResourceManifest(t *testing.T, expanded *interfaces.F
 	if len(expanded.ResourceManifest.BundledFiles) != 3 {
 		t.Fatalf("expected three bundled files after expand, got %#v", expanded.ResourceManifest.BundledFiles)
 	}
+	if expanded.ResourceManifest.BundledFiles[0].ID != "Makefile" {
+		t.Fatalf("bundled root helper id after expand = %#v, want Makefile", expanded.ResourceManifest.BundledFiles[0].ID)
+	}
 	if expanded.ResourceManifest.BundledFiles[0].TargetPath != "Makefile" || expanded.ResourceManifest.BundledFiles[0].Content.Inline != "test:\n\tgo test ./...\n" {
 		t.Fatalf("bundled root helper after expand = %#v", expanded.ResourceManifest.BundledFiles[0])
 	}
+	if expanded.ResourceManifest.BundledFiles[1].ID != "factory/docs/usage.md" {
+		t.Fatalf("bundled doc id after expand = %#v, want factory/docs/usage.md", expanded.ResourceManifest.BundledFiles[1].ID)
+	}
 	if expanded.ResourceManifest.BundledFiles[1].Content.Inline != "# Usage\n" {
 		t.Fatalf("bundled doc inline after expand = %#v", expanded.ResourceManifest.BundledFiles[1])
+	}
+	if expanded.ResourceManifest.BundledFiles[2].ID != "factory/scripts/setup-workspace.py" {
+		t.Fatalf("bundled script id after expand = %#v, want factory/scripts/setup-workspace.py", expanded.ResourceManifest.BundledFiles[2].ID)
 	}
 	if expanded.ResourceManifest.BundledFiles[2].Content.Inline != "print('portable')\n" {
 		t.Fatalf("bundled script inline after expand = %#v", expanded.ResourceManifest.BundledFiles[2])

@@ -120,9 +120,11 @@ func (r exportImportSmokeHarnessResult) AssertAPIContractSuccess(t *testing.T, f
 		comparableExportImportFactory(fixture.GeneratedExportFactor),
 	) {
 		t.Fatalf(
-			"payload drift: exported current factory diverged from canonical generated payload\ngot:  %#v\nwant: %#v",
+			"payload drift: exported current factory diverged from canonical generated payload\ngot:  %#v\nwant: %#v\ngot JSON:\n%s\nwant JSON:\n%s",
 			comparableExportImportFactory(r.ExportedFactory),
 			comparableExportImportFactory(fixture.GeneratedExportFactor),
+			comparableExportImportFactoryJSON(r.ExportedFactory),
+			comparableExportImportFactoryJSON(fixture.GeneratedExportFactor),
 		)
 	}
 	if r.ImportRequest.Name != r.ImportedFactory.Name {
@@ -133,9 +135,11 @@ func (r exportImportSmokeHarnessResult) AssertAPIContractSuccess(t *testing.T, f
 		comparableExportImportFactory(thinPortableBundledFactory(r.ImportRequest)),
 	) {
 		t.Fatalf(
-			"api contract drift: POST /factory response diverged from submitted payload\ngot:  %#v\nwant: %#v",
+			"api contract drift: POST /factory response diverged from submitted payload\ngot:  %#v\nwant: %#v\ngot JSON:\n%s\nwant JSON:\n%s",
 			comparableExportImportFactory(r.ImportedFactory),
 			comparableExportImportFactory(thinPortableBundledFactory(r.ImportRequest)),
+			comparableExportImportFactoryJSON(r.ImportedFactory),
+			comparableExportImportFactoryJSON(thinPortableBundledFactory(r.ImportRequest)),
 		)
 	}
 	if r.CurrentFactory.Name != r.ImportRequest.Name {
@@ -146,9 +150,11 @@ func (r exportImportSmokeHarnessResult) AssertAPIContractSuccess(t *testing.T, f
 		comparableExportImportFactory(r.ImportRequest),
 	) {
 		t.Fatalf(
-			"api contract drift: current-factory readback diverged from imported payload\ngot:  %#v\nwant: %#v",
+			"api contract drift: current-factory readback diverged from imported payload\ngot:  %#v\nwant: %#v\ngot JSON:\n%s\nwant JSON:\n%s",
 			comparableExportImportFactory(r.CurrentFactory),
 			comparableExportImportFactory(r.ImportRequest),
+			comparableExportImportFactoryJSON(r.CurrentFactory),
+			comparableExportImportFactoryJSON(r.ImportRequest),
 		)
 	}
 }

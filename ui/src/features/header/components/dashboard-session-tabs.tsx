@@ -93,8 +93,8 @@ function DashboardSessionTabsView({
 
   return (
     <>
-      <div className="grid min-w-0 max-w-full flex-1 gap-2 overflow-hidden">
-        <div className="flex min-w-0 max-w-full items-stretch gap-1 overflow-visible">
+      <div className="grid min-w-0 max-w-full gap-2 overflow-hidden">
+        <div className="inline-flex min-w-0 max-w-full items-stretch gap-1 overflow-visible">
           <SessionTabsContent
             activeSession={activeSession}
             closingSessionID={
@@ -250,11 +250,11 @@ function SessionTabsContent({
     <>
       <nav
         aria-label={messages.sessionTabsLabel}
-        className="min-w-0 flex-1 overflow-hidden"
+        className="min-w-0 max-w-full overflow-hidden"
       >
         <div
           aria-orientation="horizontal"
-          className="flex h-full min-w-0 items-stretch gap-1 overflow-hidden"
+          className="inline-flex h-full min-w-0 max-w-full items-stretch gap-1 overflow-hidden"
           role="tablist"
         >
           {sessions.map((session, index) => (

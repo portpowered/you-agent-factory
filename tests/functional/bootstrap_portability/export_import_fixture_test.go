@@ -112,6 +112,7 @@ func withExportImportPortableBundledFiles(t *testing.T, canonicalFactoryJSON []b
 	payload["supportingFiles"] = map[string]any{
 		"bundledFiles": []map[string]any{
 			{
+				"id":         exportImportPortableMakefilePath,
 				"type":       "ROOT_HELPER",
 				"targetPath": exportImportPortableMakefilePath,
 				"content": map[string]any{
@@ -120,6 +121,7 @@ func withExportImportPortableBundledFiles(t *testing.T, canonicalFactoryJSON []b
 				},
 			},
 			{
+				"id":         exportImportPortableDocPath,
 				"type":       "DOC",
 				"targetPath": exportImportPortableDocPath,
 				"content": map[string]any{
@@ -128,6 +130,7 @@ func withExportImportPortableBundledFiles(t *testing.T, canonicalFactoryJSON []b
 				},
 			},
 			{
+				"id":         exportImportPortableScriptPath,
 				"type":       "SCRIPT",
 				"targetPath": exportImportPortableScriptPath,
 				"content": map[string]any{
@@ -234,9 +237,11 @@ func (fixture exportImportFixture) assertCurrentFactorySignals(
 		comparableExportImportFactory(fixture.GeneratedExportFactor),
 	) {
 		t.Fatalf(
-			"current factory readback diverged from fixture export contract\ngot:  %#v\nwant: %#v",
+			"current factory readback diverged from fixture export contract\ngot:  %#v\nwant: %#v\ngot JSON:\n%s\nwant JSON:\n%s",
 			comparableExportImportFactory(current),
 			comparableExportImportFactory(fixture.GeneratedExportFactor),
+			comparableExportImportFactoryJSON(current),
+			comparableExportImportFactoryJSON(fixture.GeneratedExportFactor),
 		)
 	}
 
@@ -258,6 +263,14 @@ func comparableExportImportFactory(factory factoryapi.Factory) factoryapi.Factor
 	comparable.Metadata = nil
 	comparable.Version = nil
 	return comparable
+}
+
+func comparableExportImportFactoryJSON(factory factoryapi.Factory) string {
+	data, err := json.MarshalIndent(comparableExportImportFactory(factory), "", "  ")
+	if err != nil {
+		return "<marshal error: " + err.Error() + ">"
+	}
+	return string(data)
 }
 
 func valueOrEmpty[T any](value *[]T) []T {

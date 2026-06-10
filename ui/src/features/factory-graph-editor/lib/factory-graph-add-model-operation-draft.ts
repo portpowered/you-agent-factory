@@ -74,9 +74,7 @@ export function validateFactoryGraphAddModelOperationsDraft(
   operations: FactoryGraphAddModelOperationDraft[] | undefined,
 ): FactoryGraphAddModelOperationValidationErrors {
   if (!operations || operations.length === 0) {
-    return {
-      summary: "Add at least one model-invocation operation.",
-    };
+    return {};
   }
 
   const byIndex: Record<number, FactoryGraphAddModelOperationItemFieldErrors> =

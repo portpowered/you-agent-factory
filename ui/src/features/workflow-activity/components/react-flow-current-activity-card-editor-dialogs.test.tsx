@@ -143,8 +143,8 @@ vi.mock("./react-flow-current-activity-card-import", () => ({
   ),
 }));
 
-function createEditorStub(overrides: Record<string, unknown> = {}) {
-  return {
+function createViewModelStub(overrides: Record<string, unknown> = {}) {
+  const merged = {
     addEntityDraft: { kind: "workstation" },
     addEntityErrors: { name: "Required" },
     canSaveDraft: true,
@@ -171,6 +171,71 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     setIsConfirmingSave: vi.fn(),
     ...overrides,
   };
+  const saveMutation = merged.saveEditableDefinition as {
+    error?: unknown;
+    isPending?: boolean;
+  };
+
+  return {
+    ...merged,
+    addControls: {
+      currentFactoryDefinition: merged.currentFactoryDefinition,
+      draft: merged.addEntityDraft,
+      errors: merged.addEntityErrors,
+      isDialogOpen: merged.addEntityDraft !== null,
+      closeDialog: () => {
+        (merged.setAddEntityDraft as (draft: unknown) => void)(null);
+        (merged.setAddEntityErrors as (errors: unknown) => void)({});
+      },
+      submit: merged.handleAddEntitySubmit,
+      updateDraft: (draft: unknown) => {
+        (merged.setAddEntityDraft as (nextDraft: unknown) => void)(draft);
+        (merged.setAddEntityErrors as (errors: unknown) => void)({});
+      },
+      ...((merged as { addControls?: object }).addControls ?? {}),
+    },
+    saveControls: {
+      canSave: merged.canSaveDraft,
+      cancelConfirmation: merged.cancelSaveConfirmation,
+      confirmSave: merged.handleSaveDraft,
+      feedback: merged.documentSave,
+      isConfirming: merged.isConfirmingSave,
+      saveBeforeLeaving: merged.handleSaveBeforeLeavingEditor,
+      summary: merged.saveSummary,
+      ...((merged as { saveControls?: object }).saveControls ?? {}),
+    },
+    leaveControls: {
+      cancel: () => {
+        (merged.setIsConfirmingLeaveEditor as (open: boolean) => void)(false);
+      },
+      discardChanges: merged.handleDiscardEditorChanges,
+      isOpen: merged.leaveDialogOpen,
+      ...((merged as { leaveControls?: object }).leaveControls ?? {}),
+    },
+    removalControls: {
+      blockedReason:
+        (merged as { blockedRemovalReason?: unknown }).blockedRemovalReason ??
+        null,
+      cancel: merged.handleCancelRemoval,
+      confirm: merged.handleConfirmRemoval,
+      deleteEdge:
+        (merged as { handleEditorEdgeDelete?: unknown })
+          .handleEditorEdgeDelete ?? vi.fn(),
+      deleteNode:
+        (merged as { handleEditorNodeDelete?: unknown })
+          .handleEditorNodeDelete ?? vi.fn(),
+      pendingIntent: merged.pendingRemovalIntent,
+      requestSelectionNodeRemoval:
+        (merged as { handleSelectionNodeDelete?: unknown })
+          .handleSelectionNodeDelete ?? vi.fn(),
+      ...((merged as { removalControls?: object }).removalControls ?? {}),
+    },
+    status: {
+      isSaving: saveMutation.isPending ?? false,
+      saveError: saveMutation.error ?? null,
+      ...((merged as { status?: object }).status ?? {}),
+    },
+  };
 }
 
 function createImportsStub(overrides: Record<string, unknown> = {}) {
@@ -193,13 +258,15 @@ function createImportsStub(overrides: Record<string, unknown> = {}) {
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: dialog wiring cases share one mocked editor surface harness.
 describe("CurrentActivityGraphEditorDialogs", () => {
   it("wires import, save, discard, and add-entity dialog actions on the shared editor surface", () => {
-    const editor = createEditorStub();
+    const viewModel = createViewModelStub();
     const imports = createImportsStub();
+    const discardEditorChanges = vi.fn();
 
     render(
       <CurrentActivityGraphEditorDialogs
         currentSessionFactoryName="alpha"
-        editor={editor as never}
+        discardEditorChanges={discardEditorChanges}
+        viewModel={viewModel as never}
         imports={imports as never}
         readyImportPreviewState={imports.importPreviewState}
         shouldRenderImportPreviewDialog
@@ -230,45 +297,48 @@ describe("CurrentActivityGraphEditorDialogs", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Trigger leave cancel" }),
     );
-    expect(editor.setIsConfirmingLeaveEditor).toHaveBeenCalledWith(false);
+    expect(viewModel.setIsConfirmingLeaveEditor).toHaveBeenCalledWith(false);
 
     fireEvent.click(
       screen.getByRole("button", { name: "Trigger leave discard" }),
     );
-    expect(editor.handleDiscardEditorChanges).toHaveBeenCalledTimes(1);
+    expect(discardEditorChanges).toHaveBeenCalledTimes(1);
+    expect(viewModel.leaveControls.discardChanges).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Trigger leave save" }));
-    expect(editor.handleSaveBeforeLeavingEditor).toHaveBeenCalledTimes(1);
+    expect(viewModel.handleSaveBeforeLeavingEditor).toHaveBeenCalledTimes(1);
 
     fireEvent.click(
       screen.getByRole("button", {
         name: /Save factory graph changes\? cancel/i,
       }),
     );
-    expect(editor.cancelSaveConfirmation).toHaveBeenCalledTimes(1);
+    expect(viewModel.cancelSaveConfirmation).toHaveBeenCalledTimes(1);
 
     fireEvent.click(
       screen.getByRole("button", {
         name: /Save factory graph changes\? confirm/i,
       }),
     );
-    expect(editor.handleSaveDraft).toHaveBeenCalledTimes(1);
+    expect(viewModel.handleSaveDraft).toHaveBeenCalledTimes(1);
 
     expect(screen.queryByText("Remove route? confirm")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Trigger add change" }));
-    expect(editor.setAddEntityDraft).toHaveBeenCalledWith({ kind: "resource" });
-    expect(editor.setAddEntityErrors).toHaveBeenCalledWith({});
+    expect(viewModel.setAddEntityDraft).toHaveBeenCalledWith({
+      kind: "resource",
+    });
+    expect(viewModel.setAddEntityErrors).toHaveBeenCalledWith({});
 
     fireEvent.click(screen.getByRole("button", { name: "Trigger add close" }));
-    expect(editor.setAddEntityDraft).toHaveBeenCalledWith(null);
+    expect(viewModel.setAddEntityDraft).toHaveBeenCalledWith(null);
 
     fireEvent.click(screen.getByRole("button", { name: "Trigger add submit" }));
-    expect(editor.handleAddEntitySubmit).toHaveBeenCalledTimes(1);
+    expect(viewModel.handleAddEntitySubmit).toHaveBeenCalledTimes(1);
   });
 
   it("wires removal confirmation actions on the shared editor surface", () => {
-    const editor = createEditorStub({
+    const viewModel = createViewModelStub({
       isConfirmingSave: false,
       leaveDialogOpen: false,
       pendingRemovalIntent: {
@@ -281,7 +351,7 @@ describe("CurrentActivityGraphEditorDialogs", () => {
     render(
       <CurrentActivityGraphEditorDialogs
         currentSessionFactoryName="alpha"
-        editor={editor as never}
+        viewModel={viewModel as never}
         imports={createImportsStub() as never}
         readyImportPreviewState={null}
         shouldRenderImportPreviewDialog={false}
@@ -293,18 +363,18 @@ describe("CurrentActivityGraphEditorDialogs", () => {
         name: /Remove story work-type\? cancel/i,
       }),
     );
-    expect(editor.handleCancelRemoval).toHaveBeenCalledTimes(1);
+    expect(viewModel.removalControls.cancel).toHaveBeenCalledTimes(1);
 
     fireEvent.click(
       screen.getByRole("button", {
         name: /Remove story work-type\? confirm/i,
       }),
     );
-    expect(editor.handleConfirmRemoval).toHaveBeenCalledTimes(1);
+    expect(viewModel.removalControls.confirm).toHaveBeenCalledTimes(1);
   });
 
   it("suppresses save-dismiss callbacks while a save is pending and skips optional import chrome when disabled", () => {
-    const editor = createEditorStub({
+    const viewModel = createViewModelStub({
       documentSave: { status: "submitting" },
       isConfirmingSave: true,
       pendingRemovalIntent: null,
@@ -317,7 +387,7 @@ describe("CurrentActivityGraphEditorDialogs", () => {
     render(
       <CurrentActivityGraphEditorDialogs
         currentSessionFactoryName="alpha"
-        editor={editor as never}
+        viewModel={viewModel as never}
         imports={imports as never}
         readyImportPreviewState={imports.importPreviewState}
         shouldRenderImportPreviewDialog={false}
@@ -336,7 +406,7 @@ describe("CurrentActivityGraphEditorDialogs", () => {
       }),
     );
 
-    expect(editor.setIsConfirmingLeaveEditor).not.toHaveBeenCalled();
-    expect(editor.cancelSaveConfirmation).not.toHaveBeenCalled();
+    expect(viewModel.setIsConfirmingLeaveEditor).not.toHaveBeenCalled();
+    expect(viewModel.cancelSaveConfirmation).not.toHaveBeenCalled();
   });
 });

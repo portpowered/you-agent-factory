@@ -7,6 +7,7 @@ import type {
   StateCategory,
 } from "../../../api/dashboard/types";
 import type { CanonicalFactoryDefinition } from "../../../api/factory-definition";
+import type { FactoryGraphEditorVisibilityPreset } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import { buildFactoryGraphTopologyFromDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-graph";
 import {
   type FactoryGraphEdge,
@@ -15,11 +16,10 @@ import {
   type FactoryGraphTopology,
   parseFactoryGraphWorkstationNodeId,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
-import type { FactoryGraphEditorVisibilityPreset } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import { FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND } from "../../factory-graph-editor/lib/editor/factory-graph-editor-layout";
 import { filterFactoryGraphTopologyForCustomerDisplay } from "../../factory-graph-editor/lib/operations/factory-graph-customer-display";
-import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/work-state/factory-graph-node-class-visibility";
 import { projectFactoryGraphByVisibilityPreset } from "../../factory-graph-editor/lib/preferences/factory-graph-visibility-preset-projection";
+import { projectFactoryGraphByHiddenNodeClasses } from "../../factory-graph-editor/lib/work-state/factory-graph-node-class-visibility";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { buildLayeredGraphLayout } from "../../flowchart/lib/layered-layout";
 import type { GraphLayout, PositionedNode } from "../../flowchart/lib/layout";
@@ -29,18 +29,31 @@ import {
   REPEATER_WORKSTATION_KIND,
   STANDARD_WORKSTATION_KIND,
 } from "../../flowchart/lib/workstation-icon-metadata";
+import { factoryBundledDocDisplayLabel } from "./factory-bundled-docs";
+
+export const CURRENT_ACTIVITY_DOC_NODE_WIDTH = 168;
+export const CURRENT_ACTIVITY_DOC_NODE_HEIGHT = 86;
 
 interface FactoryGraphSeedNode {
+  displayLabel?: string;
+  fileType?: string;
   height: number;
   id: string;
   nodeId: string;
-  nodeKind: "constraint" | "resource" | "state_position" | "workstation";
+  nodeKind:
+    | "constraint"
+    | "doc"
+    | "resource"
+    | "state_position"
+    | "workstation";
   place?: DashboardPlaceRef;
+  targetPath?: string;
   width: number;
   workstationNodeId?: string;
 }
 
 interface FactoryGraphSeedEdge {
+  canonicalEdgeId?: string;
   edgeId: string;
   fromNodeId: string;
   id: string;
@@ -207,6 +220,8 @@ function placeForFactoryGraphNode(
   categories: ReadonlyMap<string, StateCategory>,
 ): DashboardPlaceRef {
   switch (node.key.kind) {
+    case "doc":
+      return factoryEntityPlace("constraint", "doc", node.key.name);
     case "resource":
       return factoryEntityPlace("resource", "resource", node.key.name);
     case "worker":
@@ -236,6 +251,8 @@ function nodeKindForFactoryGraphNode(
   node: FactoryGraphNode,
 ): FactoryGraphSeedNode["nodeKind"] {
   switch (node.kind) {
+    case "doc":
+      return "doc";
     case "resource":
       return "resource";
     case "work-state":
@@ -250,6 +267,11 @@ function nodeKindForFactoryGraphNode(
 
 function nodeDimensionsForFactoryGraphNode(node: FactoryGraphNode) {
   switch (node.kind) {
+    case "doc":
+      return {
+        height: CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
+        width: CURRENT_ACTIVITY_DOC_NODE_WIDTH,
+      };
     case "resource":
       return FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND.resource;
     case "work-state":
@@ -268,6 +290,18 @@ function seedNodeFromFactoryGraphNode(
   categories: ReadonlyMap<string, StateCategory>,
 ): FactoryGraphSeedNode {
   const dimensions = nodeDimensionsForFactoryGraphNode(node);
+  if (node.kind === "doc" && node.key.kind === "doc") {
+    return {
+      displayLabel: factoryBundledDocDisplayLabel(node.key.name),
+      fileType: node.key.sourceFileType,
+      height: dimensions.height,
+      id: node.id,
+      nodeId: node.id,
+      nodeKind: "doc",
+      targetPath: node.key.name,
+      width: dimensions.width,
+    };
+  }
   if (node.kind === "workstation") {
     return {
       height: dimensions.height,
@@ -294,6 +328,8 @@ function placeKindForFactoryGraphNodeKind(
   kind: FactoryGraphNodeKind,
 ): DashboardPlaceKind | undefined {
   switch (kind) {
+    case "doc":
+      return "constraint";
     case "resource":
       return "resource";
     case "work-state":
@@ -440,6 +476,7 @@ function seedEdgeFromFactoryGraphEdge(
     : placeKindForFactoryGraphNodeKind(targetNode.kind);
 
   return {
+    canonicalEdgeId: edge.id,
     edgeId,
     fromNodeId,
     id: edgeId,
@@ -467,6 +504,24 @@ function toPositionedNode(
   x: number,
   y: number,
 ): PositionedNode {
+  if (seedNode.nodeKind === "doc") {
+    return {
+      column,
+      displayLabel:
+        seedNode.displayLabel ??
+        factoryBundledDocDisplayLabel(seedNode.targetPath ?? seedNode.nodeId),
+      fileType: seedNode.fileType,
+      height: seedNode.height,
+      nodeId: seedNode.nodeId,
+      nodeKind: "doc",
+      row,
+      targetPath: seedNode.targetPath ?? seedNode.nodeId,
+      width: seedNode.width,
+      x,
+      y,
+    };
+  }
+
   if (seedNode.nodeKind === "workstation") {
     return {
       column,
@@ -505,6 +560,7 @@ function toPositionedEdges(
       (edge) => nodesById.has(edge.fromNodeId) && nodesById.has(edge.toNodeId),
     )
     .map((edge) => ({
+      canonicalEdgeId: edge.canonicalEdgeId,
       edgeId: edge.edgeId,
       fromNodeId: edge.fromNodeId,
       label: edge.label,
@@ -522,13 +578,14 @@ function toPositionedEdges(
 export function dashboardWorkstationFromFactory(
   workstation: FactoryWorkstation,
 ): DashboardWorkstationNode {
+  const inputRoutes = normalizedWorkstationRoute(workstation.inputs) ?? [];
   const outputRoutes = dashboardWorkstationOutputRoutes(workstation);
 
   return {
-    input_place_ids: (workstation.inputs ?? []).map((input) =>
+    input_place_ids: inputRoutes.map((input) =>
       workStatePlaceId(workstationIOWorkType(input), input.state),
     ),
-    input_places: (workstation.inputs ?? []).map((input) => ({
+    input_places: inputRoutes.map((input) => ({
       kind: "work_state",
       place_id: workStatePlaceId(workstationIOWorkType(input), input.state),
       state_value: input.state,

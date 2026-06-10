@@ -1,16 +1,15 @@
 import type { Node, ReactFlowInstance } from "@xyflow/react";
+import { buildDocTargetPathFromFileName } from "../../current-factory-definition/lib/doc-editable-values";
 import {
   type FactoryGraphNodeKind,
   nodeKeyId,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
 import { factoryGraphDocNodeIdForTargetPath } from "../../factory-graph-editor/lib/factory-graph-doc-editor";
-import { buildDocTargetPathFromFileName } from "../../current-factory-definition/lib/doc-editable-values";
 import {
   CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
   CURRENT_ACTIVITY_DOC_NODE_WIDTH,
-} from "./current-activity-doc-graph-layout";
-import type { GraphNodePosition } from "../state/currentActivityGraphStore";
+} from "./current-activity-factory-graph-layout";
 import {
   axisAlignedRectFromTopLeft,
   type FlowPoint,
@@ -18,6 +17,17 @@ import {
   resolveViewportCenterNodePlacement,
   topLeftFromAxisAlignedRectCenter,
 } from "./graph-editor-node-placement";
+import type { GraphNodePosition } from "./layout/graph-node-positions";
+
+export interface GraphEditorAddNodePlacementViewport {
+  height: number;
+  viewport: {
+    x: number;
+    y: number;
+    zoom: number;
+  };
+  width: number;
+}
 
 export function factoryGraphNodeIdForAddEntityDraft(
   draft: FactoryGraphAddEntityDraft,
@@ -51,16 +61,6 @@ export function factoryGraphNodeKindForAddEntityDraft(
   draft: FactoryGraphAddEntityDraft,
 ): FactoryGraphNodeKind | "doc" {
   return draft.kind;
-}
-
-function finiteStoredPosition(
-  position: GraphNodePosition | undefined,
-): position is GraphNodePosition {
-  return (
-    position !== undefined &&
-    Number.isFinite(position.x) &&
-    Number.isFinite(position.y)
-  );
 }
 
 function nodeKindFromRenderedNode(node: Node): FactoryGraphNodeKind | null {
@@ -117,7 +117,7 @@ export function occupiedRectsFromRenderedNodes(
   return occupiedRects;
 }
 
-export function viewportCenterInFlowCoordinates(
+function _viewportCenterInFlowCoordinates(
   instance: ReactFlowInstance,
   container: HTMLElement,
 ): FlowPoint {
@@ -128,17 +128,27 @@ export function viewportCenterInFlowCoordinates(
   });
 }
 
+export function viewportCenterFromPlacementViewport(
+  placementViewport: GraphEditorAddNodePlacementViewport,
+): FlowPoint {
+  const zoom =
+    Number.isFinite(placementViewport.viewport.zoom) &&
+    placementViewport.viewport.zoom > 0
+      ? placementViewport.viewport.zoom
+      : 1;
+
+  return {
+    x: (placementViewport.width / 2 - placementViewport.viewport.x) / zoom,
+    y: (placementViewport.height / 2 - placementViewport.viewport.y) / zoom,
+  };
+}
+
 export function resolveInitialPlacementTopLeft(input: {
   draft: FactoryGraphAddEntityDraft;
   nodes: readonly Node[];
-  storedPositions: Record<string, GraphNodePosition | undefined>;
   viewportCenter: FlowPoint;
 }): GraphNodePosition | null {
   const nodeId = factoryGraphNodeIdForAddEntityDraft(input.draft);
-  if (finiteStoredPosition(input.storedPositions[nodeId])) {
-    return null;
-  }
-
   const kind = factoryGraphNodeKindForAddEntityDraft(input.draft);
   const candidateSize =
     kind === "doc"
@@ -154,4 +164,18 @@ export function resolveInitialPlacementTopLeft(input: {
   });
 
   return topLeftFromAxisAlignedRectCenter(placement.center, candidateSize);
+}
+
+export function resolveInitialPlacementTopLeftForViewport(input: {
+  draft: FactoryGraphAddEntityDraft;
+  nodes: readonly Node[];
+  placementViewport: GraphEditorAddNodePlacementViewport;
+}): GraphNodePosition | null {
+  return resolveInitialPlacementTopLeft({
+    draft: input.draft,
+    nodes: input.nodes,
+    viewportCenter: viewportCenterFromPlacementViewport(
+      input.placementViewport,
+    ),
+  });
 }

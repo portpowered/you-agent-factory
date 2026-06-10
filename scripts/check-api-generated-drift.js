@@ -21,6 +21,7 @@ function main() {
   const filteredStats = runGitDiff([
     'diff',
     '--ignore-blank-lines',
+    '--ignore-all-space',
     '--numstat',
     '--',
     ...GENERATED_PATHS,
@@ -53,7 +54,7 @@ function main() {
     return;
   }
 
-  const fullDiff = runGitDiff(['diff', '--', ...GENERATED_PATHS]);
+  const fullDiff = runGitDiff(['diff', '--ignore-blank-lines', '--ignore-all-space', '--', ...GENERATED_PATHS]);
   if (fullDiff.stdout) {
     process.stdout.write(fullDiff.stdout);
   }

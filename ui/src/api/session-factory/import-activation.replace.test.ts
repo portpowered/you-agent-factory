@@ -1,4 +1,7 @@
-import { activateImportedFactoryForSession } from "./import-activation";
+import {
+  activateImportedFactoryDocumentForSession,
+  activateImportedFactoryForSession,
+} from "./import-activation";
 
 describe("session factory import activation replace-current default session", () => {
   it("activates an imported factory through PUT /factory-sessions/~default/factory with version metadata", async () => {
@@ -108,7 +111,7 @@ describe("session factory import activation replace-current default session", ()
   });
 });
 
-describe("session factory import activation replace-current scoped session", () => {
+describe("session factory import activation replace-current scoped session route", () => {
   it("activates an imported factory through the session-scoped PUT route for non-default sessions", async () => {
     const fetchMock = vi
       .fn()
@@ -192,6 +195,95 @@ describe("session factory import activation replace-current scoped session", () 
       expect.objectContaining({
         method: "PUT",
         body: expect.stringContaining('"mode":"REPLACE_CURRENT"'),
+      }),
+    );
+  });
+
+});
+
+describe("session factory import activation replace-current supplied baseline", () => {
+  it("uses a supplied current document as the replace-current write baseline", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          name: "Scoped Factory",
+          workTypes: [
+            { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
+          ],
+          workers: [],
+          workstations: [],
+          version: {
+            logical: "8",
+            physical: "2026-05-18T14:43:00Z",
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+
+    await expect(
+      activateImportedFactoryDocumentForSession(
+        {
+          name: "Imported Scoped Name",
+          workTypes: [
+            { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
+          ],
+          workers: [],
+          workstations: [],
+        },
+        {
+          currentDocument: {
+            name: "Scoped Factory",
+            workTypes: [],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "7",
+              physical: "2026-05-18T14:42:00Z",
+            },
+          },
+          fetch: fetchMock,
+          sessionID: "session-2",
+        },
+      ),
+    ).resolves.toEqual({
+      name: "Scoped Factory",
+      workTypes: [
+        { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
+      ],
+      workers: [],
+      workstations: [],
+      version: {
+        logical: "8",
+        physical: "2026-05-18T14:43:00Z",
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions/session-2/factory",
+      expect.objectContaining({
+        method: "PUT",
+        body: JSON.stringify({
+          mode: "REPLACE_CURRENT",
+          factory: {
+            name: "Scoped Factory",
+            workTypes: [
+              { name: "task", states: [{ name: "queued", type: "INITIAL" }] },
+            ],
+            workers: [],
+            workstations: [],
+            version: {
+              logical: "8",
+              physical: "2026-05-18T14:42:00.001Z",
+            },
+          },
+        }),
       }),
     );
   });

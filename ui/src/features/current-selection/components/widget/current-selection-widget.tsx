@@ -160,10 +160,16 @@ function renderCurrentSelectionDetailCard({
     selectedWorkID,
     selectedWorkOperationHistory,
     selectedWorkRequestHistory,
+    selectedDocBundledFile,
     selectedDocTargetPath,
+    selectedResource,
     selectedResourceName,
     selectedResourceTokenCount,
+    selectedResourceWorkerNames,
+    selectedResourceWorkstationNames,
+    selectedWorker,
     selectedWorkerName,
+    selectedWorkerWorkstationNames,
     selectedWorkTypeName,
     selectedWorkstationRequest,
     selection,
@@ -238,6 +244,7 @@ function renderCurrentSelectionDetailCard({
         headerAction={docHeaderAction}
         locale={locale}
         saveState={docSaveState}
+        savedBundledDoc={selectedDocBundledFile}
         targetPath={selectedDocTargetPath}
         widgetId={widgetId}
       />
@@ -253,7 +260,9 @@ function renderCurrentSelectionDetailCard({
         onSaveConfiguration={onSaveWorkerConfiguration}
         saveState={workerSaveState}
         widgetId={widgetId}
+        worker={selectedWorker}
         workerName={selectedWorkerName}
+        workstationNames={selectedWorkerWorkstationNames}
       />
     );
   }
@@ -264,10 +273,13 @@ function renderCurrentSelectionDetailCard({
         editableConfigurationState={editableResourceConfigurationState}
         headerAction={resourceHeaderAction}
         locale={locale}
+        resource={selectedResource}
         resourceName={selectedResourceName}
         saveState={resourceSaveState}
         tokenCount={selectedResourceTokenCount}
         widgetId={widgetId}
+        workerNames={selectedResourceWorkerNames}
+        workstationNames={selectedResourceWorkstationNames}
       />
     );
   }
@@ -329,6 +341,7 @@ export function CurrentSelectionWidget({
   widgetId = "current-selection",
 }: CurrentSelectionWidgetProps) {
   const {
+    currentFactoryDefinition,
     selectedNode,
     selectedNodeProviderSessions,
     selectedWorkDispatchAttempts,
@@ -343,32 +356,42 @@ export function CurrentSelectionWidget({
     selection,
     selectedNode,
     locale,
+    currentFactoryDefinition,
   );
   const workStatePlaceId =
     selection?.kind === "state-node" ? selection.placeId : null;
   const editableWorkStateConfigurationState =
-    useEditableWorkStateConfigurationState(selection, workStatePlaceId, locale);
+    useEditableWorkStateConfigurationState(
+      selection,
+      workStatePlaceId,
+      locale,
+      currentFactoryDefinition,
+    );
   const editableWorkerConfigurationState = useEditableWorkerConfigurationState(
     selection,
     selectedWorkerName,
     locale,
+    currentFactoryDefinition,
   );
   const editableDocConfigurationState = useEditableDocConfigurationState(
     selection,
     selectedDocTargetPath,
     locale,
+    currentFactoryDefinition,
   );
   const editableResourceConfigurationState =
     useEditableResourceConfigurationState(
       selection,
       selectedResourceName,
       locale,
+      currentFactoryDefinition,
     );
   const editableWorkTypeConfigurationState =
     useEditableWorkTypeConfigurationState(
       selection,
       selectedWorkTypeName,
       locale,
+      currentFactoryDefinition,
     );
   const {
     docHeaderAction,

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { Edge, Node } from "@xyflow/react";
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
@@ -32,6 +32,7 @@ vi.mock("@xyflow/react", async () => {
       onEdgeClick?: (_event: unknown, edge: Edge) => void;
       onInit?: (instance: {
         fitView: () => Promise<boolean>;
+        getViewport: () => { x: number; y: number; zoom: number };
         setViewport: () => Promise<boolean>;
       }) => void;
       onNodeClick?: (_event: unknown, node: { id: string }) => void;
@@ -39,37 +40,38 @@ vi.mock("@xyflow/react", async () => {
       useEffect(() => {
         onInit?.({
           fitView: async () => true,
+          getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
           setViewport: async () => true,
         });
       }, [onInit]);
 
       return (
-      <div
-        className={className}
-        data-default-viewport={JSON.stringify(defaultViewport ?? null)}
-        data-fit-view={String(fitView ?? false)}
-        data-testid="mock-react-flow"
-      >
-        {(nodes ?? []).map((node) => (
-          <button
-            key={node.id}
-            onClick={() => onNodeClick?.(null, { id: node.id })}
-            type="button"
-          >
-            {node.id}
-          </button>
-        ))}
-        {(edges ?? []).map((edge) => (
-          <button
-            key={edge.id}
-            onClick={() => onEdgeClick?.(null, edge)}
-            type="button"
-          >
-            {edge.id}
-          </button>
-        ))}
-        {children}
-      </div>
+        <div
+          className={className}
+          data-default-viewport={JSON.stringify(defaultViewport ?? null)}
+          data-fit-view={String(fitView ?? false)}
+          data-testid="mock-react-flow"
+        >
+          {(nodes ?? []).map((node) => (
+            <button
+              key={node.id}
+              onClick={() => onNodeClick?.(null, { id: node.id })}
+              type="button"
+            >
+              {node.id}
+            </button>
+          ))}
+          {(edges ?? []).map((edge) => (
+            <button
+              key={edge.id}
+              onClick={() => onEdgeClick?.(null, edge)}
+              type="button"
+            >
+              {edge.id}
+            </button>
+          ))}
+          {children}
+        </div>
       );
     },
   };
@@ -312,6 +314,38 @@ describe("CurrentActivityGraphViewport", () => {
     );
   });
 
+  it("uses factory graph edge data as the canonical editor edge id", async () => {
+    const handleEditorEdgeClick = vi.fn();
+
+    renderViewport({
+      activeTool: "delete",
+      editorMode: true,
+      edges: [
+        {
+          data: {
+            factoryGraphEdgeId:
+              "workstation-input:work-state:story:queued->workstation:review",
+          },
+          id: "workstation-resource:resource:story->workstation:review",
+          source: "resource:story",
+          target: "workstation:review",
+        },
+      ],
+      nodes: [],
+      onEditorEdgeClick: handleEditorEdgeClick,
+    });
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "workstation-resource:resource:story->workstation:review",
+      }),
+    );
+
+    expect(handleEditorEdgeClick).toHaveBeenCalledWith(
+      "workstation-input:work-state:story:queued->workstation:review",
+    );
+  });
+
   it("does not delete graph entities while outside editor mode", async () => {
     const handleEditorNodeClick = vi.fn();
     const handleEditorEdgeClick = vi.fn();
@@ -389,37 +423,50 @@ function renderViewport({
 
   return render(
     <CurrentActivityGraphViewport
-      activeTool={activeTool}
-      canInteractWithEditor={true}
-      canSaveDraft={false}
-      editorUnavailableClassifierWorkstationName={undefined}
-      editorMode={editorMode}
+      addControls={{}}
+      editorControls={{
+        activeTool,
+        canInteract: true,
+        discardPendingChanges: vi.fn(),
+        isEditing: editorMode,
+        selectTool: vi.fn(),
+        toggleMode: vi.fn(),
+        unavailableClassifierWorkstationName: undefined,
+      }}
       edges={edges}
       flowContainerRef={flowContainerRef}
-      graphKey="test-graph"
-      handleDiscardPendingChanges={vi.fn()}
-      handleEditorModeToggle={vi.fn()}
       handleNodesChange={vi.fn()}
-      handleSaveDraft={vi.fn()}
       hasPendingChanges={false}
-      hiddenNodeClasses={new Set()}
-      hideShowMenuOpen={false}
-      onClearPreferences={vi.fn()}
-      onSelectVisibilityPreset={vi.fn()}
-      preferencesDirty={false}
-      visibilityPreset="all"
+      layoutControls={{
+        canMoveLayout: false,
+        canRedo: false,
+        canUndo: false,
+        initialFitViewKey: "full-graph",
+        initialFitViewOptions: { padding: 0.18 },
+        moveNode: vi.fn(),
+        moveNodesByDelta: vi.fn(),
+        redo: vi.fn(),
+        reset: vi.fn(),
+        undo: vi.fn(),
+        updateViewport: vi.fn(),
+      }}
       headingID="test-heading"
       imports={importController}
-      initialFitViewKey="full-graph"
-      initialFitViewOptions={{ padding: 0.18 }}
       nodeTypes={{}}
       nodes={nodes}
       onEditorEdgeClick={onEditorEdgeClick}
       onEditorNodeClick={onEditorNodeClick}
-      onHideShowMenuOpenChange={vi.fn()}
-      onToggleHiddenNodeClass={vi.fn()}
-      onSelectTool={vi.fn()}
-      setStoredNodePosition={vi.fn()}
+      saveControls={{ canSave: false, requestConfirmation: vi.fn() }}
+      visibilityControls={{
+        hiddenNodeClasses: new Set(),
+        isDirty: false,
+        isMenuOpen: false,
+        preset: "all",
+        resetPreferences: vi.fn(),
+        setMenuOpen: vi.fn(),
+        setPreset: vi.fn(),
+        toggleHiddenNodeClass: vi.fn(),
+      }}
     />,
   );
 }

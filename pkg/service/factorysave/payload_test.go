@@ -43,7 +43,7 @@ func TestPreparePersistedFactoryPayload_NormalizesInlineBodiesOutOfCanonicalJSON
 	if !ok {
 		t.Fatalf("version = %#v, want object", decoded["version"])
 	}
-	if versionObj["logical"] != float64(3) {
+	if versionObj["logical"] != "3" {
 		t.Fatalf("version.logical = %#v, want 3", versionObj["logical"])
 	}
 }

@@ -12,7 +12,13 @@ import {
   type ReactFlowInstance,
   type XYPosition,
 } from "@xyflow/react";
-import { type MutableRefObject, useCallback, useRef, type KeyboardEvent } from "react";
+import {
+  type KeyboardEvent,
+  type MutableRefObject,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
 import {
   DashboardGraphBackground,
   DashboardGraphControls,
@@ -25,23 +31,25 @@ import {
   FactoryGraphEditorVisibilityPanel,
   type FactoryGraphEditorVisibilityPreset,
 } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
+import { FactoryGraphEdgeWaypointControls } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-controls";
+import { FactoryGraphEdgeWaypointLayer } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-layer";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/editor/factory-graph-editor-connections";
-import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import type {
+  FactoryLayoutPoint,
+  FactoryLayoutViewport,
+} from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import {
   isFactoryGraphEditorRedoKeyboardEvent,
   isFactoryGraphEditorUndoKeyboardEvent,
   shouldHandleFactoryGraphEditorKeyboardShortcut,
 } from "../../factory-graph-editor/lib/layout/history/factory-graph-layout-keyboard-shortcuts";
-import { FactoryGraphEdgeWaypointControls } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-controls";
-import { FactoryGraphEdgeWaypointLayer } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-layer";
-import type { FactoryLayoutPoint } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
+import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { GraphViewportSurface } from "../../graphs/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
-import { handleCurrentActivityReactFlowError } from "../lib/react-flow-current-activity-card-errors";
 import { useCanonicalLayoutViewportSync } from "../lib/layout/use-canonical-layout-viewport-sync";
+import { handleCurrentActivityReactFlowError } from "../lib/react-flow-current-activity-card-errors";
 import { useMeasuredCurrentActivityGraphViewport } from "../lib/use-measured-current-activity-graph-viewport";
-import type { FactoryLayoutViewport } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import {
   DashboardFlowAxisLegend,
   getDefaultDashboardFlowAxisLegendEdgeItems,
@@ -54,80 +62,62 @@ import {
 } from "./react-flow-current-activity-card-import";
 
 function CurrentActivityGraphEditorChrome(props: {
-  activeTool: "add" | "connect" | "delete" | null;
-  addMenuActions?: FactoryGraphEditorMenuAction[];
-  canInteractWithEditor: boolean;
-  canRedoLayout?: boolean;
-  canSaveDraft: boolean;
-  canUndoLayout?: boolean;
-  editorUnavailableClassifierWorkstationName?: string;
-  editorMode: boolean;
-  handleDiscardPendingChanges: () => void;
-  handleEditorModeToggle: () => void;
-  handleSaveDraft: () => void;
+  addControls: CurrentActivityGraphViewportAddControls;
+  editorControls: CurrentActivityGraphViewportEditorControls;
   hasPendingChanges: boolean;
-  hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
-  hideShowMenuOpen: boolean;
   isSavingDraft?: boolean;
+  layoutControls: CurrentActivityGraphViewportLayoutControls;
   locale?: string;
-  onAddAction?: (actionID: string) => void;
-  onAddMenuOpenChange?: (open: boolean) => void;
-  onClearPreferences: () => void;
-  onHideShowMenuOpenChange: (open: boolean) => void;
-  onRedoLayout?: () => void;
-  onResetLayout?: () => void;
-  onSelectTool: (tool: "add" | "connect" | "delete" | null) => void;
-  onToggleHiddenNodeClass: (kind: FactoryGraphNodeKind) => void;
-  onUndoLayout?: () => void;
-  openAddMenu?: boolean;
-  preferencesDirty: boolean;
+  saveControls: CurrentActivityGraphViewportSaveControls;
   saveDisabledReason?: string;
+  visibilityControls: CurrentActivityGraphViewportVisibilityControls;
 }) {
   const messages = getFactoryGraphEditorMessages(props.locale);
   const editorUnavailableReason =
-    props.editorUnavailableClassifierWorkstationName === undefined
+    props.editorControls.unavailableClassifierWorkstationName === undefined
       ? undefined
       : messages.modeClassifierRoutesUnavailable(
-          props.editorUnavailableClassifierWorkstationName,
+          props.editorControls.unavailableClassifierWorkstationName,
         );
 
   return (
     <FactoryGraphEditorToolbar
-      activeTool={props.activeTool}
-      addMenuActions={props.addMenuActions}
+      activeTool={props.editorControls.activeTool}
+      addMenuActions={props.addControls.actions}
       canDiscard={props.hasPendingChanges}
-      canInteract={props.canInteractWithEditor}
-      canRedoLayout={props.canRedoLayout}
-      canSave={props.canSaveDraft}
-      canUndoLayout={props.canUndoLayout}
+      canInteract={props.editorControls.canInteract}
+      canRedoLayout={props.layoutControls.canRedo}
+      canSave={props.saveControls.canSave}
+      canUndoLayout={props.layoutControls.canUndo}
       editModeToggle={{
-        disabled: !props.editorMode && editorUnavailableReason !== undefined,
-        editorMode: props.editorMode,
+        disabled:
+          !props.editorControls.isEditing &&
+          editorUnavailableReason !== undefined,
+        editorMode: props.editorControls.isEditing,
         hasChanges: props.hasPendingChanges,
-        onToggle: props.handleEditorModeToggle,
+        onToggle: props.editorControls.toggleMode,
         tooltipOverride: editorUnavailableReason,
       }}
-      hasPendingChanges={props.hasPendingChanges}
-      hiddenNodeClasses={props.hiddenNodeClasses}
-      hideShowMenuOpen={props.hideShowMenuOpen}
+      hiddenNodeClasses={props.visibilityControls.hiddenNodeClasses}
+      hideShowMenuOpen={props.visibilityControls.isMenuOpen}
       hideShowVisible={true}
       isSaving={props.isSavingDraft}
       locale={props.locale}
-      onAddAction={props.onAddAction}
-      onAddMenuOpenChange={props.onAddMenuOpenChange}
-      onClearPreferences={props.onClearPreferences}
-      onDiscard={props.handleDiscardPendingChanges}
-      onHideShowMenuOpenChange={props.onHideShowMenuOpenChange}
-      onRedoLayout={props.onRedoLayout}
-      onResetLayout={props.onResetLayout}
-      onSave={props.handleSaveDraft}
-      onSelectTool={props.onSelectTool}
-      onToggleHiddenNodeClass={props.onToggleHiddenNodeClass}
-      onUndoLayout={props.onUndoLayout}
-      openAddMenu={props.openAddMenu}
-      preferencesDirty={props.preferencesDirty}
+      onAddAction={props.addControls.startAction}
+      onAddMenuOpenChange={props.addControls.setMenuOpen}
+      onClearPreferences={props.visibilityControls.resetPreferences}
+      onDiscard={props.editorControls.discardPendingChanges}
+      onHideShowMenuOpenChange={props.visibilityControls.setMenuOpen}
+      onRedoLayout={props.layoutControls.redo}
+      onResetLayout={props.layoutControls.reset}
+      onSave={props.saveControls.requestConfirmation}
+      onSelectTool={props.editorControls.selectTool}
+      onToggleHiddenNodeClass={props.visibilityControls.toggleHiddenNodeClass}
+      onUndoLayout={props.layoutControls.undo}
+      openAddMenu={props.addControls.isMenuOpen}
+      preferencesDirty={props.visibilityControls.isDirty}
       saveDisabledReason={props.saveDisabledReason}
-      visible={props.editorMode}
+      visible={props.editorControls.isEditing}
     />
   );
 }
@@ -138,25 +128,20 @@ function buildVisibilityPresetOptions(
 ) {
   const messages = getFactoryGraphEditorMessages(locale);
 
-  return (
-    [
-      "all",
-      "workflow",
-      "execution",
-      "infrastructure",
-    ] as const
-  ).map((key) => ({
-    key,
-    label:
-      key === "all"
-        ? messages.visibilityPresetAllLabel
-        : key === "workflow"
-          ? messages.visibilityPresetWorkflowLabel
-          : key === "execution"
-            ? messages.visibilityPresetExecutionLabel
-            : messages.visibilityPresetInfrastructureLabel,
-    selected: visibilityPreset === key,
-  }));
+  return (["all", "workflow", "execution", "infrastructure"] as const).map(
+    (key) => ({
+      key,
+      label:
+        key === "all"
+          ? messages.visibilityPresetAllLabel
+          : key === "workflow"
+            ? messages.visibilityPresetWorkflowLabel
+            : key === "execution"
+              ? messages.visibilityPresetExecutionLabel
+              : messages.visibilityPresetInfrastructureLabel,
+      selected: visibilityPreset === key,
+    }),
+  );
 }
 
 function buildCurrentActivityIsValidConnection({
@@ -171,7 +156,7 @@ function buildCurrentActivityIsValidConnection({
   return (connection) => {
     if (
       !editorMode ||
-      activeTool !== "connect" ||
+      activeTool === "delete" ||
       !connection.source ||
       !connection.sourceHandle ||
       !connection.target ||
@@ -218,6 +203,13 @@ function factoryGraphNodeIdForRenderedNode(nodes: Node[], nodeId: string) {
 }
 
 function factoryGraphEdgeIdForRenderedEdge(nodes: Node[], edge: Edge) {
+  const factoryGraphEdgeId = (
+    edge.data as { factoryGraphEdgeId?: string } | undefined
+  )?.factoryGraphEdgeId;
+  if (factoryGraphEdgeId) {
+    return factoryGraphEdgeId;
+  }
+
   const edgeKind = edge.id.split(":")[0];
   if (!edgeKind || !edge.source || !edge.target) {
     return edge.id;
@@ -229,104 +221,107 @@ function factoryGraphEdgeIdForRenderedEdge(nodes: Node[], edge: Edge) {
   )}->${factoryGraphNodeIdForRenderedNode(nodes, edge.target)}`;
 }
 
+type CurrentActivityGraphViewportAddControls = {
+  actions?: FactoryGraphEditorMenuAction[];
+  isMenuOpen?: boolean;
+  setMenuOpen?: (open: boolean) => void;
+  startAction?: (actionID: string) => void;
+  updatePlacementViewport?: (viewport: {
+    height: number;
+    viewport: { x: number; y: number; zoom: number };
+    width: number;
+  }) => void;
+};
+
+type CurrentActivityGraphViewportSaveControls = {
+  canSave: boolean;
+  requestConfirmation: () => void;
+};
+
+type CurrentActivityGraphViewportEditorControls = {
+  activeTool: "add" | "connect" | "delete" | null;
+  canInteract: boolean;
+  discardPendingChanges: () => void;
+  isEditing: boolean;
+  selectTool: (tool: "add" | "connect" | "delete" | null) => void;
+  toggleMode: () => void;
+  unavailableClassifierWorkstationName?: string;
+};
+
+type CurrentActivityGraphViewportLayoutControls = {
+  canMoveLayout: boolean;
+  canRedo?: boolean;
+  canUndo?: boolean;
+  canonicalViewport?: FactoryLayoutViewport | null;
+  initialFitViewKey: string;
+  initialFitViewOptions: FitViewOptions;
+  moveNode: (nodeId: string, position: XYPosition) => void;
+  moveNodesByDelta: (
+    nodeIds: readonly string[],
+    delta: XYPosition,
+    resolvedPositionsByNodeId: ReadonlyMap<string, XYPosition>,
+  ) => void;
+  redo?: () => void;
+  reset?: () => void;
+  undo?: () => void;
+  updateViewport: (viewport: { x: number; y: number; zoom: number }) => void;
+};
+
+type CurrentActivityGraphViewportVisibilityControls = {
+  hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
+  isDirty: boolean;
+  isMenuOpen: boolean;
+  preset: FactoryGraphEditorVisibilityPreset;
+  resetPreferences: () => void;
+  setMenuOpen: (open: boolean) => void;
+  setPreset: (preset: FactoryGraphEditorVisibilityPreset) => void;
+  toggleHiddenNodeClass: (kind: FactoryGraphNodeKind) => void;
+};
+
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: composes React Flow canvas wiring with editor toolbar overlays.
 export function CurrentActivityGraphViewport({
-  activeTool,
-  addMenuActions,
-  canInteractWithEditor,
-  canRedoLayout = false,
-  canSaveDraft,
-  canUndoLayout = false,
-  editorUnavailableClassifierWorkstationName,
-  handleDiscardPendingChanges,
-  handleEditorModeToggle,
-  handleSaveDraft,
-  hiddenNodeClasses,
-  hideShowMenuOpen,
-  editorMode,
-  onClearPreferences,
-  onSelectVisibilityPreset,
-  preferencesDirty,
-  visibilityPreset,
+  addControls,
+  editorControls,
   edges,
-  graphKey,
   handleNodesChange,
   hasPendingChanges,
   headingID,
   imports,
-  canonicalLayoutViewport,
-  initialFitViewKey,
-  initialFitViewOptions,
   isSavingDraft = false,
+  layoutControls,
   edgeTypes,
   locale,
   nodeTypes,
   nodes,
-  onAddAction,
-  onAddMenuOpenChange,
-  onHideShowMenuOpenChange,
-  onRedoLayout,
-  onResetLayout,
-  onToggleHiddenNodeClass,
-  onUndoLayout,
   onConnect,
   onEditorEdgeClick,
   onEditorEdgeDoubleClick,
   onEditorNodeClick,
   onMoveEdgeWaypoint,
   onRemoveEdgeWaypoint,
-  onSelectTool,
   selectedEdgeWaypoints = [],
   selectedWaypointEdgeId = null,
   waypointAriaLabel,
   waypointControls = null,
-  openAddMenu,
+  saveControls,
   saveDisabledReason,
-  moveLayoutNode,
-  moveLayoutNodesByDelta,
-  updateLayoutViewport,
-  setStoredNodePosition,
+  visibilityControls,
   flowContainerRef,
   flowInstanceRef,
 }: {
-  activeTool: "add" | "connect" | "delete" | null;
-  addMenuActions?: FactoryGraphEditorMenuAction[];
-  canInteractWithEditor: boolean;
-  canRedoLayout?: boolean;
-  canSaveDraft: boolean;
-  canUndoLayout?: boolean;
-  editorUnavailableClassifierWorkstationName?: string;
-  handleDiscardPendingChanges: () => void;
-  handleEditorModeToggle: () => void;
-  handleSaveDraft: () => void;
-  hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
-  hideShowMenuOpen: boolean;
-  editorMode: boolean;
-  onClearPreferences: () => void;
-  onSelectVisibilityPreset: (preset: FactoryGraphEditorVisibilityPreset) => void;
-  preferencesDirty: boolean;
-  visibilityPreset: FactoryGraphEditorVisibilityPreset;
+  addControls: CurrentActivityGraphViewportAddControls;
+  editorControls: CurrentActivityGraphViewportEditorControls;
   edges: Edge[];
-  graphKey: string;
   handleNodesChange: (changes: NodeChange[]) => void;
   hasPendingChanges: boolean;
   headingID: string;
   imports: CurrentActivityImportController;
-  canonicalLayoutViewport?: FactoryLayoutViewport | null;
-  initialFitViewKey: string;
-  initialFitViewOptions: FitViewOptions;
   isSavingDraft?: boolean;
+  layoutControls: CurrentActivityGraphViewportLayoutControls;
   edgeTypes?: EdgeTypes;
   locale?: string;
   nodeTypes: NodeTypes;
   nodes: Node[];
-  onAddAction?: (actionID: string) => void;
-  onAddMenuOpenChange?: (open: boolean) => void;
-  onHideShowMenuOpenChange: (open: boolean) => void;
-  onRedoLayout?: () => void;
-  onResetLayout?: () => void;
-  onToggleHiddenNodeClass: (kind: FactoryGraphNodeKind) => void;
-  onUndoLayout?: () => void;
   onConnect?: (connection: Connection) => void;
   onEditorEdgeClick?: (edgeId: string) => void;
   onEditorEdgeDoubleClick?: (
@@ -357,21 +352,9 @@ export function CurrentActivityGraphViewport({
     selectedEdgeLabel: string;
     waypointCount: number;
   } | null;
-  onSelectTool: (tool: "add" | "connect" | "delete" | null) => void;
-  openAddMenu?: boolean;
+  saveControls: CurrentActivityGraphViewportSaveControls;
   saveDisabledReason?: string;
-  moveLayoutNode?: (nodeId: string, position: XYPosition) => void;
-  moveLayoutNodesByDelta?: (
-    nodeIds: readonly string[],
-    delta: XYPosition,
-    resolvedPositionsByNodeId: ReadonlyMap<string, XYPosition>,
-  ) => void;
-  updateLayoutViewport?: (viewport: { x: number; y: number; zoom: number }) => void;
-  setStoredNodePosition: (
-    graphKey: string,
-    nodeId: string,
-    position: XYPosition,
-  ) => void;
+  visibilityControls: CurrentActivityGraphViewportVisibilityControls;
   flowContainerRef?: MutableRefObject<HTMLElement | null>;
   flowInstanceRef?: MutableRefObject<ReactFlowInstance | null>;
 }) {
@@ -382,21 +365,63 @@ export function CurrentActivityGraphViewport({
     startPositionsByNodeId: Map<string, XYPosition>;
   } | null>(null);
   const isValidConnection = buildCurrentActivityIsValidConnection({
-    activeTool,
-    editorMode,
+    activeTool: editorControls.activeTool,
+    editorMode: editorControls.isEditing,
     nodes,
   });
   const graphViewport =
     useMeasuredCurrentActivityGraphViewport(flowContainerRef);
+  const canonicalLayoutViewport = layoutControls.canonicalViewport ?? null;
   const shouldFitView = canonicalLayoutViewport == null;
   const skipNextViewportMoveEndRef = useRef(false);
+  const canPersistLayoutChanges = layoutControls.canMoveLayout;
+  const moveLayoutNode = canPersistLayoutChanges
+    ? layoutControls.moveNode
+    : undefined;
+  const moveLayoutNodesByDelta = canPersistLayoutChanges
+    ? layoutControls.moveNodesByDelta
+    : undefined;
+  const updateLayoutViewport = canPersistLayoutChanges
+    ? layoutControls.updateViewport
+    : undefined;
+  const updatePlacementViewport = addControls.updatePlacementViewport;
+  const reportPlacementViewport = useCallback(
+    (viewport: { x: number; y: number; zoom: number }) => {
+      if (!graphViewport.ready) {
+        return;
+      }
+
+      updatePlacementViewport?.({
+        height: graphViewport.height,
+        viewport,
+        width: graphViewport.width,
+      });
+    },
+    [
+      graphViewport.height,
+      graphViewport.ready,
+      graphViewport.width,
+      updatePlacementViewport,
+    ],
+  );
   useCanonicalLayoutViewportSync({
     canonicalLayoutViewport,
-    fitViewOptions: initialFitViewOptions,
+    fitViewOptions: layoutControls.initialFitViewOptions,
     flowInstanceRef,
     skipNextViewportMoveEndRef,
-    viewportResetKey: initialFitViewKey,
+    viewportResetKey: layoutControls.initialFitViewKey,
   });
+  useEffect(() => {
+    const flowInstance = flowInstanceRef?.current;
+    if (!flowInstance) {
+      if (canonicalLayoutViewport) {
+        reportPlacementViewport(canonicalLayoutViewport);
+      }
+      return;
+    }
+
+    reportPlacementViewport(flowInstance.getViewport());
+  }, [canonicalLayoutViewport, flowInstanceRef, reportPlacementViewport]);
   const handleConnect = useCallback(
     (connection: Connection) => {
       onConnect?.({
@@ -413,22 +438,31 @@ export function CurrentActivityGraphViewport({
   );
   const handleEditorCanvasKeyDown = useCallback(
     (event: KeyboardEvent<HTMLElement>) => {
-      if (!editorMode || !shouldHandleFactoryGraphEditorKeyboardShortcut(event.target)) {
+      if (
+        !editorControls.isEditing ||
+        !shouldHandleFactoryGraphEditorKeyboardShortcut(event.target)
+      ) {
         return;
       }
 
-      if (isFactoryGraphEditorUndoKeyboardEvent(event) && canUndoLayout) {
+      if (
+        isFactoryGraphEditorUndoKeyboardEvent(event) &&
+        layoutControls.canUndo
+      ) {
         event.preventDefault();
-        onUndoLayout?.();
+        layoutControls.undo?.();
         return;
       }
 
-      if (isFactoryGraphEditorRedoKeyboardEvent(event) && canRedoLayout) {
+      if (
+        isFactoryGraphEditorRedoKeyboardEvent(event) &&
+        layoutControls.canRedo
+      ) {
         event.preventDefault();
-        onRedoLayout?.();
+        layoutControls.redo?.();
       }
     },
-    [canRedoLayout, canUndoLayout, editorMode, onRedoLayout, onUndoLayout],
+    [editorControls.isEditing, layoutControls],
   );
 
   return (
@@ -460,10 +494,12 @@ export function CurrentActivityGraphViewport({
           imports.dropState,
         )}
         data-current-activity-flow
-        data-factory-graph-editor-canvas={editorMode ? "true" : undefined}
+        data-factory-graph-editor-canvas={
+          editorControls.isEditing ? "true" : undefined
+        }
         onKeyDown={handleEditorCanvasKeyDown}
         ref={flowContainerRef}
-        tabIndex={editorMode ? 0 : undefined}
+        tabIndex={editorControls.isEditing ? 0 : undefined}
         style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
         onDragEnter={imports.onDragEnter}
         onDragLeave={imports.onDragLeave}
@@ -489,31 +525,35 @@ export function CurrentActivityGraphViewport({
               edgeTypes={edgeTypes}
               defaultViewport={canonicalLayoutViewport ?? undefined}
               fitView={shouldFitView}
-              fitViewOptions={initialFitViewOptions}
-              key={initialFitViewKey}
+              fitViewOptions={layoutControls.initialFitViewOptions}
+              key={layoutControls.initialFitViewKey}
               isValidConnection={isValidConnection}
               maxZoom={2}
               minZoom={0.25}
               nodeTypes={nodeTypes}
               nodes={nodes}
-              edgesFocusable={editorMode}
-              nodesConnectable={editorMode && activeTool === "connect"}
+              edgesFocusable={editorControls.isEditing}
+              nodesConnectable={
+                editorControls.isEditing &&
+                editorControls.activeTool !== "delete"
+              }
               onConnect={handleConnect}
               onInit={(instance) => {
                 if (flowInstanceRef) {
                   flowInstanceRef.current = instance;
                 }
+                reportPlacementViewport(instance.getViewport());
               }}
               onError={handleCurrentActivityReactFlowError}
               onEdgeClick={(_, edge) => {
-                if (editorMode) {
+                if (editorControls.isEditing) {
                   onEditorEdgeClick?.(
                     factoryGraphEdgeIdForRenderedEdge(nodes, edge),
                   );
                 }
               }}
               onEdgeDoubleClick={(event, edge) => {
-                if (!editorMode || !onEditorEdgeDoubleClick) {
+                if (!editorControls.isEditing || !onEditorEdgeDoubleClick) {
                   return;
                 }
 
@@ -532,26 +572,23 @@ export function CurrentActivityGraphViewport({
               }}
               nodesDraggable={true}
               onNodeClick={(_, node) => {
-                if (editorMode) {
+                if (editorControls.isEditing) {
                   onEditorNodeClick?.(
                     factoryGraphNodeIdForRenderedNode(nodes, node.id),
                   );
                 }
               }}
               onMoveEnd={(_, viewport) => {
-                if (!editorMode || !updateLayoutViewport) {
-                  return;
-                }
-
+                reportPlacementViewport(viewport);
                 if (skipNextViewportMoveEndRef.current) {
                   skipNextViewportMoveEndRef.current = false;
                   return;
                 }
 
-                updateLayoutViewport(viewport);
+                updateLayoutViewport?.(viewport);
               }}
               onNodeDragStart={(_, node) => {
-                if (!editorMode) {
+                if (!editorControls.isEditing) {
                   return;
                 }
 
@@ -583,7 +620,7 @@ export function CurrentActivityGraphViewport({
                 const factoryGraphNodeId = (
                   node.data as { factoryGraphNodeId?: string } | undefined
                 )?.factoryGraphNodeId;
-                if (editorMode && moveLayoutNode && factoryGraphNodeId) {
+                if (moveLayoutNode && factoryGraphNodeId) {
                   const dragSession = dragSessionRef.current;
                   dragSessionRef.current = null;
                   if (
@@ -592,7 +629,9 @@ export function CurrentActivityGraphViewport({
                     moveLayoutNodesByDelta
                   ) {
                     const startPosition =
-                      dragSession.startPositionsByNodeId.get(factoryGraphNodeId);
+                      dragSession.startPositionsByNodeId.get(
+                        factoryGraphNodeId,
+                      );
                     if (startPosition) {
                       moveLayoutNodesByDelta(
                         dragSession.factoryGraphNodeIds,
@@ -609,10 +648,6 @@ export function CurrentActivityGraphViewport({
                   moveLayoutNode(factoryGraphNodeId, node.position);
                   return;
                 }
-
-                if (graphKey) {
-                  setStoredNodePosition(graphKey, node.id, node.position);
-                }
               }}
               onNodesChange={handleNodesChange}
               panOnDrag
@@ -623,7 +658,7 @@ export function CurrentActivityGraphViewport({
               <DashboardGraphControls
                 fitViewOptions={{ maxZoom: 1.2, padding: 0.12 }}
               />
-              {editorMode &&
+              {editorControls.isEditing &&
               selectedWaypointEdgeId &&
               onMoveEdgeWaypoint &&
               waypointAriaLabel ? (
@@ -636,48 +671,30 @@ export function CurrentActivityGraphViewport({
                 />
               ) : null}
             </ReactFlow>
-            {editorMode && waypointControls ? (
+            {editorControls.isEditing && waypointControls ? (
               <FactoryGraphEdgeWaypointControls {...waypointControls} />
             ) : null}
           </div>
         ) : null}
         <FactoryGraphEditorVisibilityPanel
           locale={locale}
-          onSelectPreset={onSelectVisibilityPreset}
-          options={buildVisibilityPresetOptions(locale, visibilityPreset)}
+          onSelectPreset={visibilityControls.setPreset}
+          options={buildVisibilityPresetOptions(
+            locale,
+            visibilityControls.preset,
+          )}
           visible={false}
         />
         <CurrentActivityGraphEditorChrome
-          activeTool={activeTool}
-          addMenuActions={addMenuActions}
-          canInteractWithEditor={canInteractWithEditor}
-          canRedoLayout={canRedoLayout}
-          canSaveDraft={canSaveDraft}
-          canUndoLayout={canUndoLayout}
-          editorUnavailableClassifierWorkstationName={
-            editorUnavailableClassifierWorkstationName
-          }
-          editorMode={editorMode}
-          handleDiscardPendingChanges={handleDiscardPendingChanges}
-          handleEditorModeToggle={handleEditorModeToggle}
-          handleSaveDraft={handleSaveDraft}
+          addControls={addControls}
+          editorControls={editorControls}
           hasPendingChanges={hasPendingChanges}
-          hiddenNodeClasses={hiddenNodeClasses}
-          hideShowMenuOpen={hideShowMenuOpen}
           isSavingDraft={isSavingDraft}
+          layoutControls={layoutControls}
           locale={locale}
-          onAddAction={onAddAction}
-          onAddMenuOpenChange={onAddMenuOpenChange}
-          onClearPreferences={onClearPreferences}
-          onHideShowMenuOpenChange={onHideShowMenuOpenChange}
-          onRedoLayout={onRedoLayout}
-          onResetLayout={onResetLayout}
-          onSelectTool={onSelectTool}
-          onToggleHiddenNodeClass={onToggleHiddenNodeClass}
-          onUndoLayout={onUndoLayout}
-          openAddMenu={openAddMenu}
-          preferencesDirty={preferencesDirty}
+          saveControls={saveControls}
           saveDisabledReason={saveDisabledReason}
+          visibilityControls={visibilityControls}
         />
         <GraphDropOverlay dropState={imports.dropState} locale={locale} />
       </GraphViewportSurface>

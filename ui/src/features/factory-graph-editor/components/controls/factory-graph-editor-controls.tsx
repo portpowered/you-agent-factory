@@ -7,6 +7,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../../components/ui";
+import { cn } from "../../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../../lib/draft/factory-graph-draft-types";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 
@@ -19,18 +20,18 @@ export { FactoryGraphEditorWorkStatePhaseLegend } from "../chrome/factory-graph-
 import { FactoryGraphEditorHideShowMenu } from "../chrome/factory-graph-editor-hide-show-menu";
 import { FactoryGraphEditorModeToggle } from "../chrome/factory-graph-editor-mode-controls";
 import { FactoryGraphEditorTooltipActionButton } from "../chrome/factory-graph-editor-tooltip-button";
-import { FactoryGraphEditorMenuHeader } from "../menu/factory-graph-editor-menu-header";
-import { FactoryGraphEditorMenuItemButton } from "../menu/factory-graph-editor-menu-item-button";
-import { FactoryGraphEditorMenuItemCopy } from "../menu/factory-graph-editor-menu-item-copy";
-import { FactoryGraphEditorFloatingSurface } from "../surface/factory-graph-editor-floating-surface";
 import {
-  ConnectIcon,
+  DiscardIcon,
   RedoIcon,
   ResetLayoutIcon,
   SaveIcon,
   TrashIcon,
   UndoIcon,
 } from "../factory-graph-editor-toolbar-icons";
+import { FactoryGraphEditorMenuHeader } from "../menu/factory-graph-editor-menu-header";
+import { FactoryGraphEditorMenuItemButton } from "../menu/factory-graph-editor-menu-item-button";
+import { FactoryGraphEditorMenuItemCopy } from "../menu/factory-graph-editor-menu-item-copy";
+import { FactoryGraphEditorFloatingSurface } from "../surface/factory-graph-editor-floating-surface";
 
 export {
   FactoryGraphEditorActionPopover,
@@ -57,8 +58,6 @@ export interface FactoryGraphEditorVisibilityPresetOption {
   selected: boolean;
 }
 
-const TOOLBAR_ACTIONS_CLASS =
-  "flex items-center gap-2 border-l border-outline pl-2 max-md:ml-auto";
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: toolbar composes edit-mode toggle, hide/show, and layout history controls.
 export function FactoryGraphEditorToolbar({
   activeTool,
@@ -66,10 +65,9 @@ export function FactoryGraphEditorToolbar({
   canInteract,
   canRedoLayout = false,
   canSave = false,
-  canDiscard = true,
+  canDiscard = false,
   canUndoLayout = false,
   editModeToggle,
-  hasPendingChanges = false,
   hiddenNodeClasses = new Set<FactoryGraphNodeKind>(),
   hideShowMenuOpen = false,
   hideShowVisible = true,
@@ -105,7 +103,6 @@ export function FactoryGraphEditorToolbar({
     onToggle: () => void;
     tooltipOverride?: string;
   };
-  hasPendingChanges?: boolean;
   hiddenNodeClasses?: ReadonlySet<FactoryGraphNodeKind>;
   hideShowMenuOpen?: boolean;
   hideShowVisible?: boolean;
@@ -132,23 +129,18 @@ export function FactoryGraphEditorToolbar({
   }
   const messages = getFactoryGraphEditorMessages(locale);
   const hideShowActive = hideShowMenuOpen || hiddenNodeClasses.size > 0;
+  const showDraftActionRow = visible;
+  const showEditorControls = visible;
+  const toolbarButtonsDisabled = !showEditorControls || !canInteract;
+  const discardDisabled = !canDiscard;
+  const saveDisabled = !canSave;
 
   return (
     <FactoryGraphEditorFloatingSurface
       aria-label={messages.toolbarAriaLabel}
-      className="px-3 py-2"
+      className="overflow-hidden px-3 py-2"
       placement="bottomToolbar"
     >
-      {editModeToggle ? (
-        <FactoryGraphEditorModeToggle
-          disabled={editModeToggle.disabled}
-          editorMode={editModeToggle.editorMode}
-          hasChanges={editModeToggle.hasChanges}
-          locale={locale}
-          onClick={editModeToggle.onToggle}
-          tooltipOverride={editModeToggle.tooltipOverride}
-        />
-      ) : null}
       {hideShowVisible && onToggleHiddenNodeClass ? (
         <FactoryGraphEditorHideShowMenu
           hiddenNodeClasses={hiddenNodeClasses}
@@ -161,11 +153,26 @@ export function FactoryGraphEditorToolbar({
           pressed={hideShowActive}
         />
       ) : null}
-      {visible ? (
-        <>
+      <div
+        aria-hidden={!showEditorControls}
+        className={cn(
+          "grid min-h-10 max-h-11 min-w-0 self-center overflow-hidden transition-[max-width,opacity] duration-200 ease-out motion-reduce:transition-none",
+          showEditorControls
+            ? "max-w-xl opacity-100"
+            : "pointer-events-none max-w-0 opacity-0",
+        )}
+        data-toolbar-editor-controls-lane=""
+        data-toolbar-editor-controls={
+          showEditorControls ? "expanded" : "collapsed"
+        }
+      >
+        <div
+          className="flex min-h-10 max-h-11 min-w-max flex-nowrap items-center gap-2 overflow-hidden"
+          data-toolbar-editor-controls-row=""
+        >
           <FactoryGraphEditorAddMenu
             actions={addMenuActions}
-            canInteract={canInteract}
+            canInteract={!toolbarButtonsDisabled}
             locale={locale}
             onAction={onAddAction}
             onOpenChange={onAddMenuOpenChange}
@@ -174,7 +181,7 @@ export function FactoryGraphEditorToolbar({
           <FactoryGraphEditorToolbarButton
             active={activeTool === "delete"}
             description={messages.toolbarDeleteDescription}
-            disabled={!canInteract}
+            disabled={toolbarButtonsDisabled}
             icon={<TrashIcon />}
             label={messages.toolbarDeleteLabel}
             onClick={() =>
@@ -183,20 +190,9 @@ export function FactoryGraphEditorToolbar({
             tone={activeTool === "delete" ? "secondary" : "outline"}
           />
           <FactoryGraphEditorToolbarButton
-            active={activeTool === "connect"}
-            description={messages.toolbarConnectDescription}
-            disabled={!canInteract}
-            icon={<ConnectIcon />}
-            label={messages.toolbarConnectLabel}
-            onClick={() =>
-              onSelectTool(activeTool === "connect" ? null : "connect")
-            }
-            tone={activeTool === "connect" ? "secondary" : "outline"}
-          />
-          <FactoryGraphEditorToolbarButton
             active={false}
             description={messages.toolbarUndoDescription}
-            disabled={!canInteract || !canUndoLayout}
+            disabled={toolbarButtonsDisabled || !canUndoLayout}
             icon={<UndoIcon />}
             label={messages.toolbarUndoLabel}
             onClick={() => onUndoLayout?.()}
@@ -205,7 +201,7 @@ export function FactoryGraphEditorToolbar({
           <FactoryGraphEditorToolbarButton
             active={false}
             description={messages.toolbarRedoDescription}
-            disabled={!canInteract || !canRedoLayout}
+            disabled={toolbarButtonsDisabled || !canRedoLayout}
             icon={<RedoIcon />}
             label={messages.toolbarRedoLabel}
             onClick={() => onRedoLayout?.()}
@@ -214,31 +210,35 @@ export function FactoryGraphEditorToolbar({
           <FactoryGraphEditorToolbarButton
             active={false}
             description={messages.toolbarResetLayoutDescription}
-            disabled={!canInteract}
+            disabled={toolbarButtonsDisabled}
             icon={<ResetLayoutIcon />}
             label={messages.toolbarResetLayoutLabel}
             onClick={() => onResetLayout?.()}
             tone="outline"
           />
-          {hasPendingChanges ? (
+          {showDraftActionRow ? (
             <DashboardActionRow
               actions={
                 <>
-                  <DashboardActionButton
-                    disabled={!canDiscard || isSaving}
+                  <FactoryGraphEditorTooltipActionButton
+                    aria-label={messages.draftActionsDiscard}
+                    disabled={discardDisabled}
+                    iconOnly
                     onClick={onDiscard}
+                    placement="above"
+                    tooltip={messages.draftActionsDiscard}
                     tone="outline"
                     type="button"
                   >
-                    {messages.draftActionsDiscard}
-                  </DashboardActionButton>
+                    <DiscardIcon />
+                  </FactoryGraphEditorTooltipActionButton>
                   <FactoryGraphEditorTooltipActionButton
                     aria-label={
                       isSaving
                         ? messages.draftActionsSaving
                         : messages.draftActionsSave
                     }
-                    disabled={!canSave || isSaving}
+                    disabled={saveDisabled}
                     executing={isSaving}
                     iconOnly
                     onClick={onSave}
@@ -251,11 +251,22 @@ export function FactoryGraphEditorToolbar({
                   </FactoryGraphEditorTooltipActionButton>
                 </>
               }
-              actionsClassName={TOOLBAR_ACTIONS_CLASS}
-              className="min-w-0 flex-1"
+              actionsClassName="flex flex-nowrap items-center gap-2 border-l border-outline pl-2 max-md:ml-auto"
+              className="min-w-0 flex-1 flex-nowrap items-center overflow-hidden"
             />
           ) : null}
-        </>
+        </div>
+      </div>
+      {editModeToggle ? (
+        <FactoryGraphEditorModeToggle
+          className="shrink-0"
+          disabled={editModeToggle.disabled}
+          editorMode={editModeToggle.editorMode}
+          hasChanges={editModeToggle.hasChanges}
+          locale={locale}
+          onClick={editModeToggle.onToggle}
+          tooltipOverride={editModeToggle.tooltipOverride}
+        />
       ) : null}
     </FactoryGraphEditorFloatingSurface>
   );

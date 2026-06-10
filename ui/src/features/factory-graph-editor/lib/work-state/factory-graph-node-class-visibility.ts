@@ -6,6 +6,7 @@ import { filterFactoryGraphTopologyForCustomerDisplay } from "../operations/fact
 import { synthesizeWorkStateVisibilityBypassEdges } from "../work-state/factory-graph-work-state-visibility-bypass";
 
 export const FACTORY_GRAPH_TOGGLEABLE_NODE_KINDS = [
+  "doc",
   "work-type",
   "work-state",
   "workstation",

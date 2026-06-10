@@ -10,6 +10,12 @@ func TestBuildPendingFactoryGraphTopology_UsesCanonicalNodeAndEdgeIDs(t *testing
 	t.Parallel()
 
 	cfg := &interfaces.FactoryConfig{
+		ResourceManifest: &interfaces.PortableResourceManifestConfig{
+			BundledFiles: []interfaces.BundledFileConfig{
+				{Type: interfaces.BundledFileTypeDoc, TargetPath: "factory/docs/guide.md"},
+				{Type: interfaces.BundledFileTypeScript, TargetPath: "factory/scripts/setup.py"},
+			},
+		},
 		Resources: []interfaces.ResourceConfig{{
 			ID:   "resource-slot",
 			Name: "executor-slot",
@@ -45,6 +51,9 @@ func TestBuildPendingFactoryGraphTopology_UsesCanonicalNodeAndEdgeIDs(t *testing
 	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
 
 	wantNodes := []string{
+		"doc:factory/docs/guide.md",
+		"doc:factory/scripts/setup.py",
+		"script:factory/scripts/setup.py",
 		"resource:resource-slot",
 		"work-type:work-type-story",
 		"work-state:work-type-story:state-init",

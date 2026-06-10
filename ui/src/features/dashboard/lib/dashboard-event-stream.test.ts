@@ -164,7 +164,7 @@ describe("syncCurrentFactoryDefinition", () => {
     expect(setQueryData).not.toHaveBeenCalled();
   });
 
-  it("updates definition cache and invalidates the document query when version is absent", async () => {
+  it("updates definition cache without invalidating the document query when version is absent", async () => {
     const queryClient = new QueryClient();
     const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
     syncCurrentFactoryDefinition(
@@ -182,9 +182,10 @@ describe("syncCurrentFactoryDefinition", () => {
     ).toMatchObject({
       workers: [expect.objectContaining({ model: "gpt-5.6" })],
     });
-    expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: currentFactoryDocumentQueryKey(sessionID),
-    });
+    expect(invalidateQueries).not.toHaveBeenCalled();
+    expect(
+      queryClient.getQueryData(currentFactoryDocumentQueryKey(sessionID)),
+    ).toBeUndefined();
   });
 
   it("coerces numeric logical versions into document cache entries", () => {

@@ -21,6 +21,81 @@ const STALE_EDGE_ID =
   "workstation-output:workstation:missing->work-state:story:done";
 
 describe("factory-graph-layout-validation", () => {
+  it.each([
+    {
+      name: "reports only stale-edge references when stale edges also carry poisoned geometry",
+      layout: {
+        schemaVersion: 1,
+        edges: [
+          {
+            id: STALE_EDGE_ID,
+            waypoints: [
+              { x: Number.NaN, y: 20 },
+              { x: Number.POSITIVE_INFINITY, y: 30 },
+            ],
+            labelPosition: { x: Number.NEGATIVE_INFINITY, y: 0 },
+          },
+        ],
+      } satisfies ReturnType<typeof createDefaultFactoryLayout>,
+      expected: [
+        {
+          code: FACTORY_LAYOUT_VALIDATION_CODE.unknownEdgeReference,
+          path: "factory.layout.edges[0].id",
+        },
+      ],
+    },
+    {
+      name: "reports every non-finite waypoint on one valid edge in authored order",
+      layout: {
+        schemaVersion: 1,
+        edges: [
+          {
+            id: VALID_EDGE_ID,
+            waypoints: [
+              { x: Number.NaN, y: 20 },
+              { x: 40, y: 50 },
+              { x: 60, y: Number.NEGATIVE_INFINITY },
+            ],
+          },
+        ],
+      } satisfies ReturnType<typeof createDefaultFactoryLayout>,
+      expected: [
+        {
+          code: FACTORY_LAYOUT_VALIDATION_CODE.invalidGeometry,
+          path: "factory.layout.edges[0].waypoints[0]",
+        },
+        {
+          code: FACTORY_LAYOUT_VALIDATION_CODE.invalidGeometry,
+          path: "factory.layout.edges[0].waypoints[2]",
+        },
+      ],
+    },
+    {
+      name: "ignores geometry on edge entries that never resolved to an id",
+      layout: {
+        schemaVersion: 1,
+        edges: [
+          {
+            waypoints: [
+              { x: Number.NaN, y: 20 },
+              { x: 40, y: Number.POSITIVE_INFINITY },
+            ],
+          } as { id?: string; waypoints: { x: number; y: number }[] },
+        ],
+      } satisfies ReturnType<typeof createDefaultFactoryLayout>,
+      expected: [],
+    },
+  ])("$name", ({ layout, expected }) => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const validEdgeIds = factoryLayoutTopologyEdgeIds(topology);
+
+    expect(collectFactoryLayoutEdgeValidationTargets(layout, validEdgeIds)).toEqual(
+      expected,
+    );
+  });
+
   it("reports stale edge layout references against pending topology", () => {
     const topology = buildFactoryGraphTopologyFromDefinition(
       baseFactoryDefinition,
@@ -164,7 +239,7 @@ describe("factory-graph-layout-validation", () => {
     ]);
   });
 
-  it("prepares pending layout for save by pruning stale edge waypoints and reporting outcomes", () => {
+  it("prepares pending layout for save by pruning stale edge waypoints", () => {
     const topology = buildFactoryGraphTopologyFromDefinition(
       baseFactoryDefinition,
     );
@@ -182,16 +257,6 @@ describe("factory-graph-layout-validation", () => {
     const prepared = preparePendingFactoryLayoutForSave(layout, validEdgeIds);
 
     expect(prepared.layout.edges).toBeUndefined();
-    expect(prepared.layoutOutcomes).toEqual([
-      expect.objectContaining({
-        code: FACTORY_LAYOUT_VALIDATION_CODE.unknownEdgeReference,
-        subject: {
-          id: STALE_EDGE_ID,
-          location: "REFERENCE",
-          type: "FACTORY",
-        },
-      }),
-    ]);
   });
 
   it("falls back to generated routing when only invalid waypoint geometry remains", () => {
@@ -275,5 +340,69 @@ describe("factory-graph-layout-validation", () => {
 
     expect(prunedEdgeIds).toEqual([VALID_EDGE_ID]);
     expect(prunedLayout.edges).toBeUndefined();
+  });
+
+  it.each([
+    {
+      name: "drops non-finite label position while preserving finite authored waypoints",
+      layout: {
+        schemaVersion: 1,
+        edges: [
+          {
+            id: VALID_EDGE_ID,
+            waypoints: [{ x: 100, y: 120 }],
+            labelPosition: { x: Number.NaN, y: 160 },
+          },
+        ],
+      } satisfies ReturnType<typeof createDefaultFactoryLayout>,
+      expectedPrunedEdgeIds: [],
+      expectedEdges: [
+        {
+          id: VALID_EDGE_ID,
+          waypoints: [{ x: 100, y: 120 }],
+        },
+      ],
+    },
+    {
+      name: "preserves duplicate finite waypoints on valid edges while pruning a stale sibling",
+      layout: {
+        edges: [
+          {
+            id: VALID_EDGE_ID,
+            waypoints: [
+              { x: 180, y: 220 },
+              { x: 180, y: 220 },
+              { x: 260, y: 280 },
+            ],
+          },
+          {
+            id: STALE_EDGE_ID,
+            waypoints: [{ x: 10, y: 20 }],
+          },
+        ],
+      } satisfies ReturnType<typeof createDefaultFactoryLayout>,
+      expectedPrunedEdgeIds: [STALE_EDGE_ID],
+      expectedEdges: [
+        {
+          id: VALID_EDGE_ID,
+          waypoints: [
+            { x: 180, y: 220 },
+            { x: 180, y: 220 },
+            { x: 260, y: 280 },
+          ],
+        },
+      ],
+    },
+  ])("$name", ({ layout, expectedPrunedEdgeIds, expectedEdges }) => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const validEdgeIds = factoryLayoutTopologyEdgeIds(topology);
+
+    const { layout: prunedLayout, prunedEdgeIds } =
+      pruneFactoryLayoutEdgesForTopology(layout, validEdgeIds);
+
+    expect(prunedEdgeIds).toEqual(expectedPrunedEdgeIds);
+    expect(prunedLayout.edges).toEqual(expectedEdges);
   });
 });

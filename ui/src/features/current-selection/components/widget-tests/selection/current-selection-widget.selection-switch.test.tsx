@@ -281,25 +281,25 @@ describe("CurrentSelectionWidget selection switching", () => {
 
   it("replaces worker configuration with the selected resource detail view", () => {
     const queryClient = createCurrentSelectionWidgetQueryClient();
+    const currentFactoryDefinition = buildEditableFactoryDefinition({
+      resources: [
+        {
+          capacity: 2,
+          name: "agent-slot",
+          type: "INVOCATION_SLOT",
+        },
+      ],
+    });
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(
-        buildEditableFactoryDefinition({
-          resources: [
-            {
-              capacity: 2,
-              name: "agent-slot",
-              type: "INVOCATION_SLOT",
-            },
-          ],
-        }),
-      ),
+      buildEditableDefinitionResult(currentFactoryDefinition),
     );
 
     const { rerender } = renderWithExistingQueryClient(
       queryClient,
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection({
+          currentFactoryDefinition,
           selectedWorkerName: "reviewer",
           selection: { kind: "worker", workerName: "reviewer" },
         })}
@@ -315,6 +315,7 @@ describe("CurrentSelectionWidget selection switching", () => {
     rerender(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection({
+          currentFactoryDefinition,
           selectedResourceName: "agent-slot",
           selection: { kind: "resource", resourceName: "agent-slot" },
         })}
@@ -382,10 +383,24 @@ function buildEditableFactoryDefinitionBase(): CanonicalFactoryDefinition {
 function buildCurrentSelection(
   overrides: Partial<CurrentSelectionState> = {},
 ): CurrentSelectionState {
+  const currentFactoryDefinition =
+    overrides.currentFactoryDefinition ?? buildEditableFactoryDefinitionBase();
+  const selectedResourceName =
+    overrides.selectedResourceName ??
+    (overrides.selection?.kind === "resource"
+      ? overrides.selection.resourceName
+      : null);
+  const selectedWorkerName =
+    overrides.selectedWorkerName ??
+    (overrides.selection?.kind === "worker"
+      ? overrides.selection.workerName
+      : null);
+
   return {
     canRedoSelection: false,
     canUndoSelection: false,
     completedWorkItems: [],
+    currentFactoryDefinition,
     failedWorkItems: [],
     openTerminalWorkDetail: () => undefined,
     redoSelection: () => undefined,
@@ -402,11 +417,22 @@ function buildCurrentSelection(
     selectedWorkProviderSessions: [],
     selectedWorkRequestHistory: [],
     selectedWorkWorkstationRequests: [],
-    selectedResourceName: null,
+    selectedResource:
+      currentFactoryDefinition.resources?.find(
+        (resource) => resource.name === selectedResourceName,
+      ) ?? null,
+    selectedResourceName,
     selectedResourceTokenCount: null,
-    selectedWorker: null,
-    selectedWorkerName: null,
+    selectedResourceWorkerNames: [],
+    selectedResourceWorkstationNames: [],
+    selectedWorker:
+      currentFactoryDefinition.workers?.find(
+        (worker) => worker.name === selectedWorkerName,
+      ) ?? null,
+    selectedWorkerName,
     selectedWorkerWorkstationNames: [],
+    selectedWorkType: null,
+    selectedWorkTypeName: null,
     selectedWorkstationRequest: null,
     selection: null,
     selectResource: () => undefined,

@@ -19,22 +19,9 @@ export function resetCurrentActivityGraphLayoutCacheForTests(): void {
   GRAPH_LAYOUT_CACHE.resolvedByTopologyKey.clear();
 }
 
-export function useCurrentActivityGraphLayout(
-  snapshot: DashboardSnapshot,
-  hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind> = new Set(),
-  visibilityPreset: FactoryGraphEditorVisibilityPreset = "all",
-) {
-  return useCurrentActivityGraphLayoutForFactory(
-    snapshot,
-    undefined,
-    hiddenNodeClasses,
-    visibilityPreset,
-  );
-}
-
 export function useCurrentActivityGraphLayoutForFactory(
   snapshot: DashboardSnapshot,
-  /** Omit to use `snapshot.factory`; pass `null` to keep an empty layout while the document GET is pending. */
+  /** Omit to use the event-computed `snapshot.factory`; pass `null` when graph state has no renderable factory yet. */
   factoryOverride?: DashboardSnapshot["factory"] | null,
   hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind> = new Set(),
   visibilityPreset: FactoryGraphEditorVisibilityPreset = "all",

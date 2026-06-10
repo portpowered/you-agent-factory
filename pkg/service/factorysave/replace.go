@@ -70,7 +70,11 @@ func (s *Service) replaceCurrentFactoryLayoutLocked(
 		if err := requireFreshEditableFactoryVersionAtRoot(s.host, request.Version, sessionRootDir, current.Name); err != nil {
 			return err
 		}
-		nextVersion := nextEditableFactoryVersion(current.Version, s.now().Now().UTC())
+		currentVersion, err := s.host.CurrentFactoryDefinitionVersionAtRoot(sessionRootDir, current.Name)
+		if err != nil {
+			return err
+		}
+		nextVersion := nextEditableFactoryVersion(&currentVersion, s.now().Now().UTC())
 		prepared, err := preparePersistedFactoryPayload(string(current.Name), sanitized, nextVersion)
 		if err != nil {
 			return err
@@ -93,9 +97,6 @@ func (s *Service) replaceCurrentFactoryLayoutLocked(
 
 		var readbackErr error
 		saved, readbackErr = s.host.GetCurrentFactoryForSession(ctx, sessionID)
-		if readbackErr == nil {
-			saved = withLayoutOutcomes(saved, prepared.LayoutOutcomes)
-		}
 		return readbackErr
 	})
 	if err != nil {
@@ -128,7 +129,7 @@ func (s *Service) prepareEditableFactoryDefinitionSave(
 			return "", factoryapi.Factory{}, err
 		}
 	}
-	sanitized := stripEphemeralFactoryResponseFields(request)
+	sanitized := request
 	sanitized.Name = current.Name
 	sanitized.Version = nil
 	if err := validateEditableFactoryTopology(sanitized, s.workstationLoader()); err != nil {

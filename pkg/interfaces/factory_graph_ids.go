@@ -43,6 +43,56 @@ func CanonicalFactoryGraphEdgeID(kind, sourceNodeID, targetNodeID string) string
 	return kind + ":" + sourceNodeID + "->" + targetNodeID
 }
 
+func CanonicalBundledFileID(explicitID, targetPath string) string {
+	normalizedID := strings.TrimSpace(explicitID)
+	if normalizedID != "" {
+		return normalizedID
+	}
+	return targetPath
+}
+
+func CanonicalBundledFileGraphNodeKind(fileType string) string {
+	switch strings.TrimSpace(fileType) {
+	case BundledFileTypeDoc:
+		return "doc"
+	case BundledFileTypeScript:
+		return "script"
+	case BundledFileTypeInput:
+		return "input"
+	case BundledFileTypeRootHelper:
+		return "root-helper"
+	default:
+		return ""
+	}
+}
+
+func CanonicalBundledFileGraphNodeID(file BundledFileConfig) string {
+	kind := CanonicalBundledFileGraphNodeKind(file.Type)
+	if kind == "" {
+		return ""
+	}
+	id := CanonicalBundledFileID(file.ID, file.TargetPath)
+	if strings.TrimSpace(id) == "" {
+		return ""
+	}
+	return CanonicalFactoryGraphNodeID(kind, id)
+}
+
+func IsBundledFileGraphNodeID(nodeID string) bool {
+	switch {
+	case strings.HasPrefix(nodeID, "doc:"):
+		return true
+	case strings.HasPrefix(nodeID, "script:"):
+		return true
+	case strings.HasPrefix(nodeID, "input:"):
+		return true
+	case strings.HasPrefix(nodeID, "root-helper:"):
+		return true
+	default:
+		return false
+	}
+}
+
 // SupportedFactoryLayoutSchemaVersion is the only portable layout contract version
 // validated against pending factory graph topology.
 const SupportedFactoryLayoutSchemaVersion = 1
@@ -67,6 +117,11 @@ func BuildPendingFactoryGraphTopology(cfg *FactoryConfig) PendingFactoryGraphTop
 	}
 
 	index := buildFactoryGraphEntityIndex(cfg)
+	if cfg.ResourceManifest != nil {
+		for _, bundledFile := range cfg.ResourceManifest.BundledFiles {
+			addPendingBundledFileGraphNodes(&topology, bundledFile)
+		}
+	}
 	for _, resource := range cfg.Resources {
 		addPendingFactoryGraphNode(&topology, "resource", CanonicalFactoryGraphResourceID(resource))
 	}
@@ -107,6 +162,21 @@ func BuildPendingFactoryGraphTopology(cfg *FactoryConfig) PendingFactoryGraphTop
 		appendPendingWorkstationIOEdges(&topology, cfg.WorkTypes, "workstation-on-rejection", workstation.OnRejection, workstationNodeID, false)
 	}
 	return topology
+}
+
+func addPendingBundledFileGraphNodes(topology *PendingFactoryGraphTopology, bundledFile BundledFileConfig) {
+	if nodeID := CanonicalBundledFileGraphNodeID(bundledFile); nodeID != "" {
+		topology.NodeIDs[nodeID] = struct{}{}
+	}
+
+	// Older graph-editor drafts represented every bundled file as a doc node.
+	// Keep accepting those persisted layout references while canonical callers
+	// migrate SCRIPT, INPUT, and ROOT_HELPER files to their typed node kinds.
+	targetPath := strings.TrimSpace(bundledFile.TargetPath)
+	if bundledFile.Type == BundledFileTypeDoc || targetPath == "" {
+		return
+	}
+	topology.NodeIDs[CanonicalFactoryGraphNodeID("doc", targetPath)] = struct{}{}
 }
 
 type factoryGraphEntityIndex struct {

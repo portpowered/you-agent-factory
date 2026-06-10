@@ -531,9 +531,8 @@ type factorySplitLayoutReplaceHooks struct {
 // PreparedFactoryLayoutPayload holds normalized factory state produced once from
 // submitted JSON for split-layout validation and persist.
 type PreparedFactoryLayoutPayload struct {
-	Config         *interfaces.FactoryConfig
-	Canonical      []byte
-	LayoutOutcomes []factoryvalidation.Target
+	Config    *interfaces.FactoryConfig
+	Canonical []byte
 }
 
 // PrepareFactoryLayoutPayload normalizes factory JSON into expanded config (with
@@ -545,7 +544,7 @@ func PrepareFactoryLayoutPayload(segment string, payload []byte) (*PreparedFacto
 		return nil, err
 	}
 	topology := interfaces.BuildPendingFactoryGraphTopology(cfg)
-	layoutOutcomes := factoryvalidation.LayoutSaveOutcomes(cfg, topology)
+	factoryvalidation.PruneLayout(cfg, topology)
 	authoredFactoryCfg, err := authoredFactoryConfigForExpandedLayout(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("%w: normalize authored factory %q config: %w", ErrInvalidNamedFactory, segment, err)
@@ -556,9 +555,8 @@ func PrepareFactoryLayoutPayload(segment string, payload []byte) (*PreparedFacto
 		return nil, fmt.Errorf("%w: normalize factory %q config: %w", ErrInvalidNamedFactory, segment, err)
 	}
 	return &PreparedFactoryLayoutPayload{
-		Config:         cfg,
-		Canonical:      canonical,
-		LayoutOutcomes: layoutOutcomes.Targets,
+		Config:    cfg,
+		Canonical: canonical,
 	}, nil
 }
 

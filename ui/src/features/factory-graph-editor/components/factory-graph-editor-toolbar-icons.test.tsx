@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { FactoryGraphEditorToolbar } from "./controls/factory-graph-editor-controls";
 import {
   ConnectIcon,
+  DiscardIcon,
   RedoIcon,
   ResetLayoutIcon,
   SaveIcon,
@@ -22,11 +23,12 @@ describe("factory graph editor toolbar icons", () => {
         <RedoIcon />
         <ResetLayoutIcon />
         <SaveIcon />
+        <DiscardIcon />
       </>,
     );
 
     const icons = container.querySelectorAll("svg[aria-hidden='true']");
-    expect(icons.length).toBe(6);
+    expect(icons.length).toBe(7);
   });
 
   it("invokes layout history toolbar actions when enabled", async () => {

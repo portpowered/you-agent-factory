@@ -19,7 +19,9 @@ export interface WorkerDetailCardProps {
   onSaveConfiguration?: () => void;
   saveState?: EditableWorkerSaveState;
   widgetId?: string;
+  worker?: FactoryWorker | null;
   workerName: string;
+  workstationNames?: readonly string[] | null;
 }
 
 export type EditableWorkerSaveValidationErrors = {

@@ -15,6 +15,12 @@ import { validateFactoryGraphDraftStructural } from "./factory-graph-draft-valid
 
 const DEFAULT_RESOURCE_REQUIREMENT_CAPACITY = 1;
 
+type FactoryWorkstationIORoute =
+  | FactoryWorkstationIO
+  | FactoryWorkstationIO[]
+  | null
+  | undefined;
+
 export function buildPendingFactoryDefinition(
   baseFactoryDefinition: CanonicalFactoryDefinition,
   draft: FactoryGraphDraft,
@@ -274,7 +280,7 @@ function assignOptionalProperty<T extends object, K extends keyof T>(
 }
 
 function applyIOEdgeChanges(
-  baseItems: FactoryWorkstationIO[],
+  baseItems: FactoryWorkstationIORoute,
   draft: FactoryGraphDraft,
   workstation: FactoryGraphNodeReference,
   kind:
@@ -289,7 +295,7 @@ function applyIOEdgeChanges(
       .filter((edge) => edgeTouchesWorkstation(edge, workstation, kind))
       .map(edgeChangeId),
   );
-  const retained = baseItems.filter(
+  const retained = workstationIOEntries(baseItems).filter(
     (item) =>
       !removedEdgeIds.has(
         edgeChangeId(
@@ -309,7 +315,7 @@ function applyIOEdgeChanges(
 }
 
 function applyOptionalIOEdgeChanges(
-  baseItems: FactoryWorkstationIO[] | undefined,
+  baseItems: FactoryWorkstationIORoute,
   draft: FactoryGraphDraft,
   workstation: FactoryGraphNodeReference,
   kind:
@@ -325,6 +331,15 @@ function applyOptionalIOEdgeChanges(
     kind,
   );
   return nextItems.length > 0 ? nextItems : undefined;
+}
+
+function workstationIOEntries(
+  items: FactoryWorkstationIORoute,
+): FactoryWorkstationIO[] {
+  if (!items) {
+    return [];
+  }
+  return Array.isArray(items) ? items : [items];
 }
 
 function applyOptionalResourceEdgeChanges(

@@ -80,11 +80,12 @@ export type FactoryGraphReactFlowNode = Node<
 >;
 
 export type FactoryGraphReactFlowEdge = Edge<{
-  active: boolean;
-  alwaysShowLabel: boolean;
-  kind: FactoryGraphEdge["kind"];
-  label: string;
-  pendingStatus: "addition" | "none" | "removal";
+  active?: boolean;
+  alwaysShowLabel?: boolean;
+  factoryGraphEdgeId?: string;
+  kind?: FactoryGraphEdge["kind"];
+  label?: string;
+  pendingStatus?: "addition" | "none" | "removal";
   waypoints?: { x: number; y: number }[];
 }>;
 
@@ -130,6 +131,7 @@ export interface ProjectFactoryGraphToReactFlowOptions {
 }
 
 const COLUMN_BY_KIND: Record<FactoryGraphNodeKind, number> = {
+  doc: 5,
   resource: 0,
   worker: 1,
   workstation: 2,

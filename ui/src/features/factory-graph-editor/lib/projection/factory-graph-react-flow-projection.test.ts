@@ -21,11 +21,11 @@ import {
   systemTimeGraphNodeId,
 } from "../operations/factory-graph-customer-display";
 import { applyFactoryGraphPendingEdits } from "../operations/factory-graph-operations";
+import { projectFactoryGraphToReactFlow } from "../projection/factory-graph-react-flow-projection";
 import {
   decorateProjectedEdgesWithWaypoints,
   factoryGraphReactFlowEdgeIdentity,
 } from "./factory-graph-react-flow-edge-waypoint-projection";
-import { projectFactoryGraphToReactFlow } from "../projection/factory-graph-react-flow-projection";
 
 const FACTORY_GRAPH_EDITOR_EDGE_HOVER_CLASS =
   "agent-factory-editor-edge--hoverable";
@@ -126,6 +126,55 @@ describe("factory graph React Flow projection", () => {
       expect.arrayContaining([
         expect.objectContaining({
           id: "workstation-input:work-state:story:ready->workstation:draft",
+        }),
+      ]),
+    );
+  });
+
+  it("projects bundled source files as factory graph nodes", () => {
+    const factoryDefinition = {
+      ...baseFactoryDefinition,
+      supportingFiles: {
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Guide" },
+            targetPath: "factory/docs/guide.md",
+            type: "DOC",
+          },
+          {
+            content: { encoding: "utf-8", inline: "print('setup')" },
+            targetPath: "factory/scripts/setup-workspace.py",
+            type: "SCRIPT",
+          },
+        ],
+      },
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(factoryDefinition);
+
+    const projection = projectFactoryGraphToReactFlow({
+      factoryDefinition,
+      topology,
+    });
+
+    expect(projection.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          data: expect.objectContaining({
+            connectionAnchors: [],
+            kind: "doc",
+            kindLabel: "Doc",
+            label: "factory/docs/guide.md",
+          }),
+          id: "doc:factory/docs/guide.md",
+          type: "factoryEntity",
+        }),
+        expect.objectContaining({
+          data: expect.objectContaining({
+            connectionAnchors: [],
+            kind: "doc",
+            label: "factory/scripts/setup-workspace.py",
+          }),
+          id: "doc:factory/scripts/setup-workspace.py",
         }),
       ]),
     );
@@ -907,7 +956,6 @@ describe("factory graph React Flow projection waypoint semantics", () => {
 
     const decorated = decorateProjectedEdgesWithWaypoints({
       edges: baseline.edges,
-      editorMode: true,
       layout,
       selectedWaypointEdgeId: WAYPOINT_EDGE_ID,
     });
@@ -919,7 +967,9 @@ describe("factory graph React Flow projection waypoint semantics", () => {
       );
     }
 
-    const decoratedTarget = decorated.find((edge) => edge.id === WAYPOINT_EDGE_ID);
+    const decoratedTarget = decorated.find(
+      (edge) => edge.id === WAYPOINT_EDGE_ID,
+    );
     expect(decoratedTarget?.data?.waypoints).toEqual([
       { x: 120, y: 80 },
       { x: 180, y: 140 },
@@ -938,7 +988,6 @@ describe("factory graph React Flow projection waypoint semantics", () => {
     const generated = projectFactoryGraphToReactFlow({ topology });
     const authored = decorateProjectedEdgesWithWaypoints({
       edges: generated.edges,
-      editorMode: true,
       layout: setFactoryLayoutEdgeWaypoints(
         createDefaultFactoryLayout(),
         WAYPOINT_EDGE_ID,
@@ -959,12 +1008,9 @@ describe("factory graph React Flow projection waypoint semantics", () => {
       filterEdgesToRenderedHandles: true,
       topology,
     });
-    const nodesById = new Map(
-      projection.nodes.map((node) => [node.id, node]),
-    );
+    const nodesById = new Map(projection.nodes.map((node) => [node.id, node]));
     const decorated = decorateProjectedEdgesWithWaypoints({
       edges: projection.edges,
-      editorMode: true,
       layout: setFactoryLayoutEdgeWaypoints(
         createDefaultFactoryLayout(),
         WAYPOINT_EDGE_ID,
@@ -1001,12 +1047,36 @@ describe("factory graph React Flow projection waypoint semantics", () => {
     };
 
     const decorated = decorateProjectedEdgesWithWaypoints({
-      edges: [edgeWithoutData as (typeof edgeWithoutData & { data?: undefined })],
-      editorMode: true,
+      edges: [edgeWithoutData as typeof edgeWithoutData & { data?: undefined }],
       layout: createDefaultFactoryLayout(),
     });
 
     expect(decorated).toEqual([edgeWithoutData]);
+  });
+
+  it("decorates rendered edges through their canonical factory graph edge id", () => {
+    const renderedEdge = {
+      id: "workstation-resource:resource:story->workstation:draft",
+      source: "resource:story",
+      target: "workstation:draft",
+      data: {
+        factoryGraphEdgeId:
+          "workstation-input:work-state:story:queued->workstation:draft",
+      },
+    };
+    const layout = setFactoryLayoutEdgeWaypoints(
+      createDefaultFactoryLayout(),
+      "workstation-input:work-state:story:queued->workstation:draft",
+      [{ x: 200, y: 120 }],
+    );
+
+    const decorated = decorateProjectedEdgesWithWaypoints({
+      edges: [renderedEdge as never],
+      layout,
+    });
+
+    expect(decorated[0]?.type).toBe("factoryEditorEdge");
+    expect(decorated[0]?.data?.waypoints).toEqual([{ x: 200, y: 120 }]);
   });
 
   it("leaves graph topology unchanged through add, move, and remove waypoint layout operations", () => {
@@ -1033,7 +1103,6 @@ describe("factory graph React Flow projection waypoint semantics", () => {
 
     decorateProjectedEdgesWithWaypoints({
       edges: baseline.edges,
-      editorMode: true,
       layout,
     });
 
@@ -1077,7 +1146,9 @@ describe("factory graph React Flow projection waypoint semantics", () => {
       topology.edges.map((edge) => edge.id),
     );
     for (const edge of savedTopology.edges) {
-      const original = topology.edges.find((candidate) => candidate.id === edge.id);
+      const original = topology.edges.find(
+        (candidate) => candidate.id === edge.id,
+      );
       expect(edge).toMatchObject({
         id: original?.id,
         kind: original?.kind,

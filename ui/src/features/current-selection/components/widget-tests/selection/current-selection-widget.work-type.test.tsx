@@ -53,6 +53,7 @@ function buildCurrentSelection(
     canRedoSelection: false,
     canUndoSelection: false,
     completedWorkItems: [],
+    currentFactoryDefinition: null,
     failedWorkItems: [],
     openTerminalWorkDetail: () => undefined,
     redoSelection: () => undefined,
@@ -129,26 +130,26 @@ describe("CurrentSelectionWidget work-type selection", () => {
     resetSelectionHistoryStore();
   });
 
-  it("renders the work type detail card without empty-state guidance", () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(
-        buildEditableFactoryDefinition({
-          workTypes: [
-            {
-              name: "story",
-              states: [
-                { name: "queued", type: "INITIAL" },
-                { name: "done", type: "TERMINAL" },
-              ],
-            },
+  it("renders the work type detail card without empty-state guidance", async () => {
+    const currentFactoryDefinition = buildEditableFactoryDefinition({
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "queued", type: "INITIAL" },
+            { name: "done", type: "TERMINAL" },
           ],
-        }),
-      ),
+        },
+      ],
+    });
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(currentFactoryDefinition),
     );
 
     renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection({
+          currentFactoryDefinition,
           selectedWorkTypeName: "story",
           selection: { kind: "work-type", workTypeName: "story" },
         })}
@@ -167,40 +168,39 @@ describe("CurrentSelectionWidget work-type selection", () => {
       ),
     ).toBeNull();
     expect(
-      within(currentSelection)
-        .getByLabelText("Work type")
-        .getAttribute("value"),
+      (
+        await within(currentSelection).findByLabelText("Work type")
+      ).getAttribute("value"),
     ).toBe("story");
     expect(
       within(currentSelection).getByRole("heading", { name: "States" }),
     ).toBeTruthy();
     expect(within(currentSelection).getByText("queued")).toBeTruthy();
     expect(within(currentSelection).getByText("Initial")).toBeTruthy();
-    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(true);
   });
 
-  it("forwards work-state row navigation to selectWorkstation with the graph node id", () => {
+  it("forwards work-state row navigation to selectWorkstation with the graph node id", async () => {
     const selectWorkstation = vi.fn();
+    const currentFactoryDefinition = buildEditableFactoryDefinition({
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "queued", type: "INITIAL" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
+    });
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(
-        buildEditableFactoryDefinition({
-          workTypes: [
-            {
-              name: "story",
-              states: [
-                { name: "queued", type: "INITIAL" },
-                { name: "done", type: "TERMINAL" },
-              ],
-            },
-          ],
-        }),
-      ),
+      buildEditableDefinitionResult(currentFactoryDefinition),
     );
 
     renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection({
+          currentFactoryDefinition,
           selectedWorkTypeName: "story",
           selection: { kind: "work-type", workTypeName: "story" },
           selectWorkstation,
@@ -211,7 +211,7 @@ describe("CurrentSelectionWidget work-type selection", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", {
+      await screen.findByRole("button", {
         name: "Select queued state on factory graph",
       }),
     );

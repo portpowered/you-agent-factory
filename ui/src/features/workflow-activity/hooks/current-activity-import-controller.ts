@@ -1,5 +1,7 @@
 import { useCallback } from "react";
 
+import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
+import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { ImportFactoryValue } from "../../../api/session-factory";
 import {
   type FactoryImportActivationState,
@@ -35,6 +37,7 @@ export interface UseCurrentActivityImportControllerOptions {
   activateFactory?: (
     input: FactoryImportConfirmInput,
   ) => Promise<ImportFactoryValue>;
+  currentFactoryDefinition?: DashboardSnapshot["factory"] | null;
   locale?: string | null;
   onFactoryActivated?: () => void;
   onFactoryImportReady?: (value: FactoryPngImportValue, file: File) => void;
@@ -44,6 +47,7 @@ export interface UseCurrentActivityImportControllerOptions {
 
 export function useCurrentActivityImportController({
   activateFactory,
+  currentFactoryDefinition,
   locale,
   onFactoryActivated,
   onFactoryImportReady,
@@ -64,6 +68,8 @@ export function useCurrentActivityImportController({
   const { activateImport, activationState, clearActivationError } =
     useFactoryImportActivation({
       activateFactory,
+      currentFactoryDocument:
+        currentActivityImportDocumentFromFactory(currentFactoryDefinition),
       onActivated: handleFactoryActivated,
       sessionID,
     });
@@ -92,5 +98,29 @@ export function useCurrentActivityImportController({
     onDragLeave: drop.onDragLeave,
     onDragOver: drop.onDragOver,
     onDrop: drop.onDrop,
+  };
+}
+
+function currentActivityImportDocumentFromFactory(
+  factory: DashboardSnapshot["factory"] | null | undefined,
+): CurrentFactoryDocument | null {
+  const version = factory?.version;
+  if (
+    !factory ||
+    version == null ||
+    typeof version !== "object" ||
+    (typeof version.logical !== "string" &&
+      typeof version.logical !== "number") ||
+    typeof version.physical !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    ...factory,
+    version: {
+      logical: String(version.logical),
+      physical: version.physical,
+    },
   };
 }

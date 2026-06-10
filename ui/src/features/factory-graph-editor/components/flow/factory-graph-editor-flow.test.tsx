@@ -418,16 +418,17 @@ describe("factory graph editor work state lifecycle styling", () => {
       factoryDefinition: lifecycleFactoryDefinition,
     });
 
-    const expectSurface = async (title: string, borderClass: string) => {
+    const expectSurface = async (title: string) => {
       const node = (await screen.findByTitle(title)).closest("article");
       expect(node).not.toBeNull();
-      expect(node?.className).toContain(borderClass);
+      expect(node?.className).toContain("border-info-border");
+      expect(node?.className).toContain("bg-info-container");
     };
 
-    await expectSurface("story:queued", "border-info-border");
-    await expectSurface("story:review", "border-af-warning-border");
-    await expectSurface("story:done", "border-af-success-border");
-    await expectSurface("story:failed", "border-af-danger-border");
+    await expectSurface("story:queued");
+    await expectSurface("story:review");
+    await expectSurface("story:done");
+    await expectSurface("story:failed");
   });
 
   it("keeps non-work-state nodes on existing kind styling", async () => {
@@ -446,8 +447,8 @@ describe("factory graph editor work state lifecycle styling", () => {
     const queuedNode = (await screen.findByTitle("story:queued")).closest(
       "article",
     );
-    expect(queuedNode?.className).toContain("border-outline-variant");
-    expect(queuedNode?.className).toContain("bg-surface-container-high");
+    expect(queuedNode?.className).toContain("border-info-border");
+    expect(queuedNode?.className).toContain("bg-info-container");
   });
 
   it("keeps draft addition and removal treatments visible on phase-colored nodes", async () => {

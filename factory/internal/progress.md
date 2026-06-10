@@ -1,23 +1,52 @@
 # Repository Maintainer Progress
 
-This file is the canonical checked-in progress log for the repository
-maintainer workflow.
+Append-only local progress log (gitignored).
 
-Keep iteration notes here when the checked-in maintainer loop updates its own
-control surface.
+## 2026-06-10 UTC — meta-agent cycle
 
-## Dynamic Workflows v0 — Batch 001 closeout (2026-06-09 UTC)
+### Workspace sync
 
-Reviewed merged Batch 001 contract-kernel work in PRs **#767**, **#771**,
-**#772**, **#773**, and **#776**. Published the operator planning record in
-`docs/temp/dynamic-workflows-plan.md` with program overview, PR-linked
-completion checklist, cross-surface contract gap inventory, and Batch 002
-go/no-go recommendation.
+- `git pull` on `manual-fixes-0`: already up to date with
+  `origin/manual-fixes-0` (branch ahead by 8 commits). Unstaged local work
+  preserved.
+- Recreated gitignored `factory/internal/{view,meta,progress,asks}.md` after
+  local deletion.
 
-**Outcome:** **No-go** for immediate Batch 002 fake-session skeleton work.
-Schedule a focused **contract-repair batch** first to close blocking
-cross-surface mismatches (B1–B12 in the plan doc), then re-evaluate **Go** for
-Batch 002 skeleton handler/CLI/MCP/UI wiring.
+### Factory runtime
 
-Full checklist, gap inventory, blocking table, and re-entry criteria:
-`docs/temp/dynamic-workflows-plan.md`.
+- Global `you` failed to load `factory/factory.json` (`layout.nodes[0].size is
+  required`) — stale binary predating layout `size` optional fix on branch.
+- Rebuilt with `make build`; started `./bin/you run --continuously --dir
+  factory` successfully on port 7437.
+
+### Queue inspection
+
+- `you work list` was empty before submission.
+
+### Dispatched work
+
+Submitted standalone cleanup idea:
+
+```text
+exhaustion-rule-contract-guard-meta-test-retirement (idea)
+traceId: trace-854d7e75a2cc8a2d1a470e38c5fa5a73
+workId: batch-request-d6c62edc00ba06a713a77c54cc31a3bf-exhaustion-rule-contract-guard-meta-test-retirement
+```
+
+Retires `pkg/config/exhaustiontests/exhaustion_rule_contract_guard_test.go` AST
+inventory guard; relies on existing behavioral exhaustion_rules boundary tests.
+
+Does **not** overlap open PRs #784–#789 (other meta-test retirements) or
+manual-fixes-0 graph-editor files.
+
+### Meta view updates
+
+- Documented manual-fixes-0 factory topology (`though-retrigger`, review flow,
+  cleaner removal).
+- Noted stale global `you` vs `./bin/you` on this branch.
+- Reaffirmed Dynamic Workflows v0 contract-repair-before-skeleton posture per
+  `docs/internal/development/plans/dynamic-workflows/dynamic-workflows-plan.md`.
+
+### Customer asks
+
+- None active; no action taken.

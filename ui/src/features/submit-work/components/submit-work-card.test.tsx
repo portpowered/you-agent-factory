@@ -1,4 +1,3 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: submit-work card field, status, and textarea coverage stay together for one render helper.
 import "@testing-library/jest-dom/vitest";
 import {
   cleanup,

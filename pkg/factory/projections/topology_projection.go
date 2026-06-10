@@ -21,14 +21,17 @@ func ProjectInitialStructure(net *state.Net, runtimeConfigs ...interfaces.Runtim
 	}
 	runtimeConfig := interfaces.FirstRuntimeDefinitionLookup(runtimeConfigs...)
 	return interfaces.InitialStructurePayload{
-		Name:         runtimeFactoryName(runtimeConfig),
-		Resources:    factoryResources(net.Resources),
-		Constraints:  factoryConstraints(net, runtimeConfig),
-		Workers:      factoryWorkers(net.Transitions, runtimeConfig),
-		WorkTypes:    factoryWorkTypes(net.WorkTypes),
-		Workstations: factoryWorkstations(net.Transitions, runtimeConfig),
-		Places:       factoryPlaces(net.Places, net),
-		Relations:    topologyRelations(net.Transitions),
+		Name:             runtimeFactoryName(runtimeConfig),
+		Version:          runtimeFactoryVersion(runtimeConfig),
+		Resources:        factoryResources(net.Resources),
+		ResourceManifest: runtimeFactoryResourceManifest(runtimeConfig),
+		Constraints:      factoryConstraints(net, runtimeConfig),
+		Layout:           runtimeFactoryLayout(runtimeConfig),
+		Workers:          factoryWorkers(net.Transitions, runtimeConfig),
+		WorkTypes:        factoryWorkTypes(net.WorkTypes),
+		Workstations:     factoryWorkstations(net.Transitions, runtimeConfig),
+		Places:           factoryPlaces(net.Places, net),
+		Relations:        topologyRelations(net.Transitions),
 	}
 }
 
@@ -38,6 +41,42 @@ func runtimeFactoryName(runtimeConfig interfaces.RuntimeDefinitionLookup) string
 		return ""
 	}
 	return reader.FactoryConfig().Name
+}
+
+func runtimeFactoryVersion(runtimeConfig interfaces.RuntimeDefinitionLookup) *interfaces.FactoryVersion {
+	reader, ok := runtimeConfig.(interfaces.RuntimeFactoryConfigLookup)
+	if !ok || reader.FactoryConfig() == nil || reader.FactoryConfig().Version == nil {
+		return nil
+	}
+	cloned, err := config.CloneFactoryConfig(reader.FactoryConfig())
+	if err != nil || cloned == nil {
+		return nil
+	}
+	return cloned.Version
+}
+
+func runtimeFactoryResourceManifest(runtimeConfig interfaces.RuntimeDefinitionLookup) *interfaces.PortableResourceManifestConfig {
+	reader, ok := runtimeConfig.(interfaces.RuntimeFactoryConfigLookup)
+	if !ok || reader.FactoryConfig() == nil || reader.FactoryConfig().ResourceManifest == nil {
+		return nil
+	}
+	cloned, err := config.CloneFactoryConfig(reader.FactoryConfig())
+	if err != nil || cloned == nil {
+		return nil
+	}
+	return cloned.ResourceManifest
+}
+
+func runtimeFactoryLayout(runtimeConfig interfaces.RuntimeDefinitionLookup) *interfaces.FactoryLayoutConfig {
+	reader, ok := runtimeConfig.(interfaces.RuntimeFactoryConfigLookup)
+	if !ok || reader.FactoryConfig() == nil || reader.FactoryConfig().Layout == nil {
+		return nil
+	}
+	cloned, err := config.CloneFactoryConfig(reader.FactoryConfig())
+	if err != nil || cloned == nil {
+		return nil
+	}
+	return cloned.Layout
 }
 
 func factoryResources(resources map[string]*state.ResourceDef) []interfaces.FactoryResource {

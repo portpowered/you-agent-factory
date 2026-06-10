@@ -8,6 +8,15 @@ import {
 export const maintainerRuntimeShapedFactory = {
   name: "maintainer-runtime-factory",
   resources: [{ capacity: 10, name: "executor-slot" }],
+  supportingFiles: {
+    bundledFiles: [
+      {
+        content: { encoding: "utf-8", inline: "# Maintainer notes" },
+        targetPath: "factory/docs/maintainer.md",
+        type: "DOC",
+      },
+    ],
+  },
   workers: [{ name: "processor" }, { name: "workspace-setup" }],
   workTypes: [
     {

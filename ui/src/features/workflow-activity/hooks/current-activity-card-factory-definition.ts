@@ -1,86 +1,153 @@
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
-import { preserveExistingBundledFilesWhenAbsent } from "../../../api/factory-definition";
-import type { FactoryTimelineMode } from "../../timeline/state/factoryTimelineStore";
-import { resolveObserveModeFactoryDefinition } from "./observe-mode-factory-definition";
-import type { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
+import {
+  preserveExistingBundledFilesWhenAbsent,
+  preserveExistingLayoutWhenAbsent,
+} from "../../../api/factory-definition";
+
+type CurrentActivityFactoryDefinition = NonNullable<
+  DashboardSnapshot["factory"]
+>;
+type CurrentActivityFactoryDocumentStatus = "error" | "pending" | "success";
+
+export interface CurrentActivityFactoryGraphSource {
+  baseFactoryDocument?: DashboardSnapshot["factory"] | null;
+  editableFactoryDocument?: DashboardSnapshot["factory"] | null;
+  editableFactoryDocumentStatus?: CurrentActivityFactoryDocumentStatus;
+  editorMode: boolean;
+  latestFactoryDocument?: DashboardSnapshot["factory"] | null;
+  pendingFactoryDefinition?: DashboardSnapshot["factory"] | null;
+}
+
+function observeModeSavedFactoryDocument(
+  source: CurrentActivityFactoryGraphSource,
+) {
+  return (
+    source.editableFactoryDocument ??
+    source.latestFactoryDocument ??
+    source.baseFactoryDocument ??
+    undefined
+  );
+}
+
+function _currentActivityCardSavedFactoryDocument(
+  source: CurrentActivityFactoryGraphSource,
+): DashboardSnapshot["factory"] | null {
+  return observeModeSavedFactoryDocument(source) ?? null;
+}
+
+export function currentActivityCardPendingFactoryDefinition(
+  source: CurrentActivityFactoryGraphSource,
+): DashboardSnapshot["factory"] | null {
+  return source.pendingFactoryDefinition ?? null;
+}
+
+function _currentActivityCardBaseFactoryDocument(
+  source: CurrentActivityFactoryGraphSource,
+): DashboardSnapshot["factory"] | null {
+  return (
+    source.baseFactoryDocument ??
+    observeModeSavedFactoryDocument(source) ??
+    null
+  );
+}
+
+export function currentActivityCardCurrentFactoryDefinition(
+  source: CurrentActivityFactoryGraphSource,
+): DashboardSnapshot["factory"] | null {
+  return (
+    source.pendingFactoryDefinition ??
+    source.latestFactoryDocument ??
+    source.baseFactoryDocument ??
+    null
+  );
+}
 
 function observeModeFactoryWithBundledDocs(
   factory: DashboardSnapshot["factory"] | null | undefined,
-  document: ReturnType<
-    typeof useCurrentActivityGraphEditor
-  >["editableDefinitionQuery"]["data"],
+  document: DashboardSnapshot["factory"] | null | undefined,
 ) {
   if (!document) {
     return factory ?? undefined;
   }
 
-  return preserveExistingBundledFilesWhenAbsent(factory ?? document, document);
+  return preserveObserverModeFactoryMetadata({
+    documentFactory: document,
+    incoming: factory ?? document,
+    snapshotFactory: factory,
+  });
+}
+
+function preserveObserverModeFactoryMetadata({
+  documentFactory,
+  incoming,
+  snapshotFactory,
+}: {
+  documentFactory: DashboardSnapshot["factory"] | null | undefined;
+  incoming: CurrentActivityFactoryDefinition;
+  snapshotFactory: DashboardSnapshot["factory"] | null | undefined;
+}) {
+  return preserveExistingBundledFilesWhenAbsent(
+    preserveExistingLayoutWhenAbsent(incoming, snapshotFactory),
+    documentFactory,
+  );
 }
 
 function observeModeFactoryDefinition(
-  editor: ReturnType<typeof useCurrentActivityGraphEditor>,
+  source: CurrentActivityFactoryGraphSource,
   snapshot: DashboardSnapshot,
-  timelineMode: FactoryTimelineMode,
 ): DashboardSnapshot["factory"] | undefined {
-  const document = editor.editableDefinitionQuery?.data;
-  if (!document) {
-    return snapshot.factory;
+  const document = observeModeSavedFactoryDocument(source);
+  const eventComputedFactory = snapshot.factory ?? document;
+  if (!eventComputedFactory) {
+    return undefined;
   }
 
-  const resolvedFactory = resolveObserveModeFactoryDefinition({
-    document,
+  return preserveObserverModeFactoryMetadata({
+    documentFactory: document,
+    incoming: eventComputedFactory,
     snapshotFactory: snapshot.factory,
-    timelineMode,
   });
-
-  return preserveExistingBundledFilesWhenAbsent(resolvedFactory, document);
 }
 
 function editorModeFactoryDefinition(
-  editor: ReturnType<typeof useCurrentActivityGraphEditor>,
+  source: CurrentActivityFactoryGraphSource,
 ) {
-  return (
-    editor.draftState.pendingFactoryDefinition ??
-    editor.draftState.latestDocument ??
-    editor.draftState.baseDocument ??
-    undefined
-  );
+  return currentActivityCardCurrentFactoryDefinition(source) ?? undefined;
 }
 
 export function currentActivityCardFactoryDefinition(
-  editor: ReturnType<typeof useCurrentActivityGraphEditor>,
+  source: CurrentActivityFactoryGraphSource,
   snapshot: DashboardSnapshot,
-  timelineMode: FactoryTimelineMode,
 ): DashboardSnapshot["factory"] | null | undefined {
-  if (!editor.editorMode) {
-    const document = editor.editableDefinitionQuery?.data;
-    if (editor.editableDefinitionQuery?.status !== "success") {
-      return observeModeFactoryWithBundledDocs(snapshot.factory, document) ?? null;
+  if (!source.editorMode) {
+    const document = observeModeSavedFactoryDocument(source);
+    if (!document) {
+      return (
+        observeModeFactoryWithBundledDocs(snapshot.factory, document) ?? null
+      );
     }
 
-    return observeModeFactoryDefinition(editor, snapshot, timelineMode);
+    return observeModeFactoryDefinition(source, snapshot);
   }
 
-  if (editor.editableDefinitionQuery?.status !== "success") {
+  if (source.editableFactoryDocumentStatus !== "success") {
     return null;
   }
 
-  return editorModeFactoryDefinition(editor) ?? null;
+  return editorModeFactoryDefinition(source) ?? null;
 }
 
 export function currentActivityCardDisplayFactoryDefinition(
-  editor: ReturnType<typeof useCurrentActivityGraphEditor>,
+  source: CurrentActivityFactoryGraphSource,
   snapshot: DashboardSnapshot,
-  timelineMode: FactoryTimelineMode,
 ): DashboardSnapshot["factory"] | null | undefined {
-  const document = editor.editableDefinitionQuery?.data;
+  const document = observeModeSavedFactoryDocument(source);
   const resolvedFactory = currentActivityCardFactoryDefinition(
-    editor,
+    source,
     snapshot,
-    timelineMode,
   );
 
-  if (editor.editorMode) {
+  if (source.editorMode) {
     return resolvedFactory ?? undefined;
   }
 

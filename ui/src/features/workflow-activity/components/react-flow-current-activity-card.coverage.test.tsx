@@ -21,11 +21,9 @@ import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/h
 import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import { useFactoryGraphConnectionController } from "../hooks/react-flow-current-activity-card-editor-connections";
-import {
-  type CurrentActivitySelection,
-  ReactFlowCurrentActivityCard,
-  useCurrentActivityGraphViewModel,
-} from "./react-flow-current-activity-card";
+import { useCurrentActivityGraphViewModel } from "../hooks/react-flow-current-activity-card-graph-view-model";
+import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
+import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 type BuildGraphLayout = (
@@ -36,7 +34,6 @@ const {
   actualBuildGraphLayoutRef,
   mockBuildGraphLayout,
   mockImportController,
-  mockSetStoredNodePosition,
 } = vi.hoisted(() => ({
   actualBuildGraphLayoutRef: { current: null as BuildGraphLayout | null },
   mockBuildGraphLayout: vi.fn(),
@@ -53,7 +50,6 @@ const {
     onDragOver: vi.fn(),
     onDrop: vi.fn(),
   },
-  mockSetStoredNodePosition: vi.fn(),
 }));
 
 vi.mock("@xyflow/react", async () => {
@@ -88,6 +84,7 @@ vi.mock("@xyflow/react", async () => {
       connectionLineStyle,
       edgesFocusable,
       isValidConnection,
+      nodes,
       onConnect,
       onEdgeClick,
       onNodeClick,
@@ -108,79 +105,96 @@ vi.mock("@xyflow/react", async () => {
         target?: string | null;
         targetHandle?: string | null;
       }) => void;
+      nodes?: Array<{
+        data?: Record<string, unknown>;
+        id: string;
+        position: { x: number; y: number };
+      }>;
       onEdgeClick?: (_event: unknown, edge: { id: string }) => void;
       onNodeClick?: (_event: unknown, node: { id: string }) => void;
       onNodeDragStop?: (
         _event: unknown,
-        node: { id: string; position: { x: number; y: number } },
+        node: {
+          data?: Record<string, unknown>;
+          id: string;
+          position: { x: number; y: number };
+        },
       ) => void;
-    }) => (
-      <div data-testid="mock-react-flow">
-        <output data-testid="edges-focusable">
-          {String(edgesFocusable ?? false)}
-        </output>
-        <output data-testid="connection-line-style">
-          {JSON.stringify(connectionLineStyle ?? null)}
-        </output>
-        <output data-testid="valid-workstation-output">
-          {String(
-            isValidConnection?.({
-              source: "workstation:review",
-              sourceHandle: "workstation-output-source",
-              target: "work-state:story:done",
-              targetHandle: "work-state-input-target",
-            }) ?? false,
-          )}
-        </output>
-        <output data-testid="invalid-workstation-output">
-          {String(
-            isValidConnection?.({
-              source: "workstation:review",
-              sourceHandle: "workstation-output-source",
-              target: "work-state:story:done",
-              targetHandle: "workstation-input-source",
-            }) ?? false,
-          )}
-        </output>
-        <button
-          onClick={() =>
-            onConnect?.({
-              source: "workstation:review",
-              sourceHandle: "workstation-output-source",
-              target: "work-state:story:done",
-              targetHandle: "work-state-input-target",
-            })
-          }
-          type="button"
-        >
-          Trigger connect
-        </button>
-        <button
-          onClick={() => onEdgeClick?.(null, { id: "edge-review-done" })}
-          type="button"
-        >
-          Trigger edge click
-        </button>
-        <button
-          onClick={() => onNodeClick?.(null, { id: "workstation:review" })}
-          type="button"
-        >
-          Trigger node click
-        </button>
-        <button
-          onClick={() =>
-            onNodeDragStop?.(null, {
-              id: "review",
-              position: { x: 320, y: 180 },
-            })
-          }
-          type="button"
-        >
-          Trigger drag stop
-        </button>
-        {children}
-      </div>
-    ),
+    }) => {
+      const draggedNode = nodes?.[0] ?? {
+        data: { factoryGraphNodeId: "workstation:review" },
+        id: "workstation:review",
+        position: { x: 0, y: 0 },
+      };
+
+      return (
+        <div data-testid="mock-react-flow">
+          <output data-testid="edges-focusable">
+            {String(edgesFocusable ?? false)}
+          </output>
+          <output data-testid="connection-line-style">
+            {JSON.stringify(connectionLineStyle ?? null)}
+          </output>
+          <output data-testid="valid-workstation-output">
+            {String(
+              isValidConnection?.({
+                source: "workstation:review",
+                sourceHandle: "workstation-output-source",
+                target: "work-state:story:done",
+                targetHandle: "work-state-input-target",
+              }) ?? false,
+            )}
+          </output>
+          <output data-testid="invalid-workstation-output">
+            {String(
+              isValidConnection?.({
+                source: "workstation:review",
+                sourceHandle: "workstation-output-source",
+                target: "work-state:story:done",
+                targetHandle: "workstation-input-source",
+              }) ?? false,
+            )}
+          </output>
+          <button
+            onClick={() =>
+              onConnect?.({
+                source: "workstation:review",
+                sourceHandle: "workstation-output-source",
+                target: "work-state:story:done",
+                targetHandle: "work-state-input-target",
+              })
+            }
+            type="button"
+          >
+            Trigger connect
+          </button>
+          <button
+            onClick={() => onEdgeClick?.(null, { id: "edge-review-done" })}
+            type="button"
+          >
+            Trigger edge click
+          </button>
+          <button
+            onClick={() => onNodeClick?.(null, { id: "workstation:review" })}
+            type="button"
+          >
+            Trigger node click
+          </button>
+          <button
+            onClick={() =>
+              onNodeDragStop?.(null, {
+                ...draggedNode,
+                position: { x: 320, y: 180 },
+              })
+            }
+            type="button"
+          >
+            Trigger drag stop
+          </button>
+          {children}
+        </div>
+      );
+    },
   };
 });
 
@@ -330,7 +344,7 @@ function createProps(
     onSelectStateNode: vi.fn(),
     onSelectWorkID: vi.fn(),
     onSelectDoc: vi.fn(),
-      onSelectResource: vi.fn(),
+    onSelectResource: vi.fn(),
     onSelectWorker: vi.fn(),
     onSelectWorkType: vi.fn(),
     onSelectWorkstation: vi.fn(),
@@ -347,7 +361,6 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
 
   beforeEach(() => {
     mockBuildGraphLayout.mockReset();
-    mockSetStoredNodePosition.mockReset();
     HTMLElement.prototype.getBoundingClientRect = () =>
       ({
         bottom: 720,
@@ -436,22 +449,28 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
       canInteractWithEditor: false,
       draftState: defaultDraftState,
       editorMode: false,
+      graphProjection: {
+        canonicalLayoutViewport: null,
+        displayFactoryDefinition: null,
+        graphLayout: { edges: [], height: 0, nodes: [], width: 0 },
+        pendingAdditionEdgeIds: new Set<string>(),
+        positionedGraphLayout: { edges: [], height: 0, nodes: [], width: 0 },
+        visibleGraphEdges: [],
+      },
       handleConnectionAnchorClick: vi.fn(),
       pendingConnectionSource: null,
-      structuralValidation: {
-        projection: {
-          handleErrorsByAnchorId: new Map(),
-          nodeErrorsByNodeId: new Map(),
-        },
-        targets: [],
-      },
+      validationTargets: [],
     };
     const { result } = renderHook(() =>
       useCurrentActivityGraphViewModel({
         editor: editor as never,
         now: Date.parse("2026-04-08T12:00:00Z"),
+        onSelectDoc: vi.fn(),
+        onSelectResource: vi.fn(),
         onSelectStateNode,
         onSelectWorkID,
+        onSelectWorker: vi.fn(),
+        onSelectWorkType: vi.fn(),
         onSelectWorkstation,
         selection: null,
         snapshot,
@@ -463,23 +482,35 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
       expect(result.current.edges).toHaveLength(0);
     });
   });
-  it("persists node positions after drag-stop when the viewport provides a graph key", () => {
-    renderViewport({ graphKey: "graph-key" });
+  it("routes node drag-stop through the canonical layout move command", () => {
+    const moveLayoutNode = vi.fn();
+
+    renderViewport({
+      editorMode: true,
+      moveLayoutNode,
+      nodes: [
+        {
+          data: {
+            factoryGraphNodeId: "workstation:review",
+            kind: "workstation",
+          },
+          id: "workstation:review",
+          position: { x: 0, y: 0 },
+          type: "workstation",
+        },
+      ],
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Trigger drag stop" }));
 
-    expect(mockSetStoredNodePosition).toHaveBeenCalledWith(
-      "graph-key",
-      "review",
-      {
-        x: 320,
-        y: 180,
-      },
-    );
+    expect(moveLayoutNode).toHaveBeenCalledWith("workstation:review", {
+      x: 320,
+      y: 180,
+    });
   });
 
   it("renders the factory graph inside the shared dashboard graph frame", () => {
-    renderViewport({ graphKey: "graph-key" });
+    renderViewport({});
 
     const graphFrame = screen.getByRole("region", {
       name: "Work graph viewport",
@@ -519,7 +550,6 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     renderViewport({
       addMenuActions: [{ id: "workstation", label: "Workstation" }],
       editorMode: true,
-      graphKey: "graph-key",
       onAddAction: vi.fn(),
     });
 
@@ -531,19 +561,33 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
       within(toolbar).getAllByRole("button", { name: "Add" }),
     ).toHaveLength(1);
     expect(
-      within(toolbar).getByRole("button", { name: "Connect" }),
-    ).toBeTruthy();
-    expect(
       within(toolbar).getByRole("button", { name: "Delete" }),
     ).toBeTruthy();
   });
 
-  it("skips node-position persistence when the viewport has no graph key", () => {
-    renderViewport({ graphKey: "" });
+  it("skips node-position persistence when no canonical layout move command is available", () => {
+    const moveLayoutNode = vi.fn();
+
+    renderViewport({
+      editorMode: true,
+      includeMoveLayoutNode: false,
+      moveLayoutNode,
+      nodes: [
+        {
+          data: {
+            factoryGraphNodeId: "workstation:review",
+            kind: "workstation",
+          },
+          id: "workstation:review",
+          position: { x: 0, y: 0 },
+          type: "workstation",
+        },
+      ],
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Trigger drag stop" }));
 
-    expect(mockSetStoredNodePosition).not.toHaveBeenCalled();
+    expect(moveLayoutNode).not.toHaveBeenCalled();
   });
 
   it("routes editor-mode graph viewport connection and selection callbacks", () => {
@@ -552,9 +596,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     const onEditorNodeClick = vi.fn();
 
     renderViewport({
-      activeTool: "connect",
       editorMode: true,
-      graphKey: "graph-key",
       nodes: [
         {
           data: { kind: "workstation" },
@@ -597,9 +639,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
 
   it("rejects editor connections when the target node cannot be found", () => {
     renderViewport({
-      activeTool: "connect",
       editorMode: true,
-      graphKey: "graph-key",
       nodes: [
         {
           data: { kind: "workstation" },
@@ -617,9 +657,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
 
   it("rejects editor connections when a participating node omits its graph kind", () => {
     renderViewport({
-      activeTool: "connect",
       editorMode: true,
-      graphKey: "graph-key",
       nodes: [
         {
           data: {},
@@ -643,9 +681,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
 
   it("keeps editor edges focusable outside delete mode so hidden labels stay reachable", () => {
     renderViewport({
-      activeTool: "connect",
       editorMode: true,
-      graphKey: "graph-key",
       nodes: [
         {
           data: { kind: "workstation" },
@@ -673,7 +709,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     const editableGraph = createConnectionEditableGraph({ connectNodes });
     const { result } = renderHook(() =>
       useFactoryGraphConnectionController({
-        activeTool: "connect",
+        activeTool: null,
         canInteractWithEditor: true,
         draftState: createConnectionDraftState(),
         editableGraph,
@@ -735,7 +771,7 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
     });
     expect(connectNodes).not.toHaveBeenCalled();
 
-    rerender({ activeTool: "connect", canInteractWithEditor: true });
+    rerender({ activeTool: null, canInteractWithEditor: true });
     act(() => {
       result.current.handleConnectionAnchorClick({
         anchorId: "work-state-input-target",
@@ -798,7 +834,8 @@ function renderViewport({
   activeTool = null,
   addMenuActions,
   editorMode = false,
-  graphKey,
+  includeMoveLayoutNode = true,
+  moveLayoutNode = vi.fn(),
   nodes = [],
   onAddAction,
   onConnect,
@@ -808,13 +845,16 @@ function renderViewport({
   activeTool?: "add" | "connect" | "delete" | null;
   addMenuActions?: Parameters<
     typeof CurrentActivityGraphViewport
-  >[0]["addMenuActions"];
+  >[0]["addControls"]["actions"];
   editorMode?: boolean;
-  graphKey: string;
+  includeMoveLayoutNode?: boolean;
+  moveLayoutNode?: Parameters<
+    typeof CurrentActivityGraphViewport
+  >[0]["layoutControls"]["moveNode"];
   nodes?: Parameters<typeof CurrentActivityGraphViewport>[0]["nodes"];
   onAddAction?: Parameters<
     typeof CurrentActivityGraphViewport
-  >[0]["onAddAction"];
+  >[0]["addControls"]["startAction"];
   onConnect?: Parameters<typeof CurrentActivityGraphViewport>[0]["onConnect"];
   onEditorEdgeClick?: Parameters<
     typeof CurrentActivityGraphViewport
@@ -827,38 +867,55 @@ function renderViewport({
 
   return render(
     <CurrentActivityGraphViewport
-      activeTool={activeTool}
-      addMenuActions={addMenuActions}
-      canInteractWithEditor={editorMode}
-      canSaveDraft={false}
-      editorMode={editorMode}
+      addControls={{
+        actions: addMenuActions,
+        isMenuOpen: false,
+        setMenuOpen: vi.fn(),
+        startAction: onAddAction,
+      }}
+      editorControls={{
+        activeTool,
+        canInteract: editorMode,
+        discardPendingChanges: vi.fn(),
+        isEditing: editorMode,
+        selectTool: vi.fn(),
+        toggleMode: vi.fn(),
+      }}
       edges={[]}
       flowContainerRef={flowContainerRef}
-      graphKey={graphKey}
-      handleDiscardPendingChanges={vi.fn()}
       handleNodesChange={vi.fn()}
-      handleSaveDraft={vi.fn()}
       hasPendingChanges={false}
       headingID="test-heading"
-      hiddenNodeClasses={new Set()}
-      hideShowMenuOpen={false}
-      onClearPreferences={vi.fn()}
-      onSelectVisibilityPreset={vi.fn()}
-      preferencesDirty={false}
-      visibilityPreset="all"
+      layoutControls={{
+        canMoveLayout: includeMoveLayoutNode,
+        canRedo: false,
+        canUndo: false,
+        initialFitViewKey: "full-graph",
+        initialFitViewOptions: { padding: 0.18 },
+        moveNode: moveLayoutNode,
+        moveNodesByDelta: vi.fn(),
+        redo: vi.fn(),
+        reset: vi.fn(),
+        undo: vi.fn(),
+        updateViewport: vi.fn(),
+      }}
       imports={mockImportController}
-      initialFitViewKey="full-graph"
-      initialFitViewOptions={{ padding: 0.18 }}
       nodeTypes={{}}
       nodes={nodes}
-      onAddAction={onAddAction}
       onConnect={onConnect}
       onEditorEdgeClick={onEditorEdgeClick}
       onEditorNodeClick={onEditorNodeClick}
-      onHideShowMenuOpenChange={vi.fn()}
-      onToggleHiddenNodeClass={vi.fn()}
-      onSelectTool={vi.fn()}
-      setStoredNodePosition={mockSetStoredNodePosition}
+      saveControls={{ canSave: false, requestConfirmation: vi.fn() }}
+      visibilityControls={{
+        hiddenNodeClasses: new Set(),
+        isDirty: false,
+        isMenuOpen: false,
+        preset: "all",
+        resetPreferences: vi.fn(),
+        setMenuOpen: vi.fn(),
+        setPreset: vi.fn(),
+        toggleHiddenNodeClass: vi.fn(),
+      }}
     />,
   );
 }

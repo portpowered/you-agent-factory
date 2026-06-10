@@ -7,6 +7,7 @@ import {
   workStatePhaseSemanticIconClassName,
   workStatePhaseSurfaceClassName,
 } from "../../factory-graph-editor/lib/work-state/factory-graph-work-state-phase-styling";
+import { activityGraphNodeSurfaceClassName } from "./current-activity-node-chrome";
 import type { StatePositionNodeData } from "./current-activity-place-node";
 import { StatePositionNodeView } from "./current-activity-place-node";
 
@@ -109,10 +110,10 @@ describe("CurrentActivity place node work-state phase styling", () => {
     );
 
     expect(shell?.className).toContain(
-      "af-current-activity-node-surface-resource",
+      activityGraphNodeSurfaceClassName("resource"),
     );
     expect(shell?.className).not.toContain(
-      "af-current-activity-node-surface-info",
+      activityGraphNodeSurfaceClassName("info"),
     );
   });
 

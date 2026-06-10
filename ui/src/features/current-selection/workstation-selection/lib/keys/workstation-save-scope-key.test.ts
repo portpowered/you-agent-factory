@@ -35,5 +35,6 @@ describe("workstation save scope key", () => {
 
   it("returns null for malformed scope keys", () => {
     expect(parseWorkstationSaveScopeKey("review-only")).toBeNull();
+    expect(parseWorkstationSaveScopeKey("review:transition-only")).toBeNull();
   });
 });

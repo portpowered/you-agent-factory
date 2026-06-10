@@ -249,9 +249,96 @@ describe("useEditableFactoryGraph document plane scope isolation", () => {
   });
 });
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: document-plane save regressions share one hook harness.
 describe("useEditableFactoryGraph document plane persist", () => {
   beforeEach(() => {
     setupEditableFactoryGraphSaveTestEnvironment();
+  });
+
+  it("keeps deleted factory-change resource nodes removed immediately after save", async () => {
+    const resourceFactory: CurrentFactoryDocument = {
+      name: "Factory Stream Delete",
+      resources: [
+        {
+          capacity: 1,
+          name: "rge",
+        },
+        {
+          capacity: 1,
+          name: "asdasd",
+        },
+      ],
+      version: {
+        logical: "9",
+        physical: "2026-06-10T10:37:07.833698Z",
+      },
+    };
+    const saveMutation = setupEditableFactoryGraphSaveTestEnvironment(
+      mockFactoryDocumentSave({
+        mode: "success",
+        resolvedDocument: {
+          ...resourceFactory,
+          resources: [
+            {
+              capacity: 1,
+              name: "asdasd",
+            },
+          ],
+          version: {
+            logical: "10",
+            physical: "2026-06-10T10:37:39.734365Z",
+          },
+        },
+      }),
+    );
+    const { result } = renderHook(
+      () =>
+        useEditableFactoryGraph({
+          currentFactoryDocument: resourceFactory,
+          factoryDocumentScopeKey: "session-alpha",
+        }),
+      {
+        wrapper:
+          createEditableFactoryGraphHookWrapper()
+            .EditableFactoryGraphHookWrapper,
+      },
+    );
+
+    expect(result.current.projection.nodes.map((node) => node.id)).toEqual(
+      expect.arrayContaining(["resource:asdasd", "resource:rge"]),
+    );
+
+    act(() => {
+      result.current.actions.removeNode("resource:rge");
+    });
+
+    expect(result.current.pendingState.hasTopologyChanges).toBe(true);
+    expect(
+      result.current.projection.nodes.map((node) => node.id),
+    ).not.toContain("resource:rge");
+
+    await act(async () => {
+      await result.current.actions.save();
+    });
+
+    expect(saveMutation.saveAsync).toHaveBeenCalledWith({
+      baseVersion: resourceFactory.version,
+      factory: expect.objectContaining({
+        resources: [
+          expect.objectContaining({
+            capacity: 1,
+            name: "asdasd",
+          }),
+        ],
+      }),
+    });
+    expect(result.current.pendingState.hasTopologyChanges).toBe(false);
+    expect(result.current.draftState.latestDocument?.version.logical).toBe(
+      "10",
+    );
+    expect(result.current.projection.nodes.map((node) => node.id)).toEqual([
+      "resource:asdasd",
+    ]);
   });
 
   it("clears pending edits after save and resyncs latestDocument when the document cache updates", async () => {

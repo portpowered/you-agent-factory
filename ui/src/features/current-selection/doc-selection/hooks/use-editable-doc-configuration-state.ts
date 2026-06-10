@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import {
   applyEditableDocDraft,
   type EditableDocDraft,
@@ -30,29 +30,22 @@ export function useEditableDocConfigurationState(
   selection: DashboardSelection | null,
   targetPath: string | null,
   locale?: string | null,
+  editableDefinition?: CurrentFactoryDocument | null,
 ): EditableDocConfigurationState | undefined {
   const isDocSelection = selection?.kind === "doc" && targetPath != null;
   const messages = getDocDetailMessages(locale);
-  const editableDefinition = useCurrentFactoryDocument(isDocSelection);
   const { selectedEditableValues, sessionState, setSessionState } =
-    useEditableDocSession(editableDefinition.data, targetPath, isDocSelection);
+    useEditableDocSession(editableDefinition, targetPath, isDocSelection);
 
   if (!isDocSelection || !targetPath) {
     return undefined;
   }
 
-  if (editableDefinition.isPending) {
+  if (!editableDefinition) {
     return { status: "loading" };
   }
 
-  if (editableDefinition.isError) {
-    return {
-      errorMessage: editableDefinition.error.message,
-      status: "error",
-    };
-  }
-
-  if (!editableDefinition.data || !selectedEditableValues || !sessionState) {
+  if (!selectedEditableValues || !sessionState) {
     return {
       message: messages.configurationEmpty,
       status: "empty",
@@ -60,7 +53,7 @@ export function useEditableDocConfigurationState(
   }
 
   return buildReadyEditableDocConfigurationState({
-    editableDefinition: editableDefinition.data,
+    editableDefinition,
     sessionState,
     setSessionState,
     selectedEditableValues,
@@ -69,7 +62,7 @@ export function useEditableDocConfigurationState(
 }
 
 function useEditableDocSession(
-  editableDefinition: ReturnType<typeof useCurrentFactoryDocument>["data"],
+  editableDefinition: CurrentFactoryDocument | null | undefined,
   targetPath: string | null,
   isDocSelection: boolean,
 ) {
@@ -109,7 +102,7 @@ function buildReadyEditableDocConfigurationState({
   targetPath,
 }: {
   editableDefinition: NonNullable<
-    ReturnType<typeof useCurrentFactoryDocument>["data"]
+    CurrentFactoryDocument
   >;
   sessionState: EditableDocSessionState;
   setSessionState: (

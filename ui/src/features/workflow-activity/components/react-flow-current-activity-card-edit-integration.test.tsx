@@ -23,12 +23,12 @@ import { useCurrentFactoryDocument } from "../../current-factory-definition/hook
 import { useFactoryDocumentSave } from "../../current-factory-definition/hooks/useFactoryDocumentSave";
 import { materializeFactoryGraphEntityIdsForSave } from "../../factory-graph-editor/lib/operations/factory-graph-public-ids";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
-import { useCurrentActivityGraphStore } from "../state/currentActivityGraphStore";
 import { useGraphEditorPendingFactoryBridge } from "../state/graph-editor-pending-factory-bridge";
 import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
 
-vi.mock("../../../components/ui/dialog", () =>
-  import("../../../testing/mock-dashboard-dialog"),
+vi.mock(
+  "../../../components/ui/dialog",
+  () => import("../../../testing/mock-dashboard-dialog"),
 );
 
 vi.mock("@xyflow/react", async () => {
@@ -40,6 +40,7 @@ vi.mock("@xyflow/react", async () => {
     Controls: () => <div data-testid="graph-controls" />,
     ReactFlow: ({
       children,
+      defaultViewport,
       edges,
       isValidConnection,
       nodes,
@@ -48,7 +49,9 @@ vi.mock("@xyflow/react", async () => {
       onNodeClick,
     }: {
       children: React.ReactNode;
+      defaultViewport?: { x: number; y: number; zoom: number };
       edges?: Array<{
+        data?: Record<string, unknown>;
         id: string;
         source?: string;
         sourceHandle?: string | null;
@@ -64,6 +67,7 @@ vi.mock("@xyflow/react", async () => {
       nodes?: Array<{
         data?: Record<string, unknown>;
         id: string;
+        position?: { x: number; y: number };
       }>;
       onConnect?: (connection: {
         source?: string | null;
@@ -79,7 +83,12 @@ vi.mock("@xyflow/react", async () => {
         "workstation:review";
 
       return (
-        <div data-testid="mock-react-flow">
+        <div
+          data-edges={JSON.stringify(edges ?? [])}
+          data-nodes={JSON.stringify(nodes ?? [])}
+          data-testid="mock-react-flow"
+          data-viewport={JSON.stringify(defaultViewport ?? null)}
+        >
           <ul aria-label="Rendered graph nodes">
             {(nodes ?? []).map((node) => (
               <li key={node.id}>
@@ -264,7 +273,6 @@ let saveAsync: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   window.localStorage.clear();
-  useCurrentActivityGraphStore.setState({ positionsByGraphKey: {} });
   restoreBrowserTestShims = installDashboardBrowserTestShims();
   vi.mocked(useCurrentFactoryDocument).mockReturnValue({
     data: editableFactoryDocument,
@@ -304,6 +312,91 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     );
     expect(edge.getAttribute("data-source-handle")).not.toMatch(/^out-/);
     expect(edge.getAttribute("data-target-handle")).not.toMatch(/^in-/);
+  });
+
+  it("renders factory graph changes from the event-computed factory snapshot", async () => {
+    const changedFactoryDocument: CurrentFactoryDocument = {
+      ...editableFactoryDocument,
+      layout: {
+        edges: [
+          {
+            id: "workstation-output:workstation:qa->work-state:story:done",
+            waypoints: [{ x: 320, y: 180 }],
+          },
+        ],
+        nodes: [
+          {
+            id: "workstation:qa",
+            position: { x: 640, y: 260 },
+          },
+          {
+            id: "worker:critic",
+            position: { x: 420, y: 420 },
+          },
+        ],
+        schemaVersion: 1,
+        viewport: { x: -220, y: 75, zoom: 0.8 },
+      },
+      version: {
+        logical: "9",
+        physical: "2026-06-09T12:00:00Z",
+      },
+      workers: [
+        ...(editableFactoryDocument.workers ?? []),
+        {
+          model: "gpt-5",
+          name: "critic",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        ...(editableFactoryDocument.workstations ?? []),
+        {
+          inputs: [{ state: "qa", workType: "story" }],
+          name: "qa",
+          outputs: [{ state: "done", workType: "story" }],
+          type: "MODEL_WORKSTATION",
+          worker: "critic",
+        },
+      ],
+    };
+
+    renderCurrentActivity(createSnapshot(changedFactoryDocument));
+
+    expect(
+      await screen.findByRole("button", { name: "workstation:qa" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "worker:critic" })).toBeTruthy();
+
+    const reactFlow = screen.getByTestId("mock-react-flow");
+    expect(JSON.parse(reactFlow.dataset.viewport ?? "null")).toEqual({
+      x: -220,
+      y: 75,
+      zoom: 0.8,
+    });
+
+    const renderedNodes = JSON.parse(reactFlow.dataset.nodes ?? "[]") as Array<{
+      id: string;
+      position?: { x: number; y: number };
+    }>;
+    expect(
+      renderedNodes.find((node) => node.id === "workstation:qa")?.position,
+    ).toEqual({ x: 640, y: 260 });
+    expect(
+      renderedNodes.find((node) => node.id === "worker:critic")?.position,
+    ).toEqual({ x: 420, y: 420 });
+
+    const renderedEdges = JSON.parse(reactFlow.dataset.edges ?? "[]") as Array<{
+      data?: { waypoints?: Array<{ x: number; y: number }> };
+      id: string;
+    }>;
+    expect(
+      renderedEdges.find(
+        (edge) =>
+          edge.id ===
+          "workstation-output:workstation:qa->work-state:story:done",
+      )?.data?.waypoints,
+    ).toEqual([{ x: 320, y: 180 }]);
   });
 
   it("renders newly added graph nodes after add-node interactions", async () => {
@@ -438,6 +531,124 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
         screen.queryByRole("button", { name: "workstation:review" }),
       ).toBeNull();
     });
+
+    const toolbar = await screen.findByRole("region", {
+      name: "Factory graph editor tools",
+    });
+    expect(
+      within(toolbar)
+        .getByRole("button", { name: "Save changes" })
+        .getAttribute("disabled"),
+    ).toBeNull();
+  });
+
+  it("enables save after confirming work-state deletion", async () => {
+    renderCurrentActivity();
+    enterEditorMode();
+    expect(
+      await screen.findByRole("button", { name: "work-state:story:qa" }),
+    ).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "work-state:story:qa" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Remove story:qa work-state?",
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Delete story:qa work-state",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: "work-state:story:qa" }),
+      ).toBeNull();
+    });
+
+    const toolbar = await screen.findByRole("region", {
+      name: "Factory graph editor tools",
+    });
+    expect(
+      within(toolbar)
+        .getByRole("button", { name: "Save changes" })
+        .getAttribute("disabled"),
+    ).toBeNull();
+  });
+
+  it("enables save after confirming connected work-state deletion", async () => {
+    renderCurrentActivity();
+    enterEditorMode();
+    expect(
+      await screen.findByRole("button", { name: "work-state:story:queued" }),
+    ).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "work-state:story:queued" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Remove story:queued work-state?",
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Delete story:queued work-state",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: "work-state:story:queued" }),
+      ).toBeNull();
+    });
+
+    const toolbar = await screen.findByRole("region", {
+      name: "Factory graph editor tools",
+    });
+    expect(
+      within(toolbar)
+        .getByRole("button", { name: "Save changes" })
+        .getAttribute("disabled"),
+    ).toBeNull();
+  });
+
+  it("enables save after confirming work-type deletion", async () => {
+    renderCurrentActivity();
+    enterEditorMode();
+    expect(
+      await screen.findByRole("button", { name: "work-type:story" }),
+    ).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "work-type:story" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Remove story work-type?",
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Delete story work-type",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: "work-type:story" }),
+      ).toBeNull();
+    });
+
+    const toolbar = await screen.findByRole("region", {
+      name: "Factory graph editor tools",
+    });
+    expect(
+      within(toolbar)
+        .getByRole("button", { name: "Save changes" })
+        .getAttribute("disabled"),
+    ).toBeNull();
   });
 
   it("creates a visible semantic React Flow edge after a connect interaction", async () => {
@@ -445,7 +656,6 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     enterEditorMode();
 
     await screen.findByRole("button", { name: "work-state:story:qa" });
-    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
 
     expect(screen.getByTestId("valid-qa-output-connection").textContent).toBe(
       "true",
@@ -468,7 +678,6 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
   it("shows validation feedback and leaves graph edges unchanged for invalid connects", async () => {
     renderCurrentActivity();
     enterEditorMode();
-    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
 
     expect(
       screen.queryByRole("button", {
@@ -550,11 +759,15 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     });
     await waitFor(() => {
       expect(
-        within(toolbar).queryByRole("button", { name: "Discard changes" }),
-      ).toBeNull();
+        within(toolbar)
+          .getByRole("button", { name: "Discard changes" })
+          .getAttribute("disabled"),
+      ).not.toBeNull();
       expect(
-        within(toolbar).queryByRole("button", { name: "Save changes" }),
-      ).toBeNull();
+        within(toolbar)
+          .getByRole("button", { name: "Save changes" })
+          .getAttribute("disabled"),
+      ).not.toBeNull();
     });
   });
 
@@ -573,7 +786,9 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add entity" }));
 
     expect(
-      await screen.findByRole("button", { name: "doc:factory/docs/playbook.md" }),
+      await screen.findByRole("button", {
+        name: "doc:factory/docs/playbook.md",
+      }),
     ).toBeTruthy();
     await waitFor(() => {
       expect(
@@ -638,7 +853,6 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
     enterEditorMode();
 
     await screen.findByRole("button", { name: "work-state:story:qa" });
-    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Mock connect review to QA" }),
     );
@@ -715,7 +929,6 @@ describe("ReactFlowCurrentActivityCard distinct workstation ID editing", () => {
     expect(
       screen.queryByRole("button", { name: "workstation:review" }),
     ).toBeNull();
-    fireEvent.click(await screen.findByRole("button", { name: "Connect" }));
     fireEvent.click(
       screen.getByRole("button", { name: "Mock connect review to QA" }),
     );

@@ -238,4 +238,22 @@ describe("buildFactoryGraphLayoutTopologyKey", () => {
       buildFactoryGraphLayoutTopologyKey(next),
     );
   });
+
+  it("changes when bundled source files are added to the graph", () => {
+    const previous = cloneDefinition();
+    const next = cloneDefinition();
+    next.supportingFiles = {
+      bundledFiles: [
+        {
+          content: { encoding: "utf-8", inline: "print('setup')" },
+          targetPath: "factory/scripts/setup-workspace.py",
+          type: "SCRIPT",
+        },
+      ],
+    };
+
+    expect(buildFactoryGraphLayoutTopologyKey(previous)).not.toBe(
+      buildFactoryGraphLayoutTopologyKey(next),
+    );
+  });
 });

@@ -420,6 +420,249 @@ describe("factory graph save input", () => {
       },
     ]);
   });
+
+  it("removes internal system-time topology from save input", () => {
+    const factoryWithSystemTime: CanonicalFactoryDefinition = {
+      ...richFactoryDefinition,
+      layout: {
+        schemaVersion: 1,
+        edges: [
+          {
+            id: "workstation-output:workstation:draft->work-state:__system_time:pending",
+            waypoints: [{ x: 10, y: 20 }],
+          },
+        ],
+        nodes: [
+          { id: "workstation:draft", position: { x: 120, y: 80 } },
+          {
+            id: "work-type:__system_time",
+            position: { x: 260, y: 80 },
+          },
+          {
+            id: "work-state:__system_time:pending",
+            position: { x: 420, y: 80 },
+          },
+          {
+            id: "workstation:__system_time:expire",
+            position: { x: 580, y: 80 },
+          },
+        ],
+      },
+      workTypes: [
+        ...(richFactoryDefinition.workTypes ?? []),
+        {
+          name: "__system_time",
+          states: [{ name: "pending", type: "PROCESSING" }],
+        },
+      ],
+      workstations: [
+        {
+          ...(richFactoryDefinition.workstations?.[0] ?? {
+            inputs: [],
+            name: "draft",
+          }),
+          outputs: [
+            ...(richFactoryDefinition.workstations?.[0]?.outputs ?? []),
+            { state: "pending", workType: "__system_time" },
+          ],
+        },
+        {
+          inputs: [{ state: "pending", workType: "__system_time" }],
+          name: "__system_time:expire",
+          outputs: [],
+          type: "MODEL_WORKSTATION",
+          worker: "",
+        },
+      ],
+    };
+
+    const saveInput = applyFactoryGraphPendingEdits({
+      baseFactoryDefinition: factoryWithSystemTime,
+      draft: createEmptyFactoryGraphDraft(),
+    });
+
+    expect(saveInput.ok).toBe(true);
+    if (!saveInput.ok) {
+      return;
+    }
+
+    expect(JSON.stringify(saveInput.value)).not.toContain("__system_time");
+    expect(
+      saveInput.value.workTypes?.map((workType) => workType.name),
+    ).not.toContain("__system_time");
+    expect(
+      saveInput.value.workstations?.map((workstation) => workstation.name),
+    ).not.toContain("__system_time:expire");
+    expect(saveInput.value.workstations?.[0]?.outputs).toEqual([
+      { state: "drafted", workType: "story" },
+    ]);
+  });
+
+  it("removes generated resource availability topology from the captured save payload", () => {
+    const capturedSaveRequest = {
+      mode: "REPLACE_CURRENT",
+      factory: {
+        layout: {
+          nodes: [
+            {
+              id: "work-type:executor-slot",
+              position: { x: 0, y: 80 },
+            },
+            {
+              id: "work-state:executor-slot:available",
+              position: { x: 120, y: 80 },
+            },
+          ],
+          schemaVersion: 1,
+        },
+        name: "UNDEFINED",
+        resources: [
+          { capacity: 10, id: "executor-slot", name: "executor-slot" },
+        ],
+        workers: [
+          {
+            id: "processor",
+            name: "processor",
+            type: "MODEL_WORKER",
+          },
+        ],
+        workTypes: [
+          {
+            id: "cron-triggers",
+            name: "cron-triggers",
+            states: [
+              { id: "complete", name: "complete", type: "TERMINAL" },
+              { id: "failed", name: "failed", type: "FAILED" },
+            ],
+          },
+          {
+            id: "task",
+            name: "task",
+            states: [
+              { id: "init", name: "init", type: "INITIAL" },
+              { id: "in-review", name: "in-review", type: "PROCESSING" },
+            ],
+          },
+          {
+            id: "executor-slot",
+            name: "executor-slot",
+            states: [{ id: "available", name: "available", type: "INITIAL" }],
+          },
+        ],
+        workstations: [
+          {
+            behavior: "CRON",
+            id: "cleaner",
+            inputs: [{ state: "available", workType: "executor-slot" }],
+            name: "cleaner",
+            outputs: [
+              { state: "complete", workType: "cron-triggers" },
+              { state: "available", workType: "executor-slot" },
+            ],
+            type: "MODEL_WORKSTATION",
+            worker: "processor",
+          },
+          {
+            behavior: "REPEATER",
+            id: "process",
+            inputs: [
+              { state: "init", workType: "task" },
+              { state: "available", workType: "executor-slot" },
+            ],
+            name: "process",
+            outputs: [
+              { state: "in-review", workType: "task" },
+              { state: "available", workType: "executor-slot" },
+            ],
+            type: "MODEL_WORKSTATION",
+            worker: "processor",
+          },
+        ],
+      } satisfies CanonicalFactoryDefinition,
+    };
+
+    const saveInput = applyFactoryGraphPendingEdits({
+      baseFactoryDefinition: capturedSaveRequest.factory,
+      draft: createEmptyFactoryGraphDraft(),
+    });
+
+    expect(saveInput.ok).toBe(true);
+    if (!saveInput.ok) {
+      return;
+    }
+
+    expect(JSON.stringify(saveInput.value)).not.toContain(
+      '"workType":"executor-slot"',
+    );
+    expect(
+      saveInput.value.resources?.map((resource) => resource.name),
+    ).toContain("executor-slot");
+    expect(saveInput.value.workTypes?.map((workType) => workType.name)).toEqual(
+      ["cron-triggers", "task"],
+    );
+    expect(saveInput.value.layout?.nodes?.map((node) => node.id)).not.toEqual(
+      expect.arrayContaining([
+        "work-type:executor-slot",
+        "work-state:executor-slot:available",
+      ]),
+    );
+    expect(
+      saveInput.value.workstations?.find(
+        (workstation) => workstation.name === "cleaner",
+      ),
+    ).toMatchObject({
+      inputs: [],
+      outputs: [{ state: "complete", workType: "cron-triggers" }],
+    });
+    expect(
+      saveInput.value.workstations?.find(
+        (workstation) => workstation.name === "process",
+      ),
+    ).toMatchObject({
+      inputs: [{ state: "init", workType: "task" }],
+      outputs: [{ state: "in-review", workType: "task" }],
+    });
+  });
+
+  it("rejects non-resource workstation routes that reference unknown work states", () => {
+    const factoryWithUnknownRoute: CanonicalFactoryDefinition = {
+      ...richFactoryDefinition,
+      workstations: [
+        {
+          ...(richFactoryDefinition.workstations?.[0] ?? {
+            inputs: [],
+            name: "draft",
+            worker: "writer",
+          }),
+          inputs: [
+            ...(richFactoryDefinition.workstations?.[0]?.inputs ?? []),
+            { state: "queued", workType: "missing-work-type" },
+          ],
+        },
+      ],
+    };
+
+    const saveInput = applyFactoryGraphPendingEdits({
+      baseFactoryDefinition: factoryWithUnknownRoute,
+      draft: createEmptyFactoryGraphDraft(),
+    });
+
+    expect(saveInput).toMatchObject({
+      ok: false,
+      reason: "INVALID_SAVE",
+      validationErrors: expect.arrayContaining([
+        expect.objectContaining({
+          code: "INVALID_WORKSTATION_ROUTE",
+          message:
+            'Workstation "draft" inputs references unknown work state "missing-work-type:queued".',
+          target: {
+            id: "workstation-input:work-state:missing-work-type:queued->workstation:draft",
+            kind: "edge",
+          },
+        }),
+      ]),
+    });
+  });
 });
 
 function disconnectRoutesAndResources(): FactoryGraphDraft {

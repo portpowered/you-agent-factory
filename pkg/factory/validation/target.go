@@ -1,6 +1,9 @@
 package validation
 
-import factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+import (
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+)
 
 // Severity classifies how a validation target should be treated by callers.
 type Severity string
@@ -76,7 +79,7 @@ func (r Result) BlockingTargets() []Target {
 		if target.Severity != SeverityError {
 			continue
 		}
-		if IsLayoutTargetCode(target.Code) {
+		if IsLayoutTargetCode(target.Code) && !isBlockingLayoutTarget(target) {
 			continue
 		}
 		blocking = append(blocking, target)
@@ -111,3 +114,7 @@ func (r Result) TopologyValidationErrorInput(message string) (string, []factorya
 // DefaultTopologyValidationMessage is the operator-facing save rejection message
 // when callers do not supply a custom topology validation message.
 const DefaultTopologyValidationMessage = "Factory topology contains invalid graph references."
+
+func isBlockingLayoutTarget(target Target) bool {
+	return target.Code == CodeLayoutUnknownNodeReference && interfaces.IsBundledFileGraphNodeID(target.Subject.ID)
+}

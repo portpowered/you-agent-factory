@@ -18,6 +18,47 @@ const Z_AXIS_HINT: ZAxisIncompleteHints = {
 };
 
 describe("ActivityGraphNodeShell z-axis incomplete hints", () => {
+  it("renders handle rails inside the node shell and pads content around them", () => {
+    const { container } = render(
+      <ActivityGraphNodeShell
+        handles={[
+          {
+            id: "left-target",
+            label: "Left",
+            side: "left",
+            type: "target",
+          },
+          {
+            id: "right-source",
+            label: "Right",
+            side: "right",
+            type: "source",
+          },
+        ]}
+        nodeType="worker"
+      >
+        <p>Worker</p>
+      </ActivityGraphNodeShell>,
+    );
+
+    expect(
+      container.querySelector('[data-node-handle-rail="left"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-node-handle-rail="right"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-node-handle-badge="left-target"]'),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[data-node-handle-badge="right-source"]'),
+    ).toBeTruthy();
+
+    const content = screen.getByText("Worker").parentElement;
+    expect(content?.className).toContain("pl-6");
+    expect(content?.className).toContain("pr-6");
+  });
+
   it("renders Continue and Reject hint orbs when zAxisIncompleteHints is set on workstations", () => {
     const { container } = render(
       <ActivityGraphNodeShell

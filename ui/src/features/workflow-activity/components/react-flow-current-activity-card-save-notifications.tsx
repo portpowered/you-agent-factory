@@ -14,7 +14,7 @@ import {
   type SaveNotificationStableIdentity,
   shouldDeliverSaveNotification,
 } from "../../notifications/public";
-import type { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
+import type { CurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
 
 function readSaveErrorCode(error: unknown): string | null {
   if (
@@ -46,20 +46,20 @@ function buildToastStableIdentity(
 }
 
 export function CurrentActivityGraphSaveNotifications({
-  editor,
+  viewModel,
   locale,
 }: {
-  editor: ReturnType<typeof useCurrentActivityGraphEditor>;
+  viewModel: CurrentActivityGraphCardViewModel;
   locale?: string;
 }) {
   const messages = getFactoryGraphEditorMessages(locale);
   const lastDeliveredDeliveryKeyRef =
     useRef<SaveNotificationDeliveryKey | null>(null);
-  const saveAttemptRevision = editor.saveAttemptRevision;
-  const saveMutationError = editor.saveEditableDefinition.error ?? null;
+  const saveAttemptRevision = viewModel.saveControls.attemptRevision;
+  const saveMutationError = viewModel.status.saveError;
   const notification = resolveGraphDocumentSaveToastNotification({
-    documentSave: editor.documentSave,
-    hasDraftChanges: editor.draftState.hasChanges,
+    documentSave: viewModel.saveControls.feedback,
+    hasDraftChanges: viewModel.status.hasSharedGraphChanges,
     messages,
     saveMutationError,
   });

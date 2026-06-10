@@ -1,4 +1,4 @@
-import type { Edge, Node, XYPosition } from "@xyflow/react";
+import type { XYPosition } from "@xyflow/react";
 import { useCallback, useMemo, useState } from "react";
 
 import type { FactoryGraphEditorTool } from "../../components/controls/factory-graph-editor-controls";
@@ -6,8 +6,6 @@ import { flowMidpointBetweenNodes } from "../../components/flow/factory-graph-ed
 import { describeFactoryGraphLayoutEdgeId } from "../../lib/layout/factory-graph-layout-edge-labels";
 import { factoryLayoutEdgeWaypoints } from "../../lib/layout/factory-graph-layout-edge-waypoints";
 import type { FactoryLayout } from "../../lib/layout/factory-graph-layout-operations";
-import { decorateProjectedEdgesWithWaypoints } from "../../lib/projection/factory-graph-react-flow-edge-waypoint-projection";
-import type { FactoryGraphReactFlowEdge } from "../../lib/projection/factory-graph-react-flow-projection";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 
 function canEditFactoryGraphEdgeWaypoints(input: {
@@ -19,13 +17,17 @@ function canEditFactoryGraphEdgeWaypoints(input: {
     input.editorMode &&
     input.canInteractWithEditor &&
     input.activeTool !== "delete" &&
-    input.activeTool !== "connect" &&
     input.activeTool !== "add"
   );
 }
 
+type FactoryGraphEdgeWaypointNode = {
+  id: string;
+  position: XYPosition;
+};
+
 function resolveEdgeNodePositions(
-  nodes: Node[],
+  nodes: readonly FactoryGraphEdgeWaypointNode[],
   edgeId: string,
 ): { source: XYPosition; target: XYPosition } | null {
   const { sourceId, targetId } = describeFactoryGraphLayoutEdgeId(edgeId);
@@ -41,7 +43,7 @@ function resolveEdgeNodePositions(
   };
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: coordinates edge selection, layout mutation, and editor edge decoration.
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: coordinates edge selection, layout mutation, and editor controls.
 export function useFactoryGraphEdgeWaypointEditor(input: {
   activeTool: FactoryGraphEditorTool;
   addEdgeWaypoint: (
@@ -60,7 +62,7 @@ export function useFactoryGraphEdgeWaypointEditor(input: {
     position: { x: number; y: number },
   ) => void;
   removeEdgeWaypoint: (edgeId: string, waypointIndex: number) => void;
-  nodes: Node[];
+  nodes: readonly FactoryGraphEdgeWaypointNode[];
 }) {
   const messages = getFactoryGraphEditorMessages(input.locale);
   const [selectedWaypointEdgeId, setSelectedWaypointEdgeId] = useState<
@@ -71,10 +73,8 @@ export function useFactoryGraphEdgeWaypointEditor(input: {
   const selectedEdgeWaypoints = useMemo(
     () =>
       selectedWaypointEdgeId
-        ? (factoryLayoutEdgeWaypoints(
-            input.layout,
-            selectedWaypointEdgeId,
-          ) ?? [])
+        ? (factoryLayoutEdgeWaypoints(input.layout, selectedWaypointEdgeId) ??
+          [])
         : [],
     [input.layout, selectedWaypointEdgeId],
   );
@@ -134,10 +134,7 @@ export function useFactoryGraphEdgeWaypointEditor(input: {
           if (!endpoints) {
             return null;
           }
-          return flowMidpointBetweenNodes(
-            endpoints.source,
-            endpoints.target,
-          );
+          return flowMidpointBetweenNodes(endpoints.source, endpoints.target);
         })();
 
       if (!explicitPosition) {
@@ -187,21 +184,9 @@ export function useFactoryGraphEdgeWaypointEditor(input: {
     [canEditWaypoints, input],
   );
 
-  const decorateEditorEdges = useCallback(
-    (edges: Edge[]) =>
-      decorateProjectedEdgesWithWaypoints({
-        edges: edges as FactoryGraphReactFlowEdge[],
-        editorMode: input.editorMode,
-        layout: input.layout,
-        selectedWaypointEdgeId,
-      }),
-    [input.editorMode, input.layout, selectedWaypointEdgeId],
-  );
-
   return {
     canEditWaypoints,
     clearSelectedWaypointEdge: () => setSelectedWaypointEdgeId(null),
-    decorateEditorEdges,
     handleAddSelectedEdgeWaypoint,
     handleEditorEdgeClick,
     handleEditorEdgeDoubleClick,

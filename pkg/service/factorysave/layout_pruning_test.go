@@ -5,16 +5,15 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/api/apitypes"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 )
 
-func TestPreparePersistedFactoryPayload_PrunesStaleLayoutAndRecordsOutcomes(t *testing.T) {
+func TestPreparePersistedFactoryPayload_PrunesStaleLayout(t *testing.T) {
 	t.Parallel()
 
 	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
@@ -42,7 +41,6 @@ func TestPreparePersistedFactoryPayload_PrunesStaleLayoutAndRecordsOutcomes(t *t
 	if err != nil {
 		t.Fatalf("preparePersistedFactoryPayload: %v", err)
 	}
-	validationassert.HasDomainTargetCode(t, prepared.LayoutOutcomes, factoryvalidation.CodeLayoutUnknownNodeReference)
 	if prepared.Config == nil || prepared.Config.Layout == nil {
 		t.Fatal("expected pruned layout on prepared config")
 	}
@@ -63,11 +61,11 @@ func TestPreparePersistedFactoryPayload_PrunesStaleLayoutAndRecordsOutcomes(t *t
 		t.Fatalf("canonical layout nodes = %#v, want one node", layout["nodes"])
 	}
 	if _, ok := canonical["layoutOutcomes"]; ok {
-		t.Fatalf("canonical payload must not persist layoutOutcomes: %#v", canonical["layoutOutcomes"])
+		t.Fatalf("canonical payload must not persist removed layout metadata: %#v", canonical["layoutOutcomes"])
 	}
 }
 
-func TestPreparePersistedFactoryPayload_IncludesUnsupportedSchemaVersionInLayoutOutcomes(t *testing.T) {
+func TestPreparePersistedFactoryPayload_PreservesUnsupportedSchemaVersion(t *testing.T) {
 	t.Parallel()
 
 	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
@@ -91,7 +89,6 @@ func TestPreparePersistedFactoryPayload_IncludesUnsupportedSchemaVersionInLayout
 	if err != nil {
 		t.Fatalf("preparePersistedFactoryPayload: %v", err)
 	}
-	validationassert.HasDomainTargetCode(t, prepared.LayoutOutcomes, factoryvalidation.CodeLayoutUnsupportedSchemaVersion)
 	if prepared.Config == nil || prepared.Config.Layout == nil {
 		t.Fatal("expected layout preserved on prepared config")
 	}
@@ -123,36 +120,6 @@ func TestPrepareFactoryLayoutPayload_PrunesStaleLayoutOnNamedFactoryPersistPath(
 	}
 }
 
-func TestStripEphemeralFactoryResponseFields_RemovesLayoutOutcomesFromSaveRequests(t *testing.T) {
-	t.Parallel()
-
-	targets := factoryvalidation.ToValidationTargets([]factoryvalidation.Target{{
-		Code:     factoryvalidation.CodeLayoutUnknownNodeReference,
-		Severity: factoryvalidation.SeverityWarning,
-		Message:  "stale",
-		Subject: factoryvalidation.Subject{
-			Type:     factoryvalidation.SubjectTypeFactory,
-			ID:       "layout",
-			Location: factoryvalidation.SubjectLocationReference,
-		},
-	}})
-	factory := factoryapi.Factory{
-		Name: "alpha",
-		LayoutOutcomes: &targets,
-	}
-	view, err := prepareEditableFactoryPersistView("alpha", factory)
-	if err != nil {
-		t.Fatalf("prepareEditableFactoryPersistView: %v", err)
-	}
-	var decoded map[string]any
-	if err := json.Unmarshal(view.Canonical, &decoded); err != nil {
-		t.Fatalf("Unmarshal canonical: %v", err)
-	}
-	if _, ok := decoded["layoutOutcomes"]; ok {
-		t.Fatalf("save request canonical must not include layoutOutcomes: %#v", decoded["layoutOutcomes"])
-	}
-}
-
 func namedFactoryPayloadWithStaleLayout(t *testing.T) []byte {
 	t.Helper()
 
@@ -178,23 +145,4 @@ func namedFactoryPayloadWithStaleLayout(t *testing.T) []byte {
 		t.Fatalf("Marshal(factory): %v", err)
 	}
 	return payload
-}
-
-func TestWithLayoutOutcomes_AttachesTargetsToSaveResponse(t *testing.T) {
-	t.Parallel()
-
-	factory := factoryapi.Factory{Name: "alpha"}
-	updated := withLayoutOutcomes(factory, []factoryvalidation.Target{{
-		Code:     factoryvalidation.CodeLayoutUnknownEdgeReference,
-		Severity: factoryvalidation.SeverityWarning,
-		Message:  "pruned",
-		Subject: factoryvalidation.Subject{
-			Type:     factoryvalidation.SubjectTypeFactory,
-			ID:       "edge-1",
-			Location: factoryvalidation.SubjectLocationReference,
-		},
-	}})
-	if updated.LayoutOutcomes == nil || len(*updated.LayoutOutcomes) != 1 {
-		t.Fatalf("layoutOutcomes = %#v, want one target", updated.LayoutOutcomes)
-	}
 }

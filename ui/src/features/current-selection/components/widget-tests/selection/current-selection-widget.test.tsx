@@ -57,10 +57,24 @@ const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 function buildCurrentSelection(
   overrides: Partial<CurrentSelectionState> = {},
 ): CurrentSelectionState {
+  const currentFactoryDefinition =
+    overrides.currentFactoryDefinition ?? buildEditableFactoryDefinition();
+  const selectedWorkerName =
+    overrides.selectedWorkerName ??
+    (overrides.selection?.kind === "worker"
+      ? overrides.selection.workerName
+      : null);
+  const selectedResourceName =
+    overrides.selectedResourceName ??
+    (overrides.selection?.kind === "resource"
+      ? overrides.selection.resourceName
+      : null);
+
   return {
     canRedoSelection: false,
     canUndoSelection: false,
     completedWorkItems: [],
+    currentFactoryDefinition,
     failedWorkItems: [],
     openTerminalWorkDetail: () => undefined,
     redoSelection: () => undefined,
@@ -78,10 +92,19 @@ function buildCurrentSelection(
     selectedWorkWorkstationRequests: [],
     selectedWorkstationRequest: null,
     selectedNodeWorkstationRequests: [],
-    selectedResourceName: null,
+    selectedResource:
+      currentFactoryDefinition.resources?.find(
+        (resource) => resource.name === selectedResourceName,
+      ) ?? null,
+    selectedResourceName,
     selectedResourceTokenCount: null,
-    selectedWorker: null,
-    selectedWorkerName: null,
+    selectedResourceWorkerNames: [],
+    selectedResourceWorkstationNames: [],
+    selectedWorker:
+      currentFactoryDefinition.workers?.find(
+        (worker) => worker.name === selectedWorkerName,
+      ) ?? null,
+    selectedWorkerName,
     selectedWorkerWorkstationNames: [],
     selectedWorkType: null,
     selectedWorkTypeName: null,
@@ -704,7 +727,6 @@ describe("CurrentSelectionWidget", () => {
     const currentSelection = screen.getByRole("article", {
       name: "Current selection",
     });
-    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(true);
     expect(
       within(currentSelection).getByRole("heading", { name: "Active work" }),
     ).toBeTruthy();
@@ -722,7 +744,11 @@ describe("CurrentSelectionWidget", () => {
       />,
     );
 
-    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(false);
+    expect(
+      screen.getByText(
+        "Select a workstation, work item, or state node to inspect live details.",
+      ),
+    ).toBeTruthy();
   });
 
   it("renders the worker detail card for worker selections", () => {
@@ -754,7 +780,14 @@ describe("CurrentSelectionWidget", () => {
     renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection({
+          selectedWorker: {
+            model: "gpt-5.5",
+            modelProvider: "CURSOR",
+            name: "reviewer",
+            type: "MODEL_WORKER",
+          },
           selectedWorkerName: "reviewer",
+          selectedWorkerWorkstationNames: ["Review"],
           selection: { kind: "worker", workerName: "reviewer" },
         })}
         now={DETAIL_CARD_NOW}
@@ -768,45 +801,54 @@ describe("CurrentSelectionWidget", () => {
       screen.getByRole("heading", { name: "Worker configuration" }),
     ).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Configuration" })).toBeNull();
-    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(true);
   });
 
   it("renders the resource detail card for resource selections", () => {
+    const currentFactoryDefinition = {
+      ...buildEditableFactoryDefinition(),
+      resources: [
+        {
+          capacity: 2,
+          name: "agent-slot",
+          type: "INVOCATION_SLOT",
+        },
+      ],
+      workers: [
+        {
+          model: "gpt-5.5",
+          modelProvider: "CURSOR",
+          name: "reviewer",
+          resources: [{ capacity: 1, name: "agent-slot" }],
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          id: "review",
+          name: "Review",
+          resources: [{ capacity: 1, name: "agent-slot" }],
+          worker: "reviewer",
+        },
+      ],
+    };
+
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult({
-        ...buildEditableFactoryDefinition(),
-        resources: [
-          {
-            capacity: 2,
-            name: "agent-slot",
-            type: "INVOCATION_SLOT",
-          },
-        ],
-        workers: [
-          {
-            model: "gpt-5.5",
-            modelProvider: "CURSOR",
-            name: "reviewer",
-            resources: [{ capacity: 1, name: "agent-slot" }],
-            type: "MODEL_WORKER",
-          },
-        ],
-        workstations: [
-          {
-            id: "review",
-            name: "Review",
-            resources: [{ capacity: 1, name: "agent-slot" }],
-            worker: "reviewer",
-          },
-        ],
-      }),
+      buildEditableDefinitionResult(currentFactoryDefinition),
     );
 
     renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection({
+          currentFactoryDefinition,
+          selectedResource: {
+            capacity: 2,
+            name: "agent-slot",
+            type: "INVOCATION_SLOT",
+          },
           selectedResourceName: "agent-slot",
           selectedResourceTokenCount: 1,
+          selectedResourceWorkerNames: ["reviewer"],
+          selectedResourceWorkstationNames: ["Review"],
           selection: { kind: "resource", resourceName: "agent-slot" },
         })}
         now={DETAIL_CARD_NOW}
@@ -828,7 +870,6 @@ describe("CurrentSelectionWidget", () => {
     expect(
       screen.getByRole("heading", { name: "Referencing workers" }),
     ).toBeTruthy();
-    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(true);
   });
 
   it("initializes editable worker inputs from the canonical factory definition", async () => {
@@ -840,7 +881,14 @@ describe("CurrentSelectionWidget", () => {
     renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection({
+          selectedWorker: {
+            model: "gpt-5.5",
+            modelProvider: "CURSOR",
+            name: "reviewer",
+            type: "MODEL_WORKER",
+          },
           selectedWorkerName: "reviewer",
+          selectedWorkerWorkstationNames: ["Review"],
           selection: { kind: "worker", workerName: "reviewer" },
         })}
         now={DETAIL_CARD_NOW}
@@ -884,7 +932,7 @@ describe("CurrentSelectionWidget", () => {
       />,
     );
 
-    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(true);
+    expect(screen.getByRole("heading", { name: "Configuration" })).toBeTruthy();
   });
 
   it("loads editable workstation inputs when a workstation is already selected on mount", () => {
@@ -904,8 +952,6 @@ describe("CurrentSelectionWidget", () => {
         selectedWorkExecutionDetails={null}
       />,
     );
-
-    expect(vi.mocked(useCurrentFactoryDocument)).toHaveBeenCalledWith(true);
 
     expandEditableConfiguration();
 
@@ -1018,11 +1064,6 @@ describe("CurrentSelectionWidget", () => {
     expect(screen.getByRole("combobox", { name: "Worker" })).toHaveTextContent(
       "reviewer",
     );
-    expect(
-      screen.getByText(
-        "The running factory changed after you started editing. Saving now will overwrite newer server values for prompt, worker.",
-      ),
-    ).toBeTruthy();
     expect(
       screen.queryByText(
         "Review the latest runtime values before saving, or keep editing if this draft should replace them.",

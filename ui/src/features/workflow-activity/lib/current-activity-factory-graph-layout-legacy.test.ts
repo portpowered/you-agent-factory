@@ -9,7 +9,6 @@ import {
   buildCurrentActivityNodes,
   buildHandleAssignments,
   buildVisibleGraphEdges,
-  EMPTY_NODE_POSITIONS,
 } from "./react-flow-current-activity-card-graph";
 
 describe("current activity factory graph legacy replay layout", () => {
@@ -115,7 +114,6 @@ describe("current activity factory graph legacy replay layout", () => {
       onSelectWorkstation: vi.fn(),
       selection: null,
       snapshot: semanticWorkflowDashboardSnapshot,
-      storedNodePositions: EMPTY_NODE_POSITIONS,
     });
     const edges = buildGraphEdges(
       buildActiveGraphHighlights([], visibleGraphEdges),

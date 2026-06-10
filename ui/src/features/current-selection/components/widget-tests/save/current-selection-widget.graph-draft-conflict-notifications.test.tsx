@@ -146,6 +146,7 @@ async function renderWorkerSelection() {
   const result = renderWithQueryClient(
     <CurrentSelectionWidget
       currentSelection={buildDetailCardCurrentSelection({
+        currentFactoryDefinition: buildDetailCardEditableFactoryDocument(),
         selectedWorkerName: "reviewer",
         selection: { kind: "worker", workerName: "reviewer" },
       })}
@@ -161,6 +162,7 @@ async function renderResourceSelection(resourceName = "agent-slot") {
   const result = renderWithQueryClient(
     <CurrentSelectionWidget
       currentSelection={buildDetailCardCurrentSelection({
+        currentFactoryDefinition: buildDetailCardMultiResourceFactoryDocument(),
         selectedResourceName: resourceName,
         selection: { kind: "resource", resourceName },
       })}

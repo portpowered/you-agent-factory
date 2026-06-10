@@ -19,6 +19,13 @@ export const DETAIL_CARD_SAVE_FACTORY_VERSION = {
   physical: "2026-05-23T15:52:00Z",
 } as const;
 
+let latestDetailCardCurrentFactoryDocument: CurrentFactoryDocument | null =
+  null;
+
+function resolveLatestDetailCardCurrentFactoryDocument() {
+  return latestDetailCardCurrentFactoryDocument;
+}
+
 export type DetailCardEditableFactoryDocumentOverrides = {
   behavior?: "STANDARD" | "REPEATER" | "POLLER";
   model?: string;
@@ -42,6 +49,8 @@ export type DetailCardMultiWorkstationFactoryDocumentOverrides = {
 export function buildDetailCardFactoryDocumentQueryResult(
   data: CurrentFactoryDocument | undefined,
 ) {
+  latestDetailCardCurrentFactoryDocument = data ?? null;
+
   return {
     data,
     error: null,
@@ -249,10 +258,26 @@ export function buildDetailCardSharedWorkerFactoryDocument(overrides?: {
 export function buildDetailCardCurrentSelection(
   overrides: Partial<CurrentSelectionState> = {},
 ): CurrentSelectionState {
+  const currentFactoryDefinition =
+    overrides.currentFactoryDefinition ??
+    resolveLatestDetailCardCurrentFactoryDocument() ??
+    buildDetailCardEditableFactoryDocument();
+  const selectedWorkerName =
+    overrides.selectedWorkerName ??
+    (overrides.selection?.kind === "worker"
+      ? overrides.selection.workerName
+      : null);
+  const selectedResourceName =
+    overrides.selectedResourceName ??
+    (overrides.selection?.kind === "resource"
+      ? overrides.selection.resourceName
+      : null);
+
   return {
     canRedoSelection: false,
     canUndoSelection: false,
     completedWorkItems: [],
+    currentFactoryDefinition,
     failedWorkItems: [],
     openTerminalWorkDetail: () => undefined,
     redoSelection: () => undefined,
@@ -272,10 +297,17 @@ export function buildDetailCardCurrentSelection(
     selectedWorkWorkstationRequests: [],
     selectedWorkstationRequest: null,
     selectedDocTargetPath: null,
-    selectedWorker: null,
-    selectedResourceName: null,
+    selectedWorker:
+      currentFactoryDefinition.workers?.find(
+        (worker) => worker.name === selectedWorkerName,
+      ) ?? null,
+    selectedResource:
+      currentFactoryDefinition.resources?.find(
+        (resource) => resource.name === selectedResourceName,
+      ) ?? null,
+    selectedResourceName,
     selectedResourceTokenCount: null,
-    selectedWorkerName: null,
+    selectedWorkerName,
     selectedWorkerWorkstationNames: [],
     selectedWorkType: null,
     selectedWorkTypeName: null,

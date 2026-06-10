@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -49,6 +48,36 @@ func TestCurrentFactoryPUT_SaveEditableCurrentFactoryDefinitionEmitsCanonicalFac
 	}
 	if payload.Factory.Workstations == nil || len(*payload.Factory.Workstations) != 1 || (*payload.Factory.Workstations)[0].Name != "plan-task" {
 		t.Fatalf("factory-change payload workstations = %#v, want edited plan-task topology", payload.Factory.Workstations)
+	}
+}
+
+func TestCurrentFactoryPUT_FactoryChangeVersionsAdvanceOnEverySave(t *testing.T) {
+	rootDir := t.TempDir()
+	seedNamedFactoryRoot(t, rootDir, "alpha", "alpha-task")
+
+	server := startFactoryTransformationServer(t, rootDir)
+
+	current := getCurrentFactory(t, server.URL())
+	firstSaved := saveCurrentFactoryDefinition(t, server.URL(), functionalNamedFactoryBody("alpha", "story", advancedFactoryVersion(t, current.Version)))
+	firstChange := requireLatestFactoryChange(t, server.GetFactoryEvents(t))
+	firstPayload, err := firstChange.Payload.AsFactoryChangeEventPayload()
+	if err != nil {
+		t.Fatalf("decode first factory-change payload: %v", err)
+	}
+	assertFactoryChangeVersion(t, firstPayload.Factory, firstSaved)
+	if firstPayload.Factory.Version.Logical != current.Version.Logical+1 {
+		t.Fatalf("first factory-change logical version = %d, want %d", firstPayload.Factory.Version.Logical, current.Version.Logical+1)
+	}
+
+	secondSaved := saveCurrentFactoryDefinition(t, server.URL(), functionalNamedFactoryBody("alpha", "article", advancedFactoryVersion(t, firstSaved.Version)))
+	secondChange := requireLatestFactoryChange(t, server.GetFactoryEvents(t))
+	secondPayload, err := secondChange.Payload.AsFactoryChangeEventPayload()
+	if err != nil {
+		t.Fatalf("decode second factory-change payload: %v", err)
+	}
+	assertFactoryChangeVersion(t, secondPayload.Factory, secondSaved)
+	if secondPayload.Factory.Version.Logical != firstPayload.Factory.Version.Logical+1 {
+		t.Fatalf("second factory-change logical version = %d, want %d", secondPayload.Factory.Version.Logical, firstPayload.Factory.Version.Logical+1)
 	}
 }
 
@@ -107,36 +136,6 @@ func TestCurrentFactoryPUT_SaveDefaultFactoryDefinitionPersistsAndRunsReplacemen
 	submitWorkAndExpectStatus(t, server.URL(), "root-task", "old-default", http.StatusBadRequest)
 
 	assertFunctionalSplitLayoutAtRoot(t, rootDir, "root-runtime")
-}
-
-func assertFunctionalSplitLayoutAtRoot(t *testing.T, rootDir, project string) {
-	t.Helper()
-
-	factoryJSON, err := os.ReadFile(filepath.Join(rootDir, interfaces.FactoryConfigFile))
-	if err != nil {
-		t.Fatalf("ReadFile(factory.json): %v", err)
-	}
-	if strings.Contains(string(factoryJSON), "You are the planner.") {
-		t.Fatalf("factory.json should omit inlined planner body after split save, got %s", factoryJSON)
-	}
-
-	agentsPath := filepath.Join(rootDir, interfaces.WorkersDir, "planner", interfaces.FactoryAgentsFileName)
-	if _, err := os.Stat(agentsPath); err != nil {
-		t.Fatalf("expected planner AGENTS.md at %s: %v", agentsPath, err)
-	}
-
-	workstationPath := filepath.Join(rootDir, interfaces.WorkstationsDir, "plan-task", interfaces.FactoryAgentsFileName)
-	if _, err := os.Stat(workstationPath); err != nil {
-		t.Fatalf("expected plan-task AGENTS.md at %s: %v", workstationPath, err)
-	}
-
-	loaded, err := config.LoadRuntimeConfig(rootDir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfig: %v", err)
-	}
-	if loaded.FactoryConfig().Project != project {
-		t.Fatalf("project = %q, want %q", loaded.FactoryConfig().Project, project)
-	}
 }
 
 func TestCurrentFactoryPUT_DefaultFactoryAcceptsFullCurrentFactoryReadbackDocument(t *testing.T) {
@@ -848,6 +847,17 @@ func requireFactoryChangeAfter(t *testing.T, before []factoryapi.FactoryEvent, a
 		}
 	}
 	t.Fatalf("factory-change event not found after save; before=%d after=%d", len(before), len(after))
+	return factoryapi.FactoryEvent{}
+}
+
+func requireLatestFactoryChange(t *testing.T, events []factoryapi.FactoryEvent) factoryapi.FactoryEvent {
+	t.Helper()
+	for i := len(events) - 1; i >= 0; i-- {
+		if events[i].Type == factoryapi.FactoryEventTypeFactoryChange {
+			return events[i]
+		}
+	}
+	t.Fatalf("factory-change event not found; events=%d", len(events))
 	return factoryapi.FactoryEvent{}
 }
 
