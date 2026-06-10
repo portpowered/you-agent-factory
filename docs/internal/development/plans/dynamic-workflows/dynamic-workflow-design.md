@@ -501,11 +501,11 @@ Add or extend:
 - `POST /factory-sessions/{session_id}/invocations`
 - Factory import/export endpoints and schemas.
 
-Workflow compatibility aliases may be added after the API interface discussion:
+Workflow compatibility aliases may be added after the API interface discussion. Any preview alias must project **Factory preview** or **Factory Session preview** semantics from `pkg/orchestrators/javascript/preview`; transitional Batch 001 `POST /workflow-previews` is **obsolete** and not the target public route.
 
 - `GET /workflows`
 - `POST /workflows/validate`
-- `POST /workflows/preview`
+- `POST /workflows/preview` (alias over Factory or Factory Session preview semantics)
 - `POST /workflows/{workflow_name}/sessions`
 
 ### OpenAPI Schemas
@@ -1134,7 +1134,7 @@ Acceptance:
 
 `pkg/mcp/server.go`
 
-- `func NewServer(service workflow.Service, options ServerOptions) *Server`
+- `func NewServer(service orchestrators.Service, options ServerOptions) *Server`
 - `func (s *Server) RegisterWorkflowTools() error`
 - `func (s *Server) RegisterWorkflowResources() error`
 - `func (s *Server) RegisterWorkflowPrompts() error`
@@ -1252,8 +1252,8 @@ Acceptance:
 - Scheduler queued-state projection before workers start.
 - Runner bridge for `codex`, `cursor-cli`, `kiro`, `gemini`, `opencode`.
 - Runner bridge output capture for command metadata, stdout/stderr, last message, provider events, warnings, and usage.
-- API handlers against fake workflow service.
-- MCP tools against fake workflow service.
+- API handlers against fake orchestrator service.
+- MCP tools against fake orchestrator service.
 - Stream reconnect reconciliation from durable run/task/provider state.
 
 ### Functional Tests

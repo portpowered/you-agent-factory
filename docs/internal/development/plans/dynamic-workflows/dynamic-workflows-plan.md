@@ -332,7 +332,7 @@ Evidence sources: `api/openapi.yaml`, `pkg/factorysessionexecution/`, `pkg/apisu
 |----------|-------|------------------|
 | HTTP handlers 501 / empty persisted list | Stubbed transport | `handlers_factory.go` ↔ OpenAPI ↔ service |
 | No `factorysessionexecution.Service` wired into API server | Stubbed transport | `handlers_factory.go` |
-| Workflow source resolution documented but not in execution service start path | **Blocking** | OpenAPI ↔ `workflowsource` ↔ `factorysessionexecution` |
+| Workflow source resolution documented but not in execution service start path | **Blocking** | OpenAPI ↔ transitional `pkg/workflowsource/` (**stale Batch 001**) ↔ `factorysessionexecution`; contract repair targets `pkg/orchestrators/javascript/source` |
 | `GET /factory-sessions/{id}` union vs handler returns live shape only | **Blocking** (on wire-up) | OpenAPI ↔ `handlers_factory.go` |
 | `SessionCompleted` + fake events use wrong status model / invalid envelope | **Blocking** | OpenAPI events ↔ fake ↔ apisurface |
 | Result status enums differ (event vs REST) | **Blocking** | OpenAPI events ↔ `FactorySessionResult` |
@@ -651,7 +651,7 @@ flowchart TB
 | CR-1 | Event terminal/result enums match durable REST status vocabulary. | Batch 001 complete | OpenAPI contract tests and generated type diff. |
 | CR-2 | Fake service emits canonical `FactoryEvent` envelopes with context and payload identity boundaries. | CR-1 | Fake-service event tests and `EventReadResponseToAPI` round-trip. |
 | CR-3 | Durable fixture catalog includes `events[]` and `AWAITING_APPROVAL`. | CR-2 | Fixture validation for running, approval, terminal, and failed-with-partial scenarios. |
-| CR-4 | Fake/service reads honor source resolution, result mode/includeArtifacts, and event reconnect cursors. | Batch 001 complete | Service unit tests over `workflowsource`, result projection, and cursor filtering. |
+| CR-4 | Fake/service reads honor source resolution, result mode/includeArtifacts, and event reconnect cursors. | Batch 001 complete | Service unit tests over `pkg/orchestrators/javascript/source` (replacing transitional root `pkg/workflowsource/` **stale Batch 001**), result projection, and cursor filtering. |
 | CR-5 | Mappers preserve required lifecycle, provider-correlation, and read-model fields. | Batch 001 complete | Mapper round-trip tests against fixtures. |
 | API-0 | Server can receive an injectable durable execution service without changing route contracts. | Batch 001 complete | Server construction tests still pass with nil/live defaults and fake injection. |
 | API-1 | Async/sync start routes return fake sessions and idempotency conflicts. | CR-Q and API-0 | Handler tests for accepted, completed, timed-out, and conflict outcomes. |
