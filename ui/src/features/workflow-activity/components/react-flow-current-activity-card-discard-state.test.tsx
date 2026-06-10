@@ -3,15 +3,20 @@ import { describe, expect, it, vi } from "vitest";
 
 import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
-import { ReactFlowCurrentActivityCardView } from "./react-flow-current-activity-card";
+import { ReactFlowCurrentActivityCardView } from "./react-flow-current-activity-card-view";
 
 vi.mock("./react-flow-current-activity-card-surface", () => ({
-  CurrentActivityGraphSurface: ({
-    discardPendingChanges,
-  }: {
-    discardPendingChanges?: () => void;
-  }) => (
-    <button onClick={discardPendingChanges} type="button">
+  CurrentActivityGraphSurface: ({ viewModel }: { viewModel: never }) => (
+    <button
+      onClick={
+        (
+          viewModel as {
+            editorControls: { discardPendingChanges: () => void };
+          }
+        ).editorControls.discardPendingChanges
+      }
+      type="button"
+    >
       Trigger surface discard
     </button>
   ),

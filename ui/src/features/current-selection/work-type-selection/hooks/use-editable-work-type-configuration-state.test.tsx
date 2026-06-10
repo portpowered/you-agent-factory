@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { DashboardSelection } from "../../base/state/selection-types";
-import { useEditableWorkTypeConfigurationState } from "./use-editable-work-type-configuration-state";
+import { useEditableWorkTypeConfigurationState as useEditableWorkTypeConfigurationStateImplementation } from "./use-editable-work-type-configuration-state";
 
 vi.mock(
   "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
@@ -59,6 +59,23 @@ function buildFactoryDocument(
     ],
     ...overrides,
   };
+}
+
+function useEditableWorkTypeConfigurationState(
+  selection: DashboardSelection | null,
+  workTypeName: string | null,
+  locale?: string | null,
+) {
+  const currentFactoryDocument = useCurrentFactoryDocument(false) as {
+    data?: CurrentFactoryDocument;
+  };
+
+  return useEditableWorkTypeConfigurationStateImplementation(
+    selection,
+    workTypeName,
+    locale,
+    currentFactoryDocument.data,
+  );
 }
 
 describe("useEditableWorkTypeConfigurationState", () => {
@@ -340,7 +357,7 @@ describe("useEditableWorkTypeConfigurationState", () => {
     });
   });
 
-  it("reports loading and error states from the factory document query", () => {
+  it("reports loading while the event-backed factory document is unavailable", () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: undefined,
       error: null,
@@ -354,21 +371,6 @@ describe("useEditableWorkTypeConfigurationState", () => {
     );
     expect(loadingResult.current).toEqual({ status: "loading" });
 
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: undefined,
-      error: new Error("Factory unavailable"),
-      isError: true,
-      isPending: false,
-      status: "error",
-    } as never);
-
-    const { result: errorResult } = renderHook(() =>
-      useEditableWorkTypeConfigurationState(storySelection, "story"),
-    );
-    expect(errorResult.current).toEqual({
-      errorMessage: "Factory unavailable",
-      status: "error",
-    });
   });
 
   it("returns empty when the selected work type is missing from the factory document", () => {

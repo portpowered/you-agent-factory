@@ -7,38 +7,6 @@ import { createDefaultFactoryLayout } from "../../factory-graph-editor/lib/layou
 import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
-vi.mock(
-  "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
-  () => ({
-    FactoryGraphEditorNotice: ({
-      children,
-      dismissLabel,
-      onDismiss,
-      title,
-      tone,
-    }: {
-      children: React.ReactNode;
-      dismissLabel?: string;
-      onDismiss?: () => void;
-      title: string;
-      tone: string;
-    }) => (
-      <section
-        data-testid={`notice-${tone}`}
-        role={tone === "danger" ? "alert" : "status"}
-      >
-        <h3>{title}</h3>
-        <div>{children}</div>
-        {onDismiss && dismissLabel ? (
-          <button aria-label={dismissLabel} onClick={onDismiss} type="button">
-            {dismissLabel}
-          </button>
-        ) : null}
-      </section>
-    ),
-  }),
-);
-
 vi.mock("./react-flow-current-activity-card-viewport", () => ({
   CurrentActivityGraphViewport: ({
     addControls,
@@ -211,25 +179,38 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
     editorControls: {
       activeTool: merged.activeTool,
       canInteract: merged.canInteractWithEditor,
+      connect: merged.handleEditorConnect,
       connectionNotice: merged.connectionNotice,
       discardPendingChanges: merged.handleDiscardPendingChanges,
       isEditing: merged.editorMode,
       selectTool: merged.setActiveTool,
       toggleMode: merged.handleEditorModeToggle,
-      unavailableClassifierWorkstationName:
-        (merged as { editorUnavailableClassifierWorkstationName?: string })
-          .editorUnavailableClassifierWorkstationName,
+      unavailableClassifierWorkstationName: (
+        merged as { editorUnavailableClassifierWorkstationName?: string }
+      ).editorUnavailableClassifierWorkstationName,
       ...((merged as { editorControls?: object }).editorControls ?? {}),
+    },
+    edgeWaypointControls: {
+      handleEditorEdgeClick: merged.handleEditorEdgeDelete,
+      handleEditorEdgeDoubleClick: vi.fn(),
+      handleMoveSelectedEdgeWaypoint: vi.fn(),
+      handleRemoveSelectedEdgeWaypoint: vi.fn(),
+      selectedEdgeWaypoints: [],
+      selectedWaypointEdgeId: null,
+      waypointAriaLabel: vi.fn(),
+      waypointControls: null,
+      ...((merged as { edgeWaypointControls?: object })
+        .edgeWaypointControls ?? {}),
     },
     graphState: {
       canonicalLayout,
       canonicalLayoutViewport: null,
       displayFactoryDefinition: semanticWorkflowDashboardSnapshot.factory,
       graphLayout: { edges: [], nodes: [] },
-      topologyGraphLayout: { edges: [], nodes: [] },
       ...((merged as { graphState?: object }).graphState ?? {}),
     },
     saveControls: {
+      attemptRevision: merged.saveAttemptRevision,
       canSave: merged.canSaveDraft,
       feedback:
         (merged as { documentSave?: unknown }).documentSave ??
@@ -242,6 +223,8 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
       canRedo: layoutDraftState.canRedoLayout ?? false,
       canUndo: layoutDraftState.canUndoLayout ?? false,
       currentLayout: canonicalLayout,
+      initialFitViewKey: "full-graph",
+      initialFitViewOptions: { padding: 0.18 },
       ...((merged as { layoutControls?: object }).layoutControls ?? {}),
     },
     removalControls: {
@@ -290,6 +273,7 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
       ...((merged as { status?: object }).status ?? {}),
     },
     validationControls: {
+      draftErrors: [],
       factoryDefinition:
         (merged as { validationFactoryDefinition?: unknown })
           .validationFactoryDefinition ??
@@ -309,8 +293,6 @@ function createGraphStub() {
     edges: [],
     graphKey: "graph-key",
     handleNodesChange: vi.fn(),
-    initialFitViewKey: "full-graph",
-    initialFitViewOptions: { padding: 0.18 },
     nodes: [],
   };
 }
@@ -349,11 +331,9 @@ describe("CurrentActivityGraphSurface", () => {
 
   it("renders shared-surface notices and forwards viewport editor actions", () => {
     const viewModel = createViewModelStub();
-    const discardPendingChanges = vi.fn();
 
     render(
       <CurrentActivityGraphSurface
-        discardPendingChanges={discardPendingChanges}
         viewModel={viewModel as never}
         imports={{} as never}
         selection={null}
@@ -407,8 +387,7 @@ describe("CurrentActivityGraphSurface", () => {
     );
 
     expect(viewModel.requestSaveConfirmation).toHaveBeenCalledTimes(1);
-    expect(discardPendingChanges).toHaveBeenCalledTimes(1);
-    expect(viewModel.handleDiscardPendingChanges).not.toHaveBeenCalled();
+    expect(viewModel.handleDiscardPendingChanges).toHaveBeenCalledTimes(1);
     expect(viewModel.handleAddEntityAction).toHaveBeenCalledTimes(1);
     expect(viewModel.setAddMenuOpen).toHaveBeenCalledWith(true);
     expect(viewModel.handleEditorConnect).toHaveBeenCalledTimes(1);
@@ -458,6 +437,46 @@ describe("CurrentActivityGraphSurface", () => {
     expect(screen.getByText("Factory validation issue")).toBeTruthy();
     expect(
       screen.getByText('Workstation "review" must define a failure route.'),
+    ).toBeTruthy();
+  });
+
+  it("renders draft validation errors in the failure notice without requiring a selection", () => {
+    render(
+      <CurrentActivityGraphSurface
+        viewModel={
+          createViewModelStub({
+            blockedRemovalReason: null,
+            connectionNotice: null,
+            draftState: { hasChanges: true },
+            hasActiveWork: false,
+            isStaleDraft: false,
+            validationControls: {
+              draftErrors: [
+                {
+                  code: "MISSING_REQUIRED_FIELD",
+                  field: "worker",
+                  message:
+                    'Workstation "review" must assign a worker before saving.',
+                  target: {
+                    id: "workstation:review",
+                    kind: "node",
+                  },
+                },
+              ],
+            },
+          }) as never
+        }
+        imports={{} as never}
+        selection={null}
+        snapshot={semanticWorkflowDashboardSnapshot}
+      />,
+    );
+
+    expect(screen.getByText("Factory validation issue")).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Workstation "review" must assign a worker before saving.',
+      ),
     ).toBeTruthy();
   });
 

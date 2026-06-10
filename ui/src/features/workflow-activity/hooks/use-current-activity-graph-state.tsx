@@ -1,23 +1,24 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
+import { useFactoryGraphEdgeWaypointEditor } from "../../factory-graph-editor/hooks/layout/factory-graph-edge-waypoint-editor-hook";
 import { useFactoryGraphTopologyEditorBridge } from "../state/factory-graph-topology-editor-bridge";
 import { useGraphEditorPendingFactoryBridge } from "../state/graph-editor-pending-factory-bridge";
 import { useCurrentActivityFactoryDocumentState } from "./current-activity-factory-document-state";
+import { buildCurrentActivityGraphStatusState } from "./current-activity-graph-editor-status-state";
 import { useDraftAppliedFactoryValidation } from "./react-flow-current-activity-card-editor-draft-validation";
 import { useCurrentActivityEditableGraph } from "./react-flow-current-activity-card-editor-editable-graph";
 import { useGraphEditorLeaveEditorBridge } from "./react-flow-current-activity-card-editor-save-flow";
-import { buildCurrentActivityGraphEditorValue } from "./react-flow-current-activity-card-editor-value";
-import { useCurrentActivityFactoryGraphViewState } from "./use-current-activity-factory-graph-view-state";
-import { useCurrentActivityGraphFlowProjection } from "./use-current-activity-graph-flow-projection";
+import { buildCurrentActivityGraphStateValue } from "./current-activity-graph-state-value";
+import { useCurrentActivityGraphRenderState } from "./use-current-activity-graph-render-state";
 import { useGraphEditorControllers } from "./use-graph-editor-controllers";
 import { useGraphEditorSaveFlow } from "./use-graph-editor-save-flow";
 import { useGraphEditorSession } from "./use-graph-editor-session";
 import { useHiddenFactoryGraphNodeClasses } from "./use-hidden-factory-graph-node-classes";
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph editor hook wires session, controllers, and save flow into one card value model.
-export function useCurrentActivityGraphEditor(
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: graph state wires session, controllers, and save flow into one card value model.
+export function useCurrentActivityGraphState(
   snapshot: DashboardSnapshot,
   locale?: string | null,
   factoryDocumentScopeKey?: string | null,
@@ -40,48 +41,44 @@ export function useCurrentActivityGraphEditor(
   const factoryDocumentState = useCurrentActivityFactoryDocumentState({
     eventFactory: snapshot.factory,
   });
-  const { editableDefinitionQuery, editableGraph, saveEditableDefinition } =
-    useCurrentActivityEditableGraph({
-      editorMode,
-      factoryDocumentState,
-      factoryDocumentScopeKey,
-      hasPreferenceChanges: preferencesDirty,
-      locale,
-      snapshot,
-    });
+  const {
+    documentDraft,
+    editableDefinitionQuery,
+    editableGraph,
+    saveEditableDefinition,
+  } = useCurrentActivityEditableGraph({
+    editorMode,
+    factoryDocumentState,
+    factoryDocumentScopeKey,
+    hasPreferenceChanges: preferencesDirty,
+    locale,
+    snapshot,
+  });
   const draftState = editableGraph.draftState;
   const structuralValidation = useDraftAppliedFactoryValidation(
     draftState,
-    editableGraph.layoutDraftState.layout,
+    documentDraft.layout,
     editorMode,
   );
-  const viewState = useCurrentActivityFactoryGraphViewState(
-    {
-      draftState,
-      editableFactoryDocument: factoryDocumentState.currentFactoryDocument,
-      editableFactoryDocumentStatus: editableDefinitionQuery.status,
-      editorMode,
-    },
-    snapshot,
-  );
-  const graphState = useCurrentActivityGraphFlowProjection({
-    draftState,
+  const graphRenderState = useCurrentActivityGraphRenderState({
+    definitionStatus: editableDefinitionQuery.status,
+    documentDraft,
+    editorMode,
+    factoryDocumentState,
     hiddenNodeClasses,
-    layoutDraftState: editableGraph.layoutDraftState,
+    isSaving: saveEditableDefinition.isPending,
+    structuralValidation,
     snapshot,
-    viewState,
     visibilityPreset,
   });
+  const graphProjection = graphRenderState.flowState;
+  const viewState = graphRenderState.viewState;
   const session = useGraphEditorSession({
     activeTool,
-    draftState,
-    editableDefinitionQuery,
     editorMode,
-    layoutDraftState: editableGraph.layoutDraftState,
     locale,
     ...leaveEditorBridge.sessionCallbacks,
-    projectedFactory: viewState.persistedFactoryDefinition ?? snapshot.factory,
-    saveEditableDefinition,
+    sessionState: graphRenderState.sessionState,
     setActiveTool,
     setEditorMode,
   });
@@ -121,20 +118,54 @@ export function useCurrentActivityGraphEditor(
   });
   leaveEditorBridge.bindSaveFlow(saveFlow);
 
+  const edgeWaypointNodes = useMemo(
+    () =>
+      graphProjection.positionedGraphLayout.nodes.map((node) => ({
+        id: node.nodeId,
+        position: { x: node.x, y: node.y },
+      })),
+    [graphProjection.positionedGraphLayout.nodes],
+  );
+  const edgeWaypointControls = useFactoryGraphEdgeWaypointEditor({
+    activeTool,
+    addEdgeWaypoint: editableGraph.actions.addEdgeWaypoint,
+    canInteractWithEditor: session.canInteractWithEditor,
+    editorMode,
+    handleEditorEdgeDelete: controllers.handleEditorEdgeDelete,
+    layout: graphRenderState.layoutState.currentLayout,
+    locale,
+    moveEdgeWaypoint: editableGraph.actions.moveEdgeWaypoint,
+    nodes: edgeWaypointNodes,
+    removeEdgeWaypoint: editableGraph.actions.removeEdgeWaypoint,
+  });
+
   const { resetEditorChromeForScopeChange } = saveFlow;
   const lastFactoryDocumentScopeKeyRef = useRef<string | null>(null);
+  const statusState = buildCurrentActivityGraphStatusState({
+    definitionError: editableDefinitionQuery.error,
+    definitionStatus: editableDefinitionQuery.status,
+    dirtyStateSummary: documentDraft.dirtyState,
+    draftHasChanges: documentDraft.hasTopologyChanges,
+    draftSource: documentDraft.source,
+    hasActiveWork: saveFlow.hasActiveWork,
+    isSaving: saveEditableDefinition.isPending,
+    isStaleDraft: saveFlow.isStaleDraft,
+    layoutDirty: documentDraft.hasLayoutChanges,
+    saveBlockedReason: saveFlow.saveBlockedReason,
+    saveError: saveEditableDefinition.error ?? null,
+  });
 
   useEffect(() => {
     useFactoryGraphTopologyEditorBridge
       .getState()
-      .setGraphDraftHasPendingChanges(editableGraph.pendingState.topologyDirty);
+      .setGraphDraftHasPendingChanges(documentDraft.hasTopologyChanges);
 
     return () => {
       useFactoryGraphTopologyEditorBridge
         .getState()
         .setGraphDraftHasPendingChanges(false);
     };
-  }, [editableGraph.pendingState.topologyDirty]);
+  }, [documentDraft.hasTopologyChanges]);
 
   useEffect(() => {
     const pendingFactoryBridge = useGraphEditorPendingFactoryBridge.getState();
@@ -164,7 +195,7 @@ export function useCurrentActivityGraphEditor(
     bridge.setGraphDraftHasPendingChanges(false);
   }, [factoryDocumentScopeKey, resetEditorChromeForScopeChange]);
 
-  return buildCurrentActivityGraphEditorValue({
+  return buildCurrentActivityGraphStateValue({
     activeTool,
     addEntityController,
     addMenuActions: session.addMenuActions,
@@ -173,12 +204,11 @@ export function useCurrentActivityGraphEditor(
     cancelSaveConfirmation: saveFlow.cancelSaveConfirmation,
     canSaveDraft: saveFlow.canSaveDraft,
     documentSave: editableGraph.saveState.documentSave,
+    edgeWaypointControls,
     connectionNotice: controllers.connectionNotice,
     currentFactoryDefinition: viewState.currentFactoryDefinition ?? null,
-    draftState,
-    dirtyStateSummary: editableGraph.pendingState.dirtyState,
-    layoutDraftState: editableGraph.layoutDraftState,
-    graphState,
+    graphProjection,
+    layoutState: graphRenderState.layoutState,
     locale,
     addEdgeWaypoint: editableGraph.actions.addEdgeWaypoint,
     moveEdgeWaypoint: editableGraph.actions.moveEdgeWaypoint,
@@ -190,7 +220,6 @@ export function useCurrentActivityGraphEditor(
     resetPreferences,
     undoLayout: editableGraph.actions.undoLayout,
     updateLayoutViewport: editableGraph.actions.updateLayoutViewport,
-    editableDefinitionQuery,
     editorUnavailableClassifierWorkstationName:
       session.editorUnavailableClassifierWorkstationName,
     editorMode,
@@ -206,15 +235,11 @@ export function useCurrentActivityGraphEditor(
     handleSelectionNodeDelete: controllers.handleSelectionNodeDelete,
     handleSaveDraft: saveFlow.handleSaveDraft,
     handleSaveBeforeLeavingEditor: saveFlow.handleSaveBeforeLeavingEditor,
-    hasActiveWork: saveFlow.hasActiveWork,
     isConfirmingLeaveEditor: saveFlow.isConfirmingLeaveEditor,
     isConfirmingSave: saveFlow.isConfirmingSave,
-    isStaleDraft: saveFlow.isStaleDraft,
     pendingConnectionSource: controllers.pendingConnectionSource,
     pendingRemovalIntent: controllers.pendingRemovalIntent,
     saveAttemptRevision: saveFlow.saveAttemptRevision,
-    saveBlockedReason: saveFlow.saveBlockedReason,
-    saveEditableDefinition,
     saveSummary: saveFlow.saveSummary,
     setActiveTool,
     setBlockedRemovalReason: controllers.setBlockedRemovalReason,
@@ -223,13 +248,17 @@ export function useCurrentActivityGraphEditor(
     setIsConfirmingLeaveEditor: saveFlow.setIsConfirmingLeaveEditor,
     setPendingRemovalEdgeId: controllers.setPendingRemovalEdgeId,
     setPendingRemovalNodeId: controllers.setPendingRemovalNodeId,
-    structuralValidation,
+    statusState,
+    validationState: graphRenderState.validationState,
     hiddenNodeClasses,
     hideShowMenuOpen,
     setHideShowMenuOpen,
     setVisibilityPreset,
     toggleHiddenNodeClass,
     visibilityPreset,
-    viewState,
   });
 }
+
+export type CurrentActivityGraphState = ReturnType<
+  typeof useCurrentActivityGraphState
+>;

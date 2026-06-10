@@ -4,15 +4,16 @@ import { describe, expect, it } from "vitest";
 import type { CurrentFactoryDocument } from "../../../api/current-factory-definition";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { singleNodeDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
-import { createMockGraphEditorDraftState } from "../../../testing/graph-editor-harness";
 import {
   baseFactoryDefinition,
   currentFactoryDocument,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft.test-helpers";
 import { buildFactoryGraphLayoutTopologyKey } from "../../factory-graph-editor/lib/operations/factory-graph-topology-impact";
 import { currentActivityGraphKey } from "../lib/react-flow-current-activity-card-keys";
-import { currentActivityCardFactoryDefinition } from "./current-activity-card-factory-definition";
-import type { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
+import {
+  currentActivityCardFactoryDefinition,
+  type CurrentActivityFactoryGraphSource,
+} from "./current-activity-card-factory-definition";
 import { useCurrentActivityGraphLayoutForFactory } from "./react-flow-current-activity-card-graph-layout";
 import { useTopologyStableFactoryForLayout } from "./use-topology-stable-factory-for-layout";
 
@@ -24,15 +25,12 @@ function cloneSavedDocument(
 
 function createObserverEditorStub(savedDocument: CurrentFactoryDocument) {
   return {
-    draftState: createMockGraphEditorDraftState({
-      baseDocument: savedDocument,
-      latestDocument: savedDocument,
-    }),
+    baseFactoryDocument: savedDocument,
     editableFactoryDocument: savedDocument,
     editableFactoryDocumentStatus: "success" as const,
     editorMode: false,
-    hiddenNodeClasses: new Set(),
-  } as unknown as ReturnType<typeof useCurrentActivityGraphEditor>;
+    latestFactoryDocument: savedDocument,
+  } satisfies CurrentActivityFactoryGraphSource;
 }
 
 function useObserverGraphAfterCurrentSelectionSave({

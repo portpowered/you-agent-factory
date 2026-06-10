@@ -1131,6 +1131,7 @@ describe("CurrentSelectionWidget resource save flow", () => {
       queryClient,
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
+          currentFactoryDefinition: buildDetailCardMultiResourceFactoryDocument(),
           selectedResourceName: "agent-slot",
           selection: { kind: "resource", resourceName: "agent-slot" },
         })}
@@ -1155,6 +1156,7 @@ describe("CurrentSelectionWidget resource save flow", () => {
     rerender(
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
+          currentFactoryDefinition: buildDetailCardMultiResourceFactoryDocument(),
           selectedResourceName: "voice-model",
           selection: { kind: "resource", resourceName: "voice-model" },
         })}
@@ -1211,6 +1213,7 @@ describe("CurrentSelectionWidget resource save flow", () => {
       queryClient,
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
+          currentFactoryDefinition: buildDetailCardMultiResourceFactoryDocument(),
           selectedResourceName: "agent-slot",
           selection: { kind: "resource", resourceName: "agent-slot" },
         })}
@@ -1232,6 +1235,7 @@ describe("CurrentSelectionWidget resource save flow", () => {
     rerender(
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
+          currentFactoryDefinition: buildDetailCardMultiResourceFactoryDocument(),
           selectedResourceName: "voice-model",
           selection: { kind: "resource", resourceName: "voice-model" },
         })}
@@ -1267,6 +1271,7 @@ describe("CurrentSelectionWidget resource save flow", () => {
       queryClient,
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
+          currentFactoryDefinition: buildDetailCardMultiResourceFactoryDocument(),
           selectedResourceName: "agent-slot",
           selection: { kind: "resource", resourceName: "agent-slot" },
         })}
@@ -1527,6 +1532,7 @@ function renderWorkerSelection() {
   return renderWithQueryClient(
     <CurrentSelectionWidget
       currentSelection={buildDetailCardCurrentSelection({
+        currentFactoryDefinition: buildDetailCardEditableFactoryDocument(),
         selectedWorkerName: "reviewer",
         selection: { kind: "worker", workerName: "reviewer" },
       })}

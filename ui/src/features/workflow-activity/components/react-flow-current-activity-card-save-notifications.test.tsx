@@ -36,10 +36,12 @@ function createViewModelStub(overrides: Record<string, unknown> = {}) {
   return {
     ...merged,
     saveControls: {
+      attemptRevision: merged.saveAttemptRevision,
       feedback: merged.documentSave,
       ...((merged as { saveControls?: object }).saveControls ?? {}),
     },
     status: {
+      hasSharedGraphChanges: hasTopologyChanges,
       hasTopologyChanges,
       isSaving: saveMutation.isPending ?? false,
       saveError: saveMutation.error ?? null,

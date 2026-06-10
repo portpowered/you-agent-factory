@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { DashboardSelection } from "../../base/state/selection-types";
-import { useEditableDocConfigurationState } from "./use-editable-doc-configuration-state";
+import { useEditableDocConfigurationState as useEditableDocConfigurationStateImplementation } from "./use-editable-doc-configuration-state";
 
 vi.mock(
   "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
@@ -40,6 +40,23 @@ function buildFactoryDocument(
     workTypes: [],
     ...overrides,
   };
+}
+
+function useEditableDocConfigurationState(
+  selection: DashboardSelection | null,
+  targetPath: string | null,
+  locale?: string | null,
+) {
+  const currentFactoryDocument = useCurrentFactoryDocument(false) as {
+    data?: CurrentFactoryDocument;
+  };
+
+  return useEditableDocConfigurationStateImplementation(
+    selection,
+    targetPath,
+    locale,
+    currentFactoryDocument.data,
+  );
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: editable doc session regressions stay in one suite.
@@ -82,7 +99,7 @@ describe("useEditableDocConfigurationState", () => {
     });
   });
 
-  it("returns undefined for non-doc selections and explicit loading, error, and empty states", async () => {
+  it("returns undefined for non-doc selections and loading or empty states", async () => {
     expect(
       renderHook(() =>
         useEditableDocConfigurationState(
@@ -108,25 +125,9 @@ describe("useEditableDocConfigurationState", () => {
     expect(loadingResult.current).toEqual({ status: "loading" });
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: undefined,
-      error: new Error("Network dropped"),
-      isError: true,
-      isPending: false,
-      status: "error",
-    } as never);
-    const { result: errorResult } = renderHook(() =>
-      useEditableDocConfigurationState(
-        docSelection,
-        "factory/docs/overview.md",
-      ),
-    );
-    expect(errorResult.current).toEqual({
-      errorMessage: "Network dropped",
-      status: "error",
-    });
-
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: undefined,
+      data: buildFactoryDocument({
+        supportingFiles: { bundledFiles: [] },
+      }),
       error: null,
       isError: false,
       isPending: false,

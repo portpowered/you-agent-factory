@@ -22,10 +22,8 @@ import { createEmptyFactoryGraphDraft } from "../../factory-graph-editor/lib/dra
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import { useFactoryGraphConnectionController } from "../hooks/react-flow-current-activity-card-editor-connections";
 import { useCurrentActivityGraphViewModel } from "../hooks/react-flow-current-activity-card-graph-view-model";
-import {
-  type CurrentActivitySelection,
-  ReactFlowCurrentActivityCard,
-} from "./react-flow-current-activity-card";
+import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
+import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
 
 type BuildGraphLayout = (
@@ -892,6 +890,8 @@ function renderViewport({
         canMoveLayout: includeMoveLayoutNode,
         canRedo: false,
         canUndo: false,
+        initialFitViewKey: "full-graph",
+        initialFitViewOptions: { padding: 0.18 },
         moveNode: moveLayoutNode,
         moveNodesByDelta: vi.fn(),
         redo: vi.fn(),
@@ -900,8 +900,6 @@ function renderViewport({
         updateViewport: vi.fn(),
       }}
       imports={mockImportController}
-      initialFitViewKey="full-graph"
-      initialFitViewOptions={{ padding: 0.18 }}
       nodeTypes={{}}
       nodes={nodes}
       onConnect={onConnect}

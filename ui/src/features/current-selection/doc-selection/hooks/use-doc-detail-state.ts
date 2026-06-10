@@ -1,9 +1,11 @@
 import { useMemo } from "react";
 
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { useGraphEditorPendingFactoryBridge } from "../../../workflow-activity/state/graph-editor-pending-factory-bridge";
-import { factoryBundledDocDisplayLabel } from "../../../workflow-activity/lib/factory-bundled-docs";
-import { getDocDetailMessages } from "../messages/doc-detail";
+import {
+  factoryBundledDocDisplayLabel,
+  findFactoryBundledDocFile,
+  type FactoryBundledDocFile,
+} from "../../../workflow-activity/lib/factory-bundled-docs";
 
 export type DocDetailState =
   | { status: "loading" }
@@ -17,37 +19,23 @@ export type DocDetailState =
     };
 
 export function useDocDetailState(
-  targetPath: string,
-  locale?: string | null,
+  {
+    savedBundledDoc,
+    targetPath,
+  }: {
+    savedBundledDoc?: FactoryBundledDocFile | null;
+    targetPath: string;
+  },
+  _locale?: string | null,
 ): DocDetailState {
-  const documentQuery = useCurrentFactoryDocument();
   const pendingFactoryDefinition = useGraphEditorPendingFactoryBridge(
     (state) => state.pendingFactoryDefinition,
   );
-  const messages = getDocDetailMessages(locale);
 
   return useMemo((): DocDetailState => {
-    if (documentQuery.status === "pending") {
-      return { status: "loading" };
-    }
-
-    if (documentQuery.status === "error") {
-      return {
-        status: "error",
-        errorMessage:
-          documentQuery.error?.message ?? messages.configurationUnknownError,
-      };
-    }
-
     const bundledFile =
-      documentQuery.data?.supportingFiles?.bundledFiles?.find(
-        (candidate) =>
-          candidate.type === "DOC" && candidate.targetPath === targetPath,
-      ) ??
-      pendingFactoryDefinition?.supportingFiles?.bundledFiles?.find(
-        (candidate) =>
-          candidate.type === "DOC" && candidate.targetPath === targetPath,
-      );
+      savedBundledDoc ??
+      findFactoryBundledDocFile(pendingFactoryDefinition, targetPath);
 
     if (!bundledFile) {
       return { status: "empty" };
@@ -60,11 +48,8 @@ export function useDocDetailState(
       targetPath,
     };
   }, [
-    documentQuery.data,
-    documentQuery.error,
-    documentQuery.status,
-    messages.configurationUnknownError,
     pendingFactoryDefinition,
+    savedBundledDoc,
     targetPath,
   ]);
 }

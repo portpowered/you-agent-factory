@@ -3,22 +3,17 @@ import { useMemo } from "react";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import {
   type CurrentActivityFactoryGraphSource,
-  currentActivityCardBaseFactoryDocument,
   currentActivityCardCurrentFactoryDefinition,
   currentActivityCardDisplayFactoryDefinition,
   currentActivityCardFactoryDefinition,
   currentActivityCardPendingFactoryDefinition,
-  currentActivityCardSavedFactoryDocument,
 } from "./current-activity-card-factory-definition";
 
-export interface CurrentActivityFactoryGraphViewState
-  extends CurrentActivityFactoryGraphSource {
-  baseFactoryDocument: DashboardSnapshot["factory"] | null;
+export interface CurrentActivityFactoryGraphViewState {
   currentFactoryDefinition: DashboardSnapshot["factory"] | null;
   displayFactoryDefinition: DashboardSnapshot["factory"] | null | undefined;
   pendingFactoryDefinition: DashboardSnapshot["factory"] | null;
   persistedFactoryDefinition: DashboardSnapshot["factory"] | null | undefined;
-  savedFactoryDocument: DashboardSnapshot["factory"] | null;
 }
 
 export function useCurrentActivityFactoryGraphViewState(
@@ -27,8 +22,6 @@ export function useCurrentActivityFactoryGraphViewState(
 ): CurrentActivityFactoryGraphViewState {
   return useMemo(
     () => ({
-      ...source,
-      baseFactoryDocument: currentActivityCardBaseFactoryDocument(source),
       currentFactoryDefinition:
         currentActivityCardCurrentFactoryDefinition(source),
       displayFactoryDefinition: currentActivityCardDisplayFactoryDefinition(
@@ -41,7 +34,6 @@ export function useCurrentActivityFactoryGraphViewState(
         source,
         snapshot,
       ),
-      savedFactoryDocument: currentActivityCardSavedFactoryDocument(source),
     }),
     [snapshot, source],
   );

@@ -384,7 +384,6 @@ function renderViewport({
   return render(
     <CurrentActivityGraphViewport
       addControls={{}}
-      canonicalLayoutViewport={canonicalLayoutViewport}
       editorControls={{
         activeTool: null,
         canInteract: true,
@@ -401,12 +400,13 @@ function renderViewport({
       hasPendingChanges={false}
       headingID="test-heading"
       imports={importController}
-      initialFitViewKey="full-graph"
-      initialFitViewOptions={{ padding: 0.18 }}
       layoutControls={{
         canMoveLayout: includeMoveLayoutNode,
         canRedo: canRedoLayout,
         canUndo: canUndoLayout,
+        canonicalViewport: canonicalLayoutViewport,
+        initialFitViewKey: "full-graph",
+        initialFitViewOptions: { padding: 0.18 },
         moveNode: moveLayoutNode,
         moveNodesByDelta: moveLayoutNodesByDelta,
         redo: onRedoLayout,

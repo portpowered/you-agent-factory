@@ -5,7 +5,6 @@ import { buildFactoryGraphLayoutTopologyKey } from "../../factory-graph-editor/l
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import * as currentActivityFactoryGraphLayout from "../lib/current-activity-factory-graph-layout";
 import {
-  useCurrentActivityGraphLayout,
   useCurrentActivityGraphLayoutForFactory,
 } from "./react-flow-current-activity-card-graph-layout";
 
@@ -47,7 +46,7 @@ describe("useCurrentActivityGraphLayout", () => {
     snapshot.factory = undefined;
 
     const { result } = renderHook(() =>
-      useCurrentActivityGraphLayout(snapshot),
+      useCurrentActivityGraphLayoutForFactory(snapshot),
     );
 
     await waitFor(() => {
@@ -100,7 +99,7 @@ describe("useCurrentActivityGraphLayout", () => {
     };
 
     const { result } = renderHook(() =>
-      useCurrentActivityGraphLayout(snapshot),
+      useCurrentActivityGraphLayoutForFactory(snapshot),
     );
 
     await waitFor(() => {
@@ -324,7 +323,7 @@ describe("useCurrentActivityGraphLayout", () => {
   });
 });
 
-describe("useCurrentActivityGraphLayout legacy routes", () => {
+describe("useCurrentActivityGraphLayoutForFactory legacy routes", () => {
   beforeEach(() => {
     mockBuildGraphLayout.mockReset();
     window.localStorage.clear();
@@ -368,7 +367,7 @@ describe("useCurrentActivityGraphLayout legacy routes", () => {
     };
 
     const { result } = renderHook(() =>
-      useCurrentActivityGraphLayout(snapshot),
+      useCurrentActivityGraphLayoutForFactory(snapshot),
     );
 
     await waitFor(() => {

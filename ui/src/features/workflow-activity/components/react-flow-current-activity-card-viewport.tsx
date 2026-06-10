@@ -97,7 +97,6 @@ function CurrentActivityGraphEditorChrome(props: {
         onToggle: props.editorControls.toggleMode,
         tooltipOverride: editorUnavailableReason,
       }}
-      hasPendingChanges={props.hasPendingChanges}
       hiddenNodeClasses={props.visibilityControls.hiddenNodeClasses}
       hideShowMenuOpen={props.visibilityControls.isMenuOpen}
       hideShowVisible={true}
@@ -247,6 +246,9 @@ type CurrentActivityGraphViewportLayoutControls = {
   canMoveLayout: boolean;
   canRedo?: boolean;
   canUndo?: boolean;
+  canonicalViewport?: FactoryLayoutViewport | null;
+  initialFitViewKey: string;
+  initialFitViewOptions: FitViewOptions;
   moveNode: (nodeId: string, position: XYPosition) => void;
   moveNodesByDelta: (
     nodeIds: readonly string[],
@@ -279,9 +281,6 @@ export function CurrentActivityGraphViewport({
   hasPendingChanges,
   headingID,
   imports,
-  canonicalLayoutViewport,
-  initialFitViewKey,
-  initialFitViewOptions,
   isSavingDraft = false,
   layoutControls,
   edgeTypes,
@@ -311,9 +310,6 @@ export function CurrentActivityGraphViewport({
   hasPendingChanges: boolean;
   headingID: string;
   imports: CurrentActivityImportController;
-  canonicalLayoutViewport?: FactoryLayoutViewport | null;
-  initialFitViewKey: string;
-  initialFitViewOptions: FitViewOptions;
   isSavingDraft?: boolean;
   layoutControls: CurrentActivityGraphViewportLayoutControls;
   edgeTypes?: EdgeTypes;
@@ -369,6 +365,7 @@ export function CurrentActivityGraphViewport({
   });
   const graphViewport =
     useMeasuredCurrentActivityGraphViewport(flowContainerRef);
+  const canonicalLayoutViewport = layoutControls.canonicalViewport ?? null;
   const shouldFitView = canonicalLayoutViewport == null;
   const skipNextViewportMoveEndRef = useRef(false);
   const canPersistLayoutChanges = layoutControls.canMoveLayout;
@@ -383,10 +380,10 @@ export function CurrentActivityGraphViewport({
     : undefined;
   useCanonicalLayoutViewportSync({
     canonicalLayoutViewport,
-    fitViewOptions: initialFitViewOptions,
+    fitViewOptions: layoutControls.initialFitViewOptions,
     flowInstanceRef,
     skipNextViewportMoveEndRef,
-    viewportResetKey: initialFitViewKey,
+    viewportResetKey: layoutControls.initialFitViewKey,
   });
   const handleConnect = useCallback(
     (connection: Connection) => {
@@ -491,8 +488,8 @@ export function CurrentActivityGraphViewport({
               edgeTypes={edgeTypes}
               defaultViewport={canonicalLayoutViewport ?? undefined}
               fitView={shouldFitView}
-              fitViewOptions={initialFitViewOptions}
-              key={initialFitViewKey}
+              fitViewOptions={layoutControls.initialFitViewOptions}
+              key={layoutControls.initialFitViewKey}
               isValidConnection={isValidConnection}
               maxZoom={2}
               minZoom={0.25}
@@ -500,7 +497,8 @@ export function CurrentActivityGraphViewport({
               nodes={nodes}
               edgesFocusable={editorControls.isEditing}
               nodesConnectable={
-                editorControls.isEditing && editorControls.activeTool !== "delete"
+                editorControls.isEditing &&
+                editorControls.activeTool !== "delete"
               }
               onConnect={handleConnect}
               onInit={(instance) => {

@@ -131,6 +131,7 @@ export interface ProjectFactoryGraphToReactFlowOptions {
 }
 
 const COLUMN_BY_KIND: Record<FactoryGraphNodeKind, number> = {
+  doc: 5,
   resource: 0,
   worker: 1,
   workstation: 2,

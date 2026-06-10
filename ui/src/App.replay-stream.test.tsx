@@ -6,6 +6,7 @@ import {
   within,
 } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { FACTORY_EVENT_TYPES, type FactoryEvent } from "./api/events";
 import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
 import {
   failureAnalysisTimelineEvents,
@@ -61,6 +62,53 @@ function expectFixedReviewWorkstationDimensions(): void {
   expect(reviewNode.getAttribute("style")).toContain("height: 196px");
 }
 
+function expectReactFlowNodePosition(
+  node: HTMLElement,
+  position: { x: number; y: number },
+): void {
+  expect(node.style.transform.replace(/\s/g, "")).toContain(
+    `translate(${position.x}px,${position.y}px)`,
+  );
+}
+
+function expectReactFlowViewportTransform(viewport: {
+  x: number;
+  y: number;
+  zoom: number;
+}): void {
+  const workGraphViewport = screen.getByRole("region", {
+    name: "Work graph viewport",
+  });
+  const flowViewport = workGraphViewport.querySelector<HTMLElement>(
+    ".react-flow__viewport",
+  );
+
+  expect(flowViewport?.style.transform.replace(/\s/g, "")).toContain(
+    `translate(${viewport.x}px,${viewport.y}px)scale(${viewport.zoom})`,
+  );
+}
+
+function expectReactFlowEdgePathIncludesWaypoint(
+  edgeId: string,
+  waypoint: { x: number; y: number },
+): void {
+  const edgeGroup = Array.from(document.querySelectorAll("[data-edge-id]")).find(
+    (element) => element.getAttribute("data-edge-id") === edgeId,
+  );
+
+  if (!edgeGroup) {
+    const renderedEdgeIds = Array.from(
+      document.querySelectorAll("[data-edge-id]"),
+    ).map((element) => element.getAttribute("data-edge-id"));
+    throw new Error(
+      `expected ${edgeId} to be rendered as a graph edge; rendered edges: ${renderedEdgeIds.join(", ")}`,
+    );
+  }
+
+  const edgePath = edgeGroup.querySelector("path");
+  expect(edgePath?.getAttribute("d")).toContain(`${waypoint.x} ${waypoint.y}`);
+}
+
 function expectRenderedResourceCountMatchesBackendWorldView(
   tick: number,
 ): void {
@@ -102,6 +150,116 @@ function requireEventStream(): MockEventSource {
 
   return stream;
 }
+
+const streamGraphBaseFactory = {
+  name: "Streamed Graph Factory",
+  layout: {
+    nodes: [
+      { id: "workstation:review", position: { x: 120, y: 180 } },
+      { id: "worker:writer", position: { x: 120, y: 420 } },
+    ],
+    schemaVersion: 1,
+    viewport: { x: 0, y: 0, zoom: 1 },
+  },
+  version: {
+    logical: "1",
+    physical: "2026-06-10T00:00:00Z",
+  },
+  workers: [
+    {
+      model: "gpt-5",
+      name: "writer",
+      type: "MODEL_WORKER",
+    },
+  ],
+  workstations: [
+    {
+      inputs: [{ state: "queued", workType: "story" }],
+      name: "Review",
+      outputs: [{ state: "done", workType: "story" }],
+      type: "MODEL_WORKSTATION",
+      worker: "writer",
+    },
+  ],
+  workTypes: [
+    {
+      name: "story",
+      states: [
+        { name: "queued", type: "INITIAL" },
+        { name: "qa", type: "PROCESSING" },
+        { name: "done", type: "TERMINAL" },
+      ],
+    },
+  ],
+};
+
+const streamGraphChangedFactory = {
+  ...streamGraphBaseFactory,
+  layout: {
+    edges: [
+      {
+        id: "worker-assignment:worker:critic->workstation:QA",
+        waypoints: [{ x: 460, y: 250 }],
+      },
+    ],
+    nodes: [
+      ...(streamGraphBaseFactory.layout.nodes ?? []),
+      { id: "workstation:QA", position: { x: 640, y: 260 } },
+      { id: "worker:critic", position: { x: 420, y: 420 } },
+    ],
+    schemaVersion: 1,
+    viewport: { x: -180, y: 55, zoom: 0.85 },
+  },
+  version: {
+    logical: "2",
+    physical: "2026-06-10T00:01:00Z",
+  },
+  workers: [
+    ...streamGraphBaseFactory.workers,
+    {
+      model: "gpt-5",
+      name: "critic",
+      type: "MODEL_WORKER",
+    },
+  ],
+  workstations: [
+    ...streamGraphBaseFactory.workstations,
+    {
+      inputs: [{ state: "qa", workType: "story" }],
+      name: "QA",
+      outputs: [{ state: "done", workType: "story" }],
+      type: "MODEL_WORKSTATION",
+      worker: "critic",
+    },
+  ],
+};
+
+const streamedGraphChangeEvents = [
+  {
+    context: {
+      eventTime: "2026-06-10T00:00:00Z",
+      sequence: 1,
+      tick: 1,
+    },
+    id: "factory-event/initial-structure/streamed-graph",
+    payload: {
+      factory: streamGraphBaseFactory,
+    },
+    type: FACTORY_EVENT_TYPES.initialStructureRequest,
+  },
+  {
+    context: {
+      eventTime: "2026-06-10T00:01:00Z",
+      sequence: 2,
+      tick: 2,
+    },
+    id: "factory-event/factory-change/streamed-graph",
+    payload: {
+      factory: streamGraphChangedFactory,
+    },
+    type: FACTORY_EVENT_TYPES.factoryChange,
+  },
+] satisfies FactoryEvent[];
 
 describe("App streamed replay rendering flows", () => {
   registerAppDashboardTestLifecycle();
@@ -288,6 +446,54 @@ describe("App streamed replay rendering flows", () => {
       expectRenderedResourceCountMatchesBackendWorldView(1);
     });
 
+    expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([]);
+  });
+
+  it("renders factory graph changes from streamed factory events", async () => {
+    const { fetchMock } = renderApp({
+      seedTimelineFromSnapshot: false,
+      snapshot: baselineSnapshot,
+    });
+
+    const stream = requireEventStream();
+
+    act(() => {
+      stream.emit("message", streamedGraphChangeEvents[0]);
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Select Review workstation" }),
+      ).toBeTruthy();
+      expect(
+        screen.queryByRole("button", { name: "Select QA workstation" }),
+      ).toBeNull();
+      expect(screen.getByRole("img", { name: "worker:writer" })).toBeTruthy();
+    });
+
+    act(() => {
+      stream.emit("message", streamedGraphChangeEvents[1]);
+    });
+
+    const qaNode = await waitFor(() =>
+      getWorkstationNodeByLabel("QA"),
+    );
+    expectReactFlowNodePosition(qaNode, { x: 640, y: 260 });
+    await waitFor(() => {
+      expectReactFlowViewportTransform({ x: -180, y: 55, zoom: 0.85 });
+    });
+    await waitFor(() => {
+      expectReactFlowEdgePathIncludesWaypoint(
+        "worker-assignment:worker:critic->workstation:QA",
+        { x: 460, y: 250 },
+      );
+    });
+    expect(screen.getByRole("img", { name: "worker:critic" })).toBeTruthy();
+    expect(
+      screen.getByRole<HTMLInputElement>("slider", {
+        name: "Timeline tick",
+      }).value,
+    ).toBe("2");
     expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([]);
   });
 

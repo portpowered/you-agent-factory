@@ -7,7 +7,7 @@ import {
   hasEditableWorkstationValidationErrors,
   validateEditableWorkstationDraft,
 } from "../lib/validation/editable-workstation-configuration-validation";
-import { useEditableWorkstationConfigurationState } from "./use-editable-workstation-configuration-state";
+import { useEditableWorkstationConfigurationState as useEditableWorkstationConfigurationStateImplementation } from "./use-editable-workstation-configuration-state";
 import { useCurrentWorkstationPromptTemplateContract } from "./useCurrentWorkstationPromptTemplateContract";
 import { useCurrentWorkstationPromptTemplateValidation } from "./useCurrentWorkstationPromptTemplateValidation";
 
@@ -45,6 +45,23 @@ const planSelection: DashboardSelection = {
   kind: "node",
   nodeId: planNode.node_id,
 };
+
+function useEditableWorkstationConfigurationState(
+  selection: DashboardSelection | null,
+  selectedNode: typeof semanticWorkflowDashboardSnapshot.topology.workstation_nodes_by_id.review | null,
+  locale?: string | null,
+) {
+  const currentFactoryDocument = useCurrentFactoryDocument(false) as {
+    data?: CurrentFactoryDocument;
+  };
+
+  return useEditableWorkstationConfigurationStateImplementation(
+    selection,
+    selectedNode,
+    locale,
+    currentFactoryDocument.data,
+  );
+}
 
 describe("useEditableWorkstationConfigurationState", () => {
   beforeEach(() => {
@@ -168,7 +185,10 @@ describe("useEditableWorkstationConfigurationState", () => {
     });
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult(undefined),
+      buildEditableDefinitionResult({
+        ...buildEditableFactoryDefinition(),
+        workstations: [],
+      }),
     );
     rerender({ locale: "zh-CN" });
 
@@ -181,7 +201,7 @@ describe("useEditableWorkstationConfigurationState", () => {
     });
   });
 
-  it("surfaces editable-definition load failures directly in the form state", async () => {
+  it("reports loading while the event-backed factory document is unavailable", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: undefined,
       error: { message: "Current factory definition failed to load." },
@@ -196,10 +216,7 @@ describe("useEditableWorkstationConfigurationState", () => {
     );
 
     await waitFor(() => {
-      expect(result.current).toMatchObject({
-        errorMessage: "Current factory definition failed to load.",
-        status: "error",
-      });
+      expect(result.current).toEqual({ status: "loading" });
     });
   });
 

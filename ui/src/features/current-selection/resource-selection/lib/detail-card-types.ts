@@ -16,10 +16,13 @@ export interface ResourceDetailCardProps {
   editableConfigurationState?: EditableResourceConfigurationState;
   headerAction?: ReactNode;
   locale?: string | null;
+  resource?: FactoryResource | null;
   resourceName: string;
   saveState?: EditableResourceSaveState;
   tokenCount?: number | null;
   widgetId?: string;
+  workerNames?: readonly string[] | null;
+  workstationNames?: readonly string[] | null;
 }
 
 export type EditableResourceSaveValidationErrors = {

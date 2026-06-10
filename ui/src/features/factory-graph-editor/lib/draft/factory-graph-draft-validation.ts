@@ -2,6 +2,13 @@ import { workstationRequiresWorkerAssignment } from "../../../current-factory-de
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 import { buildDraftAppliedFactoryDefinition } from "./factory-graph-draft-apply";
 import { buildFactoryGraphTopologyFromDefinition } from "./factory-graph-draft-graph";
+import {
+  isInternalSystemTimeGraphNodeId,
+  isInternalSystemTimeWorkState,
+  isInternalSystemTimeWorkstation,
+  isInternalSystemTimeWorkType,
+} from "./factory-graph-draft-internal-system-time";
+import { validateFinalWorkstationRoutes } from "./factory-graph-draft-route-validation";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
@@ -80,6 +87,7 @@ export function validateFactoryGraphDraftSave(
 
   for (const workstation of draft.additions.workstations) {
     if (
+      !isInternalSystemTimeWorkstation(workstation) &&
       workstationRequiresWorkerAssignment(workstation) &&
       workstation.worker.trim().length === 0
     ) {
@@ -88,6 +96,7 @@ export function validateFactoryGraphDraftSave(
   }
 
   validateFinalWorkerAssignments(pendingFactoryDefinition, errors, locale);
+  validateFinalWorkstationRoutes(pendingFactoryDefinition, errors, locale);
 
   return errors;
 }
@@ -156,6 +165,7 @@ function validateFinalWorkerAssignments(
 ) {
   for (const workstation of pendingFactoryDefinition.workstations ?? []) {
     if (
+      !isInternalSystemTimeWorkstation(workstation) &&
       workstationRequiresWorkerAssignment(workstation) &&
       workstation.worker.trim().length === 0
     ) {
@@ -191,6 +201,13 @@ function validateEdgeChange(
   errors: FactoryGraphDraftValidationError[],
   locale?: string | null,
 ) {
+  if (
+    isInternalSystemTimeGraphNodeId(nodeKeyId(edgeChange.source)) ||
+    isInternalSystemTimeGraphNodeId(nodeKeyId(edgeChange.target))
+  ) {
+    return;
+  }
+
   const messages = getFactoryGraphEditorMessages(locale);
   const source = nodeIndex.get(nodeKeyId(edgeChange.source));
   const target = nodeIndex.get(nodeKeyId(edgeChange.target));
@@ -265,6 +282,15 @@ function collectFactoryGraphNodeIds(
 ): string[] {
   const nodeIds: string[] = [];
 
+  for (const bundledFile of factoryDefinition.supportingFiles?.bundledFiles ??
+    []) {
+    const targetPath = bundledFile.targetPath?.trim();
+    if (!targetPath) {
+      continue;
+    }
+
+    nodeIds.push(nodeKeyId({ id: targetPath, kind: "doc", name: targetPath }));
+  }
   for (const resource of factoryDefinition.resources ?? []) {
     nodeIds.push(
       nodeKeyId({
@@ -282,6 +308,10 @@ function collectFactoryGraphNodeIds(
     );
   }
   for (const workType of factoryDefinition.workTypes ?? []) {
+    if (isInternalSystemTimeWorkType(workType)) {
+      continue;
+    }
+
     nodeIds.push(
       nodeKeyId({
         kind: "work-type",
@@ -289,6 +319,10 @@ function collectFactoryGraphNodeIds(
       }),
     );
     for (const state of workType.states) {
+      if (isInternalSystemTimeWorkState(state, workType.id ?? workType.name)) {
+        continue;
+      }
+
       nodeIds.push(
         nodeKeyId({
           kind: "work-state",
@@ -299,6 +333,10 @@ function collectFactoryGraphNodeIds(
     }
   }
   for (const workstation of factoryDefinition.workstations ?? []) {
+    if (isInternalSystemTimeWorkstation(workstation)) {
+      continue;
+    }
+
     nodeIds.push(
       nodeKeyId({
         kind: "workstation",

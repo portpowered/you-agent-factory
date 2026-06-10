@@ -9,7 +9,7 @@ import { factoryGraphDocNodeIdForTargetPath } from "../../factory-graph-editor/l
 import {
   CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
   CURRENT_ACTIVITY_DOC_NODE_WIDTH,
-} from "./current-activity-doc-graph-layout";
+} from "./current-activity-factory-graph-layout";
 import {
   axisAlignedRectFromTopLeft,
   type FlowPoint,

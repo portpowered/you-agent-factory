@@ -41,6 +41,7 @@ export interface PositionedWorkstationNode extends PositionedBaseNode {
 
 export interface PositionedDocNode extends PositionedBaseNode {
   displayLabel: string;
+  fileType?: string;
   nodeKind: "doc";
   targetPath: string;
 }

@@ -630,16 +630,21 @@ function buildDocNode(
   const wireSelectionHandlers = shouldWireGraphNodeSelectionHandlers(
     input.editor,
   );
+  const selectableDoc =
+    positionedNode.fileType === undefined || positionedNode.fileType === "DOC";
 
   return {
     className: "border-0 bg-transparent p-0 text-on-surface",
     data: {
       displayLabel: positionedNode.displayLabel,
       factoryGraphNodeId: positionedNode.nodeId,
+      fileType: positionedNode.fileType,
       handles: [],
       kind: "doc",
       locale: input.locale,
-      ...(wireSelectionHandlers ? { onSelectDoc: input.onSelectDoc } : {}),
+      ...(wireSelectionHandlers && selectableDoc
+        ? { onSelectDoc: input.onSelectDoc }
+        : {}),
       selectedDoc:
         input.selection?.kind === "doc" &&
         input.selection.targetPath === positionedNode.targetPath,

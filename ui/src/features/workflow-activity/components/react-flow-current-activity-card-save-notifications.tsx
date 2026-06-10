@@ -55,11 +55,11 @@ export function CurrentActivityGraphSaveNotifications({
   const messages = getFactoryGraphEditorMessages(locale);
   const lastDeliveredDeliveryKeyRef =
     useRef<SaveNotificationDeliveryKey | null>(null);
-  const saveAttemptRevision = viewModel.saveAttemptRevision;
+  const saveAttemptRevision = viewModel.saveControls.attemptRevision;
   const saveMutationError = viewModel.status.saveError;
   const notification = resolveGraphDocumentSaveToastNotification({
     documentSave: viewModel.saveControls.feedback,
-    hasDraftChanges: viewModel.status.hasTopologyChanges,
+    hasDraftChanges: viewModel.status.hasSharedGraphChanges,
     messages,
     saveMutationError,
   });

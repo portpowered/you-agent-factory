@@ -58,10 +58,6 @@ export interface FactoryGraphEditorVisibilityPresetOption {
   selected: boolean;
 }
 
-const TOOLBAR_ACTIONS_CLASS =
-  "flex flex-nowrap items-center gap-2 border-l border-outline pl-2 max-md:ml-auto";
-const EDITOR_CONTROLS_TRANSITION_CLASS =
-  "grid min-h-10 max-h-11 min-w-0 self-center overflow-hidden transition-[max-width,opacity] duration-200 ease-out motion-reduce:transition-none";
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: toolbar composes edit-mode toggle, hide/show, and layout history controls.
 export function FactoryGraphEditorToolbar({
   activeTool,
@@ -69,10 +65,9 @@ export function FactoryGraphEditorToolbar({
   canInteract,
   canRedoLayout = false,
   canSave = false,
-  canDiscard = true,
+  canDiscard = false,
   canUndoLayout = false,
   editModeToggle,
-  hasPendingChanges = false,
   hiddenNodeClasses = new Set<FactoryGraphNodeKind>(),
   hideShowMenuOpen = false,
   hideShowVisible = true,
@@ -108,7 +103,6 @@ export function FactoryGraphEditorToolbar({
     onToggle: () => void;
     tooltipOverride?: string;
   };
-  hasPendingChanges?: boolean;
   hiddenNodeClasses?: ReadonlySet<FactoryGraphNodeKind>;
   hideShowMenuOpen?: boolean;
   hideShowVisible?: boolean;
@@ -138,8 +132,8 @@ export function FactoryGraphEditorToolbar({
   const showDraftActionRow = visible;
   const showEditorControls = visible;
   const toolbarButtonsDisabled = !showEditorControls || !canInteract;
-  const discardDisabled = !hasPendingChanges || !canDiscard || isSaving;
-  const saveDisabled = !hasPendingChanges || !canSave || isSaving;
+  const discardDisabled = !canDiscard;
+  const saveDisabled = !canSave;
 
   return (
     <FactoryGraphEditorFloatingSurface
@@ -162,7 +156,7 @@ export function FactoryGraphEditorToolbar({
       <div
         aria-hidden={!showEditorControls}
         className={cn(
-          EDITOR_CONTROLS_TRANSITION_CLASS,
+          "grid min-h-10 max-h-11 min-w-0 self-center overflow-hidden transition-[max-width,opacity] duration-200 ease-out motion-reduce:transition-none",
           showEditorControls
             ? "max-w-xl opacity-100"
             : "pointer-events-none max-w-0 opacity-0",
@@ -257,7 +251,7 @@ export function FactoryGraphEditorToolbar({
                   </FactoryGraphEditorTooltipActionButton>
                 </>
               }
-              actionsClassName={TOOLBAR_ACTIONS_CLASS}
+              actionsClassName="flex flex-nowrap items-center gap-2 border-l border-outline pl-2 max-md:ml-auto"
               className="min-w-0 flex-1 flex-nowrap items-center overflow-hidden"
             />
           ) : null}

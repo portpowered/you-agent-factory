@@ -28,6 +28,7 @@ export type {
 };
 
 export type FactoryGraphNodeKind =
+  | "doc"
   | "resource"
   | "worker"
   | "work-state"
@@ -50,6 +51,7 @@ export interface FactoryGraphNodeReference {
   id?: string;
   kind: Exclude<FactoryGraphNodeKind, "work-state">;
   name: string;
+  sourceFileType?: string;
 }
 
 export interface FactoryGraphWorkStateReference {
@@ -93,6 +95,7 @@ export interface FactoryGraphDraftValidationError {
     | "DUPLICATE_IDENTIFIER"
     | "INCOMPATIBLE_EDGE"
     | "INVALID_RELATIONSHIP_TYPE"
+    | "INVALID_WORKSTATION_ROUTE"
     | "MISSING_REQUIRED_FIELD"
     | "UNKNOWN_NODE";
   field?: string;
@@ -278,6 +281,8 @@ export function appendUniqueEdgeChange(
 
 export function nodeKeyId(key: FactoryGraphNodeKey): string {
   switch (key.kind) {
+    case "doc":
+      return factoryGraphNodeIdForSubject("doc", key.id, key.name);
     case "resource":
       return factoryGraphNodeIdForSubject("resource", key.id, key.name);
     case "worker":

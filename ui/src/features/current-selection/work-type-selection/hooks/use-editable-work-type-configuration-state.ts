@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import {
   hasEditableWorkTypeValidationErrors,
   mergeEditableWorkTypeContractValidationErrors,
@@ -26,14 +26,14 @@ export function useEditableWorkTypeConfigurationState(
   selection: DashboardSelection | null,
   workTypeName: string | null,
   locale?: string | null,
+  editableDefinition?: CurrentFactoryDocument | null,
 ): EditableWorkTypeConfigurationState | undefined {
   const isWorkTypeSelection =
     selection?.kind === "work-type" && workTypeName != null;
   const messages = getWorkTypeDetailMessages(locale);
-  const editableDefinition = useCurrentFactoryDocument(isWorkTypeSelection);
   const { selectedEditableValues, sessionState, setSessionState } =
     useEditableWorkTypeSession(
-      editableDefinition.data,
+      editableDefinition,
       workTypeName,
       isWorkTypeSelection,
     );
@@ -42,18 +42,11 @@ export function useEditableWorkTypeConfigurationState(
     return undefined;
   }
 
-  if (editableDefinition.isPending) {
+  if (!editableDefinition) {
     return { status: "loading" };
   }
 
-  if (editableDefinition.isError) {
-    return {
-      errorMessage: editableDefinition.error.message,
-      status: "error",
-    };
-  }
-
-  if (!editableDefinition.data || !selectedEditableValues || !sessionState) {
+  if (!selectedEditableValues || !sessionState) {
     return {
       message: messages.configurationEmpty,
       status: "empty",
@@ -61,7 +54,7 @@ export function useEditableWorkTypeConfigurationState(
   }
 
   return buildReadyEditableWorkTypeConfigurationState({
-    editableDefinition: editableDefinition.data,
+    editableDefinition,
     messages,
     sessionState,
     setSessionState,
@@ -71,7 +64,7 @@ export function useEditableWorkTypeConfigurationState(
 }
 
 function useEditableWorkTypeSession(
-  editableDefinition: ReturnType<typeof useCurrentFactoryDocument>["data"],
+  editableDefinition: CurrentFactoryDocument | null | undefined,
   workTypeName: string | null,
   isWorkTypeSelection: boolean,
 ) {
@@ -113,7 +106,7 @@ function buildReadyEditableWorkTypeConfigurationState({
   workTypeName,
 }: {
   editableDefinition: NonNullable<
-    ReturnType<typeof useCurrentFactoryDocument>["data"]
+    CurrentFactoryDocument
   >;
   messages: ReturnType<typeof getWorkTypeDetailMessages>;
   sessionState: EditableWorkTypeSessionState;

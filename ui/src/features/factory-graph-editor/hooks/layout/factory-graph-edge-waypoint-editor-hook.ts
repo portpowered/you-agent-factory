@@ -1,4 +1,4 @@
-import type { Node, XYPosition } from "@xyflow/react";
+import type { XYPosition } from "@xyflow/react";
 import { useCallback, useMemo, useState } from "react";
 
 import type { FactoryGraphEditorTool } from "../../components/controls/factory-graph-editor-controls";
@@ -21,8 +21,13 @@ function canEditFactoryGraphEdgeWaypoints(input: {
   );
 }
 
+type FactoryGraphEdgeWaypointNode = {
+  id: string;
+  position: XYPosition;
+};
+
 function resolveEdgeNodePositions(
-  nodes: Node[],
+  nodes: readonly FactoryGraphEdgeWaypointNode[],
   edgeId: string,
 ): { source: XYPosition; target: XYPosition } | null {
   const { sourceId, targetId } = describeFactoryGraphLayoutEdgeId(edgeId);
@@ -57,7 +62,7 @@ export function useFactoryGraphEdgeWaypointEditor(input: {
     position: { x: number; y: number },
   ) => void;
   removeEdgeWaypoint: (edgeId: string, waypointIndex: number) => void;
-  nodes: Node[];
+  nodes: readonly FactoryGraphEdgeWaypointNode[];
 }) {
   const messages = getFactoryGraphEditorMessages(input.locale);
   const [selectedWaypointEdgeId, setSelectedWaypointEdgeId] = useState<

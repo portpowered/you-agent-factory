@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import {
   applyEditableWorkStateDraft,
   type EditableWorkStateDraft,
@@ -27,14 +27,14 @@ export function useEditableWorkStateConfigurationState(
   selection: DashboardSelection | null,
   placeId: string | null,
   locale?: string | null,
+  editableDefinition?: CurrentFactoryDocument | null,
 ): EditableWorkStateConfigurationState | undefined {
   const isStateNodeSelection =
     selection?.kind === "state-node" && placeId != null;
   const messages = getWorkStateDetailMessages(locale);
-  const editableDefinition = useCurrentFactoryDocument(isStateNodeSelection);
   const { selectedEditableValues, sessionState, setSessionState } =
     useEditableWorkStateSession(
-      editableDefinition.data,
+      editableDefinition,
       placeId,
       isStateNodeSelection,
     );
@@ -43,18 +43,11 @@ export function useEditableWorkStateConfigurationState(
     return undefined;
   }
 
-  if (editableDefinition.isPending) {
+  if (!editableDefinition) {
     return { status: "loading" };
   }
 
-  if (editableDefinition.isError) {
-    return {
-      errorMessage: editableDefinition.error.message,
-      status: "error",
-    };
-  }
-
-  if (!editableDefinition.data || !selectedEditableValues || !sessionState) {
+  if (!selectedEditableValues || !sessionState) {
     return {
       message: messages.configurationEmpty,
       status: "empty",
@@ -62,7 +55,7 @@ export function useEditableWorkStateConfigurationState(
   }
 
   return buildReadyEditableWorkStateConfigurationState({
-    editableDefinition: editableDefinition.data,
+    editableDefinition,
     placeId,
     selectedEditableValues,
     sessionState,
@@ -71,7 +64,7 @@ export function useEditableWorkStateConfigurationState(
 }
 
 function useEditableWorkStateSession(
-  editableDefinition: ReturnType<typeof useCurrentFactoryDocument>["data"],
+  editableDefinition: CurrentFactoryDocument | null | undefined,
   placeId: string | null,
   isStateNodeSelection: boolean,
 ) {
@@ -111,7 +104,7 @@ function buildReadyEditableWorkStateConfigurationState({
   setSessionState,
 }: {
   editableDefinition: NonNullable<
-    ReturnType<typeof useCurrentFactoryDocument>["data"]
+    CurrentFactoryDocument
   >;
   placeId: string;
   selectedEditableValues: NonNullable<

@@ -76,14 +76,14 @@ import {
   buildHandleAssignments,
   buildVisibleGraphEdges,
 } from "../lib/react-flow-current-activity-card-graph";
-import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
-import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
-import type { CurrentActivitySelection } from "./react-flow-current-activity-card";
 import {
   currentActivityGraphKey,
   currentActivityTopologyKey,
-  ReactFlowCurrentActivityCard,
-} from "./react-flow-current-activity-card";
+} from "../lib/react-flow-current-activity-card-keys";
+import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
+import { getDashboardFlowAxisLegendMessages } from "../messages/dashboard-flow-axis-legend";
+import { getWorkflowActivityGraphImportMessages } from "../messages/graph-import";
+import { ReactFlowCurrentActivityCard } from "./react-flow-current-activity-card";
 
 vi.mock(
   "../../current-factory-definition/hooks/useCurrentFactoryDefinition",

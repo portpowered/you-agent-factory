@@ -37,6 +37,7 @@ import type { FactoryGraphWorkStateType } from "../../lib/work-state/factory-gra
 type FactoryGraphEditorNode = FactoryGraphReactFlowNode;
 
 const KIND_CLASS: Record<FactoryGraphNodeKind, string> = {
+  doc: activityGraphNodeSurfaceClassName("neutral"),
   resource: activityGraphNodeSurfaceClassName("resource"),
   worker: activityGraphNodeSurfaceClassName("info"),
   workstation: activityGraphNodeSurfaceClassName("workstation"),
@@ -297,6 +298,8 @@ function semanticIconKindForNodeKind(
   }
 
   switch (kind) {
+    case "doc":
+      return "doc";
     case "resource":
       return "resource";
     case "worker":
@@ -317,6 +320,8 @@ function semanticIconClassNameForNodeKind(
   }
 
   switch (kind) {
+    case "doc":
+      return "text-on-surface-variant";
     case "resource":
       return "text-success";
     case "worker":

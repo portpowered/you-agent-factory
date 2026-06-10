@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import {
   applyEditableResourceDraft,
   type EditableResourceDraft,
@@ -27,14 +27,14 @@ export function useEditableResourceConfigurationState(
   selection: DashboardSelection | null,
   resourceName: string | null,
   locale?: string | null,
+  editableDefinition?: CurrentFactoryDocument | null,
 ): EditableResourceConfigurationState | undefined {
   const isResourceSelection =
     selection?.kind === "resource" && resourceName != null;
   const messages = getResourceDetailMessages(locale);
-  const editableDefinition = useCurrentFactoryDocument(isResourceSelection);
   const { selectedEditableValues, sessionState, setSessionState } =
     useEditableResourceSession(
-      editableDefinition.data,
+      editableDefinition,
       resourceName,
       isResourceSelection,
     );
@@ -43,18 +43,11 @@ export function useEditableResourceConfigurationState(
     return undefined;
   }
 
-  if (editableDefinition.isPending) {
+  if (!editableDefinition) {
     return { status: "loading" };
   }
 
-  if (editableDefinition.isError) {
-    return {
-      errorMessage: editableDefinition.error.message,
-      status: "error",
-    };
-  }
-
-  if (!editableDefinition.data || !selectedEditableValues || !sessionState) {
+  if (!selectedEditableValues || !sessionState) {
     return {
       message: messages.configurationEmpty,
       status: "empty",
@@ -62,7 +55,7 @@ export function useEditableResourceConfigurationState(
   }
 
   return buildReadyEditableResourceConfigurationState({
-    editableDefinition: editableDefinition.data,
+    editableDefinition,
     resourceName,
     sessionState,
     setSessionState,
@@ -71,7 +64,7 @@ export function useEditableResourceConfigurationState(
 }
 
 function useEditableResourceSession(
-  editableDefinition: ReturnType<typeof useCurrentFactoryDocument>["data"],
+  editableDefinition: CurrentFactoryDocument | null | undefined,
   resourceName: string | null,
   isResourceSelection: boolean,
 ) {
@@ -112,7 +105,7 @@ function buildReadyEditableResourceConfigurationState({
   selectedEditableValues,
 }: {
   editableDefinition: NonNullable<
-    ReturnType<typeof useCurrentFactoryDocument>["data"]
+    CurrentFactoryDocument
   >;
   resourceName: string;
   sessionState: EditableResourceSessionState;

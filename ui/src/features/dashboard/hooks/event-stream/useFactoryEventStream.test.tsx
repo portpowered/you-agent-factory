@@ -219,7 +219,7 @@ describe("useFactoryEventStream query side effects", () => {
     resetFactoryEventStreamStores();
   });
 
-  it("updates factory definition queries from FACTORY_CHANGE events", async () => {
+  it("updates factory definition queries from FACTORY_CHANGE events without invalidating document reads", async () => {
     queryClient.setQueryData(CURRENT_FACTORY_DOCUMENT_QUERY_KEY, {
       name: "factory",
       workers: [],
@@ -303,7 +303,7 @@ describe("useFactoryEventStream query side effects", () => {
       expect(
         queryClient.getQueryState(CURRENT_FACTORY_DOCUMENT_QUERY_KEY)
           ?.isInvalidated,
-      ).toBe(true);
+      ).toBe(false);
     });
   });
 });

@@ -15,7 +15,6 @@ import {
   waitForCurrentSelection,
 } from "../../../../testing/current-selection-test-utils";
 import { buildReplayFixtureTimelineSnapshot } from "../../../../testing/replay-fixtures";
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { resolveDashboardSelection } from "../../state/dashboardSelection";
 import type { DashboardSelection } from "../../state/selection-types";
 import {
@@ -34,20 +33,6 @@ vi.mock("./useCurrentSelection.derived", async (importOriginal) => {
     useTerminalWorkDetailCleanup: () => undefined,
   };
 });
-
-vi.mock(
-  "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-  async () => {
-    const actual = await vi.importActual(
-      "../../../current-factory-definition/hooks/useCurrentFactoryDefinition",
-    );
-
-    return {
-      ...actual,
-      useCurrentFactoryDocument: vi.fn(),
-    };
-  },
-);
 
 const TEST_TOPOLOGY: DashboardSnapshot["topology"] = {
   edges: [],
@@ -454,9 +439,6 @@ async function renderCurrentSelectionHook(
 describe("useCurrentSelection", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: undefined,
-    } as ReturnType<typeof useCurrentFactoryDocument>);
   });
 
   afterEach(() => {

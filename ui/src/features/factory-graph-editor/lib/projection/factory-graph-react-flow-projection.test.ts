@@ -131,6 +131,55 @@ describe("factory graph React Flow projection", () => {
     );
   });
 
+  it("projects bundled source files as factory graph nodes", () => {
+    const factoryDefinition = {
+      ...baseFactoryDefinition,
+      supportingFiles: {
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Guide" },
+            targetPath: "factory/docs/guide.md",
+            type: "DOC",
+          },
+          {
+            content: { encoding: "utf-8", inline: "print('setup')" },
+            targetPath: "factory/scripts/setup-workspace.py",
+            type: "SCRIPT",
+          },
+        ],
+      },
+    } satisfies CanonicalFactoryDefinition;
+    const topology = buildFactoryGraphTopologyFromDefinition(factoryDefinition);
+
+    const projection = projectFactoryGraphToReactFlow({
+      factoryDefinition,
+      topology,
+    });
+
+    expect(projection.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          data: expect.objectContaining({
+            connectionAnchors: [],
+            kind: "doc",
+            kindLabel: "Doc",
+            label: "factory/docs/guide.md",
+          }),
+          id: "doc:factory/docs/guide.md",
+          type: "factoryEntity",
+        }),
+        expect.objectContaining({
+          data: expect.objectContaining({
+            connectionAnchors: [],
+            kind: "doc",
+            label: "factory/scripts/setup-workspace.py",
+          }),
+          id: "doc:factory/scripts/setup-workspace.py",
+        }),
+      ]),
+    );
+  });
+
   it("projects workStateType from factory definition for all lifecycle phases", () => {
     const lifecycleFactoryDefinition = {
       ...baseFactoryDefinition,

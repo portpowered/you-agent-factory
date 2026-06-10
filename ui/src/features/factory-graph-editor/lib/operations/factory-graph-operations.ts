@@ -4,6 +4,7 @@ import {
   buildPendingFactoryDefinition,
 } from "../draft/factory-graph-draft-apply";
 import { buildFactoryGraphTopologyFromDefinition } from "../draft/factory-graph-draft-graph";
+import { removeInternalSystemTimeFactoryGraph } from "../draft/factory-graph-draft-save-sanitizer";
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraft,
@@ -29,15 +30,15 @@ import {
   createFactoryGraphWorkstationResolver,
 } from "../editor/factory-graph-editor-connections";
 import {
-  applyFactoryGraphDocRemoval,
-  buildFactoryGraphDocRemovalIntent,
-  parseFactoryBundledDocNodeId,
-} from "../factory-graph-doc-editor";
-import {
   applyFactoryGraphEntityRemoval,
   buildFactoryGraphEdgeRemovalIntent,
   buildFactoryGraphRemovalIntent,
 } from "../editor-runtime/factory-graph-editor-removals";
+import {
+  applyFactoryGraphDocRemoval,
+  buildFactoryGraphDocRemovalIntent,
+  parseFactoryBundledDocNodeId,
+} from "../factory-graph-doc-editor";
 import {
   applyPendingFactoryLayout,
   type FactoryLayout,
@@ -394,15 +395,14 @@ export function applyFactoryGraphPendingEdits(options: {
   const nextDefinition =
     preparedPendingLayout &&
     hasFactoryLayoutChanges(baseLayout, preparedPendingLayout)
-      ? applyPendingFactoryLayout(
-          nextFactoryDefinition,
-          preparedPendingLayout,
-        )
+      ? applyPendingFactoryLayout(nextFactoryDefinition, preparedPendingLayout)
       : nextFactoryDefinition;
 
   return {
     ok: true,
-    value: materializeFactoryGraphEntityIdsForSave(nextDefinition),
+    value: materializeFactoryGraphEntityIdsForSave(
+      removeInternalSystemTimeFactoryGraph(nextDefinition),
+    ),
   };
 }
 

@@ -27,14 +27,13 @@ function ToolbarSizingProbe({
           },
         ]}
         canInteract={true}
-        canDiscard={true}
-        canSave={true}
+        canDiscard={false}
+        canSave={false}
         editModeToggle={{
           editorMode: editMode,
           hasChanges: false,
           onToggle: () => {},
         }}
-        hasPendingChanges={false}
         onDiscard={() => {}}
         onAddAction={() => {}}
         onSave={() => {}}

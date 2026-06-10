@@ -7,6 +7,7 @@ import {
   getCurrentFactoryDocument,
 } from "../../../api/current-factory-definition";
 import {
+  activateImportedFactoryDocumentForSession,
   activateImportedFactoryForSession,
   type ImportFactoryValue,
   SessionFactoryAPIError,
@@ -32,6 +33,9 @@ vi.mock("../../../api/session-factory", async () => {
   >("../../../api/session-factory");
   return {
     ...actual,
+    activateImportedFactoryDocumentForSession: vi.fn(
+      actual.activateImportedFactoryDocumentForSession,
+    ),
     activateImportedFactoryForSession: vi.fn(
       actual.activateImportedFactoryForSession,
     ),
@@ -95,15 +99,19 @@ const canonicalFactory: ImportFactoryValue = {
 const mockedActivateImportedFactoryForSession = vi.mocked(
   activateImportedFactoryForSession,
 );
+const mockedActivateImportedFactoryDocumentForSession = vi.mocked(
+  activateImportedFactoryDocumentForSession,
+);
 const mockedGetCurrentFactoryDocument = vi.mocked(getCurrentFactoryDocument);
 
 describe("useFactoryImportActivation", () => {
   beforeEach(() => {
     mockedActivateImportedFactoryForSession.mockClear();
+    mockedActivateImportedFactoryDocumentForSession.mockClear();
     mockedGetCurrentFactoryDocument.mockReset();
   });
 
-  it("syncs the current-factory query cache from readback after activation", async () => {
+  it("syncs the current-factory query cache from the streamed document activation response", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
         mutations: {
@@ -125,7 +133,7 @@ describe("useFactoryImportActivation", () => {
       workstations: [],
       workTypes: [],
     };
-    const readbackDocument: CurrentFactoryDocument = {
+    const savedDocument: CurrentFactoryDocument = {
       ...staleDocument,
       name: "Imported Factory Name-2",
       version: {
@@ -141,10 +149,16 @@ describe("useFactoryImportActivation", () => {
       ...canonicalFactory,
       name: "Imported Factory Name-2",
     });
-    mockedGetCurrentFactoryDocument.mockResolvedValue(readbackDocument);
+    mockedActivateImportedFactoryDocumentForSession.mockResolvedValue(
+      savedDocument,
+    );
 
     const { result } = renderHook(
-      () => useFactoryImportActivation({ sessionID: "session-2" }),
+      () =>
+        useFactoryImportActivation({
+          currentFactoryDocument: staleDocument,
+          sessionID: "session-2",
+        }),
       { wrapper: createQueryClientWrapper(queryClient) },
     );
 
@@ -160,16 +174,24 @@ describe("useFactoryImportActivation", () => {
     });
 
     await waitFor(() => {
-      expect(mockedGetCurrentFactoryDocument).toHaveBeenCalledWith({
-        sessionID: "session-2",
-      });
+      expect(mockedActivateImportedFactoryDocumentForSession).toHaveBeenCalledWith(
+        canonicalFactory,
+        {
+          choice: "replace_current",
+          createFactoryName: "Factory Roundtrip-2",
+          currentDocument: staleDocument,
+          existingFactoryNames: ["alpha", "Factory Roundtrip"],
+          sessionID: "session-2",
+        },
+      );
     });
+    expect(mockedGetCurrentFactoryDocument).not.toHaveBeenCalled();
     expect(
       queryClient.getQueryData(currentFactoryDocumentQueryKey("session-2")),
-    ).toEqual(readbackDocument);
+    ).toEqual(savedDocument);
     expect(
       queryClient.getQueryData(currentFactoryDefinitionQueryKey("session-2")),
-    ).toEqual(readbackDocument);
+    ).toEqual(savedDocument);
     expect(result.current.activationState).toEqual({ status: "idle" });
   });
 

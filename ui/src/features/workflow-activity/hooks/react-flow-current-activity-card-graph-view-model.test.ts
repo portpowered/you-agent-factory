@@ -12,6 +12,7 @@ import {
 } from "../../../testing/graph-editor-harness";
 import { sessionFactoryDocumentFromSnapshot } from "../../../testing/session-factory-mocks";
 import type { GraphLayout } from "../../flowchart/lib/layout";
+import type { FactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { currentActivityCardFactoryDefinition } from "./current-activity-card-factory-definition";
 import { useCurrentActivityGraphViewModel } from "./react-flow-current-activity-card-graph-view-model";
 
@@ -27,13 +28,16 @@ function createEditorStub(
     "editableFactoryDocument" in overrides
       ? overrides.editableFactoryDocument
       : baseFactoryDefinitionDocument;
+  const draftState = overrides.draftState ?? createMockGraphEditorDraftState();
 
   return {
-    draftState: overrides.draftState ?? createMockGraphEditorDraftState(),
+    baseFactoryDocument: draftState.baseDocument,
     editableFactoryDocument,
     editableFactoryDocumentStatus:
       overrides.editableFactoryDocumentStatus ?? "success",
     editorMode: overrides.editorMode ?? false,
+    latestFactoryDocument: draftState.latestDocument,
+    pendingFactoryDefinition: draftState.pendingFactoryDefinition,
   } as Parameters<typeof currentActivityCardFactoryDefinition>[0];
 }
 
@@ -261,7 +265,69 @@ describe("currentActivityCardFactoryDefinition bundled docs", () => {
 });
 
 describe("useCurrentActivityGraphViewModel node state", () => {
-  it("keeps node positions from the graph projection instead of React Flow presentation changes", () => {
+  function renderGraphViewModelWithLayout(
+    graphLayout: GraphLayout,
+    options: {
+      renderedLayout?: FactoryLayout;
+      selectedWaypointEdgeId?: string | null;
+      visibleGraphEdges?: GraphLayout["edges"];
+    } = {},
+  ) {
+    const editor = {
+      activeTool: null,
+      canInteractWithEditor: true,
+      editorMode: true,
+      graphProjection: {
+        canonicalLayoutViewport: null,
+        displayFactoryDefinition: baseFactoryDefinition,
+        graphLayout,
+        pendingAdditionEdgeIds: new Set<string>(),
+        positionedGraphLayout: graphLayout,
+        renderedLayout: options.renderedLayout ?? { schemaVersion: 1 },
+        visibleGraphEdges: options.visibleGraphEdges ?? [],
+      },
+      handleConnectionAnchorClick: vi.fn(),
+      pendingConnectionSource: null,
+      selectedWaypointEdgeId: options.selectedWaypointEdgeId,
+      validationTargets: [],
+    };
+    const snapshot = {
+      ...structuredClone(singleNodeDashboardSnapshot),
+      factory: baseFactoryDefinition,
+      runtime: {
+        ...singleNodeDashboardSnapshot.runtime,
+        in_flight_dispatch_count: 0,
+      },
+    };
+    const noop = vi.fn();
+
+    return renderHook(
+      ({ currentGraphLayout }: { currentGraphLayout: GraphLayout }) =>
+        useCurrentActivityGraphViewModel({
+          editor: {
+            ...editor,
+            graphProjection: {
+              ...editor.graphProjection,
+              graphLayout: currentGraphLayout,
+              positionedGraphLayout: currentGraphLayout,
+            },
+          } as Parameters<typeof useCurrentActivityGraphViewModel>[0]["editor"],
+          now: 0,
+          onSelectDoc: noop,
+          onSelectResource: noop,
+          onSelectStateNode: noop,
+          onSelectWorkID: noop,
+          onSelectWorker: noop,
+          onSelectWorkType: noop,
+          onSelectWorkstation: noop,
+          selection: null,
+          snapshot,
+        }),
+      { initialProps: { currentGraphLayout: graphLayout } },
+    );
+  }
+
+  it("applies transient React Flow positions while preserving graph projection as the reset boundary", () => {
     const graphLayout: GraphLayout = {
       edges: [],
       height: 360,
@@ -296,48 +362,7 @@ describe("useCurrentActivityGraphViewModel node state", () => {
       ],
       width: 600,
     };
-    const editor = {
-      activeTool: null,
-      canInteractWithEditor: true,
-      editorMode: true,
-      graphProjection: {
-        canonicalLayoutViewport: null,
-        displayFactoryDefinition: baseFactoryDefinition,
-        graphLayout,
-        pendingAdditionEdgeIds: new Set<string>(),
-        positionedGraphLayout: graphLayout,
-        visibleGraphEdges: [],
-      },
-      handleConnectionAnchorClick: vi.fn(),
-      pendingConnectionSource: null,
-      validationTargets: [],
-    };
-    const snapshot = {
-      ...structuredClone(singleNodeDashboardSnapshot),
-      factory: baseFactoryDefinition,
-      runtime: {
-        ...singleNodeDashboardSnapshot.runtime,
-        in_flight_dispatch_count: 0,
-      },
-    };
-    const noop = vi.fn();
-    const { result } = renderHook(() =>
-      useCurrentActivityGraphViewModel({
-        editor: editor as Parameters<
-          typeof useCurrentActivityGraphViewModel
-        >[0]["editor"],
-        now: 0,
-        onSelectDoc: noop,
-        onSelectResource: noop,
-        onSelectStateNode: noop,
-        onSelectWorkID: noop,
-        onSelectWorker: noop,
-        onSelectWorkType: noop,
-        onSelectWorkstation: noop,
-        selection: null,
-        snapshot,
-      }),
-    );
+    const { rerender, result } = renderGraphViewModelWithLayout(graphLayout);
     const workStateNode = () =>
       result.current.nodes.find(
         (node) => node.id === "work-state:story:queued",
@@ -361,8 +386,94 @@ describe("useCurrentActivityGraphViewModel node state", () => {
     });
 
     expect(workStateNode()).toMatchObject({
-      position: { x: 120, y: 80 },
+      position: { x: 999, y: 999 },
       selected: true,
+    });
+
+    const updatedGraphLayout: GraphLayout = {
+      ...graphLayout,
+      nodes: graphLayout.nodes.map((node) =>
+        node.nodeId === "work-state:story:queued"
+          ? { ...node, x: 132, y: 96 }
+          : node,
+      ),
+    };
+
+    rerender({ currentGraphLayout: updatedGraphLayout });
+
+    expect(workStateNode()).toMatchObject({
+      position: { x: 132, y: 96 },
+      selected: true,
+    });
+  });
+
+  it("decorates React Flow edges with waypoints from the rendered graph layout", () => {
+    const edgeId = "workstation-output:workstation:review->work-state:story:done";
+    const graphLayout: GraphLayout = {
+      edges: [
+        {
+          canonicalEdgeId: edgeId,
+          edgeId,
+          fromNodeId: "workstation:review",
+          label: "done",
+          labelX: 0,
+          labelY: 0,
+          outcomeKind: "success",
+          path: "",
+          sourcePlaceKind: undefined,
+          stateCategory: "TERMINAL",
+          targetPlaceKind: "work_state",
+          toNodeId: "work-state:story:done",
+        },
+      ],
+      height: 360,
+      nodes: [
+        {
+          column: 0,
+          height: 120,
+          nodeId: "workstation:review",
+          nodeKind: "workstation",
+          row: 0,
+          width: 220,
+          workstationNodeId: "review",
+          x: 120,
+          y: 80,
+        },
+        {
+          column: 1,
+          height: 120,
+          nodeId: "work-state:story:done",
+          nodeKind: "state_position",
+          place: {
+            kind: "work_state",
+            place_id: "story:done",
+            state_category: "TERMINAL",
+            state_value: "done",
+            type_id: "story",
+          },
+          row: 0,
+          width: 140,
+          x: 420,
+          y: 100,
+        },
+      ],
+      width: 600,
+    };
+    const { result } = renderGraphViewModelWithLayout(graphLayout, {
+      renderedLayout: {
+        edges: [{ id: edgeId, waypoints: [{ x: 320, y: 180 }] }],
+        schemaVersion: 1,
+      },
+      selectedWaypointEdgeId: edgeId,
+      visibleGraphEdges: graphLayout.edges,
+    });
+
+    expect(result.current.edges[0]).toMatchObject({
+      data: {
+        waypoints: [{ x: 320, y: 180 }],
+      },
+      selected: true,
+      type: "factoryEditorEdge",
     });
   });
 });

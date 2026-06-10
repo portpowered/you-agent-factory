@@ -1,38 +1,18 @@
 import { useMemo } from "react";
 
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import type { FactoryResource } from "../../../../api/events/types";
 import type { ResourceDetailState } from "../lib/detail-card-types";
-import {
-  findResourceInFactoryDefinition,
-  workerNamesReferencingResourceInFactoryDefinition,
-  workstationNamesReferencingResourceInFactoryDefinition,
-} from "../lib/resource-detail-values";
 
-export function useResourceDetailState(
-  resourceName: string,
-): ResourceDetailState {
-  const factoryDocument = useCurrentFactoryDocument(true);
-
+export function useResourceDetailState({
+  resource,
+  workerNames,
+  workstationNames,
+}: {
+  resource?: FactoryResource | null;
+  workerNames?: readonly string[] | null;
+  workstationNames?: readonly string[] | null;
+}): ResourceDetailState {
   return useMemo((): ResourceDetailState => {
-    if (factoryDocument.isPending) {
-      return { status: "loading" };
-    }
-
-    if (factoryDocument.isError) {
-      return {
-        errorMessage: factoryDocument.error.message,
-        status: "error",
-      };
-    }
-
-    if (!factoryDocument.data) {
-      return { status: "empty" };
-    }
-
-    const resource = findResourceInFactoryDefinition(
-      factoryDocument.data,
-      resourceName,
-    );
     if (!resource) {
       return { status: "empty" };
     }
@@ -40,20 +20,8 @@ export function useResourceDetailState(
     return {
       resource,
       status: "ready",
-      workerNames: workerNamesReferencingResourceInFactoryDefinition(
-        factoryDocument.data,
-        resourceName,
-      ),
-      workstationNames: workstationNamesReferencingResourceInFactoryDefinition(
-        factoryDocument.data,
-        resourceName,
-      ),
+      workerNames: [...(workerNames ?? [])],
+      workstationNames: [...(workstationNames ?? [])],
     };
-  }, [
-    factoryDocument.data,
-    factoryDocument.error,
-    factoryDocument.isError,
-    factoryDocument.isPending,
-    resourceName,
-  ]);
+  }, [resource, workerNames, workstationNames]);
 }

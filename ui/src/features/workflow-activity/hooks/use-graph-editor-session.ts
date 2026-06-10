@@ -1,58 +1,54 @@
 import { useCallback, useMemo } from "react";
 
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
-import type {
-  EditableFactoryGraphSaveMutation,
-  EditableFactoryGraphViewModel,
-} from "../../factory-graph-editor/hooks/use-editable-factory-graph-types";
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
-import type { CurrentActivityFactoryDocumentQuery } from "./current-activity-factory-document-state";
 import { findClassifierGraphEditorUnsupportedWorkstationName } from "./factory-graph-editor-availability";
+
+type CurrentActivityGraphSessionDefinitionStatus =
+  | "error"
+  | "pending"
+  | "success";
+
+interface CurrentActivityGraphSessionState {
+  currentFactoryDefinition: CanonicalFactoryDefinition | null;
+  definitionStatus: CurrentActivityGraphSessionDefinitionStatus;
+  hasPendingGraphChanges: boolean;
+  isSaving: boolean;
+  projectedFactory?: CanonicalFactoryDefinition;
+}
 
 export function useGraphEditorSession({
   activeTool,
-  draftState,
-  editableDefinitionQuery,
   editorMode,
-  layoutDraftState,
   locale,
   onAttemptLeaveEditor,
   onLeaveEditor,
-  projectedFactory,
-  saveEditableDefinition,
+  sessionState,
   setActiveTool,
   setEditorMode,
 }: {
   activeTool: FactoryGraphEditorTool;
-  draftState: EditableFactoryGraphViewModel["draftState"];
-  layoutDraftState: EditableFactoryGraphViewModel["layoutDraftState"];
-  editableDefinitionQuery: CurrentActivityFactoryDocumentQuery;
   editorMode: boolean;
   locale?: string | null;
   onAttemptLeaveEditor: () => void;
   onLeaveEditor: () => void;
-  projectedFactory?: CanonicalFactoryDefinition;
-  saveEditableDefinition: EditableFactoryGraphSaveMutation;
+  sessionState: CurrentActivityGraphSessionState;
   setActiveTool: (tool: FactoryGraphEditorTool) => void;
   setEditorMode: (mode: boolean) => void;
 }) {
-  const currentFactoryDefinition =
-    draftState.pendingFactoryDefinition ??
-    draftState.latestDocument ??
-    draftState.baseDocument ??
-    null;
+  const currentFactoryDefinition = sessionState.currentFactoryDefinition;
   const classifierEvaluationDefinition = useMemo(() => {
-    if (editorMode || editableDefinitionQuery.status === "success") {
+    if (editorMode || sessionState.definitionStatus === "success") {
       return currentFactoryDefinition ?? null;
     }
 
-    return projectedFactory ?? currentFactoryDefinition ?? null;
+    return sessionState.projectedFactory ?? currentFactoryDefinition ?? null;
   }, [
     currentFactoryDefinition,
-    editableDefinitionQuery.status,
     editorMode,
-    projectedFactory,
+    sessionState.definitionStatus,
+    sessionState.projectedFactory,
   ]);
   const editorUnavailableClassifierWorkstationName =
     findClassifierGraphEditorUnsupportedWorkstationName(
@@ -60,9 +56,9 @@ export function useGraphEditorSession({
     );
   const canInteractWithEditor =
     editorMode &&
-    editableDefinitionQuery.status === "success" &&
+    sessionState.definitionStatus === "success" &&
     editorUnavailableClassifierWorkstationName === undefined &&
-    !saveEditableDefinition.isPending;
+    !sessionState.isSaving;
 
   const handleEditorModeToggle = useCallback(() => {
     if (!editorMode) {
@@ -72,23 +68,17 @@ export function useGraphEditorSession({
       setEditorMode(true);
       return;
     }
-    if (
-      draftState.hasChanges ||
-      layoutDraftState.layoutDirty ||
-      layoutDraftState.hasChanges
-    ) {
+    if (sessionState.hasPendingGraphChanges) {
       onAttemptLeaveEditor();
       return;
     }
     onLeaveEditor();
   }, [
-    draftState.hasChanges,
     editorMode,
-    layoutDraftState.hasChanges,
-    layoutDraftState.layoutDirty,
     editorUnavailableClassifierWorkstationName,
     onAttemptLeaveEditor,
     onLeaveEditor,
+    sessionState.hasPendingGraphChanges,
     setEditorMode,
   ]);
 

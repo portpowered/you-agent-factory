@@ -21,7 +21,6 @@ import {
 } from "../../factory-graph-editor/lib/operations/factory-graph-customer-display";
 import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import { buildGraphLayout } from "../../flowchart/lib/layout";
-import { mergeDocNodesIntoGraphLayout } from "./current-activity-doc-graph-layout";
 import {
   buildCurrentActivityGraphLayoutFromFactory,
   dashboardWorkstationFromFactory,
@@ -2022,12 +2021,16 @@ describe("current activity graph active item labels", () => {
             targetPath: "factory/docs/guide.md",
             type: "DOC",
           },
+          {
+            content: { encoding: "utf-8", inline: "print('setup')" },
+            targetPath: "factory/scripts/setup-workspace.py",
+            type: "SCRIPT",
+          },
         ],
       },
     };
-    const topologyLayout =
+    const graphLayout =
       await buildCurrentActivityGraphLayoutFromFactory(factory);
-    const graphLayout = mergeDocNodesIntoGraphLayout(topologyLayout, factory);
     const onSelectDoc = vi.fn();
 
     const nodes = buildCurrentActivityNodes({
@@ -2055,17 +2058,32 @@ describe("current activity graph active item labels", () => {
     const docNode = nodes.find(
       (node) => node.id === "doc:factory/docs/guide.md",
     );
+    const scriptNode = nodes.find(
+      (node) => node.id === "doc:factory/scripts/setup-workspace.py",
+    );
 
     expect(docNode).toMatchObject({
       type: "doc",
       data: {
         displayLabel: "guide.md",
+        fileType: "DOC",
         kind: "doc",
         onSelectDoc,
         selectedDoc: true,
         targetPath: "factory/docs/guide.md",
       },
     });
+    expect(scriptNode).toMatchObject({
+      type: "doc",
+      data: {
+        displayLabel: "setup-workspace.py",
+        fileType: "SCRIPT",
+        kind: "doc",
+        selectedDoc: false,
+        targetPath: "factory/scripts/setup-workspace.py",
+      },
+    });
+    expect(scriptNode?.data).not.toHaveProperty("onSelectDoc");
   });
 
   it("updates doc nodes when the saved factory document changes", async () => {
@@ -2081,9 +2099,8 @@ describe("current activity graph active item labels", () => {
         ],
       },
     };
-    const topologyLayout =
+    const initialLayout =
       await buildCurrentActivityGraphLayoutFromFactory(factory);
-    const initialLayout = mergeDocNodesIntoGraphLayout(topologyLayout, factory);
     const renamedFactory = {
       ...factory,
       supportingFiles: {
@@ -2096,10 +2113,8 @@ describe("current activity graph active item labels", () => {
         ],
       },
     };
-    const refreshedLayout = mergeDocNodesIntoGraphLayout(
-      topologyLayout,
-      renamedFactory,
-    );
+    const refreshedLayout =
+      await buildCurrentActivityGraphLayoutFromFactory(renamedFactory);
 
     expect(initialLayout.nodes.map((node) => node.nodeId)).toContain(
       "doc:factory/docs/overview.md",

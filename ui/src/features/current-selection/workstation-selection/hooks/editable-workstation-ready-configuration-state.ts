@@ -1,5 +1,5 @@
 import type { DashboardWorkstationNode } from "../../../../api/dashboard/types";
-import type { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import {
   type EditableWorkstationBehavior,
   workstationBehaviorRequiresPrompt,
@@ -184,9 +184,7 @@ export function buildReadyEditableWorkstationConfigurationState({
   sessionState,
   setSessionState,
 }: {
-  editableDefinition: NonNullable<
-    ReturnType<typeof useCurrentFactoryDocument>["data"]
-  >;
+  editableDefinition: CurrentFactoryDocument;
   messages: WorkstationDetailMessages;
   promptHelpState: EditableWorkstationPromptHelpState;
   promptValidationState: EditableWorkstationPromptValidationState;

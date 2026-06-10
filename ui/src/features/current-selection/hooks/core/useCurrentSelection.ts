@@ -8,11 +8,12 @@ import type {
   DashboardWorkstationNode,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
+import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import type {
+  FactoryResource,
   FactoryWorker,
   FactoryWorkType,
 } from "../../../../api/events/types";
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type {
   TerminalWorkItem,
   TerminalWorkStatus,
@@ -36,11 +37,13 @@ import {
   resolveProjectedWorkstationRequestsByDispatchID,
   type WorkstationRequestLike,
 } from "./useCurrentSelection.helpers";
+import type { FactoryBundledDocFile } from "../../../workflow-activity/lib/factory-bundled-docs";
 
 export interface CurrentSelectionState {
   canRedoSelection: boolean;
   canUndoSelection: boolean;
   completedWorkItems: TerminalWorkItem[];
+  currentFactoryDefinition?: CurrentFactoryDocument | null;
   failedWorkItems: TerminalWorkItem[];
   openTerminalWorkDetail: (
     status: TerminalWorkStatus,
@@ -61,8 +64,11 @@ export interface CurrentSelectionState {
   selectedWorkProviderSessions: DashboardProviderSessionAttempt[];
   selectedWorkRequestHistory: WorkstationRequestLike[];
   selectedWorkWorkstationRequests: DashboardWorkstationRequest[];
+  selectedResource?: FactoryResource | null;
   selectedResourceName: string | null;
   selectedResourceTokenCount: number | null;
+  selectedResourceWorkerNames?: string[];
+  selectedResourceWorkstationNames?: string[];
   selectedWorker: FactoryWorker | null;
   selectedWorkerName: string | null;
   selectedWorkerWorkstationNames: string[];
@@ -87,6 +93,7 @@ export interface CurrentSelectionState {
   selectDoc: (targetPath: string) => void;
   selectResource: (resourceName: string) => void;
   selectWorker: (workerName: string) => void;
+  selectedDocBundledFile?: FactoryBundledDocFile | null;
   selectedDocTargetPath: string | null;
   clearSelectedDocIfMatching: (targetPath: string) => void;
   clearSelectedFactoryGraphNodeIfMatching: (nodeId: string) => void;
@@ -138,8 +145,6 @@ export function useCurrentSelection({
       snapshot,
       workstationRequestsByDispatchID,
     );
-  const currentFactoryDocumentQuery = useCurrentFactoryDocument();
-  const topologyFactory = currentFactoryDocumentQuery.data ?? undefined;
   const pendingFactoryDefinition = useGraphEditorPendingFactoryBridge(
     (state) => state.pendingFactoryDefinition,
   );
@@ -159,7 +164,6 @@ export function useCurrentSelection({
     selection,
     snapshot,
     terminalWorkDetail,
-    topologyFactory,
   });
 
   const derived = useCurrentSelectionDerivedState({
@@ -191,6 +195,7 @@ export function useCurrentSelection({
     canRedoSelection: store.canRedoSelection,
     canUndoSelection: store.canUndoSelection,
     completedWorkItems: derived.completedWorkItems,
+    currentFactoryDefinition: derived.currentFactoryDefinition,
     failedWorkItems: derived.failedWorkItems,
     openTerminalWorkDetail: actions.openTerminalWorkDetail,
     redoSelection: store.redoSelection,
@@ -209,9 +214,13 @@ export function useCurrentSelection({
     selectedWorkProviderSessions: derived.selectedWorkProviderSessions,
     selectedWorkRequestHistory: derived.selectedWorkRequestHistory,
     selectedWorkWorkstationRequests: derived.selectedWorkWorkstationRequests,
+    selectedDocBundledFile: derived.selectedDocBundledFile,
     selectedDocTargetPath: derived.selectedDocTargetPath,
+    selectedResource: derived.selectedResource,
     selectedResourceName: derived.selectedResourceName,
     selectedResourceTokenCount: derived.selectedResourceTokenCount,
+    selectedResourceWorkerNames: derived.selectedResourceWorkerNames,
+    selectedResourceWorkstationNames: derived.selectedResourceWorkstationNames,
     selectedWorker: derived.selectedWorker,
     selectedWorkerName: derived.selectedWorkerName,
     selectedWorkerWorkstationNames: derived.selectedWorkerWorkstationNames,

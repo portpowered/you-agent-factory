@@ -10,14 +10,12 @@ type CurrentActivityFactoryDefinition = NonNullable<
 type CurrentActivityFactoryDocumentStatus = "error" | "pending" | "success";
 
 export interface CurrentActivityFactoryGraphSource {
-  draftState: {
-    baseDocument?: DashboardSnapshot["factory"] | null;
-    latestDocument?: DashboardSnapshot["factory"] | null;
-    pendingFactoryDefinition?: DashboardSnapshot["factory"] | null;
-  };
+  baseFactoryDocument?: DashboardSnapshot["factory"] | null;
   editableFactoryDocument?: DashboardSnapshot["factory"] | null;
   editableFactoryDocumentStatus?: CurrentActivityFactoryDocumentStatus;
   editorMode: boolean;
+  latestFactoryDocument?: DashboardSnapshot["factory"] | null;
+  pendingFactoryDefinition?: DashboardSnapshot["factory"] | null;
 }
 
 function observeModeSavedFactoryDocument(
@@ -25,8 +23,8 @@ function observeModeSavedFactoryDocument(
 ) {
   return (
     source.editableFactoryDocument ??
-    source.draftState.latestDocument ??
-    source.draftState.baseDocument ??
+    source.latestFactoryDocument ??
+    source.baseFactoryDocument ??
     undefined
   );
 }
@@ -40,14 +38,14 @@ export function currentActivityCardSavedFactoryDocument(
 export function currentActivityCardPendingFactoryDefinition(
   source: CurrentActivityFactoryGraphSource,
 ): DashboardSnapshot["factory"] | null {
-  return source.draftState.pendingFactoryDefinition ?? null;
+  return source.pendingFactoryDefinition ?? null;
 }
 
 export function currentActivityCardBaseFactoryDocument(
   source: CurrentActivityFactoryGraphSource,
 ): DashboardSnapshot["factory"] | null {
   return (
-    source.draftState.baseDocument ??
+    source.baseFactoryDocument ??
     observeModeSavedFactoryDocument(source) ??
     null
   );
@@ -57,9 +55,9 @@ export function currentActivityCardCurrentFactoryDefinition(
   source: CurrentActivityFactoryGraphSource,
 ): DashboardSnapshot["factory"] | null {
   return (
-    source.draftState.pendingFactoryDefinition ??
-    source.draftState.latestDocument ??
-    source.draftState.baseDocument ??
+    source.pendingFactoryDefinition ??
+    source.latestFactoryDocument ??
+    source.baseFactoryDocument ??
     null
   );
 }

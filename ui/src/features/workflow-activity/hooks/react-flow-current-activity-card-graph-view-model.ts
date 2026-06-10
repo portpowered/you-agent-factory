@@ -5,6 +5,10 @@ import type {
   DashboardActiveExecution,
   DashboardSnapshot,
 } from "../../../api/dashboard/types";
+import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import type { FactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
+import { decorateProjectedEdgesWithWaypoints } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-edge-waypoint-projection";
+import type { FactoryGraphReactFlowEdge } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-projection";
 import type { GraphLayout } from "../../flowchart/lib/layout";
 import type { CurrentActivityNode } from "../../flowchart/public";
 import {
@@ -24,17 +28,21 @@ import {
   groupActiveExecutionsByWorkstationNodeID,
   useActiveExecutions,
 } from "./react-flow-current-activity-card-active-executions";
-import type { CurrentActivityGraphFlowProjection } from "./use-current-activity-graph-flow-projection";
 
-export type CurrentActivityGraphRenderProjection = Pick<
-  CurrentActivityGraphFlowProjection,
-  | "canonicalLayoutViewport"
-  | "displayFactoryDefinition"
-  | "graphLayout"
-  | "pendingAdditionEdgeIds"
-  | "positionedGraphLayout"
-  | "visibleGraphEdges"
->;
+const EMPTY_TRANSIENT_NODE_POSITIONS = new Map<
+  string,
+  { x: number; y: number }
+>();
+
+export type CurrentActivityGraphRenderProjection = {
+  canonicalLayoutViewport: { x: number; y: number; zoom: number } | null;
+  displayFactoryDefinition: CanonicalFactoryDefinition | null | undefined;
+  graphLayout: GraphLayout;
+  pendingAdditionEdgeIds: ReadonlySet<string>;
+  positionedGraphLayout: GraphLayout;
+  renderedLayout: FactoryLayout;
+  visibleGraphEdges: GraphLayout["edges"];
+};
 
 export type CurrentActivityGraphViewModelEditorInput = Omit<
   CurrentActivityEditorState,
@@ -42,6 +50,7 @@ export type CurrentActivityGraphViewModelEditorInput = Omit<
 > & {
   graphProjection: CurrentActivityGraphRenderProjection;
   handleConnectionAnchorClick: CurrentActivityEditorState["onConnectionAnchorClick"];
+  selectedWaypointEdgeId?: string | null;
   validationTargets?: CurrentActivityEditorState["validationTargets"];
 };
 
@@ -181,55 +190,111 @@ function useCurrentActivityGraphNodePresentation(
   const [selectedNodeIds, setSelectedNodeIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
+  const basePositionKey = useMemo(
+    () =>
+      baseNodes
+        .map((node) => `${node.id}:${node.position.x},${node.position.y}`)
+        .join("|"),
+    [baseNodes],
+  );
+  const [transientPositionState, setTransientPositionState] = useState<{
+    basePositionKey: string;
+    positionsByNodeId: ReadonlyMap<string, { x: number; y: number }>;
+  }>(() => ({
+    basePositionKey,
+    positionsByNodeId: EMPTY_TRANSIENT_NODE_POSITIONS,
+  }));
 
-  const handleNodesChange = useCallback((changes: NodeChange[]) => {
-    setSelectedNodeIds((currentSelectedNodeIds) => {
-      let nextSelectedNodeIds: Set<string> | null = null;
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      setSelectedNodeIds((currentSelectedNodeIds) => {
+        let nextSelectedNodeIds: Set<string> | null = null;
 
-      for (const change of changes) {
-        if (
-          change.type !== "select" &&
-          change.type !== "remove" &&
-          change.type !== "add" &&
-          change.type !== "replace"
-        ) {
-          continue;
-        }
-
-        nextSelectedNodeIds ??= new Set(currentSelectedNodeIds);
-
-        if (change.type === "select") {
-          if (change.selected) {
-            nextSelectedNodeIds.add(change.id);
-          } else {
-            nextSelectedNodeIds.delete(change.id);
+        for (const change of changes) {
+          if (
+            change.type !== "select" &&
+            change.type !== "remove" &&
+            change.type !== "add" &&
+            change.type !== "replace"
+          ) {
+            continue;
           }
-          continue;
+
+          nextSelectedNodeIds ??= new Set(currentSelectedNodeIds);
+
+          if (change.type === "select") {
+            if (change.selected) {
+              nextSelectedNodeIds.add(change.id);
+            } else {
+              nextSelectedNodeIds.delete(change.id);
+            }
+            continue;
+          }
+
+          if (change.type === "remove") {
+            nextSelectedNodeIds.delete(change.id);
+            continue;
+          }
+
+          const selected = change.item.selected === true;
+          if (selected) {
+            nextSelectedNodeIds.add(change.item.id);
+          } else {
+            nextSelectedNodeIds.delete(change.item.id);
+          }
         }
 
-        if (change.type === "remove") {
-          nextSelectedNodeIds.delete(change.id);
-          continue;
+        return nextSelectedNodeIds ?? currentSelectedNodeIds;
+      });
+
+      setTransientPositionState((currentPositionState) => {
+        const currentPositionsByNodeId =
+          currentPositionState.basePositionKey === basePositionKey
+            ? currentPositionState.positionsByNodeId
+            : EMPTY_TRANSIENT_NODE_POSITIONS;
+        let nextPositionsByNodeId: Map<
+          string,
+          { x: number; y: number }
+        > | null = null;
+
+        for (const change of changes) {
+          if (change.type !== "position") {
+            continue;
+          }
+
+          nextPositionsByNodeId ??= new Map(currentPositionsByNodeId);
+
+          if (!change.position) {
+            nextPositionsByNodeId.delete(change.id);
+            continue;
+          }
+
+          nextPositionsByNodeId.set(change.id, change.position);
         }
 
-        const selected = change.item.selected === true;
-        if (selected) {
-          nextSelectedNodeIds.add(change.item.id);
-        } else {
-          nextSelectedNodeIds.delete(change.item.id);
-        }
-      }
+        return nextPositionsByNodeId
+          ? {
+              basePositionKey,
+              positionsByNodeId: nextPositionsByNodeId,
+            }
+          : currentPositionState;
+      });
+    },
+    [basePositionKey],
+  );
+  const transientPositionsByNodeId =
+    transientPositionState.basePositionKey === basePositionKey
+      ? transientPositionState.positionsByNodeId
+      : EMPTY_TRANSIENT_NODE_POSITIONS;
 
-      return nextSelectedNodeIds ?? currentSelectedNodeIds;
-    });
-  }, []);
   const displayNodes = useMemo(
     () =>
       baseNodes.map((node) => ({
         ...node,
+        position: transientPositionsByNodeId.get(node.id) ?? node.position,
         selected: selectedNodeIds.has(node.id),
       })),
-    [baseNodes, selectedNodeIds],
+    [baseNodes, selectedNodeIds, transientPositionsByNodeId],
   );
 
   return { displayNodes, handleNodesChange };
@@ -239,29 +304,42 @@ function useCurrentActivityGraphEdges({
   activeGraphHighlights,
   displayNodes,
   handleAssignments,
+  layout,
   pendingAdditionEdgeIds,
+  selectedWaypointEdgeId,
   visibleGraphEdges,
 }: {
   activeGraphHighlights: ReturnType<typeof buildActiveGraphHighlights>;
   displayNodes: CurrentActivityNode[];
   handleAssignments: ReturnType<typeof buildHandleAssignments>;
+  layout: FactoryLayout;
   pendingAdditionEdgeIds: ReadonlySet<string>;
+  selectedWaypointEdgeId?: string | null;
   visibleGraphEdges: GraphLayout["edges"];
 }) {
   return useMemo(
-    () =>
-      buildGraphEdges(
+    () => {
+      const edges = buildGraphEdges(
         activeGraphHighlights,
         handleAssignments,
         pendingAdditionEdgeIds,
         visibleGraphEdges,
         displayNodes,
-      ),
+      );
+
+      return decorateProjectedEdgesWithWaypoints({
+        edges: edges as FactoryGraphReactFlowEdge[],
+        layout,
+        selectedWaypointEdgeId: selectedWaypointEdgeId ?? null,
+      });
+    },
     [
       activeGraphHighlights,
       displayNodes,
       handleAssignments,
+      layout,
       pendingAdditionEdgeIds,
+      selectedWaypointEdgeId,
       visibleGraphEdges,
     ],
   );
@@ -304,6 +382,7 @@ export function useCurrentActivityGraphViewModel({
     graphLayout,
     pendingAdditionEdgeIds,
     positionedGraphLayout,
+    renderedLayout,
     visibleGraphEdges,
   } = editor.graphProjection;
   const graphKey = useMemo(
@@ -349,7 +428,9 @@ export function useCurrentActivityGraphViewModel({
     activeGraphHighlights,
     displayNodes,
     handleAssignments,
+    layout: renderedLayout,
     pendingAdditionEdgeIds,
+    selectedWaypointEdgeId: editor.selectedWaypointEdgeId,
     visibleGraphEdges,
   });
   const initialFitViewOptions = useInitialFitViewOptions(graphLayout);

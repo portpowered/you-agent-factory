@@ -285,6 +285,14 @@ describe("factory graph editor removals", () => {
         "work-type:story",
       ].sort(),
     );
+    expect(
+      nextDraft.edgeChanges.removals.map((edge) => edgeChangeId(edge)).sort(),
+    ).toEqual(
+      [
+        "workstation-input:work-state:story:queued->workstation:review",
+        "workstation-output:workstation:review->work-state:story:done",
+      ].sort(),
+    );
   });
 
   it("summarizes work-type and resource removals with dependent topology impact", () => {

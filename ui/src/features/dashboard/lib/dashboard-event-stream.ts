@@ -110,11 +110,7 @@ export function syncCurrentFactoryDefinition(
         currentFactoryDocumentQueryKey(sessionID),
         document,
       );
-      return;
     }
-    void queryClient.invalidateQueries({
-      queryKey: currentFactoryDocumentQueryKey(sessionID),
-    });
   } catch {
     return;
   }

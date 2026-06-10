@@ -9,7 +9,7 @@ import { FACTORY_VALIDATION_DEBOUNCE_MS } from "../../factory-graph-editor/hooks
 import { baseFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft.test-helpers";
 import { buildDraftAppliedFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-apply";
 import { connectFactoryGraphNodes } from "../../factory-graph-editor/lib/operations/factory-graph-operations";
-import { useCurrentActivityGraphEditor } from "./react-flow-current-activity-card-editor";
+import { useCurrentActivityGraphState } from "./use-current-activity-graph-state";
 
 const validationFixtures = vi.hoisted(() => {
   const repeaterWithoutRejectRoute: FactoryValidationResult = {
@@ -312,7 +312,7 @@ function applyDraftMutation(
   };
 }
 
-describe("useCurrentActivityGraphEditor live validation refresh", () => {
+describe("useCurrentActivityGraphState live validation refresh", () => {
   beforeEach(() => {
     resetHookState();
     vi.mocked(validateFactoryDefinition).mockReset();
@@ -342,12 +342,12 @@ describe("useCurrentActivityGraphEditor live validation refresh", () => {
     );
 
     const { rerender, result } = renderHook(
-      () => useCurrentActivityGraphEditor(editableDashboardSnapshot),
+      () => useCurrentActivityGraphState(editableDashboardSnapshot),
       { wrapper: createWrapper(queryClient) },
     );
 
     act(() => {
-      result.current.handleEditorModeToggle();
+      result.current.editorControls.toggleMode();
     });
 
     await waitFor(() => {
@@ -365,13 +365,13 @@ describe("useCurrentActivityGraphEditor live validation refresh", () => {
     await waitFor(
       () => {
         expect(validateFactoryDefinition).toHaveBeenCalledTimes(2);
-        expect(result.current.structuralValidation.targets).toHaveLength(1);
+        expect(result.current.validationControls.targets).toHaveLength(1);
       },
       { timeout: 1_000 },
     );
 
-    expect(result.current.canInteractWithEditor).toBe(true);
-    expect(result.current.validationFactoryDefinition).toEqual(pendingAfterAdd);
+    expect(result.current.editorControls.canInteract).toBe(true);
+    expect(result.current.validationControls.factoryDefinition).toEqual(pendingAfterAdd);
     expect(result.current.status.hasTopologyChanges).toBe(true);
   });
 
@@ -409,19 +409,19 @@ describe("useCurrentActivityGraphEditor live validation refresh", () => {
     };
 
     const { rerender, result } = renderHook(
-      () => useCurrentActivityGraphEditor(editableDashboardSnapshot),
+      () => useCurrentActivityGraphState(editableDashboardSnapshot),
       { wrapper: createWrapper(queryClient) },
     );
 
     act(() => {
-      result.current.handleEditorModeToggle();
+      result.current.editorControls.toggleMode();
     });
 
     await waitFor(
       () => {
-        expect(result.current.structuralValidation.targets).toHaveLength(1);
+        expect(result.current.validationControls.targets).toHaveLength(1);
         expect(
-          result.current.structuralValidation.targets[0]?.subject.location,
+          result.current.validationControls.targets[0]?.subject.location,
         ).toBe("ON_FAILURE");
       },
       { timeout: 1_000 },
@@ -438,13 +438,13 @@ describe("useCurrentActivityGraphEditor live validation refresh", () => {
     await waitFor(
       () => {
         expect(validateFactoryDefinition).toHaveBeenCalledTimes(2);
-        expect(result.current.structuralValidation.targets).toEqual([]);
+        expect(result.current.validationControls.targets).toEqual([]);
       },
       { timeout: 1_000 },
     );
 
-    expect(result.current.canInteractWithEditor).toBe(true);
-    expect(result.current.validationFactoryDefinition).toEqual(
+    expect(result.current.editorControls.canInteract).toBe(true);
+    expect(result.current.validationControls.factoryDefinition).toEqual(
       pendingConnected,
     );
   });

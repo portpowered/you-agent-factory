@@ -334,6 +334,8 @@ function renderViewport({
         canMoveLayout: false,
         canRedo: false,
         canUndo: false,
+        initialFitViewKey: "full-graph",
+        initialFitViewOptions: { padding: 0.18 },
         moveNode: vi.fn(),
         moveNodesByDelta: vi.fn(),
         redo: vi.fn(),
@@ -343,8 +345,6 @@ function renderViewport({
       }}
       headingID="test-heading"
       imports={importController}
-      initialFitViewKey="full-graph"
-      initialFitViewOptions={{ padding: 0.18 }}
       nodeTypes={{}}
       nodes={nodes}
       saveControls={{ canSave: false, requestConfirmation: vi.fn() }}

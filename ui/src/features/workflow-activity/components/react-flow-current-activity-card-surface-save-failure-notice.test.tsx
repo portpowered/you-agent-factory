@@ -6,38 +6,6 @@ import { createDefaultFactoryLayout } from "../../factory-graph-editor/lib/layou
 import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import { CurrentActivityGraphSurface } from "./react-flow-current-activity-card-surface";
 
-vi.mock(
-  "../../factory-graph-editor/components/controls/factory-graph-editor-controls",
-  () => ({
-    FactoryGraphEditorNotice: ({
-      children,
-      dismissLabel,
-      onDismiss,
-      title,
-      tone,
-    }: {
-      children: React.ReactNode;
-      dismissLabel?: string;
-      onDismiss?: () => void;
-      title: string;
-      tone: string;
-    }) => (
-      <section
-        data-testid={`notice-${tone}`}
-        role={tone === "danger" ? "alert" : "status"}
-      >
-        <h3>{title}</h3>
-        <div>{children}</div>
-        {onDismiss && dismissLabel ? (
-          <button aria-label={dismissLabel} onClick={onDismiss} type="button">
-            {dismissLabel}
-          </button>
-        ) : null}
-      </section>
-    ),
-  }),
-);
-
 vi.mock("./react-flow-current-activity-card-viewport", () => ({
   CurrentActivityGraphViewport: () => <div data-testid="graph-viewport" />,
 }));
@@ -69,7 +37,6 @@ function createViewModelStub(overrides: Record<string, unknown> = {}) {
       canonicalLayoutViewport: null,
       displayFactoryDefinition: semanticWorkflowDashboardSnapshot.factory,
       graphLayout: { edges: [], nodes: [] },
-      topologyGraphLayout: { edges: [], nodes: [] },
     },
     handleDiscardPendingChanges: vi.fn(),
     handleEditorConnect: vi.fn(),
@@ -79,8 +46,6 @@ function createViewModelStub(overrides: Record<string, unknown> = {}) {
     handleNodesChange: vi.fn(),
     hiddenNodeClasses: new Set(),
     hideShowMenuOpen: false,
-    initialFitViewKey: "full-graph",
-    initialFitViewOptions: { padding: 0.18 },
     layoutDraftState: {
       canRedoLayout: false,
       canUndoLayout: false,
@@ -91,6 +56,8 @@ function createViewModelStub(overrides: Record<string, unknown> = {}) {
       canRedo: false,
       canUndo: false,
       currentLayout: canonicalLayout,
+      initialFitViewKey: "full-graph",
+      initialFitViewOptions: { padding: 0.18 },
     },
     moveEdgeWaypoint: vi.fn(),
     moveLayoutNode: vi.fn(),
@@ -141,10 +108,22 @@ function createViewModelStub(overrides: Record<string, unknown> = {}) {
       isEditing: base.editorMode,
       selectTool: base.setActiveTool,
       toggleMode: base.handleEditorModeToggle,
-      unavailableClassifierWorkstationName:
-        (base as { editorUnavailableClassifierWorkstationName?: string })
-          .editorUnavailableClassifierWorkstationName,
+      unavailableClassifierWorkstationName: (
+        base as { editorUnavailableClassifierWorkstationName?: string }
+      ).editorUnavailableClassifierWorkstationName,
       ...((base as { editorControls?: object }).editorControls ?? {}),
+    },
+    edgeWaypointControls: {
+      handleEditorEdgeClick: vi.fn(),
+      handleEditorEdgeDoubleClick: vi.fn(),
+      handleMoveSelectedEdgeWaypoint: vi.fn(),
+      handleRemoveSelectedEdgeWaypoint: vi.fn(),
+      selectedEdgeWaypoints: [],
+      selectedWaypointEdgeId: null,
+      waypointAriaLabel: vi.fn(),
+      waypointControls: null,
+      ...((base as { edgeWaypointControls?: object }).edgeWaypointControls ??
+        {}),
     },
     addControls: {
       actions: base.addMenuActions,
@@ -156,6 +135,7 @@ function createViewModelStub(overrides: Record<string, unknown> = {}) {
       ...((base as { addControls?: object }).addControls ?? {}),
     },
     saveControls: {
+      attemptRevision: base.saveAttemptRevision,
       canSave: base.canSaveDraft,
       feedback:
         (base as { documentSave?: unknown }).documentSave ??
@@ -195,6 +175,7 @@ function createViewModelStub(overrides: Record<string, unknown> = {}) {
       ...((base as { visibilityControls?: object }).visibilityControls ?? {}),
     },
     validationControls: {
+      draftErrors: [],
       factoryDefinition:
         (base as { validationFactoryDefinition?: unknown })
           .validationFactoryDefinition ??
@@ -226,7 +207,7 @@ function createViewModelStub(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CurrentActivityGraphSurface save failure notice", () => {
-  it("dismisses the save failure notice without clearing draft changes and re-shows on a later failure revision", () => {
+  it("collapses the floating save failure panel without dismissing the alert", () => {
     const saveError = new CurrentFactoryDefinitionError(
       "The factory definition is invalid.",
       {
@@ -236,10 +217,14 @@ describe("CurrentActivityGraphSurface save failure notice", () => {
       },
     );
 
-    const { rerender } = render(
+    render(
       <CurrentActivityGraphSurface
         viewModel={
           createViewModelStub({
+            blockedRemovalReason: null,
+            connectionNotice: null,
+            hasActiveWork: false,
+            isStaleDraft: false,
             saveAttemptRevision: 1,
             saveEditableDefinition: {
               error: saveError,
@@ -254,46 +239,19 @@ describe("CurrentActivityGraphSurface save failure notice", () => {
     );
 
     expect(screen.getByRole("alert")).toBeTruthy();
+    expect(screen.getByText("Editor alerts")).toBeTruthy();
+    expect(screen.getByText("1 issue")).toBeTruthy();
     expect(screen.getByText("Topology save failed")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Collapse editor alerts" }),
+    );
+    expect(screen.getByRole("alert")).toBeTruthy();
     expect(screen.queryByText("Topology save failed")).toBeNull();
 
-    rerender(
-      <CurrentActivityGraphSurface
-        viewModel={
-          createViewModelStub({
-            saveAttemptRevision: 1,
-            saveEditableDefinition: {
-              error: saveError,
-              isPending: false,
-            },
-          }) as never
-        }
-        imports={{} as never}
-        selection={null}
-        snapshot={semanticWorkflowDashboardSnapshot}
-      />,
+    fireEvent.click(
+      screen.getByRole("button", { name: "Expand editor alerts" }),
     );
-    expect(screen.queryByText("Topology save failed")).toBeNull();
-
-    rerender(
-      <CurrentActivityGraphSurface
-        viewModel={
-          createViewModelStub({
-            saveAttemptRevision: 2,
-            saveEditableDefinition: {
-              error: saveError,
-              isPending: false,
-            },
-          }) as never
-        }
-        imports={{} as never}
-        selection={null}
-        snapshot={semanticWorkflowDashboardSnapshot}
-      />,
-    );
-
     expect(screen.getByText("Topology save failed")).toBeTruthy();
   });
 });

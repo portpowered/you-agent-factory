@@ -65,7 +65,8 @@ export function useGraphEditorSaveFlow({
   const canSaveDraft =
     editableGraph.saveState.canSave &&
     editorUnavailableClassifierWorkstationName === undefined &&
-    !hasActiveWork;
+    !hasActiveWork &&
+    !isStaleDraft;
   const messages = getFactoryGraphEditorMessages(locale);
   const saveBlockedReason = hasActiveWork
     ? messages.saveBlockedActiveWork

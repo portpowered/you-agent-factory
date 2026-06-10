@@ -29,13 +29,25 @@ import {
   REPEATER_WORKSTATION_KIND,
   STANDARD_WORKSTATION_KIND,
 } from "../../flowchart/lib/workstation-icon-metadata";
+import { factoryBundledDocDisplayLabel } from "./factory-bundled-docs";
+
+export const CURRENT_ACTIVITY_DOC_NODE_WIDTH = 168;
+export const CURRENT_ACTIVITY_DOC_NODE_HEIGHT = 86;
 
 interface FactoryGraphSeedNode {
+  displayLabel?: string;
+  fileType?: string;
   height: number;
   id: string;
   nodeId: string;
-  nodeKind: "constraint" | "resource" | "state_position" | "workstation";
+  nodeKind:
+    | "constraint"
+    | "doc"
+    | "resource"
+    | "state_position"
+    | "workstation";
   place?: DashboardPlaceRef;
+  targetPath?: string;
   width: number;
   workstationNodeId?: string;
 }
@@ -208,6 +220,8 @@ function placeForFactoryGraphNode(
   categories: ReadonlyMap<string, StateCategory>,
 ): DashboardPlaceRef {
   switch (node.key.kind) {
+    case "doc":
+      return factoryEntityPlace("constraint", "doc", node.key.name);
     case "resource":
       return factoryEntityPlace("resource", "resource", node.key.name);
     case "worker":
@@ -237,6 +251,8 @@ function nodeKindForFactoryGraphNode(
   node: FactoryGraphNode,
 ): FactoryGraphSeedNode["nodeKind"] {
   switch (node.kind) {
+    case "doc":
+      return "doc";
     case "resource":
       return "resource";
     case "work-state":
@@ -251,6 +267,11 @@ function nodeKindForFactoryGraphNode(
 
 function nodeDimensionsForFactoryGraphNode(node: FactoryGraphNode) {
   switch (node.kind) {
+    case "doc":
+      return {
+        height: CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
+        width: CURRENT_ACTIVITY_DOC_NODE_WIDTH,
+      };
     case "resource":
       return FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND.resource;
     case "work-state":
@@ -269,6 +290,18 @@ function seedNodeFromFactoryGraphNode(
   categories: ReadonlyMap<string, StateCategory>,
 ): FactoryGraphSeedNode {
   const dimensions = nodeDimensionsForFactoryGraphNode(node);
+  if (node.kind === "doc" && node.key.kind === "doc") {
+    return {
+      displayLabel: factoryBundledDocDisplayLabel(node.key.name),
+      fileType: node.key.sourceFileType,
+      height: dimensions.height,
+      id: node.id,
+      nodeId: node.id,
+      nodeKind: "doc",
+      targetPath: node.key.name,
+      width: dimensions.width,
+    };
+  }
   if (node.kind === "workstation") {
     return {
       height: dimensions.height,
@@ -295,6 +328,8 @@ function placeKindForFactoryGraphNodeKind(
   kind: FactoryGraphNodeKind,
 ): DashboardPlaceKind | undefined {
   switch (kind) {
+    case "doc":
+      return "constraint";
     case "resource":
       return "resource";
     case "work-state":
@@ -469,6 +504,24 @@ function toPositionedNode(
   x: number,
   y: number,
 ): PositionedNode {
+  if (seedNode.nodeKind === "doc") {
+    return {
+      column,
+      displayLabel:
+        seedNode.displayLabel ??
+        factoryBundledDocDisplayLabel(seedNode.targetPath ?? seedNode.nodeId),
+      fileType: seedNode.fileType,
+      height: seedNode.height,
+      nodeId: seedNode.nodeId,
+      nodeKind: "doc",
+      row,
+      targetPath: seedNode.targetPath ?? seedNode.nodeId,
+      width: seedNode.width,
+      x,
+      y,
+    };
+  }
+
   if (seedNode.nodeKind === "workstation") {
     return {
       column,

@@ -154,6 +154,7 @@ describe("CurrentSelectionWidget header save and discard integration", () => {
     renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildDetailCardCurrentSelection({
+          currentFactoryDefinition: buildDetailCardEditableFactoryDocument(),
           selectedWorkerName: "reviewer",
           selection: { kind: "worker", workerName: "reviewer" },
         })}

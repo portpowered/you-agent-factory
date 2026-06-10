@@ -89,6 +89,51 @@ it("treats whitespace-only workstation worker names as unassigned", () => {
   );
 });
 
+it("projects bundled files as first-class graph nodes", () => {
+  const topology = buildFactoryGraphTopologyFromDefinition({
+    ...runtimeShapedFactory,
+    supportingFiles: {
+      bundledFiles: [
+        {
+          content: { encoding: "utf-8", inline: "# Overview" },
+          targetPath: "factory/docs/overview.md",
+          type: "DOC",
+        },
+        {
+          content: { encoding: "utf-8", inline: "print('setup')" },
+          targetPath: "factory/scripts/setup-workspace.py",
+          type: "SCRIPT",
+        },
+        {
+          content: { encoding: "utf-8", inline: "test:\n\tgo test ./..." },
+          targetPath: "Makefile",
+          type: "ROOT_HELPER",
+        },
+      ],
+    },
+  });
+
+  expect(topology.nodes).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        id: "doc:factory/docs/overview.md",
+        kind: "doc",
+        label: "factory/docs/overview.md",
+      }),
+      expect.objectContaining({
+        id: "doc:factory/scripts/setup-workspace.py",
+        kind: "doc",
+        label: "factory/scripts/setup-workspace.py",
+      }),
+      expect.objectContaining({
+        id: "doc:Makefile",
+        kind: "doc",
+        label: "Makefile",
+      }),
+    ]),
+  );
+});
+
 it("uses explicit entity ids for canonical graph node and edge ids", () => {
   const topology = buildFactoryGraphTopologyFromDefinition({
     name: "stable-ids",

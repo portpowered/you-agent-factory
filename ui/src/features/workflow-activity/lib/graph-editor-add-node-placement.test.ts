@@ -5,7 +5,7 @@ import type { FactoryGraphAddEntityDraft } from "../../factory-graph-editor/lib/
 import {
   CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
   CURRENT_ACTIVITY_DOC_NODE_WIDTH,
-} from "./current-activity-doc-graph-layout";
+} from "./current-activity-factory-graph-layout";
 import {
   factoryGraphNodeIdForAddEntityDraft,
   occupiedRectsFromRenderedNodes,

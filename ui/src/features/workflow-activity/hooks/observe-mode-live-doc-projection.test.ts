@@ -105,14 +105,13 @@ describe("observe-mode live doc projection", () => {
       currentFactoryDocumentQueryKey(sessionID),
     );
     const editor = {
-      draftState: {},
       editableFactoryDocument: document,
       editableFactoryDocumentStatus: "success" as const,
       editorMode: false,
     };
 
     const displayFactory = currentActivityCardFactoryDefinition(
-      editor as never,
+      editor,
       { factory: timelineFactory } as never,
     );
 
@@ -124,14 +123,13 @@ describe("observe-mode live doc projection", () => {
 
   it("uses bundled docs from cached document data while the factory query is still pending", () => {
     const editor = {
-      draftState: {},
       editableFactoryDocument: savedFactoryDocument,
       editableFactoryDocumentStatus: "pending" as const,
       editorMode: false,
     };
 
     const displayFactory = currentActivityCardFactoryDefinition(
-      editor as never,
+      editor,
       { factory: timelineFactory } as never,
     );
 
@@ -143,14 +141,13 @@ describe("observe-mode live doc projection", () => {
 
   it("does not invent bundled docs before the saved factory document is available", () => {
     const editor = {
-      draftState: {},
       editableFactoryDocument: undefined,
       editableFactoryDocumentStatus: "pending" as const,
       editorMode: false,
     };
 
     const displayFactory = currentActivityCardFactoryDefinition(
-      editor as never,
+      editor,
       { factory: timelineFactory } as never,
     );
 
@@ -159,7 +156,6 @@ describe("observe-mode live doc projection", () => {
 
   it("keeps snapshot layout for observer projection when cached document data omits layout", () => {
     const editor = {
-      draftState: {},
       editableFactoryDocument: {
         ...savedFactoryDocument,
         layout: undefined,
@@ -182,7 +178,7 @@ describe("observe-mode live doc projection", () => {
     };
 
     const displayFactory = currentActivityCardFactoryDefinition(
-      editor as never,
+      editor,
       { factory: snapshotFactory } as never,
     );
 

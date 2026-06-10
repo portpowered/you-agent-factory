@@ -91,6 +91,8 @@ function relationShellNodeType(
   kind: FactoryGraphNodeKind,
 ): PlaceNodeType | "workstation" {
   switch (kind) {
+    case "doc":
+      return "doc";
     case "work-state":
       return "statePosition";
     case "work-type":
@@ -132,6 +134,8 @@ function relationNodeToneClassName(
   relationStates: string[],
 ): string {
   switch (kind) {
+    case "doc":
+      return activityGraphNodeSurfaceClassName("neutral");
     case "resource":
       return activityGraphNodeSurfaceClassName("resource");
     case "work-state":

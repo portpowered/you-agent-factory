@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useCurrentFactoryDocument } from "../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import type { CurrentFactoryDocument } from "../../../../api/current-factory-definition";
 import {
   applyEditableWorkerDraft,
   areEditableWorkerDraftsEqual,
@@ -28,13 +28,13 @@ export function useEditableWorkerConfigurationState(
   selection: DashboardSelection | null,
   workerName: string | null,
   locale?: string | null,
+  editableDefinition?: CurrentFactoryDocument | null,
 ): EditableWorkerConfigurationState | undefined {
   const isWorkerSelection = selection?.kind === "worker" && workerName != null;
   const messages = getWorkerDetailMessages(locale);
-  const editableDefinition = useCurrentFactoryDocument(isWorkerSelection);
   const { selectedEditableValues, sessionState, setSessionState } =
     useEditableWorkerSession(
-      editableDefinition.data,
+      editableDefinition,
       workerName,
       isWorkerSelection,
     );
@@ -43,18 +43,11 @@ export function useEditableWorkerConfigurationState(
     return undefined;
   }
 
-  if (editableDefinition.isPending) {
+  if (!editableDefinition) {
     return { status: "loading" };
   }
 
-  if (editableDefinition.isError) {
-    return {
-      errorMessage: editableDefinition.error.message,
-      status: "error",
-    };
-  }
-
-  if (!editableDefinition.data || !selectedEditableValues || !sessionState) {
+  if (!selectedEditableValues || !sessionState) {
     return {
       message: messages.configurationEmpty,
       status: "empty",
@@ -62,7 +55,7 @@ export function useEditableWorkerConfigurationState(
   }
 
   return buildReadyEditableWorkerConfigurationState({
-    editableDefinition: editableDefinition.data,
+    editableDefinition,
     sessionState,
     setSessionState,
     selectedEditableValues,
@@ -71,7 +64,7 @@ export function useEditableWorkerConfigurationState(
 }
 
 function useEditableWorkerSession(
-  editableDefinition: ReturnType<typeof useCurrentFactoryDocument>["data"],
+  editableDefinition: CurrentFactoryDocument | null | undefined,
   workerName: string | null,
   isWorkerSelection: boolean,
 ) {
@@ -111,7 +104,7 @@ function buildReadyEditableWorkerConfigurationState({
   workerName,
 }: {
   editableDefinition: NonNullable<
-    ReturnType<typeof useCurrentFactoryDocument>["data"]
+    CurrentFactoryDocument
   >;
   sessionState: EditableWorkerSessionState;
   setSessionState: (

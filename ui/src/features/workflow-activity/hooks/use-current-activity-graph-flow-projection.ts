@@ -2,69 +2,55 @@ import { useMemo } from "react";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import type { FactoryGraphEditorVisibilityPreset } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
-import type { useFactoryGraphDraftState } from "../../factory-graph-editor/hooks/factory-graph-draft-hook";
-import type { useFactoryGraphLayoutDraftState } from "../../factory-graph-editor/hooks/layout/factory-graph-layout-draft-hook";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
-import {
-  createDefaultFactoryLayout,
-  factoryLayoutFromDefinition,
-} from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
+import type { FactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { pruneFactoryLayoutEdgesForTopology } from "../../factory-graph-editor/lib/layout/factory-graph-layout-validation";
-import { mergeDocNodesIntoGraphLayout } from "../lib/current-activity-doc-graph-layout";
+import type { GraphLayout, PositionedEdge } from "../../flowchart/lib/layout";
 import { graphNodePositionsFromCanonicalLayout } from "../lib/layout/factory-graph-canonical-layout-positions";
-import { buildVisibleGraphEdgesWithDraft } from "../lib/react-flow-current-activity-card-draft-edges";
 import { useCurrentActivityGraphLayoutForFactory } from "./react-flow-current-activity-card-graph-layout";
-import type { CurrentActivityFactoryGraphViewState } from "./use-current-activity-factory-graph-view-state";
 import { useTopologyStableFactoryForLayout } from "./use-topology-stable-factory-for-layout";
 
+export type CurrentActivityGraphResolvedEdges = {
+  pendingAdditionEdgeIds: ReadonlySet<string>;
+  visibleGraphEdges: PositionedEdge[];
+};
+
+export interface CurrentActivityGraphProjectionState {
+  displayFactoryDefinition: DashboardSnapshot["factory"] | null | undefined;
+  computedLayout: FactoryLayout;
+  resolveGraphEdges: (
+    positionedGraphLayout: GraphLayout,
+  ) => CurrentActivityGraphResolvedEdges;
+}
+
 export function useCurrentActivityGraphFlowProjection({
-  draftState,
   hiddenNodeClasses,
-  layoutDraftState,
+  projectionState,
   snapshot,
-  viewState,
   visibilityPreset,
 }: {
-  draftState: ReturnType<typeof useFactoryGraphDraftState>;
   hiddenNodeClasses: ReadonlySet<FactoryGraphNodeKind>;
-  layoutDraftState: ReturnType<typeof useFactoryGraphLayoutDraftState>;
+  projectionState: CurrentActivityGraphProjectionState;
   snapshot: DashboardSnapshot;
-  viewState: CurrentActivityFactoryGraphViewState;
   visibilityPreset: FactoryGraphEditorVisibilityPreset;
 }) {
-  const displayFactoryDefinition = viewState.displayFactoryDefinition;
+  const {
+    computedLayout,
+    displayFactoryDefinition,
+    resolveGraphEdges,
+  } = projectionState;
   const layoutFactoryDefinition = useTopologyStableFactoryForLayout(
     displayFactoryDefinition,
   );
-  const topologyGraphLayout = useCurrentActivityGraphLayoutForFactory(
+  const graphLayout = useCurrentActivityGraphLayoutForFactory(
     snapshot,
     layoutFactoryDefinition,
     hiddenNodeClasses,
     visibilityPreset,
   );
-  const graphLayout = useMemo(
-    () =>
-      mergeDocNodesIntoGraphLayout(
-        topologyGraphLayout,
-        displayFactoryDefinition,
-      ),
-    [displayFactoryDefinition, topologyGraphLayout],
-  );
-  const savedFactoryLayout = useMemo(
-    () => factoryLayoutFromDefinition(displayFactoryDefinition),
-    [displayFactoryDefinition],
-  );
-  const hasDocumentBackedLayoutDraft = draftState.source === "current-factory";
-  const canonicalLayout = useMemo(
-    () =>
-      hasDocumentBackedLayoutDraft
-        ? (layoutDraftState.layout ?? createDefaultFactoryLayout())
-        : savedFactoryLayout,
-    [hasDocumentBackedLayoutDraft, layoutDraftState.layout, savedFactoryLayout],
-  );
   const canonicalPositions = useMemo(
-    () => graphNodePositionsFromCanonicalLayout(graphLayout, canonicalLayout),
-    [canonicalLayout, graphLayout],
+    () => graphNodePositionsFromCanonicalLayout(graphLayout, computedLayout),
+    [computedLayout, graphLayout],
   );
   const positionedGraphLayout = useMemo(
     () => ({
@@ -77,12 +63,8 @@ export function useCurrentActivityGraphFlowProjection({
     [canonicalPositions, graphLayout],
   );
   const { pendingAdditionEdgeIds, visibleGraphEdges } = useMemo(
-    () =>
-      buildVisibleGraphEdgesWithDraft({
-        draft: draftState.draft,
-        graphLayout: positionedGraphLayout,
-      }),
-    [draftState.draft, positionedGraphLayout],
+    () => resolveGraphEdges(positionedGraphLayout),
+    [positionedGraphLayout, resolveGraphEdges],
   );
   const renderedLayout = useMemo(() => {
     const visibleLayoutEdgeIds = new Set(
@@ -90,31 +72,29 @@ export function useCurrentActivityGraphFlowProjection({
     );
 
     return pruneFactoryLayoutEdgesForTopology(
-      canonicalLayout,
+      computedLayout,
       visibleLayoutEdgeIds,
     ).layout;
-  }, [canonicalLayout, visibleGraphEdges]);
+  }, [computedLayout, visibleGraphEdges]);
 
   return useMemo(
     () => ({
-      canonicalLayout,
-      canonicalLayoutViewport: canonicalLayout.viewport ?? null,
+      canonicalLayout: computedLayout,
+      canonicalLayoutViewport: computedLayout.viewport ?? null,
       displayFactoryDefinition,
       graphLayout,
       pendingAdditionEdgeIds,
       positionedGraphLayout,
       renderedLayout,
-      topologyGraphLayout,
       visibleGraphEdges,
     }),
     [
-      canonicalLayout,
+      computedLayout,
       displayFactoryDefinition,
       graphLayout,
       pendingAdditionEdgeIds,
       positionedGraphLayout,
       renderedLayout,
-      topologyGraphLayout,
       visibleGraphEdges,
     ],
   );

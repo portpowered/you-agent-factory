@@ -28,6 +28,7 @@ export type FactoryImportSaveChoice = "replace_current" | "create_new_named";
 export interface ActivateImportedFactoryForSessionOptions {
   choice?: FactoryImportSaveChoice;
   createFactoryName?: string;
+  currentDocument?: CurrentFactoryDocument | null;
   existingFactoryNames?: readonly string[];
   fetch?: typeof globalThis.fetch;
   sessionID?: string | null;
@@ -95,6 +96,17 @@ export async function activateImportedFactoryForSession(
   importedFactory: ImportFactoryValue,
   options: ActivateImportedFactoryForSessionOptions = {},
 ): Promise<ImportFactoryValue> {
+  const savedDocument = await activateImportedFactoryDocumentForSession(
+    importedFactory,
+    options,
+  );
+  return toActivatedFactoryValue(savedDocument);
+}
+
+export async function activateImportedFactoryDocumentForSession(
+  importedFactory: ImportFactoryValue,
+  options: ActivateImportedFactoryForSessionOptions = {},
+): Promise<CurrentFactoryDocument> {
   if (options.choice === "create_new_named") {
     return activateImportedFactoryCreateNamedForSession(
       importedFactory,
@@ -111,16 +123,8 @@ export async function activateImportedFactoryForSession(
 async function activateImportedFactoryReplaceCurrentForSession(
   importedFactory: ImportFactoryValue,
   options: ActivateImportedFactoryForSessionOptions,
-): Promise<ImportFactoryValue> {
-  let currentDocument: CurrentFactoryDocument;
-  try {
-    currentDocument = await getCurrentFactoryDocument({
-      fetch: options.fetch,
-      sessionID: options.sessionID,
-    });
-  } catch (error) {
-    throw toSessionFactoryAPIErrorFromCurrentFactoryDefinition(error);
-  }
+): Promise<CurrentFactoryDocument> {
+  const currentDocument = await resolveActivationCurrentDocument(options);
 
   const { version: _version, ...importedWithoutVersion } = importedFactory;
 
@@ -142,13 +146,13 @@ async function activateImportedFactoryReplaceCurrentForSession(
     throw toSessionFactoryAPIErrorFromCurrentFactoryDefinition(error);
   }
 
-  return toActivatedFactoryValue(savedDocument);
+  return savedDocument;
 }
 
 async function activateImportedFactoryCreateNamedForSession(
   importedFactory: ImportFactoryValue,
   options: ActivateImportedFactoryForSessionOptions,
-): Promise<ImportFactoryValue> {
+): Promise<CurrentFactoryDocument> {
   const createFactoryName = options.createFactoryName?.trim();
   if (!createFactoryName) {
     throw new SessionFactoryAPIError(
@@ -159,15 +163,7 @@ async function activateImportedFactoryCreateNamedForSession(
     );
   }
 
-  let currentDocument: CurrentFactoryDocument;
-  try {
-    currentDocument = await getCurrentFactoryDocument({
-      fetch: options.fetch,
-      sessionID: options.sessionID,
-    });
-  } catch (error) {
-    throw toSessionFactoryAPIErrorFromCurrentFactoryDefinition(error);
-  }
+  const currentDocument = await resolveActivationCurrentDocument(options);
 
   const { version: _version, ...importedWithoutVersion } = importedFactory;
   const includeVersion = shouldIncludeVersionForImportCreateNamed(
@@ -195,12 +191,29 @@ async function activateImportedFactoryCreateNamedForSession(
     throw toSessionFactoryAPIErrorFromCurrentFactoryDefinition(error);
   }
 
-  return toActivatedFactoryValue(savedDocument);
+  return savedDocument;
 }
 
 function normalizeSessionID(sessionID: string | null | undefined): string {
   const trimmed = sessionID?.trim();
   return trimmed ? trimmed : "~default";
+}
+
+async function resolveActivationCurrentDocument(
+  options: ActivateImportedFactoryForSessionOptions,
+): Promise<CurrentFactoryDocument> {
+  if (options.currentDocument) {
+    return options.currentDocument;
+  }
+
+  try {
+    return await getCurrentFactoryDocument({
+      fetch: options.fetch,
+      sessionID: options.sessionID,
+    });
+  } catch (error) {
+    throw toSessionFactoryAPIErrorFromCurrentFactoryDefinition(error);
+  }
 }
 
 function shouldIncludeVersionForImportCreateNamed(

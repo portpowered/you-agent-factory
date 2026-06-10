@@ -226,6 +226,11 @@ function removeDraftAddition(
   key: FactoryGraphNodeKey,
 ) {
   switch (key.kind) {
+    case "doc":
+      draft.additions.docs = draft.additions.docs.filter(
+        (doc) => doc.targetPath !== key.name,
+      );
+      return;
     case "resource":
       draft.additions.resources = draft.additions.resources.filter(
         (resource) => resource.name !== key.name,
@@ -387,6 +392,9 @@ function shouldRemoveEdgeForNode(
   return (
     key.kind === "work-type" &&
     (edge.sourceId === nodeKeyId(key) ||
+      (edge.source.kind === "work-state" &&
+        edge.source.workTypeName === key.name &&
+        edge.kind !== "work-type-state") ||
       (edge.target.kind === "work-state" &&
         edge.target.workTypeName === key.name &&
         edge.kind !== "work-type-state"))

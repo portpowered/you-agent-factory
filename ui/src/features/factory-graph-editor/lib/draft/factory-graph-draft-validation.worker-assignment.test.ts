@@ -54,6 +54,27 @@ const modelWorkstationWithoutWorkerFactoryDefinition = {
   ],
 };
 
+const systemTimeFactoryDefinition = {
+  ...baseFactoryDefinition,
+  workTypes: [
+    ...(baseFactoryDefinition.workTypes ?? []),
+    {
+      name: "__system_time",
+      states: [{ name: "pending", type: "PROCESSING" as const }],
+    },
+  ],
+  workstations: [
+    ...(baseFactoryDefinition.workstations ?? []),
+    {
+      inputs: [{ state: "pending", workType: "__system_time" }],
+      name: "__system_time:expire",
+      outputs: [],
+      type: "MODEL_WORKSTATION" as const,
+      worker: "",
+    },
+  ],
+};
+
 it("accepts save validation for LOGICAL_MOVE workstations without worker assignments", () => {
   const validationErrors = validateFactoryGraphDraftSave(
     logicalMoveFactoryDefinition,
@@ -86,6 +107,23 @@ it("rejects save validation for worker-backed workstations without worker assign
       }),
     ]),
   );
+});
+
+it("ignores internal system-time workstations when validating worker assignments", () => {
+  const validationErrors = validateFactoryGraphDraftSave(
+    systemTimeFactoryDefinition,
+    createEmptyFactoryGraphDraft(),
+  );
+
+  expect(
+    validationErrors.filter(
+      (error) =>
+        error.code === "MISSING_REQUIRED_FIELD" &&
+        error.field === "worker" &&
+        error.target.kind === "node" &&
+        error.target.id === "workstation:__system_time:expire",
+    ),
+  ).toEqual([]);
 });
 
 it("skips missing-worker validation when adding a LOGICAL_MOVE workstation draft", () => {

@@ -13,6 +13,7 @@ import { GraphSemanticIcon } from "./graph-semantic-icon";
 export interface DocNodeData extends Record<string, unknown> {
   displayLabel: string;
   factoryGraphNodeId?: string;
+  fileType?: string;
   handles: ActivityGraphNodeHandle[];
   kind: "doc";
   locale?: string;

@@ -531,6 +531,124 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
         screen.queryByRole("button", { name: "workstation:review" }),
       ).toBeNull();
     });
+
+    const toolbar = await screen.findByRole("region", {
+      name: "Factory graph editor tools",
+    });
+    expect(
+      within(toolbar)
+        .getByRole("button", { name: "Save changes" })
+        .getAttribute("disabled"),
+    ).toBeNull();
+  });
+
+  it("enables save after confirming work-state deletion", async () => {
+    renderCurrentActivity();
+    enterEditorMode();
+    expect(
+      await screen.findByRole("button", { name: "work-state:story:qa" }),
+    ).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "work-state:story:qa" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Remove story:qa work-state?",
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Delete story:qa work-state",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: "work-state:story:qa" }),
+      ).toBeNull();
+    });
+
+    const toolbar = await screen.findByRole("region", {
+      name: "Factory graph editor tools",
+    });
+    expect(
+      within(toolbar)
+        .getByRole("button", { name: "Save changes" })
+        .getAttribute("disabled"),
+    ).toBeNull();
+  });
+
+  it("enables save after confirming connected work-state deletion", async () => {
+    renderCurrentActivity();
+    enterEditorMode();
+    expect(
+      await screen.findByRole("button", { name: "work-state:story:queued" }),
+    ).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "work-state:story:queued" }),
+    );
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Remove story:queued work-state?",
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Delete story:queued work-state",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: "work-state:story:queued" }),
+      ).toBeNull();
+    });
+
+    const toolbar = await screen.findByRole("region", {
+      name: "Factory graph editor tools",
+    });
+    expect(
+      within(toolbar)
+        .getByRole("button", { name: "Save changes" })
+        .getAttribute("disabled"),
+    ).toBeNull();
+  });
+
+  it("enables save after confirming work-type deletion", async () => {
+    renderCurrentActivity();
+    enterEditorMode();
+    expect(
+      await screen.findByRole("button", { name: "work-type:story" }),
+    ).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "work-type:story" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Remove story work-type?",
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Delete story work-type",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: "work-type:story" }),
+      ).toBeNull();
+    });
+
+    const toolbar = await screen.findByRole("region", {
+      name: "Factory graph editor tools",
+    });
+    expect(
+      within(toolbar)
+        .getByRole("button", { name: "Save changes" })
+        .getAttribute("disabled"),
+    ).toBeNull();
   });
 
   it("creates a visible semantic React Flow edge after a connect interaction", async () => {

@@ -48,14 +48,13 @@ function renderToolbar({
             },
           ]}
           canInteract={true}
-          canSave={true}
-          canDiscard={true}
+          canSave={hasPendingChanges}
+          canDiscard={hasPendingChanges}
           editModeToggle={{
             editorMode: editMode,
             hasChanges: hasPendingChanges,
             onToggle: onToggleEditMode,
           }}
-          hasPendingChanges={hasPendingChanges}
           hiddenNodeClasses={hiddenNodeClasses}
           hideShowMenuOpen={hideShowMenuOpen}
           hideShowVisible={hideShowVisible}

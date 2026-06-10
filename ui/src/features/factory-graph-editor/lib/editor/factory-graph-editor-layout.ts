@@ -12,6 +12,7 @@ export const FACTORY_GRAPH_EDITOR_NODE_DIMENSIONS_BY_KIND: Record<
   FactoryGraphNodeKind,
   { height: number; width: number }
 > = {
+  doc: { height: 86, width: 168 },
   resource: { height: 86, width: 168 },
   // Keep shared factory/trace/editor layout geometry aligned with the
   // current-activity graph's compact worker modeling.

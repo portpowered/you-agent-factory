@@ -5,15 +5,13 @@ import { AgentBentoCard } from "../../bento/public";
 import type { DashboardSelection } from "../../current-selection/public";
 import { useDashboardSession } from "../../dashboard/session/dashboard-session-provider";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
-import { useCurrentActivityGraphEditor } from "../hooks/react-flow-current-activity-card-editor";
+import { useCurrentActivityGraphState } from "../hooks/use-current-activity-graph-state";
 import { useCurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
+import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import { getWorkflowActivityShellMessages } from "../messages/activity-shell";
 import { useFactoryGraphTopologyEditorBridge } from "../state/factory-graph-topology-editor-bridge";
-import {
-  type CurrentActivitySelection,
-  ReactFlowCurrentActivityCardView,
-} from "./react-flow-current-activity-card";
 import { CurrentActivityGraphHeaderActions } from "./react-flow-current-activity-card-editor-chrome";
+import { ReactFlowCurrentActivityCardView } from "./react-flow-current-activity-card-view";
 
 interface WorkflowActivityBentoCardProps {
   headerAction?: ReactNode;
@@ -60,7 +58,7 @@ export function WorkflowActivityBentoCard({
   const setTopologyEditorBridgeHandlers = useFactoryGraphTopologyEditorBridge(
     (state) => state.setHandlers,
   );
-  const editor = useCurrentActivityGraphEditor(
+  const activityGraphState = useCurrentActivityGraphState(
     snapshot,
     locale,
     sessionID,
@@ -69,7 +67,7 @@ export function WorkflowActivityBentoCard({
   );
   const currentActivitySelection = toCurrentActivitySelection(selection);
   const viewModel = useCurrentActivityGraphCardViewModel({
-    editor,
+    graphController: activityGraphState,
     locale,
     now,
     onSelectDoc,
@@ -122,7 +120,7 @@ export function WorkflowActivityBentoCard({
       className="h-full max-h-full min-h-0 overflow-hidden"
       headerAction={
         <CurrentActivityGraphHeaderActions
-          key={`graph-editor-header-${editorControls.isEditing}-${viewModel.status.hasTopologyChanges}-${viewModel.status.hasLayoutChanges}-${viewModel.status.preferencesDirty}`}
+          key={`graph-editor-header-${editorControls.isEditing}-${viewModel.status.hasSharedGraphChanges}-${viewModel.status.preferencesDirty}`}
           compact
           dirtySummary={viewModel.status.dirtySummary}
           editorMode={editorControls.isEditing}

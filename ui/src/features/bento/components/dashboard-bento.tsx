@@ -66,6 +66,7 @@ export function DashboardBento({ locale }: DashboardBentoProps = {}) {
     worldViewCache,
   } = useDashboardBentoSnapshot(sessionID);
   const importController = useCurrentActivityImportController({
+    currentFactoryDefinition: snapshot.factory,
     locale: resolvedLocale,
     onFactoryActivated: incrementRefreshToken,
     sessionID: rawSessionID,

@@ -8,6 +8,7 @@ import type {
   EditableDocDraft,
   EditableDocValues,
 } from "../../../current-factory-definition/lib/doc-editable-values";
+import type { FactoryBundledDocFile } from "../../../workflow-activity/lib/factory-bundled-docs";
 import type { DetailCardSaveState } from "../../base/hooks/detail-card-save-types";
 import type { EditableDocValidationErrors } from "./doc-editable-validation";
 
@@ -16,6 +17,7 @@ export interface DocDetailCardProps {
   headerAction?: ReactNode;
   locale?: string | null;
   saveState?: EditableDocSaveState;
+  savedBundledDoc?: FactoryBundledDocFile | null;
   targetPath: string;
   widgetId?: string;
 }
