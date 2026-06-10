@@ -103,6 +103,34 @@ function buildFactoryDocument(
   };
 }
 
+function buildResourceContext(
+  resourceName: string,
+  factoryDocument: CurrentFactoryDocument = buildFactoryDocument(),
+) {
+  return {
+    resource:
+      factoryDocument.resources?.find(
+        (candidate) => candidate.name === resourceName,
+      ) ?? undefined,
+    workerNames:
+      factoryDocument.workers
+        ?.filter((worker) =>
+          (worker.resources ?? []).some(
+            (candidate) => candidate.name === resourceName,
+          ),
+        )
+        .map((worker) => worker.name) ?? [],
+    workstationNames:
+      factoryDocument.workstations
+        ?.filter((workstation) =>
+          (workstation.resources ?? []).some(
+            (candidate) => candidate.name === resourceName,
+          ),
+        )
+        .map((workstation) => workstation.name) ?? [],
+  };
+}
+
 function renderResourceDetailCard(
   resourceName: string,
   options?: {
@@ -111,19 +139,47 @@ function renderResourceDetailCard(
   },
 ) {
   function Harness() {
+    const editableDefinition = useCurrentFactoryDocument().data ?? null;
+    const fallbackDetailDefinition = buildFactoryDocument();
+    const detailDefinition = editableDefinition ?? fallbackDetailDefinition;
+    const resource =
+      detailDefinition.resources?.find(
+        (candidate) => candidate.name === resourceName,
+      ) ?? null;
+    const workerNames =
+      detailDefinition.workers
+        ?.filter((worker) =>
+          (worker.resources ?? []).some(
+            (candidate) => candidate.name === resourceName,
+          ),
+        )
+        .map((worker) => worker.name) ?? [];
+    const workstationNames =
+      detailDefinition.workstations
+        ?.filter((workstation) =>
+          (workstation.resources ?? []).some(
+            (candidate) => candidate.name === resourceName,
+          ),
+        )
+        .map((workstation) => workstation.name) ?? [];
     const editableConfigurationState = useEditableResourceConfigurationState(
       options?.selection ?? {
         kind: "resource",
         resourceName,
       },
       resourceName,
+      undefined,
+      editableDefinition,
     );
 
     return (
       <ResourceDetailCard
         editableConfigurationState={editableConfigurationState}
+        resource={resource}
         resourceName={resourceName}
         tokenCount={options?.tokenCount}
+        workerNames={workerNames}
+        workstationNames={workstationNames}
       />
     );
   }
@@ -186,12 +242,21 @@ function renderReadOnlyResourceDetailCard(
   resourceName: string,
   options?: { tokenCount?: number | null },
 ) {
-  return render(
-    <ResourceDetailCard
-      resourceName={resourceName}
-      tokenCount={options?.tokenCount}
-    />,
-  );
+  function Harness() {
+    const factoryDocument =
+      useCurrentFactoryDocument().data ?? buildFactoryDocument();
+    const resourceContext = buildResourceContext(resourceName, factoryDocument);
+
+    return (
+      <ResourceDetailCard
+        resourceName={resourceName}
+        tokenCount={options?.tokenCount}
+        {...resourceContext}
+      />
+    );
+  }
+
+  return render(<Harness />);
 }
 
 function expectPrimaryResourceTitle(resourceName: string) {
@@ -223,23 +288,25 @@ describe("ResourceDetailCard", () => {
     ).toBe("true");
     expect(
       screen.getByText(
-        "Loading the current factory definition for this resource.",
+        "Loading editable resource configuration.",
       ),
     ).toBeTruthy();
   });
 
   it("shows error state when the current factory document fails to load", () => {
-    mockFactoryDocumentQuery({
-      error: { message: "Factory unavailable" },
-      isError: true,
-      isPending: false,
-      status: "error",
-    } as never);
-
-    renderResourceDetailCard("agent-slot");
+    render(
+      <ResourceDetailCard
+        editableConfigurationState={{
+          errorMessage: "Factory unavailable",
+          status: "error",
+        }}
+        resourceName="agent-slot"
+        {...buildResourceContext("agent-slot")}
+      />,
+    );
 
     expect(screen.getByRole("alert").textContent).toContain(
-      "Resource definition unavailable.",
+      "Resource configuration unavailable.",
     );
     expect(screen.getByRole("alert").textContent).toContain(
       "Factory unavailable",
@@ -476,6 +543,7 @@ describe("ResourceDetailCard", () => {
       <ResourceDetailCard
         editableConfigurationState={editableConfigurationState}
         resourceName="agent-slot"
+        {...buildResourceContext("agent-slot")}
       />,
     );
 
@@ -551,6 +619,7 @@ describe("ResourceDetailCard", () => {
           onSave,
         })}
         resourceName="agent-slot"
+        {...buildResourceContext("agent-slot")}
       />,
     );
 
@@ -641,6 +710,7 @@ describe("ResourceDetailCard", () => {
           canSave: true,
         })}
         resourceName="agent-slot"
+        {...buildResourceContext("agent-slot")}
       />,
     );
 

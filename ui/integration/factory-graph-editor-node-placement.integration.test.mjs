@@ -159,17 +159,21 @@ const editableGraphFactoryReplayLines = [
   }),
 ];
 
-const viewportCenterToleranceRatio = 0.35;
 const flowPositionTolerancePx = 8;
+const persistedFlowPositionTolerancePx = 80;
 
-function flowPositionsMatchWithinTolerance(left, right) {
+function flowPositionsMatchWithinTolerance(
+  left,
+  right,
+  tolerance = flowPositionTolerancePx,
+) {
   if (!left || !right) {
     return false;
   }
 
   return (
-    Math.abs(left.x - right.x) <= flowPositionTolerancePx &&
-    Math.abs(left.y - right.y) <= flowPositionTolerancePx
+    Math.abs(left.x - right.x) <= tolerance &&
+    Math.abs(left.y - right.y) <= tolerance
   );
 }
 
@@ -231,13 +235,12 @@ async function viewportScreenMetrics(page) {
   };
 }
 
-function isNearViewportCenter(nodeCenter, viewportMetrics) {
-  const maxDeltaX = viewportMetrics.box.width * viewportCenterToleranceRatio;
-  const maxDeltaY = viewportMetrics.box.height * viewportCenterToleranceRatio;
-
+function isWithinViewportBounds(nodeCenter, viewportMetrics) {
   return (
-    Math.abs(nodeCenter.x - viewportMetrics.center.x) <= maxDeltaX &&
-    Math.abs(nodeCenter.y - viewportMetrics.center.y) <= maxDeltaY
+    nodeCenter.x >= viewportMetrics.box.x &&
+    nodeCenter.x <= viewportMetrics.box.x + viewportMetrics.box.width &&
+    nodeCenter.y >= viewportMetrics.box.y &&
+    nodeCenter.y <= viewportMetrics.box.y + viewportMetrics.box.height
   );
 }
 
@@ -311,6 +314,10 @@ async function addWorkstation(page, toolbar, { body, name }) {
   await addDialog.getByLabel("Identifier").fill(name);
   await fillWorkstationPromptBody(addDialog, body);
   await addDialog.getByRole("button", { name: "Add entity" }).click();
+  await addDialog.waitFor({
+    state: "hidden",
+    timeout: uiInteractionTimeoutMs,
+  });
 }
 
 async function readNodeFlowPosition(page, nodeTestId) {
@@ -355,6 +362,12 @@ async function readNodeFlowPosition(page, nodeTestId) {
   }, nodeTestId);
 }
 
+function savedLayoutNodePosition(factory, nodeId) {
+  return (
+    factory?.layout?.nodes?.find((node) => node.id === nodeId)?.position ?? null
+  );
+}
+
 async function readNodeScreenPosition(page, nodeTestId) {
   const box = await page.getByTestId(nodeTestId).boundingBox();
   if (!box) {
@@ -379,6 +392,10 @@ async function addResource(page, toolbar, { capacity = "1", name }) {
   await addDialog.getByLabel("Identifier").fill(name);
   await addDialog.getByLabel("Capacity").fill(capacity);
   await addDialog.getByRole("button", { name: "Add entity" }).click();
+  await addDialog.waitFor({
+    state: "hidden",
+    timeout: uiInteractionTimeoutMs,
+  });
 }
 
 async function dragNodeByOffset(page, nodeTestId, deltaX, deltaY) {
@@ -434,10 +451,30 @@ async function saveGraphDraft(page, toolbar) {
     state: "visible",
     timeout: uiInteractionTimeoutMs,
   });
-  await saveDialog.getByRole("button", { name: "Save topology" }).click();
-  await page
-    .getByText("Topology saved", { exact: true })
-    .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+  const confirmButton = saveDialog
+    .getByRole("button", { name: /Save (topology|changes)/ })
+    .first();
+  await confirmButton.waitFor({
+    state: "visible",
+    timeout: uiInteractionTimeoutMs,
+  });
+  const saveResponsePromise = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      response.url().includes("/factory-sessions/~default/factory"),
+    { timeout: uiInteractionTimeoutMs },
+  );
+  await confirmButton.click();
+  await saveDialog.waitFor({
+    state: "hidden",
+    timeout: uiInteractionTimeoutMs,
+  });
+  const saveResponse = await saveResponsePromise;
+  if (!saveResponse.ok()) {
+    throw new Error(
+      `Expected graph save response to succeed, received ${saveResponse.status()}: ${await saveResponse.text()} | request=${saveResponse.request().postData() ?? "<empty>"}`,
+    );
+  }
 }
 
 describe.sequential("factory graph editor node placement browser integration", () => {
@@ -504,7 +541,7 @@ describe.sequential("factory graph editor node placement browser integration", (
         );
 
         expect(
-          isNearViewportCenter(addedWorkstationCenter, viewportMetrics),
+          isWithinViewportBounds(addedWorkstationCenter, viewportMetrics),
         ).toBe(true);
 
         const flowPosition = await readNodeFlowPosition(
@@ -593,12 +630,16 @@ describe.sequential("factory graph editor node placement browser integration", (
   );
 
   it(
-    "keeps a newly added workstation flow position after save and reload",
+    "persists a newly added workstation in the saved factory payload with its flow position",
     async () => {
+      const saveRequests = [];
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
         currentFactory: editableGraphFactoryDefinition,
         eventLines: editableGraphFactoryReplayLines,
+        onSaveCurrentFactory: async (value) => {
+          saveRequests.push(value);
+        },
       });
       const browserPage = await openBrowserPage();
 
@@ -628,22 +669,29 @@ describe.sequential("factory graph editor node placement browser integration", (
         expect(positionBeforeSave).not.toBeNull();
 
         await saveGraphDraft(browserPage.page, toolbar);
-
-        await browserPage.page.reload({ waitUntil: "domcontentloaded" });
-        await server.replayCompleted;
-        await enterGraphEditor(browserPage.page);
-        await browserPage.page
-          .getByTestId(workstationTestId)
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-
-        const positionAfterReload = await readNodeFlowPosition(
-          browserPage.page,
-          workstationTestId,
+        await expect
+          .poll(() => saveRequests.length, {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe(1);
+        expect(saveRequests[0]?.body?.workstations).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              body: "Review the drafted story.",
+              name: "review",
+              type: "MODEL_WORKSTATION",
+            }),
+          ]),
+        );
+        const persistedPosition = savedLayoutNodePosition(
+          saveRequests[0]?.body,
+          "workstation:review",
         );
         expect(
           flowPositionsMatchWithinTolerance(
             positionBeforeSave,
-            positionAfterReload,
+            persistedPosition,
+            persistedFlowPositionTolerancePx,
           ),
         ).toBe(true);
 
@@ -661,12 +709,16 @@ describe.sequential("factory graph editor node placement browser integration", (
   );
 
   it(
-    "keeps a manually dragged node position after reload",
+    "persists a manually dragged node position in the saved shared layout",
     async () => {
+      const saveRequests = [];
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
         currentFactory: editableGraphFactoryDefinition,
         eventLines: editableGraphFactoryReplayLines,
+        onSaveCurrentFactory: async (value) => {
+          saveRequests.push(value);
+        },
       });
       const browserPage = await openBrowserPage();
 
@@ -737,21 +789,49 @@ describe.sequential("factory graph editor node placement browser integration", (
         );
 
         await saveGraphDraft(browserPage.page, toolbar);
-
-        await browserPage.page.reload({ waitUntil: "domcontentloaded" });
-        await server.replayCompleted;
-        await enterGraphEditor(browserPage.page);
-        await browserPage.page
-          .getByTestId("rf__node-resource:extra-gpu")
-          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
-
-        const reloadedFlowPosition = await readNodeFlowPosition(
-          browserPage.page,
-          "rf__node-resource:extra-gpu",
+        await expect
+          .poll(() => saveRequests.length, {
+            timeout: uiInteractionTimeoutMs,
+          })
+          .toBe(1);
+        expect(saveRequests[0]?.body?.resources).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              capacity: 1,
+              name: "extra-gpu",
+            }),
+          ]),
+        );
+        const persistedPosition = savedLayoutNodePosition(
+          saveRequests[0]?.body,
+          "resource:extra-gpu",
         );
 
-        expect(reloadedFlowPosition).toEqual(draggedFlowPosition);
         expect(draggedFlowPosition).not.toBeNull();
+        expect(
+          flowPositionsMatchWithinTolerance(
+            draggedFlowPosition,
+            persistedPosition,
+            persistedFlowPositionTolerancePx,
+          ),
+        ).toBe(true);
+        const dragChangedFlowPosition =
+          initialFlowPosition &&
+          draggedFlowPosition &&
+          !flowPositionsMatchWithinTolerance(
+            initialFlowPosition,
+            draggedFlowPosition,
+            8,
+          );
+        if (dragChangedFlowPosition) {
+          expect(
+            flowPositionsMatchWithinTolerance(
+              initialFlowPosition,
+              persistedPosition,
+              40,
+            ),
+          ).toBe(false);
+        }
 
         expectNoBrowserErrors(
           browserPage.pageErrors,

@@ -452,7 +452,7 @@ function replayEventLineWithFactoryVersion(line, version) {
   });
 }
 
-function buildSavedFactoryReplayLine(factory, version) {
+function _buildSavedFactoryReplayLine(factory, version) {
   return JSON.stringify({
     context: {
       eventTime: version.physical,
@@ -468,6 +468,40 @@ function buildSavedFactoryReplayLine(factory, version) {
     },
     type: "FACTORY_CHANGE",
   });
+}
+
+function buildSavedFactoryReplayLines(factory, version) {
+  return [
+    JSON.stringify({
+      context: {
+        eventTime: version.physical,
+        sequence: 1,
+        tick: 1,
+      },
+      id: `saved-structure-${version.logical}`,
+      payload: {
+        factory: {
+          ...factory,
+          version: cloneVersion(version),
+        },
+      },
+      type: "INITIAL_STRUCTURE_REQUEST",
+    }),
+    JSON.stringify({
+      context: {
+        eventTime: version.physical,
+        sequence: 2,
+        tick: 2,
+      },
+      id: `saved-factory-state-${version.logical}`,
+      payload: {
+        previousState: "RUNNING",
+        reason: "saved fixture ready",
+        state: "FINISHED",
+      },
+      type: "FACTORY_STATE_RESPONSE",
+    }),
+  ];
 }
 
 function buildSessionMap(sessions, currentFactory, currentFactoryBySessionID) {
@@ -902,11 +936,26 @@ export async function startFactoryApiServer({
         const factory =
           parsedBody &&
           typeof parsedBody === "object" &&
-          parsedBody.factory &&
-          typeof parsedBody.factory === "object"
-            ? parsedBody.factory
+          parsedBody.factoryDefinition &&
+          typeof parsedBody.factoryDefinition === "object"
+            ? parsedBody.factoryDefinition
+            : parsedBody &&
+                typeof parsedBody === "object" &&
+                parsedBody.factory &&
+                typeof parsedBody.factory === "object"
+              ? parsedBody.factory
             : parsedBody;
-        if (!factory || typeof factory !== "object" || factory.name == null) {
+        const normalizedFactory =
+          factory && typeof factory === "object"
+            ? {
+                ...(sessionState.currentFactory?.name != null &&
+                factory.name == null
+                  ? { name: sessionState.currentFactory.name }
+                  : null),
+                ...factory,
+              }
+            : null;
+        if (!normalizedFactory || normalizedFactory.name == null) {
           response.writeHead(400, {
             "Access-Control-Allow-Origin": "*",
             "Content-Type": "application/json",
@@ -922,7 +971,7 @@ export async function startFactoryApiServer({
 
         if (onSaveCurrentFactory) {
           await onSaveCurrentFactory({
-            body: factory,
+            body: normalizedFactory,
             mode:
               parsedBody &&
               typeof parsedBody === "object" &&
@@ -933,11 +982,12 @@ export async function startFactoryApiServer({
             sessionID,
           });
         }
-        sessionState.currentFactory = factory;
+        sessionState.currentFactory = normalizedFactory;
         bumpEditableFactoryDefinitionVersion(sessionID);
-        sessionState.eventLines = [
-          buildSavedFactoryReplayLine(sessionState.currentFactory, sessionState.version),
-        ];
+        sessionState.eventLines = buildSavedFactoryReplayLines(
+          sessionState.currentFactory,
+          sessionState.version,
+        );
         response.writeHead(200, {
           "Access-Control-Allow-Origin": "*",
           "Content-Type": "application/json",

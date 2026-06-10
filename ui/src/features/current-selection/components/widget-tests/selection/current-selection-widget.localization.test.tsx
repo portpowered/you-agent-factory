@@ -53,10 +53,24 @@ const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 function buildCurrentSelection(
   overrides: Partial<CurrentSelectionState> = {},
 ): CurrentSelectionState {
+  const currentFactoryDefinition =
+    overrides.currentFactoryDefinition ?? null;
+  const selectedResourceName =
+    overrides.selectedResourceName ??
+    (overrides.selection?.kind === "resource"
+      ? overrides.selection.resourceName
+      : null);
+  const selectedWorkerName =
+    overrides.selectedWorkerName ??
+    (overrides.selection?.kind === "worker"
+      ? overrides.selection.workerName
+      : null);
+
   return {
     canRedoSelection: false,
     canUndoSelection: false,
     completedWorkItems: [],
+    currentFactoryDefinition,
     failedWorkItems: [],
     openTerminalWorkDetail: () => undefined,
     redoSelection: () => undefined,
@@ -72,10 +86,21 @@ function buildCurrentSelection(
     selectedWorkID: null,
     selectedWorkProviderSessions: [],
     selectedWorkRequestHistory: [],
-    selectedResourceName: null,
+    selectedWorkType: null,
+    selectedWorkTypeName: null,
     selectedResourceTokenCount: null,
-    selectedWorker: null,
-    selectedWorkerName: null,
+    selectedResource:
+      currentFactoryDefinition?.resources?.find(
+        (resource) => resource.name === selectedResourceName,
+      ) ?? null,
+    selectedResourceName,
+    selectedResourceWorkerNames: [],
+    selectedResourceWorkstationNames: [],
+    selectedWorker:
+      currentFactoryDefinition?.workers?.find(
+        (worker) => worker.name === selectedWorkerName,
+      ) ?? null,
+    selectedWorkerName,
     selectedWorkerWorkstationNames: [],
     selectedWorkstationRequest: null,
     selection: null,
@@ -321,6 +346,7 @@ describe("CurrentSelectionWidget workstation localization", () => {
     } as never);
 
     const currentSelection = buildCurrentSelection({
+      currentFactoryDefinition: factoryDocument,
       selectedNode,
       selection: { kind: "node", nodeId: selectedNode.node_id },
     });
@@ -413,6 +439,7 @@ describe("CurrentSelectionWidget resource localization", () => {
 
     const queryClient = createCurrentSelectionWidgetQueryClient();
     const currentSelection = buildCurrentSelection({
+      currentFactoryDefinition: factoryDocument,
       selectedResourceName: "agent-slot",
       selection: { kind: "resource", resourceName: "agent-slot" },
     });

@@ -117,7 +117,7 @@ export function occupiedRectsFromRenderedNodes(
   return occupiedRects;
 }
 
-export function viewportCenterInFlowCoordinates(
+function _viewportCenterInFlowCoordinates(
   instance: ReactFlowInstance,
   container: HTMLElement,
 ): FlowPoint {

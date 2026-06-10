@@ -185,14 +185,22 @@ describe("useEditableFactoryGraph", () => {
         ]),
       }),
     });
-    expect(hookState.draftState.replaceDraft).toHaveBeenCalledWith(
-      createEmptyFactoryGraphDraft(),
-    );
     await waitFor(() => {
       expect(result.current.saveState.documentSave).toEqual({
         status: "success",
       });
     });
+    expect(hookState.draftState.adoptSavedFactoryDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resources: expect.arrayContaining([
+          expect.objectContaining({ name: "review-slot" }),
+        ]),
+        version: expect.objectContaining({
+          logical: "7",
+          physical: "2026-05-23T15:52:00Z",
+        }),
+      }),
+    );
   });
 
   it("allows saving a viewport-only layout change without topology edits", async () => {

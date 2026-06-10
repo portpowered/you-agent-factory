@@ -59,9 +59,12 @@ function buildFactoryDocument(
 }
 
 function WorkTypeDetailCardHarness({ workTypeName }: { workTypeName: string }) {
+  const editableDefinition = useCurrentFactoryDocument().data;
   const editableConfigurationState = useEditableWorkTypeConfigurationState(
     { kind: "work-type", workTypeName },
     workTypeName,
+    undefined,
+    editableDefinition,
   );
 
   return (
@@ -91,11 +94,11 @@ describe("WorkTypeDetailCard default handling", () => {
     } as never);
   });
 
-  it("renders the shared styled checkbox for the default handling control", () => {
+  it("renders the shared styled checkbox for the default handling control", async () => {
     render(<WorkTypeDetailCardHarness workTypeName="story" />);
 
     const panel = screen.getByRole("article", { name: "Current selection" });
-    const defaultCheckbox = within(panel).getByRole("checkbox", {
+    const defaultCheckbox = await within(panel).findByRole("checkbox", {
       name: "Mark as default work type",
     });
 
@@ -109,7 +112,7 @@ describe("WorkTypeDetailCard default handling", () => {
     render(<WorkTypeDetailCardHarness workTypeName="story" />);
 
     const panel = screen.getByRole("article", { name: "Current selection" });
-    const defaultCheckbox = within(panel).getByRole("checkbox", {
+    const defaultCheckbox = await within(panel).findByRole("checkbox", {
       name: "Mark as default work type",
     });
 
@@ -137,7 +140,7 @@ describe("WorkTypeDetailCard default handling", () => {
     ).toBeTruthy();
   });
 
-  it("shows default status and a checked control when the factory marks the work type default", () => {
+  it("shows default status and a checked control when the factory marks the work type default", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: buildFactoryDocument({
         workTypes: [
@@ -160,7 +163,7 @@ describe("WorkTypeDetailCard default handling", () => {
     render(<WorkTypeDetailCardHarness workTypeName="story" />);
 
     const panel = screen.getByRole("article", { name: "Current selection" });
-    const defaultCheckbox = within(panel).getByRole("checkbox", {
+    const defaultCheckbox = await within(panel).findByRole("checkbox", {
       name: "Mark as default work type",
     });
 
@@ -175,7 +178,7 @@ describe("WorkTypeDetailCard default handling", () => {
     ).toBeNull();
   });
 
-  it("refreshes default status after the factory document reloads with updated handling behavior", () => {
+  it("refreshes default status after the factory document reloads with updated handling behavior", async () => {
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
       data: buildFactoryDocument({
         workTypes: [
@@ -197,9 +200,9 @@ describe("WorkTypeDetailCard default handling", () => {
       screen.getByRole("article", { name: "Current selection" });
 
     expect(
-      within(panel()).getByRole("checkbox", {
+      (await within(panel()).findByRole("checkbox", {
         name: "Mark as default work type",
-      }).checked,
+      })).checked,
     ).toBe(true);
 
     vi.mocked(useCurrentFactoryDocument).mockReturnValue({
@@ -220,9 +223,9 @@ describe("WorkTypeDetailCard default handling", () => {
     view.rerender(<WorkTypeDetailCardHarness workTypeName="story" />);
 
     expect(
-      within(panel()).getByRole("checkbox", {
+      (await within(panel()).findByRole("checkbox", {
         name: "Mark as default work type",
-      }).checked,
+      })).checked,
     ).toBe(false);
     expect(within(panel()).queryByRole("status")).toBeNull();
   });

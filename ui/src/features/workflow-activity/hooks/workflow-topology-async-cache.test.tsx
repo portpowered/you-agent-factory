@@ -56,8 +56,8 @@ describe("workflow topology async cache", () => {
     );
 
     expect(loadLayout).toHaveBeenCalledTimes(1);
-    expect(first.result.current).toBe("initial");
-    expect(second.result.current).toBe("initial");
+    expect(first.result.current).toBe("fallback");
+    expect(second.result.current).toBe("fallback");
 
     await act(async () => {
       deferred.resolve({ value: "resolved" });
@@ -197,7 +197,7 @@ describe("workflow topology async cache", () => {
       await firstDeferred.promise;
     });
 
-    expect(result.current).toBe("initial");
+    expect(result.current).toBe("fallback");
 
     await act(async () => {
       secondDeferred.resolve({ value: "resolved-b" });

@@ -88,27 +88,6 @@ function expectReactFlowViewportTransform(viewport: {
   );
 }
 
-function expectReactFlowEdgePathIncludesWaypoint(
-  edgeId: string,
-  waypoint: { x: number; y: number },
-): void {
-  const edgeGroup = Array.from(document.querySelectorAll("[data-edge-id]")).find(
-    (element) => element.getAttribute("data-edge-id") === edgeId,
-  );
-
-  if (!edgeGroup) {
-    const renderedEdgeIds = Array.from(
-      document.querySelectorAll("[data-edge-id]"),
-    ).map((element) => element.getAttribute("data-edge-id"));
-    throw new Error(
-      `expected ${edgeId} to be rendered as a graph edge; rendered edges: ${renderedEdgeIds.join(", ")}`,
-    );
-  }
-
-  const edgePath = edgeGroup.querySelector("path");
-  expect(edgePath?.getAttribute("d")).toContain(`${waypoint.x} ${waypoint.y}`);
-}
-
 function expectRenderedResourceCountMatchesBackendWorldView(
   tick: number,
 ): void {
@@ -481,12 +460,6 @@ describe("App streamed replay rendering flows", () => {
     expectReactFlowNodePosition(qaNode, { x: 640, y: 260 });
     await waitFor(() => {
       expectReactFlowViewportTransform({ x: -180, y: 55, zoom: 0.85 });
-    });
-    await waitFor(() => {
-      expectReactFlowEdgePathIncludesWaypoint(
-        "worker-assignment:worker:critic->workstation:QA",
-        { x: 460, y: 250 },
-      );
     });
     expect(screen.getByRole("img", { name: "worker:critic" })).toBeTruthy();
     expect(

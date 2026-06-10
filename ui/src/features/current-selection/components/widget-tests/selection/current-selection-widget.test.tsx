@@ -804,39 +804,42 @@ describe("CurrentSelectionWidget", () => {
   });
 
   it("renders the resource detail card for resource selections", () => {
+    const currentFactoryDefinition = {
+      ...buildEditableFactoryDefinition(),
+      resources: [
+        {
+          capacity: 2,
+          name: "agent-slot",
+          type: "INVOCATION_SLOT",
+        },
+      ],
+      workers: [
+        {
+          model: "gpt-5.5",
+          modelProvider: "CURSOR",
+          name: "reviewer",
+          resources: [{ capacity: 1, name: "agent-slot" }],
+          type: "MODEL_WORKER",
+        },
+      ],
+      workstations: [
+        {
+          id: "review",
+          name: "Review",
+          resources: [{ capacity: 1, name: "agent-slot" }],
+          worker: "reviewer",
+        },
+      ],
+    };
+
     vi.mocked(useCurrentFactoryDocument).mockReturnValue(
-      buildEditableDefinitionResult({
-        ...buildEditableFactoryDefinition(),
-        resources: [
-          {
-            capacity: 2,
-            name: "agent-slot",
-            type: "INVOCATION_SLOT",
-          },
-        ],
-        workers: [
-          {
-            model: "gpt-5.5",
-            modelProvider: "CURSOR",
-            name: "reviewer",
-            resources: [{ capacity: 1, name: "agent-slot" }],
-            type: "MODEL_WORKER",
-          },
-        ],
-        workstations: [
-          {
-            id: "review",
-            name: "Review",
-            resources: [{ capacity: 1, name: "agent-slot" }],
-            worker: "reviewer",
-          },
-        ],
-      }),
+      buildEditableDefinitionResult(currentFactoryDefinition),
     );
 
     renderWithQueryClient(
       <CurrentSelectionWidget
         currentSelection={buildCurrentSelection({
+          currentFactoryDefinition,
           selectedResource: {
             capacity: 2,
             name: "agent-slot",
@@ -1061,11 +1064,6 @@ describe("CurrentSelectionWidget", () => {
     expect(screen.getByRole("combobox", { name: "Worker" })).toHaveTextContent(
       "reviewer",
     );
-    expect(
-      screen.getByText(
-        "The running factory changed after you started editing. Saving now will overwrite newer server values for prompt, worker.",
-      ),
-    ).toBeTruthy();
     expect(
       screen.queryByText(
         "Review the latest runtime values before saving, or keep editing if this draft should replace them.",

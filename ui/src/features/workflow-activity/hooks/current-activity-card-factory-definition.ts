@@ -29,7 +29,7 @@ function observeModeSavedFactoryDocument(
   );
 }
 
-export function currentActivityCardSavedFactoryDocument(
+function _currentActivityCardSavedFactoryDocument(
   source: CurrentActivityFactoryGraphSource,
 ): DashboardSnapshot["factory"] | null {
   return observeModeSavedFactoryDocument(source) ?? null;
@@ -41,7 +41,7 @@ export function currentActivityCardPendingFactoryDefinition(
   return source.pendingFactoryDefinition ?? null;
 }
 
-export function currentActivityCardBaseFactoryDocument(
+function _currentActivityCardBaseFactoryDocument(
   source: CurrentActivityFactoryGraphSource,
 ): DashboardSnapshot["factory"] | null {
   return (

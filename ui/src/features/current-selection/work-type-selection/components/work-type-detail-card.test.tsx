@@ -128,9 +128,12 @@ function WorkTypeDetailCardHarness({
   onSelectWorkStateGraphNode?: (graphNodeId: string) => void;
   workTypeName: string;
 }) {
+  const editableDefinition = useCurrentFactoryDocument().data;
   const editableConfigurationState = useEditableWorkTypeConfigurationState(
     { kind: "work-type", workTypeName },
     workTypeName,
+    undefined,
+    editableDefinition,
   );
 
   return (
@@ -181,15 +184,15 @@ describe("WorkTypeDetailCard", () => {
   });
 
   it("renders an error alert when the factory document fails to load", () => {
-    vi.mocked(useCurrentFactoryDocument).mockReturnValue({
-      data: undefined,
-      error: new Error("factory offline"),
-      isError: true,
-      isPending: false,
-      status: "error",
-    } as never);
-
-    render(<WorkTypeDetailCardHarness workTypeName="story" />);
+    render(
+      <WorkTypeDetailCard
+        editableConfigurationState={{
+          errorMessage: "factory offline",
+          status: "error",
+        }}
+        workTypeName="story"
+      />,
+    );
 
     expect(screen.getByRole("alert").textContent).toContain(
       "Work type definition unavailable.",
@@ -198,7 +201,12 @@ describe("WorkTypeDetailCard", () => {
   });
 
   it("renders empty guidance when the selected work type is missing", () => {
-    render(<WorkTypeDetailCardHarness workTypeName="missing" />);
+    render(
+      <WorkTypeDetailCard
+        editableConfigurationState={{ status: "empty" }}
+        workTypeName="missing"
+      />,
+    );
 
     expect(
       screen.getByText(
@@ -207,12 +215,12 @@ describe("WorkTypeDetailCard", () => {
     ).toBeTruthy();
   });
 
-  it("renders editable name and handling behavior fields with read-only state rows when ready", () => {
+  it("renders editable name and handling behavior fields with read-only state rows when ready", async () => {
     render(<WorkTypeDetailCardHarness workTypeName="story" />);
 
     const panel = screen.getByRole("article", { name: "Current selection" });
     expectPrimaryWorkTypeTitle("story");
-    const nameInput = within(panel).getByLabelText("Work type");
+    const nameInput = await within(panel).findByLabelText("Work type");
 
     expect(nameInput.getAttribute("value")).toBe("story");
     expect(
@@ -231,11 +239,11 @@ describe("WorkTypeDetailCard", () => {
     expect(within(panel).getByText("Completed")).toBeTruthy();
   });
 
-  it("surfaces name validation errors with aria-invalid and role alert", () => {
+  it("surfaces name validation errors with aria-invalid and role alert", async () => {
     render(<WorkTypeDetailCardHarness workTypeName="story" />);
 
     const panel = screen.getByRole("article", { name: "Current selection" });
-    const nameInput = within(panel).getByLabelText("Work type");
+    const nameInput = await within(panel).findByLabelText("Work type");
 
     fireEvent.change(nameInput, { target: { value: "   " } });
 
@@ -247,7 +255,7 @@ describe("WorkTypeDetailCard", () => {
     ).toBeTruthy();
   });
 
-  it("navigates to the matching work-state graph node when a state row is clicked", () => {
+  it("navigates to the matching work-state graph node when a state row is clicked", async () => {
     const onSelectWorkStateGraphNode = vi.fn();
 
     render(
@@ -258,7 +266,7 @@ describe("WorkTypeDetailCard", () => {
     );
 
     fireEvent.click(
-      screen.getByRole("button", {
+      await screen.findByRole("button", {
         name: "Select queued state on factory graph",
       }),
     );
