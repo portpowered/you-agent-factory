@@ -4,7 +4,7 @@ Operator-facing planning record for the Dynamic Workflows v0 program. This
 document tracks batch completion, cross-surface contract posture, and the
 recommended next batch for maintainers scheduling factory work.
 
-**Last updated:** 2026-06-09 (Batch 001 retro — granular parallel execution plan)
+**Last updated:** 2026-06-11 UTC (Batch 001 retro — obsolete preview guidance labeled; contract repair is next phase)
 
 ## Program overview
 
@@ -72,13 +72,44 @@ Batch 001 intentionally landed **contracts and projections**, not full transport
 wiring or real runtime execution. Handlers may still return `501 NotImplemented`
 or empty persisted listings until later batches wire transports and stores.
 
-#### Batch 002 — fake-session skeleton (planned)
+#### Obsolete Batch 001 preview guidance (stale — requires contract repair)
+
+Batch 001 also merged **transitional** workflow-preview surfaces that are **not**
+the intended final public contract or JavaScript orchestration ownership. Treat
+any forward-looking guidance that still points at these terms as stale Batch 001
+output that must be repaired before fake-session skeleton work proceeds:
+
+| Stale Batch 001 surface | Why it is obsolete | Corrected target |
+|-------------------------|--------------------|------------------|
+| `POST /workflow-previews` route and `PreviewWorkflow` handler | Standalone workflow-preview product route, not Factory or Factory Session preview semantics | **Factory preview** or **Factory Session preview** surfaces under `pkg/orchestrators/javascript/preview` |
+| Root `pkg/workflow*` packages (for example `pkg/workflowsource/`, `pkg/workflowpreview/`) | Transitional JavaScript orchestration helpers outside orchestrator ownership | `pkg/orchestrators/javascript` subpackages: `source`, `validation`, `store`, `policy`, `preview`, `result` |
+| `pkg/orchestrators/javascript/validator` | Wrong package name from early planning | `pkg/orchestrators/javascript/validation` |
+
+Historical mentions of these surfaces in the Batch 001 checklist below are
+**retrospective completion notes only**. They record what merged in PRs #767–#776;
+they do **not** authorize building the next batch on the standalone
+workflow-preview route, root `pkg/workflow*` ownership, or `validator` package
+names.
+
+**Next implementation phase:** **Contract repair** from corrected **Factory
+preview** or **Factory Session preview** semantics and
+`pkg/orchestrators/javascript` package ownership. Close the blocking cross-surface
+inventory in this plan, repair preview and source-loading seams, then re-run the
+go/no-go checklist. API, CLI, MCP, and UI fake-session skeleton wiring is
+**out of scope** for this phase.
+
+#### Batch 002 — fake-session skeleton (deferred until contract repair)
 
 Batch 002 targets **deterministic fake-session skeleton work**: API/CLI/MCP/UI
 surfaces that call the shared `factorysessionexecution.Service` (including the
 injectable fake implementation) so reviewers can exercise durable session
 start, status, result, dispatch, artifact, event, and lifecycle flows without
 a JavaScript VM or durable persistence backend.
+
+**Deferred:** do not schedule Batch 002 skeleton wiring until the contract-repair
+phase above closes blocking mismatches and aligns preview behavior with Factory
+or Factory Session preview semantics under `pkg/orchestrators/javascript`
+subpackage ownership.
 
 Skeleton work should:
 
@@ -176,7 +207,7 @@ Status key:
 | Ordered source lookup contract | ✅ | `FACTORY_ID`, `FACTORY_INLINE`, `WORKFLOW_FILE`, `WORKFLOW_NAME`, and `INLINE_WORKFLOW` kinds share one resolution order across API normalization surfaces. |
 | Read-only effective policy defaults | ✅ | Default mode `READ_ONLY`, bounded child limits, stable policy hashes, and fail-closed denied-capability diagnostics before runtime side effects. |
 | Structured JSON result and artifact URI rules | ✅ | JSON-compatible primary results via `WorkContent`; large/binary outputs use artifact refs or `you-artifact://sessions/{session_id}/artifacts/{artifact_id}` URIs. |
-| `POST /workflow-previews` handler | ✅ | `PreviewWorkflow` in `pkg/api/handlers_factory.go` runs the shared preview contract (validation + policy projection) without starting a session. |
+| `POST /workflow-previews` handler (**stale Batch 001**) | ✅ (transitional) | **Obsolete surface:** Batch 001 merged `PreviewWorkflow` on `POST /workflow-previews` in `pkg/api/handlers_factory.go`. This is **not** the intended final public preview route. Contract repair must align preview with **Factory preview** or **Factory Session preview** semantics under `pkg/orchestrators/javascript/preview`. |
 | Durable start-time validation wiring | 🔌 | Validation/policy contracts exist; **`POST /factory-sessions/async|sync`** handlers still return **`501`** so start-time enforcement awaits Batch 002 service injection. |
 
 ### PR #776 — shared execution service, fake service, mappers, and fixtures
@@ -241,7 +272,7 @@ Evidence sources: `api/openapi.yaml`, `pkg/factorysessionexecution/`, `pkg/apisu
 | Gap | Class | Notes |
 |-----|-------|-------|
 | No production `Service` implementation; only `FakeService` | Stubbed transport | Expected Batch 001 state; handlers do not inject service yet |
-| Workflow source resolution not in start path | **Blocking** | OpenAPI documents resolution order on durable start routes; service normalizes `Source` only — resolution lives in `pkg/workflowsource/` (used by preview) and is not called from `factorysessionexecution` |
+| Workflow source resolution not in start path | **Blocking** | OpenAPI documents resolution order on durable start routes; service normalizes `Source` only — resolution currently lives in transitional root `pkg/workflowsource/` (**stale Batch 001**; wired to obsolete workflow-preview flow) and is not called from `factorysessionexecution`. Contract repair must move source loading under `pkg/orchestrators/javascript/source` and wire resolution into the durable start path. |
 | `SessionReadResult` missing `budgets`, `usage` | **Blocking** (on wire-up) | Required by OpenAPI `FactorySessionDurableReadModel` |
 | `DispatchSummary` missing `providerSessionRefs` | **Blocking** | OpenAPI dispatch schemas include provider-session correlation refs; service projection omits them |
 | `ReadEvents` validates reconnect cursor but returns full event list | **Blocking** | `after_event_id`/`after_sequence` params on OpenAPI route are not enforced in `FakeService.ReadEvents` |
@@ -351,7 +382,7 @@ or real runtime lands.
 | B5 | No `AWAITING_APPROVAL` fixture scenario | fixtures ↔ OpenAPI enum ↔ controls | Approval control skeleton cannot be fixture-tested |
 | B6 | `ControlErrorToAPI` omits required `status` on lifecycle control responses | apisurface ↔ OpenAPI | Error responses violate required response schema |
 | B7 | Control `requestId` conflict has no distinct OpenAPI `ErrorResponse.code` | OpenAPI ↔ `ErrControlRequestIDConflict` | Idempotency replay vs true conflict cannot be distinguished at API boundary |
-| B8 | Workflow source resolution documented on durable start but not called from service start path | OpenAPI ↔ `workflowsource` ↔ service | Skeleton start would skip validation/resolution contract Batch 001 defined |
+| B8 | Workflow source resolution documented on durable start but not called from service start path | OpenAPI ↔ transitional `pkg/workflowsource/` (**stale Batch 001**) ↔ service | Skeleton start would skip validation/resolution contract Batch 001 defined; repair must move loading to `pkg/orchestrators/javascript/source` |
 | B9 | `ReadEvents` validates reconnect cursor but returns full list | OpenAPI ↔ service | Event reconnect contract is false once routes delegate to service |
 | B10 | `GetResult` ignores `mode` / `includeArtifacts` shaping | OpenAPI ↔ service | Result read contract diverges from schema parameters |
 | B11 | `budgets` / `usage` required on durable read model but absent from service/mappers | OpenAPI ↔ service ↔ apisurface | Durable `GET` responses cannot satisfy schema on wire-up |
@@ -377,18 +408,24 @@ deferred past skeleton work without shipping schema-invalid responses.
 
 Schedule one focused batch — **not** a broad refactor — with this minimum scope:
 
-1. **OpenAPI repairs:** align `SessionCompletedEventPayload.finalStatus` and
+1. **Preview and JavaScript orchestrator ownership repair:** align public preview
+   behavior with **Factory preview** or **Factory Session preview** semantics;
+   retire or remap the standalone `POST /workflow-previews` surface; move
+   validation, source loading, storage, policy, preview preparation, and result
+   validation under `pkg/orchestrators/javascript` subpackages instead of root
+   `pkg/workflow*` transitional packages.
+2. **OpenAPI repairs:** align `SessionCompletedEventPayload.finalStatus` and
    `FactoryEventSessionResultStatus` with durable REST enums; add distinct
    `FACTORY_SESSION_CONTROL_REQUEST_ID_CONFLICT` (or equivalent) for control
    `requestId` reuse with different tuples.
-2. **Fake + fixtures:** rewrite `deriveProjectionEvents` to emit canonical envelopes;
+3. **Fake + fixtures:** rewrite `deriveProjectionEvents` to emit canonical envelopes;
    add `events[]` to fixture scenarios; add `AWAITING_APPROVAL` scenario.
-3. **Service seams:** call workflow source resolution from start path; enforce
+4. **Service seams:** call workflow source resolution from start path; enforce
    `ReadEvents` cursor filtering; honor `GetResult` `mode`/`includeArtifacts`; add
    `budgets`/`usage` and `providerSessionRefs` to projections.
-4. **Mappers:** map new fields; fix `ControlErrorToAPI` required `status`; regenerate
+5. **Mappers:** map new fields; fix `ControlErrorToAPI` required `status`; regenerate
    contracts if OpenAPI changes.
-5. **Verification:** extend contract/fake-consumer tests to prove event and durable-read
+6. **Verification:** extend contract/fake-consumer tests to prove event and durable-read
    round-trips for at least running, `AWAITING_APPROVAL`, and terminal scenarios.
 
 Estimated posture: **one vertically sliced contract batch** touching the five surfaces
@@ -457,9 +494,9 @@ on 2026-06-09 shows:
 - Durable API handlers in `pkg/api/handlers_factory.go` still return `501` for
   async/sync start, results, dispatches, artifacts, lifecycle controls, and
   durable events; `scope=persisted|all` returns empty durable rows.
-- `pkg/mcp/workflow/` only exposes workflow preview/start-validation helpers,
-  so session/dispatch/artifact MCP tools can be designed now but need a later
-  API/service parity pass.
+- `pkg/mcp/workflow/` only exposes transitional workflow-preview/start-validation
+  helpers (**stale Batch 001**); session/dispatch/artifact MCP tools depend on
+  contract repair and deferred Batch 002 skeleton wiring.
 - `ui/src/api/factory-sessions/api.ts` and the current factory-session detail
   panel are live-session oriented; generated durable types are present for
   fixture-backed adapters and components before HTTP wiring exists.
@@ -623,7 +660,7 @@ flowchart TB
 | API-4 | Lifecycle controls map approve/pause/resume/cancel/terminate/retry outcomes. | API-2 plus CR-5 | Handler tests for accepted, no-op, invalid-state, terminal, replay, and conflict. |
 | API-5 | Durable event reads honor reconnect cursors and canonical envelopes. | CR-3 plus API-2 | Event route tests for initial history and after-event/sequence replay. |
 | MCP-0 | Canonical MCP tool schemas exist for session, dispatch, and artifact nouns. | Batch 001 complete | Schema/discovery tests using generated OpenAPI types; no live server required. |
-| MCP-1 | Mock client validates preview/start error shape and tool discovery. | Batch 001 complete | Mock MCP tests over `pkg/mcp/workflow` and new session tool catalog. |
+| MCP-1 | Mock client validates preview/start error shape and tool discovery. | Contract repair complete | Mock MCP tests over repaired Factory/Factory Session preview surfaces and new session tool catalog. |
 | MCP-2 | MCP start/list/status/result tools call the current HTTP durable endpoints. | API-1 and API-2 | Mock HTTP tests first; real fake-server smoke after API wiring. |
 | MCP-3 | MCP dispatch/artifact/event/control tools match API behavior. | API-3, API-4, API-5 | Mock and fake-server parity tests. |
 | MCP-4 | Host integration directories and packaging manifests exist. | Batch 001 complete | File inventory tests and release-archive inclusion checks; tool implementation can follow. |
@@ -668,12 +705,14 @@ sequenceDiagram
 
 #### Scheduling guidance
 
-- Start **MCP-0**, **MCP-1**, **MCP-4**, **UI-0**, **UI-1**, **UI-2**,
-  **CLI-0**, and **API-0** immediately; they depend only on Batch 001 generated
-  contracts and fixtures, not on non-`501` durable handlers.
-- Treat **CR-Q** as the gate for handler claims, not for client scaffolds. Client
-  scaffolds may use fixtures, generated types, and mocked HTTP responses while
-  contract repair is in flight.
+- **Immediate next phase:** schedule **CR-1 through CR-5** only. Contract repair
+  from corrected Factory preview or Factory Session preview semantics and
+  `pkg/orchestrators/javascript` package ownership is the sole active
+  implementation batch until the go/no-go checklist passes.
+- **Deferred until contract repair:** API, CLI, MCP, and UI fake-session skeleton
+  tranches (`API-*`, `CLI-*`, `MCP-*`, `UI-*` beyond type/fixture research) must
+  not start until **CR-Q** closes and preview/source ownership repair lands.
+- Treat **CR-Q** as the gate for all handler and cross-surface parity claims.
 - Split API work by route family. `API-1` and `API-2` unblock MCP/CLI start and
   list/status work; `API-3` unblocks result/dispatch/artifact panels and tools;
   `API-4` and `API-5` can follow independently.
@@ -691,13 +730,14 @@ parallel and which require a contract-repair gate before handler or parity
 claims. The old Batch 002 label remains useful as a milestone name, but the
 actual queue should be scheduled as the granular graph above.
 
-**Current decision (2026-06-09 UTC):** **No-go** for a monolithic Batch 002
-fake-session skeleton, but **go** for parallel fixture/type/client scaffolds
-that do not claim live handler parity yet. Schedule **CR-1 through CR-5** plus
-**API-0** as the contract/API foundation, and in parallel schedule **MCP-0**,
-**MCP-1**, **MCP-4**, **UI-0**, **UI-1**, **UI-2**, and **CLI-0**.
-Transport stubs from the checklist remain route-family wiring targets after
-the relevant repair gates pass.
+**Current decision (2026-06-11 UTC):** **No-go** for Batch 002 fake-session
+skeleton and **no-go** for API, CLI, MCP, or UI skeleton implementation until
+contract repair completes. Schedule **CR-1 through CR-5** as the only immediate
+implementation phase: repair Factory preview or Factory Session preview
+semantics, move JavaScript orchestration under `pkg/orchestrators/javascript`
+subpackages, and close blocking inventory items B1–B12. Transport stubs from
+the checklist remain route-family wiring targets for deferred Batch 002 work
+after **CR-Q** passes.
 
 The **Batch 001 completion checklist** is the authoritative record of what
 merged in PRs #767–#776. Treat Batch 001 as **contract-complete at the
