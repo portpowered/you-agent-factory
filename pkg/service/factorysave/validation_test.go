@@ -42,6 +42,30 @@ func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIPrePersist(t *
 	validationassert.HasTargetCode(t, topologyErr.Targets, factoryvalidation.CodeDuplicateIdentifier)
 }
 
+func TestValidateEditableFactoryTopology_ReturnsTargetsForResourceSlotRoutes(t *testing.T) {
+	t.Parallel()
+
+	factory := factoryWithResourceSlotRoutes()
+
+	saveErr := validateEditableFactoryTopology(factory, nil)
+	var topologyErr *apisurface.TopologyValidationError
+	if !errors.As(saveErr, &topologyErr) {
+		t.Fatalf("validateEditableFactoryTopology error = %v, want topology validation error", saveErr)
+	}
+
+	validationassert.HasTargetCode(t, topologyErr.Targets, factoryvalidation.CodeDanglingPlaceReference)
+	assertValidationTarget(t, topologyErr.Targets, factoryapi.FactoryValidationTarget{
+		Code:     factoryvalidation.CodeDanglingPlaceReference,
+		Severity: factoryapi.FactoryValidationSeverityError,
+		Message:  `references non-existent state "available" of work type "executor-slot"`,
+		Subject: factoryapi.FactoryValidationSubject{
+			Type:     factoryapi.FactoryValidationSubjectTypeRoute,
+			Id:       "cleaner->executor-slot:available",
+			Location: factoryapi.FactoryValidationSubjectLocationInputs,
+		},
+	})
+}
+
 func TestValidateEditableFactoryTopology_ValidFactory_NoError(t *testing.T) {
 	t.Parallel()
 
@@ -147,4 +171,65 @@ func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIForInvocationR
 
 func stringPtr(value string) *string {
 	return &value
+}
+
+func factoryWithResourceSlotRoutes() factoryapi.Factory {
+	workerType := factoryapi.WorkerTypeModelWorker
+	workstationType := factoryapi.WorkstationTypeModelWorkstation
+	outputs := []factoryapi.WorkstationIO{
+		{WorkType: "cron-triggers", State: "complete"},
+		{WorkType: "executor-slot", State: "available"},
+	}
+	onFailure := []factoryapi.WorkstationIO{{WorkType: "cron-triggers", State: "failed"}}
+	onRejection := []factoryapi.WorkstationIO{{WorkType: "cron-triggers", State: "failed"}}
+
+	return factoryapi.Factory{
+		Name: "UNDEFINED",
+		Resources: &[]factoryapi.Resource{{
+			Capacity: 10,
+			Id:       stringPtr("executor-slot"),
+			Name:     "executor-slot",
+		}},
+		Workers: &[]factoryapi.Worker{{
+			Id:   stringPtr("processor"),
+			Name: "processor",
+			Type: &workerType,
+		}},
+		WorkTypes: &[]factoryapi.WorkType{{
+			Id:   stringPtr("cron-triggers"),
+			Name: "cron-triggers",
+			States: []factoryapi.WorkState{
+				{Id: stringPtr("init"), Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+				{Id: stringPtr("complete"), Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+				{Id: stringPtr("failed"), Name: "failed", Type: factoryapi.WorkStateTypeFAILED},
+			},
+		}},
+		Workstations: &[]factoryapi.Workstation{{
+			Id:          stringPtr("cleaner"),
+			Inputs:      []factoryapi.WorkstationIO{{WorkType: "executor-slot", State: "available"}},
+			Name:        "cleaner",
+			OnFailure:   &onFailure,
+			OnRejection: &onRejection,
+			Outputs:     &outputs,
+			Type:        &workstationType,
+			Worker:      "processor",
+		}},
+	}
+}
+
+func assertValidationTarget(
+	t *testing.T,
+	targets []factoryapi.FactoryValidationTarget,
+	want factoryapi.FactoryValidationTarget,
+) {
+	t.Helper()
+	for _, target := range targets {
+		if target.Code == want.Code &&
+			target.Message == want.Message &&
+			target.Subject == want.Subject &&
+			target.Severity == want.Severity {
+			return
+		}
+	}
+	t.Fatalf("validation targets = %#v, want %#v", targets, want)
 }

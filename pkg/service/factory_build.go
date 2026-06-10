@@ -355,6 +355,11 @@ func buildRuntimeBundle(
 	effectiveFactoryRunnerID := effectiveFactoryRunnerID(input.cfg.RunnerID, input.loadedFactoryCfg.FactoryConfig())
 	eventHistory := factoryevents.NewFactoryEventHistory(net, input.clock.Now, input.loadedFactoryCfg)
 	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
+	if editableFactory, err := editableEventFactorySnapshot(input); err != nil {
+		logger.Warn("editable factory event snapshot unavailable; using runtime-thin factory event payload", zap.Error(err))
+	} else {
+		eventHistory.SetInitialStructureFactory(editableFactory)
+	}
 	localModels := input.prefetchedLocalModels
 	if localModels.manager == nil {
 		localModels = newRuntimeLocalModelDependencies(input.cfg)
@@ -398,6 +403,29 @@ func loadRuntimeBundleWorkerOptions(
 		return nil, fmt.Errorf("load workers: %w", err)
 	}
 	return workerOpts, nil
+}
+
+func editableEventFactorySnapshot(input runtimeBundleBuildInput) (factoryapi.Factory, error) {
+	if input.loadedFactoryCfg == nil || input.loadedFactoryCfg.FactoryConfig() == nil {
+		return factoryapi.Factory{}, fmt.Errorf("loaded factory config is unavailable")
+	}
+	factoryCfg, err := factoryconfig.CloneFactoryConfig(input.loadedFactoryCfg.FactoryConfig())
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("clone factory config: %w", err)
+	}
+	if err := factoryconfig.ApplySupportedPortableBundledFiles(input.loadedFactoryCfg.FactoryDir(), factoryCfg, true, false); err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("inline portable bundled files: %w", err)
+	}
+	if err := factoryconfig.ApplySharedFactoryStarterWork(input.loadedFactoryCfg.FactoryDir(), factoryCfg); err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("inline shared factory starter work: %w", err)
+	}
+	return replay.GeneratedFactoryFromRuntimeConfig(
+		input.loadedFactoryCfg.FactoryDir(),
+		factoryCfg,
+		input.loadedFactoryCfg,
+		replay.WithGeneratedFactorySourceDirectory(input.loadedFactoryCfg.FactoryDir()),
+		replay.WithGeneratedFactoryWorkflowID(input.workflowID),
+	)
 }
 
 func assembleRuntimeBundle(
@@ -1415,6 +1443,7 @@ func (fs *FactoryService) observeRuntimeMetrics(ctx context.Context, handle *liv
 		}
 	}
 }
+
 const (
 	modelPullMetricAttempts      = "managed_runtime.pull.attempts"
 	modelPullMetricSuccess       = "managed_runtime.pull.success"

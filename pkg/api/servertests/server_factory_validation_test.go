@@ -160,6 +160,51 @@ func TestValidateFactory_RejectsDuplicateDefaultHandlingWorkTypes(t *testing.T) 
 	}
 }
 
+func TestValidateFactory_RejectsResourceSlotAuthoredAsWorkstationRoute(t *testing.T) {
+	t.Parallel()
+
+	srv := newAPITestServer(&testutil.MockFactory{})
+	body := `{
+		"name":"alpha",
+		"resources":[{"name":"executor-slot","capacity":10}],
+		"workTypes":[{"name":"task","states":[
+			{"name":"init","type":"INITIAL"},
+			{"name":"done","type":"TERMINAL"}
+		]}],
+		"workers":[{"name":"processor"}],
+		"workstations":[{
+			"name":"process",
+			"worker":"processor",
+			"inputs":[
+				{"workType":"task","state":"init"},
+				{"workType":"executor-slot","state":"available"}
+			],
+			"outputs":[{"workType":"task","state":"done"}]
+		}]
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/factory-validations", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	result := decodeJSONResponse[factoryapi.FactoryValidationResult](t, rec)
+	assertHasValidationTargetCode(t, result.Targets, factoryvalidation.CodeDanglingPlaceReference)
+	assertHasValidationTarget(
+		t,
+		result.Targets,
+		factoryvalidation.CodeDanglingPlaceReference,
+		factoryapi.FactoryValidationSubjectTypeRoute,
+		"process->executor-slot:available",
+		factoryapi.FactoryValidationSubjectLocationInputs,
+		`resource slot route target`,
+	)
+}
+
 func TestValidateFactory_PreservesCanonicalStructuralCodesFromCrossPathFixture(t *testing.T) {
 	srv := newAPITestServer(&testutil.MockFactory{})
 
