@@ -11,7 +11,6 @@ import {
   buildTimeoutMs,
   expectNoBrowserErrors,
   exportCoverImagePath,
-  loadReplayLines,
   openBrowserPage,
   startBrowserPreview,
   startFactoryApiServer,
@@ -22,28 +21,16 @@ const nonDefaultSessionID = "session-review";
 
 const defaultFactoryDefinition = {
   name: "Browser Session Harness Factory",
-};
-
-const reviewSessionFactoryDefinition = {
-  inputTypes: [
-    {
-      name: "Factory request",
-      type: "DEFAULT",
-    },
-  ],
-  name: "Review Session Import Factory",
   workers: [
     {
-      body: "Return the request unchanged.",
-      model: "gpt-5.4-mini",
-      modelProvider: "CODEX",
-      name: "review-import-worker",
+      model: "gpt-5",
+      name: "writer",
       type: "MODEL_WORKER",
     },
   ],
   workTypes: [
     {
-      name: "request",
+      name: "story",
       states: [
         {
           name: "queued",
@@ -58,22 +45,83 @@ const reviewSessionFactoryDefinition = {
   ],
   workstations: [
     {
-      behavior: "STANDARD",
+      body: "Draft the story.",
       inputs: [
         {
           state: "queued",
-          workType: "request",
+          workType: "story",
         },
       ],
-      name: "Review import workstation",
+      name: "draft",
       outputs: [
         {
           state: "done",
-          workType: "request",
+          workType: "story",
         },
       ],
       type: "MODEL_WORKSTATION",
-      worker: "review-import-worker",
+      worker: "writer",
+    },
+  ],
+};
+
+const reviewSessionFactoryDefinition = {
+  metadata: {
+    owner: "operations",
+  },
+  name: "Review Session Import Factory",
+  resources: [
+    {
+      capacity: 2,
+      name: "gpu",
+    },
+  ],
+  workers: [
+    {
+      model: "gpt-5",
+      name: "review-writer",
+      type: "MODEL_WORKER",
+    },
+  ],
+  workTypes: [
+    {
+      name: "story",
+      states: [
+        {
+          name: "queued",
+          type: "INITIAL",
+        },
+        {
+          name: "done",
+          type: "TERMINAL",
+        },
+      ],
+    },
+  ],
+  workstations: [
+    {
+      body: "Review the story.",
+      inputs: [
+        {
+          state: "queued",
+          workType: "story",
+        },
+      ],
+      name: "review",
+      outputs: [
+        {
+          state: "done",
+          workType: "story",
+        },
+      ],
+      resources: [
+        {
+          capacity: 2,
+          name: "gpu",
+        },
+      ],
+      type: "MODEL_WORKSTATION",
+      worker: "review-writer",
     },
   ],
 };
@@ -101,6 +149,37 @@ function renameReplayWorkstation(lines, workstationName) {
 
     return JSON.stringify(event);
   });
+}
+
+function buildReplayLines(factoryDefinition) {
+  return [
+    JSON.stringify({
+      context: {
+        eventTime: "2026-05-19T15:00:00Z",
+        sequence: 1,
+        tick: 1,
+      },
+      id: `factory-import-${factoryDefinition.name}`,
+      payload: {
+        factory: factoryDefinition,
+      },
+      type: "INITIAL_STRUCTURE_REQUEST",
+    }),
+    JSON.stringify({
+      context: {
+        eventTime: "2026-05-19T15:00:01Z",
+        sequence: 2,
+        tick: 2,
+      },
+      id: `factory-import-ready-${factoryDefinition.name}`,
+      payload: {
+        previousState: "RUNNING",
+        reason: "fixture ready",
+        state: "FINISHED",
+      },
+      type: "FACTORY_STATE_RESPONSE",
+    }),
+  ];
 }
 
 async function openReviewSessionTab(page) {
@@ -142,13 +221,13 @@ function createImportActivationTracking() {
 
 async function startReviewSessionImportServer(preview, tracking) {
   const sessionReplayLines = renameReplayWorkstation(
-    await loadReplayLines("graph-state-smoke-replay.jsonl"),
+    buildReplayLines(reviewSessionFactoryDefinition),
     "Session Review",
   );
   return startFactoryApiServer({
     apiPort: preview.apiPort,
     currentFactory: defaultFactoryDefinition,
-    eventLines: await loadReplayLines("graph-state-smoke-replay.jsonl"),
+    eventLines: buildReplayLines(defaultFactoryDefinition),
     eventLinesBySessionID: {
       [nonDefaultSessionID]: sessionReplayLines,
     },

@@ -104,6 +104,7 @@ export const editableGraphFactoryReplayLines = [
             ],
           },
         ],
+        name: canonicalSessionFactoryName,
         workers: [
           {
             model: "gpt-5",
@@ -156,25 +157,26 @@ export const editableGraphFactoryReplayLines = [
 ];
 
 export const exportFactoryDefinition = {
-  inputTypes: [
+  metadata: {
+    owner: "operations",
+  },
+  name: "Browser Export Factory",
+  resources: [
     {
-      name: "Factory request",
-      type: "DEFAULT",
+      capacity: 2,
+      name: "gpu",
     },
   ],
-  name: "Browser Export Factory",
   workers: [
     {
-      body: "Return the request unchanged.",
-      model: "gpt-5.4-mini",
-      modelProvider: "CODEX",
-      name: "browser-export-worker",
+      model: "gpt-5",
+      name: "writer",
       type: "MODEL_WORKER",
     },
   ],
   workTypes: [
     {
-      name: "request",
+      name: "story",
       states: [
         {
           name: "queued",
@@ -189,25 +191,60 @@ export const exportFactoryDefinition = {
   ],
   workstations: [
     {
-      behavior: "STANDARD",
+      body: "Draft the story.",
       inputs: [
         {
           state: "queued",
-          workType: "request",
+          workType: "story",
         },
       ],
-      name: "Browser export workstation",
+      name: "draft",
       outputs: [
         {
           state: "done",
-          workType: "request",
+          workType: "story",
+        },
+      ],
+      resources: [
+        {
+          capacity: 2,
+          name: "gpu",
         },
       ],
       type: "MODEL_WORKSTATION",
-      worker: "browser-export-worker",
+      worker: "writer",
     },
   ],
 };
+
+export const exportFactoryReplayLines = [
+  JSON.stringify({
+    context: {
+      eventTime: "2026-05-19T15:00:00Z",
+      sequence: 1,
+      tick: 1,
+    },
+    id: "export-graph-1",
+    payload: {
+      factory: exportFactoryDefinition,
+    },
+    type: "INITIAL_STRUCTURE_REQUEST",
+  }),
+  JSON.stringify({
+    context: {
+      eventTime: "2026-05-19T15:00:01Z",
+      sequence: 2,
+      tick: 2,
+    },
+    id: "export-graph-2",
+    payload: {
+      previousState: "RUNNING",
+      reason: "fixture ready",
+      state: "FINISHED",
+    },
+    type: "FACTORY_STATE_RESPONSE",
+  }),
+];
 
 export function factoryGraphCardScope(page) {
   return page.getByRole("article", { name: "Factory graph" });
@@ -395,6 +432,10 @@ export async function saveGraphEditorTopology(page) {
   await addDialog.getByLabel("Identifier").fill("review");
   await fillWorkstationPromptBody(addDialog, "Review the drafted story.");
   await addDialog.getByRole("button", { name: "Add entity" }).click();
+  await addDialog.waitFor({
+    state: "hidden",
+    timeout: uiInteractionTimeoutMs,
+  });
 
   const saveChangesButton = toolbar.getByRole("button", {
     name: "Save changes",
@@ -414,5 +455,7 @@ export async function saveGraphEditorTopology(page) {
     state: "visible",
     timeout: uiInteractionTimeoutMs,
   });
-  await saveDialog.getByRole("button", { name: "Save topology" }).click();
+  await saveDialog
+    .getByRole("button", { name: /Save (topology|changes)/ })
+    .click();
 }
