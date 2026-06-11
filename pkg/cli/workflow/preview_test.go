@@ -32,7 +32,7 @@ func TestPreview_ValidWorkflowNameHumanOutput(t *testing.T) {
 		t.Fatalf("Preview: %v", err)
 	}
 	text := output.String()
-	for _, want := range []string{"Workflow preview passed.", "Source hash:", "Policy hash:"} {
+	for _, want := range []string{"Factory preview passed.", "Source hash:", "Policy hash:"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("output missing %q:\n%s", want, text)
 		}
@@ -53,7 +53,7 @@ func TestPreview_InvalidWorkflowReportsDiagnostics(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected preview failure")
 	}
-	if !strings.Contains(output.String(), "Workflow preview failed.") {
+	if !strings.Contains(output.String(), "Factory preview failed.") {
 		t.Fatalf("output = %q, want failure summary", output.String())
 	}
 }

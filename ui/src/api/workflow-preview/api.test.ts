@@ -50,7 +50,7 @@ describe("previewWorkflow", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining("/workflow-previews"),
+      expect.stringContaining("/factories/preview"),
       expect.objectContaining({ method: "POST" }),
     );
     expect(result.valid).toBe(true);
@@ -202,7 +202,7 @@ describe("previewWorkflow", () => {
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining("/workflow-previews"),
+      expect.stringContaining("/factories/preview"),
       expect.objectContaining({
         method: "POST",
         signal: undefined,

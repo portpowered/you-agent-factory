@@ -36,7 +36,7 @@ func Preview(cfg PreviewConfig) error {
 		return err
 	}
 
-	result := apisurface.WorkflowPreviewResultFromPreview(apisurface.BuildWorkflowPreview(input))
+	result := apisurface.FactoryPreviewResultFromPreview(apisurface.BuildFactoryPreview(input))
 	if cfg.JSON {
 		return json.NewEncoder(cfg.Output).Encode(result)
 	}
@@ -82,11 +82,11 @@ func workflowSourceKindFromCLI(kind string) (workflowsource.Kind, error) {
 	}
 }
 
-func renderPreviewHuman(result factoryapi.WorkflowPreviewResult, output io.Writer) error {
+func renderPreviewHuman(result factoryapi.FactoryPreviewResult, output io.Writer) error {
 	if result.Valid {
-		fmt.Fprintf(output, "Workflow preview passed.\n")
+		fmt.Fprintf(output, "Factory preview passed.\n")
 	} else {
-		fmt.Fprintf(output, "Workflow preview failed.\n")
+		fmt.Fprintf(output, "Factory preview failed.\n")
 	}
 	renderPreviewSourceMetadata(result, output)
 	renderPreviewResolutionDiagnostics(result, output)
@@ -97,12 +97,12 @@ func renderPreviewHuman(result factoryapi.WorkflowPreviewResult, output io.Write
 		result.ResultConstraints.MaxEmbeddedBytes,
 	)
 	if !result.Valid {
-		return fmt.Errorf("workflow preview found blocking issues")
+		return fmt.Errorf("factory preview found blocking issues")
 	}
 	return nil
 }
 
-func renderPreviewSourceMetadata(result factoryapi.WorkflowPreviewResult, output io.Writer) {
+func renderPreviewSourceMetadata(result factoryapi.FactoryPreviewResult, output io.Writer) {
 	if ref := result.SourceResolution.SourceRef; ref != nil && strings.TrimSpace(*ref) != "" {
 		fmt.Fprintf(output, "Source ref: %s\n", strings.TrimSpace(*ref))
 	}
@@ -112,7 +112,7 @@ func renderPreviewSourceMetadata(result factoryapi.WorkflowPreviewResult, output
 	fmt.Fprintf(output, "Policy hash: %s\n", strings.TrimSpace(result.PolicyPreview.PolicyHash))
 }
 
-func renderPreviewResolutionDiagnostics(result factoryapi.WorkflowPreviewResult, output io.Writer) {
+func renderPreviewResolutionDiagnostics(result factoryapi.FactoryPreviewResult, output io.Writer) {
 	if result.SourceResolution.Diagnostics != nil {
 		for _, diagnostic := range *result.SourceResolution.Diagnostics {
 			if diagnostic.Code != "" || diagnostic.Message != "" {
@@ -126,13 +126,13 @@ func renderPreviewResolutionDiagnostics(result factoryapi.WorkflowPreviewResult,
 	}
 }
 
-func renderPreviewValidationIssues(result factoryapi.WorkflowPreviewResult, output io.Writer) {
+func renderPreviewValidationIssues(result factoryapi.FactoryPreviewResult, output io.Writer) {
 	for _, issue := range result.SourceValidationIssues {
 		fmt.Fprintf(output, "%s\n", formatWorkflowDiagnostic(issue))
 	}
 }
 
-func renderPreviewPolicyDiagnostics(result factoryapi.WorkflowPreviewResult, output io.Writer) {
+func renderPreviewPolicyDiagnostics(result factoryapi.FactoryPreviewResult, output io.Writer) {
 	for _, issue := range result.PolicyPreview.ValidationIssues {
 		fmt.Fprintf(output, "%s\n", formatWorkflowDiagnostic(issue))
 	}

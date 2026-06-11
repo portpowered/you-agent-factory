@@ -308,6 +308,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factories/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Preview JavaScript orchestrator factory source
+     * @description Canonical Factory preview surface for JavaScript orchestrator factories. Resolves orchestrator source, validates JavaScript or TypeScript source without execution, and projects effective policy, artifact-root, and structured-result constraints before Factory Session start.
+     */
+    post: operations["previewFactory"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/workflow-previews": {
     parameters: {
       query?: never;
@@ -318,8 +338,9 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Preview workflow validation and policy
-     * @description Resolves workflow source, validates JavaScript or TypeScript source without execution, and projects effective policy, artifact-root, and structured-result constraints for preview or session-start surfaces.
+     * Preview workflow validation and policy (obsolete)
+     * @deprecated
+     * @description Obsolete Batch 001 compatibility alias for POST /factories/preview. Returns the same Factory preview contract while callers migrate to canonical Factory preview semantics.
      */
     post: operations["previewWorkflow"];
     delete?: never;
@@ -3954,27 +3975,27 @@ export interface components {
         [key: string]: unknown;
       };
     };
-    WorkflowPreviewRequest: {
+    FactoryPreviewRequest: {
       /**
-       * @description Workflow source request kind.
+       * @description JavaScript orchestrator factory source request kind for Factory preview.
        * @enum {string}
        */
-      sourceKind: WorkflowPreviewRequestSourceKind;
+      sourceKind: FactoryPreviewRequestSourceKind;
       /** @description Requested workflow name, file ref, factory id, or inline label. */
       sourceValue?: string;
-      /** @description Inline workflow source text for INLINE_WORKFLOW or FACTORY_INLINE requests. */
+      /** @description Inline orchestrator source text for INLINE_WORKFLOW or FACTORY_INLINE requests. */
       inlineSource?: string;
-      /** @description Optional absolute artifact root requested with the workflow source. */
+      /** @description Optional absolute artifact root requested with the factory source. */
       artifactRoot?: string;
       /** @description When true, explicit factory lookup is attempted after ordered workflow lookup. */
       allowFactoryLookup?: boolean;
-      /** @description Project root used for ordered workflow source lookup. */
+      /** @description Project root used for ordered JavaScript orchestrator source lookup. */
       projectRoot?: string;
       /** @description Optional JavaScript orchestrator metadata to validate with the source. */
       metadata?: {
         [key: string]: string;
       };
-      /** @description Optional JSON Schema object describing workflow invocation arguments. */
+      /** @description Optional JSON Schema object describing factory session invocation arguments. */
       argsSchema?: {
         [key: string]: unknown;
       };
@@ -3998,15 +4019,25 @@ export interface components {
        */
       timeoutMillis?: number;
     };
-    WorkflowPreviewResult: {
-      /** @description True when source resolution, validation, policy, and artifact-root checks pass. */
+    FactoryPreviewResult: {
+      /** @description True when source resolution, validation, policy, and artifact-root checks pass for Factory preview. */
       valid: boolean;
       sourceResolution: components["schemas"]["WorkflowSourceResolution"];
-      /** @description Workflow source, loader, and orchestrator validation diagnostics. */
+      /** @description JavaScript orchestrator source, loader, and validation diagnostics. */
       sourceValidationIssues: components["schemas"]["WorkflowDiagnostic"][];
       policyPreview: components["schemas"]["WorkflowPolicyPreview"];
       resultConstraints: components["schemas"]["WorkflowResultConstraints"];
     };
+    /**
+     * @deprecated
+     * @description Obsolete Batch 001 compatibility alias for FactoryPreviewRequest. Prefer POST /factories/preview for canonical Factory preview semantics.
+     */
+    WorkflowPreviewRequest: components["schemas"]["FactoryPreviewRequest"];
+    /**
+     * @deprecated
+     * @description Obsolete Batch 001 compatibility alias for FactoryPreviewResult. Prefer POST /factories/preview for canonical Factory preview semantics.
+     */
+    WorkflowPreviewResult: components["schemas"]["FactoryPreviewResult"];
     /**
      * @description Validation severity for one factory validation target.
      * @enum {string}
@@ -4958,6 +4989,32 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  previewFactory: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["FactoryPreviewRequest"];
+      };
+    };
+    responses: {
+      /** @description Factory preview validation, source resolution, and policy projection. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactoryPreviewResult"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   previewWorkflow: {
     parameters: {
       query?: never;
@@ -4971,7 +5028,7 @@ export interface operations {
       };
     };
     responses: {
-      /** @description Shared workflow validation, source resolution, and policy preview contract. */
+      /** @description Compatibility alias of Factory preview validation and policy projection. */
       200: {
         headers: {
           [name: string]: unknown;
@@ -6578,15 +6635,15 @@ export const PromptTemplateDiagnosticKind = {
 } as const;
 export type PromptTemplateDiagnosticKind =
   (typeof PromptTemplateDiagnosticKind)[keyof typeof PromptTemplateDiagnosticKind];
-export const WorkflowPreviewRequestSourceKind = {
+export const FactoryPreviewRequestSourceKind = {
   FACTORY_ID: "FACTORY_ID",
   FACTORY_INLINE: "FACTORY_INLINE",
   WORKFLOW_FILE: "WORKFLOW_FILE",
   WORKFLOW_NAME: "WORKFLOW_NAME",
   INLINE_WORKFLOW: "INLINE_WORKFLOW",
 } as const;
-export type WorkflowPreviewRequestSourceKind =
-  (typeof WorkflowPreviewRequestSourceKind)[keyof typeof WorkflowPreviewRequestSourceKind];
+export type FactoryPreviewRequestSourceKind =
+  (typeof FactoryPreviewRequestSourceKind)[keyof typeof FactoryPreviewRequestSourceKind];
 export const FactoryValidationSeverity = {
   FactoryValidationSeverityError: "error",
   FactoryValidationSeverityWarning: "warning",

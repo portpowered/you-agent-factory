@@ -25,8 +25,8 @@ func TestValidateTool_MatchesAPISurfacePreview(t *testing.T) {
 
 	projectRootPtr := projectRoot
 	sourceValue := "review"
-	result, err := mcpworkflow.ValidateTool(factoryapi.WorkflowPreviewRequest{
-		SourceKind:  "WORKFLOW_NAME",
+	result, err := mcpworkflow.ValidateTool(factoryapi.FactoryPreviewRequest{
+		SourceKind:  factoryapi.WORKFLOWNAME,
 		ProjectRoot: &projectRootPtr,
 		SourceValue: &sourceValue,
 	})
@@ -38,7 +38,7 @@ func TestValidateTool_MatchesAPISurfacePreview(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DefaultContext: %v", err)
 	}
-	expected := apisurface.WorkflowPreviewResultFromPreview(apisurface.BuildWorkflowPreview(workflowpreview.Request{
+	expected := apisurface.FactoryPreviewResultFromPreview(apisurface.BuildFactoryPreview(workflowpreview.Request{
 		Source: workflowsource.Request{
 			Kind:  workflowsource.KindWorkflowName,
 			Value: "review",
@@ -56,8 +56,8 @@ func TestStartTool_MatchesValidateTool(t *testing.T) {
 
 	projectRootPtr := projectRoot
 	sourceValue := "review"
-	request := factoryapi.WorkflowPreviewRequest{
-		SourceKind:  "WORKFLOW_NAME",
+	request := factoryapi.FactoryPreviewRequest{
+		SourceKind:  factoryapi.WORKFLOWNAME,
 		ProjectRoot: &projectRootPtr,
 		SourceValue: &sourceValue,
 	}
@@ -80,8 +80,8 @@ func TestMarshalToolError_EncodesStructuredFailure(t *testing.T) {
 
 	projectRootPtr := projectRoot
 	sourceValue := "broken"
-	result, err := mcpworkflow.ValidateTool(factoryapi.WorkflowPreviewRequest{
-		SourceKind:  "WORKFLOW_NAME",
+	result, err := mcpworkflow.ValidateTool(factoryapi.FactoryPreviewRequest{
+		SourceKind:  factoryapi.WORKFLOWNAME,
 		ProjectRoot: &projectRootPtr,
 		SourceValue: &sourceValue,
 	})
@@ -104,8 +104,8 @@ func TestStructuredErrorFromPreview_UsesFirstBlockingIssue(t *testing.T) {
 
 	projectRootPtr := projectRoot
 	sourceValue := "broken"
-	result, err := mcpworkflow.ValidateTool(factoryapi.WorkflowPreviewRequest{
-		SourceKind:  "WORKFLOW_NAME",
+	result, err := mcpworkflow.ValidateTool(factoryapi.FactoryPreviewRequest{
+		SourceKind:  factoryapi.WORKFLOWNAME,
 		ProjectRoot: &projectRootPtr,
 		SourceValue: &sourceValue,
 	})

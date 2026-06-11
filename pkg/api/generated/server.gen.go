@@ -181,6 +181,15 @@ const (
 	PETRI      FactoryOrchestratorKind = "PETRI"
 )
 
+// Defines values for FactoryPreviewRequestSourceKind.
+const (
+	FACTORYID      FactoryPreviewRequestSourceKind = "FACTORY_ID"
+	FACTORYINLINE  FactoryPreviewRequestSourceKind = "FACTORY_INLINE"
+	INLINEWORKFLOW FactoryPreviewRequestSourceKind = "INLINE_WORKFLOW"
+	WORKFLOWFILE   FactoryPreviewRequestSourceKind = "WORKFLOW_FILE"
+	WORKFLOWNAME   FactoryPreviewRequestSourceKind = "WORKFLOW_NAME"
+)
+
 // Defines values for FactorySaveMode.
 const (
 	FactorySaveModeReplaceCurrent         FactorySaveMode = "REPLACE_CURRENT"
@@ -693,15 +702,6 @@ const (
 	WorkerTypeHostedWorker WorkerType = "HOSTED_WORKER"
 	WorkerTypeModelWorker  WorkerType = "MODEL_WORKER"
 	WorkerTypeScriptWorker WorkerType = "SCRIPT_WORKER"
-)
-
-// Defines values for WorkflowPreviewRequestSourceKind.
-const (
-	FACTORYID      WorkflowPreviewRequestSourceKind = "FACTORY_ID"
-	FACTORYINLINE  WorkflowPreviewRequestSourceKind = "FACTORY_INLINE"
-	INLINEWORKFLOW WorkflowPreviewRequestSourceKind = "INLINE_WORKFLOW"
-	WORKFLOWFILE   WorkflowPreviewRequestSourceKind = "WORKFLOW_FILE"
-	WORKFLOWNAME   WorkflowPreviewRequestSourceKind = "WORKFLOW_NAME"
 )
 
 // Defines values for WorkstationKind.
@@ -1507,6 +1507,67 @@ type FactoryOrchestratorKind string
 
 // FactoryOrchestratorPetriConfig Petri-specific orchestrator configuration. Existing Petri factories may omit this block and rely on compatibility defaulting to orchestrator.kind = PETRI.
 type FactoryOrchestratorPetriConfig = map[string]interface{}
+
+// FactoryPreviewRequest defines model for FactoryPreviewRequest.
+type FactoryPreviewRequest struct {
+	// AllowFactoryLookup When true, explicit factory lookup is attempted after ordered workflow lookup.
+	AllowFactoryLookup *bool `json:"allowFactoryLookup,omitempty"`
+
+	// ArgsSchema Optional JSON Schema object describing factory session invocation arguments.
+	ArgsSchema *map[string]interface{} `json:"argsSchema,omitempty"`
+
+	// ArtifactRoot Optional absolute artifact root requested with the factory source.
+	ArtifactRoot *string `json:"artifactRoot,omitempty"`
+
+	// DefaultPolicy Optional factory default policy layer merged into the effective policy preview.
+	DefaultPolicy *map[string]interface{} `json:"defaultPolicy,omitempty"`
+
+	// InlineSource Inline orchestrator source text for INLINE_WORKFLOW or FACTORY_INLINE requests.
+	InlineSource *string `json:"inlineSource,omitempty"`
+
+	// Metadata Optional JavaScript orchestrator metadata to validate with the source.
+	Metadata *map[string]string `json:"metadata,omitempty"`
+
+	// ProjectRoot Project root used for ordered JavaScript orchestrator source lookup.
+	ProjectRoot *string `json:"projectRoot,omitempty"`
+
+	// RequestedModel Optional model requested for preview decision projection.
+	RequestedModel *string `json:"requestedModel,omitempty"`
+
+	// RequestedPolicy Optional request policy overrides merged into the effective policy preview.
+	RequestedPolicy *map[string]interface{} `json:"requestedPolicy,omitempty"`
+
+	// RequestedProfile Optional route profile requested for preview decision projection.
+	RequestedProfile *string `json:"requestedProfile,omitempty"`
+
+	// RequestedRunner Optional runner requested for preview decision projection.
+	RequestedRunner *string `json:"requestedRunner,omitempty"`
+
+	// SourceKind JavaScript orchestrator factory source request kind for Factory preview.
+	SourceKind FactoryPreviewRequestSourceKind `json:"sourceKind"`
+
+	// SourceValue Requested workflow name, file ref, factory id, or inline label.
+	SourceValue *string `json:"sourceValue,omitempty"`
+
+	// TimeoutMillis Optional requested timeout in milliseconds for preview decision projection.
+	TimeoutMillis *int64 `json:"timeoutMillis,omitempty"`
+}
+
+// FactoryPreviewRequestSourceKind JavaScript orchestrator factory source request kind for Factory preview.
+type FactoryPreviewRequestSourceKind string
+
+// FactoryPreviewResult defines model for FactoryPreviewResult.
+type FactoryPreviewResult struct {
+	PolicyPreview     WorkflowPolicyPreview     `json:"policyPreview"`
+	ResultConstraints WorkflowResultConstraints `json:"resultConstraints"`
+	SourceResolution  WorkflowSourceResolution  `json:"sourceResolution"`
+
+	// SourceValidationIssues JavaScript orchestrator source, loader, and validation diagnostics.
+	SourceValidationIssues []WorkflowDiagnostic `json:"sourceValidationIssues"`
+
+	// Valid True when source resolution, validation, policy, and artifact-root checks pass for Factory preview.
+	Valid bool `json:"valid"`
+}
 
 // FactorySaveMode Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
 type FactorySaveMode string
@@ -4774,65 +4835,10 @@ type WorkflowPolicyPreview struct {
 }
 
 // WorkflowPreviewRequest defines model for WorkflowPreviewRequest.
-type WorkflowPreviewRequest struct {
-	// AllowFactoryLookup When true, explicit factory lookup is attempted after ordered workflow lookup.
-	AllowFactoryLookup *bool `json:"allowFactoryLookup,omitempty"`
-
-	// ArgsSchema Optional JSON Schema object describing workflow invocation arguments.
-	ArgsSchema *map[string]interface{} `json:"argsSchema,omitempty"`
-
-	// ArtifactRoot Optional absolute artifact root requested with the workflow source.
-	ArtifactRoot *string `json:"artifactRoot,omitempty"`
-
-	// DefaultPolicy Optional factory default policy layer merged into the effective policy preview.
-	DefaultPolicy *map[string]interface{} `json:"defaultPolicy,omitempty"`
-
-	// InlineSource Inline workflow source text for INLINE_WORKFLOW or FACTORY_INLINE requests.
-	InlineSource *string `json:"inlineSource,omitempty"`
-
-	// Metadata Optional JavaScript orchestrator metadata to validate with the source.
-	Metadata *map[string]string `json:"metadata,omitempty"`
-
-	// ProjectRoot Project root used for ordered workflow source lookup.
-	ProjectRoot *string `json:"projectRoot,omitempty"`
-
-	// RequestedModel Optional model requested for preview decision projection.
-	RequestedModel *string `json:"requestedModel,omitempty"`
-
-	// RequestedPolicy Optional request policy overrides merged into the effective policy preview.
-	RequestedPolicy *map[string]interface{} `json:"requestedPolicy,omitempty"`
-
-	// RequestedProfile Optional route profile requested for preview decision projection.
-	RequestedProfile *string `json:"requestedProfile,omitempty"`
-
-	// RequestedRunner Optional runner requested for preview decision projection.
-	RequestedRunner *string `json:"requestedRunner,omitempty"`
-
-	// SourceKind Workflow source request kind.
-	SourceKind WorkflowPreviewRequestSourceKind `json:"sourceKind"`
-
-	// SourceValue Requested workflow name, file ref, factory id, or inline label.
-	SourceValue *string `json:"sourceValue,omitempty"`
-
-	// TimeoutMillis Optional requested timeout in milliseconds for preview decision projection.
-	TimeoutMillis *int64 `json:"timeoutMillis,omitempty"`
-}
-
-// WorkflowPreviewRequestSourceKind Workflow source request kind.
-type WorkflowPreviewRequestSourceKind string
+type WorkflowPreviewRequest = FactoryPreviewRequest
 
 // WorkflowPreviewResult defines model for WorkflowPreviewResult.
-type WorkflowPreviewResult struct {
-	PolicyPreview     WorkflowPolicyPreview     `json:"policyPreview"`
-	ResultConstraints WorkflowResultConstraints `json:"resultConstraints"`
-	SourceResolution  WorkflowSourceResolution  `json:"sourceResolution"`
-
-	// SourceValidationIssues Workflow source, loader, and orchestrator validation diagnostics.
-	SourceValidationIssues []WorkflowDiagnostic `json:"sourceValidationIssues"`
-
-	// Valid True when source resolution, validation, policy, and artifact-root checks pass.
-	Valid bool `json:"valid"`
-}
+type WorkflowPreviewResult = FactoryPreviewResult
 
 // WorkflowResultConstraints defines model for WorkflowResultConstraints.
 type WorkflowResultConstraints struct {
@@ -5192,6 +5198,9 @@ type GetProviderSessionDetailsParams struct {
 	// Id Provider-session identifier to resolve. This is an identifier, not a filesystem path.
 	Id string `form:"id" json:"id"`
 }
+
+// PreviewFactoryJSONRequestBody defines body for PreviewFactory for application/json ContentType.
+type PreviewFactoryJSONRequestBody = FactoryPreviewRequest
 
 // OpenFactorySessionJSONRequestBody defines body for OpenFactorySession for application/json ContentType.
 type OpenFactorySessionJSONRequestBody = OpenFactorySessionRequest
@@ -6507,6 +6516,9 @@ type ServerInterface interface {
 	// Stream factory events
 	// (GET /events)
 	GetEvents(w http.ResponseWriter, r *http.Request, params GetEventsParams)
+	// Preview JavaScript orchestrator factory source
+	// (POST /factories/preview)
+	PreviewFactory(w http.ResponseWriter, r *http.Request)
 	// List factory sessions
 	// (GET /factory-sessions)
 	ListFactorySessions(w http.ResponseWriter, r *http.Request, params ListFactorySessionsParams)
@@ -6624,7 +6636,7 @@ type ServerInterface interface {
 	// Get runtime status
 	// (GET /status)
 	GetStatus(w http.ResponseWriter, r *http.Request)
-	// Preview workflow validation and policy
+	// Preview workflow validation and policy (obsolete)
 	// (POST /workflow-previews)
 	PreviewWorkflow(w http.ResponseWriter, r *http.Request)
 }
@@ -6664,6 +6676,20 @@ func (siw *ServerInterfaceWrapper) GetEvents(w http.ResponseWriter, r *http.Requ
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetEvents(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// PreviewFactory operation middleware
+func (siw *ServerInterfaceWrapper) PreviewFactory(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PreviewFactory(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -7919,6 +7945,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	}
 
 	r.HandleFunc(options.BaseURL+"/events", wrapper.GetEvents).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factories/preview", wrapper.PreviewFactory).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions", wrapper.ListFactorySessions).Methods("GET")
 

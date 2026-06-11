@@ -34,13 +34,13 @@ func TestWorkflowPreviewSurfaces_MatchForValidWorkflow(t *testing.T) {
 		Context: ctx,
 	}
 
-	apiResult := apisurface.WorkflowPreviewResultFromPreview(apisurface.BuildWorkflowPreview(input))
+	apiResult := apisurface.FactoryPreviewResultFromPreview(apisurface.BuildFactoryPreview(input))
 	mcpResult := mcpworkflow.PreviewInputFromRequest(input)
 
 	projectRootPtr := projectRoot
 	sourceValue := "review"
-	mcpToolResult, err := mcpworkflow.ValidateTool(factoryapi.WorkflowPreviewRequest{
-		SourceKind:  "WORKFLOW_NAME",
+	mcpToolResult, err := mcpworkflow.ValidateTool(factoryapi.FactoryPreviewRequest{
+		SourceKind:  factoryapi.WORKFLOWNAME,
 		ProjectRoot: &projectRootPtr,
 		SourceValue: &sourceValue,
 	})

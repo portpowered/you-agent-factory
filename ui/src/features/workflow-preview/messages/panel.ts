@@ -1,8 +1,8 @@
 export const workflowPreviewPanelMessages = {
   empty: "Enter a workflow name or inline source to preview validation and policy.",
-  loading: "Loading workflow preview…",
-  success: "Workflow preview passed.",
-  error: "Workflow preview failed.",
+  loading: "Loading factory preview…",
+  success: "Factory preview passed.",
+  error: "Factory preview failed.",
   sourceResolution: "Source resolution",
   deniedCapabilities: "Denied capabilities",
   resultConstraints: "Result constraints",
