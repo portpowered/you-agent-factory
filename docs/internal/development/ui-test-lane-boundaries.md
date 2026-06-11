@@ -80,6 +80,13 @@ When the same observable assertion appears in multiple lanes:
 3. Document the removal in the PR / closeout notes when the deleted coverage
    was previously called out in slow-file reports.
 
+### Applied examples (prd-ui-ci-acceleration-and-test-rationalization-005)
+
+| Removed / narrowed | Kept in cheaper lane | Rationale |
+| --- | --- | --- |
+| Dispatch history, locale, workstation editing, state-node detail, work-outcome chart refresh, responsive widget catalog, and terminal occupancy cases in `App.current-selection.test.tsx` | Feature/widget suites under `ui/src/features/current-selection/**` and `ui/src/features/work-outcome/**` | Whole-dashboard `renderApp` duplicated widget-local behavior; see `ui-current-selection-app-shell-split-closeout.md` for inventory and before/after timing. |
+| Canonical multi-kind section layout walk in `App.current-selection.test.tsx` | `current-selection-widget.canonical-section-layout.test.tsx` | Exercises the same expandable section contract through `CurrentSelectionWidget` without mounting the full dashboard graph. |
+
 ### Applied examples (prd-ui-ci-acceleration-and-test-rationalization-004)
 
 | Removed / narrowed | Kept in cheaper lane | Rationale |
