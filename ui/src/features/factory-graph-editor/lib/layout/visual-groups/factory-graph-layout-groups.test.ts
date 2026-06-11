@@ -252,6 +252,63 @@ describe("factory graph layout groups", () => {
     expect(withoutGroup.edges).toEqual(withMember.edges);
   });
 
+  it("no-ops when adding an existing member or removing a missing member", () => {
+    const layout = addNodeToFactoryLayoutGroup(
+      addFactoryLayoutGroup(
+        createDefaultFactoryLayout(),
+        createFactoryLayoutGroup({
+          bounds: defaultFactoryLayoutGroupBounds({ x: 0, y: 0 }),
+          id: "group-1",
+          layout: createDefaultFactoryLayout(),
+        }),
+      ),
+      "group-1",
+      "workstation:draft",
+    );
+
+    const unchangedAdd = addNodeToFactoryLayoutGroup(
+      layout,
+      "group-1",
+      "workstation:draft",
+    );
+    const unchangedRemove = removeNodeFromFactoryLayoutGroup(
+      layout,
+      "group-1",
+      "worker:writer",
+    );
+
+    expect(factoryLayoutGroupById(unchangedAdd, "group-1")?.nodeIds).toEqual([
+      "workstation:draft",
+    ]);
+    expect(factoryLayoutGroupById(unchangedRemove, "group-1")?.nodeIds).toEqual([
+      "workstation:draft",
+    ]);
+  });
+
+  it("returns the original layout when moving a missing group or empty member set", () => {
+    const layout = addFactoryLayoutGroup(
+      createDefaultFactoryLayout(),
+      createFactoryLayoutGroup({
+        bounds: defaultFactoryLayoutGroupBounds({ x: 0, y: 0 }),
+        id: "group-1",
+        layout: createDefaultFactoryLayout(),
+      }),
+    );
+
+    expect(
+      moveFactoryLayoutGroupByDelta(layout, "missing-group", { x: 1, y: 2 }),
+    ).toBe(layout);
+    expect(
+      moveFactoryLayoutGroupByDelta(layout, "group-1", { x: 1, y: 2 }).groups?.[0]
+        ?.bounds,
+    ).toEqual({
+      height: 320,
+      width: 480,
+      x: -239,
+      y: -158,
+    });
+  });
+
   it("builds sorted canvas node options from topology nodes", () => {
     expect(
       factoryLayoutGroupCanvasNodeOptions([

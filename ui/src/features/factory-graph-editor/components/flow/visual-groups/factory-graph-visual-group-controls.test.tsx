@@ -73,6 +73,48 @@ describe("FactoryGraphVisualGroupControls", () => {
     );
   });
 
+  it("invokes color selection when a group color option is activated", async () => {
+    const user = userEvent.setup();
+    const onSetGroupColor = vi.fn();
+
+    render(
+      <FactoryGraphVisualGroupControls
+        canvasNodeOptions={[]}
+        colorLabel="Group color"
+        colorOptionLabel={(token) => `Use ${token} group color`}
+        boundsError={null}
+        deleteGroupLabel="Delete group"
+        emptyLabelError="Enter a group label."
+        group={{
+          bounds: { height: 120, width: 200, x: 0, y: 0 },
+          color: "info",
+          id: "group-1",
+          label: "Review",
+          nodeIds: [],
+        }}
+        isNodeMember={() => false}
+        labelFieldLabel="Group label"
+        membershipEmptyLabel="No canvas nodes are available to assign."
+        membershipLabel="Group members"
+        membershipNodeLabel={(label) => `Include ${label} in this group`}
+        membershipStaleNodeLabel={(nodeId) =>
+          `Saved member ${nodeId} is no longer on the canvas.`
+        }
+        onDeleteGroup={vi.fn()}
+        onRenameGroup={vi.fn()}
+        onSetGroupColor={onSetGroupColor}
+        onToggleNodeMembership={vi.fn()}
+        selectedGroupLabel="Selected visual group"
+        staleMemberNodeIds={[]}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Use success group color" }),
+    );
+    expect(onSetGroupColor).toHaveBeenCalledWith("success");
+  });
+
   it("invokes delete when the delete group action is activated", async () => {
     const user = userEvent.setup();
     const onDeleteGroup = vi.fn();
