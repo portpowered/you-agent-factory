@@ -19,7 +19,8 @@ const (
 	ErrorCodeInvalidPolicy     = "SESSION_EXECUTION_INVALID_POLICY"
 	ErrorCodeValidation        = "SESSION_EXECUTION_VALIDATION_FAILED"
 	ErrorCodeRequestIDConflict = "EXECUTION_REQUEST_ID_CONFLICT"
-	ErrorCodeSessionNotFound   = "SESSION_NOT_FOUND"
+	ErrorCodeSessionNotFound            = "SESSION_NOT_FOUND"
+	ErrorCodeReconnectCursorNotFound    = "RECONNECT_CURSOR_NOT_FOUND"
 )
 
 // ExecutionError is the stable CLI durable session execution failure contract.
@@ -105,6 +106,13 @@ func asExecutionError(err error) *ExecutionError {
 			Code:    ErrorCodeSessionNotFound,
 			Message: "factory session not found",
 			Field:   "sessionId",
+		}
+	}
+	if errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
+		return &ExecutionError{
+			Code:    ErrorCodeReconnectCursorNotFound,
+			Message: "event reconnect cursor not found in session history",
+			Field:   "afterEventId",
 		}
 	}
 	return nil

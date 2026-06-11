@@ -245,6 +245,23 @@ func TestSyncStartResponseToAPI_MapsTerminalAndTimeoutFixtures(t *testing.T) {
 	}
 }
 
+func TestEventReconnectRequestFromCLI_MapsAfterEventIDAndSequence(t *testing.T) {
+	sequence := 3
+	req, err := factorysession.EventReconnectRequestFromCLI(factorysession.CLIEventReconnectInput{
+		AfterEventID:  " session-started/dur-sess-js-run-n-001 ",
+		AfterSequence: &sequence,
+	})
+	if err != nil {
+		t.Fatalf("EventReconnectRequestFromCLI: %v", err)
+	}
+	if req.AfterEventID != "session-started/dur-sess-js-run-n-001" {
+		t.Fatalf("afterEventId = %q", req.AfterEventID)
+	}
+	if req.AfterSequence == nil || *req.AfterSequence != 3 {
+		t.Fatalf("afterSequence = %#v, want 3", req.AfterSequence)
+	}
+}
+
 func TestResultRequestFromCLI_MapsModeAndIncludeArtifacts(t *testing.T) {
 	req, err := factorysession.ResultRequestFromCLI(factorysession.CLIResultInput{
 		Mode:             "partial",

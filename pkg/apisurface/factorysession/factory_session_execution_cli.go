@@ -35,6 +35,22 @@ type CLIResultInput struct {
 	IncludeArtifacts bool
 }
 
+// CLIEventReconnectInput carries CLI-resolved durable Factory Session event
+// reconnect fields before shared normalization.
+type CLIEventReconnectInput struct {
+	AfterEventID  string
+	AfterSequence *int
+}
+
+// EventReconnectRequestFromCLI maps one CLI-resolved event reconnect request into
+// the shared service contract.
+func EventReconnectRequestFromCLI(input CLIEventReconnectInput) (factorysessionexecution.EventReconnectRequest, error) {
+	return factorysessionexecution.NormalizeEventReconnectRequest(factorysessionexecution.EventReconnectRequest{
+		AfterEventID:  input.AfterEventID,
+		AfterSequence: input.AfterSequence,
+	})
+}
+
 // ResultRequestFromCLI maps one CLI-resolved durable result read into the shared
 // service contract.
 func ResultRequestFromCLI(input CLIResultInput) (factorysessionexecution.ResultRequest, error) {

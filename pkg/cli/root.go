@@ -878,17 +878,23 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *co
 	}
 	statusCfg := sessionexecutioncli.StatusConfig{}
 	resultCfg := sessionexecutioncli.ResultConfig{}
+	dispatchesCfg := sessionexecutioncli.DispatchesConfig{}
+	artifactsCfg := sessionexecutioncli.ArtifactsConfig{}
+	eventsCfg := sessionexecutioncli.EventsConfig{}
 
 	cmd := &cobra.Command{
 		Use:   "workflow",
 		Short: "Validate, preview, and run JavaScript workflow sources",
 		Long: "Validate, preview, and run JavaScript or TypeScript workflow sources using the shared workflow contracts.\n\n" +
 			"Subcommands:\n" +
-			"  preview  resolve workflow source, validate it without execution, and project policy and result constraints\n" +
-			"  run      start one durable Factory Session synchronously through the mock-backed execution loop\n" +
-			"  start    start one durable Factory Session asynchronously and return inspection links\n" +
-			"  status   read the durable Factory Session lifecycle and progress state\n" +
-			"  result   read the durable Factory Session final or partial result",
+			"  preview    resolve workflow source, validate it without execution, and project policy and result constraints\n" +
+			"  run        start one durable Factory Session synchronously through the mock-backed execution loop\n" +
+			"  start      start one durable Factory Session asynchronously and return inspection links\n" +
+			"  status     read the durable Factory Session lifecycle and progress state\n" +
+			"  result     read the durable Factory Session final or partial result\n" +
+			"  dispatches list durable Factory Session dispatches for inspection\n" +
+			"  artifacts  list durable Factory Session artifacts for inspection\n" +
+			"  events     poll ordered durable Factory Session events with optional reconnect cursors",
 	}
 	previewCmd := &cobra.Command{
 		Use:   "preview",
@@ -1003,7 +1009,70 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *co
 	resultCmd.Flags().StringVar(&resultCfg.Mode, "mode", "", "result read mode: final or partial")
 	resultCmd.Flags().BoolVar(&resultCfg.IncludeArtifacts, "include-artifacts", false, "include artifact refs in the result read")
 	resultCmd.Flags().StringVar(&resultCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed result reads")
-	cmd.AddCommand(previewCmd, runCmd, startCmd, statusCmd, resultCmd)
+	dispatchesCmd := &cobra.Command{
+		Use:   "dispatches [session-id]",
+		Short: "List durable Factory Session dispatches",
+		Long: "List durable Factory Session dispatches through the shared execution service. " +
+			"Use global --json to emit ListFactorySessionDispatchesResponse on stdout.",
+		Args: cobra.ExactArgs(1),
+		Example: "  # List dispatches for the sync-success fixture session.\n" +
+			"  " + cliBinaryName + " workflow dispatches dur-sess-petri-success-001\n\n" +
+			"  # Emit deterministic JSON for automation.\n" +
+			"  " + cliBinaryName + " --json workflow dispatches dur-sess-petri-success-001",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dispatchesCfg.JSON = globals.json
+			dispatchesCfg.Output = cmd.OutOrStdout()
+			dispatchesCfg.SessionID = args[0]
+			return sessionexecutioncli.RunDispatches(cmd.Context(), dispatchesCfg)
+		},
+	}
+	dispatchesCmd.Flags().StringVar(&dispatchesCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed dispatch reads")
+	artifactsCmd := &cobra.Command{
+		Use:   "artifacts [session-id]",
+		Short: "List durable Factory Session artifacts",
+		Long: "List durable Factory Session artifacts through the shared execution service. " +
+			"Use global --json to emit ListFactorySessionArtifactsResponse on stdout.",
+		Args: cobra.ExactArgs(1),
+		Example: "  # List artifacts for the sync-success fixture session.\n" +
+			"  " + cliBinaryName + " workflow artifacts dur-sess-petri-success-001\n\n" +
+			"  # Emit deterministic JSON for automation.\n" +
+			"  " + cliBinaryName + " --json workflow artifacts dur-sess-petri-success-001",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			artifactsCfg.JSON = globals.json
+			artifactsCfg.Output = cmd.OutOrStdout()
+			artifactsCfg.SessionID = args[0]
+			return sessionexecutioncli.RunArtifacts(cmd.Context(), artifactsCfg)
+		},
+	}
+	artifactsCmd.Flags().StringVar(&artifactsCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed artifact reads")
+	var afterSequence int
+	eventsCmd := &cobra.Command{
+		Use:   "events [session-id]",
+		Short: "Poll durable Factory Session events",
+		Long: "Poll ordered durable Factory Session events through the shared execution service. " +
+			"Use --after-event-id or --after-sequence to reconnect after a prior cursor. " +
+			"Use global --json to emit a FactoryEvent array on stdout.",
+		Args: cobra.ExactArgs(1),
+		Example: "  # Poll events for the async-running fixture session.\n" +
+			"  " + cliBinaryName + " workflow events dur-sess-js-run-n-001\n\n" +
+			"  # Reconnect after the session-started event.\n" +
+			"  " + cliBinaryName + " workflow events dur-sess-js-run-n-001 --after-event-id session-started/dur-sess-js-run-n-001\n\n" +
+			"  # Emit deterministic JSON for automation.\n" +
+			"  " + cliBinaryName + " --json workflow events dur-sess-js-run-n-001",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			eventsCfg.JSON = globals.json
+			eventsCfg.Output = cmd.OutOrStdout()
+			eventsCfg.SessionID = args[0]
+			if cmd.Flags().Changed("after-sequence") {
+				eventsCfg.AfterSequence = &afterSequence
+			}
+			return sessionexecutioncli.RunEvents(cmd.Context(), eventsCfg)
+		},
+	}
+	eventsCmd.Flags().StringVar(&eventsCfg.AfterEventID, "after-event-id", "", "reconnect cursor event id")
+	eventsCmd.Flags().IntVar(&afterSequence, "after-sequence", 0, "reconnect cursor session sequence")
+	eventsCmd.Flags().StringVar(&eventsCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed event reads")
+	cmd.AddCommand(previewCmd, runCmd, startCmd, statusCmd, resultCmd, dispatchesCmd, artifactsCmd, eventsCmd)
 	return cmd
 }
 
