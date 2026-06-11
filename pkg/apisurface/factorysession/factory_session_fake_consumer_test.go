@@ -230,6 +230,113 @@ func TestFakeServiceConsumer_ProjectsFixtureThroughApisurfaceMappers(t *testing.
 	}
 }
 
+func TestFakeServiceConsumer_ResultDispatchArtifact_ProjectsCoherentReads(t *testing.T) {
+	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+	}
+
+	scenario := findScenario(t, loadDurableFixtureCatalog(t), "petri-succeeded-one-dispatch")
+	executionRequest, ok := scenario["executionRequest"].(map[string]any)
+	if !ok {
+		t.Fatal("missing executionRequest fixture")
+	}
+	request, err := factorysession.StartRequestFromAPI(decodeExecutionRequest(t, executionRequest))
+	if err != nil {
+		t.Fatalf("StartRequestFromAPI: %v", err)
+	}
+	started, err := service.StartAsync(context.Background(), request)
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+	sessionID := started.SessionID
+
+	result, err := service.GetResult(context.Background(), sessionID, factorysessionexecution.ResultRequest{
+		Mode:             factorysessionexecution.ResultModeFinal,
+		IncludeArtifacts: true,
+	})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	mappedResult := factorysession.ResultResponseToAPI(result)
+	if mappedResult.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("resultStatus = %q, want FINAL", mappedResult.ResultStatus)
+	}
+	if mappedResult.PrimaryResult == nil {
+		t.Fatal("primaryResult missing")
+	}
+	if mappedResult.ArtifactRefs == nil || len(*mappedResult.ArtifactRefs) != 1 {
+		t.Fatalf("artifactRefs = %#v", mappedResult.ArtifactRefs)
+	}
+
+	dispatches, err := service.ListDispatches(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches: %v", err)
+	}
+	mappedDispatches := factorysession.ListDispatchesResponseToAPI(dispatches)
+	if len(mappedDispatches.Dispatches) != 1 {
+		t.Fatalf("dispatches = %#v", mappedDispatches.Dispatches)
+	}
+
+	dispatchDetail, err := service.GetDispatch(context.Background(), sessionID, mappedDispatches.Dispatches[0].Id)
+	if err != nil {
+		t.Fatalf("GetDispatch: %v", err)
+	}
+	mappedDispatch := factorysession.DispatchDetailResponseToAPI(dispatchDetail)
+	if mappedDispatch.Status != factoryapi.FactoryDispatchStatusCOMPLETED {
+		t.Fatalf("dispatch status = %q, want COMPLETED", mappedDispatch.Status)
+	}
+	if mappedDispatch.Petri == nil {
+		t.Fatal("petri projection missing")
+	}
+
+	artifacts, err := service.ListArtifacts(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListArtifacts: %v", err)
+	}
+	mappedArtifacts := factorysession.ListArtifactsResponseToAPI(artifacts)
+	if len(mappedArtifacts.Artifacts) != 1 {
+		t.Fatalf("artifacts = %#v", mappedArtifacts.Artifacts)
+	}
+	if mappedArtifacts.Artifacts[0].RetrievalRef == nil || mappedArtifacts.Artifacts[0].RetrievalRef.Href == "" {
+		t.Fatal("artifact retrievalRef missing")
+	}
+
+	artifactDetail, err := service.GetArtifact(context.Background(), sessionID, mappedArtifacts.Artifacts[0].Id)
+	if err != nil {
+		t.Fatalf("GetArtifact: %v", err)
+	}
+	mappedArtifact := factorysession.ArtifactDetailResponseToAPI(artifactDetail)
+	if mappedArtifact.DispatchId == nil || *mappedArtifact.DispatchId != mappedDispatches.Dispatches[0].Id {
+		t.Fatalf("artifact dispatchId = %#v, want %q", mappedArtifact.DispatchId, mappedDispatches.Dispatches[0].Id)
+	}
+	if mappedArtifact.Content == nil {
+		t.Fatal("artifact content missing")
+	}
+
+	_, err = service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-js-interrupted-001",
+		Source: factorysessionexecution.Source{
+			Kind:      workflowsource.KindFactoryID,
+			FactoryID: "customer-support-triage",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync interrupted: %v", err)
+	}
+	interruptedFinal, err := service.GetResult(context.Background(), "dur-sess-js-interrupted-001", factorysessionexecution.ResultRequest{
+		Mode: factorysessionexecution.ResultModeFinal,
+	})
+	if err != nil {
+		t.Fatalf("GetResult interrupted final: %v", err)
+	}
+	mappedInterrupted := factorysession.ResultResponseToAPI(interruptedFinal)
+	if mappedInterrupted.ResultStatus != factoryapi.FactorySessionResultStatusNotReady {
+		t.Fatalf("interrupted final status = %q, want NOT_READY", mappedInterrupted.ResultStatus)
+	}
+}
+
 func TestFakeServiceConsumer_ProjectsCanonicalFixtureEventsForRunningApprovalTerminal(t *testing.T) {
 	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)

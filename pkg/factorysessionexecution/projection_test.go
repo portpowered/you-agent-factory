@@ -91,6 +91,63 @@ func TestValidateResultMatchesSessionRead(t *testing.T) {
 	}
 }
 
+func TestValidateDispatchDetailMatchesListSummary(t *testing.T) {
+	summary := DispatchSummary{
+		ID:           "disp-1",
+		Status:       DispatchStatusFailed,
+		DispatchKind: "JAVASCRIPT_VERIFY",
+		Label:        "verify",
+		Attempt:      1,
+		FailureDetail: &DispatchFailureDetail{
+			Reason:  "VERIFY_ASSERTION_FAILED",
+			Message: "Expected release manifest checksum.",
+		},
+	}
+	detail := DispatchDetail{
+		DispatchSummary:  summary,
+		SessionID:        "dur-sess-001",
+		OrchestratorKind: "JAVASCRIPT",
+	}
+	if err := ValidateDispatchDetailMatchesListSummary(detail, summary); err != nil {
+		t.Fatalf("ValidateDispatchDetailMatchesListSummary: %v", err)
+	}
+
+	mismatch := detail
+	mismatch.Status = DispatchStatusCompleted
+	if err := ValidateDispatchDetailMatchesListSummary(mismatch, summary); err == nil {
+		t.Fatal("error = nil, want status mismatch")
+	}
+}
+
+func TestValidateArtifactDetailMatchesListSummary(t *testing.T) {
+	summary := ArtifactSummary{
+		ID:          "art-1",
+		Kind:        "FINAL_RESULT",
+		Visibility:  "PUBLIC",
+		Label:       "Triage summary",
+		ContentHash: "sha256:art-1",
+		SizeBytes:   128,
+		DispatchID:  "disp-1",
+		RetrievalRef: &ArtifactRetrievalRef{
+			Href:   "/factory-sessions/dur-sess-001/artifacts/art-1",
+			Method: "GET",
+		},
+	}
+	detail := ArtifactDetail{
+		ArtifactSummary: summary,
+		SessionID:       "dur-sess-001",
+	}
+	if err := ValidateArtifactDetailMatchesListSummary(detail, summary); err != nil {
+		t.Fatalf("ValidateArtifactDetailMatchesListSummary: %v", err)
+	}
+
+	mismatch := detail
+	mismatch.DispatchID = "disp-2"
+	if err := ValidateArtifactDetailMatchesListSummary(mismatch, summary); err == nil {
+		t.Fatal("error = nil, want dispatchId mismatch")
+	}
+}
+
 func TestValidateDispatchListMatchesSessionProgress(t *testing.T) {
 	session := SessionReadResult{
 		SessionID: "dur-sess-001",

@@ -126,6 +126,76 @@ func validateResultSummaryMatches(detail, summary *ResultSummary) error {
 	}
 }
 
+// ValidateDispatchDetailMatchesListSummary checks that one dispatch detail read
+// aligns with the dispatch list row for the same dispatch id.
+func ValidateDispatchDetailMatchesListSummary(detail DispatchDetail, summary DispatchSummary) error {
+	if detail.ID != summary.ID {
+		return fmt.Errorf("detail id %q does not match list summary %q", detail.ID, summary.ID)
+	}
+	if detail.Status != summary.Status {
+		return fmt.Errorf("detail status %q does not match list summary %q", detail.Status, summary.Status)
+	}
+	if detail.DispatchKind != summary.DispatchKind {
+		return fmt.Errorf("detail dispatchKind %q does not match list summary %q", detail.DispatchKind, summary.DispatchKind)
+	}
+	if strings.TrimSpace(detail.Label) != strings.TrimSpace(summary.Label) {
+		return fmt.Errorf("detail label %q does not match list summary %q", detail.Label, summary.Label)
+	}
+	if detail.Attempt != summary.Attempt {
+		return fmt.Errorf("detail attempt %d does not match list summary %d", detail.Attempt, summary.Attempt)
+	}
+	if detail.FailureDetail != nil || summary.FailureDetail != nil {
+		switch {
+		case detail.FailureDetail == nil || summary.FailureDetail == nil:
+			return fmt.Errorf("detail failureDetail %#v does not match list summary %#v", detail.FailureDetail, summary.FailureDetail)
+		case detail.FailureDetail.Reason != summary.FailureDetail.Reason,
+			detail.FailureDetail.Message != summary.FailureDetail.Message:
+			return fmt.Errorf("detail failureDetail %#v does not match list summary %#v", detail.FailureDetail, summary.FailureDetail)
+		}
+	}
+	return nil
+}
+
+// ValidateArtifactDetailMatchesListSummary checks that one artifact detail read
+// aligns with the artifact list row for the same artifact id.
+func ValidateArtifactDetailMatchesListSummary(detail ArtifactDetail, summary ArtifactSummary) error {
+	if detail.ID != summary.ID {
+		return fmt.Errorf("detail id %q does not match list summary %q", detail.ID, summary.ID)
+	}
+	if detail.Kind != summary.Kind {
+		return fmt.Errorf("detail kind %q does not match list summary %q", detail.Kind, summary.Kind)
+	}
+	if detail.Visibility != summary.Visibility {
+		return fmt.Errorf("detail visibility %q does not match list summary %q", detail.Visibility, summary.Visibility)
+	}
+	if strings.TrimSpace(detail.Label) != strings.TrimSpace(summary.Label) {
+		return fmt.Errorf("detail label %q does not match list summary %q", detail.Label, summary.Label)
+	}
+	if detail.ContentHash != summary.ContentHash {
+		return fmt.Errorf("detail contentHash %q does not match list summary %q", detail.ContentHash, summary.ContentHash)
+	}
+	if detail.SizeBytes != summary.SizeBytes {
+		return fmt.Errorf("detail sizeBytes %d does not match list summary %d", detail.SizeBytes, summary.SizeBytes)
+	}
+	if detail.DispatchID != summary.DispatchID {
+		return fmt.Errorf("detail dispatchId %q does not match list summary %q", detail.DispatchID, summary.DispatchID)
+	}
+	detailRef := detail.RetrievalRef
+	if detailRef == nil {
+		detailRef = detail.ContentRef
+	}
+	if detailRef != nil || summary.RetrievalRef != nil {
+		switch {
+		case detailRef == nil || summary.RetrievalRef == nil:
+			return fmt.Errorf("detail retrieval ref %#v does not match list summary %#v", detailRef, summary.RetrievalRef)
+		case detailRef.Href != summary.RetrievalRef.Href,
+			detailRef.Method != summary.RetrievalRef.Method:
+			return fmt.Errorf("detail retrieval ref %#v does not match list summary %#v", detailRef, summary.RetrievalRef)
+		}
+	}
+	return nil
+}
+
 // ValidateDispatchListMatchesSessionProgress checks dispatch list counts against
 // one session read progress summary when present.
 func ValidateDispatchListMatchesSessionProgress(session SessionReadResult, dispatches []DispatchSummary) error {

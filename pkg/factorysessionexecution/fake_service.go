@@ -690,20 +690,14 @@ func shapePartialModeResult(projected, canonical ResultReadResult, session Sessi
 func shapeFinalModeResult(projected, canonical ResultReadResult, session SessionReadResult, status ResultStatus) ResultReadResult {
 	switch status {
 	case ResultStatusPartial:
-		if !IsTerminalLifecycleStatus(session.Status) {
-			projected.ResultStatus = ResultStatusNotReady
-			projected.PrimaryResult = nil
-			projected.Failure = nil
-			projected.Availability = cloneResultAvailability(canonical.Availability)
-			if projected.Availability == nil {
-				projected.Availability = defaultNotReadyAvailability(session)
-			}
-			return projected
+		projected.ResultStatus = ResultStatusNotReady
+		projected.PrimaryResult = nil
+		projected.Failure = nil
+		projected.Availability = cloneResultAvailability(canonical.Availability)
+		if projected.Availability == nil {
+			projected.Availability = defaultNotReadyAvailability(session)
 		}
-		projected.ResultStatus = status
-		projected.PrimaryResult = cloneRawJSON(canonical.PrimaryResult)
-		projected.Failure = cloneFailureSummary(canonical.Failure)
-		projected.Availability = nil
+		return projected
 	case ResultStatusFinal, ResultStatusFailedWithPartial:
 		projected.ResultStatus = status
 		projected.PrimaryResult = cloneRawJSON(canonical.PrimaryResult)

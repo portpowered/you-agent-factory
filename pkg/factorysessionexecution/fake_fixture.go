@@ -827,7 +827,24 @@ func fakeSessionStateFromScenario(scenario FakeScenario) *fakeSessionState {
 	if len(state.events) == 0 {
 		state.events = deriveProjectionEvents(state.session, state.result)
 	}
+	for _, summary := range state.artifacts {
+		if detail, ok := state.artifactDetails[summary.ID]; ok {
+			state.artifactDetails[summary.ID] = enrichArtifactDetailFromListSummary(detail, summary)
+		}
+	}
 	return state
+}
+
+func enrichArtifactDetailFromListSummary(detail ArtifactDetail, summary ArtifactSummary) ArtifactDetail {
+	if detail.RetrievalRef == nil && summary.RetrievalRef != nil {
+		ref := *summary.RetrievalRef
+		detail.RetrievalRef = &ref
+	}
+	if detail.ContentRef == nil && summary.RetrievalRef != nil {
+		ref := *summary.RetrievalRef
+		detail.ContentRef = &ref
+	}
+	return detail
 }
 
 func cloneSessionRead(session SessionReadResult) SessionReadResult {

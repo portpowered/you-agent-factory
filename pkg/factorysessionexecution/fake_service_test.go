@@ -838,6 +838,208 @@ func TestProjectResultRead_NotReadyRunningSession(t *testing.T) {
 	}
 }
 
+func TestFakeService_ResultDispatchArtifact_ReadProjectionsCoherent(t *testing.T) {
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-petri-success-001")
+	startAsyncByRequestID(t, service, "req-petri-run-001")
+	startAsyncByRequestID(t, service, "req-js-failed-partial-001")
+	startAsyncByRequestID(t, service, "req-js-interrupted-001")
+
+	t.Run("success final result and artifacts", func(t *testing.T) {
+		sessionID := "dur-sess-petri-success-001"
+		session, err := service.GetSession(context.Background(), sessionID)
+		if err != nil {
+			t.Fatalf("GetSession: %v", err)
+		}
+		result, err := service.GetResult(context.Background(), sessionID, ResultRequest{
+			Mode:             ResultModeFinal,
+			IncludeArtifacts: true,
+		})
+		if err != nil {
+			t.Fatalf("GetResult: %v", err)
+		}
+		if result.ResultStatus != ResultStatusFinal {
+			t.Fatalf("resultStatus = %q, want FINAL", result.ResultStatus)
+		}
+		if len(result.PrimaryResult) == 0 {
+			t.Fatal("primaryResult missing")
+		}
+		if len(result.ArtifactRefs) != 1 || result.ArtifactRefs[0].ID != "art-petri-final-001" {
+			t.Fatalf("artifactRefs = %#v", result.ArtifactRefs)
+		}
+		if err := ValidateResultMatchesSessionRead(session, result); err != nil {
+			t.Fatalf("ValidateResultMatchesSessionRead: %v", err)
+		}
+
+		dispatches, err := service.ListDispatches(context.Background(), sessionID)
+		if err != nil {
+			t.Fatalf("ListDispatches: %v", err)
+		}
+		if len(dispatches.Dispatches) != 1 || dispatches.Dispatches[0].ID != "disp-petri-success-001" {
+			t.Fatalf("dispatches = %#v", dispatches.Dispatches)
+		}
+		if len(dispatches.Dispatches[0].OutputArtifactIDs) != 1 || dispatches.Dispatches[0].OutputArtifactIDs[0] != "art-petri-final-001" {
+			t.Fatalf("outputArtifactIds = %#v", dispatches.Dispatches[0].OutputArtifactIDs)
+		}
+
+		dispatchDetail, err := service.GetDispatch(context.Background(), sessionID, "disp-petri-success-001")
+		if err != nil {
+			t.Fatalf("GetDispatch: %v", err)
+		}
+		if dispatchDetail.Petri == nil || dispatchDetail.Petri.TransitionID == "" {
+			t.Fatalf("petri projection missing: %#v", dispatchDetail.Petri)
+		}
+		if err := ValidateDispatchDetailMatchesListSummary(dispatchDetail, dispatches.Dispatches[0]); err != nil {
+			t.Fatalf("ValidateDispatchDetailMatchesListSummary: %v", err)
+		}
+
+		artifacts, err := service.ListArtifacts(context.Background(), sessionID)
+		if err != nil {
+			t.Fatalf("ListArtifacts: %v", err)
+		}
+		if len(artifacts.Artifacts) != 1 || artifacts.Artifacts[0].ID != "art-petri-final-001" {
+			t.Fatalf("artifacts = %#v", artifacts.Artifacts)
+		}
+		if artifacts.Artifacts[0].RetrievalRef == nil || artifacts.Artifacts[0].RetrievalRef.Href == "" {
+			t.Fatalf("retrievalRef missing: %#v", artifacts.Artifacts[0].RetrievalRef)
+		}
+		if artifacts.Artifacts[0].DispatchID != "disp-petri-success-001" {
+			t.Fatalf("dispatchId = %q, want disp-petri-success-001", artifacts.Artifacts[0].DispatchID)
+		}
+
+		artifactDetail, err := service.GetArtifact(context.Background(), sessionID, "art-petri-final-001")
+		if err != nil {
+			t.Fatalf("GetArtifact: %v", err)
+		}
+		if len(artifactDetail.Content) == 0 {
+			t.Fatal("artifact content missing")
+		}
+		if err := ValidateArtifactDetailMatchesListSummary(artifactDetail, artifacts.Artifacts[0]); err != nil {
+			t.Fatalf("ValidateArtifactDetailMatchesListSummary: %v", err)
+		}
+	})
+
+	t.Run("running session reports not-ready final result", func(t *testing.T) {
+		sessionID := "dur-sess-petri-run-001"
+		result, err := service.GetResult(context.Background(), sessionID, ResultRequest{Mode: ResultModeFinal})
+		if err != nil {
+			t.Fatalf("GetResult: %v", err)
+		}
+		if result.ResultStatus != ResultStatusNotReady {
+			t.Fatalf("resultStatus = %q, want NOT_READY", result.ResultStatus)
+		}
+		if len(result.PrimaryResult) != 0 {
+			t.Fatal("primaryResult should be omitted for running session")
+		}
+		if result.Availability == nil {
+			t.Fatal("availability missing")
+		}
+
+		artifacts, err := service.ListArtifacts(context.Background(), sessionID)
+		if err != nil {
+			t.Fatalf("ListArtifacts: %v", err)
+		}
+		if len(artifacts.Artifacts) != 0 {
+			t.Fatalf("artifacts = %#v, want none", artifacts.Artifacts)
+		}
+	})
+
+	t.Run("failed-with-partial and interrupted partial versus final modes", func(t *testing.T) {
+		failedPartial, err := service.GetResult(context.Background(), "dur-sess-js-failed-partial-001", ResultRequest{Mode: ResultModePartial})
+		if err != nil {
+			t.Fatalf("GetResult failed partial: %v", err)
+		}
+		if failedPartial.ResultStatus != ResultStatusFailedWithPartial || len(failedPartial.PrimaryResult) == 0 {
+			t.Fatalf("failed partial result = %#v", failedPartial)
+		}
+
+		failedFinal, err := service.GetResult(context.Background(), "dur-sess-js-failed-partial-001", ResultRequest{Mode: ResultModeFinal})
+		if err != nil {
+			t.Fatalf("GetResult failed final: %v", err)
+		}
+		if failedFinal.ResultStatus != ResultStatusFailedWithPartial || len(failedFinal.PrimaryResult) == 0 {
+			t.Fatalf("failed final result = %#v", failedFinal)
+		}
+
+		interruptedPartial, err := service.GetResult(context.Background(), "dur-sess-js-interrupted-001", ResultRequest{Mode: ResultModePartial})
+		if err != nil {
+			t.Fatalf("GetResult interrupted partial: %v", err)
+		}
+		if interruptedPartial.ResultStatus != ResultStatusPartial || len(interruptedPartial.PrimaryResult) == 0 {
+			t.Fatalf("interrupted partial result = %#v", interruptedPartial)
+		}
+
+		interruptedFinal, err := service.GetResult(context.Background(), "dur-sess-js-interrupted-001", ResultRequest{Mode: ResultModeFinal})
+		if err != nil {
+			t.Fatalf("GetResult interrupted final: %v", err)
+		}
+		if interruptedFinal.ResultStatus != ResultStatusNotReady {
+			t.Fatalf("interrupted final status = %q, want NOT_READY", interruptedFinal.ResultStatus)
+		}
+		if len(interruptedFinal.PrimaryResult) != 0 {
+			t.Fatal("interrupted final primaryResult should be omitted")
+		}
+		if interruptedFinal.Availability == nil {
+			t.Fatal("interrupted final availability missing")
+		}
+	})
+
+	t.Run("dispatch failure and interruption metadata", func(t *testing.T) {
+		failedDispatches, err := service.ListDispatches(context.Background(), "dur-sess-js-failed-partial-001")
+		if err != nil {
+			t.Fatalf("ListDispatches failed: %v", err)
+		}
+		if len(failedDispatches.Dispatches) != 2 {
+			t.Fatalf("failed dispatches = %#v", failedDispatches.Dispatches)
+		}
+		failedDetail, err := service.GetDispatch(context.Background(), "dur-sess-js-failed-partial-001", "disp-js-fail-002")
+		if err != nil {
+			t.Fatalf("GetDispatch failed: %v", err)
+		}
+		if failedDetail.Status != DispatchStatusFailed {
+			t.Fatalf("status = %q, want FAILED", failedDetail.Status)
+		}
+		if failedDetail.FailureDetail == nil || failedDetail.FailureDetail.Reason != "VERIFY_ASSERTION_FAILED" {
+			t.Fatalf("failureDetail = %#v", failedDetail.FailureDetail)
+		}
+		if failedDetail.JavaScript == nil || failedDetail.JavaScript.TaskKind != "VERIFY" {
+			t.Fatalf("javascript projection = %#v", failedDetail.JavaScript)
+		}
+		if err := ValidateDispatchDetailMatchesListSummary(failedDetail, failedDispatches.Dispatches[1]); err != nil {
+			t.Fatalf("ValidateDispatchDetailMatchesListSummary: %v", err)
+		}
+
+		interruptedDispatches, err := service.ListDispatches(context.Background(), "dur-sess-js-interrupted-001")
+		if err != nil {
+			t.Fatalf("ListDispatches interrupted: %v", err)
+		}
+		if len(interruptedDispatches.Dispatches) != 2 {
+			t.Fatalf("interrupted dispatches = %#v", interruptedDispatches.Dispatches)
+		}
+		interruptedDetail, err := service.GetDispatch(context.Background(), "dur-sess-js-interrupted-001", "disp-js-interrupted-002")
+		if err != nil {
+			t.Fatalf("GetDispatch interrupted: %v", err)
+		}
+		if interruptedDetail.Status != DispatchStatusCanceled {
+			t.Fatalf("status = %q, want CANCELED", interruptedDetail.Status)
+		}
+		if err := ValidateDispatchDetailMatchesListSummary(interruptedDetail, interruptedDispatches.Dispatches[1]); err != nil {
+			t.Fatalf("ValidateDispatchDetailMatchesListSummary: %v", err)
+		}
+	})
+
+	t.Run("missing dispatch and artifact return not-found", func(t *testing.T) {
+		_, err := service.GetDispatch(context.Background(), "dur-sess-petri-success-001", "missing-dispatch")
+		if !errors.Is(err, ErrDispatchNotFound) {
+			t.Fatalf("GetDispatch error = %v, want ErrDispatchNotFound", err)
+		}
+		_, err = service.GetArtifact(context.Background(), "dur-sess-petri-success-001", "missing-artifact")
+		if !errors.Is(err, ErrArtifactNotFound) {
+			t.Fatalf("GetArtifact error = %v, want ErrArtifactNotFound", err)
+		}
+	})
+}
+
 func TestProjectResultRead_DefaultsToFinalMode(t *testing.T) {
 	canonical := ResultReadResult{
 		SessionID:     "dur-sess-001",
