@@ -22,7 +22,14 @@ type RuntimeService struct {
 	now        func() time.Time
 
 	sessions    map[string]*runtimeSessionState
-	startReplay map[string]startReplayRecord
+	startReplay map[string]runtimeStartReplayRecord
+}
+
+type runtimeStartReplayRecord struct {
+	sessionID  string
+	tupleHash  string
+	asyncStart *AsyncStartResult
+	syncStart  *SyncStartResult
 }
 
 type runtimeSessionState struct {
@@ -50,7 +57,7 @@ func NewRuntimeService(prepareCtx StartPrepareContext, options ...RuntimeService
 		prepareCtx:  prepareCtx,
 		now:         time.Now,
 		sessions:    make(map[string]*runtimeSessionState),
-		startReplay: make(map[string]startReplayRecord),
+		startReplay: make(map[string]runtimeStartReplayRecord),
 	}
 	for _, option := range options {
 		option(service)
@@ -75,6 +82,11 @@ func (s *RuntimeService) StartAsync(ctx context.Context, req StartRequest) (Asyn
 			s.mu.Unlock()
 			return AsyncStartResult{}, err
 		}
+		if replay.asyncStart != nil {
+			result := cloneAsyncStartResult(*replay.asyncStart)
+			s.mu.Unlock()
+			return result, nil
+		}
 		state, ok := s.sessions[replay.sessionID]
 		if !ok {
 			s.mu.Unlock()
@@ -87,11 +99,13 @@ func (s *RuntimeService) StartAsync(ctx context.Context, req StartRequest) (Asyn
 
 	state := s.newRunningSessionState(prepared)
 	s.sessions[state.session.SessionID] = state
-	s.startReplay[prepared.Request.RequestID] = startReplayRecord{
-		sessionID: state.session.SessionID,
-		tupleHash: prepared.TupleHash,
-	}
 	asyncResult := s.asyncStartFromState(state)
+	record := runtimeStartReplayRecord{
+		sessionID:  state.session.SessionID,
+		tupleHash:  prepared.TupleHash,
+		asyncStart: cloneAsyncStartResultPtr(asyncResult),
+	}
+	s.startReplay[prepared.Request.RequestID] = record
 	s.mu.Unlock()
 
 	go s.runSession(context.Background(), prepared, state.session.SessionID)
@@ -113,6 +127,11 @@ func (s *RuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncS
 			s.mu.Unlock()
 			return SyncStartResult{}, err
 		}
+		if replay.syncStart != nil {
+			result := cloneSyncStartResult(*replay.syncStart)
+			s.mu.Unlock()
+			return result, nil
+		}
 		state, ok := s.sessions[replay.sessionID]
 		if !ok {
 			s.mu.Unlock()
@@ -128,7 +147,7 @@ func (s *RuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncS
 	sessionID := state.session.SessionID
 	runtimeDone := state.runtimeDone
 	s.sessions[sessionID] = state
-	s.startReplay[prepared.Request.RequestID] = startReplayRecord{
+	s.startReplay[prepared.Request.RequestID] = runtimeStartReplayRecord{
 		sessionID: sessionID,
 		tupleHash: prepared.TupleHash,
 	}
@@ -155,6 +174,7 @@ func (s *RuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncS
 		}
 		result := s.syncStartFromStateLocked(state)
 		s.mu.RUnlock()
+		s.recordSyncStartReplay(prepared.Request.RequestID, result)
 		return result, nil
 	case <-waitCtx.Done():
 		if errors.Is(waitCtx.Err(), context.DeadlineExceeded) && syncWaitTimeout(prepared.Request.Wait) > 0 {
@@ -171,6 +191,7 @@ func (s *RuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncS
 			}
 			result := s.syncTimedOutFromStateLocked(state, cancelOnTimeout)
 			s.mu.RUnlock()
+			s.recordSyncStartReplay(prepared.Request.RequestID, result)
 			return result, nil
 		}
 		if err := ctx.Err(); err != nil {
@@ -571,6 +592,44 @@ func (s *RuntimeService) syncStartFromStateLocked(state *runtimeSessionState) Sy
 	}
 	result.Result = encoded
 	return result
+}
+
+func (s *RuntimeService) recordSyncStartReplay(requestID string, result SyncStartResult) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	record, ok := s.startReplay[requestID]
+	if !ok {
+		return
+	}
+	record.syncStart = cloneSyncStartResultPtr(result)
+	s.startReplay[requestID] = record
+}
+
+func cloneAsyncStartResultPtr(result AsyncStartResult) *AsyncStartResult {
+	cloned := cloneAsyncStartResult(result)
+	return &cloned
+}
+
+func cloneAsyncStartResult(result AsyncStartResult) AsyncStartResult {
+	cloned := result
+	cloned.ResolvedSource = cloneResolvedSource(result.ResolvedSource)
+	cloned.Policy = clonePolicyProjection(result.Policy)
+	cloned.Links = result.Links
+	return cloned
+}
+
+func cloneSyncStartResultPtr(result SyncStartResult) *SyncStartResult {
+	cloned := cloneSyncStartResult(result)
+	return &cloned
+}
+
+func cloneSyncStartResult(result SyncStartResult) SyncStartResult {
+	cloned := result
+	cloned.AsyncStartResult = cloneAsyncStartResult(result.AsyncStartResult)
+	if len(result.Result) > 0 {
+		cloned.Result = append(json.RawMessage(nil), result.Result...)
+	}
+	return cloned
 }
 
 func (s *RuntimeService) syncTimedOutFromStateLocked(state *runtimeSessionState, sessionCanceledByTimeout bool) SyncStartResult {
