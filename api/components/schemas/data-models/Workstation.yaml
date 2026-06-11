@@ -32,9 +32,9 @@ properties:
   worker:
     type: string
     description: Name of a worker declared in the workers list.
-  runner:
-    $ref: './RunnerID.yaml'
-    description: Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then worker modelProvider compatibility when no explicit runner is configured, then the default codex runner.
+  modelProvider:
+    $ref: './ModelProviderSelection.yaml'
+    description: Optional workstation-specific execution-family override. When omitted or DEFAULT, dispatch defers to the factory modelProvider, then worker modelProvider, then the operator default.
   openCodeAgent:
     type: string
     description: >-

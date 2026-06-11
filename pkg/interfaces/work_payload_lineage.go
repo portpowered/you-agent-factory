@@ -823,11 +823,17 @@ func resolveFactoryModelProviderSelection(selection string) string {
 	return ""
 }
 
+// ValidateWorkstationModelProviderSelection reports whether one workstation-level
+// modelProvider value is a known concrete provider, symbolic DEFAULT, or absent.
+func ValidateWorkstationModelProviderSelection(selection string) error {
+	return ValidateFactoryModelProviderSelection(selection)
+}
+
 // ResolveRunnerSelection applies the v1 precedence rules for backend runtime
 // runner choice: workstation override, then factory override, then legacy
 // worker modelProvider compatibility, then the codex default.
-func ResolveRunnerSelection(workstationRunner, factoryModelProvider, workerModelProvider string) ResolvedRunnerSelection {
-	if runner := NormalizeRunnerID(workstationRunner); runner != "" {
+func ResolveRunnerSelection(workstationModelProvider, factoryModelProvider, workerModelProvider string) ResolvedRunnerSelection {
+	if runner := resolveFactoryModelProviderSelection(workstationModelProvider); runner != "" {
 		return ResolvedRunnerSelection{RunnerID: runner, Source: RunnerSelectionSourceWorkstation}
 	}
 	if runner := resolveFactoryModelProviderSelection(factoryModelProvider); runner != "" {

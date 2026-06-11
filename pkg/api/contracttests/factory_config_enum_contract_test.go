@@ -36,7 +36,7 @@ func TestFactoryConfigContract_OpenAPIEnumBackedFieldsReferenceNamedSchemas(t *t
 	assertSchemaPropertyRef(t, schemas, "Factory", "modelProvider", "#/components/schemas/ModelProviderSelection")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "behavior", "#/components/schemas/WorkstationKind")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "operation", "#/components/schemas/ModelOperationName")
-	assertSchemaPropertyRef(t, schemas, "Workstation", "runner", "#/components/schemas/RunnerID")
+	assertSchemaPropertyRef(t, schemas, "Workstation", "modelProvider", "#/components/schemas/ModelProviderSelection")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "type", "#/components/schemas/WorkstationType")
 	assertSchemaArrayItemRef(t, schemas, "Workstation", "classificationRoutes", "#/components/schemas/ClassificationRoute")
 	assertSchemaPropertyRef(t, schemas, "Guard", "type", "#/components/schemas/GuardType")
@@ -56,7 +56,7 @@ func TestFactoryConfigContract_GeneratedModelsUseEnumBackedFieldsForTightenedCon
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Factory{}), "ModelProvider", reflect.TypeOf((*generated.ModelProviderSelection)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Behavior", reflect.TypeOf((*generated.WorkstationKind)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Operation", reflect.TypeOf((*string)(nil)))
-	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Runner", reflect.TypeOf((*generated.RunnerID)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "ModelProvider", reflect.TypeOf((*generated.ModelProviderSelection)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Type", reflect.TypeOf((*generated.WorkstationType)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "ClassificationRoutes", reflect.TypeOf((*[]generated.ClassificationRoute)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "OnContinue", reflect.TypeOf((*[]generated.WorkstationIO)(nil)))
@@ -159,8 +159,8 @@ func assertCanonicalExecuteStoryBoundaryFields(t *testing.T, executeStory genera
 	if executeStory.Behavior == nil || *executeStory.Behavior != generated.WorkstationKindCron {
 		t.Fatalf("canonical workstation behavior = %#v, want CRON", executeStory.Behavior)
 	}
-	if executeStory.Runner == nil || *executeStory.Runner != generated.RunnerIDCursorCLI {
-		t.Fatalf("canonical workstation runner = %#v, want cursor-cli", executeStory.Runner)
+	if executeStory.ModelProvider == nil || *executeStory.ModelProvider != generated.ModelProviderSelectionCursor {
+		t.Fatalf("canonical workstation modelProvider = %#v, want CURSOR", executeStory.ModelProvider)
 	}
 	if executeStory.Type == nil || *executeStory.Type != generated.WorkstationTypeModelWorkstation {
 		t.Fatalf("canonical workstation type = %#v, want MODEL_WORKSTATION", executeStory.Type)

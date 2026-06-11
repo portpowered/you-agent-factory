@@ -768,6 +768,9 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig)
 	if normalized.OpenCodeAgent != "" {
 		apiWorkstation.OpenCodeAgent = stringPtr(normalized.OpenCodeAgent)
 	}
+	if normalized.ModelProvider != "" {
+		apiWorkstation.ModelProvider = factoryModelProviderSelectionPtrIfNotEmpty(normalized.ModelProvider)
+	}
 	return apiWorkstation
 }
 

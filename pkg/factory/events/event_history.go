@@ -629,7 +629,7 @@ func (h *FactoryEventHistory) runnerSelectionInputsForDispatch(dispatch interfac
 	var workstationRunner string
 	if workstationName != "" {
 		if workstation, ok := h.runtimeConfig.Workstation(workstationName); ok && workstation != nil {
-			workstationRunner = workstation.Runner
+			workstationRunner = workstation.ModelProvider
 		}
 	}
 	worker, ok := h.runtimeConfig.Worker(dispatch.WorkerType)

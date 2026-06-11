@@ -252,7 +252,7 @@ func (we *WorkstationExecutor) applyCodexFactoryWorktreePreparation(
 	requestContext *resolvedWorkstationExecutionContext,
 	start time.Time,
 ) *interfaces.WorkResult {
-	selection := interfaces.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider)
+	selection := interfaces.ResolveRunnerSelection(workstationDef.ModelProvider, we.DefaultRunnerID, workerDef.ModelProvider)
 	executionProvider := modelProviderForExecution(workerDef.ModelProvider, selection)
 	if !worktree.ShouldPrepareFactoryWorktreeForCodex(executionProvider, workstationDef.WorkingDirectory, requestContext.Worktree) {
 		return nil
@@ -362,7 +362,7 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfa
 		return interfaces.WorkstationExecutionRequest{}, &failed
 	}
 
-	selection := interfaces.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider)
+	selection := interfaces.ResolveRunnerSelection(workstationDef.ModelProvider, we.DefaultRunnerID, workerDef.ModelProvider)
 	return interfaces.WorkstationExecutionRequest{
 		Dispatch:                 interfaces.CloneWorkDispatch(dispatch),
 		WorkerType:               workerName,

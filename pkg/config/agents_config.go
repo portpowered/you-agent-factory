@@ -328,7 +328,14 @@ func normalizeWorkstationPublicEnums(cfg *interfaces.FactoryWorkstationConfig) {
 	if cfg == nil {
 		return
 	}
-	cfg.Runner = interfaces.NormalizeRunnerID(cfg.Runner)
+	if cfg.ModelProvider != "" {
+		cfg.ModelProvider = interfaces.StrictPublicFactoryModelProviderSelection(cfg.ModelProvider)
+		if cfg.ModelProvider != interfaces.FactoryModelProviderDefault {
+			if internal, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(factoryapi.WorkerModelProvider(cfg.ModelProvider)); ok {
+				cfg.ModelProvider = string(internal)
+			}
+		}
+	}
 	if cfg.Kind != "" {
 		behavior := factoryapi.WorkstationKind(cfg.Kind)
 		cfg.Kind = internalFactoryWorkstationKindFromPublic(&behavior)
@@ -406,7 +413,20 @@ func rejectRetiredWorkerFrontmatterAliases(frontmatter map[string]any) error {
 	})
 }
 
+func publicWorkstationModelProviderForExpansion(value string) string {
+	if value == "" {
+		return ""
+	}
+	if value == interfaces.FactoryModelProviderDefault {
+		return interfaces.FactoryModelProviderDefault
+	}
+	return string(publicFactoryWorkerModelProviderFromInternal(value))
+}
+
 func rejectRetiredWorkstationFrontmatterAliases(frontmatter map[string]any) error {
+	if _, ok := frontmatter["runner"]; ok {
+		return fmt.Errorf("frontmatter.runner is retired; use frontmatter.modelProvider")
+	}
 	if err := rejectRetiredBoundaryFields(frontmatter, "frontmatter", []retiredBoundaryField{
 		{key: "kind", replacement: "use behavior"},
 		{key: "runtimeType", replacement: "use type"},
@@ -578,7 +598,7 @@ type workstationFrontmatter struct {
 	Kind             interfaces.WorkstationKind   `yaml:"behavior,omitempty"`
 	Type             string                       `yaml:"type,omitempty"`
 	Worker           string                       `yaml:"worker,omitempty"`
-	Runner           string                       `yaml:"runner,omitempty"`
+	ModelProvider    string                       `yaml:"modelProvider,omitempty"`
 	OpenCodeAgent    string                       `yaml:"openCodeAgent,omitempty"`
 	PromptFile       string                       `yaml:"promptFile,omitempty"`
 	OutputSchema     string                       `yaml:"outputSchema,omitempty"`
@@ -640,7 +660,7 @@ func workstationFrontmatterForExpansion(def interfaces.FactoryWorkstationConfig)
 		Kind:             behavior,
 		Type:             def.Type,
 		Worker:           def.WorkerTypeName,
-		Runner:           def.Runner,
+		ModelProvider:    publicWorkstationModelProviderForExpansion(def.ModelProvider),
 		OpenCodeAgent:    def.OpenCodeAgent,
 		PromptFile:       def.PromptFile,
 		OutputSchema:     def.OutputSchema,

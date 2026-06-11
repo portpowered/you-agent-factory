@@ -1140,7 +1140,10 @@ func validateConfiguredWorkstationRunners(factoryCfg *interfaces.FactoryConfig, 
 			workerModelProvider = worker.ModelProvider
 		}
 
-		selection := interfaces.ResolveRunnerSelection(workstation.Runner, factoryRunnerID, workerModelProvider)
+		if err := interfaces.ValidateWorkstationModelProviderSelection(workstation.ModelProvider); err != nil {
+			return fmt.Errorf("workstations[%d](%s).modelProvider: %w", i, workstation.Name, err)
+		}
+		selection := interfaces.ResolveRunnerSelection(workstation.ModelProvider, factoryRunnerID, workerModelProvider)
 		workerOpenCodeAgent := ""
 		if worker != nil {
 			workerOpenCodeAgent = worker.OpenCodeAgent
@@ -1152,7 +1155,7 @@ func validateConfiguredWorkstationRunners(factoryCfg *interfaces.FactoryConfig, 
 			continue
 		}
 		if err := validateResolvedRunnerSelection(selection, preflight); err != nil {
-			return fmt.Errorf("workstations[%d](%s).runner: %w", i, workstation.Name, err)
+			return fmt.Errorf("workstations[%d](%s).modelProvider: %w", i, workstation.Name, err)
 		}
 	}
 	return nil
@@ -1168,7 +1171,7 @@ func runnerSelectionRequiresValidation(selection interfaces.ResolvedRunnerSelect
 
 func validateResolvedRunnerSelection(selection interfaces.ResolvedRunnerSelection, preflight runnerSelectionPreflight) error {
 	if _, ok := interfaces.BuiltInRunnerMetadata(selection.RunnerID); !ok {
-		return fmt.Errorf("unknown runner %q", selection.RunnerID)
+		return fmt.Errorf("unknown modelProvider %q", selection.RunnerID)
 	}
 	if status, ok := workers.BuiltInRunnerStatus(selection.RunnerID); ok && !status.Available {
 		return fmt.Errorf("%s", status.UnavailableReason)

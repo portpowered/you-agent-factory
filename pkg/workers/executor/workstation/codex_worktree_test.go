@@ -57,7 +57,7 @@ func TestWorkstationExecutor_CodexWorktreePreparation_SetsMaterializedWorkingDir
 			"process": {
 				Type:           interfaces.WorkstationTypeModel,
 				WorkerTypeName: "codex-worker",
-				Runner:         interfaces.RunnerIDCodex,
+				ModelProvider:  string(interfaces.ModelProviderCodex),
 				PromptTemplate: "Process {{ (index .Inputs 0).WorkID }}",
 				Worktree:       `{{ index (index .Inputs 0).Tags "branch" }}`,
 			},
@@ -181,7 +181,7 @@ func TestWorkstationExecutor_CodexWorktreePreparation_SkipsWhenWorkingDirectoryA
 			"process": {
 				Type:             interfaces.WorkstationTypeModel,
 				WorkerTypeName:   "codex-worker",
-				Runner:           interfaces.RunnerIDCodex,
+				ModelProvider:    string(interfaces.ModelProviderCodex),
 				PromptTemplate:   "Process {{ (index .Inputs 0).WorkID }}",
 				WorkingDirectory: `/repo/{{ index (index .Inputs 0).Tags "branch" }}`,
 				Worktree:         `{{ index (index .Inputs 0).Tags "branch" }}`,

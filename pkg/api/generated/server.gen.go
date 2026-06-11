@@ -4936,6 +4936,9 @@ type Workstation struct {
 	// Limits Retry and execution ceilings applied to one workstation definition.
 	Limits *WorkstationLimits `json:"limits,omitempty"`
 
+	// ModelProvider Canonical execution-family selector for factory-level defaults. DEFAULT defers to worker modelProvider and then the operator default.
+	ModelProvider *ModelProviderSelection `json:"modelProvider,omitempty"`
+
 	// Name Customer-authored workstation name used by guards, diagnostics, and authored references.
 	Name string `json:"name"`
 
@@ -4968,9 +4971,6 @@ type Workstation struct {
 
 	// Resources Resource capacity this workstation consumes while one dispatch is in flight.
 	Resources *[]ResourceRequirement `json:"resources,omitempty"`
-
-	// Runner Stable built-in runner identifiers supported by factory and workstation runner selection.
-	Runner *RunnerID `json:"runner,omitempty"`
 
 	// StopWords Stop words authored on the topology entry for model-oriented dispatches.
 	StopWords *[]string `json:"stopWords,omitempty"`

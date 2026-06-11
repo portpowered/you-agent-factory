@@ -301,7 +301,6 @@ You are a helpful assistant.
 	if err := os.WriteFile(filepath.Join(workstationDir, "AGENTS.md"), []byte(`---
 type: MODEL_WORKSTATION
 worker: worker-a
-runner: mystery-runner
 ---
 Review.
 `), 0o644); err != nil {
@@ -309,7 +308,10 @@ Review.
 	}
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
-		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:          "review",
+			ModelProvider: "mystery-runner",
+		}},
 		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
 	},
 		map[string]*interfaces.WorkerConfig{
@@ -321,8 +323,8 @@ Review.
 	)
 
 	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil, nil, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), `unknown runner "mystery-runner"`) {
-		t.Fatalf("loadWorkersFromConfig error = %v, want unknown runner", err)
+	if err == nil || !strings.Contains(err.Error(), `unknown modelProvider "mystery-runner"`) {
+		t.Fatalf("loadWorkersFromConfig error = %v, want unknown workstation modelProvider", err)
 	}
 }
 
@@ -500,14 +502,14 @@ func TestRunnerSelectionValidation_RejectsUnknownExplicitWorkstationRunner(t *te
 			"review": {
 				Name:           "review",
 				WorkerTypeName: "worker-a",
-				Runner:         "mystery-runner",
+				ModelProvider:  "mystery-runner",
 			},
 		},
 	}
 
 	err := validateConfiguredWorkstationRunners(cfg, "", runtimeCfg, runnerSelectionPreflight{skipCommandAvailability: true})
-	if err == nil || !strings.Contains(err.Error(), `unknown runner "mystery-runner"`) {
-		t.Fatalf("validateConfiguredWorkstationRunners error = %v, want unknown workstation runner", err)
+	if err == nil || !strings.Contains(err.Error(), `unknown modelProvider "mystery-runner"`) {
+		t.Fatalf("validateConfiguredWorkstationRunners error = %v, want unknown workstation modelProvider", err)
 	}
 }
 

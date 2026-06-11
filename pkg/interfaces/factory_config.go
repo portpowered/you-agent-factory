@@ -353,7 +353,7 @@ type FactoryWorkstationConfig struct {
 	Operation             string                      `json:"operation,omitempty" yaml:"operation,omitempty"`
 	OperationBindings     []ModelOperationBinding     `json:"operationBindings,omitempty" yaml:"operationBindings,omitempty"`
 	WorkerTypeName        string                      `json:"worker" yaml:"worker,omitempty"`
-	Runner                string                      `json:"runner,omitempty" yaml:"runner,omitempty"`
+	ModelProvider         string                      `json:"modelProvider,omitempty" yaml:"modelProvider,omitempty"`
 	OpenCodeAgent         string                      `json:"openCodeAgent,omitempty" yaml:"openCodeAgent,omitempty"`
 	PromptFile            string                      `json:"prompt_file,omitempty" yaml:"promptFile,omitempty"`
 	OutputSchema          string                      `json:"output_schema,omitempty" yaml:"outputSchema,omitempty"`

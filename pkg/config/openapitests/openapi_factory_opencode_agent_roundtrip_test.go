@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	. "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestFactoryConfigFromOpenAPIJSON_OpenCodeAgentRoundTripsWorkerAndWorkstation(t *testing.T) {
@@ -21,7 +22,7 @@ func TestFactoryConfigFromOpenAPIJSON_OpenCodeAgentRoundTripsWorkerAndWorkstatio
 			"name":"execute-story",
 			"worker":"executor",
 			"type":"MODEL_WORKSTATION",
-			"runner":"opencode",
+			"modelProvider":"OPENCODE",
 			"openCodeAgent":"implementer",
 			"inputs":[{"workType":"story","state":"init"}],
 			"outputs":[{"workType":"story","state":"complete"}]
@@ -38,6 +39,9 @@ func TestFactoryConfigFromOpenAPIJSON_OpenCodeAgentRoundTripsWorkerAndWorkstatio
 	if cfg.Workstations[0].OpenCodeAgent != "implementer" {
 		t.Fatalf("workstation openCodeAgent = %q, want implementer", cfg.Workstations[0].OpenCodeAgent)
 	}
+	if got := cfg.Workstations[0].ModelProvider; got != string(interfaces.ModelProviderOpenCode) {
+		t.Fatalf("workstation modelProvider = %q, want %q", got, interfaces.ModelProviderOpenCode)
+	}
 
 	publicWorker := WorkerConfigToOpenAPI(cfg.Workers[0])
 	if publicWorker.OpenCodeAgent == nil || *publicWorker.OpenCodeAgent != "reviewer" {
@@ -46,6 +50,9 @@ func TestFactoryConfigFromOpenAPIJSON_OpenCodeAgentRoundTripsWorkerAndWorkstatio
 	publicWorkstation := WorkstationConfigToOpenAPI(cfg.Workstations[0])
 	if publicWorkstation.OpenCodeAgent == nil || *publicWorkstation.OpenCodeAgent != "implementer" {
 		t.Fatalf("projected workstation openCodeAgent = %#v, want implementer", publicWorkstation.OpenCodeAgent)
+	}
+	if publicWorkstation.ModelProvider == nil || *publicWorkstation.ModelProvider != "OPENCODE" {
+		t.Fatalf("projected workstation modelProvider = %#v, want OPENCODE", publicWorkstation.ModelProvider)
 	}
 }
 

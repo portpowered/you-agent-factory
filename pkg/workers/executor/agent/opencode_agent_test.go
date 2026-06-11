@@ -15,7 +15,7 @@ func TestAgentExecutor_ForwardsOpenCodeAgentOnOpenCodeDispatch(t *testing.T) {
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"implement": {
 				Name:          "implement",
-				Runner:        interfaces.RunnerIDOpenCode,
+				ModelProvider: string(interfaces.ModelProviderOpenCode),
 				OpenCodeAgent: "implementer",
 			},
 		},

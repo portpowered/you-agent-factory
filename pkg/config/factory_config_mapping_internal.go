@@ -508,9 +508,14 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 	if err != nil {
 		return interfaces.FactoryWorkstationConfig{}, err
 	}
+	modelProvider := ""
+	if workstation.ModelProvider != nil {
+		modelProvider = internalFactoryModelProviderSelectionFromPublic(workstation.ModelProvider)
+	}
 	cfg := interfaces.FactoryWorkstationConfig{
 		ID:                    stringValue(workstation.Id),
 		Name:                  workstation.Name,
+		ModelProvider:         modelProvider,
 		WorkerTypeName:        workstation.Worker,
 		Operation:             stringValue(workstation.Operation),
 		OperationBindings:     workstationOperationBindingsInternalFromAPI(workstation.OperationBindings),

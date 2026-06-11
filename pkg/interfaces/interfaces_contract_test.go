@@ -646,7 +646,7 @@ func TestResolveRunnerSelection(t *testing.T) {
 
 	tests := []struct {
 		name              string
-		workstationRunner string
+		workstationModelProvider string
 		factoryRunner     string
 		modelProvider     string
 		wantRunner        string
@@ -654,7 +654,7 @@ func TestResolveRunnerSelection(t *testing.T) {
 	}{
 		{
 			name:              "WorkstationWins",
-			workstationRunner: "  GEMINI ",
+			workstationModelProvider: "  GEMINI ",
 			factoryRunner:     RunnerIDCodex,
 			modelProvider:     RunnerIDCodex,
 			wantRunner:        RunnerIDGemini,
@@ -685,7 +685,7 @@ func TestResolveRunnerSelection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := ResolveRunnerSelection(tt.workstationRunner, tt.factoryRunner, tt.modelProvider)
+			got := ResolveRunnerSelection(tt.workstationModelProvider, tt.factoryRunner, tt.modelProvider)
 			if got.RunnerID != tt.wantRunner || got.Source != tt.wantSource {
 				t.Fatalf("ResolveRunnerSelection(...) = %#v, want runner=%q source=%q", got, tt.wantRunner, tt.wantSource)
 			}

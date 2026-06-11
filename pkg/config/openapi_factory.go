@@ -481,7 +481,7 @@ func normalizeFactoryWorkstationEntries(root map[string]any) error {
 		}); err != nil {
 			return err
 		}
-		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "runner", fmt.Sprintf("workstations[%d].runner", i), interfaces.StrictPublicFactoryRunnerID); err != nil {
+		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "modelProvider", fmt.Sprintf("workstations[%d].modelProvider", i), interfaces.StrictPublicFactoryModelProviderSelection); err != nil {
 			return err
 		}
 		if err := normalizeFactoryEnumObjectFieldWithNormalizer(workstation, "type", fmt.Sprintf("workstations[%d].type", i), interfaces.StrictPublicFactoryWorkstationType); err != nil {
@@ -855,7 +855,17 @@ func rejectRetiredWorkstationBoundaryAliases(root map[string]any) error {
 	return nil
 }
 
+func rejectRetiredWorkstationRunnerField(workstation map[string]any, path string) error {
+	if _, ok := workstation["runner"]; ok {
+		return fmt.Errorf("%s.runner is retired; use %s.modelProvider", path, path)
+	}
+	return nil
+}
+
 func rejectRetiredWorkstationBoundaryObject(workstation map[string]any, path string, includeDefinition bool) error {
+	if err := rejectRetiredWorkstationRunnerField(workstation, path); err != nil {
+		return err
+	}
 	if err := rejectRetiredBoundaryFields(workstation, path, retiredWorkstationBoundaryFields); err != nil {
 		return err
 	}
