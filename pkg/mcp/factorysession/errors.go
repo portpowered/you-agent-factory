@@ -2,15 +2,22 @@ package factorysession
 
 import (
 	"errors"
+	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 )
 
 const (
-	errorCodeBadRequest        = "BAD_REQUEST"
-	errorCodeValidateInvalid   = "factory_session.validate.invalid"
-	errorMessageValidateInvalid = "factory source validation found blocking issues"
+	errorCodeBadRequest                 = "BAD_REQUEST"
+	errorCodeValidateInvalid            = "factory_session.validate.invalid"
+	errorMessageValidateInvalid         = "factory source validation found blocking issues"
+	errorCodeServiceUnavailable         = "factory_session.service.unavailable"
+	errorCodeStartUnknownScenario       = "factory_session.start.unknown_scenario"
+	errorCodeStartRequestIDConflict     = "factory_session.start.request_id_conflict"
+	errorMessageServiceUnavailable      = "factory session execution service is unavailable"
+	errorMessageStartRequestIDConflict  = "execution request id was reused with a different start tuple"
 )
 
 func requestValidationErrorEnvelope(err error) ToolErrorEnvelope {
@@ -55,6 +62,40 @@ func validationErrorEnvelopeFromPreview(preview factoryapi.FactoryPreviewResult)
 		Retryable: false,
 		Details:   validationDetailsFromPreview(preview),
 	}
+}
+
+func unavailableServiceErrorEnvelope() ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeServiceUnavailable,
+		Message:   errorMessageServiceUnavailable,
+		Retryable: false,
+	}
+}
+
+func executionErrorEnvelope(err error) ToolErrorEnvelope {
+	var validationErr *factorysessionexecution.ValidationError
+	if errors.As(err, &validationErr) {
+		code := errorCodeBadRequest
+		if validationErr.Field == "requestId" && strings.Contains(validationErr.Message, "unknown fake scenario") {
+			code = errorCodeStartUnknownScenario
+		}
+		return ToolErrorEnvelope{
+			Code:      code,
+			Message:   validationErr.Error(),
+			Retryable: false,
+			Details: map[string]any{
+				"field": validationErr.Field,
+			},
+		}
+	}
+	if errors.Is(err, factorysessionexecution.ErrExecutionRequestIDConflict) {
+		return ToolErrorEnvelope{
+			Code:      errorCodeStartRequestIDConflict,
+			Message:   errorMessageStartRequestIDConflict,
+			Retryable: false,
+		}
+	}
+	return requestValidationErrorEnvelope(err)
 }
 
 func validationDetailsFromPreview(preview factoryapi.FactoryPreviewResult) map[string]any {
