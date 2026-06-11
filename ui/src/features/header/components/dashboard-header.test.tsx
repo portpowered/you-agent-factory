@@ -532,6 +532,54 @@ describe("DashboardHeader", () => {
       screen.queryByRole("menu", { name: messages.paletteLabel }),
     ).toBeNull();
   });
+
+  it("opens, navigates, and dismisses the palette menu with keyboard and pointer checkpoints", async () => {
+    seedDashboardHeaderSnapshot();
+    window.sessionStorage.clear();
+
+    renderWithQueryClient(
+      <AppColorPaletteProvider>
+        <DashboardHeader />
+      </AppColorPaletteProvider>,
+    );
+
+    const messages = getHeaderControlsMessages("en");
+    const paletteButton = screen.getByRole("button", {
+      name: messages.paletteMenuButtonLabel,
+    });
+
+    fireEvent.keyDown(paletteButton, { key: "ArrowDown" });
+
+    const paletteMenu = screen.getByRole("menu", {
+      name: messages.paletteLabel,
+    });
+    const menuItems = screen.getAllByRole("menuitemradio");
+    expect(document.activeElement).toBe(menuItems[0]);
+
+    fireEvent.keyDown(paletteMenu, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(menuItems[1]);
+
+    fireEvent.keyDown(paletteMenu, { key: "Escape" });
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("menu", { name: messages.paletteLabel }),
+      ).toBeNull();
+    });
+    expect(document.activeElement).toBe(paletteButton);
+
+    fireEvent.click(paletteButton);
+    expect(
+      screen.getByRole("menu", { name: messages.paletteLabel }),
+    ).toBeTruthy();
+
+    fireEvent.pointerDown(document.body);
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("menu", { name: messages.paletteLabel }),
+      ).toBeNull();
+    });
+    expect(document.activeElement).toBe(paletteButton);
+  });
 });
 
 function renderWithQueryClient(view: React.ReactElement) {
