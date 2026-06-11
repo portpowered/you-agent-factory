@@ -21,6 +21,7 @@ import (
 	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	sessioncli "github.com/portpowered/infinite-you/pkg/cli/session"
+	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/cli/sessionexecution"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
 	workflowcli "github.com/portpowered/infinite-you/pkg/cli/workflow"
@@ -865,13 +866,19 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 
 func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *cobra.Command {
 	cfg := workflowcli.PreviewConfig{Dir: defaultcmd.FactoryDir}
+	runCfg := sessionexecutioncli.RunConfig{
+		StartConfig: sessionexecutioncli.StartConfig{
+			Mode: sessionexecutioncli.ExecutionModeSync,
+		},
+	}
 
 	cmd := &cobra.Command{
 		Use:   "workflow",
-		Short: "Validate and preview JavaScript workflow sources",
-		Long: "Validate and preview JavaScript or TypeScript workflow sources using the shared workflow preview contract.\n\n" +
+		Short: "Validate, preview, and run JavaScript workflow sources",
+		Long: "Validate, preview, and run JavaScript or TypeScript workflow sources using the shared workflow contracts.\n\n" +
 			"Subcommands:\n" +
-			"  preview  resolve workflow source, validate it without execution, and project policy and result constraints",
+			"  preview  resolve workflow source, validate it without execution, and project policy and result constraints\n" +
+			"  run      start one durable Factory Session synchronously through the mock-backed execution loop",
 	}
 	previewCmd := &cobra.Command{
 		Use:   "preview",
@@ -892,6 +899,39 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *co
 	previewCmd.Flags().StringVar(&cfg.SourceValue, "value", "", "workflow name, file ref, or factory id")
 	previewCmd.Flags().StringVar(&cfg.InlineSource, "inline", "", "inline workflow source text")
 	previewCmd.Flags().StringVar(&cfg.ArtifactRoot, "artifact-root", "", "optional absolute artifact root")
-	cmd.AddCommand(previewCmd)
+	var waitTimeoutMillis int64
+	runCmd := &cobra.Command{
+		Use:   "run",
+		Short: "Run one durable Factory Session synchronously",
+		Long: "Start one durable Factory Session synchronously through the shared execution request contract.\n\n" +
+			"The mock-backed provider path resolves fixture-backed request ids to deterministic session, " +
+			"status, result, and inspection-link outcomes. Use global --json to emit FactorySessionSyncExecutionResponse " +
+			"on stdout.",
+		Example: "  # Run the published sync-success fixture by factory id and request id.\n" +
+			"  " + cliBinaryName + " workflow run --request-id req-petri-success-001 --factory customer-support-triage\n\n" +
+			"  # Emit deterministic JSON for automation.\n" +
+			"  " + cliBinaryName + " --json workflow run --request-id req-petri-success-001 --factory customer-support-triage",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			runCfg.JSON = globals.json
+			runCfg.Output = cmd.OutOrStdout()
+			runCfg.StartConfig.PositionalArgs = args
+			runCfg.StartConfig.Stdin = cmd.InOrStdin()
+			if cmd.Flags().Changed("wait-timeout-millis") {
+				runCfg.StartConfig.WaitTimeoutMillis = &waitTimeoutMillis
+			}
+			return sessionexecutioncli.RunSync(cmd.Context(), runCfg)
+		},
+	}
+	runCmd.Flags().StringVar(&runCfg.StartConfig.RequestID, "request-id", "", "durable execution request id and idempotency key")
+	runCmd.Flags().StringVar(&runCfg.StartConfig.FactoryID, "factory", "", "factory id source selector")
+	runCmd.Flags().StringVar(&runCfg.StartConfig.WorkflowName, "workflow", "", "workflow name source selector")
+	runCmd.Flags().StringVar(&runCfg.StartConfig.WorkflowFile, "workflow-file", "", "workflow file source selector")
+	runCmd.Flags().StringVar(&runCfg.StartConfig.ArgsJSON, "args", "", "execution args JSON object")
+	runCmd.Flags().StringVar(&runCfg.StartConfig.PolicyJSON, "policy", "", "requested policy JSON object")
+	runCmd.Flags().StringVar(&runCfg.StartConfig.PolicyHash, "policy-hash", "", "requested policy hash selector")
+	runCmd.Flags().Int64Var(&waitTimeoutMillis, "wait-timeout-millis", 0, "sync wait timeout in milliseconds")
+	runCmd.Flags().BoolVar(&runCfg.StartConfig.CancelOnTimeout, "cancel-on-timeout", false, "request session cancel when sync wait times out")
+	runCmd.Flags().StringVar(&runCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed runs")
+	cmd.AddCommand(previewCmd, runCmd)
 	return cmd
 }

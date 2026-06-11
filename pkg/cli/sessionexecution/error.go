@@ -12,12 +12,13 @@ import (
 )
 
 const (
-	ErrorCodeUnsupportedMode = "SESSION_EXECUTION_UNSUPPORTED_MODE"
-	ErrorCodeSourceConflict  = "SESSION_EXECUTION_SOURCE_CONFLICT"
-	ErrorCodeMissingSource   = "SESSION_EXECUTION_MISSING_SOURCE"
-	ErrorCodeInvalidArgs     = "SESSION_EXECUTION_INVALID_ARGS"
-	ErrorCodeInvalidPolicy   = "SESSION_EXECUTION_INVALID_POLICY"
-	ErrorCodeValidation      = "SESSION_EXECUTION_VALIDATION_FAILED"
+	ErrorCodeUnsupportedMode   = "SESSION_EXECUTION_UNSUPPORTED_MODE"
+	ErrorCodeSourceConflict    = "SESSION_EXECUTION_SOURCE_CONFLICT"
+	ErrorCodeMissingSource     = "SESSION_EXECUTION_MISSING_SOURCE"
+	ErrorCodeInvalidArgs       = "SESSION_EXECUTION_INVALID_ARGS"
+	ErrorCodeInvalidPolicy     = "SESSION_EXECUTION_INVALID_POLICY"
+	ErrorCodeValidation        = "SESSION_EXECUTION_VALIDATION_FAILED"
+	ErrorCodeRequestIDConflict = "EXECUTION_REQUEST_ID_CONFLICT"
 )
 
 // ExecutionError is the stable CLI durable session execution failure contract.
@@ -89,6 +90,13 @@ func asExecutionError(err error) *ExecutionError {
 			Code:    ErrorCodeValidation,
 			Message: validationErr.Message,
 			Field:   validationErr.Field,
+		}
+	}
+	if errors.Is(err, factorysessionexecution.ErrExecutionRequestIDConflict) {
+		return &ExecutionError{
+			Code:    ErrorCodeRequestIDConflict,
+			Message: "execution request id was reused with a different normalized request",
+			Field:   "requestId",
 		}
 	}
 	return nil

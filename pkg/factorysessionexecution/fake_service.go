@@ -23,6 +23,7 @@ type FakeService struct {
 type startReplayRecord struct {
 	sessionID string
 	tupleHash string
+	syncStart *SyncStartResult
 }
 
 type controlReplayRecord struct {
@@ -147,6 +148,9 @@ func (s *FakeService) StartSync(ctx context.Context, req StartRequest) (SyncStar
 		if !ok {
 			return SyncStartResult{}, ErrSessionNotFound
 		}
+		if replay.syncStart != nil {
+			return *replay.syncStart, nil
+		}
 		return s.syncStartFromState(state), nil
 	}
 
@@ -156,11 +160,14 @@ func (s *FakeService) StartSync(ctx context.Context, req StartRequest) (SyncStar
 	}
 	state := fakeSessionStateFromScenario(scenario)
 	s.sessions[state.session.SessionID] = state
+	result := s.syncStartFromScenario(scenario, state)
+	cloned := cloneSyncStartResult(result)
 	s.startReplay[normalized.RequestID] = startReplayRecord{
 		sessionID: state.session.SessionID,
 		tupleHash: tupleHash,
+		syncStart: &cloned,
 	}
-	return s.syncStartFromScenario(scenario, state), nil
+	return result, nil
 }
 
 func (s *FakeService) GetSession(ctx context.Context, sessionID string) (SessionReadResult, error) {
@@ -795,6 +802,12 @@ func cloneResultAvailability(availability *ResultAvailabilityDetail) *ResultAvai
 	}
 	cloned := *availability
 	return &cloned
+}
+
+func cloneSyncStartResult(result SyncStartResult) SyncStartResult {
+	cloned := result
+	cloned.Result = cloneRawJSON(result.Result)
+	return cloned
 }
 
 func cloneRawJSON(raw json.RawMessage) json.RawMessage {
