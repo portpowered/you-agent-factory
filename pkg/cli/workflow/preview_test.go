@@ -27,10 +27,12 @@ func TestPreview_ValidWorkflowNameHumanOutput(t *testing.T) {
 
 	var output bytes.Buffer
 	err := workflow.Preview(workflow.PreviewConfig{
-		Dir:         projectRoot,
-		SourceKind:  string(workflowsource.KindWorkflowName),
-		SourceValue: "review",
-		Output:      &output,
+		SourceConfig: workflow.SourceConfig{
+			Dir:         projectRoot,
+			SourceKind:  string(workflowsource.KindWorkflowName),
+			SourceValue: "review",
+		},
+		Output: &output,
 	})
 	if err != nil {
 		t.Fatalf("Preview: %v", err)
@@ -62,11 +64,13 @@ func TestPreview_JSONOutputMatchesCanonicalFactoryPreview(t *testing.T) {
 
 	var output bytes.Buffer
 	if err := workflow.Preview(workflow.PreviewConfig{
-		Dir:         projectRoot,
-		SourceKind:  string(workflowsource.KindWorkflowName),
-		SourceValue: "review",
-		JSON:        true,
-		Output:      &output,
+		SourceConfig: workflow.SourceConfig{
+			Dir:         projectRoot,
+			SourceKind:  string(workflowsource.KindWorkflowName),
+			SourceValue: "review",
+		},
+		JSON:   true,
+		Output: &output,
 	}); err != nil {
 		t.Fatalf("Preview: %v", err)
 	}
@@ -91,10 +95,12 @@ func TestPreview_InvalidWorkflowReportsDiagnostics(t *testing.T) {
 
 	var output bytes.Buffer
 	err := workflow.Preview(workflow.PreviewConfig{
-		Dir:         projectRoot,
-		SourceKind:  string(workflowsource.KindWorkflowName),
-		SourceValue: "broken",
-		Output:      &output,
+		SourceConfig: workflow.SourceConfig{
+			Dir:         projectRoot,
+			SourceKind:  string(workflowsource.KindWorkflowName),
+			SourceValue: "broken",
+		},
+		Output: &output,
 	})
 	if err == nil {
 		t.Fatal("expected preview failure")
