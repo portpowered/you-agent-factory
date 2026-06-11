@@ -8,9 +8,70 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this consumer test keeps fake-service projection assertions together across apisurface mappers.
+func TestFakeServiceConsumer_StartAsync_ProjectsCoreScenarioOutcomes(t *testing.T) {
+	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+	}
+
+	cases := []struct {
+		name       string
+		scenarioID string
+		requestID  string
+		sessionID  string
+		status     factoryapi.FactorySessionDurableLifecycleStatus
+	}{
+		{"success", "petri-succeeded-one-dispatch", "", "dur-sess-petri-success-001", factoryapi.FactorySessionDurableLifecycleStatusSucceeded},
+		{"running", "petri-running-one-dispatch", "", "dur-sess-petri-run-001", factoryapi.FactorySessionDurableLifecycleStatusRunning},
+		{"failed-with-partial", "javascript-failed-with-partial", "", "dur-sess-js-failed-partial-001", factoryapi.FactorySessionDurableLifecycleStatusFailed},
+		{"interrupted", "", "req-js-interrupted-001", "dur-sess-js-interrupted-001", factoryapi.FactorySessionDurableLifecycleStatusInterrupted},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var request factorysessionexecution.StartRequest
+			if tc.scenarioID != "" {
+				scenario := findScenario(t, loadDurableFixtureCatalog(t), tc.scenarioID)
+				executionRequest, ok := scenario["executionRequest"].(map[string]any)
+				if !ok {
+					t.Fatal("missing executionRequest fixture")
+				}
+				var err error
+				request, err = factorysession.StartRequestFromAPI(decodeExecutionRequest(t, executionRequest))
+				if err != nil {
+					t.Fatalf("StartRequestFromAPI: %v", err)
+				}
+			} else {
+				request = factorysessionexecution.StartRequest{
+					RequestID: tc.requestID,
+					Source: factorysessionexecution.Source{
+						Kind:      workflowsource.KindFactoryID,
+						FactoryID: "customer-support-triage",
+					},
+				}
+			}
+			started, err := service.StartAsync(context.Background(), request)
+			if err != nil {
+				t.Fatalf("StartAsync: %v", err)
+			}
+			mapped := factorysession.AsyncStartResponseToAPI(started)
+			if mapped.SessionId != tc.sessionID {
+				t.Fatalf("sessionId = %q, want %q", mapped.SessionId, tc.sessionID)
+			}
+			if mapped.Status != tc.status {
+				t.Fatalf("status = %q, want %q", mapped.Status, tc.status)
+			}
+			if mapped.Links.Session == nil || *mapped.Links.Session == "" {
+				t.Fatal("session inspection link missing")
+			}
+		})
+	}
+}
+
 func TestFakeServiceConsumer_ProjectsFixtureThroughApisurfaceMappers(t *testing.T) {
 	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)

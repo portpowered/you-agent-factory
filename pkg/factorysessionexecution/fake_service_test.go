@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -80,6 +81,80 @@ func TestFakeService_StartAsync_ProjectsFixtureScenarios(t *testing.T) {
 			}
 			if result.ResultStatus != tc.result {
 				t.Fatalf("resultStatus = %q, want %q", result.ResultStatus, tc.result)
+			}
+		})
+	}
+}
+
+func TestFakeService_StartAsync_UnknownRequestIDReturnsValidationError(t *testing.T) {
+	service := newContractFakeService(t)
+	_, err := service.StartAsync(context.Background(), StartRequest{
+		RequestID: "req-unknown-scenario",
+		Source:    Source{Kind: workflowsource.KindFactoryID, FactoryID: "customer-support-triage"},
+	})
+	if err == nil {
+		t.Fatal("error = nil, want validation error for unknown scenario")
+	}
+	var validationErr *ValidationError
+	if !errors.As(err, &validationErr) || validationErr.Field != "requestId" {
+		t.Fatalf("error = %v, want requestId validation error", err)
+	}
+	if !strings.Contains(validationErr.Message, "req-unknown-scenario") {
+		t.Fatalf("message = %q, want actionable unknown scenario detail", validationErr.Message)
+	}
+}
+
+func TestFakeService_StartAsync_RepeatedStartReturnsStableOutcome(t *testing.T) {
+	service := newContractFakeService(t)
+	cases := []struct {
+		requestID string
+		sessionID string
+	}{
+		{"req-petri-success-001", "dur-sess-petri-success-001"},
+		{"req-petri-run-001", "dur-sess-petri-run-001"},
+		{"req-js-failed-partial-001", "dur-sess-js-failed-partial-001"},
+		{"req-js-interrupted-001", "dur-sess-js-interrupted-001"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.requestID, func(t *testing.T) {
+			req := StartRequest{
+				RequestID: tc.requestID,
+				Source:    Source{Kind: workflowsource.KindFactoryID, FactoryID: "customer-support-triage"},
+			}
+			first, err := service.StartAsync(context.Background(), req)
+			if err != nil {
+				t.Fatalf("first StartAsync: %v", err)
+			}
+			second, err := service.StartAsync(context.Background(), req)
+			if err != nil {
+				t.Fatalf("second StartAsync: %v", err)
+			}
+			if second.SessionID != first.SessionID || second.SessionID != tc.sessionID {
+				t.Fatalf("sessionId = %q, want stable %q", second.SessionID, tc.sessionID)
+			}
+			if second.Status != first.Status {
+				t.Fatalf("status = %q, want stable %q", second.Status, first.Status)
+			}
+			if second.Links != first.Links {
+				t.Fatalf("links changed on replay: first=%#v second=%#v", first.Links, second.Links)
+			}
+			if second.Links.Session == "" || second.Links.Results == "" {
+				t.Fatalf("inspection links missing session/results: %#v", second.Links)
+			}
+
+			firstRead, err := service.GetSession(context.Background(), tc.sessionID)
+			if err != nil {
+				t.Fatalf("first GetSession: %v", err)
+			}
+			secondRead, err := service.GetSession(context.Background(), tc.sessionID)
+			if err != nil {
+				t.Fatalf("second GetSession: %v", err)
+			}
+			if secondRead.Status != firstRead.Status || secondRead.Phase != firstRead.Phase {
+				t.Fatalf("session read changed on replay: first=%#v second=%#v", firstRead, secondRead)
+			}
+			if secondRead.Links != firstRead.Links {
+				t.Fatalf("session read links changed on replay: first=%#v second=%#v", firstRead.Links, secondRead.Links)
 			}
 		})
 	}
@@ -414,6 +489,45 @@ func TestFakeService_StartAsync_ConcurrentIdempotentStarts(t *testing.T) {
 		if results[i].SessionID != results[0].SessionID {
 			t.Fatalf("sessionId[%d] = %q, want %q", i, results[i].SessionID, results[0].SessionID)
 		}
+	}
+
+	sessionID := results[0].SessionID
+	all, err := service.ListSessions(context.Background(), ListSessionsRequest{Scope: SessionListScopeAll})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	liveCount := 0
+	for _, session := range all.LiveSessions {
+		if session.ID == sessionID {
+			liveCount++
+		}
+	}
+	if liveCount != 1 {
+		t.Fatalf("live session rows for %q = %d, want 1", sessionID, liveCount)
+	}
+
+	dispatches, err := service.ListDispatches(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches: %v", err)
+	}
+	if len(dispatches.Dispatches) != 1 || dispatches.Dispatches[0].ID != "disp-petri-001" {
+		t.Fatalf("dispatches = %#v, want one stable dispatch", dispatches.Dispatches)
+	}
+
+	artifacts, err := service.ListArtifacts(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListArtifacts: %v", err)
+	}
+	if len(artifacts.Artifacts) != 0 {
+		t.Fatalf("artifacts = %#v, want none for running scenario", artifacts.Artifacts)
+	}
+
+	events, err := service.ReadEvents(context.Background(), sessionID, EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
+	}
+	if len(events.Events) != 2 {
+		t.Fatalf("events = %d, want 2 for running scenario", len(events.Events))
 	}
 }
 

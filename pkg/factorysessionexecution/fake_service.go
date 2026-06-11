@@ -632,7 +632,7 @@ func findDispatchSummary(dispatches []DispatchSummary, dispatchID string) (Dispa
 	}
 	return DispatchSummary{}, false
 }
-// mode and includeArtifacts parameters.
+
 func ProjectResultRead(canonical ResultReadResult, session SessionReadResult, artifacts []ArtifactSummary, req ResultRequest) (ResultReadResult, error) {
 	normalized, err := NormalizeResultRequest(req)
 	if err != nil {
