@@ -1,13 +1,48 @@
-package factorysessionexecution
+package fixtures
 
 import (
 	"crypto/sha256"
-	"errors"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
+
+	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+)
+
+type (
+	LifecycleStatus         = fse.LifecycleStatus
+	ResultStatus            = fse.ResultStatus
+	FakeScenario            = fse.FakeScenario
+	ResultReadResult        = fse.ResultReadResult
+	ListDispatchesResult    = fse.ListDispatchesResult
+	DispatchDetail          = fse.DispatchDetail
+	ListArtifactsResult     = fse.ListArtifactsResult
+	ArtifactDetail          = fse.ArtifactDetail
+	EventReadResult         = fse.EventReadResult
+	LifecycleControlResult  = fse.LifecycleControlResult
+	SyncStartResult         = fse.SyncStartResult
+	LifecycleControlKind    = fse.LifecycleControlKind
+	LifecycleControlOutcome = fse.LifecycleControlOutcome
+	ValidationError         = fse.ValidationError
+	ControlError            = fse.ControlError
+)
+
+const (
+	LifecycleStatusFailed                  = fse.LifecycleStatusFailed
+	LifecycleStatusRunning                 = fse.LifecycleStatusRunning
+	LifecycleStatusSucceeded               = fse.LifecycleStatusSucceeded
+	LifecycleStatusPaused                  = fse.LifecycleStatusPaused
+	LifecycleStatusInterrupted             = fse.LifecycleStatusInterrupted
+	ResultStatusUnavailable                = fse.ResultStatusUnavailable
+	ResultStatusPartial                    = fse.ResultStatusPartial
+	ResultStatusFinal                      = fse.ResultStatusFinal
+	ResultStatusNotReady                   = fse.ResultStatusNotReady
+	LifecycleControlOutcomeInvalidState    = fse.LifecycleControlOutcomeInvalidState
+	LifecycleControlOutcomeTerminalSession = fse.LifecycleControlOutcomeTerminalSession
+	LifecycleControlOutcomeConflict        = fse.LifecycleControlOutcomeConflict
 )
 
 // ContractFixtureCatalogRelativePath is the repository-relative path to the durable
@@ -17,16 +52,16 @@ const ContractFixtureCatalogRelativePath = "pkg/api/testdata/durable-session-con
 // Published fixture scenario IDs are stable identifiers downstream CLI, MCP, API,
 // and website cells can import for deterministic Factory Session verification.
 const (
-	FixtureScenarioValidationFailure      = "missing-source"
-	FixtureScenarioAsyncRunning           = "javascript-running-n-dispatch"
-	FixtureScenarioSyncSuccess            = "petri-succeeded-one-dispatch"
-	FixtureScenarioSyncTimeout            = "javascript-sync-timed-out"
-	FixtureScenarioFailedRecoverable      = "javascript-interrupted-recoverable"
-	FixtureScenarioDispatchInspection     = "petri-succeeded-one-dispatch"
-	FixtureScenarioArtifactInspection     = "javascript-paused-two-dispatch"
-	FixtureScenarioEventReconnect         = "javascript-running-n-dispatch"
-	FixtureScenarioLifecycleControl       = "javascript-paused-two-dispatch"
-	FixtureScenarioIdempotentReplay       = "idempotent-replay"
+	FixtureScenarioValidationFailure  = "missing-source"
+	FixtureScenarioAsyncRunning       = "javascript-running-n-dispatch"
+	FixtureScenarioSyncSuccess        = "petri-succeeded-one-dispatch"
+	FixtureScenarioSyncTimeout        = "javascript-sync-timed-out"
+	FixtureScenarioFailedRecoverable  = "javascript-interrupted-recoverable"
+	FixtureScenarioDispatchInspection = "petri-succeeded-one-dispatch"
+	FixtureScenarioArtifactInspection = "javascript-paused-two-dispatch"
+	FixtureScenarioEventReconnect     = "javascript-running-n-dispatch"
+	FixtureScenarioLifecycleControl   = "javascript-paused-two-dispatch"
+	FixtureScenarioIdempotentReplay   = "idempotent-replay"
 )
 
 // FixtureScenarioPurpose names one reusable provider-fixture outcome category.
@@ -47,13 +82,13 @@ const (
 // PublishedFixtureScenario documents one canonical contract-backed scenario identity
 // for downstream reuse.
 type PublishedFixtureScenario struct {
-	Purpose        FixtureScenarioPurpose
-	ScenarioID     string
-	RequestID      string
-	SessionID      string
+	Purpose         FixtureScenarioPurpose
+	ScenarioID      string
+	RequestID       string
+	SessionID       string
 	LifecycleStatus LifecycleStatus
-	ResultStatus   ResultStatus
-	ProjectionHash string
+	ResultStatus    ResultStatus
+	ProjectionHash  string
 }
 
 // PublishedFixtureScenarios is the stable catalog of reusable Factory Session fixture
@@ -149,7 +184,7 @@ type FixtureScenarioIdentity struct {
 // LoadFixtureScenarioIdentities loads the contract fixture catalog and returns one
 // identity bundle per scenario keyed by scenario ID.
 func LoadFixtureScenarioIdentities(path string) (map[string]FixtureScenarioIdentity, error) {
-	scenarios, err := LoadFakeScenariosFromContractFixtures(path)
+	scenarios, err := fse.LoadFakeScenariosFromContractFixtures(path)
 	if err != nil {
 		return nil, err
 	}
@@ -581,15 +616,15 @@ func TypedFailureIdentityFromError(err error) (TypedFailureIdentity, bool) {
 	}
 
 	switch {
-	case errors.Is(err, ErrSessionNotFound):
+	case errors.Is(err, fse.ErrSessionNotFound):
 		return TypedFailureIdentity{Kind: TypedFailureSessionNotFound}, true
-	case errors.Is(err, ErrDispatchNotFound):
+	case errors.Is(err, fse.ErrDispatchNotFound):
 		return TypedFailureIdentity{Kind: TypedFailureDispatchNotFound}, true
-	case errors.Is(err, ErrArtifactNotFound):
+	case errors.Is(err, fse.ErrArtifactNotFound):
 		return TypedFailureIdentity{Kind: TypedFailureArtifactNotFound}, true
-	case errors.Is(err, ErrReconnectCursorNotFound):
+	case errors.Is(err, fse.ErrReconnectCursorNotFound):
 		return TypedFailureIdentity{Kind: TypedFailureReconnectCursorNotFound}, true
-	case errors.Is(err, ErrExecutionRequestIDConflict):
+	case errors.Is(err, fse.ErrExecutionRequestIDConflict):
 		return TypedFailureIdentity{Kind: TypedFailureExecutionRequestConflict}, true
 	default:
 		return TypedFailureIdentity{}, false
