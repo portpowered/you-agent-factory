@@ -212,18 +212,24 @@ func FilterEventsAfterReconnect(events []json.RawMessage, req EventReconnectRequ
 	}
 
 	if afterID := strings.TrimSpace(req.AfterEventID); afterID != "" {
-		for index, event := range parsed {
-			if event.ID == afterID {
-				return append([]json.RawMessage(nil), events[index+1:]...), nil
-			}
-		}
-		return nil, fmt.Errorf("%w: after_event_id %q", ErrReconnectCursorNotFound, afterID)
+		return filterEventsAfterEventID(events, parsed, afterID)
 	}
-
 	if req.AfterSequence == nil {
 		return append([]json.RawMessage(nil), events...), nil
 	}
-	ackSequence := *req.AfterSequence
+	return filterEventsAfterSequence(events, parsed, *req.AfterSequence, sessionID)
+}
+
+func filterEventsAfterEventID(events []json.RawMessage, parsed []parsedCanonicalEvent, afterID string) ([]json.RawMessage, error) {
+	for index, event := range parsed {
+		if event.ID == afterID {
+			return append([]json.RawMessage(nil), events[index+1:]...), nil
+		}
+	}
+	return nil, fmt.Errorf("%w: after_event_id %q", ErrReconnectCursorNotFound, afterID)
+}
+
+func filterEventsAfterSequence(events []json.RawMessage, parsed []parsedCanonicalEvent, ackSequence int, sessionID string) ([]json.RawMessage, error) {
 	if sessionID != "" {
 		for index := len(parsed) - 1; index >= 0; index-- {
 			event := parsed[index]

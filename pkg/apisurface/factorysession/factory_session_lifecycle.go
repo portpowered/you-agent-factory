@@ -62,6 +62,22 @@ func SessionReadResponseToAPI(result factorysessionexecution.SessionReadResult) 
 		OrchestratorKind: interfaces.GeneratedPublicFactoryOrchestratorKind(result.OrchestratorKind),
 		ResolvedSource:   resolvedSourceToAPI(result.ResolvedSource),
 	}
+	applyOptionalSessionReadResponseFields(&response, result)
+	return response
+}
+
+func applyOptionalSessionReadResponseFields(
+	response *factoryapi.FactorySessionDurableReadModel,
+	result factorysessionexecution.SessionReadResult,
+) {
+	applyOptionalSessionReadPolicyFields(response, result)
+	applyOptionalSessionReadOutcomeFields(response, result)
+}
+
+func applyOptionalSessionReadPolicyFields(
+	response *factoryapi.FactorySessionDurableReadModel,
+	result factorysessionexecution.SessionReadResult,
+) {
 	if dialect := strings.TrimSpace(result.Dialect); dialect != "" {
 		response.Dialect = &dialect
 	}
@@ -91,6 +107,12 @@ func SessionReadResponseToAPI(result factorysessionexecution.SessionReadResult) 
 	}
 	usage := sessionUsageToAPI(result.Usage)
 	response.Usage = &usage
+}
+
+func applyOptionalSessionReadOutcomeFields(
+	response *factoryapi.FactorySessionDurableReadModel,
+	result factorysessionexecution.SessionReadResult,
+) {
 	if summary := resultSummaryToAPI(result.ResultSummary); summary != nil {
 		response.ResultSummary = summary
 	}
@@ -110,7 +132,6 @@ func SessionReadResponseToAPI(result factorysessionexecution.SessionReadResult) 
 	if links := executionLinksToAPI(result.Links); links != nil {
 		response.Links = links
 	}
-	return response
 }
 
 // LifecycleControlResponseToAPI maps one lifecycle control result to the public response shape.
