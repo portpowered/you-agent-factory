@@ -1,11 +1,15 @@
 ## Codebase Patterns
 - Canonical PR verification tiers live in the root `Makefile`: `verify-pr` → `verify-build-contracts` + `verify-tests`; use `run_verification_step` for owned lane labels and exact `make <target>` rerun hints on failure.
-- `scripts/ci/run-sharded-ui-coverage.sh` runs `UI_COVERAGE_SHARD=<i>/<total> make ui-test-coverage` shards in parallel (default `UI_COVERAGE_SHARD_TOTAL=10`), then `make test-ui-coverage-merge` for thresholds and replay check; stale `ui/.vitest-reports/main-shard-*.json` blobs are removed before each run.
+- `scripts/ci/run-sharded-ui-coverage.sh` runs `UI_COVERAGE_SHARD=<i>/<total> make ui-test-coverage` shards in parallel (default `UI_COVERAGE_SHARD_TOTAL=10`), then `make test-ui-coverage-merge` for thresholds and replay check; it wipes `ui/.vitest-reports` before shard launch and `sanitizeVitestReportsDirForShardMerge` in `ui-coverage-runner.mjs` strips stale monolithic/out-of-range blobs before `vitest --mergeReports`.
 - `scripts/ci/run-concurrent-ui-verification-lanes.sh` orchestrates concurrent `make run-sharded-ui-coverage` and `make ui-integration-test` with `[UI Coverage]` / `[UI Browser Integration]` stdout prefixes and per-lane logs under `.artifacts/concurrent-ui-verification-lanes/`.
 - GitHub Actions already runs `ui-coverage-shard` and `ui-browser-integration` as parallel jobs; local `make verify-tests` matches that shard-and-merge plus fast-fail concurrency model.
 - Shard main passes use per-shard coverage dirs (`coverage/shard-<index>`) in `ui/scripts/ui-coverage-runner.mjs` so parallel local shards avoid shared `coverage/` races.
 - Browser integration harness (`ui/integration/browser-test-harness.mjs`) picks isolated preview/API ports via `findAvailablePort()`, so concurrent browser and covered UI lanes avoid port conflicts when run locally.
+- High-cost `App.*` suites can be split by deleting cases already owned by feature/widget tests and moving canonical layout walks onto `CurrentSelectionWidget` harnesses; record before/after timings in `docs/internal/development/ui-*-split-closeout.md`.
+- Shared slow-file reporting lives in `ui/scripts/ui-test-cost-report.mjs`; covered UI writes per-shard `.vitest-reports/main-shard-<index>-timings.json` and merge mode prints `[ui-coverage] Merged main covered pass slowest test files`; browser integration uses `ui/scripts/ui-integration-runner.mjs` with `[ui-browser-integration]` summaries and `[category]` suffixes.
 - Verification command smoke tests live in `tests/functional/smoke/verify_fast_command_smoke_test.go` and use wrapper Makefiles to assert tier ordering without running full suites.
+- UI test lane boundaries and redundancy policy live in `docs/internal/development/ui-test-lane-boundaries.md`; keep theme/CSS token contracts in jsdom (`styles.page-shell-background.test.ts`, `theme-role-regression.test.ts`) and durable import/export/graph behavior in `ui/integration/*.integration.test.mjs`.
+- Browser integration stability (sequential suites, port/download isolation, durable wait helpers) lives in `docs/internal/development/ui-browser-integration-stability.md`; shared checkpoints are `waitForDurableControlEnabled`, `waitForCapturedDownloadOrDialogError`, and `waitForDialogHidden` in `browser-test-harness.mjs`.
 
 ## 2026-06-11T11:19:15Z - prd-ui-ci-acceleration-and-test-rationalization-001
 - Implemented concurrent UI verification in the canonical PR path: `make verify-tests` and `make ci-verify-tests` now invoke `make run-concurrent-ui-verification-lanes`, which starts `test-ui-coverage` and `ui-integration-test` together with prefixed stdout and per-lane artifact logs.
@@ -23,4 +27,51 @@
   - Patterns discovered: mirror CI shard+merge locally with a dedicated `scripts/ci/*.sh` orchestrator; keep `make test-ui-coverage` as monolithic compatibility while `make run-sharded-ui-coverage` is the PR-tier lane contract.
   - Gotchas encountered: parallel local shards need isolated `--coverage.reportsDirectory` values; clean stale `main-shard-*.json` blobs before orchestration or merge can pass with partial prior artifacts.
   - Useful context: merge still runs through `make test-ui-coverage-merge` which invokes `UI_COVERAGE_MERGE=1` plus `ui-replay-coverage-check`; shard logs land under `.artifacts/sharded-ui-coverage/shard-<index>.log`.
+---
+
+## 2026-06-11T18:33:00Z - prd-ui-ci-acceleration-and-test-rationalization-003
+- Added shared `ui/scripts/ui-test-cost-report.mjs` with Vitest log parsing, cost categories, and stable slow-file summary formatting; covered UI shards now write timing artifacts and merge mode emits a merged top-slowest summary with `[category]` labels.
+- Wired browser integration through `ui/scripts/ui-integration-runner.mjs` and `run-ui-integration-with-timings.mjs` so `test:integration` prints `[ui-browser-integration]` per-file timing summaries; documented reporting in `development.md` and cleaned stale timing blobs in `run-sharded-ui-coverage.sh`.
+- **Learnings for future iterations:**
+  - Patterns discovered: keep lane-specific log prefixes (`[ui-coverage]`, `[ui-browser-integration]`) while sharing parse/rank/categorize helpers from one module; write small JSON timing artifacts per shard for merge-time aggregation instead of re-parsing prefixed lane logs.
+  - Gotchas encountered: integration test paths use `integration/...` without a leading slash—categorization heuristics must match both forms; `src/App.import.test.tsx` needs import-export classification before the generic `App.*` app-shell rule.
+  - Useful context: slow-file lines look like `[prefix]   <path> <seconds>s [<category>]` and are suitable to paste into closeout notes for cross-run comparison.
+---
+
+## 2026-06-11T18:42:00Z - prd-ui-ci-acceleration-and-test-rationalization-004
+- Added `docs/internal/development/ui-test-lane-boundaries.md` with observable contracts per lane, durable-behavior browser guidance, and minimum import/export plus graph-editing browser contracts; linked from `development.md`.
+- Removed redundant browser integration suites `page-shell-background.integration.test.mjs` and `header-palette-menu-selected-state.integration.test.mjs` in favor of cheaper jsdom theme/CSS coverage; narrowed `App.import.test.tsx` roundtrip to assert activation `PUT` from a harness-built PNG without re-proving export dialog copy.
+- Updated `replay-fixture-catalog.ts` PNG roundtrip metadata to reflect narrowed jsdom ownership.
+- **Learnings for future iterations:**
+  - Patterns discovered: document lane boundaries in a dedicated maintainer guide and record applied redundancy removals in a table so future stories can split suites without re-litigating ownership.
+  - Gotchas encountered: when narrowing jsdom import roundtrips, build `importValue.factory` from the full named export fixture (minus version) so activation-body assertions still match production payload shape.
+  - Useful context: browser import/export minimum contract is spread across `factory-name-preservation.integration.test.mjs`, `factory-import-second-session.integration.test.mjs`, and `factory-graph-editor.integration.test.mjs`—jsdom should stop at request bodies and stream refresh.
+---
+
+## 2026-06-11T19:04:00Z - prd-ui-ci-acceleration-and-test-rationalization-005
+- Split `App.current-selection.test.tsx` from 26 whole-dashboard cases to 10 cross-feature app-shell regressions; moved dispatch history, locale, workstation editing, chart refresh, responsive catalog, and terminal occupancy ownership to existing feature/widget suites and added `current-selection-widget.canonical-section-layout.test.tsx`.
+- Added `docs/internal/development/ui-current-selection-app-shell-split-closeout.md` with behavior inventory and before/after timing (90.31s → 31.99s on the same local runner for the app-shell file).
+- **Learnings for future iterations:**
+  - Patterns discovered: when an `App.*` file duplicates feature tests, delete the redundant `renderApp` cases first and add a widget-harness replacement only for layout contracts that lack a direct owner; document the mapping in a split closeout note.
+  - Gotchas encountered: Python/regex block removal must match nested `describe` indentation (`    it(`) and brace-balanced blocks—orphaned bodies break Vitest silently; run the target file immediately after mechanical deletions.
+  - Useful context: worker/resource/work-type canonical sections already live in `current-selection-widget.test.tsx` and `current-selection-widget.work-type.test.tsx`; app-shell should keep graph+bento+trace cross-wiring only.
+---
+
+## 2026-06-11T19:12:00Z - prd-ui-ci-acceleration-and-test-rationalization-006
+- Added `docs/internal/development/ui-browser-integration-stability.md` documenting sequential browser suites, concurrent-lane port/download isolation, and failure rerun paths; linked from `development.md` and `ui-test-lane-boundaries.md`.
+- Exposed durable wait helpers in `browser-test-harness.mjs` (`waitForDurableCheckpoint`, `waitForDurableControlEnabled`, `waitForDialogHidden`, `waitForCapturedDownloadOrDialogError`) with unit coverage in `browser-test-harness.wait-patterns.test.mjs`.
+- Simplified export/import browser assertions: removed `Selected image: dashboard.png` and duplicate `textContent` checks in favor of enabled-control polling, dialog hidden state, and preview-image visibility; verified `factory-name-preservation.integration.test.mjs` (3 tests, ~220s local).
+- **Learnings for future iterations:**
+  - Patterns discovered: encode browser wait guidance as exported harness helpers with small node-environment unit tests; document every `describe.sequential` file and its shared preview/build cache in one stability guide.
+  - Gotchas encountered: dialog teardown should wait on `role="dialog"` hidden state, not heading copy that unmounts on a different schedule than the dialog node.
+  - Useful context: `make ui-integration-test` already forces `--no-file-parallelism --maxWorkers 1`; concurrent PR verification only parallelizes the browser lane against covered UI in separate processes with isolated ports from `findAvailablePort()`.
+---
+
+## 2026-06-11T19:26:00Z - mergeability (PR #799 blocking feedback)
+- Addressed BLOCKING review on stale Vitest blob merge: `run-sharded-ui-coverage.sh` now wipes `ui/.vitest-reports` before launching shards; `sanitizeVitestReportsDirForShardMerge` in `ui-coverage-runner.mjs` removes monolithic/out-of-range/react-flow blobs before merge mode runs `vitest --mergeReports`.
+- Added stale-blob coverage in `ui-coverage-runner.test.mjs` and `TestShardedUICoverageScriptSmoke_CleansStaleVitestReportBlobsBeforeShards`; documented hermetic report-dir behavior in `development.md`.
+- **Learnings for future iterations:**
+  - Patterns discovered: shard orchestrators should reset shared blob report directories wholesale; merge mode still needs a second sanitize pass because `vitest --mergeReports <dir>` ingests every blob in that directory.
+  - Gotchas encountered: timing artifacts (`main-shard-<index>-timings.json`) are not Vitest blobs but live beside them—allowlist sanitization must keep timing files for the expected shard total while deleting unrelated JSON blobs.
+  - Useful context: only mergeability work for this iteration; all PRD stories were already `passes: true`.
 ---
