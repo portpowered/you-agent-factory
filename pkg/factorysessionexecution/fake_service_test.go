@@ -305,6 +305,321 @@ func TestFakeService_LifecycleControls_UpdateStateAndErrors(t *testing.T) {
 	}
 }
 
+func TestFakeService_LifecycleControls_AllSupportedOutcomes(t *testing.T) {
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-js-run-n-001")
+	startAsyncByRequestID(t, service, "req-petri-success-001")
+	startAsyncByRequestID(t, service, "req-js-awaiting-001")
+	startAsyncByRequestID(t, service, "req-petri-cancel-001")
+	startAsyncByRequestID(t, service, "req-js-failed-partial-001")
+
+	cases := []struct {
+		name      string
+		sessionID string
+		call      func() (LifecycleControlResult, error)
+		want      LifecycleControlOutcome
+		wantErr   bool
+	}{
+		{
+			name:      "pause running accepted",
+			sessionID: "dur-sess-js-run-n-001",
+			call: func() (LifecycleControlResult, error) {
+				return service.Pause(context.Background(), "dur-sess-js-run-n-001", ControlRequest{})
+			},
+			want: LifecycleControlOutcomeAccepted,
+		},
+		{
+			name:      "pause paused no-op",
+			sessionID: "dur-sess-js-run-n-001",
+			call: func() (LifecycleControlResult, error) {
+				return service.Pause(context.Background(), "dur-sess-js-run-n-001", ControlRequest{})
+			},
+			want: LifecycleControlOutcomeNoOp,
+		},
+		{
+			name:      "pause awaiting approval invalid",
+			sessionID: "dur-sess-js-awaiting-001",
+			call: func() (LifecycleControlResult, error) {
+				return service.Pause(context.Background(), "dur-sess-js-awaiting-001", ControlRequest{})
+			},
+			wantErr: true,
+		},
+		{
+			name:      "approve awaiting approval accepted",
+			sessionID: "dur-sess-js-awaiting-001",
+			call: func() (LifecycleControlResult, error) {
+				return service.Approve(context.Background(), "dur-sess-js-awaiting-001", ApproveRequest{
+					ControlRequest: ControlRequest{},
+				})
+			},
+			want: LifecycleControlOutcomeAccepted,
+		},
+		{
+			name:      "terminate paused accepted",
+			sessionID: "dur-sess-js-run-n-001",
+			call: func() (LifecycleControlResult, error) {
+				return service.Terminate(context.Background(), "dur-sess-js-run-n-001", ControlRequest{})
+			},
+			want: LifecycleControlOutcomeAccepted,
+		},
+		{
+			name:      "cancel canceled no-op",
+			sessionID: "dur-sess-petri-cancel-001",
+			call: func() (LifecycleControlResult, error) {
+				return service.Cancel(context.Background(), "dur-sess-petri-cancel-001", ControlRequest{})
+			},
+			want: LifecycleControlOutcomeNoOp,
+		},
+		{
+			name:      "pause terminal success rejected",
+			sessionID: "dur-sess-petri-success-001",
+			call: func() (LifecycleControlResult, error) {
+				return service.Pause(context.Background(), "dur-sess-petri-success-001", ControlRequest{})
+			},
+			wantErr: true,
+		},
+		{
+			name:      "retry terminal success rejected",
+			sessionID: "dur-sess-petri-success-001",
+			call: func() (LifecycleControlResult, error) {
+				return service.RetryDispatch(context.Background(), "dur-sess-petri-success-001", RetryDispatchRequest{
+					ControlRequest: ControlRequest{},
+					DispatchID:     "disp-petri-success-001",
+				})
+			},
+			wantErr: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := tc.call()
+			if tc.wantErr {
+				var controlErr *ControlError
+				if !errors.As(err, &controlErr) {
+					t.Fatalf("error = %v, want ControlError", err)
+				}
+				switch tc.name {
+				case "pause awaiting approval invalid":
+					if controlErr.Outcome != LifecycleControlOutcomeInvalidState {
+						t.Fatalf("outcome = %q, want INVALID_STATE", controlErr.Outcome)
+					}
+				default:
+					if controlErr.Outcome != LifecycleControlOutcomeTerminalSession {
+						t.Fatalf("outcome = %q, want TERMINAL_SESSION", controlErr.Outcome)
+					}
+				}
+				detail, detailErr := service.GetSession(context.Background(), tc.sessionID)
+				if detailErr != nil {
+					t.Fatalf("GetSession after rejected control: %v", detailErr)
+				}
+				if tc.name == "pause terminal success rejected" && detail.Status != LifecycleStatusSucceeded {
+					t.Fatalf("status = %q, want SUCCEEDED", detail.Status)
+				}
+				if tc.name == "pause awaiting approval invalid" && detail.Status != LifecycleStatusAwaitingApproval {
+					t.Fatalf("status = %q, want AWAITING_APPROVAL", detail.Status)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("control: %v", err)
+			}
+			if result.Outcome != tc.want {
+				t.Fatalf("outcome = %q, want %q", result.Outcome, tc.want)
+			}
+			if err := ValidateLifecycleControlLinks(tc.sessionID, result.Links); err != nil {
+				t.Fatalf("ValidateLifecycleControlLinks: %v", err)
+			}
+		})
+	}
+}
+
+func TestFakeService_LifecycleControl_IdempotentReplay_NoDuplicateEventsOrRetries(t *testing.T) {
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-js-run-n-001")
+	startAsyncByRequestID(t, service, "req-js-failed-partial-001")
+
+	first, err := service.Pause(context.Background(), "dur-sess-js-run-n-001", ControlRequest{
+		RequestID: "ctrl-pause-events-001",
+	})
+	if err != nil {
+		t.Fatalf("first Pause: %v", err)
+	}
+	eventsAfterFirst, err := service.ReadEvents(context.Background(), "dur-sess-js-run-n-001", EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents after pause: %v", err)
+	}
+
+	second, err := service.Pause(context.Background(), "dur-sess-js-run-n-001", ControlRequest{
+		RequestID: "ctrl-pause-events-001",
+	})
+	if err != nil {
+		t.Fatalf("replay Pause: %v", err)
+	}
+	if second.Outcome != first.Outcome || second.Status != first.Status {
+		t.Fatalf("replay result = %#v, want %#v", second, first)
+	}
+	eventsAfterReplay, err := service.ReadEvents(context.Background(), "dur-sess-js-run-n-001", EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents after replay: %v", err)
+	}
+	if len(eventsAfterReplay.Events) != len(eventsAfterFirst.Events) {
+		t.Fatalf("event count after replay = %d, want %d", len(eventsAfterReplay.Events), len(eventsAfterFirst.Events))
+	}
+
+	firstRetry, err := service.RetryDispatch(context.Background(), "dur-sess-js-failed-partial-001", RetryDispatchRequest{
+		ControlRequest: ControlRequest{RequestID: "ctrl-retry-events-001"},
+		DispatchID:     "disp-js-fail-002",
+	})
+	if err != nil {
+		t.Fatalf("first RetryDispatch: %v", err)
+	}
+	dispatchesAfterFirst, err := service.ListDispatches(context.Background(), "dur-sess-js-failed-partial-001")
+	if err != nil {
+		t.Fatalf("ListDispatches after retry: %v", err)
+	}
+	var retried DispatchSummary
+	for _, dispatch := range dispatchesAfterFirst.Dispatches {
+		if dispatch.ID == "disp-js-fail-002" {
+			retried = dispatch
+			break
+		}
+	}
+	if retried.Attempt != 2 {
+		t.Fatalf("retried attempt = %d, want 2", retried.Attempt)
+	}
+
+	secondRetry, err := service.RetryDispatch(context.Background(), "dur-sess-js-failed-partial-001", RetryDispatchRequest{
+		ControlRequest: ControlRequest{RequestID: "ctrl-retry-events-001"},
+		DispatchID:     "disp-js-fail-002",
+	})
+	if err != nil {
+		t.Fatalf("replay RetryDispatch: %v", err)
+	}
+	if secondRetry.Outcome != firstRetry.Outcome || secondRetry.Status != firstRetry.Status {
+		t.Fatalf("replay retry = %#v, want %#v", secondRetry, firstRetry)
+	}
+	dispatchesAfterReplay, err := service.ListDispatches(context.Background(), "dur-sess-js-failed-partial-001")
+	if err != nil {
+		t.Fatalf("ListDispatches after replay: %v", err)
+	}
+	for _, dispatch := range dispatchesAfterReplay.Dispatches {
+		if dispatch.ID == "disp-js-fail-002" && dispatch.Attempt != 2 {
+			t.Fatalf("retried attempt after replay = %d, want 2", dispatch.Attempt)
+		}
+	}
+}
+
+func TestFakeService_LifecycleControls_TerminalSessionsDoNotResumeViaControls(t *testing.T) {
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-petri-success-001")
+	startAsyncByRequestID(t, service, "req-js-failed-partial-001")
+
+	for _, tc := range []struct {
+		name      string
+		sessionID string
+		want      LifecycleStatus
+	}{
+		{"success", "dur-sess-petri-success-001", LifecycleStatusSucceeded},
+		{"failed-with-partial", "dur-sess-js-failed-partial-001", LifecycleStatusFailed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := service.Pause(context.Background(), tc.sessionID, ControlRequest{})
+			var controlErr *ControlError
+			if !errors.As(err, &controlErr) || controlErr.Outcome != LifecycleControlOutcomeTerminalSession {
+				t.Fatalf("pause error = %v, want TERMINAL_SESSION", err)
+			}
+			detail, err := service.GetSession(context.Background(), tc.sessionID)
+			if err != nil {
+				t.Fatalf("GetSession: %v", err)
+			}
+			if detail.Status != tc.want {
+				t.Fatalf("status = %q, want %q", detail.Status, tc.want)
+			}
+		})
+	}
+}
+
+func TestFakeService_RetryDispatch_UpdatesOnlyTargetDispatch(t *testing.T) {
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-js-failed-partial-001")
+	sessionID := "dur-sess-js-failed-partial-001"
+
+	beforeDispatches, err := service.ListDispatches(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches before: %v", err)
+	}
+	beforeArtifacts, err := service.ListArtifacts(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListArtifacts before: %v", err)
+	}
+
+	_, err = service.RetryDispatch(context.Background(), sessionID, RetryDispatchRequest{
+		ControlRequest: ControlRequest{},
+		DispatchID:     "disp-js-fail-002",
+	})
+	if err != nil {
+		t.Fatalf("RetryDispatch: %v", err)
+	}
+
+	afterDispatches, err := service.ListDispatches(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches after: %v", err)
+	}
+	afterArtifacts, err := service.ListArtifacts(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListArtifacts after: %v", err)
+	}
+	if len(afterArtifacts.Artifacts) != len(beforeArtifacts.Artifacts) {
+		t.Fatalf("artifact count = %d, want %d", len(afterArtifacts.Artifacts), len(beforeArtifacts.Artifacts))
+	}
+
+	beforeByID := map[string]DispatchSummary{}
+	for _, dispatch := range beforeDispatches.Dispatches {
+		beforeByID[dispatch.ID] = dispatch
+	}
+	for _, dispatch := range afterDispatches.Dispatches {
+		before, ok := beforeByID[dispatch.ID]
+		if !ok {
+			t.Fatalf("unexpected dispatch %q", dispatch.ID)
+		}
+		switch dispatch.ID {
+		case "disp-js-fail-002":
+			if dispatch.Status != DispatchStatusQueued {
+				t.Fatalf("retried status = %q, want QUEUED", dispatch.Status)
+			}
+			if dispatch.Attempt != before.Attempt+1 {
+				t.Fatalf("retried attempt = %d, want %d", dispatch.Attempt, before.Attempt+1)
+			}
+		default:
+			if dispatch.Status != before.Status || dispatch.Attempt != before.Attempt ||
+				dispatch.DispatchKind != before.DispatchKind || dispatch.Label != before.Label {
+				t.Fatalf("dispatch %q changed: before=%#v after=%#v", dispatch.ID, before, dispatch)
+			}
+		}
+	}
+
+	detail, err := service.GetDispatch(context.Background(), sessionID, "disp-js-fail-002")
+	if err != nil {
+		t.Fatalf("GetDispatch retried: %v", err)
+	}
+	if detail.Status != DispatchStatusQueued {
+		t.Fatalf("detail status = %q, want QUEUED", detail.Status)
+	}
+	var retriedSummary DispatchSummary
+	for _, dispatch := range afterDispatches.Dispatches {
+		if dispatch.ID == "disp-js-fail-002" {
+			retriedSummary = dispatch
+			break
+		}
+	}
+	if retriedSummary.ID == "" {
+		t.Fatal("retried dispatch summary missing")
+	}
+	if err := ValidateDispatchDetailMatchesListSummary(detail, retriedSummary); err != nil {
+		t.Fatalf("ValidateDispatchDetailMatchesListSummary: %v", err)
+	}
+}
+
 func TestFakeService_ReadProjections_MatchFixtureDispatchesArtifactsEvents(t *testing.T) {
 	service := newContractFakeService(t)
 	startAsyncByRequestID(t, service, "req-petri-success-001")

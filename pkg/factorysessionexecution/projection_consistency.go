@@ -139,6 +139,29 @@ func validateResultSummaryMatches(detail, summary *ResultSummary) error {
 	}
 }
 
+// ValidateLifecycleControlLinks checks that one lifecycle control response exposes
+// canonical inspection links for follow-up session, result, dispatch, artifact, and
+// event reads.
+func ValidateLifecycleControlLinks(sessionID string, links LifecycleControlLinks) error {
+	expected := LifecycleControlLinksForSession(sessionID, true)
+	if links.Session != expected.Session {
+		return fmt.Errorf("session link %q does not match expected %q", links.Session, expected.Session)
+	}
+	if links.Results != expected.Results {
+		return fmt.Errorf("results link %q does not match expected %q", links.Results, expected.Results)
+	}
+	if links.Dispatches != expected.Dispatches {
+		return fmt.Errorf("dispatches link %q does not match expected %q", links.Dispatches, expected.Dispatches)
+	}
+	if links.Artifacts != expected.Artifacts {
+		return fmt.Errorf("artifacts link %q does not match expected %q", links.Artifacts, expected.Artifacts)
+	}
+	if links.Events != expected.Events {
+		return fmt.Errorf("events link %q does not match expected %q", links.Events, expected.Events)
+	}
+	return nil
+}
+
 // ValidateDispatchDetailMatchesListSummary checks that one dispatch detail read
 // aligns with the dispatch list row for the same dispatch id.
 func ValidateDispatchDetailMatchesListSummary(detail DispatchDetail, summary DispatchSummary) error {

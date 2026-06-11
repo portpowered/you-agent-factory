@@ -2,6 +2,7 @@ package factorysession_test
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -429,6 +430,81 @@ func TestFakeServiceConsumer_ReadEvents_ReconnectAndReplayMatchesDirectReads(t *
 				t.Fatalf("reconnect events = %d, want fewer than full replay %d", len(reconnectMapped), len(mapped))
 			}
 		})
+	}
+}
+
+func TestFakeServiceConsumer_LifecycleControls_ProjectsOutcomesAndLinks(t *testing.T) {
+	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+	}
+
+	start := func(requestID string) {
+		t.Helper()
+		_, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
+			RequestID: requestID,
+			Source: factorysessionexecution.Source{
+				Kind:      workflowsource.KindFactoryID,
+				FactoryID: "customer-support-triage",
+			},
+		})
+		if err != nil {
+			t.Fatalf("StartAsync(%q): %v", requestID, err)
+		}
+	}
+	start("req-js-run-n-001")
+	start("req-petri-success-001")
+	start("req-js-failed-partial-001")
+
+	pauseReq, err := factorysession.ControlRequestFromAPI(factoryapi.FactorySessionLifecycleControlRequest{})
+	if err != nil {
+		t.Fatalf("ControlRequestFromAPI: %v", err)
+	}
+	paused, err := service.Pause(context.Background(), "dur-sess-js-run-n-001", pauseReq)
+	if err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+	pauseMapped := factorysession.LifecycleControlResponseToAPI(paused)
+	if pauseMapped.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("pause outcome = %q, want ACCEPTED", pauseMapped.Outcome)
+	}
+	if pauseMapped.Links == nil || pauseMapped.Links.Session == nil || *pauseMapped.Links.Session == "" {
+		t.Fatal("pause inspection links missing")
+	}
+	if err := factorysessionexecution.ValidateLifecycleControlLinks("dur-sess-js-run-n-001", paused.Links); err != nil {
+		t.Fatalf("ValidateLifecycleControlLinks pause: %v", err)
+	}
+
+	_, err = service.Pause(context.Background(), "dur-sess-petri-success-001", pauseReq)
+	var controlErr *factorysessionexecution.ControlError
+	if !errors.As(err, &controlErr) {
+		t.Fatalf("pause terminal error = %v, want ControlError", err)
+	}
+	terminalMapped := factorysession.ControlErrorToAPI("dur-sess-petri-success-001", controlErr)
+	if terminalMapped.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeTerminalSession {
+		t.Fatalf("terminal outcome = %q, want TERMINAL_SESSION", terminalMapped.Outcome)
+	}
+
+	retryReq, err := factorysession.RetryDispatchRequestFromAPI(factoryapi.FactorySessionRetryDispatchRequest{
+		DispatchId: "disp-js-fail-002",
+	})
+	if err != nil {
+		t.Fatalf("RetryDispatchRequestFromAPI: %v", err)
+	}
+	retried, err := service.RetryDispatch(context.Background(), "dur-sess-js-failed-partial-001", retryReq)
+	if err != nil {
+		t.Fatalf("RetryDispatch: %v", err)
+	}
+	retryMapped := factorysession.LifecycleControlResponseToAPI(retried)
+	if retryMapped.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("retry outcome = %q, want ACCEPTED", retryMapped.Outcome)
+	}
+	if retryMapped.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("retry status = %q, want RUNNING", retryMapped.Status)
+	}
+	if retryMapped.Links == nil || retryMapped.Links.Dispatches == nil || *retryMapped.Links.Dispatches == "" {
+		t.Fatal("retry dispatch inspection link missing")
 	}
 }
 
