@@ -417,6 +417,61 @@ esac
 	}
 }
 
+func TestShardedUICoverageScriptSmoke_CleansStaleVitestReportBlobsBeforeShards(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	reportsDir := filepath.Join(repoRoot, "ui", ".vitest-reports")
+	if err := os.MkdirAll(reportsDir, 0o755); err != nil {
+		t.Fatalf("create vitest reports dir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.RemoveAll(reportsDir)
+	})
+
+	staleFiles := []string{
+		filepath.Join(reportsDir, "main.json"),
+		filepath.Join(reportsDir, "main-shard-99.json"),
+		filepath.Join(reportsDir, "react-flow-current-activity-card.json"),
+	}
+	for _, stalePath := range staleFiles {
+		if err := os.WriteFile(stalePath, []byte("{}"), 0o644); err != nil {
+			t.Fatalf("write stale vitest report blob %s: %v", stalePath, err)
+		}
+	}
+
+	makePath := writeExecutableScript(t, "fake-make-sharded-ui-clean", `#!/bin/sh
+case "$1" in
+  ui-test-coverage)
+    printf '%s\n' "fake-make:ui-test-coverage UI_COVERAGE_SHARD=${UI_COVERAGE_SHARD:-unset}"
+    ;;
+  test-ui-coverage-merge)
+    printf '%s\n' "fake-make:test-ui-coverage-merge"
+    ;;
+  *)
+    printf '%s\n' "fake-make:unexpected:$*"
+    exit 99
+    ;;
+esac
+`)
+	artifactRoot := filepath.Join(t.TempDir(), "sharded-ui-coverage-artifacts")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "run-sharded-ui-coverage.sh"),
+		fmt.Sprintf("ARTIFACT_ROOT=%s", artifactRoot),
+		fmt.Sprintf("MAKE_BIN=%s", makePath),
+		"UI_COVERAGE_SHARD_TOTAL=2",
+	)
+	if err != nil {
+		t.Fatalf("run sharded UI coverage script: %v\n%s", err, output)
+	}
+
+	for _, stalePath := range staleFiles {
+		if _, statErr := os.Stat(stalePath); !os.IsNotExist(statErr) {
+			t.Fatalf("stale vitest report blob still present after sharded run: %s (stat err=%v)", stalePath, statErr)
+		}
+	}
+}
+
 func TestShardedUICoverageScriptSmoke_FailureReportsExactShardRerun(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makePath := writeExecutableScript(t, "fake-make-sharded-ui-fail", `#!/bin/sh

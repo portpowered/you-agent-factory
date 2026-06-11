@@ -23,6 +23,7 @@ import {
   findMissingShardBlobIndices,
   formatElapsedMs,
   formatMissingShardBlobSummary,
+  sanitizeVitestReportsDirForShardMerge,
   formatPhaseElapsed,
   logMergedShardSlowFileSummary,
   mainCoveredShardTimingBlobPath,
@@ -270,6 +271,61 @@ test("cleanCoverageArtifacts recreates coverage temp and blob report directories
     process.chdir(cwd);
     rmSync(tempDir, { force: true, recursive: true });
   }
+});
+
+test("sanitizeVitestReportsDirForShardMerge removes stale monolithic and out-of-range shard blobs", () => {
+  const reportsDir = mkdtempSync(join(tmpdir(), "ui-coverage-reports-"));
+  writeFileSync(mainCoveredShardBlobPath(1, reportsDir), "{}");
+  writeFileSync(
+    mainCoveredShardTimingBlobPath(1, reportsDir),
+    JSON.stringify([{ durationMs: 1000, path: "src/a.test.ts" }]),
+  );
+  writeFileSync(join(reportsDir, "main.json"), "{}");
+  writeFileSync(join(reportsDir, "main-shard-3.json"), "{}");
+  writeFileSync(
+    join(reportsDir, "react-flow-current-activity-card.json"),
+    "{}",
+  );
+
+  const removed = sanitizeVitestReportsDirForShardMerge(2, { reportsDir });
+
+  expect(removed.sort()).toEqual([
+    "main-shard-3.json",
+    "main.json",
+    "react-flow-current-activity-card.json",
+  ]);
+  expect(existsSync(mainCoveredShardBlobPath(1, reportsDir))).toBe(true);
+  expect(existsSync(mainCoveredShardTimingBlobPath(1, reportsDir))).toBe(true);
+  expect(existsSync(join(reportsDir, "main.json"))).toBe(false);
+  expect(existsSync(join(reportsDir, "main-shard-3.json"))).toBe(false);
+});
+
+test("runUiCoverageMerge ignores stale blobs before running merge phases", () => {
+  const reportsDir = mkdtempSync(join(tmpdir(), "ui-coverage-reports-"));
+  writeFileSync(mainCoveredShardBlobPath(1, reportsDir), "{}");
+  writeFileSync(
+    mainCoveredShardTimingBlobPath(1, reportsDir),
+    JSON.stringify([{ durationMs: 1000, path: "src/slow.test.ts" }]),
+  );
+  writeFileSync(join(reportsDir, "main.json"), "{}");
+  writeFileSync(join(reportsDir, "main-shard-99.json"), "{}");
+  const spawn = vi.fn(() => ({ status: 0 }));
+  const exit = vi.spyOn(process, "exit").mockImplementation(() => {});
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+  runUiCoverage(uiCoveragePhases, {
+    env: { UI_COVERAGE_MERGE: "1", UI_COVERAGE_SHARD_TOTAL: "1" },
+    reportsDir,
+    spawn,
+  });
+
+  expect(existsSync(join(reportsDir, "main.json"))).toBe(false);
+  expect(existsSync(join(reportsDir, "main-shard-99.json"))).toBe(false);
+  expect(spawn).toHaveBeenCalledTimes(3);
+  expect(exit).not.toHaveBeenCalled();
+
+  log.mockRestore();
+  exit.mockRestore();
 });
 
 test("findMissingShardBlobIndices reports absent shard blobs", () => {

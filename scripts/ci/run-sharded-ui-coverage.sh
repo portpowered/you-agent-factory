@@ -14,12 +14,9 @@ if ! [[ "$shard_total" =~ ^[1-9][0-9]*$ ]]; then
 fi
 
 reports_dir="ui/.vitest-reports"
-mkdir -p "$artifact_root" "$reports_dir"
-
-for index in $(seq 1 "$shard_total"); do
-  rm -f "$reports_dir/main-shard-${index}.json"
-  rm -f "$reports_dir/main-shard-${index}-timings.json"
-done
+mkdir -p "$artifact_root"
+rm -rf "$reports_dir"
+mkdir -p "$reports_dir"
 
 printf '%s\n' \
   "==> Sharded UI Coverage (${shard_total} main covered Vitest shards + merge)" \

@@ -1,5 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 
@@ -101,6 +108,41 @@ export function getUiCoverageShardTotal(env = process.env) {
   }
 
   return total;
+}
+
+export function allowedShardReportBasenames(shardTotal) {
+  const allowed = new Set();
+
+  for (let index = 1; index <= shardTotal; index += 1) {
+    allowed.add(`main-shard-${index}.json`);
+    allowed.add(`main-shard-${index}-timings.json`);
+  }
+
+  return allowed;
+}
+
+export function sanitizeVitestReportsDirForShardMerge(
+  shardTotal,
+  { reportsDir = ".vitest-reports" } = {},
+) {
+  if (!existsSync(reportsDir)) {
+    mkdirSync(reportsDir, { recursive: true });
+    return [];
+  }
+
+  const allowed = allowedShardReportBasenames(shardTotal);
+  const removed = [];
+
+  for (const entry of readdirSync(reportsDir)) {
+    if (allowed.has(entry)) {
+      continue;
+    }
+
+    rmSync(join(reportsDir, entry), { force: true, recursive: true });
+    removed.push(entry);
+  }
+
+  return removed;
 }
 
 export function findMissingShardBlobIndices(
@@ -361,6 +403,8 @@ export function runUiCoverageMerge(options = {}) {
     );
     process.exit(1);
   }
+
+  sanitizeVitestReportsDirForShardMerge(shardTotal, { reportsDir });
 
   rmSync("coverage", { force: true, recursive: true });
 
