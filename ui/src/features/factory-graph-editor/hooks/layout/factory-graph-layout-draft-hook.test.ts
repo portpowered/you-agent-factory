@@ -421,6 +421,63 @@ describe("useFactoryGraphLayoutDraftState scope and pruning", () => {
   });
 });
 
+describe("useFactoryGraphLayoutDraftState visual group create rename style", () => {
+  it("records group create, rename, and style changes with undo and redo", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-group-style",
+      }),
+    );
+
+    act(() => {
+      result.current.createVisualGroup({ x: 200, y: 150 });
+    });
+
+    const createdGroup = factoryLayoutGroupById(result.current.layout, "group-1");
+    expect(createdGroup).toMatchObject({
+      id: "group-1",
+      label: "Group 1",
+      nodeIds: [],
+    });
+    expect(result.current.layoutDirty).toBe(true);
+
+    act(() => {
+      result.current.renameVisualGroup("group-1", "Planning");
+      result.current.setVisualGroupColor("group-1", "warning");
+    });
+
+    expect(factoryLayoutGroupById(result.current.layout, "group-1")).toMatchObject({
+      color: "warning",
+      label: "Planning",
+    });
+
+    act(() => {
+      result.current.undoLayout();
+      result.current.undoLayout();
+    });
+
+    expect(factoryLayoutGroupById(result.current.layout, "group-1")).toMatchObject({
+      color: "primary",
+      label: "Group 1",
+    });
+
+    act(() => {
+      result.current.undoLayout();
+    });
+
+    expect(result.current.layout.groups ?? []).toEqual([]);
+
+    act(() => {
+      result.current.redoLayout();
+    });
+
+    expect(factoryLayoutGroupById(result.current.layout, "group-1")?.id).toBe(
+      "group-1",
+    );
+  });
+});
+
 describe("useFactoryGraphLayoutDraftState visual group save reload", () => {
   it("adopts saved visual group layout after reload without topology dirty state", () => {
     const savedLayoutDocument = {

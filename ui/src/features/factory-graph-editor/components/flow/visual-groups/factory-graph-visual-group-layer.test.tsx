@@ -53,6 +53,29 @@ function renderVisualGroupLayer(
 }
 
 describe("FactoryGraphVisualGroupLayer", () => {
+  it("falls back to the group id when the label is blank", () => {
+    renderVisualGroupLayer({
+      groups: [
+        {
+          ...sampleGroup,
+          label: "   ",
+        },
+      ],
+    });
+
+    expect(screen.getByText("group-1")).toBeInTheDocument();
+  });
+
+  it("ignores non-action keyboard events on the group body", () => {
+    const { onSelectGroup } = renderVisualGroupLayer();
+    const groupBody = screen.getByRole("button", { name: "Review" });
+
+    groupBody.focus();
+    fireEvent.keyDown(groupBody, { key: "Tab" });
+
+    expect(onSelectGroup).not.toHaveBeenCalled();
+  });
+
   it("renders groups behind interaction handles with labels and selection state", () => {
     renderVisualGroupLayer({
       onResizeGroup: vi.fn(),

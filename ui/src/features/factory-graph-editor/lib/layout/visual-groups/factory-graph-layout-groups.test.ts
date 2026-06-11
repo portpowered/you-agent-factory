@@ -12,6 +12,7 @@ import {
   factoryLayoutGroupColorCssVariable,
   factoryLayoutGroupColorSurfaceCssVariable,
   factoryLayoutGroupContainsNode,
+  factoryLayoutGroupsEqual,
   isApprovedFactoryLayoutGroupColor,
   moveFactoryLayoutGroupByDelta,
   removeFactoryLayoutGroup,
@@ -374,6 +375,33 @@ describe("factory graph layout groups", () => {
 
     expect(factoryLayoutGroupById(withoutNode, "group-1")?.nodeIds).toEqual([]);
     expect(factoryLayoutGroupById(withoutNode, "group-2")?.nodeIds).toEqual([]);
+  });
+
+  it("allocates the next available group id when defaults collide", () => {
+    const layout = addFactoryLayoutGroup(createDefaultFactoryLayout(), {
+      bounds: defaultFactoryLayoutGroupBounds({ x: 0, y: 0 }),
+      id: "group-1",
+      label: "Existing",
+      nodeIds: [],
+    });
+
+    expect(createFactoryLayoutGroupId(layout)).toBe("group-2");
+  });
+
+  it("detects equal groups and no-ops updates for missing groups", () => {
+    const group = createFactoryLayoutGroup({
+      bounds: defaultFactoryLayoutGroupBounds({ x: 0, y: 0 }),
+      id: "group-1",
+      layout: createDefaultFactoryLayout(),
+    });
+
+    expect(factoryLayoutGroupsEqual(group, structuredClone(group))).toBe(true);
+    expect(
+      updateFactoryLayoutGroup(createDefaultFactoryLayout(), "missing", (current) => ({
+        ...current,
+        label: "Ignored",
+      })),
+    ).toEqual(createDefaultFactoryLayout());
   });
 
   it("builds sorted canvas node options from topology nodes", () => {
