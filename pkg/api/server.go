@@ -29,13 +29,14 @@ var _ factoryapi.ServerInterface = (*Server)(nil)
 
 // Server is the REST API server for the agent-factory.
 type Server struct {
-	runtime           apisurface.APISurface
-	sessionRuntime    apisurface.SessionAPISurface
-	logger            *zap.Logger
-	router            *mux.Router
-	port              int
-	codexSessionsRoot   string
-	cursorSessionsRoot  cursorstorage.AgentStorageRoot
+	runtime                 apisurface.APISurface
+	sessionRuntime          apisurface.SessionAPISurface
+	durableSessionExecution apisurface.DurableSessionExecutionAPI
+	logger                  *zap.Logger
+	router                  *mux.Router
+	port                    int
+	codexSessionsRoot       string
+	cursorSessionsRoot      cursorstorage.AgentStorageRoot
 }
 
 var noModTime = time.Time{}
@@ -47,8 +48,9 @@ func NewServer(runtime apisurface.APISurface, port int, logger *zap.Logger) *Ser
 
 // ServerOptions configures optional API server boundaries.
 type ServerOptions struct {
-	CodexSessionsRoot  string
-	CursorSessionsRoot string
+	CodexSessionsRoot       string
+	CursorSessionsRoot      string
+	DurableSessionExecution apisurface.DurableSessionExecutionAPI
 }
 
 // NewServerWithOptions creates a new API server with explicit runtime
@@ -60,11 +62,12 @@ func NewServerWithOptions(runtime apisurface.APISurface, port int, logger *zap.L
 		cursorRoot = ""
 	}
 	srv := &Server{
-		runtime:            runtime,
-		logger:             logger,
-		port:               port,
-		codexSessionsRoot:  normalizeCodexSessionsRoot(opts.CodexSessionsRoot),
-		cursorSessionsRoot: cursorRoot,
+		runtime:                 runtime,
+		logger:                  logger,
+		port:                    port,
+		durableSessionExecution: opts.DurableSessionExecution,
+		codexSessionsRoot:       normalizeCodexSessionsRoot(opts.CodexSessionsRoot),
+		cursorSessionsRoot:      cursorRoot,
 	}
 	if sessionRuntime, ok := runtime.(apisurface.SessionAPISurface); ok {
 		srv.sessionRuntime = sessionRuntime
