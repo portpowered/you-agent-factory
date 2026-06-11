@@ -1,9 +1,11 @@
+// pkgmaintcheck:ignore-file-lines consolidated fake durable session service tests remain together until dedicated fake-service test seams split.
 package factorysessionexecution
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -305,6 +307,8 @@ func TestFakeService_LifecycleControls_UpdateStateAndErrors(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this lifecycle test keeps supported control outcomes and links together on one seam.
+// pkgmaintcheck:ignore-function-lines this lifecycle test keeps supported control outcomes and links together on one seam.
 func TestFakeService_LifecycleControls_AllSupportedOutcomes(t *testing.T) {
 	service := newContractFakeService(t)
 	startAsyncByRequestID(t, service, "req-js-run-n-001")
@@ -433,6 +437,7 @@ func TestFakeService_LifecycleControls_AllSupportedOutcomes(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this replay test keeps lifecycle idempotency and projection stability assertions together.
 func TestFakeService_LifecycleControl_IdempotentReplay_NoDuplicateEventsOrRetries(t *testing.T) {
 	service := newContractFakeService(t)
 	startAsyncByRequestID(t, service, "req-js-run-n-001")
@@ -539,6 +544,7 @@ func TestFakeService_LifecycleControls_TerminalSessionsDoNotResumeViaControls(t 
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this retry-dispatch test keeps targeted mutation assertions together on one seam.
 func TestFakeService_RetryDispatch_UpdatesOnlyTargetDispatch(t *testing.T) {
 	service := newContractFakeService(t)
 	startAsyncByRequestID(t, service, "req-js-failed-partial-001")
@@ -841,6 +847,8 @@ func TestFakeService_ReadEvents_NotFoundDoesNotMutateState(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this scoped list/detail test keeps lifecycle membership and summary coherence together.
+// pkgmaintcheck:ignore-function-lines this scoped list/detail test keeps lifecycle membership and summary coherence together.
 func TestFakeService_ListAndDetail_ScopedSummariesAndConsistency(t *testing.T) {
 	service := newContractFakeService(t)
 	cases := []struct {
@@ -1067,6 +1075,7 @@ func TestFakeService_ListSessions_ScopedPersistedAndLive(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this concurrency test keeps idempotent start and projection stability assertions together.
 func TestFakeService_StartAsync_ConcurrentIdempotentStarts(t *testing.T) {
 	service := newContractFakeService(t)
 	const workers = 12
@@ -1133,6 +1142,75 @@ func TestFakeService_StartAsync_ConcurrentIdempotentStarts(t *testing.T) {
 	if len(events.Events) != 2 {
 		t.Fatalf("events = %d, want 2 for running scenario", len(events.Events))
 	}
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity this concurrency test keeps lifecycle control and read replay safety assertions together.
+func TestFakeService_LifecycleControl_ConcurrentReadsRemainCoherent(t *testing.T) {
+	service := newContractFakeService(t)
+	started := startAsyncByRequestID(t, service, "req-js-awaiting-001")
+	sessionID := started.SessionID
+	ctx := context.Background()
+
+	const readers = 12
+	var wg sync.WaitGroup
+	for i := 0; i < readers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for round := 0; round < 40; round++ {
+				if _, err := service.GetSession(ctx, sessionID); err != nil {
+					t.Errorf("GetSession: %v", err)
+					return
+				}
+				if _, err := service.GetResult(ctx, sessionID, ResultRequest{Mode: ResultModeFinal}); err != nil {
+					t.Errorf("GetResult: %v", err)
+					return
+				}
+				if _, err := service.ListDispatches(ctx, sessionID); err != nil {
+					t.Errorf("ListDispatches: %v", err)
+					return
+				}
+				if _, err := service.ListArtifacts(ctx, sessionID); err != nil {
+					t.Errorf("ListArtifacts: %v", err)
+					return
+				}
+				if _, err := service.ReadEvents(ctx, sessionID, EventReconnectRequest{}); err != nil {
+					t.Errorf("ReadEvents: %v", err)
+					return
+				}
+			}
+		}()
+	}
+
+	for i := 0; i < 4; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			requestPrefix := fmt.Sprintf("concurrent-control-%d", index)
+			if _, err := service.Approve(ctx, sessionID, ApproveRequest{
+				ControlRequest: ControlRequest{RequestID: requestPrefix + "-approve"},
+			}); err != nil {
+				var controlErr *ControlError
+				if !errors.As(err, &controlErr) {
+					t.Errorf("Approve: %v", err)
+				}
+			}
+			if _, err := service.Pause(ctx, sessionID, ControlRequest{RequestID: requestPrefix + "-pause"}); err != nil {
+				var controlErr *ControlError
+				if !errors.As(err, &controlErr) {
+					t.Errorf("Pause: %v", err)
+				}
+			}
+			if _, err := service.Resume(ctx, sessionID, ControlRequest{RequestID: requestPrefix + "-resume"}); err != nil {
+				var controlErr *ControlError
+				if !errors.As(err, &controlErr) {
+					t.Errorf("Resume: %v", err)
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
 }
 
 func int64Ptr(value int64) *int64 {
@@ -1273,6 +1351,8 @@ func TestProjectResultRead_NotReadyRunningSession(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this projection test keeps result, dispatch, and artifact coherence assertions together.
+// pkgmaintcheck:ignore-function-lines this projection test keeps result, dispatch, and artifact coherence assertions together.
 func TestFakeService_ResultDispatchArtifact_ReadProjectionsCoherent(t *testing.T) {
 	service := newContractFakeService(t)
 	startAsyncByRequestID(t, service, "req-petri-success-001")

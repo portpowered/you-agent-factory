@@ -171,11 +171,11 @@ func (s *FakeService) GetSession(ctx context.Context, sessionID string) (Session
 	if err != nil {
 		return SessionReadResult{}, err
 	}
-	state, err := s.sessionState(id)
+	state, err := s.snapshotSessionState(id)
 	if err != nil {
 		return SessionReadResult{}, err
 	}
-	return cloneSessionRead(state.session), nil
+	return state.session, nil
 }
 
 func (s *FakeService) Pause(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
@@ -214,7 +214,7 @@ func (s *FakeService) GetResult(ctx context.Context, sessionID string, req Resul
 	if err != nil {
 		return ResultReadResult{}, err
 	}
-	state, err := s.sessionState(id)
+	state, err := s.snapshotSessionState(id)
 	if err != nil {
 		return ResultReadResult{}, err
 	}
@@ -229,13 +229,13 @@ func (s *FakeService) ListDispatches(ctx context.Context, sessionID string) (Lis
 	if err != nil {
 		return ListDispatchesResult{}, err
 	}
-	state, err := s.sessionState(id)
+	state, err := s.snapshotSessionState(id)
 	if err != nil {
 		return ListDispatchesResult{}, err
 	}
 	return ListDispatchesResult{
 		SessionID:  id,
-		Dispatches: cloneDispatchSummaries(state.dispatches),
+		Dispatches: state.dispatches,
 	}, nil
 }
 
@@ -247,7 +247,7 @@ func (s *FakeService) GetDispatch(ctx context.Context, sessionID, dispatchID str
 	if err != nil {
 		return DispatchDetail{}, err
 	}
-	state, err := s.sessionState(id)
+	state, err := s.snapshotSessionState(id)
 	if err != nil {
 		return DispatchDetail{}, err
 	}
@@ -274,13 +274,13 @@ func (s *FakeService) ListArtifacts(ctx context.Context, sessionID string) (List
 	if err != nil {
 		return ListArtifactsResult{}, err
 	}
-	state, err := s.sessionState(id)
+	state, err := s.snapshotSessionState(id)
 	if err != nil {
 		return ListArtifactsResult{}, err
 	}
 	return ListArtifactsResult{
 		SessionID: id,
-		Artifacts: cloneArtifactSummaries(state.artifacts),
+		Artifacts: state.artifacts,
 	}, nil
 }
 
@@ -292,7 +292,7 @@ func (s *FakeService) GetArtifact(ctx context.Context, sessionID, artifactID str
 	if err != nil {
 		return ArtifactDetail{}, err
 	}
-	state, err := s.sessionState(id)
+	state, err := s.snapshotSessionState(id)
 	if err != nil {
 		return ArtifactDetail{}, err
 	}
@@ -318,7 +318,7 @@ func (s *FakeService) ReadEvents(ctx context.Context, sessionID string, req Even
 	if _, err := NormalizeEventReconnectRequest(req); err != nil {
 		return EventReadResult{}, err
 	}
-	state, err := s.sessionState(id)
+	state, err := s.snapshotSessionState(id)
 	if err != nil {
 		return EventReadResult{}, err
 	}
@@ -371,14 +371,14 @@ func (s *FakeService) ListSessions(ctx context.Context, req ListSessionsRequest)
 	}, normalized), nil
 }
 
-func (s *FakeService) sessionState(sessionID string) (*fakeSessionState, error) {
+func (s *FakeService) snapshotSessionState(sessionID string) (*fakeSessionState, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	state, ok := s.sessions[sessionID]
 	if !ok {
 		return nil, ErrSessionNotFound
 	}
-	return state, nil
+	return cloneFakeSessionState(state), nil
 }
 
 func validateLifecycleControlRequest(

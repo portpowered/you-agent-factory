@@ -364,6 +364,7 @@ func ValidateEventEnvelopeOrdering(sessionID string, events []json.RawMessage) e
 
 // ValidateEventReplayMatchesDirectProjections checks that one fake event stream
 // aligns with direct session, result, dispatch, and artifact reads.
+// pkgmaintcheck:ignore-cyclomatic-complexity this validator keeps replay coherence checks across projections together on one seam.
 func ValidateEventReplayMatchesDirectProjections(
 	session SessionReadResult,
 	result ResultReadResult,

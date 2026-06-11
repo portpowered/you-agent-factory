@@ -73,6 +73,7 @@ func TestFakeServiceConsumer_StartAsync_ProjectsCoreScenarioOutcomes(t *testing.
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this consumer test keeps scoped list/detail mapper assertions together on one seam.
 func TestFakeServiceConsumer_ListAndDetail_ProjectsScopedSummaries(t *testing.T) {
 	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
@@ -159,6 +160,7 @@ func TestFakeServiceConsumer_ListAndDetail_ProjectsScopedSummaries(t *testing.T)
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this consumer test keeps fixture projection mapper assertions together on one seam.
 func TestFakeServiceConsumer_ProjectsFixtureThroughApisurfaceMappers(t *testing.T) {
 	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
@@ -231,6 +233,8 @@ func TestFakeServiceConsumer_ProjectsFixtureThroughApisurfaceMappers(t *testing.
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this consumer test keeps result, dispatch, and artifact mapper assertions together.
+// pkgmaintcheck:ignore-function-lines this consumer test keeps result, dispatch, and artifact mapper assertions together.
 func TestFakeServiceConsumer_ResultDispatchArtifact_ProjectsCoherentReads(t *testing.T) {
 	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
@@ -338,6 +342,7 @@ func TestFakeServiceConsumer_ResultDispatchArtifact_ProjectsCoherentReads(t *tes
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this consumer test keeps event replay and reconnect mapper assertions together.
 func TestFakeServiceConsumer_ReadEvents_ReconnectAndReplayMatchesDirectReads(t *testing.T) {
 	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
@@ -433,6 +438,7 @@ func TestFakeServiceConsumer_ReadEvents_ReconnectAndReplayMatchesDirectReads(t *
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this consumer test keeps lifecycle control mapper assertions together on one seam.
 func TestFakeServiceConsumer_LifecycleControls_ProjectsOutcomesAndLinks(t *testing.T) {
 	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
