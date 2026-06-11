@@ -240,3 +240,33 @@ var errUnresolvedSymbolicDefaultProvider = errors.New(
 		"set defaults.workerModelProvider, YOU_DEFAULT_WORKER_MODEL_PROVIDER, or " +
 		"--default-worker-model-provider to a supported provider",
 )
+
+// PrecedenceChain describes the operator default precedence order for diagnostics.
+const PrecedenceChain = "file < env < flag"
+
+// DiagnosticsLine returns a redacted verbose diagnostic line for resolved defaults.
+func (r ResolvedDefaults) DiagnosticsLine() string {
+	return fmt.Sprintf(
+		"operatorDefaults precedence=%s provider=%s providerSource=%s model=%s modelSource=%s configPath=%q",
+		PrecedenceChain,
+		diagnosticsDefaultValue(r.WorkerModelProvider, r.WorkerModelProviderSource),
+		diagnosticsSourceLabel(r.WorkerModelProviderSource),
+		diagnosticsDefaultValue(r.WorkerModel, r.WorkerModelSource),
+		diagnosticsSourceLabel(r.WorkerModelSource),
+		r.ConfigPath,
+	)
+}
+
+func diagnosticsSourceLabel(source Source) string {
+	if source == "" {
+		return "unset"
+	}
+	return string(source)
+}
+
+func diagnosticsDefaultValue(value string, source Source) string {
+	if source == "" || strings.TrimSpace(value) == "" {
+		return "unset"
+	}
+	return value
+}
