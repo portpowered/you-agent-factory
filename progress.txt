@@ -1,8 +1,12 @@
 ## Codebase Patterns
+- Normalize durable Factory Session CLI start flags through `pkg/cli/sessionexecution.NormalizeStartRequest` → `pkg/apisurface/factorysession.StartRequestFromCLI` → `factorysessionexecution.NormalizeStartRequest`; render deterministic human/JSON failures with `sessionexecution.WriteExecutionError`.
+- Inline workflow CLI source text reuses `invocations.ResolveTextInput` ownership rules; explicit `--factory`, `--workflow`, and `--workflow-file` selectors are mutually exclusive.
 - Published Factory Session fixture scenario IDs and stable projection hashes live in `pkg/factorysessionexecution/fixture_catalog.go` (`PublishedFixtureScenarios`, `FixtureScenarioIdentityFromScenario`, `FixtureScenarioProjectionHash`); contract JSON remains in `pkg/api/testdata/durable-session-contract-fixtures.json` and loads through `LoadFakeScenariosFromContractFixtures`.
 - Use `ContractFixtureCatalogRelativePath` when downstream cells need the repository-relative catalog path; prove stable identity with `fixture_catalog_test.go` golden projection hashes rather than recomputing ad hoc in each consumer package.
 - Built-in recoverable interrupted JavaScript session `javascript-interrupted-recoverable` is appended by `LoadFakeScenariosFromContractFixtures` even though it is not in the JSON catalog.
 - Prove FakeService start/list/read/result behavior against `PublishedFixtureScenarios` in `start_list_read_result_test.go`; use `ProjectedResultReadHash` and `SyncStartResultHash` for golden result digests instead of ad hoc field comparisons.
+- Wire mock-backed synchronous CLI starts through `sessionexecution.RunSync` and `you workflow run`; render human/JSON via `factorysession.SyncStartResponseToAPI`; default to contract-fixture `FakeService` when no service is injected.
+- `FakeService.StartSync` stores the first sync start payload on the start replay record so request-id replays return the original fixture sync response instead of re-projecting from session state.
 
 ## 2026-06-11 UTC - dynamic-workflows-cell-provider-fixtures-001
 - Published stable fixture scenario identity catalog with purpose-to-scenario mappings for validation failure, async running, sync success, sync timeout, failed recoverable session, dispatch inspection, artifact inspection, event reconnect, and lifecycle-control outcomes.
@@ -23,4 +27,27 @@
   - Patterns discovered: drive story-level FakeService tests from `PublishedFixtureScenarios` + `publishedScenarioByPurpose` rather than duplicating request/session IDs; fixture `asyncResponse.links` may omit events/dispatches/artifacts even when `InspectionLinksForSession` includes them.
   - Gotchas encountered: `GetSession` read models for running/timeout fixtures may omit `resultSummary` — assert result status via `GetResult` instead; idempotent-replay conflict tests must copy `Args` into a new map before mutation.
   - Useful context: sync timeout scenario returns `SYNC_WAIT_TIMED_OUT` availability on final result reads; terminal success dedupes from live rows in `scope=all` when also present in persisted durable listing.
+---
+
+## 2026-06-11 UTC - dynamic-workflows-cell-cli-run-status-result-001
+- Added `pkg/cli/sessionexecution` to resolve sync/async mode, source selectors, args/policy JSON, wait options, and inline workflow positional/stdin input into shared `factorysessionexecution.StartRequest` via `factorysession.StartRequestFromCLI`.
+- Added deterministic CLI execution errors (`WriteExecutionError`) for unsupported mode, missing/conflicting source, invalid args/policy, and shared validation failures.
+- Added focused normalization/idempotency tests proving equivalent CLI inputs hash to the same mock-provider idempotency tuple.
+- Files changed: `pkg/cli/sessionexecution/*`, `pkg/apisurface/factorysession/factory_session_execution_cli.go`, `pkg/apisurface/factorysession/factory_session_execution_test.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: keep CLI transport parsing in `pkg/cli/sessionexecution` and delegate canonical request shaping to `StartRequestFromCLI`; only attach `Wait` options for sync mode.
+  - Gotchas encountered: whitespace-only `--factory` must still count as an explicit selector so `NormalizeStartRequest` can return `source.factoryId` validation errors; existing filesystem paths win over inline stdin without treating file+stdin as invocation text conflicts.
+  - Useful context: story 002 should wire a mock-backed run command that calls `NormalizeStartRequest` then `FakeService.StartSync`/`StartAsync` without introducing HTTP dependencies.
+---
+
+## 2026-06-11 UTC - dynamic-workflows-cell-cli-run-status-result-002
+- Added `sessionexecution.RunSync` to normalize CLI start inputs, call shared `factorysessionexecution.Service.StartSync`, and render deterministic human or `FactorySessionSyncExecutionResponse` JSON through `factorysession.SyncStartResponseToAPI`.
+- Wired `you workflow run` with sync-only execution flags, contract-fixture catalog discovery, and mock-backed `FakeService` fallback.
+- Fixed `FakeService` sync start replay to return the stored first sync response for equivalent `requestId` retries.
+- Added CLI tests for completed human output, deterministic JSON, request-id replay, async rejection, and shared primary-result projection.
+- Files changed: `pkg/cli/sessionexecution/run.go`, `pkg/cli/sessionexecution/run_test.go`, `pkg/cli/sessionexecution/error.go`, `pkg/cli/root.go`, `pkg/factorysessionexecution/fake_service.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: keep CLI execution transport in `sessionexecution.RunSync` and project responses only through apisurface `SyncStartResponseToAPI`; inject `factorysessionexecution.Service` in tests and resolve contract fixtures from cwd for the default mock path.
+  - Gotchas encountered: `WorkContentPart` is a generated union—use `AsWorkTextContentPart` for human summaries; first sync start comes from fixture `syncResponse` while replay previously re-projected from session state until the replay record stored the original payload.
+  - Useful context: story 003 should add async start and status polling commands beside `workflow run`, reusing `NormalizeStartRequest` and the same output/error helpers.
 ---
