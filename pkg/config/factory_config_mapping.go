@@ -147,6 +147,7 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 	return factoryapi.Factory{
 		Name:             factoryReferenceName(cfg),
 		Id:               stringPtrIfNotEmpty(cfg.Project),
+		ModelProvider:    factoryModelProviderSelectionPtrIfNotEmpty(cfg.ModelProvider),
 		Version:          hybridLogicalTimestampPtr(cfg.Version),
 		Guards:           factoryGuardsAPIFromInternal(cfg.Guards),
 		InputTypes:       inputTypesAPIFromInternal(cfg.InputTypes),

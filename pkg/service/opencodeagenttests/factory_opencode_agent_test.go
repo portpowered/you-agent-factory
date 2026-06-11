@@ -41,7 +41,7 @@ You are a helpful assistant.
 func TestBuildFactoryService_AllowsOpenCodeAgentWithOpenCodeFactoryRunner(t *testing.T) {
 	dir := t.TempDir()
 	cfg := factoryfixtures.MinimalFactoryConfig()
-	cfg["runner"] = interfaces.RunnerIDOpenCode
+	cfg["modelProvider"] = "OPENCODE"
 	factoryfixtures.WriteFactoryJSON(t, dir, cfg)
 	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
 type: MODEL_WORKER

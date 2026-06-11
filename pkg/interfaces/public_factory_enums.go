@@ -81,6 +81,18 @@ var publicFactoryWorkerModelProviderAliases = map[string]string{
 	publicFactoryWorkerModelProviderOpenCode: publicFactoryWorkerModelProviderOpenCode,
 }
 
+const publicFactoryModelProviderSelectionDefault = "DEFAULT"
+
+var publicFactoryModelProviderSelectionAliases = map[string]string{
+	publicFactoryModelProviderSelectionDefault: publicFactoryModelProviderSelectionDefault,
+	publicFactoryWorkerModelProviderClaude:     publicFactoryWorkerModelProviderClaude,
+	publicFactoryWorkerModelProviderCodex:      publicFactoryWorkerModelProviderCodex,
+	publicFactoryWorkerModelProviderCursor:     publicFactoryWorkerModelProviderCursor,
+	publicFactoryWorkerModelProviderGemini:     publicFactoryWorkerModelProviderGemini,
+	publicFactoryWorkerModelProviderKiro:       publicFactoryWorkerModelProviderKiro,
+	publicFactoryWorkerModelProviderOpenCode:   publicFactoryWorkerModelProviderOpenCode,
+}
+
 var publicFactoryWorkerProviderAliases = map[string]string{
 	publicFactoryWorkerProviderScriptWrap: publicFactoryWorkerProviderScriptWrap,
 }
@@ -232,6 +244,12 @@ func PermissivePublicFactoryWorkerModelProvider(value string) string {
 // StrictPublicFactoryWorkerModelProvider canonicalizes supported public worker model providers and rejects unknown values.
 func StrictPublicFactoryWorkerModelProvider(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerModelProviderAliases, false)
+}
+
+// StrictPublicFactoryModelProviderSelection canonicalizes supported public factory-level
+// modelProvider values, including symbolic DEFAULT, and rejects unknown values.
+func StrictPublicFactoryModelProviderSelection(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryModelProviderSelectionAliases, false)
 }
 
 // PermissivePublicFactoryWorkerProvider canonicalizes supported public worker providers and preserves unknown values.

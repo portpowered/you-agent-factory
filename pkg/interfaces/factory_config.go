@@ -132,7 +132,7 @@ type FactoryConfig struct {
 	Name             string                          `json:"name"`
 	Project          string                          `json:"project,omitempty"`
 	Version          *FactoryVersion                 `json:"version,omitempty"`
-	Runner           string                          `json:"runner,omitempty"`
+	ModelProvider    string                          `json:"modelProvider,omitempty"`
 	Guards           []FactoryGuardConfig            `json:"guards,omitempty"`
 	InputTypes       []InputTypeConfig               `json:"input_types,omitempty"`
 	InvocationReturn *InvocationReturnConfig         `json:"invocation_return,omitempty"`
@@ -230,6 +230,10 @@ const (
 
 // WorkTypeHandlingBehaviorDefault marks the work type that receives simplified CLI prompt submissions.
 const WorkTypeHandlingBehaviorDefault = "DEFAULT"
+
+// FactoryModelProviderDefault is the symbolic factory-level modelProvider value that
+// defers execution-family selection to worker modelProvider and operator default.
+const FactoryModelProviderDefault = "DEFAULT"
 
 type InvocationReturnConfig struct {
 	Policy        string `json:"policy"`

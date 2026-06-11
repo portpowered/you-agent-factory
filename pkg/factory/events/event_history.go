@@ -662,7 +662,7 @@ func (h *FactoryEventHistory) factoryRunnerID() string {
 	if cfg == nil {
 		return ""
 	}
-	return cfg.Runner
+	return cfg.ModelProvider
 }
 
 func traceIDsFromTokens(tokens []interfaces.Token) []string {

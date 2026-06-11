@@ -13,6 +13,9 @@ import (
 
 func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig, error) {
 	cfg := interfaces.FactoryConfig{Name: string(apiCfg.Name)}
+	if apiCfg.ModelProvider != nil {
+		cfg.ModelProvider = internalFactoryModelProviderSelectionFromPublic(apiCfg.ModelProvider)
+	}
 	if apiCfg.Id != nil {
 		cfg.Project = *apiCfg.Id
 	}
@@ -896,6 +899,37 @@ func internalFactoryWorkerModelProviderFromPublic(value *factoryapi.WorkerModelP
 		return string(internal)
 	}
 	return strings.TrimSpace(string(*value))
+}
+
+func internalFactoryModelProviderSelectionFromPublic(value *factoryapi.ModelProviderSelection) string {
+	if value == nil {
+		return ""
+	}
+	if canonical := interfaces.StrictPublicFactoryModelProviderSelection(string(*value)); canonical == interfaces.FactoryModelProviderDefault {
+		return interfaces.FactoryModelProviderDefault
+	}
+	if internal, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(factoryapi.WorkerModelProvider(*value)); ok {
+		return string(internal)
+	}
+	return strings.TrimSpace(string(*value))
+}
+
+func publicFactoryModelProviderSelectionFromInternal(value string) *factoryapi.ModelProviderSelection {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	if trimmed == interfaces.FactoryModelProviderDefault {
+		selection := factoryapi.ModelProviderSelectionDefault
+		return &selection
+	}
+	public := publicFactoryWorkerModelProviderFromInternal(trimmed)
+	selection := factoryapi.ModelProviderSelection(public)
+	return &selection
+}
+
+func factoryModelProviderSelectionPtrIfNotEmpty(value string) *factoryapi.ModelProviderSelection {
+	return publicFactoryModelProviderSelectionFromInternal(value)
 }
 
 func internalFactoryWorkerModelLocalityFromPublic(value *factoryapi.WorkerModelLocality) string {

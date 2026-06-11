@@ -1876,6 +1876,8 @@ components:
       $ref: './components/schemas/data-models/WorkerType.yaml'
     WorkerModelProvider:
       $ref: './components/schemas/data-models/WorkerModelProvider.yaml'
+    ModelProviderSelection:
+      $ref: './components/schemas/data-models/ModelProviderSelection.yaml'
     WorkerModelLocality:
       $ref: './components/schemas/data-models/WorkerModelLocality.yaml'
     WorkerProvider:

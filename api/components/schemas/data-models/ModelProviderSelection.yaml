@@ -1,0 +1,28 @@
+type: string
+description: >-
+  Canonical execution-family selector for factory-level defaults. DEFAULT defers
+  to worker modelProvider and then the operator default.
+x-enum-varnames:
+  - ModelProviderSelectionDefault
+  - ModelProviderSelectionClaude
+  - ModelProviderSelectionCodex
+  - ModelProviderSelectionCursor
+  - ModelProviderSelectionGemini
+  - ModelProviderSelectionKiro
+  - ModelProviderSelectionOpenCode
+enum:
+  - DEFAULT
+  - CLAUDE
+  - CODEX
+  - CURSOR
+  - GEMINI
+  - KIRO
+  - OPENCODE
+x-enum-descriptions:
+  - Defer execution-family selection to worker modelProvider, then operator default.
+  - Claude model execution routed through the `claude` provider command.
+  - Codex model execution routed through the `codex` provider command.
+  - Cursor model execution routed through the `agent` provider command.
+  - Gemini model execution routed through the `gemini` provider command.
+  - Kiro model execution routed through the `kiro-cli` provider command.
+  - OpenCode model execution routed through the `opencode` provider command.

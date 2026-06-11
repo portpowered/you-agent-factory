@@ -947,7 +947,7 @@ func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryCon
 	if factoryCfg == nil {
 		return ""
 	}
-	return interfaces.NormalizeRunnerID(factoryCfg.Runner)
+	return strings.TrimSpace(factoryCfg.ModelProvider)
 }
 
 // loadWorkersFromConfig instantiates worker executors from the loaded runtime config.
@@ -1124,6 +1124,9 @@ func buildWorkerExecutor(
 func validateConfiguredWorkstationRunners(factoryCfg *interfaces.FactoryConfig, factoryRunnerID string, runtimeCfg interfaces.RuntimeConfigLookup, preflight runnerSelectionPreflight) error {
 	if factoryCfg == nil {
 		return nil
+	}
+	if err := interfaces.ValidateFactoryModelProviderSelection(factoryRunnerID); err != nil {
+		return err
 	}
 	for i, workstation := range factoryCfg.Workstations {
 		runtimeWorkstation, ok := runtimeCfg.Workstation(workstation.Name)

@@ -110,9 +110,9 @@ properties:
   id:
     type: string
     description: Factory identifier used as the factory-level template context fallback.
-  runner:
-    $ref: './RunnerID.yaml'
-    description: Default runner selection for the factory when a workstation does not declare its own runner override.
+  modelProvider:
+    $ref: './ModelProviderSelection.yaml'
+    description: Default execution-family selection for the factory when a workstation or worker does not declare a concrete provider. DEFAULT defers to worker modelProvider and then the operator default.
   factoryDirectory:
     type: string
     description: Directory that contained the factory.json used for this serialized runtime config.

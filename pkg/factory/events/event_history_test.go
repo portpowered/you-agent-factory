@@ -472,7 +472,7 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesFactoryRunnerOverrideM
 		eventHistoryProjectionNet(),
 		func() time.Time { return time.Unix(0, 0).UTC() },
 		eventHistoryRuntimeConfig{
-			Factory: &interfaces.FactoryConfig{Runner: "codex"},
+			Factory: &interfaces.FactoryConfig{ModelProvider: string(interfaces.ModelProviderCodex)},
 		},
 	)
 	history.SetFactoryRunnerOverride("  gemini  ")
@@ -491,7 +491,7 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesSharedFactoryConfigRun
 		eventHistoryProjectionNet(),
 		func() time.Time { return time.Unix(0, 0).UTC() },
 		eventHistoryRuntimeConfig{
-			Factory: &interfaces.FactoryConfig{Runner: "  opencode  "},
+			Factory: &interfaces.FactoryConfig{ModelProvider: "  opencode  "},
 		},
 	)
 

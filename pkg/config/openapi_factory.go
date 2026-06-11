@@ -183,7 +183,7 @@ func normalizeCanonicalFactoryInputFields(v any) (any, error) {
 	if !ok {
 		return v, nil
 	}
-	if err := normalizeFactoryEnumObjectFieldWithNormalizer(root, "runner", "runner", interfaces.StrictPublicFactoryRunnerID); err != nil {
+	if err := normalizeFactoryEnumObjectFieldWithNormalizer(root, "modelProvider", "modelProvider", interfaces.StrictPublicFactoryModelProviderSelection); err != nil {
 		return nil, err
 	}
 	if err := normalizeFactoryGuardEntries(root); err != nil {
@@ -686,6 +686,13 @@ type retiredBoundaryField struct {
 	replacement string
 }
 
+func rejectRetiredFactoryRunnerField(root map[string]any) error {
+	if _, ok := root["runner"]; ok {
+		return fmt.Errorf("factory.runner is retired; use factory.modelProvider")
+	}
+	return nil
+}
+
 var retiredFactoryBoundaryFields = []retiredBoundaryField{
 	{key: "project", replacement: "use id"},
 	{key: "factoryDir", replacement: "use factoryDirectory"},
@@ -767,6 +774,9 @@ func rejectRetiredGeneratedBoundaryAliases(data []byte) error {
 	var payload map[string]any
 	if err := json.Unmarshal(data, &payload); err != nil {
 		return nil
+	}
+	if err := rejectRetiredFactoryRunnerField(payload); err != nil {
+		return err
 	}
 	if err := rejectRetiredBoundaryFields(payload, "factory", retiredFactoryBoundaryFields); err != nil {
 		return err

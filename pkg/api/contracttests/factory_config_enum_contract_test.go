@@ -33,7 +33,7 @@ func TestFactoryConfigContract_OpenAPIEnumBackedFieldsReferenceNamedSchemas(t *t
 	assertSchemaPropertyRef(t, schemas, "Worker", "modelLocality", "#/components/schemas/WorkerModelLocality")
 	assertSchemaPropertyRef(t, schemas, "Worker", "executorProvider", "#/components/schemas/WorkerProvider")
 	assertSchemaArrayItemRef(t, schemas, "Worker", "operations", "#/components/schemas/ModelOperation")
-	assertSchemaPropertyRef(t, schemas, "Factory", "runner", "#/components/schemas/RunnerID")
+	assertSchemaPropertyRef(t, schemas, "Factory", "modelProvider", "#/components/schemas/ModelProviderSelection")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "behavior", "#/components/schemas/WorkstationKind")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "operation", "#/components/schemas/ModelOperationName")
 	assertSchemaPropertyRef(t, schemas, "Workstation", "runner", "#/components/schemas/RunnerID")
@@ -53,7 +53,7 @@ func TestFactoryConfigContract_GeneratedModelsUseEnumBackedFieldsForTightenedCon
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Worker{}), "ModelLocality", reflect.TypeOf((*generated.WorkerModelLocality)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Worker{}), "ExecutorProvider", reflect.TypeOf((*generated.WorkerProvider)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Worker{}), "Operations", reflect.TypeOf((*[]generated.ModelOperation)(nil)))
-	assertGeneratedFieldType(t, reflect.TypeOf(generated.Factory{}), "Runner", reflect.TypeOf((*generated.RunnerID)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.Factory{}), "ModelProvider", reflect.TypeOf((*generated.ModelProviderSelection)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Behavior", reflect.TypeOf((*generated.WorkstationKind)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Operation", reflect.TypeOf((*string)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "Runner", reflect.TypeOf((*generated.RunnerID)(nil)))
@@ -86,8 +86,8 @@ func assertCanonicalFactoryTopLevelEnums(t *testing.T, factory generated.Factory
 	if factory.Guards == nil || len(*factory.Guards) != 1 {
 		t.Fatalf("canonical factory guards = %#v, want one enum-backed factory guard", factory.Guards)
 	}
-	if factory.Runner == nil || *factory.Runner != generated.RunnerIDGemini {
-		t.Fatalf("canonical factory runner = %#v, want gemini", factory.Runner)
+	if factory.ModelProvider == nil || *factory.ModelProvider != generated.ModelProviderSelectionGemini {
+		t.Fatalf("canonical factory modelProvider = %#v, want GEMINI", factory.ModelProvider)
 	}
 	if (*factory.Guards)[0].Type != generated.GuardTypeInferenceThrottle {
 		t.Fatalf("canonical factory guard type = %q, want INFERENCE_THROTTLE_GUARD", (*factory.Guards)[0].Type)

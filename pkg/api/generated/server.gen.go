@@ -508,6 +508,17 @@ const (
 	ModelOperationContentTypeText   ModelOperationContentType = "TEXT"
 )
 
+// Defines values for ModelProviderSelection.
+const (
+	ModelProviderSelectionClaude   ModelProviderSelection = "CLAUDE"
+	ModelProviderSelectionCodex    ModelProviderSelection = "CODEX"
+	ModelProviderSelectionCursor   ModelProviderSelection = "CURSOR"
+	ModelProviderSelectionDefault  ModelProviderSelection = "DEFAULT"
+	ModelProviderSelectionGemini   ModelProviderSelection = "GEMINI"
+	ModelProviderSelectionKiro     ModelProviderSelection = "KIRO"
+	ModelProviderSelectionOpenCode ModelProviderSelection = "OPENCODE"
+)
+
 // Defines values for ModelPullOutcome.
 const (
 	ModelPullOutcomeALREADYPRESENT ModelPullOutcome = "ALREADY_PRESENT"
@@ -999,6 +1010,9 @@ type Factory struct {
 	Layout   *FactoryLayout `json:"layout,omitempty"`
 	Metadata *StringMap     `json:"metadata,omitempty"`
 
+	// ModelProvider Canonical execution-family selector for factory-level defaults. DEFAULT defers to worker modelProvider and then the operator default.
+	ModelProvider *ModelProviderSelection `json:"modelProvider,omitempty"`
+
 	// Name Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 	Name FactoryName `json:"name"`
 
@@ -1007,9 +1021,6 @@ type Factory struct {
 
 	// Resources Shared capacity pools that workers or workstations can consume while work is executing.
 	Resources *[]Resource `json:"resources,omitempty"`
-
-	// Runner Stable built-in runner identifiers supported by factory and workstation runner selection.
-	Runner *RunnerID `json:"runner,omitempty"`
 
 	// SourceDirectory Original source directory for record/replay and drift diagnostics.
 	SourceDirectory *string `json:"sourceDirectory,omitempty"`
@@ -3249,6 +3260,9 @@ type ModelOperationSlot struct {
 	// Required Whether this input slot must be resolved before invocation starts. Output slots omit this field when not needed.
 	Required *bool `json:"required,omitempty"`
 }
+
+// ModelProviderSelection Canonical execution-family selector for factory-level defaults. DEFAULT defers to worker modelProvider and then the operator default.
+type ModelProviderSelection string
 
 // ModelPullDownloadedFile defines model for ModelPullDownloadedFile.
 type ModelPullDownloadedFile struct {

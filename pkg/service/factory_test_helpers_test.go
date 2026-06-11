@@ -443,8 +443,8 @@ You are a helpful assistant.
 	)
 
 	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "mystery-runner", cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil, nil, nil, nil)
-	if err == nil || !strings.Contains(err.Error(), `unknown runner "mystery-runner"`) {
-		t.Fatalf("loadWorkersFromConfig error = %v, want unknown runner", err)
+	if err == nil || !strings.Contains(err.Error(), `unknown modelProvider "mystery-runner"`) {
+		t.Fatalf("loadWorkersFromConfig error = %v, want unknown modelProvider", err)
 	}
 }
 
@@ -524,19 +524,19 @@ func TestRunnerSelectionValidation_RejectsUnknownExplicitFactoryRunner(t *testin
 	})
 
 	err := validateConfiguredWorkstationRunners(cfg, "mystery-runner", runtimeCfg, runnerSelectionPreflight{skipCommandAvailability: true})
-	if err == nil || !strings.Contains(err.Error(), `unknown runner "mystery-runner"`) {
-		t.Fatalf("validateConfiguredWorkstationRunners error = %v, want unknown factory runner", err)
+	if err == nil || !strings.Contains(err.Error(), `unknown modelProvider "mystery-runner"`) {
+		t.Fatalf("validateConfiguredWorkstationRunners error = %v, want unknown factory modelProvider", err)
 	}
 }
 
 func TestEffectiveFactoryRunnerID_PrefersExplicitOverrideThenConfig(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{Runner: interfaces.RunnerIDGemini}
+	cfg := &interfaces.FactoryConfig{ModelProvider: string(interfaces.ModelProviderGemini)}
 
 	if got := effectiveFactoryRunnerID("  cursor-cli  ", cfg); got != interfaces.RunnerIDCursorCLI {
 		t.Fatalf("effectiveFactoryRunnerID override = %q, want %q", got, interfaces.RunnerIDCursorCLI)
 	}
-	if got := effectiveFactoryRunnerID("", cfg); got != interfaces.RunnerIDGemini {
-		t.Fatalf("effectiveFactoryRunnerID config = %q, want %q", got, interfaces.RunnerIDGemini)
+	if got := effectiveFactoryRunnerID("", cfg); got != string(interfaces.ModelProviderGemini) {
+		t.Fatalf("effectiveFactoryRunnerID config = %q, want %q", got, interfaces.ModelProviderGemini)
 	}
 	if got := effectiveFactoryRunnerID("", nil); got != "" {
 		t.Fatalf("effectiveFactoryRunnerID nil config = %q, want empty", got)

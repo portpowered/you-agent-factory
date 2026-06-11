@@ -772,14 +772,65 @@ func ValidateOpenCodeAgentForRunnerSelection(workstationAgent, workerAgent strin
 	)
 }
 
+// RunnerIDFromInternalModelProvider maps a canonical internal model provider command
+// to the built-in runner identifier used by runtime selection when one exists.
+func RunnerIDFromInternalModelProvider(provider string) (string, bool) {
+	switch ModelProvider(strings.ToLower(strings.TrimSpace(provider))) {
+	case ModelProviderCodex:
+		return RunnerIDCodex, true
+	case ModelProviderGemini:
+		return RunnerIDGemini, true
+	case ModelProviderKiro:
+		return RunnerIDKiro, true
+	case ModelProviderCursor:
+		return RunnerIDCursorCLI, true
+	case ModelProviderOpenCode:
+		return RunnerIDOpenCode, true
+	default:
+		return "", false
+	}
+}
+
+// ValidateFactoryModelProviderSelection reports whether one factory-level modelProvider
+// value is a known concrete provider, symbolic DEFAULT, or absent.
+func ValidateFactoryModelProviderSelection(selection string) error {
+	selection = strings.TrimSpace(selection)
+	if selection == "" || selection == FactoryModelProviderDefault {
+		return nil
+	}
+	if resolveFactoryModelProviderSelection(selection) != "" {
+		return nil
+	}
+	switch ModelProvider(strings.ToLower(selection)) {
+	case ModelProviderClaude, ModelProviderCodex, ModelProviderCursor, ModelProviderGemini, ModelProviderKiro, ModelProviderOpenCode:
+		return nil
+	default:
+		return fmt.Errorf("unknown modelProvider %q", selection)
+	}
+}
+
+func resolveFactoryModelProviderSelection(selection string) string {
+	selection = strings.TrimSpace(selection)
+	if selection == "" || selection == FactoryModelProviderDefault {
+		return ""
+	}
+	if runner := NormalizeRunnerID(selection); IsBuiltInRunnerID(runner) {
+		return runner
+	}
+	if runner, ok := RunnerIDFromInternalModelProvider(selection); ok {
+		return runner
+	}
+	return ""
+}
+
 // ResolveRunnerSelection applies the v1 precedence rules for backend runtime
 // runner choice: workstation override, then factory override, then legacy
 // worker modelProvider compatibility, then the codex default.
-func ResolveRunnerSelection(workstationRunner, factoryRunner, workerModelProvider string) ResolvedRunnerSelection {
+func ResolveRunnerSelection(workstationRunner, factoryModelProvider, workerModelProvider string) ResolvedRunnerSelection {
 	if runner := NormalizeRunnerID(workstationRunner); runner != "" {
 		return ResolvedRunnerSelection{RunnerID: runner, Source: RunnerSelectionSourceWorkstation}
 	}
-	if runner := NormalizeRunnerID(factoryRunner); runner != "" {
+	if runner := resolveFactoryModelProviderSelection(factoryModelProvider); runner != "" {
 		return ResolvedRunnerSelection{RunnerID: runner, Source: RunnerSelectionSourceFactory}
 	}
 	if runner := NormalizeRunnerID(workerModelProvider); IsBuiltInRunnerID(runner) {
