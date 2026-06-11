@@ -37,6 +37,8 @@ type ChildExecutionResult struct {
 	DispatchID         string
 	ChildIndex         int
 	Status             string
+	ExecutionMode      string
+	Diagnostic         string
 	Output             map[string]any
 	ArtifactRef        string
 	ProviderSessionRef string
@@ -84,7 +86,7 @@ func (e *FakeChildExecutor) Execute(req ChildExecutionRequest) (ChildExecutionRe
 		Command:            req.Command,
 		Sandbox:            req.Sandbox,
 		SchemaDigest:       schemaDigest(req.OutputSchema),
-		ExecutionMode:      childExecutionModeFake,
+		ExecutionMode:      ChildExecutionModeFake,
 		ProviderSessionRef: providerSessionRef,
 		ArtifactRef:        artifactRef,
 	}
@@ -103,6 +105,7 @@ func (e *FakeChildExecutor) Execute(req ChildExecutionRequest) (ChildExecutionRe
 		DispatchID:         dispatchID,
 		ChildIndex:         childIndex,
 		Status:             ChildDispatchStatusCompleted,
+		ExecutionMode:      ChildExecutionModeFake,
 		Output:             output,
 		ArtifactRef:        artifactRef,
 		ProviderSessionRef: providerSessionRef,
@@ -122,7 +125,7 @@ func (e *FakeChildExecutor) executeFailed(req ChildExecutionRequest) (ChildExecu
 		Command:         req.Command,
 		Sandbox:         req.Sandbox,
 		SchemaDigest:    schemaDigest(req.OutputSchema),
-		ExecutionMode:   childExecutionModeFake,
+		ExecutionMode: ChildExecutionModeFake,
 	}
 	e.appendChildDispatch(base, ChildDispatchStatusQueued)
 	e.appendChildDispatch(base, ChildDispatchStatusRunning)
@@ -132,7 +135,15 @@ func (e *FakeChildExecutor) executeFailed(req ChildExecutionRequest) (ChildExecu
 		Kind:          RecordKindChildDispatch,
 		ChildDispatch: &failed,
 	})
-	return ChildExecutionResult{}, fmt.Errorf("fake child failed: %s", strings.TrimPrefix(req.Prompt, "fail:"))
+	diagnostic := fmt.Sprintf("fake child failed: %s", strings.TrimPrefix(req.Prompt, "fail:"))
+	return ChildExecutionResult{
+		DispatchID:    dispatchID,
+		ChildIndex:    childIndex,
+		Status:        ChildDispatchStatusFailed,
+		ExecutionMode: ChildExecutionModeFake,
+		Diagnostic:    diagnostic,
+		Request:       req,
+	}, fmt.Errorf("%s", diagnostic)
 }
 
 func (e *FakeChildExecutor) childDispatchIdentity(req ChildExecutionRequest) (string, int) {
@@ -290,11 +301,14 @@ func textDigest(text string) string {
 	return contentDigest([]byte(text))
 }
 
-func failedChildResultValue(label string, err error) map[string]any {
+func failedChildResultValue(label, executionMode string, err error) map[string]any {
+	if executionMode == "" {
+		executionMode = ChildExecutionModeFake
+	}
 	value := map[string]any{
-		"status":      ChildDispatchStatusFailed,
-		"executionMode": childExecutionModeFake,
-		"diagnostic":  err.Error(),
+		"status":        ChildDispatchStatusFailed,
+		"executionMode": executionMode,
+		"diagnostic":    err.Error(),
 	}
 	if label != "" {
 		value["label"] = label
@@ -304,14 +318,21 @@ func failedChildResultValue(label string, err error) map[string]any {
 
 func childResultValueMap(result ChildExecutionResult) map[string]any {
 	req := result.Request
+	executionMode := result.ExecutionMode
+	if executionMode == "" {
+		executionMode = ChildExecutionModeFake
+	}
 	value := map[string]any{
 		"status":             result.Status,
 		"dispatchId":         result.DispatchID,
 		"childIndex":         result.ChildIndex,
-		"executionMode":      childExecutionModeFake,
+		"executionMode":      executionMode,
 		"providerSessionRef": result.ProviderSessionRef,
 		"promptDigest":       textDigest(req.Prompt),
 		"output":             result.Output,
+	}
+	if result.Diagnostic != "" {
+		value["diagnostic"] = result.Diagnostic
 	}
 	if req.Label != "" {
 		value["label"] = req.Label

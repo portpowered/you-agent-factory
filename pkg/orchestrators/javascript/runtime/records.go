@@ -24,7 +24,9 @@ const (
 	ChildDispatchStatusFailed    = "FAILED"
 )
 
-const childExecutionModeFake = "fake"
+// ChildExecutionModeFake marks deterministic in-process child execution used before
+// real provider dispatch is available.
+const ChildExecutionModeFake = "fake"
 
 // RuntimeRecord is one ordered host-effect record emitted during workflow execution.
 // Records are typed so they can later map into factory session events, dispatches,

@@ -44,7 +44,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 		policy:        policy,
 		sessionID:     sessionID,
 		records:       records,
-		childExecutor: NewFakeChildExecutor(sessionID, records),
+		childExecutor: childExecutorForRun(sessionID, records, hooks),
 		onArtifact:    hooks.OnArtifact,
 	}
 	if err := globals.bindWorkflowAPI(); err != nil {
@@ -122,6 +122,13 @@ func argsValueForRequest(vm *goja.Runtime, raw json.RawMessage) (goja.Value, err
 
 func wrapWorkflowSource(source string) string {
 	return "(function(){\n" + source + "\n})()"
+}
+
+func childExecutorForRun(sessionID string, records *recordCollector, hooks Hooks) ChildExecutor {
+	if hooks.NewChildExecutor != nil {
+		return hooks.NewChildExecutor(sessionID, records.append)
+	}
+	return NewFakeChildExecutor(sessionID, records)
 }
 
 func watchContext(ctx context.Context, vm *goja.Runtime, done <-chan struct{}) {

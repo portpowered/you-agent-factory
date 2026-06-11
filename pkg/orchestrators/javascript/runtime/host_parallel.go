@@ -162,17 +162,17 @@ func (g *runtimeGlobals) executeParallelAgentSpecs(items []parallelItem, concurr
 
 			req, err := childExecutionRequestFromSpec(item.spec, g.workflowName(), g.argsSubject())
 			if err != nil {
-				results[item.index] = failedChildResultValue("", err)
+				results[item.index] = failedChildResultValue("", "", err)
 				return
 			}
 			if err := g.denyChildRequest(req); err != nil {
-				results[item.index] = failedChildResultValue(req.Label, err)
+				results[item.index] = failedChildResultValue(req.Label, "", err)
 				return
 			}
 			req.ReservedIdentity = identityByIndex[item.index]
 			result, err := g.childExecutor.Execute(req)
 			if err != nil {
-				results[item.index] = failedChildResultValue(req.Label, err)
+				results[item.index] = failedChildResultValue(req.Label, result.ExecutionMode, err)
 				return
 			}
 			results[item.index] = childResultValueMap(result)

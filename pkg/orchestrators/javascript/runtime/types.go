@@ -17,10 +17,15 @@ type Request struct {
 	Policy    workflowpolicy.EffectivePolicy
 }
 
-// Hooks supplies optional terminal result and artifact callbacks.
+// ChildExecutorFactory builds the child executor for one workflow run. The
+// appendRecord callback appends typed runtime records in execution order.
+type ChildExecutorFactory func(sessionID string, appendRecord func(RuntimeRecord)) ChildExecutor
+
+// Hooks supplies optional terminal result, artifact, and child-execution callbacks.
 type Hooks struct {
-	OnResult   func(workflowresult.TypedValue) error
-	OnArtifact func(kind string, content json.RawMessage) error
+	OnResult         func(workflowresult.TypedValue) error
+	OnArtifact       func(kind string, content json.RawMessage) error
+	NewChildExecutor ChildExecutorFactory
 }
 
 // Failure is one deterministic runtime failure diagnostic.
