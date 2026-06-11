@@ -30,7 +30,7 @@ func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 		"Packaged reference topics:",
 		"`agents` - Agent orientation: read order, work submission, command matrix, planner vs executor, and topic router",
 		"`authoring-factories` - Practical factory authoring workflow",
-		"`config` - factory.json topology, work types, states, workers, workstations, resources, and portability",
+		"`config` - factory.json topology, operator model defaults, work types, states, workers, workstations, resources, and portability",
 		"`mock-workers` - Mock-worker runs",
 		"`record-replay` - Record and replay run modes",
 		"`guards` - Workstation, input, and factory guards",

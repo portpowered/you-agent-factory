@@ -809,7 +809,7 @@ func serviceSlicePtr[T any](values []T) *[]T {
 
 func writeWorkerAgentsMD(t *testing.T, factoryDir, workerName string) {
 	t.Helper()
-	writeWorkerAgentsMDWithContent(t, factoryDir, workerName, "---\ntype: MODEL_WORKER\nmodel: claude-3-5-haiku-20241022\n---\nYou are a helpful assistant.\n")
+	writeWorkerAgentsMDWithContent(t, factoryDir, workerName, "---\ntype: MODEL_WORKER\nmodelProvider: codex\nmodel: claude-3-5-haiku-20241022\n---\nYou are a helpful assistant.\n")
 }
 
 func writeScriptWorkerAgentsMD(t *testing.T, factoryDir, workerName string) {

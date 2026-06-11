@@ -4,6 +4,7 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
@@ -15,6 +16,8 @@ import (
 type Config struct {
 	ExecutionBaseDir                        string
 	RunnerID                                string
+	OperatorDefaults                        operatorconfig.ResolvedDefaults
+	ApplyOperatorDefaults                   bool
 	RuntimeMode                             interfaces.RuntimeMode
 	Verbose                                 bool
 	RuntimeInstanceID                       string

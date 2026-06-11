@@ -20,7 +20,7 @@ workflow.log("step");
 workflow.artifact({ kind: "log", label: "step" });
 const result = await agent.run({ prompt: "review" });
 workflow.final({ ok: true, result });
-parallel([pipeline([result])]);
+pipeline([], function () {}, function () {});
 `
 
 func TestResolve_WorkflowName_UsesProjectClaudeWorkflowsFirst(t *testing.T) {

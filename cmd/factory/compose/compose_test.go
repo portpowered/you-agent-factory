@@ -7,7 +7,11 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/cmd/factory/compose"
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"go.uber.org/zap"
 )
 
 func TestInjectFactoryService_RejectsMissingFactoryDir(t *testing.T) {
@@ -60,5 +64,147 @@ func TestInjectFactoryService_BuildsMinimalFactory(t *testing.T) {
 	}
 	if svc == nil {
 		t.Fatal("expected non-nil FactoryService")
+	}
+}
+
+func TestInjectFactoryService_MatchesBuildFactoryServiceWithResolvedOperatorDefaults(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "factory.json"), []byte(`{
+  "name": "wire-operator-defaults",
+  "workTypes": [{
+    "name": "task",
+    "states": [
+      {"name": "init", "type": "INITIAL"},
+      {"name": "complete", "type": "TERMINAL"},
+      {"name": "failed", "type": "FAILED"}
+    ]
+  }],
+  "workers": [{
+    "name": "executor",
+    "type": "MODEL_WORKER",
+    "body": "You are the executor."
+  }],
+  "workstations": [{
+    "name": "execute-task",
+    "worker": "executor",
+    "inputs": [{"workType": "task", "state": "init"}],
+    "outputs": [{"workType": "task", "state": "complete"}],
+    "onFailure": [{"workType": "task", "state": "failed"}],
+    "type": "MODEL_WORKSTATION",
+    "body": "Implement {{ .WorkID }}."
+  }]
+}`), 0o600); err != nil {
+		t.Fatalf("write factory.json: %v", err)
+	}
+
+	ctx := context.Background()
+	cfg := &service.FactoryServiceConfig{
+		Dir: dir,
+		OperatorDefaults: operatorconfig.ResolvedDefaults{
+			WorkerModelProvider:       "CODEX",
+			WorkerModel:               "gpt-5-codex",
+			WorkerModelProviderSource: operatorconfig.SourceFlag,
+			WorkerModelSource:         operatorconfig.SourceFlag,
+		},
+		MockWorkersConfig:                       config.NewEmptyMockWorkersConfig(),
+		SkipBuiltInRunnerPrerequisiteValidation: true,
+		Logger:                                  zap.NewNop(),
+	}
+
+	wireBuilt, err := compose.InjectFactoryService(ctx, cfg)
+	if err != nil {
+		t.Fatalf("InjectFactoryService: %v", err)
+	}
+	directBuilt, err := service.BuildFactoryService(ctx, cfg)
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	if directBuilt.ComposeCollaboratorSnapshot() != wireBuilt.ComposeCollaboratorSnapshot() {
+		t.Fatalf("compose snapshot mismatch: direct=%+v wire=%+v",
+			directBuilt.ComposeCollaboratorSnapshot(), wireBuilt.ComposeCollaboratorSnapshot())
+	}
+
+	assertComposeOperatorDefaultedExecutorWorker(t, directBuilt)
+	assertComposeOperatorDefaultedExecutorWorker(t, wireBuilt)
+}
+
+func TestInjectFactoryService_IgnoresOperatorDefaultEnvironmentWhenConfigSupplied(t *testing.T) {
+	t.Setenv(operatorconfig.EnvDefaultWorkerModelProvider, "claude")
+	t.Setenv(operatorconfig.EnvDefaultWorkerModel, "claude-sonnet-4-20250514")
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "factory.json"), []byte(`{
+  "name": "wire-env-ignore",
+  "workTypes": [{
+    "name": "task",
+    "states": [
+      {"name": "init", "type": "INITIAL"},
+      {"name": "complete", "type": "TERMINAL"},
+      {"name": "failed", "type": "FAILED"}
+    ]
+  }],
+  "workers": [{
+    "name": "executor",
+    "type": "MODEL_WORKER",
+    "body": "You are the executor."
+  }],
+  "workstations": [{
+    "name": "execute-task",
+    "worker": "executor",
+    "inputs": [{"workType": "task", "state": "init"}],
+    "outputs": [{"workType": "task", "state": "complete"}],
+    "onFailure": [{"workType": "task", "state": "failed"}],
+    "type": "MODEL_WORKSTATION",
+    "body": "Implement {{ .WorkID }}."
+  }]
+}`), 0o600); err != nil {
+		t.Fatalf("write factory.json: %v", err)
+	}
+
+	ctx := context.Background()
+	cfg := &service.FactoryServiceConfig{
+		Dir: dir,
+		OperatorDefaults: operatorconfig.ResolvedDefaults{
+			WorkerModelProvider:       "CODEX",
+			WorkerModel:               "gpt-5-codex",
+			WorkerModelProviderSource: operatorconfig.SourceFlag,
+			WorkerModelSource:         operatorconfig.SourceFlag,
+		},
+		MockWorkersConfig:                       config.NewEmptyMockWorkersConfig(),
+		SkipBuiltInRunnerPrerequisiteValidation: true,
+		Logger:                                  zap.NewNop(),
+	}
+
+	wireBuilt, err := compose.InjectFactoryService(ctx, cfg)
+	if err != nil {
+		t.Fatalf("InjectFactoryService: %v", err)
+	}
+	directBuilt, err := service.BuildFactoryService(ctx, cfg)
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	if directBuilt.ComposeCollaboratorSnapshot() != wireBuilt.ComposeCollaboratorSnapshot() {
+		t.Fatalf("compose snapshot mismatch: direct=%+v wire=%+v",
+			directBuilt.ComposeCollaboratorSnapshot(), wireBuilt.ComposeCollaboratorSnapshot())
+	}
+
+	assertComposeOperatorDefaultedExecutorWorker(t, wireBuilt)
+}
+
+func assertComposeOperatorDefaultedExecutorWorker(t *testing.T, svc *service.FactoryService) {
+	t.Helper()
+	worker, ok := svc.StartupWorkerConfig("executor")
+	if !ok || worker == nil {
+		t.Fatal("expected executor worker")
+	}
+	if worker.ModelProvider != string(interfaces.ModelProviderCodex) {
+		t.Fatalf("modelProvider = %q, want %q", worker.ModelProvider, interfaces.ModelProviderCodex)
+	}
+	if worker.Model != "gpt-5-codex" {
+		t.Fatalf("model = %q, want gpt-5-codex", worker.Model)
 	}
 }

@@ -13,6 +13,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
+	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
@@ -772,6 +773,15 @@ func (fs *FactoryService) currentRuntimeConfig() *factoryconfig.LoadedFactoryCon
 	return nil
 }
 
+// StartupWorkerConfig returns the named worker from the built startup runtime config.
+func (fs *FactoryService) StartupWorkerConfig(name string) (*interfaces.WorkerConfig, bool) {
+	runtimeCfg := fs.currentRuntimeConfig()
+	if runtimeCfg == nil {
+		return nil, false
+	}
+	return runtimeCfg.Worker(name)
+}
+
 func (fs *FactoryService) workflowID() string {
 	if fs == nil {
 		return ""
@@ -779,6 +789,16 @@ func (fs *FactoryService) workflowID() string {
 	fs.runtimeMu.RLock()
 	defer fs.runtimeMu.RUnlock()
 	return fs.coordinatorPolicy().workflowID
+}
+
+func applyOperatorDefaultsToLoadedConfig(cfg *FactoryServiceConfig, loaded *factoryconfig.LoadedFactoryConfig) error {
+	if cfg == nil || loaded == nil || cfg.ReplayPath != "" {
+		return nil
+	}
+	if err := operatordefaultsruntime.ApplyToLoadedConfig(loaded, cfg.OperatorDefaults); err != nil {
+		return fmt.Errorf("apply operator defaults: %w", err)
+	}
+	return operatordefaultsruntime.ValidateModelWorkerRuntimeProviders(loaded)
 }
 
 func validateReplayModeConfig(cfg *FactoryServiceConfig) error {
@@ -797,7 +817,13 @@ func loadFactoryConfigForMode(cfg *FactoryServiceConfig) (*factoryconfig.LoadedF
 		if loaded != nil {
 			loaded.SetRuntimeBaseDir(cfg.ExecutionBaseDir)
 		}
-		return loaded, nil, err
+		if err != nil {
+			return loaded, nil, err
+		}
+		if err := applyOperatorDefaultsToLoadedConfig(cfg, loaded); err != nil {
+			return nil, nil, err
+		}
+		return loaded, nil, nil
 	}
 	artifact, err := replay.Load(cfg.ReplayPath)
 	if err != nil {

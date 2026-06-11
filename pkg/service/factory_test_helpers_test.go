@@ -219,7 +219,7 @@ func writeWorkerAgentsMD(t *testing.T, factoryDir, workerName string) {
 	if err := os.MkdirAll(workerDir, 0o755); err != nil {
 		t.Fatalf("create worker dir: %v", err)
 	}
-	agentsMD := "---\ntype: MODEL_WORKER\nmodel: claude-3-5-haiku-20241022\n---\nYou are a helpful assistant.\n"
+	agentsMD := "---\ntype: MODEL_WORKER\nmodelProvider: codex\nmodel: claude-3-5-haiku-20241022\n---\nYou are a helpful assistant.\n"
 	if err := os.WriteFile(filepath.Join(workerDir, "AGENTS.md"), []byte(agentsMD), 0o644); err != nil {
 		t.Fatalf("write AGENTS.md: %v", err)
 	}
@@ -1034,9 +1034,11 @@ func writeNamedFactoryFixture(t *testing.T, rootDir, name string) string {
 		},
 		"workers": []map[string]any{
 			{
-				"name": "executor",
-				"type": "MODEL_WORKER",
-				"body": "You are the executor.",
+				"name":          "executor",
+				"type":          "MODEL_WORKER",
+				"modelProvider": "CODEX",
+				"model":         "gpt-5-codex",
+				"body":          "You are the executor.",
 			},
 		},
 		"workstations": []map[string]any{

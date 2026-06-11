@@ -178,6 +178,30 @@ func (c *LoadedFactoryConfig) Worker(name string) (*interfaces.WorkerConfig, boo
 	return c.lookup.Worker(name)
 }
 
+// MutateWorkers invokes mutate for each worker in the effective factory config and
+// lookup maps so in-memory runtime mutations stay consistent across both views.
+func (c *LoadedFactoryConfig) MutateWorkers(mutate func(worker *interfaces.WorkerConfig) error) error {
+	if c == nil || c.factory == nil {
+		return nil
+	}
+	for i := range c.factory.Workers {
+		if err := mutate(&c.factory.Workers[i]); err != nil {
+			return err
+		}
+	}
+	if c.lookup != nil {
+		for name, worker := range c.lookup.workers {
+			if worker == nil {
+				continue
+			}
+			if err := mutate(worker); err != nil {
+				return fmt.Errorf("worker %q: %w", name, err)
+			}
+		}
+	}
+	return nil
+}
+
 // Workstation returns the canonical loaded workstation entry for the given configured workstation name.
 func (c *LoadedFactoryConfig) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
 	if c == nil {

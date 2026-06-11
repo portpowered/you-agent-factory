@@ -85,6 +85,16 @@ type: MODEL_WORKER
 You are a helpful assistant.
 ```
 
+When operator defaults are configured, you can omit `modelProvider` and
+`model` on `MODEL_WORKER` definitions and let the runtime fill them from
+`~/.you-agent-factory/config.json`, `YOU_DEFAULT_WORKER_MODEL_PROVIDER`,
+`YOU_DEFAULT_WORKER_MODEL`, or global `--default-worker-model-provider` and
+`--default-worker-model`. See `you docs config` for precedence, `DEFAULT`
+resolution, and failure modes.
+
+Authored worker `modelProvider` and `model` values always win over operator
+defaults. Script and hosted workers never receive operator model defaults.
+
 ## Worker-Owned Vs Workstation-Owned Fields
 
 | Put it on the worker | Put it on the workstation |
@@ -318,11 +328,14 @@ Keep worker `modelProvider`, factory/workstation `modelProvider`, and
 `executorProvider` separate:
 
 - Worker `modelProvider` names the worker-local model backend for routing and
-  diagnostics. Current built-in values are `CLAUDE` and `CODEX`.
+  diagnostics. Current built-in values are `CLAUDE` and `CODEX`. Omit it when
+  operator defaults supply the provider for this run.
 - Factory and workstation `modelProvider` choose the execution-family provider
   for dispatches from that scope. Supported built-in values include `CLAUDE`,
   `CODEX`, `GEMINI`, `CURSOR`, `KIRO`, and `OPENCODE`, plus symbolic `DEFAULT`
   to defer through the precedence chain.
+- `model` names the concrete model identifier such as `gpt-5-codex`. Omit it
+  when operator defaults supply the model for this run.
 - `executorProvider` names the execution wrapper around that worker. The
   current public built-in value is `SCRIPT_WRAP`.
 
