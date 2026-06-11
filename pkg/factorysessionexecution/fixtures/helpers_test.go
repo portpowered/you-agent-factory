@@ -178,6 +178,106 @@ func int64Ptr(value int64) *int64 {
 	return &value
 }
 
+func startPublishedScenarioWithSync(t *testing.T, service *fse.FakeService, row fixtures.PublishedFixtureScenario, sync bool) {
+	t.Helper()
+	req := startRequestForPublished(row)
+	if sync {
+		if _, err := service.StartSync(context.Background(), req); err != nil {
+			t.Fatalf("StartSync: %v", err)
+		}
+		return
+	}
+	if _, err := service.StartAsync(context.Background(), req); err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+}
+
+func assertDispatchListStableSummaries(
+	t *testing.T,
+	service *fse.FakeService,
+	row fixtures.PublishedFixtureScenario,
+	wantIDs []string,
+	wantHash string,
+) {
+	t.Helper()
+	listed, err := service.ListDispatches(context.Background(), row.SessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches: %v", err)
+	}
+	if listed.SessionID != row.SessionID {
+		t.Fatalf("sessionId = %q, want %q", listed.SessionID, row.SessionID)
+	}
+	if len(listed.Dispatches) != len(wantIDs) {
+		t.Fatalf("dispatches = %#v, want %d rows", listed.Dispatches, len(wantIDs))
+	}
+	for index, wantID := range wantIDs {
+		got := listed.Dispatches[index]
+		if got.ID != wantID {
+			t.Fatalf("dispatch[%d].id = %q, want %q", index, got.ID, wantID)
+		}
+		if got.Status == "" || got.DispatchKind == "" {
+			t.Fatalf("dispatch[%d] missing status/kind: %#v", index, got)
+		}
+	}
+	read, err := service.GetSession(context.Background(), row.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if err := fse.ValidateDispatchListMatchesSessionProgress(read, listed.Dispatches); err != nil {
+		t.Fatalf("ValidateDispatchListMatchesSessionProgress: %v", err)
+	}
+	hash, err := fixtures.ListDispatchesResultHash(listed)
+	if err != nil {
+		t.Fatalf("ListDispatchesResultHash: %v", err)
+	}
+	if hash != wantHash {
+		t.Fatalf("dispatch list hash = %q, want %q", hash, wantHash)
+	}
+}
+
+func assertArtifactListStableSummaries(
+	t *testing.T,
+	service *fse.FakeService,
+	row fixtures.PublishedFixtureScenario,
+	wantIDs []string,
+	wantHash string,
+) {
+	t.Helper()
+	listed, err := service.ListArtifacts(context.Background(), row.SessionID)
+	if err != nil {
+		t.Fatalf("ListArtifacts: %v", err)
+	}
+	if listed.SessionID != row.SessionID {
+		t.Fatalf("sessionId = %q, want %q", listed.SessionID, row.SessionID)
+	}
+	if len(listed.Artifacts) != len(wantIDs) {
+		t.Fatalf("artifacts = %#v, want %d rows", listed.Artifacts, len(wantIDs))
+	}
+	for index, wantID := range wantIDs {
+		got := listed.Artifacts[index]
+		if got.ID != wantID {
+			t.Fatalf("artifact[%d].id = %q, want %q", index, got.ID, wantID)
+		}
+		if got.Kind == "" || got.ContentHash == "" {
+			t.Fatalf("artifact[%d] missing kind/contentHash: %#v", index, got)
+		}
+		if got.RetrievalRef == nil || got.RetrievalRef.Href == "" {
+			t.Fatalf("artifact[%d] missing retrieval ref: %#v", index, got)
+		}
+		wantHref := "/factory-sessions/" + row.SessionID + "/artifacts/" + wantID
+		if got.RetrievalRef.Href != wantHref {
+			t.Fatalf("retrieval href = %q, want %q", got.RetrievalRef.Href, wantHref)
+		}
+	}
+	hash, err := fixtures.ListArtifactsResultHash(listed)
+	if err != nil {
+		t.Fatalf("ListArtifactsResultHash: %v", err)
+	}
+	if hash != wantHash {
+		t.Fatalf("artifact list hash = %q, want %q", hash, wantHash)
+	}
+}
+
 func assertCanonicalEventEnvelope(t *testing.T, raw json.RawMessage, eventType, id string) {
 	t.Helper()
 	const schemaVersion = "agent-factory.event.v1"

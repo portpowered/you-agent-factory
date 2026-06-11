@@ -105,50 +105,8 @@ func TestFakeService_PublishedScenarios_ListDispatchesStableSummaries(t *testing
 	for _, tc := range cases {
 		row := publishedScenarioByPurpose(t, tc.purpose)
 		t.Run(string(tc.purpose), func(t *testing.T) {
-			req := startRequestForPublished(row)
-			if tc.sync {
-				if _, err := service.StartSync(context.Background(), req); err != nil {
-					t.Fatalf("fse.StartSync: %v", err)
-				}
-			} else if _, err := service.StartAsync(context.Background(), req); err != nil {
-				t.Fatalf("fse.StartAsync: %v", err)
-			}
-
-			listed, err := service.ListDispatches(context.Background(), row.SessionID)
-			if err != nil {
-				t.Fatalf("fse.ListDispatches: %v", err)
-			}
-			if listed.SessionID != row.SessionID {
-				t.Fatalf("sessionId = %q, want %q", listed.SessionID, row.SessionID)
-			}
-			if len(listed.Dispatches) != len(tc.wantIDs) {
-				t.Fatalf("dispatches = %#v, want %d rows", listed.Dispatches, len(tc.wantIDs))
-			}
-			for index, wantID := range tc.wantIDs {
-				got := listed.Dispatches[index]
-				if got.ID != wantID {
-					t.Fatalf("dispatch[%d].id = %q, want %q", index, got.ID, wantID)
-				}
-				if got.Status == "" || got.DispatchKind == "" {
-					t.Fatalf("dispatch[%d] missing status/kind: %#v", index, got)
-				}
-			}
-
-			read, err := service.GetSession(context.Background(), row.SessionID)
-			if err != nil {
-				t.Fatalf("fse.GetSession: %v", err)
-			}
-			if err := fse.ValidateDispatchListMatchesSessionProgress(read, listed.Dispatches); err != nil {
-				t.Fatalf("fse.ValidateDispatchListMatchesSessionProgress: %v", err)
-			}
-
-			hash, err := fixtures.ListDispatchesResultHash(listed)
-			if err != nil {
-				t.Fatalf("fixtures.ListDispatchesResultHash: %v", err)
-			}
-			if hash != tc.wantHash {
-				t.Fatalf("dispatch list hash = %q, want %q", hash, tc.wantHash)
-			}
+			startPublishedScenarioWithSync(t, service, row, tc.sync)
+			assertDispatchListStableSummaries(t, service, row, tc.wantIDs, tc.wantHash)
 		})
 	}
 }
@@ -222,49 +180,8 @@ func TestFakeService_PublishedScenarios_ListArtifactsStableSummaries(t *testing.
 	for _, tc := range cases {
 		row := publishedScenarioByPurpose(t, tc.purpose)
 		t.Run(string(tc.purpose), func(t *testing.T) {
-			req := startRequestForPublished(row)
-			if tc.sync {
-				if _, err := service.StartSync(context.Background(), req); err != nil {
-					t.Fatalf("fse.StartSync: %v", err)
-				}
-			} else if _, err := service.StartAsync(context.Background(), req); err != nil {
-				t.Fatalf("fse.StartAsync: %v", err)
-			}
-
-			listed, err := service.ListArtifacts(context.Background(), row.SessionID)
-			if err != nil {
-				t.Fatalf("fse.ListArtifacts: %v", err)
-			}
-			if listed.SessionID != row.SessionID {
-				t.Fatalf("sessionId = %q, want %q", listed.SessionID, row.SessionID)
-			}
-			if len(listed.Artifacts) != len(tc.wantIDs) {
-				t.Fatalf("artifacts = %#v, want %d rows", listed.Artifacts, len(tc.wantIDs))
-			}
-			for index, wantID := range tc.wantIDs {
-				got := listed.Artifacts[index]
-				if got.ID != wantID {
-					t.Fatalf("artifact[%d].id = %q, want %q", index, got.ID, wantID)
-				}
-				if got.Kind == "" || got.ContentHash == "" {
-					t.Fatalf("artifact[%d] missing kind/contentHash: %#v", index, got)
-				}
-				if got.RetrievalRef == nil || got.RetrievalRef.Href == "" {
-					t.Fatalf("artifact[%d] missing retrieval ref: %#v", index, got)
-				}
-				wantHref := "/factory-sessions/" + row.SessionID + "/artifacts/" + wantID
-				if got.RetrievalRef.Href != wantHref {
-					t.Fatalf("retrieval href = %q, want %q", got.RetrievalRef.Href, wantHref)
-				}
-			}
-
-			hash, err := fixtures.ListArtifactsResultHash(listed)
-			if err != nil {
-				t.Fatalf("fixtures.ListArtifactsResultHash: %v", err)
-			}
-			if hash != tc.wantHash {
-				t.Fatalf("artifact list hash = %q, want %q", hash, tc.wantHash)
-			}
+			startPublishedScenarioWithSync(t, service, row, tc.sync)
+			assertArtifactListStableSummaries(t, service, row, tc.wantIDs, tc.wantHash)
 		})
 	}
 }

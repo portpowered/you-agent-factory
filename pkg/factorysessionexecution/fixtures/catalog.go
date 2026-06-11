@@ -594,27 +594,43 @@ func TypedFailureIdentityFromError(err error) (TypedFailureIdentity, bool) {
 		}, true
 	}
 
-	var controlErr *ControlError
-	if errors.As(err, &controlErr) {
-		kind := TypedFailureLifecycleConflict
-		switch controlErr.Outcome {
-		case LifecycleControlOutcomeInvalidState:
-			kind = TypedFailureLifecycleInvalidState
-		case LifecycleControlOutcomeTerminalSession:
-			kind = TypedFailureLifecycleTerminalSession
-		case LifecycleControlOutcomeConflict:
-			kind = TypedFailureLifecycleConflict
-		default:
-			return TypedFailureIdentity{}, false
-		}
-		return TypedFailureIdentity{
-			Kind:      kind,
-			Operation: controlErr.Operation,
-			Outcome:   controlErr.Outcome,
-			Status:    controlErr.Status,
-		}, true
+	if identity, ok := typedFailureIdentityFromControlError(err); ok {
+		return identity, true
 	}
+	return typedFailureIdentityFromSentinelError(err)
+}
 
+func typedFailureIdentityFromControlError(err error) (TypedFailureIdentity, bool) {
+	var controlErr *ControlError
+	if !errors.As(err, &controlErr) {
+		return TypedFailureIdentity{}, false
+	}
+	kind, ok := typedFailureKindForControlOutcome(controlErr.Outcome)
+	if !ok {
+		return TypedFailureIdentity{}, false
+	}
+	return TypedFailureIdentity{
+		Kind:      kind,
+		Operation: controlErr.Operation,
+		Outcome:   controlErr.Outcome,
+		Status:    controlErr.Status,
+	}, true
+}
+
+func typedFailureKindForControlOutcome(outcome LifecycleControlOutcome) (TypedFailureKind, bool) {
+	switch outcome {
+	case LifecycleControlOutcomeInvalidState:
+		return TypedFailureLifecycleInvalidState, true
+	case LifecycleControlOutcomeTerminalSession:
+		return TypedFailureLifecycleTerminalSession, true
+	case LifecycleControlOutcomeConflict:
+		return TypedFailureLifecycleConflict, true
+	default:
+		return "", false
+	}
+}
+
+func typedFailureIdentityFromSentinelError(err error) (TypedFailureIdentity, bool) {
 	switch {
 	case errors.Is(err, fse.ErrSessionNotFound):
 		return TypedFailureIdentity{Kind: TypedFailureSessionNotFound}, true
