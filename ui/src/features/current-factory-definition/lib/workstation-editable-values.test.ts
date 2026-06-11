@@ -1,6 +1,7 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: existing workstation-editable-values coverage stayed intact during feature-root migration.
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
+import { WorkerType, WorkstationType } from "../../../api/generated/openapi";
 import { resolveEditableWorkstationOverwriteFields } from "../../current-selection/workstation-selection/editing/editable-workstation-overwrite-fields";
 import {
   applyEditableWorkstationDraft,
@@ -2047,5 +2048,75 @@ describe("editable workstation name draft", () => {
         "worker",
       ]),
     );
+  });
+});
+
+describe("workstation taxonomy save projection", () => {
+  it("round-trips new taxonomy workstation saves without downgrading to legacy names", () => {
+    const taxonomyFactory: CanonicalFactoryDefinition = {
+      name: "Legacy Factory",
+      workers: [
+        {
+          model: "gpt-5",
+          name: "writer",
+          type: WorkerType.WorkerTypeInferenceWorker,
+        },
+      ],
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "queued", type: "INITIAL" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          body: "Draft the story.",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "draft",
+          outputs: [{ state: "done", workType: "story" }],
+          type: WorkstationType.WorkstationTypeAgentRun,
+          worker: "writer",
+        },
+      ],
+    };
+
+    const values = resolveEditableWorkstationValues(taxonomyFactory, {
+      node_id: "draft",
+      transition_id: "draft",
+      workstation_kind: WorkstationType.WorkstationTypeAgentRun,
+      workstation_name: "draft",
+    });
+    if (!values) {
+      throw new Error("expected editable workstation values");
+    }
+
+    const draft = editableWorkstationDraftFromValues({
+      ...values,
+      workstationType: WorkstationType.WorkstationTypeInferenceRun,
+      operation: "TTS",
+      operationBindings: [],
+    });
+    const saved = applyEditableWorkstationDraft(
+      taxonomyFactory,
+      {
+        node_id: "draft",
+        transition_id: "draft",
+        workstation_kind: WorkstationType.WorkstationTypeAgentRun,
+        workstation_name: "draft",
+      },
+      {
+        ...draft,
+        workstationType: WorkstationType.WorkstationTypeInferenceRun,
+      },
+    );
+
+    expect(saved?.workstations?.[0]).toMatchObject({
+      name: "draft",
+      type: WorkstationType.WorkstationTypeInferenceRun,
+      worker: "writer",
+    });
   });
 });

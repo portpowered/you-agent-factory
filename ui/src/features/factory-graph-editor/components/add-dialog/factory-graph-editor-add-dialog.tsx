@@ -12,7 +12,7 @@ import {
   FACTORY_GRAPH_ADD_WORKER_TYPES,
   isModelProviderWorkerType,
   isScriptWorkerType,
-} from "../../../current-factory-definition/lib/worker-workstation-taxonomy";
+} from "../../../current-factory-definition/public";
 import { getWorkerDetailMessages } from "../../../current-selection/worker-selection/messages/worker-detail";
 import type { CanonicalFactoryDefinition } from "../../lib/draft/factory-graph-draft-types";
 import type {

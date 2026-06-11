@@ -22,10 +22,9 @@ import {
 } from "../../../current-factory-definition/lib/worker-editable-values";
 import {
   isModelProviderWorkerType,
-  isPollerWorkerType,
   isScriptWorkerType,
   resolveEditableWorkerTypeOptions,
-} from "../../../current-factory-definition/lib/worker-workstation-taxonomy";
+} from "../../../current-factory-definition/public";
 import { WORKER_TIMEOUT_UNITS } from "../../../current-factory-definition/lib/worker-timeout-duration";
 import { CurrentSelectionExpandableSection } from "../../base/components/detail/current-selection-expandable-section";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/save/detail-card-factory-save-feedback";

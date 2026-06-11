@@ -3,7 +3,6 @@ import {
   DEFAULT_WORKER_TYPE,
   EDITABLE_WORKER_TYPES,
   isModelProviderWorkerType,
-  isPollerWorkerType,
   isScriptWorkerType,
 } from "./worker-workstation-taxonomy";
 import {

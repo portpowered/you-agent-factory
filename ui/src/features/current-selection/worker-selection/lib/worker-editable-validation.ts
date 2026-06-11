@@ -8,7 +8,7 @@ import {
   isModelProviderWorkerType,
   isPollerWorkerType,
   isScriptWorkerType,
-} from "../../../current-factory-definition/lib/worker-workstation-taxonomy";
+} from "../../../current-factory-definition/public";
 import { goDurationFromWorkerTimeoutPicker } from "../../../current-factory-definition/lib/worker-timeout-duration";
 import type { WorkerDetailMessages } from "../messages/worker-detail-types";
 

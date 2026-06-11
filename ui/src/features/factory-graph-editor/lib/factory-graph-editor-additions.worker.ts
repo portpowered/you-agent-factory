@@ -3,7 +3,7 @@ import {
   DEFAULT_WORKER_TYPE,
   isModelProviderWorkerType,
   isScriptWorkerType,
-} from "../../current-factory-definition/lib/worker-workstation-taxonomy";
+} from "../../current-factory-definition/public";
 import {
   buildCanonicalModelOperationsFromDraft,
   validateFactoryGraphAddModelOperationsDraft,

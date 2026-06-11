@@ -29,9 +29,10 @@ import {
 } from "../../../current-factory-definition/lib/workstation/workstation-type";
 import {
   DEFAULT_WORKER_TYPE,
-  FACTORY_GRAPH_ADD_WORKER_TYPES,
-  type ApiWorkerType,
-} from "../../../current-factory-definition/lib/worker-workstation-taxonomy";
+  type FactoryGraphAddWorkerType,
+} from "../../../current-factory-definition/public";
+
+export type { FactoryGraphAddWorkerType };
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 export { buildFactoryGraphAddEntityMenuActions } from "../factory-graph-editor-add-menu";
 import type {
@@ -39,11 +40,6 @@ import type {
   FactoryGraphDraft,
   FactoryWorkState,
 } from "../draft/factory-graph-draft-types";
-
-export type FactoryGraphAddWorkerType = Extract<
-  ApiWorkerType,
-  (typeof FACTORY_GRAPH_ADD_WORKER_TYPES)[number]
->;
 
 export type FactoryGraphAddEntityKind =
   | "doc"

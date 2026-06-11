@@ -27,6 +27,9 @@ export const FACTORY_GRAPH_ADD_WORKER_TYPES = [
   WorkerType.WorkerTypeScriptWorker,
 ] as const satisfies readonly ApiWorkerType[];
 
+export type FactoryGraphAddWorkerType =
+  (typeof FACTORY_GRAPH_ADD_WORKER_TYPES)[number];
+
 export const FACTORY_GRAPH_ADD_WORKSTATION_TYPES = [
   WorkstationType.WorkstationTypeAgentRun,
   WorkstationType.WorkstationTypeLogicalMove,

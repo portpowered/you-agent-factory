@@ -8,7 +8,7 @@ import {
 } from "../../../current-factory-definition/lib/workstation-behavior";
 import type { EditableWorkstationCronDraft } from "../../../current-factory-definition/lib/workstation-editable-values";
 import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation/workstation-type";
-import { FACTORY_GRAPH_ADD_WORKSTATION_TYPES } from "../../../current-factory-definition/lib/worker-workstation-taxonomy";
+import { FACTORY_GRAPH_ADD_WORKSTATION_TYPES } from "../../../current-factory-definition/public";
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 import { getWorkstationDetailMessages } from "../../../current-selection/workstation-selection/messages/workstation-detail";
 import type { CanonicalFactoryDefinition } from "../../lib/draft/factory-graph-draft-types";
