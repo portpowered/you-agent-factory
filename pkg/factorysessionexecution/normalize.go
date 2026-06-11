@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
@@ -163,8 +164,7 @@ func cloneSessionRead(session SessionReadResult) SessionReadResult {
 		cloned.Failure = &failure
 	}
 	if session.Lifecycle != nil {
-		lifecycle := *session.Lifecycle
-		cloned.Lifecycle = &lifecycle
+		cloned.Lifecycle = cloneLifecycleTimestamps(session.Lifecycle)
 	}
 	if session.Budgets != nil {
 		budgets := *session.Budgets
@@ -202,12 +202,90 @@ func clonePolicyProjection(policy PolicyProjection) PolicyProjection {
 	return cloned
 }
 
+func cloneTimePtr(value *time.Time) *time.Time {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
+func cloneLifecycleTimestamps(lifecycle *LifecycleTimestamps) *LifecycleTimestamps {
+	if lifecycle == nil {
+		return nil
+	}
+	return &LifecycleTimestamps{
+		QueuedAt:           cloneTimePtr(lifecycle.QueuedAt),
+		AwaitingApprovalAt: cloneTimePtr(lifecycle.AwaitingApprovalAt),
+		StartedAt:          cloneTimePtr(lifecycle.StartedAt),
+		PausedAt:           cloneTimePtr(lifecycle.PausedAt),
+		ResumedAt:          cloneTimePtr(lifecycle.ResumedAt),
+		FinishedAt:         cloneTimePtr(lifecycle.FinishedAt),
+		InterruptedAt:      cloneTimePtr(lifecycle.InterruptedAt),
+		TerminatedAt:       cloneTimePtr(lifecycle.TerminatedAt),
+		UpdatedAt:          cloneTimePtr(lifecycle.UpdatedAt),
+	}
+}
+
+func cloneDispatchUsage(usage *DispatchUsage) *DispatchUsage {
+	if usage == nil {
+		return nil
+	}
+	cloned := *usage
+	return &cloned
+}
+
+func cloneDispatchFailureDetail(detail *DispatchFailureDetail) *DispatchFailureDetail {
+	if detail == nil {
+		return nil
+	}
+	cloned := *detail
+	return &cloned
+}
+
+func cloneDispatchSummary(summary DispatchSummary) DispatchSummary {
+	cloned := summary
+	cloned.ProviderSessionRefs = append([]ProviderSessionRef(nil), summary.ProviderSessionRefs...)
+	cloned.OutputArtifactIDs = append([]string(nil), summary.OutputArtifactIDs...)
+	cloned.Usage = cloneDispatchUsage(summary.Usage)
+	cloned.Warnings = append([]DispatchWarning(nil), summary.Warnings...)
+	cloned.FailureDetail = cloneDispatchFailureDetail(summary.FailureDetail)
+	return cloned
+}
+
 func cloneDispatchSummaries(dispatches []DispatchSummary) []DispatchSummary {
 	if len(dispatches) == 0 {
 		return nil
 	}
 	cloned := make([]DispatchSummary, len(dispatches))
-	copy(cloned, dispatches)
+	for index, dispatch := range dispatches {
+		cloned[index] = cloneDispatchSummary(dispatch)
+	}
+	return cloned
+}
+
+func cloneDispatchPetriProjection(petri *DispatchPetriProjection) *DispatchPetriProjection {
+	if petri == nil {
+		return nil
+	}
+	cloned := *petri
+	return &cloned
+}
+
+func cloneDispatchJavaScriptProjection(js *DispatchJavaScriptProjection) *DispatchJavaScriptProjection {
+	if js == nil {
+		return nil
+	}
+	cloned := *js
+	return &cloned
+}
+
+func cloneDispatchDetail(detail DispatchDetail) DispatchDetail {
+	cloned := detail
+	cloned.DispatchSummary = cloneDispatchSummary(detail.DispatchSummary)
+	cloned.ArtifactIDs = append([]string(nil), detail.ArtifactIDs...)
+	cloned.Petri = cloneDispatchPetriProjection(detail.Petri)
+	cloned.JavaScript = cloneDispatchJavaScriptProjection(detail.JavaScript)
 	return cloned
 }
 
@@ -217,8 +295,32 @@ func cloneDispatchDetails(details map[string]DispatchDetail) map[string]Dispatch
 	}
 	cloned := make(map[string]DispatchDetail, len(details))
 	for key, value := range details {
-		cloned[key] = value
+		cloned[key] = cloneDispatchDetail(value)
 	}
+	return cloned
+}
+
+func cloneArtifactRedactionCounts(counts *ArtifactRedactionCounts) *ArtifactRedactionCounts {
+	if counts == nil {
+		return nil
+	}
+	cloned := *counts
+	return &cloned
+}
+
+func cloneArtifactRetrievalRef(ref *ArtifactRetrievalRef) *ArtifactRetrievalRef {
+	if ref == nil {
+		return nil
+	}
+	cloned := *ref
+	return &cloned
+}
+
+func cloneArtifactSummary(summary ArtifactSummary) ArtifactSummary {
+	cloned := summary
+	cloned.CreatedAt = cloneTimePtr(summary.CreatedAt)
+	cloned.RedactionCounts = cloneArtifactRedactionCounts(summary.RedactionCounts)
+	cloned.RetrievalRef = cloneArtifactRetrievalRef(summary.RetrievalRef)
 	return cloned
 }
 
@@ -227,7 +329,20 @@ func cloneArtifactSummaries(artifacts []ArtifactSummary) []ArtifactSummary {
 		return nil
 	}
 	cloned := make([]ArtifactSummary, len(artifacts))
-	copy(cloned, artifacts)
+	for index, artifact := range artifacts {
+		cloned[index] = cloneArtifactSummary(artifact)
+	}
+	return cloned
+}
+
+func cloneArtifactDetail(detail ArtifactDetail) ArtifactDetail {
+	cloned := detail
+	cloned.ArtifactSummary = cloneArtifactSummary(detail.ArtifactSummary)
+	cloned.CaptureMetadata = cloneArgs(detail.CaptureMetadata)
+	if len(detail.Content) > 0 {
+		cloned.Content = append(json.RawMessage(nil), detail.Content...)
+	}
+	cloned.ContentRef = cloneArtifactRetrievalRef(detail.ContentRef)
 	return cloned
 }
 
@@ -237,7 +352,7 @@ func cloneArtifactDetails(details map[string]ArtifactDetail) map[string]Artifact
 	}
 	cloned := make(map[string]ArtifactDetail, len(details))
 	for key, value := range details {
-		cloned[key] = value
+		cloned[key] = cloneArtifactDetail(value)
 	}
 	return cloned
 }

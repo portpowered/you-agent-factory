@@ -18,7 +18,7 @@ workflow.log("step");
 workflow.artifact({ kind: "log", label: "step" });
 const result = await agent.run({ prompt: "review" });
 workflow.final({ ok: true, result });
-parallel([pipeline([result])]);
+pipeline([], function () {}, function () {});
 `
 
 func TestValidate_AcceptsSupportedWorkflowGlobals(t *testing.T) {
@@ -68,6 +68,19 @@ func TestValidate_RejectsForbiddenHostAccess(t *testing.T) {
 	})
 	if !result.HasIssues() {
 		t.Fatal("expected forbidden host-access validation issue")
+	}
+	if result.Issues[0].Code != workflowvalidation.CodeForbiddenHostAccess {
+		t.Fatalf("issue code = %q, want %q", result.Issues[0].Code, workflowvalidation.CodeForbiddenHostAccess)
+	}
+}
+
+func TestValidate_RejectsDynamicImportHostAccess(t *testing.T) {
+	result := workflowvalidation.Validate(workflowvalidation.Request{
+		Source:    `import("fs");`,
+		SourceRef: "inline",
+	})
+	if !result.HasIssues() {
+		t.Fatal("expected forbidden host-access validation issue for dynamic import")
 	}
 	if result.Issues[0].Code != workflowvalidation.CodeForbiddenHostAccess {
 		t.Fatalf("issue code = %q, want %q", result.Issues[0].Code, workflowvalidation.CodeForbiddenHostAccess)

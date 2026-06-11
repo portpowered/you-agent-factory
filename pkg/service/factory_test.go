@@ -59,9 +59,11 @@ func serviceNamedFactoryPayloadWithWorkType(t *testing.T, project, workType stri
 			},
 		}},
 		"workers": []map[string]any{{
-			"name": "worker-a",
-			"type": "MODEL_WORKER",
-			"body": "You are worker " + project + ".",
+			"name":          "worker-a",
+			"type":          "MODEL_WORKER",
+			"modelProvider": "CODEX",
+			"model":         "gpt-5-codex",
+			"body":          "You are worker " + project + ".",
 		}},
 		"workstations": []map[string]any{{
 			"name":      "process",
@@ -125,9 +127,11 @@ func serviceNamedFactoryContractWithBundledFiles(t *testing.T, name string) fact
 			},
 		}},
 		"workers": []map[string]any{{
-			"name": "worker-a",
-			"type": "MODEL_WORKER",
-			"body": "You are worker " + name + ".",
+			"name":          "worker-a",
+			"type":          "MODEL_WORKER",
+			"modelProvider": "CODEX",
+			"model":         "gpt-5-codex",
+			"body":          "You are worker " + name + ".",
 		}},
 		"workstations": []map[string]any{{
 			"name":      "process",
@@ -199,7 +203,7 @@ func serviceNamedFactoryContractWithWorkType(t *testing.T, name, workType string
 			{"name":"complete","type":"TERMINAL"},
 			{"name":"failed","type":"FAILED"}
 		]}],
-		"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"You are worker ` + name + `."}],
+		"workers":[{"name":"worker-a","type":"MODEL_WORKER","modelProvider":"CODEX","model":"gpt-5-codex","body":"You are worker ` + name + `."}],
 		"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"Do the ` + name + ` work.","inputs":[{"workType":"` + workType + `","state":"init"}],"outputs":[{"workType":"` + workType + `","state":"complete"}],"onFailure": [{"workType":"` + workType + `","state":"failed"}]}]
 		}`))
 	if err != nil {
@@ -2343,7 +2347,7 @@ func TestFactoryService_SaveFactoryForSession_RejectsDuplicateDefaultHandlingWor
 				{"name": "failed", "type": "FAILED"},
 			},
 		}},
-		"workers": []map[string]any{{"name": "worker-a", "type": "MODEL_WORKER", "body": "worker"}},
+		"workers": []map[string]any{{"name": "worker-a", "type": "MODEL_WORKER", "modelProvider": "CODEX", "model": "gpt-5-codex", "body": "worker"}},
 		"workstations": []map[string]any{{
 			"name":      "process",
 			"worker":    "worker-a",

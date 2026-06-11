@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
@@ -1216,6 +1217,145 @@ func TestFakeService_LifecycleControl_ConcurrentReadsRemainCoherent(t *testing.T
 	wg.Wait()
 }
 
+func TestFakeService_ReadProjections_MutationDoesNotAffectInternalState(t *testing.T) {
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-petri-success-001")
+	sessionID := "dur-sess-petri-success-001"
+	ctx := context.Background()
+
+	baselineSession, err := service.GetSession(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("GetSession baseline: %v", err)
+	}
+	baselineDispatches, err := service.ListDispatches(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches baseline: %v", err)
+	}
+	baselineArtifacts, err := service.ListArtifacts(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("ListArtifacts baseline: %v", err)
+	}
+	if len(baselineArtifacts.Artifacts) == 0 {
+		t.Fatal("expected artifact projections for success scenario")
+	}
+	baselineDispatch, err := service.GetDispatch(ctx, sessionID, "disp-petri-success-001")
+	if err != nil {
+		t.Fatalf("GetDispatch baseline: %v", err)
+	}
+	baselineArtifact, err := service.GetArtifact(ctx, sessionID, baselineArtifacts.Artifacts[0].ID)
+	if err != nil {
+		t.Fatalf("GetArtifact baseline: %v", err)
+	}
+
+	baselineSessionJSON := mustMarshalJSON(t, baselineSession)
+	baselineDispatchesJSON := mustMarshalJSON(t, baselineDispatches)
+	baselineArtifactsJSON := mustMarshalJSON(t, baselineArtifacts)
+	baselineDispatchJSON := mustMarshalJSON(t, baselineDispatch)
+	baselineArtifactJSON := mustMarshalJSON(t, baselineArtifact)
+
+	mutateReturnedFakeProjections(&baselineSession, &baselineDispatches, &baselineArtifacts, &baselineDispatch, &baselineArtifact)
+
+	afterSession, err := service.GetSession(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("GetSession after mutation: %v", err)
+	}
+	assertJSONEqual(t, "session read", baselineSessionJSON, mustMarshalJSON(t, afterSession))
+
+	afterDispatches, err := service.ListDispatches(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches after mutation: %v", err)
+	}
+	assertJSONEqual(t, "dispatch list", baselineDispatchesJSON, mustMarshalJSON(t, afterDispatches))
+
+	afterArtifacts, err := service.ListArtifacts(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("ListArtifacts after mutation: %v", err)
+	}
+	assertJSONEqual(t, "artifact list", baselineArtifactsJSON, mustMarshalJSON(t, afterArtifacts))
+
+	afterDispatch, err := service.GetDispatch(ctx, sessionID, "disp-petri-success-001")
+	if err != nil {
+		t.Fatalf("GetDispatch after mutation: %v", err)
+	}
+	assertJSONEqual(t, "dispatch detail", baselineDispatchJSON, mustMarshalJSON(t, afterDispatch))
+
+	afterArtifact, err := service.GetArtifact(ctx, sessionID, baselineArtifacts.Artifacts[0].ID)
+	if err != nil {
+		t.Fatalf("GetArtifact after mutation: %v", err)
+	}
+	assertJSONEqual(t, "artifact detail", baselineArtifactJSON, mustMarshalJSON(t, afterArtifact))
+}
+
+func mutateReturnedFakeProjections(
+	session *SessionReadResult,
+	dispatches *ListDispatchesResult,
+	artifacts *ListArtifactsResult,
+	dispatch *DispatchDetail,
+	artifact *ArtifactDetail,
+) {
+	if session.Lifecycle != nil && session.Lifecycle.StartedAt != nil {
+		shifted := session.Lifecycle.StartedAt.Add(time.Hour)
+		session.Lifecycle.StartedAt = &shifted
+	}
+	if session.Progress != nil {
+		session.Progress.TotalDispatches++
+	}
+	if session.ResultSummary != nil {
+		session.ResultSummary.Summary = "mutated-session-summary"
+	}
+
+	for index := range dispatches.Dispatches {
+		dispatches.Dispatches[index].OutputArtifactIDs = append(
+			dispatches.Dispatches[index].OutputArtifactIDs,
+			"mutated-artifact-id",
+		)
+		if dispatches.Dispatches[index].FailureDetail != nil {
+			dispatches.Dispatches[index].FailureDetail.Message = "mutated-dispatch-failure"
+		}
+	}
+
+	for index := range artifacts.Artifacts {
+		if artifacts.Artifacts[index].RetrievalRef != nil {
+			artifacts.Artifacts[index].RetrievalRef.Href = "/mutated-artifact"
+		}
+		if artifacts.Artifacts[index].CreatedAt != nil {
+			shifted := artifacts.Artifacts[index].CreatedAt.Add(time.Hour)
+			artifacts.Artifacts[index].CreatedAt = &shifted
+		}
+	}
+
+	if dispatch.JavaScript != nil {
+		dispatch.JavaScript.TaskLabel = "mutated-task-label"
+	}
+	if dispatch.Petri != nil {
+		dispatch.Petri.WorkstationName = "mutated-workstation"
+	}
+
+	artifact.CaptureMetadata = map[string]any{"mutated": true}
+	if len(artifact.Content) > 0 {
+		artifact.Content = json.RawMessage(`{"mutated":true}`)
+	}
+	if artifact.ContentRef != nil {
+		artifact.ContentRef.Href = "/mutated-content"
+	}
+}
+
+func mustMarshalJSON(t *testing.T, value any) []byte {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal value: %v", err)
+	}
+	return encoded
+}
+
+func assertJSONEqual(t *testing.T, label string, want, got []byte) {
+	t.Helper()
+	if string(want) != string(got) {
+		t.Fatalf("%s changed after mutating a prior projection:\nwant %s\ngot  %s", label, want, got)
+	}
+}
+
 func int64Ptr(value int64) *int64 {
 	return &value
 }
@@ -1584,4 +1724,173 @@ func TestProjectResultRead_DefaultsToFinalMode(t *testing.T) {
 	if projected.ResultStatus != ResultStatusFinal {
 		t.Fatalf("status = %q, want FINAL", projected.ResultStatus)
 	}
+}
+
+func TestIsTerminalLifecycleStatus(t *testing.T) {
+	terminal := []LifecycleStatus{
+		LifecycleStatusSucceeded,
+		LifecycleStatusFailed,
+		LifecycleStatusCanceled,
+		LifecycleStatusTimedOut,
+		LifecycleStatusInterrupted,
+		LifecycleStatusTerminated,
+	}
+	for _, status := range terminal {
+		if !IsTerminalLifecycleStatus(status) {
+			t.Fatalf("status %q should be terminal", status)
+		}
+		if status != LifecycleStatusFailed && AllowsRetryDispatchOnTerminal(status) {
+			t.Fatalf("retry-dispatch should be rejected on terminal status %q", status)
+		}
+	}
+	if !AllowsRetryDispatchOnTerminal(LifecycleStatusFailed) {
+		t.Fatal("retry-dispatch should remain allowed on FAILED terminal sessions")
+	}
+	active := []LifecycleStatus{
+		LifecycleStatusRunning,
+		LifecycleStatusPaused,
+		LifecycleStatusCanceling,
+	}
+	for _, status := range active {
+		if IsTerminalLifecycleStatus(status) {
+			t.Fatalf("status %q should be active", status)
+		}
+	}
+}
+
+func TestEvaluateLifecycleControl_ValidTransitions(t *testing.T) {
+	cases := []struct {
+		operation LifecycleControlKind
+		status    LifecycleStatus
+		want      LifecycleControlOutcome
+	}{
+		{LifecycleControlPause, LifecycleStatusRunning, LifecycleControlOutcomeAccepted},
+		{LifecycleControlPause, LifecycleStatusPaused, LifecycleControlOutcomeNoOp},
+		{LifecycleControlResume, LifecycleStatusPaused, LifecycleControlOutcomeAccepted},
+		{LifecycleControlCancel, LifecycleStatusRunning, LifecycleControlOutcomeAccepted},
+		{LifecycleControlCancel, LifecycleStatusCanceling, LifecycleControlOutcomeNoOp},
+		{LifecycleControlTerminate, LifecycleStatusRunning, LifecycleControlOutcomeAccepted},
+		{LifecycleControlApprove, LifecycleStatusAwaitingApproval, LifecycleControlOutcomeAccepted},
+		{LifecycleControlRetryDispatch, LifecycleStatusRunning, LifecycleControlOutcomeAccepted},
+		{LifecycleControlRetryDispatch, LifecycleStatusFailed, LifecycleControlOutcomeAccepted},
+	}
+	for _, tc := range cases {
+		got := EvaluateLifecycleControl(tc.operation, tc.status)
+		if got != tc.want {
+			t.Fatalf("%s on %s = %q, want %q", tc.operation, tc.status, got, tc.want)
+		}
+	}
+}
+
+func TestEvaluateLifecycleControl_InvalidAndTerminal(t *testing.T) {
+	if got := EvaluateLifecycleControl(LifecycleControlPause, LifecycleStatusAwaitingApproval); got != LifecycleControlOutcomeInvalidState {
+		t.Fatalf("pause on awaiting approval = %q, want INVALID_STATE", got)
+	}
+	if got := EvaluateLifecycleControl(LifecycleControlRetryDispatch, LifecycleStatusSucceeded); got != LifecycleControlOutcomeTerminalSession {
+		t.Fatalf("retry on succeeded = %q, want TERMINAL_SESSION", got)
+	}
+	if got := EvaluateLifecycleControl(LifecycleControlCancel, LifecycleStatusCanceled); got != LifecycleControlOutcomeNoOp {
+		t.Fatalf("cancel on canceled = %q, want NO_OP", got)
+	}
+}
+
+func TestNormalizeRetryDispatchRequest_RequiresDispatchID(t *testing.T) {
+	_, err := NormalizeRetryDispatchRequest(RetryDispatchRequest{})
+	if err == nil {
+		t.Fatal("error = nil, want validation error")
+	}
+	var validationErr *ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("error = %T, want ValidationError", err)
+	}
+}
+
+func TestControlIdempotencyTupleHash_IsStable(t *testing.T) {
+	retry := RetryDispatchRequest{
+		ControlRequest: ControlRequest{RequestID: "req-retry-001"},
+		DispatchID:     "disp-js-success-002",
+	}
+	first, err := ControlIdempotencyTupleHash(LifecycleControlRetryDispatch, "dur-sess-js-success-002", ApproveRequest{}, retry)
+	if err != nil {
+		t.Fatalf("first hash: %v", err)
+	}
+	second, err := ControlIdempotencyTupleHash(LifecycleControlRetryDispatch, "dur-sess-js-success-002", ApproveRequest{}, retry)
+	if err != nil {
+		t.Fatalf("second hash: %v", err)
+	}
+	if first != second {
+		t.Fatalf("hash mismatch: %q vs %q", first, second)
+	}
+}
+
+func TestCheckControlRequestIDReplay_Conflict(t *testing.T) {
+	err := CheckControlRequestIDReplay("req-1", "sha256:abc", "sha256:def")
+	if !errors.Is(err, ErrControlRequestIDConflict) {
+		t.Fatalf("error = %v, want ErrControlRequestIDConflict", err)
+	}
+}
+
+func TestServiceMethods_PropagateContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var service interface {
+		GetSession(context.Context, string) (SessionReadResult, error)
+	}
+	service = stubCancelAwareService{}
+	if _, err := service.GetSession(ctx, "dur-sess-001"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("GetSession error = %v, want context.Canceled", err)
+	}
+}
+
+type stubCancelAwareService struct{}
+
+func (stubCancelAwareService) GetSession(ctx context.Context, _ string) (SessionReadResult, error) {
+	if err := ctx.Err(); err != nil {
+		return SessionReadResult{}, err
+	}
+	return SessionReadResult{}, nil
+}
+
+func (stubCancelAwareService) StartAsync(context.Context, StartRequest) (AsyncStartResult, error) {
+	return AsyncStartResult{}, nil
+}
+func (stubCancelAwareService) StartSync(context.Context, StartRequest) (SyncStartResult, error) {
+	return SyncStartResult{}, nil
+}
+func (stubCancelAwareService) Pause(context.Context, string, ControlRequest) (LifecycleControlResult, error) {
+	return LifecycleControlResult{}, nil
+}
+func (stubCancelAwareService) Resume(context.Context, string, ControlRequest) (LifecycleControlResult, error) {
+	return LifecycleControlResult{}, nil
+}
+func (stubCancelAwareService) Cancel(context.Context, string, ControlRequest) (LifecycleControlResult, error) {
+	return LifecycleControlResult{}, nil
+}
+func (stubCancelAwareService) Terminate(context.Context, string, ControlRequest) (LifecycleControlResult, error) {
+	return LifecycleControlResult{}, nil
+}
+func (stubCancelAwareService) Approve(context.Context, string, ApproveRequest) (LifecycleControlResult, error) {
+	return LifecycleControlResult{}, nil
+}
+func (stubCancelAwareService) RetryDispatch(context.Context, string, RetryDispatchRequest) (LifecycleControlResult, error) {
+	return LifecycleControlResult{}, nil
+}
+func (stubCancelAwareService) GetResult(context.Context, string, ResultRequest) (ResultReadResult, error) {
+	return ResultReadResult{}, nil
+}
+func (stubCancelAwareService) ListDispatches(context.Context, string) (ListDispatchesResult, error) {
+	return ListDispatchesResult{}, nil
+}
+func (stubCancelAwareService) GetDispatch(context.Context, string, string) (DispatchDetail, error) {
+	return DispatchDetail{}, nil
+}
+func (stubCancelAwareService) ListArtifacts(context.Context, string) (ListArtifactsResult, error) {
+	return ListArtifactsResult{}, nil
+}
+func (stubCancelAwareService) GetArtifact(context.Context, string, string) (ArtifactDetail, error) {
+	return ArtifactDetail{}, nil
+}
+func (stubCancelAwareService) ReadEvents(context.Context, string, EventReconnectRequest) (EventReadResult, error) {
+	return EventReadResult{}, nil
 }

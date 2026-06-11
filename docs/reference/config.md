@@ -14,6 +14,117 @@ cross-links. For live session inspection (`you session list`, `you factory query
 status API fields, and `--server` / `--session` on HTTP client commands), see
 `you docs sessions`.
 
+Operator-level default worker model settings are separate from `factory.json`.
+They live in `~/.you-agent-factory/config.json`, environment variables, and
+global CLI flags. See [Operator model defaults](#operator-model-defaults) before
+you repeat `modelProvider` or `model` on every model worker.
+
+## Operator Model Defaults
+
+Use operator defaults when you want one preferred model provider and model for
+runs without editing each factory worker. Operator defaults apply only to
+`MODEL_WORKER` definitions that omit `modelProvider` or `model`. Authored worker
+values, script workers, and hosted workers are never overwritten. Operator
+defaults are applied in memory at runtime and are not persisted into
+`factory.json`.
+
+This is distinct from factory-level `runner` in `factory.json`. Public
+`factory.json` and OpenAPI `runner` fields are unchanged by operator defaults;
+they continue to control built-in runner selection as documented on this page
+and in `you docs workers`.
+
+The legacy CLI flag `you run --runner` is removed. Set operator defaults or
+author `modelProvider` on workers instead.
+
+### Config file
+
+Default path:
+
+```text
+~/.you-agent-factory/config.json
+```
+
+Example:
+
+```json
+{
+  "defaults": {
+    "workerModelProvider": "codex",
+    "workerModel": "gpt-5-codex"
+  }
+}
+```
+
+- A missing config file is valid and applies no operator defaults.
+- Malformed JSON fails before service construction with an error that names the
+  config file path.
+- Unknown top-level JSON fields are rejected.
+
+### Environment variables
+
+| Variable | Purpose |
+|----------|---------|
+| `YOU_DEFAULT_WORKER_MODEL_PROVIDER` | Override `defaults.workerModelProvider` from the config file |
+| `YOU_DEFAULT_WORKER_MODEL` | Override `defaults.workerModel` from the config file |
+
+Each variable overrides its file value independently. Empty or unset values do not
+clear a lower-precedence layer.
+
+### Global CLI flags
+
+| Flag | Purpose |
+|------|---------|
+| `--default-worker-model-provider` | Override file and environment for the worker model provider |
+| `--default-worker-model` | Override file and environment for the worker model |
+
+These are global persistent flags on the root `you` command. Both no-argument
+`you` and explicit `you run` honor them:
+
+```bash
+you --default-worker-model-provider codex --default-worker-model gpt-5-codex run
+```
+
+### Precedence
+
+Effective precedence is independent per field:
+
+```text
+file < env < flag
+```
+
+Use `--verbose` to print which layer won for each field and the full precedence
+chain. Diagnostics name the config path and sources (`file`, `env`, `flag`, or
+`unset`) without printing unrelated environment values or credentials.
+
+### Provider aliases and `DEFAULT`
+
+Provider inputs are canonicalized the same way as factory worker `modelProvider`
+values. Accepted canonical providers are `CLAUDE`, `CODEX`, `CURSOR`, `GEMINI`,
+`KIRO`, and `OPENCODE`. Public aliases include `codex`, `claude`, `gemini`,
+`kiro-cli`, `opencode`, `agent`, `cursor`, and `anthropic`.
+
+`DEFAULT` is accepted only as a symbolic `workerModelProvider` value in file,
+environment, or flag inputs. It resolves to the concrete provider from the next
+lower-precedence layer that supplies a non-`DEFAULT` provider. If no concrete
+provider exists below the winning `DEFAULT` layer, startup fails with an
+actionable error that names file, environment, and flag options.
+
+Unsupported providers fail before runtime dispatch with a message that lists
+accepted canonical providers and aliases.
+
+### Failure modes
+
+| Condition | Behavior |
+|-----------|----------|
+| Missing `~/.you-agent-factory/config.json` | Startup continues with no operator defaults |
+| Malformed config JSON | Fails before service construction; error names the config path |
+| Unsupported `workerModelProvider` | Fails before dispatch with accepted provider summary |
+| `DEFAULT` without a lower-precedence concrete provider | Fails before dispatch with resolution guidance |
+| Authored worker `modelProvider` or `model` | Operator defaults do not override authored values |
+
+See `you docs workers` for how omitted model-worker fields inherit operator
+defaults at runtime.
+
 ## Current Contract
 
 - `factory.json` is the canonical root file. It owns factory-level workflow
@@ -649,8 +760,11 @@ through arbitrary project files outside the documented allowlist.
 ## Run Controls
 
 `you run` supports optional factory selection, one-shot prompts, mock workers,
-and record/replay flags:
+record/replay flags, and global operator model defaults:
 
+- `--default-worker-model-provider` — default `modelProvider` for model workers
+  that omit it (see [Operator model defaults](#operator-model-defaults))
+- `--default-worker-model` — default `model` for model workers that omit it
 - `--factory <factory.json>` — load a portable `factory.json` by file path and,
   with a trailing positional prompt, submit raw text to the work type that
   declares `handlingBehavior: ["DEFAULT"]` (see [Default handling for one-shot CLI runs](#default-handling-for-one-shot-cli-runs))

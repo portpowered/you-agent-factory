@@ -3,8 +3,11 @@ package factoryvalidationtests
 import (
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
+	"go.uber.org/zap"
 )
 
 func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T) {
@@ -103,5 +106,64 @@ func TestFactoryCoreComposeCollaboratorsMatchBuildFactoryCore(t *testing.T) {
 	}
 	if built.Sessions() == nil || built.RuntimeBuild() == nil || built.StartupBundle() == nil {
 		t.Fatalf("BuildFactoryCore omitted required collaborators: snapshot=%+v", built.ComposeCollaboratorSnapshot())
+	}
+}
+
+func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorDefaults(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+
+	ctx := t.Context()
+	cfg := &service.FactoryServiceConfig{
+		Dir: dir,
+		OperatorDefaults: operatorconfig.ResolvedDefaults{
+			WorkerModelProvider:       "CODEX",
+			WorkerModel:               "gpt-5-codex",
+			WorkerModelProviderSource: operatorconfig.SourceFlag,
+			WorkerModelSource:         operatorconfig.SourceFlag,
+		},
+		MockWorkersConfig:                       config.NewEmptyMockWorkersConfig(),
+		SkipBuiltInRunnerPrerequisiteValidation: true,
+		Logger:                                  zap.NewNop(),
+	}
+
+	built, err := service.BuildFactoryService(ctx, cfg)
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	root, err := service.ResolveFactoryServiceRoot(cfg)
+	if err != nil {
+		t.Fatalf("ResolveFactoryServiceRoot: %v", err)
+	}
+	load, err := service.LoadFactoryConfigForCompose(cfg, root)
+	if err != nil {
+		t.Fatalf("LoadFactoryConfigForCompose: %v", err)
+	}
+	clock := service.ServiceClockForCompose(cfg, load)
+	collaborators := service.NewFactoryServiceCollaborators(
+		cfg,
+		clock,
+		root.BaseLogger,
+		service.NewFactorySessionsRegistry(),
+	)
+	shell, err := service.ComposeFactoryService(
+		ctx,
+		cfg,
+		root,
+		collaborators,
+		load,
+		clock,
+		service.NewHostedWorkersConfig(cfg, root.BaseLogger, clock),
+	)
+	if err != nil {
+		t.Fatalf("ComposeFactoryService: %v", err)
+	}
+	composed := service.AttachFactorySaveCollaborator(shell, service.ProvideFactorySaveCollaborator(shell, cfg))
+
+	if built.ComposeCollaboratorSnapshot() != composed.ComposeCollaboratorSnapshot() {
+		t.Fatalf("compose snapshot mismatch: built=%+v composed=%+v", built.ComposeCollaboratorSnapshot(), composed.ComposeCollaboratorSnapshot())
 	}
 }
