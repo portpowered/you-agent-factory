@@ -92,3 +92,11 @@
   - Gotchas encountered: the stale-blob sanitize fix accidentally kept timing JSON in `.vitest-reports`, which passed local shard-only runs but broke CI merge when shard artifacts uploaded timing files with blobs.
   - Useful context: mergeability-only follow-up; all PRD stories remain `passes: true`.
 ---
+
+## 2026-06-11T13:10:00Z - mergeability (PR #799 lint + main merge)
+- Merged `origin/main` to clear PR conflict; split `ui-coverage-runner.test.mjs` into `ui-coverage-runner.shard-merge.test.mjs` after Biome `noExcessiveLinesPerFile` failed at 461 lines (max 450).
+- **Learnings for future iterations:**
+  - Patterns discovered: when shard/merge tests push a script test file over the 450-line Biome cap, split merge-mode coverage into a sibling `*.shard-merge.test.mjs` file instead of disabling the rule.
+  - Gotchas encountered: merging main can introduce unrelated lint warnings, but the nursery line-count rule is an error that fails `make ui-lint` even when warnings are tolerable.
+  - Useful context: mergeability-only follow-up on head `ee360d880`.
+---
