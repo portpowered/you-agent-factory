@@ -297,13 +297,6 @@ export function clampFactoryLayoutGroupBounds(
   };
 }
 
-export function factoryLayoutGroupMemberNodeIds(
-  layout: FactoryLayout,
-  groupId: string,
-): readonly string[] {
-  return factoryLayoutGroupById(layout, groupId)?.nodeIds ?? [];
-}
-
 export function moveFactoryLayoutGroupByDelta(
   layout: FactoryLayout,
   groupId: string,
@@ -346,22 +339,4 @@ export function resizeFactoryLayoutGroup(
     ...group,
     bounds: clampFactoryLayoutGroupBounds(bounds),
   }));
-}
-
-export function factoryLayoutGroupMemberStartPositions(
-  layout: FactoryLayout,
-  groupId: string,
-  resolvedNodePositions: ReadonlyMap<string, FactoryLayoutPoint> = new Map(),
-): Map<string, FactoryLayoutPoint> {
-  const positions = new Map<string, FactoryLayoutPoint>();
-  for (const nodeId of factoryLayoutGroupMemberNodeIds(layout, groupId)) {
-    const position =
-      factoryLayoutNodePosition(layout, nodeId) ??
-      resolvedNodePositions.get(nodeId);
-    if (position) {
-      positions.set(nodeId, position);
-    }
-  }
-
-  return positions;
 }
