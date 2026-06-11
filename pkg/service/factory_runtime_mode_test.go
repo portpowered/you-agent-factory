@@ -257,6 +257,8 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureDispatchOutcomes(t 
 		Dir:               dir,
 		RuntimeMode:       interfaces.RuntimeModeService,
 		RuntimeMetricsDir: metricsDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		SkipBuiltInRunnerPrerequisiteValidation: true,
 		Logger:            zap.NewNop(),
 		ExtraOptions: []factory.FactoryOption{
 			factory.WithWorkerExecutor("worker-a", dispatchMetricsWorkerExecutor{}),
