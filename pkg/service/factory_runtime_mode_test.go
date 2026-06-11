@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
@@ -2447,11 +2448,11 @@ func TestGeneratedFactoryFromRuntimeConfig_CapturesOperatorDefaultedModelWorkerF
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
-	if err := config.ApplyOperatorDefaultsToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
+	if err := operatordefaultsruntime.ApplyToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
 		WorkerModelProvider: "CODEX",
 		WorkerModel:         "gpt-5-codex",
 	}); err != nil {
-		t.Fatalf("ApplyOperatorDefaultsToLoadedConfig: %v", err)
+		t.Fatalf("ApplyToLoadedConfig: %v", err)
 	}
 
 	generated, err := replay.GeneratedFactoryFromRuntimeConfig(dir, loaded.FactoryConfig(), loaded)

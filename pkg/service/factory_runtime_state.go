@@ -13,6 +13,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
+	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
@@ -794,10 +795,10 @@ func applyOperatorDefaultsToLoadedConfig(cfg *FactoryServiceConfig, loaded *fact
 	if cfg == nil || loaded == nil || cfg.ReplayPath != "" {
 		return nil
 	}
-	if err := factoryconfig.ApplyOperatorDefaultsToLoadedConfig(loaded, cfg.OperatorDefaults); err != nil {
+	if err := operatordefaultsruntime.ApplyToLoadedConfig(loaded, cfg.OperatorDefaults); err != nil {
 		return fmt.Errorf("apply operator defaults: %w", err)
 	}
-	return factoryconfig.ValidateModelWorkerRuntimeProviders(loaded)
+	return operatordefaultsruntime.ValidateModelWorkerRuntimeProviders(loaded)
 }
 
 func validateReplayModeConfig(cfg *FactoryServiceConfig) error {

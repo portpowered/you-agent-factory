@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -21,7 +22,7 @@ func TestApplyOperatorDefaultsToLoadedConfig_FillsOmittedModelWorkerFields(t *te
 		}},
 	})
 
-	if err := config.ApplyOperatorDefaultsToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
+	if err := operatordefaultsruntime.ApplyToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
 		WorkerModelProvider: "CODEX",
 		WorkerModel:         "gpt-5-codex",
 	}); err != nil {
@@ -51,7 +52,7 @@ func TestApplyOperatorDefaultsToLoadedConfig_PreservesAuthoredModelWorkerFields(
 		}},
 	})
 
-	if err := config.ApplyOperatorDefaultsToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
+	if err := operatordefaultsruntime.ApplyToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
 		WorkerModelProvider: "CODEX",
 		WorkerModel:         "gpt-5-codex",
 	}); err != nil {
@@ -82,7 +83,7 @@ func TestApplyOperatorDefaultsToLoadedConfig_SkipsScriptAndHostedWorkers(t *test
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	if err = config.ApplyOperatorDefaultsToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
+	if err = operatordefaultsruntime.ApplyToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
 		WorkerModelProvider: "CODEX",
 		WorkerModel:         "gpt-5-codex",
 	}); err != nil {
@@ -117,7 +118,7 @@ func TestValidateModelWorkerRuntimeProviders_RejectsUnsupportedProvider(t *testi
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	err = config.ValidateModelWorkerRuntimeProviders(loaded)
+	err = operatordefaultsruntime.ValidateModelWorkerRuntimeProviders(loaded)
 	if err == nil {
 		t.Fatal("expected unsupported provider validation error")
 	}

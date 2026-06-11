@@ -10,6 +10,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"go.uber.org/zap"
 )
@@ -18,10 +19,10 @@ func applyOperatorDefaultsToLoadedConfig(defaults operatorconfig.ResolvedDefault
 	if loaded == nil {
 		return nil
 	}
-	if err := factoryconfig.ApplyOperatorDefaultsToLoadedConfig(loaded, defaults); err != nil {
+	if err := operatordefaultsruntime.ApplyToLoadedConfig(loaded, defaults); err != nil {
 		return fmt.Errorf("apply operator defaults: %w", err)
 	}
-	return factoryconfig.ValidateModelWorkerRuntimeProviders(loaded)
+	return operatordefaultsruntime.ValidateModelWorkerRuntimeProviders(loaded)
 }
 
 // BundleBuilder constructs a runnable runtime bundle from an immutable session
