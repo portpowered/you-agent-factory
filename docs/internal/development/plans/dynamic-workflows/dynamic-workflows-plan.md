@@ -4,7 +4,7 @@ Operator-facing planning record for the Dynamic Workflows v0 program. This
 document tracks batch completion, cross-surface contract posture, and the
 recommended next batch for maintainers scheduling factory work.
 
-**Last updated:** 2026-06-11 UTC (active-surface contract repair verified — Batch 002 fake-session skeleton may proceed)
+**Last updated:** 2026-06-11 UTC (residual active-surface import gate verified — Batch 002 fake-session skeleton may proceed)
 
 ## Program overview
 
@@ -151,6 +151,39 @@ go test ./pkg/api/contracttests ./pkg/api/servertests ./pkg/apisurface \
   ./pkg/mcp/workflow ./pkg/cli/workflow
 npm --prefix ui run typecheck
 ```
+
+**Residual active-surface import repair (verified 2026-06-11 UTC):** Branch
+`dynamic-workflows-contract-repair-residual-active-surface-imports` closed the
+follow-up gate that scoped verification still found active CLI, MCP, API test,
+and CLI source-normalization code importing deprecated root `pkg/workflow*`
+compatibility shims instead of orchestrator-owned JavaScript packages.
+
+| Story | Outcome |
+|-------|---------|
+| Canonical Factory preview remains primary | Server tests prove `POST /workflow-previews` returns the same preview body as `POST /factories/preview` with Deprecation and Link successor headers. |
+| CLI preview and source normalization use orchestrator packages | CLI-package tests prove preview JSON matches `apisurface.BuildFactoryPreview` and normalize success/not-found diagnostics. |
+| MCP workflow preview tests target orchestrator ownership | MCP tests import orchestrator `preview` and `source` directly and prove not-found diagnostics through `ValidateTool`. |
+| API and apisurface tests prove compatibility without active shim imports | Contract/server tests assert canonical vs deprecated preview routes; apisurface tests exercise orchestrator source/preview directly. |
+| Residual import gate blocks Batch 002 until clean | Scoped `rg` verification is clean; `TestActiveSurfaceImportGuard_*` in `pkg/api/contracttests/active_surface_import_guard_test.go` encodes the gate in CI. |
+
+Scoped residual import verification (2026-06-11 UTC):
+
+```bash
+rg -n "github.com/portpowered/infinite-you/pkg/workflow(preview|source|validation|policy|result)" \
+  pkg/api pkg/apisurface pkg/cli pkg/mcp pkg/factorysessionexecution pkg/factorysessions \
+  --glob '!**/generated/**'
+rg -n "/workflow-previews|WorkflowPreview" \
+  api/openapi-main.yaml api/components pkg/api pkg/apisurface pkg/cli pkg/mcp ui/src \
+  --glob '!**/generated/**'
+find pkg/orchestrators/javascript -maxdepth 2 -type f | sort
+go test ./pkg/api/contracttests ./pkg/api/servertests ./pkg/apisurface \
+  ./pkg/mcp/workflow ./pkg/cli/workflow ./pkg/cli/workflowsource
+npm --prefix ui run typecheck
+```
+
+The first `rg` command reports no active imports. Remaining workflow-preview
+hits are generated aliases, deprecated OpenAPI compatibility routes/schemas,
+compatibility handlers/tests, and explicit compatibility UI wrappers only.
 
 #### Batch 002 — fake-session skeleton (scheduled)
 
