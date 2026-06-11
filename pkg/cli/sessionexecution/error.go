@@ -19,6 +19,7 @@ const (
 	ErrorCodeInvalidPolicy     = "SESSION_EXECUTION_INVALID_POLICY"
 	ErrorCodeValidation        = "SESSION_EXECUTION_VALIDATION_FAILED"
 	ErrorCodeRequestIDConflict = "EXECUTION_REQUEST_ID_CONFLICT"
+	ErrorCodeSessionNotFound   = "SESSION_NOT_FOUND"
 )
 
 // ExecutionError is the stable CLI durable session execution failure contract.
@@ -97,6 +98,13 @@ func asExecutionError(err error) *ExecutionError {
 			Code:    ErrorCodeRequestIDConflict,
 			Message: "execution request id was reused with a different normalized request",
 			Field:   "requestId",
+		}
+	}
+	if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+		return &ExecutionError{
+			Code:    ErrorCodeSessionNotFound,
+			Message: "factory session not found",
+			Field:   "sessionId",
 		}
 	}
 	return nil

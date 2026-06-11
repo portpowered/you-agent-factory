@@ -21,9 +21,10 @@ type FakeService struct {
 }
 
 type startReplayRecord struct {
-	sessionID string
-	tupleHash string
-	syncStart *SyncStartResult
+	sessionID  string
+	tupleHash  string
+	syncStart  *SyncStartResult
+	asyncStart *AsyncStartResult
 }
 
 type controlReplayRecord struct {
@@ -109,6 +110,9 @@ func (s *FakeService) StartAsync(ctx context.Context, req StartRequest) (AsyncSt
 		if !ok {
 			return AsyncStartResult{}, ErrSessionNotFound
 		}
+		if replay.asyncStart != nil {
+			return *replay.asyncStart, nil
+		}
 		return s.asyncStartFromState(state), nil
 	}
 
@@ -118,11 +122,14 @@ func (s *FakeService) StartAsync(ctx context.Context, req StartRequest) (AsyncSt
 	}
 	state := fakeSessionStateFromScenario(scenario)
 	s.sessions[state.session.SessionID] = state
+	result := s.asyncStartFromScenario(scenario, state)
+	cloned := cloneAsyncStartResult(result)
 	s.startReplay[normalized.RequestID] = startReplayRecord{
-		sessionID: state.session.SessionID,
-		tupleHash: tupleHash,
+		sessionID:  state.session.SessionID,
+		tupleHash:  tupleHash,
+		asyncStart: &cloned,
 	}
-	return s.asyncStartFromScenario(scenario, state), nil
+	return result, nil
 }
 
 func (s *FakeService) StartSync(ctx context.Context, req StartRequest) (SyncStartResult, error) {
@@ -804,8 +811,16 @@ func cloneResultAvailability(availability *ResultAvailabilityDetail) *ResultAvai
 	return &cloned
 }
 
+func cloneAsyncStartResult(result AsyncStartResult) AsyncStartResult {
+	cloned := result
+	cloned.ResolvedSource = cloneResolvedSource(result.ResolvedSource)
+	cloned.Policy = clonePolicyProjection(result.Policy)
+	return cloned
+}
+
 func cloneSyncStartResult(result SyncStartResult) SyncStartResult {
 	cloned := result
+	cloned.AsyncStartResult = cloneAsyncStartResult(result.AsyncStartResult)
 	cloned.Result = cloneRawJSON(result.Result)
 	return cloned
 }

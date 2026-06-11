@@ -871,6 +871,12 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *co
 			Mode: sessionexecutioncli.ExecutionModeSync,
 		},
 	}
+	startCfg := sessionexecutioncli.RunConfig{
+		StartConfig: sessionexecutioncli.StartConfig{
+			Mode: sessionexecutioncli.ExecutionModeAsync,
+		},
+	}
+	statusCfg := sessionexecutioncli.StatusConfig{}
 
 	cmd := &cobra.Command{
 		Use:   "workflow",
@@ -878,7 +884,9 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *co
 		Long: "Validate, preview, and run JavaScript or TypeScript workflow sources using the shared workflow contracts.\n\n" +
 			"Subcommands:\n" +
 			"  preview  resolve workflow source, validate it without execution, and project policy and result constraints\n" +
-			"  run      start one durable Factory Session synchronously through the mock-backed execution loop",
+			"  run      start one durable Factory Session synchronously through the mock-backed execution loop\n" +
+			"  start    start one durable Factory Session asynchronously and return inspection links\n" +
+			"  status   read the durable Factory Session lifecycle and progress state",
 	}
 	previewCmd := &cobra.Command{
 		Use:   "preview",
@@ -932,6 +940,55 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *co
 	runCmd.Flags().Int64Var(&waitTimeoutMillis, "wait-timeout-millis", 0, "sync wait timeout in milliseconds")
 	runCmd.Flags().BoolVar(&runCfg.StartConfig.CancelOnTimeout, "cancel-on-timeout", false, "request session cancel when sync wait times out")
 	runCmd.Flags().StringVar(&runCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed runs")
-	cmd.AddCommand(previewCmd, runCmd)
+	startCmd := &cobra.Command{
+		Use:   "start",
+		Short: "Start one durable Factory Session asynchronously",
+		Long: "Start one durable Factory Session asynchronously through the shared execution request contract.\n\n" +
+			"The mock-backed provider path resolves fixture-backed request ids to deterministic session, " +
+			"status, result, and inspection-link outcomes. Use global --json to emit FactorySessionExecutionResponse " +
+			"fields plus requestId and resultAvailability on stdout.",
+		Example: "  # Start the published async-running fixture by workflow name and request id.\n" +
+			"  " + cliBinaryName + " workflow start --request-id req-js-run-n-001 --workflow release-train\n\n" +
+			"  # Emit deterministic JSON for automation.\n" +
+			"  " + cliBinaryName + " --json workflow start --request-id req-js-run-n-001 --workflow release-train",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			startCfg.JSON = globals.json
+			startCfg.Output = cmd.OutOrStdout()
+			startCfg.StartConfig.PositionalArgs = args
+			startCfg.StartConfig.Stdin = cmd.InOrStdin()
+			return sessionexecutioncli.RunAsync(cmd.Context(), startCfg)
+		},
+	}
+	addWorkflowStartFlags(startCmd, &startCfg.StartConfig, &startCfg.FixtureCatalogPath)
+	statusCmd := &cobra.Command{
+		Use:   "status [session-id]",
+		Short: "Read one durable Factory Session status",
+		Long: "Read one durable Factory Session lifecycle, progress, result availability, and inspection links " +
+			"through the shared execution service. Use global --json to emit FactorySessionDurableReadModel on stdout.",
+		Args: cobra.ExactArgs(1),
+		Example: "  # Poll the async-running fixture session started earlier.\n" +
+			"  " + cliBinaryName + " workflow status dur-sess-js-run-n-001\n\n" +
+			"  # Emit deterministic JSON for automation.\n" +
+			"  " + cliBinaryName + " --json workflow status dur-sess-js-run-n-001",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			statusCfg.JSON = globals.json
+			statusCfg.Output = cmd.OutOrStdout()
+			statusCfg.SessionID = args[0]
+			return sessionexecutioncli.RunStatus(cmd.Context(), statusCfg)
+		},
+	}
+	statusCmd.Flags().StringVar(&statusCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed status reads")
+	cmd.AddCommand(previewCmd, runCmd, startCmd, statusCmd)
 	return cmd
+}
+
+func addWorkflowStartFlags(cmd *cobra.Command, startCfg *sessionexecutioncli.StartConfig, fixtureCatalogPath *string) {
+	cmd.Flags().StringVar(&startCfg.RequestID, "request-id", "", "durable execution request id and idempotency key")
+	cmd.Flags().StringVar(&startCfg.FactoryID, "factory", "", "factory id source selector")
+	cmd.Flags().StringVar(&startCfg.WorkflowName, "workflow", "", "workflow name source selector")
+	cmd.Flags().StringVar(&startCfg.WorkflowFile, "workflow-file", "", "workflow file source selector")
+	cmd.Flags().StringVar(&startCfg.ArgsJSON, "args", "", "execution args JSON object")
+	cmd.Flags().StringVar(&startCfg.PolicyJSON, "policy", "", "requested policy JSON object")
+	cmd.Flags().StringVar(&startCfg.PolicyHash, "policy-hash", "", "requested policy hash selector")
+	cmd.Flags().StringVar(fixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed starts")
 }

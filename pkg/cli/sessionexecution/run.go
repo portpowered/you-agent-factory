@@ -28,7 +28,7 @@ type RunConfig struct {
 // through the shared execution service, and renders deterministic human or JSON output.
 func RunSync(ctx context.Context, cfg RunConfig) error {
 	if cfg.Output == nil {
-		cfg.Output = os.Stdout
+		cfg.Output = defaultOutputWriter()
 	}
 
 	normalized, mode, err := NormalizeStartRequest(cfg.StartConfig)
