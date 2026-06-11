@@ -1172,7 +1172,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     expect(screen.getByText("Workstation type")).toBeTruthy();
-    expect(screen.getByText("Model workstation")).toBeTruthy();
+    expect(screen.getByText("Model workstation (legacy)")).toBeTruthy();
   });
 
   it("renders localized workstation type in zh-CN when editable configuration is ready", () => {
@@ -1191,7 +1191,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     expect(screen.getByText("工作站类型")).toBeTruthy();
-    expect(screen.getByText("模型工作站")).toBeTruthy();
+    expect(screen.getByText("模型工作站（旧版）")).toBeTruthy();
   });
 
   it("shows workstation type loading and unavailable copy for editable configuration states", () => {
@@ -2539,7 +2539,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     ).toBeTruthy();
     expect(within(resolvedSummarySection).getByText("Kind")).toBeTruthy();
     expect(
-      within(resolvedSummarySection).getByText("Model workstation"),
+      within(resolvedSummarySection).getByText("Model workstation (legacy)"),
     ).toBeTruthy();
   });
 

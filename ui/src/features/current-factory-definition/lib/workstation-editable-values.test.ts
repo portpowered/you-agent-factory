@@ -75,8 +75,8 @@ describe("resolveEditableWorkstationValues", () => {
       inputs: [{ guards: [], state: "queued", workType: "story" }],
       workstationName: "Review",
       workstationOptions: ["Review"],
-      workstationType: "MODEL_WORKSTATION",
-      workstationTypeOptions: ["MODEL_WORKSTATION", "MODEL_INVOKE"],
+      workstationType: "AGENT_RUN",
+      workstationTypeOptions: ["AGENT_RUN", "INFERENCE_RUN"],
     });
   });
 
@@ -101,7 +101,7 @@ describe("resolveEditableWorkstationValues", () => {
       workstations: [
         {
           name: "speak-story",
-          type: "MODEL_INVOKE",
+          type: "INFERENCE_RUN",
           worker: "tts-worker",
           operation: "TTS",
           operationBindings: [
@@ -134,7 +134,7 @@ describe("resolveEditableWorkstationValues", () => {
           selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
         },
       ],
-      workstationType: "MODEL_INVOKE",
+      workstationType: "INFERENCE_RUN",
     });
   });
 
@@ -165,7 +165,7 @@ describe("resolveEditableWorkstationValues", () => {
       workstations: [
         {
           name: "speak-story",
-          type: "MODEL_INVOKE",
+          type: "INFERENCE_RUN",
           worker: "tts-worker",
           operation: "TTS",
           operationBindings: [
@@ -220,13 +220,13 @@ describe("resolveEditableWorkstationValues", () => {
         prompt: "",
         runnerName: null,
         workerName: "tts-worker",
-        workstationType: "MODEL_INVOKE",
+        workstationType: "INFERENCE_RUN",
       },
     );
 
     expect(updatedFactory?.workstations?.[0]).toEqual({
       name: "speak-story",
-      type: "MODEL_INVOKE",
+      type: "INFERENCE_RUN",
       worker: "tts-worker",
       operation: "TTS",
       operationBindings: [
@@ -246,7 +246,7 @@ describe("resolveEditableWorkstationValues", () => {
     expect(updatedFactory?.workers).toEqual(factory.workers);
   });
 
-  it("converts a prompt-oriented workstation draft into MODEL_INVOKE on save", () => {
+  it("converts a prompt-oriented workstation draft into INFERENCE_RUN on save", () => {
     const factory: CanonicalFactoryDefinition = {
       name: "tts-factory",
       workers: [
@@ -302,13 +302,13 @@ describe("resolveEditableWorkstationValues", () => {
         prompt: "Narrate the story.",
         runnerName: null,
         workerName: "tts-worker",
-        workstationType: "MODEL_INVOKE",
+        workstationType: "INFERENCE_RUN",
       },
     );
 
     expect(updatedFactory?.workstations?.[0]).toEqual({
       name: "speak-story",
-      type: "MODEL_INVOKE",
+      type: "INFERENCE_RUN",
       worker: "tts-worker",
       operation: "TTS",
       operationBindings: [
@@ -324,7 +324,7 @@ describe("resolveEditableWorkstationValues", () => {
     expect(updatedFactory?.workstations?.[0]).not.toHaveProperty("runner");
   });
 
-  it("defaults omitted workstation type to MODEL_WORKSTATION", () => {
+  it("defaults omitted workstation type to AGENT_RUN", () => {
     const factory: CanonicalFactoryDefinition = {
       name: "Current Factory",
       workers: [
@@ -349,7 +349,7 @@ describe("resolveEditableWorkstationValues", () => {
 
     expect(
       resolveEditableWorkstationValues(factory, selectedNode)?.workstationType,
-    ).toBe("MODEL_WORKSTATION");
+    ).toBe("AGENT_RUN");
   });
 
   it("preserves explicit workstation implementation types", () => {
@@ -453,8 +453,8 @@ describe("resolveEditableWorkstationValues", () => {
       inputs: [{ guards: [], state: "queued", workType: "story" }],
       workstationName: "Review",
       workstationOptions: ["Review"],
-      workstationType: "MODEL_WORKSTATION",
-      workstationTypeOptions: ["MODEL_WORKSTATION", "MODEL_INVOKE"],
+      workstationType: "AGENT_RUN",
+      workstationTypeOptions: ["AGENT_RUN", "INFERENCE_RUN"],
     });
   });
 
@@ -635,8 +635,8 @@ describe("resolveEditableWorkstationValues", () => {
       inputs: [{ guards: [], state: "queued", workType: "story" }],
       workstationName: "Review",
       workstationOptions: ["Review", "Plan", "Code"],
-      workstationType: "MODEL_WORKSTATION",
-      workstationTypeOptions: ["MODEL_WORKSTATION", "MODEL_INVOKE"],
+      workstationType: "AGENT_RUN",
+      workstationTypeOptions: ["AGENT_RUN", "INFERENCE_RUN"],
     });
   });
 

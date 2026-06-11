@@ -36,31 +36,47 @@ const WORKSTATION_KIND_LABELS_ZH_CN = {
 } satisfies WorkstationKindLabelCatalog["labels"];
 
 const WORKSTATION_TYPE_LABELS_EN = {
+  AGENT_RUN: "Agent run",
   CLASSIFIER_WORKSTATION: "Classifier workstation",
+  INFERENCE_RUN: "Inference run",
   LOGICAL_MOVE: "Logical move",
-  MODEL_INVOKE: "Model invoke",
-  MODEL_WORKSTATION: "Model workstation",
+  MODEL_INVOKE: "Model invoke (legacy)",
+  MODEL_WORKSTATION: "Model workstation (legacy)",
+  POLLER_RUN: "Poller run",
+  SCRIPT_RUN: "Script run",
 } satisfies WorkstationTypeLabelCatalog["labels"];
 
 const WORKSTATION_TYPE_LABELS_JA = {
+  AGENT_RUN: "エージェント実行",
   CLASSIFIER_WORKSTATION: "分類ワークステーション",
+  INFERENCE_RUN: "推論実行",
   LOGICAL_MOVE: "論理移動",
-  MODEL_INVOKE: "モデル呼び出し",
-  MODEL_WORKSTATION: "モデルワークステーション",
+  MODEL_INVOKE: "モデル呼び出し（レガシー）",
+  MODEL_WORKSTATION: "モデルワークステーション（レガシー）",
+  POLLER_RUN: "ポーラー実行",
+  SCRIPT_RUN: "スクリプト実行",
 } satisfies WorkstationTypeLabelCatalog["labels"];
 
 const WORKSTATION_TYPE_LABELS_KO = {
+  AGENT_RUN: "에이전트 실행",
   CLASSIFIER_WORKSTATION: "분류 워크스테이션",
+  INFERENCE_RUN: "추론 실행",
   LOGICAL_MOVE: "논리 이동",
-  MODEL_INVOKE: "모델 호출",
-  MODEL_WORKSTATION: "모델 워크스테이션",
+  MODEL_INVOKE: "모델 호출(레거시)",
+  MODEL_WORKSTATION: "모델 워크스테이션(레거시)",
+  POLLER_RUN: "폴러 실행",
+  SCRIPT_RUN: "스크립트 실행",
 } satisfies WorkstationTypeLabelCatalog["labels"];
 
 const WORKSTATION_TYPE_LABELS_ZH_CN = {
+  AGENT_RUN: "Agent 运行",
   CLASSIFIER_WORKSTATION: "分类工作站",
+  INFERENCE_RUN: "推理运行",
   LOGICAL_MOVE: "逻辑移动",
-  MODEL_INVOKE: "模型调用",
-  MODEL_WORKSTATION: "模型工作站",
+  MODEL_INVOKE: "模型调用（旧版）",
+  MODEL_WORKSTATION: "模型工作站（旧版）",
+  POLLER_RUN: "轮询运行",
+  SCRIPT_RUN: "脚本运行",
 } satisfies WorkstationTypeLabelCatalog["labels"];
 
 export function localizeWorkstationKindValue(

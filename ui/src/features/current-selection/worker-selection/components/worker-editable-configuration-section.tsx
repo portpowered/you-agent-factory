@@ -19,8 +19,13 @@ import {
   EDITABLE_HOSTED_PROVIDERS,
   EDITABLE_MODEL_LOCALITIES,
   EDITABLE_MODEL_PROVIDERS,
-  EDITABLE_WORKER_TYPES,
 } from "../../../current-factory-definition/lib/worker-editable-values";
+import {
+  isModelProviderWorkerType,
+  isPollerWorkerType,
+  isScriptWorkerType,
+  resolveEditableWorkerTypeOptions,
+} from "../../../current-factory-definition/lib/worker-workstation-taxonomy";
 import { WORKER_TIMEOUT_UNITS } from "../../../current-factory-definition/lib/worker-timeout-duration";
 import { CurrentSelectionExpandableSection } from "../../base/components/detail/current-selection-expandable-section";
 import { mergeDetailCardSaveFieldErrors } from "../../base/components/save/detail-card-factory-save-feedback";
@@ -169,10 +174,12 @@ function WorkerEditableConfigurationReadyForm({
               onValueChange={(nextValue) =>
                 state.onTypeChange(nextValue as typeof state.draft.type)
               }
-              options={EDITABLE_WORKER_TYPES.map((workerType) => ({
-                label: messages.localizeWorkerType(workerType),
-                value: workerType,
-              }))}
+              options={resolveEditableWorkerTypeOptions(state.draft.type).map(
+                (workerType) => ({
+                  label: messages.localizeWorkerType(workerType),
+                  value: workerType,
+                }),
+              )}
               value={state.draft.type}
             />
           }
@@ -446,7 +453,7 @@ function WorkerTypeSpecificFields({
     { status: "ready" }
   >["validationErrors"];
 }) {
-  if (state.draft.type === "MODEL_WORKER") {
+  if (isModelProviderWorkerType(state.draft.type)) {
     return (
       <ModelWorkerEditableFields
         messages={messages}
@@ -456,7 +463,7 @@ function WorkerTypeSpecificFields({
     );
   }
 
-  if (state.draft.type === "SCRIPT_WORKER") {
+  if (isScriptWorkerType(state.draft.type)) {
     return (
       <ScriptWorkerEditableFields
         messages={messages}

@@ -27,6 +27,11 @@ import {
   DEFAULT_WORKSTATION_TYPE,
   type EditableWorkstationType,
 } from "../../../current-factory-definition/lib/workstation/workstation-type";
+import {
+  DEFAULT_WORKER_TYPE,
+  FACTORY_GRAPH_ADD_WORKER_TYPES,
+  type ApiWorkerType,
+} from "../../../current-factory-definition/lib/worker-workstation-taxonomy";
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 export { buildFactoryGraphAddEntityMenuActions } from "../factory-graph-editor-add-menu";
 import type {
@@ -35,13 +40,9 @@ import type {
   FactoryWorkState,
 } from "../draft/factory-graph-draft-types";
 
-type CanonicalWorker = NonNullable<
-  CanonicalFactoryDefinition["workers"]
->[number];
-
 export type FactoryGraphAddWorkerType = Extract<
-  CanonicalWorker["type"],
-  "MODEL_WORKER" | "SCRIPT_WORKER"
+  ApiWorkerType,
+  (typeof FACTORY_GRAPH_ADD_WORKER_TYPES)[number]
 >;
 
 export type FactoryGraphAddEntityKind =
@@ -156,7 +157,7 @@ export function createFactoryGraphAddEntityDraft(
       modelProvider: "",
       name: "",
       operations: [],
-      workerType: "MODEL_WORKER",
+      workerType: DEFAULT_WORKER_TYPE as FactoryGraphAddWorkerType,
     };
   }
 

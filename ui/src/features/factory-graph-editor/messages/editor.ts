@@ -616,7 +616,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogIdentifierLabel: "Identifier",
       addDialogKindLabel: "Kind",
       addDialogModelHelp:
-        "The model identifier saved on the new `MODEL_WORKER`.",
+        "The model identifier saved on the new inference worker.",
       addDialogModelLabel: "Model",
       addDialogModelOperationAddAction: "Add operation",
       addDialogModelOperationHeading: (operationIndex) =>
@@ -636,7 +636,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogModelOperationSlotRemoveAction: "Remove slot",
       addDialogModelOperationSlotRequiredLabel: "Required input slot",
       addDialogModelOperationsHelp:
-        "Optionally declare provider-agnostic operations with typed input and output slots for MODEL_INVOKE workstations.",
+        "Optionally declare provider-agnostic operations with typed input and output slots for inference-run workstations.",
       addDialogModelOperationsLabel: "Model operations (optional)",
       addDialogPromptBodyEditorError:
         "The prompt editor could not start. Edit the prompt text below while we recover.",
@@ -922,7 +922,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogIdentifierHelp: "使用应保存到工厂定义中的已编写名称。",
       addDialogIdentifierLabel: "标识符",
       addDialogKindLabel: "类型",
-      addDialogModelHelp: "将保存到新 `MODEL_WORKER` 上的模型标识符。",
+      addDialogModelHelp: "将保存到新推理 worker 上的模型标识符。",
       addDialogModelLabel: "模型",
       addDialogModelOperationAddAction: "添加操作",
       addDialogModelOperationHeading: (operationIndex) =>
@@ -941,7 +941,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       addDialogModelOperationSlotRemoveAction: "移除槽位",
       addDialogModelOperationSlotRequiredLabel: "必填输入槽位",
       addDialogModelOperationsHelp:
-        "可选择为 MODEL_INVOKE 工作站声明带有类型化输入和输出槽位的提供方无关操作。",
+        "可选择为推理运行工作站声明带有类型化输入和输出槽位的提供方无关操作。",
       addDialogModelOperationsLabel: "模型操作（可选）",
       addDialogPromptBodyEditorError:
         "提示词编辑器无法启动。请先在下方编辑提示正文，我们稍后会恢复编辑器。",

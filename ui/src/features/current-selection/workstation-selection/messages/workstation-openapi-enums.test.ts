@@ -15,7 +15,7 @@ describe("workstation OpenAPI enum localization", () => {
 
   it("localizes WorkstationType values with unknown fallback", () => {
     expect(localizeWorkstationTypeValue("MODEL_WORKSTATION", "en")).toBe(
-      "Model workstation",
+      "Model workstation (legacy)",
     );
     expect(localizeWorkstationTypeValue("LOGICAL_MOVE", "ja")).toBe("論理移動");
     expect(localizeWorkstationTypeValue("FUTURE_TYPE", "en")).toBe(

@@ -403,7 +403,7 @@ describe("buildReadyEditableWorkstationConfigurationState model invoke handlers"
       prompt: "Updated prompt body.",
       runnerName: "reviewer",
       workerName: "tts-worker",
-      workstationType: "MODEL_WORKSTATION",
+      workstationType: "AGENT_RUN",
     });
   });
 });

@@ -30,6 +30,7 @@ import {
   syncEditableModelInvokeBindingsForOperation,
 } from "./workstation/workstation-model-invoke";
 import type { EditableModelInvokeBindingDraft } from "./workstation/workstation-model-invoke";
+import { preferredInferenceRunWorkstationType } from "./worker-workstation-taxonomy";
 import {
   type EditableWorkstationType,
   resolveEditableWorkstationType,
@@ -322,7 +323,7 @@ function buildModelInvokeWorkstationFromDraft(
     ...workstationWithoutPromptOrientedFields,
     inputs: applyEditableWorkstationInputs(draft.inputs),
     name: trimmedName,
-    type: "MODEL_INVOKE",
+    type: preferredInferenceRunWorkstationType(),
     worker: draft.workerName,
     ...(trimmedOperation.length > 0 ? { operation: trimmedOperation } : {}),
     ...(operationBindings.length > 0 ? { operationBindings } : {}),

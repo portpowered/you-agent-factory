@@ -8,6 +8,11 @@ import {
   DialogTitle,
 } from "../../../../components/ui";
 import { EDITABLE_MODEL_PROVIDERS } from "../../../current-factory-definition/lib/worker-editable-values";
+import {
+  FACTORY_GRAPH_ADD_WORKER_TYPES,
+  isModelProviderWorkerType,
+  isScriptWorkerType,
+} from "../../../current-factory-definition/lib/worker-workstation-taxonomy";
 import { getWorkerDetailMessages } from "../../../current-selection/worker-selection/messages/worker-detail";
 import type { CanonicalFactoryDefinition } from "../../lib/draft/factory-graph-draft-types";
 import type {
@@ -191,8 +196,8 @@ function renderEntitySpecificFields({
 
   if (draft.kind === "worker") {
     const workerMessages = getWorkerDetailMessages(locale);
-    const isModelWorker = draft.workerType === "MODEL_WORKER";
-    const isScriptWorker = draft.workerType === "SCRIPT_WORKER";
+    const isModelProviderWorker = isModelProviderWorkerType(draft.workerType);
+    const isScriptWorker = isScriptWorkerType(draft.workerType);
 
     return (
       <>
@@ -205,7 +210,7 @@ function renderEntitySpecificFields({
               return;
             }
 
-            if (workerType === "MODEL_WORKER") {
+            if (isModelProviderWorkerType(workerType)) {
               onChange({
                 ...draft,
                 argsText: "",
@@ -224,18 +229,13 @@ function renderEntitySpecificFields({
               workerType,
             });
           }}
-          options={(
-            [
-              "MODEL_WORKER",
-              "SCRIPT_WORKER",
-            ] as const satisfies FactoryGraphAddWorkerType[]
-          ).map((workerType) => ({
+          options={FACTORY_GRAPH_ADD_WORKER_TYPES.map((workerType) => ({
             label: workerMessages.localizeWorkerType(workerType),
             value: workerType,
           }))}
           value={draft.workerType}
         />
-        {isModelWorker ? (
+        {isModelProviderWorker ? (
           <>
             <FactoryGraphEditorSelectField
               error={errors.modelProvider}

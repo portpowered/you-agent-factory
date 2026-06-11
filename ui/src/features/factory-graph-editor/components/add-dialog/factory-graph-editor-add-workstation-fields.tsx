@@ -1,6 +1,5 @@
 import {
   WorkstationKind,
-  WorkstationType,
 } from "../../../../api/generated/openapi";
 import { Checkbox } from "../../../../components/ui";
 import {
@@ -9,6 +8,7 @@ import {
 } from "../../../current-factory-definition/lib/workstation-behavior";
 import type { EditableWorkstationCronDraft } from "../../../current-factory-definition/lib/workstation-editable-values";
 import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation/workstation-type";
+import { FACTORY_GRAPH_ADD_WORKSTATION_TYPES } from "../../../current-factory-definition/lib/worker-workstation-taxonomy";
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 import { getWorkstationDetailMessages } from "../../../current-selection/workstation-selection/messages/workstation-detail";
 import type { CanonicalFactoryDefinition } from "../../lib/draft/factory-graph-draft-types";
@@ -28,10 +28,8 @@ import {
   FactoryGraphEditorTextField,
 } from "./factory-graph-editor-add-dialog-fields";
 
-const FACTORY_GRAPH_ADD_WORKSTATION_TYPES = [
-  WorkstationType.WorkstationTypeModelWorkstation,
-  WorkstationType.WorkstationTypeLogicalMove,
-] as const satisfies readonly EditableWorkstationType[];
+const FACTORY_GRAPH_ADD_WORKSTATION_TYPE_OPTIONS =
+  FACTORY_GRAPH_ADD_WORKSTATION_TYPES;
 
 export function FactoryGraphEditorAddWorkstationFields({
   currentFactoryDefinition,
@@ -81,7 +79,7 @@ export function FactoryGraphEditorAddWorkstationFields({
             workstationType,
           });
         }}
-        options={FACTORY_GRAPH_ADD_WORKSTATION_TYPES.map((workstationType) => ({
+        options={FACTORY_GRAPH_ADD_WORKSTATION_TYPE_OPTIONS.map((workstationType) => ({
           label: workstationMessages.localizeWorkstationType(workstationType),
           value: workstationType,
         }))}
