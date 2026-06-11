@@ -109,5 +109,6 @@ New regression?
 ## Related references
 
 - [development.md](development.md) — verification tiers, CI lane table, harness modules
+- [ui-browser-integration-stability.md](ui-browser-integration-stability.md) — sequential browser suites, concurrent-lane isolation, durable wait helpers
 - [ui-coverage-speed-closeout.md](ui-coverage-speed-closeout.md) — timing history for slow files
 - `ui/src/testing/replay-fixture-catalog.ts` — replay surface ownership across layers
