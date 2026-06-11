@@ -9,6 +9,8 @@
 - Final result mode returns `NOT_READY` for running and interrupted sessions that only have partial progress; `FAILED_WITH_PARTIAL` remains the terminal final read for failed-with-partial scenarios.
 - Use `ValidateDispatchDetailMatchesListSummary` and `ValidateArtifactDetailMatchesListSummary` to prove dispatch/artifact list/detail coherence; artifact detail may carry retrieval refs on `ContentRef` while list rows use `RetrievalRef`.
 - `enrichArtifactDetailFromListSummary` copies list retrieval refs onto sparse artifact detail fixtures during scenario load.
+- Use `ValidateEventReplayMatchesDirectProjections` to prove ordered fake event streams align with direct session, result, dispatch, and artifact reads; `FilterEventsAfterReconnect` and service `ReadEvents` honor `AfterEventID`/`AfterSequence` cursors and return `ErrReconnectCursorNotFound` for unknown cursors.
+- Scenarios without fixture `events` derive canonical `SESSION_STARTED`/`SESSION_RESULT_UPDATED`/`SESSION_COMPLETED` streams via `BuildCanonicalSessionEvents` on scenario load.
 
 ## 2026-06-11T11:25:55Z - fake-session-service-001
 - Added story-focused tests proving deterministic fake async starts for success, running, failed-with-partial, and interrupted scenarios; unknown `requestId` validation errors; stable replay of session id, status, and inspection links; and concurrent idempotent starts producing one session with stable dispatch/event projections.
@@ -43,4 +45,15 @@
   - Contract `artifactDetail` fixtures can omit `retrievalRef` while list rows include it; enrich detail from list summaries instead of expecting fixture parity.
   - Failed dispatch detail for `javascript-failed-with-partial` is `disp-js-fail-002` with `VERIFY_ASSERTION_FAILED` and JavaScript `VERIFY` task metadata.
   - Interrupted builtin scenario exposes canceled dispatch `disp-js-interrupted-002` for interruption inspection reads.
+---
+
+## 2026-06-11T14:20:00Z - fake-session-service-004
+- Added event replay validators for envelope ordering, terminal lifecycle alignment, artifact id coherence, and direct projection consistency across result, dispatch, and artifact reads.
+- Added service tests for stable ordered event streams on success/running/failed-partial/interrupted scenarios, reconnect after sequence, invalid cursor errors, and not-found reads that do not mutate state.
+- Added apisurface consumer test mapping failed-partial and interrupted event replay plus reconnect reads through `EventReadResponseToAPI`.
+- Files changed: `pkg/factorysessionexecution/projection_consistency.go`, `pkg/factorysessionexecution/projection_test.go`, `pkg/factorysessionexecution/fake_service_test.go`, `pkg/apisurface/factorysession/factory_session_fake_consumer_test.go`
+- **Learnings for future iterations:**
+  - `ValidateResultMatchesEventProjection` only checks the latest `SESSION_RESULT_UPDATED`; use `ValidateEventReplayMatchesDirectProjections` when story acceptance needs terminal status and artifact coherence too.
+  - Fixture-backed scenarios like `req-js-success-002` are the best reconnect-after-sequence proofs because they ship explicit `sessionSequence` values in event context.
+  - Derived events for terminal scenarios without fixture `events` still include `SESSION_COMPLETED` with `finalStatus` matching the session lifecycle status.
 ---
