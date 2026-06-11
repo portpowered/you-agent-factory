@@ -1,6 +1,6 @@
 ---
 behavior: repeater
-type: MODEL_WORKSTATION
+type: AGENT_RUN
 worker: executor
 ---
 

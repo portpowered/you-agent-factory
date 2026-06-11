@@ -1,6 +1,6 @@
 ---
 behavior: standard
-type: MODEL_WORKSTATION
+type: AGENT_RUN
 worker: reviewer
 ---
 

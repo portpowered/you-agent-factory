@@ -96,8 +96,8 @@ Use these canonical concept owners when you need the current contract.
   `factory.json`, `workers/`, `workstations/`, and `inputs/`.
 - [Resources](resources.md) explains top-level resource pools and the
   `{name, capacity}` requirements consumed by workers or workstations.
-- [Models and model operations](models.md) explains `MODEL_INVOKE`,
-  `MODEL_WORKER` capabilities, typed model resources, `/models`, and local or
+- [Models and model operations](models.md) explains `INFERENCE_RUN`,
+  `INFERENCE_WORKER` capabilities, typed model resources, `/models`, and local or
   cloud TTS authoring patterns.
 - [Batch inputs](batch-inputs.md) explains the `FACTORY_REQUEST_BATCH` request
   shape, watched-file placement, and supported relation types.

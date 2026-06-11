@@ -51,8 +51,8 @@ The dispatcher.ps1 also handles **ideation** (generating new ideas) and **planni
 dispatcher-parity/
 ├── factory.json                        # Workflow with structured input, repeater, worktrees
 ├── workers/
-│   ├── executor/AGENTS.md              # MODEL_WORKER: implements stories iteratively
-│   └── reviewer/AGENTS.md              # MODEL_WORKER: reviews against acceptance criteria
+│   ├── executor/AGENTS.md              # AGENT_WORKER: implements stories iteratively
+│   └── reviewer/AGENTS.md              # AGENT_WORKER: reviews against acceptance criteria
 ├── workstations/
 │   ├── execute-story/AGENTS.md         # Repeater prompt with worktree context
 │   └── review-story/AGENTS.md          # Standard review prompt

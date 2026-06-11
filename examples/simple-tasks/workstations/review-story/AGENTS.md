@@ -1,5 +1,5 @@
 ---
-type: MODEL_WORKSTATION
+type: AGENT_RUN
 worker: reviewer
 limits:
   maxExecutionTime: 30m

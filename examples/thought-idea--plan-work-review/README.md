@@ -26,8 +26,8 @@ examples/thought-idea--plan-work-review/
 ├── factory.json                    # Workflow: thought → idea → plan → task → review with guarded loop breakers
 ├── workers/
 │   ├── README.md
-│   ├── processor/AGENTS.md         # MODEL_WORKER: handles planning and task work
-│   └── workspace-setup/AGENTS.md   # MODEL_WORKER: prepares workspaces
+│   ├── processor/AGENTS.md         # AGENT_WORKER: handles planning and task work
+│   └── workspace-setup/AGENTS.md   # AGENT_WORKER: prepares workspaces
 ├── workstations/
 │   ├── README.md
 │   ├── ideafy/AGENTS.md            # Prompt template for idea generation

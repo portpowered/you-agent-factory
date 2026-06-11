@@ -47,16 +47,44 @@ Use this page when you need the backend-facing worker contract. Use
 `you docs workstations` when you need to understand when a step runs,
 what it renders, and where it routes results.
 
+## Worker Taxonomy
+
+Public factory config names workers by behavior class:
+
+| Public type | Behavior | Use when |
+|-------------|----------|----------|
+| `INFERENCE_WORKER` | One-shot model operations | Harnessless inference such as TTS, ASR, or typed `INFERENCE_RUN` dispatches |
+| `AGENT_WORKER` | Agent-loop model execution | Prompt-rendered `AGENT_RUN` workstations that iterate until acceptance, rejection, or failure |
+| `SCRIPT_WORKER` | Script execution | Command-backed `SCRIPT_RUN` workstations |
+| `POLLER_WORKER` | Hosted poller integration | Workstations with `behavior: "POLLER"` that ingest external work through built-in providers |
+
+### Legacy compatibility aliases
+
+During the migration window, existing factories may still use:
+
+- `MODEL_WORKER` — loads and validates successfully. Projects to
+  `INFERENCE_WORKER` when paired with inference workstations, or to
+  `AGENT_WORKER` when paired with agent-loop workstations. Prefer the new names
+  in new docs and configs.
+- `HOSTED_WORKER` — loads and validates successfully. Projects to
+  `POLLER_WORKER` poller behavior. Prefer `POLLER_WORKER` for new hosted
+  poller workers.
+
+See `you docs workstations` for the matching `INFERENCE_RUN`, `AGENT_RUN`,
+`SCRIPT_RUN`, and `POLLER_RUN` workstation taxonomy and compatibility rules.
+
 ## Current Contract
 
 - Workers define the execution backend and system instructions.
 - Workstations define topology, routing, prompt templates, and per-step
   execution context.
-- The current worker types are `MODEL_WORKER`, `SCRIPT_WORKER`, and
-  `HOSTED_WORKER`.
-- `MODEL_WORKER` can declare provider-agnostic `operations`, named input and
-  output slots, `modelLocality`, and concrete `model` identity so
-  `MODEL_INVOKE` workstations can validate compatibility before dispatch.
+- The current worker types are `INFERENCE_WORKER`, `AGENT_WORKER`,
+  `SCRIPT_WORKER`, and `POLLER_WORKER`.
+- `INFERENCE_WORKER` can declare provider-agnostic `operations`, named input
+  and output slots, `modelLocality`, and concrete `model` identity so
+  `INFERENCE_RUN` workstations can validate compatibility before dispatch.
+- `AGENT_WORKER` supplies the model backend and shared system instructions for
+  prompt-rendered `AGENT_RUN` workstations.
 - Current built-in `modelProvider` values are `CLAUDE` and `CODEX`.
 - Runner selection is separate from `modelProvider`. Use factory or
   workstation `runner` fields to choose the built-in runner ID: `codex`,
@@ -70,12 +98,12 @@ what it renders, and where it routes results.
 
 ## Minimal Worker
 
-Only `type` is required for a split worker definition. A minimal model worker
+Only `type` is required for a split worker definition. A minimal agent worker
 can be:
 
 ```yaml
 ---
-type: MODEL_WORKER
+type: AGENT_WORKER
 ---
 
 You are a helpful assistant.
@@ -102,31 +130,16 @@ step, prompt rendering, or per-step execution behavior.
 
 ## Worker Types
 
-### `MODEL_WORKER`
+### `INFERENCE_WORKER`
 
-Use a model worker when the workstation should call a model-backed executor.
-The markdown body is the system prompt.
-
-```yaml
----
-type: MODEL_WORKER
-model: gpt-5-codex
-modelProvider: CODEX
-executorProvider: SCRIPT_WRAP
-timeout: 1h
-skipPermissions: true
----
-
-You are a software engineer. Follow the workstation instructions and keep
-changes scoped to the current work item.
-```
-
-When the worker should support direct model operations such as TTS, add the
-capability contract directly to the worker:
+Use an inference worker when the workstation should perform one bounded model
+operation such as TTS or ASR through `INFERENCE_RUN`. The markdown body
+describes the operation context; slot bindings and operation names live on the
+workstation.
 
 ```yaml
 ---
-type: MODEL_WORKER
+type: INFERENCE_WORKER
 model: OMNIVOICE_Q4_K_M
 modelProvider: CODEX
 modelLocality: LOCAL
@@ -156,7 +169,7 @@ worker identity and locality:
 
 ```yaml
 ---
-type: MODEL_WORKER
+type: INFERENCE_WORKER
 model: gpt-4o-mini-tts
 modelProvider: CODEX
 modelLocality: CLOUD
@@ -187,6 +200,33 @@ Validation rejects duplicate operation names on one worker, duplicate slot
 names within one operation direction, lowercase or invalid uppercase enum
 values, and incompatible content declarations.
 
+Legacy `MODEL_WORKER` remains accepted for inference workers during the
+migration window and projects to the same inference behavior.
+
+### `AGENT_WORKER`
+
+Use an agent worker when the workstation should render a prompt and dispatch to
+a model-backed executor through `AGENT_RUN`. The markdown body is the system
+prompt.
+
+```yaml
+---
+type: AGENT_WORKER
+model: gpt-5-codex
+modelProvider: CODEX
+executorProvider: SCRIPT_WRAP
+timeout: 1h
+skipPermissions: true
+---
+
+You are a software engineer. Follow the workstation instructions and keep
+changes scoped to the current work item.
+```
+
+Legacy `MODEL_WORKER` remains accepted for agent-loop workers during the
+migration window. When paired with `AGENT_RUN` (or legacy `MODEL_WORKSTATION`),
+it projects to `AGENT_WORKER` behavior.
+
 ### `SCRIPT_WORKER`
 
 Use a script worker when the workstation should run a command instead of a
@@ -204,11 +244,14 @@ timeout: 10m
 Runs the Go test suite.
 ```
 
-### `HOSTED_WORKER`
+### `POLLER_WORKER`
 
-Use a hosted worker when Infinite You should run a built-in provider integration
-instead of a custom script or model backend. V1 hosted workers are poller-only
-and pair with a workstation that uses `behavior: "POLLER"`.
+Use a poller worker when Infinite You should run a built-in provider
+integration instead of a custom script or model backend. V1 poller workers are
+poller-only and pair with a workstation that uses `behavior: "POLLER"`.
+
+Legacy `HOSTED_WORKER` remains accepted during the migration window and
+projects to the same poller behavior.
 
 The current built-in hosted provider is `LINEAR`. Hosted workers authenticate
 through `auth.secretRef` only. Do not put inline API keys, OAuth tokens, or
@@ -254,7 +297,7 @@ configured credentials.
 
 ```yaml
 ---
-type: HOSTED_WORKER
+type: POLLER_WORKER
 provider: LINEAR
 auth:
   secretRef: secrets/linear-api-key
@@ -291,22 +334,22 @@ Use `you docs workstations` for `behavior: "POLLER"` lifecycle semantics and
 
 | Field | Applies to | What it controls |
 |-------|------------|------------------|
-| `type` | all workers | `MODEL_WORKER`, `SCRIPT_WORKER`, or `HOSTED_WORKER` |
-| `provider` | hosted workers | Built-in hosted provider such as `LINEAR` |
-| `auth.secretRef` | hosted workers | Referenced secret name resolved at runtime |
-| `linear` | hosted LINEAR workers | Poll interval, scope filters, mapping, and optional claim config |
-| `model` | model workers | Concrete model identifier such as `gpt-5-codex` |
-| `modelProvider` | model workers | Model-routing provider identity used for provider selection and diagnostics |
-| `executorProvider` | model workers | Execution wrapper or adapter used to run the worker |
+| `type` | all workers | `INFERENCE_WORKER`, `AGENT_WORKER`, `SCRIPT_WORKER`, or `POLLER_WORKER` |
+| `provider` | poller workers | Built-in hosted provider such as `LINEAR` |
+| `auth.secretRef` | poller workers | Referenced secret name resolved at runtime |
+| `linear` | LINEAR poller workers | Poll interval, scope filters, mapping, and optional claim config |
+| `model` | inference and agent workers | Concrete model identifier such as `gpt-5-codex` |
+| `modelProvider` | inference and agent workers | Model-routing provider identity used for provider selection and diagnostics |
+| `executorProvider` | inference and agent workers | Execution wrapper or adapter used to run the worker |
 | `command` | script workers | Executable to run |
 | `args` | script workers | Command arguments; values can use Go template expressions |
 | `resources` | all workers | Worker-level resource requirements |
 | `timeout` | all workers | Per-attempt worker timeout |
-| `stopToken` | model workers | Output marker for accepted completion when configured |
-| `skipPermissions` | model workers | Provider-specific permission shortcut |
-| `modelLocality` | model workers | `LOCAL` or `CLOUD` execution locality for model operations and diagnostics |
-| `operations` | model workers | Provider-agnostic capability declarations with uppercase operation names and typed slots |
-| `openCodeAgent` | model workers | Named OpenCode agent profile for dispatches that resolve to runner `opencode` |
+| `stopToken` | agent workers | Output marker for accepted completion when configured |
+| `skipPermissions` | inference and agent workers | Provider-specific permission shortcut |
+| `modelLocality` | inference workers | `LOCAL` or `CLOUD` execution locality for model operations and diagnostics |
+| `operations` | inference workers | Provider-agnostic capability declarations with uppercase operation names and typed slots |
+| `openCodeAgent` | agent workers | Named OpenCode agent profile for dispatches that resolve to runner `opencode` |
 
 ## Provider Fields
 
@@ -327,7 +370,7 @@ worker provider compatibility fallback when no explicit runner is configured.
 
 ## OpenCode Agent Profiles
 
-Use `openCodeAgent` on a `MODEL_WORKER` when the dispatch should run through
+Use `openCodeAgent` on an `AGENT_WORKER` when the dispatch should run through
 the OpenCode runner and you want OpenCode to apply a named agent profile
 (system prompt, tool permissions, and other settings created with
 `opencode agent create`) instead of duplicating that guidance in the worker
@@ -335,7 +378,7 @@ body.
 
 ```yaml
 ---
-type: MODEL_WORKER
+type: AGENT_WORKER
 model: gpt-5
 runner: opencode
 openCodeAgent: implementer
