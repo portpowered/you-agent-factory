@@ -283,6 +283,153 @@ func ProjectedResultReadHash(result ResultReadResult) (string, error) {
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
+// ListDispatchesResultHash returns a stable digest for one dispatch list read.
+func ListDispatchesResultHash(result ListDispatchesResult) (string, error) {
+	dispatches := make([]map[string]any, 0, len(result.Dispatches))
+	for _, dispatch := range result.Dispatches {
+		row := map[string]any{
+			"id":           dispatch.ID,
+			"status":       string(dispatch.Status),
+			"dispatchKind": dispatch.DispatchKind,
+			"phase":        dispatch.Phase,
+			"label":        dispatch.Label,
+			"attempt":      dispatch.Attempt,
+		}
+		if len(dispatch.OutputArtifactIDs) > 0 {
+			ids := append([]string(nil), dispatch.OutputArtifactIDs...)
+			sort.Strings(ids)
+			row["outputArtifactIds"] = ids
+		}
+		if len(dispatch.ProviderSessionRefs) > 0 {
+			refs := make([]string, 0, len(dispatch.ProviderSessionRefs))
+			for _, ref := range dispatch.ProviderSessionRefs {
+				refs = append(refs, fmt.Sprintf("%s:%s:%s", ref.Provider, ref.Kind, ref.ID))
+			}
+			sort.Strings(refs)
+			row["providerSessionRefs"] = refs
+		}
+		dispatches = append(dispatches, row)
+	}
+	document := map[string]any{
+		"sessionId":  result.SessionID,
+		"dispatches": dispatches,
+	}
+	encoded, err := json.Marshal(document)
+	if err != nil {
+		return "", fmt.Errorf("marshal dispatch list read: %w", err)
+	}
+	sum := sha256.Sum256(encoded)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+// DispatchDetailHash returns a stable digest for one dispatch detail read.
+func DispatchDetailHash(detail DispatchDetail) (string, error) {
+	document := map[string]any{
+		"sessionId":        detail.SessionID,
+		"id":               detail.ID,
+		"status":           string(detail.Status),
+		"dispatchKind":     detail.DispatchKind,
+		"orchestratorKind": detail.OrchestratorKind,
+		"phase":            detail.Phase,
+		"label":            detail.Label,
+		"attempt":          detail.Attempt,
+	}
+	if len(detail.ArtifactIDs) > 0 {
+		ids := append([]string(nil), detail.ArtifactIDs...)
+		sort.Strings(ids)
+		document["artifactIds"] = ids
+	}
+	if detail.Petri != nil {
+		document["petriTransitionId"] = detail.Petri.TransitionID
+	}
+	if detail.JavaScript != nil {
+		document["javascriptTaskKind"] = detail.JavaScript.TaskKind
+	}
+	encoded, err := json.Marshal(document)
+	if err != nil {
+		return "", fmt.Errorf("marshal dispatch detail read: %w", err)
+	}
+	sum := sha256.Sum256(encoded)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+// ListArtifactsResultHash returns a stable digest for one artifact list read.
+func ListArtifactsResultHash(result ListArtifactsResult) (string, error) {
+	artifacts := make([]map[string]any, 0, len(result.Artifacts))
+	for _, artifact := range result.Artifacts {
+		row := map[string]any{
+			"id":          artifact.ID,
+			"kind":        artifact.Kind,
+			"visibility":  artifact.Visibility,
+			"label":       artifact.Label,
+			"contentHash": artifact.ContentHash,
+			"sizeBytes":   artifact.SizeBytes,
+			"dispatchId":  artifact.DispatchID,
+			"auditMode":   artifact.AuditMode,
+		}
+		if artifact.RetrievalRef != nil {
+			row["retrievalHref"] = artifact.RetrievalRef.Href
+		}
+		artifacts = append(artifacts, row)
+	}
+	document := map[string]any{
+		"sessionId": result.SessionID,
+		"artifacts": artifacts,
+	}
+	encoded, err := json.Marshal(document)
+	if err != nil {
+		return "", fmt.Errorf("marshal artifact list read: %w", err)
+	}
+	sum := sha256.Sum256(encoded)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+// ArtifactDetailHash returns a stable digest for one artifact detail read.
+func ArtifactDetailHash(detail ArtifactDetail) (string, error) {
+	document := map[string]any{
+		"sessionId":   detail.SessionID,
+		"id":          detail.ID,
+		"kind":        detail.Kind,
+		"visibility":  detail.Visibility,
+		"label":       detail.Label,
+		"contentHash": detail.ContentHash,
+		"sizeBytes":   detail.SizeBytes,
+		"dispatchId":  detail.DispatchID,
+		"auditMode":   detail.AuditMode,
+	}
+	if detail.ContentRef != nil {
+		document["contentHref"] = detail.ContentRef.Href
+	}
+	if len(detail.Content) > 0 {
+		sum := sha256.Sum256(detail.Content)
+		document["contentPayloadHash"] = "sha256:" + hex.EncodeToString(sum[:])
+	}
+	encoded, err := json.Marshal(document)
+	if err != nil {
+		return "", fmt.Errorf("marshal artifact detail read: %w", err)
+	}
+	sum := sha256.Sum256(encoded)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+// EventReadResultHash returns a stable digest for one event read preserving event order.
+func EventReadResultHash(result EventReadResult) (string, error) {
+	eventIDs, err := orderedEventIDsFromFixtureEvents(result.Events)
+	if err != nil {
+		return "", err
+	}
+	document := map[string]any{
+		"sessionId": result.SessionID,
+		"eventIds":  eventIDs,
+	}
+	encoded, err := json.Marshal(document)
+	if err != nil {
+		return "", fmt.Errorf("marshal event read: %w", err)
+	}
+	sum := sha256.Sum256(encoded)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
 // SyncStartResultHash returns a stable digest for one sync start outcome.
 func SyncStartResultHash(result SyncStartResult) (string, error) {
 	document := map[string]any{
@@ -304,6 +451,19 @@ func SyncStartResultHash(result SyncStartResult) (string, error) {
 }
 
 func eventIDsFromFixtureEvents(events []json.RawMessage) ([]string, error) {
+	ids, err := orderedEventIDsFromFixtureEvents(events)
+	if err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	sorted := append([]string(nil), ids...)
+	sort.Strings(sorted)
+	return sorted, nil
+}
+
+func orderedEventIDsFromFixtureEvents(events []json.RawMessage) ([]string, error) {
 	if len(events) == 0 {
 		return nil, nil
 	}
@@ -319,6 +479,5 @@ func eventIDsFromFixtureEvents(events []json.RawMessage) ([]string, error) {
 			ids = append(ids, id)
 		}
 	}
-	sort.Strings(ids)
 	return ids, nil
 }
