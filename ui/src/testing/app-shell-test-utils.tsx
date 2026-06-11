@@ -114,10 +114,6 @@ interface RenderAppResult extends ReturnType<typeof render> {
   fetchMock: FetchMock;
 }
 
-type CurrentFactoryDocumentResult = ReturnType<
-  typeof useCurrentFactoryDocument
->;
-
 const queryClients: QueryClient[] = [];
 let restoreBrowserTestShims: (() => void) | null = null;
 export const baselineSnapshot = buildDashboardSnapshotFixture(
@@ -429,12 +425,6 @@ export function createFileDropTransfer(files: File[]): {
       types: ["Files"],
     },
   };
-}
-
-export function mockCurrentFactoryDocument(
-  result: CurrentFactoryDocumentResult,
-): void {
-  vi.mocked(useCurrentFactoryDocument).mockReturnValue(result as never);
 }
 
 export function resetCurrentFactoryDocumentMock(): void {

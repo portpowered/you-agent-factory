@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
@@ -292,9 +293,15 @@ func TestRun_VerboseStartupDiagnosticsReportResolvedRuntimeMetadata(t *testing.T
 
 	var diagnostics bytes.Buffer
 	err := Run(context.Background(), RunConfig{
-		Dir:                        dir,
-		Workflow:                   "workflow-1",
-		RunnerID:                   "codex",
+		Dir:     dir,
+		Workflow: "workflow-1",
+		OperatorDefaults: operatorconfig.ResolvedDefaults{
+			WorkerModelProvider:       "CODEX",
+			WorkerModel:               "gpt-5-codex",
+			WorkerModelProviderSource: operatorconfig.SourceFlag,
+			WorkerModelSource:         operatorconfig.SourceFlag,
+			ConfigPath:                "/tmp/config.json",
+		},
 		Port:                       busyPort,
 		AutoPort:                   true,
 		DisableDefaultRecording:    true,
@@ -320,7 +327,11 @@ func TestRun_VerboseStartupDiagnosticsReportResolvedRuntimeMetadata(t *testing.T
 		`configuredDir="` + dir + `"`,
 		"runtimeMode=BATCH",
 		`workflow="workflow-1"`,
-		"runnerOverride=true",
+		"operatorDefaults precedence=file < env < flag",
+		"provider=CODEX",
+		"providerSource=flag",
+		"model=gpt-5-codex",
+		"modelSource=flag",
 		"mockWorkers=true",
 		"recording=disabled",
 		`runtimeLogDir="logs/runtime"`,

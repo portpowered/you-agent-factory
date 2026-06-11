@@ -74,14 +74,13 @@ func TestVerifyFastCommandSmoke_FailureReportsOwnedSuiteAndRerunCommand(t *testi
 func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"verify-build-contracts":    "@printf '%s\\n' 'stub:verify-build-contracts'\n",
-		"release-surface-smoke":     "@printf '%s\\n' 'stub:release-surface-smoke'\n",
-		"test-ui-coverage":          "@printf '%s\\n' 'stub:test-ui-coverage'\n",
-		"ui-integration-test":       "@printf '%s\\n' 'stub:ui-integration-test'\n",
-		"test-backend-verification": "@printf '%s\\n' 'stub:test-backend-verification'\n",
-		"verify":                    "@printf '%s\\n' 'unexpected:verify'\n\t@exit 99\n",
-		"test-backend-functional":   "@printf '%s\\n' 'unexpected:test-backend-functional'\n\t@exit 99\n",
-		"ui-test":                   "@printf '%s\\n' 'unexpected:ui-test'\n\t@exit 99\n",
+		"verify-build-contracts":             "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"release-surface-smoke":              "@printf '%s\\n' 'stub:release-surface-smoke'\n",
+		"run-concurrent-ui-verification-lanes": "@printf '%s\\n' 'stub:run-concurrent-ui-verification-lanes'\n",
+		"test-backend-verification":          "@printf '%s\\n' 'stub:test-backend-verification'\n",
+		"verify":                             "@printf '%s\\n' 'unexpected:verify'\n\t@exit 99\n",
+		"test-backend-functional":            "@printf '%s\\n' 'unexpected:test-backend-functional'\n\t@exit 99\n",
+		"ui-test":                            "@printf '%s\\n' 'unexpected:ui-test'\n\t@exit 99\n",
 	})
 
 	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-pr")
@@ -94,13 +93,11 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 		"==> build contracts and static verification [make verify-build-contracts]",
 		"stub:verify-build-contracts",
 		"==> required CI-equivalent test lanes [make verify-tests]",
-		"Running required CI-equivalent test lanes: release surface smoke + UI coverage + browser integration + backend verification",
+		"Running required CI-equivalent test lanes: release surface smoke + concurrent UI coverage/browser integration + backend verification",
 		"==> Release surface smoke lane [make release-surface-smoke]",
 		"stub:release-surface-smoke",
-		"==> UI Coverage lane [make test-ui-coverage]",
-		"stub:test-ui-coverage",
-		"==> UI Browser Integration lane [make ui-integration-test]",
-		"stub:ui-integration-test",
+		"==> Concurrent UI Coverage + UI Browser Integration lanes [make run-concurrent-ui-verification-lanes]",
+		"stub:run-concurrent-ui-verification-lanes",
 		"==> Backend Verification lane [make test-backend-verification]",
 		"stub:test-backend-verification",
 	)
@@ -108,8 +105,7 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 	for _, expected := range []string{
 		"stub:verify-build-contracts",
 		"stub:release-surface-smoke",
-		"stub:test-ui-coverage",
-		"stub:ui-integration-test",
+		"stub:run-concurrent-ui-verification-lanes",
 		"stub:test-backend-verification",
 	} {
 		if count := strings.Count(output, expected); count != 1 {
@@ -131,18 +127,17 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 func TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"verify-build-contracts":    "@printf '%s\\n' 'stub:verify-build-contracts'\n",
-		"release-surface-smoke":     "@printf '%s\\n' 'stub:release-surface-smoke'\n",
-		"test-ui-coverage":          "@printf '%s\\n' 'stub:test-ui-coverage'\n",
-		"ui-integration-test":       "@printf '%s\\n' 'stub:ui-integration-test'\n\t@exit 23\n",
-		"test-backend-verification": "@printf '%s\\n' 'stub:test-backend-verification'\n",
+		"verify-build-contracts":             "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"release-surface-smoke":              "@printf '%s\\n' 'stub:release-surface-smoke'\n",
+		"run-concurrent-ui-verification-lanes": "@printf '%s\\n' 'stub:run-concurrent-ui-verification-lanes'\n\t@exit 23\n",
+		"test-backend-verification":          "@printf '%s\\n' 'stub:test-backend-verification'\n",
 	})
 
 	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-pr")
 	if err == nil {
 		t.Fatalf("verify-pr unexpectedly succeeded:\n%s", output)
 	}
-	if !strings.Contains(output, "FAIL: UI Browser Integration lane [make ui-integration-test] failed. Rerun with: make ui-integration-test") {
+	if !strings.Contains(output, "FAIL: Concurrent UI Coverage + UI Browser Integration lanes [make run-concurrent-ui-verification-lanes] failed. Rerun with: make run-concurrent-ui-verification-lanes") {
 		t.Fatalf("verify-pr failure output missing exact lane rerun hint:\n%s", output)
 	}
 	if strings.Contains(output, "stub:test-backend-verification") {
@@ -225,11 +220,10 @@ func TestUIPackageCoverageCommandSmoke_InvokesPackageOwnedCoverageScript(t *test
 func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"verify-build-contracts":    "@printf '%s\\n' 'stub:verify-build-contracts'\n",
-		"release-surface-smoke":     "@printf '%s\\n' 'stub:release-surface-smoke'\n",
-		"test-ui-coverage":          "@printf '%s\\n' 'stub:test-ui-coverage'\n",
-		"ui-integration-test":       "@printf '%s\\n' 'stub:ui-integration-test'\n",
-		"test-backend-verification": "@printf '%s\\n' 'stub:test-backend-verification'\n",
+		"verify-build-contracts":             "@printf '%s\\n' 'stub:verify-build-contracts'\n",
+		"release-surface-smoke":              "@printf '%s\\n' 'stub:release-surface-smoke'\n",
+		"run-concurrent-ui-verification-lanes": "@printf '%s\\n' 'stub:run-concurrent-ui-verification-lanes'\n",
+		"test-backend-verification":          "@printf '%s\\n' 'stub:test-backend-verification'\n",
 	})
 
 	output, err := runMakefileTarget(repoRoot, makefilePath, "verify")
@@ -245,10 +239,8 @@ func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) 
 		"==> required CI-equivalent test lanes [make verify-tests]",
 		"==> Release surface smoke lane [make release-surface-smoke]",
 		"stub:release-surface-smoke",
-		"==> UI Coverage lane [make test-ui-coverage]",
-		"stub:test-ui-coverage",
-		"==> UI Browser Integration lane [make ui-integration-test]",
-		"stub:ui-integration-test",
+		"==> Concurrent UI Coverage + UI Browser Integration lanes [make run-concurrent-ui-verification-lanes]",
+		"stub:run-concurrent-ui-verification-lanes",
 		"==> Backend Verification lane [make test-backend-verification]",
 		"stub:test-backend-verification",
 	)
@@ -256,8 +248,7 @@ func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) 
 	for _, expected := range []string{
 		"stub:verify-build-contracts",
 		"stub:release-surface-smoke",
-		"stub:test-ui-coverage",
-		"stub:ui-integration-test",
+		"stub:run-concurrent-ui-verification-lanes",
 		"stub:test-backend-verification",
 	} {
 		if count := strings.Count(output, expected); count != 1 {
@@ -290,6 +281,239 @@ func TestBackendVerificationLaneScriptSmoke_UsesCanonicalOwnedCommandAndCaptures
 	}
 	if !strings.Contains(string(logBody), "fake-make:test-backend-verification") {
 		t.Fatalf("backend verification command log missing canonical command output:\n%s", string(logBody))
+	}
+}
+
+func TestConcurrentUIVerificationLanesScriptSmoke_RunsBothOwnedLanesConcurrently(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makePath := writeExecutableScript(t, "fake-make-concurrent-ui", `#!/bin/sh
+case "$1" in
+  run-sharded-ui-coverage)
+    printf '%s\n' "fake-make:run-sharded-ui-coverage"
+    sleep 0.2
+    ;;
+  ui-integration-test)
+    printf '%s\n' "fake-make:ui-integration-test"
+    ;;
+  *)
+    printf '%s\n' "fake-make:unexpected:$*"
+    exit 99
+    ;;
+esac
+`)
+	artifactRoot := filepath.Join(t.TempDir(), "concurrent-ui-verification-artifacts")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "run-concurrent-ui-verification-lanes.sh"),
+		fmt.Sprintf("ARTIFACT_ROOT=%s", artifactRoot),
+		fmt.Sprintf("MAKE_BIN=%s", makePath),
+	)
+	if err != nil {
+		t.Fatalf("run concurrent UI verification script: %v\n%s", err, output)
+	}
+
+	if !strings.Contains(output, "[UI Coverage] fake-make:run-sharded-ui-coverage") {
+		t.Fatalf("concurrent UI verification script missing prefixed coverage output:\n%s", output)
+	}
+	if !strings.Contains(output, "[UI Browser Integration] fake-make:ui-integration-test") {
+		t.Fatalf("concurrent UI verification script missing prefixed browser output:\n%s", output)
+	}
+
+	assertOutputOrder(t, output,
+		"==> UI Coverage lane [make run-sharded-ui-coverage] (concurrent)",
+		"==> UI Browser Integration lane [make ui-integration-test] (concurrent)",
+	)
+
+	for _, lane := range []struct {
+		label    string
+		filename string
+	}{
+		{"UI Coverage", "ui-coverage.log"},
+		{"UI Browser Integration", "ui-browser-integration.log"},
+	} {
+		logBody, readErr := os.ReadFile(filepath.Join(artifactRoot, lane.filename))
+		if readErr != nil {
+			t.Fatalf("read %s lane log: %v", lane.label, readErr)
+		}
+		if len(logBody) == 0 {
+			t.Fatalf("%s lane log is empty", lane.label)
+		}
+	}
+}
+
+func TestConcurrentUIVerificationLanesScriptSmoke_FailureReportsExactLaneRerun(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makePath := writeExecutableScript(t, "fake-make-concurrent-ui-fail", `#!/bin/sh
+case "$1" in
+  run-sharded-ui-coverage)
+    printf '%s\n' "fake-make:run-sharded-ui-coverage"
+    ;;
+  ui-integration-test)
+    printf '%s\n' "fake-make:ui-integration-test"
+    exit 23
+    ;;
+  *)
+    printf '%s\n' "fake-make:unexpected:$*"
+    exit 99
+    ;;
+esac
+`)
+	artifactRoot := filepath.Join(t.TempDir(), "concurrent-ui-verification-artifacts")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "run-concurrent-ui-verification-lanes.sh"),
+		fmt.Sprintf("ARTIFACT_ROOT=%s", artifactRoot),
+		fmt.Sprintf("MAKE_BIN=%s", makePath),
+	)
+	if err == nil {
+		t.Fatalf("concurrent UI verification script unexpectedly succeeded:\n%s", output)
+	}
+	if !strings.Contains(output, "FAIL: UI Browser Integration lane [make ui-integration-test] failed. Rerun with: make ui-integration-test") {
+		t.Fatalf("concurrent UI verification script missing exact browser lane rerun hint:\n%s", output)
+	}
+}
+
+func TestShardedUICoverageScriptSmoke_RunsAllShardsThenMerge(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makePath := writeExecutableScript(t, "fake-make-sharded-ui", `#!/bin/sh
+case "$1" in
+  ui-test-coverage)
+    printf '%s\n' "fake-make:ui-test-coverage UI_COVERAGE_SHARD=${UI_COVERAGE_SHARD:-unset}"
+    ;;
+  test-ui-coverage-merge)
+    printf '%s\n' "fake-make:test-ui-coverage-merge"
+    ;;
+  *)
+    printf '%s\n' "fake-make:unexpected:$*"
+    exit 99
+    ;;
+esac
+`)
+	artifactRoot := filepath.Join(t.TempDir(), "sharded-ui-coverage-artifacts")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "run-sharded-ui-coverage.sh"),
+		fmt.Sprintf("ARTIFACT_ROOT=%s", artifactRoot),
+		fmt.Sprintf("MAKE_BIN=%s", makePath),
+		"UI_COVERAGE_SHARD_TOTAL=2",
+	)
+	if err != nil {
+		t.Fatalf("run sharded UI coverage script: %v\n%s", err, output)
+	}
+
+	for _, expected := range []string{
+		"==> Sharded UI Coverage (2 main covered Vitest shards + merge)",
+		"[UI Coverage Shard 1/2] fake-make:ui-test-coverage UI_COVERAGE_SHARD=1/2",
+		"[UI Coverage Shard 2/2] fake-make:ui-test-coverage UI_COVERAGE_SHARD=2/2",
+		"==> UI Coverage merge lane [make test-ui-coverage-merge]",
+		"fake-make:test-ui-coverage-merge",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("sharded UI coverage script missing %q:\n%s", expected, output)
+		}
+	}
+}
+
+func TestShardedUICoverageScriptSmoke_CleansStaleVitestReportBlobsBeforeShards(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	reportsDir := filepath.Join(repoRoot, "ui", ".vitest-reports")
+	if err := os.MkdirAll(reportsDir, 0o755); err != nil {
+		t.Fatalf("create vitest reports dir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.RemoveAll(reportsDir)
+	})
+
+	staleFiles := []string{
+		filepath.Join(reportsDir, "main.json"),
+		filepath.Join(reportsDir, "main-shard-99.json"),
+		filepath.Join(reportsDir, "react-flow-current-activity-card.json"),
+	}
+	for _, stalePath := range staleFiles {
+		if err := os.WriteFile(stalePath, []byte("{}"), 0o644); err != nil {
+			t.Fatalf("write stale vitest report blob %s: %v", stalePath, err)
+		}
+	}
+
+	makePath := writeExecutableScript(t, "fake-make-sharded-ui-clean", `#!/bin/sh
+case "$1" in
+  ui-test-coverage)
+    printf '%s\n' "fake-make:ui-test-coverage UI_COVERAGE_SHARD=${UI_COVERAGE_SHARD:-unset}"
+    ;;
+  test-ui-coverage-merge)
+    printf '%s\n' "fake-make:test-ui-coverage-merge"
+    ;;
+  *)
+    printf '%s\n' "fake-make:unexpected:$*"
+    exit 99
+    ;;
+esac
+`)
+	artifactRoot := filepath.Join(t.TempDir(), "sharded-ui-coverage-artifacts")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "run-sharded-ui-coverage.sh"),
+		fmt.Sprintf("ARTIFACT_ROOT=%s", artifactRoot),
+		fmt.Sprintf("MAKE_BIN=%s", makePath),
+		"UI_COVERAGE_SHARD_TOTAL=2",
+	)
+	if err != nil {
+		t.Fatalf("run sharded UI coverage script: %v\n%s", err, output)
+	}
+
+	for _, stalePath := range staleFiles {
+		if _, statErr := os.Stat(stalePath); !os.IsNotExist(statErr) {
+			t.Fatalf("stale vitest report blob still present after sharded run: %s (stat err=%v)", stalePath, statErr)
+		}
+	}
+}
+
+func TestShardedUICoverageScriptSmoke_FailureReportsExactShardRerun(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makePath := writeExecutableScript(t, "fake-make-sharded-ui-fail", `#!/bin/sh
+case "$1" in
+  ui-test-coverage)
+    case "${UI_COVERAGE_SHARD:-}" in
+      2/2)
+        printf '%s\n' "fake-make:ui-test-coverage UI_COVERAGE_SHARD=${UI_COVERAGE_SHARD}"
+        exit 19
+        ;;
+      *)
+        printf '%s\n' "fake-make:ui-test-coverage UI_COVERAGE_SHARD=${UI_COVERAGE_SHARD:-unset}"
+        ;;
+    esac
+    ;;
+  test-ui-coverage-merge)
+    printf '%s\n' "fake-make:test-ui-coverage-merge"
+    exit 99
+    ;;
+  *)
+    printf '%s\n' "fake-make:unexpected:$*"
+    exit 99
+    ;;
+esac
+`)
+	artifactRoot := filepath.Join(t.TempDir(), "sharded-ui-coverage-artifacts")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "run-sharded-ui-coverage.sh"),
+		fmt.Sprintf("ARTIFACT_ROOT=%s", artifactRoot),
+		fmt.Sprintf("MAKE_BIN=%s", makePath),
+		"UI_COVERAGE_SHARD_TOTAL=2",
+	)
+	if err == nil {
+		t.Fatalf("sharded UI coverage script unexpectedly succeeded:\n%s", output)
+	}
+	if !strings.Contains(output, "FAIL: UI Coverage Shard 2/2 failed. Rerun with: UI_COVERAGE_SHARD=2/2 make ui-test-coverage") {
+		t.Fatalf("sharded UI coverage script missing exact shard rerun hint:\n%s", output)
+	}
+	if strings.Contains(output, "fake-make:test-ui-coverage-merge") {
+		t.Fatalf("sharded UI coverage script should not run merge after shard failure:\n%s", output)
 	}
 }
 
