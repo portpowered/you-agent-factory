@@ -56,6 +56,10 @@ func TestPreview_InvalidWorkflowReportsDiagnostics(t *testing.T) {
 	if !strings.Contains(output.String(), "Factory preview failed.") {
 		t.Fatalf("output = %q, want failure summary", output.String())
 	}
+	wantPath := workflowsource.ProjectClaudeWorkflowsDir + "/broken.js"
+	if !strings.Contains(output.String(), wantPath+":") {
+		t.Fatalf("output = %q, want path-aware diagnostic prefix %q", output.String(), wantPath)
+	}
 }
 
 func writeWorkflow(t *testing.T, projectRoot, name, content string) {

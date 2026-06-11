@@ -121,6 +121,47 @@ func TestStructuredErrorFromPreview_UsesFirstBlockingIssue(t *testing.T) {
 	}
 }
 
+func TestValidateTool_ReturnsPathAwareDiagnosticsForInvalidSource(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeWorkflow(t, projectRoot, "broken.js", "require('fs');")
+
+	projectRootPtr := projectRoot
+	sourceValue := "broken"
+	result, err := mcpworkflow.ValidateTool(factoryapi.FactoryPreviewRequest{
+		SourceKind:  factoryapi.WORKFLOWNAME,
+		ProjectRoot: &projectRootPtr,
+		SourceValue: &sourceValue,
+	})
+	if err != nil {
+		t.Fatalf("ValidateTool: %v", err)
+	}
+	if result.Valid {
+		t.Fatal("expected invalid preview")
+	}
+	if len(result.SourceValidationIssues) == 0 {
+		t.Fatalf("issues = %#v, want source validation diagnostics", result.SourceValidationIssues)
+	}
+	wantPath := workflowsource.ProjectClaudeWorkflowsDir + "/broken.js"
+	if result.SourceValidationIssues[0].Path == nil || strings.TrimSpace(*result.SourceValidationIssues[0].Path) != wantPath {
+		t.Fatalf("issue path = %v, want %q", result.SourceValidationIssues[0].Path, wantPath)
+	}
+
+	startResult, err := mcpworkflow.StartTool(factoryapi.FactoryPreviewRequest{
+		SourceKind:  factoryapi.WORKFLOWNAME,
+		ProjectRoot: &projectRootPtr,
+		SourceValue: &sourceValue,
+	})
+	if err != nil {
+		t.Fatalf("StartTool: %v", err)
+	}
+	if startResult.Valid || len(startResult.SourceValidationIssues) == 0 {
+		t.Fatalf("start preview = %#v, want invalid preview with diagnostics", startResult)
+	}
+	if startResult.SourceValidationIssues[0].Path == nil || strings.TrimSpace(*startResult.SourceValidationIssues[0].Path) != wantPath {
+		t.Fatalf("start issue path = %v, want %q", startResult.SourceValidationIssues[0].Path, wantPath)
+	}
+}
+
 func writeWorkflow(t *testing.T, projectRoot, name, content string) {
 	t.Helper()
 	workflowDir := filepath.Join(projectRoot, workflowsource.ProjectClaudeWorkflowsDir)
