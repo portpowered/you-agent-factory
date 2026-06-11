@@ -48,6 +48,8 @@ func (g *runtimeGlobals) captureReturn(value goja.Value) {
 	g.returnedSet = true
 }
 
+// terminalValue returns the workflow terminal value when one is present.
+// When both workflow.final and a returned value exist, workflow.final wins.
 func (g *runtimeGlobals) terminalValue() (goja.Value, bool) {
 	if g.finalSet {
 		return g.finalValue, true
