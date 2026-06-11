@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
@@ -189,6 +190,9 @@ type FactoryServiceConfig struct {
 	// RunnerID sets the factory-level runner override used when a workstation
 	// does not declare its own runner selection.
 	RunnerID string
+	// OperatorDefaults carries resolved operator-level default worker model
+	// settings applied to omitted MODEL_WORKER fields in effective runtime config.
+	OperatorDefaults operatorconfig.ResolvedDefaults
 	// ExecutionBaseDir overrides the base directory used to resolve relative
 	// runtime execution paths such as workstation workingDirectory values.
 	// Empty defaults to the loaded factory directory.

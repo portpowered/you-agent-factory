@@ -781,6 +781,16 @@ func (fs *FactoryService) workflowID() string {
 	return fs.coordinatorPolicy().workflowID
 }
 
+func applyOperatorDefaultsToLoadedConfig(cfg *FactoryServiceConfig, loaded *factoryconfig.LoadedFactoryConfig) error {
+	if cfg == nil || loaded == nil || cfg.ReplayPath != "" {
+		return nil
+	}
+	if err := factoryconfig.ApplyOperatorDefaultsToLoadedConfig(loaded, cfg.OperatorDefaults); err != nil {
+		return fmt.Errorf("apply operator defaults: %w", err)
+	}
+	return factoryconfig.ValidateModelWorkerRuntimeProviders(loaded)
+}
+
 func validateReplayModeConfig(cfg *FactoryServiceConfig) error {
 	if cfg == nil {
 		return fmt.Errorf("factory service config is required")
@@ -797,7 +807,13 @@ func loadFactoryConfigForMode(cfg *FactoryServiceConfig) (*factoryconfig.LoadedF
 		if loaded != nil {
 			loaded.SetRuntimeBaseDir(cfg.ExecutionBaseDir)
 		}
-		return loaded, nil, err
+		if err != nil {
+			return loaded, nil, err
+		}
+		if err := applyOperatorDefaultsToLoadedConfig(cfg, loaded); err != nil {
+			return nil, nil, err
+		}
+		return loaded, nil, nil
 	}
 	artifact, err := replay.Load(cfg.ReplayPath)
 	if err != nil {

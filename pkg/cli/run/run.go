@@ -512,6 +512,7 @@ func buildRunServiceConfig(
 	svcCfg := &service.FactoryServiceConfig{
 		Dir:                       cfg.Dir,
 		RunnerID:                  cfg.RunnerID,
+		OperatorDefaults:          cfg.OperatorDefaults,
 		ExecutionBaseDir:          cfg.ExecutionBaseDir,
 		RuntimeMode:               runtimeModeForRun(cfg),
 		Port:                      cfg.Port,
