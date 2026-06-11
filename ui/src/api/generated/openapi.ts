@@ -1766,7 +1766,7 @@ export interface components {
     };
     /** @description Authoritative terminal session lifecycle marker on the canonical factory event stream. Session identity lives in FactoryEvent.context. */
     SessionCompletedEventPayload: {
-      finalStatus: components["schemas"]["FactorySessionStatus"];
+      finalStatus: components["schemas"]["FactorySessionDurableLifecycleStatus"];
       /**
        * Format: date-time
        * @description When durable session execution reached a terminal state.
@@ -6068,12 +6068,16 @@ export const FactoryArtifactAuditMode = {
 export type FactoryArtifactAuditMode =
   (typeof FactoryArtifactAuditMode)[keyof typeof FactoryArtifactAuditMode];
 export const FactoryEventSessionResultStatus = {
+  // The durable session result is not yet available for the requested mode.
+  FactoryEventSessionResultStatusNotReady: "NOT_READY",
   // A partial customer-visible result is available before terminal completion.
-  PARTIAL: "PARTIAL",
+  FactoryEventSessionResultStatusPartial: "PARTIAL",
   // The final customer-visible result is available.
-  FINAL: "FINAL",
+  FactoryEventSessionResultStatusFinal: "FINAL",
   // Terminal failure occurred after partial customer-visible results were recorded.
-  FAILED_WITH_PARTIAL: "FAILED_WITH_PARTIAL",
+  FactoryEventSessionResultStatusFailedWithPartial: "FAILED_WITH_PARTIAL",
+  // The durable session result is unavailable for the requested mode.
+  FactoryEventSessionResultStatusUnavailable: "UNAVAILABLE",
 } as const;
 export type FactoryEventSessionResultStatus =
   (typeof FactoryEventSessionResultStatus)[keyof typeof FactoryEventSessionResultStatus];

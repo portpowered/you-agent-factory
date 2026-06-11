@@ -23,11 +23,106 @@ func TestReconstructFactoryWorldState_SuccessfulSessionBracketReconstructsLifecy
 	if view.Runtime.Session.Bracket == nil {
 		t.Fatal("session bracket projection = nil, want lifecycle bracket")
 	}
-	if !view.Runtime.Session.Bracket.Terminal || view.Runtime.Session.Bracket.FinalStatus != string(factoryapi.FactorySessionStatusFINISHED) {
+	if !view.Runtime.Session.Bracket.Terminal || view.Runtime.Session.Bracket.FinalStatus != string(factoryapi.FactorySessionDurableLifecycleStatusSucceeded) {
 		t.Fatalf("session bracket projection = %#v, want terminal FINISHED", view.Runtime.Session.Bracket)
 	}
-	if view.Runtime.Session.Bracket.ResultStatus != string(factoryapi.FINAL) {
+	if view.Runtime.Session.Bracket.ResultStatus != string(factoryapi.FactoryEventSessionResultStatusFinal) {
 		t.Fatalf("session bracket result status = %q, want FINAL", view.Runtime.Session.Bracket.ResultStatus)
+	}
+}
+
+func TestReconstructFactoryWorldState_RunningSessionNotReadyResultStatusRoundTrips(t *testing.T) {
+	t0 := time.Date(2026, 6, 9, 12, 2, 0, 0, time.UTC)
+	sessionID := "session-running"
+	kind := factoryapi.JAVASCRIPT
+	source := "api"
+	events := []factoryapi.FactoryEvent{
+		generatedProjectionEvent(factoryapi.FactoryEventTypeSessionStarted, "event-session-started-running", 1, t0, factoryapi.FactoryEventContext{
+			Sequence:         1,
+			SessionId:        &sessionID,
+			SessionSequence:  intPtrForProjectionTest(0),
+			OrchestratorKind: &kind,
+			Source:           &source,
+		}, factoryapi.SessionStartedEventPayload{
+			FactoryId: stringPointer("factory-running"),
+			StartedAt: t0,
+		}),
+		generatedProjectionEvent(factoryapi.FactoryEventTypeSessionResultUpdated, "event-session-result-not-ready", 2, t0.Add(time.Second), factoryapi.FactoryEventContext{
+			Sequence:         2,
+			SessionId:        &sessionID,
+			SessionSequence:  intPtrForProjectionTest(1),
+			OrchestratorKind: &kind,
+			Source:           &source,
+		}, factoryapi.SessionResultUpdatedEventPayload{
+			ResultStatus: factoryapi.FactoryEventSessionResultStatusNotReady,
+		}),
+	}
+
+	worldState, err := ReconstructFactoryWorldState(events, 2)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	bracket := worldState.SessionBracket
+	if bracket == nil || bracket.Terminal {
+		t.Fatalf("session bracket = %#v, want non-terminal running lifecycle", bracket)
+	}
+	if bracket.ResultStatus != string(factoryapi.FactoryEventSessionResultStatusNotReady) {
+		t.Fatalf("result status = %q, want NOT_READY", bracket.ResultStatus)
+	}
+}
+
+func TestReconstructFactoryWorldState_CanceledSessionUnavailableResultStatusRoundTrips(t *testing.T) {
+	t0 := time.Date(2026, 6, 9, 12, 3, 0, 0, time.UTC)
+	sessionID := "session-canceled"
+	kind := factoryapi.PETRI
+	source := "api"
+	events := []factoryapi.FactoryEvent{
+		generatedProjectionEvent(factoryapi.FactoryEventTypeSessionStarted, "event-session-started-canceled", 1, t0, factoryapi.FactoryEventContext{
+			Sequence:         1,
+			SessionId:        &sessionID,
+			SessionSequence:  intPtrForProjectionTest(0),
+			OrchestratorKind: &kind,
+			Source:           &source,
+		}, factoryapi.SessionStartedEventPayload{
+			FactoryId: stringPointer("factory-canceled"),
+			StartedAt: t0,
+		}),
+		generatedProjectionEvent(factoryapi.FactoryEventTypeSessionResultUpdated, "event-session-result-unavailable", 2, t0.Add(time.Second), factoryapi.FactoryEventContext{
+			Sequence:         2,
+			SessionId:        &sessionID,
+			SessionSequence:  intPtrForProjectionTest(1),
+			OrchestratorKind: &kind,
+			Source:           &source,
+		}, factoryapi.SessionResultUpdatedEventPayload{
+			ResultStatus: factoryapi.FactoryEventSessionResultStatusUnavailable,
+		}),
+		generatedProjectionEvent(factoryapi.FactoryEventTypeSessionCompleted, "event-session-completed-canceled", 3, t0.Add(2*time.Second), factoryapi.FactoryEventContext{
+			Sequence:         3,
+			SessionId:        &sessionID,
+			SessionSequence:  intPtrForProjectionTest(2),
+			OrchestratorKind: &kind,
+			Source:           &source,
+		}, factoryapi.SessionCompletedEventPayload{
+			FinalStatus:    factoryapi.FactorySessionDurableLifecycleStatusCanceled,
+			CompletedAt:    t0.Add(2 * time.Second),
+			DurationMillis: int64PtrForProjectionTest(2000),
+			ResultStatus:   factoryEventSessionResultStatusPtr(factoryapi.FactoryEventSessionResultStatusUnavailable),
+		}),
+	}
+
+	worldState, err := ReconstructFactoryWorldState(events, 3)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	bracket := worldState.SessionBracket
+	if bracket == nil || !bracket.Terminal {
+		t.Fatalf("session bracket = %#v, want terminal canceled lifecycle", bracket)
+	}
+	if bracket.FinalStatus != string(factoryapi.FactorySessionDurableLifecycleStatusCanceled) {
+		t.Fatalf("final status = %q, want CANCELED", bracket.FinalStatus)
+	}
+	if bracket.ResultStatus != string(factoryapi.FactoryEventSessionResultStatusUnavailable) {
+		t.Fatalf("result status = %q, want UNAVAILABLE", bracket.ResultStatus)
 	}
 }
 
@@ -43,7 +138,7 @@ func TestReconstructFactoryWorldState_FailedWithPartialSessionBracketReconstruct
 	if bracket == nil {
 		t.Fatal("session bracket = nil, want failed-with-partial lifecycle")
 	}
-	if bracket.ResultStatus != string(factoryapi.FAILEDWITHPARTIAL) {
+	if bracket.ResultStatus != string(factoryapi.FactoryEventSessionResultStatusFailedWithPartial) {
 		t.Fatalf("result status = %q, want FAILED_WITH_PARTIAL", bracket.ResultStatus)
 	}
 	if len(bracket.ResultSummary) != 1 || bracket.ResultSummary[0].Text != "Partial findings before failure" {
@@ -66,11 +161,11 @@ func assertSuccessfulSessionBracketReplay(t *testing.T, worldState interfaces.Fa
 	if bracket.FactoryID != "factory-alpha" || bracket.SourceRef != "workflow/main.js" {
 		t.Fatalf("session source = %#v, want factory-alpha workflow/main.js", bracket)
 	}
-	if bracket.ResultStatus != string(factoryapi.FINAL) {
+	if bracket.ResultStatus != string(factoryapi.FactoryEventSessionResultStatusFinal) {
 		t.Fatalf("latest result status = %q, want FINAL from terminal completion", bracket.ResultStatus)
 	}
-	if !bracket.Terminal || bracket.FinalStatus != string(factoryapi.FactorySessionStatusFINISHED) {
-		t.Fatalf("terminal state = %#v, want FINISHED terminal marker", bracket)
+	if !bracket.Terminal || bracket.FinalStatus != string(factoryapi.FactorySessionDurableLifecycleStatusSucceeded) {
+		t.Fatalf("terminal state = %#v, want SUCCEEDED terminal marker", bracket)
 	}
 	if bracket.DispatchCounts == nil || bracket.DispatchCounts.Completed != 2 {
 		t.Fatalf("dispatch counts = %#v, want completed=2", bracket.DispatchCounts)
@@ -106,7 +201,7 @@ func successfulSessionBracketEvents(t *testing.T, t0 time.Time) []factoryapi.Fac
 			OrchestratorKind: &kind,
 			Source:           &source,
 		}, factoryapi.SessionResultUpdatedEventPayload{
-			ResultStatus: factoryapi.PARTIAL,
+			ResultStatus: factoryapi.FactoryEventSessionResultStatusPartial,
 			ArtifactIds:  &[]string{"artifact-partial-1"},
 		}),
 		generatedProjectionEvent(factoryapi.FactoryEventTypeSessionCompleted, "event-session-completed", 3, t0.Add(2*time.Second), factoryapi.FactoryEventContext{
@@ -116,10 +211,10 @@ func successfulSessionBracketEvents(t *testing.T, t0 time.Time) []factoryapi.Fac
 			OrchestratorKind: &kind,
 			Source:           &source,
 		}, factoryapi.SessionCompletedEventPayload{
-			FinalStatus:    factoryapi.FactorySessionStatusFINISHED,
+			FinalStatus:    factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
 			CompletedAt:    t0.Add(2 * time.Second),
 			DurationMillis: int64PtrForProjectionTest(2000),
-			ResultStatus:   factoryEventSessionResultStatusPtr(factoryapi.FINAL),
+			ResultStatus:   factoryEventSessionResultStatusPtr(factoryapi.FactoryEventSessionResultStatusFinal),
 			ArtifactIds:    &[]string{"artifact-result-1"},
 			DispatchCounts: &factoryapi.FactorySessionJavaScriptChildDispatchCounts{
 				Queued:    0,
@@ -162,7 +257,7 @@ func failedWithPartialSessionBracketEvents(t *testing.T, t0 time.Time) []factory
 			OrchestratorKind: &kind,
 			Source:           &source,
 		}, factoryapi.SessionResultUpdatedEventPayload{
-			ResultStatus:  factoryapi.PARTIAL,
+			ResultStatus:  factoryapi.FactoryEventSessionResultStatusPartial,
 			ResultSummary: &summary,
 			ArtifactIds:   &[]string{"artifact-partial-beta"},
 		}),
@@ -173,7 +268,7 @@ func failedWithPartialSessionBracketEvents(t *testing.T, t0 time.Time) []factory
 			OrchestratorKind: &kind,
 			Source:           &source,
 		}, factoryapi.SessionResultUpdatedEventPayload{
-			ResultStatus: factoryapi.FAILEDWITHPARTIAL,
+			ResultStatus: factoryapi.FactoryEventSessionResultStatusFailedWithPartial,
 			ResultSummary: &summary,
 		}),
 		generatedProjectionEvent(factoryapi.FactoryEventTypeSessionCompleted, "event-session-completed-beta", 4, t0.Add(3*time.Second), factoryapi.FactoryEventContext{
@@ -183,10 +278,10 @@ func failedWithPartialSessionBracketEvents(t *testing.T, t0 time.Time) []factory
 			OrchestratorKind: &kind,
 			Source:           &source,
 		}, factoryapi.SessionCompletedEventPayload{
-			FinalStatus:    factoryapi.FactorySessionStatusFINISHED,
+			FinalStatus:    factoryapi.FactorySessionDurableLifecycleStatusFailed,
 			CompletedAt:    t0.Add(3 * time.Second),
 			DurationMillis: int64PtrForProjectionTest(3000),
-			ResultStatus:   factoryEventSessionResultStatusPtr(factoryapi.FAILEDWITHPARTIAL),
+			ResultStatus:   factoryEventSessionResultStatusPtr(factoryapi.FactoryEventSessionResultStatusFailedWithPartial),
 			FailureDetail: &factoryapi.FactoryDispatchFailureDetail{
 				Reason:  stringPointer("session_failed"),
 				Message: stringPointer("workflow execution failed after partial results"),

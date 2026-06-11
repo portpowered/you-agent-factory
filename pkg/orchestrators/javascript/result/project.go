@@ -93,9 +93,9 @@ func BuildSessionResultUpdatedPayload(input SessionResultInput) factoryapi.Sessi
 
 func eventResultStatusFromSessionStatus(status factoryapi.FactorySessionStatus) factoryapi.FactoryEventSessionResultStatus {
 	if status == factoryapi.FactorySessionStatusFINISHED {
-		return factoryapi.FINAL
+		return factoryapi.FactoryEventSessionResultStatusFinal
 	}
-	return factoryapi.PARTIAL
+	return factoryapi.FactoryEventSessionResultStatusPartial
 }
 
 func resultStatusFromSessionStatus(status factoryapi.FactorySessionStatus) factoryapi.FactorySessionResultStatus {

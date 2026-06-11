@@ -32,7 +32,7 @@ func TestReconnectReplay_ReconstructsSessionLifecyclePhaseDispatchAndResultWitho
 	if worldState.SessionBracket == nil || worldState.SessionBracket.Terminal {
 		t.Fatalf("session bracket = %#v, want non-terminal reconnect view", worldState.SessionBracket)
 	}
-	if worldState.SessionBracket.ResultStatus != string(factoryapi.PARTIAL) {
+	if worldState.SessionBracket.ResultStatus != string(factoryapi.FactoryEventSessionResultStatusPartial) {
 		t.Fatalf("result status = %q, want PARTIAL from reconnect replay", worldState.SessionBracket.ResultStatus)
 	}
 	if worldState.JavaScriptRuntime == nil || worldState.JavaScriptRuntime.CompletedDispatches != 1 {
@@ -74,7 +74,7 @@ func reconnectSessionLifecycleEvents(t0 time.Time) []factoryapi.FactoryEvent {
 			OrchestratorKind: &kind,
 			Source:           &source,
 		}, factoryapi.SessionResultUpdatedEventPayload{
-			ResultStatus: factoryapi.PARTIAL,
+			ResultStatus: factoryapi.FactoryEventSessionResultStatusPartial,
 			ArtifactIds:  &[]string{"artifact-result-1"},
 		}),
 	}

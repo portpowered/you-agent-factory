@@ -85,7 +85,7 @@ func TestFactoryEventHistory_RecordSessionLifecycle_FailedRunEmitsFailedWithPart
 	if err != nil {
 		t.Fatalf("result updated payload: %v", err)
 	}
-	if resultPayload.ResultStatus != factoryapi.FAILEDWITHPARTIAL {
+	if resultPayload.ResultStatus != factoryapi.FactoryEventSessionResultStatusFailedWithPartial {
 		t.Fatalf("result status = %q, want FAILED_WITH_PARTIAL", resultPayload.ResultStatus)
 	}
 	completedPayload, err := events[2].Payload.AsSessionCompletedEventPayload()

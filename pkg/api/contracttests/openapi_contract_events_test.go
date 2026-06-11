@@ -28,6 +28,7 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	assertUnifiedInferenceEvents(t, schemas)
 	assertUnifiedScriptEvents(t, schemas)
 	assertUnifiedStateEvent(t, schemas)
+	assertSessionLifecycleEventStatusVocabulary(t, schemas)
 }
 
 func TestOpenAPIContract_CanonicalFactoryEventVocabularyFixtureValidatesAndRetiresLegacyNames(t *testing.T) {
@@ -157,6 +158,20 @@ func assertUnifiedEventContext(t *testing.T, schemas map[string]any) {
 		"orchestrator_kind",
 	)
 	assertSessionLifecyclePayloadsOmitContextIdentityFields(t, schemas)
+}
+
+func assertSessionLifecycleEventStatusVocabulary(t *testing.T, schemas map[string]any) {
+	t.Helper()
+	sessionCompleted := schemaObject(t, schemas, "SessionCompletedEventPayload")
+	assertPropertyRef(
+		t,
+		schemaProperties(t, sessionCompleted, "SessionCompletedEventPayload"),
+		"finalStatus",
+		"#/components/schemas/FactorySessionDurableLifecycleStatus",
+	)
+	assertEnumValues(t, schemaObject(t, schemas, "FactoryEventSessionResultStatus"), "FactoryEventSessionResultStatus", []string{
+		"NOT_READY", "PARTIAL", "FINAL", "FAILED_WITH_PARTIAL", "UNAVAILABLE",
+	})
 }
 
 func assertSessionLifecyclePayloadsOmitContextIdentityFields(t *testing.T, schemas map[string]any) {

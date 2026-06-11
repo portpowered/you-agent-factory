@@ -126,9 +126,11 @@ const (
 
 // Defines values for FactoryEventSessionResultStatus.
 const (
-	FAILEDWITHPARTIAL FactoryEventSessionResultStatus = "FAILED_WITH_PARTIAL"
-	FINAL             FactoryEventSessionResultStatus = "FINAL"
-	PARTIAL           FactoryEventSessionResultStatus = "PARTIAL"
+	FactoryEventSessionResultStatusFailedWithPartial FactoryEventSessionResultStatus = "FAILED_WITH_PARTIAL"
+	FactoryEventSessionResultStatusFinal             FactoryEventSessionResultStatus = "FINAL"
+	FactoryEventSessionResultStatusNotReady          FactoryEventSessionResultStatus = "NOT_READY"
+	FactoryEventSessionResultStatusPartial           FactoryEventSessionResultStatus = "PARTIAL"
+	FactoryEventSessionResultStatusUnavailable       FactoryEventSessionResultStatus = "UNAVAILABLE"
 )
 
 // Defines values for FactoryEventType.
@@ -4047,8 +4049,8 @@ type SessionCompletedEventPayload struct {
 	DurationMillis *int64                        `json:"durationMillis,omitempty"`
 	FailureDetail  *FactoryDispatchFailureDetail `json:"failureDetail,omitempty"`
 
-	// FinalStatus Canonical lifecycle status for one live factory session runtime.
-	FinalStatus FactorySessionStatus `json:"finalStatus"`
+	// FinalStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	FinalStatus FactorySessionDurableLifecycleStatus `json:"finalStatus"`
 
 	// ResultStatus Customer-visible session result availability for result update events.
 	ResultStatus *FactoryEventSessionResultStatus `json:"resultStatus,omitempty"`
