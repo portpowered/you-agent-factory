@@ -1,0 +1,25 @@
+## Codebase Patterns
+- Factory-level execution-family defaults use `modelProvider` with the `ModelProviderSelection` OpenAPI enum (includes symbolic `DEFAULT`); `factory.runner` is rejected at the generated boundary with `factory.runner is retired; use factory.modelProvider`.
+- Workstation-level overrides use the same `ModelProviderSelection` enum on `Workstation.yaml`; `workstations[n].runner` is rejected with `workstations[n].runner is retired; use workstations[n].modelProvider`, and AGENTS.md frontmatter rejects `runner` similarly.
+- Map factory and workstation `modelProvider` through `internalFactoryModelProviderSelectionFromPublic` / `publicFactoryModelProviderSelectionFromInternal` and `factoryModelProviderSelectionPtrIfNotEmpty` in `pkg/config/factory_config_mapping_internal.go`.
+- Internal workstation config stores selection on `interfaces.FactoryWorkstationConfig.ModelProvider`; runtime selection still flows through `ResolveRunnerSelection(workstationModelProvider, factoryModelProvider, workerModelProvider)`.
+- Runtime runner selection still flows through `ResolveRunnerSelection`; pass the factory `ModelProvider` string (not a runner ID) via `effectiveFactoryRunnerID`, which resolves concrete providers through `resolveFactoryModelProviderSelection`.
+- After OpenAPI schema changes, run `go generate -tags=interfaces ./pkg/api ./pkg/generatedclient` even when UI `openapi-typescript` deps are unavailable in the worktree.
+
+## 2026-06-11T11:23:14Z - prd-model-provider-runner-convergence-001
+- Implemented factory-level `modelProvider` support: new `ModelProviderSelection` OpenAPI schema, `Factory.yaml` migration from `runner`, config expand/flatten mapping, retired `factory.runner` rejection, runtime selection/validation via `ResolveRunnerSelection` + `ValidateFactoryModelProviderSelection`, and focused openapitests/contract tests.
+- Files changed: `api/components/schemas/data-models/ModelProviderSelection.yaml`, `Factory.yaml`, `api/openapi-main.yaml`, `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, `pkg/config/*`, `pkg/interfaces/*`, `pkg/service/factory_build.go`, contract/opencode agent tests.
+- **Learnings for future iterations:**
+  - Patterns discovered: factory defaults belong on `interfaces.FactoryConfig.ModelProvider`; symbolic `DEFAULT` stores as `interfaces.FactoryModelProviderDefault`.
+  - Gotchas encountered: `effectiveFactoryRunnerID` now returns a model-provider selection string—callers must not assume a runner ID except for CLI `--runner` overrides.
+  - Useful context: workstation-level `runner` remains for story 002; only top-level factory `runner` was retired in this story.
+---
+
+## 2026-06-11T12:45:00Z - prd-model-provider-runner-convergence-002
+- Implemented workstation-level `modelProvider` support: `Workstation.yaml` migration from `runner`, config expand/flatten mapping, retired `workstations[n].runner` and AGENTS.md `frontmatter.runner` rejection, runtime selection via `ResolveRunnerSelection` + `ValidateWorkstationModelProviderSelection`, and focused openapitests/contract/service tests.
+- Files changed: `api/components/schemas/data-models/Workstation.yaml`, `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, `pkg/config/*`, `pkg/interfaces/*`, `pkg/service/factory_build.go`, `pkg/factory/events/event_history.go`, `pkg/workers/executor/*`.
+- **Learnings for future iterations:**
+  - Patterns discovered: workstation overrides belong on `interfaces.FactoryWorkstationConfig.ModelProvider`; symbolic `DEFAULT` stores as `interfaces.FactoryModelProviderDefault` and defers through factory, worker, then operator default.
+  - Gotchas encountered: `workstationInternalFromAPI` previously did not map `runner` at all—story 002 is the first complete OpenAPI workstation provider mapping path.
+  - Useful context: OpenCode-agent validation already uses `ValidateOpenCodeAgentForRunnerSelection` against the resolved selection; setting workstation `modelProvider: OPENCODE` is enough for workstation-level agent overrides.
+---

@@ -1,0 +1,148 @@
+{
+  "project": "Model Provider And Runner Grammar Convergence",
+  "branchName": "prd-model-provider-runner-convergence",
+  "description": "Converge factory execution-family selection on modelProvider, retire runner vocabulary from public config and runtime metadata, add symbolic DEFAULT provider resolution, and align contracts, runtime behavior, events, replay, dashboard projections, docs, examples, and migration guidance.",
+  "context": {
+    "customerAsk": "Converge the public and internal grammar on modelProvider, delete the runner configuration vocabulary and associated runtime selection concepts, add a public DEFAULT provider value, preserve clear migration behavior for old configs and replay artifacts, and align OpenAPI, generated code, runtime selection, events, docs, examples, validation, replay compatibility, and dashboard/API projections.",
+    "problem": "Customers see both modelProvider and runner even though both describe execution-family selection. Factory-level and workstation-level runner fields create unclear precedence against worker modelProvider. API clients, dashboard projections, events, docs, and examples expose runner-specific names that customers must learn even when selecting a model provider. Existing configs and replay artifacts may contain old runner or runnerId fields, so the migration needs deterministic failure or compatibility behavior. Provider capability and prerequisite checks currently depend on runner-oriented identity, which risks behavior regressions if the vocabulary is renamed without collapsing the selection path.",
+    "solution": "Define modelProvider as the only canonical execution-family selector at factory, workstation, worker, runtime dispatch, event, API, and dashboard projection boundaries. Accept DEFAULT as a symbolic public modelProvider value. Resolve dispatch provider selection in this order: concrete workstation provider, concrete factory provider, concrete worker provider, then operator default. A missing value or DEFAULT at a scope defers to the next step; execution, provider diagnostics, prerequisite checks, and capability checks receive only a concrete resolved provider. New public config rejects runner with field-specific migration guidance and never persists or emits runner. Old event/replay artifacts with runnerId are supported through an explicit replay compatibility adapter that maps legacy metadata into the new provider metadata for historical inspection; new events and API responses use modelProvider only."
+  },
+  "acceptanceCriteria": [
+    "New authored factory and workstation configuration accepts modelProvider, accepts DEFAULT, rejects runner with exact field-path guidance, and never emits runner during flatten, expand, save, export, or API responses.",
+    "Runtime dispatch provider selection follows the finalized precedence order: concrete workstation provider, concrete factory provider, concrete worker provider, then operator default; DEFAULT and absent values defer and are resolved before execution.",
+    "Provider prerequisite, capability, OpenCode-agent, command construction, and dispatch lifecycle behavior remain at least as strict as the current runner-backed behavior.",
+    "Public OpenAPI schemas, generated Go/TypeScript clients, dispatch event metadata, replay projections, factory world views, and dashboard/provider summaries expose modelProvider terminology instead of runner terminology for execution family.",
+    "Existing examples, fixtures, packaged reference docs, CLI help/docs, and sparse architecture notes teach modelProvider as canonical and mention runner only in migration guidance.",
+    "Old replay artifacts containing runnerId replay through a documented compatibility adapter, while old authored configs containing runner fail with actionable errors unless an explicit migration command is added later.",
+    "Typecheck, lint, and tests pass for all touched packages, including make generate-api, focused Go/API/replay/config/runtime tests, docs smoke where relevant, and UI typecheck/build for generated TypeScript changes."
+  ],
+  "userStories": [
+    {
+      "id": "prd-model-provider-runner-convergence-001",
+      "title": "Accept factory-level model provider defaults",
+      "description": "As a factory author, I want factory-level execution-family defaults to use modelProvider so factory config has one canonical provider concept.",
+      "acceptanceCriteria": [
+        "A factory config can set top-level modelProvider to a concrete provider value and workers/workstations without a concrete provider resolve through that default.",
+        "A factory config can set top-level modelProvider: DEFAULT, and dispatch resolution defers to worker provider and then operator default.",
+        "Factory config decode rejects top-level runner with a clear field-path message such as factory.runner is retired; use factory.modelProvider.",
+        "Factory config flatten, expand, save, and export output include modelProvider when needed and never include runner.",
+        "Existing factory examples and config fixtures that previously used factory-level runner are migrated to modelProvider.",
+        "Tests cover factory-level concrete provider, DEFAULT, absent provider fallback, rejected runner, and no runner in emitted config.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "prd-model-provider-runner-convergence-002",
+      "title": "Accept workstation-level model provider overrides",
+      "description": "As a factory author, I want workstation-level execution overrides to use modelProvider so workstation grammar matches factory and worker grammar.",
+      "acceptanceCriteria": [
+        "A workstation config can set modelProvider to a concrete provider value, and dispatches from that workstation use it ahead of factory, worker, and operator defaults.",
+        "A workstation config can set modelProvider: DEFAULT, and dispatch resolution defers to concrete factory provider, then concrete worker provider, then operator default.",
+        "Workstation config decode rejects runner with a clear field-path message such as factory.workstations[id].runner is retired; use factory.workstations[id].modelProvider.",
+        "Workstation OpenCode-agent validation uses the effective resolved provider and accepts OpenCode-agent settings only when the resolved provider is OpenCode.",
+        "Existing workstation examples and fixtures use modelProvider and no longer use runner.",
+        "Tests cover concrete workstation override, workstation DEFAULT, factory fallback, worker fallback, operator fallback, rejected workstation runner, and OpenCode-agent validation.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "prd-model-provider-runner-convergence-003",
+      "title": "Resolve runtime provider selection directly",
+      "description": "As a maintainer, I want runtime selection and validation to resolve model providers directly so execution behavior no longer depends on runner aliases.",
+      "acceptanceCriteria": [
+        "Provider selection diagnostics report the selected concrete provider and whether the value came from workstation, factory, worker, operator default, or symbolic DEFAULT deferral.",
+        "Runtime dispatch, provider command construction, provider prerequisite checks, and provider diagnostics receive a concrete modelProvider value before execution starts.",
+        "Capability checks for image input, worktree support, working directory support, structured output, and session resume match the current behavior for each provider.",
+        "Built-in provider prerequisite checks map from canonical provider values rather than runner IDs.",
+        "Runner-oriented selection concepts are absent from active config/runtime selection paths except for an intentionally documented compatibility adapter.",
+        "Unit tests cover provider precedence, diagnostic source metadata, capability checks, prerequisite checks, and concrete-provider enforcement before execution.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "prd-model-provider-runner-convergence-004",
+      "title": "Publish provider terminology in API contracts and generated clients",
+      "description": "As an API client maintainer, I want the public contract to expose model-provider terminology so clients do not depend on runner vocabulary.",
+      "acceptanceCriteria": [
+        "Authored OpenAPI schemas for factory, workstation, dispatch request metadata, dispatch summaries, world views, and event metadata expose modelProvider where the value describes execution family.",
+        "Authored public OpenAPI schemas remove runner, runnerId, runnerSelectionSource, and RunnerID where they only represented model provider selection.",
+        "The bundled OpenAPI contract and generated Go and TypeScript clients are regenerated from the authored contract.",
+        "Contract tests prove generated public factory and workstation shapes do not include authored runner fields.",
+        "API boundary tests prove dispatch metadata contains provider/model metadata using modelProvider terminology.",
+        "Existing UI API adapters compile against the regenerated TypeScript types without reintroducing runner fields.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "prd-model-provider-runner-convergence-005",
+      "title": "Emit and replay provider-based dispatch metadata",
+      "description": "As a dashboard and replay consumer, I want dispatch events and projections to report the selected model provider so historical and live views use one vocabulary.",
+      "acceptanceCriteria": [
+        "New dispatch events record modelProvider and provider-selection source metadata instead of runnerId and runner-selection source metadata.",
+        "Factory world views, dispatch summaries, and replay projections expose provider/model metadata and do not expose runner-specific config fields.",
+        "Old replay artifacts with runnerId replay through an explicit compatibility adapter that maps legacy values to modelProvider for historical inspection.",
+        "Replay of unsupported legacy provider values fails with a documented unsupported-version or unknown-provider error that names the legacy field.",
+        "Dashboard runtime projections continue to show provider and model metadata for live and replayed dispatches.",
+        "Focused replay and projection tests cover new provider metadata, legacy runnerId compatibility, unknown legacy value failure, and dashboard projection output.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill: run or replay a dispatch and confirm the dashboard shows provider/model metadata without runner labels."
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "prd-model-provider-runner-convergence-006",
+      "title": "Provide deterministic migration guidance",
+      "description": "As an operator with existing configs or artifacts, I want old runner usage to produce predictable outcomes so I know whether to edit config or rely on replay compatibility.",
+      "acceptanceCriteria": [
+        "Public config validation rejects old runner fields at factory and workstation paths with replacement guidance and does not silently migrate or persist them.",
+        "CLI validation and API validation return actionable errors for retired runner fields using the same field-path language.",
+        "Release notes and packaged docs state that old authored configs require manual replacement of runner with modelProvider.",
+        "Replay compatibility docs state that old event metadata with runnerId is supported only through the replay adapter and new events use modelProvider.",
+        "If a migration command or helper is introduced, its output emits only modelProvider; otherwise the docs explicitly state no automatic config migration command exists.",
+        "Tests cover CLI/API validation error shape for old config paths and replay compatibility behavior for old event metadata.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "prd-model-provider-runner-convergence-007",
+      "title": "Update shipped docs, examples, and help text",
+      "description": "As a user, I want shipped docs, examples, and CLI help to use one term so I do not learn obsolete runner vocabulary.",
+      "acceptanceCriteria": [
+        "Packaged reference docs for config, workers, workstations, models, and invocation describe modelProvider as the execution-family selector and document DEFAULT resolution.",
+        "Workstation docs describe provider override behavior and the finalized precedence order without recommending runner.",
+        "CLI help and docs remove runner terminology except for migration notes that point to modelProvider.",
+        "Architecture docs receive a sparse note that modelProvider is the canonical execution-family selector and model remains separate model-name selection.",
+        "Examples and functional fixtures use modelProvider, including at least one factory-level default and one workstation-level override.",
+        "Docs/reference smoke or equivalent packaged-doc verification passes where existing docs tests cover these topics.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
