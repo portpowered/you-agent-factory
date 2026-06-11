@@ -916,7 +916,7 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *co
 		Long: "Start one durable Factory Session synchronously through the shared execution request contract.\n\n" +
 			"The mock-backed provider path resolves fixture-backed request ids to deterministic session, " +
 			"status, result, and inspection-link outcomes. Use global --json to emit FactorySessionSyncExecutionResponse " +
-			"on stdout.",
+			"on stdout; timed-out sync runs also include requestId, cancelOnTimeout, and resultAvailability.",
 		Example: "  # Run the published sync-success fixture by factory id and request id.\n" +
 			"  " + cliBinaryName + " workflow run --request-id req-petri-success-001 --factory customer-support-triage\n\n" +
 			"  # Emit deterministic JSON for automation.\n" +

@@ -168,6 +168,7 @@ func (s *FakeService) StartSync(ctx context.Context, req StartRequest) (SyncStar
 	state := fakeSessionStateFromScenario(scenario)
 	s.sessions[state.session.SessionID] = state
 	result := s.syncStartFromScenario(scenario, state)
+	applySyncWaitOutcome(&result, state, normalized)
 	cloned := cloneSyncStartResult(result)
 	s.startReplay[normalized.RequestID] = startReplayRecord{
 		sessionID: state.session.SessionID,
@@ -607,6 +608,38 @@ func (s *FakeService) asyncStartFromState(state *fakeSessionState) AsyncStartRes
 		Policy:           state.session.Policy,
 		Links:            state.session.Links,
 	}
+}
+
+func applySyncWaitOutcome(result *SyncStartResult, state *fakeSessionState, req StartRequest) {
+	if result == nil || state == nil {
+		return
+	}
+	if result.SyncOutcome != SyncOutcomeTimedOut && !result.TimedOut {
+		return
+	}
+	if req.Wait == nil || !req.Wait.CancelOnTimeout {
+		return
+	}
+
+	result.SessionCanceledByTimeout = true
+	result.Result = nil
+	switch state.session.Status {
+	case LifecycleStatusRunning,
+		LifecycleStatusPaused,
+		LifecycleStatusResuming,
+		LifecycleStatusQueued,
+		LifecycleStatusAwaitingApproval:
+		state.session.Status = LifecycleStatusCanceling
+		state.result.SessionStatus = LifecycleStatusCanceling
+		state.result.ResultStatus = ResultStatusUnavailable
+		state.result.Availability = &ResultAvailabilityDetail{
+			Reason:    "SESSION_CANCELED",
+			Message:   "Session cancel was submitted after sync wait timed out.",
+			Retryable: false,
+		}
+	}
+	result.Status = string(state.session.Status)
+	state.events = deriveProjectionEvents(state.session, state.result)
 }
 
 func (s *FakeService) syncStartFromScenario(scenario FakeScenario, state *fakeSessionState) SyncStartResult {

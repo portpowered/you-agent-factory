@@ -55,14 +55,26 @@ func RunSync(ctx context.Context, cfg RunConfig) error {
 
 	mapped := factorysession.SyncStartResponseToAPI(result)
 	if cfg.JSON {
-		encoded, marshalErr := json.Marshal(mapped)
+		var encoded []byte
+		var marshalErr error
+		if isSyncTimeoutOutcome(mapped) {
+			availability, availabilityErr := syncResultAvailability(ctx, service, mapped.SessionId)
+			if availabilityErr != nil {
+				return writeRunError(cfg.Output, cfg.JSON, availabilityErr)
+			}
+			cancelOnTimeout := normalized.Wait != nil && normalized.Wait.CancelOnTimeout
+			encoded, marshalErr = marshalSyncTimeoutJSON(mapped, normalized.RequestID, cancelOnTimeout, availability)
+		} else {
+			encoded, marshalErr = json.Marshal(mapped)
+		}
 		if marshalErr != nil {
 			return fmt.Errorf("marshal sync run response: %w", marshalErr)
 		}
 		_, err = fmt.Fprintln(cfg.Output, string(encoded))
 		return err
 	}
-	return renderSyncRunHuman(cfg.Output, mapped)
+	cancelOnTimeout := normalized.Wait != nil && normalized.Wait.CancelOnTimeout
+	return renderSyncRunHuman(cfg.Output, mapped, cancelOnTimeout)
 }
 
 func writeRunError(output io.Writer, jsonOutput bool, err error) error {
@@ -115,7 +127,58 @@ func resolveFixtureCatalogPath(explicit string) (string, error) {
 	)
 }
 
-func renderSyncRunHuman(output io.Writer, result factoryapi.FactorySessionSyncExecutionResponse) error {
+type syncTimeoutCLIResponse struct {
+	factoryapi.FactorySessionSyncExecutionResponse
+	RequestID          string `json:"requestId,omitempty"`
+	CancelOnTimeout    bool   `json:"cancelOnTimeout,omitempty"`
+	ResultAvailability string `json:"resultAvailability,omitempty"`
+}
+
+func isSyncTimeoutOutcome(result factoryapi.FactorySessionSyncExecutionResponse) bool {
+	return result.SyncOutcome == factoryapi.FactorySessionSyncExecutionOutcomeTimedOut ||
+		(result.TimedOut != nil && *result.TimedOut)
+}
+
+func syncResultAvailability(
+	ctx context.Context,
+	service factorysessionexecution.Service,
+	sessionID string,
+) (factoryapi.FactorySessionResultStatus, error) {
+	result, err := service.GetResult(ctx, sessionID, factorysessionexecution.ResultRequest{
+		Mode: factorysessionexecution.ResultModeFinal,
+	})
+	if err != nil {
+		return "", err
+	}
+	return factoryapi.FactorySessionResultStatus(result.ResultStatus), nil
+}
+
+func marshalSyncTimeoutJSON(
+	response factoryapi.FactorySessionSyncExecutionResponse,
+	requestID string,
+	cancelOnTimeout bool,
+	resultAvailability factoryapi.FactorySessionResultStatus,
+) ([]byte, error) {
+	payload := syncTimeoutCLIResponse{
+		FactorySessionSyncExecutionResponse: response,
+	}
+	if trimmed := strings.TrimSpace(requestID); trimmed != "" {
+		payload.RequestID = trimmed
+	}
+	if cancelOnTimeout {
+		payload.CancelOnTimeout = true
+	}
+	if resultAvailability != "" {
+		payload.ResultAvailability = string(resultAvailability)
+	}
+	return json.Marshal(payload)
+}
+
+func renderSyncRunHuman(
+	output io.Writer,
+	result factoryapi.FactorySessionSyncExecutionResponse,
+	cancelOnTimeout bool,
+) error {
 	switch result.SyncOutcome {
 	case factoryapi.FactorySessionSyncExecutionOutcomeCompleted:
 		if _, err := fmt.Fprintf(
@@ -147,6 +210,24 @@ func renderSyncRunHuman(output io.Writer, result factoryapi.FactorySessionSyncEx
 		}
 	}
 
+	if isSyncTimeoutOutcome(result) {
+		if cancelOnTimeout {
+			if _, err := fmt.Fprintln(output, "Cancel on timeout: requested"); err != nil {
+				return err
+			}
+		}
+		if result.SessionCanceledByTimeout != nil && *result.SessionCanceledByTimeout {
+			if _, err := fmt.Fprintln(output, "Session canceled by timeout: true"); err != nil {
+				return err
+			}
+		}
+		if result.TimedOut != nil && *result.TimedOut {
+			if _, err := fmt.Fprintln(output, "Timed out: true"); err != nil {
+				return err
+			}
+		}
+	}
+
 	if result.SourceHash != nil && strings.TrimSpace(*result.SourceHash) != "" {
 		if _, err := fmt.Fprintf(output, "Source hash: %s\n", strings.TrimSpace(*result.SourceHash)); err != nil {
 			return err
@@ -157,13 +238,20 @@ func renderSyncRunHuman(output io.Writer, result factoryapi.FactorySessionSyncEx
 		}
 	}
 
-	if summary := primaryResultSummary(result.Result); summary != "" {
-		if _, err := fmt.Fprintf(output, "Primary result: %s\n", summary); err != nil {
-			return err
+	if !isSyncTimeoutOutcome(result) {
+		if summary := primaryResultSummary(result.Result); summary != "" {
+			if _, err := fmt.Fprintf(output, "Primary result: %s\n", summary); err != nil {
+				return err
+			}
 		}
 	}
 
 	if result.Links != nil {
+		if result.Links.Status != nil && strings.TrimSpace(*result.Links.Status) != "" {
+			if _, err := fmt.Fprintf(output, "Status link: %s\n", strings.TrimSpace(*result.Links.Status)); err != nil {
+				return err
+			}
+		}
 		if result.Links.Session != nil && strings.TrimSpace(*result.Links.Session) != "" {
 			if _, err := fmt.Fprintf(output, "Session link: %s\n", strings.TrimSpace(*result.Links.Session)); err != nil {
 				return err
@@ -173,6 +261,16 @@ func renderSyncRunHuman(output io.Writer, result factoryapi.FactorySessionSyncEx
 			if _, err := fmt.Fprintf(output, "Results link: %s\n", strings.TrimSpace(*result.Links.Results)); err != nil {
 				return err
 			}
+		}
+	}
+
+	if isSyncTimeoutOutcome(result) {
+		if _, err := fmt.Fprintf(
+			output,
+			"Follow-up: you workflow status %s\n",
+			result.SessionId,
+		); err != nil {
+			return err
 		}
 	}
 	return nil
