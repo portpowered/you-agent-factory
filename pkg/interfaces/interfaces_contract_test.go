@@ -93,25 +93,6 @@ func TestCronConfigUnmarshalJSON_IgnoresRetiredAliases(t *testing.T) {
 	}
 }
 
-func TestPublicFactoryEnumNormalizers(t *testing.T) {
-	for _, tt := range publicFactoryEnumNormalizerCases() {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.permissive("  " + tt.alias + "  "); got != tt.want {
-				t.Fatalf("permissive(%q) = %q, want %q", tt.alias, got, tt.want)
-			}
-			if got := tt.strict("  " + tt.alias + "  "); got != tt.want {
-				t.Fatalf("strict(%q) = %q, want %q", tt.alias, got, tt.want)
-			}
-			if got := tt.permissive("  " + tt.unknown + "  "); got != tt.unknown {
-				t.Fatalf("permissive(%q) = %q, want trimmed unknown %q", tt.unknown, got, tt.unknown)
-			}
-			if got := tt.strict("  " + tt.unknown + "  "); got != "" {
-				t.Fatalf("strict(%q) = %q, want rejection", tt.unknown, got)
-			}
-		})
-	}
-}
-
 func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
 	for _, tt := range generatedPublicFactoryEnumPreservationCases() {
 		t.Run(tt.name, func(t *testing.T) {

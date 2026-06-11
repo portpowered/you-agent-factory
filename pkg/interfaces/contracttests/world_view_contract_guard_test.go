@@ -1,9 +1,11 @@
-package interfaces
+package contracttests
 
 import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 var approvedWorkDispatchFields = map[string]string{
@@ -41,7 +43,7 @@ var retiredWorkDispatchWorkerFields = []string{
 func TestWorkDispatchContractGuard_FieldInventoryStaysDispatchOwned(t *testing.T) {
 	t.Parallel()
 
-	workDispatchType := reflect.TypeOf(WorkDispatch{})
+	workDispatchType := reflect.TypeOf(interfaces.WorkDispatch{})
 	seen := make(map[string]struct{}, workDispatchType.NumField())
 	for i := 0; i < workDispatchType.NumField(); i++ {
 		field := workDispatchType.Field(i)
@@ -66,7 +68,7 @@ func TestWorkDispatchContractGuard_FieldInventoryStaysDispatchOwned(t *testing.T
 func TestWorkDispatchContractGuard_WorkerOwnedFieldsStayDeleted(t *testing.T) {
 	t.Parallel()
 
-	workDispatchType := reflect.TypeOf(WorkDispatch{})
+	workDispatchType := reflect.TypeOf(interfaces.WorkDispatch{})
 	for _, fieldName := range retiredWorkDispatchWorkerFields {
 		if _, ok := workDispatchType.FieldByName(fieldName); ok {
 			t.Fatalf("WorkDispatch must not reintroduce worker-owned field %s", fieldName)
@@ -77,11 +79,11 @@ func TestWorkDispatchContractGuard_WorkerOwnedFieldsStayDeleted(t *testing.T) {
 func TestFactoryWorldContractGuard_RuntimeShellUsesCanonicalSelectedTickTypes(t *testing.T) {
 	t.Parallel()
 
-	topologyType := reflect.TypeOf(FactoryWorldTopologyView{})
-	assertWorldViewSliceType(t, topologyType, "SubmitWorkTypes", reflect.TypeOf(FactoryWorldSubmitWorkType{}))
+	topologyType := reflect.TypeOf(interfaces.FactoryWorldTopologyView{})
+	assertWorldViewSliceType(t, topologyType, "SubmitWorkTypes", reflect.TypeOf(interfaces.FactoryWorldSubmitWorkType{}))
 
-	runtimeType := reflect.TypeOf(FactoryWorldRuntimeView{})
-	assertWorldViewFieldType(t, runtimeType, "InferenceAttemptsByDispatchID", reflect.TypeOf(map[string]map[string]FactoryWorldInferenceAttempt{}))
+	runtimeType := reflect.TypeOf(interfaces.FactoryWorldRuntimeView{})
+	assertWorldViewFieldType(t, runtimeType, "InferenceAttemptsByDispatchID", reflect.TypeOf(map[string]map[string]interfaces.FactoryWorldInferenceAttempt{}))
 	if _, ok := runtimeType.FieldByName("WorkstationRequestsByDispatchID"); ok {
 		t.Fatal("FactoryWorldRuntimeView must not retain the API-owned workstation_requests_by_dispatch_id projection")
 	}
@@ -90,18 +92,18 @@ func TestFactoryWorldContractGuard_RuntimeShellUsesCanonicalSelectedTickTypes(t 
 	if !ok {
 		t.Fatalf("FactoryWorldRuntimeView missing Session field")
 	}
-	if sessionField.Type != reflect.TypeOf(FactoryWorldSessionRuntime{}) {
-		t.Fatalf("FactoryWorldRuntimeView.Session = %v, want %v", sessionField.Type, reflect.TypeOf(FactoryWorldSessionRuntime{}))
+	if sessionField.Type != reflect.TypeOf(interfaces.FactoryWorldSessionRuntime{}) {
+		t.Fatalf("FactoryWorldRuntimeView.Session = %v, want %v", sessionField.Type, reflect.TypeOf(interfaces.FactoryWorldSessionRuntime{}))
 	}
 
-	activeExecutionType := reflect.TypeOf(FactoryWorldActiveExecution{})
-	assertWorldViewSliceType(t, activeExecutionType, "ConsumedInputs", reflect.TypeOf(WorkstationInput{}))
+	activeExecutionType := reflect.TypeOf(interfaces.FactoryWorldActiveExecution{})
+	assertWorldViewSliceType(t, activeExecutionType, "ConsumedInputs", reflect.TypeOf(interfaces.WorkstationInput{}))
 	assertWorldViewFieldAbsent(t, activeExecutionType, "ConsumedTokens")
 	assertWorldViewFieldAbsent(t, activeExecutionType, "OutputMutations")
 
-	sessionType := reflect.TypeOf(FactoryWorldSessionRuntime{})
-	assertWorldViewSliceType(t, sessionType, "DispatchHistory", reflect.TypeOf(FactoryWorldDispatchCompletion{}))
-	assertWorldViewSliceType(t, sessionType, "ProviderSessions", reflect.TypeOf(FactoryWorldProviderSessionRecord{}))
+	sessionType := reflect.TypeOf(interfaces.FactoryWorldSessionRuntime{})
+	assertWorldViewSliceType(t, sessionType, "DispatchHistory", reflect.TypeOf(interfaces.FactoryWorldDispatchCompletion{}))
+	assertWorldViewSliceType(t, sessionType, "ProviderSessions", reflect.TypeOf(interfaces.FactoryWorldProviderSessionRecord{}))
 	assertWorldViewFieldAbsent(t, sessionType, "CompletedWorkLabels")
 	assertWorldViewFieldAbsent(t, sessionType, "FailedWorkLabels")
 	assertWorldViewFieldAbsent(t, sessionType, "FailedWorkDetailsByWorkID")
@@ -143,28 +145,52 @@ func assertWorldViewFieldAbsent(t *testing.T, structType reflect.Type, fieldName
 }
 
 type runtimeFactoryConfigLookupStub struct {
-	factory *FactoryConfig
+	factory *interfaces.FactoryConfig
 }
 
-func (s *runtimeFactoryConfigLookupStub) FactoryConfig() *FactoryConfig {
+func (s *runtimeFactoryConfigLookupStub) FactoryConfig() *interfaces.FactoryConfig {
 	return s.factory
+}
+
+type runtimeLookupDefinitionStub struct {
+	workers      map[string]*interfaces.WorkerConfig
+	workstations map[string]*interfaces.FactoryWorkstationConfig
+}
+
+func (s *runtimeLookupDefinitionStub) Worker(name string) (*interfaces.WorkerConfig, bool) {
+	worker, ok := s.workers[name]
+	return worker, ok
+}
+
+func (s *runtimeLookupDefinitionStub) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
+	workstation, ok := s.workstations[name]
+	return workstation, ok
+}
+
+type runtimeLookupWorkstationStub struct {
+	workstations map[string]*interfaces.FactoryWorkstationConfig
+}
+
+func (s *runtimeLookupWorkstationStub) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
+	workstation, ok := s.workstations[name]
+	return workstation, ok
 }
 
 func TestFirstRuntimeDefinitionLookup_ReturnsFirstNonNilCandidate(t *testing.T) {
 	t.Parallel()
 
 	first := &runtimeLookupDefinitionStub{
-		workers: map[string]*WorkerConfig{
+		workers: map[string]*interfaces.WorkerConfig{
 			"planner": {Type: "planner"},
 		},
 	}
 	second := &runtimeLookupDefinitionStub{
-		workers: map[string]*WorkerConfig{
+		workers: map[string]*interfaces.WorkerConfig{
 			"reviewer": {Type: "reviewer"},
 		},
 	}
 
-	got := FirstRuntimeDefinitionLookup(nil, first, second)
+	got := interfaces.FirstRuntimeDefinitionLookup(nil, first, second)
 	if got != first {
 		t.Fatalf("FirstRuntimeDefinitionLookup() returned %p, want first non-nil candidate %p", got, first)
 	}
@@ -178,7 +204,7 @@ func TestFirstRuntimeDefinitionLookup_ReturnsFirstNonNilCandidate(t *testing.T) 
 func TestFirstRuntimeDefinitionLookup_ReturnsNilWhenEveryCandidateIsNil(t *testing.T) {
 	t.Parallel()
 
-	if got := FirstRuntimeDefinitionLookup(nil, nil); got != nil {
+	if got := interfaces.FirstRuntimeDefinitionLookup(nil, nil); got != nil {
 		t.Fatalf("FirstRuntimeDefinitionLookup() = %p, want nil", got)
 	}
 }
@@ -187,17 +213,17 @@ func TestFirstRuntimeWorkstationLookup_ReturnsFirstNonNilCandidate(t *testing.T)
 	t.Parallel()
 
 	first := &runtimeLookupWorkstationStub{
-		workstations: map[string]*FactoryWorkstationConfig{
+		workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"review": {Name: "review"},
 		},
 	}
 	second := &runtimeLookupWorkstationStub{
-		workstations: map[string]*FactoryWorkstationConfig{
+		workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"publish": {Name: "publish"},
 		},
 	}
 
-	got := FirstRuntimeWorkstationLookup(nil, first, second)
+	got := interfaces.FirstRuntimeWorkstationLookup(nil, first, second)
 	if got != first {
 		t.Fatalf("FirstRuntimeWorkstationLookup() returned %p, want first non-nil candidate %p", got, first)
 	}
@@ -211,7 +237,7 @@ func TestFirstRuntimeWorkstationLookup_ReturnsFirstNonNilCandidate(t *testing.T)
 func TestFirstRuntimeWorkstationLookup_ReturnsNilWhenEveryCandidateIsNil(t *testing.T) {
 	t.Parallel()
 
-	if got := FirstRuntimeWorkstationLookup(nil, nil); got != nil {
+	if got := interfaces.FirstRuntimeWorkstationLookup(nil, nil); got != nil {
 		t.Fatalf("FirstRuntimeWorkstationLookup() = %p, want nil", got)
 	}
 }
@@ -220,13 +246,13 @@ func TestFirstRuntimeFactoryConfigLookup_ReturnsFirstNonNilCandidate(t *testing.
 	t.Parallel()
 
 	first := &runtimeFactoryConfigLookupStub{
-		factory: &FactoryConfig{Name: "alpha"},
+		factory: &interfaces.FactoryConfig{Name: "alpha"},
 	}
 	second := &runtimeFactoryConfigLookupStub{
-		factory: &FactoryConfig{Name: "beta"},
+		factory: &interfaces.FactoryConfig{Name: "beta"},
 	}
 
-	got := FirstRuntimeFactoryConfigLookup(nil, first, second)
+	got := interfaces.FirstRuntimeFactoryConfigLookup(nil, first, second)
 	if got != first {
 		t.Fatalf("FirstRuntimeFactoryConfigLookup() returned %p, want first non-nil candidate %p", got, first)
 	}
@@ -239,7 +265,7 @@ func TestFirstRuntimeFactoryConfigLookup_ReturnsFirstNonNilCandidate(t *testing.
 func TestFirstRuntimeFactoryConfigLookup_ReturnsNilWhenEveryCandidateIsNil(t *testing.T) {
 	t.Parallel()
 
-	if got := FirstRuntimeFactoryConfigLookup(nil, nil); got != nil {
+	if got := interfaces.FirstRuntimeFactoryConfigLookup(nil, nil); got != nil {
 		t.Fatalf("FirstRuntimeFactoryConfigLookup() = %p, want nil", got)
 	}
 }

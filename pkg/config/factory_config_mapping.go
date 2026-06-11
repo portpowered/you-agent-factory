@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/api/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/optional"
+	"github.com/portpowered/infinite-you/pkg/config/retiredboundary"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
@@ -49,20 +50,20 @@ func (m *FactoryConfigMapper) Expand(data []byte) (*interfaces.FactoryConfig, er
 }
 
 func decodeGeneratedFactoryBoundaryJSON(data []byte) (generatedFactoryBoundary, error) {
-	if err := rejectRetiredGeneratedBoundaryAliases(data); err != nil {
+	if err := retiredboundary.RejectGeneratedBoundaryAliases(data); err != nil {
 		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
 	}
 	normalizedData, err := normalizeFactoryInputJSON(data)
 	if err != nil {
 		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
 	}
-	if err := rejectRetiredExhaustionRulesField(normalizedData); err != nil {
+	if err := retiredboundary.RejectExhaustionRulesField(normalizedData); err != nil {
 		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
 	}
-	if err := rejectRetiredFanInField(normalizedData); err != nil {
+	if err := retiredboundary.RejectFanInField(normalizedData); err != nil {
 		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
 	}
-	if err := rejectRetiredCronIntervalField(normalizedData); err != nil {
+	if err := retiredboundary.RejectCronIntervalField(normalizedData); err != nil {
 		return generatedFactoryBoundary{}, fmt.Errorf("%s: %w", generatedFactoryBoundaryErrorPrefix, err)
 	}
 	if err := validatePortableLayoutBoundaryJSON(normalizedData); err != nil {

@@ -9,6 +9,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config/mockworkers"
+	"github.com/portpowered/infinite-you/pkg/config/retiredboundary"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -262,13 +263,13 @@ func normalizeFactoryGuardEntries(root map[string]any) error {
 }
 
 func rejectUnsupportedFactoryGuardBoundaryFields(guard map[string]any, path string) error {
-	return rejectRetiredBoundaryFields(guard, path, []retiredBoundaryField{
-		{key: "workstation", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
-		{key: "maxVisits", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
-		{key: "matchConfig", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
-		{key: "matchInput", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
-		{key: "parentInput", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
-		{key: "spawnedBy", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+	return retiredboundary.RejectFields(guard, path, []retiredboundary.Field{
+		{Key: "workstation", Replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{Key: "maxVisits", Replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{Key: "matchConfig", Replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{Key: "matchInput", Replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{Key: "parentInput", Replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{Key: "spawnedBy", Replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
 	})
 }
 
@@ -361,20 +362,20 @@ func rejectUnsupportedHostedWorkerBoundaryFields(worker map[string]any, path str
 	if len(auth) == 0 {
 		return nil
 	}
-	return rejectRetiredBoundaryFields(auth, path+".auth", []retiredBoundaryField{
-		{key: "apiKey", replacement: "v1 hosted workers accept only auth.secretRef"},
-		{key: "api_key", replacement: "v1 hosted workers accept only auth.secretRef"},
-		{key: "token", replacement: "v1 hosted workers accept only auth.secretRef"},
-		{key: "accessToken", replacement: "v1 hosted workers accept only auth.secretRef"},
-		{key: "access_token", replacement: "v1 hosted workers accept only auth.secretRef"},
-		{key: "clientId", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
-		{key: "client_id", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
-		{key: "clientSecret", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
-		{key: "client_secret", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
-		{key: "refreshToken", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
-		{key: "refresh_token", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
-		{key: "tokenUrl", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
-		{key: "token_url", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+	return retiredboundary.RejectFields(auth, path+".auth", []retiredboundary.Field{
+		{Key: "apiKey", Replacement: "v1 hosted workers accept only auth.secretRef"},
+		{Key: "api_key", Replacement: "v1 hosted workers accept only auth.secretRef"},
+		{Key: "token", Replacement: "v1 hosted workers accept only auth.secretRef"},
+		{Key: "accessToken", Replacement: "v1 hosted workers accept only auth.secretRef"},
+		{Key: "access_token", Replacement: "v1 hosted workers accept only auth.secretRef"},
+		{Key: "clientId", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "client_id", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "clientSecret", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "client_secret", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "refreshToken", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "refresh_token", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "tokenUrl", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "token_url", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
 	})
 }
 

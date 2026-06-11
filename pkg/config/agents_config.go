@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/config/retiredboundary"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"gopkg.in/yaml.v3"
 	"os"
@@ -392,50 +393,50 @@ func parseAgentsFrontmatterMap(frontmatter []byte) (map[string]any, error) {
 }
 
 func rejectRetiredWorkerFrontmatterAliases(frontmatter map[string]any) error {
-	if err := rejectRetiredHostedProviderAlias(frontmatter, "frontmatter"); err != nil {
+	if err := retiredboundary.RejectHostedProviderAlias(frontmatter, "frontmatter"); err != nil {
 		return err
 	}
-	return rejectRetiredBoundaryFields(frontmatter, "frontmatter", []retiredBoundaryField{
-		{key: "model_provider", replacement: "use modelProvider"},
-		{key: "sessionId", replacement: "remove sessionId; provider sessions are runtime-owned"},
-		{key: "session_id", replacement: "remove sessionId; provider sessions are runtime-owned"},
-		{key: "concurrency", replacement: "remove concurrency; use resources to limit concurrent work"},
-		{key: "stop_token", replacement: "use stopToken"},
-		{key: "skip_permissions", replacement: "use skipPermissions"},
-		{key: "open_code_agent", replacement: "use openCodeAgent"},
+	return retiredboundary.RejectFields(frontmatter, "frontmatter", []retiredboundary.Field{
+		{Key: "model_provider", Replacement: "use modelProvider"},
+		{Key: "sessionId", Replacement: "remove sessionId; provider sessions are runtime-owned"},
+		{Key: "session_id", Replacement: "remove sessionId; provider sessions are runtime-owned"},
+		{Key: "concurrency", Replacement: "remove concurrency; use resources to limit concurrent work"},
+		{Key: "stop_token", Replacement: "use stopToken"},
+		{Key: "skip_permissions", Replacement: "use skipPermissions"},
+		{Key: "open_code_agent", Replacement: "use openCodeAgent"},
 	})
 }
 
 func rejectRetiredWorkstationFrontmatterAliases(frontmatter map[string]any) error {
-	if err := rejectRetiredBoundaryFields(frontmatter, "frontmatter", []retiredBoundaryField{
-		{key: "kind", replacement: "use behavior"},
-		{key: "runtimeType", replacement: "use type"},
-		{key: "runtime_type", replacement: "use type"},
-		{key: "prompt_file", replacement: "use promptFile"},
-		{key: "output_schema", replacement: "use outputSchema"},
-		{key: "on_continue", replacement: "use onContinue"},
-		{key: "on_rejection", replacement: "use onRejection"},
-		{key: "on_failure", replacement: "use onFailure"},
-		{key: "resourceUsage", replacement: "use resources"},
-		{key: "resource_usage", replacement: "use resources"},
-		{key: "stopToken", replacement: "use stopWords"},
-		{key: "stop_token", replacement: "use stopWords"},
-		{key: "stop_words", replacement: "use stopWords"},
-		{key: "runtimeStopWords", replacement: "use stopWords"},
-		{key: "runtime_stop_words", replacement: "use stopWords"},
-		{key: "timeout", replacement: "use limits.maxExecutionTime"},
-		{key: "working_directory", replacement: "use workingDirectory"},
-		{key: "open_code_agent", replacement: "use openCodeAgent"},
+	if err := retiredboundary.RejectFields(frontmatter, "frontmatter", []retiredboundary.Field{
+		{Key: "kind", Replacement: "use behavior"},
+		{Key: "runtimeType", Replacement: "use type"},
+		{Key: "runtime_type", Replacement: "use type"},
+		{Key: "prompt_file", Replacement: "use promptFile"},
+		{Key: "output_schema", Replacement: "use outputSchema"},
+		{Key: "on_continue", Replacement: "use onContinue"},
+		{Key: "on_rejection", Replacement: "use onRejection"},
+		{Key: "on_failure", Replacement: "use onFailure"},
+		{Key: "resourceUsage", Replacement: "use resources"},
+		{Key: "resource_usage", Replacement: "use resources"},
+		{Key: "stopToken", Replacement: "use stopWords"},
+		{Key: "stop_token", Replacement: "use stopWords"},
+		{Key: "stop_words", Replacement: "use stopWords"},
+		{Key: "runtimeStopWords", Replacement: "use stopWords"},
+		{Key: "runtime_stop_words", Replacement: "use stopWords"},
+		{Key: "timeout", Replacement: "use limits.maxExecutionTime"},
+		{Key: "working_directory", Replacement: "use workingDirectory"},
+		{Key: "open_code_agent", Replacement: "use openCodeAgent"},
 	}); err != nil {
 		return err
 	}
-	if err := rejectRetiredBoundaryFields(frontmatterMap(frontmatter["limits"]), "frontmatter.limits", []retiredBoundaryField{
-		{key: "max_retries", replacement: "use maxRetries"},
-		{key: "max_execution_time", replacement: "use maxExecutionTime"},
+	if err := retiredboundary.RejectFields(frontmatterMap(frontmatter["limits"]), "frontmatter.limits", []retiredboundary.Field{
+		{Key: "max_retries", Replacement: "use maxRetries"},
+		{Key: "max_execution_time", Replacement: "use maxExecutionTime"},
 	}); err != nil {
 		return err
 	}
-	if err := rejectRetiredCronBoundaryAliases(frontmatter["cron"], "frontmatter.cron"); err != nil {
+	if err := retiredboundary.RejectCronBoundaryAliases(frontmatter["cron"], "frontmatter.cron"); err != nil {
 		return err
 	}
 	if err := rejectRetiredIOFrontmatterListAliases(frontmatter["inputs"], "frontmatter.inputs"); err != nil {
@@ -471,8 +472,8 @@ func rejectRetiredIOFrontmatterListAliases(raw any, path string) error {
 
 func rejectRetiredIOFrontmatterAliases(raw any, path string) error {
 	entry := frontmatterMap(raw)
-	if err := rejectRetiredBoundaryFields(entry, path, []retiredBoundaryField{
-		{key: "work_type", replacement: "use workType"},
+	if err := retiredboundary.RejectFields(entry, path, []retiredboundary.Field{
+		{Key: "work_type", Replacement: "use workType"},
 	}); err != nil {
 		return err
 	}
@@ -480,10 +481,10 @@ func rejectRetiredIOFrontmatterAliases(raw any, path string) error {
 }
 
 func rejectRetiredInputGuardFrontmatterAliases(raw any, path string) error {
-	return rejectRetiredBoundaryFields(frontmatterMap(raw), path, []retiredBoundaryField{
-		{key: "match_input", replacement: "use matchInput"},
-		{key: "parent_input", replacement: "use parentInput"},
-		{key: "spawned_by", replacement: "use spawnedBy"},
+	return retiredboundary.RejectFields(frontmatterMap(raw), path, []retiredboundary.Field{
+		{Key: "match_input", Replacement: "use matchInput"},
+		{Key: "parent_input", Replacement: "use parentInput"},
+		{Key: "spawned_by", Replacement: "use spawnedBy"},
 	})
 }
 
@@ -495,13 +496,13 @@ func rejectRetiredGuardFrontmatterAliases(raw any, path string) error {
 	for index, item := range items {
 		entryPath := fmt.Sprintf("%s[%d]", path, index)
 		entry := frontmatterMap(item)
-		if err := rejectRetiredBoundaryFields(entry, entryPath, []retiredBoundaryField{
-			{key: "max_visits", replacement: "use maxVisits"},
+		if err := retiredboundary.RejectFields(entry, entryPath, []retiredboundary.Field{
+			{Key: "max_visits", Replacement: "use maxVisits"},
 		}); err != nil {
 			return err
 		}
-		if err := rejectRetiredBoundaryFields(frontmatterMap(entry["matchConfig"]), entryPath+".matchConfig", []retiredBoundaryField{
-			{key: "input_key", replacement: "use inputKey"},
+		if err := retiredboundary.RejectFields(frontmatterMap(entry["matchConfig"]), entryPath+".matchConfig", []retiredboundary.Field{
+			{Key: "input_key", Replacement: "use inputKey"},
 		}); err != nil {
 			return err
 		}
