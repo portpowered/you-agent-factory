@@ -8,6 +8,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	jsstore "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 )
 
@@ -242,4 +243,15 @@ func ProjectSessionPartialResult(
 		}
 	}
 	return result
+}
+
+// JavaScriptCheckpointStore keeps orchestrator-owned checkpoint bundles for one
+// live JavaScript workflow session.
+//
+// Deprecated: use pkg/orchestrators/javascript/store.CheckpointStore directly.
+type JavaScriptCheckpointStore = jsstore.CheckpointStore
+
+// NewJavaScriptCheckpointStore allocates an empty checkpoint store.
+func NewJavaScriptCheckpointStore() *JavaScriptCheckpointStore {
+	return jsstore.NewCheckpointStore()
 }
