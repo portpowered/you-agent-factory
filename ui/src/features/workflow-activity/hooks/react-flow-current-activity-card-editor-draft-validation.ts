@@ -4,10 +4,7 @@ import type { EditableFactoryGraphViewModel } from "../../factory-graph-editor/h
 import { useFactoryValidation } from "../../factory-graph-editor/hooks/validation/use-factory-validation";
 import { buildDraftAppliedFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-apply";
 import type { FactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
-import {
-  factoryLayoutTopologyEdgeIds,
-  projectFactoryLayoutValidationTargets,
-} from "../../factory-graph-editor/lib/layout/factory-graph-layout-validation";
+import { projectFactoryLayoutValidationTargets } from "../../factory-graph-editor/lib/layout/factory-graph-layout-validation";
 import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 
 export function useDraftAppliedFactoryValidation(
@@ -34,10 +31,7 @@ export function useDraftAppliedFactoryValidation(
       return [];
     }
 
-    return projectFactoryLayoutValidationTargets(
-      layout,
-      factoryLayoutTopologyEdgeIds(draftState.graph),
-    );
+    return projectFactoryLayoutValidationTargets(layout, draftState.graph);
   }, [draftState.graph, editorMode, layout]);
   const targets = useMemo(
     () => [...apiValidation.targets, ...layoutValidationTargets],

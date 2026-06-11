@@ -45,10 +45,7 @@ import {
   factoryLayoutFromDefinition,
   hasFactoryLayoutChanges,
 } from "../layout/factory-graph-layout-operations";
-import {
-  factoryLayoutTopologyEdgeIds,
-  preparePendingFactoryLayoutForSave,
-} from "../layout/factory-graph-layout-validation";
+import { preparePendingFactoryLayoutForSave } from "../layout/factory-graph-layout-validation";
 import { materializeFactoryGraphEntityIdsForSave } from "./factory-graph-public-ids";
 
 export {
@@ -384,13 +381,12 @@ export function applyFactoryGraphPendingEdits(options: {
     options.baseFactoryDefinition,
     options.draft,
   );
-  const validEdgeIds = factoryLayoutTopologyEdgeIds(
-    buildFactoryGraphTopologyFromDefinition(nextFactoryDefinition),
-  );
+  const pendingTopology =
+    buildFactoryGraphTopologyFromDefinition(nextFactoryDefinition);
   const preparedPendingLayoutResult =
     options.pendingLayout == null
       ? null
-      : preparePendingFactoryLayoutForSave(options.pendingLayout, validEdgeIds);
+      : preparePendingFactoryLayoutForSave(options.pendingLayout, pendingTopology);
   const preparedPendingLayout = preparedPendingLayoutResult?.layout ?? null;
   const nextDefinition =
     preparedPendingLayout &&
