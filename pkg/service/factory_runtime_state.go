@@ -772,6 +772,15 @@ func (fs *FactoryService) currentRuntimeConfig() *factoryconfig.LoadedFactoryCon
 	return nil
 }
 
+// StartupWorkerConfig returns the named worker from the built startup runtime config.
+func (fs *FactoryService) StartupWorkerConfig(name string) (*interfaces.WorkerConfig, bool) {
+	runtimeCfg := fs.currentRuntimeConfig()
+	if runtimeCfg == nil {
+		return nil, false
+	}
+	return runtimeCfg.Worker(name)
+}
+
 func (fs *FactoryService) workflowID() string {
 	if fs == nil {
 		return ""
