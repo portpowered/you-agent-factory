@@ -86,10 +86,9 @@ The workflow currently executes these repository-owned commands through one prer
 1. `cd ui && bun install --frozen-lockfile`
 2. `cd ui && bun run tsc`
 3. `make verify-build-contracts`
-4. `make test-ui-coverage`
-5. `cd ui && bunx playwright install chromium`
-6. `make ui-integration-test`
-7. `make test-backend-verification`
+4. `make test-ui-coverage` and `make ui-integration-test` in parallel GitHub Actions jobs (local `make verify-tests` runs the same two lanes concurrently through `make run-concurrent-ui-verification-lanes`)
+5. `cd ui && bunx playwright install chromium` (browser integration job only; local `make release-surface-smoke` installs browsers before the concurrent UI lanes)
+6. `make test-backend-verification`
 
 Use the same root-level commands locally when reproducing a GitHub Actions failure. The workflow installs Go from `go.mod` and pins Bun to `1.3.12` in `.github/workflows/ci.yml`; keep that version aligned with the checked-in `ui/package.json` `packageManager` pin when either file changes.
 
@@ -108,7 +107,7 @@ Treat the matrix below as the canonical suite-ownership and rerun guide for the 
 | `make verify-fast` | `make typecheck`, `make ui-test`, `make test` | `make test-ui-coverage`, `make ui-integration-test`, `make test-backend-verification`, `make long-tests` | rerun the failing owned step directly: `make typecheck`, `make ui-test`, or `make test` |
 | `make verify-pr` | `make verify-build-contracts` once, then `make verify-tests` once | `make long-tests`, `make test-functional-long`, managed-runtime specialty coverage | rerun `make verify-pr` for the full required envelope, or rerun the failing owned lane called out in output |
 | `make verify-extended` | `make verify-pr`, then `make long-tests` | no extra hidden suites beyond the named long and specialty lanes | rerun `make verify-extended` for the whole opt-in pass, or rerun the failing owned long lane called out in output |
-| `make verify-tests` | `make test-ui-coverage`, `make ui-integration-test`, `make test-backend-verification` | compatibility aliases that would repeat the same confidence outcome | rerun the exact failing required lane printed in output |
+| `make verify-tests` | `make release-surface-smoke`, concurrent `make test-ui-coverage` + `make ui-integration-test` through `make run-concurrent-ui-verification-lanes`, then `make test-backend-verification` | compatibility aliases that would repeat the same confidence outcome | rerun the exact failing required lane printed in output |
 | `make long-tests` | `make long-tests-managed-runtime`, `make long-tests-functional-runtime` | short-path fast and PR-tier suites, unless you intentionally rerun them through `make verify-pr` first | rerun the exact failing specialty lane printed in output |
 
 Compatibility aliases that still remain on the root command surface:
@@ -138,7 +137,7 @@ Treat the `ui/` Biome excessive-lines rules as a maintainability boundary for ha
 
 `make verify-build-contracts` is the repository-owned build-contract lane used by CI after dependency setup. It runs `make typecheck`, `make ui-build`, `make build`, `make lint`, and `make api-smoke` in the same order the `verify-build-contracts` GitHub Actions job enforces.
 
-`make verify-tests` is the repository-owned local aggregate for the required test lanes. It runs `make test-ui-coverage`, `make ui-integration-test`, and `make test-backend-verification`, prints the owned lane label before each one, and emits the exact lane rerun command if one fails. The GitHub Actions workflow fans those lanes out across separate `UI Coverage`, `UI Browser Integration`, and `Backend Verification` jobs so required failures point at one lane instead of a mixed `make ui-test` rerun. **CI vs local for UI Coverage:** pull-request CI runs ten parallel `ui-coverage-shard` matrix jobs plus one `ui-coverage-merge` job (both gated by `run_ui_coverage`); local `make verify-pr` and `make verify-tests` still use the unsharded canonical `make test-ui-coverage` command that `cmd/ciclassify` recommends for lane reruns.
+`make verify-tests` is the repository-owned local aggregate for the required test lanes. It runs `make release-surface-smoke`, then starts `make test-ui-coverage` and `make ui-integration-test` concurrently through `make run-concurrent-ui-verification-lanes`, and finishes with `make test-backend-verification`. The concurrent orchestrator prefixes each lane's stdout with `[UI Coverage]` or `[UI Browser Integration]`, writes per-lane logs under `.artifacts/concurrent-ui-verification-lanes/`, and emits the exact `make <target>` rerun command for any failed lane. Browser integration therefore starts alongside covered UI verification instead of waiting for the full covered UI lane to finish. The GitHub Actions workflow fans those lanes out across separate `UI Coverage`, `UI Browser Integration`, and `Backend Verification` jobs so required failures point at one lane instead of a mixed `make ui-test` rerun. **CI vs local for UI Coverage:** pull-request CI runs ten parallel `ui-coverage-shard` matrix jobs plus one `ui-coverage-merge` job (both gated by `run_ui_coverage`); local `make verify-pr` and `make verify-tests` still use the unsharded canonical `make test-ui-coverage` command that `cmd/ciclassify` recommends for lane reruns.
 
 Every pull request still runs the same prerequisite path before any lane-specific skips happen:
 
