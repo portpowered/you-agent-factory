@@ -430,6 +430,38 @@ func EventReadResultHash(result EventReadResult) (string, error) {
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
+// LifecycleControlResultHash returns a stable digest for one lifecycle control outcome
+// so downstream cells can assert fixture-backed control behavior without ad hoc comparisons.
+func LifecycleControlResultHash(result LifecycleControlResult) (string, error) {
+	document := map[string]any{
+		"sessionId": result.SessionID,
+		"operation": string(result.Operation),
+		"outcome":   string(result.Outcome),
+		"status":    string(result.Status),
+	}
+	if dispatchID := strings.TrimSpace(result.DispatchID); dispatchID != "" {
+		document["dispatchId"] = dispatchID
+	}
+	if retryDispatchID := strings.TrimSpace(result.RetryDispatchID); retryDispatchID != "" {
+		document["retryDispatchId"] = retryDispatchID
+	}
+	if result.Links.Session != "" {
+		document["links"] = map[string]any{
+			"session":    result.Links.Session,
+			"results":    result.Links.Results,
+			"dispatches": result.Links.Dispatches,
+			"artifacts":  result.Links.Artifacts,
+			"events":     result.Links.Events,
+		}
+	}
+	encoded, err := json.Marshal(document)
+	if err != nil {
+		return "", fmt.Errorf("marshal lifecycle control result: %w", err)
+	}
+	sum := sha256.Sum256(encoded)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
 // SyncStartResultHash returns a stable digest for one sync start outcome.
 func SyncStartResultHash(result SyncStartResult) (string, error) {
 	document := map[string]any{
