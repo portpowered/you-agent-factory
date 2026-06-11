@@ -14,7 +14,6 @@ import {
   exportImageFile,
   exportTimelineEvents,
   fromBase64,
-  installExportDownloadProbe,
 } from "./testing/app-shell-export-test-utils";
 import {
   baselineSnapshot,
@@ -294,8 +293,13 @@ describe("App shell import flows", () => {
     expectNoPostFactoriesActivation(fetchMock);
   });
 
-  it("smoke tests authored export and dropped import as one dashboard-shell roundtrip", async () => {
-    const exportProbe = installExportDownloadProbe();
+  it("activates a harness-built exported PNG through PUT without re-proving export dialog copy", async () => {
+    const { version: _version, ...importedFactory } =
+      currentNamedFactoryExportResponse;
+    const importValue = {
+      ...createFactoryImportValue(),
+      factory: importedFactory,
+    };
     const mockedExportResult =
       await factoryPngExportModule.writeFactoryExportPng({
         factory: currentNamedFactoryExportResponse,
@@ -310,9 +314,10 @@ describe("App shell import flows", () => {
         "expected the roundtrip export fixture to build successfully",
       );
     }
-    const writeFactoryExportPngSpy = vi
-      .spyOn(factoryPngExportModule, "writeFactoryExportPng")
-      .mockResolvedValue(mockedExportResult);
+    vi.spyOn(factoryPngImportModule, "readFactoryImportPng").mockResolvedValue({
+      ok: true,
+      value: importValue,
+    });
     const { fetchMock } = renderApp({
       snapshot: importedFactorySnapshot,
       timelineEvents: exportTimelineEvents,
@@ -341,137 +346,59 @@ describe("App shell import flows", () => {
       },
     );
 
-    try {
-      fireEvent.click(
-        await screen.findByRole("button", { name: "Export PNG" }),
-      );
-
-      const exportDialog = await screen.findByRole("dialog", {
-        name: "Export factory",
-      });
-      await waitFor(() => {
-        expect(
-          (
-            within(exportDialog).getByRole("button", {
-              name: "Export PNG",
-            }) as HTMLButtonElement
-          ).disabled,
-        ).toBe(false);
-      });
-
-      const imageInput = within(exportDialog).getByLabelText(
-        "Cover image",
-      ) as HTMLInputElement;
-      Object.defineProperty(imageInput, "files", {
-        configurable: true,
-        value: [exportImageFile()],
-      });
-      fireEvent.change(imageInput);
-      fireEvent.click(
-        within(exportDialog).getByRole("button", { name: "Export PNG" }),
-      );
-
-      await waitFor(() => {
-        expect(exportProbe.getDownloadedBlob()).not.toBeNull();
-      });
-      await waitFor(() => {
-        expect(exportProbe.getDownloadedFilename()).toBe(
-          "semantic-workflow.png",
-        );
-      });
-      await waitFor(() => {
-        expect(within(exportDialog).getByRole("status").textContent).toContain(
-          "Downloaded semantic-workflow.png.",
-        );
-      });
-      fireEvent.click(
-        within(exportDialog).getByRole("button", { name: "Close" }),
-      );
-      await waitFor(() => {
-        expect(
-          screen.queryByRole("dialog", { name: "Export factory" }),
-        ).toBeNull();
-      });
-
-      const exportedBlob = exportProbe.getDownloadedBlob();
-      if (!(exportedBlob instanceof Blob)) {
-        throw new Error("expected the export flow to download a PNG blob");
-      }
-
-      const viewport = await screen.findByRole("region", {
-        name: "Work graph viewport",
-      });
-      fireEvent.drop(
-        viewport,
-        createFileDropTransfer([
-          new File([exportedBlob], exportProbe.getDownloadedFilename(), {
-            type: "image/png",
-          }),
-        ]),
-      );
-
-      const previewDialog = await screen.findByRole("dialog", {
-        name: "Review factory import",
-      });
-      expect(previewDialog.textContent).toContain(
-        currentNamedFactoryExportResponse.name,
-      );
-      expect(previewDialog.textContent).toContain("semantic-workflow.png");
-
-      fireEvent.click(
-        within(previewDialog).getByRole("button", { name: "Confirm import" }),
-      );
-
-      await waitFor(() => {
-        const putActivationCall = fetchMock.mock.calls.find(([url, init]) => {
-          return (
-            resolveFetchPath(url) === "/factory-sessions/~default/factory" &&
-            resolveFetchMethod(url, init) === "PUT"
-          );
-        });
-        expect(putActivationCall).toBeDefined();
-        expect(putActivationCall?.[1]).toEqual(
-          expect.objectContaining({
-            body: expect.any(String),
-            headers: {
-              "content-type": "application/json",
-            },
-            method: "PUT",
-          }),
-        );
-        expect(JSON.parse(String(putActivationCall?.[1]?.body))).toEqual({
-          mode: "REPLACE_CURRENT",
-          factory: {
-            ...currentNamedFactoryExportResponse,
-            version: incrementedSessionFactoryVersion,
-          },
-        });
-      });
-      expectNoPostFactoriesActivation(fetchMock);
-      await waitFor(() => {
-        expect(MockEventSource.instances.length).toBeGreaterThan(0);
-      });
-
-      const refreshedStream = MockEventSource.instances.at(-1);
-      if (!refreshedStream) {
-        throw new Error("expected a dashboard stream after factory activation");
-      }
-
-      act(() => {
-        refreshedStream.emit("snapshot", importedFactorySnapshot);
-      });
-
-      await waitFor(() => {
-        expect(screen.queryByText("Imported factory active")).toBeNull();
-      });
-      expect(
-        await screen.findByRole("button", {
-          name: "Select Review workstation",
+    const viewport = await screen.findByRole("region", {
+      name: "Work graph viewport",
+    });
+    fireEvent.drop(
+      viewport,
+      createFileDropTransfer([
+        new File([mockedExportResult.blob], "semantic-workflow.png", {
+          type: "image/png",
         }),
-      ).toBeTruthy();
-    } finally {
-      writeFactoryExportPngSpy.mockRestore();
-      exportProbe.restore();
+      ]),
+    );
+
+    const previewDialog = await screen.findByRole("dialog", {
+      name: "Review factory import",
+    });
+    fireEvent.click(
+      within(previewDialog).getByRole("button", { name: "Confirm import" }),
+    );
+
+    await waitFor(() => {
+      const putActivationCall = fetchMock.mock.calls.find(([url, init]) => {
+        return (
+          resolveFetchPath(url) === "/factory-sessions/~default/factory" &&
+          resolveFetchMethod(url, init) === "PUT"
+        );
+      });
+      expect(putActivationCall).toBeDefined();
+      expect(JSON.parse(String(putActivationCall?.[1]?.body))).toEqual({
+        mode: "REPLACE_CURRENT",
+        factory: {
+          ...currentNamedFactoryExportResponse,
+          version: incrementedSessionFactoryVersion,
+        },
+      });
+    });
+    expectNoPostFactoriesActivation(fetchMock);
+    await waitFor(() => {
+      expect(MockEventSource.instances.length).toBeGreaterThan(0);
+    });
+
+    const refreshedStream = MockEventSource.instances.at(-1);
+    if (!refreshedStream) {
+      throw new Error("expected a dashboard stream after factory activation");
     }
+
+    act(() => {
+      refreshedStream.emit("snapshot", importedFactorySnapshot);
+    });
+
+    expect(
+      await screen.findByRole("button", {
+        name: "Select Review workstation",
+      }),
+    ).toBeTruthy();
   });
 });

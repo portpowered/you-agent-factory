@@ -87,6 +87,7 @@ func modelCatalogConfig(includeResource bool) map[string]any {
 	worker := map[string]any{
 		"name":          "voice-local",
 		"type":          interfaces.WorkerTypeModel,
+		"modelProvider": "CODEX",
 		"model":         "OMNIVOICE_Q4_K_M",
 		"modelLocality": interfaces.ModelLocalityLocal,
 		"operations": []map[string]any{{
