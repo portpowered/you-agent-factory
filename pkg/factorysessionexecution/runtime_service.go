@@ -143,7 +143,6 @@ func (s *RuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncS
 	}
 
 	state := s.newRunningSessionState(prepared)
-	runCtx, cancel := context.WithCancel(context.Background())
 	sessionID := state.session.SessionID
 	runtimeDone := state.runtimeDone
 	s.sessions[sessionID] = state
@@ -153,7 +152,19 @@ func (s *RuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncS
 	}
 	s.mu.Unlock()
 
-	go s.runSession(runCtx, prepared, sessionID)
+	runCtx := context.Background()
+	var stopRuntime context.CancelFunc
+	if prepared.Request.Wait != nil && prepared.Request.Wait.CancelOnTimeout {
+		var cancel context.CancelFunc
+		runCtx, cancel = context.WithCancel(context.Background())
+		stopRuntime = cancel
+		go func() {
+			defer cancel()
+			s.runSession(runCtx, prepared, sessionID)
+		}()
+	} else {
+		go s.runSession(runCtx, prepared, sessionID)
+	}
 
 	waitCtx := ctx
 	var cancelWait context.CancelFunc
@@ -179,8 +190,8 @@ func (s *RuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncS
 	case <-waitCtx.Done():
 		if errors.Is(waitCtx.Err(), context.DeadlineExceeded) && syncWaitTimeout(prepared.Request.Wait) > 0 {
 			cancelOnTimeout := prepared.Request.Wait != nil && prepared.Request.Wait.CancelOnTimeout
-			if cancelOnTimeout {
-				cancel()
+			if cancelOnTimeout && stopRuntime != nil {
+				stopRuntime()
 			}
 			s.applySyncWaitTimeout(sessionID)
 			s.mu.RLock()
