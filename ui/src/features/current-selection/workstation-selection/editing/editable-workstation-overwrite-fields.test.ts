@@ -36,7 +36,7 @@ const messages = {
   modelInvokeBindingsFieldLabel: "Operation bindings",
   modelInvokeOperationFieldLabel: "Operation",
   promptFieldLabel: "Prompt",
-  runnerFieldLabel: "Runner",
+  runnerFieldLabel: "Model provider",
   workerFieldLabel: "Worker",
   workstationNameFieldLabel: "Workstation name",
   workstationTypeLabel: "Workstation type",

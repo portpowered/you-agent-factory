@@ -201,8 +201,8 @@ const currentSelectionDetailMessagesByLocale = {
     localizedTimezoneContext:
       "Times on this card are shown in your local timezone.",
     localizedTimezoneLabel: "Timezone",
-    runnerLabel: "Runner",
-    runnerSelectionSourceLabel: "Runner source",
+    runnerLabel: "Model provider",
+    runnerSelectionSourceLabel: "Model provider source",
     collapseAction: "Collapse",
     expandAction: "Expand",
     expandAttemptAction: (attemptNumber: number) =>
@@ -338,8 +338,8 @@ const currentSelectionDetailMessagesByLocale = {
     localizedTimezoneContext:
       "このカードの時刻は、あなたのローカルタイムゾーンで表示されます。",
     localizedTimezoneLabel: "タイムゾーン",
-    runnerLabel: "Runner",
-    runnerSelectionSourceLabel: "Runner source",
+    runnerLabel: "Model provider",
+    runnerSelectionSourceLabel: "Model provider source",
     collapseAction: "Collapse",
     expandAction: "Expand",
     expandAttemptAction: (attemptNumber: number) =>
@@ -475,8 +475,8 @@ const currentSelectionDetailMessagesByLocale = {
     localizedTimezoneContext:
       "이 카드의 시간은 사용자의 로컬 시간대로 표시됩니다.",
     localizedTimezoneLabel: "시간대",
-    runnerLabel: "Runner",
-    runnerSelectionSourceLabel: "Runner source",
+    runnerLabel: "Model provider",
+    runnerSelectionSourceLabel: "Model provider source",
     collapseAction: "Collapse",
     expandAction: "Expand",
     expandAttemptAction: (attemptNumber: number) =>
@@ -599,7 +599,7 @@ const currentSelectionDetailMessagesByLocale = {
     providerSessionLabel: "Provider session",
     localizedTimezoneContext: "此卡片中的时间会按你的本地时区显示。",
     localizedTimezoneLabel: "时区",
-    runnerLabel: "Runner",
+    runnerLabel: "Model provider",
     runnerSelectionSourceLabel: "Runner 来源",
     collapseAction: "折叠",
     expandAction: "展开",

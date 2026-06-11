@@ -59,7 +59,7 @@ describe("EditableConfigurationModelInvokeFields", () => {
     expect(screen.getByLabelText("Default content")).toBeInTheDocument();
     expect(screen.queryByLabelText("Prompt")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Kind")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Runner")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Model provider")).not.toBeInTheDocument();
   });
 
   it("surfaces worker option empty and error states", () => {

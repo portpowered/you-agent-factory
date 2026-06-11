@@ -89,7 +89,7 @@ describe("WorkstationRequestDetailCard request fallbacks", () => {
         name: "Current selection",
       }),
     );
-    expect(currentSelection.getByText("Runner")).toBeTruthy();
+    expect(currentSelection.getByText("Model provider")).toBeTruthy();
     expect(currentSelection.getByText("Codex")).toBeTruthy();
     expect(currentSelection.getByText("operator_default")).toBeTruthy();
     expect(

@@ -533,7 +533,8 @@ func decodeSaveCurrentFactoryBody(body io.Reader) (factoryapi.SaveCurrentFactory
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
 	var payload struct {
-		Factory json.RawMessage `json:"factory"`
+		Mode    *factoryapi.FactorySaveMode `json:"mode"`
+		Factory json.RawMessage             `json:"factory"`
 	}
 	if err := decoder.Decode(&payload); err != nil {
 		return factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{}, err

@@ -2,6 +2,7 @@ package workstationprojection
 
 import (
 	"sort"
+	"strings"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -98,6 +99,7 @@ func workstationDispatchViewFromActiveDispatch(
 		TransitionId:    dispatch.TransitionID,
 		WorkstationName: workstationRequestStringPtr(workstationNameOrID(dispatch.Workstation.Name, dispatch.TransitionID)),
 		Request: workstationDispatchRequestView(
+			dispatch.ModelProvider,
 			dispatch.RunnerID,
 			dispatch.RunnerSelectionSource,
 			dispatch.StartedAt,
@@ -120,7 +122,7 @@ func workstationRequestResponseViewFromActiveDispatch(
 		return nil
 	}
 	return &factoryapi.FactoryWorldWorkstationRequestResponseView{
-		ModelProvider:  generatedFactoryWorldSelectedModelProviderView(dispatch.RunnerID, dispatch.RunnerSelectionSource),
+		ModelProvider:  generatedFactoryWorldSelectedModelProviderView(dispatch.ModelProvider, dispatch.RunnerID, dispatch.RunnerSelectionSource),
 		ScriptResponse: generatedFactoryWorldScriptResponse(latestScriptResponse),
 	}
 }
@@ -149,6 +151,7 @@ func workstationDispatchViewFromCompletion(
 		TransitionId:    completion.TransitionID,
 		WorkstationName: workstationRequestStringPtr(workstationNameOrID(completion.Workstation.Name, completion.TransitionID)),
 		Request: workstationDispatchRequestView(
+			completion.ModelProvider,
 			completion.RunnerID,
 			completion.RunnerSelectionSource,
 			completion.StartedAt,
@@ -160,7 +163,7 @@ func workstationDispatchViewFromCompletion(
 			latestScriptRequest,
 		),
 		Response: &factoryapi.FactoryWorldWorkstationRequestResponseView{
-			ModelProvider:               generatedFactoryWorldSelectedModelProviderView(completion.RunnerID, completion.RunnerSelectionSource),
+			ModelProvider:               generatedFactoryWorldSelectedModelProviderView(completion.ModelProvider, completion.RunnerID, completion.RunnerSelectionSource),
 			Outcome:                     workstationRequestStringPtr(completion.Result.Outcome),
 			Feedback:                    workstationRequestStringPtr(completion.Result.Feedback),
 			SelectedClassificationLabel: workstationRequestStringPtr(completion.Result.SelectedClassificationLabel),
@@ -176,6 +179,7 @@ func workstationDispatchViewFromCompletion(
 }
 
 func workstationDispatchRequestView(
+	modelProvider string,
 	runnerID string,
 	runnerSource interfaces.RunnerSelectionSource,
 	startedAt time.Time,
@@ -187,7 +191,7 @@ func workstationDispatchRequestView(
 	latestScriptRequest *interfaces.FactoryWorldScriptRequest,
 ) factoryapi.FactoryWorldWorkstationRequestRequestView {
 	return factoryapi.FactoryWorldWorkstationRequestRequestView{
-		ModelProvider:            generatedFactoryWorldSelectedModelProviderView(runnerID, runnerSource),
+		ModelProvider:            generatedFactoryWorldSelectedModelProviderView(modelProvider, runnerID, runnerSource),
 		StartedAt:                timePtr(startedAt),
 		InputWorkItems:           workItemRefSlicePtr(inputWorkItems),
 		InputWorkTypeIds:         stringSlicePtr(workTypeIDsForWorkRefs(inputWorkItems)),
@@ -199,14 +203,31 @@ func workstationDispatchRequestView(
 	}
 }
 
-func generatedFactoryWorldSelectedModelProviderView(runnerID string, runnerSource interfaces.RunnerSelectionSource) *factoryapi.FactoryWorldSelectedModelProviderView {
+func generatedFactoryWorldSelectedModelProviderView(modelProvider string, runnerID string, runnerSource interfaces.RunnerSelectionSource) *factoryapi.FactoryWorldSelectedModelProviderView {
+	modelProvider = strings.TrimSpace(modelProvider)
 	runnerID = interfaces.NormalizeRunnerID(runnerID)
-	if runnerID == "" && runnerSource == "" {
+	if modelProvider == "" && runnerID == "" && runnerSource == "" {
 		return nil
 	}
+	var publicProvider *factoryapi.WorkerModelProvider
+	if modelProvider != "" {
+		publicProvider = interfaces.GeneratedPublicFactoryWorkerModelProviderPtr(modelProvider)
+	}
+	if publicProvider == nil && runnerID != "" {
+		publicProvider = interfaces.GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProviderPtr(runnerID)
+	}
 	view := &factoryapi.FactoryWorldSelectedModelProviderView{
-		ModelProvider:                interfaces.GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProviderPtr(runnerID),
+		ModelProvider:                publicProvider,
 		ModelProviderSelectionSource: interfaces.GeneratedPublicFactoryModelProviderSelectionSourcePtr(string(runnerSource)),
+	}
+	if publicProvider != nil {
+		if internalProvider, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(*publicProvider); ok {
+			if metadata, ok := interfaces.BuiltInModelProviderMetadata(internalProvider); ok {
+				view.DisplayName = workstationRequestStringPtr(metadata.DisplayName)
+				view.Capabilities = generatedFactoryWorldRunnerCapabilitiesView(metadata.Capabilities)
+				return view
+			}
+		}
 	}
 	if metadata, ok := interfaces.BuiltInRunnerMetadata(runnerID); ok {
 		view.DisplayName = workstationRequestStringPtr(metadata.DisplayName)

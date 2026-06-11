@@ -266,7 +266,7 @@ describe("WorkstationDetailCard", () => {
     expect(configurationHeading).toBeTruthy();
     expect(activeWorkHeading).toBeTruthy();
     expect(screen.getByText("Worker type")).toBeTruthy();
-    expect(screen.getByText("Selected runner")).toBeTruthy();
+    expect(screen.getByText("Selected model provider")).toBeTruthy();
     expect(
       screen.getByText("No active work is running on this workstation."),
     ).toBeTruthy();
@@ -317,7 +317,7 @@ describe("WorkstationDetailCard", () => {
     expect(configurationHeading).toBeTruthy();
     expect(activeWorkHeading).toBeTruthy();
     expect(screen.getByText("ワーカータイプ")).toBeTruthy();
-    expect(screen.getByText("選択中の runner")).toBeTruthy();
+    expect(screen.getByText("選択中の model provider")).toBeTruthy();
     expect(
       screen.getByText(
         "このワークステーションでは現在アクティブな作業は実行されていません。",

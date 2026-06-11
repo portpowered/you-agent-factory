@@ -65,6 +65,61 @@ func TestReconstructFactoryWorldState_ProjectsDispatchRequestModelProviderMetada
 	}
 }
 
+func TestReconstructFactoryWorldState_ProjectsDispatchRequestClaudeModelProviderWithoutLegacyRunnerID(t *testing.T) {
+	t0 := time.Date(2026, 6, 11, 13, 0, 0, 0, time.UTC)
+	modelProvider := factoryapi.WorkerModelProviderClaude
+	source := factoryapi.ModelProviderSelectionSourceWorker
+	workItem := interfaces.FactoryWorkItem{
+		ID:          "work-claude",
+		WorkTypeID:  "task",
+		DisplayName: "Draft",
+		TraceID:     "trace-claude",
+		PlaceID:     "task:init",
+	}
+	events := []factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		workInputEvent(1, t0.Add(time.Second), workItem),
+		dispatchRequestEventWithProviderMetadata(
+			2,
+			t0.Add(2*time.Second),
+			"dispatch-claude-1",
+			"t-review",
+			workItem,
+			&factoryapi.DispatchRequestEventMetadata{
+				ModelProvider:                &modelProvider,
+				ModelProviderSelectionSource: &source,
+			},
+		),
+	}
+
+	worldState, err := ReconstructFactoryWorldState(events, 2)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	dispatch := worldState.ActiveDispatches["dispatch-claude-1"]
+	if dispatch.ModelProvider != string(factoryapi.WorkerModelProviderClaude) {
+		t.Fatalf("dispatch modelProvider = %q, want %q", dispatch.ModelProvider, factoryapi.WorkerModelProviderClaude)
+	}
+	if dispatch.RunnerID != "" {
+		t.Fatalf("dispatch runnerID = %q, want empty for claude provider", dispatch.RunnerID)
+	}
+
+	slice := workstationprojection.BuildFactoryWorldWorkstationRequestProjectionSlice(worldState)
+	if slice.WorkstationRequestsByDispatchId == nil {
+		t.Fatal("workstation request projection missing")
+	}
+	request := (*slice.WorkstationRequestsByDispatchId)["dispatch-claude-1"]
+	if request.Request.ModelProvider == nil {
+		t.Fatal("request modelProvider view missing")
+	}
+	if got := stringValue(request.Request.ModelProvider.ModelProvider); got != string(factoryapi.WorkerModelProviderClaude) {
+		t.Fatalf("request modelProvider = %q, want %q", got, factoryapi.WorkerModelProviderClaude)
+	}
+	if request.Request.ModelProvider.DisplayName == nil || *request.Request.ModelProvider.DisplayName != "Claude" {
+		t.Fatalf("request displayName = %#v, want Claude", request.Request.ModelProvider.DisplayName)
+	}
+}
+
 func TestReconstructFactoryWorldState_ProjectsLegacyDispatchQueuedRunnerIDAsModelProvider(t *testing.T) {
 	t0 := time.Date(2026, 6, 11, 12, 5, 0, 0, time.UTC)
 	modelProvider := factoryapi.WorkerModelProviderCursor

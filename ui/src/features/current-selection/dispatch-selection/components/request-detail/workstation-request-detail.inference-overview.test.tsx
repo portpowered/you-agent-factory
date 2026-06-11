@@ -127,7 +127,7 @@ it("keeps inference-backed request and response detail inside inference attempts
   expect(currentSelection.getAllByText("Dispatch ID").length).toBeGreaterThan(
     0,
   );
-  expect(currentSelection.getByText("Runner")).toBeTruthy();
+  expect(currentSelection.getByText("Model provider")).toBeTruthy();
   expect(currentSelection.getByText("Gemini")).toBeTruthy();
   expect(currentSelection.getByText("factory")).toBeTruthy();
   expect(currentSelection.queryByText("Runner capability support")).toBeNull();

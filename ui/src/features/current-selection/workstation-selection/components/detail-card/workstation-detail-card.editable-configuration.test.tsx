@@ -632,12 +632,12 @@ describe("WorkstationDetailCard editable configuration", () => {
     expandEditableConfiguration();
 
     const configuration = editableConfigurationSection();
-    const runnerSelect = screen.getByRole("combobox", { name: "Runner" });
+    const runnerSelect = screen.getByRole("combobox", { name: "Model provider" });
 
     expect(runnerSelect).toBeTruthy();
     expect(
       within(configuration).getByText(
-        "Effective runner: Gemini (Workstation).",
+        "Effective model provider: Gemini (Workstation).",
       ),
     ).toBeTruthy();
     expect(
@@ -646,7 +646,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     expect(within(configuration).queryByText("Supported")).toBeNull();
     expect(within(configuration).queryByText("Unsupported")).toBeNull();
 
-    await selectLabeledComboboxOption(user, "Runner", "Codex");
+    await selectLabeledComboboxOption(user, "Model provider", "Codex");
     expect(onRunnerChange).toHaveBeenCalledWith("codex");
 
     rerender(
@@ -667,7 +667,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     );
 
     expect(
-      within(configuration).getByText("Effective runner: Codex (Workstation)."),
+      within(configuration).getByText("Effective model provider: Codex (Workstation)."),
     ).toBeTruthy();
     expect(
       within(configuration).queryByText("Runner capability support"),
@@ -2416,7 +2416,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     const configuration = editableConfigurationSection();
     expect(within(configuration).queryByLabelText("Worker")).toBeNull();
     expect(within(configuration).queryByLabelText("Kind")).toBeNull();
-    expect(within(configuration).queryByLabelText("Runner")).toBeNull();
+    expect(within(configuration).queryByLabelText("Model provider")).toBeNull();
     expect(within(configuration).queryByLabelText("Prompt")).toBeNull();
     expect(
       within(configuration).queryByText("Worker selection unavailable."),
@@ -2501,7 +2501,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       within(resolvedSummarySection).queryByText("Worker type"),
     ).toBeNull();
     expect(
-      within(resolvedSummarySection).queryByText("Selected runner"),
+      within(resolvedSummarySection).queryByText("Selected model provider"),
     ).toBeNull();
     expect(within(resolvedSummarySection).queryByText("Kind")).toBeNull();
     expect(
@@ -2535,7 +2535,7 @@ describe("WorkstationDetailCard editable configuration", () => {
       within(resolvedSummarySection).getByText("Worker type"),
     ).toBeTruthy();
     expect(
-      within(resolvedSummarySection).getByText("Selected runner"),
+      within(resolvedSummarySection).getByText("Selected model provider"),
     ).toBeTruthy();
     expect(within(resolvedSummarySection).getByText("Kind")).toBeTruthy();
     expect(
@@ -2568,7 +2568,7 @@ describe("WorkstationDetailCard editable configuration", () => {
     const configuration = editableConfigurationSection();
     expect(within(configuration).getByLabelText("Worker")).toBeTruthy();
     expect(within(configuration).getByLabelText("Kind")).toBeTruthy();
-    expect(within(configuration).getByLabelText("Runner")).toBeTruthy();
+    expect(within(configuration).getByLabelText("Model provider")).toBeTruthy();
     expect(within(configuration).getByLabelText("Prompt")).toBeTruthy();
   });
 

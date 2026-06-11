@@ -58,6 +58,7 @@ type FactoryWorldDispatch struct {
 	Workstation              FactoryWorkstationRef `json:"workstation"`
 	RunnerID                 string                `json:"runner_id,omitempty"`
 	RunnerSelectionSource    RunnerSelectionSource `json:"runner_selection_source,omitempty"`
+	ModelProvider            string                `json:"model_provider,omitempty"`
 	Provider                 string                `json:"provider,omitempty"`
 	Model                    string                `json:"model,omitempty"`
 	StartedTick              int                   `json:"started_tick"`
@@ -78,6 +79,7 @@ type FactoryWorldDispatchCompletion struct {
 	Workstation              FactoryWorkstationRef    `json:"workstation"`
 	RunnerID                 string                   `json:"runner_id,omitempty"`
 	RunnerSelectionSource    RunnerSelectionSource    `json:"runner_selection_source,omitempty"`
+	ModelProvider            string                   `json:"model_provider,omitempty"`
 	StartedTick              int                      `json:"started_tick,omitempty"`
 	CompletedTick            int                      `json:"completed_tick"`
 	StartedAt                time.Time                `json:"started_at,omitempty"`

@@ -321,7 +321,7 @@ describe("EditableConfigurationSection model workstation fields", () => {
     expect(screen.getByRole("combobox", { name: "Kind" })).toHaveTextContent(
       "Standard",
     );
-    expect(screen.getByLabelText("Runner")).toBeInTheDocument();
+    expect(screen.getByLabelText("Model provider")).toBeInTheDocument();
     expect(screen.getByLabelText("Prompt")).toHaveValue("Review prompt");
 
     await selectLabeledComboboxOption(user, "Kind", "Repeater");

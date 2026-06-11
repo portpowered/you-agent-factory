@@ -7,6 +7,15 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
 
+// PublicModelProviderFromDispatchRequestMetadata returns the canonical public
+// modelProvider value recorded on dispatch-request metadata when present.
+func PublicModelProviderFromDispatchRequestMetadata(metadata *factoryapi.DispatchRequestEventMetadata) string {
+	if metadata == nil || metadata.ModelProvider == nil {
+		return ""
+	}
+	return string(*metadata.ModelProvider)
+}
+
 // RunnerMetadataFromDispatchRequestMetadata maps dispatch-request event metadata
 // into the legacy runner projection fields retained for world-state replay.
 func RunnerMetadataFromDispatchRequestMetadata(metadata *factoryapi.DispatchRequestEventMetadata) (runnerID string, source RunnerSelectionSource) {

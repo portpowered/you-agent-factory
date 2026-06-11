@@ -67,9 +67,26 @@ func ModelProviderFromRunnerID(id string) (ModelProvider, bool) {
 	}
 }
 
+var builtInModelProviderOnlyMetadata = map[ModelProvider]ModelProviderMetadata{
+	ModelProviderClaude: {
+		Provider:    ModelProviderClaude,
+		DisplayName: "Claude",
+		Capabilities: NewRunnerCapabilities(
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityImageInput, Status: RunnerOptionalCapabilityStatusUnsupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilitySessionResume, Status: RunnerOptionalCapabilityStatusSupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityStructuredOutput, Status: RunnerOptionalCapabilityStatusUnsupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityWorkingDirectory, Status: RunnerOptionalCapabilityStatusSupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityWorktree, Status: RunnerOptionalCapabilityStatusSupported, Detail: "factory-managed git worktree preparation under the factory root"},
+		),
+	},
+}
+
 // BuiltInModelProviderMetadata returns metadata for one built-in model provider
 // command backed by the stable runner registry.
 func BuiltInModelProviderMetadata(provider ModelProvider) (ModelProviderMetadata, bool) {
+	if metadata, ok := builtInModelProviderOnlyMetadata[provider]; ok {
+		return metadata, true
+	}
 	runnerID, ok := RunnerIDFromInternalModelProvider(string(provider))
 	if !ok {
 		return ModelProviderMetadata{}, false
