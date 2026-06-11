@@ -1,0 +1,180 @@
+package workflowruntime
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/dop251/goja"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+)
+
+// Run executes one simple JavaScript workflow source with explicit inputs and hooks.
+func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
+	if err := ctx.Err(); err != nil {
+		return canceledOutcome(err), nil
+	}
+	if strings.TrimSpace(req.Source) == "" {
+		return Outcome{
+			OK: false,
+			Failure: Failure{
+				Code:    CodePreExecutionInvalid,
+				Message: "workflow source is required",
+			},
+		}, nil
+	}
+
+	policy := req.Policy
+	if policy.Mode == "" {
+		policy = workflowpolicy.DefaultEffectivePolicy()
+	}
+
+	vm := goja.New()
+	globals := &runtimeGlobals{vm: vm, policy: policy}
+	if err := globals.bindWorkflowAPI(); err != nil {
+		return Outcome{}, err
+	}
+
+	argsValue, err := argsValueForRequest(vm, req.Args)
+	if err != nil {
+		return Outcome{
+			OK: false,
+			Failure: Failure{
+				Code:    CodePreExecutionInvalid,
+				Message: err.Error(),
+			},
+		}, nil
+	}
+	globals.bindArgs(argsValue)
+	globals.bindMeta(metaFromRequest(req.Metadata))
+
+	interrupt := make(chan struct{}, 1)
+	go watchContext(ctx, vm, interrupt)
+
+	value, runErr := vm.RunString(wrapWorkflowSource(req.Source))
+	close(interrupt)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return canceledOutcome(ctxErr), nil
+	}
+	if runErr != nil {
+		return scriptErrorOutcome(runErr), nil
+	}
+	globals.captureReturn(value)
+
+	terminal, ok := globals.terminalValue()
+	if !ok {
+		return Outcome{
+			OK: false,
+			Failure: Failure{
+				Code:    CodeUnresolvedFinal,
+				Message: "workflow completed without a returned or final value",
+			},
+		}, nil
+	}
+
+	typed, err := typedValueFromGoja(vm, terminal)
+	if err != nil {
+		return Outcome{
+			OK: false,
+			Failure: Failure{
+				Code:    CodeScriptError,
+				Message: err.Error(),
+			},
+		}, nil
+	}
+	if hooks.OnResult != nil {
+		if err := hooks.OnResult(typed); err != nil {
+			return Outcome{}, err
+		}
+	}
+	return Outcome{OK: true, Value: typed}, nil
+}
+
+func argsValueForRequest(vm *goja.Runtime, raw json.RawMessage) (goja.Value, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return vm.ToValue(map[string]any{}), nil
+	}
+	if !json.Valid(raw) {
+		return nil, fmt.Errorf("workflow args must be JSON-compatible")
+	}
+	var decoded any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil, fmt.Errorf("workflow args must be JSON-compatible: %w", err)
+	}
+	return vm.ToValue(decoded), nil
+}
+
+func wrapWorkflowSource(source string) string {
+	return "(function(){\n" + source + "\n})()"
+}
+
+func watchContext(ctx context.Context, vm *goja.Runtime, done <-chan struct{}) {
+	if ctx == nil {
+		return
+	}
+	select {
+	case <-ctx.Done():
+		vm.Interrupt(ctx.Err().Error())
+	case <-done:
+	}
+}
+
+func canceledOutcome(err error) Outcome {
+	message := "workflow runtime canceled"
+	if err != nil && !errors.Is(err, context.Canceled) {
+		message = err.Error()
+	}
+	return Outcome{
+		OK: false,
+		Failure: Failure{
+			Code:    CodeCanceled,
+			Message: message,
+		},
+	}
+}
+
+func scriptErrorOutcome(err error) Outcome {
+	message := err.Error()
+	var interrupted *goja.InterruptedError
+	if errors.As(err, &interrupted) {
+		if strings.Contains(strings.ToLower(message), "context canceled") {
+			return canceledOutcome(context.Canceled)
+		}
+		if strings.Contains(strings.ToLower(message), "deadline exceeded") {
+			return Outcome{
+				OK: false,
+				Failure: Failure{
+					Code:    CodeTimeout,
+					Message: message,
+				},
+			}
+		}
+	}
+	var exception *goja.Exception
+	if errors.As(err, &exception) {
+		if exported := exception.Value().Export(); exported != nil {
+			message = fmt.Sprint(exported)
+		}
+	}
+	return Outcome{
+		OK: false,
+		Failure: Failure{
+			Code:    CodeScriptError,
+			Message: message,
+		},
+	}
+}
+
+// RunWithTimeout executes one workflow with a bounded timeout derived from the context deadline.
+func RunWithTimeout(parent context.Context, timeout time.Duration, req Request, hooks Hooks) (Outcome, error) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, timeout)
+	defer cancel()
+	return Run(ctx, req, hooks)
+}
