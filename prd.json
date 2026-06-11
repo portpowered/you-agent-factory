@@ -1,0 +1,106 @@
+{
+  "project": "Dynamic Workflows Cell Provider Fixtures",
+  "branchName": "dynamic-workflows-cell-provider-fixtures",
+  "description": "Stabilize the shared deterministic Factory Session provider fixtures so downstream CLI, MCP, API, and website cells can start, list, inspect, poll, replay, and control JavaScript Factory Sessions without requiring a real JavaScript runtime.",
+  "context": {
+    "customerAsk": "Use the existing deterministic FakeService and contract fixtures as the mock session-provider path. Add or repair deterministic fixture scenarios for validation failure, async running, sync success, sync timeout, failed recoverable session, dispatch summaries, artifact detail, event reconnect, and lifecycle-control outcomes. FakeService must drive direct tests for async start, sync start, session listing, session reads, results, dispatches, artifacts, event reconnect, lifecycle controls, idempotent replay, and request-id conflict, while avoiding HTTP handler, CLI command, MCP tool, UI component, real JavaScript VM, or generated OpenAPI changes unless required for fixture compilation.",
+    "problem": "Parallel CLI, MCP, API, and website cells need the same session IDs, statuses, result hashes, dispatch IDs, artifact IDs, event cursors, and typed error behavior. Without a stable fixture catalog, each downstream surface either waits for the real runtime or invents local mock data, creating drift and unreliable cross-surface verification.",
+    "solution": "Extend the deterministic Factory Session fake provider and contract fixture catalog so direct package tests can exercise shared JavaScript Factory Session scenarios. Document stable scenario IDs and expected hashes in tests, return typed errors for known failure cases, preserve canonical Factory Session vocabulary, and keep the work scoped to provider fixtures and direct service behavior."
+  },
+  "acceptanceCriteria": [
+    "FakeService direct tests cover async start, sync start, live/persisted/all session listing, get session, final and partial results, dispatch list/detail, artifact list/detail, event reconnect, lifecycle controls, idempotent replay, and request-id conflict behavior.",
+    "Fixture scenario IDs and expected session/result hashes are stable and documented in tests so downstream CLI, MCP, API, and UI cells can reuse them.",
+    "Unknown scenario, unknown session, malformed request, reconnect cursor miss, and lifecycle conflict failures return stable typed errors.",
+    "Fixture-backed scenarios use canonical Factory Session vocabulary and do not introduce DynamicWorkflowRun or workflow run as service/resource nouns.",
+    "No HTTP handler, CLI command, MCP tool, UI component, real JavaScript VM behavior, or generated OpenAPI change is introduced unless strictly required for fixture compilation.",
+    "Quality gate passes: go test ./pkg/factorysessionexecution, scoped vocabulary verification, typecheck, lint where touched, and any focused tests required by touched fixture consumers."
+  ],
+  "userStories": [
+    {
+      "id": "dynamic-workflows-cell-provider-fixtures-001",
+      "title": "Publish Stable Fixture Scenario Identity",
+      "description": "As a downstream cell implementer, I want stable fixture scenario IDs and expected hashes so CLI, MCP, API, and website tests can all target the same JavaScript Factory Session examples.",
+      "acceptanceCriteria": [
+        "The fixture catalog exposes deterministic scenario IDs for validation failure, async running, sync success, sync timeout, failed recoverable session, dispatch inspection, artifact inspection, event reconnect, and lifecycle-control outcomes.",
+        "Direct tests document each reusable scenario ID with the expected session ID, lifecycle status, result status when applicable, and stable result or projection hash.",
+        "Re-loading the same fixture catalog produces the same scenario IDs, session IDs, event ordering, dispatch IDs, artifact IDs, and result hashes.",
+        "Scenario payloads use Factory Session, FactoryEvent, Dispatch, Artifact, and Provider Session vocabulary in public-facing fixture fields.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "dynamic-workflows-cell-provider-fixtures-002",
+      "title": "Exercise Start, List, Read, And Result Behavior",
+      "description": "As a provider consumer, I want the fake Factory Session service to start and inspect deterministic sessions so surface cells can build against the shared service contract before the real runtime exists.",
+      "acceptanceCriteria": [
+        "Async start returns a deterministic running Factory Session with inspection links and a replayable event prefix.",
+        "Sync start returns a deterministic successful terminal result for the success scenario and a stable timeout result for the timeout scenario.",
+        "Listing with live, persisted, and all scopes returns the expected fixture-backed sessions, with duplicate live/persisted identities handled deterministically.",
+        "Get session returns the expected read model for running, completed, timed-out, and failed recoverable sessions.",
+        "Final and partial result reads return the expected status, availability, primary result, artifact inclusion behavior, and stable hash for each supported scenario.",
+        "Replaying the same request ID with the same idempotency tuple returns the original start result instead of creating a new session.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "dynamic-workflows-cell-provider-fixtures-003",
+      "title": "Provide Dispatch, Artifact, And Event Inspection Fixtures",
+      "description": "As an inspection surface implementer, I want deterministic dispatch, artifact, and event fixture behavior so detail views and tools can verify session progress without a real JavaScript runtime.",
+      "acceptanceCriteria": [
+        "List dispatches returns deterministic summaries with stable dispatch IDs, status, timestamps, provider session references when present, and links back to the owning Factory Session.",
+        "Get dispatch returns deterministic detail for known dispatch IDs and a stable typed error for unknown dispatch IDs.",
+        "List artifacts returns deterministic summaries with stable artifact IDs, names, media or content metadata, retrieval refs, and ownership by Factory Session.",
+        "Get artifact returns deterministic detail for known artifact IDs and a stable typed error for unknown artifact IDs.",
+        "Event reads return ordered canonical Factory Session events for running, terminal, dispatch, artifact, and awaiting-approval scenarios.",
+        "Event reconnect after a known cursor returns only later events, while a missing cursor returns the stable reconnect-cursor typed error.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "dynamic-workflows-cell-provider-fixtures-004",
+      "title": "Model Lifecycle Controls And Idempotency Outcomes",
+      "description": "As a lifecycle-control consumer, I want the fake provider to apply pause, resume, cancel, terminate, approve, and retry-dispatch outcomes deterministically so downstream cells can verify controls before the real backend is complete.",
+      "acceptanceCriteria": [
+        "Pause, resume, cancel, terminate, approve, and retry-dispatch return deterministic accepted, no-op, invalid-state, terminal-session, or conflict outcomes according to the fixture scenario state.",
+        "Accepted controls return stable post-control inspection links for session, result, dispatch, artifact, or event reads when those resources are available.",
+        "Lifecycle controls do not mutate unrelated fixture scenarios or hidden global state; repeating the same fixture setup produces the same outcomes.",
+        "Control request idempotency returns the original lifecycle outcome for an equivalent replay and returns a stable conflict for the same request ID with a different idempotency tuple.",
+        "Lifecycle-control tests cover at least one recoverable failed session, one terminal session, one awaiting-approval session, and one retry-dispatch path.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "dynamic-workflows-cell-provider-fixtures-005",
+      "title": "Stabilize Typed Failures And Scope Boundaries",
+      "description": "As a maintainer, I want fixture failures and scope boundaries to be explicit so downstream cells receive predictable errors without this cell widening into transport or UI work.",
+      "acceptanceCriteria": [
+        "Unknown scenario, unknown session, malformed start or control request, unknown dispatch, unknown artifact, reconnect cursor miss, lifecycle conflict, and request-id conflict return stable typed errors.",
+        "Error values preserve enough structured context for API, CLI, MCP, and UI adapters to map them later without parsing free-form strings.",
+        "Malformed request tests prove validation fails before fixture state changes or session creation.",
+        "The fixture provider remains directly testable without HTTP server startup, CLI command execution, MCP host wiring, UI rendering, generated OpenAPI regeneration, or real JavaScript VM execution.",
+        "Public-facing fixture names, error names, event names, and test descriptions avoid DynamicWorkflowRun and workflow run as canonical resource terminology.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
