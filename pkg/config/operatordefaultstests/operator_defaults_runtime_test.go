@@ -1,4 +1,4 @@
-package config
+package operatordefaultstests
 
 import (
 	"encoding/json"
@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -20,7 +21,7 @@ func TestApplyOperatorDefaultsToLoadedConfig_FillsOmittedModelWorkerFields(t *te
 		}},
 	})
 
-	if err := ApplyOperatorDefaultsToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
+	if err := config.ApplyOperatorDefaultsToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
 		WorkerModelProvider: "CODEX",
 		WorkerModel:         "gpt-5-codex",
 	}); err != nil {
@@ -50,7 +51,7 @@ func TestApplyOperatorDefaultsToLoadedConfig_PreservesAuthoredModelWorkerFields(
 		}},
 	})
 
-	if err := ApplyOperatorDefaultsToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
+	if err := config.ApplyOperatorDefaultsToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
 		WorkerModelProvider: "CODEX",
 		WorkerModel:         "gpt-5-codex",
 	}); err != nil {
@@ -71,7 +72,7 @@ func TestApplyOperatorDefaultsToLoadedConfig_PreservesAuthoredModelWorkerFields(
 
 func TestApplyOperatorDefaultsToLoadedConfig_SkipsScriptAndHostedWorkers(t *testing.T) {
 	factoryDir := t.TempDir()
-	loaded, err := NewLoadedFactoryConfig(factoryDir, &interfaces.FactoryConfig{
+	loaded, err := config.NewLoadedFactoryConfig(factoryDir, &interfaces.FactoryConfig{
 		Workers: []interfaces.WorkerConfig{
 			{Name: "script-worker", Type: interfaces.WorkerTypeScript, Body: "Run scripts."},
 			{Name: "hosted-worker", Type: interfaces.WorkerTypeHosted, Provider: interfaces.HostedWorkerProviderLinear, Body: "Poll linear."},
@@ -81,7 +82,7 @@ func TestApplyOperatorDefaultsToLoadedConfig_SkipsScriptAndHostedWorkers(t *test
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	if err = ApplyOperatorDefaultsToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
+	if err = config.ApplyOperatorDefaultsToLoadedConfig(loaded, operatorconfig.ResolvedDefaults{
 		WorkerModelProvider: "CODEX",
 		WorkerModel:         "gpt-5-codex",
 	}); err != nil {
@@ -104,7 +105,7 @@ func TestApplyOperatorDefaultsToLoadedConfig_SkipsScriptAndHostedWorkers(t *test
 
 func TestValidateModelWorkerRuntimeProviders_RejectsUnsupportedProvider(t *testing.T) {
 	factoryDir := t.TempDir()
-	loaded, err := NewLoadedFactoryConfig(factoryDir, &interfaces.FactoryConfig{
+	loaded, err := config.NewLoadedFactoryConfig(factoryDir, &interfaces.FactoryConfig{
 		Workers: []interfaces.WorkerConfig{{
 			Name:          "executor",
 			Type:          interfaces.WorkerTypeModel,
@@ -116,7 +117,7 @@ func TestValidateModelWorkerRuntimeProviders_RejectsUnsupportedProvider(t *testi
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	err = ValidateModelWorkerRuntimeProviders(loaded)
+	err = config.ValidateModelWorkerRuntimeProviders(loaded)
 	if err == nil {
 		t.Fatal("expected unsupported provider validation error")
 	}
@@ -125,13 +126,13 @@ func TestValidateModelWorkerRuntimeProviders_RejectsUnsupportedProvider(t *testi
 	}
 }
 
-func newOperatorDefaultsRuntimeFixture(t *testing.T, factory map[string]any) *LoadedFactoryConfig {
+func newOperatorDefaultsRuntimeFixture(t *testing.T, factory map[string]any) *config.LoadedFactoryConfig {
 	t.Helper()
 
 	factoryDir := t.TempDir()
 	writeOperatorDefaultsFactoryJSON(t, factoryDir, mergeOperatorDefaultsFactoryFixture(factory))
 
-	loaded, err := LoadRuntimeConfig(factoryDir, nil)
+	loaded, err := config.LoadRuntimeConfig(factoryDir, nil)
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
