@@ -157,6 +157,7 @@ func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecution
 		Dispatch:                     interfaces.CloneWorkDispatch(request.Dispatch),
 		WorkerType:                   request.WorkerType,
 		WorkstationType:              inferenceWorkstationType(request),
+		ModelProviderSelectionSource: request.ModelProviderSelectionSource,
 		RunnerID:                     request.RunnerID,
 		ProjectID:                    request.ProjectID,
 		InputTokens:                  cloneRawInputTokens(request.InputTokens),
@@ -173,10 +174,7 @@ func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecution
 	}
 	if workerDef != nil {
 		req.Model = workerDef.Model
-		req.ModelProvider = modelProviderForExecution(workerDef.ModelProvider, interfaces.ResolvedRunnerSelection{
-			RunnerID: request.RunnerID,
-			Source:   request.RunnerSelectionSource,
-		})
+		req.ModelProvider = resolvedExecutionModelProvider(request, workerDef.ModelProvider)
 		req.ModelLocality = workerDef.ModelLocality
 		req.SessionID = workerDef.SessionID
 		if workerDef.SessionID != "" {
@@ -197,33 +195,17 @@ func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecution
 	return req
 }
 
-func modelProviderForExecution(workerModelProvider string, selection interfaces.ResolvedRunnerSelection) string {
-	if selection.Source == interfaces.RunnerSelectionSourceWorkstation || selection.Source == interfaces.RunnerSelectionSourceFactory {
-		if provider := modelProviderForRunnerID(selection.RunnerID); provider != "" {
-			return provider
-		}
+func resolvedExecutionModelProvider(request interfaces.WorkstationExecutionRequest, workerModelProvider string) string {
+	if provider := strings.TrimSpace(request.ModelProvider); provider != "" {
+		return provider
 	}
 	if workerModelProvider != "" {
 		return workerModelProvider
 	}
-	return modelProviderForRunnerID(selection.RunnerID)
-}
-
-func modelProviderForRunnerID(runnerID string) string {
-	switch interfaces.NormalizeRunnerID(runnerID) {
-	case interfaces.RunnerIDCodex:
-		return string(interfaces.ModelProviderCodex)
-	case interfaces.RunnerIDGemini:
-		return string(interfaces.ModelProviderGemini)
-	case interfaces.RunnerIDKiro:
-		return string(interfaces.ModelProviderKiro)
-	case interfaces.RunnerIDCursorCLI:
-		return string(interfaces.ModelProviderCursor)
-	case interfaces.RunnerIDOpenCode:
-		return string(interfaces.ModelProviderOpenCode)
-	default:
-		return ""
+	if provider, ok := interfaces.ModelProviderFromRunnerID(request.RunnerID); ok {
+		return string(provider)
 	}
+	return string(interfaces.OperatorDefaultModelProvider)
 }
 
 func inferenceWorkstationType(request interfaces.WorkstationExecutionRequest) string {
@@ -370,7 +352,7 @@ func shouldRequireWorktreeRunnerCapability(request interfaces.WorkstationExecuti
 	if request.Worktree == "" {
 		return false
 	}
-	if request.WorkingDirectory != "" && interfaces.NormalizeRunnerID(request.RunnerID) == interfaces.RunnerIDCodex {
+	if request.WorkingDirectory != "" && strings.TrimSpace(request.ModelProvider) == string(interfaces.ModelProviderCodex) {
 		return false
 	}
 	return true

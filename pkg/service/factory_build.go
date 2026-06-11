@@ -352,9 +352,9 @@ func buildRuntimeBundle(
 		return nil, fmt.Errorf("map factory config: %w", err)
 	}
 
-	effectiveFactoryRunnerID := effectiveFactoryRunnerID(input.cfg.RunnerID, input.loadedFactoryCfg.FactoryConfig())
+	effectiveFactoryModelProvider := effectiveFactoryModelProvider(input.cfg.RunnerID, input.loadedFactoryCfg.FactoryConfig())
 	eventHistory := factoryevents.NewFactoryEventHistory(net, input.clock.Now, input.loadedFactoryCfg)
-	eventHistory.SetFactoryRunnerOverride(effectiveFactoryRunnerID)
+	eventHistory.SetFactoryRunnerOverride(effectiveFactoryModelProvider)
 	if editableFactory, err := editableEventFactorySnapshot(input); err != nil {
 		logger.Warn("editable factory event snapshot unavailable; using runtime-thin factory event payload", zap.Error(err))
 	} else {
@@ -364,7 +364,7 @@ func buildRuntimeBundle(
 	if localModels.manager == nil {
 		localModels = newRuntimeLocalModelDependencies(input.cfg)
 	}
-	workerOpts, err := loadRuntimeBundleWorkerOptions(input, logger, effectiveFactoryRunnerID, eventHistory, localModels)
+	workerOpts, err := loadRuntimeBundleWorkerOptions(input, logger, effectiveFactoryModelProvider, eventHistory, localModels)
 	if err != nil {
 		return nil, err
 	}
@@ -376,14 +376,14 @@ func buildRuntimeBundle(
 func loadRuntimeBundleWorkerOptions(
 	input runtimeBundleBuildInput,
 	logger *zap.Logger,
-	effectiveFactoryRunnerID string,
+	effectiveFactoryModelProvider string,
 	eventHistory *factoryevents.FactoryEventHistory,
 	localModels localModelDomain,
 ) ([]factory.FactoryOption, error) {
 	workerOpts, err := loadWorkersFromConfig(
 		input.loadedFactoryCfg.FactoryDir(),
 		input.loadedFactoryCfg.FactoryConfig(),
-		effectiveFactoryRunnerID,
+		effectiveFactoryModelProvider,
 		input.loadedFactoryCfg,
 		runtimeWorkflowContext(input.loadedFactoryCfg.FactoryConfig(), input.sessionID),
 		logging.NewZapLogger(logger, input.cfg.Verbose),
@@ -940,9 +940,9 @@ func dirExists(path string) bool {
 	return err == nil && info.IsDir()
 }
 
-func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryConfig) string {
-	if runner := interfaces.NormalizeRunnerID(override); runner != "" {
-		return runner
+func effectiveFactoryModelProvider(override string, factoryCfg *interfaces.FactoryConfig) string {
+	if override = strings.TrimSpace(override); override != "" {
+		return override
 	}
 	if factoryCfg == nil {
 		return ""
@@ -955,7 +955,7 @@ func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryCon
 func loadWorkersFromConfig(
 	factoryDir string,
 	factoryCfg *interfaces.FactoryConfig,
-	factoryRunnerID string,
+	factoryModelProvider string,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,
@@ -975,10 +975,10 @@ func loadWorkersFromConfig(
 	if factoryCfg == nil {
 		return nil, fmt.Errorf("factory config is required")
 	}
-	preflight := runnerSelectionPreflight{
+	preflight := modelProviderSelectionPreflight{
 		skipCommandAvailability: providerOverride != nil || providerCommandRunner != nil || skipBuiltInRunnerPrerequisiteValidation,
 	}
-	if err := validateConfiguredWorkstationRunners(factoryCfg, factoryRunnerID, runtimeCfg, preflight); err != nil {
+	if err := validateConfiguredWorkstationRunners(factoryCfg, factoryModelProvider, runtimeCfg, preflight); err != nil {
 		return nil, err
 	}
 	for _, workerCfg := range factoryCfg.Workers {
@@ -989,7 +989,7 @@ func loadWorkersFromConfig(
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workerexecutor.NoopExecutor{}))
 			continue
 		}
-		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, workflowContext, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, now, modelResources, localModels)
+		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryModelProvider, workflowContext, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, now, modelResources, localModels)
 		if executor != nil {
 			logger.Info("loaded worker", "worker", workerCfg.Name)
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, executor))
@@ -1009,7 +1009,7 @@ func loadWorkersFromConfig(
 		logger.Info("loading workerless logical workstation", "workstation", workstationCfg.Name)
 		opts = append(opts, factory.WithWorkerExecutor(workstationCfg.Name, &workerexecutor.WorkstationExecutor{
 			RuntimeConfig:   runtimeCfg,
-			DefaultRunnerID: factoryRunnerID,
+			DefaultFactoryModelProvider: factoryModelProvider,
 			WorkflowContext: workflowContext,
 			Renderer:        &workerprompting.DefaultPromptRenderer{},
 			Logger:          logger,
@@ -1020,15 +1020,15 @@ func loadWorkersFromConfig(
 
 func configuredWorkstationExecutor(
 	runtimeCfg interfaces.RuntimeConfigLookup,
-	factoryRunnerID string,
+	factoryModelProvider string,
 	workflowContext *factory_context.FactoryContext,
 	inner workers.WorkstationRequestExecutor,
 	logger logging.Logger,
 ) *workerexecutor.WorkstationExecutor {
 	return &workerexecutor.WorkstationExecutor{
-		RuntimeConfig:   runtimeCfg,
-		DefaultRunnerID: factoryRunnerID,
-		WorkflowContext: workflowContext,
+		RuntimeConfig:               runtimeCfg,
+		DefaultFactoryModelProvider: factoryModelProvider,
+		WorkflowContext:             workflowContext,
 		Executor:        inner,
 		Renderer:        &workerprompting.DefaultPromptRenderer{},
 		Logger:          logger,
@@ -1041,7 +1041,7 @@ func buildWorkerExecutor(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	factoryCfg *interfaces.FactoryConfig,
 	workerName string,
-	factoryRunnerID string,
+	factoryModelProvider string,
 	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,
 	providerOverride workerprovider.Provider,
@@ -1098,9 +1098,9 @@ func buildWorkerExecutor(
 		runner = modelResources.WrapRunner(runner, factoryCfg, def)
 		runner = newRecordingModelRunner(runner, factoryCfg, def, modelRecorder, now)
 		agentExec := workerexecutor.NewAgentExecutorWithRunner(runtimeCfg, runner, agentOpts...)
-		return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, agentExec, logger)
+		return configuredWorkstationExecutor(runtimeCfg, factoryModelProvider, workflowContext, agentExec, logger)
 	case interfaces.WorkstationTypeLogical:
-		return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, nil, logger)
+		return configuredWorkstationExecutor(runtimeCfg, factoryModelProvider, workflowContext, nil, logger)
 	case interfaces.WorkerTypeScript:
 		var scriptOpts []workerexecutor.ScriptExecutorOption
 		if runtimeCfg != nil && runtimeCfg.FactoryDir() != "" {
@@ -1115,17 +1115,17 @@ func buildWorkerExecutor(
 		} else {
 			scriptExec = workerexecutor.NewScriptExecutor(def, logger, scriptOpts...)
 		}
-		return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, scriptExec, logger)
+		return configuredWorkstationExecutor(runtimeCfg, factoryModelProvider, workflowContext, scriptExec, logger)
 	default:
 		return nil
 	}
 }
 
-func validateConfiguredWorkstationRunners(factoryCfg *interfaces.FactoryConfig, factoryRunnerID string, runtimeCfg interfaces.RuntimeConfigLookup, preflight runnerSelectionPreflight) error {
+func validateConfiguredWorkstationRunners(factoryCfg *interfaces.FactoryConfig, factoryModelProvider string, runtimeCfg interfaces.RuntimeConfigLookup, preflight modelProviderSelectionPreflight) error {
 	if factoryCfg == nil {
 		return nil
 	}
-	if err := interfaces.ValidateFactoryModelProviderSelection(factoryRunnerID); err != nil {
+	if err := interfaces.ValidateFactoryModelProviderSelection(factoryModelProvider); err != nil {
 		return err
 	}
 	for i, workstation := range factoryCfg.Workstations {
@@ -1143,43 +1143,46 @@ func validateConfiguredWorkstationRunners(factoryCfg *interfaces.FactoryConfig, 
 		if err := interfaces.ValidateWorkstationModelProviderSelection(workstation.ModelProvider); err != nil {
 			return fmt.Errorf("workstations[%d](%s).modelProvider: %w", i, workstation.Name, err)
 		}
-		selection := interfaces.ResolveRunnerSelection(workstation.ModelProvider, factoryRunnerID, workerModelProvider)
+		selection := interfaces.ResolveModelProviderSelection(workstation.ModelProvider, factoryModelProvider, workerModelProvider)
 		workerOpenCodeAgent := ""
 		if worker != nil {
 			workerOpenCodeAgent = worker.OpenCodeAgent
 		}
-		if err := interfaces.ValidateOpenCodeAgentForRunnerSelection(workstation.OpenCodeAgent, workerOpenCodeAgent, selection); err != nil {
+		if err := interfaces.ValidateOpenCodeAgentForModelProviderSelection(workstation.OpenCodeAgent, workerOpenCodeAgent, selection); err != nil {
 			return fmt.Errorf("workstations[%d](%s).openCodeAgent: %w", i, workstation.Name, err)
 		}
-		if !runnerSelectionRequiresValidation(selection) {
+		if !modelProviderSelectionRequiresValidation(selection) {
 			continue
 		}
-		if err := validateResolvedRunnerSelection(selection, preflight); err != nil {
+		if err := validateResolvedModelProviderSelection(selection, preflight); err != nil {
 			return fmt.Errorf("workstations[%d](%s).modelProvider: %w", i, workstation.Name, err)
 		}
 	}
 	return nil
 }
 
-type runnerSelectionPreflight struct {
+type modelProviderSelectionPreflight struct {
 	skipCommandAvailability bool
 }
 
-func runnerSelectionRequiresValidation(selection interfaces.ResolvedRunnerSelection) bool {
-	return selection.Source != interfaces.RunnerSelectionSourceDefault
+func modelProviderSelectionRequiresValidation(selection interfaces.ResolvedModelProviderSelection) bool {
+	return selection.Source != interfaces.ModelProviderSelectionSourceOperatorDefault
 }
 
-func validateResolvedRunnerSelection(selection interfaces.ResolvedRunnerSelection, preflight runnerSelectionPreflight) error {
-	if _, ok := interfaces.BuiltInRunnerMetadata(selection.RunnerID); !ok {
-		return fmt.Errorf("unknown modelProvider %q", selection.RunnerID)
+func validateResolvedModelProviderSelection(selection interfaces.ResolvedModelProviderSelection, preflight modelProviderSelectionPreflight) error {
+	if !interfaces.IsSupportedModelProvider(selection.Provider) {
+		return fmt.Errorf("unknown modelProvider %q", selection.Provider)
 	}
-	if status, ok := workers.BuiltInRunnerStatus(selection.RunnerID); ok && !status.Available {
-		return fmt.Errorf("%s", status.UnavailableReason)
-	}
-	if !preflight.skipCommandAvailability {
-		if err := workers.ValidateBuiltInRunnerPrerequisites(selection.RunnerID); err != nil {
-			return err
+	if status, ok := workers.BuiltInModelProviderStatus(string(selection.Provider)); ok {
+		if !status.Available {
+			return fmt.Errorf("%s", status.UnavailableReason)
 		}
+		if !preflight.skipCommandAvailability {
+			if err := workers.ValidateBuiltInModelProviderPrerequisites(string(selection.Provider)); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 	return nil
 }

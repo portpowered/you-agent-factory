@@ -754,22 +754,37 @@ func ResolveOpenCodeAgent(workstationAgent, workerAgent string) string {
 
 // ValidateOpenCodeAgentForRunnerSelection reports a configuration error when a
 // non-empty OpenCode agent profile is configured for a dispatch that will not
-// use the OpenCode runner.
+// use the OpenCode provider. It delegates to the provider-native validator.
 func ValidateOpenCodeAgentForRunnerSelection(workstationAgent, workerAgent string, selection ResolvedRunnerSelection) error {
-	agent := ResolveOpenCodeAgent(workstationAgent, workerAgent)
-	if agent == "" {
-		return nil
-	}
-	runnerID := NormalizeRunnerID(selection.RunnerID)
-	if runnerID == RunnerIDOpenCode {
-		return nil
-	}
-	return fmt.Errorf(
-		"openCodeAgent %q requires runner %q, resolved runner %q",
-		agent,
-		RunnerIDOpenCode,
-		runnerID,
+	return ValidateOpenCodeAgentForModelProviderSelection(
+		workstationAgent,
+		workerAgent,
+		resolvedModelProviderSelectionFromRunnerSelection(selection),
 	)
+}
+
+func resolvedModelProviderSelectionFromRunnerSelection(selection ResolvedRunnerSelection) ResolvedModelProviderSelection {
+	provider := OperatorDefaultModelProvider
+	if mapped, ok := ModelProviderFromRunnerID(selection.RunnerID); ok {
+		provider = mapped
+	}
+	return ResolvedModelProviderSelection{
+		Provider: provider,
+		Source:   modelProviderSelectionSourceFromRunnerSelectionSource(selection.Source),
+	}
+}
+
+func modelProviderSelectionSourceFromRunnerSelectionSource(source RunnerSelectionSource) ModelProviderSelectionSource {
+	switch source {
+	case RunnerSelectionSourceWorkstation:
+		return ModelProviderSelectionSourceWorkstation
+	case RunnerSelectionSourceFactory:
+		return ModelProviderSelectionSourceFactory
+	case RunnerSelectionSourceLegacyProvider:
+		return ModelProviderSelectionSourceWorker
+	default:
+		return ModelProviderSelectionSourceOperatorDefault
+	}
 }
 
 // RunnerIDFromInternalModelProvider maps a canonical internal model provider command
@@ -810,15 +825,10 @@ func ValidateFactoryModelProviderSelection(selection string) error {
 }
 
 func resolveFactoryModelProviderSelection(selection string) string {
-	selection = strings.TrimSpace(selection)
-	if selection == "" || selection == FactoryModelProviderDefault {
-		return ""
-	}
-	if runner := NormalizeRunnerID(selection); IsBuiltInRunnerID(runner) {
-		return runner
-	}
-	if runner, ok := RunnerIDFromInternalModelProvider(selection); ok {
-		return runner
+	if provider := resolveConcreteModelProviderFromSelection(selection); provider != "" {
+		if runnerID, ok := RunnerIDFromInternalModelProvider(string(provider)); ok {
+			return runnerID
+		}
 	}
 	return ""
 }
@@ -829,20 +839,12 @@ func ValidateWorkstationModelProviderSelection(selection string) error {
 	return ValidateFactoryModelProviderSelection(selection)
 }
 
-// ResolveRunnerSelection applies the v1 precedence rules for backend runtime
-// runner choice: workstation override, then factory override, then legacy
-// worker modelProvider compatibility, then the codex default.
+// ResolveRunnerSelection maps the canonical model-provider selection into the
+// legacy runner metadata shape retained for replay and API compatibility.
 func ResolveRunnerSelection(workstationModelProvider, factoryModelProvider, workerModelProvider string) ResolvedRunnerSelection {
-	if runner := resolveFactoryModelProviderSelection(workstationModelProvider); runner != "" {
-		return ResolvedRunnerSelection{RunnerID: runner, Source: RunnerSelectionSourceWorkstation}
-	}
-	if runner := resolveFactoryModelProviderSelection(factoryModelProvider); runner != "" {
-		return ResolvedRunnerSelection{RunnerID: runner, Source: RunnerSelectionSourceFactory}
-	}
-	if runner := NormalizeRunnerID(workerModelProvider); IsBuiltInRunnerID(runner) {
-		return ResolvedRunnerSelection{RunnerID: runner, Source: RunnerSelectionSourceLegacyProvider}
-	}
-	return ResolvedRunnerSelection{RunnerID: RunnerIDCodex, Source: RunnerSelectionSourceDefault}
+	return resolvedRunnerSelectionFromModelProviderSelection(
+		ResolveModelProviderSelection(workstationModelProvider, factoryModelProvider, workerModelProvider),
+	)
 }
 
 // NormalizeRunnerID trims operator-supplied runner IDs into the canonical

@@ -673,8 +673,14 @@ func TestResolveRunnerSelection(t *testing.T) {
 			wantSource:    RunnerSelectionSourceLegacyProvider,
 		},
 		{
-			name:          "DefaultFallsBackToCodex",
+			name:          "WorkerClaudeMapsToLegacyProviderSource",
 			modelProvider: "claude",
+			wantRunner:    "",
+			wantSource:    RunnerSelectionSourceLegacyProvider,
+		},
+		{
+			name:          "OperatorDefaultFallsBackToCodex",
+			modelProvider: "unknown-provider",
 			wantRunner:    RunnerIDCodex,
 			wantSource:    RunnerSelectionSourceDefault,
 		},

@@ -45,6 +45,8 @@ type WorkstationExecutionRequest struct {
 	Dispatch                 WorkDispatch                    `json:"dispatch"`
 	WorkerType               string                          `json:"worker_type,omitempty"`
 	WorkstationType          string                          `json:"workstation_type,omitempty"`
+	ModelProvider              string                `json:"model_provider,omitempty"`
+	ModelProviderSelectionSource ModelProviderSelectionSource `json:"model_provider_selection_source,omitempty"`
 	RunnerID                 string                          `json:"runner_id,omitempty"`
 	RunnerSelectionSource    RunnerSelectionSource           `json:"runner_selection_source,omitempty"`
 	ProjectID                string                          `json:"project_id,omitempty"`
@@ -82,6 +84,7 @@ type ProviderInferenceRequest struct {
 	WorkingDirectory             string                          `json:"working_directory,omitempty"`
 	Model                        string                          `json:"model,omitempty"`
 	ModelProvider                string                          `json:"model_provider,omitempty"`
+	ModelProviderSelectionSource ModelProviderSelectionSource    `json:"model_provider_selection_source,omitempty"`
 	ModelLocality                string                          `json:"model_locality,omitempty"`
 	SessionID                    string                          `json:"session_id,omitempty"`
 	OpenCodeAgent                string                          `json:"open_code_agent,omitempty"`

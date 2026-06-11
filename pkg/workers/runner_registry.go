@@ -3,6 +3,7 @@ package workers
 import (
 	"fmt"
 	"os/exec"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -11,6 +12,14 @@ import (
 // current build before dispatch starts.
 type RunnerStatus struct {
 	Metadata          interfaces.RunnerMetadata
+	Available         bool
+	UnavailableReason string
+}
+
+// ModelProviderStatus reports whether a built-in model provider can be selected
+// safely in the current build before dispatch starts.
+type ModelProviderStatus struct {
+	Metadata          interfaces.ModelProviderMetadata
 	Available         bool
 	UnavailableReason string
 }
@@ -48,6 +57,38 @@ func BuiltInRunnerStatus(id string) (RunnerStatus, bool) {
 		return RunnerStatus{}, false
 	}
 	return status, true
+}
+
+// BuiltInModelProviderStatus reports the build-local availability of one
+// canonical model provider command.
+func BuiltInModelProviderStatus(provider string) (ModelProviderStatus, bool) {
+	metadata, ok := interfaces.BuiltInModelProviderMetadata(interfaces.ModelProvider(provider))
+	if !ok {
+		return ModelProviderStatus{}, false
+	}
+	runnerID, ok := interfaces.RunnerIDFromInternalModelProvider(provider)
+	if !ok {
+		return ModelProviderStatus{}, false
+	}
+	status, ok := BuiltInRunnerStatus(runnerID)
+	if !ok {
+		return ModelProviderStatus{}, false
+	}
+	return ModelProviderStatus{
+		Metadata:          metadata,
+		Available:         status.Available,
+		UnavailableReason: status.UnavailableReason,
+	}, true
+}
+
+// ValidateBuiltInModelProviderPrerequisites checks PATH-visible prerequisites
+// for one built-in model provider before the runtime attempts dispatch.
+func ValidateBuiltInModelProviderPrerequisites(provider string) error {
+	runnerID, ok := interfaces.RunnerIDFromInternalModelProvider(provider)
+	if !ok {
+		return fmt.Errorf("unknown modelProvider %q", strings.TrimSpace(provider))
+	}
+	return ValidateBuiltInRunnerPrerequisites(runnerID)
 }
 
 // ValidateBuiltInRunnerPrerequisites checks PATH-visible prerequisites for one

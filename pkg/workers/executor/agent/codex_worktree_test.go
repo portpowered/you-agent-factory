@@ -12,6 +12,9 @@ import (
 func withAgentRunnerID(runnerID string) func(*interfaces.WorkstationExecutionRequest) {
 	return func(req *interfaces.WorkstationExecutionRequest) {
 		req.RunnerID = runnerID
+		if provider, ok := interfaces.ModelProviderFromRunnerID(runnerID); ok {
+			req.ModelProvider = string(provider)
+		}
 	}
 }
 

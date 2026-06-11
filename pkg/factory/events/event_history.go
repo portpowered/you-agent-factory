@@ -611,9 +611,17 @@ func (h *FactoryEventHistory) resolvedRunnerSelectionForDispatch(dispatch interf
 	if h == nil {
 		return interfaces.ResolvedRunnerSelection{}
 	}
-	workstationRunner, workerModelProvider := h.runnerSelectionInputsForDispatch(dispatch)
-	factoryRunner := h.factoryRunnerID()
-	return interfaces.ResolveRunnerSelection(workstationRunner, factoryRunner, workerModelProvider)
+	workstationModelProvider, workerModelProvider := h.modelProviderSelectionInputsForDispatch(dispatch)
+	factoryModelProvider := h.factoryModelProviderOverride()
+	return interfaces.ResolveRunnerSelection(workstationModelProvider, factoryModelProvider, workerModelProvider)
+}
+
+func (h *FactoryEventHistory) modelProviderSelectionInputsForDispatch(dispatch interfaces.WorkDispatch) (string, string) {
+	return h.runnerSelectionInputsForDispatch(dispatch)
+}
+
+func (h *FactoryEventHistory) factoryModelProviderOverride() string {
+	return h.factoryRunnerID()
 }
 
 func (h *FactoryEventHistory) runnerSelectionInputsForDispatch(dispatch interfaces.WorkDispatch) (string, string) {

@@ -46,7 +46,7 @@ type OutputParser interface {
 // For LOGICAL_MOVE:      pass-through input colors → WorkResult (no worker call)
 type WorkstationExecutor struct {
 	RuntimeConfig   interfaces.RuntimeConfigLookup
-	DefaultRunnerID string
+	DefaultFactoryModelProvider string
 	WorkflowContext *factory_context.FactoryContext
 	Executor        WorkstationRequestExecutor
 	Renderer        workerprompting.PromptRenderer
@@ -252,8 +252,8 @@ func (we *WorkstationExecutor) applyCodexFactoryWorktreePreparation(
 	requestContext *resolvedWorkstationExecutionContext,
 	start time.Time,
 ) *interfaces.WorkResult {
-	selection := interfaces.ResolveRunnerSelection(workstationDef.ModelProvider, we.DefaultRunnerID, workerDef.ModelProvider)
-	executionProvider := modelProviderForExecution(workerDef.ModelProvider, selection)
+	selection := interfaces.ResolveModelProviderSelection(workstationDef.ModelProvider, we.DefaultFactoryModelProvider, workerDef.ModelProvider)
+	executionProvider := string(selection.Provider)
 	if !worktree.ShouldPrepareFactoryWorktreeForCodex(executionProvider, workstationDef.WorkingDirectory, requestContext.Worktree) {
 		return nil
 	}
@@ -362,13 +362,16 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfa
 		return interfaces.WorkstationExecutionRequest{}, &failed
 	}
 
-	selection := interfaces.ResolveRunnerSelection(workstationDef.ModelProvider, we.DefaultRunnerID, workerDef.ModelProvider)
+	selection := interfaces.ResolveModelProviderSelection(workstationDef.ModelProvider, we.DefaultFactoryModelProvider, workerDef.ModelProvider)
+	legacySelection := interfaces.ResolveRunnerSelection(workstationDef.ModelProvider, we.DefaultFactoryModelProvider, workerDef.ModelProvider)
 	return interfaces.WorkstationExecutionRequest{
-		Dispatch:                 interfaces.CloneWorkDispatch(dispatch),
-		WorkerType:               workerName,
-		WorkstationType:          dispatch.WorkstationName,
-		RunnerID:                 selection.RunnerID,
-		RunnerSelectionSource:    selection.Source,
+		Dispatch:                     interfaces.CloneWorkDispatch(dispatch),
+		WorkerType:                   workerName,
+		WorkstationType:              dispatch.WorkstationName,
+		ModelProvider:                string(selection.Provider),
+		ModelProviderSelectionSource: selection.Source,
+		RunnerID:                     legacySelection.RunnerID,
+		RunnerSelectionSource:        legacySelection.Source,
 		ProjectID:                requestContext.ProjectID,
 		FactorySessionID:         requestContext.SessionID,
 		InputTokens:              InputTokens(requestContext.InputTokens...),

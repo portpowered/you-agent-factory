@@ -70,6 +70,35 @@ func TestValidateBuiltInRunnerPrerequisites_UsesExpectedCommand(t *testing.T) {
 	}
 }
 
+func TestValidateBuiltInModelProviderPrerequisites_UsesCanonicalProviderCommands(t *testing.T) {
+	originalLookPath := lookPath
+	defer func() {
+		lookPath = originalLookPath
+	}()
+
+	var commands []string
+	lookPath = func(file string) (string, error) {
+		commands = append(commands, file)
+		return "/usr/bin/" + file, nil
+	}
+
+	for _, provider := range []string{
+		string(interfaces.ModelProviderCodex),
+		string(interfaces.ModelProviderGemini),
+		string(interfaces.ModelProviderKiro),
+		string(interfaces.ModelProviderCursor),
+		string(interfaces.ModelProviderOpenCode),
+	} {
+		if err := ValidateBuiltInModelProviderPrerequisites(provider); err != nil {
+			t.Fatalf("ValidateBuiltInModelProviderPrerequisites(%q): %v", provider, err)
+		}
+	}
+
+	if len(commands) != 5 {
+		t.Fatalf("lookPath calls = %#v, want five provider commands", commands)
+	}
+}
+
 func TestValidateBuiltInRunnerPrerequisites_ReportsMissingBinary(t *testing.T) {
 	originalLookPath := lookPath
 	defer func() {

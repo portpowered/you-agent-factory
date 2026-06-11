@@ -37,6 +37,8 @@ func TestAgentExecutor_ForwardsOpenCodeAgentOnOpenCodeDispatch(t *testing.T) {
 		},
 		withAgentPrompts("system", "user"),
 		func(req *interfaces.WorkstationExecutionRequest) {
+			req.ModelProvider = string(interfaces.ModelProviderOpenCode)
+			req.ModelProviderSelectionSource = interfaces.ModelProviderSelectionSourceWorkstation
 			req.RunnerID = interfaces.RunnerIDOpenCode
 			req.RunnerSelectionSource = interfaces.RunnerSelectionSourceWorkstation
 		},

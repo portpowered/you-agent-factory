@@ -462,7 +462,7 @@ func TestRunnerSelectionValidation_AcceptsLegacyBuiltInRunnerDefault(t *testing.
 		ModelProvider: interfaces.RunnerIDCodex,
 	})
 
-	if err := validateConfiguredWorkstationRunners(cfg, "", runtimeCfg, runnerSelectionPreflight{skipCommandAvailability: true}); err != nil {
+	if err := validateConfiguredWorkstationRunners(cfg, "", runtimeCfg, modelProviderSelectionPreflight{skipCommandAvailability: true}); err != nil {
 		t.Fatalf("validateConfiguredWorkstationRunners: %v", err)
 	}
 }
@@ -479,7 +479,7 @@ func TestRunnerSelectionValidation_SkipsDefaultFallbackValidation(t *testing.T) 
 		ModelProvider: "claude",
 	})
 
-	if err := validateConfiguredWorkstationRunners(cfg, "", runtimeCfg, runnerSelectionPreflight{}); err != nil {
+	if err := validateConfiguredWorkstationRunners(cfg, "", runtimeCfg, modelProviderSelectionPreflight{}); err != nil {
 		t.Fatalf("validateConfiguredWorkstationRunners: %v", err)
 	}
 }
@@ -507,7 +507,7 @@ func TestRunnerSelectionValidation_RejectsUnknownExplicitWorkstationRunner(t *te
 		},
 	}
 
-	err := validateConfiguredWorkstationRunners(cfg, "", runtimeCfg, runnerSelectionPreflight{skipCommandAvailability: true})
+	err := validateConfiguredWorkstationRunners(cfg, "", runtimeCfg, modelProviderSelectionPreflight{skipCommandAvailability: true})
 	if err == nil || !strings.Contains(err.Error(), `unknown modelProvider "mystery-runner"`) {
 		t.Fatalf("validateConfiguredWorkstationRunners error = %v, want unknown workstation modelProvider", err)
 	}
@@ -525,23 +525,23 @@ func TestRunnerSelectionValidation_RejectsUnknownExplicitFactoryRunner(t *testin
 		ModelProvider: "claude",
 	})
 
-	err := validateConfiguredWorkstationRunners(cfg, "mystery-runner", runtimeCfg, runnerSelectionPreflight{skipCommandAvailability: true})
+	err := validateConfiguredWorkstationRunners(cfg, "mystery-runner", runtimeCfg, modelProviderSelectionPreflight{skipCommandAvailability: true})
 	if err == nil || !strings.Contains(err.Error(), `unknown modelProvider "mystery-runner"`) {
 		t.Fatalf("validateConfiguredWorkstationRunners error = %v, want unknown factory modelProvider", err)
 	}
 }
 
-func TestEffectiveFactoryRunnerID_PrefersExplicitOverrideThenConfig(t *testing.T) {
+func TestEffectiveFactoryModelProvider_PrefersExplicitOverrideThenConfig(t *testing.T) {
 	cfg := &interfaces.FactoryConfig{ModelProvider: string(interfaces.ModelProviderGemini)}
 
-	if got := effectiveFactoryRunnerID("  cursor-cli  ", cfg); got != interfaces.RunnerIDCursorCLI {
-		t.Fatalf("effectiveFactoryRunnerID override = %q, want %q", got, interfaces.RunnerIDCursorCLI)
+	if got := effectiveFactoryModelProvider("  cursor-cli  ", cfg); got != "cursor-cli" {
+		t.Fatalf("effectiveFactoryModelProvider override = %q, want %q", got, "cursor-cli")
 	}
-	if got := effectiveFactoryRunnerID("", cfg); got != string(interfaces.ModelProviderGemini) {
-		t.Fatalf("effectiveFactoryRunnerID config = %q, want %q", got, interfaces.ModelProviderGemini)
+	if got := effectiveFactoryModelProvider("", cfg); got != string(interfaces.ModelProviderGemini) {
+		t.Fatalf("effectiveFactoryModelProvider config = %q, want %q", got, interfaces.ModelProviderGemini)
 	}
-	if got := effectiveFactoryRunnerID("", nil); got != "" {
-		t.Fatalf("effectiveFactoryRunnerID nil config = %q, want empty", got)
+	if got := effectiveFactoryModelProvider("", nil); got != "" {
+		t.Fatalf("effectiveFactoryModelProvider nil config = %q, want empty", got)
 	}
 }
 

@@ -21,6 +21,9 @@ func workDiagnosticsForInferenceRequest(req interfaces.ProviderInferenceRequest)
 	if req.OpenCodeAgent != "" {
 		requestMetadata["opencode_agent"] = req.OpenCodeAgent
 	}
+	if req.ModelProviderSelectionSource != "" {
+		requestMetadata["model_provider_selection_source"] = string(req.ModelProviderSelectionSource)
+	}
 	return &interfaces.WorkDiagnostics{
 		RenderedPrompt: &interfaces.RenderedPromptDiagnostic{
 			SystemPromptHash: hashText(req.SystemPrompt),
