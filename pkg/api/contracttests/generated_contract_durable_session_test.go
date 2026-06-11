@@ -29,6 +29,7 @@ type durableSessionContractScenario struct {
 	Artifacts        []map[string]any           `json:"artifacts"`
 	ArtifactDetail   map[string]any             `json:"artifactDetail,omitempty"`
 	Result           map[string]any             `json:"result"`
+	Events           []map[string]any           `json:"events,omitempty"`
 	LifecycleControl map[string]any             `json:"lifecycleControl,omitempty"`
 }
 
@@ -127,6 +128,8 @@ func assertDurableSessionScenarioFixture(t *testing.T, doc *openapi3.T, scenario
 		})
 	}
 
+	assertDurableSessionScenarioEventFixtures(t, doc, scenario)
+
 	assertDurableSessionFixtureOmitsHostPaths(t, scenario)
 }
 
@@ -172,6 +175,21 @@ func assertDurableSessionScenarioDispatchArtifactFixtures(t *testing.T, doc *ope
 			decodeRoundTripJSON(t, raw, &value, scenario.ID+" artifact detail")
 			assertArtifactRetrievalRefSafe(t, value.ContentRef)
 		})
+	}
+}
+
+func assertDurableSessionScenarioEventFixtures(t *testing.T, doc *openapi3.T, scenario durableSessionContractScenario) {
+	t.Helper()
+	if len(scenario.Events) == 0 {
+		return
+	}
+	for index, event := range scenario.Events {
+		assertOpenAPIFixtureValidates(t, doc, "FactoryEvent", event)
+		assertGeneratedFixtureRoundTrip(t, event, "FactoryEvent", func(raw []byte) {
+			var value factoryapi.FactoryEvent
+			decodeRoundTripJSON(t, raw, &value, scenario.ID+" event")
+		})
+		assertCanonicalFactoryEventFixtureEntry(t, doc, index, event)
 	}
 }
 
@@ -240,6 +258,7 @@ func assertDurableSessionFixtureCoverage(
 		"timed-out",
 		"canceled",
 		"succeeded",
+		"awaiting-approval",
 		"unsupported-runner",
 		"missing-source",
 	} {

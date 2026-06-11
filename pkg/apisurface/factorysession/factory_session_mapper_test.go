@@ -47,6 +47,67 @@ func TestDurableSessionMapperRoundTrip_AllFixtureResponses(t *testing.T) {
 			if lifecycleControl, ok := rawScenario["lifecycleControl"].(map[string]any); ok {
 				assertLifecycleControlMapperRoundTrip(t, scenario.ID, lifecycleControl)
 			}
+			if events, ok := rawScenario["events"].([]any); ok && len(events) > 0 {
+				assertFixtureEventsMapperRoundTrip(t, scenario.ID, events)
+			}
+		})
+	}
+}
+
+func TestDurableSessionMapperRoundTrip_CanonicalFixtureEventsThroughFakeService(t *testing.T) {
+	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+	}
+
+	cases := []struct {
+		scenarioID string
+		requestID  string
+		eventCount int
+	}{
+		{"javascript-running-n-dispatch", "req-js-run-n-001", 2},
+		{"javascript-succeeded-two-dispatch", "req-js-success-002", 3},
+		{"javascript-awaiting-approval", "req-js-awaiting-001", 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.scenarioID, func(t *testing.T) {
+			rawScenario := findScenario(t, loadDurableFixtureCatalog(t), tc.scenarioID)
+			executionRequest, ok := rawScenario["executionRequest"].(map[string]any)
+			if !ok {
+				t.Fatal("missing executionRequest")
+			}
+			request, err := factorysession.StartRequestFromAPI(decodeExecutionRequest(t, executionRequest))
+			if err != nil {
+				t.Fatalf("StartRequestFromAPI: %v", err)
+			}
+			started, err := service.StartAsync(context.Background(), request)
+			if err != nil {
+				t.Fatalf("StartAsync: %v", err)
+			}
+			events, err := service.ReadEvents(context.Background(), started.SessionID, factorysessionexecution.EventReconnectRequest{})
+			if err != nil {
+				t.Fatalf("ReadEvents: %v", err)
+			}
+			if len(events.Events) != tc.eventCount {
+				t.Fatalf("events = %d, want %d", len(events.Events), tc.eventCount)
+			}
+			mapped := factorysession.EventReadResponseToAPI(events)
+			if len(mapped) != tc.eventCount {
+				t.Fatalf("mapped events = %d, want %d", len(mapped), tc.eventCount)
+			}
+			stream := factorysession.FactoryEventStreamFromReadResult(events)
+			if len(stream.History) != tc.eventCount {
+				t.Fatalf("stream history = %d, want %d", len(stream.History), tc.eventCount)
+			}
+			for index, event := range mapped {
+				if event.SchemaVersion != factoryapi.AgentFactoryEventV1 {
+					t.Fatalf("event[%d] schemaVersion = %q, want agent-factory.event.v1", index, event.SchemaVersion)
+				}
+				if event.Id == "" || event.Type == "" {
+					t.Fatalf("event[%d] = %#v, want canonical id and type", index, event)
+				}
+			}
 		})
 	}
 }
@@ -395,6 +456,32 @@ func assertLifecycleControlMapperRoundTrip(t *testing.T, label string, fixture m
 	assertMapperRoundTrip(t, label+" lifecycle control", apiValue, func(value factoryapi.FactorySessionLifecycleControlResponse) factoryapi.FactorySessionLifecycleControlResponse {
 		return factorysession.LifecycleControlResponseToAPI(factorysession.LifecycleControlResultFromAPI(value))
 	}, assertLifecycleControlFieldsPreserved)
+}
+
+func assertFixtureEventsMapperRoundTrip(t *testing.T, label string, events []any) {
+	t.Helper()
+	rawEvents := make([]json.RawMessage, 0, len(events))
+	for index, item := range events {
+		encoded, err := json.Marshal(item)
+		if err != nil {
+			t.Fatalf("%s event[%d] marshal: %v", label, index, err)
+		}
+		rawEvents = append(rawEvents, encoded)
+	}
+	mapped := factorysession.EventReadResponseToAPI(factorysessionexecution.EventReadResult{
+		Events: rawEvents,
+	})
+	if len(mapped) != len(events) {
+		t.Fatalf("%s mapped events = %d, want %d", label, len(mapped), len(events))
+	}
+	for index, event := range mapped {
+		if event.SchemaVersion != factoryapi.AgentFactoryEventV1 {
+			t.Fatalf("%s event[%d] schemaVersion = %q, want agent-factory.event.v1", label, index, event.SchemaVersion)
+		}
+		if event.Id == "" || event.Type == "" {
+			t.Fatalf("%s event[%d] = %#v, want canonical id and type", label, index, event)
+		}
+	}
 }
 
 func assertMapperRoundTrip[T any](t *testing.T, label string, apiValue T, roundTrip func(T) T, assertFields func(*testing.T, map[string]any, T)) {

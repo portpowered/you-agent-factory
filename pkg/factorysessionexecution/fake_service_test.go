@@ -46,6 +46,7 @@ func TestFakeService_StartAsync_ProjectsFixtureScenarios(t *testing.T) {
 	}{
 		{"req-petri-run-001", "dur-sess-petri-run-001", LifecycleStatusRunning, ResultStatusNotReady},
 		{"req-js-run-n-001", "dur-sess-js-run-n-001", LifecycleStatusRunning, ResultStatusPartial},
+		{"req-js-awaiting-001", "dur-sess-js-awaiting-001", LifecycleStatusAwaitingApproval, ResultStatusNotReady},
 		{"req-petri-success-001", "dur-sess-petri-success-001", LifecycleStatusSucceeded, ResultStatusFinal},
 		{"req-js-failed-partial-001", "dur-sess-js-failed-partial-001", LifecycleStatusFailed, ResultStatusFailedWithPartial},
 		{"req-petri-cancel-001", "dur-sess-petri-cancel-001", LifecycleStatusCanceled, ResultStatusUnavailable},
@@ -260,6 +261,71 @@ func TestFakeService_ReadProjections_MatchFixtureDispatchesArtifactsEvents(t *te
 	}
 	if err := ValidateResultMatchesEventProjection(result, events.Events); err != nil {
 		t.Fatalf("ValidateResultMatchesEventProjection: %v", err)
+	}
+}
+
+func TestFakeService_ReadEvents_ReturnsCanonicalFixtureEventsAndHonorsCursor(t *testing.T) {
+	service := newContractFakeService(t)
+	cases := []struct {
+		requestID string
+		sessionID string
+		wantCount int
+	}{
+		{"req-js-run-n-001", "dur-sess-js-run-n-001", 2},
+		{"req-js-success-002", "dur-sess-js-success-002", 3},
+		{"req-js-awaiting-001", "dur-sess-js-awaiting-001", 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.sessionID, func(t *testing.T) {
+			startAsyncByRequestID(t, service, tc.requestID)
+			all, err := service.ReadEvents(context.Background(), tc.sessionID, EventReconnectRequest{})
+			if err != nil {
+				t.Fatalf("ReadEvents: %v", err)
+			}
+			if len(all.Events) != tc.wantCount {
+				t.Fatalf("events = %d, want %d", len(all.Events), tc.wantCount)
+			}
+			for index, raw := range all.Events {
+				assertCanonicalEventEnvelope(t, raw, "", "")
+				_ = index
+			}
+
+			afterStart, err := service.ReadEvents(context.Background(), tc.sessionID, EventReconnectRequest{
+				AfterEventID: "session-started/" + tc.sessionID,
+			})
+			if err != nil {
+				t.Fatalf("ReadEvents after start: %v", err)
+			}
+			if len(afterStart.Events) != tc.wantCount-1 {
+				t.Fatalf("after start events = %d, want %d", len(afterStart.Events), tc.wantCount-1)
+			}
+		})
+	}
+}
+
+func TestFakeService_ReadEvents_InvalidCursorReturnsError(t *testing.T) {
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-js-run-n-001")
+	_, err := service.ReadEvents(context.Background(), "dur-sess-js-run-n-001", EventReconnectRequest{
+		AfterEventID: "missing-event-id",
+	})
+	if !errors.Is(err, ErrReconnectCursorNotFound) {
+		t.Fatalf("error = %v, want ErrReconnectCursorNotFound", err)
+	}
+}
+
+func TestFakeService_DerivedProjectionEvents_AreCanonicalWhenFixtureEventsMissing(t *testing.T) {
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-petri-run-001")
+	events, err := service.ReadEvents(context.Background(), "dur-sess-petri-run-001", EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
+	}
+	if len(events.Events) == 0 {
+		t.Fatal("derived events missing")
+	}
+	for _, raw := range events.Events {
+		assertCanonicalEventEnvelope(t, raw, "", "")
 	}
 }
 

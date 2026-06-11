@@ -124,6 +124,10 @@ var ErrDispatchNotFound = errors.New("dispatch not found")
 // the targeted durable session.
 var ErrArtifactNotFound = errors.New("artifact not found")
 
+// ErrReconnectCursorNotFound reports that the reconnect cursor did not match any
+// recorded durable session event.
+var ErrReconnectCursorNotFound = errors.New("reconnect cursor not found in event history")
+
 // ErrUnsupportedControl reports that the requested control is not supported by
 // the active durable session runtime.
 var ErrUnsupportedControl = errors.New("unsupported lifecycle control")

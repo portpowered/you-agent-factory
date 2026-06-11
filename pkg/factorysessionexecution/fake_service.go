@@ -321,9 +321,13 @@ func (s *FakeService) ReadEvents(ctx context.Context, sessionID string, req Even
 	if err != nil {
 		return EventReadResult{}, err
 	}
+	filtered, err := FilterEventsAfterReconnect(state.events, req, id)
+	if err != nil {
+		return EventReadResult{}, err
+	}
 	return EventReadResult{
 		SessionID: id,
-		Events:    append([]json.RawMessage(nil), state.events...),
+		Events:    filtered,
 	}, nil
 }
 

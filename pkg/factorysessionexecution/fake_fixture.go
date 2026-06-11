@@ -869,44 +869,7 @@ func cloneResultRead(result ResultReadResult) ResultReadResult {
 }
 
 func deriveProjectionEvents(session SessionReadResult, result ResultReadResult) []json.RawMessage {
-	events := []json.RawMessage{
-		json.RawMessage(`{"type":"SESSION_STARTED","payload":{"sessionId":"` + session.SessionID + `"}}`),
-	}
-	if result.ResultStatus != "" {
-		payload, err := json.Marshal(map[string]any{
-			"type": "SESSION_RESULT_UPDATED",
-			"payload": map[string]any{
-				"sessionId":    session.SessionID,
-				"resultStatus": string(result.ResultStatus),
-			},
-		})
-		if err == nil {
-			events = append(events, payload)
-		}
-	}
-	if IsTerminalLifecycleStatus(session.Status) {
-		completedPayload := map[string]any{
-			"finalStatus": string(session.Status),
-		}
-		if session.Lifecycle != nil && session.Lifecycle.FinishedAt != nil {
-			completedPayload["completedAt"] = session.Lifecycle.FinishedAt.UTC().Format(time.RFC3339)
-		} else if session.Lifecycle != nil && session.Lifecycle.TerminatedAt != nil {
-			completedPayload["completedAt"] = session.Lifecycle.TerminatedAt.UTC().Format(time.RFC3339)
-		} else if session.Lifecycle != nil && session.Lifecycle.InterruptedAt != nil {
-			completedPayload["completedAt"] = session.Lifecycle.InterruptedAt.UTC().Format(time.RFC3339)
-		}
-		if result.ResultStatus != "" {
-			completedPayload["resultStatus"] = string(result.ResultStatus)
-		}
-		payload, err := json.Marshal(map[string]any{
-			"type":    "SESSION_COMPLETED",
-			"payload": completedPayload,
-		})
-		if err == nil {
-			events = append(events, payload)
-		}
-	}
-	return events
+	return BuildCanonicalSessionEvents(session, result)
 }
 // BuiltinInterruptedRecoverableScenario is a deterministic JavaScript session that
 // was interrupted with a stale lease and remains recoverable for persisted listing.
