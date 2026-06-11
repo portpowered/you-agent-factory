@@ -1,5 +1,6 @@
 ## Codebase Patterns
-- Published Factory Session fixture scenario IDs and stable projection hashes live in `pkg/factorysessionexecution/fixture_catalog.go` (`PublishedFixtureScenarios`, `FixtureScenarioIdentityFromScenario`, `FixtureScenarioProjectionHash`); contract JSON remains in `pkg/api/testdata/durable-session-contract-fixtures.json` and loads through `LoadFakeScenariosFromContractFixtures`.
+- Durable Factory Session CLI execution lives in `pkg/cli/sessionexecution/` with shared request normalization via `pkg/apisurface/factorysession/factory_session_execution_cli.go` (`StartRequestFromCLI`); wire `you workflow run` through `RunSync` and default to `NewFakeServiceFromContractFixtures` when no service is injected.
+- Published Factory Session fixture scenario IDs and stable projection hashes live in `pkg/factorysessionexecution/fixtures/catalog.go` (`PublishedFixtureScenarios`, `FixtureScenarioIdentityFromScenario`, `FixtureScenarioProjectionHash`); contract JSON remains in `pkg/api/testdata/durable-session-contract-fixtures.json` and loads through `LoadFakeScenariosFromContractFixtures`.
 - Use `ContractFixtureCatalogRelativePath` when downstream cells need the repository-relative catalog path; prove stable identity with `fixture_catalog_test.go` golden projection hashes rather than recomputing ad hoc in each consumer package.
 - Built-in recoverable interrupted JavaScript session `javascript-interrupted-recoverable` is appended by `LoadFakeScenariosFromContractFixtures` even though it is not in the JSON catalog.
 - Prove FakeService start/list/read/result behavior against `PublishedFixtureScenarios` in `start_list_read_result_test.go`; use `ProjectedResultReadHash` and `SyncStartResultHash` for golden result digests instead of ad hoc field comparisons.
@@ -23,4 +24,14 @@
   - Patterns discovered: drive story-level FakeService tests from `PublishedFixtureScenarios` + `publishedScenarioByPurpose` rather than duplicating request/session IDs; fixture `asyncResponse.links` may omit events/dispatches/artifacts even when `InspectionLinksForSession` includes them.
   - Gotchas encountered: `GetSession` read models for running/timeout fixtures may omit `resultSummary` — assert result status via `GetResult` instead; idempotent-replay conflict tests must copy `Args` into a new map before mutation.
   - Useful context: sync timeout scenario returns `SYNC_WAIT_TIMED_OUT` availability on final result reads; terminal success dedupes from live rows in `scope=all` when also present in persisted durable listing.
+---
+
+## 2026-06-12 UTC - dynamic-workflows-recovery-cli-run-status-result-001
+- Added `you workflow run` for fixture-backed synchronous Factory Session execution with shared CLI normalization (`StartRequestFromCLI`, `NormalizeStartRequest`) and deterministic human/JSON output via `SyncStartResponseToAPI`.
+- Introduced `pkg/cli/sessionexecution` (`RunSync`, source/args/policy resolution, stable `WriteExecutionError`) and `FakeService` idempotent replay cloning so repeated `requestId` runs return byte-identical sync JSON.
+- Files changed: `pkg/cli/sessionexecution/*`, `pkg/cli/root.go`, `pkg/apisurface/factorysession/factory_session_execution_cli.go`, `pkg/apisurface/factorysession/factory_session_execution_test.go`, `pkg/factorysessionexecution/fake_service.go`, `pkg/factorysessionexecution/fake_service_test.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: adapt the completed `dynamic-workflows-cell-cli-run-status-result` cell package for recovery stories; keep async/status/result/inspection subcommands for later stories but reuse `StartConfig` + `NormalizeStartRequest` foundation.
+  - Gotchas encountered: `FakeService` replay must store cloned `syncStart`/`asyncStart` snapshots or CLI JSON determinism tests fail on second `requestId` replay when result artifact inclusion drifts.
+  - Useful context: sync-success fixture uses `req-petri-success-001` + `--factory customer-support-triage`; prove CLI output against `SyncStartResponseToAPI` rather than ad hoc field checks.
 ---

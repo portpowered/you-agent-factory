@@ -1,102 +1,96 @@
 {
-  "project": "Dynamic Workflows Cell Provider Fixtures",
-  "branchName": "dynamic-workflows-cell-provider-fixtures",
-  "description": "Stabilize the shared deterministic Factory Session provider fixtures so downstream CLI, MCP, API, and website cells can start, list, inspect, poll, replay, and control JavaScript Factory Sessions without requiring a real JavaScript runtime.",
+  "project": "Recover CLI Start, Status, and Result Loopback Against Deterministic Factory Sessions",
+  "branchName": "dynamic-workflows-recovery-cli-run-status-result",
+  "description": "Recover the dynamic workflow CLI run/status/result path by routing sync start, async start, status polling, result retrieval, and supported inspection commands through deterministic Factory Session fixtures. The intent is to restore customer-testable CLI behavior without waiting for the real JavaScript runtime, HTTP API wiring, or dashboard UI.",
   "context": {
-    "customerAsk": "Use the existing deterministic FakeService and contract fixtures as the mock session-provider path. Add or repair deterministic fixture scenarios for validation failure, async running, sync success, sync timeout, failed recoverable session, dispatch summaries, artifact detail, event reconnect, and lifecycle-control outcomes. FakeService must drive direct tests for async start, sync start, session listing, session reads, results, dispatches, artifacts, event reconnect, lifecycle controls, idempotent replay, and request-id conflict, while avoiding HTTP handler, CLI command, MCP tool, UI component, real JavaScript VM, or generated OpenAPI changes unless required for fixture compilation.",
-    "problem": "Parallel CLI, MCP, API, and website cells need the same session IDs, statuses, result hashes, dispatch IDs, artifact IDs, event cursors, and typed error behavior. Without a stable fixture catalog, each downstream surface either waits for the real runtime or invents local mock data, creating drift and unreliable cross-surface verification.",
-    "solution": "Extend the deterministic Factory Session fake provider and contract fixture catalog so direct package tests can exercise shared JavaScript Factory Session scenarios. Document stable scenario IDs and expected hashes in tests, return typed errors for known failure cases, preserve canonical Factory Session vocabulary, and keep the work scoped to provider fixtures and direct service behavior."
+    "customerAsk": "A user can start a JavaScript Factory Session from the CLI in sync or async mode, poll status, and retrieve final or partial result data from deterministic provider fixtures.",
+    "problem": "The earlier dynamic-workflows-cell-cli-run-status-result work item is blocked by paired plan token work-plan-55 failing immediately after manual repair. The CLI loopback still needs recoverable run/status/result behavior, but it should not wait on the real JavaScript runtime, API handlers, dashboard UI, or the failed plan token.",
+    "solution": "Create a narrower CLI-only recovery batch that uses completed mock provider fixtures and shared Factory Session execution request/status/result/dispatch/artifact types. Normalize CLI input through shared domain or apisurface helpers, render concise human output and deterministic JSON output, and verify sync, async, timeout, cancellation, inspection, and error paths with focused Go tests."
   },
   "acceptanceCriteria": [
-    "FakeService direct tests cover async start, sync start, live/persisted/all session listing, get session, final and partial results, dispatch list/detail, artifact list/detail, event reconnect, lifecycle controls, idempotent replay, and request-id conflict behavior.",
-    "Fixture scenario IDs and expected session/result hashes are stable and documented in tests so downstream CLI, MCP, API, and UI cells can reuse them.",
-    "Unknown scenario, unknown session, malformed request, reconnect cursor miss, and lifecycle conflict failures return stable typed errors.",
-    "Fixture-backed scenarios use canonical Factory Session vocabulary and do not introduce DynamicWorkflowRun or workflow run as service/resource nouns.",
-    "No HTTP handler, CLI command, MCP tool, UI component, real JavaScript VM behavior, or generated OpenAPI change is introduced unless strictly required for fixture compilation.",
-    "Quality gate passes: go test ./pkg/factorysessionexecution, scoped vocabulary verification, typecheck, lint where touched, and any focused tests required by touched fixture consumers."
+    "A sync CLI run of the deterministic fixture reports a completed outcome and includes either the expected structured result or the expected stable result hash.",
+    "An async CLI run returns a durable Factory Session id, and follow-up status/result commands report the same fixture state using that id.",
+    "A timed-out sync run reports timeout without claiming completion, and cancel-on-timeout behavior is visible when requested.",
+    "CLI output is concise for humans and deterministic for JSON across started, running, completed, timed-out, failed, not-ready, missing-session, and conflict outcomes.",
+    "Focused CLI tests cover not-ready result, missing session, unsupported mode, bad source, and requestId conflict paths.",
+    "Typecheck, lint, and focused tests pass, including go test ./pkg/cli/session ./pkg/cli/workflow ./pkg/factorysessionexecution."
   ],
   "userStories": [
     {
-      "id": "dynamic-workflows-cell-provider-fixtures-001",
-      "title": "Publish Stable Fixture Scenario Identity",
-      "description": "As a downstream cell implementer, I want stable fixture scenario IDs and expected hashes so CLI, MCP, API, and website tests can all target the same JavaScript Factory Session examples.",
+      "id": "dynamic-workflows-recovery-cli-run-status-result-001",
+      "title": "Run a Fixture Synchronously to Completion",
+      "description": "As a CLI user, I want a sync run command to execute a deterministic JavaScript Factory Session fixture and return the completed result so that I can verify the run loopback from the terminal.",
       "acceptanceCriteria": [
-        "The fixture catalog exposes deterministic scenario IDs for validation failure, async running, sync success, sync timeout, failed recoverable session, dispatch inspection, artifact inspection, event reconnect, and lifecycle-control outcomes.",
-        "Direct tests document each reusable scenario ID with the expected session ID, lifecycle status, result status when applicable, and stable result or projection hash.",
-        "Re-loading the same fixture catalog produces the same scenario IDs, session IDs, event ordering, dispatch IDs, artifact IDs, and result hashes.",
-        "Scenario payloads use Factory Session, FactoryEvent, Dispatch, Artifact, and Provider Session vocabulary in public-facing fixture fields.",
-        "Typecheck passes",
-        "Tests pass"
+        "A sync run against the fixture exits successfully when the fixture reaches completed state.",
+        "Human output clearly reports the completed outcome without dumping verbose internal state.",
+        "JSON output includes deterministic session identity/status fields and either the expected structured result or the expected stable result hash.",
+        "CLI input handling for source, args, requestId, wait, and timeout uses shared execution/domain normalization rather than transport-specific duplicate rules.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-provider-fixtures-002",
-      "title": "Exercise Start, List, Read, And Result Behavior",
-      "description": "As a provider consumer, I want the fake Factory Session service to start and inspect deterministic sessions so surface cells can build against the shared service contract before the real runtime exists.",
+      "id": "dynamic-workflows-recovery-cli-run-status-result-002",
+      "title": "Start Asynchronously and Inspect Status and Result",
+      "description": "As a CLI user, I want an async start command to return a durable Factory Session id so that I can poll status and retrieve the fixture result later.",
       "acceptanceCriteria": [
-        "Async start returns a deterministic running Factory Session with inspection links and a replayable event prefix.",
-        "Sync start returns a deterministic successful terminal result for the success scenario and a stable timeout result for the timeout scenario.",
-        "Listing with live, persisted, and all scopes returns the expected fixture-backed sessions, with duplicate live/persisted identities handled deterministically.",
-        "Get session returns the expected read model for running, completed, timed-out, and failed recoverable sessions.",
-        "Final and partial result reads return the expected status, availability, primary result, artifact inclusion behavior, and stable hash for each supported scenario.",
-        "Replaying the same request ID with the same idempotency tuple returns the original start result instead of creating a new session.",
-        "Typecheck passes",
-        "Tests pass"
+        "Async start returns a durable session id in human output and JSON output.",
+        "A follow-up status command using that session id reports the fixture state consistently.",
+        "A follow-up result command using that session id returns completed result data when the fixture is complete.",
+        "A result command against a still-running fixture reports not-ready without fabricating a final result.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 2,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-provider-fixtures-003",
-      "title": "Provide Dispatch, Artifact, And Event Inspection Fixtures",
-      "description": "As an inspection surface implementer, I want deterministic dispatch, artifact, and event fixture behavior so detail views and tools can verify session progress without a real JavaScript runtime.",
+      "id": "dynamic-workflows-recovery-cli-run-status-result-003",
+      "title": "Report Timeout and Optional Cancel-on-Timeout",
+      "description": "As a CLI user, I want a sync run with a short timeout to report timeout accurately and optionally cancel the session so that automation can distinguish incomplete work from completed work.",
       "acceptanceCriteria": [
-        "List dispatches returns deterministic summaries with stable dispatch IDs, status, timestamps, provider session references when present, and links back to the owning Factory Session.",
-        "Get dispatch returns deterministic detail for known dispatch IDs and a stable typed error for unknown dispatch IDs.",
-        "List artifacts returns deterministic summaries with stable artifact IDs, names, media or content metadata, retrieval refs, and ownership by Factory Session.",
-        "Get artifact returns deterministic detail for known artifact IDs and a stable typed error for unknown artifact IDs.",
-        "Event reads return ordered canonical Factory Session events for running, terminal, dispatch, artifact, and awaiting-approval scenarios.",
-        "Event reconnect after a known cursor returns only later events, while a missing cursor returns the stable reconnect-cursor typed error.",
-        "Typecheck passes",
-        "Tests pass"
+        "A sync run that exceeds its wait/timeout reports a timed-out outcome and does not claim completion.",
+        "JSON output for timeout is deterministic and includes enough state for automation to know the session did not complete.",
+        "When cancel-on-timeout is requested, output visibly reports that cancellation was requested or applied according to fixture behavior.",
+        "Tests prove both timeout-without-cancel and timeout-with-cancel behavior.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 3,
       "passes": false,
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-provider-fixtures-004",
-      "title": "Model Lifecycle Controls And Idempotency Outcomes",
-      "description": "As a lifecycle-control consumer, I want the fake provider to apply pause, resume, cancel, terminate, approve, and retry-dispatch outcomes deterministically so downstream cells can verify controls before the real backend is complete.",
+      "id": "dynamic-workflows-recovery-cli-run-status-result-004",
+      "title": "Inspect Dispatches, Artifacts, and Events From the CLI",
+      "description": "As a CLI user, I want supported inspection commands to list dispatches, artifacts, and polled events for a fixture-backed Factory Session so that I can understand partial session state before or after completion.",
       "acceptanceCriteria": [
-        "Pause, resume, cancel, terminate, approve, and retry-dispatch return deterministic accepted, no-op, invalid-state, terminal-session, or conflict outcomes according to the fixture scenario state.",
-        "Accepted controls return stable post-control inspection links for session, result, dispatch, artifact, or event reads when those resources are available.",
-        "Lifecycle controls do not mutate unrelated fixture scenarios or hidden global state; repeating the same fixture setup produces the same outcomes.",
-        "Control request idempotency returns the original lifecycle outcome for an equivalent replay and returns a stable conflict for the same request ID with a different idempotency tuple.",
-        "Lifecycle-control tests cover at least one recoverable failed session, one terminal session, one awaiting-approval session, and one retry-dispatch path.",
-        "Typecheck passes",
-        "Tests pass"
+        "Dispatch list output shows deterministic fixture dispatch records when the CLI command exists for this surface.",
+        "Artifact list output shows deterministic fixture artifact records when the CLI command exists for this surface.",
+        "Event polling output reports fixture lifecycle/result events in stable order when the CLI command exists for this surface.",
+        "Unsupported inspection modes fail with a clear unsupported-mode outcome rather than falling through to ambiguous errors.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 4,
       "passes": false,
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-provider-fixtures-005",
-      "title": "Stabilize Typed Failures And Scope Boundaries",
-      "description": "As a maintainer, I want fixture failures and scope boundaries to be explicit so downstream cells receive predictable errors without this cell widening into transport or UI work.",
+      "id": "dynamic-workflows-recovery-cli-run-status-result-005",
+      "title": "Cover Recovery and Error Paths",
+      "description": "As a CLI user or maintainer, I want invalid or incomplete fixture interactions to return stable errors so that recovery behavior is predictable and testable.",
       "acceptanceCriteria": [
-        "Unknown scenario, unknown session, malformed start or control request, unknown dispatch, unknown artifact, reconnect cursor miss, lifecycle conflict, and request-id conflict return stable typed errors.",
-        "Error values preserve enough structured context for API, CLI, MCP, and UI adapters to map them later without parsing free-form strings.",
-        "Malformed request tests prove validation fails before fixture state changes or session creation.",
-        "The fixture provider remains directly testable without HTTP server startup, CLI command execution, MCP host wiring, UI rendering, generated OpenAPI regeneration, or real JavaScript VM execution.",
-        "Public-facing fixture names, error names, event names, and test descriptions avoid DynamicWorkflowRun and workflow run as canonical resource terminology.",
-        "Typecheck passes",
-        "Tests pass"
+        "A missing session id returns a clear missing-session outcome in human and JSON output.",
+        "A bad source returns a clear source error without starting a session.",
+        "A repeated conflicting requestId returns a conflict outcome without creating ambiguous duplicate results.",
+        "Not-ready result, missing session, unsupported mode, bad source, and requestId conflict paths have focused CLI coverage.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 5,
       "passes": false,
