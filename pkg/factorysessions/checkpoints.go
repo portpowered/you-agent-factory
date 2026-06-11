@@ -2,76 +2,15 @@ package factorysessions
 
 import (
 	"encoding/json"
-	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workflowresult"
+	jsstore "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store"
+	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 )
-
-// JavaScriptCheckpointStore keeps orchestrator-owned checkpoint bundles for one
-// live JavaScript workflow session.
-type JavaScriptCheckpointStore struct {
-	mu      sync.RWMutex
-	records map[string]interfaces.JavaScriptCheckpointRecord
-}
-
-// NewJavaScriptCheckpointStore allocates an empty checkpoint store.
-func NewJavaScriptCheckpointStore() *JavaScriptCheckpointStore {
-	return &JavaScriptCheckpointStore{
-		records: make(map[string]interfaces.JavaScriptCheckpointRecord),
-	}
-}
-
-// Put stores or replaces one checkpoint record for the session.
-func (s *JavaScriptCheckpointStore) Put(record interfaces.JavaScriptCheckpointRecord) {
-	if s == nil || strings.TrimSpace(record.ID) == "" {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.records == nil {
-		s.records = make(map[string]interfaces.JavaScriptCheckpointRecord)
-	}
-	s.records[record.ID] = record
-}
-
-// List returns checkpoint records in stable id order.
-func (s *JavaScriptCheckpointStore) List() []interfaces.JavaScriptCheckpointRecord {
-	if s == nil {
-		return nil
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if len(s.records) == 0 {
-		return nil
-	}
-	ids := make([]string, 0, len(s.records))
-	for id := range s.records {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	records := make([]interfaces.JavaScriptCheckpointRecord, 0, len(ids))
-	for _, id := range ids {
-		records = append(records, s.records[id])
-	}
-	return records
-}
-
-// Get returns one checkpoint record when present.
-func (s *JavaScriptCheckpointStore) Get(id string) (interfaces.JavaScriptCheckpointRecord, bool) {
-	if s == nil {
-		return interfaces.JavaScriptCheckpointRecord{}, false
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	record, ok := s.records[id]
-	return record, ok
-}
 
 // ProjectCheckpointArtifactRef maps one internal checkpoint record to public
 // artifact metadata without raw VM state or host paths.
@@ -304,4 +243,15 @@ func ProjectSessionPartialResult(
 		}
 	}
 	return result
+}
+
+// JavaScriptCheckpointStore keeps orchestrator-owned checkpoint bundles for one
+// live JavaScript workflow session.
+//
+// Deprecated: use pkg/orchestrators/javascript/store.CheckpointStore directly.
+type JavaScriptCheckpointStore = jsstore.CheckpointStore
+
+// NewJavaScriptCheckpointStore allocates an empty checkpoint store.
+func NewJavaScriptCheckpointStore() *JavaScriptCheckpointStore {
+	return jsstore.NewCheckpointStore()
 }

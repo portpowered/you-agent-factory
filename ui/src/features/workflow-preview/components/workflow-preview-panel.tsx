@@ -1,6 +1,6 @@
-import type { WorkflowDiagnostic } from "../../../api/workflow-preview";
+import type { FactoryPreviewDiagnostic } from "../../../api/factory-preview";
 import { workflowPreviewPanelMessages } from "../messages/panel";
-import { useWorkflowPreview } from "../hooks/useWorkflowPreview";
+import { useFactoryPreview } from "../hooks/useWorkflowPreview";
 
 export interface WorkflowPreviewPanelProps {
   projectRoot: string;
@@ -10,7 +10,7 @@ export interface WorkflowPreviewPanelProps {
   artifactRoot?: string;
 }
 
-function formatDiagnostic(diagnostic: WorkflowDiagnostic): string {
+function formatDiagnostic(diagnostic: FactoryPreviewDiagnostic): string {
   const location =
     diagnostic.line != null && diagnostic.line > 0
       ? diagnostic.column != null && diagnostic.column > 0
@@ -35,7 +35,7 @@ export function WorkflowPreviewPanel({
     (sourceValue != null && sourceValue.trim().length > 0) ||
     (inlineSource != null && inlineSource.trim().length > 0);
 
-  const previewQuery = useWorkflowPreview(
+  const previewQuery = useFactoryPreview(
     hasRequestInput
       ? {
           sourceKind,

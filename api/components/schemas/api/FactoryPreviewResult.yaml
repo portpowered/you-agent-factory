@@ -1,0 +1,23 @@
+type: object
+additionalProperties: false
+required:
+  - valid
+  - sourceResolution
+  - sourceValidationIssues
+  - policyPreview
+  - resultConstraints
+properties:
+  valid:
+    type: boolean
+    description: True when source resolution, validation, policy, and artifact-root checks pass for Factory preview.
+  sourceResolution:
+    $ref: './WorkflowSourceResolution.yaml'
+  sourceValidationIssues:
+    type: array
+    description: JavaScript orchestrator source, loader, and validation diagnostics.
+    items:
+      $ref: './WorkflowDiagnostic.yaml'
+  policyPreview:
+    $ref: './WorkflowPolicyPreview.yaml'
+  resultConstraints:
+    $ref: './WorkflowResultConstraints.yaml'

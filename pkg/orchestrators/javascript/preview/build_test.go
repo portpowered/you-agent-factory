@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/workflowpreview"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
-	"github.com/portpowered/infinite-you/pkg/workflowvalidation"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
 )
 
 const validWorkflowSource = `

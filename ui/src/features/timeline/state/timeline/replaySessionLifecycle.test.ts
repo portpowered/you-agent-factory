@@ -43,7 +43,7 @@ describe("reconstructWorldState session lifecycle replay", () => {
         completedAt: "2026-06-09T12:00:05Z",
         dispatchCounts: { completed: 2, queued: 0, running: 0 },
         durationMillis: 5000,
-        finalStatus: "FINISHED",
+        finalStatus: "SUCCEEDED",
         resultStatus: "FINAL",
       }),
     ];
@@ -427,7 +427,7 @@ describe("reconstructWorldState failed session replay", () => {
           message: "child dispatch failed",
           reason: "DISPATCH_FAILED",
         },
-        finalStatus: "FINISHED",
+        finalStatus: "SUCCEEDED",
         resultStatus: "FAILED_WITH_PARTIAL",
       }),
     ];

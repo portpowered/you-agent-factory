@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 // SyncOutcome reports how a sync start wait ended.
@@ -124,6 +124,10 @@ var ErrDispatchNotFound = errors.New("dispatch not found")
 // the targeted durable session.
 var ErrArtifactNotFound = errors.New("artifact not found")
 
+// ErrReconnectCursorNotFound reports that the reconnect cursor did not match any
+// recorded durable session event.
+var ErrReconnectCursorNotFound = errors.New("reconnect cursor not found in event history")
+
 // ErrUnsupportedControl reports that the requested control is not supported by
 // the active durable session runtime.
 var ErrUnsupportedControl = errors.New("unsupported lifecycle control")
@@ -133,6 +137,7 @@ var ErrUnsupportedControl = errors.New("unsupported lifecycle control")
 type ControlError struct {
 	Operation LifecycleControlKind
 	Outcome   LifecycleControlOutcome
+	Status    LifecycleStatus
 	Message   string
 }
 

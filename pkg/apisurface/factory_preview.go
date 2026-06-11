@@ -5,84 +5,103 @@ import (
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/workflowpolicy"
-	"github.com/portpowered/infinite-you/pkg/workflowpreview"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	workflowpreview "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
-// BuildWorkflowPreview is the shared API, CLI, MCP, and website entry point for
-// workflow validation, source resolution, and policy preview projection.
-func BuildWorkflowPreview(input workflowpreview.Request) workflowpreview.Preview {
+// BuildFactoryPreview is the shared API, CLI, MCP, and website entry point for
+// Factory preview validation, source resolution, and policy projection.
+func BuildFactoryPreview(input workflowpreview.Request) workflowpreview.Preview {
 	return workflowpreview.BuildPreview(input)
 }
 
-// WorkflowPreviewRequestFromAPI maps one public request into the shared preview contract.
-func WorkflowPreviewRequestFromAPI(req factoryapi.WorkflowPreviewRequest) (workflowpreview.Request, error) {
-	sourceKind, err := workflowSourceKindFromAPI(string(req.SourceKind))
+// FactoryPreviewRequestFromAPI maps one canonical Factory preview request into the shared preview contract.
+func FactoryPreviewRequestFromAPI(req factoryapi.FactoryPreviewRequest) (workflowpreview.Request, error) {
+	return factoryPreviewRequestFromAPI(req.SourceKind, req.ProjectRoot, req.SourceValue, req.InlineSource, req.ArtifactRoot, req.AllowFactoryLookup, req.Metadata, req.ArgsSchema, req.DefaultPolicy, req.RequestedPolicy, req.RequestedRunner, req.RequestedModel, req.RequestedProfile, req.TimeoutMillis)
+}
+
+func factoryPreviewRequestFromAPI(
+	sourceKind factoryapi.FactoryPreviewRequestSourceKind,
+	projectRoot *string,
+	sourceValue *string,
+	inlineSource *string,
+	artifactRoot *string,
+	allowFactoryLookup *bool,
+	metadata *map[string]string,
+	argsSchema *map[string]interface{},
+	defaultPolicy *map[string]interface{},
+	requestedPolicy *map[string]interface{},
+	requestedRunner *string,
+	requestedModel *string,
+	requestedProfile *string,
+	timeoutMillis *int64,
+) (workflowpreview.Request, error) {
+	kind, err := workflowSourceKindFromAPI(string(sourceKind))
 	if err != nil {
 		return workflowpreview.Request{}, err
 	}
 
-	projectRoot := strings.TrimSpace(derefString(req.ProjectRoot))
-	if projectRoot == "" {
+	root := strings.TrimSpace(derefString(projectRoot))
+	if root == "" {
 		return workflowpreview.Request{}, &RequestValidationError{Message: "projectRoot is required"}
 	}
-	ctx, err := workflowsource.DefaultContext(projectRoot)
+	ctx, err := workflowsource.DefaultContext(root)
 	if err != nil {
 		return workflowpreview.Request{}, &RequestValidationError{Message: err.Error()}
 	}
 
-	var argsSchema []byte
-	if req.ArgsSchema != nil {
-		encoded, marshalErr := json.Marshal(req.ArgsSchema)
+	var encodedArgsSchema []byte
+	if argsSchema != nil {
+		encoded, marshalErr := json.Marshal(argsSchema)
 		if marshalErr != nil {
 			return workflowpreview.Request{}, &RequestValidationError{Message: "argsSchema must be a JSON object"}
 		}
-		argsSchema = encoded
+		encodedArgsSchema = encoded
 	}
 
 	var factoryDefault json.RawMessage
-	if req.DefaultPolicy != nil {
-		encoded, marshalErr := json.Marshal(req.DefaultPolicy)
+	if defaultPolicy != nil {
+		encoded, marshalErr := json.Marshal(defaultPolicy)
 		if marshalErr != nil {
 			return workflowpreview.Request{}, &RequestValidationError{Message: "defaultPolicy must be a JSON object"}
 		}
 		factoryDefault = encoded
 	}
 
-	var requestedPolicy map[string]any
-	if req.RequestedPolicy != nil {
-		requestedPolicy = *req.RequestedPolicy
+	var requestedPolicyMap map[string]any
+	if requestedPolicy != nil {
+		requestedPolicyMap = *requestedPolicy
 	}
 
-	var metadata map[string]string
-	if req.Metadata != nil {
-		metadata = *req.Metadata
+	var metadataMap map[string]string
+	if metadata != nil {
+		metadataMap = *metadata
 	}
 
 	return workflowpreview.Request{
 		Source: workflowsource.Request{
-			Kind:               sourceKind,
-			Value:              derefString(req.SourceValue),
-			InlineSource:       derefString(req.InlineSource),
-			ArtifactRoot:       derefString(req.ArtifactRoot),
-			AllowFactoryLookup: req.AllowFactoryLookup != nil && *req.AllowFactoryLookup,
+			Kind:               kind,
+			Value:              derefString(sourceValue),
+			InlineSource:       derefString(inlineSource),
+			ArtifactRoot:       derefString(artifactRoot),
+			AllowFactoryLookup: allowFactoryLookup != nil && *allowFactoryLookup,
 		},
 		Context:              ctx,
-		Metadata:             metadata,
-		ArgsSchema:           argsSchema,
+		Metadata:             metadataMap,
+		ArgsSchema:           encodedArgsSchema,
 		FactoryDefaultPolicy: factoryDefault,
-		RequestedPolicy:      requestedPolicy,
-		RequestedRunner:      derefString(req.RequestedRunner),
-		RequestedModel:       derefString(req.RequestedModel),
-		RequestedProfile:     derefString(req.RequestedProfile),
-		TimeoutMillis:        req.TimeoutMillis,
+		RequestedPolicy:      requestedPolicyMap,
+		RequestedRunner:      derefString(requestedRunner),
+		RequestedModel:       derefString(requestedModel),
+		RequestedProfile:     derefString(requestedProfile),
+		TimeoutMillis:        timeoutMillis,
 	}, nil
 }
 
-// WorkflowPreviewResultFromPreview maps the shared preview contract to the public API shape.
-func WorkflowPreviewResultFromPreview(preview workflowpreview.Preview) factoryapi.WorkflowPreviewResult {
-	return factoryapi.WorkflowPreviewResult{
+// FactoryPreviewResultFromPreview maps the shared preview contract to the canonical Factory preview API shape.
+func FactoryPreviewResultFromPreview(preview workflowpreview.Preview) factoryapi.FactoryPreviewResult {
+	return factoryapi.FactoryPreviewResult{
 		Valid:                  preview.Valid,
 		SourceResolution:       workflowSourceResolutionFromPreview(preview.SourceResolution),
 		SourceValidationIssues: workflowDiagnosticsFromSourceIssues(preview.SourceValidationIssues),

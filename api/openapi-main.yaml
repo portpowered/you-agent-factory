@@ -465,13 +465,45 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factories/preview:
+    post:
+      tags:
+        - Factory
+      operationId: previewFactory
+      summary: Preview JavaScript orchestrator factory source
+      description: >-
+        Canonical Factory preview surface for JavaScript orchestrator factories.
+        Resolves orchestrator source, validates JavaScript or TypeScript source
+        without execution, and projects effective policy, artifact-root, and
+        structured-result constraints before Factory Session start.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactoryPreviewRequest'
+      responses:
+        '200':
+          description: Factory preview validation, source resolution, and policy projection.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactoryPreviewResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /workflow-previews:
     post:
+      deprecated: true
       tags:
         - Workflows
       operationId: previewWorkflow
-      summary: Preview workflow validation and policy
-      description: Resolves workflow source, validates JavaScript or TypeScript source without execution, and projects effective policy, artifact-root, and structured-result constraints for preview or session-start surfaces.
+      summary: Preview workflow validation and policy (obsolete)
+      description: >-
+        Obsolete Batch 001 compatibility alias for POST /factories/preview.
+        Returns the same Factory preview contract while callers migrate to
+        canonical Factory preview semantics.
       requestBody:
         required: true
         content:
@@ -480,7 +512,7 @@ paths:
               $ref: '#/components/schemas/WorkflowPreviewRequest'
       responses:
         '200':
-          description: Shared workflow validation, source resolution, and policy preview contract.
+          description: Compatibility alias of Factory preview validation and policy projection.
           content:
             application/json:
               schema:
@@ -1902,6 +1934,10 @@ components:
       $ref: './components/schemas/api/WorkflowResultConstraints.yaml'
     WorkflowPolicyPreview:
       $ref: './components/schemas/api/WorkflowPolicyPreview.yaml'
+    FactoryPreviewRequest:
+      $ref: './components/schemas/api/FactoryPreviewRequest.yaml'
+    FactoryPreviewResult:
+      $ref: './components/schemas/api/FactoryPreviewResult.yaml'
     WorkflowPreviewRequest:
       $ref: './components/schemas/api/WorkflowPreviewRequest.yaml'
     WorkflowPreviewResult:

@@ -8,7 +8,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
-	"github.com/portpowered/infinite-you/pkg/workflowresult"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 )
 
 func TestValidateTypedValue_AcceptsStructuredJSON(t *testing.T) {

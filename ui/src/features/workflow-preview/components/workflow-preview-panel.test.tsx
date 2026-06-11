@@ -4,18 +4,18 @@ import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import {
-  WorkflowPreviewAPIError,
-  previewWorkflow,
-  workflowPreviewAPIErrorMessages,
-} from "../../../api/workflow-preview";
+  FactoryPreviewAPIError,
+  factoryPreviewAPIErrorMessages,
+  previewFactory,
+} from "../../../api/factory-preview";
 import * as workflowPreviewHooks from "../hooks/useWorkflowPreview";
 import { WorkflowPreviewPanel } from "./workflow-preview-panel";
 
-vi.mock("../../../api/workflow-preview", async () => {
-  const actual = await vi.importActual("../../../api/workflow-preview");
+vi.mock("../../../api/factory-preview", async () => {
+  const actual = await vi.importActual("../../../api/factory-preview");
   return {
     ...actual,
-    previewWorkflow: vi.fn(),
+    previewFactory: vi.fn(),
   };
 });
 
@@ -36,7 +36,7 @@ function createWrapper() {
 
 describe("WorkflowPreviewPanel", () => {
   beforeEach(() => {
-    vi.mocked(previewWorkflow).mockReset();
+    vi.mocked(previewFactory).mockReset();
   });
 
   it("shows an empty state when the workflow name is only whitespace", () => {
@@ -50,7 +50,7 @@ describe("WorkflowPreviewPanel", () => {
     );
 
     expect(screen.getByTestId("workflow-preview-empty")).toBeTruthy();
-    expect(previewWorkflow).not.toHaveBeenCalled();
+    expect(previewFactory).not.toHaveBeenCalled();
   });
 
   it("shows an empty state before a workflow request is provided", () => {
@@ -63,11 +63,11 @@ describe("WorkflowPreviewPanel", () => {
     );
 
     expect(screen.getByTestId("workflow-preview-empty")).toBeTruthy();
-    expect(previewWorkflow).not.toHaveBeenCalled();
+    expect(previewFactory).not.toHaveBeenCalled();
   });
 
   it("shows loading and then success preview data", async () => {
-    vi.mocked(previewWorkflow).mockResolvedValue({
+    vi.mocked(previewFactory).mockResolvedValue({
       valid: true,
       sourceResolution: {
         found: true,
@@ -107,7 +107,7 @@ describe("WorkflowPreviewPanel", () => {
       expect(screen.getByTestId("workflow-preview-success")).toBeTruthy();
     });
 
-    expect(screen.getByText("Workflow preview passed.")).toBeTruthy();
+    expect(screen.getByText("Factory preview passed.")).toBeTruthy();
     expect(screen.getByText(/Source hash: sha256:abc/)).toBeTruthy();
     expect(screen.getByText(/Policy hash: sha256:policy/)).toBeTruthy();
     expect(screen.getByText(/Structured JSON required/)).toBeTruthy();
@@ -115,7 +115,7 @@ describe("WorkflowPreviewPanel", () => {
   });
 
   it("shows validation and denied capability diagnostics on failure", async () => {
-    vi.mocked(previewWorkflow).mockResolvedValue({
+    vi.mocked(previewFactory).mockResolvedValue({
       valid: false,
       sourceResolution: {
         found: true,
@@ -163,7 +163,7 @@ describe("WorkflowPreviewPanel", () => {
       expect(screen.getByTestId("workflow-preview-error")).toBeTruthy();
     });
 
-    expect(screen.getByText("Workflow preview failed.")).toBeTruthy();
+    expect(screen.getByText("Factory preview failed.")).toBeTruthy();
     expect(
       screen.getByText(/workflow.source.forbiddenHostAccess/),
     ).toBeTruthy();
@@ -172,8 +172,8 @@ describe("WorkflowPreviewPanel", () => {
   });
 
   it("shows API failures from the preview query", async () => {
-    vi.mocked(previewWorkflow).mockRejectedValue(
-      new WorkflowPreviewAPIError(workflowPreviewAPIErrorMessages.network, {
+    vi.mocked(previewFactory).mockRejectedValue(
+      new FactoryPreviewAPIError(factoryPreviewAPIErrorMessages.network, {
         code: "NETWORK_ERROR",
       }),
     );
@@ -192,12 +192,12 @@ describe("WorkflowPreviewPanel", () => {
     });
 
     expect(
-      screen.getByText(workflowPreviewAPIErrorMessages.network),
+      screen.getByText(factoryPreviewAPIErrorMessages.network),
     ).toBeTruthy();
   });
 
   it("renders source resolution and policy diagnostics with locations", async () => {
-    vi.mocked(previewWorkflow).mockResolvedValue({
+    vi.mocked(previewFactory).mockResolvedValue({
       valid: false,
       sourceResolution: {
         found: false,
@@ -258,7 +258,7 @@ describe("WorkflowPreviewPanel", () => {
   });
 
   it("renders the resolved source ref when preview data includes one", async () => {
-    vi.mocked(previewWorkflow).mockResolvedValue({
+    vi.mocked(previewFactory).mockResolvedValue({
       valid: true,
       sourceResolution: {
         found: true,
@@ -300,14 +300,14 @@ describe("WorkflowPreviewPanel", () => {
 
   it("renders nothing when preview data is unexpectedly missing", () => {
     const useWorkflowPreviewSpy = vi
-      .spyOn(workflowPreviewHooks, "useWorkflowPreview")
+      .spyOn(workflowPreviewHooks, "useFactoryPreview")
       .mockReturnValue({
         isLoading: false,
         isError: false,
         data: undefined,
         error: null,
         status: "success",
-      } as ReturnType<typeof workflowPreviewHooks.useWorkflowPreview>);
+      } as ReturnType<typeof workflowPreviewHooks.useFactoryPreview>);
 
     try {
       const { container } = render(
@@ -326,7 +326,7 @@ describe("WorkflowPreviewPanel", () => {
   });
 
   it("renders when optional diagnostics arrays are omitted", async () => {
-    vi.mocked(previewWorkflow).mockResolvedValue({
+    vi.mocked(previewFactory).mockResolvedValue({
       valid: true,
       sourceResolution: {
         found: true,
@@ -367,7 +367,7 @@ describe("WorkflowPreviewPanel", () => {
   });
 
   it("formats diagnostics with path prefixes and line-only locations", async () => {
-    vi.mocked(previewWorkflow).mockResolvedValue({
+    vi.mocked(previewFactory).mockResolvedValue({
       valid: false,
       sourceResolution: {
         found: true,

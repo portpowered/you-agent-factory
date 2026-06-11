@@ -120,6 +120,9 @@ func DispatchDetailResponseToAPI(result factorysessionexecution.DispatchDetail) 
 	if provider := strings.TrimSpace(result.Provider); provider != "" {
 		response.Provider = &provider
 	}
+	if refs := providerSessionRefsToAPI(result.ProviderSessionRefs); refs != nil {
+		response.ProviderSessionRefs = refs
+	}
 	if ids := stringSlicePtr(result.ArtifactIDs); ids != nil {
 		response.ArtifactIds = ids
 	}
@@ -257,6 +260,9 @@ func dispatchSummaryToAPI(dispatch factorysessionexecution.DispatchSummary) fact
 	}
 	if provider := strings.TrimSpace(dispatch.Provider); provider != "" {
 		response.Provider = &provider
+	}
+	if refs := providerSessionRefsToAPI(dispatch.ProviderSessionRefs); refs != nil {
+		response.ProviderSessionRefs = refs
 	}
 	if ids := stringSlicePtr(dispatch.OutputArtifactIDs); ids != nil {
 		response.OutputArtifactIds = ids

@@ -112,6 +112,21 @@ func TestArtifactProjectionToAPI_MapsSummaryAndDetailFixtures(t *testing.T) {
 	}
 }
 
+func TestResultRequestFromAPI_MapsModeAndIncludeArtifacts(t *testing.T) {
+	mode := factoryapi.FactorySessionResultModePartial
+	include := true
+	req, err := factorysession.ResultRequestFromAPI(factoryapi.GetFactorySessionResultsParams{
+		Mode:             &mode,
+		IncludeArtifacts: &include,
+	})
+	if err != nil {
+		t.Fatalf("ResultRequestFromAPI: %v", err)
+	}
+	if req.Mode != factorysessionexecution.ResultModePartial || !req.IncludeArtifacts {
+		t.Fatalf("request = %#v", req)
+	}
+}
+
 func TestResultRequestFromAPI_RejectsInvalidMode(t *testing.T) {
 	mode := factoryapi.FactorySessionResultMode("invalid")
 	_, err := factorysession.ResultRequestFromAPI(factoryapi.GetFactorySessionResultsParams{Mode: &mode})
@@ -147,6 +162,17 @@ func TestValidateProjectionConsistencyFromFixtures(t *testing.T) {
 	if err := factorysessionexecution.ValidateDispatchListMatchesSessionProgress(session, dispatches); err != nil {
 		t.Fatalf("ValidateDispatchListMatchesSessionProgress: %v", err)
 	}
+}
+
+func resultRequestFromFixture(result map[string]any) factorysessionexecution.ResultRequest {
+	req := factorysessionexecution.ResultRequest{}
+	if mode := stringValue(result, "mode"); mode != "" {
+		req.Mode = factorysessionexecution.ResultMode(mode)
+	}
+	if includeArtifacts, ok := result["includeArtifacts"].(bool); ok {
+		req.IncludeArtifacts = includeArtifacts
+	}
+	return req
 }
 
 func resultFromFixture(result map[string]any) factorysessionexecution.ResultReadResult {
@@ -234,6 +260,17 @@ func dispatchSummaryFromFixture(dispatch map[string]any) factorysessionexecution
 		for _, item := range ids {
 			if value, ok := item.(string); ok {
 				summary.OutputArtifactIDs = append(summary.OutputArtifactIDs, value)
+			}
+		}
+	}
+	if refs, ok := dispatch["providerSessionRefs"].([]any); ok {
+		for _, item := range refs {
+			if row, ok := item.(map[string]any); ok {
+				summary.ProviderSessionRefs = append(summary.ProviderSessionRefs, factorysessionexecution.ProviderSessionRef{
+					Provider: stringValue(row, "provider"),
+					Kind:     stringValue(row, "kind"),
+					ID:       stringValue(row, "id"),
+				})
 			}
 		}
 	}

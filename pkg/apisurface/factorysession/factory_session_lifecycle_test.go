@@ -12,7 +12,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 func TestSessionReadResponseToAPI_MapsRunningFixture(t *testing.T) {
@@ -136,6 +136,16 @@ func sessionReadFromFixture(session map[string]any) factorysessionexecution.Sess
 		SourceHash:       stringValue(session, "sourceHash"),
 		Phase:            stringValue(session, "phase"),
 	}
+	applySessionReadFixtureFields(&result, session)
+	return result
+}
+
+func applySessionReadFixtureFields(result *factorysessionexecution.SessionReadResult, session map[string]any) {
+	applySessionReadFixtureCoreFields(result, session)
+	applySessionReadFixtureOutcomeFields(result, session)
+}
+
+func applySessionReadFixtureCoreFields(result *factorysessionexecution.SessionReadResult, session map[string]any) {
 	if resolved, ok := session["resolvedSource"].(map[string]any); ok {
 		result.ResolvedSource = resolvedSourceFromFixture(resolved)
 	}
@@ -149,6 +159,15 @@ func sessionReadFromFixture(session map[string]any) factorysessionexecution.Sess
 	if progress, ok := session["progress"].(map[string]any); ok {
 		result.Progress = progressCountsFromFixture(progress)
 	}
+	if budgets, ok := session["budgets"].(map[string]any); ok {
+		if maxAgents := intValue(budgets, "maxAgents"); maxAgents > 0 {
+			result.Budgets = &factorysessionexecution.SessionBudgets{MaxAgents: maxAgents}
+		}
+	}
+	result.Usage = sessionUsageFromFixture(session)
+}
+
+func applySessionReadFixtureOutcomeFields(result *factorysessionexecution.SessionReadResult, session map[string]any) {
 	if summaries, ok := session["phaseSummaries"].([]any); ok {
 		for _, item := range summaries {
 			if row, ok := item.(map[string]any); ok {
@@ -183,7 +202,30 @@ func sessionReadFromFixture(session map[string]any) factorysessionexecution.Sess
 	if links, ok := session["links"].(map[string]any); ok {
 		result.Links = inspectionLinksFromFixture(links)
 	}
-	return result
+}
+
+func sessionUsageFromFixture(session map[string]any) factorysessionexecution.SessionUsage {
+	usage := factorysessionexecution.EmptySessionUsage()
+	rawUsage, ok := session["usage"].(map[string]any)
+	if !ok {
+		return usage
+	}
+	rows, ok := rawUsage["resources"].([]any)
+	if !ok {
+		return usage
+	}
+	for _, item := range rows {
+		row, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		usage.Resources = append(usage.Resources, factorysessionexecution.ResourceUsage{
+			Name:      stringValue(row, "name"),
+			Available: intValue(row, "available"),
+			Total:     intValue(row, "total"),
+		})
+	}
+	return usage
 }
 
 func lifecycleControlFromFixture(control map[string]any) factorysessionexecution.LifecycleControlResult {

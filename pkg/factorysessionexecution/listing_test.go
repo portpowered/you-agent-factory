@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 func TestNormalizeListSessionsRequest_DefaultsToLiveAndRejectsUnsupportedScope(t *testing.T) {

@@ -1,7 +1,6 @@
 export {
   previewWorkflow,
   WorkflowPreviewAPIError,
-  type WorkflowDiagnostic,
   type WorkflowPreviewRequest,
   type WorkflowPreviewResult,
 } from "./api";

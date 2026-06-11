@@ -441,7 +441,7 @@ func generatedSessionLifecycleBracketEvents(
 				Source:           &fixture.source,
 			},
 			Payload: factoryEventPayload(t, factoryapi.SessionResultUpdatedEventPayload{
-				ResultStatus: factoryapi.PARTIAL,
+				ResultStatus: factoryapi.FactoryEventSessionResultStatusPartial,
 				ArtifactIds:  &[]string{"artifact-partial-1"},
 			}),
 		},
@@ -459,10 +459,10 @@ func generatedSessionLifecycleBracketEvents(
 				Source:           &fixture.source,
 			},
 			Payload: factoryEventPayload(t, factoryapi.SessionCompletedEventPayload{
-				FinalStatus:    factoryapi.FactorySessionStatusFINISHED,
+				FinalStatus:    factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
 				CompletedAt:    eventTime,
 				DurationMillis: durationMillisPtr(2000),
-				ResultStatus:   factoryEventSessionResultStatusPtr(factoryapi.FINAL),
+				ResultStatus:   factoryEventSessionResultStatusPtr(factoryapi.FactoryEventSessionResultStatusFinal),
 				ArtifactIds:    &[]string{"artifact-result-1"},
 				DispatchCounts: &factoryapi.FactorySessionJavaScriptChildDispatchCounts{
 					Queued:    0,

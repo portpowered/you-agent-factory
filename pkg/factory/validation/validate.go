@@ -6,8 +6,8 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workflowpolicy"
-	"github.com/portpowered/infinite-you/pkg/workflowvalidation"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
 )
 
 const validationRoot = "factory"

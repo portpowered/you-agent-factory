@@ -3,24 +3,24 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 
 import {
-  type WorkflowPreviewResult,
-  previewWorkflow,
-} from "../../../api/workflow-preview";
+  type FactoryPreviewResult,
+  previewFactory,
+} from "../../../api/factory-preview";
 import {
-  buildWorkflowPreviewQueryKey,
-  useWorkflowPreview,
-  workflowPreviewQueryOptions,
+  buildFactoryPreviewQueryKey,
+  useFactoryPreview,
+  factoryPreviewQueryOptions,
 } from "./useWorkflowPreview";
 
-vi.mock("../../../api/workflow-preview", async () => {
-  const actual = await vi.importActual("../../../api/workflow-preview");
+vi.mock("../../../api/factory-preview", async () => {
+  const actual = await vi.importActual("../../../api/factory-preview");
   return {
     ...actual,
-    previewWorkflow: vi.fn(),
+    previewFactory: vi.fn(),
   };
 });
 
-const previewResult: WorkflowPreviewResult = {
+const previewResult: FactoryPreviewResult = {
   valid: true,
   sourceResolution: {
     found: true,
@@ -59,16 +59,16 @@ function createWrapper() {
   };
 }
 
-describe("buildWorkflowPreviewQueryKey", () => {
+describe("buildFactoryPreviewQueryKey", () => {
   it("builds a stable query key for one preview request", () => {
     expect(
-      buildWorkflowPreviewQueryKey({
+      buildFactoryPreviewQueryKey({
         sourceKind: "WORKFLOW_NAME",
         projectRoot: "/tmp/project",
         sourceValue: "review",
       }),
     ).toEqual([
-      "workflow-preview",
+      "factory-preview",
       "WORKFLOW_NAME",
       "/tmp/project",
       "review",
@@ -79,14 +79,14 @@ describe("buildWorkflowPreviewQueryKey", () => {
 
   it("includes inline source and artifact root segments in the query key", () => {
     expect(
-      buildWorkflowPreviewQueryKey({
+      buildFactoryPreviewQueryKey({
         sourceKind: "INLINE_WORKFLOW",
         projectRoot: "/tmp/project",
         inlineSource: "phase('setup');",
         artifactRoot: "/tmp/artifacts",
       }),
     ).toEqual([
-      "workflow-preview",
+      "factory-preview",
       "INLINE_WORKFLOW",
       "/tmp/project",
       "",
@@ -97,14 +97,14 @@ describe("buildWorkflowPreviewQueryKey", () => {
 
   it("fills omitted optional request fields with empty query-key segments", () => {
     expect(
-      buildWorkflowPreviewQueryKey({
+      buildFactoryPreviewQueryKey({
         sourceKind: "WORKFLOW_FILE",
       }),
-    ).toEqual(["workflow-preview", "WORKFLOW_FILE", "", "", "", ""]);
+    ).toEqual(["factory-preview", "WORKFLOW_FILE", "", "", "", ""]);
   });
 });
 
-describe("workflowPreviewQueryOptions", () => {
+describe("factoryPreviewQueryOptions", () => {
   it("throws when fetchQuery runs without a request", async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
@@ -115,23 +115,23 @@ describe("workflowPreviewQueryOptions", () => {
     });
 
     await expect(
-      queryClient.fetchQuery(workflowPreviewQueryOptions(null)),
-    ).rejects.toThrow("workflow preview request is required");
+      queryClient.fetchQuery(factoryPreviewQueryOptions(null)),
+    ).rejects.toThrow("factory preview request is required");
   });
 });
 
-describe("useWorkflowPreview", () => {
+describe("useFactoryPreview", () => {
   beforeEach(() => {
-    vi.mocked(previewWorkflow).mockReset();
-    vi.mocked(previewWorkflow).mockResolvedValue(previewResult);
+    vi.mocked(previewFactory).mockReset();
+    vi.mocked(previewFactory).mockResolvedValue(previewResult);
   });
 
   it("does not fetch when the request is null", () => {
-    const { result } = renderHook(() => useWorkflowPreview(null), {
+    const { result } = renderHook(() => useFactoryPreview(null), {
       wrapper: createWrapper(),
     });
 
-    expect(previewWorkflow).not.toHaveBeenCalled();
+    expect(previewFactory).not.toHaveBeenCalled();
     expect(result.current.status).toBe("pending");
   });
 
@@ -142,11 +142,11 @@ describe("useWorkflowPreview", () => {
       sourceValue: "review",
     };
 
-    renderHook(() => useWorkflowPreview(request, false), {
+    renderHook(() => useFactoryPreview(request, false), {
       wrapper: createWrapper(),
     });
 
-    expect(previewWorkflow).not.toHaveBeenCalled();
+    expect(previewFactory).not.toHaveBeenCalled();
   });
 
   it("fetches preview data for one workflow request", async () => {
@@ -156,7 +156,7 @@ describe("useWorkflowPreview", () => {
       sourceValue: "review",
     };
 
-    const { result } = renderHook(() => useWorkflowPreview(request), {
+    const { result } = renderHook(() => useFactoryPreview(request), {
       wrapper: createWrapper(),
     });
 
@@ -164,7 +164,7 @@ describe("useWorkflowPreview", () => {
       expect(result.current.status).toBe("success");
     });
 
-    expect(previewWorkflow).toHaveBeenCalledWith(request);
+    expect(previewFactory).toHaveBeenCalledWith(request);
     expect(result.current.data?.valid).toBe(true);
   });
 });

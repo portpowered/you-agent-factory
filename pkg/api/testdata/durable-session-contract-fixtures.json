@@ -82,6 +82,9 @@
           "events": "/factory-sessions/dur-sess-petri-run-001/events",
           "results": "/factory-sessions/dur-sess-petri-run-001/results",
           "status": "/factory-sessions/dur-sess-petri-run-001"
+        },
+        "usage": {
+          "resources": []
         }
       },
       "listSummary": {
@@ -124,7 +127,14 @@
           "attempt": 1,
           "runnerId": "planner",
           "model": "claude-sonnet-4-20250514",
-          "provider": "claude"
+          "provider": "claude",
+          "providerSessionRefs": [
+            {
+              "provider": "codex",
+              "kind": "session_id",
+              "id": "prov-sess-disp-petri-001"
+            }
+          ]
         }
       ],
       "dispatchDetail": {
@@ -143,7 +153,14 @@
           "transitionId": "transition-plan-task",
           "workstationName": "plan-task",
           "workerType": "model-worker"
-        }
+        },
+        "providerSessionRefs": [
+          {
+            "provider": "codex",
+            "kind": "session_id",
+            "id": "prov-sess-disp-petri-001"
+          }
+        ]
       },
       "artifacts": [],
       "result": {
@@ -227,6 +244,9 @@
         "links": {
           "session": "/factory-sessions/dur-sess-petri-success-001",
           "results": "/factory-sessions/dur-sess-petri-success-001/results"
+        },
+        "usage": {
+          "resources": []
         }
       },
       "listSummary": {
@@ -259,7 +279,9 @@
           "dispatchKind": "PETRI_TRANSITION",
           "label": "plan-task",
           "attempt": 1,
-          "outputArtifactIds": ["art-petri-final-001"]
+          "outputArtifactIds": [
+            "art-petri-final-001"
+          ]
         }
       ],
       "dispatchDetail": {
@@ -270,7 +292,9 @@
         "status": "COMPLETED",
         "label": "plan-task",
         "attempt": 1,
-        "artifactIds": ["art-petri-final-001"],
+        "artifactIds": [
+          "art-petri-final-001"
+        ],
         "petri": {
           "transitionId": "transition-plan-task",
           "workstationName": "plan-task",
@@ -414,6 +438,12 @@
           "session": "/factory-sessions/dur-sess-js-run-n-001",
           "results": "/factory-sessions/dur-sess-js-run-n-001/results",
           "status": "/factory-sessions/dur-sess-js-run-n-001"
+        },
+        "usage": {
+          "resources": []
+        },
+        "budgets": {
+          "maxAgents": 3
         }
       },
       "listSummary": {
@@ -482,7 +512,51 @@
             }
           }
         ]
-      }
+      },
+      "events": [
+        {
+          "schemaVersion": "agent-factory.event.v1",
+          "id": "session-started/dur-sess-js-run-n-001",
+          "type": "SESSION_STARTED",
+          "context": {
+            "sequence": 1,
+            "tick": 1,
+            "eventTime": "2026-06-08T14:00:00Z",
+            "sessionId": "dur-sess-js-run-n-001",
+            "sessionSequence": 0,
+            "orchestratorKind": "JAVASCRIPT",
+            "orchestratorDialect": "you-workflow-v1",
+            "phaseId": "verify",
+            "phaseName": "verify",
+            "source": "fake-service"
+          },
+          "payload": {
+            "sourceRef": "workflow/release-train",
+            "sourceHash": "sha256:js-workflow-release-train",
+            "startedAt": "2026-06-08T14:00:00Z"
+          }
+        },
+        {
+          "schemaVersion": "agent-factory.event.v1",
+          "id": "session-result-updated/dur-sess-js-run-n-001",
+          "type": "SESSION_RESULT_UPDATED",
+          "context": {
+            "sequence": 2,
+            "tick": 2,
+            "eventTime": "2026-06-08T14:05:00Z",
+            "sessionId": "dur-sess-js-run-n-001",
+            "sessionSequence": 1,
+            "orchestratorKind": "JAVASCRIPT",
+            "orchestratorDialect": "you-workflow-v1",
+            "phaseId": "verify",
+            "phaseName": "verify",
+            "source": "fake-service"
+          },
+          "payload": {
+            "resultStatus": "PARTIAL"
+          }
+        }
+      ]
     },
     {
       "id": "javascript-paused-two-dispatch",
@@ -525,6 +599,12 @@
           "session": "/factory-sessions/dur-sess-js-paused-001",
           "results": "/factory-sessions/dur-sess-js-paused-001/results",
           "status": "/factory-sessions/dur-sess-js-paused-001"
+        },
+        "usage": {
+          "resources": []
+        },
+        "budgets": {
+          "maxAgents": 3
         }
       },
       "listSummary": {
@@ -611,7 +691,15 @@
             "text": "Awaiting operator approval."
           }
         ],
-        "artifactIds": ["art-js-pause-001"]
+        "artifactRefs": [
+          {
+            "id": "art-js-pause-001",
+            "kind": "FINDING",
+            "visibility": "PUBLIC",
+            "contentHash": "sha256:js-pause-art-001",
+            "sizeBytes": 512
+          }
+        ]
       },
       "lifecycleControl": {
         "sessionId": "dur-sess-js-paused-001",
@@ -669,6 +757,12 @@
         "links": {
           "session": "/factory-sessions/dur-sess-js-failed-partial-001",
           "results": "/factory-sessions/dur-sess-js-failed-partial-001/results"
+        },
+        "usage": {
+          "resources": []
+        },
+        "budgets": {
+          "maxAgents": 3
         }
       },
       "listSummary": {
@@ -789,6 +883,12 @@
         "links": {
           "session": "/factory-sessions/dur-sess-js-timeout-001",
           "status": "/factory-sessions/dur-sess-js-timeout-001"
+        },
+        "usage": {
+          "resources": []
+        },
+        "budgets": {
+          "maxAgents": 3
         }
       },
       "listSummary": {
@@ -870,6 +970,9 @@
           "session": "/factory-sessions/dur-sess-petri-cancel-001",
           "results": "/factory-sessions/dur-sess-petri-cancel-001/results",
           "status": "/factory-sessions/dur-sess-petri-cancel-001"
+        },
+        "usage": {
+          "resources": []
         }
       },
       "listSummary": {
@@ -991,6 +1094,12 @@
           "session": "/factory-sessions/dur-sess-js-success-002",
           "results": "/factory-sessions/dur-sess-js-success-002/results",
           "status": "/factory-sessions/dur-sess-js-success-002"
+        },
+        "usage": {
+          "resources": []
+        },
+        "budgets": {
+          "maxAgents": 3
         }
       },
       "listSummary": {
@@ -1018,7 +1127,9 @@
           "dispatchKind": "JAVASCRIPT_VERIFY",
           "label": "verify-docs",
           "attempt": 1,
-          "outputArtifactIds": ["art-js-success-001"]
+          "outputArtifactIds": [
+            "art-js-success-001"
+          ]
         }
       ],
       "dispatchDetail": {
@@ -1029,7 +1140,9 @@
         "status": "COMPLETED",
         "label": "verify-docs",
         "attempt": 1,
-        "artifactIds": ["art-js-success-001"],
+        "artifactIds": [
+          "art-js-success-001"
+        ],
         "javascript": {
           "taskKind": "VERIFY",
           "taskLabel": "verify-docs"
@@ -1092,6 +1205,73 @@
           }
         ]
       },
+      "events": [
+        {
+          "schemaVersion": "agent-factory.event.v1",
+          "id": "session-started/dur-sess-js-success-002",
+          "type": "SESSION_STARTED",
+          "context": {
+            "sequence": 1,
+            "tick": 1,
+            "eventTime": "2026-06-08T13:00:02Z",
+            "sessionId": "dur-sess-js-success-002",
+            "sessionSequence": 0,
+            "orchestratorKind": "JAVASCRIPT",
+            "orchestratorDialect": "you-workflow-v1",
+            "source": "fake-service"
+          },
+          "payload": {
+            "sourceRef": "workflow/.claude/workflows/docs-refresh.yaml",
+            "sourceHash": "sha256:js-workflow-docs-refresh",
+            "policyHash": "eff-policy-docs-refresh",
+            "startedAt": "2026-06-08T13:00:02Z"
+          }
+        },
+        {
+          "schemaVersion": "agent-factory.event.v1",
+          "id": "session-result-updated/dur-sess-js-success-002",
+          "type": "SESSION_RESULT_UPDATED",
+          "context": {
+            "sequence": 2,
+            "tick": 2,
+            "eventTime": "2026-06-08T13:05:00Z",
+            "sessionId": "dur-sess-js-success-002",
+            "sessionSequence": 1,
+            "orchestratorKind": "JAVASCRIPT",
+            "orchestratorDialect": "you-workflow-v1",
+            "source": "fake-service"
+          },
+          "payload": {
+            "resultStatus": "FINAL",
+            "artifactIds": [
+              "art-js-success-001"
+            ]
+          }
+        },
+        {
+          "schemaVersion": "agent-factory.event.v1",
+          "id": "session-completed/dur-sess-js-success-002",
+          "type": "SESSION_COMPLETED",
+          "context": {
+            "sequence": 3,
+            "tick": 3,
+            "eventTime": "2026-06-08T13:10:00Z",
+            "sessionId": "dur-sess-js-success-002",
+            "sessionSequence": 2,
+            "orchestratorKind": "JAVASCRIPT",
+            "orchestratorDialect": "you-workflow-v1",
+            "source": "fake-service"
+          },
+          "payload": {
+            "finalStatus": "SUCCEEDED",
+            "completedAt": "2026-06-08T13:10:00Z",
+            "resultStatus": "FINAL",
+            "artifactIds": [
+              "art-js-success-001"
+            ]
+          }
+        }
+      ],
       "lifecycleControl": {
         "sessionId": "dur-sess-js-success-002",
         "operation": "RETRY_DISPATCH",
@@ -1106,6 +1286,176 @@
           "artifacts": "/factory-sessions/dur-sess-js-success-002/artifacts"
         }
       }
+    },
+    {
+      "id": "javascript-awaiting-approval",
+      "tags": {
+        "orchestrator": "JAVASCRIPT",
+        "status": "AWAITING_APPROVAL",
+        "dispatchCount": "ONE",
+        "outcome": "awaiting-approval"
+      },
+      "executionRequest": {
+        "requestId": "req-js-awaiting-001",
+        "source": {
+          "kind": "WORKFLOW_FILE",
+          "workflowFile": ".claude/workflows/policy-gated-release.yaml"
+        },
+        "requestedPolicy": {
+          "policyHash": "req-policy-gated-release"
+        }
+      },
+      "asyncResponse": {
+        "sessionId": "dur-sess-js-awaiting-001",
+        "status": "AWAITING_APPROVAL",
+        "orchestratorKind": "JAVASCRIPT",
+        "dialect": "you-workflow-v1",
+        "resolvedSource": {
+          "kind": "WORKFLOW_FILE",
+          "sourceRef": "workflow/.claude/workflows/policy-gated-release.yaml",
+          "sourceHash": "sha256:js-workflow-policy-gated-release",
+          "dialect": "you-workflow-v1",
+          "resolutionOrder": [
+            "PROJECT_CLAUDE_WORKFLOWS"
+          ]
+        },
+        "requestedPolicy": {
+          "policyHash": "req-policy-gated-release"
+        },
+        "effectivePolicy": {
+          "policyHash": "eff-policy-gated-release",
+          "approvalPreviewId": "preview-policy-gated-release"
+        },
+        "effectivePolicyHash": "eff-policy-gated-release",
+        "links": {
+          "session": "/factory-sessions/dur-sess-js-awaiting-001",
+          "events": "/factory-sessions/dur-sess-js-awaiting-001/events",
+          "results": "/factory-sessions/dur-sess-js-awaiting-001/results",
+          "status": "/factory-sessions/dur-sess-js-awaiting-001"
+        }
+      },
+      "session": {
+        "sessionId": "dur-sess-js-awaiting-001",
+        "status": "AWAITING_APPROVAL",
+        "orchestratorKind": "JAVASCRIPT",
+        "dialect": "you-workflow-v1",
+        "resolvedSource": {
+          "kind": "WORKFLOW_FILE",
+          "sourceRef": "workflow/.claude/workflows/policy-gated-release.yaml",
+          "sourceHash": "sha256:js-workflow-policy-gated-release",
+          "dialect": "you-workflow-v1",
+          "resolutionOrder": [
+            "PROJECT_CLAUDE_WORKFLOWS"
+          ]
+        },
+        "requestedPolicy": {
+          "policyHash": "req-policy-gated-release"
+        },
+        "effectivePolicy": {
+          "policyHash": "eff-policy-gated-release",
+          "approvalPreviewId": "preview-policy-gated-release"
+        },
+        "effectivePolicyHash": "eff-policy-gated-release",
+        "phase": "approval",
+        "resultSummary": {
+          "resultStatus": "NOT_READY",
+          "summary": "Awaiting orchestrator policy approval before execution."
+        },
+        "lifecycle": {
+          "queuedAt": "2026-06-08T15:00:00Z",
+          "awaitingApprovalAt": "2026-06-08T15:00:01Z"
+        },
+        "links": {
+          "session": "/factory-sessions/dur-sess-js-awaiting-001",
+          "events": "/factory-sessions/dur-sess-js-awaiting-001/events",
+          "results": "/factory-sessions/dur-sess-js-awaiting-001/results",
+          "status": "/factory-sessions/dur-sess-js-awaiting-001"
+        },
+        "usage": {
+          "resources": []
+        },
+        "budgets": {
+          "maxAgents": 3
+        }
+      },
+      "listSummary": {
+        "sessionId": "dur-sess-js-awaiting-001",
+        "status": "AWAITING_APPROVAL",
+        "orchestratorKind": "JAVASCRIPT",
+        "resolvedSource": {
+          "kind": "WORKFLOW_FILE",
+          "sourceRef": "workflow/.claude/workflows/policy-gated-release.yaml",
+          "sourceHash": "sha256:js-workflow-policy-gated-release"
+        },
+        "resultSummary": {
+          "resultStatus": "NOT_READY",
+          "summary": "Awaiting orchestrator policy approval before execution."
+        },
+        "actions": {
+          "canApprove": true,
+          "canCancel": true,
+          "canTerminate": true
+        }
+      },
+      "dispatches": [],
+      "artifacts": [],
+      "result": {
+        "sessionId": "dur-sess-js-awaiting-001",
+        "resultStatus": "NOT_READY",
+        "sessionStatus": "AWAITING_APPROVAL",
+        "mode": "final",
+        "includeArtifacts": false,
+        "availability": {
+          "reason": "RESULT_NOT_READY",
+          "message": "Session is awaiting policy approval.",
+          "retryable": true
+        }
+      },
+      "events": [
+        {
+          "schemaVersion": "agent-factory.event.v1",
+          "id": "session-started/dur-sess-js-awaiting-001",
+          "type": "SESSION_STARTED",
+          "context": {
+            "sequence": 1,
+            "tick": 1,
+            "eventTime": "2026-06-08T15:00:00Z",
+            "sessionId": "dur-sess-js-awaiting-001",
+            "sessionSequence": 0,
+            "orchestratorKind": "JAVASCRIPT",
+            "orchestratorDialect": "you-workflow-v1",
+            "phaseId": "approval",
+            "phaseName": "approval",
+            "source": "fake-service"
+          },
+          "payload": {
+            "sourceRef": "workflow/.claude/workflows/policy-gated-release.yaml",
+            "sourceHash": "sha256:js-workflow-policy-gated-release",
+            "policyHash": "eff-policy-gated-release",
+            "startedAt": "2026-06-08T15:00:00Z"
+          }
+        },
+        {
+          "schemaVersion": "agent-factory.event.v1",
+          "id": "session-result-updated/dur-sess-js-awaiting-001",
+          "type": "SESSION_RESULT_UPDATED",
+          "context": {
+            "sequence": 2,
+            "tick": 2,
+            "eventTime": "2026-06-08T15:00:01Z",
+            "sessionId": "dur-sess-js-awaiting-001",
+            "sessionSequence": 1,
+            "orchestratorKind": "JAVASCRIPT",
+            "orchestratorDialect": "you-workflow-v1",
+            "phaseId": "approval",
+            "phaseName": "approval",
+            "source": "fake-service"
+          },
+          "payload": {
+            "resultStatus": "NOT_READY"
+          }
+        }
+      ]
     },
     {
       "id": "unsupported-runner",
@@ -1139,6 +1489,12 @@
         "links": {
           "session": "/factory-sessions/dur-sess-unsupported-runner-001",
           "results": "/factory-sessions/dur-sess-unsupported-runner-001/results"
+        },
+        "usage": {
+          "resources": []
+        },
+        "budgets": {
+          "maxAgents": 3
         }
       },
       "listSummary": {
@@ -1254,6 +1610,12 @@
         },
         "links": {
           "session": "/factory-sessions/dur-sess-missing-source-001"
+        },
+        "usage": {
+          "resources": []
+        },
+        "budgets": {
+          "maxAgents": 3
         }
       },
       "listSummary": {

@@ -47,6 +47,67 @@ func TestDurableSessionMapperRoundTrip_AllFixtureResponses(t *testing.T) {
 			if lifecycleControl, ok := rawScenario["lifecycleControl"].(map[string]any); ok {
 				assertLifecycleControlMapperRoundTrip(t, scenario.ID, lifecycleControl)
 			}
+			if events, ok := rawScenario["events"].([]any); ok && len(events) > 0 {
+				assertFixtureEventsMapperRoundTrip(t, scenario.ID, events)
+			}
+		})
+	}
+}
+
+func TestDurableSessionMapperRoundTrip_CanonicalFixtureEventsThroughFakeService(t *testing.T) {
+	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+	}
+
+	cases := []struct {
+		scenarioID string
+		requestID  string
+		eventCount int
+	}{
+		{"javascript-running-n-dispatch", "req-js-run-n-001", 2},
+		{"javascript-succeeded-two-dispatch", "req-js-success-002", 3},
+		{"javascript-awaiting-approval", "req-js-awaiting-001", 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.scenarioID, func(t *testing.T) {
+			rawScenario := findScenario(t, loadDurableFixtureCatalog(t), tc.scenarioID)
+			executionRequest, ok := rawScenario["executionRequest"].(map[string]any)
+			if !ok {
+				t.Fatal("missing executionRequest")
+			}
+			request, err := factorysession.StartRequestFromAPI(decodeExecutionRequest(t, executionRequest))
+			if err != nil {
+				t.Fatalf("StartRequestFromAPI: %v", err)
+			}
+			started, err := service.StartAsync(context.Background(), request)
+			if err != nil {
+				t.Fatalf("StartAsync: %v", err)
+			}
+			events, err := service.ReadEvents(context.Background(), started.SessionID, factorysessionexecution.EventReconnectRequest{})
+			if err != nil {
+				t.Fatalf("ReadEvents: %v", err)
+			}
+			if len(events.Events) != tc.eventCount {
+				t.Fatalf("events = %d, want %d", len(events.Events), tc.eventCount)
+			}
+			mapped := factorysession.EventReadResponseToAPI(events)
+			if len(mapped) != tc.eventCount {
+				t.Fatalf("mapped events = %d, want %d", len(mapped), tc.eventCount)
+			}
+			stream := factorysession.FactoryEventStreamFromReadResult(events)
+			if len(stream.History) != tc.eventCount {
+				t.Fatalf("stream history = %d, want %d", len(stream.History), tc.eventCount)
+			}
+			for index, event := range mapped {
+				if event.SchemaVersion != factoryapi.AgentFactoryEventV1 {
+					t.Fatalf("event[%d] schemaVersion = %q, want agent-factory.event.v1", index, event.SchemaVersion)
+				}
+				if event.Id == "" || event.Type == "" {
+					t.Fatalf("event[%d] = %#v, want canonical id and type", index, event)
+				}
+			}
 		})
 	}
 }
@@ -134,7 +195,11 @@ func TestDurableSessionMapperRoundTrip_FakeServiceProjections(t *testing.T) {
 			}
 			assertSessionReadMapperRoundTrip(t, scenarioID, mustFixtureMap(t, factorysession.SessionReadResponseToAPI(read)))
 
-			result, err := service.GetResult(context.Background(), started.SessionID, factorysessionexecution.ResultRequest{})
+			resultFixture, ok := rawScenario["result"].(map[string]any)
+			if !ok {
+				t.Fatal("missing result fixture")
+			}
+			result, err := service.GetResult(context.Background(), started.SessionID, resultRequestFromFixture(resultFixture))
 			if err != nil {
 				t.Fatalf("GetResult: %v", err)
 			}
@@ -247,10 +312,14 @@ func TestControlErrorToAPI_MapsTerminalSessionOutcome(t *testing.T) {
 	mapped := factorysession.ControlErrorToAPI("dur-sess-js-success-002", &factorysessionexecution.ControlError{
 		Operation: factorysessionexecution.LifecycleControlRetryDispatch,
 		Outcome:   factorysessionexecution.LifecycleControlOutcomeTerminalSession,
+		Status:    factorysessionexecution.LifecycleStatusSucceeded,
 		Message:   "session is terminal",
 	})
 	if mapped.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeTerminalSession {
 		t.Fatalf("outcome = %q, want TERMINAL_SESSION", mapped.Outcome)
+	}
+	if mapped.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("status = %q, want SUCCEEDED", mapped.Status)
 	}
 	if mapped.Detail == nil || *mapped.Detail != "session is terminal" {
 		t.Fatalf("detail = %#v", mapped.Detail)
@@ -393,6 +462,32 @@ func assertLifecycleControlMapperRoundTrip(t *testing.T, label string, fixture m
 	}, assertLifecycleControlFieldsPreserved)
 }
 
+func assertFixtureEventsMapperRoundTrip(t *testing.T, label string, events []any) {
+	t.Helper()
+	rawEvents := make([]json.RawMessage, 0, len(events))
+	for index, item := range events {
+		encoded, err := json.Marshal(item)
+		if err != nil {
+			t.Fatalf("%s event[%d] marshal: %v", label, index, err)
+		}
+		rawEvents = append(rawEvents, encoded)
+	}
+	mapped := factorysession.EventReadResponseToAPI(factorysessionexecution.EventReadResult{
+		Events: rawEvents,
+	})
+	if len(mapped) != len(events) {
+		t.Fatalf("%s mapped events = %d, want %d", label, len(mapped), len(events))
+	}
+	for index, event := range mapped {
+		if event.SchemaVersion != factoryapi.AgentFactoryEventV1 {
+			t.Fatalf("%s event[%d] schemaVersion = %q, want agent-factory.event.v1", label, index, event.SchemaVersion)
+		}
+		if event.Id == "" || event.Type == "" {
+			t.Fatalf("%s event[%d] = %#v, want canonical id and type", label, index, event)
+		}
+	}
+}
+
 func assertMapperRoundTrip[T any](t *testing.T, label string, apiValue T, roundTrip func(T) T, assertFields func(*testing.T, map[string]any, T)) {
 	t.Helper()
 	first := roundTrip(apiValue)
@@ -429,6 +524,17 @@ func assertSessionReadFieldsPreserved(t *testing.T, fixture map[string]any, mapp
 	}
 	if mapped.Phase != nil && *mapped.Phase != stringValue(fixture, "phase") {
 		t.Fatalf("phase = %q, want %q", *mapped.Phase, stringValue(fixture, "phase"))
+	}
+	if mapped.Usage == nil || mapped.Usage.Resources == nil {
+		t.Fatal("usage.resources missing from durable session read projection")
+	}
+	if budgets, ok := fixture["budgets"].(map[string]any); ok {
+		if mapped.Budgets == nil || mapped.Budgets.MaxAgents == nil {
+			t.Fatal("budgets.maxAgents missing from durable session read projection")
+		}
+		if int(*mapped.Budgets.MaxAgents) != intValue(budgets, "maxAgents") {
+			t.Fatalf("budgets.maxAgents = %d, want %d", *mapped.Budgets.MaxAgents, intValue(budgets, "maxAgents"))
+		}
 	}
 }
 
@@ -516,6 +622,19 @@ func assertDispatchListFieldsPreserved(t *testing.T, fixture map[string]any, map
 	if len(mapped.Dispatches) != len(fixtureRows) {
 		t.Fatalf("dispatch count = %d, want %d", len(mapped.Dispatches), len(fixtureRows))
 	}
+	for index, row := range fixtureRows {
+		fixtureRow, ok := row.(map[string]any)
+		if !ok {
+			continue
+		}
+		refs, ok := fixtureRow["providerSessionRefs"].([]any)
+		if !ok || len(refs) == 0 {
+			continue
+		}
+		if mapped.Dispatches[index].ProviderSessionRefs == nil || len(*mapped.Dispatches[index].ProviderSessionRefs) != len(refs) {
+			t.Fatalf("dispatch[%d] providerSessionRefs = %#v, want %d refs", index, mapped.Dispatches[index].ProviderSessionRefs, len(refs))
+		}
+	}
 }
 
 func assertDispatchDetailFieldsPreserved(t *testing.T, fixture map[string]any, mapped factoryapi.FactoryDispatch) {
@@ -584,6 +703,9 @@ func assertLifecycleControlFieldsPreserved(t *testing.T, fixture map[string]any,
 	}
 	if string(mapped.Outcome) != stringValue(fixture, "outcome") {
 		t.Fatalf("outcome = %q, want %q", mapped.Outcome, stringValue(fixture, "outcome"))
+	}
+	if status := stringValue(fixture, "status"); status != "" && string(mapped.Status) != status {
+		t.Fatalf("status = %q, want %q", mapped.Status, status)
 	}
 }
 

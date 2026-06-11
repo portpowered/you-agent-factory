@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 // NormalizeStartRequest validates and normalizes one durable execution start request.

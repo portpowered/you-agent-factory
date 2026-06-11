@@ -3,9 +3,9 @@ package workflowpreview
 import (
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/workflowpolicy"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
-	"github.com/portpowered/infinite-you/pkg/workflowvalidation"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
 )
 
 // BuildPreview resolves workflow source, validates it without execution, and projects policy preview metadata.

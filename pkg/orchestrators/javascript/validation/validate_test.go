@@ -7,7 +7,7 @@ import (
 
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workflowvalidation"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
 )
 
 const validWorkflowSource = `

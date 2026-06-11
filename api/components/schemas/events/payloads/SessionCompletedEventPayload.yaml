@@ -8,7 +8,7 @@ required:
   - completedAt
 properties:
   finalStatus:
-    $ref: '../../api/FactorySessionStatus.yaml'
+    $ref: '../../api/FactorySessionDurableLifecycleStatus.yaml'
   completedAt:
     type: string
     format: date-time

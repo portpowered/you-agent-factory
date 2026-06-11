@@ -449,13 +449,38 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factories/preview:
+    post:
+      tags:
+        - Factory
+      operationId: previewFactory
+      summary: Preview JavaScript orchestrator factory source
+      description: Canonical Factory preview surface for JavaScript orchestrator factories. Resolves orchestrator source, validates JavaScript or TypeScript source without execution, and projects effective policy, artifact-root, and structured-result constraints before Factory Session start.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactoryPreviewRequest'
+      responses:
+        '200':
+          description: Factory preview validation, source resolution, and policy projection.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactoryPreviewResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /workflow-previews:
     post:
+      deprecated: true
       tags:
         - Workflows
       operationId: previewWorkflow
-      summary: Preview workflow validation and policy
-      description: Resolves workflow source, validates JavaScript or TypeScript source without execution, and projects effective policy, artifact-root, and structured-result constraints for preview or session-start surfaces.
+      summary: Preview workflow validation and policy (obsolete)
+      description: Obsolete Batch 001 compatibility alias for POST /factories/preview. Returns the same Factory preview contract while callers migrate to canonical Factory preview semantics.
       requestBody:
         required: true
         content:
@@ -464,7 +489,7 @@ paths:
               $ref: '#/components/schemas/WorkflowPreviewRequest'
       responses:
         '200':
-          description: Shared workflow validation, source resolution, and policy preview contract.
+          description: Compatibility alias of Factory preview validation and policy projection.
           content:
             application/json:
               schema:
@@ -3565,13 +3590,23 @@ components:
       type: string
       description: Customer-visible session result availability for result update events.
       enum:
+        - NOT_READY
         - PARTIAL
         - FINAL
         - FAILED_WITH_PARTIAL
+        - UNAVAILABLE
+      x-enum-varnames:
+        - FactoryEventSessionResultStatusNotReady
+        - FactoryEventSessionResultStatusPartial
+        - FactoryEventSessionResultStatusFinal
+        - FactoryEventSessionResultStatusFailedWithPartial
+        - FactoryEventSessionResultStatusUnavailable
       x-enum-descriptions:
+        - The durable session result is not yet available for the requested mode.
         - A partial customer-visible result is available before terminal completion.
         - The final customer-visible result is available.
         - Terminal failure occurred after partial customer-visible results were recorded.
+        - The durable session result is unavailable for the requested mode.
     OrchestratorPhaseStatus:
       type: string
       description: Canonical workflow phase lifecycle status for orchestrator phase events.
@@ -3659,7 +3694,7 @@ components:
         - completedAt
       properties:
         finalStatus:
-          $ref: '#/components/schemas/FactorySessionStatus'
+          $ref: '#/components/schemas/FactorySessionDurableLifecycleStatus'
         completedAt:
           type: string
           format: date-time
@@ -7792,7 +7827,7 @@ components:
           type: object
           additionalProperties: true
           description: Child and concurrency budget decisions for preview surfaces.
-    WorkflowPreviewRequest:
+    FactoryPreviewRequest:
       type: object
       additionalProperties: false
       required:
@@ -7800,7 +7835,7 @@ components:
       properties:
         sourceKind:
           type: string
-          description: Workflow source request kind.
+          description: JavaScript orchestrator factory source request kind for Factory preview.
           enum:
             - FACTORY_ID
             - FACTORY_INLINE
@@ -7812,16 +7847,16 @@ components:
           description: Requested workflow name, file ref, factory id, or inline label.
         inlineSource:
           type: string
-          description: Inline workflow source text for INLINE_WORKFLOW or FACTORY_INLINE requests.
+          description: Inline orchestrator source text for INLINE_WORKFLOW or FACTORY_INLINE requests.
         artifactRoot:
           type: string
-          description: Optional absolute artifact root requested with the workflow source.
+          description: Optional absolute artifact root requested with the factory source.
         allowFactoryLookup:
           type: boolean
           description: When true, explicit factory lookup is attempted after ordered workflow lookup.
         projectRoot:
           type: string
-          description: Project root used for ordered workflow source lookup.
+          description: Project root used for ordered JavaScript orchestrator source lookup.
         metadata:
           type: object
           additionalProperties:
@@ -7830,7 +7865,7 @@ components:
         argsSchema:
           type: object
           additionalProperties: true
-          description: Optional JSON Schema object describing workflow invocation arguments.
+          description: Optional JSON Schema object describing factory session invocation arguments.
         defaultPolicy:
           type: object
           additionalProperties: true
@@ -7852,7 +7887,7 @@ components:
           type: integer
           format: int64
           description: Optional requested timeout in milliseconds for preview decision projection.
-    WorkflowPreviewResult:
+    FactoryPreviewResult:
       type: object
       additionalProperties: false
       required:
@@ -7864,18 +7899,28 @@ components:
       properties:
         valid:
           type: boolean
-          description: True when source resolution, validation, policy, and artifact-root checks pass.
+          description: True when source resolution, validation, policy, and artifact-root checks pass for Factory preview.
         sourceResolution:
           $ref: '#/components/schemas/WorkflowSourceResolution'
         sourceValidationIssues:
           type: array
-          description: Workflow source, loader, and orchestrator validation diagnostics.
+          description: JavaScript orchestrator source, loader, and validation diagnostics.
           items:
             $ref: '#/components/schemas/WorkflowDiagnostic'
         policyPreview:
           $ref: '#/components/schemas/WorkflowPolicyPreview'
         resultConstraints:
           $ref: '#/components/schemas/WorkflowResultConstraints'
+    WorkflowPreviewRequest:
+      deprecated: true
+      description: Obsolete Batch 001 compatibility alias for FactoryPreviewRequest. Prefer POST /factories/preview for canonical Factory preview semantics.
+      allOf:
+        - $ref: '#/components/schemas/FactoryPreviewRequest'
+    WorkflowPreviewResult:
+      deprecated: true
+      description: Obsolete Batch 001 compatibility alias for FactoryPreviewResult. Prefer POST /factories/preview for canonical Factory preview semantics.
+      allOf:
+        - $ref: '#/components/schemas/FactoryPreviewResult'
     FactoryValidationSeverity:
       type: string
       description: Validation severity for one factory validation target.

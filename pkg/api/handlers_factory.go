@@ -43,9 +43,18 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, result.FactoryValidationResult())
 }
 
-// PreviewWorkflow handles POST /workflow-previews using the shared workflow preview contract.
+// PreviewFactory handles POST /factories/preview using canonical Factory preview semantics.
+func (s *Server) PreviewFactory(w http.ResponseWriter, r *http.Request) {
+	s.writeFactoryPreview(w, r, false)
+}
+
+// PreviewWorkflow handles POST /workflow-previews as an obsolete compatibility alias of Factory preview.
 func (s *Server) PreviewWorkflow(w http.ResponseWriter, r *http.Request) {
-	req, err := decodeStrictJSON[factoryapi.WorkflowPreviewRequest](r.Body)
+	s.writeFactoryPreview(w, r, true)
+}
+
+func (s *Server) writeFactoryPreview(w http.ResponseWriter, r *http.Request, compatibility bool) {
+	req, err := decodeStrictJSON[factoryapi.FactoryPreviewRequest](r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
 			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
@@ -55,7 +64,7 @@ func (s *Server) PreviewWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	previewInput, err := apisurface.WorkflowPreviewRequestFromAPI(req)
+	previewInput, err := apisurface.FactoryPreviewRequestFromAPI(req)
 	if err != nil {
 		var validationErr *apisurface.RequestValidationError
 		if errors.As(err, &validationErr) {
@@ -66,7 +75,12 @@ func (s *Server) PreviewWorkflow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := apisurface.WorkflowPreviewResultFromPreview(apisurface.BuildWorkflowPreview(previewInput))
+	if compatibility {
+		w.Header().Set("Deprecation", "true")
+		w.Header().Set("Link", `</factories/preview>; rel="successor-version"`)
+	}
+
+	result := apisurface.FactoryPreviewResultFromPreview(apisurface.BuildFactoryPreview(previewInput))
 	s.writeJSON(w, http.StatusOK, result)
 }
 

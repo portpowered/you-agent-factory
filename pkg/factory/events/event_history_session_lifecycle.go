@@ -52,7 +52,7 @@ type SessionLifecycleCompleteInput struct {
 	OrchestratorKind factoryapi.FactoryOrchestratorKind
 	Source           string
 	Tick             int
-	FinalStatus      factoryapi.FactorySessionStatus
+	FinalStatus      factoryapi.FactorySessionDurableLifecycleStatus
 	ResultStatus     *factoryapi.FactoryEventSessionResultStatus
 	ArtifactIDs      []string
 	DispatchCounts   *factoryapi.FactorySessionJavaScriptChildDispatchCounts
@@ -220,11 +220,12 @@ func (h *FactoryEventHistory) RecordSessionLifecycleCompletion(
 		sessionID = factory_context.DefaultSessionID
 	}
 	orchestratorKind := interfaces.GeneratedPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryCfg))
-	finalStatus := factoryapi.FactorySessionStatusFINISHED
-	resultStatus := factoryapi.FINAL
+	finalStatus := factoryapi.FactorySessionDurableLifecycleStatusSucceeded
+	resultStatus := factoryapi.FactoryEventSessionResultStatusFinal
 	var failureDetail *factoryapi.FactoryDispatchFailureDetail
 	if factoryState == interfaces.FactoryStateFailed {
-		resultStatus = factoryapi.FAILEDWITHPARTIAL
+		finalStatus = factoryapi.FactorySessionDurableLifecycleStatusFailed
+		resultStatus = factoryapi.FactoryEventSessionResultStatusFailedWithPartial
 		if strings.TrimSpace(reason) != "" {
 			failureDetail = &factoryapi.FactoryDispatchFailureDetail{
 				Reason:  stringPtrIfNotEmpty("session_failed"),

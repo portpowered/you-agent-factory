@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 // IdempotencyTupleHash returns a stable digest for the normalized execution tuple

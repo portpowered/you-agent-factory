@@ -202,21 +202,29 @@ type DispatchJavaScriptProjection struct {
 	TaskLabel string
 }
 
+// ProviderSessionRef correlates one dispatch with a provider session identity.
+type ProviderSessionRef struct {
+	Provider string
+	Kind     string
+	ID       string
+}
+
 // DispatchSummary is the shared durable dispatch list projection.
 type DispatchSummary struct {
-	ID                string
-	Status            DispatchStatus
-	DispatchKind      string
-	Phase             string
-	Label             string
-	Attempt           int
-	RunnerID          string
-	Model             string
-	Provider          string
-	OutputArtifactIDs []string
-	Usage             *DispatchUsage
-	Warnings          []DispatchWarning
-	FailureDetail     *DispatchFailureDetail
+	ID                  string
+	Status              DispatchStatus
+	DispatchKind        string
+	Phase               string
+	Label               string
+	Attempt             int
+	RunnerID            string
+	Model               string
+	Provider            string
+	ProviderSessionRefs []ProviderSessionRef
+	OutputArtifactIDs   []string
+	Usage               *DispatchUsage
+	Warnings            []DispatchWarning
+	FailureDetail       *DispatchFailureDetail
 }
 
 // DispatchDetail is the shared durable dispatch read projection.

@@ -16,13 +16,19 @@ type FakeService struct {
 	scenariosByRequestID map[string]FakeScenario
 	sessions             map[string]*fakeSessionState
 	startReplay          map[string]startReplayRecord
-	controlReplay        map[string]string
+	controlReplay        map[string]controlReplayRecord
 	persistedSeeds       []DurableSessionListSummary
 }
 
 type startReplayRecord struct {
 	sessionID string
 	tupleHash string
+}
+
+type controlReplayRecord struct {
+	tupleHash string
+	result    LifecycleControlResult
+	err       error
 }
 
 // FakeServiceOption configures one FakeService instance.
@@ -59,7 +65,7 @@ func NewFakeService(options ...FakeServiceOption) *FakeService {
 		scenariosByRequestID: make(map[string]FakeScenario),
 		sessions:             make(map[string]*fakeSessionState),
 		startReplay:          make(map[string]startReplayRecord),
-		controlReplay:        make(map[string]string),
+		controlReplay:        make(map[string]controlReplayRecord),
 	}
 	for _, option := range options {
 		option(service)
@@ -204,14 +210,15 @@ func (s *FakeService) GetResult(ctx context.Context, sessionID string, req Resul
 	if err != nil {
 		return ResultReadResult{}, err
 	}
-	if _, err := NormalizeResultRequest(req); err != nil {
+	normalized, err := NormalizeResultRequest(req)
+	if err != nil {
 		return ResultReadResult{}, err
 	}
 	state, err := s.sessionState(id)
 	if err != nil {
 		return ResultReadResult{}, err
 	}
-	return cloneResultRead(state.result), nil
+	return ProjectResultRead(state.result, state.session, state.artifacts, normalized)
 }
 
 func (s *FakeService) ListDispatches(ctx context.Context, sessionID string) (ListDispatchesResult, error) {
@@ -315,9 +322,13 @@ func (s *FakeService) ReadEvents(ctx context.Context, sessionID string, req Even
 	if err != nil {
 		return EventReadResult{}, err
 	}
+	filtered, err := FilterEventsAfterReconnect(state.events, req, id)
+	if err != nil {
+		return EventReadResult{}, err
+	}
 	return EventReadResult{
 		SessionID: id,
-		Events:    append([]json.RawMessage(nil), state.events...),
+		Events:    filtered,
 	}, nil
 }
 
@@ -370,78 +381,36 @@ func (s *FakeService) sessionState(sessionID string) (*fakeSessionState, error) 
 	return state, nil
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity this fake lifecycle path keeps control validation, mutation, and projection assembly together on one seam.
-func (s *FakeService) applyLifecycleControl(
-	ctx context.Context,
-	sessionID string,
+func validateLifecycleControlRequest(
 	operation LifecycleControlKind,
 	control ControlRequest,
 	approve ApproveRequest,
 	retry RetryDispatchRequest,
-) (LifecycleControlResult, error) {
-	if err := ctx.Err(); err != nil {
-		return LifecycleControlResult{}, err
-	}
-	id, err := NormalizeSessionID(sessionID)
-	if err != nil {
-		return LifecycleControlResult{}, err
-	}
+) error {
 	switch operation {
 	case LifecycleControlApprove:
 		if _, err := NormalizeApproveRequest(approve); err != nil {
-			return LifecycleControlResult{}, err
+			return err
 		}
 	case LifecycleControlRetryDispatch:
 		if _, err := NormalizeRetryDispatchRequest(retry); err != nil {
-			return LifecycleControlResult{}, err
+			return err
 		}
 	default:
 		if _, err := NormalizeControlRequest(control); err != nil {
-			return LifecycleControlResult{}, err
+			return err
 		}
 	}
+	return nil
+}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	state, ok := s.sessions[id]
-	if !ok {
-		return LifecycleControlResult{}, ErrSessionNotFound
-	}
-
-	if operation == LifecycleControlRetryDispatch {
-		if _, ok := findDispatchSummary(state.dispatches, retry.DispatchID); !ok {
-			return LifecycleControlResult{}, ErrDispatchNotFound
-		}
-	}
-
-	outcome := EvaluateLifecycleControl(operation, state.session.Status)
-	if outcome == LifecycleControlOutcomeInvalidState || outcome == LifecycleControlOutcomeTerminalSession {
-		return LifecycleControlResult{}, &ControlError{
-			Operation: operation,
-			Outcome:   outcome,
-			Message:   fmt.Sprintf("%s rejected for session %s in status %s", operation, id, state.session.Status),
-		}
-	}
-
-	if requestID := strings.TrimSpace(control.RequestID); requestID != "" {
-		tupleHash, err := ControlIdempotencyTupleHash(operation, id, approve, retry)
-		if err != nil {
-			return LifecycleControlResult{}, err
-		}
-		if recorded, ok := s.controlReplay[requestID]; ok {
-			if err := CheckControlRequestIDReplay(requestID, recorded, tupleHash); err != nil {
-				return LifecycleControlResult{}, err
-			}
-		} else {
-			s.controlReplay[requestID] = tupleHash
-		}
-	}
-
-	if outcome == LifecycleControlOutcomeAccepted {
-		s.mutateSessionForControl(state, operation, retry.DispatchID)
-	}
-
+func lifecycleControlResultFromState(
+	state *fakeSessionState,
+	id string,
+	operation LifecycleControlKind,
+	outcome LifecycleControlOutcome,
+	retry RetryDispatchRequest,
+) LifecycleControlResult {
 	result := LifecycleControlResult{
 		SessionID: id,
 		Operation: operation,
@@ -459,7 +428,98 @@ func (s *FakeService) applyLifecycleControl(
 		session := cloneSessionRead(state.session)
 		result.Session = &session
 	}
+	return result
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity this fake lifecycle path keeps control validation, mutation, and projection assembly together on one seam.
+func (s *FakeService) applyLifecycleControl(
+	ctx context.Context,
+	sessionID string,
+	operation LifecycleControlKind,
+	control ControlRequest,
+	approve ApproveRequest,
+	retry RetryDispatchRequest,
+) (LifecycleControlResult, error) {
+	if err := ctx.Err(); err != nil {
+		return LifecycleControlResult{}, err
+	}
+	id, err := NormalizeSessionID(sessionID)
+	if err != nil {
+		return LifecycleControlResult{}, err
+	}
+	if err := validateLifecycleControlRequest(operation, control, approve, retry); err != nil {
+		return LifecycleControlResult{}, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, ok := s.sessions[id]
+	if !ok {
+		return LifecycleControlResult{}, ErrSessionNotFound
+	}
+
+	currentStatus := state.session.Status
+	requestID := strings.TrimSpace(control.RequestID)
+	var tupleHash string
+	if requestID != "" {
+		var err error
+		tupleHash, err = ControlIdempotencyTupleHash(operation, id, approve, retry)
+		if err != nil {
+			return LifecycleControlResult{}, err
+		}
+		if recorded, ok := s.controlReplay[requestID]; ok {
+			if err := CheckControlRequestIDReplay(requestID, recorded.tupleHash, tupleHash); err != nil {
+				return LifecycleControlResult{}, &ControlError{
+					Operation: operation,
+					Outcome:   LifecycleControlOutcomeConflict,
+					Status:    currentStatus,
+					Message:   "control requestId was reused with a different operation or target",
+				}
+			}
+			if recorded.err != nil {
+				return LifecycleControlResult{}, recorded.err
+			}
+			return recorded.result, nil
+		}
+	}
+
+	if operation == LifecycleControlRetryDispatch {
+		if _, ok := findDispatchSummary(state.dispatches, retry.DispatchID); !ok {
+			return LifecycleControlResult{}, ErrDispatchNotFound
+		}
+	}
+
+	outcome := EvaluateLifecycleControl(operation, state.session.Status)
+	if outcome == LifecycleControlOutcomeInvalidState || outcome == LifecycleControlOutcomeTerminalSession {
+		controlErr := &ControlError{
+			Operation: operation,
+			Outcome:   outcome,
+			Status:    currentStatus,
+			Message:   fmt.Sprintf("%s rejected for session %s in status %s", operation, id, state.session.Status),
+		}
+		s.recordControlReplay(requestID, tupleHash, LifecycleControlResult{}, controlErr)
+		return LifecycleControlResult{}, controlErr
+	}
+
+	if outcome == LifecycleControlOutcomeAccepted {
+		s.mutateSessionForControl(state, operation, retry.DispatchID)
+	}
+
+	result := lifecycleControlResultFromState(state, id, operation, outcome, retry)
+	s.recordControlReplay(requestID, tupleHash, result, nil)
 	return result, nil
+}
+
+func (s *FakeService) recordControlReplay(requestID, tupleHash string, result LifecycleControlResult, err error) {
+	if strings.TrimSpace(requestID) == "" {
+		return
+	}
+	s.controlReplay[requestID] = controlReplayRecord{
+		tupleHash: tupleHash,
+		result:    result,
+		err:       err,
+	}
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this fake mutation helper keeps lifecycle control state transitions together for deterministic fixtures.
@@ -571,4 +631,175 @@ func findDispatchSummary(dispatches []DispatchSummary, dispatchID string) (Dispa
 		}
 	}
 	return DispatchSummary{}, false
+}
+// mode and includeArtifacts parameters.
+func ProjectResultRead(canonical ResultReadResult, session SessionReadResult, artifacts []ArtifactSummary, req ResultRequest) (ResultReadResult, error) {
+	normalized, err := NormalizeResultRequest(req)
+	if err != nil {
+		return ResultReadResult{}, err
+	}
+
+	status := canonicalResultStatus(canonical, session)
+	projected := cloneResultRead(canonical)
+	projected.Mode = normalized.Mode
+	projected.IncludeArtifacts = normalized.IncludeArtifacts
+	projected = applyResultModeShaping(projected, canonical, session, status, normalized.Mode)
+	projected = applyResultArtifactShaping(projected, artifacts, normalized.IncludeArtifacts)
+	return projected, nil
+}
+
+func canonicalResultStatus(canonical ResultReadResult, session SessionReadResult) ResultStatus {
+	if session.ResultSummary != nil {
+		if status := strings.TrimSpace(session.ResultSummary.ResultStatus); status != "" {
+			return ResultStatus(status)
+		}
+	}
+	return canonical.ResultStatus
+}
+
+func applyResultModeShaping(projected, canonical ResultReadResult, session SessionReadResult, status ResultStatus, mode ResultMode) ResultReadResult {
+	switch mode {
+	case ResultModePartial:
+		return shapePartialModeResult(projected, canonical, session, status)
+	case ResultModeFinal:
+		return shapeFinalModeResult(projected, canonical, session, status)
+	default:
+		projected.ResultStatus = status
+		return projected
+	}
+}
+
+func shapePartialModeResult(projected, canonical ResultReadResult, session SessionReadResult, status ResultStatus) ResultReadResult {
+	projected.ResultStatus = status
+	switch status {
+	case ResultStatusPartial, ResultStatusFinal, ResultStatusFailedWithPartial:
+		projected.PrimaryResult = cloneRawJSON(canonical.PrimaryResult)
+		projected.Failure = cloneFailureSummary(canonical.Failure)
+		projected.Availability = nil
+	case ResultStatusNotReady, ResultStatusUnavailable:
+		projected.PrimaryResult = nil
+		projected.Failure = nil
+		projected.Availability = cloneResultAvailability(canonical.Availability)
+		if projected.Availability == nil && status == ResultStatusNotReady {
+			projected.Availability = defaultNotReadyAvailability(session)
+		}
+	}
+	return projected
+}
+
+func shapeFinalModeResult(projected, canonical ResultReadResult, session SessionReadResult, status ResultStatus) ResultReadResult {
+	switch status {
+	case ResultStatusPartial:
+		if !IsTerminalLifecycleStatus(session.Status) {
+			projected.ResultStatus = ResultStatusNotReady
+			projected.PrimaryResult = nil
+			projected.Failure = nil
+			projected.Availability = cloneResultAvailability(canonical.Availability)
+			if projected.Availability == nil {
+				projected.Availability = defaultNotReadyAvailability(session)
+			}
+			return projected
+		}
+		projected.ResultStatus = status
+		projected.PrimaryResult = cloneRawJSON(canonical.PrimaryResult)
+		projected.Failure = cloneFailureSummary(canonical.Failure)
+		projected.Availability = nil
+	case ResultStatusFinal, ResultStatusFailedWithPartial:
+		projected.ResultStatus = status
+		projected.PrimaryResult = cloneRawJSON(canonical.PrimaryResult)
+		projected.Failure = cloneFailureSummary(canonical.Failure)
+		projected.Availability = nil
+	case ResultStatusNotReady, ResultStatusUnavailable:
+		projected.ResultStatus = status
+		projected.PrimaryResult = nil
+		projected.Failure = nil
+		projected.Availability = cloneResultAvailability(canonical.Availability)
+		if projected.Availability == nil && status == ResultStatusNotReady {
+			projected.Availability = defaultNotReadyAvailability(session)
+		}
+	default:
+		projected.ResultStatus = status
+	}
+	return projected
+}
+
+func applyResultArtifactShaping(projected ResultReadResult, artifacts []ArtifactSummary, includeArtifacts bool) ResultReadResult {
+	projected.ArtifactIDs = nil
+	projected.ArtifactRefs = nil
+
+	if includeArtifacts {
+		projected.ArtifactRefs = artifactRefsFromSummaries(artifacts)
+		return projected
+	}
+
+	projected.ArtifactIDs = artifactIDsFromSummaries(artifacts)
+	return projected
+}
+
+func artifactRefsFromSummaries(artifacts []ArtifactSummary) []ArtifactRefSummary {
+	if len(artifacts) == 0 {
+		return nil
+	}
+	refs := make([]ArtifactRefSummary, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		refs = append(refs, ArtifactRefSummary{
+			ID:          artifact.ID,
+			Kind:        artifact.Kind,
+			Visibility:  artifact.Visibility,
+			ContentHash: artifact.ContentHash,
+			SizeBytes:   artifact.SizeBytes,
+		})
+	}
+	return refs
+}
+
+func artifactIDsFromSummaries(artifacts []ArtifactSummary) []string {
+	if len(artifacts) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		if id := strings.TrimSpace(artifact.ID); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	return ids
+}
+
+func defaultNotReadyAvailability(session SessionReadResult) *ResultAvailabilityDetail {
+	message := "Session is still running."
+	if IsTerminalLifecycleStatus(session.Status) {
+		message = "Final result is not available."
+	}
+	return &ResultAvailabilityDetail{
+		Reason:    "RESULT_NOT_READY",
+		Message:   message,
+		Retryable: !IsTerminalLifecycleStatus(session.Status),
+	}
+}
+
+func cloneFailureSummary(failure *FailureSummary) *FailureSummary {
+	if failure == nil {
+		return nil
+	}
+	cloned := *failure
+	return &cloned
+}
+
+func cloneResultAvailability(availability *ResultAvailabilityDetail) *ResultAvailabilityDetail {
+	if availability == nil {
+		return nil
+	}
+	cloned := *availability
+	return &cloned
+}
+
+func cloneRawJSON(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return nil
+	}
+	return append(json.RawMessage(nil), raw...)
 }

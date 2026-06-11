@@ -1,10 +1,20 @@
 type: string
 description: Customer-visible session result availability for result update events.
 enum:
+  - NOT_READY
   - PARTIAL
   - FINAL
   - FAILED_WITH_PARTIAL
+  - UNAVAILABLE
+x-enum-varnames:
+  - FactoryEventSessionResultStatusNotReady
+  - FactoryEventSessionResultStatusPartial
+  - FactoryEventSessionResultStatusFinal
+  - FactoryEventSessionResultStatusFailedWithPartial
+  - FactoryEventSessionResultStatusUnavailable
 x-enum-descriptions:
+  - The durable session result is not yet available for the requested mode.
   - A partial customer-visible result is available before terminal completion.
   - The final customer-visible result is available.
   - Terminal failure occurred after partial customer-visible results were recorded.
+  - The durable session result is unavailable for the requested mode.

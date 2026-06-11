@@ -58,7 +58,10 @@ func TestFakeServiceConsumer_ProjectsFixtureThroughApisurfaceMappers(t *testing.
 		t.Fatalf("dispatches = %#v", mappedDispatches.Dispatches)
 	}
 
-	result, err := service.GetResult(context.Background(), mappedStart.SessionId, factorysessionexecution.ResultRequest{})
+	result, err := service.GetResult(context.Background(), mappedStart.SessionId, factorysessionexecution.ResultRequest{
+		Mode:             factorysessionexecution.ResultModeFinal,
+		IncludeArtifacts: true,
+	})
 	if err != nil {
 		t.Fatalf("GetResult: %v", err)
 	}
@@ -77,5 +80,52 @@ func TestFakeServiceConsumer_ProjectsFixtureThroughApisurfaceMappers(t *testing.
 	stream := factorysession.FactoryEventStreamFromReadResult(events)
 	if len(stream.History) == 0 {
 		t.Fatal("terminal events missing")
+	}
+}
+
+func TestFakeServiceConsumer_ProjectsCanonicalFixtureEventsForRunningApprovalTerminal(t *testing.T) {
+	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+	}
+
+	cases := []struct {
+		scenarioID string
+		eventCount int
+	}{
+		{"javascript-running-n-dispatch", 2},
+		{"javascript-succeeded-two-dispatch", 3},
+		{"javascript-awaiting-approval", 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.scenarioID, func(t *testing.T) {
+			scenario := findScenario(t, loadDurableFixtureCatalog(t), tc.scenarioID)
+			executionRequest, ok := scenario["executionRequest"].(map[string]any)
+			if !ok {
+				t.Fatal("missing executionRequest fixture")
+			}
+			request, err := factorysession.StartRequestFromAPI(decodeExecutionRequest(t, executionRequest))
+			if err != nil {
+				t.Fatalf("StartRequestFromAPI: %v", err)
+			}
+			started, err := service.StartAsync(context.Background(), request)
+			if err != nil {
+				t.Fatalf("StartAsync: %v", err)
+			}
+			events, err := service.ReadEvents(context.Background(), started.SessionID, factorysessionexecution.EventReconnectRequest{})
+			if err != nil {
+				t.Fatalf("ReadEvents: %v", err)
+			}
+			mapped := factorysession.EventReadResponseToAPI(events)
+			if len(mapped) != tc.eventCount {
+				t.Fatalf("mapped events = %d, want %d", len(mapped), tc.eventCount)
+			}
+			for index, event := range mapped {
+				if event.SchemaVersion != factoryapi.AgentFactoryEventV1 {
+					t.Fatalf("event[%d] schemaVersion = %q, want agent-factory.event.v1", index, event.SchemaVersion)
+				}
+			}
+		})
 	}
 }

@@ -41,7 +41,8 @@
     "test:unit": "vitest run --exclude 'integration/*.integration.test.mjs'",
     "test": "vitest run --exclude 'integration/*.integration.test.mjs' && vitest run integration --no-file-parallelism --maxWorkers 1",
     "test-storybook": "bun scripts/run-storybook-ci.mjs",
-    "tsc": "tsc -b --noEmit --pretty false"
+    "tsc": "tsc -b --noEmit --pretty false",
+    "typecheck": "tsc -b --noEmit --pretty false"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",

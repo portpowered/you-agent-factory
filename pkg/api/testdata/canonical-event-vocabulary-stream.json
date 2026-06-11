@@ -439,7 +439,7 @@
       "source": "api"
     },
     "payload": {
-      "finalStatus": "FINISHED",
+      "finalStatus": "SUCCEEDED",
       "completedAt": "2026-04-21T12:00:11Z",
       "durationMillis": 2000,
       "resultStatus": "FINAL",

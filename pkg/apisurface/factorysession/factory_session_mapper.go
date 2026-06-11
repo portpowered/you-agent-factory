@@ -8,7 +8,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 // OrchestratorOverrideFromAPI maps one public orchestrator override into the shared
@@ -89,6 +89,8 @@ func SessionReadResultFromAPI(response factoryapi.FactorySessionDurableReadModel
 	if response.Progress != nil {
 		result.Progress = progressCountsFromAPI(*response.Progress)
 	}
+	result.Budgets = sessionBudgetsFromAPI(response.Budgets)
+	result.Usage = sessionUsageFromAPI(response.Usage)
 	if response.ResultSummary != nil {
 		result.ResultSummary = &factorysessionexecution.ResultSummary{
 			ResultStatus: string(response.ResultSummary.ResultStatus),
@@ -176,6 +178,7 @@ func DispatchSummaryFromAPI(response factoryapi.FactorySessionDispatchSummary) f
 	if response.Provider != nil {
 		summary.Provider = strings.TrimSpace(*response.Provider)
 	}
+	summary.ProviderSessionRefs = providerSessionRefsFromAPI(response.ProviderSessionRefs)
 	if response.OutputArtifactIds != nil {
 		summary.OutputArtifactIDs = append([]string(nil), *response.OutputArtifactIds...)
 	}
@@ -218,6 +221,7 @@ func DispatchDetailFromAPI(response factoryapi.FactoryDispatch) factorysessionex
 	if response.Provider != nil {
 		summary.Provider = strings.TrimSpace(*response.Provider)
 	}
+	summary.ProviderSessionRefs = providerSessionRefsFromAPI(response.ProviderSessionRefs)
 	if response.Usage != nil {
 		summary.Usage = dispatchUsageFromAPI(*response.Usage)
 	}
@@ -458,6 +462,9 @@ func ControlErrorToAPI(sessionID string, err *factorysessionexecution.ControlErr
 		SessionId: sessionID,
 		Operation: factoryapi.FactorySessionLifecycleControlKind(err.Operation),
 		Outcome:   factoryapi.FactorySessionLifecycleControlOutcome(err.Outcome),
+	}
+	if err.Status != "" {
+		response.Status = factoryapi.FactorySessionDurableLifecycleStatus(err.Status)
 	}
 	if message := strings.TrimSpace(err.Message); message != "" {
 		response.Detail = &message

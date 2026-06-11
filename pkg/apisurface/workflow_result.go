@@ -2,7 +2,7 @@ package apisurface
 
 import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/workflowresult"
+	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 )
 
 // BuildWorkflowSessionLiveResult projects the live terminal session result read shape.

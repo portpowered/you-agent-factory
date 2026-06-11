@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 // LoadFakeScenariosFromContractFixtures loads deterministic fake scenarios from the
@@ -243,6 +243,14 @@ func sessionReadFromFixtureMap(session map[string]any) SessionReadResult {
 	if progress, ok := session["progress"].(map[string]any); ok {
 		result.Progress = progressCountsFromFixtureMap(progress)
 	}
+	if budgets, ok := session["budgets"].(map[string]any); ok {
+		result.Budgets = sessionBudgetsFromFixtureMap(budgets)
+	}
+	if usage, ok := session["usage"].(map[string]any); ok {
+		result.Usage = sessionUsageFromFixtureMap(usage)
+	} else {
+		result.Usage = EmptySessionUsage()
+	}
 	if summaries, ok := session["phaseSummaries"].([]any); ok {
 		for _, item := range summaries {
 			if row, ok := item.(map[string]any); ok {
@@ -390,6 +398,16 @@ func dispatchSummaryFromFixtureMap(dispatch map[string]any) DispatchSummary {
 			}
 		}
 	}
+	if refs, ok := dispatch["providerSessionRefs"].([]any); ok {
+		for _, item := range refs {
+			if row, ok := item.(map[string]any); ok {
+				summary.ProviderSessionRefs = append(summary.ProviderSessionRefs, providerSessionRefFromFixtureMap(row))
+			}
+		}
+	}
+	if usage, ok := dispatch["usage"].(map[string]any); ok {
+		summary.Usage = dispatchUsageFromFixtureMap(usage)
+	}
 	if failure, ok := dispatch["failureDetail"].(map[string]any); ok {
 		summary.FailureDetail = &DispatchFailureDetail{
 			Reason:     fixtureStringValue(failure, "reason"),
@@ -507,6 +525,74 @@ func progressCountsFromFixtureMap(progress map[string]any) *ProgressCounts {
 		InFlightDispatches:  fixtureIntValue(progress, "inFlightDispatches"),
 		PhaseCount:          fixtureIntValue(progress, "phaseCount"),
 	}
+}
+
+func sessionBudgetsFromFixtureMap(budgets map[string]any) *SessionBudgets {
+	if maxAgents := fixtureIntValue(budgets, "maxAgents"); maxAgents > 0 {
+		return &SessionBudgets{MaxAgents: maxAgents}
+	}
+	return nil
+}
+
+func sessionUsageFromFixtureMap(usage map[string]any) SessionUsage {
+	out := EmptySessionUsage()
+	rows, ok := usage["resources"].([]any)
+	if !ok {
+		return out
+	}
+	for _, item := range rows {
+		row, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		out.Resources = append(out.Resources, ResourceUsage{
+			Name:      fixtureStringValue(row, "name"),
+			Available: fixtureIntValue(row, "available"),
+			Total:     fixtureIntValue(row, "total"),
+		})
+	}
+	return out
+}
+
+func providerSessionRefFromFixtureMap(ref map[string]any) ProviderSessionRef {
+	return ProviderSessionRef{
+		Provider: fixtureStringValue(ref, "provider"),
+		Kind:     fixtureStringValue(ref, "kind"),
+		ID:       fixtureStringValue(ref, "id"),
+	}
+}
+
+func dispatchUsageFromFixtureMap(usage map[string]any) *DispatchUsage {
+	out := &DispatchUsage{}
+	if value := fixtureInt64Value(usage, "inputTokens"); value > 0 {
+		out.InputTokens = value
+	}
+	if value := fixtureInt64Value(usage, "outputTokens"); value > 0 {
+		out.OutputTokens = value
+	}
+	if value := fixtureInt64Value(usage, "totalTokens"); value > 0 {
+		out.TotalTokens = value
+	}
+	if value := fixtureInt64Value(usage, "durationMillis"); value > 0 {
+		out.DurationMillis = value
+	}
+	if value, ok := usage["costUsd"].(float64); ok && value > 0 {
+		out.CostUSD = value
+	}
+	if value := fixtureIntValue(usage, "retryCount"); value > 0 {
+		out.RetryCount = int32(value)
+	}
+	if out.InputTokens == 0 && out.OutputTokens == 0 && out.TotalTokens == 0 &&
+		out.DurationMillis == 0 && out.CostUSD == 0 && out.RetryCount == 0 {
+		return nil
+	}
+	return out
+}
+
+func cloneSessionUsage(usage SessionUsage) SessionUsage {
+	cloned := SessionUsage{Resources: make([]ResourceUsage, 0, len(usage.Resources))}
+	cloned.Resources = append(cloned.Resources, usage.Resources...)
+	return cloned
 }
 
 func phaseSummaryFromFixtureMap(summary map[string]any) PhaseSummary {
@@ -688,6 +774,11 @@ func cloneSessionRead(session SessionReadResult) SessionReadResult {
 		lifecycle := *session.Lifecycle
 		cloned.Lifecycle = &lifecycle
 	}
+	if session.Budgets != nil {
+		budgets := *session.Budgets
+		cloned.Budgets = &budgets
+	}
+	cloned.Usage = cloneSessionUsage(session.Usage)
 	cloned.PhaseSummaries = append([]PhaseSummary(nil), session.PhaseSummaries...)
 	cloned.ArtifactRefs = append([]ArtifactRefSummary(nil), session.ArtifactRefs...)
 	cloned.Links = session.Links
@@ -778,34 +869,7 @@ func cloneResultRead(result ResultReadResult) ResultReadResult {
 }
 
 func deriveProjectionEvents(session SessionReadResult, result ResultReadResult) []json.RawMessage {
-	events := []json.RawMessage{
-		json.RawMessage(`{"type":"SESSION_STARTED","payload":{"sessionId":"` + session.SessionID + `"}}`),
-	}
-	if result.ResultStatus != "" {
-		payload, err := json.Marshal(map[string]any{
-			"type": "SESSION_RESULT_UPDATED",
-			"payload": map[string]any{
-				"sessionId":    session.SessionID,
-				"resultStatus": string(result.ResultStatus),
-			},
-		})
-		if err == nil {
-			events = append(events, payload)
-		}
-	}
-	if IsTerminalLifecycleStatus(session.Status) {
-		payload, err := json.Marshal(map[string]any{
-			"type": "SESSION_COMPLETED",
-			"payload": map[string]any{
-				"sessionId": session.SessionID,
-				"status":    string(session.Status),
-			},
-		})
-		if err == nil {
-			events = append(events, payload)
-		}
-	}
-	return events
+	return BuildCanonicalSessionEvents(session, result)
 }
 // BuiltinInterruptedRecoverableScenario is a deterministic JavaScript session that
 // was interrupted with a stale lease and remains recoverable for persisted listing.

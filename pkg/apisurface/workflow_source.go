@@ -1,7 +1,7 @@
 package apisurface
 
 import (
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 // NormalizeWorkflowSourceRequest is the shared API, CLI, MCP, and website entry
