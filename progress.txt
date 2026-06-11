@@ -75,3 +75,11 @@
   - Gotchas encountered: timing artifacts (`main-shard-<index>-timings.json`) are not Vitest blobs but live beside them—allowlist sanitization must keep timing files for the expected shard total while deleting unrelated JSON blobs.
   - Useful context: only mergeability work for this iteration; all PRD stories were already `passes: true`.
 ---
+
+## 2026-06-11T12:35:00Z - mergeability (PR #799 CI deadcode)
+- Fixed `Build, Lint, and API` CI failure: removed unused `mockCurrentFactoryDocument` export from `app-shell-test-utils.tsx` after story 005 deleted the only consumers during the app-shell split.
+- **Learnings for future iterations:**
+  - Patterns discovered: when deleting `App.*` test cases, grep for helpers that become single-file exports and run `make ui-deadcode` before pushing—CI enforces the reviewed baseline.
+  - Gotchas encountered: deadcode drift fails the whole `Build, Lint, and API` job even when typecheck and shard lanes pass independently.
+  - Useful context: mergeability-only follow-up; no PRD story status changes required.
+---
