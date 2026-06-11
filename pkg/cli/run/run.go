@@ -26,6 +26,7 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	"github.com/portpowered/infinite-you/pkg/cli/timedisplay"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -56,7 +57,10 @@ type RunConfig struct {
 	// InvocationStdinText carries stdin text resolved before Run when root
 	// already consumed the stdin stream for one-shot factory invocation.
 	InvocationStdinText *string
-	RunnerID            string
+	RunnerID string
+	// OperatorDefaults carries resolved operator-level default worker model
+	// settings loaded at the CLI boundary.
+	OperatorDefaults operatorconfig.ResolvedDefaults
 	// ExecutionBaseDir overrides the base directory used to resolve relative
 	// runtime execution paths. Empty defaults to the caller's current working
 	// directory for CLI-style runs.
@@ -508,6 +512,7 @@ func buildRunServiceConfig(
 	svcCfg := &service.FactoryServiceConfig{
 		Dir:                       cfg.Dir,
 		RunnerID:                  cfg.RunnerID,
+		OperatorDefaults:          cfg.OperatorDefaults,
 		ExecutionBaseDir:          cfg.ExecutionBaseDir,
 		RuntimeMode:               runtimeModeForRun(cfg),
 		Port:                      cfg.Port,
@@ -558,12 +563,11 @@ func emitVerboseStartupDiagnostics(cfg RunConfig, recordPath resolvedRunRecordPa
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
-		"run startup factoryDir=%q configuredDir=%q runtimeMode=%s workflow=%q runnerOverride=%t mockWorkers=%t mockWorkersConfigPath=%q recording=%s runtimeLogDir=%q runtimeLogRoll=%s runtimeMetricsDir=%q runtimeMetricsRoll=%s dashboardPort=%d requestedDashboardPort=%d autoPort=%s",
+		"run startup factoryDir=%q configuredDir=%q runtimeMode=%s workflow=%q mockWorkers=%t mockWorkersConfigPath=%q recording=%s runtimeLogDir=%q runtimeLogRoll=%s runtimeMetricsDir=%q runtimeMetricsRoll=%s dashboardPort=%d requestedDashboardPort=%d autoPort=%s",
 		resolvedFactoryDir,
 		cfg.Dir,
 		runtimeModeForRun(cfg),
 		workflowLabel(cfg.Workflow),
-		strings.TrimSpace(cfg.RunnerID) != "",
 		cfg.MockWorkersEnabled,
 		cfg.MockWorkersConfigPath,
 		recordingDiagnostics(recordPath, cfg.ReplayPath),
@@ -575,6 +579,7 @@ func emitVerboseStartupDiagnostics(cfg RunConfig, recordPath resolvedRunRecordPa
 		requestedPort,
 		autoPortDiagnostics(cfg.AutoPort, requestedPort, cfg.Port),
 	)
+	clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "%s", cfg.OperatorDefaults.DiagnosticsLine())
 }
 
 func emitNamedFactoryResolutionDiagnostics(cfg RunConfig, logger *zap.Logger) {
