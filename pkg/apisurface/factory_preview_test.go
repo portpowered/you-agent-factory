@@ -1,3 +1,6 @@
+// Apisurface preview tests exercise orchestrator-owned JavaScript preview and
+// source packages directly; active behavior must not depend on root pkg/workflow*
+// compatibility shims.
 package apisurface_test
 
 import (
