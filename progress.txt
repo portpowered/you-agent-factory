@@ -1,0 +1,15 @@
+## Codebase Patterns
+- Use `factorysessionexecution.PrepareStart` to normalize durable JavaScript session starts: it chains `NormalizeStartRequest`, `resolveStartSourceWithResolution`, wrapped-source validation (IIFE wrap matching `workflowruntime.Run`), args JSON checks, `workflowpolicy.Resolve`, and wait-option validation before runtime execution.
+- Runtime simple-workflow fixtures live in `pkg/orchestrators/javascript/runtime/testdata/`; factorysessionexecution tests can read them via `../orchestrators/javascript/runtime/testdata/<name>`.
+- Durable start source resolution is shared through `resolveStartSourceWithResolution`; `ResolveStartSource` is a thin wrapper returning only `ResolvedSource`.
+
+## 2026-06-11T12:49:03Z - dynamic-workflows-cell-session-backend-runtime-001
+- Implemented `PrepareStart`, `StartPrepareContext`, and `PreparedStart` in `pkg/factorysessionexecution/prepare_start.go` to normalize real JavaScript session starts through orchestrator-owned source resolution, validation, policy projection, args checks, and wait validation before runtime execution.
+- Refactored `ResolveStartSource` to delegate to shared `resolveStartSourceWithResolution`.
+- Added focused tests for successful preparation and invalid source/args/policy/wait rejection paths using runtime `simple-final` and `syntax-error` fixtures.
+- Updated `docs/internal/processes/api-relevant-files.md` with the `PrepareStart` wiring pattern.
+- **Learnings for future iterations:**
+  - Pre-execution source validation must wrap executable source in an IIFE like `workflowruntime.Run`; validating raw top-level `return` fixtures fails incorrectly.
+  - Policy denial surfaces as `ValidationError` with field `requestedPolicy`; source issues use field `source`.
+  - `PreparedStart` carries `SourceContent` (executable), `EffectivePolicy`, `PolicyProjection`, and `TupleHash` for downstream runtime-backed `StartAsync`/`StartSync` work in story 002+.
+---
