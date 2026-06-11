@@ -52,13 +52,16 @@ func (r *factoryWorldReducer) applyDispatchCreated(event factoryapi.FactoryEvent
 	}
 
 	worker := r.workerForTransition(payload.TransitionId)
+	runnerID, runnerSource := interfaces.RunnerMetadataFromDispatchRequestMetadata(payload.Metadata)
 	dispatch := interfaces.FactoryWorldDispatch{
-		DispatchID:   dispatchID,
-		TransitionID: payload.TransitionId,
-		Workstation:  r.workstationRefForTransition(payload.TransitionId),
-		Provider:     worker.Provider,
-		Model:        worker.Model,
-		StartedTick:  event.Context.Tick,
+		DispatchID:            dispatchID,
+		TransitionID:          payload.TransitionId,
+		Workstation:           r.workstationRefForTransition(payload.TransitionId),
+		RunnerID:              runnerID,
+		RunnerSelectionSource: runnerSource,
+		Provider:              worker.Provider,
+		Model:                 worker.Model,
+		StartedTick:           event.Context.Tick,
 		StartedAt:    event.Context.EventTime,
 		Inputs:       inputs,
 		WorkItemIDs:  sortedStrings(workIDs),

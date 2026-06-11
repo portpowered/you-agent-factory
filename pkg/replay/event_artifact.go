@@ -131,6 +131,9 @@ func hydrateArtifactFromEvents(artifact *interfaces.ReplayArtifact) error {
 	if artifact == nil {
 		return fmt.Errorf("replay artifact is required")
 	}
+	if err := normalizeDispatchProviderEvents(artifact.Events); err != nil {
+		return err
+	}
 	for _, event := range artifact.Events {
 		switch event.Type {
 		case factoryapi.FactoryEventTypeRunRequest:
