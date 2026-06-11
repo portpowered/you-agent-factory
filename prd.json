@@ -1,105 +1,117 @@
 {
-  "project": "Dynamic Workflows Cell Provider Fixtures",
-  "branchName": "dynamic-workflows-cell-provider-fixtures",
-  "description": "Stabilize the shared deterministic Factory Session provider fixtures so downstream CLI, MCP, API, and website cells can start, list, inspect, poll, replay, and control JavaScript Factory Sessions without requiring a real JavaScript runtime.",
+  "project": "UI CI Acceleration and Test Rationalization",
+  "branchName": "prd-ui-ci-acceleration-and-test-rationalization",
+  "description": "Accelerate the UI-heavy portions of the required CI path by surfacing browser integration failures earlier, using sharded UI coverage, adding stable slow-test reporting, and reducing redundant UI test coverage without weakening defect detection.",
   "context": {
-    "customerAsk": "Use the existing deterministic FakeService and contract fixtures as the mock session-provider path. Add or repair deterministic fixture scenarios for validation failure, async running, sync success, sync timeout, failed recoverable session, dispatch summaries, artifact detail, event reconnect, and lifecycle-control outcomes. FakeService must drive direct tests for async start, sync start, session listing, session reads, results, dispatches, artifacts, event reconnect, lifecycle controls, idempotent replay, and request-id conflict, while avoiding HTTP handler, CLI command, MCP tool, UI component, real JavaScript VM, or generated OpenAPI changes unless required for fixture compilation.",
-    "problem": "Parallel CLI, MCP, API, and website cells need the same session IDs, statuses, result hashes, dispatch IDs, artifact IDs, event cursors, and typed error behavior. Without a stable fixture catalog, each downstream surface either waits for the real runtime or invents local mock data, creating drift and unreliable cross-surface verification.",
-    "solution": "Extend the deterministic Factory Session fake provider and contract fixture catalog so direct package tests can exercise shared JavaScript Factory Session scenarios. Document stable scenario IDs and expected hashes in tests, return typed errors for known failure cases, preserve canonical Factory Session vocabulary, and keep the work scoped to provider fixtures and direct service behavior."
+    "customerAsk": "Accelerate UI CI and rationalize redundant tests so browser integration regressions fail faster, covered UI runs complete sooner, and maintainers have timing evidence to keep the suite from regressing.",
+    "problem": "The current required CI path runs expensive UI verification lanes serially, so browser integration failures can be delayed until after a long covered UI pass. Existing coverage sharding is not used by the canonical PR flow, slow app-shell and React Flow-heavy tests dominate runtime, and some browser/jsdom/unit assertions overlap without adding proportional confidence.",
+    "solution": "Introduce a canonical PR verification flow that starts browser integration before covered UI completion, use the repo-owned sharded coverage and merge behavior, emit stable slow-test reports, define lane boundaries, split at least one high-cost app-shell suite into lower-cost feature tests, and preserve deterministic browser integration behavior."
   },
   "acceptanceCriteria": [
-    "FakeService direct tests cover async start, sync start, live/persisted/all session listing, get session, final and partial results, dispatch list/detail, artifact list/detail, event reconnect, lifecycle controls, idempotent replay, and request-id conflict behavior.",
-    "Fixture scenario IDs and expected session/result hashes are stable and documented in tests so downstream CLI, MCP, API, and UI cells can reuse them.",
-    "Unknown scenario, unknown session, malformed request, reconnect cursor miss, and lifecycle conflict failures return stable typed errors.",
-    "Fixture-backed scenarios use canonical Factory Session vocabulary and do not introduce DynamicWorkflowRun or workflow run as service/resource nouns.",
-    "No HTTP handler, CLI command, MCP tool, UI component, real JavaScript VM behavior, or generated OpenAPI change is introduced unless strictly required for fixture compilation.",
-    "Quality gate passes: go test ./pkg/factorysessionexecution, scoped vocabulary verification, typecheck, lint where touched, and any focused tests required by touched fixture consumers."
+    "Browser integration no longer waits for the full covered UI lane to finish before starting in the canonical PR verification flow.",
+    "Required UI-related CI wall clock time is reduced by at least 30% from the current measured baseline, or the closeout artifact explains the measured blocker and next tuning step.",
+    "Sharded UI coverage preserves merged coverage reports, threshold enforcement, replay coverage checking, and clear failure output when a shard fails.",
+    "Covered UI and browser integration lanes emit stable slow-file summaries that maintainers can compare across runs.",
+    "Lane boundaries explain what belongs in unit/jsdom coverage, covered feature integration, and browser integration, with duplicate assertion patterns removed from at least one high-cost area.",
+    "Browser integration remains deterministic: failures identify the lane and rerun command, and concurrent execution avoids port, preview server, and shared download conflicts.",
+    "Typecheck, lint, and relevant tests pass for CI orchestration, coverage sharding, reporting, and changed UI test behavior."
   ],
   "userStories": [
     {
-      "id": "dynamic-workflows-cell-provider-fixtures-001",
-      "title": "Publish Stable Fixture Scenario Identity",
-      "description": "As a downstream cell implementer, I want stable fixture scenario IDs and expected hashes so CLI, MCP, API, and website tests can all target the same JavaScript Factory Session examples.",
+      "id": "prd-ui-ci-acceleration-and-test-rationalization-001",
+      "title": "Fast-Fail Required UI CI Flow",
+      "description": "As an engineer merging a UI change, I want browser integration to start before or alongside covered UI verification so that browser regressions become actionable sooner.",
       "acceptanceCriteria": [
-        "The fixture catalog exposes deterministic scenario IDs for validation failure, async running, sync success, sync timeout, failed recoverable session, dispatch inspection, artifact inspection, event reconnect, and lifecycle-control outcomes.",
-        "Direct tests document each reusable scenario ID with the expected session ID, lifecycle status, result status when applicable, and stable result or projection hash.",
-        "Re-loading the same fixture catalog produces the same scenario IDs, session IDs, event ordering, dispatch IDs, artifact IDs, and result hashes.",
-        "Scenario payloads use Factory Session, FactoryEvent, Dispatch, Artifact, and Provider Session vocabulary in public-facing fixture fields.",
-        "Typecheck passes",
-        "Tests pass"
+        "The canonical PR verification flow starts browser integration before covered UI completion, either by ordering browser first or by running browser and coverage through one orchestrated concurrent flow.",
+        "Failure output names the failed lane and includes the target or command an engineer should rerun locally.",
+        "Concurrent lanes, if used, keep lane logs attributable and avoid shared-state conflicts between browser-oriented processes.",
+        "The chosen ordering or concurrency behavior is documented in the developer-facing CI target help or adjacent CI documentation.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 1,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-provider-fixtures-002",
-      "title": "Exercise Start, List, Read, And Result Behavior",
-      "description": "As a provider consumer, I want the fake Factory Session service to start and inspect deterministic sessions so surface cells can build against the shared service contract before the real runtime exists.",
+      "id": "prd-ui-ci-acceleration-and-test-rationalization-002",
+      "title": "Sharded Covered UI Verification",
+      "description": "As an engineer waiting on CI, I want covered UI tests to run in shards and merge coverage afterward so that wall clock time drops without weakening coverage enforcement.",
       "acceptanceCriteria": [
-        "Async start returns a deterministic running Factory Session with inspection links and a replayable event prefix.",
-        "Sync start returns a deterministic successful terminal result for the success scenario and a stable timeout result for the timeout scenario.",
-        "Listing with live, persisted, and all scopes returns the expected fixture-backed sessions, with duplicate live/persisted identities handled deterministically.",
-        "Get session returns the expected read model for running, completed, timed-out, and failed recoverable sessions.",
-        "Final and partial result reads return the expected status, availability, primary result, artifact inclusion behavior, and stable hash for each supported scenario.",
-        "Replaying the same request ID with the same idempotency tuple returns the original start result instead of creating a new session.",
-        "Typecheck passes",
-        "Tests pass"
+        "The canonical PR verification flow uses the repo-owned UI coverage shard and merge behavior with a documented default shard count.",
+        "The merged coverage report preserves threshold enforcement and replay coverage checking after all expected shards finish.",
+        "A missing or failed shard produces a clear failure that identifies the shard and does not silently produce partial coverage.",
+        "Shard count can be tuned through a documented environment variable or CI setting without changing test semantics.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 2,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-provider-fixtures-003",
-      "title": "Provide Dispatch, Artifact, And Event Inspection Fixtures",
-      "description": "As an inspection surface implementer, I want deterministic dispatch, artifact, and event fixture behavior so detail views and tools can verify session progress without a real JavaScript runtime.",
+      "id": "prd-ui-ci-acceleration-and-test-rationalization-003",
+      "title": "Stable UI Test Cost Reporting",
+      "description": "As a maintainer, I want CI to report the slowest covered UI and browser integration files with cost categories so that runtime regressions are visible and actionable.",
       "acceptanceCriteria": [
-        "List dispatches returns deterministic summaries with stable dispatch IDs, status, timestamps, provider session references when present, and links back to the owning Factory Session.",
-        "Get dispatch returns deterministic detail for known dispatch IDs and a stable typed error for unknown dispatch IDs.",
-        "List artifacts returns deterministic summaries with stable artifact IDs, names, media or content metadata, retrieval refs, and ownership by Factory Session.",
-        "Get artifact returns deterministic detail for known artifact IDs and a stable typed error for unknown artifact IDs.",
-        "Event reads return ordered canonical Factory Session events for running, terminal, dispatch, artifact, and awaiting-approval scenarios.",
-        "Event reconnect after a known cursor returns only later events, while a missing cursor returns the stable reconnect-cursor typed error.",
-        "Typecheck passes",
-        "Tests pass"
+        "Covered UI verification emits a stable top-slowest file summary after the run or after shard merge.",
+        "Browser integration emits per-file timing or an equivalent top-slowest summary after the run.",
+        "The report categorizes slow files into app-shell integration, React Flow graph tests, replay/timeline tests, import/export tests, script-style tests, or uncategorized.",
+        "The report format is suitable for closeout notes and can be compared across CI runs without requiring source topology assertions.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-provider-fixtures-004",
-      "title": "Model Lifecycle Controls And Idempotency Outcomes",
-      "description": "As a lifecycle-control consumer, I want the fake provider to apply pause, resume, cancel, terminate, approve, and retry-dispatch outcomes deterministically so downstream cells can verify controls before the real backend is complete.",
+      "id": "prd-ui-ci-acceleration-and-test-rationalization-004",
+      "title": "Lane Boundary and Redundancy Policy",
+      "description": "As a maintainer, I want explicit test-lane boundaries so that unit, covered jsdom, and browser tests each verify distinct behavior.",
       "acceptanceCriteria": [
-        "Pause, resume, cancel, terminate, approve, and retry-dispatch return deterministic accepted, no-op, invalid-state, terminal-session, or conflict outcomes according to the fixture scenario state.",
-        "Accepted controls return stable post-control inspection links for session, result, dispatch, artifact, or event reads when those resources are available.",
-        "Lifecycle controls do not mutate unrelated fixture scenarios or hidden global state; repeating the same fixture setup produces the same outcomes.",
-        "Control request idempotency returns the original lifecycle outcome for an equivalent replay and returns a stable conflict for the same request ID with a different idempotency tuple.",
-        "Lifecycle-control tests cover at least one recoverable failed session, one terminal session, one awaiting-approval session, and one retry-dispatch path.",
-        "Typecheck passes",
-        "Tests pass"
+        "The test strategy defines what observable contracts belong in unit tests, covered feature/jsdom integration tests, and browser integration tests.",
+        "Browser integration guidance prioritizes durable behavior such as saved payloads, network effects, downloads, imports, and final visible state over repeated copy-only assertions.",
+        "Export/import and graph-editing flows have a documented minimum browser contract that avoids repeating every jsdom UI assertion.",
+        "At least one existing duplicate assertion pattern is removed or moved to the cheaper lane while preserving the durable behavior check.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-provider-fixtures-005",
-      "title": "Stabilize Typed Failures And Scope Boundaries",
-      "description": "As a maintainer, I want fixture failures and scope boundaries to be explicit so downstream cells receive predictable errors without this cell widening into transport or UI work.",
+      "id": "prd-ui-ci-acceleration-and-test-rationalization-005",
+      "title": "Split One High-Cost App-Shell Suite",
+      "description": "As a maintainer, I want at least one oversized app-shell test suite replaced with smaller feature-focused coverage so that the same behavior is proven with less setup cost.",
       "acceptanceCriteria": [
-        "Unknown scenario, unknown session, malformed start or control request, unknown dispatch, unknown artifact, reconnect cursor miss, lifecycle conflict, and request-id conflict return stable typed errors.",
-        "Error values preserve enough structured context for API, CLI, MCP, and UI adapters to map them later without parsing free-form strings.",
-        "Malformed request tests prove validation fails before fixture state changes or session creation.",
-        "The fixture provider remains directly testable without HTTP server startup, CLI command execution, MCP host wiring, UI rendering, generated OpenAPI regeneration, or real JavaScript VM execution.",
-        "Public-facing fixture names, error names, event names, and test descriptions avoid DynamicWorkflowRun and workflow run as canonical resource terminology.",
-        "Typecheck passes",
-        "Tests pass"
+        "One high-cost app-shell suite is selected from the current slow-file inventory and its unique observable behaviors are listed before changes.",
+        "Equivalent behavior is covered by smaller feature-owned tests where whole-dashboard mounting is not required.",
+        "Any remaining app-shell coverage is limited to cross-feature behavior that cannot be proven reliably at a lower layer.",
+        "Before/after timing for the selected suite or replacement tests is captured in the closeout artifact.",
+        "Tests pass",
+        "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "prd-ui-ci-acceleration-and-test-rationalization-006",
+      "title": "Browser Integration Stability and Runtime Boundaries",
+      "description": "As an engineer debugging browser failures, I want browser integration tests to be isolated and deterministic so that failures are attributable and retries remain rare.",
+      "acceptanceCriteria": [
+        "Browser integration documentation states which suites must remain sequential because of shared preview servers, ports, downloads, or global browser state.",
+        "Any browser test concurrency introduced by this project uses isolated ports, preview state, and download locations per worker or file.",
+        "Shared browser helpers expose or document a recommended wait pattern for durable network and UI checkpoints.",
+        "At least one flaky or over-constrained browser assertion is simplified to assert durable behavior rather than transient copy, animation, or timing state.",
+        "Direct browser verification confirms changed browser-visible test flows still exercise the intended final UI state.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": true,
       "notes": ""
     }
   ]

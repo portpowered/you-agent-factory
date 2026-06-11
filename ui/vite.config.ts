@@ -131,6 +131,8 @@ export default defineConfig({
         "src/testing/replay-harness.ts",
         "src/styles.css",
         "**/index.ts",
+        // Browser integration harness code is validated in the browser lane, not jsdom coverage.
+        "integration/**",
       ],
       thresholds: {
         // Mergeability: sharded mergeReports on ubuntu-latest measured ~92.98% lines (PR #771 run 27162262541).

@@ -13,18 +13,14 @@ import { expect, test, vi } from "vitest";
 
 import {
   buildMainCoveredShardPhase,
-  buildUiCoverageMergePhases,
   buildUiCoveragePhases,
   cleanCoverageArtifacts,
   defaultCapturedStdoutMaxBuffer,
   defaultMainCoveredMaxWorkers,
   defaultShardMainCoveredMaxWorkers,
   defaultUiCoverageShardTotal,
-  findMissingShardBlobIndices,
   formatElapsedMs,
-  formatMissingShardBlobSummary,
   formatPhaseElapsed,
-  formatSlowFileSummaryLines,
   getMainCoveredMaxWorkers,
   getUiCoverageShardTotal,
   mainCoveredPhaseName,
@@ -38,6 +34,9 @@ import {
   runUiCoverage,
   uiCoveragePhases,
 } from "./ui-coverage-runner.mjs";
+import {
+  formatSlowFileSummaryLines,
+} from "./ui-test-cost-report.mjs";
 
 const fixtureLogSnippet = readFileSync(
   join(
@@ -146,11 +145,17 @@ test("formats a bounded slow-file summary with stable labels", () => {
     },
     { durationMs: 116, path: "src/i18n/formatters.test.ts" },
   ]);
-  expect(formatSlowFileSummaryLines(slowFiles, { limit: 3 })).toEqual([
+  expect(
+    formatSlowFileSummaryLines(slowFiles, {
+      limit: 3,
+      logPrefix: phaseLogPrefix,
+      summaryTitle: "Main covered pass slowest test files",
+    }),
+  ).toEqual([
     `${phaseLogPrefix} Main covered pass slowest test files (top 3):`,
-    `${phaseLogPrefix}   src/App.test.tsx 120.00s`,
-    `${phaseLogPrefix}   src/features/timeline/state/factoryTimelineStore.test.ts 5.00s`,
-    `${phaseLogPrefix}   src/i18n/formatters.test.ts 0.12s`,
+    `${phaseLogPrefix}   src/App.test.tsx 120.00s [app-shell-integration]`,
+    `${phaseLogPrefix}   src/features/timeline/state/factoryTimelineStore.test.ts 5.00s [replay-timeline]`,
+    `${phaseLogPrefix}   src/i18n/formatters.test.ts 0.12s [uncategorized]`,
   ]);
 });
 
@@ -186,6 +191,9 @@ test("builds shard main pass with vitest shard flag and unique blob output", () 
 
   expect(phase.name).toBe(`${mainCoveredPhaseName} (shard 3/10)`);
   expect(phase.args).toContain("--shard=3/10");
+  expect(phase.args).toContain("--coverage.clean=true");
+  expect(phase.args).not.toContain("--coverage.clean=false");
+  expect(phase.args).toContain("--coverage.reportsDirectory=coverage/shard-3");
   expect(phase.args).toContain(
     `--outputFile.blob=${mainCoveredShardBlobPath(3)}`,
   );
@@ -203,6 +211,8 @@ test("builds shard main pass with vitest shard flag and unique blob output", () 
       "scripts/dashboard-shell-storybook-responsive.test.mjs",
       "--exclude",
       "scripts/ui-coverage-runner.test.mjs",
+      "--exclude",
+      "scripts/ui-coverage-runner.shard-merge.test.mjs",
       "--exclude",
       "src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx",
     ]),
@@ -233,14 +243,6 @@ test("defaults and validates UI_COVERAGE_SHARD_TOTAL for merge mode", () => {
   ).toThrow(/positive integer/);
 });
 
-test("buildUiCoverageMergePhases runs follow-on phases without the main pass", () => {
-  expect(buildUiCoverageMergePhases().map((phase) => phase.name)).toEqual([
-    "Isolated React Flow covered pass",
-    "Blob report merge pass",
-    "Standalone script-style test",
-  ]);
-});
-
 test("cleanCoverageArtifacts recreates coverage temp and blob report directories", () => {
   const cwd = process.cwd();
   const tempDir = mkdtempSync(join(tmpdir(), "ui-coverage-clean-"));
@@ -258,66 +260,6 @@ test("cleanCoverageArtifacts recreates coverage temp and blob report directories
     process.chdir(cwd);
     rmSync(tempDir, { force: true, recursive: true });
   }
-});
-
-test("findMissingShardBlobIndices reports absent shard blobs", () => {
-  const reportsDir = mkdtempSync(join(tmpdir(), "ui-coverage-reports-"));
-  writeFileSync(mainCoveredShardBlobPath(1, reportsDir), "{}");
-
-  expect(findMissingShardBlobIndices(2, { reportsDir })).toEqual([2]);
-  expect(formatMissingShardBlobSummary([2], 2)).toContain("main-shard-2.json");
-});
-
-test("runUiCoverage in merge mode runs follow-on phases when shard blobs exist", () => {
-  const reportsDir = mkdtempSync(join(tmpdir(), "ui-coverage-reports-"));
-  writeFileSync(mainCoveredShardBlobPath(1, reportsDir), "{}");
-  const spawn = vi.fn(() => ({ status: 0 }));
-  const exit = vi.spyOn(process, "exit").mockImplementation(() => {});
-
-  runUiCoverage(uiCoveragePhases, {
-    env: { UI_COVERAGE_MERGE: "1", UI_COVERAGE_SHARD_TOTAL: "1" },
-    reportsDir,
-    spawn,
-  });
-
-  expect(spawn).toHaveBeenCalledTimes(3);
-  expect(spawn.mock.calls.map(([, args]) => args)).toEqual(
-    expect.arrayContaining([
-      expect.arrayContaining([
-        "--mergeReports",
-        ".vitest-reports",
-        "--coverage",
-      ]),
-    ]),
-  );
-  expect(exit).not.toHaveBeenCalled();
-
-  exit.mockRestore();
-});
-
-test("runUiCoverage in merge mode exits before phases when shard blobs are missing", () => {
-  const reportsDir = mkdtempSync(join(tmpdir(), "ui-coverage-reports-"));
-  const spawn = vi.fn(() => ({ status: 0 }));
-  const exit = vi.spyOn(process, "exit").mockImplementation((code) => {
-    throw new Error(`process.exit:${code}`);
-  });
-  const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
-
-  expect(() =>
-    runUiCoverage(uiCoveragePhases, {
-      env: { UI_COVERAGE_MERGE: "1", UI_COVERAGE_SHARD_TOTAL: "2" },
-      reportsDir,
-      spawn,
-    }),
-  ).toThrow(/process.exit:1/);
-
-  expect(spawn).not.toHaveBeenCalled();
-  expect(errorLog).toHaveBeenCalledWith(
-    expect.stringContaining("Missing UI coverage shard blobs"),
-  );
-
-  errorLog.mockRestore();
-  exit.mockRestore();
 });
 
 test("rejects setting UI_COVERAGE_SHARD and UI_COVERAGE_MERGE together", () => {
