@@ -67,9 +67,12 @@ func InternalModelProviderFromPublicWorkerModelProvider(value factoryapi.WorkerM
 }
 
 var publicFactoryWorkerTypeAliases = map[string]string{
-	WorkerTypeModel:  WorkerTypeModel,
-	WorkerTypeScript: WorkerTypeScript,
-	WorkerTypeHosted: WorkerTypeHosted,
+	WorkerTypeInference: WorkerTypeInference,
+	WorkerTypeAgent:     WorkerTypeAgent,
+	WorkerTypeScript:    WorkerTypeScript,
+	WorkerTypePoller:    WorkerTypePoller,
+	WorkerTypeModel:     WorkerTypeInference,
+	WorkerTypeHosted:    WorkerTypePoller,
 }
 
 var publicFactoryWorkerModelProviderAliases = map[string]string{
@@ -214,6 +217,48 @@ func generatedPublicFactoryEnumPtr[T ~string](value string, convert func(string)
 	return &enumValue
 }
 
+// InternalRuntimeWorkerTypeFromPublic maps canonical public worker types to the
+// internal runtime identifiers used by validation and execution.
+func InternalRuntimeWorkerTypeFromPublic(value string) string {
+	switch PermissivePublicFactoryWorkerType(value) {
+	case WorkerTypeInference:
+		return WorkerTypeModel
+	case WorkerTypePoller:
+		return WorkerTypeHosted
+	case WorkerTypeAgent, WorkerTypeScript:
+		return PermissivePublicFactoryWorkerType(value)
+	default:
+		return PermissivePublicFactoryWorkerType(value)
+	}
+}
+
+// PublicWorkerTypeFromInternalRuntime maps internal runtime worker identifiers
+// to the preferred public taxonomy names.
+func PublicWorkerTypeFromInternalRuntime(value string) string {
+	switch strings.TrimSpace(value) {
+	case WorkerTypeModel:
+		return WorkerTypeInference
+	case WorkerTypeHosted:
+		return WorkerTypePoller
+	case WorkerTypeInference, WorkerTypeAgent, WorkerTypeScript, WorkerTypePoller:
+		return strings.TrimSpace(value)
+	default:
+		return PermissivePublicFactoryWorkerType(value)
+	}
+}
+
+// IsInferenceWorkerPublicType reports whether a public worker type value denotes
+// inference-worker behavior, including the legacy MODEL_WORKER alias.
+func IsInferenceWorkerPublicType(value string) bool {
+	return PermissivePublicFactoryWorkerType(value) == WorkerTypeInference
+}
+
+// IsPollerWorkerPublicType reports whether a public worker type value denotes
+// poller-worker behavior, including the legacy HOSTED_WORKER alias.
+func IsPollerWorkerPublicType(value string) bool {
+	return PermissivePublicFactoryWorkerType(value) == WorkerTypePoller
+}
+
 // PermissivePublicFactoryWorkerType canonicalizes supported public worker types and preserves unknown values.
 func PermissivePublicFactoryWorkerType(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerTypeAliases, true)
@@ -316,7 +361,7 @@ func StrictPublicFactoryRunnerSelectionSource(value string) string {
 
 // GeneratedPublicFactoryWorkerType returns the generated worker type enum.
 func GeneratedPublicFactoryWorkerType(value string) factoryapi.WorkerType {
-	return factoryapi.WorkerType(PermissivePublicFactoryWorkerType(value))
+	return factoryapi.WorkerType(PublicWorkerTypeFromInternalRuntime(value))
 }
 
 // GeneratedPublicFactoryWorkerTypePtr returns the generated worker type enum when non-empty.

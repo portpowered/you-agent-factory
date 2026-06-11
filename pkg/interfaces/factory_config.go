@@ -107,10 +107,14 @@ const (
 	ResourceStateAvailable = "available"
 )
 
-// WorkerType constants for worker AGENTS.md frontmatter.
+// WorkerType constants for worker AGENTS.md frontmatter and runtime config.
 const (
+	WorkerTypeInference = "INFERENCE_WORKER"
+	WorkerTypeAgent     = "AGENT_WORKER"
+	WorkerTypeScript    = "SCRIPT_WORKER"
+	WorkerTypePoller    = "POLLER_WORKER"
+	// Legacy runtime identifiers retained during the migration window.
 	WorkerTypeModel  = "MODEL_WORKER"
-	WorkerTypeScript = "SCRIPT_WORKER"
 	WorkerTypeHosted = "HOSTED_WORKER"
 )
 

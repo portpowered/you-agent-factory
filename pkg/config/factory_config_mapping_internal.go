@@ -874,8 +874,8 @@ func publicFactoryWorkerTypeFromInternal(value string) factoryapi.WorkerType {
 }
 
 func internalFactoryWorkerTypeFromPublic(value factoryapi.WorkerType) string {
-	if canonical := interfaces.PermissivePublicFactoryWorkerType(string(value)); canonical != "" {
-		return canonical
+	if runtimeType := interfaces.InternalRuntimeWorkerTypeFromPublic(string(value)); runtimeType != "" {
+		return runtimeType
 	}
 	return strings.TrimSpace(string(value))
 }

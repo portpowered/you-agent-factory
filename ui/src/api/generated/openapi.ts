@@ -6504,11 +6504,17 @@ export const ResourceType = {
 } as const;
 export type ResourceType = (typeof ResourceType)[keyof typeof ResourceType];
 export const WorkerType = {
-  // Model-backed worker that renders prompts and dispatches through the configured model provider.
-  WorkerTypeModelWorker: "MODEL_WORKER",
+  // Inference worker that performs one bounded model operation through the configured provider or managed runtime.
+  WorkerTypeInferenceWorker: "INFERENCE_WORKER",
+  // Agent worker reserved for future agent-loop execution; not used for harnessless inference calls.
+  WorkerTypeAgentWorker: "AGENT_WORKER",
   // Script-backed worker that executes a configured command instead of calling a model provider.
   WorkerTypeScriptWorker: "SCRIPT_WORKER",
-  // Repository-owned hosted worker implementation selected by type-specific runtime code instead of a subprocess.
+  // Poller worker that watches an external source and emits work through repository-owned hosted runtime code.
+  WorkerTypePollerWorker: "POLLER_WORKER",
+  // Legacy alias for inference-worker behavior during the migration window.
+  WorkerTypeModelWorker: "MODEL_WORKER",
+  // Legacy alias for poller-worker behavior during the migration window.
   WorkerTypeHostedWorker: "HOSTED_WORKER",
 } as const;
 export type WorkerType = (typeof WorkerType)[keyof typeof WorkerType];
