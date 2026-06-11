@@ -245,6 +245,22 @@ func TestSyncStartResponseToAPI_MapsTerminalAndTimeoutFixtures(t *testing.T) {
 	}
 }
 
+func TestResultRequestFromCLI_MapsModeAndIncludeArtifacts(t *testing.T) {
+	req, err := factorysession.ResultRequestFromCLI(factorysession.CLIResultInput{
+		Mode:             "partial",
+		IncludeArtifacts: true,
+	})
+	if err != nil {
+		t.Fatalf("ResultRequestFromCLI: %v", err)
+	}
+	if req.Mode != factorysessionexecution.ResultModePartial {
+		t.Fatalf("mode = %q, want partial", req.Mode)
+	}
+	if !req.IncludeArtifacts {
+		t.Fatal("includeArtifacts = false, want true")
+	}
+}
+
 func strPtr(value string) *string {
 	return &value
 }

@@ -877,6 +877,7 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *co
 		},
 	}
 	statusCfg := sessionexecutioncli.StatusConfig{}
+	resultCfg := sessionexecutioncli.ResultConfig{}
 
 	cmd := &cobra.Command{
 		Use:   "workflow",
@@ -886,7 +887,8 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *co
 			"  preview  resolve workflow source, validate it without execution, and project policy and result constraints\n" +
 			"  run      start one durable Factory Session synchronously through the mock-backed execution loop\n" +
 			"  start    start one durable Factory Session asynchronously and return inspection links\n" +
-			"  status   read the durable Factory Session lifecycle and progress state",
+			"  status   read the durable Factory Session lifecycle and progress state\n" +
+			"  result   read the durable Factory Session final or partial result",
 	}
 	previewCmd := &cobra.Command{
 		Use:   "preview",
@@ -978,7 +980,30 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *co
 		},
 	}
 	statusCmd.Flags().StringVar(&statusCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed status reads")
-	cmd.AddCommand(previewCmd, runCmd, startCmd, statusCmd)
+	resultCmd := &cobra.Command{
+		Use:   "result [session-id]",
+		Short: "Read one durable Factory Session result",
+		Long: "Read one durable Factory Session final or partial result through the shared execution service.\n\n" +
+			"Use --mode partial for in-progress partial reads and --mode final for terminal or not-ready final reads. " +
+			"Use global --json to emit FactorySessionResult on stdout.",
+		Args: cobra.ExactArgs(1),
+		Example: "  # Read the final result for a completed fixture session.\n" +
+			"  " + cliBinaryName + " workflow result dur-sess-petri-success-001\n\n" +
+			"  # Read partial progress for a running fixture session.\n" +
+			"  " + cliBinaryName + " workflow result dur-sess-js-run-n-001 --mode partial\n\n" +
+			"  # Emit deterministic JSON for automation.\n" +
+			"  " + cliBinaryName + " --json workflow result dur-sess-petri-success-001",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resultCfg.JSON = globals.json
+			resultCfg.Output = cmd.OutOrStdout()
+			resultCfg.SessionID = args[0]
+			return sessionexecutioncli.RunResult(cmd.Context(), resultCfg)
+		},
+	}
+	resultCmd.Flags().StringVar(&resultCfg.Mode, "mode", "", "result read mode: final or partial")
+	resultCmd.Flags().BoolVar(&resultCfg.IncludeArtifacts, "include-artifacts", false, "include artifact refs in the result read")
+	resultCmd.Flags().StringVar(&resultCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed result reads")
+	cmd.AddCommand(previewCmd, runCmd, startCmd, statusCmd, resultCmd)
 	return cmd
 }
 
