@@ -686,6 +686,7 @@ export function CurrentActivityGraphViewport({
             >
               <DashboardGraphBackground />
               {editorControls.isEditing &&
+              visualGroups.length > 0 &&
               onSelectVisualGroup &&
               visualGroupAriaLabel ? (
                 <FactoryGraphVisualGroupLayer
