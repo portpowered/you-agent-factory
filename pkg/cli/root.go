@@ -903,14 +903,17 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 }
 
 func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *cobra.Command {
-	cfg := workflowcli.PreviewConfig{Dir: defaultcmd.FactoryDir}
+	sourceCfg := workflowcli.SourceConfig{Dir: defaultcmd.FactoryDir}
+	previewCfg := workflowcli.PreviewConfig{SourceConfig: sourceCfg}
+	validateCfg := workflowcli.ValidateConfig{SourceConfig: sourceCfg}
 
 	cmd := &cobra.Command{
 		Use:   "workflow",
 		Short: "Validate and preview JavaScript workflow sources",
 		Long: "Validate and preview JavaScript or TypeScript workflow sources using the shared workflow preview contract.\n\n" +
 			"Subcommands:\n" +
-			"  preview  resolve workflow source, validate it without execution, and project policy and result constraints",
+			"  validate  resolve workflow source and validate it without execution\n" +
+			"  preview   resolve workflow source, validate it without execution, and project policy and result constraints",
 	}
 	previewCmd := &cobra.Command{
 		Use:   "preview",
@@ -921,16 +924,35 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *co
 			"  # Preview inline workflow source.\n" +
 			"  " + cliBinaryName + " workflow preview --kind INLINE_WORKFLOW --inline \"phase('setup');\"",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			return workflowcli.Preview(cfg)
+			previewCfg.JSON = globals.json
+			previewCfg.Output = cmd.OutOrStdout()
+			return workflowcli.Preview(previewCfg)
 		},
 	}
-	previewCmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "project root used for ordered workflow source lookup")
-	previewCmd.Flags().StringVar(&cfg.SourceKind, "kind", string(workflowsource.KindWorkflowName), "workflow source kind")
-	previewCmd.Flags().StringVar(&cfg.SourceValue, "value", "", "workflow name, file ref, or factory id")
-	previewCmd.Flags().StringVar(&cfg.InlineSource, "inline", "", "inline workflow source text")
-	previewCmd.Flags().StringVar(&cfg.ArtifactRoot, "artifact-root", "", "optional absolute artifact root")
+	validateCmd := &cobra.Command{
+		Use:   "validate",
+		Short: "Validate JavaScript workflow source",
+		Long:  "Resolve workflow source and validate it without execution using the shared workflow validation contract.",
+		Example: "  # Validate a project workflow by name.\n" +
+			"  " + cliBinaryName + " workflow validate --kind WORKFLOW_NAME --value review\n\n" +
+			"  # Validate inline workflow source.\n" +
+			"  " + cliBinaryName + " workflow validate --kind INLINE_WORKFLOW --inline \"phase('setup');\"",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			validateCfg.JSON = globals.json
+			validateCfg.Output = cmd.OutOrStdout()
+			return workflowcli.Validate(validateCfg)
+		},
+	}
+	addWorkflowSourceFlags := func(command *cobra.Command, cfg *workflowcli.SourceConfig) {
+		command.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "project root used for ordered workflow source lookup")
+		command.Flags().StringVar(&cfg.SourceKind, "kind", string(workflowsource.KindWorkflowName), "workflow source kind")
+		command.Flags().StringVar(&cfg.SourceValue, "value", "", "workflow name, file ref, or factory id")
+		command.Flags().StringVar(&cfg.InlineSource, "inline", "", "inline workflow source text")
+		command.Flags().StringVar(&cfg.ArtifactRoot, "artifact-root", "", "optional absolute artifact root")
+	}
+	addWorkflowSourceFlags(previewCmd, &previewCfg.SourceConfig)
+	addWorkflowSourceFlags(validateCmd, &validateCfg.SourceConfig)
+	cmd.AddCommand(validateCmd)
 	cmd.AddCommand(previewCmd)
 	return cmd
 }
