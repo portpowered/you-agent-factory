@@ -144,6 +144,38 @@ func TestFakeService_StartSync_TerminalAndTimeoutFixtures(t *testing.T) {
 	}
 }
 
+func TestFakeService_LifecycleControl_IdempotentReplayAndConflict(t *testing.T) {
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-js-run-n-001")
+
+	first, err := service.Pause(context.Background(), "dur-sess-js-run-n-001", ControlRequest{
+		RequestID: "ctrl-pause-replay-001",
+	})
+	if err != nil {
+		t.Fatalf("first Pause: %v", err)
+	}
+	second, err := service.Pause(context.Background(), "dur-sess-js-run-n-001", ControlRequest{
+		RequestID: "ctrl-pause-replay-001",
+	})
+	if err != nil {
+		t.Fatalf("replay Pause: %v", err)
+	}
+	if second.Outcome != first.Outcome || second.Status != first.Status {
+		t.Fatalf("replay result = %#v, want %#v", second, first)
+	}
+
+	_, err = service.Resume(context.Background(), "dur-sess-js-run-n-001", ControlRequest{
+		RequestID: "ctrl-pause-replay-001",
+	})
+	var controlErr *ControlError
+	if !errors.As(err, &controlErr) || controlErr.Outcome != LifecycleControlOutcomeConflict {
+		t.Fatalf("conflict error = %v, want CONFLICT ControlError", err)
+	}
+	if controlErr.Status != LifecycleStatusPaused {
+		t.Fatalf("conflict status = %q, want PAUSED", controlErr.Status)
+	}
+}
+
 func TestFakeService_LifecycleControls_UpdateStateAndErrors(t *testing.T) {
 	service := newContractFakeService(t)
 	startAsyncByRequestID(t, service, "req-js-run-n-001")

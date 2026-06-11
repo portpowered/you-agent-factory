@@ -247,10 +247,14 @@ func TestControlErrorToAPI_MapsTerminalSessionOutcome(t *testing.T) {
 	mapped := factorysession.ControlErrorToAPI("dur-sess-js-success-002", &factorysessionexecution.ControlError{
 		Operation: factorysessionexecution.LifecycleControlRetryDispatch,
 		Outcome:   factorysessionexecution.LifecycleControlOutcomeTerminalSession,
+		Status:    factorysessionexecution.LifecycleStatusSucceeded,
 		Message:   "session is terminal",
 	})
 	if mapped.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeTerminalSession {
 		t.Fatalf("outcome = %q, want TERMINAL_SESSION", mapped.Outcome)
+	}
+	if mapped.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("status = %q, want SUCCEEDED", mapped.Status)
 	}
 	if mapped.Detail == nil || *mapped.Detail != "session is terminal" {
 		t.Fatalf("detail = %#v", mapped.Detail)
@@ -430,6 +434,17 @@ func assertSessionReadFieldsPreserved(t *testing.T, fixture map[string]any, mapp
 	if mapped.Phase != nil && *mapped.Phase != stringValue(fixture, "phase") {
 		t.Fatalf("phase = %q, want %q", *mapped.Phase, stringValue(fixture, "phase"))
 	}
+	if mapped.Usage == nil || mapped.Usage.Resources == nil {
+		t.Fatal("usage.resources missing from durable session read projection")
+	}
+	if budgets, ok := fixture["budgets"].(map[string]any); ok {
+		if mapped.Budgets == nil || mapped.Budgets.MaxAgents == nil {
+			t.Fatal("budgets.maxAgents missing from durable session read projection")
+		}
+		if int(*mapped.Budgets.MaxAgents) != intValue(budgets, "maxAgents") {
+			t.Fatalf("budgets.maxAgents = %d, want %d", *mapped.Budgets.MaxAgents, intValue(budgets, "maxAgents"))
+		}
+	}
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this assertion keeps durable list summary fixture field checks together on one contract test seam.
@@ -516,6 +531,19 @@ func assertDispatchListFieldsPreserved(t *testing.T, fixture map[string]any, map
 	if len(mapped.Dispatches) != len(fixtureRows) {
 		t.Fatalf("dispatch count = %d, want %d", len(mapped.Dispatches), len(fixtureRows))
 	}
+	for index, row := range fixtureRows {
+		fixtureRow, ok := row.(map[string]any)
+		if !ok {
+			continue
+		}
+		refs, ok := fixtureRow["providerSessionRefs"].([]any)
+		if !ok || len(refs) == 0 {
+			continue
+		}
+		if mapped.Dispatches[index].ProviderSessionRefs == nil || len(*mapped.Dispatches[index].ProviderSessionRefs) != len(refs) {
+			t.Fatalf("dispatch[%d] providerSessionRefs = %#v, want %d refs", index, mapped.Dispatches[index].ProviderSessionRefs, len(refs))
+		}
+	}
 }
 
 func assertDispatchDetailFieldsPreserved(t *testing.T, fixture map[string]any, mapped factoryapi.FactoryDispatch) {
@@ -584,6 +612,9 @@ func assertLifecycleControlFieldsPreserved(t *testing.T, fixture map[string]any,
 	}
 	if string(mapped.Outcome) != stringValue(fixture, "outcome") {
 		t.Fatalf("outcome = %q, want %q", mapped.Outcome, stringValue(fixture, "outcome"))
+	}
+	if status := stringValue(fixture, "status"); status != "" && string(mapped.Status) != status {
+		t.Fatalf("status = %q, want %q", mapped.Status, status)
 	}
 }
 

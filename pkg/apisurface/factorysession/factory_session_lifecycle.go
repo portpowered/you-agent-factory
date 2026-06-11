@@ -86,6 +86,11 @@ func SessionReadResponseToAPI(result factorysessionexecution.SessionReadResult) 
 	if progress := progressCountsToAPI(result.Progress); progress != nil {
 		response.Progress = progress
 	}
+	if budgets := sessionBudgetsToAPI(result.Budgets); budgets != nil {
+		response.Budgets = budgets
+	}
+	usage := sessionUsageToAPI(result.Usage)
+	response.Usage = &usage
 	if summary := resultSummaryToAPI(result.ResultSummary); summary != nil {
 		response.ResultSummary = summary
 	}

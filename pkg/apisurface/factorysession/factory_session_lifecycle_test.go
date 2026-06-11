@@ -149,6 +149,27 @@ func sessionReadFromFixture(session map[string]any) factorysessionexecution.Sess
 	if progress, ok := session["progress"].(map[string]any); ok {
 		result.Progress = progressCountsFromFixture(progress)
 	}
+	if budgets, ok := session["budgets"].(map[string]any); ok {
+		if maxAgents := intValue(budgets, "maxAgents"); maxAgents > 0 {
+			result.Budgets = &factorysessionexecution.SessionBudgets{MaxAgents: maxAgents}
+		}
+	}
+	if usage, ok := session["usage"].(map[string]any); ok {
+		result.Usage = factorysessionexecution.EmptySessionUsage()
+		if rows, ok := usage["resources"].([]any); ok {
+			for _, item := range rows {
+				if row, ok := item.(map[string]any); ok {
+					result.Usage.Resources = append(result.Usage.Resources, factorysessionexecution.ResourceUsage{
+						Name:      stringValue(row, "name"),
+						Available: intValue(row, "available"),
+						Total:     intValue(row, "total"),
+					})
+				}
+			}
+		}
+	} else {
+		result.Usage = factorysessionexecution.EmptySessionUsage()
+	}
 	if summaries, ok := session["phaseSummaries"].([]any); ok {
 		for _, item := range summaries {
 			if row, ok := item.(map[string]any); ok {

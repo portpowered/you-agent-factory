@@ -133,6 +133,7 @@ var ErrUnsupportedControl = errors.New("unsupported lifecycle control")
 type ControlError struct {
 	Operation LifecycleControlKind
 	Outcome   LifecycleControlOutcome
+	Status    LifecycleStatus
 	Message   string
 }
 

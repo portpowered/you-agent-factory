@@ -237,6 +237,17 @@ func dispatchSummaryFromFixture(dispatch map[string]any) factorysessionexecution
 			}
 		}
 	}
+	if refs, ok := dispatch["providerSessionRefs"].([]any); ok {
+		for _, item := range refs {
+			if row, ok := item.(map[string]any); ok {
+				summary.ProviderSessionRefs = append(summary.ProviderSessionRefs, factorysessionexecution.ProviderSessionRef{
+					Provider: stringValue(row, "provider"),
+					Kind:     stringValue(row, "kind"),
+					ID:       stringValue(row, "id"),
+				})
+			}
+		}
+	}
 	if failure, ok := dispatch["failureDetail"].(map[string]any); ok {
 		summary.FailureDetail = &factorysessionexecution.DispatchFailureDetail{
 			Reason:     stringValue(failure, "reason"),

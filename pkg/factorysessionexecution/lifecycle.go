@@ -266,6 +266,29 @@ type ArtifactRefSummary struct {
 	SizeBytes   int64
 }
 
+// SessionBudgets exposes effective orchestrator policy budgets for one session read.
+type SessionBudgets struct {
+	MaxAgents int
+}
+
+// ResourceUsage summarizes one named resource pool for session runtime usage.
+type ResourceUsage struct {
+	Name      string
+	Available int
+	Total     int
+}
+
+// SessionUsage exposes resource availability and consumption for one session read.
+type SessionUsage struct {
+	Resources []ResourceUsage
+}
+
+// EmptySessionUsage returns the stable zero usage projection for sessions without
+// runtime consumption data.
+func EmptySessionUsage() SessionUsage {
+	return SessionUsage{Resources: []ResourceUsage{}}
+}
+
 // SessionReadResult is the shared durable session read projection consumed by API,
 // CLI, MCP, and UI transports.
 type SessionReadResult struct {
@@ -279,6 +302,8 @@ type SessionReadResult struct {
 	Phase             string
 	PhaseSummaries    []PhaseSummary
 	Progress          *ProgressCounts
+	Budgets           *SessionBudgets
+	Usage             SessionUsage
 	ResultSummary     *ResultSummary
 	ArtifactRefs      []ArtifactRefSummary
 	ArtifactCount     int

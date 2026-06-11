@@ -16,13 +16,19 @@ type FakeService struct {
 	scenariosByRequestID map[string]FakeScenario
 	sessions             map[string]*fakeSessionState
 	startReplay          map[string]startReplayRecord
-	controlReplay        map[string]string
+	controlReplay        map[string]controlReplayRecord
 	persistedSeeds       []DurableSessionListSummary
 }
 
 type startReplayRecord struct {
 	sessionID string
 	tupleHash string
+}
+
+type controlReplayRecord struct {
+	tupleHash string
+	result    LifecycleControlResult
+	err       error
 }
 
 // FakeServiceOption configures one FakeService instance.
@@ -59,7 +65,7 @@ func NewFakeService(options ...FakeServiceOption) *FakeService {
 		scenariosByRequestID: make(map[string]FakeScenario),
 		sessions:             make(map[string]*fakeSessionState),
 		startReplay:          make(map[string]startReplayRecord),
-		controlReplay:        make(map[string]string),
+		controlReplay:        make(map[string]controlReplayRecord),
 	}
 	for _, option := range options {
 		option(service)
@@ -409,6 +415,31 @@ func (s *FakeService) applyLifecycleControl(
 		return LifecycleControlResult{}, ErrSessionNotFound
 	}
 
+	currentStatus := state.session.Status
+	requestID := strings.TrimSpace(control.RequestID)
+	var tupleHash string
+	if requestID != "" {
+		var err error
+		tupleHash, err = ControlIdempotencyTupleHash(operation, id, approve, retry)
+		if err != nil {
+			return LifecycleControlResult{}, err
+		}
+		if recorded, ok := s.controlReplay[requestID]; ok {
+			if err := CheckControlRequestIDReplay(requestID, recorded.tupleHash, tupleHash); err != nil {
+				return LifecycleControlResult{}, &ControlError{
+					Operation: operation,
+					Outcome:   LifecycleControlOutcomeConflict,
+					Status:    currentStatus,
+					Message:   "control requestId was reused with a different operation or target",
+				}
+			}
+			if recorded.err != nil {
+				return LifecycleControlResult{}, recorded.err
+			}
+			return recorded.result, nil
+		}
+	}
+
 	if operation == LifecycleControlRetryDispatch {
 		if _, ok := findDispatchSummary(state.dispatches, retry.DispatchID); !ok {
 			return LifecycleControlResult{}, ErrDispatchNotFound
@@ -417,25 +448,14 @@ func (s *FakeService) applyLifecycleControl(
 
 	outcome := EvaluateLifecycleControl(operation, state.session.Status)
 	if outcome == LifecycleControlOutcomeInvalidState || outcome == LifecycleControlOutcomeTerminalSession {
-		return LifecycleControlResult{}, &ControlError{
+		controlErr := &ControlError{
 			Operation: operation,
 			Outcome:   outcome,
+			Status:    currentStatus,
 			Message:   fmt.Sprintf("%s rejected for session %s in status %s", operation, id, state.session.Status),
 		}
-	}
-
-	if requestID := strings.TrimSpace(control.RequestID); requestID != "" {
-		tupleHash, err := ControlIdempotencyTupleHash(operation, id, approve, retry)
-		if err != nil {
-			return LifecycleControlResult{}, err
-		}
-		if recorded, ok := s.controlReplay[requestID]; ok {
-			if err := CheckControlRequestIDReplay(requestID, recorded, tupleHash); err != nil {
-				return LifecycleControlResult{}, err
-			}
-		} else {
-			s.controlReplay[requestID] = tupleHash
-		}
+		s.recordControlReplay(requestID, tupleHash, LifecycleControlResult{}, controlErr)
+		return LifecycleControlResult{}, controlErr
 	}
 
 	if outcome == LifecycleControlOutcomeAccepted {
@@ -459,7 +479,19 @@ func (s *FakeService) applyLifecycleControl(
 		session := cloneSessionRead(state.session)
 		result.Session = &session
 	}
+	s.recordControlReplay(requestID, tupleHash, result, nil)
 	return result, nil
+}
+
+func (s *FakeService) recordControlReplay(requestID, tupleHash string, result LifecycleControlResult, err error) {
+	if strings.TrimSpace(requestID) == "" {
+		return
+	}
+	s.controlReplay[requestID] = controlReplayRecord{
+		tupleHash: tupleHash,
+		result:    result,
+		err:       err,
+	}
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this fake mutation helper keeps lifecycle control state transitions together for deterministic fixtures.
