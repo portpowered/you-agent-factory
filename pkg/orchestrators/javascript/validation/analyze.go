@@ -46,20 +46,6 @@ func (a *sourceAnalyzer) Exit(js.INode) {}
 
 func (a *sourceAnalyzer) inspectCall(call *js.CallExpr) {
 	switch callee := call.X.(type) {
-	case *js.Var:
-		name := string(callee.Name())
-		if callee.Decl != js.NoDecl {
-			return
-		}
-		if msg, forbidden := forbiddenRootGlobals[name]; forbidden {
-			a.addIssue(CodeForbiddenHostAccess, msg, call)
-			return
-		}
-		if _, supported := supportedRootGlobals[name]; !supported {
-			a.addIssue(CodeUnsupportedGlobal, fmt.Sprintf("unsupported workflow global %q", name), call)
-			return
-		}
-		a.validateSupportedPrimitiveShape(call, name)
 	case *js.DotExpr:
 		root, member, ok := memberAccess(callee)
 		if !ok {
@@ -85,6 +71,20 @@ func (a *sourceAnalyzer) inspectCall(call *js.CallExpr) {
 		default:
 			a.addIssue(CodeUnsupportedGlobal, fmt.Sprintf("unsupported workflow global %q", root), call)
 		}
+	default:
+		name, ok := callCalleeName(call.X)
+		if !ok {
+			return
+		}
+		if msg, forbidden := forbiddenRootGlobals[name]; forbidden {
+			a.addIssue(CodeForbiddenHostAccess, msg, call)
+			return
+		}
+		if _, supported := supportedRootGlobals[name]; !supported {
+			a.addIssue(CodeUnsupportedGlobal, fmt.Sprintf("unsupported workflow global %q", name), call)
+			return
+		}
+		a.validateSupportedPrimitiveShape(call, name)
 	}
 }
 
@@ -122,6 +122,28 @@ func (a *sourceAnalyzer) inspectIdentifierUse(v *js.Var) {
 	if msg, forbidden := forbiddenRootGlobals[name]; forbidden {
 		a.addIssue(CodeForbiddenHostAccess, msg, v)
 		a.seen["id:"+name] = struct{}{}
+	}
+}
+
+func callCalleeName(expr js.IExpr) (string, bool) {
+	switch callee := expr.(type) {
+	case *js.Var:
+		if callee.Decl != js.NoDecl {
+			return "", false
+		}
+		return string(callee.Name()), true
+	case js.LiteralExpr:
+		if len(callee.Data) == 0 {
+			return "", false
+		}
+		return string(callee.Data), true
+	case *js.LiteralExpr:
+		if callee == nil || len(callee.Data) == 0 {
+			return "", false
+		}
+		return string(callee.Data), true
+	default:
+		return "", false
 	}
 }
 
