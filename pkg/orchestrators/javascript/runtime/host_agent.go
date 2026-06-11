@@ -23,6 +23,12 @@ func (g *runtimeGlobals) hostAgentRun(call goja.FunctionCall) goja.Value {
 	if err != nil {
 		panic(g.vm.NewTypeError(err.Error()))
 	}
+	if err := g.denyChildSlots(1); err != nil {
+		panic(g.vm.NewTypeError(err.Error()))
+	}
+	if err := g.denyChildRequest(req); err != nil {
+		panic(g.vm.NewTypeError(err.Error()))
+	}
 	result, err := g.childExecutor.Execute(req)
 	if err != nil {
 		panic(g.vm.NewGoError(err))

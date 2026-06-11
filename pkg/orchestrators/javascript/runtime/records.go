@@ -164,6 +164,15 @@ func (c *recordCollector) nextChildDispatchIdentity() (string, int) {
 	return fmt.Sprintf("dispatch-%d", index), index
 }
 
+func (c *recordCollector) childDispatchCountValue() int {
+	if c == nil {
+		return 0
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.childDispatchCount
+}
+
 func (c *recordCollector) nextChildArtifactID() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -67,7 +67,9 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 		return contextTerminationOutcome(ctxErr), nil
 	}
 	if runErr != nil {
-		return scriptErrorOutcome(vm, runErr), nil
+		outcome := scriptErrorOutcome(vm, runErr)
+		outcome.Records = records.list()
+		return outcome, nil
 	}
 	globals.captureReturn(value)
 

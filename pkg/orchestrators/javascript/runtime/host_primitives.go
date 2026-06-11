@@ -87,6 +87,9 @@ func (g *runtimeGlobals) hostWorkflowArtifact(call goja.FunctionCall) goja.Value
 	if err != nil {
 		panic(g.vm.NewGoError(fmt.Errorf("workflow.artifact content must be JSON-compatible: %w", err)))
 	}
+	if err := g.denyArtifactSize(int64(len(contentRaw))); err != nil {
+		panic(g.vm.NewTypeError(err.Error()))
+	}
 	if g.onArtifact != nil {
 		if err := g.onArtifact(kind, contentRaw); err != nil {
 			panic(g.vm.NewGoError(err))

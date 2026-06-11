@@ -32,7 +32,7 @@ func (g *runtimeGlobals) hostParallel(call goja.FunctionCall) goja.Value {
 	if err != nil {
 		panic(g.vm.NewTypeError(err.Error()))
 	}
-	if err := g.denyParallelFanout(len(items)); err != nil {
+	if err := g.denyChildSlots(len(items)); err != nil {
 		panic(g.vm.NewTypeError(err.Error()))
 	}
 
@@ -94,17 +94,6 @@ func (g *runtimeGlobals) classifyParallelItem(index int, value goja.Value) (para
 		}, nil
 	}
 	return parallelItem{}, fmt.Errorf("parallel() items must be agent run specs or functions")
-}
-
-func (g *runtimeGlobals) denyParallelFanout(fanout int) error {
-	if fanout <= g.policy.MaxAgents {
-		return nil
-	}
-	return fmt.Errorf(
-		"policy denied: requested fanout %d exceeds maxAgents %d",
-		fanout,
-		g.policy.MaxAgents,
-	)
 }
 
 func (g *runtimeGlobals) effectiveParallelConcurrency(itemCount int) int {
@@ -174,6 +163,10 @@ func (g *runtimeGlobals) executeParallelAgentSpecs(items []parallelItem, concurr
 			req, err := childExecutionRequestFromSpec(item.spec, g.workflowName(), g.argsSubject())
 			if err != nil {
 				results[item.index] = failedChildResultValue("", err)
+				return
+			}
+			if err := g.denyChildRequest(req); err != nil {
+				results[item.index] = failedChildResultValue(req.Label, err)
 				return
 			}
 			req.ReservedIdentity = identityByIndex[item.index]

@@ -11,15 +11,18 @@ import (
 // ChildExecutionRequest is the typed child-agent request shared by host primitives
 // and future dispatch bridges.
 type ChildExecutionRequest struct {
-	Prompt          string
-	Label           string
-	Model           string
-	ReasoningEffort string
-	Command         string
-	Sandbox         string
-	OutputSchema    map[string]any
-	WorkflowName    string
-	ArgsSubject     string
+	Prompt           string
+	Label            string
+	Model            string
+	ReasoningEffort  string
+	Command          string
+	Sandbox          string
+	WritableRoots    []string
+	AllowNetwork     bool
+	Concurrency      int
+	OutputSchema     map[string]any
+	WorkflowName     string
+	ArgsSubject      string
 	ReservedIdentity *ChildDispatchIdentity
 }
 
@@ -172,6 +175,24 @@ func childExecutionRequestFromSpec(spec map[string]any, workflowName, argsSubjec
 	if err != nil {
 		return ChildExecutionRequest{}, err
 	}
+	writableRoots, err := stringSliceField(spec, "writableRoots")
+	if err != nil {
+		return ChildExecutionRequest{}, err
+	}
+	allowNetwork, err := boolField(spec, "allowNetwork")
+	if err != nil {
+		return ChildExecutionRequest{}, err
+	}
+	if !allowNetwork {
+		allowNetwork, err = boolField(spec, "network")
+		if err != nil {
+			return ChildExecutionRequest{}, err
+		}
+	}
+	concurrency, err := intField(spec, "concurrency")
+	if err != nil {
+		return ChildExecutionRequest{}, err
+	}
 	return ChildExecutionRequest{
 		Prompt:          prompt,
 		Label:           stringField(spec, "label"),
@@ -179,10 +200,69 @@ func childExecutionRequestFromSpec(spec map[string]any, workflowName, argsSubjec
 		ReasoningEffort: stringField(spec, "reasoningEffort"),
 		Command:         stringField(spec, "command"),
 		Sandbox:         stringField(spec, "sandbox"),
+		WritableRoots:   writableRoots,
+		AllowNetwork:    allowNetwork,
+		Concurrency:     concurrency,
 		OutputSchema:    outputSchema,
 		WorkflowName:    workflowName,
 		ArgsSubject:     argsSubject,
 	}, nil
+}
+
+func stringSliceField(spec map[string]any, key string) ([]string, error) {
+	value, ok := spec[key]
+	if !ok || value == nil {
+		return nil, nil
+	}
+	switch typed := value.(type) {
+	case []string:
+		return append([]string(nil), typed...), nil
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			text, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf(`agent.run() requires %q to be an array of strings`, key)
+			}
+			out = append(out, text)
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf(`agent.run() requires %q to be an array of strings`, key)
+	}
+}
+
+func boolField(spec map[string]any, key string) (bool, error) {
+	value, ok := spec[key]
+	if !ok || value == nil {
+		return false, nil
+	}
+	allowed, ok := value.(bool)
+	if !ok {
+		return false, fmt.Errorf(`agent.run() requires %q to be a boolean`, key)
+	}
+	return allowed, nil
+}
+
+func intField(spec map[string]any, key string) (int, error) {
+	value, ok := spec[key]
+	if !ok || value == nil {
+		return 0, nil
+	}
+	switch typed := value.(type) {
+	case int:
+		return typed, nil
+	case int32:
+		return int(typed), nil
+	case int64:
+		return int(typed), nil
+	case float32:
+		return int(typed), nil
+	case float64:
+		return int(typed), nil
+	default:
+		return 0, fmt.Errorf(`agent.run() requires %q to be a number`, key)
+	}
 }
 
 func outputSchemaFromSpec(spec map[string]any) (map[string]any, error) {
