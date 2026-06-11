@@ -7,6 +7,9 @@
 - Prove FakeService start/list/read/result behavior against `PublishedFixtureScenarios` in `start_list_read_result_test.go`; use `ProjectedResultReadHash` and `SyncStartResultHash` for golden result digests instead of ad hoc field comparisons.
 - Wire mock-backed synchronous CLI starts through `sessionexecution.RunSync` and `you workflow run`; render human/JSON via `factorysession.SyncStartResponseToAPI`; default to contract-fixture `FakeService` when no service is injected.
 - `FakeService.StartSync` stores the first sync start payload on the start replay record so request-id replays return the original fixture sync response instead of re-projecting from session state.
+- Wire mock-backed asynchronous CLI starts through `sessionexecution.RunAsync` and `you workflow start`; poll status through `RunStatus` and `you workflow status <session-id>`; async JSON adds `requestId` and shared partial `GetResult` `resultAvailability` atop `FactorySessionExecutionResponse`.
+- `FakeService.StartAsync` stores the first async start payload on the start replay record so request-id replays return the original fixture async response instead of re-projecting from session read state.
+- Wire mock-backed durable result reads through `sessionexecution.RunResult` and `you workflow result <session-id>`; normalize `--mode` / `--include-artifacts` via `ResultRequestFromCLI`; render `FactorySessionResult` through `ResultResponseToAPI`; return `ResultOutcomeError` for `NOT_READY`, `UNAVAILABLE`, and `FAILED_WITH_PARTIAL` after writing human/JSON output so automation gets non-zero exits without `SESSION_NOT_FOUND`.
 
 ## 2026-06-11 UTC - dynamic-workflows-cell-provider-fixtures-001
 - Published stable fixture scenario identity catalog with purpose-to-scenario mappings for validation failure, async running, sync success, sync timeout, failed recoverable session, dispatch inspection, artifact inspection, event reconnect, and lifecycle-control outcomes.
@@ -50,4 +53,28 @@
   - Patterns discovered: keep CLI execution transport in `sessionexecution.RunSync` and project responses only through apisurface `SyncStartResponseToAPI`; inject `factorysessionexecution.Service` in tests and resolve contract fixtures from cwd for the default mock path.
   - Gotchas encountered: `WorkContentPart` is a generated union—use `AsWorkTextContentPart` for human summaries; first sync start comes from fixture `syncResponse` while replay previously re-projected from session state until the replay record stored the original payload.
   - Useful context: story 003 should add async start and status polling commands beside `workflow run`, reusing `NormalizeStartRequest` and the same output/error helpers.
+---
+
+## 2026-06-11 UTC - dynamic-workflows-cell-cli-run-status-result-003
+- Added `sessionexecution.RunAsync` and `sessionexecution.RunStatus` for mock-backed async starts and durable session status reads through shared `StartAsync` / `GetSession` projections.
+- Wired `you workflow start` and `you workflow status <session-id>` in `pkg/cli/root.go` with shared start flags and deterministic human/JSON rendering.
+- Extended CLI execution errors with `SESSION_NOT_FOUND` and fixed `FakeService` async request-id replay to return the stored first async start response.
+- Added CLI tests covering async-running fixture human/JSON output, async-then-status polling, missing-session errors, and deterministic status JSON.
+- Files changed: `pkg/cli/sessionexecution/{async,status}.go`, `pkg/cli/sessionexecution/*_test.go`, `pkg/cli/sessionexecution/error.go`, `pkg/cli/root.go`, `pkg/factorysessionexecution/fake_service.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: keep async JSON deterministic with a typed `asyncRunCLIResponse` embed of `FactorySessionExecutionResponse` rather than round-tripping through `map[string]any`; enrich async JSON `resultAvailability` via shared `GetResult` partial reads.
+  - Gotchas encountered: fixture `asyncResponse` and `session` projections differ (source hash vs ref), so async replay must store the first async payload like sync replay; map-based JSON merges randomize key order.
+  - Useful context: story 004 should add `you workflow result` beside `workflow status`, reusing the same service resolver and `WriteExecutionError` paths.
+---
+
+## 2026-06-11 UTC - dynamic-workflows-cell-cli-run-status-result-004
+- Added `sessionexecution.RunResult` for mock-backed final/partial durable session result reads through shared `GetResult` projections.
+- Wired `you workflow result <session-id>` with `--mode final|partial`, `--include-artifacts`, and deterministic human/JSON rendering via `ResultResponseToAPI`.
+- Added `ResultRequestFromCLI` and `ResultOutcomeError` so not-ready/failed/unavailable results render stable output then exit non-zero without using missing-session errors.
+- Added CLI tests covering final success, partial running, not-ready final, missing session, shared projection parity, and deterministic JSON.
+- Files changed: `pkg/cli/sessionexecution/{result,result_test}.go`, `pkg/cli/root.go`, `pkg/apisurface/factorysession/factory_session_execution_cli.go`, `pkg/apisurface/factorysession/factory_session_execution_test.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: keep result CLI transport in `sessionexecution.RunResult` and map only through `ResultRequestFromCLI` + `ResultResponseToAPI`; use `ResultOutcomeError` when automation needs a non-zero exit after successful stdout rendering.
+  - Gotchas encountered: running sessions return `NOT_READY` for `--mode final` but `PARTIAL` with JSON primary result for `--mode partial`; human summaries need `AsWorkJsonContentPart` in addition to text parts.
+  - Useful context: story 005 should extend sync timeout rendering and reuse `RunResult` for timed-out session inspection where appropriate.
 ---
