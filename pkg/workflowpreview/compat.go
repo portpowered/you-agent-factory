@@ -5,13 +5,8 @@ package workflowpreview
 import target "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview"
 
 type (
-	Request = target.Request
+	Request               = target.Request
 	SourceValidationIssue = target.SourceValidationIssue
-	ResultConstraints = target.ResultConstraints
-	Preview = target.Preview
+	ResultConstraints     = target.ResultConstraints
+	Preview               = target.Preview
 )
-
-func BuildPreview(input Request) Preview { return target.BuildPreview(input) }
-
-func DefaultResultConstraints() ResultConstraints { return target.DefaultResultConstraints() }
-

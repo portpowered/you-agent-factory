@@ -2,11 +2,7 @@
 // This package is a Batch 001 compatibility shim; core runtime and API code must import the orchestrator-owned path directly.
 package workflowpolicy
 
-import (
-	"encoding/json"
-
-	target "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
-)
+import target "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 
 type (
 	Issue            = target.Issue
@@ -25,20 +21,20 @@ type (
 )
 
 const (
-	CodeInvalidConcurrency        = target.CodeInvalidConcurrency
-	CodeConcurrencyAboveMaxAgents = target.CodeConcurrencyAboveMaxAgents
-	CodeExcessiveMaxAgents        = target.CodeExcessiveMaxAgents
-	CodeInvalidMaxAgents          = target.CodeInvalidMaxAgents
-	CodeWritableRootsReadOnly     = target.CodeWritableRootsReadOnly
-	CodeUnsupportedRunner         = target.CodeUnsupportedRunner
-	CodeUnsupportedModel          = target.CodeUnsupportedModel
-	CodeUnsupportedReasoning      = target.CodeUnsupportedReasoning
-	CodeUnsupportedRouteProfile   = target.CodeUnsupportedRouteProfile
-	CodeUnsupportedCommand        = target.CodeUnsupportedCommand
-	CodeUnsupportedSandboxMode    = target.CodeUnsupportedSandboxMode
-	CodeDeniedCapability          = target.CodeDeniedCapability
-	CodeInvalidPolicyDocument     = target.CodeInvalidPolicyDocument
-	CodeUnsupportedPolicyMode     = target.CodeUnsupportedPolicyMode
+	CodeInvalidConcurrency          = target.CodeInvalidConcurrency
+	CodeConcurrencyAboveMaxAgents   = target.CodeConcurrencyAboveMaxAgents
+	CodeExcessiveMaxAgents          = target.CodeExcessiveMaxAgents
+	CodeInvalidMaxAgents            = target.CodeInvalidMaxAgents
+	CodeWritableRootsReadOnly       = target.CodeWritableRootsReadOnly
+	CodeUnsupportedRunner           = target.CodeUnsupportedRunner
+	CodeUnsupportedModel            = target.CodeUnsupportedModel
+	CodeUnsupportedReasoning        = target.CodeUnsupportedReasoning
+	CodeUnsupportedRouteProfile     = target.CodeUnsupportedRouteProfile
+	CodeUnsupportedCommand          = target.CodeUnsupportedCommand
+	CodeUnsupportedSandboxMode      = target.CodeUnsupportedSandboxMode
+	CodeDeniedCapability            = target.CodeDeniedCapability
+	CodeInvalidPolicyDocument       = target.CodeInvalidPolicyDocument
+	CodeUnsupportedPolicyMode       = target.CodeUnsupportedPolicyMode
 	DefaultMaxAgents                = target.DefaultMaxAgents
 	DefaultDeploymentCap            = target.DefaultDeploymentCap
 	DefaultMaxDepth                 = target.DefaultMaxDepth
@@ -53,25 +49,3 @@ const (
 	CapabilityConnectors            = target.CapabilityConnectors
 	CapabilityDangerFullAccess      = target.CapabilityDangerFullAccess
 )
-
-func Validate(policy EffectivePolicy, deploymentCap int) []Issue { return target.Validate(policy, deploymentCap) }
-
-func ValidateCapability(policy EffectivePolicy, capability Capability) *Diagnostic {
-	return target.ValidateCapability(policy, capability)
-}
-
-func DeniedCapabilitiesForReadOnly(policy EffectivePolicy) []Diagnostic {
-	return target.DeniedCapabilitiesForReadOnly(policy)
-}
-
-func BuildPreview(input PreviewInput) Preview { return target.BuildPreview(input) }
-
-func Resolve(request Request) Resolution { return target.Resolve(request) }
-
-func ResolveFromFactoryDefault(raw json.RawMessage) Resolution { return target.ResolveFromFactoryDefault(raw) }
-
-func DefaultEffectivePolicy() EffectivePolicy { return target.DefaultEffectivePolicy() }
-
-func Hash(policy EffectivePolicy) string { return target.Hash(policy) }
-
-func HashDocument(raw json.RawMessage) string { return target.HashDocument(raw) }

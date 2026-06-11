@@ -15,26 +15,24 @@ type (
 )
 
 const (
-	CodeArtifactRootInvalid     = target.CodeArtifactRootInvalid
-	CodeArtifactRootInsideRepo  = target.CodeArtifactRootInsideRepo
-	KindFactoryID               = target.KindFactoryID
-	KindFactoryInline           = target.KindFactoryInline
-	KindWorkflowFile            = target.KindWorkflowFile
-	KindWorkflowName            = target.KindWorkflowName
-	KindInlineWorkflow          = target.KindInlineWorkflow
-	LookupStageProjectClaude    = target.LookupStageProjectClaude
-	LookupStageGlobalUser       = target.LookupStageGlobalUser
-	LookupStagePackageRelative  = target.LookupStagePackageRelative
-	LookupStageNamedJavaScript  = target.LookupStageNamedJavaScript
-	LookupStageExplicitFactory  = target.LookupStageExplicitFactory
+	CodeArtifactRootInvalid       = target.CodeArtifactRootInvalid
+	CodeArtifactRootInsideRepo    = target.CodeArtifactRootInsideRepo
+	KindFactoryID                 = target.KindFactoryID
+	KindFactoryInline             = target.KindFactoryInline
+	KindWorkflowFile              = target.KindWorkflowFile
+	KindWorkflowName              = target.KindWorkflowName
+	KindInlineWorkflow            = target.KindInlineWorkflow
+	LookupStageProjectClaude      = target.LookupStageProjectClaude
+	LookupStageGlobalUser         = target.LookupStageGlobalUser
+	LookupStagePackageRelative    = target.LookupStagePackageRelative
+	LookupStageNamedJavaScript    = target.LookupStageNamedJavaScript
+	LookupStageExplicitFactory    = target.LookupStageExplicitFactory
 	LookupStageExplicitSourceKind = target.LookupStageExplicitSourceKind
-	ProjectClaudeWorkflowsDir   = target.ProjectClaudeWorkflowsDir
-	GlobalWorkflowsDirName      = target.GlobalWorkflowsDirName
-	CodeSourceNotFound          = target.CodeSourceNotFound
-	CodeSourceConflict          = target.CodeSourceConflict
-	CodeUnsupportedKind         = target.CodeUnsupportedKind
+	ProjectClaudeWorkflowsDir     = target.ProjectClaudeWorkflowsDir
+	GlobalWorkflowsDirName        = target.GlobalWorkflowsDirName
+	CodeSourceNotFound            = target.CodeSourceNotFound
+	CodeSourceConflict            = target.CodeSourceConflict
+	CodeUnsupportedKind           = target.CodeUnsupportedKind
 )
 
 func DefaultContext(projectRoot string) (Context, error) { return target.DefaultContext(projectRoot) }
-
-func Resolve(req Request, ctx Context) Resolution { return target.Resolve(req, ctx) }
