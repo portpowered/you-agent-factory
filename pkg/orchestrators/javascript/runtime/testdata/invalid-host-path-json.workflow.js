@@ -1,0 +1,1 @@
+return { path: "/etc/passwd" };

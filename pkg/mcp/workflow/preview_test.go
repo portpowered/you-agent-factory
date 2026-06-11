@@ -1,3 +1,5 @@
+// Active MCP workflow preview tests import orchestrator-owned JavaScript packages
+// directly; root pkg/workflow* compatibility shims are not used here.
 package workflow_test
 
 import (
@@ -118,6 +120,35 @@ func TestStructuredErrorFromPreview_UsesFirstBlockingIssue(t *testing.T) {
 	}
 	if toolErr.Preview.Valid {
 		t.Fatal("expected invalid preview in structured error")
+	}
+}
+
+func TestValidateTool_ReturnsNotFoundDiagnosticForMissingWorkflow(t *testing.T) {
+	projectRoot := t.TempDir()
+
+	projectRootPtr := projectRoot
+	sourceValue := "missing"
+	result, err := mcpworkflow.ValidateTool(factoryapi.FactoryPreviewRequest{
+		SourceKind:  factoryapi.WORKFLOWNAME,
+		ProjectRoot: &projectRootPtr,
+		SourceValue: &sourceValue,
+	})
+	if err != nil {
+		t.Fatalf("ValidateTool: %v", err)
+	}
+	if result.Valid {
+		t.Fatal("expected invalid preview for missing workflow")
+	}
+	if result.SourceResolution.Diagnostics == nil || len(*result.SourceResolution.Diagnostics) == 0 {
+		t.Fatalf("diagnostics = %v, want source not-found diagnostic", result.SourceResolution.Diagnostics)
+	}
+	if (*result.SourceResolution.Diagnostics)[0].Code != workflowsource.CodeSourceNotFound {
+		t.Fatalf("diagnostic code = %q, want %q", (*result.SourceResolution.Diagnostics)[0].Code, workflowsource.CodeSourceNotFound)
+	}
+
+	toolErr := mcpworkflow.StructuredErrorFromPreview(result, "validation")
+	if toolErr.Code != workflowsource.CodeSourceNotFound {
+		t.Fatalf("tool error code = %q, want %q", toolErr.Code, workflowsource.CodeSourceNotFound)
 	}
 }
 

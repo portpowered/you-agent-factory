@@ -1,0 +1,134 @@
+package fixtures_test
+
+import (
+	"encoding/json"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
+)
+
+func TestPublishedFixtureScenarios_DocumentStableIdentity(t *testing.T) {
+	identities, err := fixtures.LoadFixtureScenarioIdentities(contractFixtureCatalogPath(t))
+	if err != nil {
+		t.Fatalf("fixtures.LoadFixtureScenarioIdentities: %v", err)
+	}
+
+	for _, tc := range stableFixtureIdentityCases() {
+		t.Run(string(tc.purpose), func(t *testing.T) {
+			identity, ok := identities[tc.scenarioID]
+			if !ok {
+				t.Fatalf("scenario %q missing from catalog", tc.scenarioID)
+			}
+			if identity.RequestID != tc.requestID {
+				t.Fatalf("requestId = %q, want %q", identity.RequestID, tc.requestID)
+			}
+			if identity.SessionID != tc.sessionID {
+				t.Fatalf("sessionId = %q, want %q", identity.SessionID, tc.sessionID)
+			}
+			if identity.LifecycleStatus != tc.lifecycleStatus {
+				t.Fatalf("lifecycleStatus = %q, want %q", identity.LifecycleStatus, tc.lifecycleStatus)
+			}
+			if identity.ResultStatus != tc.resultStatus {
+				t.Fatalf("resultStatus = %q, want %q", identity.ResultStatus, tc.resultStatus)
+			}
+			if identity.ProjectionHash != tc.projectionHash {
+				t.Fatalf("projectionHash = %q, want %q", identity.ProjectionHash, tc.projectionHash)
+			}
+			assertStringSliceEqual(t, "dispatchIds", identity.DispatchIDs, tc.dispatchIDs)
+			assertStringSliceEqual(t, "artifactIds", identity.ArtifactIDs, tc.artifactIDs)
+			assertStringSliceEqual(t, "eventIds", identity.EventIDs, tc.eventIDs)
+		})
+	}
+}
+
+func TestPublishedFixtureScenarios_MatchExportedCatalogRows(t *testing.T) {
+	identities, err := fixtures.LoadFixtureScenarioIdentities(contractFixtureCatalogPath(t))
+	if err != nil {
+		t.Fatalf("fixtures.LoadFixtureScenarioIdentities: %v", err)
+	}
+	hydrated := fixtures.HydratePublishedFixtureProjectionHashes(identities)
+	if len(hydrated) != len(fixtures.PublishedFixtureScenarios) {
+		t.Fatalf("hydrated rows = %d, want %d", len(hydrated), len(fixtures.PublishedFixtureScenarios))
+	}
+	for index, row := range fixtures.PublishedFixtureScenarios {
+		hydratedRow := hydrated[index]
+		if row.Purpose != hydratedRow.Purpose || row.ScenarioID != hydratedRow.ScenarioID {
+			t.Fatalf("catalog row mismatch at %d: %#v vs %#v", index, row, hydratedRow)
+		}
+		if hydratedRow.ProjectionHash == "" {
+			t.Fatalf("projection hash missing for purpose %q", row.Purpose)
+		}
+	}
+}
+
+func TestLoadFixtureScenarioIdentities_ReloadIsStable(t *testing.T) {
+	path := contractFixtureCatalogPath(t)
+	first, err := fixtures.LoadFixtureScenarioIdentities(path)
+	if err != nil {
+		t.Fatalf("first load: %v", err)
+	}
+	second, err := fixtures.LoadFixtureScenarioIdentities(path)
+	if err != nil {
+		t.Fatalf("second load: %v", err)
+	}
+	if len(first) != len(second) {
+		t.Fatalf("scenario count mismatch: %d vs %d", len(first), len(second))
+	}
+	for scenarioID, firstIdentity := range first {
+		secondIdentity, ok := second[scenarioID]
+		if !ok {
+			t.Fatalf("scenario %q missing on reload", scenarioID)
+		}
+		if firstIdentity.ScenarioID != secondIdentity.ScenarioID ||
+			firstIdentity.RequestID != secondIdentity.RequestID ||
+			firstIdentity.SessionID != secondIdentity.SessionID ||
+			firstIdentity.LifecycleStatus != secondIdentity.LifecycleStatus ||
+			firstIdentity.ResultStatus != secondIdentity.ResultStatus ||
+			firstIdentity.ProjectionHash != secondIdentity.ProjectionHash {
+			t.Fatalf("identity drift for %q:\nfirst=%#v\nsecond=%#v", scenarioID, firstIdentity, secondIdentity)
+		}
+		assertStringSliceEqual(t, "reload dispatchIds", firstIdentity.DispatchIDs, secondIdentity.DispatchIDs)
+		assertStringSliceEqual(t, "reload artifactIds", firstIdentity.ArtifactIDs, secondIdentity.ArtifactIDs)
+		assertStringSliceEqual(t, "reload eventIds", firstIdentity.EventIDs, secondIdentity.EventIDs)
+	}
+}
+
+func TestContractFixtureCatalog_UsesCanonicalFactorySessionVocabulary(t *testing.T) {
+	raw, err := os.ReadFile(contractFixtureCatalogPath(t))
+	if err != nil {
+		t.Fatalf("read fixtures: %v", err)
+	}
+	text := string(raw)
+	for _, term := range fixtures.ForbiddenFixtureVocabularyTerms() {
+		if strings.Contains(text, term) {
+			t.Fatalf("fixture catalog contains forbidden term %q", term)
+		}
+	}
+
+	var document map[string]any
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatalf("decode fixtures: %v", err)
+	}
+	scenarios, ok := document["scenarios"].([]any)
+	if !ok {
+		t.Fatal("missing scenarios array")
+	}
+	for _, item := range scenarios {
+		row, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		encoded, err := json.Marshal(row)
+		if err != nil {
+			t.Fatalf("marshal scenario: %v", err)
+		}
+		payload := string(encoded)
+		for _, required := range []string{"sessionId", "session", "executionRequest"} {
+			if !strings.Contains(payload, required) {
+				t.Fatalf("scenario %v missing %q in public fixture fields", row["id"], required)
+			}
+		}
+	}
+}
