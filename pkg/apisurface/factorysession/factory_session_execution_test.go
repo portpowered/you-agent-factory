@@ -11,6 +11,7 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 type durableFixtureCatalog struct {
@@ -99,6 +100,25 @@ func TestStartRequestFromAPI_RejectsMissingRequestID(t *testing.T) {
 		if !errors.As(err, &domainErr) {
 			t.Fatalf("error = %T, want validation error", err)
 		}
+	}
+}
+
+func TestStartRequestFromCLI_NormalizesFixtureBackedRequest(t *testing.T) {
+	request, err := factorysession.StartRequestFromCLI(factorysession.CLIStartInput{
+		RequestID: "req-petri-success-001",
+		Source: factorysessionexecution.Source{
+			Kind:      workflowsource.KindFactoryID,
+			FactoryID: "customer-support-triage",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartRequestFromCLI: %v", err)
+	}
+	if request.RequestID != "req-petri-success-001" {
+		t.Fatalf("requestId = %q", request.RequestID)
+	}
+	if request.Source.FactoryID != "customer-support-triage" {
+		t.Fatalf("factoryId = %q", request.Source.FactoryID)
 	}
 }
 
