@@ -4,6 +4,8 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps, CSSProperties } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { installDashboardBrowserTestShims } from "../../../../../components/dashboard/test-browser-shims";
+
 import type { FactoryLayoutGroup } from "../../../lib/layout/visual-groups/factory-graph-layout-groups";
 import { FactoryGraphVisualGroupLayer } from "./factory-graph-visual-group-layer";
 
@@ -16,9 +18,18 @@ const sampleGroup: FactoryLayoutGroup = {
 };
 
 function enablePointerCapture(element: HTMLElement) {
-  element.setPointerCapture = vi.fn();
-  element.releasePointerCapture = vi.fn();
-  element.hasPointerCapture = vi.fn(() => true);
+  Object.defineProperty(element, "setPointerCapture", {
+    configurable: true,
+    value: vi.fn(),
+  });
+  Object.defineProperty(element, "releasePointerCapture", {
+    configurable: true,
+    value: vi.fn(),
+  });
+  Object.defineProperty(element, "hasPointerCapture", {
+    configurable: true,
+    value: vi.fn(() => true),
+  });
 }
 
 function renderVisualGroupLayer(
@@ -271,6 +282,139 @@ describe("FactoryGraphVisualGroupLayer", () => {
       );
     },
   );
+
+  it("ignores pointer handlers when editing or callbacks are unavailable", () => {
+    const onMoveGroup = vi.fn();
+    const onResizeGroup = vi.fn();
+
+    renderVisualGroupLayer({
+      canEdit: false,
+      onMoveGroup,
+      onResizeGroup,
+      selectedGroupId: "group-1",
+    });
+
+    const groupBody = screen.getByRole("button", { name: "Review" });
+    enablePointerCapture(groupBody);
+    fireEvent.pointerDown(groupBody, {
+      clientX: 100,
+      clientY: 120,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(groupBody, {
+      clientX: 140,
+      clientY: 150,
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(groupBody, {
+      clientX: 140,
+      clientY: 150,
+      pointerId: 1,
+    });
+
+    expect(onMoveGroup).not.toHaveBeenCalled();
+    expect(onResizeGroup).not.toHaveBeenCalled();
+  });
+
+  it("ignores pointer events from a different pointer id during drag", () => {
+    const onMoveGroup = vi.fn();
+
+    renderVisualGroupLayer(
+      {
+        onMoveGroup,
+        selectedGroupId: "group-1",
+      },
+      { height: 480, position: "relative", width: 640 },
+    );
+
+    const groupBody = screen.getByRole("button", { name: "Review" });
+    enablePointerCapture(groupBody);
+    fireEvent.pointerDown(groupBody, {
+      clientX: 100,
+      clientY: 120,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(groupBody, {
+      clientX: 140,
+      clientY: 150,
+      pointerId: 2,
+    });
+    fireEvent.pointerUp(groupBody, {
+      clientX: 140,
+      clientY: 150,
+      pointerId: 2,
+    });
+
+    expect(onMoveGroup).not.toHaveBeenCalled();
+  });
+
+  it("captures member node start positions when dragging a group with canvas nodes", () => {
+    const restoreBrowserShims = installDashboardBrowserTestShims();
+    const onMoveGroup = vi.fn();
+
+    render(
+      <ReactFlowProvider>
+        <div style={{ height: 480, position: "relative", width: 640 }}>
+          <ReactFlow
+            defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+            edges={[]}
+            nodes={[
+              {
+                data: { factoryGraphNodeId: "workstation:draft" },
+                id: "workstation:draft",
+                position: { x: 40, y: 60 },
+              },
+            ]}
+          >
+            <FactoryGraphVisualGroupLayer
+              canEdit
+              groupAriaLabel={(group) => group.label ?? group.id}
+              groups={[
+                {
+                  ...sampleGroup,
+                  nodeIds: ["workstation:draft"],
+                },
+              ]}
+              onMoveGroup={onMoveGroup}
+              onSelectGroup={vi.fn()}
+              resizeHandleAriaLabel={(corner) => `Resize ${corner}`}
+              selectedGroupId="group-1"
+            />
+          </ReactFlow>
+        </div>
+      </ReactFlowProvider>,
+    );
+
+    const groupBody = screen.getByRole("button", { name: "Review" });
+    enablePointerCapture(groupBody);
+    fireEvent.pointerDown(groupBody, {
+      clientX: 100,
+      clientY: 120,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(groupBody, {
+      clientX: 140,
+      clientY: 150,
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(groupBody, {
+      clientX: 140,
+      clientY: 150,
+      pointerId: 1,
+    });
+
+    const [, , startMemberPositions] = onMoveGroup.mock.calls[0] ?? [];
+    expect(onMoveGroup).toHaveBeenCalledWith(
+      "group-1",
+      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
+      expect.any(Map),
+    );
+    expect(startMemberPositions?.get("workstation:draft")).toEqual({
+      x: 40,
+      y: 60,
+    });
+    restoreBrowserShims();
+  });
 
   it("commits group moves that include saved member node ids", () => {
     const onMoveGroup = vi.fn();
