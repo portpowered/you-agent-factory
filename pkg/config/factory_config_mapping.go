@@ -156,7 +156,7 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 		Resources:        resourcesAPIFromInternal(cfg.Resources),
 		SupportingFiles:  resourceManifestAPIFromInternal(cfg.ResourceManifest),
 		Layout:           factoryLayoutAPIFromInternal(cfg.Layout),
-		Workers:          workersAPIFromInternal(cfg.Workers),
+		Workers:          workersAPIFromInternal(cfg.Workers, cfg.Workstations),
 		Workstations:     workstationsAPIFromInternal(cfg.Workstations, workerTypesByName(cfg.Workers)),
 	}
 }
@@ -672,13 +672,13 @@ func resourcesAPIFromInternal(resources []interfaces.ResourceConfig) *[]factorya
 	return &result
 }
 
-func workersAPIFromInternal(workers []interfaces.WorkerConfig) *[]factoryapi.Worker {
+func workersAPIFromInternal(workers []interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) *[]factoryapi.Worker {
 	if len(workers) == 0 {
 		return nil
 	}
 	result := make([]factoryapi.Worker, len(workers))
 	for i, worker := range workers {
-		result[i] = *workerDefinitionAPIFromInternal(&worker)
+		result[i] = *workerDefinitionAPIFromInternalWithUsage(&worker, workstations)
 	}
 	return &result
 }
@@ -912,12 +912,16 @@ func WorkstationConfigToOpenAPIWithWorkerType(workstation interfaces.FactoryWork
 }
 
 func workerDefinitionAPIFromInternal(def *interfaces.WorkerConfig) *factoryapi.Worker {
+	return workerDefinitionAPIFromInternalWithUsage(def, nil)
+}
+
+func workerDefinitionAPIFromInternalWithUsage(def *interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) *factoryapi.Worker {
 	if def == nil {
 		return nil
 	}
 	return &factoryapi.Worker{
 		Id:               stringPtrIfNotEmpty(def.ID),
-		Type:             workerTypePtrIfNotEmpty(def.Type),
+		Type:             workerTypePtrForFactoryUsage(def, workstations),
 		Provider:         hostedWorkerProviderPtrIfNotEmpty(def.Provider),
 		Name:             def.Name,
 		Args:             stringSlicePtr(def.Args),
@@ -979,7 +983,14 @@ func hostedLinearWorkerClaimAPIFromInternal(claim *interfaces.HostedLinearWorker
 // WorkerConfigToOpenAPI converts an internal worker config into the generated
 // OpenAPI worker model.
 func WorkerConfigToOpenAPI(worker interfaces.WorkerConfig) factoryapi.Worker {
-	return *workerDefinitionAPIFromInternal(&worker)
+	return WorkerConfigToOpenAPIWithFactoryUsage(worker, nil)
+}
+
+// WorkerConfigToOpenAPIWithFactoryUsage converts an internal worker config into
+// the generated OpenAPI worker model using workstation references for
+// behavior-aware worker taxonomy projection.
+func WorkerConfigToOpenAPIWithFactoryUsage(worker interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) factoryapi.Worker {
+	return *workerDefinitionAPIFromInternalWithUsage(&worker, workstations)
 }
 
 func modelOperationsAPIFromInternal(operations []interfaces.ModelOperation) *[]factoryapi.ModelOperation {
@@ -1185,6 +1196,15 @@ func workerTypePtrIfNotEmpty(value string) *factoryapi.WorkerType {
 		return nil
 	}
 	enumValue := publicFactoryWorkerTypeFromInternal(value)
+	return &enumValue
+}
+
+func workerTypePtrForFactoryUsage(def *interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) *factoryapi.WorkerType {
+	if def == nil || strings.TrimSpace(def.Type) == "" {
+		return nil
+	}
+	publicType := interfaces.PublicWorkerTypeForFactoryUsage(*def, workstations)
+	enumValue := factoryapi.WorkerType(publicType)
 	return &enumValue
 }
 

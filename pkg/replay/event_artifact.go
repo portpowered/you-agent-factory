@@ -308,7 +308,7 @@ func workRelationsFromGenerated(works []factoryapi.Work, relations *[]factoryapi
 	return out
 }
 
-func mergeGeneratedWorkers(factory *factoryapi.Factory, runtimeWorkers map[string]interfaces.WorkerConfig) error {
+func mergeGeneratedWorkers(factory *factoryapi.Factory, runtimeWorkers map[string]interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) error {
 	if len(runtimeWorkers) == 0 {
 		return nil
 	}
@@ -317,7 +317,7 @@ func mergeGeneratedWorkers(factory *factoryapi.Factory, runtimeWorkers map[strin
 		generatedWorkerIndexes,
 		sortedWorkerNames(runtimeWorkers),
 		func(name string) (factoryapi.Worker, error) {
-			return generatedWorkerFromReplayConfig(name, runtimeWorkers[name])
+			return generatedWorkerFromReplayConfig(name, runtimeWorkers[name], workstations)
 		},
 		func(worker factoryapi.Worker) string {
 			return worker.Name
@@ -330,8 +330,8 @@ func mergeGeneratedWorkers(factory *factoryapi.Factory, runtimeWorkers map[strin
 	return nil
 }
 
-func generatedWorkerFromReplayConfig(name string, worker interfaces.WorkerConfig) (factoryapi.Worker, error) {
-	generated := generatedWorkerAPIFromConfig(name, worker)
+func generatedWorkerFromReplayConfig(name string, worker interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) (factoryapi.Worker, error) {
+	generated := generatedWorkerAPIFromConfig(name, worker, workstations)
 	if generated.Name == "" {
 		generated.Name = name
 	}

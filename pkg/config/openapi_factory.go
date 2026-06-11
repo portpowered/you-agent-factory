@@ -204,6 +204,9 @@ func normalizeCanonicalFactoryInputFields(v any) (any, error) {
 	if err := normalizeFactoryWorkstationEntries(root); err != nil {
 		return nil, err
 	}
+	if err := normalizeFactoryWorkerTypesForFactoryUsage(root); err != nil {
+		return nil, err
+	}
 	if err := normalizeFactoryOrchestratorEntry(root); err != nil {
 		return nil, err
 	}
@@ -463,6 +466,72 @@ func isUppercaseOperationIdentifier(value string) bool {
 		return false
 	}
 	return value != ""
+}
+
+func normalizeFactoryWorkerTypesForFactoryUsage(root map[string]any) error {
+	workstations := factoryWorkstationsFromInputMaps(root)
+	workers, ok := root["workers"].([]any)
+	if !ok {
+		return nil
+	}
+	for _, item := range workers {
+		worker, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		workerName, _ := worker["name"].(string)
+		workerType, _ := worker["type"].(string)
+		if strings.TrimSpace(workerName) == "" || strings.TrimSpace(workerType) == "" {
+			continue
+		}
+		if interfaces.InternalRuntimeWorkerTypeFromPublic(workerType) != interfaces.WorkerTypeModel {
+			continue
+		}
+		publicType := interfaces.PublicWorkerTypeForFactoryUsage(interfaces.WorkerConfig{
+			Name: workerName,
+			Type: interfaces.WorkerTypeModel,
+		}, workstations)
+		worker["type"] = publicType
+	}
+	return nil
+}
+
+func factoryWorkstationsFromInputMaps(root map[string]any) []interfaces.FactoryWorkstationConfig {
+	workstationsValue, ok := root["workstations"].([]any)
+	if !ok {
+		return nil
+	}
+	workstations := make([]interfaces.FactoryWorkstationConfig, 0, len(workstationsValue))
+	for _, item := range workstationsValue {
+		workstationMap, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		workstation := interfaces.FactoryWorkstationConfig{
+			Name:           stringValueFromFactoryInputMap(workstationMap, "name"),
+			WorkerTypeName: stringValueFromFactoryInputMap(workstationMap, "worker"),
+		}
+		if workstationType := stringValueFromFactoryInputMap(workstationMap, "type"); workstationType != "" {
+			workstation.Type = workstationType
+		}
+		if behavior := stringValueFromFactoryInputMap(workstationMap, "behavior"); behavior != "" {
+			workstation.Kind = interfaces.WorkstationKind(behavior)
+		}
+		workstations = append(workstations, workstation)
+	}
+	return workstations
+}
+
+func stringValueFromFactoryInputMap(values map[string]any, key string) string {
+	raw, ok := values[key]
+	if !ok {
+		return ""
+	}
+	value, ok := raw.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(value)
 }
 
 func normalizeFactoryWorkstationEntries(root map[string]any) error {

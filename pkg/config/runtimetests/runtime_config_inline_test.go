@@ -431,8 +431,8 @@ func TestLoadRuntimeConfig_LoadsInlineRuntimeDefinitionsWithoutAgentsFiles(t *te
 	if !ok {
 		t.Fatal("expected inline executor worker definition")
 	}
-	if workerDef.Type != "MODEL_WORKER" {
-		t.Fatalf("expected worker type MODEL_WORKER, got %q", workerDef.Type)
+	if workerDef.Type != interfaces.WorkerTypeAgent {
+		t.Fatalf("expected worker type %s, got %q", interfaces.WorkerTypeAgent, workerDef.Type)
 	}
 	if workerDef.ModelProvider != "claude" {
 		t.Fatalf("expected model provider claude, got %q", workerDef.ModelProvider)

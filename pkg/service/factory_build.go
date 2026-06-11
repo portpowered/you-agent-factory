@@ -613,7 +613,7 @@ func (r *factoryRuntimeBundle) emitWorkerBoundaryStartMetrics(fields metrics.Fie
 		return
 	}
 	switch workerDef.Type {
-	case interfaces.WorkerTypeModel:
+	case interfaces.WorkerTypeModel, interfaces.WorkerTypeAgent, interfaces.WorkerTypeInference:
 		providerFields := fields
 		providerFields.Provider = normalizedRuntimeMetricProvider(workerDef.ModelProvider)
 		r.emitMetricCounter(runtimeMetricProviderRequest, 1, providerFields)
@@ -628,7 +628,7 @@ func (r *factoryRuntimeBundle) emitWorkerBoundaryCompletionMetrics(result interf
 		return
 	}
 	switch workerDef.Type {
-	case interfaces.WorkerTypeModel:
+	case interfaces.WorkerTypeModel, interfaces.WorkerTypeAgent, interfaces.WorkerTypeInference:
 		r.emitProviderCompletionMetrics(result, fields, workerDef)
 	case interfaces.WorkerTypeScript:
 		r.emitScriptCompletionMetrics(result, fields)
@@ -1060,7 +1060,7 @@ func buildWorkerExecutor(
 	}
 
 	switch def.Type {
-	case interfaces.WorkerTypeModel:
+	case interfaces.WorkerTypeModel, interfaces.WorkerTypeAgent:
 		var runner workers.Runner
 		if providerOverride != nil {
 			runner = workers.RunnerFromProvider(providerOverride)

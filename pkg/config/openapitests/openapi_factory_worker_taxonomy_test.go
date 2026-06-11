@@ -16,42 +16,49 @@ func TestFactoryConfigFromOpenAPIJSON_AcceptsNewWorkerTaxonomyAndProjectsLegacyR
 	tests := []struct {
 		name              string
 		workerType        string
+		workstationType   string
 		wantRuntimeType   string
 		wantGeneratedType factoryapi.WorkerType
 	}{
 		{
 			name:              "inference worker",
 			workerType:        interfaces.WorkerTypeInference,
+			workstationType:   interfaces.WorkstationTypeInference,
 			wantRuntimeType:   interfaces.WorkerTypeModel,
 			wantGeneratedType: factoryapi.WorkerTypeInferenceWorker,
 		},
 		{
 			name:              "legacy model worker alias",
 			workerType:        interfaces.WorkerTypeModel,
-			wantRuntimeType:   interfaces.WorkerTypeModel,
-			wantGeneratedType: factoryapi.WorkerTypeInferenceWorker,
+			workstationType:   interfaces.WorkstationTypeModel,
+			wantRuntimeType:   interfaces.WorkerTypeAgent,
+			wantGeneratedType: factoryapi.WorkerTypeAgentWorker,
 		},
 		{
 			name:              "agent worker",
 			workerType:        interfaces.WorkerTypeAgent,
+			workstationType:   interfaces.WorkstationTypeAgent,
 			wantRuntimeType:   interfaces.WorkerTypeAgent,
 			wantGeneratedType: factoryapi.WorkerTypeAgentWorker,
 		},
 		{
 			name:              "script worker",
 			workerType:        interfaces.WorkerTypeScript,
+			workstationType:   interfaces.WorkstationTypeScript,
 			wantRuntimeType:   interfaces.WorkerTypeScript,
 			wantGeneratedType: factoryapi.WorkerTypeScriptWorker,
 		},
 		{
 			name:              "poller worker",
 			workerType:        interfaces.WorkerTypePoller,
+			workstationType:   interfaces.WorkstationTypePoller,
 			wantRuntimeType:   interfaces.WorkerTypeHosted,
 			wantGeneratedType: factoryapi.WorkerTypePollerWorker,
 		},
 		{
 			name:              "legacy hosted worker alias",
 			workerType:        interfaces.WorkerTypeHosted,
+			workstationType:   interfaces.WorkstationTypePoller,
 			wantRuntimeType:   interfaces.WorkerTypeHosted,
 			wantGeneratedType: factoryapi.WorkerTypePollerWorker,
 		},
@@ -62,7 +69,7 @@ func TestFactoryConfigFromOpenAPIJSON_AcceptsNewWorkerTaxonomyAndProjectsLegacyR
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			cfgJSON := workerTaxonomyFactoryJSON(tt.workerType)
+			cfgJSON := workerTaxonomyFactoryJSON(tt.workerType, tt.workstationType)
 			generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
 			if err != nil {
 				t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
@@ -109,6 +116,7 @@ func TestMarshalCanonicalFactoryConfig_PrefersNewWorkerTaxonomyOnRoundTrip(t *te
 		}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "execute-story",
+			Type:           interfaces.WorkstationTypeInvoke,
 			WorkerTypeName: "executor",
 			Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
 			Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
@@ -132,7 +140,22 @@ func TestMarshalCanonicalFactoryConfig_PrefersNewWorkerTaxonomyOnRoundTrip(t *te
 	}
 }
 
-func workerTaxonomyFactoryJSON(workerType string) []byte {
+func workerTaxonomyFactoryJSON(workerType, workstationType string) []byte {
+	workstation := map[string]any{
+		"name":   "execute-story",
+		"worker": "executor",
+		"inputs": []map[string]string{{"workType": "story", "state": "init"}},
+		"outputs": []map[string]string{{
+			"workType": "story",
+			"state":    "complete",
+		}},
+	}
+	if strings.TrimSpace(workstationType) != "" {
+		workstation["type"] = workstationType
+		if workstationType == interfaces.WorkstationTypePoller {
+			workstation["behavior"] = "POLLER"
+		}
+	}
 	payload := map[string]any{
 		"name": "worker-taxonomy-factory",
 		"workTypes": []map[string]any{{
@@ -146,15 +169,7 @@ func workerTaxonomyFactoryJSON(workerType string) []byte {
 			"name": "executor",
 			"type": workerType,
 		}},
-		"workstations": []map[string]any{{
-			"name":   "execute-story",
-			"worker": "executor",
-			"inputs": []map[string]string{{"workType": "story", "state": "init"}},
-			"outputs": []map[string]string{{
-				"workType": "story",
-				"state":    "complete",
-			}},
-		}},
+		"workstations": []map[string]any{workstation},
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

@@ -188,7 +188,7 @@ func TestMergeGeneratedWorkers_ReplacesExistingEntriesAndAppendsRuntimeOnlyInSor
 		},
 	}
 
-	if err := mergeGeneratedWorkers(factory, runtimeWorkers); err != nil {
+	if err := mergeGeneratedWorkers(factory, runtimeWorkers, nil); err != nil {
 		t.Fatalf("mergeGeneratedWorkers() error = %v", err)
 	}
 	if factory.Workers == nil {
