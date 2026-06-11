@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/cli/workflow"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 const validWorkflowSource = `
@@ -55,6 +55,10 @@ func TestPreview_InvalidWorkflowReportsDiagnostics(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), "Factory preview failed.") {
 		t.Fatalf("output = %q, want failure summary", output.String())
+	}
+	wantPath := workflowsource.ProjectClaudeWorkflowsDir + "/broken.js"
+	if !strings.Contains(output.String(), wantPath+":") {
+		t.Fatalf("output = %q, want path-aware diagnostic prefix %q", output.String(), wantPath)
 	}
 }
 

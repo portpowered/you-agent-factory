@@ -34,5 +34,3 @@ const (
 	CodeSourceConflict            = target.CodeSourceConflict
 	CodeUnsupportedKind           = target.CodeUnsupportedKind
 )
-
-func DefaultContext(projectRoot string) (Context, error) { return target.DefaultContext(projectRoot) }

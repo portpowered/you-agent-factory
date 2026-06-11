@@ -1,6 +1,9 @@
 package apicontract_test
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestOpenAPIContract_DefinesFactoryValidationEndpoint(t *testing.T) {
 	doc := loadBundledOpenAPIDocument(t)
@@ -85,6 +88,16 @@ func TestOpenAPIContract_DefinesFactoryPreviewEndpoint(t *testing.T) {
 	if got, _ := postOperation["operationId"].(string); got != "previewFactory" {
 		t.Fatalf("paths./factories/preview.post.operationId = %q, want previewFactory", got)
 	}
+	if deprecated, ok := postOperation["deprecated"].(bool); ok && deprecated {
+		t.Fatal("paths./factories/preview.post must not be deprecated")
+	}
+	tags, ok := postOperation["tags"].([]any)
+	if !ok || len(tags) == 0 {
+		t.Fatal("paths./factories/preview.post.tags is missing")
+	}
+	if got, _ := tags[0].(string); got != "Factory" {
+		t.Fatalf("paths./factories/preview.post.tags[0] = %q, want Factory", got)
+	}
 	assertRequestSchemaRef(t, postOperation, "#/components/schemas/FactoryPreviewRequest")
 	assertResponseSchemaRef(t, postOperation, "200", "#/components/schemas/FactoryPreviewResult")
 	assertResponseRef(t, postOperation, "400", "#/components/responses/BadRequest")
@@ -111,14 +124,42 @@ func TestOpenAPIContract_DefinesWorkflowPreviewCompatibilityEndpoint(t *testing.
 	if got, _ := postOperation["operationId"].(string); got != "previewWorkflow" {
 		t.Fatalf("paths./workflow-previews.post.operationId = %q, want previewWorkflow", got)
 	}
+	description, _ := postOperation["description"].(string)
+	if !strings.Contains(description, "/factories/preview") {
+		t.Fatalf("paths./workflow-previews.post.description = %q, want successor reference to /factories/preview", description)
+	}
 	assertRequestSchemaRef(t, postOperation, "#/components/schemas/WorkflowPreviewRequest")
 	assertResponseSchemaRef(t, postOperation, "200", "#/components/schemas/WorkflowPreviewResult")
 	assertResponseRef(t, postOperation, "400", "#/components/responses/BadRequest")
 }
 
+func TestOpenAPIContract_FactoryPreviewRequestSchemaMatchesSharedContract(t *testing.T) {
+	schemas := loadBundledOpenAPIComponentSchemas(t)
+	requestSchema := schemaObject(t, schemas, "FactoryPreviewRequest")
+	if deprecated, ok := requestSchema["deprecated"].(bool); ok && deprecated {
+		t.Fatal("FactoryPreviewRequest must not be deprecated")
+	}
+	assertRequiredFields(t, requestSchema, "sourceKind")
+	requestProperties := schemaProperties(t, requestSchema, "FactoryPreviewRequest")
+	sourceKind, ok := requestProperties["sourceKind"].(map[string]any)
+	if !ok {
+		t.Fatal("FactoryPreviewRequest.properties.sourceKind is missing")
+	}
+	assertEnumValues(t, sourceKind, "FactoryPreviewRequest.properties.sourceKind", []string{
+		"FACTORY_ID",
+		"FACTORY_INLINE",
+		"WORKFLOW_FILE",
+		"WORKFLOW_NAME",
+		"INLINE_WORKFLOW",
+	})
+}
+
 func TestOpenAPIContract_FactoryPreviewResultSchemaMatchesSharedContract(t *testing.T) {
 	schemas := loadBundledOpenAPIComponentSchemas(t)
 	resultSchema := schemaObject(t, schemas, "FactoryPreviewResult")
+	if deprecated, ok := resultSchema["deprecated"].(bool); ok && deprecated {
+		t.Fatal("FactoryPreviewResult must not be deprecated")
+	}
 	assertRequiredFields(t, resultSchema,
 		"valid",
 		"sourceResolution",
