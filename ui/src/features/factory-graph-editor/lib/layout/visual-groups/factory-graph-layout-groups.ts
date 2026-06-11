@@ -4,10 +4,7 @@ import type {
   FactoryLayout,
   FactoryLayoutPoint,
 } from "../factory-graph-layout-operations";
-import {
-  factoryLayoutNodePosition,
-  moveFactoryLayoutNodesByDelta,
-} from "../factory-graph-layout-operations";
+import { moveFactoryLayoutNodesByDelta } from "../factory-graph-layout-operations";
 
 export type FactoryLayoutGroupCanvasNodeOption = {
   id: string;

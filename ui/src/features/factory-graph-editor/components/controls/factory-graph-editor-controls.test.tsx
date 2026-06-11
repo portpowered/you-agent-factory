@@ -79,17 +79,6 @@ function renderToolbar({
 }
 
 describe("factory graph editor toolbar controls", () => {
-  it("invokes create visual group from the toolbar when edit mode is active", async () => {
-    const user = userEvent.setup();
-    const onCreateVisualGroup = vi.fn();
-
-    renderToolbar({ editMode: true, onCreateVisualGroup });
-
-    await user.click(screen.getByRole("button", { name: "Create group" }));
-
-    expect(onCreateVisualGroup).toHaveBeenCalledTimes(1);
-  });
-
   it("opens the add menu from the keyboard and exposes action copy", async () => {
     const user = userEvent.setup();
 

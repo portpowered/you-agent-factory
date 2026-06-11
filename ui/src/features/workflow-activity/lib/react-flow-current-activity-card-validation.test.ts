@@ -286,6 +286,43 @@ describe("validationMessagesForGraphSelection", () => {
 });
 
 describe("layoutValidationWarningMessages", () => {
+  it("ignores blank messages and non-layout warning targets", () => {
+    const targets: FactoryValidationTarget[] = [
+      {
+        code: "factory.layout.unknownGroupMemberReference",
+        message: "   ",
+        severity: "warning",
+        subject: {
+          id: "review-lane",
+          location: "REFERENCE",
+          type: "FACTORY",
+        },
+      },
+      {
+        code: "factory.layout.invalidGeometry",
+        message: "Group bounds are invalid.",
+        severity: "error",
+        subject: {
+          id: "review-lane",
+          location: "GEOMETRY",
+          type: "FACTORY",
+        },
+      },
+      {
+        code: "factory.workstation.missingFailureRoute",
+        message: "Workstation review must define a failure route.",
+        severity: "warning",
+        subject: {
+          id: "review",
+          location: "ON_FAILURE",
+          type: "WORKSTATION",
+        },
+      },
+    ];
+
+    expect(layoutValidationWarningMessages(targets)).toEqual([]);
+  });
+
   it("returns recoverable layout group warnings without topology errors", () => {
     const targets: FactoryValidationTarget[] = [
       {
