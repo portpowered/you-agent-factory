@@ -164,7 +164,7 @@ compatibility shims instead of orchestrator-owned JavaScript packages.
 | CLI preview and source normalization use orchestrator packages | CLI-package tests prove preview JSON matches `apisurface.BuildFactoryPreview` and normalize success/not-found diagnostics. |
 | MCP workflow preview tests target orchestrator ownership | MCP tests import orchestrator `preview` and `source` directly and prove not-found diagnostics through `ValidateTool`. |
 | API and apisurface tests prove compatibility without active shim imports | Contract/server tests assert canonical vs deprecated preview routes; apisurface tests exercise orchestrator source/preview directly. |
-| Residual import gate blocks Batch 002 until clean | Scoped `rg` verification is clean; `TestActiveSurfaceImportGuard_*` in `pkg/api/contracttests/active_surface_import_guard_test.go` encodes the gate in CI. |
+| Residual import gate blocks Batch 002 until clean | Scoped `rg` verification is clean (no output); behavioral contract/server/CLI/MCP/apisurface tests prove canonical preview and orchestrator ownership without root shim imports. |
 
 Scoped residual import verification (2026-06-11 UTC):
 
