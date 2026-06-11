@@ -8,7 +8,7 @@ properties:
   replayKey:
     type: string
     description: Stable replay correlation key for recorded dispatch reconstruction.
-  runnerId:
-    $ref: '../../../openapi-main.yaml#/components/schemas/RunnerID'
-  runnerSelectionSource:
-    $ref: '../../../openapi-main.yaml#/components/schemas/RunnerSelectionSource'
+  modelProvider:
+    $ref: '../../../openapi-main.yaml#/components/schemas/WorkerModelProvider'
+  modelProviderSelectionSource:
+    $ref: '../../../openapi-main.yaml#/components/schemas/ModelProviderSelectionSource'

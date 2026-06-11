@@ -7,19 +7,21 @@ import {
 } from "./runner-openapi-enums";
 
 describe("runner OpenAPI enum localization", () => {
-  it("exposes the generated RunnerID enum set in contract order", () => {
+  it("exposes the generated ModelProviderSelection enum set in contract order", () => {
     expect(OPENAPI_RUNNER_IDS).toEqual([
-      "codex",
-      "gemini",
-      "kiro",
-      "cursor-cli",
-      "opencode",
+      "DEFAULT",
+      "CLAUDE",
+      "CODEX",
+      "CURSOR",
+      "GEMINI",
+      "KIRO",
+      "OPENCODE",
     ]);
   });
 
-  it("localizes RunnerSelectionSource values with unknown fallback", () => {
+  it("localizes ModelProviderSelectionSource values with unknown fallback", () => {
     expect(localizeRunnerSelectionSourceValue("factory", "en")).toBe("Factory");
-    expect(localizeRunnerSelectionSourceValue("legacy_provider", "ja")).toBe(
+    expect(localizeRunnerSelectionSourceValue("worker", "ja")).toBe(
       "ワーカー provider",
     );
     expect(localizeRunnerSelectionSourceValue("workstation", "fr")).toBe(
@@ -30,14 +32,15 @@ describe("runner OpenAPI enum localization", () => {
     );
   });
 
-  it("validates built-in RunnerID membership", () => {
-    expect(isOpenApiRunnerID("cursor-cli")).toBe(true);
-    expect(isOpenApiRunnerID(" CURSOR-CLI ")).toBe(true);
-    expect(isOpenApiRunnerID("claude")).toBe(false);
+  it("validates built-in ModelProviderSelection membership", () => {
+    expect(isOpenApiRunnerID("CURSOR")).toBe(true);
+    expect(isOpenApiRunnerID(" cursor ")).toBe(true);
+    expect(isOpenApiRunnerID("claude")).toBe(true);
+    expect(isOpenApiRunnerID("custom-runner")).toBe(false);
   });
 
-  it("normalizes runner IDs before persistence checks", () => {
-    expect(normalizeRunnerID(" CURSOR-CLI ")).toBe("cursor-cli");
+  it("normalizes model provider selections before persistence checks", () => {
+    expect(normalizeRunnerID(" cursor ")).toBe("CURSOR");
     expect(normalizeRunnerID(null)).toBe("");
   });
 });

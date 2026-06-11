@@ -757,3 +757,32 @@ func TestGeneratedDispatchArtifactContracts_PetriAndJavaScriptRoundTrip(t *testi
 		t.Fatalf("decoded artifacts = %#v, want one entry", decoded.Artifacts)
 	}
 }
+
+func TestOpenAPIContract_FactoryAndWorkstationSchemasUseModelProviderNotRunner(t *testing.T) {
+	doc := loadBundledOpenAPIDocument(t)
+	schemas := componentSchemas(t, doc)
+
+	factoryProperties := schemaProperties(t, schemaObject(t, schemas, "Factory"), "Factory")
+	if _, ok := factoryProperties["runner"]; ok {
+		t.Fatal("Factory schema must not expose runner")
+	}
+	if _, ok := factoryProperties["modelProvider"]; !ok {
+		t.Fatal("Factory schema must expose modelProvider")
+	}
+
+	workstationProperties := schemaProperties(t, schemaObject(t, schemas, "Workstation"), "Workstation")
+	if _, ok := workstationProperties["runner"]; ok {
+		t.Fatal("Workstation schema must not expose runner")
+	}
+	if _, ok := workstationProperties["modelProvider"]; !ok {
+		t.Fatal("Workstation schema must expose modelProvider")
+	}
+
+	dispatchMetadataProperties := schemaProperties(t, schemaObject(t, schemas, "DispatchRequestEventMetadata"), "DispatchRequestEventMetadata")
+	if _, ok := dispatchMetadataProperties["runnerId"]; ok {
+		t.Fatal("DispatchRequestEventMetadata must not expose runnerId")
+	}
+	if _, ok := dispatchMetadataProperties["modelProvider"]; !ok {
+		t.Fatal("DispatchRequestEventMetadata must expose modelProvider")
+	}
+}

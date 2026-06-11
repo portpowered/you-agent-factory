@@ -85,7 +85,7 @@ export const modelWorkstationValues = {
     runnerId: "gemini",
     source: "workstation" as const,
   },
-  runnerName: "gemini",
+  runnerName: "GEMINI",
   runnerOptions: ["gemini"],
   runnerSelectionSource: "workstation" as const,
   sharedWorkerWorkstationNames: [],
@@ -112,7 +112,7 @@ export const baseEditableWorkstationDraft: EditableWorkstationDraft = {
   operation: "",
   operationBindings: [],
   prompt: "",
-  runnerName: "gemini",
+  runnerName: "GEMINI",
   workerName: "",
   workstationType: "MODEL_WORKSTATION",
 };

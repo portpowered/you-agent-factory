@@ -97,7 +97,7 @@ describe("useEditableWorkstationConfigurationState", () => {
       draft: {
         behavior: "STANDARD",
         prompt: "",
-        runnerName: "gemini",
+        runnerName: "GEMINI",
         workerName: "",
       },
       hasValidationErrors: true,
@@ -574,7 +574,7 @@ describe("useEditableWorkstationConfigurationState", () => {
             name: "Canonical Review",
             outputs: [{ state: "approved", workType: "story" }],
             promptFile: "prompts/review.md",
-            runner: "gemini",
+            modelProvider: "GEMINI",
             worker: "reviewer",
           },
         ],
@@ -665,16 +665,16 @@ describe("useEditableWorkstationConfigurationState", () => {
     const selectedEditableValues = {
       behavior: "STANDARD",
       behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
-      effectiveRunnerName: "codex",
+      effectiveRunnerName: "CODEX",
       factoryRunnerName: null,
       prompt: "Review the story.",
       resolvedRunnerSelection: {
-        runnerId: "codex",
-        source: "default",
+        runnerId: "CODEX",
+        source: "operator_default",
       },
       runnerName: null,
-      runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
-      runnerSelectionSource: "default",
+      runnerOptions: ["CLAUDE", "CODEX", "CURSOR", "GEMINI", "KIRO", "OPENCODE"],
+      runnerSelectionSource: "operator_default",
       sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],
       workerModelProvider: null,
@@ -893,16 +893,16 @@ describe("useEditableWorkstationConfigurationState guards and cron", () => {
       behavior: "STANDARD",
       behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
       cron: null,
-      effectiveRunnerName: "codex",
+      effectiveRunnerName: "CODEX",
       factoryRunnerName: null,
       prompt: null,
       resolvedRunnerSelection: {
-        runnerId: "codex",
-        source: "default",
+        runnerId: "CODEX",
+        source: "operator_default",
       },
       runnerName: null,
-      runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
-      runnerSelectionSource: "default",
+      runnerOptions: ["CLAUDE", "CODEX", "CURSOR", "GEMINI", "KIRO", "OPENCODE"],
+      runnerSelectionSource: "operator_default",
       sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],
       workerModelProvider: null,
@@ -1291,7 +1291,15 @@ function buildEditableFactoryDefinition(overrides?: {
     triggerAtStart?: boolean;
   };
   prompt?: string;
-  runnerName?: "codex" | "gemini" | "kiro" | "cursor-cli" | "opencode" | null;
+  runnerName?:
+    | "DEFAULT"
+    | "CLAUDE"
+    | "CODEX"
+    | "CURSOR"
+    | "GEMINI"
+    | "KIRO"
+    | "OPENCODE"
+    | null;
   workerName?: string;
   workerOptions?: Array<{
     name: string;
@@ -1301,7 +1309,7 @@ function buildEditableFactoryDefinition(overrides?: {
 }): CurrentFactoryDocument {
   return {
     name: "Current Factory",
-    runner: "codex",
+    modelProvider: "CODEX",
     version: {
       logical: "7",
       physical: "2026-05-23T15:52:00Z",
@@ -1337,7 +1345,7 @@ function buildEditableFactoryDefinition(overrides?: {
         name: "Review",
         outputs: [{ state: "approved", workType: "story" }],
         promptFile: "prompts/review.md",
-        runner: overrides?.runnerName ?? "gemini",
+        modelProvider: overrides?.runnerName ?? "GEMINI",
         type: overrides?.workstationType,
         worker: overrides?.workerName ?? "reviewer",
       },
@@ -1349,7 +1357,7 @@ function buildEditableFactoryDefinition(overrides?: {
 function buildMultiWorkstationEditableFactoryDefinition(): CurrentFactoryDocument {
   return {
     name: "Current Factory",
-    runner: "codex",
+    modelProvider: "CODEX",
     version: {
       logical: "7",
       physical: "2026-05-23T15:52:00Z",
@@ -1374,7 +1382,7 @@ function buildMultiWorkstationEditableFactoryDefinition(): CurrentFactoryDocumen
         name: "Review",
         outputs: [{ state: "approved", workType: "story" }],
         promptFile: "prompts/review.md",
-        runner: "gemini",
+        modelProvider: "GEMINI",
         worker: "reviewer",
       },
       {
@@ -1384,7 +1392,7 @@ function buildMultiWorkstationEditableFactoryDefinition(): CurrentFactoryDocumen
         name: "Plan",
         outputs: [{ state: "planned", workType: "story" }],
         promptFile: "prompts/plan.md",
-        runner: "codex",
+        modelProvider: "CODEX",
         worker: "planner",
       },
     ],
@@ -1395,7 +1403,7 @@ function buildMultiWorkstationEditableFactoryDefinition(): CurrentFactoryDocumen
 function buildFactoryDefinitionWithoutReview(): CurrentFactoryDocument {
   return {
     name: "Current Factory",
-    runner: "codex",
+    modelProvider: "CODEX",
     version: {
       logical: "8",
       physical: "2026-05-23T15:53:00Z",
@@ -1415,7 +1423,7 @@ function buildFactoryDefinitionWithoutReview(): CurrentFactoryDocument {
         name: "Plan",
         outputs: [{ state: "planned", workType: "story" }],
         promptFile: "prompts/plan.md",
-        runner: "codex",
+        modelProvider: "CODEX",
         worker: "planner",
       },
     ],

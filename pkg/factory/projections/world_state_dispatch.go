@@ -592,7 +592,7 @@ func (r *factoryWorldReducer) applyDispatchQueuedEvent(event factoryapi.FactoryE
 		Status:       string(factoryapi.FactoryDispatchStatusQUEUED),
 		Phase:        dispatchLifecyclePhase(event.Context),
 		Label:        stringValue(payload.Label),
-		RunnerID:     stringValue(payload.RunnerId),
+		RunnerID:     internalRunnerIDFromDispatchModelProvider(payload.ModelProvider),
 		Model:        stringValue(payload.Model),
 		Provider:     stringValue(payload.Provider),
 		PromptDigest: stringValue(payload.PromptDigest),
@@ -803,4 +803,19 @@ func int32Value(value *int32) int {
 		return 0
 	}
 	return int(*value)
+}
+
+func internalRunnerIDFromDispatchModelProvider(value *factoryapi.WorkerModelProvider) string {
+	if value == nil {
+		return ""
+	}
+	provider, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(*value)
+	if !ok {
+		return ""
+	}
+	runnerID, ok := interfaces.RunnerIDFromInternalModelProvider(string(provider))
+	if !ok {
+		return ""
+	}
+	return runnerID
 }

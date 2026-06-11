@@ -1,0 +1,11 @@
+type: object
+additionalProperties: false
+properties:
+  modelProvider:
+    $ref: '../../../openapi-main.yaml#/components/schemas/WorkerModelProvider'
+  displayName:
+    type: string
+  modelProviderSelectionSource:
+    $ref: '../../../openapi-main.yaml#/components/schemas/ModelProviderSelectionSource'
+  capabilities:
+    $ref: './FactoryWorldRunnerCapabilitiesView.yaml'

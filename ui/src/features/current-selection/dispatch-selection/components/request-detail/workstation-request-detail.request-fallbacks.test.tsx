@@ -75,9 +75,9 @@ describe("WorkstationRequestDetailCard request fallbacks", () => {
           request_id: "request-codex-fallback",
           request_view: {
             input_work_items: [],
-            runner: {
-              runnerId: "codex",
-              selectionSource: "default",
+            modelProvider: {
+              modelProvider: "CODEX",
+              modelProviderSelectionSource: "operator_default",
             },
           },
         })}
@@ -91,7 +91,7 @@ describe("WorkstationRequestDetailCard request fallbacks", () => {
     );
     expect(currentSelection.getByText("Runner")).toBeTruthy();
     expect(currentSelection.getByText("Codex")).toBeTruthy();
-    expect(currentSelection.getByText("default")).toBeTruthy();
+    expect(currentSelection.getByText("operator_default")).toBeTruthy();
     expect(
       currentSelection.queryByText("Runner capability support"),
     ).toBeNull();

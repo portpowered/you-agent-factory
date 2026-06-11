@@ -230,14 +230,14 @@ export function toDashboardWorkstationRequest(
     outcome: request.response?.outcome,
     request_view: {
       ...request.request,
-      runner: request.request.runner,
+      modelProvider: request.request.modelProvider,
     },
     responded_request_count:
       request.counts.respondedCount ?? request.counts.responded_count ?? 0,
     response_view: request.response
       ? {
           ...request.response,
-          runner: request.response.runner,
+          modelProvider: request.response.modelProvider,
         }
       : undefined,
     script_request:

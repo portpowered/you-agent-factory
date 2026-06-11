@@ -111,8 +111,8 @@ func DispatchDetailResponseToAPI(result factorysessionexecution.DispatchDetail) 
 		attempt := int32(result.Attempt)
 		response.Attempt = &attempt
 	}
-	if runnerID := strings.TrimSpace(result.RunnerID); runnerID != "" {
-		response.RunnerId = &runnerID
+	if modelProvider := interfaces.GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProviderPtr(result.RunnerID); modelProvider != nil {
+		response.ModelProvider = modelProvider
 	}
 	if model := strings.TrimSpace(result.Model); model != "" {
 		response.Model = &model
@@ -252,8 +252,8 @@ func dispatchSummaryToAPI(dispatch factorysessionexecution.DispatchSummary) fact
 		attempt := int32(dispatch.Attempt)
 		response.Attempt = &attempt
 	}
-	if runnerID := strings.TrimSpace(dispatch.RunnerID); runnerID != "" {
-		response.RunnerId = &runnerID
+	if modelProvider := interfaces.GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProviderPtr(dispatch.RunnerID); modelProvider != nil {
+		response.ModelProvider = modelProvider
 	}
 	if model := strings.TrimSpace(dispatch.Model); model != "" {
 		response.Model = &model

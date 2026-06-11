@@ -47,7 +47,7 @@ describe("resolveEditableWorkstationValues", () => {
       behavior: "STANDARD",
       behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
       cron: null,
-      effectiveRunnerName: "codex",
+      effectiveRunnerName: "CODEX",
       factoryRunnerName: null,
       modelInvokeWorkerOptions: [],
       modelOperationsByWorkerName: {
@@ -57,12 +57,12 @@ describe("resolveEditableWorkstationValues", () => {
       operationBindings: [],
       prompt: "Review the latest story changes before approval.",
       resolvedRunnerSelection: {
-        runnerId: "codex",
-        source: "default",
+        runnerId: "CODEX",
+        source: "operator_default",
       },
       runnerName: null,
-      runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
-      runnerSelectionSource: "default",
+      runnerOptions: ["CLAUDE", "CODEX", "CURSOR", "GEMINI", "KIRO", "OPENCODE"],
+      runnerSelectionSource: "operator_default",
       sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],
       workerModelProvider: null,
@@ -321,7 +321,7 @@ describe("resolveEditableWorkstationValues", () => {
       outputs: [{ state: "complete", workType: "story" }],
     });
     expect(updatedFactory?.workstations?.[0]).not.toHaveProperty("body");
-    expect(updatedFactory?.workstations?.[0]).not.toHaveProperty("runner");
+    expect(updatedFactory?.workstations?.[0]).not.toHaveProperty("modelProvider");
   });
 
   it("defaults omitted workstation type to MODEL_WORKSTATION", () => {
@@ -429,7 +429,7 @@ describe("resolveEditableWorkstationValues", () => {
       behavior: "STANDARD",
       behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
       cron: null,
-      effectiveRunnerName: "codex",
+      effectiveRunnerName: "CODEX",
       factoryRunnerName: null,
       modelInvokeWorkerOptions: [],
       modelOperationsByWorkerName: {},
@@ -437,12 +437,12 @@ describe("resolveEditableWorkstationValues", () => {
       operationBindings: [],
       prompt: "Review the latest story changes before approval.",
       resolvedRunnerSelection: {
-        runnerId: "codex",
-        source: "default",
+        runnerId: "CODEX",
+        source: "operator_default",
       },
       runnerName: null,
-      runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
-      runnerSelectionSource: "default",
+      runnerOptions: ["CLAUDE", "CODEX", "CURSOR", "GEMINI", "KIRO", "OPENCODE"],
+      runnerSelectionSource: "operator_default",
       sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],
       workerModelProvider: null,
@@ -604,7 +604,7 @@ describe("resolveEditableWorkstationValues", () => {
       behavior: "STANDARD",
       behaviorOptions: ["STANDARD", "REPEATER", "POLLER"],
       cron: null,
-      effectiveRunnerName: "codex",
+      effectiveRunnerName: "CODEX",
       factoryRunnerName: null,
       modelInvokeWorkerOptions: [],
       modelOperationsByWorkerName: {
@@ -614,12 +614,12 @@ describe("resolveEditableWorkstationValues", () => {
       operationBindings: [],
       prompt: "Review work",
       resolvedRunnerSelection: {
-        runnerId: "codex",
-        source: "default",
+        runnerId: "CODEX",
+        source: "operator_default",
       },
       runnerName: null,
-      runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
-      runnerSelectionSource: "default",
+      runnerOptions: ["CLAUDE", "CODEX", "CURSOR", "GEMINI", "KIRO", "OPENCODE"],
+      runnerSelectionSource: "operator_default",
       sharedWorkerWorkstationNamesByWorkerName: {
         coder: ["Code"],
         processor: ["Plan"],
@@ -667,12 +667,12 @@ describe("resolveEditableWorkstationValues", () => {
     expect(
       resolveEditableWorkstationValues(factory, selectedNode),
     ).toMatchObject({
-      effectiveRunnerName: "codex",
+      effectiveRunnerName: "CODEX",
       resolvedRunnerSelection: {
-        runnerId: "codex",
-        source: "legacy_provider",
+        runnerId: "CODEX",
+        source: "worker",
       },
-      runnerSelectionSource: "legacy_provider",
+      runnerSelectionSource: "worker",
       workerModelProvider: "CODEX",
     });
   });
@@ -728,7 +728,7 @@ describe("resolveEditableWorkstationValues", () => {
         inputs: [{ guards: [], state: "queued", workType: "story" }],
         name: "Review",
         prompt: "Updated review work",
-        runnerName: "gemini",
+        runnerName: "GEMINI",
         workerName: "reviewer",
       }),
     ).toMatchObject({
@@ -740,7 +740,7 @@ describe("resolveEditableWorkstationValues", () => {
         {
           body: "Updated review work",
           name: "Review",
-          runner: "gemini",
+          modelProvider: "GEMINI",
           worker: "reviewer",
         },
         { body: "Plan work", name: "Plan" },
@@ -874,7 +874,7 @@ describe("resolveEditableWorkstationValues", () => {
           inputs: [{ state: "queued", workType: "story" }],
           name: "Move",
           outputs: [{ state: "moved", workType: "story" }],
-          runner: "gemini",
+          modelProvider: "GEMINI",
           type: "LOGICAL_MOVE",
           worker: "removed-worker",
         },
@@ -894,7 +894,7 @@ describe("resolveEditableWorkstationValues", () => {
         operation: "",
         operationBindings: [],
         prompt: "Draft prompt must not apply.",
-        runnerName: "codex",
+        runnerName: "CODEX",
         workerName: "missing-worker",
         workstationType: "LOGICAL_MOVE",
       },
@@ -905,7 +905,7 @@ describe("resolveEditableWorkstationValues", () => {
         {
           body: "Legacy prompt that must not be overwritten.",
           name: "Move",
-          runner: "gemini",
+          modelProvider: "GEMINI",
           type: "LOGICAL_MOVE",
           worker: "removed-worker",
         },
@@ -1408,7 +1408,7 @@ describe("resolveEditableWorkstationValues", () => {
           editableValues as NonNullable<typeof editableValues>,
         ),
         prompt: "Updated review prompt only.",
-        runnerName: "gemini",
+        runnerName: "GEMINI",
       },
     );
 
@@ -1422,7 +1422,7 @@ describe("resolveEditableWorkstationValues", () => {
           workType: "story",
         },
       ],
-      runner: "gemini",
+      modelProvider: "GEMINI",
     });
   });
 });
@@ -1444,7 +1444,7 @@ describe("applyEditableWorkstationDraft failures", () => {
         inputs: [],
         name: "Review",
         prompt: "Updated prompt",
-        runnerName: "gemini",
+        runnerName: "GEMINI",
         workerName: "reviewer",
       }),
     ).toBeNull();
@@ -1474,7 +1474,7 @@ describe("applyEditableWorkstationDraft failures", () => {
         inputs: [],
         name: "Review",
         prompt: "Updated prompt",
-        runnerName: "gemini",
+        runnerName: "GEMINI",
         workerName: "reviewer",
       }),
     ).toBeNull();
@@ -1685,17 +1685,17 @@ describe("editable workstation cron draft", () => {
         jitter: "5s",
         expiryWindow: "30m",
       },
-      effectiveRunnerName: "codex",
+      effectiveRunnerName: "CODEX",
       factoryRunnerName: null,
       modelInvokeWorkerOptions: [],
       modelOperationsByWorkerName: {},
       operation: "",
       operationBindings: [],
       prompt: null,
-      resolvedRunnerSelection: { runnerId: "codex", source: "default" },
+      resolvedRunnerSelection: { runnerId: "CODEX", source: "operator_default" },
       runnerName: null,
-      runnerOptions: ["codex"],
-      runnerSelectionSource: "default",
+      runnerOptions: ["CLAUDE", "CODEX", "CURSOR", "GEMINI", "KIRO", "OPENCODE"],
+      runnerSelectionSource: "operator_default",
       sharedWorkerWorkstationNamesByWorkerName: {},
       sharedWorkerWorkstationNames: [],
       workerModelProvider: null,
@@ -1934,17 +1934,17 @@ describe("editable workstation name draft", () => {
       behavior: "STANDARD",
       behaviorOptions: ["STANDARD"],
       cron: null,
-      effectiveRunnerName: "codex",
+      effectiveRunnerName: "CODEX",
       factoryRunnerName: null,
       modelInvokeWorkerOptions: [],
       modelOperationsByWorkerName: {},
       operation: "",
       operationBindings: [],
       prompt: "Review work",
-      resolvedRunnerSelection: { runnerId: "codex", source: "default" },
+      resolvedRunnerSelection: { runnerId: "CODEX", source: "operator_default" },
       runnerName: null,
-      runnerOptions: ["codex"],
-      runnerSelectionSource: "default",
+      runnerOptions: ["CLAUDE", "CODEX", "CURSOR", "GEMINI", "KIRO", "OPENCODE"],
+      runnerSelectionSource: "operator_default",
       sharedWorkerWorkstationNames: [],
       sharedWorkerWorkstationNamesByWorkerName: {},
       workerModelProvider: null,
@@ -1980,7 +1980,7 @@ describe("editable workstation name draft", () => {
       behavior: "STANDARD",
       behaviorOptions: ["STANDARD"],
       cron: null,
-      effectiveRunnerName: "codex",
+      effectiveRunnerName: "CODEX",
       factoryRunnerName: null,
       modelInvokeWorkerOptions: ["tts-worker"],
       modelOperationsByWorkerName: {
@@ -1995,10 +1995,10 @@ describe("editable workstation name draft", () => {
       operation: "",
       operationBindings: [],
       prompt: "Review work",
-      resolvedRunnerSelection: { runnerId: "codex", source: "default" },
+      resolvedRunnerSelection: { runnerId: "CODEX", source: "operator_default" },
       runnerName: null,
-      runnerOptions: ["codex"],
-      runnerSelectionSource: "default",
+      runnerOptions: ["CLAUDE", "CODEX", "CURSOR", "GEMINI", "KIRO", "OPENCODE"],
+      runnerSelectionSource: "operator_default",
       sharedWorkerWorkstationNames: [],
       sharedWorkerWorkstationNamesByWorkerName: {},
       workerModelProvider: null,

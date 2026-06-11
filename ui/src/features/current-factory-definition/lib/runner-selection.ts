@@ -1,40 +1,66 @@
 import type { components } from "../../../api/generated/openapi";
 import {
-  type ApiRunnerID,
-  isOpenApiRunnerID,
-  normalizeRunnerID,
+  type ApiModelProviderSelection,
+  isOpenApiModelProviderSelection,
+  normalizeModelProviderSelection,
 } from "../../current-selection/workstation-selection/messages/runner-openapi-enums";
 
-export type RunnerSelectionSource =
-  components["schemas"]["RunnerSelectionSource"];
+export type ModelProviderSelectionSource =
+  components["schemas"]["ModelProviderSelectionSource"];
 
+export interface ResolvedModelProviderSelection {
+  modelProvider: ApiModelProviderSelection;
+  source: ModelProviderSelectionSource;
+}
+
+const DEFAULT_MODEL_PROVIDER: ApiModelProviderSelection = "CODEX";
+
+/** Mirrors backend `ResolveModelProviderSelection` precedence for editable factory UI. */
+export function resolveModelProviderSelection(
+  workstationModelProvider: string | null | undefined,
+  factoryModelProvider: string | null | undefined,
+  workerModelProvider: string | null | undefined,
+): ResolvedModelProviderSelection {
+  const workstation = normalizeModelProviderSelection(workstationModelProvider);
+  if (workstation && workstation !== "DEFAULT" && isOpenApiModelProviderSelection(workstation)) {
+    return { modelProvider: workstation, source: "workstation" };
+  }
+
+  const factory = normalizeModelProviderSelection(factoryModelProvider);
+  if (factory && factory !== "DEFAULT" && isOpenApiModelProviderSelection(factory)) {
+    return { modelProvider: factory, source: "factory" };
+  }
+
+  const worker = normalizeModelProviderSelection(workerModelProvider);
+  if (worker && isOpenApiModelProviderSelection(worker)) {
+    return { modelProvider: worker, source: "worker" };
+  }
+
+  return { modelProvider: DEFAULT_MODEL_PROVIDER, source: "operator_default" };
+}
+
+/** Backward-compatible alias for existing runner-named imports. */
+export type RunnerSelectionSource = ModelProviderSelectionSource;
+
+/** Backward-compatible alias for existing runner-named imports. */
 export interface ResolvedRunnerSelection {
-  runnerId: ApiRunnerID;
+  runnerId: ApiModelProviderSelection;
   source: RunnerSelectionSource;
 }
 
-const DEFAULT_RUNNER_ID: ApiRunnerID = "codex";
-
-/** Mirrors backend `ResolveRunnerSelection` precedence for editable factory UI. */
+/** Backward-compatible alias for existing runner-named imports. */
 export function resolveRunnerSelection(
-  workstationRunner: string | null | undefined,
-  factoryRunner: string | null | undefined,
+  workstationModelProvider: string | null | undefined,
+  factoryModelProvider: string | null | undefined,
   workerModelProvider: string | null | undefined,
 ): ResolvedRunnerSelection {
-  const workstation = normalizeRunnerID(workstationRunner);
-  if (workstation && isOpenApiRunnerID(workstation)) {
-    return { runnerId: workstation, source: "workstation" };
-  }
-
-  const factory = normalizeRunnerID(factoryRunner);
-  if (factory && isOpenApiRunnerID(factory)) {
-    return { runnerId: factory, source: "factory" };
-  }
-
-  const legacy = normalizeRunnerID(workerModelProvider);
-  if (legacy && isOpenApiRunnerID(legacy)) {
-    return { runnerId: legacy, source: "legacy_provider" };
-  }
-
-  return { runnerId: DEFAULT_RUNNER_ID, source: "default" };
+  const selection = resolveModelProviderSelection(
+    workstationModelProvider,
+    factoryModelProvider,
+    workerModelProvider,
+  );
+  return {
+    runnerId: selection.modelProvider,
+    source: selection.source,
+  };
 }

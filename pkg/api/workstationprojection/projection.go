@@ -120,7 +120,7 @@ func workstationRequestResponseViewFromActiveDispatch(
 		return nil
 	}
 	return &factoryapi.FactoryWorldWorkstationRequestResponseView{
-		Runner:         generatedFactoryWorldSelectedRunnerView(dispatch.RunnerID, dispatch.RunnerSelectionSource),
+		ModelProvider:  generatedFactoryWorldSelectedModelProviderView(dispatch.RunnerID, dispatch.RunnerSelectionSource),
 		ScriptResponse: generatedFactoryWorldScriptResponse(latestScriptResponse),
 	}
 }
@@ -160,7 +160,7 @@ func workstationDispatchViewFromCompletion(
 			latestScriptRequest,
 		),
 		Response: &factoryapi.FactoryWorldWorkstationRequestResponseView{
-			Runner:                      generatedFactoryWorldSelectedRunnerView(completion.RunnerID, completion.RunnerSelectionSource),
+			ModelProvider:               generatedFactoryWorldSelectedModelProviderView(completion.RunnerID, completion.RunnerSelectionSource),
 			Outcome:                     workstationRequestStringPtr(completion.Result.Outcome),
 			Feedback:                    workstationRequestStringPtr(completion.Result.Feedback),
 			SelectedClassificationLabel: workstationRequestStringPtr(completion.Result.SelectedClassificationLabel),
@@ -187,7 +187,7 @@ func workstationDispatchRequestView(
 	latestScriptRequest *interfaces.FactoryWorldScriptRequest,
 ) factoryapi.FactoryWorldWorkstationRequestRequestView {
 	return factoryapi.FactoryWorldWorkstationRequestRequestView{
-		Runner:                   generatedFactoryWorldSelectedRunnerView(runnerID, runnerSource),
+		ModelProvider:            generatedFactoryWorldSelectedModelProviderView(runnerID, runnerSource),
 		StartedAt:                timePtr(startedAt),
 		InputWorkItems:           workItemRefSlicePtr(inputWorkItems),
 		InputWorkTypeIds:         stringSlicePtr(workTypeIDsForWorkRefs(inputWorkItems)),
@@ -199,14 +199,14 @@ func workstationDispatchRequestView(
 	}
 }
 
-func generatedFactoryWorldSelectedRunnerView(runnerID string, runnerSource interfaces.RunnerSelectionSource) *factoryapi.FactoryWorldSelectedRunnerView {
+func generatedFactoryWorldSelectedModelProviderView(runnerID string, runnerSource interfaces.RunnerSelectionSource) *factoryapi.FactoryWorldSelectedModelProviderView {
 	runnerID = interfaces.NormalizeRunnerID(runnerID)
 	if runnerID == "" && runnerSource == "" {
 		return nil
 	}
-	view := &factoryapi.FactoryWorldSelectedRunnerView{
-		RunnerId:        interfaces.GeneratedPublicFactoryRunnerIDPtr(runnerID),
-		SelectionSource: interfaces.GeneratedPublicFactoryRunnerSelectionSourcePtr(string(runnerSource)),
+	view := &factoryapi.FactoryWorldSelectedModelProviderView{
+		ModelProvider:                interfaces.GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProviderPtr(runnerID),
+		ModelProviderSelectionSource: interfaces.GeneratedPublicFactoryModelProviderSelectionSourcePtr(string(runnerSource)),
 	}
 	if metadata, ok := interfaces.BuiltInRunnerMetadata(runnerID); ok {
 		view.DisplayName = workstationRequestStringPtr(metadata.DisplayName)

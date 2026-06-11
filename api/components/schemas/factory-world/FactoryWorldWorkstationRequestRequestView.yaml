@@ -1,8 +1,8 @@
 type: object
 additionalProperties: false
 properties:
-  runner:
-    $ref: './FactoryWorldSelectedRunnerView.yaml'
+  modelProvider:
+    $ref: './FactoryWorldSelectedModelProviderView.yaml'
   startedAt:
     type: string
     format: date-time

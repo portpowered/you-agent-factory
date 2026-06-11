@@ -422,14 +422,14 @@ func generatedDispatchConsumedWorkRefsFromTokens(tokens []interfaces.Token) []fa
 	return out
 }
 
-func generatedDispatchRequestEventMetadataPtr(replayKey string, selection interfaces.ResolvedRunnerSelection) *factoryapi.DispatchRequestEventMetadata {
-	if replayKey == "" && selection.RunnerID == "" && selection.Source == "" {
+func generatedDispatchRequestEventMetadataPtr(replayKey string, selection interfaces.ResolvedModelProviderSelection) *factoryapi.DispatchRequestEventMetadata {
+	if replayKey == "" && selection.Provider == "" && selection.Source == "" {
 		return nil
 	}
 	return &factoryapi.DispatchRequestEventMetadata{
-		ReplayKey:             stringPtrIfNotEmpty(replayKey),
-		RunnerId:              interfaces.GeneratedPublicFactoryRunnerIDPtr(selection.RunnerID),
-		RunnerSelectionSource: interfaces.GeneratedPublicFactoryRunnerSelectionSourcePtr(string(selection.Source)),
+		ReplayKey:                    stringPtrIfNotEmpty(replayKey),
+		ModelProvider:                interfaces.GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProviderPtr(string(selection.Provider)),
+		ModelProviderSelectionSource: interfaces.GeneratedPublicFactoryModelProviderSelectionSourcePtr(string(selection.Source)),
 	}
 }
 

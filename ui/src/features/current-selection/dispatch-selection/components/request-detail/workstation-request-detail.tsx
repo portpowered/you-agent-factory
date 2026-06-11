@@ -161,20 +161,20 @@ function WorkstationRequestSummary({
               : messages.totalDurationUnavailable
           }
         />
-        {view.requestRunner?.runnerId ? (
+        {view.requestRunner?.modelProvider ? (
           <InferenceAttemptDetail
             label={messages.runnerLabel}
             value={
-              getRunnerDisplayName(view.requestRunner.runnerId) ??
+              getRunnerDisplayName(view.requestRunner.modelProvider) ??
               view.requestRunner.displayName ??
-              view.requestRunner.runnerId
+              view.requestRunner.modelProvider
             }
           />
         ) : null}
-        {view.requestRunner?.selectionSource ? (
+        {view.requestRunner?.modelProviderSelectionSource ? (
           <InferenceAttemptDetail
             label={messages.runnerSelectionSourceLabel}
-            value={view.requestRunner.selectionSource}
+            value={view.requestRunner.modelProviderSelectionSource}
           />
         ) : null}
       </CurrentSelectionDescriptionList>

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
@@ -387,7 +389,7 @@ func dispatchSummaryFromFixtureMap(dispatch map[string]any) DispatchSummary {
 		Phase:        fixtureStringValue(dispatch, "phase"),
 		Label:        fixtureStringValue(dispatch, "label"),
 		Attempt:      fixtureIntValue(dispatch, "attempt"),
-		RunnerID:     fixtureStringValue(dispatch, "runnerId"),
+		RunnerID:     dispatchRunnerIDFromFixture(dispatch),
 		Model:        fixtureStringValue(dispatch, "model"),
 		Provider:     fixtureStringValue(dispatch, "provider"),
 	}
@@ -963,4 +965,13 @@ func BuiltinInterruptedRecoverableScenario() FakeScenario {
 			Links:            links,
 		},
 	}
+}
+
+func dispatchRunnerIDFromFixture(dispatch map[string]any) string {
+	if modelProvider := fixtureStringValue(dispatch, "modelProvider"); modelProvider != "" {
+		if runnerID, ok := interfaces.InternalRunnerIDFromPublicWorkerModelProvider(factoryapi.WorkerModelProvider(modelProvider)); ok {
+			return runnerID
+		}
+	}
+	return fixtureStringValue(dispatch, "runnerId")
 }

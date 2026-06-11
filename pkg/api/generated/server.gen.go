@@ -519,6 +519,14 @@ const (
 	ModelProviderSelectionOpenCode ModelProviderSelection = "OPENCODE"
 )
 
+// Defines values for ModelProviderSelectionSource.
+const (
+	ModelProviderSelectionSourceFactory         ModelProviderSelectionSource = "factory"
+	ModelProviderSelectionSourceOperatorDefault ModelProviderSelectionSource = "operator_default"
+	ModelProviderSelectionSourceWorker          ModelProviderSelectionSource = "worker"
+	ModelProviderSelectionSourceWorkstation     ModelProviderSelectionSource = "workstation"
+)
+
 // Defines values for ModelPullOutcome.
 const (
 	ModelPullOutcomeALREADYPRESENT ModelPullOutcome = "ALREADY_PRESENT"
@@ -585,23 +593,6 @@ const (
 	ResourceTypeInvocationSlot ResourceType = "INVOCATION_SLOT"
 	ResourceTypeModel          ResourceType = "MODEL"
 	ResourceTypeProviderQuota  ResourceType = "PROVIDER_QUOTA"
-)
-
-// Defines values for RunnerID.
-const (
-	RunnerIDCodex     RunnerID = "codex"
-	RunnerIDCursorCLI RunnerID = "cursor-cli"
-	RunnerIDGemini    RunnerID = "gemini"
-	RunnerIDKiro      RunnerID = "kiro"
-	RunnerIDOpenCode  RunnerID = "opencode"
-)
-
-// Defines values for RunnerSelectionSource.
-const (
-	RunnerSelectionSourceDefault        RunnerSelectionSource = "default"
-	RunnerSelectionSourceFactory        RunnerSelectionSource = "factory"
-	RunnerSelectionSourceLegacyProvider RunnerSelectionSource = "legacy_provider"
-	RunnerSelectionSourceWorkstation    RunnerSelectionSource = "workstation"
 )
 
 // Defines values for ScriptExecutionOutcome.
@@ -857,6 +848,9 @@ type DispatchQueuedEventPayload struct {
 	// Model Selected model identifier when applicable.
 	Model *string `json:"model,omitempty"`
 
+	// ModelProvider Canonical model-provider identifiers supported by model workers in factory config.
+	ModelProvider *WorkerModelProvider `json:"modelProvider,omitempty"`
+
 	// ParentDispatchId Parent dispatch identifier when this dispatch was spawned from another dispatch.
 	ParentDispatchId *string `json:"parentDispatchId,omitempty"`
 
@@ -871,9 +865,6 @@ type DispatchQueuedEventPayload struct {
 
 	// RetryOfDispatchId Prior dispatch identifier when this dispatch is a retry.
 	RetryOfDispatchId *string `json:"retryOfDispatchId,omitempty"`
-
-	// RunnerId Selected runner identifier when applicable.
-	RunnerId *string `json:"runnerId,omitempty"`
 
 	// SchemaDigest Stable digest of the output schema when applicable.
 	SchemaDigest *string `json:"schemaDigest,omitempty"`
@@ -902,14 +893,14 @@ type DispatchReconciliationSource string
 
 // DispatchRequestEventMetadata Optional non-identity dispatch metadata retained on dispatch-request events. Request, trace, work, and dispatch identity must remain on FactoryEvent.context rather than reappearing here.
 type DispatchRequestEventMetadata struct {
+	// ModelProvider Canonical model-provider identifiers supported by model workers in factory config.
+	ModelProvider *WorkerModelProvider `json:"modelProvider,omitempty"`
+
+	// ModelProviderSelectionSource Configuration layer that supplied the resolved model provider selection for a dispatch.
+	ModelProviderSelectionSource *ModelProviderSelectionSource `json:"modelProviderSelectionSource,omitempty"`
+
 	// ReplayKey Stable replay correlation key for recorded dispatch reconstruction.
 	ReplayKey *string `json:"replayKey,omitempty"`
-
-	// RunnerId Stable built-in runner identifiers supported by factory and workstation runner selection.
-	RunnerId *RunnerID `json:"runnerId,omitempty"`
-
-	// RunnerSelectionSource Configuration layer that supplied the resolved built-in runner selection for a dispatch.
-	RunnerSelectionSource *RunnerSelectionSource `json:"runnerSelectionSource,omitempty"`
 }
 
 // DispatchRequestEventPayload Customer-visible dispatch start event. FactoryEvent.context owns dispatch, request, trace, and work identity. This payload keeps only non-derived dispatch facts first known when execution starts; workstation and worker topology must be reconstructed from the initial structure and the retained transition identifier. Ordered inputs carry consumed work references only; work type, trace, display, and other work facts must be rebuilt from prior work-request history.
@@ -1144,6 +1135,9 @@ type FactoryDispatch struct {
 	// Model Selected model identifier when applicable.
 	Model *string `json:"model,omitempty"`
 
+	// ModelProvider Canonical model-provider identifiers supported by model workers in factory config.
+	ModelProvider *WorkerModelProvider `json:"modelProvider,omitempty"`
+
 	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
 	OrchestratorKind FactoryOrchestratorKind         `json:"orchestratorKind"`
 	Petri            *FactoryDispatchPetriProjection `json:"petri,omitempty"`
@@ -1162,9 +1156,6 @@ type FactoryDispatch struct {
 
 	// RelatedWorkIds Related work identifiers consumed or produced by the dispatch.
 	RelatedWorkIds *[]string `json:"relatedWorkIds,omitempty"`
-
-	// RunnerId Selected runner identifier when applicable.
-	RunnerId *string `json:"runnerId,omitempty"`
 
 	// SchemaDigest Stable digest of the output schema when applicable.
 	SchemaDigest *string `json:"schemaDigest,omitempty"`
@@ -1725,6 +1716,9 @@ type FactorySessionDispatchSummary struct {
 	// Model Selected model identifier when applicable.
 	Model *string `json:"model,omitempty"`
 
+	// ModelProvider Canonical model-provider identifiers supported by model workers in factory config.
+	ModelProvider *WorkerModelProvider `json:"modelProvider,omitempty"`
+
 	// OutputArtifactIds Artifact identifiers produced by the dispatch.
 	OutputArtifactIds *[]string `json:"outputArtifactIds,omitempty"`
 
@@ -1736,9 +1730,6 @@ type FactorySessionDispatchSummary struct {
 
 	// ProviderSessionRefs Provider-session correlation refs for model-backed dispatches.
 	ProviderSessionRefs *[]LoadableProviderSessionRef `json:"providerSessionRefs,omitempty"`
-
-	// RunnerId Selected runner identifier when applicable.
-	RunnerId *string `json:"runnerId,omitempty"`
 
 	// Status Canonical dispatch lifecycle status shared across orchestrators.
 	Status   FactoryDispatchStatus     `json:"status"`
@@ -2625,16 +2616,16 @@ type FactoryWorldScriptResponseView struct {
 	Stdout          *string `json:"stdout,omitempty"`
 }
 
-// FactoryWorldSelectedRunnerView defines model for FactoryWorldSelectedRunnerView.
-type FactoryWorldSelectedRunnerView struct {
+// FactoryWorldSelectedModelProviderView defines model for FactoryWorldSelectedModelProviderView.
+type FactoryWorldSelectedModelProviderView struct {
 	Capabilities *FactoryWorldRunnerCapabilitiesView `json:"capabilities,omitempty"`
 	DisplayName  *string                             `json:"displayName,omitempty"`
 
-	// RunnerId Stable built-in runner identifiers supported by factory and workstation runner selection.
-	RunnerId *RunnerID `json:"runnerId,omitempty"`
+	// ModelProvider Canonical model-provider identifiers supported by model workers in factory config.
+	ModelProvider *WorkerModelProvider `json:"modelProvider,omitempty"`
 
-	// SelectionSource Configuration layer that supplied the resolved built-in runner selection for a dispatch.
-	SelectionSource *RunnerSelectionSource `json:"selectionSource,omitempty"`
+	// ModelProviderSelectionSource Configuration layer that supplied the resolved model provider selection for a dispatch.
+	ModelProviderSelectionSource *ModelProviderSelectionSource `json:"modelProviderSelectionSource,omitempty"`
 }
 
 // FactoryWorldTokenView defines model for FactoryWorldTokenView.
@@ -2723,30 +2714,30 @@ type FactoryWorldWorkstationRequestProjectionSlice struct {
 
 // FactoryWorldWorkstationRequestRequestView defines model for FactoryWorldWorkstationRequestRequestView.
 type FactoryWorldWorkstationRequestRequestView struct {
-	ConsumedTokens           *[]FactoryWorldTokenView        `json:"consumedTokens,omitempty"`
-	CurrentChainingTraceId   *string                         `json:"currentChainingTraceId,omitempty"`
-	InputWorkItems           *[]FactoryWorldWorkItemRef      `json:"inputWorkItems,omitempty"`
-	InputWorkTypeIds         *[]string                       `json:"inputWorkTypeIds,omitempty"`
-	PreviousChainingTraceIds *[]string                       `json:"previousChainingTraceIds,omitempty"`
-	Runner                   *FactoryWorldSelectedRunnerView `json:"runner,omitempty"`
-	ScriptRequest            *FactoryWorldScriptRequestView  `json:"scriptRequest,omitempty"`
-	StartedAt                *time.Time                      `json:"startedAt,omitempty"`
-	TraceIds                 *[]string                       `json:"traceIds,omitempty"`
+	ConsumedTokens           *[]FactoryWorldTokenView               `json:"consumedTokens,omitempty"`
+	CurrentChainingTraceId   *string                                `json:"currentChainingTraceId,omitempty"`
+	InputWorkItems           *[]FactoryWorldWorkItemRef             `json:"inputWorkItems,omitempty"`
+	InputWorkTypeIds         *[]string                              `json:"inputWorkTypeIds,omitempty"`
+	ModelProvider            *FactoryWorldSelectedModelProviderView `json:"modelProvider,omitempty"`
+	PreviousChainingTraceIds *[]string                              `json:"previousChainingTraceIds,omitempty"`
+	ScriptRequest            *FactoryWorldScriptRequestView         `json:"scriptRequest,omitempty"`
+	StartedAt                *time.Time                             `json:"startedAt,omitempty"`
+	TraceIds                 *[]string                              `json:"traceIds,omitempty"`
 }
 
 // FactoryWorldWorkstationRequestResponseView defines model for FactoryWorldWorkstationRequestResponseView.
 type FactoryWorldWorkstationRequestResponseView struct {
-	DurationMillis              *int64                          `json:"durationMillis,omitempty"`
-	EndTime                     *time.Time                      `json:"endTime,omitempty"`
-	FailureMessage              *string                         `json:"failureMessage,omitempty"`
-	FailureReason               *string                         `json:"failureReason,omitempty"`
-	Feedback                    *string                         `json:"feedback,omitempty"`
-	Outcome                     *string                         `json:"outcome,omitempty"`
-	OutputMutations             *[]FactoryWorldMutationView     `json:"outputMutations,omitempty"`
-	OutputWorkItems             *[]FactoryWorldWorkItemRef      `json:"outputWorkItems,omitempty"`
-	Runner                      *FactoryWorldSelectedRunnerView `json:"runner,omitempty"`
-	ScriptResponse              *FactoryWorldScriptResponseView `json:"scriptResponse,omitempty"`
-	SelectedClassificationLabel *string                         `json:"selectedClassificationLabel,omitempty"`
+	DurationMillis              *int64                                 `json:"durationMillis,omitempty"`
+	EndTime                     *time.Time                             `json:"endTime,omitempty"`
+	FailureMessage              *string                                `json:"failureMessage,omitempty"`
+	FailureReason               *string                                `json:"failureReason,omitempty"`
+	Feedback                    *string                                `json:"feedback,omitempty"`
+	ModelProvider               *FactoryWorldSelectedModelProviderView `json:"modelProvider,omitempty"`
+	Outcome                     *string                                `json:"outcome,omitempty"`
+	OutputMutations             *[]FactoryWorldMutationView            `json:"outputMutations,omitempty"`
+	OutputWorkItems             *[]FactoryWorldWorkItemRef             `json:"outputWorkItems,omitempty"`
+	ScriptResponse              *FactoryWorldScriptResponseView        `json:"scriptResponse,omitempty"`
+	SelectedClassificationLabel *string                                `json:"selectedClassificationLabel,omitempty"`
 }
 
 // FactoryWorldWorkstationRequestView defines model for FactoryWorldWorkstationRequestView.
@@ -3263,6 +3254,9 @@ type ModelOperationSlot struct {
 
 // ModelProviderSelection Canonical execution-family selector for factory-level defaults. DEFAULT defers to worker modelProvider and then the operator default.
 type ModelProviderSelection string
+
+// ModelProviderSelectionSource Configuration layer that supplied the resolved model provider selection for a dispatch.
+type ModelProviderSelectionSource string
 
 // ModelPullDownloadedFile defines model for ModelPullDownloadedFile.
 type ModelPullDownloadedFile struct {
@@ -3976,12 +3970,6 @@ type RunResponseEventPayload struct {
 	State     *FactoryState `json:"state,omitempty"`
 	WallClock *WallClock    `json:"wallClock,omitempty"`
 }
-
-// RunnerID Stable built-in runner identifiers supported by factory and workstation runner selection.
-type RunnerID string
-
-// RunnerSelectionSource Configuration layer that supplied the resolved built-in runner selection for a dispatch.
-type RunnerSelectionSource string
 
 // SafeWorkDiagnostics Dashboard-facing execution diagnostics that omit raw prompts, command stdin, and command environment values.
 type SafeWorkDiagnostics struct {

@@ -121,8 +121,8 @@ func (h *FactoryEventHistory) RecordDispatchQueued(input DispatchQueuedInput, ev
 	if coordinationRef := strings.TrimSpace(input.CoordinationRef); coordinationRef != "" {
 		payload.CoordinationRef = &coordinationRef
 	}
-	if runnerID := strings.TrimSpace(input.RunnerID); runnerID != "" {
-		payload.RunnerId = &runnerID
+	if modelProvider := interfaces.GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProviderPtr(input.RunnerID); modelProvider != nil {
+		payload.ModelProvider = modelProvider
 	}
 	if model := strings.TrimSpace(input.Model); model != "" {
 		payload.Model = &model

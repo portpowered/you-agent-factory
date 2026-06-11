@@ -15,9 +15,9 @@ properties:
   coordinationRef:
     type: string
     description: Optional coordination reference for grouped child work.
-  runnerId:
-    type: string
-    description: Selected runner identifier when applicable.
+  modelProvider:
+    $ref: '../../data-models/WorkerModelProvider.yaml'
+    description: Selected model provider when applicable.
   model:
     type: string
     description: Selected model identifier when applicable.

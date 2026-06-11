@@ -4,9 +4,9 @@ import type { DashboardSessionBracket } from "./session-lifecycle-types";
 
 export type { DashboardSessionBracket } from "./session-lifecycle-types";
 
-type DashboardRunnerID = components["schemas"]["RunnerID"];
-type DashboardRunnerSelectionSource =
-  components["schemas"]["RunnerSelectionSource"];
+type DashboardWorkerModelProvider = components["schemas"]["WorkerModelProvider"];
+type DashboardModelProviderSelectionSource =
+  components["schemas"]["ModelProviderSelectionSource"];
 type DashboardRunnerBaselineCapability =
   components["schemas"]["FactoryWorldRunnerBaselineCapability"];
 type DashboardRunnerOptionalCapability =
@@ -219,7 +219,7 @@ export interface DashboardRuntimeWorkstationRequestCounts {
 }
 
 export interface DashboardRuntimeWorkstationRequestRequest {
-  runner?: DashboardSelectedRunner;
+  modelProvider?: DashboardSelectedModelProvider;
   startedAt?: string;
   started_at?: string;
   inputWorkItems?: DashboardWorkItemRef[];
@@ -240,7 +240,7 @@ export interface DashboardRuntimeWorkstationRequestRequest {
 
 export interface DashboardRuntimeWorkstationRequestResponse {
   outcome?: string;
-  runner?: DashboardSelectedRunner;
+  modelProvider?: DashboardSelectedModelProvider;
   feedback?: string;
   selectedClassificationLabel?: string;
   selected_classification_label?: string;
@@ -272,11 +272,11 @@ export interface DashboardRuntimeWorkstationRequest {
   response?: DashboardRuntimeWorkstationRequestResponse;
 }
 
-export interface DashboardSelectedRunner {
+export interface DashboardSelectedModelProvider {
   capabilities?: DashboardRunnerCapabilities;
   displayName?: string;
-  runnerId?: DashboardRunnerID;
-  selectionSource?: DashboardRunnerSelectionSource;
+  modelProvider?: DashboardWorkerModelProvider;
+  modelProviderSelectionSource?: DashboardModelProviderSelectionSource;
 }
 
 export interface DashboardRunnerCapabilities {

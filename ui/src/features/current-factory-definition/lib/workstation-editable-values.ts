@@ -140,8 +140,8 @@ export function resolveEditableWorkstationValues(
     workstation.worker,
   );
   const resolvedRunnerSelection = resolveRunnerSelection(
-    workstation.runner,
-    factory.runner,
+    workstation.modelProvider,
+    factory.modelProvider,
     workerModelProvider,
   );
   const modelOperationsByWorkerName = resolveModelOperationsByWorkerName(factory);
@@ -152,7 +152,7 @@ export function resolveEditableWorkstationValues(
     cron:
       behavior === "CRON" ? resolveEditableWorkstationCron(workstation) : null,
     effectiveRunnerName: resolvedRunnerSelection.runnerId,
-    factoryRunnerName: factory.runner ?? null,
+    factoryRunnerName: factory.modelProvider ?? null,
     modelInvokeWorkerOptions: resolveCompatibleModelWorkerNames(factory),
     modelOperationsByWorkerName,
     operation: workstation.operation ?? "",
@@ -167,7 +167,7 @@ export function resolveEditableWorkstationValues(
       : [],
     prompt: workstation.body ?? null,
     resolvedRunnerSelection,
-    runnerName: workstation.runner ?? null,
+    runnerName: workstation.modelProvider ?? null,
     runnerOptions: BUILT_IN_RUNNER_IDS,
     runnerSelectionSource: resolvedRunnerSelection.source,
     sharedWorkerWorkstationNamesByWorkerName:
@@ -277,19 +277,19 @@ function buildPromptOrientedWorkstationFromDraft(
     inputs: _existingInputs,
     operation: _operation,
     operationBindings: _operationBindings,
-    runner: _existingRunner,
-    ...workstationWithoutCronRunner
+    modelProvider: _existingModelProvider,
+    ...workstationWithoutCronModelProvider
   } = workstation;
 
   return {
-    ...workstationWithoutCronRunner,
+    ...workstationWithoutCronModelProvider,
     body: draft.prompt,
     inputs: applyEditableWorkstationInputs(draft.inputs),
     name: trimmedName,
     type: draft.workstationType,
     worker: draft.workerName,
     ...(draft.guards.length > 0 ? { guards: draft.guards } : {}),
-    ...(draft.runnerName ? { runner: draft.runnerName } : {}),
+    ...(draft.runnerName ? { modelProvider: draft.runnerName } : {}),
     ...(draft.behavior === DEFAULT_WORKSTATION_BEHAVIOR &&
     existingBehavior === undefined
       ? {}
@@ -310,7 +310,7 @@ function buildModelInvokeWorkstationFromDraft(
     cron: _cron,
     operation: _existingOperation,
     operationBindings: _existingBindings,
-    runner: _runner,
+    modelProvider: _modelProvider,
     ...workstationWithoutPromptOrientedFields
   } = workstation;
   const trimmedOperation = draft.operation.trim();

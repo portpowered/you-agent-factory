@@ -8,6 +8,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestResultResponseToAPI_MapsProjectionFixtures(t *testing.T) {
@@ -252,7 +253,7 @@ func dispatchSummaryFromFixture(dispatch map[string]any) factorysessionexecution
 		Phase:        stringValue(dispatch, "phase"),
 		Label:        stringValue(dispatch, "label"),
 		Attempt:      intValue(dispatch, "attempt"),
-		RunnerID:     stringValue(dispatch, "runnerId"),
+		RunnerID:     dispatchRunnerIDFromFixtureMap(dispatch),
 		Model:        stringValue(dispatch, "model"),
 		Provider:     stringValue(dispatch, "provider"),
 	}
@@ -374,4 +375,13 @@ func marshalFixtureValue(value any) json.RawMessage {
 		return nil
 	}
 	return encoded
+}
+
+func dispatchRunnerIDFromFixtureMap(dispatch map[string]any) string {
+	if modelProvider := stringValue(dispatch, "modelProvider"); modelProvider != "" {
+		if runnerID, ok := interfaces.InternalRunnerIDFromPublicWorkerModelProvider(factoryapi.WorkerModelProvider(modelProvider)); ok {
+			return runnerID
+		}
+	}
+	return stringValue(dispatch, "runnerId")
 }

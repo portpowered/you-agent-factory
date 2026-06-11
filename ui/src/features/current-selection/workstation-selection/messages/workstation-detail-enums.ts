@@ -8,7 +8,7 @@ import type {
   WorkstationLevelGuardType,
 } from "../../../current-factory-definition/lib/workstation-guards";
 import {
-  type ApiRunnerSelectionSource,
+  type ApiModelProviderSelectionSource,
   localizeRunnerSelectionSourceValue,
 } from "./runner-openapi-enums";
 import type {
@@ -23,7 +23,7 @@ import {
 export interface WorkstationDetailEnumMessages {
   localizeProviderSessionKind: (value: string) => string;
   localizeRunnerSelectionSource: (
-    value: ApiRunnerSelectionSource | string,
+    value: ApiModelProviderSelectionSource | string,
   ) => string;
   localizeWorkstationBehavior: (value: ApiWorkstationKind | string) => string;
   localizeWorkstationKind: (value: ApiWorkstationKind | string) => string;

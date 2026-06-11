@@ -50,7 +50,7 @@ function renderReadyInferenceRequestDetailCard() {
         },
         request_view: {
           input_work_items: [],
-          runner: {
+          modelProvider: {
             capabilities: {
               baselineCapabilities: ["prompt_submission", "tool_execution"],
               optionalCapabilities: [
@@ -65,8 +65,8 @@ function renderReadyInferenceRequestDetailCard() {
               ],
             },
             displayName: "Gemini",
-            runnerId: "gemini",
-            selectionSource: "factory",
+            modelProvider: "GEMINI",
+            modelProviderSelectionSource: "factory",
           },
         },
         responded_request_count: 1,

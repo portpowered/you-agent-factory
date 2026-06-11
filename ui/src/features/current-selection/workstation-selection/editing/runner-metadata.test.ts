@@ -8,29 +8,31 @@ import {
 } from "./runner-metadata";
 
 describe("runner-metadata", () => {
-  it("exposes built-in runner ids in OpenAPI contract order", () => {
-    expect(BUILT_IN_RUNNER_IDS).toEqual([...OPENAPI_RUNNER_IDS]);
+  it("exposes built-in model providers in OpenAPI contract order without DEFAULT", () => {
+    expect(BUILT_IN_RUNNER_IDS).toEqual(
+      OPENAPI_RUNNER_IDS.filter((value) => value !== "DEFAULT"),
+    );
   });
 
-  it("returns metadata for every built-in runner id", () => {
-    for (const runnerID of BUILT_IN_RUNNER_IDS) {
-      expect(getRunnerMetadata(runnerID)).toMatchObject({
+  it("returns metadata for every built-in model provider", () => {
+    for (const modelProvider of BUILT_IN_RUNNER_IDS) {
+      expect(getRunnerMetadata(modelProvider)).toMatchObject({
         displayName: expect.any(String),
-        id: runnerID,
+        id: modelProvider,
       });
     }
   });
 
-  it("returns display names for built-in runner ids and null for unknown ids", () => {
-    expect(getRunnerDisplayName("codex")).toBe("Codex");
-    expect(getRunnerDisplayName("cursor-cli")).toBe("Cursor CLI");
-    expect(getRunnerDisplayName("claude")).toBeNull();
+  it("returns display names for built-in model providers and null for unknown ids", () => {
+    expect(getRunnerDisplayName("CODEX")).toBe("Codex");
+    expect(getRunnerDisplayName("CURSOR")).toBe("Cursor CLI");
+    expect(getRunnerDisplayName("custom-runner")).toBeNull();
     expect(getRunnerDisplayName(null)).toBeNull();
     expect(getRunnerDisplayName(undefined)).toBeNull();
   });
 
-  it("falls back safely for unknown runner ids", () => {
-    expect(getRunnerMetadata("claude")).toBeNull();
+  it("falls back safely for unknown model providers", () => {
+    expect(getRunnerMetadata("custom-runner")).toBeNull();
     expect(getRunnerMetadata(null)).toBeNull();
     expect(getRunnerMetadata(undefined)).toBeNull();
   });

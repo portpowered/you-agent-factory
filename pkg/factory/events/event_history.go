@@ -329,7 +329,7 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 	}
 	eventTime = interfaces.CanonicalEventTime(eventTime)
 	inputTokens := workers.WorkDispatchInputTokens(record.Dispatch)
-	runnerSelection := h.resolvedRunnerSelectionForDispatch(record.Dispatch)
+	modelProviderSelection := h.resolvedModelProviderSelectionForDispatch(record.Dispatch)
 	h.appendGenerated(factoryEvent(
 		factoryapi.FactoryEventTypeDispatchRequest,
 		fmt.Sprintf("%s/%s", eventIDDispatchCreatedPrefix, dispatchID),
@@ -349,7 +349,7 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 			PreviousChainingTraceIds: stringSlicePtr(record.Dispatch.PreviousChainingTraceIDs),
 			Inputs:                   generatedDispatchConsumedWorkRefsFromTokens(inputTokens),
 			Resources:                h.generatedResourcesPtr(inputTokens),
-			Metadata:                 generatedDispatchRequestEventMetadataPtr(record.Dispatch.Execution.ReplayKey, runnerSelection),
+			Metadata:                 generatedDispatchRequestEventMetadataPtr(record.Dispatch.Execution.ReplayKey, modelProviderSelection),
 		},
 	))
 }
@@ -607,13 +607,13 @@ func factoryEventPayload(payload any) factoryapi.FactoryEvent_Payload {
 	return out
 }
 
-func (h *FactoryEventHistory) resolvedRunnerSelectionForDispatch(dispatch interfaces.WorkDispatch) interfaces.ResolvedRunnerSelection {
+func (h *FactoryEventHistory) resolvedModelProviderSelectionForDispatch(dispatch interfaces.WorkDispatch) interfaces.ResolvedModelProviderSelection {
 	if h == nil {
-		return interfaces.ResolvedRunnerSelection{}
+		return interfaces.ResolvedModelProviderSelection{}
 	}
 	workstationModelProvider, workerModelProvider := h.modelProviderSelectionInputsForDispatch(dispatch)
 	factoryModelProvider := h.factoryModelProviderOverride()
-	return interfaces.ResolveRunnerSelection(workstationModelProvider, factoryModelProvider, workerModelProvider)
+	return interfaces.ResolveModelProviderSelection(workstationModelProvider, factoryModelProvider, workerModelProvider)
 }
 
 func (h *FactoryEventHistory) modelProviderSelectionInputsForDispatch(dispatch interfaces.WorkDispatch) (string, string) {

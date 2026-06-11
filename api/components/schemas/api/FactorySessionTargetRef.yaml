@@ -5,6 +5,9 @@ required:
 properties:
   kind:
     type: string
+    x-enum-varnames:
+      - FactorySessionTargetRefKindDefault
+      - FactorySessionTargetRefKindNamed
     enum:
       - default
       - named

@@ -51,7 +51,7 @@ type FactoryHostedWorkerAuth = FactorySchemas["HostedWorkerAuth"];
 type FactoryInputType = FactorySchemas["InputType"];
 type FactoryResource = FactorySchemas["Resource"];
 type FactoryResourceRequirement = FactorySchemas["ResourceRequirement"];
-type FactoryRunnerID = FactorySchemas["RunnerID"];
+type FactoryModelProviderSelection = FactorySchemas["ModelProviderSelection"];
 type FactoryLayout = FactorySchemas["FactoryLayout"];
 type FactoryLayoutBounds = FactorySchemas["FactoryLayoutBounds"];
 type FactoryLayoutEdge = FactorySchemas["FactoryLayoutEdge"];
@@ -78,8 +78,8 @@ const FACTORY_KEYS = new Set([
   "metadata",
   "name",
   "layout",
+  "modelProvider",
   "resources",
-  "runner",
   "sourceDirectory",
   "supportingFiles",
   "version",
@@ -181,8 +181,8 @@ const WORKSTATION_KEYS = new Set([
   "outputSchema",
   "outputs",
   "promptFile",
+  "modelProvider",
   "resources",
-  "runner",
   "stopWords",
   "type",
   "worker",
@@ -232,12 +232,14 @@ const WORKER_MODEL_LOCALITY_VALUES = new Set<
 const HOSTED_WORKER_PROVIDER_VALUES = new Set<
   NonNullable<FactoryWorker["provider"]>
 >(["LINEAR"]);
-const RUNNER_ID_VALUES = new Set<FactoryRunnerID>([
-  "codex",
-  "gemini",
-  "kiro",
-  "cursor-cli",
-  "opencode",
+const MODEL_PROVIDER_SELECTION_VALUES = new Set<FactoryModelProviderSelection>([
+  "DEFAULT",
+  "CLAUDE",
+  "CODEX",
+  "CURSOR",
+  "GEMINI",
+  "KIRO",
+  "OPENCODE",
 ]);
 const WORKSTATION_BEHAVIOR_VALUES = new Set<
   NonNullable<FactoryWorkstation["behavior"]>
@@ -313,7 +315,12 @@ function decodeFactoryDefinition(
   const workTypes = readOptionalArray(value, "workTypes", path, decodeWorkType);
   const resources = readOptionalArray(value, "resources", path, decodeResource);
   const layout = readOptionalObject(value, "layout", path, decodeFactoryLayout);
-  const runner = readOptionalEnum(value, "runner", path, RUNNER_ID_VALUES);
+  const modelProvider = readOptionalEnum(
+    value,
+    "modelProvider",
+    path,
+    MODEL_PROVIDER_SELECTION_VALUES,
+  );
   const supportingFiles = readOptionalObject(
     value,
     "supportingFiles",
@@ -363,8 +370,8 @@ function decodeFactoryDefinition(
   if (layout !== undefined) {
     factory.layout = layout;
   }
-  if (runner !== undefined) {
-    factory.runner = runner;
+  if (modelProvider !== undefined) {
+    factory.modelProvider = modelProvider;
   }
   if (workers !== undefined) {
     factory.workers = workers;
@@ -981,7 +988,12 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   const workingDirectory = readOptionalString(record, "workingDirectory", path);
   const worktree = readOptionalString(record, "worktree", path);
   const env = readOptionalStringMap(record, "env", path);
-  const runner = readOptionalEnum(record, "runner", path, RUNNER_ID_VALUES);
+  const modelProvider = readOptionalEnum(
+    record,
+    "modelProvider",
+    path,
+    MODEL_PROVIDER_SELECTION_VALUES,
+  );
   const openCodeAgent = readOptionalNonEmptyString(
     record,
     "openCodeAgent",
@@ -1055,8 +1067,8 @@ function decodeWorkstation(value: unknown, path: string): FactoryWorkstation {
   if (env !== undefined) {
     workstation.env = env;
   }
-  if (runner !== undefined) {
-    workstation.runner = runner;
+  if (modelProvider !== undefined) {
+    workstation.modelProvider = modelProvider;
   }
   if (openCodeAgent !== undefined) {
     workstation.openCodeAgent = openCodeAgent;

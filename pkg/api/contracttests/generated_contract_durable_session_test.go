@@ -694,7 +694,7 @@ func assertDurableSessionDispatchArtifactSurfaceSchemas(t *testing.T, schemas ma
 	assertArrayItemRef(t, dispatchSummaryProperties, "providerSessionRefs", "#/components/schemas/LoadableProviderSessionRef")
 	assertArrayItemRef(t, dispatchSummaryProperties, "warnings", "#/components/schemas/FactoryDispatchWarning")
 	assertSchemaPropertiesPresent(t, dispatchSummaryProperties, "FactorySessionDispatchSummary",
-		"id", "status", "dispatchKind", "phase", "label", "attempt", "runnerId", "model", "provider",
+		"id", "status", "dispatchKind", "phase", "label", "attempt", "modelProvider", "model", "provider",
 		"providerSessionRefs", "usage", "warnings", "outputArtifactIds", "failureDetail")
 
 	dispatchDetailSchema := schemaObject(t, schemas, "FactoryDispatch")

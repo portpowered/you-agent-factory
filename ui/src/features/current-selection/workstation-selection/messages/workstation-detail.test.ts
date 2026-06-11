@@ -175,7 +175,7 @@ describe("getWorkstationDetailMessages", () => {
     ).toBe("未知类型：FUTURE_TYPE");
     expect(
       getWorkstationDetailMessages("en").localizeRunnerSelectionSource(
-        "legacy_provider",
+        "worker",
       ),
     ).toBe("Worker provider");
     expect(

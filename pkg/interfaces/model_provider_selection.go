@@ -3,6 +3,8 @@ package interfaces
 import (
 	"fmt"
 	"strings"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
 
 // ModelProviderSelectionSource reports which configuration layer supplied the
@@ -126,6 +128,16 @@ func resolveConcreteModelProviderFromSelection(selection string) ModelProvider {
 func modelProviderFromPublicSelection(canonical string) (ModelProvider, bool) {
 	public := GeneratedPublicFactoryWorkerModelProvider(canonical)
 	return InternalModelProviderFromPublicWorkerModelProvider(public)
+}
+
+// InternalRunnerIDFromPublicWorkerModelProvider maps one public WorkerModelProvider
+// value to the legacy built-in runner identifier used by internal projections.
+func InternalRunnerIDFromPublicWorkerModelProvider(value factoryapi.WorkerModelProvider) (string, bool) {
+	provider, ok := InternalModelProviderFromPublicWorkerModelProvider(value)
+	if !ok {
+		return "", false
+	}
+	return RunnerIDFromInternalModelProvider(string(provider))
 }
 
 // ValidateOpenCodeAgentForModelProviderSelection reports a configuration error

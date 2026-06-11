@@ -1,84 +1,105 @@
 import type { components } from "../../../../api/generated/openapi";
 import { type EnumLabelCatalog, localizeEnumLabel } from "../../../../i18n";
 
-export type ApiRunnerID = components["schemas"]["RunnerID"];
-export type ApiRunnerSelectionSource =
-  components["schemas"]["RunnerSelectionSource"];
+export type ApiModelProviderSelection =
+  components["schemas"]["ModelProviderSelection"];
+export type ApiModelProviderSelectionSource =
+  components["schemas"]["ModelProviderSelectionSource"];
 
-/** OpenAPI RunnerID enum order from the generated contract. */
-export const OPENAPI_RUNNER_IDS = [
-  "codex",
-  "gemini",
-  "kiro",
-  "cursor-cli",
-  "opencode",
-] as const satisfies readonly ApiRunnerID[];
+/** Backward-compatible alias for workstation editing surfaces. */
+export type ApiRunnerID = ApiModelProviderSelection;
 
-type RunnerSelectionSourceLabelCatalog =
-  EnumLabelCatalog<ApiRunnerSelectionSource>;
+/** OpenAPI ModelProviderSelection enum order from the generated contract. */
+export const OPENAPI_MODEL_PROVIDER_SELECTIONS = [
+  "DEFAULT",
+  "CLAUDE",
+  "CODEX",
+  "CURSOR",
+  "GEMINI",
+  "KIRO",
+  "OPENCODE",
+] as const satisfies readonly ApiModelProviderSelection[];
 
-const RUNNER_SELECTION_SOURCE_LABELS_EN = {
-  default: "Default",
+/** Backward-compatible alias for existing runner-named imports. */
+export const OPENAPI_RUNNER_IDS = OPENAPI_MODEL_PROVIDER_SELECTIONS;
+
+type ModelProviderSelectionSourceLabelCatalog =
+  EnumLabelCatalog<ApiModelProviderSelectionSource>;
+
+const MODEL_PROVIDER_SELECTION_SOURCE_LABELS_EN = {
+  operator_default: "Operator default",
   factory: "Factory",
-  legacy_provider: "Worker provider",
+  worker: "Worker provider",
   workstation: "Workstation",
-} satisfies RunnerSelectionSourceLabelCatalog["labels"];
+} satisfies ModelProviderSelectionSourceLabelCatalog["labels"];
 
-const RUNNER_SELECTION_SOURCE_LABELS_JA = {
-  default: "既定",
+const MODEL_PROVIDER_SELECTION_SOURCE_LABELS_JA = {
+  operator_default: "オペレーター既定",
   factory: "ファクトリー",
-  legacy_provider: "ワーカー provider",
+  worker: "ワーカー provider",
   workstation: "ワークステーション",
-} satisfies RunnerSelectionSourceLabelCatalog["labels"];
+} satisfies ModelProviderSelectionSourceLabelCatalog["labels"];
 
-const RUNNER_SELECTION_SOURCE_LABELS_KO = {
-  default: "기본값",
+const MODEL_PROVIDER_SELECTION_SOURCE_LABELS_KO = {
+  operator_default: "운영자 기본값",
   factory: "팩토리",
-  legacy_provider: "워커 provider",
+  worker: "워커 provider",
   workstation: "워크스테이션",
-} satisfies RunnerSelectionSourceLabelCatalog["labels"];
+} satisfies ModelProviderSelectionSourceLabelCatalog["labels"];
 
-const RUNNER_SELECTION_SOURCE_LABELS_ZH_CN = {
-  default: "默认值",
+const MODEL_PROVIDER_SELECTION_SOURCE_LABELS_ZH_CN = {
+  operator_default: "操作者默认值",
   factory: "工厂",
-  legacy_provider: "工作者 provider",
+  worker: "工作者 provider",
   workstation: "工作站",
-} satisfies RunnerSelectionSourceLabelCatalog["labels"];
+} satisfies ModelProviderSelectionSourceLabelCatalog["labels"];
 
-export function localizeRunnerSelectionSourceValue(
-  value: ApiRunnerSelectionSource | string,
+export function localizeModelProviderSelectionSourceValue(
+  value: ApiModelProviderSelectionSource | string,
   locale: string,
 ): string {
   const labelsByLocale: Record<
     string,
-    RunnerSelectionSourceLabelCatalog["labels"]
+    ModelProviderSelectionSourceLabelCatalog["labels"]
   > = {
-    en: RUNNER_SELECTION_SOURCE_LABELS_EN,
-    ja: RUNNER_SELECTION_SOURCE_LABELS_JA,
-    ko: RUNNER_SELECTION_SOURCE_LABELS_KO,
-    "zh-CN": RUNNER_SELECTION_SOURCE_LABELS_ZH_CN,
+    en: MODEL_PROVIDER_SELECTION_SOURCE_LABELS_EN,
+    ja: MODEL_PROVIDER_SELECTION_SOURCE_LABELS_JA,
+    ko: MODEL_PROVIDER_SELECTION_SOURCE_LABELS_KO,
+    "zh-CN": MODEL_PROVIDER_SELECTION_SOURCE_LABELS_ZH_CN,
   };
 
   return localizeEnumLabel({
     category: "type",
-    labels: labelsByLocale[locale] ?? RUNNER_SELECTION_SOURCE_LABELS_EN,
+    labels: labelsByLocale[locale] ?? MODEL_PROVIDER_SELECTION_SOURCE_LABELS_EN,
     locale,
     value,
   });
 }
 
-export function isOpenApiRunnerID(
+/** Backward-compatible alias for existing runner-named imports. */
+export const localizeRunnerSelectionSourceValue =
+  localizeModelProviderSelectionSourceValue;
+
+export function isOpenApiModelProviderSelection(
   value: string | null | undefined,
-): value is ApiRunnerID {
+): value is ApiModelProviderSelection {
   if (!value) {
     return false;
   }
 
-  return (OPENAPI_RUNNER_IDS as readonly string[]).includes(
-    value.trim().toLowerCase(),
+  return (OPENAPI_MODEL_PROVIDER_SELECTIONS as readonly string[]).includes(
+    value.trim().toUpperCase(),
   );
 }
 
-export function normalizeRunnerID(value: string | null | undefined): string {
-  return (value ?? "").trim().toLowerCase();
+/** Backward-compatible alias for existing runner-named imports. */
+export const isOpenApiRunnerID = isOpenApiModelProviderSelection;
+
+export function normalizeModelProviderSelection(
+  value: string | null | undefined,
+): string {
+  return (value ?? "").trim().toUpperCase();
 }
+
+/** Backward-compatible alias for existing runner-named imports. */
+export const normalizeRunnerID = normalizeModelProviderSelection;

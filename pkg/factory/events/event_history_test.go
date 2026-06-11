@@ -478,11 +478,11 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesFactoryRunnerOverrideM
 	history.SetFactoryRunnerOverride("  gemini  ")
 
 	metadata := dispatchRequestMetadataForEventHistoryTest(t, history)
-	if got := stringValueForEventHistoryTest(metadata.RunnerId); got != interfaces.RunnerIDGemini {
-		t.Fatalf("metadata runnerId = %q, want %q", got, interfaces.RunnerIDGemini)
+	if got := stringValueForEventHistoryTest(metadata.ModelProvider); got != string(factoryapi.WorkerModelProviderGemini) {
+		t.Fatalf("metadata modelProvider = %q, want %q", got, factoryapi.WorkerModelProviderGemini)
 	}
-	if got := stringValueForEventHistoryTest(metadata.RunnerSelectionSource); got != string(interfaces.RunnerSelectionSourceFactory) {
-		t.Fatalf("metadata runnerSelectionSource = %q, want %q", got, interfaces.RunnerSelectionSourceFactory)
+	if got := stringValueForEventHistoryTest(metadata.ModelProviderSelectionSource); got != string(interfaces.ModelProviderSelectionSourceFactory) {
+		t.Fatalf("metadata modelProviderSelectionSource = %q, want %q", got, interfaces.ModelProviderSelectionSourceFactory)
 	}
 }
 
@@ -496,11 +496,11 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesSharedFactoryConfigRun
 	)
 
 	metadata := dispatchRequestMetadataForEventHistoryTest(t, history)
-	if got := stringValueForEventHistoryTest(metadata.RunnerId); got != interfaces.RunnerIDOpenCode {
-		t.Fatalf("metadata runnerId = %q, want %q", got, interfaces.RunnerIDOpenCode)
+	if got := stringValueForEventHistoryTest(metadata.ModelProvider); got != string(factoryapi.WorkerModelProviderOpenCode) {
+		t.Fatalf("metadata modelProvider = %q, want %q", got, factoryapi.WorkerModelProviderOpenCode)
 	}
-	if got := stringValueForEventHistoryTest(metadata.RunnerSelectionSource); got != string(interfaces.RunnerSelectionSourceFactory) {
-		t.Fatalf("metadata runnerSelectionSource = %q, want %q", got, interfaces.RunnerSelectionSourceFactory)
+	if got := stringValueForEventHistoryTest(metadata.ModelProviderSelectionSource); got != string(interfaces.ModelProviderSelectionSourceFactory) {
+		t.Fatalf("metadata modelProviderSelectionSource = %q, want %q", got, interfaces.ModelProviderSelectionSourceFactory)
 	}
 }
 
@@ -512,11 +512,11 @@ func TestFactoryEventHistory_RecordWorkstationRequest_DefaultsRunnerMetadataWith
 	)
 
 	metadata := dispatchRequestMetadataForEventHistoryTest(t, history)
-	if got := stringValueForEventHistoryTest(metadata.RunnerId); got != interfaces.RunnerIDCodex {
-		t.Fatalf("metadata runnerId = %q, want %q", got, interfaces.RunnerIDCodex)
+	if got := stringValueForEventHistoryTest(metadata.ModelProvider); got != string(factoryapi.WorkerModelProviderCodex) {
+		t.Fatalf("metadata modelProvider = %q, want %q", got, factoryapi.WorkerModelProviderCodex)
 	}
-	if got := stringValueForEventHistoryTest(metadata.RunnerSelectionSource); got != string(interfaces.RunnerSelectionSourceDefault) {
-		t.Fatalf("metadata runnerSelectionSource = %q, want %q", got, interfaces.RunnerSelectionSourceDefault)
+	if got := stringValueForEventHistoryTest(metadata.ModelProviderSelectionSource); got != string(interfaces.ModelProviderSelectionSourceOperatorDefault) {
+		t.Fatalf("metadata modelProviderSelectionSource = %q, want %q", got, interfaces.ModelProviderSelectionSourceOperatorDefault)
 	}
 }
 
@@ -528,11 +528,11 @@ func TestFactoryEventHistory_RecordWorkstationRequest_DefaultsRunnerMetadataWhen
 	)
 
 	metadata := dispatchRequestMetadataForEventHistoryTest(t, history)
-	if got := stringValueForEventHistoryTest(metadata.RunnerId); got != interfaces.RunnerIDCodex {
-		t.Fatalf("metadata runnerId = %q, want %q", got, interfaces.RunnerIDCodex)
+	if got := stringValueForEventHistoryTest(metadata.ModelProvider); got != string(factoryapi.WorkerModelProviderCodex) {
+		t.Fatalf("metadata modelProvider = %q, want %q", got, factoryapi.WorkerModelProviderCodex)
 	}
-	if got := stringValueForEventHistoryTest(metadata.RunnerSelectionSource); got != string(interfaces.RunnerSelectionSourceDefault) {
-		t.Fatalf("metadata runnerSelectionSource = %q, want %q", got, interfaces.RunnerSelectionSourceDefault)
+	if got := stringValueForEventHistoryTest(metadata.ModelProviderSelectionSource); got != string(interfaces.ModelProviderSelectionSourceOperatorDefault) {
+		t.Fatalf("metadata modelProviderSelectionSource = %q, want %q", got, interfaces.ModelProviderSelectionSourceOperatorDefault)
 	}
 }
 

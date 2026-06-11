@@ -188,20 +188,12 @@ func publicFactoryEnumNormalizerCases() []publicFactoryEnumNormalizerCase {
 			strict:     StrictPublicFactoryWorkstationType,
 		},
 		{
-			name:       "runner id",
-			alias:      "cursor-cli",
-			unknown:    "custom-runner",
-			want:       RunnerIDCursorCLI,
-			permissive: PermissivePublicFactoryRunnerID,
-			strict:     StrictPublicFactoryRunnerID,
-		},
-		{
-			name:       "runner selection source",
+			name:       "model provider selection source",
 			alias:      "factory",
 			unknown:    "custom-source",
-			want:       string(RunnerSelectionSourceFactory),
-			permissive: PermissivePublicFactoryRunnerSelectionSource,
-			strict:     StrictPublicFactoryRunnerSelectionSource,
+			want:       string(ModelProviderSelectionSourceFactory),
+			permissive: PermissivePublicFactoryModelProviderSelectionSource,
+			strict:     StrictPublicFactoryModelProviderSelectionSource,
 		},
 		{
 			name:       "work type handling behavior",
@@ -247,10 +239,9 @@ func generatedPublicFactoryEnumPreservationCases() []generatedPublicFactoryEnumP
 		{name: "worker operation content type unknown", input: "  sound  ", want: "sound", fn: generatedWorkerOperationContentTypeString},
 		{name: "resource type unknown", input: "  custom-resource  ", want: "custom-resource", fn: permissiveResourceTypeString},
 		{name: "workstation type", input: "  CUSTOM_WORKSTATION  ", want: "CUSTOM_WORKSTATION", fn: generatedWorkstationTypeString},
-		{name: "runner id", input: "  GEMINI  ", want: "gemini", fn: generatedRunnerIDString},
-		{name: "runner id unknown", input: "  custom-runner  ", want: "custom-runner", fn: generatedRunnerIDString},
-		{name: "runner selection source", input: "  default  ", want: "default", fn: generatedRunnerSelectionSourceString},
-		{name: "runner selection source unknown", input: "  custom-source  ", want: "custom-source", fn: generatedRunnerSelectionSourceString},
+		{name: "model provider selection source", input: "  operator_default  ", want: "operator_default", fn: generatedModelProviderSelectionSourceString},
+		{name: "legacy runner selection source", input: "  default  ", want: "operator_default", fn: generatedModelProviderSelectionSourceString},
+		{name: "model provider selection source unknown", input: "  custom-source  ", want: "custom-source", fn: generatedModelProviderSelectionSourceString},
 	}
 }
 
@@ -278,11 +269,8 @@ func permissiveResourceTypeString(value string) string {
 func generatedWorkstationTypeString(value string) string {
 	return string(GeneratedPublicFactoryWorkstationType(value))
 }
-func generatedRunnerIDString(value string) string {
-	return string(GeneratedPublicFactoryRunnerID(value))
-}
-func generatedRunnerSelectionSourceString(value string) string {
-	return string(GeneratedPublicFactoryRunnerSelectionSource(value))
+func generatedModelProviderSelectionSourceString(value string) string {
+	return string(GeneratedPublicFactoryModelProviderSelectionSource(value))
 }
 
 func TestGeneratedPublicFactoryEnumPtrs(t *testing.T) {
@@ -377,20 +365,12 @@ func generatedPublicFactoryEnumPtrCases() []generatedPublicFactoryEnumPtrCase {
 			ptr:           generatedPublicFactoryWorkstationTypeStringPtr,
 		},
 		{
-			name:          "runner id",
-			supported:     "  GEMINI  ",
-			wantSupported: "gemini",
-			unknown:       "  custom-runner  ",
-			wantUnknown:   "custom-runner",
-			ptr:           generatedPublicFactoryRunnerIDStringPtr,
-		},
-		{
-			name:          "runner selection source",
+			name:          "model provider selection source",
 			supported:     "  workstation  ",
 			wantSupported: "workstation",
 			unknown:       "  custom-source  ",
 			wantUnknown:   "custom-source",
-			ptr:           generatedPublicFactoryRunnerSelectionSourceStringPtr,
+			ptr:           generatedPublicFactoryModelProviderSelectionSourceStringPtr,
 		},
 	}
 }
@@ -423,12 +403,8 @@ func generatedPublicFactoryWorkstationTypeStringPtr(value string) *string {
 	return generatedPublicFactoryStringPtr(GeneratedPublicFactoryWorkstationTypePtr(value))
 }
 
-func generatedPublicFactoryRunnerIDStringPtr(value string) *string {
-	return generatedPublicFactoryStringPtr(GeneratedPublicFactoryRunnerIDPtr(value))
-}
-
-func generatedPublicFactoryRunnerSelectionSourceStringPtr(value string) *string {
-	return generatedPublicFactoryStringPtr(GeneratedPublicFactoryRunnerSelectionSourcePtr(value))
+func generatedPublicFactoryModelProviderSelectionSourceStringPtr(value string) *string {
+	return generatedPublicFactoryStringPtr(GeneratedPublicFactoryModelProviderSelectionSourcePtr(value))
 }
 
 func generatedPublicFactoryStringPtr[T ~string](value *T) *string {

@@ -127,19 +127,13 @@ var publicFactoryWorkstationTypeAliases = map[string]string{
 	WorkstationTypeModel:    WorkstationTypeModel,
 }
 
-var publicFactoryRunnerIDAliases = map[string]string{
-	RunnerIDCodex:     RunnerIDCodex,
-	RunnerIDGemini:    RunnerIDGemini,
-	RunnerIDKiro:      RunnerIDKiro,
-	RunnerIDCursorCLI: RunnerIDCursorCLI,
-	RunnerIDOpenCode:  RunnerIDOpenCode,
-}
-
-var publicFactoryRunnerSelectionSourceAliases = map[string]string{
-	string(RunnerSelectionSourceWorkstation):    string(RunnerSelectionSourceWorkstation),
-	string(RunnerSelectionSourceFactory):        string(RunnerSelectionSourceFactory),
-	string(RunnerSelectionSourceLegacyProvider): string(RunnerSelectionSourceLegacyProvider),
-	string(RunnerSelectionSourceDefault):        string(RunnerSelectionSourceDefault),
+var publicFactoryModelProviderSelectionSourceAliases = map[string]string{
+	string(ModelProviderSelectionSourceWorkstation):     string(ModelProviderSelectionSourceWorkstation),
+	string(ModelProviderSelectionSourceFactory):         string(ModelProviderSelectionSourceFactory),
+	string(ModelProviderSelectionSourceWorker):          string(ModelProviderSelectionSourceWorker),
+	string(ModelProviderSelectionSourceOperatorDefault): string(ModelProviderSelectionSourceOperatorDefault),
+	string(RunnerSelectionSourceLegacyProvider):         string(ModelProviderSelectionSourceWorker),
+	string(RunnerSelectionSourceDefault):                string(ModelProviderSelectionSourceOperatorDefault),
 }
 
 var publicFactoryWorkTypeHandlingBehaviorAliases = map[string]string{
@@ -312,24 +306,16 @@ func StrictPublicFactoryWorkstationType(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryWorkstationTypeAliases, false)
 }
 
-// PermissivePublicFactoryRunnerID canonicalizes supported public runner IDs and preserves unknown values.
-func PermissivePublicFactoryRunnerID(value string) string {
-	return normalizePublicFactoryEnumValue(value, publicFactoryRunnerIDAliases, true)
+// PermissivePublicFactoryModelProviderSelectionSource canonicalizes supported public
+// model-provider selection sources and preserves unknown values.
+func PermissivePublicFactoryModelProviderSelectionSource(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryModelProviderSelectionSourceAliases, true)
 }
 
-// StrictPublicFactoryRunnerID canonicalizes supported public runner IDs and rejects unknown values.
-func StrictPublicFactoryRunnerID(value string) string {
-	return normalizePublicFactoryEnumValue(value, publicFactoryRunnerIDAliases, false)
-}
-
-// PermissivePublicFactoryRunnerSelectionSource canonicalizes supported public runner selection sources and preserves unknown values.
-func PermissivePublicFactoryRunnerSelectionSource(value string) string {
-	return normalizePublicFactoryEnumValue(value, publicFactoryRunnerSelectionSourceAliases, true)
-}
-
-// StrictPublicFactoryRunnerSelectionSource canonicalizes supported public runner selection sources and rejects unknown values.
-func StrictPublicFactoryRunnerSelectionSource(value string) string {
-	return normalizePublicFactoryEnumValue(value, publicFactoryRunnerSelectionSourceAliases, false)
+// StrictPublicFactoryModelProviderSelectionSource canonicalizes supported public
+// model-provider selection sources and rejects unknown values.
+func StrictPublicFactoryModelProviderSelectionSource(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryModelProviderSelectionSourceAliases, false)
 }
 
 // GeneratedPublicFactoryWorkerType returns the generated worker type enum.
@@ -402,24 +388,42 @@ func GeneratedPublicFactoryWorkstationTypePtr(value string) *factoryapi.Workstat
 	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkstationType)
 }
 
-// GeneratedPublicFactoryRunnerID returns the generated runner ID enum.
-func GeneratedPublicFactoryRunnerID(value string) factoryapi.RunnerID {
-	return factoryapi.RunnerID(PermissivePublicFactoryRunnerID(NormalizeRunnerID(value)))
+// GeneratedPublicFactoryModelProviderSelectionSource returns the generated model-provider selection source enum.
+func GeneratedPublicFactoryModelProviderSelectionSource(value string) factoryapi.ModelProviderSelectionSource {
+	return factoryapi.ModelProviderSelectionSource(PermissivePublicFactoryModelProviderSelectionSource(value))
 }
 
-// GeneratedPublicFactoryRunnerIDPtr returns the generated runner ID enum when non-empty.
-func GeneratedPublicFactoryRunnerIDPtr(value string) *factoryapi.RunnerID {
-	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryRunnerID)
+// GeneratedPublicFactoryModelProviderSelectionSourcePtr returns the generated model-provider selection source enum when non-empty.
+func GeneratedPublicFactoryModelProviderSelectionSourcePtr(value string) *factoryapi.ModelProviderSelectionSource {
+	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryModelProviderSelectionSource)
 }
 
-// GeneratedPublicFactoryRunnerSelectionSource returns the generated runner selection source enum.
-func GeneratedPublicFactoryRunnerSelectionSource(value string) factoryapi.RunnerSelectionSource {
-	return factoryapi.RunnerSelectionSource(PermissivePublicFactoryRunnerSelectionSource(value))
+// GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProvider maps a built-in runner ID
+// or internal provider command to the generated public WorkerModelProvider enum.
+func GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProvider(value string) (factoryapi.WorkerModelProvider, bool) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", false
+	}
+	if provider := ModelProvider(strings.ToLower(value)); IsSupportedModelProvider(provider) {
+		return PublicWorkerModelProviderFromInternal(provider)
+	}
+	if provider, ok := ModelProviderFromRunnerID(value); ok {
+		return PublicWorkerModelProviderFromInternal(provider)
+	}
+	if canonical := StrictPublicFactoryWorkerModelProvider(value); canonical != "" {
+		return factoryapi.WorkerModelProvider(canonical), true
+	}
+	return "", false
 }
 
-// GeneratedPublicFactoryRunnerSelectionSourcePtr returns the generated runner selection source enum when non-empty.
-func GeneratedPublicFactoryRunnerSelectionSourcePtr(value string) *factoryapi.RunnerSelectionSource {
-	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryRunnerSelectionSource)
+// GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProviderPtr returns the generated
+// public WorkerModelProvider enum when one can be derived from the input value.
+func GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProviderPtr(value string) *factoryapi.WorkerModelProvider {
+	if public, ok := GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProvider(value); ok {
+		return &public
+	}
+	return nil
 }
 
 const (

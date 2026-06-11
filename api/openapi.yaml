@@ -2611,6 +2611,9 @@ components:
       properties:
         kind:
           type: string
+          x-enum-varnames:
+            - FactorySessionTargetRefKindDefault
+            - FactorySessionTargetRefKindNamed
           enum:
             - default
             - named
@@ -3032,9 +3035,9 @@ components:
           format: int32
           minimum: 1
           description: One-based attempt number for retried dispatches.
-        runnerId:
-          type: string
-          description: Selected runner identifier when applicable.
+        modelProvider:
+          $ref: '#/components/schemas/WorkerModelProvider'
+          description: Selected model provider when applicable.
         model:
           type: string
           description: Selected model identifier when applicable.
@@ -3250,9 +3253,9 @@ components:
           format: int32
           minimum: 1
           description: One-based attempt number for retried dispatches.
-        runnerId:
-          type: string
-          description: Selected runner identifier when applicable.
+        modelProvider:
+          $ref: '#/components/schemas/WorkerModelProvider'
+          description: Selected model provider when applicable.
         model:
           type: string
           description: Selected model identifier when applicable.
@@ -3788,9 +3791,9 @@ components:
         coordinationRef:
           type: string
           description: Optional coordination reference for grouped child work.
-        runnerId:
-          type: string
-          description: Selected runner identifier when applicable.
+        modelProvider:
+          $ref: '#/components/schemas/WorkerModelProvider'
+          description: Selected model provider when applicable.
         model:
           type: string
           description: Selected model identifier when applicable.
@@ -5324,16 +5327,16 @@ components:
           type: integer
         failureType:
           type: string
-    FactoryWorldSelectedRunnerView:
+    FactoryWorldSelectedModelProviderView:
       type: object
       additionalProperties: false
       properties:
-        runnerId:
-          $ref: '#/components/schemas/RunnerID'
+        modelProvider:
+          $ref: '#/components/schemas/WorkerModelProvider'
         displayName:
           type: string
-        selectionSource:
-          $ref: '#/components/schemas/RunnerSelectionSource'
+        modelProviderSelectionSource:
+          $ref: '#/components/schemas/ModelProviderSelectionSource'
         capabilities:
           $ref: '#/components/schemas/FactoryWorldRunnerCapabilitiesView'
     FactoryWorldRunnerBaselineCapability:
@@ -5403,8 +5406,8 @@ components:
       type: object
       additionalProperties: false
       properties:
-        runner:
-          $ref: '#/components/schemas/FactoryWorldSelectedRunnerView'
+        modelProvider:
+          $ref: '#/components/schemas/FactoryWorldSelectedModelProviderView'
         startedAt:
           type: string
           format: date-time
@@ -5436,8 +5439,8 @@ components:
       type: object
       additionalProperties: false
       properties:
-        runner:
-          $ref: '#/components/schemas/FactoryWorldSelectedRunnerView'
+        modelProvider:
+          $ref: '#/components/schemas/FactoryWorldSelectedModelProviderView'
         outcome:
           type: string
         feedback:
@@ -5729,10 +5732,10 @@ components:
         replayKey:
           type: string
           description: Stable replay correlation key for recorded dispatch reconstruction.
-        runnerId:
-          $ref: '#/components/schemas/RunnerID'
-        runnerSelectionSource:
-          $ref: '#/components/schemas/RunnerSelectionSource'
+        modelProvider:
+          $ref: '#/components/schemas/WorkerModelProvider'
+        modelProviderSelectionSource:
+          $ref: '#/components/schemas/ModelProviderSelectionSource'
     RunRequestEventPayload:
       type: object
       additionalProperties: false
@@ -7162,6 +7165,19 @@ components:
         - Gemini model execution routed through the `gemini` provider command.
         - Kiro model execution routed through the `kiro-cli` provider command.
         - OpenCode model execution routed through the `opencode` provider command.
+    ModelProviderSelectionSource:
+      type: string
+      description: Configuration layer that supplied the resolved model provider selection for a dispatch.
+      enum:
+        - workstation
+        - factory
+        - worker
+        - operator_default
+      x-enum-descriptions:
+        - Workstation-level modelProvider override resolved the dispatch target.
+        - Factory-level default modelProvider resolved the dispatch target.
+        - Worker modelProvider resolved the dispatch target when no explicit override is set.
+        - The operator default model provider resolved the dispatch target.
     WorkerModelLocality:
       type: string
       description: Provider locality for a model worker capability declaration.
@@ -7243,40 +7259,6 @@ components:
         - Audio content.
         - Structured JSON content.
         - Opaque binary content.
-    RunnerID:
-      type: string
-      description: Stable built-in runner identifiers supported by factory and workstation runner selection.
-      x-enum-varnames:
-        - RunnerIDCodex
-        - RunnerIDGemini
-        - RunnerIDKiro
-        - RunnerIDCursorCLI
-        - RunnerIDOpenCode
-      enum:
-        - codex
-        - gemini
-        - kiro
-        - cursor-cli
-        - opencode
-      x-enum-descriptions:
-        - Codex runner selected through the shared runner contract.
-        - Gemini runner selected through the shared runner contract.
-        - Kiro runner selected through the shared runner contract.
-        - Cursor CLI runner selected through the shared runner contract.
-        - OpenCode runner selected through the shared runner contract.
-    RunnerSelectionSource:
-      type: string
-      description: Configuration layer that supplied the resolved built-in runner selection for a dispatch.
-      enum:
-        - workstation
-        - factory
-        - legacy_provider
-        - default
-      x-enum-descriptions:
-        - Workstation-level runner override resolved the dispatch target.
-        - Factory-level default runner resolved the dispatch target.
-        - Worker modelProvider compatibility resolved the dispatch target when no explicit runner override is set.
-        - The documented default Codex runner resolved the dispatch target.
     Workstation:
       description: A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states.
       type: object

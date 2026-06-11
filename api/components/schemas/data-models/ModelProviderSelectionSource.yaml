@@ -1,0 +1,12 @@
+type: string
+description: Configuration layer that supplied the resolved model provider selection for a dispatch.
+enum:
+  - workstation
+  - factory
+  - worker
+  - operator_default
+x-enum-descriptions:
+  - Workstation-level modelProvider override resolved the dispatch target.
+  - Factory-level default modelProvider resolved the dispatch target.
+  - Worker modelProvider resolved the dispatch target when no explicit override is set.
+  - The operator default model provider resolved the dispatch target.

@@ -26,9 +26,9 @@ properties:
     format: int32
     minimum: 1
     description: One-based attempt number for retried dispatches.
-  runnerId:
-    type: string
-    description: Selected runner identifier when applicable.
+  modelProvider:
+    $ref: '../data-models/WorkerModelProvider.yaml'
+    description: Selected model provider when applicable.
   model:
     type: string
     description: Selected model identifier when applicable.

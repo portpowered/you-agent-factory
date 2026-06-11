@@ -1,50 +1,59 @@
 import {
-  type ApiRunnerID,
-  OPENAPI_RUNNER_IDS,
+  type ApiModelProviderSelection,
+  OPENAPI_MODEL_PROVIDER_SELECTIONS,
 } from "../messages/runner-openapi-enums";
 
 export interface RunnerMetadata {
   displayName: string;
-  id: ApiRunnerID;
+  id: ApiModelProviderSelection;
 }
 
-const BUILT_IN_RUNNER_METADATA: Record<ApiRunnerID, RunnerMetadata> = {
-  codex: {
+const BUILT_IN_MODEL_PROVIDER_METADATA: Partial<
+  Record<ApiModelProviderSelection, RunnerMetadata>
+> = {
+  CLAUDE: {
+    displayName: "Claude",
+    id: "CLAUDE",
+  },
+  CODEX: {
     displayName: "Codex",
-    id: "codex",
+    id: "CODEX",
   },
-  gemini: {
+  GEMINI: {
     displayName: "Gemini",
-    id: "gemini",
+    id: "GEMINI",
   },
-  kiro: {
+  KIRO: {
     displayName: "Kiro",
-    id: "kiro",
+    id: "KIRO",
   },
-  "cursor-cli": {
+  CURSOR: {
     displayName: "Cursor CLI",
-    id: "cursor-cli",
+    id: "CURSOR",
   },
-  opencode: {
+  OPENCODE: {
     displayName: "OpenCode",
-    id: "opencode",
+    id: "OPENCODE",
   },
 };
 
-export const BUILT_IN_RUNNER_IDS: ApiRunnerID[] = [...OPENAPI_RUNNER_IDS];
+export const BUILT_IN_RUNNER_IDS: ApiModelProviderSelection[] = [
+  ...OPENAPI_MODEL_PROVIDER_SELECTIONS,
+].filter((value) => value !== "DEFAULT");
 
 export function getRunnerMetadata(
-  runnerID: string | null | undefined,
+  modelProvider: string | null | undefined,
 ): RunnerMetadata | null {
-  if (!runnerID) {
+  if (!modelProvider) {
     return null;
   }
 
-  return BUILT_IN_RUNNER_METADATA[runnerID as ApiRunnerID] ?? null;
+  const normalized = modelProvider.trim().toUpperCase();
+  return BUILT_IN_MODEL_PROVIDER_METADATA[normalized as ApiModelProviderSelection] ?? null;
 }
 
 export function getRunnerDisplayName(
-  runnerID: string | null | undefined,
+  modelProvider: string | null | undefined,
 ): string | null {
-  return getRunnerMetadata(runnerID)?.displayName ?? null;
+  return getRunnerMetadata(modelProvider)?.displayName ?? null;
 }

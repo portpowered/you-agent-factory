@@ -125,7 +125,7 @@
           "phase": "triage",
           "label": "plan-task",
           "attempt": 1,
-          "runnerId": "planner",
+          "modelProvider": "CLAUDE",
           "model": "claude-sonnet-4-20250514",
           "provider": "claude",
           "providerSessionRefs": [
@@ -146,7 +146,7 @@
         "phase": "triage",
         "label": "plan-task",
         "attempt": 1,
-        "runnerId": "planner",
+        "modelProvider": "CLAUDE",
         "model": "claude-sonnet-4-20250514",
         "provider": "claude",
         "petri": {
@@ -1514,7 +1514,7 @@
           "dispatchKind": "JAVASCRIPT_AGENT",
           "label": "experimental-agent",
           "attempt": 1,
-          "runnerId": "experimental-runner",
+          "modelProvider": "CODEX",
           "failureDetail": {
             "reason": "UNSUPPORTED_RUNNER",
             "message": "Runner experimental-runner is not registered."
@@ -1529,7 +1529,7 @@
         "status": "FAILED",
         "label": "experimental-agent",
         "attempt": 1,
-        "runnerId": "experimental-runner",
+        "modelProvider": "CODEX",
         "javascript": {
           "taskKind": "AGENT",
           "taskLabel": "experimental-agent"

@@ -1,4 +1,4 @@
-import type { DashboardSelectedRunner } from "../../../../../api/dashboard/types";
+import type { DashboardSelectedModelProvider } from "../../../../../api/dashboard/types";
 import { formatWorkItemLabel } from "../../../../../components/ui/formatters";
 import { normalizeDetailText } from "../../../base/components/detail-card/detail-card-shared";
 import type { WorkstationRequestDetailCardProps } from "../../lib/detail-card-types";
@@ -13,7 +13,7 @@ export interface WorkstationRequestDetailView {
   normalizedScriptStdout: string | undefined;
   outcome: string | undefined;
   requestTitle: string;
-  requestRunner: DashboardSelectedRunner | undefined;
+  requestRunner: DashboardSelectedModelProvider | undefined;
   totalDurationMillis: number | undefined;
 }
 
@@ -53,7 +53,7 @@ export function buildWorkstationRequestDetailView(
     ),
     outcome: request.outcome ?? request.script_response?.outcome,
     requestTitle: workstationRequestTitle(request),
-    requestRunner: request.request_view?.runner,
+    requestRunner: request.request_view?.modelProvider,
     totalDurationMillis:
       request.total_duration_millis ?? request.script_response?.duration_millis,
   };

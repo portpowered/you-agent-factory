@@ -6,8 +6,9 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
@@ -169,8 +170,10 @@ func DispatchSummaryFromAPI(response factoryapi.FactorySessionDispatchSummary) f
 	if response.Attempt != nil {
 		summary.Attempt = int(*response.Attempt)
 	}
-	if response.RunnerId != nil {
-		summary.RunnerID = strings.TrimSpace(*response.RunnerId)
+	if response.ModelProvider != nil {
+		if runnerID, ok := interfaces.InternalRunnerIDFromPublicWorkerModelProvider(*response.ModelProvider); ok {
+			summary.RunnerID = runnerID
+		}
 	}
 	if response.Model != nil {
 		summary.Model = strings.TrimSpace(*response.Model)
@@ -212,8 +215,10 @@ func DispatchDetailFromAPI(response factoryapi.FactoryDispatch) factorysessionex
 	if response.Attempt != nil {
 		summary.Attempt = int(*response.Attempt)
 	}
-	if response.RunnerId != nil {
-		summary.RunnerID = strings.TrimSpace(*response.RunnerId)
+	if response.ModelProvider != nil {
+		if runnerID, ok := interfaces.InternalRunnerIDFromPublicWorkerModelProvider(*response.ModelProvider); ok {
+			summary.RunnerID = runnerID
+		}
 	}
 	if response.Model != nil {
 		summary.Model = strings.TrimSpace(*response.Model)

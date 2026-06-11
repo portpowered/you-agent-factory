@@ -5,7 +5,7 @@ import type {
   DashboardRuntimeWorkstationRequestResponse,
   DashboardScriptRequest,
   DashboardScriptResponse,
-  DashboardSelectedRunner,
+  DashboardSelectedModelProvider,
   DashboardTraceMutation,
   DashboardTraceToken,
   DashboardWorkItemRef,
@@ -41,7 +41,7 @@ export interface TimelineWorkstationRequestRequest {
   inputWorkItems?: DashboardWorkItemRef[];
   inputWorkTypeIds?: string[];
   previousChainingTraceIds?: string[];
-  runner?: DashboardSelectedRunner;
+  modelProvider?: DashboardSelectedModelProvider;
   scriptRequest?: TimelineScriptRequest;
   startedAt?: string;
   traceIds?: string[];
@@ -56,7 +56,7 @@ export interface TimelineWorkstationRequestResponse {
   outcome?: string;
   outputMutations?: DashboardTraceMutation[];
   outputWorkItems?: DashboardWorkItemRef[];
-  runner?: DashboardSelectedRunner;
+  modelProvider?: DashboardSelectedModelProvider;
   scriptResponse?: TimelineScriptResponse;
 }
 
@@ -139,7 +139,7 @@ export function toDashboardRuntimeWorkstationRequestRequest(
     previous_chaining_trace_ids: request.previousChainingTraceIds
       ? [...request.previousChainingTraceIds]
       : undefined,
-    runner: request.runner,
+    modelProvider: request.modelProvider,
     scriptRequest: toDashboardScriptRequest(request.scriptRequest),
     script_request: toDashboardScriptRequest(request.scriptRequest),
     startedAt: request.startedAt,
@@ -171,7 +171,7 @@ export function toDashboardRuntimeWorkstationRequestResponse(
     output_mutations: response.outputMutations,
     outputWorkItems: response.outputWorkItems,
     output_work_items: response.outputWorkItems,
-    runner: response.runner,
+    modelProvider: response.modelProvider,
     scriptResponse: toDashboardScriptResponse(response.scriptResponse),
     script_response: toDashboardScriptResponse(response.scriptResponse),
   };
