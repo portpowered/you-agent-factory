@@ -252,6 +252,11 @@ The CLI `you run --factory` mode uses the same invocation contract for input
 resolution and primary-result selection; it just writes the successful
 `primaryResult` to stdout instead of returning an HTTP response.
 
+Invocation dispatches still honor the active factory's execution-family
+`modelProvider` precedence: workstation override, factory default, worker
+fallback, then operator default. See `you docs config` for `DEFAULT` deferral
+and retired `runner` migration guidance.
+
 ## Dashboard
 
 When the service was started via `you` or `you run` without `--quiet`, open:

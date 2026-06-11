@@ -88,6 +88,7 @@ camelCase config fields.
 ```json
 {
   "id": "sample-service",
+  "modelProvider": "CODEX",
   "resources": [
     { "name": "agent-slot", "capacity": 1 }
   ],
@@ -119,6 +120,7 @@ camelCase config fields.
     },
     {
       "name": "review-story",
+      "modelProvider": "CLAUDE",
       "worker": "reviewer",
       "inputs": [{ "workType": "story", "state": "in-review" }],
       "outputs": [{ "workType": "story", "state": "complete" }],

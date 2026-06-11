@@ -1,5 +1,6 @@
 {
   "name": "simple-tasks",
+  "modelProvider": "CODEX",
   "resources": [
     {
       "capacity": 1,
@@ -73,6 +74,7 @@
           "workType": "story"
         }
       ],
+      "modelProvider": "CLAUDE",
       "name": "review-story",
       "onFailure": [
         {

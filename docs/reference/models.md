@@ -19,6 +19,12 @@ in `you docs workers`, workstation-only routing and prompt fields in
 
 ## Current Contract
 
+- `modelProvider` is the canonical execution-family selector at factory,
+  workstation, and worker scopes. Symbolic `DEFAULT` defers through the
+  documented precedence chain before dispatch starts. Keep `model` separate:
+  `model` names the concrete model identity requested from the resolved
+  provider, while `modelProvider` names which provider command family should run
+  the dispatch.
 - Use `type: "MODEL_INVOKE"` on a workstation when the step should request one
   uppercase provider-agnostic operation such as `TTS`.
 - Keep operation names, model localities, resource types, slot content types,

@@ -101,7 +101,7 @@ When no `mockWorkers` entry matches a dispatch, mock-worker mode uses
 | Value | Behavior |
 |-------|----------|
 | omitted or `"accept"` | Return the default accepted mock result. This preserves the historical mock-worker default. |
-| `"passthrough"` | Execute the dispatch through the normal worker runner and provider path instead of returning the synthetic accepted result. |
+| `"passthrough"` | Execute the dispatch through the normal worker provider path instead of returning the synthetic accepted result. |
 
 Use `"accept"` when you want every dispatch to stay deterministic. Use
 `"passthrough"` for mixed mock/live runs where targeted `mockWorkers[]` entries
@@ -288,7 +288,7 @@ you run --dir ./examples/write-code-review \
 
 **Signoff note:** Do not rely on a live real-agent passthrough run for signoff
 in this change. The `unmatchedDispatchPolicy: "passthrough"` mixed mock/live
-path is covered by automated service and runner tests instead of manual
+path is covered by automated service and provider tests instead of manual
 live-provider QA.
 
 ## Related

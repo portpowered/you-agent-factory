@@ -593,7 +593,7 @@ func TestMarkdown_MockWorkersReturnsRawAuthoredMarkdown(t *testing.T) {
 		"## Reviewer Verification",
 		"you docs mock-workers",
 		"Do not rely on a live real-agent passthrough run for signoff",
-		"automated service and runner tests",
+		"automated service and provider tests",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(mock-workers) missing %q:\n%s", want, got)

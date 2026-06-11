@@ -57,13 +57,17 @@ what it renders, and where it routes results.
 - `MODEL_WORKER` can declare provider-agnostic `operations`, named input and
   output slots, `modelLocality`, and concrete `model` identity so
   `MODEL_INVOKE` workstations can validate compatibility before dispatch.
-- Current built-in `modelProvider` values are `CLAUDE` and `CODEX`.
-- Runner selection is separate from `modelProvider`. Use factory or
-  workstation `runner` fields to choose the built-in runner ID: `codex`,
-  `gemini`, `kiro`, `cursor-cli`, or `opencode`.
+- Worker `modelProvider` names the worker-local model backend for routing and
+  diagnostics. Current built-in worker values are `CLAUDE` and `CODEX`.
+- Execution-family selection uses `modelProvider` at factory, workstation, and
+  worker scopes. Resolution order is workstation `modelProvider`, then factory
+  `modelProvider`, then worker `modelProvider`, then the operator default.
+  Symbolic `DEFAULT` at factory or workstation scope defers to the next step in
+  that order. See `you docs config` and `you docs workstations` for override
+  examples and the full precedence contract.
 - Optional `openCodeAgent` selects a named OpenCode agent profile when the
-  resolved runner is `opencode`. Omit it to keep today's default `opencode run`
-  behavior without `--agent`.
+  resolved execution-family provider is `OPENCODE`. Omit it to keep today's
+  default `opencode run` behavior without `--agent`.
 - The current public `executorProvider` value is `SCRIPT_WRAP`.
 - Older snake_case and alias frontmatter keys are compatibility-only inputs.
   New docs and authored configs should use canonical camelCase fields.
@@ -306,29 +310,35 @@ Use `you docs workstations` for `behavior: "POLLER"` lifecycle semantics and
 | `skipPermissions` | model workers | Provider-specific permission shortcut |
 | `modelLocality` | model workers | `LOCAL` or `CLOUD` execution locality for model operations and diagnostics |
 | `operations` | model workers | Provider-agnostic capability declarations with uppercase operation names and typed slots |
-| `openCodeAgent` | model workers | Named OpenCode agent profile for dispatches that resolve to runner `opencode` |
+| `openCodeAgent` | model workers | Named OpenCode agent profile for dispatches that resolve to provider `OPENCODE` |
 
 ## Provider Fields
 
-Keep `modelProvider` and `executorProvider` separate:
+Keep worker `modelProvider`, factory/workstation `modelProvider`, and
+`executorProvider` separate:
 
-- `modelProvider` names the model backend. Current built-in values are
-  `CLAUDE` and `CODEX`.
+- Worker `modelProvider` names the worker-local model backend for routing and
+  diagnostics. Current built-in values are `CLAUDE` and `CODEX`.
+- Factory and workstation `modelProvider` choose the execution-family provider
+  for dispatches from that scope. Supported built-in values include `CLAUDE`,
+  `CODEX`, `GEMINI`, `CURSOR`, `KIRO`, and `OPENCODE`, plus symbolic `DEFAULT`
+  to defer through the precedence chain.
 - `executorProvider` names the execution wrapper around that worker. The
   current public built-in value is `SCRIPT_WRAP`.
 
-For a normal model worker, both fields can appear on the same worker because
-they answer different questions: which model backend to use, and which worker
-execution adapter should run it.
+For a normal model worker, `modelProvider` and `executorProvider` can both
+appear on the same worker because they answer different questions: which model
+backend to use, and which worker execution adapter should run it.
 
-Use `runner` when the operator needs to choose the execution family. Keep
-`modelProvider` for worker-local provider compatibility, diagnostics, and the
-worker provider compatibility fallback when no explicit runner is configured.
+Set factory or workstation `modelProvider` when the operator needs to choose
+the execution family for a factory or step. Keep worker `modelProvider` for
+worker-local compatibility, diagnostics, and the worker step in the precedence
+chain when higher scopes defer or omit a concrete provider.
 
 ## OpenCode Agent Profiles
 
 Use `openCodeAgent` on a `MODEL_WORKER` when the dispatch should run through
-the OpenCode runner and you want OpenCode to apply a named agent profile
+the OpenCode provider and you want OpenCode to apply a named agent profile
 (system prompt, tool permissions, and other settings created with
 `opencode agent create`) instead of duplicating that guidance in the worker
 body.
@@ -337,7 +347,7 @@ body.
 ---
 type: MODEL_WORKER
 model: gpt-5
-runner: opencode
+modelProvider: CODEX
 openCodeAgent: implementer
 ---
 
@@ -349,11 +359,11 @@ Requirements and behavior:
 
 - `openCodeAgent` must be a non-empty string when set. Explicit empty or
   whitespace-only values fail validation.
-- The field is honored only when runner selection resolves to `opencode`.
-  Setting `openCodeAgent` while the resolved runner is something else fails
-  during factory build with an error that names `openCodeAgent`, the agent
-  name, and the resolved runner ID.
-- When configured and the runner is `opencode`, dispatches invoke
+- The field is honored only when execution-family selection resolves to
+  `OPENCODE`. Setting `openCodeAgent` while the resolved provider is something
+  else fails during factory build with an error that names `openCodeAgent`, the
+  agent name, and the resolved `modelProvider`.
+- When configured and the resolved provider is `OPENCODE`, dispatches invoke
   `opencode run --agent <name>` before the rendered user prompt. Inference
   diagnostics record the resolved value as `opencode_agent`.
 - Omit `openCodeAgent` to keep the existing `opencode run` argument shape with

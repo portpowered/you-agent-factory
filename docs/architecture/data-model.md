@@ -22,6 +22,8 @@ The public API and customer-facing documentation should use these resource meani
 
 These terms are the primary public resource model. Internal Petri-net concepts such as tokens, transitions, places, and edges remain implementation details that support the runtime, but they are not the primary customer-facing API resources.
 
+`modelProvider` is the canonical execution-family selector at factory, workstation, and worker configuration boundaries. Keep `model` separate: `model` names the concrete model identity requested from the resolved provider, while `modelProvider` names which provider command family should execute the dispatch.
+
 ## Internal system data model
 
 ```mermaid
