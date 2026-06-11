@@ -5,6 +5,13 @@ import { useFactoryGraphLayoutDraftState } from "./factory-graph-layout-draft-ho
 import { baseFactoryDefinition } from "../../lib/draft/factory-graph-draft.test-helpers";
 import { factoryLayoutEdgeWaypoints } from "../../lib/layout/factory-graph-layout-edge-waypoints";
 import {
+  addFactoryLayoutGroup,
+  createFactoryLayoutGroup,
+  defaultFactoryLayoutGroupBounds,
+  factoryLayoutGroupById,
+} from "../../lib/layout/factory-graph-layout-groups";
+import {
+  createDefaultFactoryLayout,
   factoryLayoutNodePosition,
   moveFactoryLayoutNode,
 } from "../../lib/layout/factory-graph-layout-operations";
@@ -410,5 +417,59 @@ describe("useFactoryGraphLayoutDraftState scope and pruning", () => {
     expect(result.current.layoutDirty).toBe(false);
     expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toBeUndefined();
     expect(result.current.canUndoLayout).toBe(false);
+  });
+});
+
+describe("useFactoryGraphLayoutDraftState visual group membership", () => {
+  it("records group membership changes with undo and redo", () => {
+    const layoutDocument = {
+      ...baseFactoryDefinition,
+      layout: addFactoryLayoutGroup(createDefaultFactoryLayout(), {
+        bounds: defaultFactoryLayoutGroupBounds({ x: 0, y: 0 }),
+        id: "group-1",
+        label: "Review",
+        nodeIds: [],
+      }),
+    };
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: layoutDocument,
+        factoryDocumentScopeKey: "session-group-membership",
+      }),
+    );
+
+    act(() => {
+      result.current.addNodeToVisualGroup("group-1", "workstation:draft");
+    });
+
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.nodeIds,
+    ).toEqual(["workstation:draft"]);
+    expect(result.current.layoutDirty).toBe(true);
+    expect(result.current.canUndoLayout).toBe(true);
+
+    act(() => {
+      result.current.undoLayout();
+    });
+
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.nodeIds,
+    ).toEqual([]);
+
+    act(() => {
+      result.current.redoLayout();
+    });
+
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.nodeIds,
+    ).toEqual(["workstation:draft"]);
+
+    act(() => {
+      result.current.removeNodeFromVisualGroup("group-1", "workstation:draft");
+    });
+
+    expect(
+      factoryLayoutGroupById(result.current.layout, "group-1")?.nodeIds,
+    ).toEqual([]);
   });
 });

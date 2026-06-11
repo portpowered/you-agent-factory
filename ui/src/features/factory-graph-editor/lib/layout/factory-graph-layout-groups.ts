@@ -1,8 +1,14 @@
 import type { components } from "../../../../api/generated/openapi";
+import type { FactoryGraphNode } from "../draft/factory-graph-draft-types";
 import type {
   FactoryLayout,
   FactoryLayoutPoint,
 } from "./factory-graph-layout-operations";
+
+export type FactoryLayoutGroupCanvasNodeOption = {
+  id: string;
+  label: string;
+};
 
 export type FactoryLayoutGroup = NonNullable<
   components["schemas"]["Factory"]["layout"]
@@ -180,4 +186,93 @@ export function factoryLayoutGroupsEqual(
   right: FactoryLayoutGroup,
 ): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+export function factoryLayoutGroupCanvasNodeOptions(
+  nodes: readonly FactoryGraphNode[],
+): readonly FactoryLayoutGroupCanvasNodeOption[] {
+  return [...nodes]
+    .map((node) => ({
+      id: node.id,
+      label: node.label,
+    }))
+    .sort((left, right) => left.label.localeCompare(right.label));
+}
+
+export function factoryLayoutGroupContainsNode(
+  group: FactoryLayoutGroup,
+  nodeId: string,
+): boolean {
+  return (group.nodeIds ?? []).includes(nodeId);
+}
+
+export function removeNodeFromAllFactoryLayoutGroups(
+  layout: FactoryLayout,
+  nodeId: string,
+  exceptGroupId?: string,
+): FactoryLayout {
+  let changed = false;
+  const groups = (layout.groups ?? []).map((group) => {
+    if (exceptGroupId !== undefined && group.id === exceptGroupId) {
+      return group;
+    }
+
+    const nodeIds = group.nodeIds ?? [];
+    if (!nodeIds.includes(nodeId)) {
+      return group;
+    }
+
+    changed = true;
+    return {
+      ...group,
+      nodeIds: nodeIds.filter((id) => id !== nodeId),
+    };
+  });
+
+  if (!changed) {
+    return layout;
+  }
+
+  return {
+    ...layout,
+    groups,
+  };
+}
+
+export function addNodeToFactoryLayoutGroup(
+  layout: FactoryLayout,
+  groupId: string,
+  nodeId: string,
+): FactoryLayout {
+  const layoutWithoutNode = removeNodeFromAllFactoryLayoutGroups(layout, nodeId);
+
+  return updateFactoryLayoutGroup(layoutWithoutNode, groupId, (group) => {
+    const nodeIds = group.nodeIds ?? [];
+    if (nodeIds.includes(nodeId)) {
+      return group;
+    }
+
+    return {
+      ...group,
+      nodeIds: [...nodeIds, nodeId],
+    };
+  });
+}
+
+export function removeNodeFromFactoryLayoutGroup(
+  layout: FactoryLayout,
+  groupId: string,
+  nodeId: string,
+): FactoryLayout {
+  return updateFactoryLayoutGroup(layout, groupId, (group) => {
+    const nodeIds = group.nodeIds ?? [];
+    if (!nodeIds.includes(nodeId)) {
+      return group;
+    }
+
+    return {
+      ...group,
+      nodeIds: nodeIds.filter((id) => id !== nodeId),
+    };
+  });
 }

@@ -3,7 +3,9 @@ import { useCallback, useMemo, useState } from "react";
 import type { FactoryGraphEditorTool } from "../../components/controls/factory-graph-editor-controls";
 import {
   factoryLayoutGroupById,
+  factoryLayoutGroupContainsNode,
   factoryLayoutGroups,
+  type FactoryLayoutGroupCanvasNodeOption,
   type FactoryLayoutGroupColorToken,
 } from "../../lib/layout/factory-graph-layout-groups";
 import type {
@@ -27,11 +29,14 @@ function canEditFactoryGraphVisualGroups(input: {
 
 export function useFactoryGraphVisualGroupEditor(input: {
   activeTool: FactoryGraphEditorTool;
+  addNodeToVisualGroup: (groupId: string, nodeId: string) => void;
   canInteractWithEditor: boolean;
+  canvasNodeOptions: readonly FactoryLayoutGroupCanvasNodeOption[];
   createVisualGroup: (center: FactoryLayoutPoint) => { id: string } | null;
   editorMode: boolean;
   layout: FactoryLayout;
   locale?: string | null;
+  removeNodeFromVisualGroup: (groupId: string, nodeId: string) => void;
   renameVisualGroup: (groupId: string, label: string) => void;
   setVisualGroupColor: (
     groupId: string,
@@ -103,9 +108,39 @@ export function useFactoryGraphVisualGroupEditor(input: {
     [canEditVisualGroups, input, selectedGroupId],
   );
 
+  const handleToggleSelectedGroupNodeMembership = useCallback(
+    (nodeId: string, selected: boolean) => {
+      if (!selectedGroupId || !canEditVisualGroups) {
+        return;
+      }
+
+      if (selected) {
+        input.addNodeToVisualGroup(selectedGroupId, nodeId);
+        return;
+      }
+
+      input.removeNodeFromVisualGroup(selectedGroupId, nodeId);
+    },
+    [canEditVisualGroups, input, selectedGroupId],
+  );
+
   const clearSelectedVisualGroup = useCallback(() => {
     setSelectedGroupId(null);
   }, []);
+
+  const canvasNodeOptionIds = useMemo(
+    () => new Set(input.canvasNodeOptions.map((option) => option.id)),
+    [input.canvasNodeOptions],
+  );
+  const staleMemberNodeIds = useMemo(() => {
+    if (!selectedGroup) {
+      return [];
+    }
+
+    return (selectedGroup.nodeIds ?? []).filter(
+      (nodeId) => !canvasNodeOptionIds.has(nodeId),
+    );
+  }, [canvasNodeOptionIds, selectedGroup]);
 
   return {
     canEditVisualGroups,
@@ -121,14 +156,24 @@ export function useFactoryGraphVisualGroupEditor(input: {
     visualGroupControls:
       selectedGroup && canEditVisualGroups
         ? {
+            canvasNodeOptions: input.canvasNodeOptions,
             colorLabel: messages.visualGroupColorLabel,
             colorOptionLabel: messages.visualGroupColorOptionLabel,
             emptyLabelError: messages.visualGroupEmptyLabelError,
             group: selectedGroup,
+            isNodeMember: (nodeId: string) =>
+              factoryLayoutGroupContainsNode(selectedGroup, nodeId),
             labelFieldLabel: messages.visualGroupLabelFieldLabel,
+            membershipEmptyLabel: messages.visualGroupMembershipEmptyLabel,
+            membershipLabel: messages.visualGroupMembershipLabel,
+            membershipNodeLabel: messages.visualGroupMembershipNodeLabel,
+            membershipStaleNodeLabel:
+              messages.visualGroupMembershipStaleNodeLabel,
             onRenameGroup: handleRenameSelectedGroup,
             onSetGroupColor: handleSetSelectedGroupColor,
+            onToggleNodeMembership: handleToggleSelectedGroupNodeMembership,
             selectedGroupLabel: messages.visualGroupSelectedLabel,
+            staleMemberNodeIds,
           }
         : null,
   };

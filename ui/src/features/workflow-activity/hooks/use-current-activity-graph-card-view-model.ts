@@ -87,11 +87,15 @@ export function useCurrentActivityGraphCardViewModel(
   }, [addNodePlacementViewport]);
   const visualGroupControls = useFactoryGraphVisualGroupEditor({
     activeTool: publicEditor.editorControls.activeTool,
+    addNodeToVisualGroup: publicEditor.layoutControls.addNodeToVisualGroup,
     canInteractWithEditor: publicEditor.editorControls.canInteract,
+    canvasNodeOptions: publicEditor.layoutControls.canvasNodeOptions,
     createVisualGroup: publicEditor.layoutControls.createVisualGroup,
     editorMode: publicEditor.editorControls.isEditing,
     layout: publicEditor.layoutControls.currentLayout,
     locale: input.locale,
+    removeNodeFromVisualGroup:
+      publicEditor.layoutControls.removeNodeFromVisualGroup,
     renameVisualGroup: publicEditor.layoutControls.renameVisualGroup,
     resolveViewportCenter,
     setVisualGroupColor: publicEditor.layoutControls.setVisualGroupColor,

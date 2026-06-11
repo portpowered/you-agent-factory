@@ -13,6 +13,7 @@ import {
   type XYPosition,
 } from "@xyflow/react";
 import {
+  type ComponentProps,
   type KeyboardEvent,
   type MutableRefObject,
   useCallback,
@@ -352,20 +353,9 @@ export function CurrentActivityGraphViewport({
   selectedVisualGroupId?: string | null;
   selectedWaypointEdgeId?: string | null;
   visualGroupAriaLabel?: (group: FactoryLayoutGroup) => string;
-  visualGroupControls?: {
-    colorLabel: string;
-    colorOptionLabel: (
-      token: "primary" | "info" | "success" | "warning" | "outline",
-    ) => string;
-    emptyLabelError: string;
-    group: FactoryLayoutGroup;
-    labelFieldLabel: string;
-    onRenameGroup: (label: string) => void;
-    onSetGroupColor: (
-      token: "primary" | "info" | "success" | "warning" | "outline",
-    ) => void;
-    selectedGroupLabel: string;
-  } | null;
+  visualGroupControls?: ComponentProps<
+    typeof FactoryGraphVisualGroupControls
+  > | null;
   visualGroups?: readonly FactoryLayoutGroup[];
   waypointAriaLabel?: (index: number) => string;
   waypointControls?: {

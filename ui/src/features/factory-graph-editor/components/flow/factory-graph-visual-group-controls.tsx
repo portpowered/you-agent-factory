@@ -4,29 +4,46 @@ import { cn } from "../../../../lib/cn";
 import {
   FACTORY_LAYOUT_GROUP_COLOR_TOKENS,
   type FactoryLayoutGroup,
+  type FactoryLayoutGroupCanvasNodeOption,
   type FactoryLayoutGroupColorToken,
   factoryLayoutGroupColorCssVariable,
   isApprovedFactoryLayoutGroupColor,
 } from "../../lib/layout/factory-graph-layout-groups";
 
 export function FactoryGraphVisualGroupControls({
+  canvasNodeOptions,
   colorLabel,
   colorOptionLabel,
   emptyLabelError,
   group,
+  isNodeMember,
   labelFieldLabel,
+  membershipEmptyLabel,
+  membershipLabel,
+  membershipNodeLabel,
+  membershipStaleNodeLabel,
   onRenameGroup,
   onSetGroupColor,
+  onToggleNodeMembership,
   selectedGroupLabel,
+  staleMemberNodeIds,
 }: {
+  canvasNodeOptions: readonly FactoryLayoutGroupCanvasNodeOption[];
   colorLabel: string;
   colorOptionLabel: (token: FactoryLayoutGroupColorToken) => string;
   emptyLabelError: string;
   group: FactoryLayoutGroup;
+  isNodeMember: (nodeId: string) => boolean;
   labelFieldLabel: string;
+  membershipEmptyLabel: string;
+  membershipLabel: string;
+  membershipNodeLabel: (label: string) => string;
+  membershipStaleNodeLabel: (nodeId: string) => string;
   onRenameGroup: (label: string) => void;
   onSetGroupColor: (color: FactoryLayoutGroupColorToken) => void;
+  onToggleNodeMembership: (nodeId: string, selected: boolean) => void;
   selectedGroupLabel: string;
+  staleMemberNodeIds: readonly string[];
 }) {
   const labelFieldId = useId();
   const trimmedLabel = group.label?.trim() ?? "";
@@ -89,6 +106,57 @@ export function FactoryGraphVisualGroupControls({
             />
           ))}
         </div>
+      </fieldset>
+      <fieldset
+        className="mt-3 grid max-h-48 gap-2 overflow-y-auto border-0 p-0"
+        data-factory-visual-group-membership=""
+      >
+        <legend className="text-sm text-on-surface-subtle">
+          {membershipLabel}
+        </legend>
+        {canvasNodeOptions.length === 0 && staleMemberNodeIds.length === 0 ? (
+          <p className="m-0 text-sm text-on-surface-subtle">
+            {membershipEmptyLabel}
+          </p>
+        ) : (
+          <ul className="m-0 grid list-none gap-2 p-0">
+            {canvasNodeOptions.map((option) => {
+              const checked = isNodeMember(option.id);
+              const checkboxId = `${group.id}-${option.id}`;
+
+              return (
+                <li key={option.id}>
+                  <label
+                    className="flex items-center gap-2 text-sm text-on-surface"
+                    htmlFor={checkboxId}
+                  >
+                    <input
+                      checked={checked}
+                      className="h-4 w-4 rounded border-outline text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                      data-factory-visual-group-member={option.id}
+                      id={checkboxId}
+                      onChange={(event) =>
+                        onToggleNodeMembership(option.id, event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    <span>{membershipNodeLabel(option.label)}</span>
+                  </label>
+                </li>
+              );
+            })}
+            {staleMemberNodeIds.map((nodeId) => (
+              <li key={nodeId}>
+                <p
+                  className="m-0 text-sm text-on-error-container"
+                  role="alert"
+                >
+                  {membershipStaleNodeLabel(nodeId)}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
       </fieldset>
     </section>
   );

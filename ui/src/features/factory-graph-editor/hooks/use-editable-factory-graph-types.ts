@@ -92,6 +92,8 @@ export interface EditableFactoryGraphViewModel {
       groupId: string,
       color: "primary" | "info" | "success" | "warning" | "outline",
     ) => void;
+    addNodeToVisualGroup: (groupId: string, nodeId: string) => void;
+    removeNodeFromVisualGroup: (groupId: string, nodeId: string) => void;
     updateNodeField: (
       update: FactoryGraphNodeFieldUpdate,
     ) => FactoryGraphOperationResult<CanonicalFactoryDefinition>;

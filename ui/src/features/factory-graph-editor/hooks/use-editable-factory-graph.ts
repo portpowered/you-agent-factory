@@ -130,6 +130,8 @@ export function useEditableFactoryGraph(
       createVisualGroup: layoutDraftState.createVisualGroup,
       renameVisualGroup: layoutDraftState.renameVisualGroup,
       setVisualGroupColor: layoutDraftState.setVisualGroupColor,
+      addNodeToVisualGroup: layoutDraftState.addNodeToVisualGroup,
+      removeNodeFromVisualGroup: layoutDraftState.removeNodeFromVisualGroup,
       updateNodeField: mutationActions.updateNodeField,
     },
     blockedOperation,

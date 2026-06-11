@@ -100,6 +100,10 @@ export interface FactoryGraphEditorMessages {
   ) => string;
   visualGroupEmptyLabelError: string;
   visualGroupLabelFieldLabel: string;
+  visualGroupMembershipEmptyLabel: string;
+  visualGroupMembershipLabel: string;
+  visualGroupMembershipNodeLabel: (label: string) => string;
+  visualGroupMembershipStaleNodeLabel: (nodeId: string) => string;
   visualGroupSelectedLabel: string;
   toolbarCreateGroupDescription: string;
   toolbarCreateGroupLabel: string;
@@ -697,6 +701,11 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       visualGroupColorOptionLabel: (token) => `Use ${token} group color`,
       visualGroupEmptyLabelError: "Enter a group label.",
       visualGroupLabelFieldLabel: "Group label",
+      visualGroupMembershipEmptyLabel: "No canvas nodes are available to assign.",
+      visualGroupMembershipLabel: "Group members",
+      visualGroupMembershipNodeLabel: (label) => `Include ${label} in this group`,
+      visualGroupMembershipStaleNodeLabel: (nodeId) =>
+        `Saved member ${nodeId} is no longer on the canvas.`,
       visualGroupSelectedLabel: "Selected visual group",
       toolbarCreateGroupDescription: "Create a labeled background group",
       toolbarCreateGroupLabel: "Create group",
@@ -1111,6 +1120,11 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       visualGroupColorOptionLabel: (token) => `使用 ${token} 分组颜色`,
       visualGroupEmptyLabelError: "请输入分组标签。",
       visualGroupLabelFieldLabel: "分组标签",
+      visualGroupMembershipEmptyLabel: "当前画布上没有可分配的节点。",
+      visualGroupMembershipLabel: "分组成员",
+      visualGroupMembershipNodeLabel: (label) => `将 ${label} 加入此分组`,
+      visualGroupMembershipStaleNodeLabel: (nodeId) =>
+        `已保存的成员 ${nodeId} 已不在画布上。`,
       visualGroupSelectedLabel: "已选视觉分组",
       toolbarCreateGroupDescription: "创建带标签的背景分组",
       toolbarCreateGroupLabel: "创建分组",

@@ -68,6 +68,8 @@ function graphControllerFixture() {
     },
     layoutControls: {
       addEdgeWaypoint: vi.fn(),
+      addNodeToVisualGroup: vi.fn(),
+      canvasNodeOptions: [],
       canMoveLayout: true,
       currentLayout: {
         edges: [
@@ -80,6 +82,7 @@ function graphControllerFixture() {
       },
       moveEdgeWaypoint: vi.fn(),
       removeEdgeWaypoint: vi.fn(),
+      removeNodeFromVisualGroup: vi.fn(),
     },
     leaveControls: {},
     removalControls: {

@@ -226,6 +226,9 @@ export function useCurrentActivityGraphState(
     createVisualGroup: editableGraph.actions.createVisualGroup,
     renameVisualGroup: editableGraph.actions.renameVisualGroup,
     setVisualGroupColor: editableGraph.actions.setVisualGroupColor,
+    addNodeToVisualGroup: editableGraph.actions.addNodeToVisualGroup,
+    removeNodeFromVisualGroup: editableGraph.actions.removeNodeFromVisualGroup,
+    topologyNodes: editableGraph.draftState.graph?.nodes ?? [],
     editorUnavailableClassifierWorkstationName:
       session.editorUnavailableClassifierWorkstationName,
     editorMode,

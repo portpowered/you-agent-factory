@@ -10,6 +10,7 @@ import type { DashboardSnapshot } from "../api/dashboard/types";
 import { singleNodeDashboardSnapshot } from "../components/dashboard/test-fixtures";
 import { useFactoryDocumentSave } from "../features/current-factory-definition/hooks/useFactoryDocumentSave";
 import type { FactoryDocumentSaveState } from "../features/current-selection/base/hooks/factory-document-save-types";
+import type { FactoryGraphLayoutDraftDerivedState } from "../features/factory-graph-editor/hooks/layout/factory-graph-layout-draft-hook";
 import type {
   EditableFactoryGraphViewModel,
   UseEditableFactoryGraphOptions,
@@ -27,9 +28,11 @@ import {
 } from "../features/factory-graph-editor/lib/layout/factory-graph-layout-edge-waypoints";
 import {
   addFactoryLayoutGroup,
+  addNodeToFactoryLayoutGroup,
   createFactoryLayoutGroup,
   createFactoryLayoutGroupId,
   defaultFactoryLayoutGroupBounds,
+  removeNodeFromFactoryLayoutGroup,
   updateFactoryLayoutGroup,
 } from "../features/factory-graph-editor/lib/layout/factory-graph-layout-groups";
 import {
@@ -359,6 +362,24 @@ function createMockVisualGroupLayoutActions(state: {
         state.layoutDirty = true;
       },
     ),
+    addNodeToVisualGroup: vi.fn((groupId: string, nodeId: string) => {
+      state.layout = addNodeToFactoryLayoutGroup(
+        state.layout,
+        groupId,
+        nodeId,
+      );
+      state.hasChanges = true;
+      state.layoutDirty = true;
+    }),
+    removeNodeFromVisualGroup: vi.fn((groupId: string, nodeId: string) => {
+      state.layout = removeNodeFromFactoryLayoutGroup(
+        state.layout,
+        groupId,
+        nodeId,
+      );
+      state.hasChanges = true;
+      state.layoutDirty = true;
+    }),
   };
 }
 
@@ -447,7 +468,7 @@ function createMockLayoutDraftState() {
 
   Object.assign(state, createMockVisualGroupLayoutActions(state));
 
-  return state;
+  return state as unknown as FactoryGraphLayoutDraftDerivedState;
 }
 
 function createMockEditableFactoryGraphActions(
@@ -575,6 +596,8 @@ function createMockEditableFactoryGraphActions(
     createVisualGroup: layoutDraftState.createVisualGroup,
     renameVisualGroup: layoutDraftState.renameVisualGroup,
     setVisualGroupColor: layoutDraftState.setVisualGroupColor,
+    addNodeToVisualGroup: layoutDraftState.addNodeToVisualGroup,
+    removeNodeFromVisualGroup: layoutDraftState.removeNodeFromVisualGroup,
     updateNodeField: () => ({
       message: "Field editing is not exercised by this component test.",
       ok: false,
