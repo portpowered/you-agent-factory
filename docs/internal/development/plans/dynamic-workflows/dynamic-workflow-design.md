@@ -24,6 +24,29 @@ The GitHub issue comments add concrete implementation references that should sha
 
 These references turn several nice-to-have ideas into first-class requirements: static reusable scripts, global structured `args`, phase metadata, explicit progress events, schema-validated worker output, artifact hygiene, read-only MVP defaults, bounded local resources, resumable/replayable run storage, and visible queue/reconnect behavior.
 
+## Contract repair implementation status (2026-06-11 UTC)
+
+The contract-repair kernel on branch `dynamic-workflows-contract-repair-kernel-resubmit`
+implements the ownership and preview boundaries described in this document:
+
+- **Factory preview semantics:** canonical `POST /factories/preview` with
+  `FactoryPreviewRequest` / `FactoryPreviewResult`; `POST /workflow-previews` is
+  a deprecated compatibility alias with successor headers. Preview preparation
+  lives in `pkg/orchestrators/javascript/preview`; transport mapping in
+  `pkg/apisurface/factory_preview.go`; UI adapter in `ui/src/api/factory-preview/`.
+- **JavaScript orchestrator ownership:** source, validation, policy, preview,
+  result, and store behavior under `pkg/orchestrators/javascript/*`. Root
+  `pkg/workflow*` packages are documented compatibility shims only.
+- **Durable session contract alignment:** `SESSION_COMPLETED.finalStatus` and
+  `FactoryEventSessionResultStatus` match durable REST enums; fake service emits
+  canonical `FactoryEvent` envelopes with reconnect filtering; durable read
+  projections include `budgets`/`usage` and dispatch `providerSessionRefs`;
+  `GetResult` honors `mode` and `includeArtifacts`; fixtures include canonical
+  `events[]` and an `AWAITING_APPROVAL` scenario.
+
+Batch 002 fake-session skeleton wiring remains the next implementation phase;
+real JavaScript execution and durable persistence are still out of scope here.
+
 ## Goals
 
 - Customers can run dynamic workflows through every interface point: website, API, CLI, and MCP server.
