@@ -6,7 +6,7 @@
 - Shard main passes use per-shard coverage dirs (`coverage/shard-<index>`) in `ui/scripts/ui-coverage-runner.mjs` so parallel local shards avoid shared `coverage/` races.
 - Browser integration harness (`ui/integration/browser-test-harness.mjs`) picks isolated preview/API ports via `findAvailablePort()`, so concurrent browser and covered UI lanes avoid port conflicts when run locally.
 - High-cost `App.*` suites can be split by deleting cases already owned by feature/widget tests and moving canonical layout walks onto `CurrentSelectionWidget` harnesses; record before/after timings in `docs/internal/development/ui-*-split-closeout.md`.
-- Shared slow-file reporting lives in `ui/scripts/ui-test-cost-report.mjs`; covered UI writes per-shard `.vitest-reports/main-shard-<index>-timings.json` and merge mode prints `[ui-coverage] Merged main covered pass slowest test files`; browser integration uses `ui/scripts/ui-integration-runner.mjs` with `[ui-browser-integration]` summaries and `[category]` suffixes.
+- Shared slow-file reporting lives in `ui/scripts/ui-test-cost-report.mjs`; covered UI writes per-shard `ui/.vitest-report-timings/main-shard-<index>-timings.json` (outside `.vitest-reports` so `vitest --mergeReports` only sees Vitest blobs) and merge mode prints `[ui-coverage] Merged main covered pass slowest test files`; browser integration uses `ui/scripts/ui-integration-runner.mjs` with `[ui-browser-integration]` summaries and `[category]` suffixes.
 - Verification command smoke tests live in `tests/functional/smoke/verify_fast_command_smoke_test.go` and use wrapper Makefiles to assert tier ordering without running full suites.
 - UI test lane boundaries and redundancy policy live in `docs/internal/development/ui-test-lane-boundaries.md`; keep theme/CSS token contracts in jsdom (`styles.page-shell-background.test.ts`, `theme-role-regression.test.ts`) and durable import/export/graph behavior in `ui/integration/*.integration.test.mjs`.
 - Browser integration stability (sequential suites, port/download isolation, durable wait helpers) lives in `docs/internal/development/ui-browser-integration-stability.md`; shared checkpoints are `waitForDurableControlEnabled`, `waitForCapturedDownloadOrDialogError`, and `waitForDialogHidden` in `browser-test-harness.mjs`.
@@ -72,7 +72,7 @@
 - Added stale-blob coverage in `ui-coverage-runner.test.mjs` and `TestShardedUICoverageScriptSmoke_CleansStaleVitestReportBlobsBeforeShards`; documented hermetic report-dir behavior in `development.md`.
 - **Learnings for future iterations:**
   - Patterns discovered: shard orchestrators should reset shared blob report directories wholesale; merge mode still needs a second sanitize pass because `vitest --mergeReports <dir>` ingests every blob in that directory.
-  - Gotchas encountered: timing artifacts (`main-shard-<index>-timings.json`) are not Vitest blobs but live beside them—allowlist sanitization must keep timing files for the expected shard total while deleting unrelated JSON blobs.
+  - Gotchas encountered: timing artifacts (`main-shard-<index>-timings.json`) are not Vitest blobs—keep them in `ui/.vitest-report-timings/`, not `ui/.vitest-reports/`, or `vitest --mergeReports` will crash parsing them.
   - Useful context: only mergeability work for this iteration; all PRD stories were already `passes: true`.
 ---
 
@@ -82,4 +82,13 @@
   - Patterns discovered: when deleting `App.*` test cases, grep for helpers that become single-file exports and run `make ui-deadcode` before pushing—CI enforces the reviewed baseline.
   - Gotchas encountered: deadcode drift fails the whole `Build, Lint, and API` job even when typecheck and shard lanes pass independently.
   - Useful context: mergeability-only follow-up; no PRD story status changes required.
+---
+
+## 2026-06-11T12:50:00Z - mergeability (PR #799 UI Coverage merge)
+- Fixed CI `UI Coverage` merge failure (`TypeError: parse is not a function`): moved slow-file timing artifacts from `ui/.vitest-reports/` to `ui/.vitest-report-timings/` and stopped allowlisting `*-timings.json` in `sanitizeVitestReportsDirForShardMerge` so `vitest --mergeReports` only ingests Vitest blob reports.
+- Updated `run-sharded-ui-coverage.sh`, runner tests, and `development.md`.
+- **Learnings for future iterations:**
+  - Patterns discovered: never store non-Vitest JSON beside shard blob reports—`vitest --mergeReports <dir>` parses every file in that directory.
+  - Gotchas encountered: the stale-blob sanitize fix accidentally kept timing JSON in `.vitest-reports`, which passed local shard-only runs but broke CI merge when shard artifacts uploaded timing files with blobs.
+  - Useful context: mergeability-only follow-up; all PRD stories remain `passes: true`.
 ---
