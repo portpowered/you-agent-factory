@@ -128,6 +128,42 @@ func TestPreviewWorkflowCompatibility_RejectsForbiddenHostAccessWithDeprecationH
 	}
 }
 
+func TestPreviewWorkflow_ReturnsSamePreviewBodyAsCanonicalFactoryPreview(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeWorkflowPreviewFixture(t, projectRoot, "review.js", validWorkflowPreviewSource)
+
+	body, err := json.Marshal(factoryapi.FactoryPreviewRequest{
+		SourceKind:  factoryapi.WORKFLOWNAME,
+		ProjectRoot: stringPtr(projectRoot),
+		SourceValue: stringPtr("review"),
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+
+	srv := newAPITestServer(nil)
+
+	canonicalReq := httptest.NewRequest(http.MethodPost, "/factories/preview", bytes.NewReader(body))
+	canonicalReq.Header.Set("Content-Type", "application/json")
+	canonicalRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(canonicalRec, canonicalReq)
+	if canonicalRec.Code != http.StatusOK {
+		t.Fatalf("POST /factories/preview status = %d, want 200: %s", canonicalRec.Code, canonicalRec.Body.String())
+	}
+
+	aliasReq := httptest.NewRequest(http.MethodPost, "/workflow-previews", bytes.NewReader(body))
+	aliasReq.Header.Set("Content-Type", "application/json")
+	aliasRec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(aliasRec, aliasReq)
+	if aliasRec.Code != http.StatusOK {
+		t.Fatalf("POST /workflow-previews status = %d, want 200: %s", aliasRec.Code, aliasRec.Body.String())
+	}
+
+	if canonicalRec.Body.String() != aliasRec.Body.String() {
+		t.Fatalf("compatibility alias body = %s, want identical canonical body %s", aliasRec.Body.String(), canonicalRec.Body.String())
+	}
+}
+
 func TestPreviewWorkflow_ReturnsCompatibilityAliasWithDeprecationHeaders(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeWorkflowPreviewFixture(t, projectRoot, "review.js", validWorkflowPreviewSource)
