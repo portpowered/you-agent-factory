@@ -235,6 +235,7 @@ func TestFakeServiceConsumer_ProjectsFixtureThroughApisurfaceMappers(t *testing.
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this consumer test keeps result, dispatch, and artifact mapper assertions together.
 // pkgmaintcheck:ignore-function-lines this consumer test keeps result, dispatch, and artifact mapper assertions together.
+// backendsizecheck:ignore-function this consumer test keeps result, dispatch, and artifact mapper assertions together.
 func TestFakeServiceConsumer_ResultDispatchArtifact_ProjectsCoherentReads(t *testing.T) {
 	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)

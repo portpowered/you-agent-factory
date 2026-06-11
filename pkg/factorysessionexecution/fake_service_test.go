@@ -1,4 +1,5 @@
 // pkgmaintcheck:ignore-file-lines consolidated fake durable session service tests remain together until dedicated fake-service test seams split.
+// backendsizecheck:ignore-file consolidated fake durable session service tests remain together until dedicated fake-service test seams split.
 package factorysessionexecution
 
 import (
@@ -309,6 +310,7 @@ func TestFakeService_LifecycleControls_UpdateStateAndErrors(t *testing.T) {
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this lifecycle test keeps supported control outcomes and links together on one seam.
 // pkgmaintcheck:ignore-function-lines this lifecycle test keeps supported control outcomes and links together on one seam.
+// backendsizecheck:ignore-function this lifecycle test keeps supported control outcomes and links together on one seam.
 func TestFakeService_LifecycleControls_AllSupportedOutcomes(t *testing.T) {
 	service := newContractFakeService(t)
 	startAsyncByRequestID(t, service, "req-js-run-n-001")
@@ -849,6 +851,7 @@ func TestFakeService_ReadEvents_NotFoundDoesNotMutateState(t *testing.T) {
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this scoped list/detail test keeps lifecycle membership and summary coherence together.
 // pkgmaintcheck:ignore-function-lines this scoped list/detail test keeps lifecycle membership and summary coherence together.
+// backendsizecheck:ignore-function this scoped list/detail test keeps lifecycle membership and summary coherence together.
 func TestFakeService_ListAndDetail_ScopedSummariesAndConsistency(t *testing.T) {
 	service := newContractFakeService(t)
 	cases := []struct {
@@ -1353,6 +1356,7 @@ func TestProjectResultRead_NotReadyRunningSession(t *testing.T) {
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this projection test keeps result, dispatch, and artifact coherence assertions together.
 // pkgmaintcheck:ignore-function-lines this projection test keeps result, dispatch, and artifact coherence assertions together.
+// backendsizecheck:ignore-function this projection test keeps result, dispatch, and artifact coherence assertions together.
 func TestFakeService_ResultDispatchArtifact_ReadProjectionsCoherent(t *testing.T) {
 	service := newContractFakeService(t)
 	startAsyncByRequestID(t, service, "req-petri-success-001")
