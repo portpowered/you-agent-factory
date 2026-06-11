@@ -10,6 +10,7 @@
 - Verification command smoke tests live in `tests/functional/smoke/verify_fast_command_smoke_test.go` and use wrapper Makefiles to assert tier ordering without running full suites.
 - UI test lane boundaries and redundancy policy live in `docs/internal/development/ui-test-lane-boundaries.md`; keep theme/CSS token contracts in jsdom (`styles.page-shell-background.test.ts`, `theme-role-regression.test.ts`) and durable import/export/graph behavior in `ui/integration/*.integration.test.mjs`.
 - Browser integration stability (sequential suites, port/download isolation, durable wait helpers) lives in `docs/internal/development/ui-browser-integration-stability.md`; shared checkpoints are `waitForDurableControlEnabled`, `waitForCapturedDownloadOrDialogError`, and `waitForDialogHidden` in `browser-test-harness.mjs`.
+- Exclude every `ui-coverage-runner*.test.mjs` from the main covered Vitest pass: merge-mode tests call `runUiCoverageMerge`, which `rmSync("coverage")` and will break in-flight shard coverage if the file lands in a shard (story 002 split `ui-coverage-runner.shard-merge.test.mjs` into shard 8/10).
 
 ## 2026-06-11T11:19:15Z - prd-ui-ci-acceleration-and-test-rationalization-001
 - Implemented concurrent UI verification in the canonical PR path: `make verify-tests` and `make ci-verify-tests` now invoke `make run-concurrent-ui-verification-lanes`, which starts `test-ui-coverage` and `ui-integration-test` together with prefixed stdout and per-lane artifact logs.
@@ -99,4 +100,13 @@
   - Patterns discovered: when shard/merge tests push a script test file over the 450-line Biome cap, split merge-mode coverage into a sibling `*.shard-merge.test.mjs` file instead of disabling the rule.
   - Gotchas encountered: merging main can introduce unrelated lint warnings, but the nursery line-count rule is an error that fails `make ui-lint` even when warnings are tolerable.
   - Useful context: mergeability-only follow-up on head `ee360d880`.
+---
+
+## 2026-06-11T13:35:00Z - mergeability (PR #799 UI Coverage shard 8)
+- Fixed CI `UI Coverage Shard (8/10)` / merge failure: excluded `scripts/ui-coverage-runner.shard-merge.test.mjs` from the main covered pass alongside `ui-coverage-runner.test.mjs`; shard-merge tests invoke `runUiCoverageMerge`, which deletes `coverage/` while Vitest is still writing shard temp coverage files.
+- Shard runs now use `--coverage.clean=true` and pre-clean `coverage/shard-<index>` for isolated shard dirs.
+- **Learnings for future iterations:**
+  - Patterns discovered: when splitting runner tests into sibling files for lint, mirror every new `ui-coverage-runner*.test.mjs` path in `buildMainCoveredVitestArgs` excludes or shard coverage will intermittently ENOENT mid-pass.
+  - Gotchas encountered: Vitest's ENOENT on `coverage-*.json` during `readCoverageFiles` can be a symptom of another test deleting `coverage/`, not a Vitest shard bug—check which files the failing shard index actually runs.
+  - Useful context: reproduced locally with `UI_COVERAGE_SHARD=8/10 make ui-test-coverage`; mergeability-only follow-up on head `6e7462b1a`.
 ---
