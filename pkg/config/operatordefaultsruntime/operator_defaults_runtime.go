@@ -10,9 +10,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
-// ApplyToLoadedConfig fills omitted MODEL_WORKER modelProvider and model fields
-// from operator defaults in the in-memory effective runtime config. Authored worker
-// values and non-model workers are left unchanged.
+// ApplyToLoadedConfig fills omitted model-provider worker modelProvider and model
+// fields from operator defaults in the in-memory effective runtime config. Authored
+// worker values and non-model workers are left unchanged.
 func ApplyToLoadedConfig(loaded *config.LoadedFactoryConfig, defaults operatorconfig.ResolvedDefaults) error {
 	if loaded == nil || loaded.FactoryConfig() == nil {
 		return nil
@@ -61,7 +61,12 @@ func applyOperatorDefaultsToWorker(worker *interfaces.WorkerConfig, defaultProvi
 }
 
 func isModelWorkerType(workerType string) bool {
-	return interfaces.StrictPublicFactoryWorkerType(workerType) == interfaces.WorkerTypeModel
+	switch strings.TrimSpace(workerType) {
+	case interfaces.WorkerTypeModel, interfaces.WorkerTypeInference, interfaces.WorkerTypeAgent:
+		return true
+	default:
+		return false
+	}
 }
 
 func operatorDefaultProviderInternal(canonicalPublic string) (string, error) {
