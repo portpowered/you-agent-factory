@@ -15,7 +15,7 @@ import (
 // Run executes one simple JavaScript workflow source with explicit inputs and hooks.
 func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 	if err := ctx.Err(); err != nil {
-		return canceledOutcome(err), nil
+		return contextTerminationOutcome(err), nil
 	}
 	if strings.TrimSpace(req.Source) == "" {
 		return Outcome{
@@ -54,7 +54,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 	value, runErr := vm.RunString(wrapWorkflowSource(req.Source))
 	close(interrupt)
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return canceledOutcome(ctxErr), nil
+		return contextTerminationOutcome(ctxErr), nil
 	}
 	if runErr != nil {
 		return scriptErrorOutcome(vm, runErr), nil
@@ -120,6 +120,13 @@ func watchContext(ctx context.Context, vm *goja.Runtime, done <-chan struct{}) {
 	}
 }
 
+func contextTerminationOutcome(err error) Outcome {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return timeoutOutcome(err)
+	}
+	return canceledOutcome(err)
+}
+
 func canceledOutcome(err error) Outcome {
 	message := "workflow runtime canceled"
 	if err != nil && !errors.Is(err, context.Canceled) {
@@ -134,6 +141,20 @@ func canceledOutcome(err error) Outcome {
 	}
 }
 
+func timeoutOutcome(err error) Outcome {
+	message := "workflow runtime timed out"
+	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
+		message = err.Error()
+	}
+	return Outcome{
+		OK: false,
+		Failure: Failure{
+			Code:    CodeTimeout,
+			Message: message,
+		},
+	}
+}
+
 func scriptErrorOutcome(vm *goja.Runtime, err error) Outcome {
 	message := err.Error()
 	var interrupted *goja.InterruptedError
@@ -142,13 +163,7 @@ func scriptErrorOutcome(vm *goja.Runtime, err error) Outcome {
 			return canceledOutcome(context.Canceled)
 		}
 		if strings.Contains(strings.ToLower(message), "deadline exceeded") {
-			return Outcome{
-				OK: false,
-				Failure: Failure{
-					Code:    CodeTimeout,
-					Message: message,
-				},
-			}
+			return timeoutOutcome(context.DeadlineExceeded)
 		}
 	}
 	var exception *goja.Exception

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
@@ -238,6 +239,126 @@ func TestRun_ExecutionFailure_DoesNotInvokeHooks(t *testing.T) {
 	}
 }
 
+func TestRun_CanceledContext_ReturnsCanceledFailure(t *testing.T) {
+	req := busyLoopRequest(t, "session-canceled")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan workflowruntime.Outcome, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		outcome, err := workflowruntime.Run(ctx, req, workflowruntime.Hooks{})
+		if err != nil {
+			errCh <- err
+			return
+		}
+		done <- outcome
+	}()
+
+	cancel()
+
+	select {
+	case err := <-errCh:
+		t.Fatalf("Run() error = %v", err)
+	case outcome := <-done:
+		assertCanceledFailure(t, req.SessionID, outcome)
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run() did not return after cancellation within bounded wait")
+	}
+}
+
+func TestRun_AlreadyCanceledContext_ReturnsCanceledFailure(t *testing.T) {
+	req := busyLoopRequest(t, "session-already-canceled")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	outcome, err := workflowruntime.Run(ctx, req, workflowruntime.Hooks{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	assertCanceledFailure(t, req.SessionID, outcome)
+}
+
+func TestRun_Timeout_ReturnsTimeoutFailure(t *testing.T) {
+	req := busyLoopRequest(t, "session-timeout")
+
+	outcome, err := workflowruntime.RunWithTimeout(context.Background(), 50*time.Millisecond, req, workflowruntime.Hooks{})
+	if err != nil {
+		t.Fatalf("RunWithTimeout() error = %v", err)
+	}
+	assertTimeoutFailure(t, req.SessionID, outcome)
+}
+
+func TestRun_CancelOrTimeout_DoesNotInvokeHooks(t *testing.T) {
+	t.Run("canceled", func(t *testing.T) {
+		req := busyLoopRequest(t, "session-canceled-hooks")
+		ctx, cancel := context.WithCancel(context.Background())
+		hooksCalled := false
+		hooks := workflowruntime.Hooks{
+			OnResult: func(workflowresult.TypedValue) error {
+				hooksCalled = true
+				return nil
+			},
+			OnArtifact: func(string, json.RawMessage) error {
+				hooksCalled = true
+				return nil
+			},
+		}
+
+		done := make(chan workflowruntime.Outcome, 1)
+		errCh := make(chan error, 1)
+		go func() {
+			outcome, err := workflowruntime.Run(ctx, req, hooks)
+			if err != nil {
+				errCh <- err
+				return
+			}
+			done <- outcome
+		}()
+		cancel()
+
+		select {
+		case err := <-errCh:
+			t.Fatalf("Run() error = %v", err)
+		case outcome := <-done:
+			if outcome.OK {
+				t.Fatal("expected canceled failure")
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("Run() did not return after cancellation within bounded wait")
+		}
+		if hooksCalled {
+			t.Fatal("result/artifact hooks were invoked after cancellation")
+		}
+	})
+
+	t.Run("timeout", func(t *testing.T) {
+		req := busyLoopRequest(t, "session-timeout-hooks")
+		hooksCalled := false
+		hooks := workflowruntime.Hooks{
+			OnResult: func(workflowresult.TypedValue) error {
+				hooksCalled = true
+				return nil
+			},
+			OnArtifact: func(string, json.RawMessage) error {
+				hooksCalled = true
+				return nil
+			},
+		}
+
+		outcome, err := workflowruntime.RunWithTimeout(context.Background(), 50*time.Millisecond, req, hooks)
+		if err != nil {
+			t.Fatalf("RunWithTimeout() error = %v", err)
+		}
+		if outcome.OK {
+			t.Fatal("expected timeout failure")
+		}
+		if hooksCalled {
+			t.Fatal("result/artifact hooks were invoked after timeout")
+		}
+	})
+}
+
 func TestRun_WorkflowFinalAndReturn_PrefersWorkflowFinal(t *testing.T) {
 	source := readFixture(t, "workflow-final-and-return.workflow.js")
 	args := marshalArgs(t, map[string]any{
@@ -265,6 +386,42 @@ func TestRun_WorkflowFinalAndReturn_PrefersWorkflowFinal(t *testing.T) {
 	if projected["mechanism"] == "return" {
 		t.Fatalf("projected mechanism = return, want workflow.final precedence")
 	}
+}
+
+func busyLoopRequest(t *testing.T, sessionID string) workflowruntime.Request {
+	t.Helper()
+	return workflowruntime.Request{
+		Source:    readFixture(t, "busy-loop.workflow.js"),
+		SourceRef: "busy-loop.workflow.js",
+		SessionID: sessionID,
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}
+}
+
+func assertCanceledFailure(t *testing.T, sessionID string, outcome workflowruntime.Outcome) {
+	t.Helper()
+	if outcome.OK {
+		t.Fatal("expected canceled failure")
+	}
+	if outcome.Failure.Code != workflowruntime.CodeCanceled {
+		t.Fatalf("failure code = %q, want %q", outcome.Failure.Code, workflowruntime.CodeCanceled)
+	}
+	assertFailureDoesNotProjectPrimaryResult(t, sessionID, outcome)
+}
+
+func assertTimeoutFailure(t *testing.T, sessionID string, outcome workflowruntime.Outcome) {
+	t.Helper()
+	if outcome.OK {
+		t.Fatal("expected timeout failure")
+	}
+	if outcome.Failure.Code != workflowruntime.CodeTimeout {
+		t.Fatalf("failure code = %q, want %q", outcome.Failure.Code, workflowruntime.CodeTimeout)
+	}
+	if !strings.Contains(strings.ToLower(outcome.Failure.Message), "deadline exceeded") &&
+		!strings.Contains(strings.ToLower(outcome.Failure.Message), "timed out") {
+		t.Fatalf("failure message = %q, want timeout diagnostic", outcome.Failure.Message)
+	}
+	assertFailureDoesNotProjectPrimaryResult(t, sessionID, outcome)
 }
 
 func readFixture(t *testing.T, name string) string {
