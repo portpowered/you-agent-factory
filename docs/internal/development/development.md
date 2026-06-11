@@ -457,6 +457,8 @@ feature code.
 
 Place new dashboard UI regressions at the shallowest layer that still observes the customer-visible contract. Prefer behavioral assertions on rendered text, accessible names, network bodies, and emitted events—not source inventories, route lists, or doc-link topology checks.
 
+See [UI Test Lane Boundaries](ui-test-lane-boundaries.md) for observable contracts per lane, browser-integration durable-behavior guidance, minimum import/export and graph-editing browser contracts, and the redundancy policy applied when jsdom and browser suites overlap.
+
 | Layer | Scope | Example path |
 | --- | --- | --- |
 | Unit | Pure helpers, fixtures, and harness builders without mounting production React trees | `ui/src/testing/session-factory-mocks.test.ts` |
