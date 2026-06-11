@@ -406,6 +406,175 @@ func TestFakeService_DerivedProjectionEvents_AreCanonicalWhenFixtureEventsMissin
 	}
 }
 
+func TestFakeService_ListAndDetail_ScopedSummariesAndConsistency(t *testing.T) {
+	service := newContractFakeService(t)
+	cases := []struct {
+		requestID       string
+		sessionID       string
+		expectLive      bool
+		expectPersisted bool
+		expectTerminal  bool
+		expectRecoverable bool
+	}{
+		{"req-petri-run-001", "dur-sess-petri-run-001", true, false, false, false},
+		{"req-petri-success-001", "dur-sess-petri-success-001", true, true, true, false},
+		{"req-js-failed-partial-001", "dur-sess-js-failed-partial-001", true, true, true, false},
+		{"req-js-interrupted-001", "dur-sess-js-interrupted-001", true, true, true, true},
+	}
+	for _, tc := range cases {
+		startAsyncByRequestID(t, service, tc.requestID)
+	}
+
+	for _, scope := range []SessionListScope{
+		SessionListScopeLive,
+		SessionListScopePersisted,
+		SessionListScopeAll,
+	} {
+		first, err := service.ListSessions(context.Background(), ListSessionsRequest{Scope: scope})
+		if err != nil {
+			t.Fatalf("ListSessions(%s) first: %v", scope, err)
+		}
+		second, err := service.ListSessions(context.Background(), ListSessionsRequest{Scope: scope})
+		if err != nil {
+			t.Fatalf("ListSessions(%s) second: %v", scope, err)
+		}
+		if len(first.LiveSessions) != len(second.LiveSessions) || len(first.DurableSessions) != len(second.DurableSessions) {
+			t.Fatalf("scope %s listing changed between reads: first=%#v second=%#v", scope, first, second)
+		}
+	}
+
+	live, err := service.ListSessions(context.Background(), ListSessionsRequest{Scope: SessionListScopeLive})
+	if err != nil {
+		t.Fatalf("ListSessions live: %v", err)
+	}
+	persisted, err := service.ListSessions(context.Background(), ListSessionsRequest{Scope: SessionListScopePersisted})
+	if err != nil {
+		t.Fatalf("ListSessions persisted: %v", err)
+	}
+	all, err := service.ListSessions(context.Background(), ListSessionsRequest{Scope: SessionListScopeAll})
+	if err != nil {
+		t.Fatalf("ListSessions all: %v", err)
+	}
+
+	liveIDs := liveSessionIDs(live.LiveSessions)
+	allLiveIDs := liveSessionIDs(all.LiveSessions)
+
+	for _, tc := range cases {
+		t.Run(tc.sessionID, func(t *testing.T) {
+			detail, err := service.GetSession(context.Background(), tc.sessionID)
+			if err != nil {
+				t.Fatalf("GetSession: %v", err)
+			}
+			if tc.expectTerminal != IsTerminalLifecycleStatus(detail.Status) {
+				t.Fatalf("terminal = %t, want %t for status %q", IsTerminalLifecycleStatus(detail.Status), tc.expectTerminal, detail.Status)
+			}
+			if detail.Progress == nil || detail.Progress.TotalDispatches == 0 {
+				t.Fatalf("detail progress missing dispatch count: %#v", detail.Progress)
+			}
+			dispatches, err := service.ListDispatches(context.Background(), tc.sessionID)
+			if err != nil {
+				t.Fatalf("ListDispatches: %v", err)
+			}
+			if err := ValidateDispatchListMatchesSessionProgress(detail, dispatches.Dispatches); err != nil {
+				t.Fatalf("ValidateDispatchListMatchesSessionProgress: %v", err)
+			}
+
+			inLive := containsString(liveIDs, tc.sessionID)
+			inPersisted := containsPersistedSummary(persisted.DurableSessions, tc.sessionID)
+			if inLive != tc.expectLive {
+				t.Fatalf("live scope membership = %t, want %t", inLive, tc.expectLive)
+			}
+			if inPersisted != tc.expectPersisted {
+				t.Fatalf("persisted scope membership = %t, want %t", inPersisted, tc.expectPersisted)
+			}
+
+			var listSummary *DurableSessionListSummary
+			if inPersisted {
+				for index := range persisted.DurableSessions {
+					if persisted.DurableSessions[index].SessionID == tc.sessionID {
+						listSummary = &persisted.DurableSessions[index]
+						break
+					}
+				}
+			}
+			if listSummary != nil {
+				if listSummary.Recoverable != tc.expectRecoverable {
+					t.Fatalf("recoverable = %t, want %t", listSummary.Recoverable, tc.expectRecoverable)
+				}
+				if err := ValidateSessionDetailMatchesListSummary(detail, *listSummary); err != nil {
+					t.Fatalf("ValidateSessionDetailMatchesListSummary: %v", err)
+				}
+			}
+
+			inAllLive := containsString(allLiveIDs, tc.sessionID)
+			inAllDurable := containsPersistedSummary(all.DurableSessions, tc.sessionID)
+			if tc.expectTerminal {
+				if inAllLive {
+					t.Fatalf("scope=all still contains terminal session %q in live rows", tc.sessionID)
+				}
+				if !inAllDurable {
+					t.Fatal("scope=all missing terminal durable row")
+				}
+			} else if !inAllLive || inAllDurable {
+				t.Fatalf("scope=all live=%t durable=%t, want live-only for running session", inAllLive, inAllDurable)
+			}
+		})
+	}
+
+	for index := 1; index < len(persisted.DurableSessions); index++ {
+		if strings.Compare(persisted.DurableSessions[index-1].SessionID, persisted.DurableSessions[index].SessionID) >= 0 {
+			t.Fatalf("persisted ordering not stable: %#v", persisted.DurableSessions)
+		}
+	}
+}
+
+func TestFakeService_GetSession_NotFoundDoesNotMutateState(t *testing.T) {
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-petri-run-001")
+
+	before, err := service.ListSessions(context.Background(), ListSessionsRequest{Scope: SessionListScopeAll})
+	if err != nil {
+		t.Fatalf("ListSessions before: %v", err)
+	}
+
+	_, err = service.GetSession(context.Background(), "dur-sess-missing-001")
+	if !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("GetSession error = %v, want ErrSessionNotFound", err)
+	}
+
+	after, err := service.ListSessions(context.Background(), ListSessionsRequest{Scope: SessionListScopeAll})
+	if err != nil {
+		t.Fatalf("ListSessions after: %v", err)
+	}
+	if len(before.LiveSessions) != len(after.LiveSessions) || len(before.DurableSessions) != len(after.DurableSessions) {
+		t.Fatalf("listing changed after not-found read: before=%#v after=%#v", before, after)
+	}
+	detail, err := service.GetSession(context.Background(), "dur-sess-petri-run-001")
+	if err != nil {
+		t.Fatalf("GetSession existing: %v", err)
+	}
+	if detail.Status != LifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", detail.Status)
+	}
+}
+
+func liveSessionIDs(sessions []LiveSessionSummary) []string {
+	ids := make([]string, 0, len(sessions))
+	for _, session := range sessions {
+		ids = append(ids, session.ID)
+	}
+	return ids
+}
+
+func containsPersistedSummary(summaries []DurableSessionListSummary, sessionID string) bool {
+	for _, summary := range summaries {
+		if summary.SessionID == sessionID {
+			return true
+		}
+	}
+	return false
+}
+
 func TestFakeService_ListSessions_ScopedPersistedAndLive(t *testing.T) {
 	service := newContractFakeService(t)
 	startAsyncByRequestID(t, service, "req-petri-run-001")

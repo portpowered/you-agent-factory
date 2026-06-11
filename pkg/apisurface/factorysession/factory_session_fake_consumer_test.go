@@ -72,6 +72,92 @@ func TestFakeServiceConsumer_StartAsync_ProjectsCoreScenarioOutcomes(t *testing.
 	}
 }
 
+func TestFakeServiceConsumer_ListAndDetail_ProjectsScopedSummaries(t *testing.T) {
+	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+	}
+
+	start := func(requestID string) {
+		t.Helper()
+		_, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
+			RequestID: requestID,
+			Source: factorysessionexecution.Source{
+				Kind:      workflowsource.KindFactoryID,
+				FactoryID: "customer-support-triage",
+			},
+		})
+		if err != nil {
+			t.Fatalf("StartAsync(%q): %v", requestID, err)
+		}
+	}
+	start("req-petri-run-001")
+	start("req-petri-success-001")
+	start("req-js-interrupted-001")
+
+	liveScope := factoryapi.FactorySessionListScopeLive
+	liveReq, err := factorysession.ListSessionsRequestFromAPI(factoryapi.ListFactorySessionsParams{Scope: &liveScope})
+	if err != nil {
+		t.Fatalf("ListSessionsRequestFromAPI live: %v", err)
+	}
+	live, err := service.ListSessions(context.Background(), liveReq)
+	if err != nil {
+		t.Fatalf("ListSessions live: %v", err)
+	}
+	liveAPI := factorysession.ListSessionsResponseToAPI(live)
+	if liveAPI.DurableSessions != nil {
+		t.Fatalf("live response durableSessions = %#v, want omitted", liveAPI.DurableSessions)
+	}
+
+	persistedScope := factoryapi.FactorySessionListScopePersisted
+	persistedReq, err := factorysession.ListSessionsRequestFromAPI(factoryapi.ListFactorySessionsParams{Scope: &persistedScope})
+	if err != nil {
+		t.Fatalf("ListSessionsRequestFromAPI persisted: %v", err)
+	}
+	persisted, err := service.ListSessions(context.Background(), persistedReq)
+	if err != nil {
+		t.Fatalf("ListSessions persisted: %v", err)
+	}
+	persistedAPI := factorysession.ListSessionsResponseToAPI(persisted)
+	if persistedAPI.DurableSessions == nil || len(*persistedAPI.DurableSessions) == 0 {
+		t.Fatal("persisted durableSessions missing")
+	}
+
+	read, err := service.GetSession(context.Background(), "dur-sess-petri-success-001")
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	mappedRead := factorysession.SessionReadResponseToAPI(read)
+	if mappedRead.Progress == nil || mappedRead.Progress.TotalDispatches == nil || *mappedRead.Progress.TotalDispatches == 0 {
+		t.Fatalf("detail progress missing dispatch count: %#v", mappedRead.Progress)
+	}
+
+	var successSummary factoryapi.FactorySessionDurableSummary
+	for _, row := range *persistedAPI.DurableSessions {
+		if row.SessionId == "dur-sess-petri-success-001" {
+			successSummary = row
+			break
+		}
+	}
+	if successSummary.SessionId == "" {
+		t.Fatal("persisted list missing success session")
+	}
+	if mappedRead.ResultSummary == nil || successSummary.ResultSummary == nil ||
+		mappedRead.ResultSummary.ResultStatus != successSummary.ResultSummary.ResultStatus {
+		t.Fatalf("result summary mismatch: detail=%#v list=%#v", mappedRead.ResultSummary, successSummary.ResultSummary)
+	}
+	if successSummary.Progress == nil || mappedRead.Progress == nil ||
+		successSummary.Progress.TotalDispatches == nil || mappedRead.Progress.TotalDispatches == nil ||
+		*successSummary.Progress.TotalDispatches != *mappedRead.Progress.TotalDispatches {
+		t.Fatalf("dispatch count mismatch: detail=%#v list=%#v", mappedRead.Progress, successSummary.Progress)
+	}
+	if successSummary.ArtifactCount == nil || mappedRead.ArtifactRefs == nil ||
+		*successSummary.ArtifactCount != len(*mappedRead.ArtifactRefs) {
+		t.Fatalf("artifact count mismatch: detail=%d list=%v", len(*mappedRead.ArtifactRefs), successSummary.ArtifactCount)
+	}
+}
+
 func TestFakeServiceConsumer_ProjectsFixtureThroughApisurfaceMappers(t *testing.T) {
 	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)

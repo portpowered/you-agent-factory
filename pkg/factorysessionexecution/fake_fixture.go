@@ -87,6 +87,13 @@ func parseIdempotentReplayScenario(document map[string]any) (FakeScenario, error
 	}
 	summary := DurableListSummaryFromSessionRead(scenario.Session)
 	scenario.ListSummary = &summary
+	scenario.Session = enrichSessionReadProjection(
+		scenario.Session,
+		scenario.ListSummary,
+		scenario.Dispatches,
+		scenario.Artifacts,
+	)
+	scenario.ListSummary = durableListSummaryPtr(DurableListSummaryFromSessionRead(scenario.Session))
 	return scenario, nil
 }
 
@@ -168,6 +175,13 @@ func parseFakeScenarioFromFixture(document map[string]any) (FakeScenario, error)
 		summary := DurableListSummaryFromSessionRead(scenario.Session)
 		scenario.ListSummary = &summary
 	}
+	scenario.Session = enrichSessionReadProjection(
+		scenario.Session,
+		scenario.ListSummary,
+		scenario.Dispatches,
+		scenario.Artifacts,
+	)
+	scenario.ListSummary = durableListSummaryPtr(DurableListSummaryFromSessionRead(scenario.Session))
 	return scenario, nil
 }
 
@@ -525,6 +539,68 @@ func progressCountsFromFixtureMap(progress map[string]any) *ProgressCounts {
 		InFlightDispatches:  fixtureIntValue(progress, "inFlightDispatches"),
 		PhaseCount:          fixtureIntValue(progress, "phaseCount"),
 	}
+}
+
+func enrichSessionReadProjection(
+	session SessionReadResult,
+	summary *DurableSessionListSummary,
+	dispatches []DispatchSummary,
+	artifacts []ArtifactSummary,
+) SessionReadResult {
+	if summary != nil {
+		if session.Progress == nil && summary.Progress != nil {
+			progress := *summary.Progress
+			session.Progress = &progress
+		}
+		if strings.TrimSpace(session.Phase) == "" && strings.TrimSpace(summary.Phase) != "" {
+			session.Phase = summary.Phase
+		}
+		if session.ArtifactCount == 0 && summary.ArtifactCount > 0 {
+			session.ArtifactCount = summary.ArtifactCount
+		}
+		if session.ResultSummary == nil && summary.ResultSummary != nil {
+			resultSummary := *summary.ResultSummary
+			session.ResultSummary = &resultSummary
+		}
+	}
+	if session.Progress == nil && len(dispatches) > 0 {
+		session.Progress = progressCountsFromDispatches(dispatches)
+	}
+	if session.ArtifactCount == 0 && len(artifacts) > 0 {
+		session.ArtifactCount = len(artifacts)
+	}
+	if len(session.ArtifactRefs) == 0 && len(artifacts) > 0 {
+		session.ArtifactRefs = make([]ArtifactRefSummary, 0, len(artifacts))
+		for _, artifact := range artifacts {
+			session.ArtifactRefs = append(session.ArtifactRefs, ArtifactRefSummary{
+				ID:          artifact.ID,
+				Kind:        artifact.Kind,
+				Visibility:  artifact.Visibility,
+				ContentHash: artifact.ContentHash,
+				SizeBytes:   artifact.SizeBytes,
+			})
+		}
+	}
+	return session
+}
+
+func progressCountsFromDispatches(dispatches []DispatchSummary) *ProgressCounts {
+	counts := &ProgressCounts{TotalDispatches: len(dispatches)}
+	for _, dispatch := range dispatches {
+		switch dispatch.Status {
+		case DispatchStatusCompleted:
+			counts.CompletedDispatches++
+		case DispatchStatusFailed:
+			counts.FailedDispatches++
+		case DispatchStatusRunning, DispatchStatusQueued:
+			counts.InFlightDispatches++
+		}
+	}
+	return counts
+}
+
+func durableListSummaryPtr(summary DurableSessionListSummary) *DurableSessionListSummary {
+	return &summary
 }
 
 func sessionBudgetsFromFixtureMap(budgets map[string]any) *SessionBudgets {

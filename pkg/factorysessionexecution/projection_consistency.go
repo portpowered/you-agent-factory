@@ -53,6 +53,79 @@ func ValidateResultMatchesSessionRead(session SessionReadResult, result ResultRe
 	return nil
 }
 
+// ValidateSessionDetailMatchesListSummary checks that one session detail read
+// aligns with the durable list row for the same session id.
+func ValidateSessionDetailMatchesListSummary(
+	detail SessionReadResult,
+	summary DurableSessionListSummary,
+) error {
+	if strings.TrimSpace(detail.SessionID) == "" || strings.TrimSpace(summary.SessionID) == "" {
+		return nil
+	}
+	if detail.SessionID != summary.SessionID {
+		return fmt.Errorf("detail sessionId %q does not match list summary %q", detail.SessionID, summary.SessionID)
+	}
+	if detail.Status != summary.Status {
+		return fmt.Errorf("detail status %q does not match list summary %q", detail.Status, summary.Status)
+	}
+	if strings.TrimSpace(detail.Phase) != strings.TrimSpace(summary.Phase) {
+		return fmt.Errorf("detail phase %q does not match list summary %q", detail.Phase, summary.Phase)
+	}
+	if err := validateProgressMatches(detail.Progress, summary.Progress); err != nil {
+		return err
+	}
+	if err := validateResultSummaryMatches(detail.ResultSummary, summary.ResultSummary); err != nil {
+		return err
+	}
+	detailArtifactCount := detail.ArtifactCount
+	if detailArtifactCount == 0 {
+		detailArtifactCount = len(detail.ArtifactRefs)
+	}
+	if detailArtifactCount != summary.ArtifactCount {
+		return fmt.Errorf("detail artifactCount %d does not match list summary %d", detailArtifactCount, summary.ArtifactCount)
+	}
+	derivedActions := DeriveSessionActionAvailability(detail.Status)
+	if derivedActions != summary.Actions {
+		return fmt.Errorf("detail actions %#v do not match list summary %#v", derivedActions, summary.Actions)
+	}
+	if detail.Links != summary.Links {
+		return fmt.Errorf("detail links %#v do not match list summary %#v", detail.Links, summary.Links)
+	}
+	if summary.Recoverable != IsRecoverableSession(detail.Status, detail.StaleLease) {
+		return fmt.Errorf("detail recoverability does not match list summary recoverable=%t", summary.Recoverable)
+	}
+	return nil
+}
+
+func validateProgressMatches(detail, summary *ProgressCounts) error {
+	switch {
+	case detail == nil && summary == nil:
+		return nil
+	case detail == nil || summary == nil:
+		return fmt.Errorf("detail progress %#v does not match list summary %#v", detail, summary)
+	case detail.TotalDispatches != summary.TotalDispatches,
+		detail.CompletedDispatches != summary.CompletedDispatches,
+		detail.FailedDispatches != summary.FailedDispatches,
+		detail.InFlightDispatches != summary.InFlightDispatches:
+		return fmt.Errorf("detail progress %#v does not match list summary %#v", detail, summary)
+	default:
+		return nil
+	}
+}
+
+func validateResultSummaryMatches(detail, summary *ResultSummary) error {
+	switch {
+	case detail == nil && summary == nil:
+		return nil
+	case detail == nil || summary == nil:
+		return fmt.Errorf("detail resultSummary %#v does not match list summary %#v", detail, summary)
+	case strings.TrimSpace(detail.ResultStatus) != strings.TrimSpace(summary.ResultStatus):
+		return fmt.Errorf("detail resultStatus %q does not match list summary %q", detail.ResultStatus, summary.ResultStatus)
+	default:
+		return nil
+	}
+}
+
 // ValidateDispatchListMatchesSessionProgress checks dispatch list counts against
 // one session read progress summary when present.
 func ValidateDispatchListMatchesSessionProgress(session SessionReadResult, dispatches []DispatchSummary) error {

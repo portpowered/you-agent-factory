@@ -39,6 +39,34 @@ func TestNormalizeEventReconnectRequest_RejectsNegativeSequence(t *testing.T) {
 	}
 }
 
+func TestValidateSessionDetailMatchesListSummary(t *testing.T) {
+	detail := SessionReadResult{
+		SessionID: "dur-sess-petri-success-001",
+		Status:    LifecycleStatusSucceeded,
+		Phase:     "complete",
+		Progress: &ProgressCounts{
+			TotalDispatches:     1,
+			CompletedDispatches: 1,
+		},
+		ResultSummary: &ResultSummary{ResultStatus: string(ResultStatusFinal)},
+		ArtifactCount: 1,
+		Links: InspectionLinks{
+			Session: "/api/v1/factory-sessions/dur-sess-petri-success-001",
+			Results: "/api/v1/factory-sessions/dur-sess-petri-success-001/result",
+		},
+	}
+	summary := DurableListSummaryFromSessionRead(detail)
+	if err := ValidateSessionDetailMatchesListSummary(detail, summary); err != nil {
+		t.Fatalf("ValidateSessionDetailMatchesListSummary: %v", err)
+	}
+
+	mismatched := summary
+	mismatched.Phase = "different"
+	if err := ValidateSessionDetailMatchesListSummary(detail, mismatched); err == nil {
+		t.Fatal("error = nil, want phase mismatch")
+	}
+}
+
 func TestValidateResultMatchesSessionRead(t *testing.T) {
 	session := SessionReadResult{
 		SessionID: "dur-sess-001",
