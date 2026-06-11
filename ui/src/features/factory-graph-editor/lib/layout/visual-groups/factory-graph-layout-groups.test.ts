@@ -8,6 +8,7 @@ import {
   createFactoryLayoutGroupId,
   defaultFactoryLayoutGroupBounds,
   factoryLayoutGroupById,
+  factoryLayoutGroups,
   factoryLayoutGroupCanvasNodeOptions,
   factoryLayoutGroupColorCssVariable,
   factoryLayoutGroupColorSurfaceCssVariable,
@@ -402,6 +403,21 @@ describe("factory graph layout groups", () => {
         label: "Ignored",
       })),
     ).toEqual(createDefaultFactoryLayout());
+  });
+
+  it("reads groups from layout metadata helpers", () => {
+    const layout = addFactoryLayoutGroup(createDefaultFactoryLayout(), {
+      bounds: defaultFactoryLayoutGroupBounds({ x: 0, y: 0 }),
+      id: "group-1",
+      label: "Review",
+      nodeIds: [],
+    });
+
+    expect(factoryLayoutGroups(layout)).toHaveLength(1);
+    expect(factoryLayoutGroupById(layout, "group-1")?.label).toBe("Review");
+    expect(factoryLayoutGroupById(createDefaultFactoryLayout(), "missing")).toBe(
+      undefined,
+    );
   });
 
   it("builds sorted canvas node options from topology nodes", () => {

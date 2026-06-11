@@ -63,6 +63,7 @@ function renderVisualGroupLayer(
   return { onSelectGroup };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: pointer drag scenarios share one layer fixture.
 describe("FactoryGraphVisualGroupLayer", () => {
   it("falls back to the group id when the label is blank", () => {
     renderVisualGroupLayer({

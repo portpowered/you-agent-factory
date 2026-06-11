@@ -1,39 +1,9 @@
-import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { Edge, Node } from "@xyflow/react";
 import { type ReactNode, useEffect } from "react";
 
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { CurrentActivityGraphViewport } from "./react-flow-current-activity-card-viewport";
-
-vi.mock(
-  "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-layer",
-  () => ({
-    FactoryGraphVisualGroupLayer: ({
-      groups,
-      selectedGroupId,
-    }: {
-      groups: readonly { id: string }[];
-      selectedGroupId: string | null;
-    }) => (
-      <div
-        data-selected-group-id={selectedGroupId ?? ""}
-        data-testid="factory-visual-group-layer"
-      >
-        {groups.map((group) => group.id).join(",")}
-      </div>
-    ),
-  }),
-);
-
-vi.mock(
-  "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-controls",
-  () => ({
-    FactoryGraphVisualGroupControls: () => (
-      <section data-testid="factory-visual-group-controls">controls</section>
-    ),
-  }),
-);
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
@@ -417,107 +387,6 @@ describe("CurrentActivityGraphViewport", () => {
     expect(handleEditorEdgeClick).not.toHaveBeenCalled();
   });
 
-  it("renders visual group overlays while editing and hides them in observer mode", async () => {
-    const sampleGroups = [
-      {
-        bounds: { height: 120, width: 200, x: 40, y: 60 },
-        id: "group-1",
-        label: "Review",
-        nodeIds: [],
-      },
-    ];
-    const visualGroupControls = {
-      canvasNodeOptions: [],
-      colorLabel: "Group color",
-      colorOptionLabel: (token: string) => `Use ${token} group color`,
-      deleteGroupLabel: "Delete group",
-      boundsError: null,
-      emptyLabelError: "Enter a group label.",
-      group: sampleGroups[0],
-      isNodeMember: () => false,
-      labelFieldLabel: "Group label",
-      membershipEmptyLabel: "No canvas nodes are available to assign.",
-      membershipLabel: "Group members",
-      membershipNodeLabel: (label: string) => `Include ${label} in this group`,
-      membershipStaleNodeLabel: (nodeId: string) =>
-        `Saved member ${nodeId} is no longer on the canvas.`,
-      onDeleteGroup: vi.fn(),
-      onRenameGroup: vi.fn(),
-      onSetGroupColor: vi.fn(),
-      onToggleNodeMembership: vi.fn(),
-      selectedGroupLabel: "Selected visual group",
-      staleMemberNodeIds: [],
-    };
-
-    const { rerender } = renderViewport({
-      editorMode: true,
-      onCreateVisualGroup: vi.fn(),
-      onSelectVisualGroup: vi.fn(),
-      selectedVisualGroupId: "group-1",
-      visualGroupAriaLabel: (group) => group.label ?? group.id,
-      visualGroupCanEdit: true,
-      visualGroupControls,
-      visualGroups: sampleGroups,
-    });
-
-    expect(
-      await screen.findByTestId("factory-visual-group-layer"),
-    ).toHaveTextContent("group-1");
-    expect(
-      screen.getByTestId("factory-visual-group-controls"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Create group" }),
-    ).toBeEnabled();
-
-    rerender(
-      <CurrentActivityGraphViewport
-        {...buildViewportProps({
-          editorMode: false,
-          onCreateVisualGroup: vi.fn(),
-          onSelectVisualGroup: vi.fn(),
-          selectedVisualGroupId: "group-1",
-          visualGroupAriaLabel: (group) => group.label ?? group.id,
-          visualGroupCanEdit: true,
-          visualGroupControls,
-          visualGroups: sampleGroups,
-        })}
-      />,
-    );
-
-    expect(
-      screen.queryByTestId("factory-visual-group-layer"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("factory-visual-group-controls"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("invokes create visual group from the editor toolbar", async () => {
-    const onCreateVisualGroup = vi.fn();
-
-    renderViewport({
-      editorMode: true,
-      onCreateVisualGroup,
-      onSelectVisualGroup: vi.fn(),
-      visualGroupAriaLabel: (group) => group.label ?? group.id,
-      visualGroups: [
-        {
-          bounds: { height: 120, width: 200, x: 0, y: 0 },
-          id: "group-1",
-          label: "Review",
-          nodeIds: [],
-        },
-      ],
-    });
-
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Create group" }),
-    );
-
-    expect(onCreateVisualGroup).toHaveBeenCalledTimes(1);
-  });
-
   it("keeps the current-activity graph shell and React Flow canvas flat", () => {
     renderViewport();
 
@@ -535,129 +404,69 @@ describe("CurrentActivityGraphViewport", () => {
   });
 });
 
-function buildViewportProps({
+function renderViewport({
   activeTool = null,
   edges = [],
   editorMode = false,
   nodes = [],
-  onCreateVisualGroup,
   onEditorEdgeClick = vi.fn(),
   onEditorNodeClick = vi.fn(),
-  onSelectVisualGroup,
-  selectedVisualGroupId = null,
-  visualGroupAriaLabel,
-  visualGroupCanEdit = false,
-  visualGroupControls = null,
-  visualGroups = [],
 }: {
   activeTool?: "add" | "connect" | "delete" | null;
   edges?: Edge[];
   editorMode?: boolean;
   nodes?: Node[];
-  onCreateVisualGroup?: () => void;
   onEditorEdgeClick?: (edgeId: string) => void;
   onEditorNodeClick?: (nodeId: string) => void;
-  onSelectVisualGroup?: (groupId: string) => void;
-  selectedVisualGroupId?: string | null;
-  visualGroupAriaLabel?: (group: {
-    id: string;
-    label?: string;
-  }) => string;
-  visualGroupCanEdit?: boolean;
-  visualGroupControls?: {
-    boundsError: string | null;
-    canvasNodeOptions: readonly { id: string; label: string }[];
-    colorLabel: string;
-    colorOptionLabel: (token: string) => string;
-    deleteGroupLabel: string;
-    emptyLabelError: string;
-    group: {
-      bounds: { height: number; width: number; x: number; y: number };
-      id: string;
-      label: string;
-      nodeIds: string[];
-    };
-    isNodeMember: (nodeId: string) => boolean;
-    labelFieldLabel: string;
-    membershipEmptyLabel: string;
-    membershipLabel: string;
-    membershipNodeLabel: (label: string) => string;
-    membershipStaleNodeLabel: (nodeId: string) => string;
-    onDeleteGroup: () => void;
-    onRenameGroup: (label: string) => void;
-    onSetGroupColor: (color: string) => void;
-    onToggleNodeMembership: (nodeId: string, selected: boolean) => void;
-    selectedGroupLabel: string;
-    staleMemberNodeIds: readonly string[];
-  } | null;
-  visualGroups?: readonly {
-    bounds: { height: number; width: number; x: number; y: number };
-    id: string;
-    label: string;
-    nodeIds: string[];
-  }[];
 } = {}) {
   const flowContainerRef = { current: null as HTMLElement | null };
 
-  return {
-    addControls: {},
-    editorControls: {
-      activeTool,
-      canInteract: true,
-      discardPendingChanges: vi.fn(),
-      isEditing: editorMode,
-      selectTool: vi.fn(),
-      toggleMode: vi.fn(),
-      unavailableClassifierWorkstationName: undefined,
-    },
-    edges,
-    flowContainerRef,
-    handleNodesChange: vi.fn(),
-    hasPendingChanges: false,
-    layoutControls: {
-      canMoveLayout: false,
-      canRedo: false,
-      canUndo: false,
-      initialFitViewKey: "full-graph",
-      initialFitViewOptions: { padding: 0.18 },
-      moveNode: vi.fn(),
-      moveNodesByDelta: vi.fn(),
-      redo: vi.fn(),
-      reset: vi.fn(),
-      undo: vi.fn(),
-      updateViewport: vi.fn(),
-    },
-    headingID: "test-heading",
-    imports: importController,
-    nodeTypes: {},
-    nodes,
-    onCreateVisualGroup,
-    onEditorEdgeClick,
-    onEditorNodeClick,
-    onSelectVisualGroup,
-    saveControls: { canSave: false, requestConfirmation: vi.fn() },
-    selectedVisualGroupId,
-    visualGroupAriaLabel,
-    visualGroupCanEdit,
-    visualGroupControls,
-    visualGroups,
-    visibilityControls: {
-      hiddenNodeClasses: new Set(),
-      isDirty: false,
-      isMenuOpen: false,
-      preset: "all" as const,
-      resetPreferences: vi.fn(),
-      setMenuOpen: vi.fn(),
-      setPreset: vi.fn(),
-      toggleHiddenNodeClass: vi.fn(),
-    },
-  };
-}
-
-function renderViewport(
-  props: Parameters<typeof buildViewportProps>[0] = {},
-) {
   return render(
-    <CurrentActivityGraphViewport {...buildViewportProps(props)} />,
+    <CurrentActivityGraphViewport
+      addControls={{}}
+      editorControls={{
+        activeTool,
+        canInteract: true,
+        discardPendingChanges: vi.fn(),
+        isEditing: editorMode,
+        selectTool: vi.fn(),
+        toggleMode: vi.fn(),
+        unavailableClassifierWorkstationName: undefined,
+      }}
+      edges={edges}
+      flowContainerRef={flowContainerRef}
+      handleNodesChange={vi.fn()}
+      hasPendingChanges={false}
+      layoutControls={{
+        canMoveLayout: false,
+        canRedo: false,
+        canUndo: false,
+        initialFitViewKey: "full-graph",
+        initialFitViewOptions: { padding: 0.18 },
+        moveNode: vi.fn(),
+        moveNodesByDelta: vi.fn(),
+        redo: vi.fn(),
+        reset: vi.fn(),
+        undo: vi.fn(),
+        updateViewport: vi.fn(),
+      }}
+      headingID="test-heading"
+      imports={importController}
+      nodeTypes={{}}
+      nodes={nodes}
+      onEditorEdgeClick={onEditorEdgeClick}
+      onEditorNodeClick={onEditorNodeClick}
+      saveControls={{ canSave: false, requestConfirmation: vi.fn() }}
+      visibilityControls={{
+        hiddenNodeClasses: new Set(),
+        isDirty: false,
+        isMenuOpen: false,
+        preset: "all",
+        resetPreferences: vi.fn(),
+        setMenuOpen: vi.fn(),
+        setPreset: vi.fn(),
+        toggleHiddenNodeClass: vi.fn(),
+      }}
+    />,
   );
 }

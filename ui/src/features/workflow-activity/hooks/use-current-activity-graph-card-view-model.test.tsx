@@ -170,6 +170,79 @@ describe("useCurrentActivityGraphCardViewModel waypoint state", () => {
   });
 });
 
+describe("useCurrentActivityGraphCardViewModel visual groups", () => {
+  beforeEach(() => {
+    graphViewModelMock.useCurrentActivityGraphViewModel.mockReset();
+    graphViewModelMock.useCurrentActivityGraphViewModel.mockReturnValue({
+      canonicalLayoutViewport: null,
+      edges: [],
+      graphKey: "graph-key",
+      handleNodesChange: vi.fn(),
+      initialFitViewKey: "graph-key",
+      initialFitViewOptions: { padding: 0.18 },
+      nodes: [],
+    });
+  });
+
+  it("projects visual group editor controls from the current layout", () => {
+    const graphController = {
+      ...graphControllerFixture(),
+      editorControls: {
+        ...graphControllerFixture().editorControls,
+        isEditing: true,
+      },
+      layoutControls: {
+        ...graphControllerFixture().layoutControls,
+        canvasNodeOptions: [{ id: "workstation:review", label: "Review" }],
+        createVisualGroup: vi.fn(() => ({ id: "group-1" })),
+        currentLayout: {
+          groups: [
+            {
+              bounds: { height: 120, width: 200, x: 0, y: 0 },
+              id: "group-1",
+              label: "Review lane",
+              nodeIds: ["workstation:review"],
+            },
+          ],
+          schemaVersion: 1,
+        },
+        moveVisualGroupByDelta: vi.fn(),
+        renameVisualGroup: vi.fn(),
+        resizeVisualGroup: vi.fn(),
+        setVisualGroupColor: vi.fn(),
+      },
+    };
+    const { result } = renderHook(() =>
+      useCurrentActivityGraphCardViewModel({
+        graphController,
+        locale: "en",
+        now: Date.parse("2026-06-10T00:00:00Z"),
+        onSelectDoc: vi.fn(),
+        onSelectResource: vi.fn(),
+        onSelectStateNode: vi.fn(),
+        onSelectWorkID: vi.fn(),
+        onSelectWorker: vi.fn(),
+        onSelectWorkstation: vi.fn(),
+        onSelectWorkType: vi.fn(),
+        selection: null,
+        snapshot: { factory: undefined } as never,
+      } as never),
+    );
+
+    act(() => {
+      result.current.visualGroupControls.handleSelectVisualGroup("group-1");
+    });
+
+    expect(result.current.visualGroupControls.groups).toHaveLength(1);
+    expect(result.current.visualGroupControls.selectedGroup?.label).toBe(
+      "Review lane",
+    );
+    expect(result.current.visualGroupControls.visualGroupControls?.group.id).toBe(
+      "group-1",
+    );
+  });
+});
+
 describe("useCurrentActivityGraphCardViewModel add placement", () => {
   beforeEach(() => {
     graphViewModelMock.useCurrentActivityGraphViewModel.mockReset();

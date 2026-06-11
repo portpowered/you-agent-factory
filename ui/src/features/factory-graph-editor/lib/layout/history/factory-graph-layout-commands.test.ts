@@ -335,6 +335,9 @@ describe("factory graph layout commands", () => {
       x: 40,
       y: 60,
     });
+    expect(factoryLayoutCommandAffectedNodeIds(command)).toEqual([
+      "workstation:draft",
+    ]);
   });
 
   it("creates and inverts visual group delete commands", () => {
