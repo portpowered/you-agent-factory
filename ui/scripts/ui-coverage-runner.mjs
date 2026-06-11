@@ -178,10 +178,13 @@ export function buildMainCoveredVitestArgs(options = {}) {
     options.mainCoveredMaxWorkers ??
     getMainCoveredMaxWorkers(options.env, { shard: Boolean(shard) });
   const blobPath = options.blobPath ?? ".vitest-reports/main.json";
+  const coverageCleanFlag = shard
+    ? "--coverage.clean=true"
+    : "--coverage.clean=false";
   const args = [
     "run",
     "--coverage",
-    "--coverage.clean=false",
+    coverageCleanFlag,
     `--maxWorkers=${mainCoveredMaxWorkers}`,
     "--coverage.thresholds.lines=0",
     "--coverage.thresholds.functions=0",
@@ -196,6 +199,8 @@ export function buildMainCoveredVitestArgs(options = {}) {
     "scripts/dashboard-shell-storybook-responsive.test.mjs",
     "--exclude",
     "scripts/ui-coverage-runner.test.mjs",
+    "--exclude",
+    "scripts/ui-coverage-runner.shard-merge.test.mjs",
     "--exclude",
     "src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx",
   ];
@@ -380,6 +385,7 @@ export function logMergedShardSlowFileSummary(
 
 export function runUiCoverageShard(shard, options = {}) {
   const spawn = options.spawn ?? spawnSync;
+  rmSync(`coverage/shard-${shard.index}`, { force: true, recursive: true });
   const phase = buildMainCoveredShardPhase(shard, options);
   const { capturedStdout, status } = runTimedPhase(phase, spawn, {
     captureStdout: true,

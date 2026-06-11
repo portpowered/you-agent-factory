@@ -191,6 +191,8 @@ test("builds shard main pass with vitest shard flag and unique blob output", () 
 
   expect(phase.name).toBe(`${mainCoveredPhaseName} (shard 3/10)`);
   expect(phase.args).toContain("--shard=3/10");
+  expect(phase.args).toContain("--coverage.clean=true");
+  expect(phase.args).not.toContain("--coverage.clean=false");
   expect(phase.args).toContain("--coverage.reportsDirectory=coverage/shard-3");
   expect(phase.args).toContain(
     `--outputFile.blob=${mainCoveredShardBlobPath(3)}`,
@@ -209,6 +211,8 @@ test("builds shard main pass with vitest shard flag and unique blob output", () 
       "scripts/dashboard-shell-storybook-responsive.test.mjs",
       "--exclude",
       "scripts/ui-coverage-runner.test.mjs",
+      "--exclude",
+      "scripts/ui-coverage-runner.shard-merge.test.mjs",
       "--exclude",
       "src/features/workflow-activity/components/react-flow-current-activity-card.test.tsx",
     ]),
