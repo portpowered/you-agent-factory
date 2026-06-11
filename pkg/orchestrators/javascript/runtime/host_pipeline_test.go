@@ -131,6 +131,12 @@ func assertPipelineStageTransitions(t *testing.T, outcome workflowruntime.Outcom
 func assertPipelineReviewUsesEditOutput(t *testing.T, outcome workflowruntime.Outcome) {
 	t.Helper()
 	projected := projectPrimaryJSON(t, "session-pipeline-staged-fake-children", outcome.Value)
+	editResult, reviewResult := pipelineFirstItemStageResults(t, projected)
+	assertPipelineStageOutputsDiffer(t, editResult, reviewResult)
+}
+
+func pipelineFirstItemStageResults(t *testing.T, projected map[string]any) (map[string]any, map[string]any) {
+	t.Helper()
 	results, ok := projected["results"].([]any)
 	if !ok || len(results) == 0 {
 		t.Fatalf("projected results = %#v, want non-empty", projected["results"])
@@ -159,6 +165,11 @@ func assertPipelineReviewUsesEditOutput(t *testing.T, outcome workflowruntime.Ou
 	if !ok {
 		t.Fatalf("results[0].stages[1].result = %#v, want object", reviewStage["result"])
 	}
+	return editResult, reviewResult
+}
+
+func assertPipelineStageOutputsDiffer(t *testing.T, editResult, reviewResult map[string]any) {
+	t.Helper()
 	editOutput, ok := editResult["output"].(map[string]any)
 	if !ok {
 		t.Fatalf("edit output = %#v, want object", editResult["output"])

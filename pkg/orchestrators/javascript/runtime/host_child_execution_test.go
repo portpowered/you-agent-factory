@@ -71,7 +71,12 @@ func TestRun_ChildExecutionBoundary_RoutesAgentRunParallelAndPipelineThroughHook
 		t.Fatalf("Run() failure = %#v", outcome.Failure)
 	}
 
-	gotLabels := stub.labelOrder()
+	assertStubChildExecutorLabelOrder(t, stub.labelOrder())
+	assertChildExecutionBoundaryProjection(t, projectPrimaryJSON(t, req.SessionID, outcome.Value))
+}
+
+func assertStubChildExecutorLabelOrder(t *testing.T, gotLabels []string) {
+	t.Helper()
 	if len(gotLabels) != 5 {
 		t.Fatalf("child executor call count = %d, want 5", len(gotLabels))
 	}
@@ -86,8 +91,10 @@ func TestRun_ChildExecutionBoundary_RoutesAgentRunParallelAndPipelineThroughHook
 	if gotLabels[3] != "pipeline-edit-boundary" || gotLabels[4] != "pipeline-review-boundary" {
 		t.Fatalf("pipeline child labels = %#v, want [pipeline-edit-boundary pipeline-review-boundary]", gotLabels[3:])
 	}
+}
 
-	projected := projectPrimaryJSON(t, req.SessionID, outcome.Value)
+func assertChildExecutionBoundaryProjection(t *testing.T, projected map[string]any) {
+	t.Helper()
 	if projected["label"] != "child-execution-boundary" {
 		t.Fatalf("projected label = %#v", projected["label"])
 	}

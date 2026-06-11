@@ -29,61 +29,99 @@ func TestRun_AgentRunFakeChild_EmitsOrderedChildDispatchRecords(t *testing.T) {
 	}
 	assertRecordSequences(t, first.Records)
 
+	wantPromptDigest := assertFakeChildDispatchRecords(t, first.Records, req.SessionID)
+	assertFakeChildProjectedValue(t, req.SessionID, first.Value, wantPromptDigest)
+
+	if recordsJSON(first.Records) != recordsJSON(second.Records) {
+		t.Fatalf("record drift across runs:\nfirst=%s\nsecond=%s", recordsJSON(first.Records), recordsJSON(second.Records))
+	}
+	if string(first.Value.JSON) != string(second.Value.JSON) {
+		t.Fatalf("value drift across runs: first=%s second=%s", first.Value.JSON, second.Value.JSON)
+	}
+}
+
+func assertFakeChildDispatchRecords(t *testing.T, records []workflowruntime.RuntimeRecord, sessionID string) string {
+	t.Helper()
+
 	wantStatuses := []string{
 		workflowruntime.ChildDispatchStatusQueued,
 		workflowruntime.ChildDispatchStatusRunning,
 		workflowruntime.ChildDispatchStatusCompleted,
 	}
-	wantDispatchID := "dispatch-1"
-	wantArtifactRef := workflowresult.FormatArtifactURI(req.SessionID, "child-artifact-1")
-	wantProviderSessionRef := "fake-provider-session-1"
-	wantPromptDigest := first.Records[0].ChildDispatch.PromptDigest
+	wantPromptDigest := records[0].ChildDispatch.PromptDigest
+	wantArtifactRef := workflowresult.FormatArtifactURI(sessionID, "child-artifact-1")
 
 	for i, wantStatus := range wantStatuses {
-		record := first.Records[i]
-		if record.Kind != workflowruntime.RecordKindChildDispatch {
-			t.Fatalf("records[%d].kind = %q, want %q", i, record.Kind, workflowruntime.RecordKindChildDispatch)
-		}
-		child := record.ChildDispatch
-		if child == nil {
-			t.Fatalf("records[%d] missing child dispatch payload", i)
-		}
-		if child.Status != wantStatus {
-			t.Fatalf("records[%d].status = %q, want %q", i, child.Status, wantStatus)
-		}
-		if child.DispatchID != wantDispatchID {
-			t.Fatalf("records[%d].dispatchId = %q, want %q", i, child.DispatchID, wantDispatchID)
-		}
-		if child.ChildIndex != 1 {
-			t.Fatalf("records[%d].childIndex = %d, want 1", i, child.ChildIndex)
-		}
-		if child.Label != "summarize-findings" {
-			t.Fatalf("records[%d].label = %q", i, child.Label)
-		}
-		if child.Model != "gpt-test" || child.ReasoningEffort != "medium" {
-			t.Fatalf("records[%d] model metadata = %#v", i, child)
-		}
-		if child.Command != "review" || child.Sandbox != "read-only" {
-			t.Fatalf("records[%d] command/sandbox = %#v", i, child)
-		}
-		if child.ExecutionMode != "fake" {
-			t.Fatalf("records[%d].executionMode = %q, want fake", i, child.ExecutionMode)
-		}
-		if child.ProviderSessionRef != wantProviderSessionRef {
-			t.Fatalf("records[%d].providerSessionRef = %q, want %q", i, child.ProviderSessionRef, wantProviderSessionRef)
-		}
-		if child.ArtifactRef != wantArtifactRef {
-			t.Fatalf("records[%d].artifactRef = %q, want %q", i, child.ArtifactRef, wantArtifactRef)
-		}
-		if child.PromptDigest != wantPromptDigest {
-			t.Fatalf("records[%d].promptDigest = %q, want %q", i, child.PromptDigest, wantPromptDigest)
-		}
-		if child.SchemaDigest == "" {
-			t.Fatalf("records[%d].schemaDigest is empty", i)
-		}
+		assertFakeChildDispatchRecord(t, records[i], i, wantStatus, wantPromptDigest, wantArtifactRef)
 	}
+	return wantPromptDigest
+}
 
-	projected := projectPrimaryJSON(t, req.SessionID, first.Value)
+func assertFakeChildDispatchRecord(
+	t *testing.T,
+	record workflowruntime.RuntimeRecord,
+	index int,
+	wantStatus string,
+	wantPromptDigest string,
+	wantArtifactRef string,
+) {
+	t.Helper()
+	if record.Kind != workflowruntime.RecordKindChildDispatch {
+		t.Fatalf("records[%d].kind = %q, want %q", index, record.Kind, workflowruntime.RecordKindChildDispatch)
+	}
+	child := record.ChildDispatch
+	if child == nil {
+		t.Fatalf("records[%d] missing child dispatch payload", index)
+	}
+	if child.Status != wantStatus {
+		t.Fatalf("records[%d].status = %q, want %q", index, child.Status, wantStatus)
+	}
+	if child.DispatchID != "dispatch-1" {
+		t.Fatalf("records[%d].dispatchId = %q, want dispatch-1", index, child.DispatchID)
+	}
+	if child.ChildIndex != 1 {
+		t.Fatalf("records[%d].childIndex = %d, want 1", index, child.ChildIndex)
+	}
+	assertFakeChildDispatchRecordMetadata(t, child, index, wantPromptDigest, wantArtifactRef)
+}
+
+func assertFakeChildDispatchRecordMetadata(
+	t *testing.T,
+	child *workflowruntime.ChildDispatchRecord,
+	index int,
+	wantPromptDigest string,
+	wantArtifactRef string,
+) {
+	t.Helper()
+	if child.Label != "summarize-findings" {
+		t.Fatalf("records[%d].label = %q", index, child.Label)
+	}
+	if child.Model != "gpt-test" || child.ReasoningEffort != "medium" {
+		t.Fatalf("records[%d] model metadata = %#v", index, child)
+	}
+	if child.Command != "review" || child.Sandbox != "read-only" {
+		t.Fatalf("records[%d] command/sandbox = %#v", index, child)
+	}
+	if child.ExecutionMode != "fake" {
+		t.Fatalf("records[%d].executionMode = %q, want fake", index, child.ExecutionMode)
+	}
+	if child.ProviderSessionRef != "fake-provider-session-1" {
+		t.Fatalf("records[%d].providerSessionRef = %q, want fake-provider-session-1", index, child.ProviderSessionRef)
+	}
+	if child.ArtifactRef != wantArtifactRef {
+		t.Fatalf("records[%d].artifactRef = %q, want %q", index, child.ArtifactRef, wantArtifactRef)
+	}
+	if child.PromptDigest != wantPromptDigest {
+		t.Fatalf("records[%d].promptDigest = %q, want %q", index, child.PromptDigest, wantPromptDigest)
+	}
+	if child.SchemaDigest == "" {
+		t.Fatalf("records[%d].schemaDigest is empty", index)
+	}
+}
+
+func assertFakeChildProjectedValue(t *testing.T, sessionID string, value workflowresult.TypedValue, wantPromptDigest string) {
+	t.Helper()
+	projected := projectPrimaryJSON(t, sessionID, value)
 	if projected["label"] != "agent-run-fake-child" {
 		t.Fatalf("projected label = %#v", projected["label"])
 	}
@@ -94,17 +132,24 @@ func TestRun_AgentRunFakeChild_EmitsOrderedChildDispatchRecords(t *testing.T) {
 	if !ok {
 		t.Fatalf("projected child = %#v, want object", projected["child"])
 	}
+	assertFakeChildProjectedMetadata(t, child, sessionID, wantPromptDigest)
+	assertFakeChildProjectedOutput(t, child)
+}
+
+func assertFakeChildProjectedMetadata(t *testing.T, child map[string]any, sessionID string, wantPromptDigest string) {
+	t.Helper()
+	wantArtifactRef := workflowresult.FormatArtifactURI(sessionID, "child-artifact-1")
 	if child["status"] != workflowruntime.ChildDispatchStatusCompleted {
 		t.Fatalf("child status = %#v", child["status"])
 	}
-	if child["dispatchId"] != wantDispatchID {
-		t.Fatalf("child dispatchId = %#v, want %q", child["dispatchId"], wantDispatchID)
+	if child["dispatchId"] != "dispatch-1" {
+		t.Fatalf("child dispatchId = %#v, want dispatch-1", child["dispatchId"])
 	}
 	if child["executionMode"] != "fake" {
 		t.Fatalf("child executionMode = %#v", child["executionMode"])
 	}
-	if child["providerSessionRef"] != wantProviderSessionRef {
-		t.Fatalf("child providerSessionRef = %#v, want %q", child["providerSessionRef"], wantProviderSessionRef)
+	if child["providerSessionRef"] != "fake-provider-session-1" {
+		t.Fatalf("child providerSessionRef = %#v, want fake-provider-session-1", child["providerSessionRef"])
 	}
 	if child["artifactRef"] != wantArtifactRef {
 		t.Fatalf("child artifactRef = %#v, want %q", child["artifactRef"], wantArtifactRef)
@@ -118,6 +163,10 @@ func TestRun_AgentRunFakeChild_EmitsOrderedChildDispatchRecords(t *testing.T) {
 	if child["promptDigest"] != wantPromptDigest {
 		t.Fatalf("child promptDigest = %#v, want %q", child["promptDigest"], wantPromptDigest)
 	}
+}
+
+func assertFakeChildProjectedOutput(t *testing.T, child map[string]any) {
+	t.Helper()
 	output, ok := child["output"].(map[string]any)
 	if !ok {
 		t.Fatalf("child output = %#v, want object", child["output"])
@@ -130,12 +179,5 @@ func TestRun_AgentRunFakeChild_EmitsOrderedChildDispatchRecords(t *testing.T) {
 	}
 	if output["schemaValidated"] != true {
 		t.Fatalf("child output schemaValidated = %#v", output["schemaValidated"])
-	}
-
-	if recordsJSON(first.Records) != recordsJSON(second.Records) {
-		t.Fatalf("record drift across runs:\nfirst=%s\nsecond=%s", recordsJSON(first.Records), recordsJSON(second.Records))
-	}
-	if string(first.Value.JSON) != string(second.Value.JSON) {
-		t.Fatalf("value drift across runs: first=%s second=%s", first.Value.JSON, second.Value.JSON)
 	}
 }

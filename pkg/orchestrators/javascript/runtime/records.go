@@ -153,11 +153,6 @@ func (c *recordCollector) nextCheckpointID() string {
 	return fmt.Sprintf("checkpoint-%d", c.checkpointCount)
 }
 
-func (c *recordCollector) nextChildDispatchID() string {
-	id, _ := c.nextChildDispatchIdentity()
-	return id
-}
-
 func (c *recordCollector) nextChildDispatchIdentity() (string, int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
