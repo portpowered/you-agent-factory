@@ -11,7 +11,7 @@ import (
 
 func contractFixturesPath(t *testing.T) string {
 	t.Helper()
-	return filepath.Join("..", "api", "testdata", "durable-session-contract-fixtures.json")
+	return filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 }
 
 func TestFakeAndRuntimeService_ImplementSharedContract(t *testing.T) {

@@ -189,7 +189,7 @@ func TestPrepareStart_RejectsInvalidWait(t *testing.T) {
 
 func readRuntimeFixture(t *testing.T, name string) string {
 	t.Helper()
-	path := filepath.Join("..", "orchestrators", "javascript", "runtime", "testdata", name)
+	path := filepath.Join("..", "..", "orchestrators", "javascript", "runtime", "testdata", name)
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read fixture %s: %v", name, err)
