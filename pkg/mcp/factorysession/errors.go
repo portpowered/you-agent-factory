@@ -10,14 +10,18 @@ import (
 )
 
 const (
-	errorCodeBadRequest                 = "BAD_REQUEST"
-	errorCodeValidateInvalid            = "factory_session.validate.invalid"
-	errorMessageValidateInvalid         = "factory source validation found blocking issues"
-	errorCodeServiceUnavailable         = "factory_session.service.unavailable"
-	errorCodeStartUnknownScenario       = "factory_session.start.unknown_scenario"
-	errorCodeStartRequestIDConflict     = "factory_session.start.request_id_conflict"
-	errorMessageServiceUnavailable      = "factory session execution service is unavailable"
-	errorMessageStartRequestIDConflict  = "execution request id was reused with a different start tuple"
+	errorCodeBadRequest                = "BAD_REQUEST"
+	errorCodeValidateInvalid           = "factory_session.validate.invalid"
+	errorMessageValidateInvalid        = "factory source validation found blocking issues"
+	errorCodeServiceUnavailable        = "factory_session.service.unavailable"
+	errorCodeStartUnknownScenario      = "factory_session.start.unknown_scenario"
+	errorCodeStartRequestIDConflict    = "factory_session.start.request_id_conflict"
+	errorCodeSessionNotFound           = "factory_session.session.not_found"
+	errorCodeResultNotReady            = "factory_session.result.not_ready"
+	errorMessageServiceUnavailable     = "factory session execution service is unavailable"
+	errorMessageStartRequestIDConflict = "execution request id was reused with a different start tuple"
+	errorMessageSessionNotFound        = "factory session not found"
+	errorMessageResultNotReady         = "factory session result is not ready"
 )
 
 func requestValidationErrorEnvelope(err error) ToolErrorEnvelope {
@@ -69,6 +73,46 @@ func unavailableServiceErrorEnvelope() ToolErrorEnvelope {
 		Code:      errorCodeServiceUnavailable,
 		Message:   errorMessageServiceUnavailable,
 		Retryable: false,
+	}
+}
+
+func readErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
+	if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+		return sessionNotFoundErrorEnvelope(sessionID)
+	}
+	return executionErrorEnvelope(err)
+}
+
+func sessionNotFoundErrorEnvelope(sessionID string) ToolErrorEnvelope {
+	return ToolErrorEnvelope{
+		Code:      errorCodeSessionNotFound,
+		Message:   errorMessageSessionNotFound,
+		Retryable: false,
+		SessionID: strings.TrimSpace(sessionID),
+	}
+}
+
+func resultNotReadyErrorEnvelope(sessionID string, availability *factorysessionexecution.ResultAvailabilityDetail) ToolErrorEnvelope {
+	message := errorMessageResultNotReady
+	retryable := true
+	details := map[string]any{
+		"reason": "RESULT_NOT_READY",
+	}
+	if availability != nil {
+		if trimmed := strings.TrimSpace(availability.Message); trimmed != "" {
+			message = trimmed
+		}
+		retryable = availability.Retryable
+		if trimmed := strings.TrimSpace(availability.Reason); trimmed != "" {
+			details["reason"] = trimmed
+		}
+	}
+	return ToolErrorEnvelope{
+		Code:      errorCodeResultNotReady,
+		Message:   message,
+		Retryable: retryable,
+		SessionID: strings.TrimSpace(sessionID),
+		Details:   details,
 	}
 }
 
