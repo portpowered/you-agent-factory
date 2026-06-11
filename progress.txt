@@ -1,0 +1,26 @@
+## Codebase Patterns
+- Published Factory Session fixture scenario IDs and stable projection hashes live in `pkg/factorysessionexecution/fixture_catalog.go` (`PublishedFixtureScenarios`, `FixtureScenarioIdentityFromScenario`, `FixtureScenarioProjectionHash`); contract JSON remains in `pkg/api/testdata/durable-session-contract-fixtures.json` and loads through `LoadFakeScenariosFromContractFixtures`.
+- Use `ContractFixtureCatalogRelativePath` when downstream cells need the repository-relative catalog path; prove stable identity with `fixture_catalog_test.go` golden projection hashes rather than recomputing ad hoc in each consumer package.
+- Built-in recoverable interrupted JavaScript session `javascript-interrupted-recoverable` is appended by `LoadFakeScenariosFromContractFixtures` even though it is not in the JSON catalog.
+- Prove FakeService start/list/read/result behavior against `PublishedFixtureScenarios` in `start_list_read_result_test.go`; use `ProjectedResultReadHash` and `SyncStartResultHash` for golden result digests instead of ad hoc field comparisons.
+
+## 2026-06-11 UTC - dynamic-workflows-cell-provider-fixtures-001
+- Published stable fixture scenario identity catalog with purpose-to-scenario mappings for validation failure, async running, sync success, sync timeout, failed recoverable session, dispatch inspection, artifact inspection, event reconnect, and lifecycle-control outcomes.
+- Added `FixtureScenarioIdentityFromScenario` and `FixtureScenarioProjectionHash` to derive deterministic session/dispatch/artifact/event IDs and stable `sha256:` projection digests from loaded contract fixtures.
+- Added direct tests documenting golden scenario identities, reload stability, canonical Factory Session vocabulary, and hydrated published catalog rows.
+- Files changed: `pkg/factorysessionexecution/fixture_catalog.go`, `pkg/factorysessionexecution/fixture_catalog_test.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: mirror UI replay catalog style with exported Go constants plus a published slice (`PublishedFixtureScenarios`) keyed by `FixtureScenarioPurpose`; hash identity bundles via canonical JSON of sorted ID lists plus optional `primaryResultHash`.
+  - Gotchas encountered: `javascript-interrupted-recoverable` is injected at load time from `BuiltinInterruptedRecoverableScenario()` — include it when asserting full scenario counts from the loader, not only JSON `scenarios[]` length.
+  - Useful context: existing `fake_service_test.go` already exercises runtime behavior; story 001 focuses on documenting reusable scenario IDs/hashes for downstream cells without widening into transport surfaces.
+---
+
+## 2026-06-11 UTC - dynamic-workflows-cell-provider-fixtures-002
+- Added `ProjectedResultReadHash` and `SyncStartResultHash` helpers for stable downstream result assertions.
+- Added `start_list_read_result_test.go` proving published-scenario async/sync start, scoped session listing with all-scope dedup, get-session read models, result reads with golden hashes, artifact inclusion shaping, and start idempotency replay/conflict through direct `FakeService` tests.
+- Files changed: `pkg/factorysessionexecution/fixture_catalog.go`, `pkg/factorysessionexecution/start_list_read_result_test.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: drive story-level FakeService tests from `PublishedFixtureScenarios` + `publishedScenarioByPurpose` rather than duplicating request/session IDs; fixture `asyncResponse.links` may omit events/dispatches/artifacts even when `InspectionLinksForSession` includes them.
+  - Gotchas encountered: `GetSession` read models for running/timeout fixtures may omit `resultSummary` — assert result status via `GetResult` instead; idempotent-replay conflict tests must copy `Args` into a new map before mutation.
+  - Useful context: sync timeout scenario returns `SYNC_WAIT_TIMED_OUT` availability on final result reads; terminal success dedupes from live rows in `scope=all` when also present in persisted durable listing.
+---
