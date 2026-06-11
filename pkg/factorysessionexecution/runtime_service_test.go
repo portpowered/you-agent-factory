@@ -185,6 +185,177 @@ func TestRuntimeService_ReadEvents_ModelsSessionStartedForAsyncSession(t *testin
 	}
 }
 
+func TestRuntimeService_StartSync_CompletesSimpleFinalWithPrimaryResult(t *testing.T) {
+	_, service := newRuntimeServiceWithFixture(t, "simple-final.workflow.js", "simple-final")
+
+	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-runtime-sync-complete",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "simple-final",
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+			"count":   3,
+			"prefix":  "you",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+	if completed.SyncOutcome != factorysessionexecution.SyncOutcomeCompleted {
+		t.Fatalf("syncOutcome = %q, want COMPLETED", completed.SyncOutcome)
+	}
+	if completed.Status != string(factorysessionexecution.LifecycleStatusSucceeded) {
+		t.Fatalf("status = %q, want SUCCEEDED", completed.Status)
+	}
+	if len(completed.Result) == 0 {
+		t.Fatal("expected encoded session result on completed sync start")
+	}
+
+	var resultPayload struct {
+		ResultStatus  string          `json:"resultStatus"`
+		SessionStatus string          `json:"sessionStatus"`
+		PrimaryResult json.RawMessage `json:"primaryResult"`
+	}
+	if err := json.Unmarshal(completed.Result, &resultPayload); err != nil {
+		t.Fatalf("Unmarshal sync result: %v", err)
+	}
+	if resultPayload.ResultStatus != string(factorysessionexecution.ResultStatusFinal) {
+		t.Fatalf("resultStatus = %q, want FINAL", resultPayload.ResultStatus)
+	}
+	if resultPayload.SessionStatus != string(factorysessionexecution.LifecycleStatusSucceeded) {
+		t.Fatalf("sessionStatus = %q, want SUCCEEDED", resultPayload.SessionStatus)
+	}
+	var primary map[string]any
+	if err := json.Unmarshal(resultPayload.PrimaryResult, &primary); err != nil {
+		t.Fatalf("Unmarshal primary result: %v", err)
+	}
+	if primary["echo"] != "you:workflows" {
+		t.Fatalf("primary echo = %#v, want you:workflows", primary["echo"])
+	}
+
+	read, err := service.GetSession(context.Background(), completed.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if read.Status != factorysessionexecution.LifecycleStatusSucceeded {
+		t.Fatalf("GetSession status = %q, want SUCCEEDED", read.Status)
+	}
+
+	result, err := service.GetResult(context.Background(), completed.SessionID, factorysessionexecution.ResultRequest{
+		Mode: factorysessionexecution.ResultModeFinal,
+	})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.ResultStatus != factorysessionexecution.ResultStatusFinal {
+		t.Fatalf("GetResult status = %q, want FINAL", result.ResultStatus)
+	}
+	if len(result.PrimaryResult) == 0 {
+		t.Fatal("expected primary result on GetResult after sync completion")
+	}
+}
+
+func TestRuntimeService_StartSync_TimesOutBusyLoopAndPreservesSession(t *testing.T) {
+	_, service := newRuntimeServiceWithFixture(t, "busy-loop.workflow.js", "busy-loop")
+	timeoutMillis := int64(25)
+
+	timedOut, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-runtime-sync-timeout",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "busy-loop",
+		},
+		Wait: &factorysessionexecution.WaitOptions{
+			TimeoutMillis:   &timeoutMillis,
+			CancelOnTimeout: false,
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+	if timedOut.SyncOutcome != factorysessionexecution.SyncOutcomeTimedOut || !timedOut.TimedOut {
+		t.Fatalf("timeout response = %#v", timedOut)
+	}
+	if timedOut.Status != string(factorysessionexecution.LifecycleStatusRunning) {
+		t.Fatalf("status = %q, want RUNNING", timedOut.Status)
+	}
+	if timedOut.SessionCanceledByTimeout {
+		t.Fatal("sessionCanceledByTimeout = true, want false")
+	}
+
+	read, err := service.GetSession(context.Background(), timedOut.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if read.Status != factorysessionexecution.LifecycleStatusRunning {
+		t.Fatalf("GetSession status = %q, want RUNNING", read.Status)
+	}
+
+	result, err := service.GetResult(context.Background(), timedOut.SessionID, factorysessionexecution.ResultRequest{
+		Mode: factorysessionexecution.ResultModeFinal,
+	})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.ResultStatus != factorysessionexecution.ResultStatusNotReady {
+		t.Fatalf("resultStatus = %q, want NOT_READY", result.ResultStatus)
+	}
+	if result.Availability == nil || result.Availability.Reason != "SYNC_WAIT_TIMED_OUT" {
+		t.Fatalf("availability = %#v, want SYNC_WAIT_TIMED_OUT", result.Availability)
+	}
+}
+
+func TestRuntimeService_StartSync_TimeoutPreservesEventualRuntimeResult(t *testing.T) {
+	projectRoot := setupSlowFinalWorkflowFixture(t)
+	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
+		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	})
+	timeoutMillis := int64(20)
+
+	timedOut, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-runtime-sync-slow-timeout",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "slow-final",
+		},
+		Wait: &factorysessionexecution.WaitOptions{
+			TimeoutMillis: &timeoutMillis,
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+	if timedOut.SyncOutcome != factorysessionexecution.SyncOutcomeTimedOut || !timedOut.TimedOut {
+		t.Fatalf("timeout response = %#v", timedOut)
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		read, err := service.GetSession(context.Background(), timedOut.SessionID)
+		if err != nil {
+			t.Fatalf("GetSession after timeout: %v", err)
+		}
+		if read.Status == factorysessionexecution.LifecycleStatusSucceeded {
+			final, err := service.GetResult(context.Background(), timedOut.SessionID, factorysessionexecution.ResultRequest{
+				Mode: factorysessionexecution.ResultModeFinal,
+			})
+			if err != nil {
+				t.Fatalf("GetResult after background completion: %v", err)
+			}
+			if final.ResultStatus != factorysessionexecution.ResultStatusFinal {
+				t.Fatalf("final resultStatus = %q, want FINAL", final.ResultStatus)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("session still %q after timeout wait, want eventual SUCCEEDED", read.Status)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func TestRuntimeService_StartAsync_CompletesSimpleFinalInBackground(t *testing.T) {
 	_, service := newRuntimeServiceWithFixture(t, "simple-final.workflow.js", "simple-final")
 
@@ -238,6 +409,24 @@ func newRuntimeServiceWithFixture(t *testing.T, fixtureName, workflowName string
 		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
 	})
 	return projectRoot, service
+}
+
+func setupSlowFinalWorkflowFixture(t *testing.T) string {
+	t.Helper()
+	projectRoot := t.TempDir()
+	workflowDir := filepath.Join(projectRoot, workflowsource.ProjectClaudeWorkflowsDir)
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	source := `var spin = 0;
+while (spin < 12000000) {
+  spin += 1;
+}
+return { completed: true };`
+	if err := os.WriteFile(filepath.Join(workflowDir, "slow-final.js"), []byte(source), 0o600); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+	return projectRoot
 }
 
 func setupRuntimeWorkflowFixture(t *testing.T, fixtureName, workflowName string) string {

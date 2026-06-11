@@ -3,6 +3,7 @@ package factorysessionexecution
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -25,11 +26,12 @@ type RuntimeService struct {
 }
 
 type runtimeSessionState struct {
-	session   SessionReadResult
-	result    ResultReadResult
-	dispatches []DispatchSummary
-	artifacts []ArtifactSummary
-	events    []json.RawMessage
+	session       SessionReadResult
+	result        ResultReadResult
+	dispatches    []DispatchSummary
+	artifacts     []ArtifactSummary
+	events        []json.RawMessage
+	runtimeDone chan struct{}
 }
 
 // RuntimeServiceOption configures one RuntimeService instance.
@@ -92,7 +94,7 @@ func (s *RuntimeService) StartAsync(ctx context.Context, req StartRequest) (Asyn
 	asyncResult := s.asyncStartFromState(state)
 	s.mu.Unlock()
 
-	go s.runSessionAsync(prepared, state.session.SessionID)
+	go s.runSession(context.Background(), prepared, state.session.SessionID)
 	return asyncResult, nil
 }
 
@@ -100,7 +102,82 @@ func (s *RuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncS
 	if err := ctx.Err(); err != nil {
 		return SyncStartResult{}, err
 	}
-	return SyncStartResult{}, fmt.Errorf("sync start is not implemented by runtime service")
+	prepared, err := PrepareStart(req, s.prepareCtx)
+	if err != nil {
+		return SyncStartResult{}, err
+	}
+
+	s.mu.Lock()
+	if replay, ok := s.startReplay[prepared.Request.RequestID]; ok {
+		if err := CheckRequestIDReplay(prepared.Request.RequestID, replay.tupleHash, prepared.TupleHash); err != nil {
+			s.mu.Unlock()
+			return SyncStartResult{}, err
+		}
+		state, ok := s.sessions[replay.sessionID]
+		if !ok {
+			s.mu.Unlock()
+			return SyncStartResult{}, ErrSessionNotFound
+		}
+		result := s.syncStartFromStateLocked(state)
+		s.mu.Unlock()
+		return result, nil
+	}
+
+	state := s.newRunningSessionState(prepared)
+	runCtx, cancel := context.WithCancel(context.Background())
+	sessionID := state.session.SessionID
+	runtimeDone := state.runtimeDone
+	s.sessions[sessionID] = state
+	s.startReplay[prepared.Request.RequestID] = startReplayRecord{
+		sessionID: sessionID,
+		tupleHash: prepared.TupleHash,
+	}
+	s.mu.Unlock()
+
+	go s.runSession(runCtx, prepared, sessionID)
+
+	waitCtx := ctx
+	var cancelWait context.CancelFunc
+	if timeout := syncWaitTimeout(prepared.Request.Wait); timeout > 0 {
+		waitCtx, cancelWait = context.WithTimeout(ctx, timeout)
+	}
+	if cancelWait != nil {
+		defer cancelWait()
+	}
+
+	select {
+	case <-runtimeDone:
+		s.mu.RLock()
+		state, ok := s.sessions[sessionID]
+		if !ok {
+			s.mu.RUnlock()
+			return SyncStartResult{}, ErrSessionNotFound
+		}
+		result := s.syncStartFromStateLocked(state)
+		s.mu.RUnlock()
+		return result, nil
+	case <-waitCtx.Done():
+		if errors.Is(waitCtx.Err(), context.DeadlineExceeded) && syncWaitTimeout(prepared.Request.Wait) > 0 {
+			cancelOnTimeout := prepared.Request.Wait != nil && prepared.Request.Wait.CancelOnTimeout
+			if cancelOnTimeout {
+				cancel()
+			}
+			s.applySyncWaitTimeout(sessionID)
+			s.mu.RLock()
+			state, ok := s.sessions[sessionID]
+			if !ok {
+				s.mu.RUnlock()
+				return SyncStartResult{}, ErrSessionNotFound
+			}
+			result := s.syncTimedOutFromStateLocked(state, cancelOnTimeout)
+			s.mu.RUnlock()
+			return result, nil
+		}
+		if err := ctx.Err(); err != nil {
+			return SyncStartResult{}, err
+		}
+		return SyncStartResult{}, waitCtx.Err()
+	}
 }
 
 func (s *RuntimeService) GetSession(ctx context.Context, sessionID string) (SessionReadResult, error) {
@@ -349,21 +426,24 @@ func (s *RuntimeService) newRunningSessionState(prepared PreparedStart) *runtime
 		Availability: defaultNotReadyAvailability(session),
 	}
 	state := &runtimeSessionState{
-		session: session,
-		result:  result,
+		session:     session,
+		result:      result,
+		runtimeDone: make(chan struct{}),
 	}
 	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
 	return state
 }
 
-func (s *RuntimeService) runSessionAsync(prepared PreparedStart, sessionID string) {
+func (s *RuntimeService) runSession(ctx context.Context, prepared PreparedStart, sessionID string) {
+	defer s.markRuntimeDone(sessionID)
+
 	argsJSON, err := json.Marshal(prepared.Request.Args)
 	if err != nil {
 		s.applyRuntimeError(sessionID, fmt.Errorf("marshal workflow args: %w", err))
 		return
 	}
 
-	outcome, err := workflowruntime.Run(context.Background(), workflowruntime.Request{
+	outcome, err := workflowruntime.Run(ctx, workflowruntime.Request{
 		Source:    prepared.SourceContent,
 		SourceRef: prepared.SourceRef,
 		SessionID: sessionID,
@@ -455,6 +535,76 @@ func (s *RuntimeService) asyncStartFromState(state *runtimeSessionState) AsyncSt
 		Policy:           state.session.Policy,
 		Links:            state.session.Links,
 	}
+}
+
+func (s *RuntimeService) syncStartFromStateLocked(state *runtimeSessionState) SyncStartResult {
+	result := SyncStartResult{AsyncStartResult: s.asyncStartFromState(state)}
+	if !IsTerminalLifecycleStatus(state.session.Status) {
+		return result
+	}
+	result.SyncOutcome = SyncOutcomeCompleted
+	projected, err := ProjectResultRead(state.result, state.session, state.artifacts, ResultRequest{
+		Mode: ResultModeFinal,
+	})
+	if err != nil {
+		return result
+	}
+	encoded, err := json.Marshal(projected)
+	if err != nil {
+		return result
+	}
+	result.Result = encoded
+	return result
+}
+
+func (s *RuntimeService) syncTimedOutFromStateLocked(state *runtimeSessionState, sessionCanceledByTimeout bool) SyncStartResult {
+	return SyncStartResult{
+		AsyncStartResult:         s.asyncStartFromState(state),
+		SyncOutcome:              SyncOutcomeTimedOut,
+		TimedOut:                 true,
+		SessionCanceledByTimeout: sessionCanceledByTimeout,
+	}
+}
+
+func (s *RuntimeService) applySyncWaitTimeout(sessionID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, ok := s.sessions[sessionID]
+	if !ok || IsTerminalLifecycleStatus(state.session.Status) {
+		return
+	}
+	state.result = ResultReadResult{
+		SessionID:     sessionID,
+		ResultStatus:  ResultStatusNotReady,
+		SessionStatus: state.session.Status,
+		Availability: &ResultAvailabilityDetail{
+			Reason:    "SYNC_WAIT_TIMED_OUT",
+			Message:   "Sync wait ended before a terminal result was available.",
+			Retryable: true,
+		},
+	}
+}
+
+func (s *RuntimeService) markRuntimeDone(sessionID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, ok := s.sessions[sessionID]
+	if !ok || state.runtimeDone == nil {
+		return
+	}
+	select {
+	case <-state.runtimeDone:
+	default:
+		close(state.runtimeDone)
+	}
+}
+
+func syncWaitTimeout(wait *WaitOptions) time.Duration {
+	if wait == nil || wait.TimeoutMillis == nil {
+		return 0
+	}
+	return time.Duration(*wait.TimeoutMillis) * time.Millisecond
 }
 
 func (s *RuntimeService) sessionStateLocked(sessionID string) (*runtimeSessionState, error) {
