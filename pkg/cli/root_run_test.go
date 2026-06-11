@@ -1,4 +1,5 @@
 // backendsizecheck:ignore-file consolidated root run and operator-default CLI tests remain together until dedicated CLI test seams split.
+// pkgmaintcheck:ignore-file-lines consolidated root run and operator-default CLI tests remain together until dedicated CLI test seams split.
 package cli
 
 import (
