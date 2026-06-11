@@ -381,6 +381,56 @@ func (s *FakeService) sessionState(sessionID string) (*fakeSessionState, error) 
 	return state, nil
 }
 
+func validateLifecycleControlRequest(
+	operation LifecycleControlKind,
+	control ControlRequest,
+	approve ApproveRequest,
+	retry RetryDispatchRequest,
+) error {
+	switch operation {
+	case LifecycleControlApprove:
+		if _, err := NormalizeApproveRequest(approve); err != nil {
+			return err
+		}
+	case LifecycleControlRetryDispatch:
+		if _, err := NormalizeRetryDispatchRequest(retry); err != nil {
+			return err
+		}
+	default:
+		if _, err := NormalizeControlRequest(control); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func lifecycleControlResultFromState(
+	state *fakeSessionState,
+	id string,
+	operation LifecycleControlKind,
+	outcome LifecycleControlOutcome,
+	retry RetryDispatchRequest,
+) LifecycleControlResult {
+	result := LifecycleControlResult{
+		SessionID: id,
+		Operation: operation,
+		Outcome:   outcome,
+		Status:    state.session.Status,
+		Links:     LifecycleControlLinksForSession(id, true),
+	}
+	if operation == LifecycleControlRetryDispatch {
+		result.DispatchID = retry.DispatchID
+		if outcome == LifecycleControlOutcomeAccepted {
+			result.RetryDispatchID = retry.DispatchID
+		}
+	}
+	if outcome == LifecycleControlOutcomeAccepted || outcome == LifecycleControlOutcomeNoOp {
+		session := cloneSessionRead(state.session)
+		result.Session = &session
+	}
+	return result
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity this fake lifecycle path keeps control validation, mutation, and projection assembly together on one seam.
 func (s *FakeService) applyLifecycleControl(
 	ctx context.Context,
@@ -397,19 +447,8 @@ func (s *FakeService) applyLifecycleControl(
 	if err != nil {
 		return LifecycleControlResult{}, err
 	}
-	switch operation {
-	case LifecycleControlApprove:
-		if _, err := NormalizeApproveRequest(approve); err != nil {
-			return LifecycleControlResult{}, err
-		}
-	case LifecycleControlRetryDispatch:
-		if _, err := NormalizeRetryDispatchRequest(retry); err != nil {
-			return LifecycleControlResult{}, err
-		}
-	default:
-		if _, err := NormalizeControlRequest(control); err != nil {
-			return LifecycleControlResult{}, err
-		}
+	if err := validateLifecycleControlRequest(operation, control, approve, retry); err != nil {
+		return LifecycleControlResult{}, err
 	}
 
 	s.mu.Lock()
@@ -467,23 +506,7 @@ func (s *FakeService) applyLifecycleControl(
 		s.mutateSessionForControl(state, operation, retry.DispatchID)
 	}
 
-	result := LifecycleControlResult{
-		SessionID: id,
-		Operation: operation,
-		Outcome:   outcome,
-		Status:    state.session.Status,
-		Links:     LifecycleControlLinksForSession(id, true),
-	}
-	if operation == LifecycleControlRetryDispatch {
-		result.DispatchID = retry.DispatchID
-		if outcome == LifecycleControlOutcomeAccepted {
-			result.RetryDispatchID = retry.DispatchID
-		}
-	}
-	if outcome == LifecycleControlOutcomeAccepted || outcome == LifecycleControlOutcomeNoOp {
-		session := cloneSessionRead(state.session)
-		result.Session = &session
-	}
+	result := lifecycleControlResultFromState(state, id, operation, outcome, retry)
 	s.recordControlReplay(requestID, tupleHash, result, nil)
 	return result, nil
 }

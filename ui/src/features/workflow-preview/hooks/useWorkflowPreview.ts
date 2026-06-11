@@ -18,9 +18,6 @@ export function buildFactoryPreviewQueryKey(request: FactoryPreviewRequest) {
   ] as const;
 }
 
-/** @deprecated Use buildFactoryPreviewQueryKey. */
-export const buildWorkflowPreviewQueryKey = buildFactoryPreviewQueryKey;
-
 export function factoryPreviewQueryOptions(
   request: FactoryPreviewRequest | null,
   isEnabled = true,
@@ -42,9 +39,6 @@ export function factoryPreviewQueryOptions(
   } as const;
 }
 
-/** @deprecated Use factoryPreviewQueryOptions. */
-export const workflowPreviewQueryOptions = factoryPreviewQueryOptions;
-
 export function useFactoryPreview(
   request: FactoryPreviewRequest | null,
   isEnabled = true,
@@ -53,6 +47,3 @@ export function useFactoryPreview(
     factoryPreviewQueryOptions(request, isEnabled),
   );
 }
-
-/** @deprecated Use useFactoryPreview. */
-export const useWorkflowPreview = useFactoryPreview;
