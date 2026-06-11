@@ -234,6 +234,34 @@ describe("useFactoryGraphVisualGroupEditor", () => {
     expect(createVisualGroup).not.toHaveBeenCalled();
   });
 
+  it("hides selected group controls when editor mode is off", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphVisualGroupEditor({
+        activeTool: null,
+        addNodeToVisualGroup: vi.fn(),
+        canInteractWithEditor: true,
+        canvasNodeOptions: [],
+        createVisualGroup: vi.fn(() => null),
+        deleteVisualGroup: vi.fn(),
+        editorMode: false,
+        layout: layoutWithGroup(),
+        moveVisualGroupByDelta: vi.fn(),
+        removeNodeFromVisualGroup: vi.fn(),
+        renameVisualGroup: vi.fn(),
+        resizeVisualGroup: vi.fn(),
+        resolveViewportCenter: () => ({ x: 0, y: 0 }),
+        setVisualGroupColor: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      result.current.handleSelectVisualGroup("group-1");
+    });
+
+    expect(result.current.visualGroupControls).toBeNull();
+    expect(result.current.canEditVisualGroups).toBe(false);
+  });
+
   it("surfaces stale members and invalid bounds on the selected group controls", () => {
     const layout = addFactoryLayoutGroup(createDefaultFactoryLayout(), {
       bounds: {

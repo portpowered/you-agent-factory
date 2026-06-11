@@ -19,6 +19,7 @@ function renderToolbar({
   hasPendingChanges = true,
   hiddenNodeClasses = new Set<FactoryGraphNodeKind>(),
   hideShowVisible = true,
+  onCreateVisualGroup = vi.fn(),
   onToggleEditMode = vi.fn(),
   onToggleHiddenNodeClass = vi.fn(),
   visible = true,
@@ -27,6 +28,7 @@ function renderToolbar({
   hasPendingChanges?: boolean;
   hiddenNodeClasses?: ReadonlySet<FactoryGraphNodeKind>;
   hideShowVisible?: boolean;
+  onCreateVisualGroup?: () => void;
   onToggleEditMode?: () => void;
   onToggleHiddenNodeClass?: (kind: FactoryGraphNodeKind) => void;
   visible?: boolean;
@@ -58,6 +60,7 @@ function renderToolbar({
           hiddenNodeClasses={hiddenNodeClasses}
           hideShowMenuOpen={hideShowMenuOpen}
           hideShowVisible={hideShowVisible}
+          onCreateVisualGroup={onCreateVisualGroup}
           onDiscard={() => {}}
           onAddAction={() => {}}
           onAddMenuOpenChange={setMenuOpen}
@@ -76,6 +79,17 @@ function renderToolbar({
 }
 
 describe("factory graph editor toolbar controls", () => {
+  it("invokes create visual group from the toolbar when edit mode is active", async () => {
+    const user = userEvent.setup();
+    const onCreateVisualGroup = vi.fn();
+
+    renderToolbar({ editMode: true, onCreateVisualGroup });
+
+    await user.click(screen.getByRole("button", { name: "Create group" }));
+
+    expect(onCreateVisualGroup).toHaveBeenCalledTimes(1);
+  });
+
   it("opens the add menu from the keyboard and exposes action copy", async () => {
     const user = userEvent.setup();
 

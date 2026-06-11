@@ -517,6 +517,40 @@ describe("factory-graph-layout-validation", () => {
     ]);
   });
 
+  it("drops groups without ids and blank member ids during topology pruning", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const validNodeIds = factoryLayoutTopologyNodeIds(topology);
+    const layout: ReturnType<typeof createDefaultFactoryLayout> = {
+      schemaVersion: 1,
+      groups: [
+        {
+          bounds: { x: 0, y: 0, width: 120, height: 80 },
+          id: "",
+          nodeIds: ["workstation:missing"],
+        },
+        {
+          bounds: { x: 40, y: 60, width: 120, height: 80 },
+          id: "valid-lane",
+          nodeIds: ["", "workstation:missing", "workstation:draft"],
+        },
+      ],
+    };
+
+    const { layout: prunedLayout, prunedGroupMemberNodeIds } =
+      pruneFactoryLayoutGroupsForTopology(layout, validNodeIds);
+
+    expect(prunedGroupMemberNodeIds).toEqual(["workstation:missing"]);
+    expect(prunedLayout.groups).toEqual([
+      {
+        bounds: { x: 40, y: 60, width: 120, height: 80 },
+        id: "valid-lane",
+        nodeIds: ["workstation:draft"],
+      },
+    ]);
+  });
+
   it("rejects groups with non-finite bounds during save preparation", () => {
     const topology = buildFactoryGraphTopologyFromDefinition(
       baseFactoryDefinition,
