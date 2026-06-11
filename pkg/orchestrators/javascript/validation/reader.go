@@ -7,16 +7,21 @@ import (
 	"strings"
 )
 
-// FileSourceReader returns a reader that resolves workflow source refs relative to rootDir.
-func FileSourceReader(rootDir string) factorySourceReader {
-	return factorySourceReader{rootDir: rootDir}
+// SourceReader reads workflow source content for factory-relative refs.
+type SourceReader interface {
+	ReadWorkflowSource(sourceRef string) (string, error)
 }
 
-type factorySourceReader struct {
+// FileSourceReader returns a reader that resolves workflow source refs relative to rootDir.
+func FileSourceReader(rootDir string) SourceReader {
+	return fileSourceReader{rootDir: rootDir}
+}
+
+type fileSourceReader struct {
 	rootDir string
 }
 
-func (r factorySourceReader) ReadWorkflowSource(sourceRef string) (string, error) {
+func (r fileSourceReader) ReadWorkflowSource(sourceRef string) (string, error) {
 	ref := strings.TrimSpace(sourceRef)
 	if ref == "" {
 		return "", fmt.Errorf("workflow source ref is empty")

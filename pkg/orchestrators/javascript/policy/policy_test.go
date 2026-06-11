@@ -6,7 +6,7 @@ import (
 
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workflowpolicy"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 )
 
 func TestDefaultEffectivePolicy_MatchesReadOnlyMVPDefaults(t *testing.T) {

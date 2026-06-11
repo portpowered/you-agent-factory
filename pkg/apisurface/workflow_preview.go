@@ -2,7 +2,7 @@ package apisurface
 
 import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/workflowpreview"
+	workflowpreview "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview"
 )
 
 // BuildWorkflowPreview is a compatibility alias for BuildFactoryPreview.

@@ -3,9 +3,9 @@ package workflowpreview
 import (
 	"encoding/json"
 
-	"github.com/portpowered/infinite-you/pkg/workflowpolicy"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
-	"github.com/portpowered/infinite-you/pkg/workflowvalidation"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
 )
 
 // Request is the shared workflow validation and policy preview contract input.

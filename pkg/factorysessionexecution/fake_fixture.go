@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 // LoadFakeScenariosFromContractFixtures loads deterministic fake scenarios from the

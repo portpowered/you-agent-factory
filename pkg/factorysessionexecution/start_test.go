@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 func baseRequest() factorysessionexecution.StartRequest {
