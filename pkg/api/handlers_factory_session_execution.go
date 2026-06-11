@@ -64,6 +64,16 @@ func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.R
 	s.writeJSON(w, http.StatusOK, response)
 }
 
+func (s *Server) writeDurableSessionListError(w http.ResponseWriter, err error) {
+	var validationErr *factorysessionexecution.ValidationError
+	if errors.As(err, &validationErr) {
+		s.writeError(w, http.StatusBadRequest, validationErr.Error(), "BAD_REQUEST")
+		return
+	}
+	s.logger.Error("list durable factory sessions failed", zap.Error(err))
+	s.writeError(w, http.StatusInternalServerError, "failed to list factory sessions", "INTERNAL_ERROR")
+}
+
 func (s *Server) writeDurableSessionStartError(w http.ResponseWriter, err error) {
 	var validationErr *apisurface.RequestValidationError
 	if errors.As(err, &validationErr) {

@@ -36,14 +36,22 @@ type durableStartIdempotentReplayFixture struct {
 
 func newDurableSessionAPITestServer(t *testing.T) *api.Server {
 	t.Helper()
+	return newDurableSessionAPITestServerWithFactory(t, &testutil.MockFactory{})
+}
+
+func newDurableSessionAPITestServerWithFactory(t *testing.T, factory *testutil.MockFactory) *api.Server {
+	t.Helper()
 	fixturesPath := filepath.Join("..", "testdata", "durable-session-contract-fixtures.json")
 	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
 	if err != nil {
 		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
 	}
 	logger, _ := zap.NewDevelopment()
-	return api.NewServerWithOptions(&testutil.MockFactory{}, 8080, logger, api.ServerOptions{
-		DurableSessionExecution: factorysession.NewExecutionAPI(service),
+	bindings := factorysession.NewDurableSessionBindings(service)
+	return api.NewServerWithOptions(factory, 8080, logger, api.ServerOptions{
+		DurableSessionExecution: bindings.Execution,
+		DurableSessionListing:   bindings.Listing,
+		DurableSessionRead:      bindings.Read,
 	})
 }
 

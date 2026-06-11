@@ -41,13 +41,20 @@ func ListSessionsResponseToAPI(result factorysessionexecution.ListSessionsResult
 
 // LiveSessionSummaryToAPI maps one live workspace session row to the public summary shape.
 func LiveSessionSummaryToAPI(session factorysessionexecution.LiveSessionSummary) factoryapi.FactorySessionSummary {
+	target := factoryapi.FactorySessionTargetRef{Kind: factoryapi.FactorySessionTargetRefKindDefault}
+	if project := strings.TrimSpace(session.Project); project != "" {
+		target = factoryapi.FactorySessionTargetRef{
+			Kind: factoryapi.FactorySessionTargetRefKindNamed,
+			Name: &project,
+		}
+	}
 	return factoryapi.FactorySessionSummary{
 		Id:         session.ID,
 		FactoryDir: session.FactoryDir,
 		FolderPath: session.FolderPath,
 		Project:    session.Project,
 		IsDefault:  session.IsDefault,
-		Target:     factoryapi.FactorySessionTargetRef{},
+		Target:     target,
 	}
 }
 

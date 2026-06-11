@@ -18,6 +18,7 @@ import (
 	"github.com/gorilla/mux"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/internal/cursorstorage"
 	dashboardui "github.com/portpowered/infinite-you/ui"
 	"go.uber.org/zap"
@@ -32,6 +33,8 @@ type Server struct {
 	runtime                 apisurface.APISurface
 	sessionRuntime          apisurface.SessionAPISurface
 	durableSessionExecution apisurface.DurableSessionExecutionAPI
+	durableSessionListing   apisurface.DurableSessionListingAPI
+	durableSessionRead      factorysession.DurableSessionReadAPI
 	logger                  *zap.Logger
 	router                  *mux.Router
 	port                    int
@@ -51,6 +54,8 @@ type ServerOptions struct {
 	CodexSessionsRoot       string
 	CursorSessionsRoot      string
 	DurableSessionExecution apisurface.DurableSessionExecutionAPI
+	DurableSessionListing   apisurface.DurableSessionListingAPI
+	DurableSessionRead      factorysession.DurableSessionReadAPI
 }
 
 // NewServerWithOptions creates a new API server with explicit runtime
@@ -66,6 +71,8 @@ func NewServerWithOptions(runtime apisurface.APISurface, port int, logger *zap.L
 		logger:                  logger,
 		port:                    port,
 		durableSessionExecution: opts.DurableSessionExecution,
+		durableSessionListing:   opts.DurableSessionListing,
+		durableSessionRead:      opts.DurableSessionRead,
 		codexSessionsRoot:       normalizeCodexSessionsRoot(opts.CodexSessionsRoot),
 		cursorSessionsRoot:      cursorRoot,
 	}

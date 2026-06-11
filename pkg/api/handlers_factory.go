@@ -9,6 +9,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
@@ -97,6 +98,31 @@ func (s *Server) requireSessionRuntime(w http.ResponseWriter) (apisurface.Sessio
 }
 
 func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request, params factoryapi.ListFactorySessionsParams) {
+	if s.durableSessionListing != nil {
+		response, err := s.durableSessionListing.ListDurableFactorySessions(r.Context(), params)
+		if err != nil {
+			s.writeDurableSessionListError(w, err)
+			return
+		}
+		scope := factoryapi.FactorySessionListScopeLive
+		if params.Scope != nil {
+			scope = *params.Scope
+		}
+		if scope == factoryapi.FactorySessionListScopeLive || scope == factoryapi.FactorySessionListScopeAll {
+			if sessionRuntime := s.sessionRuntime; sessionRuntime != nil {
+				liveResponse, err := sessionRuntime.ListFactorySessions(r.Context())
+				if err != nil {
+					s.logger.Error("list live factory sessions failed", zap.Error(err))
+					s.writeError(w, http.StatusInternalServerError, "failed to list factory sessions", "INTERNAL_ERROR")
+					return
+				}
+				response.Sessions = append(liveResponse.Sessions, response.Sessions...)
+			}
+		}
+		s.writeJSON(w, http.StatusOK, response)
+		return
+	}
+
 	scope := factoryapi.FactorySessionListScopeLive
 	if params.Scope != nil {
 		scope = *params.Scope
@@ -138,6 +164,24 @@ func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request, par
 }
 
 func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	if s.durableSessionRead != nil {
+		response, err := s.durableSessionRead.GetDurableFactorySession(r.Context(), string(sessionID))
+		if err == nil {
+			s.writeJSON(w, http.StatusOK, response)
+			return
+		}
+		var validationErr *factorysessionexecution.ValidationError
+		if errors.As(err, &validationErr) {
+			s.writeError(w, http.StatusBadRequest, validationErr.Error(), "BAD_REQUEST")
+			return
+		}
+		if !errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+			s.logger.Error("get durable factory session failed", zap.Error(err))
+			s.writeError(w, http.StatusInternalServerError, "failed to get factory session", "INTERNAL_ERROR")
+			return
+		}
+	}
+
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
 		return
