@@ -4,7 +4,7 @@ import {
   addFactoryLayoutGroup,
   createFactoryLayoutGroup,
   defaultFactoryLayoutGroupBounds,
-} from "../factory-graph-layout-groups";
+} from "../visual-groups/factory-graph-layout-groups";
 import {
   applyFactoryLayoutCommand,
   createCreateFactoryLayoutGroupCommand,

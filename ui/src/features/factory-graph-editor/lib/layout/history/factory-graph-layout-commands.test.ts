@@ -28,7 +28,7 @@ import {
   createFactoryLayoutGroup,
   defaultFactoryLayoutGroupBounds,
   factoryLayoutGroupById,
-} from "../factory-graph-layout-groups";
+} from "../visual-groups/factory-graph-layout-groups";
 import {
   createDefaultFactoryLayout,
   factoryLayoutNodePosition,

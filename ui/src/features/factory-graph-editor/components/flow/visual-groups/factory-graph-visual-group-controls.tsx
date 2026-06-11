@@ -1,6 +1,7 @@
 import { useId } from "react";
 
-import { cn } from "../../../../lib/cn";
+import { DashboardActionButton } from "../../../../../components/ui";
+import { cn } from "../../../../../lib/cn";
 import {
   FACTORY_LAYOUT_GROUP_COLOR_TOKENS,
   type FactoryLayoutGroup,
@@ -8,7 +9,7 @@ import {
   type FactoryLayoutGroupColorToken,
   factoryLayoutGroupColorCssVariable,
   isApprovedFactoryLayoutGroupColor,
-} from "../../lib/layout/factory-graph-layout-groups";
+} from "../../../lib/layout/visual-groups/factory-graph-layout-groups";
 
 export function FactoryGraphVisualGroupControls({
   canvasNodeOptions,
@@ -98,35 +99,40 @@ export function FactoryGraphVisualGroupControls({
         <legend className="text-sm text-on-surface-subtle">{colorLabel}</legend>
         <div className="flex flex-wrap gap-2">
           {FACTORY_LAYOUT_GROUP_COLOR_TOKENS.map((token) => (
-            <button
+            <DashboardActionButton
               aria-label={colorOptionLabel(token)}
               aria-pressed={selectedColor === token}
               className={cn(
-                "h-8 w-8 rounded-full border-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+                "h-8 min-h-8 w-8 min-w-8 rounded-full border-2 p-0",
                 selectedColor === token
                   ? "border-on-surface ring-2 ring-af-overlay-focus"
                   : "border-outline",
               )}
               data-factory-visual-group-color={token}
+              iconOnly
               key={token}
               onClick={() => onSetGroupColor(token)}
               style={{
                 backgroundColor: factoryLayoutGroupColorCssVariable(token),
               }}
+              tone={selectedColor === token ? "secondary" : "outline"}
               type="button"
-            />
+            >
+              <span className="sr-only">{colorOptionLabel(token)}</span>
+            </DashboardActionButton>
           ))}
         </div>
       </fieldset>
       <div className="mt-3">
-        <button
-          className="w-full rounded-lg border border-af-danger-border px-3 py-2 text-sm font-medium text-on-error-container focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        <DashboardActionButton
+          className="w-full"
           data-factory-visual-group-delete=""
           onClick={onDeleteGroup}
+          tone="destructive"
           type="button"
         >
           {deleteGroupLabel}
-        </button>
+        </DashboardActionButton>
       </div>
       <fieldset
         className="mt-3 grid max-h-48 gap-2 overflow-y-auto border-0 p-0"

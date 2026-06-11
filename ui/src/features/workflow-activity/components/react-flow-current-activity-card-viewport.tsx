@@ -34,9 +34,9 @@ import {
 } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import { FactoryGraphEdgeWaypointControls } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-controls";
 import { FactoryGraphEdgeWaypointLayer } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-layer";
-import { FactoryGraphVisualGroupControls } from "../../factory-graph-editor/components/flow/factory-graph-visual-group-controls";
-import { FactoryGraphVisualGroupLayer } from "../../factory-graph-editor/components/flow/factory-graph-visual-group-layer";
-import type { FactoryLayoutGroup } from "../../factory-graph-editor/lib/layout/factory-graph-layout-groups";
+import { FactoryGraphVisualGroupControls } from "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-controls";
+import { FactoryGraphVisualGroupLayer } from "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-layer";
+import type { FactoryLayoutGroup } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/editor/factory-graph-editor-connections";
 import type {

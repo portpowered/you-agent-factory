@@ -7,7 +7,7 @@ import {
   factoryLayoutGroups,
   type FactoryLayoutGroupCanvasNodeOption,
   type FactoryLayoutGroupColorToken,
-} from "../../lib/layout/factory-graph-layout-groups";
+} from "../../lib/layout/visual-groups/factory-graph-layout-groups";
 import { isValidFactoryLayoutGroupBounds } from "../../lib/layout/factory-graph-layout-validation";
 import type {
   FactoryLayout,

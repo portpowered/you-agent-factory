@@ -10,7 +10,7 @@ import {
   addNodeToFactoryLayoutGroup,
   defaultFactoryLayoutGroupBounds,
   factoryLayoutGroupById,
-} from "../../lib/layout/factory-graph-layout-groups";
+} from "../../lib/layout/visual-groups/factory-graph-layout-groups";
 import {
   createDefaultFactoryLayout,
   factoryLayoutNodePosition,

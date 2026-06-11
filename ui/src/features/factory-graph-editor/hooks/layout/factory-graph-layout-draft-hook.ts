@@ -33,7 +33,7 @@ import {
   removeNodeFromFactoryLayoutGroup,
   resizeFactoryLayoutGroup,
   updateFactoryLayoutGroup,
-} from "../../lib/layout/factory-graph-layout-groups";
+} from "../../lib/layout/visual-groups/factory-graph-layout-groups";
 import {
   canRedoFactoryLayoutHistory,
   canUndoFactoryLayoutHistory,

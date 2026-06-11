@@ -37,7 +37,7 @@ import {
   removeNodeFromFactoryLayoutGroup,
   resizeFactoryLayoutGroup,
   updateFactoryLayoutGroup,
-} from "../features/factory-graph-editor/lib/layout/factory-graph-layout-groups";
+} from "../features/factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import {
   createDefaultFactoryLayout,
   moveFactoryLayoutNode,

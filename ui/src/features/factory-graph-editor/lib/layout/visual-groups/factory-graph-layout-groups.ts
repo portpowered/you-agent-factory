@@ -1,13 +1,13 @@
-import type { components } from "../../../../api/generated/openapi";
-import type { FactoryGraphNode } from "../draft/factory-graph-draft-types";
+import type { components } from "../../../../../api/generated/openapi";
+import type { FactoryGraphNode } from "../../draft/factory-graph-draft-types";
 import type {
   FactoryLayout,
   FactoryLayoutPoint,
-} from "./factory-graph-layout-operations";
+} from "../factory-graph-layout-operations";
 import {
   factoryLayoutNodePosition,
   moveFactoryLayoutNodesByDelta,
-} from "./factory-graph-layout-operations";
+} from "../factory-graph-layout-operations";
 
 export type FactoryLayoutGroupCanvasNodeOption = {
   id: string;

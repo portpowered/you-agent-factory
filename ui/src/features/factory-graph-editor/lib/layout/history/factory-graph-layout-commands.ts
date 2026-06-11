@@ -12,7 +12,7 @@ import {
   moveFactoryLayoutGroupByDelta,
   removeFactoryLayoutGroup,
   updateFactoryLayoutGroup,
-} from "../factory-graph-layout-groups";
+} from "../visual-groups/factory-graph-layout-groups";
 import {
   type FactoryLayout,
   type FactoryLayoutPoint,

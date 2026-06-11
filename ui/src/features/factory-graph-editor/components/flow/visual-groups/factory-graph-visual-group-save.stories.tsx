@@ -1,19 +1,19 @@
 import { useCallback, useMemo, useState } from "react";
 import { expect, userEvent, within } from "storybook/test";
 
-import "../../../../styles.css";
-import { baseFactoryDefinition } from "../../lib/draft/factory-graph-draft.test-helpers";
-import { createEmptyFactoryGraphDraft } from "../../lib/draft/factory-graph-draft-types";
-import { applyFactoryGraphPendingEdits } from "../../lib/operations/factory-graph-operations";
+import "../../../../../styles.css";
+import { baseFactoryDefinition } from "../../../lib/draft/factory-graph-draft.test-helpers";
+import { createEmptyFactoryGraphDraft } from "../../../lib/draft/factory-graph-draft-types";
+import { applyFactoryGraphPendingEdits } from "../../../lib/operations/factory-graph-operations";
 import {
   factoryLayoutGroupById,
   factoryLayoutGroups,
-} from "../../lib/layout/factory-graph-layout-groups";
+} from "../../../lib/layout/visual-groups/factory-graph-layout-groups";
 import {
   createDefaultFactoryLayout,
   factoryLayoutFromDefinition,
-} from "../../lib/layout/factory-graph-layout-operations";
-import { useFactoryGraphLayoutDraftState } from "../../hooks/layout/factory-graph-layout-draft-hook";
+} from "../../../lib/layout/factory-graph-layout-operations";
+import { useFactoryGraphLayoutDraftState } from "../../../hooks/layout/factory-graph-layout-draft-hook";
 
 type WorkflowPhase =
   | "idle"

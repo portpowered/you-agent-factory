@@ -1,14 +1,15 @@
 import { useReactFlow, useStore } from "@xyflow/react";
 import { useCallback, useRef, useState } from "react";
 
-import { cn } from "../../../../lib/cn";
+import { GraphNodeButton } from "../../../../graphs/public";
+import { cn } from "../../../../../lib/cn";
 import {
   FACTORY_LAYOUT_GROUP_MIN_SIZE,
   type FactoryLayoutGroup,
   factoryLayoutGroupColorCssVariable,
   factoryLayoutGroupColorSurfaceCssVariable,
-} from "../../lib/layout/factory-graph-layout-groups";
-import type { FactoryLayoutPoint } from "../../lib/layout/factory-graph-layout-operations";
+} from "../../../lib/layout/visual-groups/factory-graph-layout-groups";
+import type { FactoryLayoutPoint } from "../../../lib/layout/factory-graph-layout-operations";
 
 const DRAG_CLICK_THRESHOLD_PX = 4;
 
@@ -122,6 +123,20 @@ export function FactoryGraphVisualGroupLayer({
       );
     },
     [setNodes],
+  );
+
+  const handleGroupKeyDown = useCallback(
+    (groupId: string) =>
+      (event: React.KeyboardEvent<HTMLDivElement>) => {
+        if (event.key !== "Enter" && event.key !== " ") {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+        onSelectGroup(groupId);
+      },
+    [onSelectGroup],
   );
 
   const handleGroupPointerDown = useCallback(
@@ -367,6 +382,7 @@ export function FactoryGraphVisualGroupLayer({
                 "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
               )}
               data-factory-visual-group-body=""
+              onKeyDown={handleGroupKeyDown(group.id)}
               onPointerDown={handleGroupPointerDown(group)}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
@@ -382,11 +398,10 @@ export function FactoryGraphVisualGroupLayer({
             </div>
             {selected && canEdit && onResizeGroup
               ? RESIZE_CORNERS.map((corner) => (
-                  <button
+                  <GraphNodeButton
                     aria-label={resizeHandleAriaLabel(corner)}
                     className={cn(
                       "pointer-events-auto absolute z-10 h-4 w-4 min-h-11 min-w-11 rounded-sm border-2 border-primary bg-surface shadow-sm sm:h-4 sm:w-4 sm:min-h-0 sm:min-w-0",
-                      "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
                     )}
                     data-factory-visual-group-resize={corner}
                     key={corner}
@@ -394,7 +409,7 @@ export function FactoryGraphVisualGroupLayer({
                     onPointerMove={handlePointerMove}
                     onPointerUp={handlePointerUp}
                     style={resizeHandleStyle(corner)}
-                    type="button"
+                    tabIndex={-1}
                   />
                 ))
               : null}

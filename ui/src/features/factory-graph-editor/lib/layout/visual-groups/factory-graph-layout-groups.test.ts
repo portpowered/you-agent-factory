@@ -21,7 +21,7 @@ import {
   factoryLayoutNodePosition,
   hasFactoryLayoutChanges,
   moveFactoryLayoutNode,
-} from "./factory-graph-layout-operations";
+} from "../factory-graph-layout-operations";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: group layout scenarios share fixtures.
 describe("factory graph layout groups", () => {

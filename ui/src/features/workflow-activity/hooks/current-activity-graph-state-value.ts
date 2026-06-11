@@ -12,7 +12,7 @@ import type {
   FactoryGraphNode,
   FactoryGraphNodeKind,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
-import { factoryLayoutGroupCanvasNodeOptions } from "../../factory-graph-editor/lib/layout/factory-graph-layout-groups";
+import { factoryLayoutGroupCanvasNodeOptions } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import type { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
 import type { FactoryGraphEditorDirtyState } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state";
 import type { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary";

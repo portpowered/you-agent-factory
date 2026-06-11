@@ -1,9 +1,19 @@
 import "@testing-library/jest-dom/vitest";
 import { ReactFlow, ReactFlowProvider } from "@xyflow/react";
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { ComponentProps, CSSProperties } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import type { FactoryLayoutGroup } from "../../../lib/layout/visual-groups/factory-graph-layout-groups";
 import { FactoryGraphVisualGroupLayer } from "./factory-graph-visual-group-layer";
+
+const sampleGroup: FactoryLayoutGroup = {
+  bounds: { height: 120, width: 200, x: 40, y: 60 },
+  color: "info",
+  id: "group-1",
+  label: "Review",
+  nodeIds: [],
+};
 
 function enablePointerCapture(element: HTMLElement) {
   element.setPointerCapture = vi.fn();
@@ -11,35 +21,43 @@ function enablePointerCapture(element: HTMLElement) {
   element.hasPointerCapture = vi.fn(() => true);
 }
 
+function renderVisualGroupLayer(
+  props: Partial<ComponentProps<typeof FactoryGraphVisualGroupLayer>> = {},
+  wrapperStyle: CSSProperties = { height: 480, width: 640 },
+) {
+  const onSelectGroup = props.onSelectGroup ?? vi.fn();
+
+  render(
+    <ReactFlowProvider>
+      <div style={wrapperStyle}>
+        <ReactFlow
+          defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+          edges={[]}
+          fitView={wrapperStyle.position !== "relative"}
+          nodes={[]}
+        >
+          <FactoryGraphVisualGroupLayer
+            canEdit
+            groupAriaLabel={(group) => group.label ?? group.id}
+            groups={[sampleGroup]}
+            onSelectGroup={onSelectGroup}
+            resizeHandleAriaLabel={(corner) => `Resize ${corner}`}
+            {...props}
+          />
+        </ReactFlow>
+      </div>
+    </ReactFlowProvider>,
+  );
+
+  return { onSelectGroup };
+}
+
 describe("FactoryGraphVisualGroupLayer", () => {
   it("renders groups behind interaction handles with labels and selection state", () => {
-    const onSelectGroup = vi.fn();
-
-    render(
-      <ReactFlowProvider>
-        <div style={{ height: 480, width: 640 }}>
-          <ReactFlow nodes={[]} edges={[]} fitView>
-            <FactoryGraphVisualGroupLayer
-              canEdit
-              groupAriaLabel={(group) => group.label ?? group.id}
-              groups={[
-                {
-                  bounds: { height: 120, width: 200, x: 40, y: 60 },
-                  color: "info",
-                  id: "group-1",
-                  label: "Review",
-                  nodeIds: [],
-                },
-              ]}
-              onResizeGroup={vi.fn()}
-              onSelectGroup={onSelectGroup}
-              resizeHandleAriaLabel={(corner) => `Resize ${corner}`}
-              selectedGroupId="group-1"
-            />
-          </ReactFlow>
-        </div>
-      </ReactFlowProvider>,
-    );
+    renderVisualGroupLayer({
+      onResizeGroup: vi.fn(),
+      selectedGroupId: "group-1",
+    });
 
     expect(screen.getByText("Review")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Review" })).toHaveAttribute(
@@ -51,36 +69,30 @@ describe("FactoryGraphVisualGroupLayer", () => {
     ).toBeInTheDocument();
   });
 
+  it("selects a group when Enter or Space is pressed on the group body", () => {
+    const { onSelectGroup } = renderVisualGroupLayer({ selectedGroupId: null });
+    const groupBody = screen.getByRole("button", { name: "Review" });
+
+    groupBody.focus();
+    fireEvent.keyDown(groupBody, { key: "Enter" });
+    expect(onSelectGroup).toHaveBeenCalledWith("group-1");
+
+    onSelectGroup.mockClear();
+    fireEvent.keyDown(groupBody, { key: " " });
+    expect(onSelectGroup).toHaveBeenCalledWith("group-1");
+  });
+
   it("commits group move and resize interactions on pointer up", () => {
     const onMoveGroup = vi.fn();
     const onResizeGroup = vi.fn();
-    const onSelectGroup = vi.fn();
 
-    render(
-      <ReactFlowProvider>
-        <div style={{ height: 480, position: "relative", width: 640 }}>
-          <ReactFlow defaultViewport={{ x: 0, y: 0, zoom: 1 }} nodes={[]} edges={[]}>
-            <FactoryGraphVisualGroupLayer
-              canEdit
-              groupAriaLabel={(group) => group.label ?? group.id}
-              groups={[
-                {
-                  bounds: { height: 120, width: 200, x: 40, y: 60 },
-                  color: "info",
-                  id: "group-1",
-                  label: "Review",
-                  nodeIds: [],
-                },
-              ]}
-              onMoveGroup={onMoveGroup}
-              onResizeGroup={onResizeGroup}
-              onSelectGroup={onSelectGroup}
-              resizeHandleAriaLabel={(corner) => `Resize ${corner}`}
-              selectedGroupId="group-1"
-            />
-          </ReactFlow>
-        </div>
-      </ReactFlowProvider>,
+    renderVisualGroupLayer(
+      {
+        onMoveGroup,
+        onResizeGroup,
+        selectedGroupId: "group-1",
+      },
+      { height: 480, position: "relative", width: 640 },
     );
 
     const groupBody = screen.getByRole("button", { name: "Review" });
