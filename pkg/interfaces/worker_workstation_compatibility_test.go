@@ -27,15 +27,15 @@ func TestPublicWorkerTypeForFactoryUsage(t *testing.T) {
 	}
 }
 
-func TestWorkerMatchesWorkstationBehavior(t *testing.T) {
-	t.Parallel()
+type workerWorkstationBehaviorCase struct {
+	name        string
+	workerType  string
+	workstation FactoryWorkstationConfig
+	want        bool
+}
 
-	tests := []struct {
-		name        string
-		workerType  string
-		workstation FactoryWorkstationConfig
-		want        bool
-	}{
+func workerMatchesWorkstationBehaviorCompatibleCases() []workerWorkstationBehaviorCase {
+	return []workerWorkstationBehaviorCase{
 		{
 			name:       "inference run with inference worker",
 			workerType: WorkerTypeInference,
@@ -102,6 +102,19 @@ func TestWorkerMatchesWorkstationBehavior(t *testing.T) {
 			want: true,
 		},
 		{
+			name:       "logical move exempt",
+			workerType: WorkerTypeInference,
+			workstation: FactoryWorkstationConfig{
+				Type: WorkstationTypeLogical,
+			},
+			want: true,
+		},
+	}
+}
+
+func workerMatchesWorkstationBehaviorIncompatibleCases() []workerWorkstationBehaviorCase {
+	return []workerWorkstationBehaviorCase{
+		{
 			name:       "agent run with inference worker",
 			workerType: WorkerTypeInference,
 			workstation: FactoryWorkstationConfig{
@@ -134,17 +147,19 @@ func TestWorkerMatchesWorkstationBehavior(t *testing.T) {
 			},
 			want: false,
 		},
-		{
-			name:       "logical move exempt",
-			workerType: WorkerTypeInference,
-			workstation: FactoryWorkstationConfig{
-				Type: WorkstationTypeLogical,
-			},
-			want: true,
-		},
 	}
+}
 
-	for _, tt := range tests {
+func workerMatchesWorkstationBehaviorCases() []workerWorkstationBehaviorCase {
+	cases := workerMatchesWorkstationBehaviorCompatibleCases()
+	cases = append(cases, workerMatchesWorkstationBehaviorIncompatibleCases()...)
+	return cases
+}
+
+func TestWorkerMatchesWorkstationBehavior(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range workerMatchesWorkstationBehaviorCases() {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
