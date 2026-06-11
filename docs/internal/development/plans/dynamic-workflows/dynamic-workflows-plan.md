@@ -4,7 +4,7 @@ Operator-facing planning record for the Dynamic Workflows v0 program. This
 document tracks batch completion, cross-surface contract posture, and the
 recommended next batch for maintainers scheduling factory work.
 
-**Last updated:** 2026-06-11 UTC (contract-repair kernel merged — Batch 002 fake-session skeleton is unblocked)
+**Last updated:** 2026-06-11 UTC (active-surface contract repair verified — Batch 002 fake-session skeleton may proceed)
 
 ## Program overview
 
@@ -91,7 +91,7 @@ they do **not** authorize building the next batch on the standalone
 workflow-preview route, root `pkg/workflow*` ownership, or `validator` package
 names.
 
-**Contract repair (merged 2026-06-11 UTC):** Branch
+**Contract repair kernel (merged 2026-06-11 UTC):** Branch
 `dynamic-workflows-contract-repair-kernel-resubmit` closed blocking inventory
 items B1–B12 at the contract-kernel layer. Evidence: canonical `POST
 /factories/preview` (`pkg/apisurface/factory_preview.go`,
@@ -105,6 +105,53 @@ result mode shaping (`result_projection.go`), fixture `events[]` plus
 `javascript-awaiting-approval`, and focused contract/apisurface/fake-service
 tests listed in the gap inventory below.
 
+**Active-surface repair (verified 2026-06-11 UTC):** Branch
+`dynamic-workflows-contract-repair-active-surface-followup` was the **mandatory
+gate before Batch 002 fake-session skeleton transport wiring**. Kernel repair
+closed schema/projection drift, but planner verification still found active
+standalone `POST /workflow-previews` / `WorkflowPreview` surfaces and root
+`pkg/workflow*` ownership outside the orchestrator boundary. **Do not schedule
+Batch 002 skeleton handler/CLI/MCP/UI wiring until this gate passes.**
+
+Follow-up stories closed the active-surface gate:
+
+| Story | Outcome |
+|-------|---------|
+| Expose preview through Factory semantics | Canonical `POST /factories/preview` with `FactoryPreviewRequest` / `FactoryPreviewResult`; `POST /workflow-previews` retained only as a deprecated compatibility alias with successor headers. |
+| Move JavaScript orchestration ownership | `pkg/orchestrators/javascript/{source,validation,policy,preview,result,store}` owns behavior; root `pkg/workflow*` packages are thin `compat.go` aliases only. |
+| Align API, apisurface, CLI, and MCP consumers | Handlers, mappers, CLI preview, and MCP validation exercise the Factory preview seam; compatibility alias coverage is explicit and non-primary. |
+| Update UI generated types and preview adapters | `ui/src/api/factory-preview/` is canonical; `ui/src/api/workflow-preview/` and `ui/src/features/workflow-preview/` are compatibility wrappers. |
+| Synchronize contracts and record blocker evidence | `make generate-api` synchronized; scoped `rg` verification and focused tests recorded below. |
+
+Scoped active-surface verification (2026-06-11 UTC):
+
+```bash
+rg -n "workflow-previews|WorkflowPreview|pkg/workflow" \
+  api/openapi-main.yaml api/components pkg/api pkg/apisurface pkg/cli pkg/mcp \
+  pkg/factorysessionexecution pkg/factorysessions pkg/orchestrators/javascript ui/src
+```
+
+Remaining hits are **only** generated compatibility aliases
+(`pkg/api/generated/server.gen.go`, `ui/src/api/generated/openapi.ts`),
+deprecated OpenAPI compatibility routes/schemas (`api/openapi-main.yaml`,
+`WorkflowPreviewRequest.yaml` / `WorkflowPreviewResult.yaml`),
+obsolete compatibility handlers/tests (`pkg/api/handlers_factory.go`,
+`pkg/api/contracttests/openapi_contract_factory_validation_test.go`,
+`pkg/api/servertests/server_factory_preview_test.go`), and explicit
+compatibility UI wrappers (`ui/src/api/workflow-preview/`,
+`ui/src/features/workflow-preview/`). No scoped path imports root `pkg/workflow*`
+as a final owner.
+
+Focused verification:
+
+```bash
+make generate-api
+go test ./pkg/api/contracttests ./pkg/api/servertests ./pkg/apisurface \
+  ./pkg/apisurface/factorysession ./pkg/factorysessionexecution ./pkg/factorysessions \
+  ./pkg/mcp/workflow ./pkg/cli/workflow
+npm --prefix ui run typecheck
+```
+
 #### Batch 002 — fake-session skeleton (scheduled)
 
 Batch 002 targets **deterministic fake-session skeleton work**: API/CLI/MCP/UI
@@ -113,10 +160,11 @@ injectable fake implementation) so reviewers can exercise durable session
 start, status, result, dispatch, artifact, event, and lifecycle flows without
 a JavaScript VM or durable persistence backend.
 
-**Go:** contract-repair kernel verified 2026-06-11 UTC. Schedule Batch 002
-skeleton wiring against the repaired contract kernel. Remaining gaps are
-stubbed transport (501 handlers, empty persisted listing) and wire-up routing
-for durable `GET /factory-sessions/{id}` — not schema blockers.
+**Go:** active-surface repair verified 2026-06-11 UTC. Schedule Batch 002
+skeleton wiring against the repaired contract kernel and orchestrator-owned
+preview/source seams. Remaining gaps are stubbed transport (501 handlers, empty
+persisted listing) and wire-up routing for durable `GET /factory-sessions/{id}`
+— not schema blockers.
 
 Skeleton work should:
 
@@ -214,7 +262,7 @@ Status key:
 | Ordered source lookup contract | ✅ | `FACTORY_ID`, `FACTORY_INLINE`, `WORKFLOW_FILE`, `WORKFLOW_NAME`, and `INLINE_WORKFLOW` kinds share one resolution order across API normalization surfaces. |
 | Read-only effective policy defaults | ✅ | Default mode `READ_ONLY`, bounded child limits, stable policy hashes, and fail-closed denied-capability diagnostics before runtime side effects. |
 | Structured JSON result and artifact URI rules | ✅ | JSON-compatible primary results via `WorkContent`; large/binary outputs use artifact refs or `you-artifact://sessions/{session_id}/artifacts/{artifact_id}` URIs. |
-| `POST /workflow-previews` handler (**stale Batch 001**) | ✅ (transitional) | **Obsolete surface:** Batch 001 merged `PreviewWorkflow` on `POST /workflow-previews` in `pkg/api/handlers_factory.go`. This is **not** the intended final public preview route. Contract repair must align preview with **Factory preview** or **Factory Session preview** semantics under `pkg/orchestrators/javascript/preview`. |
+| `POST /workflow-previews` handler (**stale Batch 001**) | ✅ (compatibility only) | **Closed by active-surface repair:** `PreviewWorkflow` remains a deprecated alias of canonical `POST /factories/preview` in `pkg/api/handlers_factory.go`. Primary preview semantics live under `pkg/orchestrators/javascript/preview` and `pkg/apisurface/factory_preview.go`. |
 | Durable start-time validation wiring | 🔌 | Validation/policy contracts exist; **`POST /factory-sessions/async|sync`** handlers still return **`501`** so start-time enforcement awaits Batch 002 service injection. |
 
 ### PR #776 — shared execution service, fake service, mappers, and fixtures
@@ -359,7 +407,9 @@ Stubbed transport gaps are **expected Batch 002 wiring targets**, not permission
 
 **Recommendation: Go** — schedule Batch 002 fake-session skeleton work as the
 immediate next batch. Contract-repair kernel merged 2026-06-11 UTC on branch
-`dynamic-workflows-contract-repair-kernel-resubmit`.
+`dynamic-workflows-contract-repair-kernel-resubmit`; active-surface repair
+verified 2026-06-11 UTC on branch
+`dynamic-workflows-contract-repair-active-surface-followup`.
 
 ### Evidence
 
@@ -367,16 +417,26 @@ The Batch 001 completion checklist shows contract surfaces landed (✅) while du
 transport remains stubbed (🔌). Contract repair closed blocking mismatches B1–B6,
 B8–B12 at the schema/projection layer and downgraded B7 (control `requestId`
 conflict uses lifecycle `CONFLICT` outcome, not HTTP `ErrorResponse.code`).
+Active-surface repair then closed the remaining planner gate: no scoped path treats
+standalone `POST /workflow-previews` / `WorkflowPreview` or root `pkg/workflow*`
+packages as the primary preview or JavaScript orchestration owner.
+
 Focused verification passes:
 
-- `go test ./pkg/api/contracttests ./pkg/api/servertests ./pkg/apisurface ./pkg/apisurface/factorysession ./pkg/factorysessionexecution`
+- `make generate-api` (generated artifacts synchronized)
+- `go test ./pkg/api/contracttests ./pkg/api/servertests ./pkg/apisurface ./pkg/apisurface/factorysession ./pkg/factorysessionexecution ./pkg/factorysessions ./pkg/mcp/workflow ./pkg/cli/workflow`
 - `go test ./pkg/factory/projections/projectiontests ./pkg/factory/events ./pkg/factory/validation`
 - `npm --prefix ui run typecheck`
-- `make generate-api` (generated artifacts synchronized)
+- Scoped `rg` verification over `api/openapi-main.yaml`, `api/components`, `pkg/api`,
+  `pkg/apisurface`, `pkg/cli`, `pkg/mcp`, `pkg/factorysessionexecution`,
+  `pkg/factorysessions`, `pkg/orchestrators/javascript`, and `ui/src` reports only
+  generated compatibility aliases, deprecated OpenAPI compatibility routes/schemas,
+  and explicit obsolete/compatibility tests or UI wrappers.
 
 Batch 002 skeleton consumers can now prove round-trip through apisurface mappers and
 contract fixtures, emit/consume canonical `FactoryEvent` payloads, and wire handlers
-to `factorysessionexecution.Service` without redefining schemas.
+to `factorysessionexecution.Service` without redefining schemas or depending on
+obsolete workflow-preview ownership.
 
 ### Blocking findings (contract-repair closure — 2026-06-11 UTC)
 
@@ -440,9 +500,13 @@ CLI/MCP/UI) but mandatory so skeleton work does not encode broken contracts.
 
 ### Re-entry criteria for Batch 002 (Go)
 
-**Met 2026-06-11 UTC** after contract-repair merge:
+**Met 2026-06-11 UTC** after contract-repair kernel merge and active-surface repair
+verification:
 
 - Blocking table B1–B12 rows are closed or explicitly downgraded (B7).
+- Active-surface repair gate passed: canonical Factory preview semantics, orchestrator-owned
+  JavaScript helpers, aligned API/CLI/MCP/UI consumers, synchronized generated contracts, and
+  scoped `rg` verification with only compatibility/obsolete hits.
 - `durable-session-contract-fixtures.json` includes canonical `events[]` for representative
   scenarios and an `AWAITING_APPROVAL` row.
 - Fake-service + mapper round-trip tests pass for durable session get, result, dispatch,
@@ -500,15 +564,15 @@ on 2026-06-09 shows:
 - Durable API handlers in `pkg/api/handlers_factory.go` still return `501` for
   async/sync start, results, dispatches, artifacts, lifecycle controls, and
   durable events; `scope=persisted|all` returns empty durable rows.
-- `pkg/mcp/workflow/` only exposes transitional workflow-preview/start-validation
-  helpers (**stale Batch 001**); session/dispatch/artifact MCP tools depend on
-  contract repair and deferred Batch 002 skeleton wiring.
+- `pkg/mcp/workflow/` exposes preview/start-validation through the canonical Factory
+  preview seam; session/dispatch/artifact MCP tools depend on deferred Batch 002
+  skeleton wiring.
 - `ui/src/api/factory-sessions/api.ts` and the current factory-session detail
   panel are live-session oriented; generated durable types are present for
   fixture-backed adapters and components before HTTP wiring exists.
-- `pkg/api/testdata/durable-session-contract-fixtures.json` lacks canonical
-  `events[]` arrays and an `AWAITING_APPROVAL` scenario, so event/control
-  tranches need fixture repair before cross-surface parity claims.
+- `pkg/api/testdata/durable-session-contract-fixtures.json` now includes canonical
+  `events[]` arrays and an `AWAITING_APPROVAL` scenario from contract-repair kernel
+  work; remaining event/control tranches are Batch 002 skeleton wiring targets.
 
 Use the following graph to schedule smaller work items. `CR-*` closes contract
 drift; `API-*`, `MCP-*`, `UI-*`, and `CLI-*` can advance as soon as their
