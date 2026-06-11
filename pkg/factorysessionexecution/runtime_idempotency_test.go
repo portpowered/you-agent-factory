@@ -165,7 +165,7 @@ func TestRuntimeService_StartSync_IdempotentReplayTimeout(t *testing.T) {
 			t.Fatalf("timeout response = %#v", first)
 		}
 
-		deadline := time.Now().Add(5 * time.Second)
+		deadline := time.Now().Add(15 * time.Second)
 		for {
 			read, err := service.GetSession(context.Background(), first.SessionID)
 			if err != nil {

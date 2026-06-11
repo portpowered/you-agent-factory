@@ -37,7 +37,16 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 	}
 
 	vm := goja.New()
-	globals := &runtimeGlobals{vm: vm, policy: policy}
+	records := newRecordCollector()
+	sessionID := strings.TrimSpace(req.SessionID)
+	globals := &runtimeGlobals{
+		vm:            vm,
+		policy:        policy,
+		sessionID:     sessionID,
+		records:       records,
+		childExecutor: childExecutorForRun(sessionID, records, hooks),
+		onArtifact:    hooks.OnArtifact,
+	}
 	if err := globals.bindWorkflowAPI(); err != nil {
 		return Outcome{}, err
 	}
@@ -58,7 +67,9 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 		return contextTerminationOutcome(ctxErr), nil
 	}
 	if runErr != nil {
-		return scriptErrorOutcome(vm, runErr), nil
+		outcome := scriptErrorOutcome(vm, runErr)
+		outcome.Records = records.list()
+		return outcome, nil
 	}
 	globals.captureReturn(value)
 
@@ -91,7 +102,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 			return Outcome{}, err
 		}
 	}
-	return Outcome{OK: true, Value: typed}, nil
+	return Outcome{OK: true, Value: typed, Records: records.list()}, nil
 }
 
 func argsValueForRequest(vm *goja.Runtime, raw json.RawMessage) (goja.Value, error) {
@@ -111,6 +122,13 @@ func argsValueForRequest(vm *goja.Runtime, raw json.RawMessage) (goja.Value, err
 
 func wrapWorkflowSource(source string) string {
 	return "(function(){\n" + source + "\n})()"
+}
+
+func childExecutorForRun(sessionID string, records *recordCollector, hooks Hooks) ChildExecutor {
+	if hooks.NewChildExecutor != nil {
+		return hooks.NewChildExecutor(sessionID, records.append)
+	}
+	return NewFakeChildExecutor(sessionID, records)
 }
 
 func watchContext(ctx context.Context, vm *goja.Runtime, done <-chan struct{}) {
