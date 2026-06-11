@@ -99,6 +99,7 @@ export interface FactoryGraphEditorMessages {
     token: "primary" | "info" | "success" | "warning" | "outline",
   ) => string;
   visualGroupEmptyLabelError: string;
+  visualGroupInvalidBoundsError: string;
   visualGroupLabelFieldLabel: string;
   visualGroupMembershipEmptyLabel: string;
   visualGroupMembershipLabel: string;
@@ -156,6 +157,7 @@ export interface FactoryGraphEditorMessages {
   noticeStaleTitle: string;
   noticeTopologyBlockedDescription: string;
   noticeTopologyBlockedTitle: string;
+  noticeLayoutWarningTitle: string;
   noticeValidationFailureTitle: string;
   operationConnectionInvalid: string;
   operationEdgeNotFound: (edgeId: string) => string;
@@ -453,7 +455,7 @@ function describeEnglishSaveSummaryForDirtyState(summary: {
     case "preferences-only":
       return "Visibility and filter preferences changed for your view only. They stay private and are not saved into the shared factory document.";
     case "layout-only":
-      return "This save will update shared graph layout positions and viewport. Factory topology stays unchanged.";
+      return "This save will update shared graph layout, visual groups, and viewport. Factory topology stays unchanged.";
     case "topology-only":
       return summary.topologySummary;
     case "mixed":
@@ -704,6 +706,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       visualGroupColorLabel: "Group color",
       visualGroupColorOptionLabel: (token) => `Use ${token} group color`,
       visualGroupEmptyLabelError: "Enter a group label.",
+      visualGroupInvalidBoundsError:
+        "Group bounds contain non-finite geometry. Resize the group to correct them before saving.",
       visualGroupLabelFieldLabel: "Group label",
       visualGroupMembershipEmptyLabel: "No canvas nodes are available to assign.",
       visualGroupMembershipLabel: "Group members",
@@ -758,6 +762,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       noticeTopologyBlockedDescription:
         "Save is unavailable while active work is still running in the current factory.",
       noticeTopologyBlockedTitle: "Topology edits are blocked",
+      noticeLayoutWarningTitle: "Recoverable layout warning",
       noticeValidationFailureTitle: "Factory validation issue",
       operationConnectionInvalid: "Graph connection is invalid.",
       operationEdgeNotFound: (edgeId) =>
@@ -1126,6 +1131,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       visualGroupColorLabel: "分组颜色",
       visualGroupColorOptionLabel: (token) => `使用 ${token} 分组颜色`,
       visualGroupEmptyLabelError: "请输入分组标签。",
+      visualGroupInvalidBoundsError:
+        "分组边界包含非有限几何。请在保存前调整分组大小以修正。",
       visualGroupLabelFieldLabel: "分组标签",
       visualGroupMembershipEmptyLabel: "当前画布上没有可分配的节点。",
       visualGroupMembershipLabel: "分组成员",
@@ -1212,6 +1219,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       noticeTopologyBlockedDescription:
         "当前工厂仍有活动工作在运行，因此无法保存。",
       noticeTopologyBlockedTitle: "拓扑编辑被阻止",
+      noticeLayoutWarningTitle: "可恢复的布局警告",
       noticeValidationFailureTitle: "工厂验证问题",
       operationConnectionInvalid: "图连接无效。",
       operationEdgeNotFound: (edgeId) => `未找到图边“${edgeId}”。`,
@@ -1279,7 +1287,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
           case "preferences-only":
             return "可见性和筛选偏好仅针对你的视图更改。它们会保持私有，不会保存到共享工厂文档中。";
           case "layout-only":
-            return "此保存将更新共享图布局位置和视口。工厂拓扑保持不变。";
+            return "此保存将更新共享图布局、视觉分组和视口。工厂拓扑保持不变。";
           case "topology-only":
             return summary.topologySummary;
           case "mixed":

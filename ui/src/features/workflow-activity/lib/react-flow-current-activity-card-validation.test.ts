@@ -5,6 +5,7 @@ import { CurrentFactoryDefinitionError } from "../../../api/current-factory-defi
 import type { FactoryValidationTarget } from "../../../api/factory-validation";
 import { projectFactoryValidationTargets } from "../../factory-graph-editor/lib/projection/factory-validation-graph-projection";
 import {
+  layoutValidationWarningMessages,
   mergeFactoryValidationTargets,
   saveErrorNoticeMessages,
   validationMessagesForGraphSelection,
@@ -280,6 +281,38 @@ describe("validationMessagesForGraphSelection", () => {
 
     expect(messages).toEqual([
       'work state "story:queued" has no terminal completion path.',
+    ]);
+  });
+});
+
+describe("layoutValidationWarningMessages", () => {
+  it("returns recoverable layout group warnings without topology errors", () => {
+    const targets: FactoryValidationTarget[] = [
+      {
+        code: "factory.layout.unknownGroupMemberReference",
+        message:
+          'Layout group "review-lane" references unknown graph node "workstation:missing".',
+        severity: "warning",
+        subject: {
+          id: "review-lane",
+          location: "REFERENCE",
+          type: "FACTORY",
+        },
+      },
+      {
+        code: "factory.workstation.missingFailureRoute",
+        message: 'Workstation "review" must define a failure route.',
+        severity: "error",
+        subject: {
+          id: "review",
+          location: "ON_FAILURE",
+          type: "WORKSTATION",
+        },
+      },
+    ];
+
+    expect(layoutValidationWarningMessages(targets)).toEqual([
+      'Layout group "review-lane" references unknown graph node "workstation:missing".',
     ]);
   });
 });

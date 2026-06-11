@@ -40,7 +40,7 @@ export function factoryLayoutTopologyNodeIds(
   return new Set(topology.nodes.map((node) => node.id));
 }
 
-function isValidFactoryLayoutBounds(
+export function isValidFactoryLayoutGroupBounds(
   bounds: FactoryLayoutGroup["bounds"] | undefined,
 ): bounds is FactoryLayoutGroup["bounds"] {
   return (
@@ -97,7 +97,7 @@ export function collectFactoryLayoutGroupValidationTargets(
       continue;
     }
 
-    if (!isValidFactoryLayoutBounds(group.bounds)) {
+    if (!isValidFactoryLayoutGroupBounds(group.bounds)) {
       targets.push({
         code: FACTORY_LAYOUT_VALIDATION_CODE.invalidGeometry,
         path: `${path}.bounds`,
@@ -240,7 +240,7 @@ export function pruneFactoryLayoutGroupsForTopology(
       continue;
     }
 
-    if (!isValidFactoryLayoutBounds(group.bounds)) {
+    if (!isValidFactoryLayoutGroupBounds(group.bounds)) {
       rejectedGroupIds.push(group.id);
       didChange = true;
       continue;

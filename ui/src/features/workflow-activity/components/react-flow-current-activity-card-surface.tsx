@@ -16,6 +16,7 @@ import type { CurrentActivityImportController } from "../hooks/current-activity-
 import type { CurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import {
+  layoutValidationWarningMessages,
   mergeFactoryValidationTargets,
   saveErrorNoticeMessages,
   validationMessagesForGraphSelection,
@@ -124,6 +125,9 @@ function CurrentActivityGraphSurfaceContent({
   const validationNoticeMessages = [
     ...new Set([...draftValidationMessages, ...validationSelectionMessages]),
   ];
+  const layoutWarningMessages = editorControls.isEditing
+    ? layoutValidationWarningMessages(model.validationControls.targets)
+    : [];
   const saveFailureMessages = editorControls.isEditing
     ? saveErrorNoticeMessages(saveError)
     : [];
@@ -142,6 +146,14 @@ function CurrentActivityGraphSurfaceContent({
       messages: validationNoticeMessages,
       title: messages.noticeValidationFailureTitle,
       tone: "danger",
+    });
+  }
+  if (layoutWarningMessages.length > 0) {
+    editorNoticeSections.push({
+      id: "layout-warning",
+      messages: layoutWarningMessages,
+      title: messages.noticeLayoutWarningTitle,
+      tone: "warning",
     });
   }
   if (removalControls.blockedReason) {

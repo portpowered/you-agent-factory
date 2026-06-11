@@ -15,6 +15,7 @@ export function FactoryGraphVisualGroupControls({
   colorLabel,
   colorOptionLabel,
   deleteGroupLabel,
+  boundsError,
   emptyLabelError,
   group,
   isNodeMember,
@@ -34,6 +35,7 @@ export function FactoryGraphVisualGroupControls({
   colorLabel: string;
   colorOptionLabel: (token: FactoryLayoutGroupColorToken) => string;
   deleteGroupLabel: string;
+  boundsError: string | null;
   emptyLabelError: string;
   group: FactoryLayoutGroup;
   isNodeMember: (nodeId: string) => boolean;
@@ -84,6 +86,11 @@ export function FactoryGraphVisualGroupControls({
         {labelError ? (
           <p className="m-0 text-xs text-on-error-container" role="alert">
             {labelError}
+          </p>
+        ) : null}
+        {boundsError ? (
+          <p className="m-0 text-xs text-on-error-container" role="alert">
+            {boundsError}
           </p>
         ) : null}
       </div>

@@ -421,6 +421,55 @@ describe("useFactoryGraphLayoutDraftState scope and pruning", () => {
   });
 });
 
+describe("useFactoryGraphLayoutDraftState visual group save reload", () => {
+  it("adopts saved visual group layout after reload without topology dirty state", () => {
+    const savedLayoutDocument = {
+      ...baseFactoryDefinition,
+      layout: addNodeToFactoryLayoutGroup(
+        addFactoryLayoutGroup(createDefaultFactoryLayout(), {
+          bounds: defaultFactoryLayoutGroupBounds({ x: 120, y: 80 }),
+          color: "success",
+          id: "group-1",
+          label: "Review lane",
+          locked: false,
+          nodeIds: [],
+          parentGroupId: null,
+        }),
+        "group-1",
+        "workstation:draft",
+      ),
+    };
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: baseFactoryDefinition,
+        factoryDocumentScopeKey: "session-group-reload",
+      }),
+    );
+
+    const savedLayout = savedLayoutDocument.layout;
+    if (!savedLayout) {
+      throw new Error("Expected saved layout fixture.");
+    }
+
+    act(() => {
+      result.current.createVisualGroup({ x: 0, y: 0 });
+      result.current.adoptSavedLayout(savedLayout);
+    });
+
+    expect(result.current.layoutDirty).toBe(false);
+    expect(factoryLayoutGroupById(result.current.layout, "group-1")).toEqual({
+      bounds: defaultFactoryLayoutGroupBounds({ x: 120, y: 80 }),
+      color: "success",
+      id: "group-1",
+      label: "Review lane",
+      locked: false,
+      nodeIds: ["workstation:draft"],
+      parentGroupId: null,
+    });
+    expect(result.current.canUndoLayout).toBe(false);
+  });
+});
+
 describe("useFactoryGraphLayoutDraftState visual group membership", () => {
   it("records group membership changes with undo and redo", () => {
     const layoutDocument = {

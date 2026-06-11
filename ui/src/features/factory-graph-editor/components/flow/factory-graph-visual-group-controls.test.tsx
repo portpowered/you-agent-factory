@@ -19,6 +19,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         ]}
         colorLabel="Group color"
         colorOptionLabel={(token) => `Use ${token} group color`}
+        boundsError={null}
         deleteGroupLabel="Delete group"
         emptyLabelError="Enter a group label."
         group={{
@@ -81,6 +82,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         canvasNodeOptions={[]}
         colorLabel="Group color"
         colorOptionLabel={(token) => `Use ${token} group color`}
+        boundsError={null}
         deleteGroupLabel="Delete group"
         emptyLabelError="Enter a group label."
         group={{
@@ -116,6 +118,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         canvasNodeOptions={[]}
         colorLabel="Group color"
         colorOptionLabel={(token) => `Use ${token} group color`}
+        boundsError={null}
         deleteGroupLabel="Delete group"
         emptyLabelError="Enter a group label."
         group={{
@@ -143,6 +146,50 @@ describe("FactoryGraphVisualGroupControls", () => {
 
     expect(
       screen.getByText("No canvas nodes are available to assign."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows invalid bounds feedback without blocking other controls", () => {
+    render(
+      <FactoryGraphVisualGroupControls
+        boundsError="Group bounds contain non-finite geometry. Resize the group to correct them before saving."
+        canvasNodeOptions={[]}
+        colorLabel="Group color"
+        colorOptionLabel={(token) => `Use ${token} group color`}
+        deleteGroupLabel="Delete group"
+        emptyLabelError="Enter a group label."
+        group={{
+          bounds: {
+            height: Number.NaN,
+            width: 200,
+            x: 0,
+            y: 0,
+          },
+          id: "group-1",
+          label: "Review",
+          nodeIds: [],
+        }}
+        isNodeMember={() => false}
+        labelFieldLabel="Group label"
+        membershipEmptyLabel="No canvas nodes are available to assign."
+        membershipLabel="Group members"
+        membershipNodeLabel={(label) => `Include ${label} in this group`}
+        membershipStaleNodeLabel={(nodeId) =>
+          `Saved member ${nodeId} is no longer on the canvas.`
+        }
+        onDeleteGroup={vi.fn()}
+        onRenameGroup={vi.fn()}
+        onSetGroupColor={vi.fn()}
+        onToggleNodeMembership={vi.fn()}
+        selectedGroupLabel="Selected visual group"
+        staleMemberNodeIds={[]}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        "Group bounds contain non-finite geometry. Resize the group to correct them before saving.",
+      ),
     ).toBeInTheDocument();
   });
 });

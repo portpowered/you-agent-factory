@@ -234,4 +234,52 @@ describe("factory graph layout save", () => {
     const reloadedLayout = factoryLayoutFromDefinition(saveInput.value);
     expect(reloadedLayout.groups).toEqual(saveInput.value.layout?.groups);
   });
+
+  it("round-trips edited visual groups through save preparation and reload", () => {
+    const pendingLayout = {
+      ...createDefaultFactoryLayout(),
+      groups: [
+        {
+          bounds: { x: 80, y: 60, width: 360, height: 240 },
+          color: "warning",
+          id: "planning-lane",
+          label: "Planning",
+          locked: false,
+          nodeIds: ["workstation:draft"],
+          parentGroupId: "parent-lane",
+        },
+      ],
+    };
+    const saveInput = applyFactoryGraphPendingEdits({
+      baseFactoryDefinition,
+      draft: createEmptyFactoryGraphDraft(),
+      pendingLayout,
+    });
+
+    expect(saveInput.ok).toBe(true);
+    if (!saveInput.ok) {
+      return;
+    }
+
+    const reloadedLayout = factoryLayoutFromDefinition(saveInput.value);
+    expect(reloadedLayout.groups).toEqual([
+      {
+        bounds: { x: 80, y: 60, width: 360, height: 240 },
+        color: "warning",
+        id: "planning-lane",
+        label: "Planning",
+        locked: false,
+        nodeIds: ["workstation:draft"],
+        parentGroupId: "parent-lane",
+      },
+    ]);
+    for (const [index, workType] of (baseFactoryDefinition.workTypes ?? []).entries()) {
+      expect(saveInput.value.workTypes?.[index]).toMatchObject(workType);
+    }
+    for (const [index, workstation] of (
+      baseFactoryDefinition.workstations ?? []
+    ).entries()) {
+      expect(saveInput.value.workstations?.[index]).toMatchObject(workstation);
+    }
+  });
 });

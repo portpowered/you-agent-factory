@@ -8,6 +8,7 @@ import {
   type FactoryLayoutGroupCanvasNodeOption,
   type FactoryLayoutGroupColorToken,
 } from "../../lib/layout/factory-graph-layout-groups";
+import { isValidFactoryLayoutGroupBounds } from "../../lib/layout/factory-graph-layout-validation";
 import type {
   FactoryLayout,
   FactoryLayoutPoint,
@@ -190,6 +191,10 @@ export function useFactoryGraphVisualGroupEditor(input: {
       (nodeId) => !canvasNodeOptionIds.has(nodeId),
     );
   }, [canvasNodeOptionIds, selectedGroup]);
+  const selectedGroupBoundsError =
+    selectedGroup && !isValidFactoryLayoutGroupBounds(selectedGroup.bounds)
+      ? messages.visualGroupInvalidBoundsError
+      : null;
 
   return {
     canEditVisualGroups,
@@ -213,6 +218,7 @@ export function useFactoryGraphVisualGroupEditor(input: {
             colorLabel: messages.visualGroupColorLabel,
             colorOptionLabel: messages.visualGroupColorOptionLabel,
             deleteGroupLabel: messages.visualGroupDeleteLabel,
+            boundsError: selectedGroupBoundsError,
             emptyLabelError: messages.visualGroupEmptyLabelError,
             group: selectedGroup,
             isNodeMember: (nodeId: string) =>
