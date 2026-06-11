@@ -144,6 +144,10 @@ const (
 	publicFactoryWorkerProviderScriptWrap    = "SCRIPT_WRAP"
 )
 
+// WorkerModelProviderDefault is the symbolic operator-config model provider value
+// that resolves through a lower-precedence concrete provider before dispatch.
+const WorkerModelProviderDefault = "DEFAULT"
+
 var internalFactoryWorkerModelProviderAliases = map[string]string{
 	"ANTHROPIC":    publicFactoryWorkerModelProviderClaude,
 	"CLAUDE":       publicFactoryWorkerModelProviderClaude,
@@ -232,6 +236,37 @@ func PermissivePublicFactoryWorkerModelProvider(value string) string {
 // StrictPublicFactoryWorkerModelProvider canonicalizes supported public worker model providers and rejects unknown values.
 func StrictPublicFactoryWorkerModelProvider(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryWorkerModelProviderAliases, false)
+}
+
+// IsSymbolicWorkerModelProviderDefault reports whether value is the symbolic DEFAULT provider.
+func IsSymbolicWorkerModelProviderDefault(value string) bool {
+	return strings.EqualFold(strings.TrimSpace(value), WorkerModelProviderDefault)
+}
+
+// CanonicalizeOperatorWorkerModelProviderInput canonicalizes operator-config worker
+// model provider inputs, including public aliases and symbolic DEFAULT.
+func CanonicalizeOperatorWorkerModelProviderInput(value string) (string, bool) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "", true
+	}
+	if IsSymbolicWorkerModelProviderDefault(trimmed) {
+		return WorkerModelProviderDefault, true
+	}
+	if canonical := normalizePublicFactoryEnumValue(trimmed, internalFactoryWorkerModelProviderAliases, false); canonical != "" {
+		return canonical, true
+	}
+	if canonical := StrictPublicFactoryWorkerModelProvider(trimmed); canonical != "" {
+		return canonical, true
+	}
+	return "", false
+}
+
+// AcceptedPublicWorkerModelProviderSummary returns canonical provider names and
+// representative public aliases for operator-facing validation errors.
+func AcceptedPublicWorkerModelProviderSummary() string {
+	return "accepted canonical providers: CLAUDE, CODEX, CURSOR, GEMINI, KIRO, OPENCODE; " +
+		"accepted aliases include codex, claude, gemini, kiro-cli, opencode, agent, cursor, and anthropic"
 }
 
 // PermissivePublicFactoryWorkerProvider canonicalizes supported public worker providers and preserves unknown values.

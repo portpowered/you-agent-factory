@@ -1,0 +1,230 @@
+package operatorconfig
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestLoadFileDefaults_MissingFileReturnsEmptyDefaults(t *testing.T) {
+	defaults, err := LoadFileDefaults(filepath.Join(t.TempDir(), "missing-config.json"))
+	if err != nil {
+		t.Fatalf("LoadFileDefaults() error = %v", err)
+	}
+	if defaults != (Defaults{}) {
+		t.Fatalf("defaults = %#v, want empty", defaults)
+	}
+}
+
+func TestLoadFileDefaults_MalformedFileNamesPath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"defaults":`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := LoadFileDefaults(path)
+	if err == nil {
+		t.Fatal("expected malformed config error")
+	}
+	if !strings.Contains(err.Error(), path) {
+		t.Fatalf("error = %q, want path %q", err.Error(), path)
+	}
+}
+
+func TestParseFileDefaults_AcceptsWorkerModelDefaults(t *testing.T) {
+	defaults, err := ParseFileDefaults([]byte(`{
+		"defaults": {
+			"workerModelProvider": "codex",
+			"workerModel": "gpt-5-codex"
+		}
+	}`))
+	if err != nil {
+		t.Fatalf("ParseFileDefaults() error = %v", err)
+	}
+	if defaults.WorkerModelProvider != "codex" {
+		t.Fatalf("provider = %q, want codex", defaults.WorkerModelProvider)
+	}
+	if defaults.WorkerModel != "gpt-5-codex" {
+		t.Fatalf("model = %q, want gpt-5-codex", defaults.WorkerModel)
+	}
+}
+
+func TestResolve_FileEnvFlagPrecedenceIsIndependentPerField(t *testing.T) {
+	resolved, err := Resolve(ResolveInput{
+		File: Defaults{
+			WorkerModelProvider: "claude",
+			WorkerModel:         "file-model",
+		},
+		Env: Defaults{
+			WorkerModelProvider: "codex",
+			WorkerModel:         "env-model",
+		},
+		Flag: Defaults{
+			WorkerModelProvider: "gemini",
+			WorkerModel:         "flag-model",
+		},
+	}, "/tmp/config.json")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if resolved.WorkerModelProvider != "GEMINI" {
+		t.Fatalf("provider = %q, want GEMINI", resolved.WorkerModelProvider)
+	}
+	if resolved.WorkerModel != "flag-model" {
+		t.Fatalf("model = %q, want flag-model", resolved.WorkerModel)
+	}
+	if resolved.WorkerModelProviderSource != SourceFlag {
+		t.Fatalf("provider source = %q, want flag", resolved.WorkerModelProviderSource)
+	}
+	if resolved.WorkerModelSource != SourceFlag {
+		t.Fatalf("model source = %q, want flag", resolved.WorkerModelSource)
+	}
+}
+
+func TestResolve_EnvOverridesFileWhenFlagsUnset(t *testing.T) {
+	resolved, err := Resolve(ResolveInput{
+		File: Defaults{
+			WorkerModelProvider: "claude",
+			WorkerModel:         "file-model",
+		},
+		Env: Defaults{
+			WorkerModelProvider: "codex",
+			WorkerModel:         "env-model",
+		},
+	}, "/tmp/config.json")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if resolved.WorkerModelProvider != "CODEX" {
+		t.Fatalf("provider = %q, want CODEX", resolved.WorkerModelProvider)
+	}
+	if resolved.WorkerModel != "env-model" {
+		t.Fatalf("model = %q, want env-model", resolved.WorkerModel)
+	}
+	if resolved.WorkerModelProviderSource != SourceEnv {
+		t.Fatalf("provider source = %q, want env", resolved.WorkerModelProviderSource)
+	}
+	if resolved.WorkerModelSource != SourceEnv {
+		t.Fatalf("model source = %q, want env", resolved.WorkerModelSource)
+	}
+}
+
+func TestResolve_CanonicalizesProviderAliases(t *testing.T) {
+	resolved, err := Resolve(ResolveInput{
+		File: Defaults{WorkerModelProvider: "kiro-cli"},
+	}, "/tmp/config.json")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if resolved.WorkerModelProvider != "KIRO" {
+		t.Fatalf("provider = %q, want KIRO", resolved.WorkerModelProvider)
+	}
+}
+
+func TestResolve_SymbolicDefaultResolvesThroughLowerPrecedenceConcreteProvider(t *testing.T) {
+	resolved, err := Resolve(ResolveInput{
+		File: Defaults{WorkerModelProvider: "codex"},
+		Flag: Defaults{WorkerModelProvider: "DEFAULT"},
+	}, "/tmp/config.json")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if resolved.WorkerModelProvider != "CODEX" {
+		t.Fatalf("provider = %q, want CODEX", resolved.WorkerModelProvider)
+	}
+	if resolved.WorkerModelProviderSource != SourceFlag {
+		t.Fatalf("provider source = %q, want flag", resolved.WorkerModelProviderSource)
+	}
+}
+
+func TestResolve_SymbolicDefaultWithoutConcreteProviderFails(t *testing.T) {
+	_, err := Resolve(ResolveInput{
+		Flag: Defaults{WorkerModelProvider: "DEFAULT"},
+	}, "/tmp/config.json")
+	if err == nil {
+		t.Fatal("expected unresolved DEFAULT error")
+	}
+	if !strings.Contains(err.Error(), "concrete provider") {
+		t.Fatalf("error = %q, want concrete provider guidance", err.Error())
+	}
+}
+
+func TestResolve_UnsupportedProviderFailsWithAcceptedProviders(t *testing.T) {
+	_, err := Resolve(ResolveInput{
+		File: Defaults{WorkerModelProvider: "not-a-provider"},
+	}, "/tmp/config.json")
+	if err == nil {
+		t.Fatal("expected unsupported provider error")
+	}
+	if !strings.Contains(err.Error(), "unsupported worker model provider") {
+		t.Fatalf("error = %q, want unsupported provider message", err.Error())
+	}
+	if !strings.Contains(err.Error(), "accepted canonical providers") {
+		t.Fatalf("error = %q, want accepted provider summary", err.Error())
+	}
+}
+
+func TestResolveFromHome_LoadsFileAndEnvironment(t *testing.T) {
+	homeDir := t.TempDir()
+	configPath := DefaultConfigPath(homeDir)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte(`{
+		"defaults": {
+			"workerModelProvider": "claude",
+			"workerModel": "file-model"
+		}
+	}`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	t.Setenv(EnvDefaultWorkerModelProvider, "codex")
+	t.Setenv(EnvDefaultWorkerModel, "env-model")
+
+	resolved, err := ResolveFromHome(homeDir, FlagOverrides{})
+	if err != nil {
+		t.Fatalf("ResolveFromHome() error = %v", err)
+	}
+	if resolved.WorkerModelProvider != "CODEX" {
+		t.Fatalf("provider = %q, want CODEX", resolved.WorkerModelProvider)
+	}
+	if resolved.WorkerModel != "env-model" {
+		t.Fatalf("model = %q, want env-model", resolved.WorkerModel)
+	}
+	if resolved.ConfigPath != configPath {
+		t.Fatalf("config path = %q, want %q", resolved.ConfigPath, configPath)
+	}
+}
+
+func TestResolveFromHome_FlagsOverrideEnvironmentAndFile(t *testing.T) {
+	homeDir := t.TempDir()
+	configPath := DefaultConfigPath(homeDir)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte(`{
+		"defaults": {
+			"workerModelProvider": "claude",
+			"workerModel": "file-model"
+		}
+	}`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	t.Setenv(EnvDefaultWorkerModelProvider, "codex")
+	t.Setenv(EnvDefaultWorkerModel, "env-model")
+
+	resolved, err := ResolveFromHome(homeDir, FlagOverrides{
+		WorkerModelProvider: "gemini",
+		WorkerModel:         "flag-model",
+	})
+	if err != nil {
+		t.Fatalf("ResolveFromHome() error = %v", err)
+	}
+	if resolved.WorkerModelProvider != "GEMINI" {
+		t.Fatalf("provider = %q, want GEMINI", resolved.WorkerModelProvider)
+	}
+	if resolved.WorkerModel != "flag-model" {
+		t.Fatalf("model = %q, want flag-model", resolved.WorkerModel)
+	}
+}
