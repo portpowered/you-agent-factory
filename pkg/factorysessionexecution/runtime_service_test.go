@@ -227,12 +227,18 @@ func TestRuntimeService_StartSync_CompletesSimpleFinalWithPrimaryResult(t *testi
 	if resultPayload.SessionStatus != string(factorysessionexecution.LifecycleStatusSucceeded) {
 		t.Fatalf("sessionStatus = %q, want SUCCEEDED", resultPayload.SessionStatus)
 	}
-	var primary map[string]any
+	var primary []struct {
+		Type string         `json:"type"`
+		JSON map[string]any `json:"json"`
+	}
 	if err := json.Unmarshal(resultPayload.PrimaryResult, &primary); err != nil {
 		t.Fatalf("Unmarshal primary result: %v", err)
 	}
-	if primary["echo"] != "you:workflows" {
-		t.Fatalf("primary echo = %#v, want you:workflows", primary["echo"])
+	if len(primary) != 1 || primary[0].Type != "JSON" {
+		t.Fatalf("primary result = %#v, want one JSON work content part", primary)
+	}
+	if primary[0].JSON["echo"] != "you:workflows" {
+		t.Fatalf("primary echo = %#v, want you:workflows", primary[0].JSON["echo"])
 	}
 
 	read, err := service.GetSession(context.Background(), completed.SessionID)

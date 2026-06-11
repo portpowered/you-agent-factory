@@ -475,15 +475,31 @@ func (s *RuntimeService) applyRuntimeSuccess(sessionID string, outcome workflowr
 	if state.session.Lifecycle != nil {
 		state.session.Lifecycle.FinishedAt = &finishedAt
 	}
-	state.session.ResultSummary = &ResultSummary{
-		ResultStatus: string(ResultStatusFinal),
+	projected, resultSummary, err := projectRuntimeSuccessResult(sessionID, outcome.Value, state.artifacts)
+	if err != nil {
+		state.session.Status = LifecycleStatusFailed
+		state.session.Lifecycle.FinishedAt = &finishedAt
+		state.session.Failure = &FailureSummary{
+			Reason:  "WORKFLOW_RUNTIME_INVALID_RESULT",
+			Message: err.Error(),
+		}
+		state.session.ResultSummary = &ResultSummary{
+			ResultStatus: string(ResultStatusUnavailable),
+		}
+		state.result = ResultReadResult{
+			SessionID:     sessionID,
+			ResultStatus:  ResultStatusUnavailable,
+			SessionStatus: LifecycleStatusFailed,
+			Failure:       cloneFailureSummary(state.session.Failure),
+			Availability:  defaultUnavailableAvailability(),
+		}
+		state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+		return
 	}
-	state.result = ResultReadResult{
-		SessionID:     sessionID,
-		ResultStatus:  ResultStatusFinal,
-		SessionStatus: LifecycleStatusSucceeded,
-		PrimaryResult: append(json.RawMessage(nil), outcome.Value.JSON...),
-	}
+	state.session.ResultSummary = resultSummary
+	state.session.ArtifactRefs = artifactRefsFromSummaries(state.artifacts)
+	state.session.ArtifactCount = len(state.session.ArtifactRefs)
+	state.result = projected
 	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
 }
 
