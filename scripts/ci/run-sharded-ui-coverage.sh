@@ -18,6 +18,7 @@ mkdir -p "$artifact_root" "$reports_dir"
 
 for index in $(seq 1 "$shard_total"); do
   rm -f "$reports_dir/main-shard-${index}.json"
+  rm -f "$reports_dir/main-shard-${index}-timings.json"
 done
 
 printf '%s\n' \

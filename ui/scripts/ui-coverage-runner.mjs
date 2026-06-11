@@ -1,23 +1,25 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
+
+import {
+  defaultCapturedStdoutMaxBuffer,
+  defaultSlowFileSummaryLimit,
+  formatElapsedMs,
+  formatSlowFileSummaryLines,
+  logSlowFileSummary as emitSlowFileSummary,
+  mergeFileDurations,
+  parseVitestFileDurationsFromLog,
+  rankSlowestTestFiles,
+} from "./ui-test-cost-report.mjs";
 
 export const phaseLogPrefix = "[ui-coverage]";
 export const mainCoveredPhaseName = "Main covered Vitest pass";
 export const defaultMainCoveredMaxWorkers = "2";
 export const defaultShardMainCoveredMaxWorkers = "1";
-export const defaultSlowFileSummaryLimit = 15;
+export { defaultSlowFileSummaryLimit, defaultCapturedStdoutMaxBuffer };
 export const defaultUiCoverageShardTotal = 10;
-export const defaultCapturedStdoutMaxBuffer = 128 * 1024 * 1024;
-
-const vitestFileDurationLinePattern =
-  /^\s*[✓×]\s+(\S+\.(?:test|spec)\.(?:tsx?|mjs|cjs))\s+\([^)]+\)\s+(\d+(?:\.\d+)?)ms(?:\s+\d+ MB heap used)?/gm;
-
-const ansiEscapePattern = new RegExp(
-  `${String.fromCharCode(27)}\\[[0-9;]*m`,
-  "g",
-);
 
 export function getMainCoveredMaxWorkers(env = process.env, options = {}) {
   if (env.UI_COVERAGE_MAIN_MAX_WORKERS) {
@@ -65,6 +67,13 @@ export function mainCoveredShardBlobPath(
   reportsDir = ".vitest-reports",
 ) {
   return join(reportsDir, `main-shard-${shardIndex}.json`);
+}
+
+export function mainCoveredShardTimingBlobPath(
+  shardIndex,
+  reportsDir = ".vitest-reports",
+) {
+  return join(reportsDir, `main-shard-${shardIndex}-timings.json`);
 }
 
 export function parseUiCoverageMerge(env = process.env) {
@@ -223,61 +232,37 @@ export function buildUiCoveragePhases(options = {}) {
 
 export const uiCoveragePhases = buildUiCoveragePhases();
 
-export function stripAnsi(text) {
-  return text.replace(ansiEscapePattern, "");
-}
+export {
+  formatElapsedMs,
+  formatSlowFileSummaryLines,
+  parseVitestFileDurationsFromLog,
+  rankSlowestTestFiles,
+};
 
-export function parseVitestFileDurationsFromLog(logText) {
-  const strippedLog = stripAnsi(logText);
-  const durationsByPath = new Map();
-
-  for (const match of strippedLog.matchAll(vitestFileDurationLinePattern)) {
-    const [, filePath, durationMsText] = match;
-    const durationMs = Number(durationMsText);
-    durationsByPath.set(
-      filePath,
-      Math.max(durationsByPath.get(filePath) ?? 0, durationMs),
-    );
-  }
-
-  return [...durationsByPath.entries()].map(([path, durationMs]) => ({
-    path,
-    durationMs,
-  }));
-}
-
-export function rankSlowestTestFiles(
+export function writeShardTimingArtifact(
+  shardIndex,
   fileDurations,
-  limit = defaultSlowFileSummaryLimit,
+  reportsDir = ".vitest-reports",
 ) {
-  return [...fileDurations]
-    .sort((left, right) => right.durationMs - left.durationMs)
-    .slice(0, limit);
+  writeFileSync(
+    mainCoveredShardTimingBlobPath(shardIndex, reportsDir),
+    `${JSON.stringify(fileDurations, null, 2)}\n`,
+  );
 }
 
-export function formatSlowFileSummaryLines(
-  slowFiles,
-  { limit = defaultSlowFileSummaryLimit } = {},
-) {
-  if (slowFiles.length === 0) {
-    return [
-      `${phaseLogPrefix} Main covered pass slowest test files: none reported`,
-    ];
+export function readShardTimingArtifacts(shardTotal, reportsDir = ".vitest-reports") {
+  const fileDurations = [];
+
+  for (let index = 1; index <= shardTotal; index += 1) {
+    const timingPath = mainCoveredShardTimingBlobPath(index, reportsDir);
+    if (!existsSync(timingPath)) {
+      continue;
+    }
+
+    fileDurations.push(...JSON.parse(readFileSync(timingPath, "utf8")));
   }
 
-  const lines = [
-    `${phaseLogPrefix} Main covered pass slowest test files (top ${Math.min(slowFiles.length, limit)}):`,
-  ];
-
-  for (const { path, durationMs } of slowFiles) {
-    lines.push(`${phaseLogPrefix}   ${path} ${formatElapsedMs(durationMs)}`);
-  }
-
-  return lines;
-}
-
-export function formatElapsedMs(elapsedMs) {
-  return `${(elapsedMs / 1000).toFixed(2)}s`;
+  return fileDurations;
 }
 
 export function formatPhaseElapsed(phaseName, elapsedMs) {
@@ -321,12 +306,24 @@ export function runTimedPhase(phase, spawn = spawnSync, options = {}) {
   };
 }
 
-export function logSlowFileSummary(capturedStdout) {
-  const slowFiles = rankSlowestTestFiles(
-    parseVitestFileDurationsFromLog(capturedStdout),
-  );
+export function logSlowFileSummary(capturedStdout, summaryTitle) {
+  emitSlowFileSummary(capturedStdout, {
+    logPrefix: phaseLogPrefix,
+    summaryTitle:
+      summaryTitle ?? "Main covered pass slowest test files",
+  });
+}
 
-  for (const line of formatSlowFileSummaryLines(slowFiles)) {
+export function logMergedShardSlowFileSummary(shardTotal, reportsDir = ".vitest-reports") {
+  const merged = mergeFileDurations(
+    readShardTimingArtifacts(shardTotal, reportsDir),
+  );
+  const slowFiles = rankSlowestTestFiles(merged);
+
+  for (const line of formatSlowFileSummaryLines(slowFiles, {
+    logPrefix: phaseLogPrefix,
+    summaryTitle: "Merged main covered pass slowest test files",
+  })) {
     console.log(line);
   }
 }
@@ -342,6 +339,12 @@ export function runUiCoverageShard(shard, options = {}) {
     process.exit(status);
   }
 
+  const fileDurations = parseVitestFileDurationsFromLog(capturedStdout);
+  writeShardTimingArtifact(
+    shard.index,
+    fileDurations,
+    options.reportsDir ?? ".vitest-reports",
+  );
   logSlowFileSummary(capturedStdout);
 }
 
@@ -368,6 +371,8 @@ export function runUiCoverageMerge(options = {}) {
       process.exit(status);
     }
   }
+
+  logMergedShardSlowFileSummary(shardTotal, reportsDir);
 }
 
 export function runUiCoverage(phases = uiCoveragePhases, options = {}) {

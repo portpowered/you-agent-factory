@@ -24,7 +24,9 @@ import {
   formatElapsedMs,
   formatMissingShardBlobSummary,
   formatPhaseElapsed,
-  formatSlowFileSummaryLines,
+  logMergedShardSlowFileSummary,
+  mainCoveredShardTimingBlobPath,
+  writeShardTimingArtifact,
   getMainCoveredMaxWorkers,
   getUiCoverageShardTotal,
   mainCoveredPhaseName,
@@ -38,6 +40,9 @@ import {
   runUiCoverage,
   uiCoveragePhases,
 } from "./ui-coverage-runner.mjs";
+import {
+  formatSlowFileSummaryLines,
+} from "./ui-test-cost-report.mjs";
 
 const fixtureLogSnippet = readFileSync(
   join(
@@ -146,11 +151,17 @@ test("formats a bounded slow-file summary with stable labels", () => {
     },
     { durationMs: 116, path: "src/i18n/formatters.test.ts" },
   ]);
-  expect(formatSlowFileSummaryLines(slowFiles, { limit: 3 })).toEqual([
+  expect(
+    formatSlowFileSummaryLines(slowFiles, {
+      limit: 3,
+      logPrefix: phaseLogPrefix,
+      summaryTitle: "Main covered pass slowest test files",
+    }),
+  ).toEqual([
     `${phaseLogPrefix} Main covered pass slowest test files (top 3):`,
-    `${phaseLogPrefix}   src/App.test.tsx 120.00s`,
-    `${phaseLogPrefix}   src/features/timeline/state/factoryTimelineStore.test.ts 5.00s`,
-    `${phaseLogPrefix}   src/i18n/formatters.test.ts 0.12s`,
+    `${phaseLogPrefix}   src/App.test.tsx 120.00s [app-shell-integration]`,
+    `${phaseLogPrefix}   src/features/timeline/state/factoryTimelineStore.test.ts 5.00s [replay-timeline]`,
+    `${phaseLogPrefix}   src/i18n/formatters.test.ts 0.12s [uncategorized]`,
   ]);
 });
 
@@ -269,11 +280,48 @@ test("findMissingShardBlobIndices reports absent shard blobs", () => {
   expect(formatMissingShardBlobSummary([2], 2)).toContain("main-shard-2.json");
 });
 
+test("logMergedShardSlowFileSummary ranks merged shard timing artifacts", () => {
+  const reportsDir = mkdtempSync(join(tmpdir(), "ui-coverage-reports-"));
+  writeShardTimingArtifact(
+    1,
+    [{ durationMs: 1000, path: "src/a.test.ts" }],
+    reportsDir,
+  );
+  writeShardTimingArtifact(
+    2,
+    [
+      { durationMs: 5000, path: "src/App.test.tsx" },
+      { durationMs: 2000, path: "src/a.test.ts" },
+    ],
+    reportsDir,
+  );
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
+
+  logMergedShardSlowFileSummary(2, reportsDir);
+
+  expect(log).toHaveBeenCalledWith(
+    `${phaseLogPrefix} Merged main covered pass slowest test files (top 2):`,
+  );
+  expect(log).toHaveBeenCalledWith(
+    `${phaseLogPrefix}   src/App.test.tsx 5.00s [app-shell-integration]`,
+  );
+  expect(log).toHaveBeenCalledWith(
+    `${phaseLogPrefix}   src/a.test.ts 2.00s [uncategorized]`,
+  );
+
+  log.mockRestore();
+});
+
 test("runUiCoverage in merge mode runs follow-on phases when shard blobs exist", () => {
   const reportsDir = mkdtempSync(join(tmpdir(), "ui-coverage-reports-"));
   writeFileSync(mainCoveredShardBlobPath(1, reportsDir), "{}");
+  writeFileSync(
+    mainCoveredShardTimingBlobPath(1, reportsDir),
+    JSON.stringify([{ durationMs: 1000, path: "src/slow.test.ts" }]),
+  );
   const spawn = vi.fn(() => ({ status: 0 }));
   const exit = vi.spyOn(process, "exit").mockImplementation(() => {});
+  const log = vi.spyOn(console, "log").mockImplementation(() => {});
 
   runUiCoverage(uiCoveragePhases, {
     env: { UI_COVERAGE_MERGE: "1", UI_COVERAGE_SHARD_TOTAL: "1" },
@@ -282,6 +330,9 @@ test("runUiCoverage in merge mode runs follow-on phases when shard blobs exist",
   });
 
   expect(spawn).toHaveBeenCalledTimes(3);
+  expect(log).toHaveBeenCalledWith(
+    `${phaseLogPrefix} Merged main covered pass slowest test files (top 1):`,
+  );
   expect(spawn.mock.calls.map(([, args]) => args)).toEqual(
     expect.arrayContaining([
       expect.arrayContaining([
@@ -293,6 +344,7 @@ test("runUiCoverage in merge mode runs follow-on phases when shard blobs exist",
   );
   expect(exit).not.toHaveBeenCalled();
 
+  log.mockRestore();
   exit.mockRestore();
 });
 
