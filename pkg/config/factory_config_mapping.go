@@ -157,7 +157,7 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 		SupportingFiles:  resourceManifestAPIFromInternal(cfg.ResourceManifest),
 		Layout:           factoryLayoutAPIFromInternal(cfg.Layout),
 		Workers:          workersAPIFromInternal(cfg.Workers),
-		Workstations:     workstationsAPIFromInternal(cfg.Workstations),
+		Workstations:     workstationsAPIFromInternal(cfg.Workstations, workerTypesByName(cfg.Workers)),
 	}
 }
 
@@ -683,13 +683,24 @@ func workersAPIFromInternal(workers []interfaces.WorkerConfig) *[]factoryapi.Wor
 	return &result
 }
 
-func workstationsAPIFromInternal(workstations []interfaces.FactoryWorkstationConfig) *[]factoryapi.Workstation {
+func workerTypesByName(workers []interfaces.WorkerConfig) map[string]string {
+	if len(workers) == 0 {
+		return nil
+	}
+	workerTypes := make(map[string]string, len(workers))
+	for _, worker := range workers {
+		workerTypes[worker.Name] = worker.Type
+	}
+	return workerTypes
+}
+
+func workstationsAPIFromInternal(workstations []interfaces.FactoryWorkstationConfig, workerTypes map[string]string) *[]factoryapi.Workstation {
 	if len(workstations) == 0 {
 		return nil
 	}
 	result := make([]factoryapi.Workstation, 0, len(workstations))
 	for _, workstation := range workstations {
-		result = append(result, workstationAPIFromInternal(workstation))
+		result = append(result, workstationAPIFromInternal(workstation, workerTypes[workstation.WorkerTypeName]))
 	}
 	return &result
 }
@@ -720,7 +731,7 @@ func hybridLogicalTimestampPtr(version *interfaces.FactoryVersion) *factoryapi.H
 	}
 }
 
-func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig) factoryapi.Workstation {
+func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig, workerType string) factoryapi.Workstation {
 	normalized := CloneWorkstationConfig(workstation)
 	NormalizeWorkstationExecutionLimit(&normalized)
 	promptBody := normalized.PromptTemplate
@@ -749,7 +760,7 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig)
 		Operation:             stringPtrIfNotEmpty(normalized.Operation),
 		OperationBindings:     workstationOperationBindingsAPIFromInternal(normalized.OperationBindings),
 		PromptFile:            stringPtrIfNotEmpty(normalized.PromptFile),
-		Type:                  workstationTypePtrIfNotEmpty(normalized.Type),
+		Type:                  workstationTypePtrIfNotEmpty(normalized, workerType),
 	}
 	if normalized.ID != "" {
 		apiWorkstation.Id = stringPtr(normalized.ID)
@@ -890,7 +901,14 @@ func dropSupportedPortableBundledInlineContent(payload any) {
 // WorkstationConfigToOpenAPI converts an internal workstation config into the
 // generated OpenAPI model.
 func WorkstationConfigToOpenAPI(workstation interfaces.FactoryWorkstationConfig) factoryapi.Workstation {
-	return workstationAPIFromInternal(workstation)
+	return WorkstationConfigToOpenAPIWithWorkerType(workstation, "")
+}
+
+// WorkstationConfigToOpenAPIWithWorkerType converts an internal workstation
+// config into the generated OpenAPI model using worker-type context for
+// behavior-aware workstation taxonomy projection.
+func WorkstationConfigToOpenAPIWithWorkerType(workstation interfaces.FactoryWorkstationConfig, workerType string) factoryapi.Workstation {
+	return workstationAPIFromInternal(workstation, workerType)
 }
 
 func workerDefinitionAPIFromInternal(def *interfaces.WorkerConfig) *factoryapi.Worker {
@@ -1198,11 +1216,12 @@ func hostedWorkerProviderPtrIfNotEmpty(value string) *factoryapi.HostedWorkerPro
 	return interfaces.GeneratedPublicFactoryHostedWorkerProviderPtr(value)
 }
 
-func workstationTypePtrIfNotEmpty(value string) *factoryapi.WorkstationType {
-	if strings.TrimSpace(value) == "" {
+func workstationTypePtrIfNotEmpty(workstation interfaces.FactoryWorkstationConfig, workerType string) *factoryapi.WorkstationType {
+	publicType := interfaces.PublicWorkstationTypeFromInternalRuntime(workstation.Type, workerType, workstation.Kind)
+	if strings.TrimSpace(publicType) == "" {
 		return nil
 	}
-	enumValue := publicFactoryWorkstationTypeFromInternal(value)
+	enumValue := publicFactoryWorkstationTypeFromInternal(workstation, workerType)
 	return &enumValue
 }
 

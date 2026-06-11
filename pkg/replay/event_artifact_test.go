@@ -218,7 +218,7 @@ func TestMergeGeneratedWorkers_ReplacesExistingEntriesAndAppendsRuntimeOnlyInSor
 
 func TestMergeGeneratedWorkstations_ReplacesExistingEntriesAndAppendsRuntimeOnlyInSortedOrder(t *testing.T) {
 	factory, runtimeWorkstations := mergeGeneratedWorkstationsFixture()
-	if err := mergeGeneratedWorkstations(factory, runtimeWorkstations); err != nil {
+	if err := mergeGeneratedWorkstations(factory, runtimeWorkstations, nil); err != nil {
 		t.Fatalf("mergeGeneratedWorkstations() error = %v", err)
 	}
 	assertMergedGeneratedWorkstations(t, factory)

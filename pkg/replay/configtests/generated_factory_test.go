@@ -91,8 +91,8 @@ Fallback body.
 	if workstation.Body == nil || *workstation.Body != "Implement {{ .WorkID }}." {
 		t.Fatalf("generated workstation body = %#v, want prompt file content", workstation.Body)
 	}
-	if workstation.Type == nil || *workstation.Type != "MODEL_WORKSTATION" {
-		t.Fatalf("generated workstation runtime type = %#v, want MODEL_WORKSTATION", workstation.Type)
+	if workstation.Type == nil || *workstation.Type != "SCRIPT_RUN" {
+		t.Fatalf("generated workstation runtime type = %#v, want SCRIPT_RUN", workstation.Type)
 	}
 	if workstation.StopWords == nil || len(*workstation.StopWords) != 2 || (*workstation.StopWords)[0] != "BLOCKED" || (*workstation.StopWords)[1] != "DONE" {
 		t.Fatalf("generated canonical stop words = %#v, want [BLOCKED DONE]", workstation.StopWords)

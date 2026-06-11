@@ -427,7 +427,7 @@ func assertFlattenedInlineRuntimeDefinitions(t *testing.T, flattened []byte) {
 	if _, ok := workstationPayload["runtimeType"]; ok {
 		t.Fatalf("expected canonical inline workstation runtime config not to use runtimeType")
 	}
-	if got, ok := workstationPayload["type"].(string); !ok || got != "MODEL_WORKSTATION" {
+	if got, ok := workstationPayload["type"].(string); !ok || got != "AGENT_RUN" {
 		t.Fatalf("expected canonical inline workstation runtime type, got %#v", workstationPayload["type"])
 	}
 }

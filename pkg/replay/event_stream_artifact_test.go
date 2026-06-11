@@ -305,7 +305,7 @@ func assertReplayHydratedFactoryRuntime(t *testing.T, factory factoryapi.Factory
 	if workstation.Body == nil || *workstation.Body != "Implement {{ .WorkID }}." {
 		t.Fatalf("workstation body = %#v, want prompt file content", workstation.Body)
 	}
-	if workstation.Type == nil || *workstation.Type != factoryapi.WorkstationTypeModelWorkstation {
-		t.Fatalf("workstation type = %#v, want MODEL_WORKSTATION", workstation.Type)
+	if workstation.Type == nil || *workstation.Type != factoryapi.WorkstationTypeScriptRun {
+		t.Fatalf("workstation type = %#v, want SCRIPT_RUN", workstation.Type)
 	}
 }

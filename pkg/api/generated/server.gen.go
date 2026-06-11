@@ -719,10 +719,14 @@ const (
 
 // Defines values for WorkstationType.
 const (
+	WorkstationTypeAgentRun              WorkstationType = "AGENT_RUN"
 	WorkstationTypeClassifierWorkstation WorkstationType = "CLASSIFIER_WORKSTATION"
+	WorkstationTypeInferenceRun          WorkstationType = "INFERENCE_RUN"
 	WorkstationTypeLogicalMove           WorkstationType = "LOGICAL_MOVE"
 	WorkstationTypeModelInvoke           WorkstationType = "MODEL_INVOKE"
 	WorkstationTypeModelWorkstation      WorkstationType = "MODEL_WORKSTATION"
+	WorkstationTypePollerRun             WorkstationType = "POLLER_RUN"
+	WorkstationTypeScriptRun             WorkstationType = "SCRIPT_RUN"
 )
 
 // Defines values for SortBy.

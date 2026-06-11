@@ -211,7 +211,7 @@ func assertDeterministicExpandedPayload(t *testing.T, payload map[string]any) {
 		t.Fatalf("expected workstation payload object, got %#v", workstationsPayload[0])
 	}
 	for key, want := range map[string]any{
-		"type":         "MODEL_WORKSTATION",
+		"type":         "AGENT_RUN",
 		"worker":       "executor",
 		"promptFile":   "prompt.md",
 		"outputSchema": "schema.json",

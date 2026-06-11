@@ -155,7 +155,7 @@ func GeneratedFactoryFromRuntimeConfig(factoryDir string, factoryCfg *interfaces
 	if err := mergeGeneratedWorkers(&generated, workers); err != nil {
 		return factoryapi.Factory{}, err
 	}
-	if err := mergeGeneratedWorkstations(&generated, workstations); err != nil {
+	if err := mergeGeneratedWorkstations(&generated, workstations, workers); err != nil {
 		return factoryapi.Factory{}, err
 	}
 
@@ -269,8 +269,8 @@ func generatedFactoryAPIFromConfig(cfg *interfaces.FactoryConfig) factoryapi.Fac
 	return config.FactoryConfigToOpenAPI(cfg)
 }
 
-func generatedWorkstationAPIFromConfig(name string, cfg interfaces.FactoryWorkstationConfig) factoryapi.Workstation {
-	workstation := config.WorkstationConfigToOpenAPI(cfg)
+func generatedWorkstationAPIFromConfig(name string, cfg interfaces.FactoryWorkstationConfig, workerType string) factoryapi.Workstation {
+	workstation := config.WorkstationConfigToOpenAPIWithWorkerType(cfg, workerType)
 	if workstation.Name == "" {
 		workstation.Name = name
 	}

@@ -112,10 +112,14 @@ var publicFactoryResourceTypeAliases = map[string]string{
 }
 
 var publicFactoryWorkstationTypeAliases = map[string]string{
-	WorkstationTypeClassify: WorkstationTypeClassify,
-	WorkstationTypeLogical:  WorkstationTypeLogical,
-	WorkstationTypeInvoke:   WorkstationTypeInvoke,
-	WorkstationTypeModel:    WorkstationTypeModel,
+	WorkstationTypeInference: WorkstationTypeInference,
+	WorkstationTypeAgent:     WorkstationTypeAgent,
+	WorkstationTypeScript:    WorkstationTypeScript,
+	WorkstationTypePoller:    WorkstationTypePoller,
+	WorkstationTypeInvoke:    WorkstationTypeInference,
+	WorkstationTypeModel:     WorkstationTypeAgent,
+	WorkstationTypeClassify:  WorkstationTypeClassify,
+	WorkstationTypeLogical:   WorkstationTypeLogical,
 }
 
 var publicFactoryRunnerIDAliases = map[string]string{
@@ -329,6 +333,63 @@ func StrictPublicFactoryResourceType(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryResourceTypeAliases, false)
 }
 
+// InternalRuntimeWorkstationTypeFromPublic maps canonical public workstation types to
+// the internal runtime identifiers used by validation and execution.
+func InternalRuntimeWorkstationTypeFromPublic(value string) string {
+	switch PermissivePublicFactoryWorkstationType(value) {
+	case WorkstationTypeInference:
+		return WorkstationTypeInvoke
+	case WorkstationTypeAgent, WorkstationTypeScript:
+		return WorkstationTypeModel
+	case WorkstationTypePoller:
+		return ""
+	case WorkstationTypeLogical, WorkstationTypeClassify:
+		return PermissivePublicFactoryWorkstationType(value)
+	default:
+		return PermissivePublicFactoryWorkstationType(value)
+	}
+}
+
+// PublicWorkstationTypeFromInternalRuntime maps internal runtime workstation identifiers
+// to the preferred public taxonomy names.
+func PublicWorkstationTypeFromInternalRuntime(workstationType, workerType string, kind WorkstationKind) string {
+	switch strings.TrimSpace(workstationType) {
+	case WorkstationTypeInvoke:
+		return WorkstationTypeInference
+	case WorkstationTypeModel:
+		if PermissivePublicFactoryWorkerType(workerType) == WorkerTypeScript {
+			return WorkstationTypeScript
+		}
+		return WorkstationTypeAgent
+	case WorkstationTypeLogical, WorkstationTypeClassify:
+		return strings.TrimSpace(workstationType)
+	case "":
+		if kind == WorkstationKindPoller {
+			return WorkstationTypePoller
+		}
+		return ""
+	case WorkstationTypeInference, WorkstationTypeAgent, WorkstationTypeScript, WorkstationTypePoller:
+		return strings.TrimSpace(workstationType)
+	default:
+		return PermissivePublicFactoryWorkstationType(workstationType)
+	}
+}
+
+// IsInferenceRunPublicWorkstationType reports whether a public workstation type value
+// denotes inference-run behavior, including the legacy MODEL_INVOKE alias.
+func IsInferenceRunPublicWorkstationType(value string) bool {
+	return PermissivePublicFactoryWorkstationType(value) == WorkstationTypeInference
+}
+
+// IsPollerRunPublicWorkstationType reports whether a public workstation type value
+// denotes poller-run behavior, including empty type on poller-kind workstations.
+func IsPollerRunPublicWorkstationType(value string, kind WorkstationKind) bool {
+	if PermissivePublicFactoryWorkstationType(value) == WorkstationTypePoller {
+		return true
+	}
+	return strings.TrimSpace(value) == "" && kind == WorkstationKindPoller
+}
+
 // PermissivePublicFactoryWorkstationType canonicalizes supported public workstation types and preserves unknown values.
 func PermissivePublicFactoryWorkstationType(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryWorkstationTypeAliases, true)
@@ -421,7 +482,13 @@ func GeneratedPublicFactoryWorkerModelOperationContentTypePtr(value string) *fac
 
 // GeneratedPublicFactoryWorkstationType returns the generated workstation type enum.
 func GeneratedPublicFactoryWorkstationType(value string) factoryapi.WorkstationType {
-	return factoryapi.WorkstationType(PermissivePublicFactoryWorkstationType(value))
+	return factoryapi.WorkstationType(PublicWorkstationTypeFromInternalRuntime(value, "", ""))
+}
+
+// GeneratedPublicFactoryWorkstationTypeFromWorkstation returns the generated workstation
+// type enum using worker and scheduling context for behavior-aware projection.
+func GeneratedPublicFactoryWorkstationTypeFromWorkstation(workstation FactoryWorkstationConfig, workerType string) factoryapi.WorkstationType {
+	return factoryapi.WorkstationType(PublicWorkstationTypeFromInternalRuntime(workstation.Type, workerType, workstation.Kind))
 }
 
 // GeneratedPublicFactoryWorkstationTypePtr returns the generated workstation type enum when non-empty.

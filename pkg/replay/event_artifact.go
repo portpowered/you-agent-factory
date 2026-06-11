@@ -338,7 +338,7 @@ func generatedWorkerFromReplayConfig(name string, worker interfaces.WorkerConfig
 	return generated, nil
 }
 
-func mergeGeneratedWorkstations(factory *factoryapi.Factory, workstationsByName map[string]interfaces.FactoryWorkstationConfig) error {
+func mergeGeneratedWorkstations(factory *factoryapi.Factory, workstationsByName map[string]interfaces.FactoryWorkstationConfig, runtimeWorkers map[string]interfaces.WorkerConfig) error {
 	if len(workstationsByName) == 0 {
 		return nil
 	}
@@ -347,7 +347,7 @@ func mergeGeneratedWorkstations(factory *factoryapi.Factory, workstationsByName 
 		generatedWorkstationIndexes,
 		sortedWorkstationNames(workstationsByName),
 		func(name string) (factoryapi.Workstation, error) {
-			return generatedWorkstationFromReplayConfig(name, workstationsByName[name])
+			return generatedWorkstationFromReplayConfig(name, workstationsByName[name], runtimeWorkers)
 		},
 		func(workstation factoryapi.Workstation) string {
 			return workstation.Name
@@ -377,8 +377,12 @@ func mergeGeneratedEntries[T any](generated []T, indexes func([]T) map[string]in
 	return generated, nil
 }
 
-func generatedWorkstationFromReplayConfig(name string, cfg interfaces.FactoryWorkstationConfig) (factoryapi.Workstation, error) {
-	generated := generatedWorkstationAPIFromConfig(name, cfg)
+func generatedWorkstationFromReplayConfig(name string, cfg interfaces.FactoryWorkstationConfig, runtimeWorkers map[string]interfaces.WorkerConfig) (factoryapi.Workstation, error) {
+	workerType := ""
+	if worker, ok := runtimeWorkers[cfg.WorkerTypeName]; ok {
+		workerType = worker.Type
+	}
+	generated := generatedWorkstationAPIFromConfig(name, cfg, workerType)
 	preserveGeneratedWorkstationResources(cfg.Resources, &generated)
 	if generated.Name == "" {
 		generated.Name = name

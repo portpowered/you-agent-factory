@@ -978,16 +978,16 @@ func internalFactoryWorkstationKindFromPublic(kind *factoryapi.WorkstationKind) 
 	}
 }
 
-func publicFactoryWorkstationTypeFromInternal(value string) factoryapi.WorkstationType {
-	return interfaces.GeneratedPublicFactoryWorkstationType(value)
+func publicFactoryWorkstationTypeFromInternal(workstation interfaces.FactoryWorkstationConfig, workerType string) factoryapi.WorkstationType {
+	return interfaces.GeneratedPublicFactoryWorkstationTypeFromWorkstation(workstation, workerType)
 }
 
 func internalFactoryWorkstationTypeFromPublic(value *factoryapi.WorkstationType) string {
 	if value == nil {
 		return ""
 	}
-	if canonical := interfaces.PermissivePublicFactoryWorkstationType(string(*value)); canonical != "" {
-		return canonical
+	if runtimeType := interfaces.InternalRuntimeWorkstationTypeFromPublic(string(*value)); runtimeType != "" || interfaces.PermissivePublicFactoryWorkstationType(string(*value)) == interfaces.WorkstationTypePoller {
+		return runtimeType
 	}
 	return strings.TrimSpace(string(*value))
 }
