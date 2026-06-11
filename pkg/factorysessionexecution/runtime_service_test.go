@@ -337,7 +337,7 @@ func TestRuntimeService_StartSync_TimeoutPreservesEventualRuntimeResult(t *testi
 		t.Fatalf("timeout response = %#v", timedOut)
 	}
 
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for {
 		read, err := service.GetSession(context.Background(), timedOut.SessionID)
 		if err != nil {

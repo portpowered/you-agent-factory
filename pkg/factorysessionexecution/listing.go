@@ -566,6 +566,13 @@ func buildCanonicalSessionEvents(session SessionReadResult, result ResultReadRes
 		payload := map[string]any{
 			"resultStatus": string(result.ResultStatus),
 		}
+		if session.ResultSummary != nil {
+			if summary := strings.TrimSpace(session.ResultSummary.Summary); summary != "" {
+				payload["resultSummary"] = []map[string]any{
+					{"type": "text", "text": summary},
+				}
+			}
+		}
 		if len(result.ArtifactIDs) > 0 {
 			payload["artifactIds"] = append([]string(nil), result.ArtifactIDs...)
 		}

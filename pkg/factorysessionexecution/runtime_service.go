@@ -659,6 +659,7 @@ func (s *RuntimeService) applySyncWaitTimeout(sessionID string) {
 			Retryable: true,
 		},
 	}
+	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
 }
 
 func (s *RuntimeService) markRuntimeDone(sessionID string) {
