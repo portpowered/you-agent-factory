@@ -1,15 +1,18 @@
 package workflowruntime_test
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
@@ -83,6 +86,84 @@ func TestRun_WorkflowFinal_ProjectsStructuredPrimaryResult(t *testing.T) {
 	assertProjectedFields(t, projected, want)
 }
 
+func TestRun_SyntaxError_FailsBeforeExecution(t *testing.T) {
+	source := readFixture(t, "syntax-error.workflow.js")
+	req := workflowruntime.Request{
+		Source:    source,
+		SourceRef: "syntax-error.workflow.js",
+		SessionID: "session-syntax-error",
+		Args:      marshalArgs(t, map[string]any{"subject": "workflows"}),
+		Metadata:  map[string]string{"name": "syntax-error"},
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}
+
+	outcome := runPreExecutionFailure(t, req)
+	if outcome.Failure.Code != workflowruntime.CodePreExecutionInvalid {
+		t.Fatalf("failure code = %q, want %q", outcome.Failure.Code, workflowruntime.CodePreExecutionInvalid)
+	}
+	if !strings.Contains(outcome.Failure.Message, workflowvalidation.CodeSyntaxError) {
+		t.Fatalf("failure message = %q, want validation code %q", outcome.Failure.Message, workflowvalidation.CodeSyntaxError)
+	}
+	if !strings.Contains(outcome.Failure.Message, "syntax-error.workflow.js") {
+		t.Fatalf("failure message = %q, want source ref context", outcome.Failure.Message)
+	}
+}
+
+func TestRun_ValidationFailure_FailsBeforeExecution(t *testing.T) {
+	source := readFixture(t, "validation-failure.workflow.js")
+	req := workflowruntime.Request{
+		Source:    source,
+		SourceRef: "validation-failure.workflow.js",
+		SessionID: "session-validation-failure",
+		Args:      marshalArgs(t, map[string]any{"subject": "workflows"}),
+		Metadata:  map[string]string{"name": "validation-failure"},
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}
+
+	outcome := runPreExecutionFailure(t, req)
+	if outcome.Failure.Code != workflowruntime.CodePreExecutionInvalid {
+		t.Fatalf("failure code = %q, want %q", outcome.Failure.Code, workflowruntime.CodePreExecutionInvalid)
+	}
+	if !strings.Contains(outcome.Failure.Message, workflowvalidation.CodeUnsupportedGlobal) {
+		t.Fatalf("failure message = %q, want validation code %q", outcome.Failure.Message, workflowvalidation.CodeUnsupportedGlobal)
+	}
+	if !strings.Contains(outcome.Failure.Message, "console") {
+		t.Fatalf("failure message = %q, want unsupported global context", outcome.Failure.Message)
+	}
+}
+
+func TestRun_PreExecutionFailure_DoesNotInvokeHooks(t *testing.T) {
+	source := readFixture(t, "syntax-error.workflow.js")
+	req := workflowruntime.Request{
+		Source:    source,
+		SourceRef: "syntax-error.workflow.js",
+		SessionID: "session-syntax-error-hooks",
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}
+	hooksCalled := false
+	hooks := workflowruntime.Hooks{
+		OnResult: func(workflowresult.TypedValue) error {
+			hooksCalled = true
+			return nil
+		},
+		OnArtifact: func(string, json.RawMessage) error {
+			hooksCalled = true
+			return nil
+		},
+	}
+
+	outcome, err := workflowruntime.Run(context.Background(), req, hooks)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if outcome.OK {
+		t.Fatal("expected pre-execution failure")
+	}
+	if hooksCalled {
+		t.Fatal("result/artifact hooks were invoked for pre-execution failure")
+	}
+}
+
 func TestRun_WorkflowFinalAndReturn_PrefersWorkflowFinal(t *testing.T) {
 	source := readFixture(t, "workflow-final-and-return.workflow.js")
 	args := marshalArgs(t, map[string]any{
@@ -129,6 +210,21 @@ func marshalArgs(t *testing.T, args map[string]any) json.RawMessage {
 		t.Fatalf("marshal args: %v", err)
 	}
 	return raw
+}
+
+func runPreExecutionFailure(t *testing.T, req workflowruntime.Request) workflowruntime.Outcome {
+	t.Helper()
+	outcome, err := workflowruntime.Run(t.Context(), req, workflowruntime.Hooks{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if outcome.OK {
+		t.Fatalf("Run() expected pre-execution failure, got success value = %#v", outcome.Value)
+	}
+	if outcome.Failure.Code == "" {
+		t.Fatalf("Run() missing failure diagnostic: %#v", outcome)
+	}
+	return outcome
 }
 
 func runSuccessful(t *testing.T, req workflowruntime.Request) workflowruntime.Outcome {

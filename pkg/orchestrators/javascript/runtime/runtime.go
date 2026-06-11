@@ -26,6 +26,9 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 			},
 		}, nil
 	}
+	if issue := validatePreExecution(req); issue != nil {
+		return preExecutionFailure(req, *issue), nil
+	}
 
 	policy := req.Policy
 	if policy.Mode == "" {
@@ -40,13 +43,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 
 	argsValue, err := argsValueForRequest(vm, req.Args)
 	if err != nil {
-		return Outcome{
-			OK: false,
-			Failure: Failure{
-				Code:    CodePreExecutionInvalid,
-				Message: err.Error(),
-			},
-		}, nil
+		return invalidArgsFailure(err), nil
 	}
 	globals.bindArgs(argsValue)
 	globals.bindMeta(metaFromRequest(req.Metadata))
