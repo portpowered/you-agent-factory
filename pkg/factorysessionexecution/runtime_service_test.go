@@ -82,53 +82,8 @@ func TestRuntimeService_GetSession_ReportsRunningStateWithProgressAndLinks(t *te
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
-	if read.Status != factorysessionexecution.LifecycleStatusRunning {
-		t.Fatalf("status = %q, want RUNNING", read.Status)
-	}
-	if read.OrchestratorKind != "JAVASCRIPT" {
-		t.Fatalf("orchestratorKind = %q, want JAVASCRIPT", read.OrchestratorKind)
-	}
-	if read.SourceHash == "" || read.Policy.EffectiveHash == "" {
-		t.Fatal("expected source and policy hashes on session read")
-	}
-	if read.Progress == nil {
-		t.Fatal("expected progress projection")
-	}
-	if read.Progress.TotalDispatches != 0 {
-		t.Fatalf("totalDispatches = %d, want 0 for simple runtime session", read.Progress.TotalDispatches)
-	}
-	if read.ResultSummary == nil || read.ResultSummary.ResultStatus != string(factorysessionexecution.ResultStatusNotReady) {
-		t.Fatalf("resultSummary = %#v, want NOT_READY", read.ResultSummary)
-	}
-	if read.Links.Session != started.Links.Session {
-		t.Fatalf("session link = %q, want %q", read.Links.Session, started.Links.Session)
-	}
-
-	dispatches, err := service.ListDispatches(context.Background(), started.SessionID)
-	if err != nil {
-		t.Fatalf("ListDispatches: %v", err)
-	}
-	if len(dispatches.Dispatches) != 0 {
-		t.Fatalf("dispatch stubs = %d, want 0", len(dispatches.Dispatches))
-	}
-
-	artifacts, err := service.ListArtifacts(context.Background(), started.SessionID)
-	if err != nil {
-		t.Fatalf("ListArtifacts: %v", err)
-	}
-	if len(artifacts.Artifacts) != 0 {
-		t.Fatalf("artifact stubs = %d, want 0", len(artifacts.Artifacts))
-	}
-
-	result, err := service.GetResult(context.Background(), started.SessionID, factorysessionexecution.ResultRequest{
-		Mode: factorysessionexecution.ResultModeFinal,
-	})
-	if err != nil {
-		t.Fatalf("GetResult: %v", err)
-	}
-	if result.ResultStatus != factorysessionexecution.ResultStatusNotReady {
-		t.Fatalf("resultStatus = %q, want NOT_READY", result.ResultStatus)
-	}
+	assertRunningRuntimeSessionRead(t, read, started)
+	assertRunningRuntimeSessionStubs(t, service, started.SessionID)
 }
 
 func TestRuntimeService_ReadEvents_ModelsSessionStartedForAsyncSession(t *testing.T) {
@@ -203,64 +158,8 @@ func TestRuntimeService_StartSync_CompletesSimpleFinalWithPrimaryResult(t *testi
 	if err != nil {
 		t.Fatalf("StartSync: %v", err)
 	}
-	if completed.SyncOutcome != factorysessionexecution.SyncOutcomeCompleted {
-		t.Fatalf("syncOutcome = %q, want COMPLETED", completed.SyncOutcome)
-	}
-	if completed.Status != string(factorysessionexecution.LifecycleStatusSucceeded) {
-		t.Fatalf("status = %q, want SUCCEEDED", completed.Status)
-	}
-	if len(completed.Result) == 0 {
-		t.Fatal("expected encoded session result on completed sync start")
-	}
-
-	var resultPayload struct {
-		ResultStatus  string          `json:"resultStatus"`
-		SessionStatus string          `json:"sessionStatus"`
-		PrimaryResult json.RawMessage `json:"primaryResult"`
-	}
-	if err := json.Unmarshal(completed.Result, &resultPayload); err != nil {
-		t.Fatalf("Unmarshal sync result: %v", err)
-	}
-	if resultPayload.ResultStatus != string(factorysessionexecution.ResultStatusFinal) {
-		t.Fatalf("resultStatus = %q, want FINAL", resultPayload.ResultStatus)
-	}
-	if resultPayload.SessionStatus != string(factorysessionexecution.LifecycleStatusSucceeded) {
-		t.Fatalf("sessionStatus = %q, want SUCCEEDED", resultPayload.SessionStatus)
-	}
-	var primary []struct {
-		Type string         `json:"type"`
-		JSON map[string]any `json:"json"`
-	}
-	if err := json.Unmarshal(resultPayload.PrimaryResult, &primary); err != nil {
-		t.Fatalf("Unmarshal primary result: %v", err)
-	}
-	if len(primary) != 1 || primary[0].Type != "JSON" {
-		t.Fatalf("primary result = %#v, want one JSON work content part", primary)
-	}
-	if primary[0].JSON["echo"] != "you:workflows" {
-		t.Fatalf("primary echo = %#v, want you:workflows", primary[0].JSON["echo"])
-	}
-
-	read, err := service.GetSession(context.Background(), completed.SessionID)
-	if err != nil {
-		t.Fatalf("GetSession: %v", err)
-	}
-	if read.Status != factorysessionexecution.LifecycleStatusSucceeded {
-		t.Fatalf("GetSession status = %q, want SUCCEEDED", read.Status)
-	}
-
-	result, err := service.GetResult(context.Background(), completed.SessionID, factorysessionexecution.ResultRequest{
-		Mode: factorysessionexecution.ResultModeFinal,
-	})
-	if err != nil {
-		t.Fatalf("GetResult: %v", err)
-	}
-	if result.ResultStatus != factorysessionexecution.ResultStatusFinal {
-		t.Fatalf("GetResult status = %q, want FINAL", result.ResultStatus)
-	}
-	if len(result.PrimaryResult) == 0 {
-		t.Fatal("expected primary result on GetResult after sync completion")
-	}
+	assertSyncCompletedPrimaryResult(t, completed)
+	assertFinalRuntimeSessionResult(t, service, completed.SessionID)
 }
 
 func TestRuntimeService_StartSync_TimesOutBusyLoopAndPreservesSession(t *testing.T) {
@@ -474,5 +373,152 @@ func assertRuntimeCanonicalEvent(t *testing.T, raw json.RawMessage, eventType, i
 	}
 	if len(envelope.Payload) == 0 {
 		t.Fatal("payload missing")
+	}
+}
+
+func assertRunningRuntimeSessionRead(
+	t *testing.T,
+	read factorysessionexecution.SessionReadResult,
+	started factorysessionexecution.AsyncStartResult,
+) {
+	t.Helper()
+	if read.Status != factorysessionexecution.LifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", read.Status)
+	}
+	if read.OrchestratorKind != "JAVASCRIPT" {
+		t.Fatalf("orchestratorKind = %q, want JAVASCRIPT", read.OrchestratorKind)
+	}
+	if read.SourceHash == "" || read.Policy.EffectiveHash == "" {
+		t.Fatal("expected source and policy hashes on session read")
+	}
+	if read.Progress == nil {
+		t.Fatal("expected progress projection")
+	}
+	if read.Progress.TotalDispatches != 0 {
+		t.Fatalf("totalDispatches = %d, want 0 for simple runtime session", read.Progress.TotalDispatches)
+	}
+	if read.ResultSummary == nil || read.ResultSummary.ResultStatus != string(factorysessionexecution.ResultStatusNotReady) {
+		t.Fatalf("resultSummary = %#v, want NOT_READY", read.ResultSummary)
+	}
+	if read.Links.Session != started.Links.Session {
+		t.Fatalf("session link = %q, want %q", read.Links.Session, started.Links.Session)
+	}
+}
+
+func assertRunningRuntimeSessionStubs(t *testing.T, service factorysessionexecution.Service, sessionID string) {
+	t.Helper()
+	dispatches, err := service.ListDispatches(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches: %v", err)
+	}
+	if len(dispatches.Dispatches) != 0 {
+		t.Fatalf("dispatch stubs = %d, want 0", len(dispatches.Dispatches))
+	}
+
+	artifacts, err := service.ListArtifacts(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListArtifacts: %v", err)
+	}
+	if len(artifacts.Artifacts) != 0 {
+		t.Fatalf("artifact stubs = %d, want 0", len(artifacts.Artifacts))
+	}
+
+	result, err := service.GetResult(context.Background(), sessionID, factorysessionexecution.ResultRequest{
+		Mode: factorysessionexecution.ResultModeFinal,
+	})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.ResultStatus != factorysessionexecution.ResultStatusNotReady {
+		t.Fatalf("resultStatus = %q, want NOT_READY", result.ResultStatus)
+	}
+}
+
+func assertSyncCompletedPrimaryResult(t *testing.T, completed factorysessionexecution.SyncStartResult) {
+	t.Helper()
+	if completed.SyncOutcome != factorysessionexecution.SyncOutcomeCompleted {
+		t.Fatalf("syncOutcome = %q, want COMPLETED", completed.SyncOutcome)
+	}
+	if completed.Status != string(factorysessionexecution.LifecycleStatusSucceeded) {
+		t.Fatalf("status = %q, want SUCCEEDED", completed.Status)
+	}
+	if len(completed.Result) == 0 {
+		t.Fatal("expected encoded session result on completed sync start")
+	}
+
+	var resultPayload struct {
+		ResultStatus  string          `json:"resultStatus"`
+		SessionStatus string          `json:"sessionStatus"`
+		PrimaryResult json.RawMessage `json:"primaryResult"`
+	}
+	if err := json.Unmarshal(completed.Result, &resultPayload); err != nil {
+		t.Fatalf("Unmarshal sync result: %v", err)
+	}
+	if resultPayload.ResultStatus != string(factorysessionexecution.ResultStatusFinal) {
+		t.Fatalf("resultStatus = %q, want FINAL", resultPayload.ResultStatus)
+	}
+	if resultPayload.SessionStatus != string(factorysessionexecution.LifecycleStatusSucceeded) {
+		t.Fatalf("sessionStatus = %q, want SUCCEEDED", resultPayload.SessionStatus)
+	}
+	var primary []struct {
+		Type string         `json:"type"`
+		JSON map[string]any `json:"json"`
+	}
+	if err := json.Unmarshal(resultPayload.PrimaryResult, &primary); err != nil {
+		t.Fatalf("Unmarshal primary result: %v", err)
+	}
+	if len(primary) != 1 || primary[0].Type != "JSON" {
+		t.Fatalf("primary result = %#v, want one JSON work content part", primary)
+	}
+	if primary[0].JSON["echo"] != "you:workflows" {
+		t.Fatalf("primary echo = %#v, want you:workflows", primary[0].JSON["echo"])
+	}
+}
+
+func assertFinalRuntimeSessionResult(t *testing.T, service factorysessionexecution.Service, sessionID string) {
+	t.Helper()
+	read, err := service.GetSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if read.Status != factorysessionexecution.LifecycleStatusSucceeded {
+		t.Fatalf("GetSession status = %q, want SUCCEEDED", read.Status)
+	}
+
+	result, err := service.GetResult(context.Background(), sessionID, factorysessionexecution.ResultRequest{
+		Mode: factorysessionexecution.ResultModeFinal,
+	})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.ResultStatus != factorysessionexecution.ResultStatusFinal {
+		t.Fatalf("GetResult status = %q, want FINAL", result.ResultStatus)
+	}
+	if len(result.PrimaryResult) == 0 {
+		t.Fatal("expected primary result on GetResult after sync completion")
+	}
+}
+
+func waitForRuntimeSessionStatus(
+	t *testing.T,
+	service factorysessionexecution.Service,
+	sessionID string,
+	want factorysessionexecution.LifecycleStatus,
+	timeout time.Duration,
+) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for {
+		read, err := service.GetSession(context.Background(), sessionID)
+		if err != nil {
+			t.Fatalf("GetSession: %v", err)
+		}
+		if read.Status == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("session still %q, want %s", read.Status, want)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }

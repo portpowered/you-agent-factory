@@ -122,24 +122,12 @@ func (s *RuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncS
 	}
 
 	s.mu.Lock()
-	if replay, ok := s.startReplay[prepared.Request.RequestID]; ok {
-		if err := CheckRequestIDReplay(prepared.Request.RequestID, replay.tupleHash, prepared.TupleHash); err != nil {
-			s.mu.Unlock()
-			return SyncStartResult{}, err
-		}
-		if replay.syncStart != nil {
-			result := cloneSyncStartResult(*replay.syncStart)
-			s.mu.Unlock()
-			return result, nil
-		}
-		state, ok := s.sessions[replay.sessionID]
-		if !ok {
-			s.mu.Unlock()
-			return SyncStartResult{}, ErrSessionNotFound
-		}
-		result := s.syncStartFromStateLocked(state)
+	if replayResult, ok, replayErr := s.tryReplaySyncStartLocked(prepared); replayErr != nil {
 		s.mu.Unlock()
-		return result, nil
+		return SyncStartResult{}, replayErr
+	} else if ok {
+		s.mu.Unlock()
+		return replayResult, nil
 	}
 
 	state := s.newRunningSessionState(prepared)
@@ -152,6 +140,29 @@ func (s *RuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncS
 	}
 	s.mu.Unlock()
 
+	stopRuntime := s.launchSyncRuntimeSession(prepared, sessionID)
+	return s.awaitSyncStartOutcome(ctx, prepared, sessionID, runtimeDone, stopRuntime)
+}
+
+func (s *RuntimeService) tryReplaySyncStartLocked(prepared PreparedStart) (SyncStartResult, bool, error) {
+	replay, ok := s.startReplay[prepared.Request.RequestID]
+	if !ok {
+		return SyncStartResult{}, false, nil
+	}
+	if err := CheckRequestIDReplay(prepared.Request.RequestID, replay.tupleHash, prepared.TupleHash); err != nil {
+		return SyncStartResult{}, false, err
+	}
+	if replay.syncStart != nil {
+		return cloneSyncStartResult(*replay.syncStart), true, nil
+	}
+	state, ok := s.sessions[replay.sessionID]
+	if !ok {
+		return SyncStartResult{}, false, ErrSessionNotFound
+	}
+	return s.syncStartFromStateLocked(state), true, nil
+}
+
+func (s *RuntimeService) launchSyncRuntimeSession(prepared PreparedStart, sessionID string) context.CancelFunc {
 	runCtx := context.Background()
 	var stopRuntime context.CancelFunc
 	if prepared.Request.Wait != nil && prepared.Request.Wait.CancelOnTimeout {
@@ -162,10 +173,19 @@ func (s *RuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncS
 			defer cancel()
 			s.runSession(runCtx, prepared, sessionID)
 		}()
-	} else {
-		go s.runSession(runCtx, prepared, sessionID)
+		return stopRuntime
 	}
+	go s.runSession(runCtx, prepared, sessionID)
+	return nil
+}
 
+func (s *RuntimeService) awaitSyncStartOutcome(
+	ctx context.Context,
+	prepared PreparedStart,
+	sessionID string,
+	runtimeDone <-chan struct{},
+	stopRuntime context.CancelFunc,
+) (SyncStartResult, error) {
 	waitCtx := ctx
 	var cancelWait context.CancelFunc
 	if timeout := syncWaitTimeout(prepared.Request.Wait); timeout > 0 {
@@ -177,39 +197,53 @@ func (s *RuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncS
 
 	select {
 	case <-runtimeDone:
+		return s.syncStartOutcomeOnRuntimeDone(prepared.Request.RequestID, sessionID)
+	case <-waitCtx.Done():
+		return s.syncStartOutcomeOnWaitDone(ctx, waitCtx, prepared, sessionID, stopRuntime)
+	}
+}
+
+func (s *RuntimeService) syncStartOutcomeOnRuntimeDone(requestID, sessionID string) (SyncStartResult, error) {
+	s.mu.RLock()
+	state, ok := s.sessions[sessionID]
+	if !ok {
+		s.mu.RUnlock()
+		return SyncStartResult{}, ErrSessionNotFound
+	}
+	result := s.syncStartFromStateLocked(state)
+	s.mu.RUnlock()
+	s.recordSyncStartReplay(requestID, result)
+	return result, nil
+}
+
+func (s *RuntimeService) syncStartOutcomeOnWaitDone(
+	ctx context.Context,
+	waitCtx context.Context,
+	prepared PreparedStart,
+	sessionID string,
+	stopRuntime context.CancelFunc,
+) (SyncStartResult, error) {
+	if errors.Is(waitCtx.Err(), context.DeadlineExceeded) && syncWaitTimeout(prepared.Request.Wait) > 0 {
+		cancelOnTimeout := prepared.Request.Wait != nil && prepared.Request.Wait.CancelOnTimeout
+		if cancelOnTimeout && stopRuntime != nil {
+			stopRuntime()
+		}
+		s.applySyncWaitTimeout(sessionID)
 		s.mu.RLock()
 		state, ok := s.sessions[sessionID]
 		if !ok {
 			s.mu.RUnlock()
 			return SyncStartResult{}, ErrSessionNotFound
 		}
-		result := s.syncStartFromStateLocked(state)
+		result := s.syncTimedOutFromStateLocked(state, cancelOnTimeout)
 		s.mu.RUnlock()
 		s.recordSyncStartReplay(prepared.Request.RequestID, result)
 		return result, nil
-	case <-waitCtx.Done():
-		if errors.Is(waitCtx.Err(), context.DeadlineExceeded) && syncWaitTimeout(prepared.Request.Wait) > 0 {
-			cancelOnTimeout := prepared.Request.Wait != nil && prepared.Request.Wait.CancelOnTimeout
-			if cancelOnTimeout && stopRuntime != nil {
-				stopRuntime()
-			}
-			s.applySyncWaitTimeout(sessionID)
-			s.mu.RLock()
-			state, ok := s.sessions[sessionID]
-			if !ok {
-				s.mu.RUnlock()
-				return SyncStartResult{}, ErrSessionNotFound
-			}
-			result := s.syncTimedOutFromStateLocked(state, cancelOnTimeout)
-			s.mu.RUnlock()
-			s.recordSyncStartReplay(prepared.Request.RequestID, result)
-			return result, nil
-		}
-		if err := ctx.Err(); err != nil {
-			return SyncStartResult{}, err
-		}
-		return SyncStartResult{}, waitCtx.Err()
 	}
+	if err := ctx.Err(); err != nil {
+		return SyncStartResult{}, err
+	}
+	return SyncStartResult{}, waitCtx.Err()
 }
 
 func (s *RuntimeService) GetSession(ctx context.Context, sessionID string) (SessionReadResult, error) {

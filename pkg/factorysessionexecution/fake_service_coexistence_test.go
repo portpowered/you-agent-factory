@@ -124,26 +124,7 @@ func TestFakeService_EventReplay_MatchesLiveFixtureProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReplaySessionProjection: %v", err)
 	}
-	if replayedSession.SessionID != liveSession.SessionID {
-		t.Fatalf("sessionId = %q, want %q", replayedSession.SessionID, liveSession.SessionID)
-	}
-	if replayedSession.Status != liveSession.Status {
-		t.Fatalf("status = %q, want %q", replayedSession.Status, liveSession.Status)
-	}
-	if replayedSession.SourceHash != liveSession.SourceHash {
-		t.Fatalf("sourceHash = %q, want %q", replayedSession.SourceHash, liveSession.SourceHash)
-	}
-	if replayedSession.Policy.EffectiveHash != liveSession.Policy.EffectiveHash {
-		t.Fatalf("policyHash = %q, want %q", replayedSession.Policy.EffectiveHash, liveSession.Policy.EffectiveHash)
-	}
-	if liveSession.ResultSummary != nil {
-		if replayedSession.ResultSummary == nil {
-			t.Fatal("replayed resultSummary missing")
-		}
-		if replayedSession.ResultSummary.ResultStatus != liveSession.ResultSummary.ResultStatus {
-			t.Fatalf("resultSummary.status = %q, want %q", replayedSession.ResultSummary.ResultStatus, liveSession.ResultSummary.ResultStatus)
-		}
-	}
+	assertFakeReplayedSessionCoreMatchesLive(t, liveSession, replayedSession)
 	assertReplayedResultStatusMatchesLive(t, liveResult, replayedResult)
 
 	if err := factorysessionexecution.ValidateResultMatchesEventProjection(replayedResult, events.Events); err != nil {
@@ -206,5 +187,33 @@ func TestFakeService_IdempotencyRemainsCompatibleWithRuntimeBackedPath(t *testin
 	}
 	if runtimeSecond.SessionID != runtimeFirst.SessionID {
 		t.Fatalf("runtime replay sessionId = %q, want %q", runtimeSecond.SessionID, runtimeFirst.SessionID)
+	}
+}
+
+func assertFakeReplayedSessionCoreMatchesLive(
+	t *testing.T,
+	live, replayed factorysessionexecution.SessionReadResult,
+) {
+	t.Helper()
+	if replayed.SessionID != live.SessionID {
+		t.Fatalf("sessionId = %q, want %q", replayed.SessionID, live.SessionID)
+	}
+	if replayed.Status != live.Status {
+		t.Fatalf("status = %q, want %q", replayed.Status, live.Status)
+	}
+	if replayed.SourceHash != live.SourceHash {
+		t.Fatalf("sourceHash = %q, want %q", replayed.SourceHash, live.SourceHash)
+	}
+	if replayed.Policy.EffectiveHash != live.Policy.EffectiveHash {
+		t.Fatalf("policyHash = %q, want %q", replayed.Policy.EffectiveHash, live.Policy.EffectiveHash)
+	}
+	if live.ResultSummary == nil {
+		return
+	}
+	if replayed.ResultSummary == nil {
+		t.Fatal("replayed resultSummary missing")
+	}
+	if replayed.ResultSummary.ResultStatus != live.ResultSummary.ResultStatus {
+		t.Fatalf("resultSummary.status = %q, want %q", replayed.ResultSummary.ResultStatus, live.ResultSummary.ResultStatus)
 	}
 }

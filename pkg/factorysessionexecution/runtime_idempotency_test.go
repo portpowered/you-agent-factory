@@ -106,97 +106,82 @@ func TestRuntimeService_StartSync_IdempotentReplayCompleted(t *testing.T) {
 	}
 }
 
-func TestRuntimeService_StartSync_IdempotentReplayTimeout(t *testing.T) {
-	t.Run("busy-loop immediate replay", func(t *testing.T) {
-		_, service := newRuntimeServiceWithFixture(t, "busy-loop.workflow.js", "busy-loop")
-		timeoutMillis := int64(25)
-		req := factorysessionexecution.StartRequest{
-			RequestID: "req-runtime-idempotent-sync-timeout-busy",
-			Source: factorysessionexecution.Source{
-				Kind:         workflowsource.KindWorkflowName,
-				WorkflowName: "busy-loop",
-			},
-			Wait: &factorysessionexecution.WaitOptions{
-				TimeoutMillis:   &timeoutMillis,
-				CancelOnTimeout: false,
-			},
-		}
+func TestRuntimeService_StartSync_IdempotentReplayTimeout_BusyLoop(t *testing.T) {
+	_, service := newRuntimeServiceWithFixture(t, "busy-loop.workflow.js", "busy-loop")
+	timeoutMillis := int64(25)
+	req := factorysessionexecution.StartRequest{
+		RequestID: "req-runtime-idempotent-sync-timeout-busy",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "busy-loop",
+		},
+		Wait: &factorysessionexecution.WaitOptions{
+			TimeoutMillis:   &timeoutMillis,
+			CancelOnTimeout: false,
+		},
+	}
 
-		first, err := service.StartSync(context.Background(), req)
-		if err != nil {
-			t.Fatalf("first StartSync: %v", err)
-		}
-		if first.SyncOutcome != factorysessionexecution.SyncOutcomeTimedOut || !first.TimedOut {
-			t.Fatalf("timeout response = %#v", first)
-		}
-		if first.Status != string(factorysessionexecution.LifecycleStatusRunning) {
-			t.Fatalf("status = %q, want RUNNING", first.Status)
-		}
+	first, err := service.StartSync(context.Background(), req)
+	if err != nil {
+		t.Fatalf("first StartSync: %v", err)
+	}
+	if first.SyncOutcome != factorysessionexecution.SyncOutcomeTimedOut || !first.TimedOut {
+		t.Fatalf("timeout response = %#v", first)
+	}
+	if first.Status != string(factorysessionexecution.LifecycleStatusRunning) {
+		t.Fatalf("status = %q, want RUNNING", first.Status)
+	}
 
-		second, err := service.StartSync(context.Background(), req)
-		if err != nil {
-			t.Fatalf("second StartSync: %v", err)
-		}
-		assertSyncStartReplayEqual(t, first, second)
+	second, err := service.StartSync(context.Background(), req)
+	if err != nil {
+		t.Fatalf("second StartSync: %v", err)
+	}
+	assertSyncStartReplayEqual(t, first, second)
+}
+
+func TestRuntimeService_StartSync_IdempotentReplayTimeout_SlowFinal(t *testing.T) {
+	projectRoot := setupSlowFinalWorkflowFixture(t)
+	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
+		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
 	})
+	timeoutMillis := int64(20)
+	req := factorysessionexecution.StartRequest{
+		RequestID: "req-runtime-idempotent-sync-timeout-slow",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "slow-final",
+		},
+		Wait: &factorysessionexecution.WaitOptions{
+			TimeoutMillis: &timeoutMillis,
+		},
+	}
 
-	t.Run("slow-final replay stays timeout-shaped after completion", func(t *testing.T) {
-		projectRoot := setupSlowFinalWorkflowFixture(t)
-		service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
-			StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
-		})
-		timeoutMillis := int64(20)
-		req := factorysessionexecution.StartRequest{
-			RequestID: "req-runtime-idempotent-sync-timeout-slow",
-			Source: factorysessionexecution.Source{
-				Kind:         workflowsource.KindWorkflowName,
-				WorkflowName: "slow-final",
-			},
-			Wait: &factorysessionexecution.WaitOptions{
-				TimeoutMillis: &timeoutMillis,
-			},
-		}
+	first, err := service.StartSync(context.Background(), req)
+	if err != nil {
+		t.Fatalf("first StartSync: %v", err)
+	}
+	if first.SyncOutcome != factorysessionexecution.SyncOutcomeTimedOut || !first.TimedOut {
+		t.Fatalf("timeout response = %#v", first)
+	}
 
-		first, err := service.StartSync(context.Background(), req)
-		if err != nil {
-			t.Fatalf("first StartSync: %v", err)
-		}
-		if first.SyncOutcome != factorysessionexecution.SyncOutcomeTimedOut || !first.TimedOut {
-			t.Fatalf("timeout response = %#v", first)
-		}
+	waitForRuntimeSessionStatus(t, service, first.SessionID, factorysessionexecution.LifecycleStatusSucceeded, 15*time.Second)
 
-		deadline := time.Now().Add(15 * time.Second)
-		for {
-			read, err := service.GetSession(context.Background(), first.SessionID)
-			if err != nil {
-				t.Fatalf("GetSession: %v", err)
-			}
-			if read.Status == factorysessionexecution.LifecycleStatusSucceeded {
-				break
-			}
-			if time.Now().After(deadline) {
-				t.Fatalf("session still %q, want eventual SUCCEEDED", read.Status)
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
+	replay, err := service.StartSync(context.Background(), req)
+	if err != nil {
+		t.Fatalf("replay StartSync after completion: %v", err)
+	}
+	assertSyncStartReplayEqual(t, first, replay)
 
-		replay, err := service.StartSync(context.Background(), req)
-		if err != nil {
-			t.Fatalf("replay StartSync after completion: %v", err)
-		}
-		assertSyncStartReplayEqual(t, first, replay)
-
-		beforeCount := runtimeSessionCount(t, service)
-		conflict := req
-		conflict.Args = map[string]any{"marker": "conflict"}
-		_, err = service.StartSync(context.Background(), conflict)
-		if !errors.Is(err, factorysessionexecution.ErrExecutionRequestIDConflict) {
-			t.Fatalf("conflict error = %v, want ErrExecutionRequestIDConflict", err)
-		}
-		if after := runtimeSessionCount(t, service); after != beforeCount {
-			t.Fatalf("session count = %d, want %d after conflict", after, beforeCount)
-		}
-	})
+	beforeCount := runtimeSessionCount(t, service)
+	conflict := req
+	conflict.Args = map[string]any{"marker": "conflict"}
+	_, err = service.StartSync(context.Background(), conflict)
+	if !errors.Is(err, factorysessionexecution.ErrExecutionRequestIDConflict) {
+		t.Fatalf("conflict error = %v, want ErrExecutionRequestIDConflict", err)
+	}
+	if after := runtimeSessionCount(t, service); after != beforeCount {
+		t.Fatalf("session count = %d, want %d after conflict", after, beforeCount)
+	}
 }
 
 func assertAsyncStartReplayEqual(t *testing.T, first, second factorysessionexecution.AsyncStartResult) {
