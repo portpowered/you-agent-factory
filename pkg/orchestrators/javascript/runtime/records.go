@@ -8,24 +8,34 @@ import (
 )
 
 const (
-	RecordKindPhase      = "phase"
-	RecordKindLog        = "log"
-	RecordKindArtifact   = "artifact"
-	RecordKindCheckpoint = "checkpoint"
-	RecordKindBudget     = "budget"
+	RecordKindPhase         = "phase"
+	RecordKindLog           = "log"
+	RecordKindArtifact      = "artifact"
+	RecordKindCheckpoint    = "checkpoint"
+	RecordKindBudget        = "budget"
+	RecordKindChildDispatch = "child_dispatch"
 )
+
+const (
+	ChildDispatchStatusQueued    = "QUEUED"
+	ChildDispatchStatusRunning   = "RUNNING"
+	ChildDispatchStatusCompleted = "COMPLETED"
+)
+
+const childExecutionModeFake = "fake"
 
 // RuntimeRecord is one ordered host-effect record emitted during workflow execution.
 // Records are typed so they can later map into factory session events, dispatches,
 // and artifacts without changing workflow source syntax.
 type RuntimeRecord struct {
-	Sequence   int               `json:"sequence"`
-	Kind       string            `json:"kind"`
-	Phase      *PhaseRecord      `json:"phase,omitempty"`
-	Log        *LogRecord        `json:"log,omitempty"`
-	Artifact   *ArtifactRecord   `json:"artifact,omitempty"`
-	Checkpoint *CheckpointRecord `json:"checkpoint,omitempty"`
-	Budget     *BudgetRecord     `json:"budget,omitempty"`
+	Sequence       int                  `json:"sequence"`
+	Kind           string               `json:"kind"`
+	Phase          *PhaseRecord         `json:"phase,omitempty"`
+	Log            *LogRecord           `json:"log,omitempty"`
+	Artifact       *ArtifactRecord      `json:"artifact,omitempty"`
+	Checkpoint     *CheckpointRecord    `json:"checkpoint,omitempty"`
+	Budget         *BudgetRecord        `json:"budget,omitempty"`
+	ChildDispatch  *ChildDispatchRecord `json:"childDispatch,omitempty"`
 }
 
 // PhaseRecord captures one workflow phase transition.
@@ -58,6 +68,26 @@ type CheckpointRecord struct {
 	State   map[string]any `json:"state,omitempty"`
 }
 
+// ChildDispatchRecord captures dispatch-like child execution metadata for one
+// status transition. Multiple records per child prove queued/running/completed
+// ordering without starting real provider sessions.
+type ChildDispatchRecord struct {
+	DispatchID         string `json:"dispatchId"`
+	ChildIndex         int    `json:"childIndex"`
+	Status             string `json:"status"`
+	Label              string `json:"label,omitempty"`
+	PromptDigest       string `json:"promptDigest,omitempty"`
+	Model              string `json:"model,omitempty"`
+	ReasoningEffort    string `json:"reasoningEffort,omitempty"`
+	Command            string `json:"command,omitempty"`
+	Sandbox            string `json:"sandbox,omitempty"`
+	SchemaDigest       string `json:"schemaDigest,omitempty"`
+	RunnerID           string `json:"runnerId,omitempty"`
+	ExecutionMode      string `json:"executionMode,omitempty"`
+	ProviderSessionRef string `json:"providerSessionRef,omitempty"`
+	ArtifactRef        string `json:"artifactRef,omitempty"`
+}
+
 // BudgetRecord captures effective policy budget values observed by the runtime.
 type BudgetRecord struct {
 	MaxAgents               int    `json:"maxAgents"`
@@ -71,10 +101,11 @@ type BudgetRecord struct {
 }
 
 type recordCollector struct {
-	sequence       int
-	records        []RuntimeRecord
-	artifactCount  int
-	checkpointCount int
+	sequence          int
+	records           []RuntimeRecord
+	artifactCount     int
+	checkpointCount   int
+	childDispatchCount int
 }
 
 func newRecordCollector() *recordCollector {
@@ -104,6 +135,15 @@ func (c *recordCollector) nextArtifactID() string {
 func (c *recordCollector) nextCheckpointID() string {
 	c.checkpointCount++
 	return fmt.Sprintf("checkpoint-%d", c.checkpointCount)
+}
+
+func (c *recordCollector) nextChildDispatchID() string {
+	c.childDispatchCount++
+	return fmt.Sprintf("dispatch-%d", c.childDispatchCount)
+}
+
+func (c *recordCollector) nextChildArtifactID() string {
+	return fmt.Sprintf("child-artifact-%d", c.childDispatchCount)
 }
 
 func contentDigest(payload []byte) string {

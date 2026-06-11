@@ -13,15 +13,16 @@ import (
 // network, and shell globals are not injected; forbidden host access is rejected
 // before execution.
 type runtimeGlobals struct {
-	vm          *goja.Runtime
-	policy      workflowpolicy.EffectivePolicy
-	sessionID   string
-	records     *recordCollector
-	onArtifact  func(kind string, content json.RawMessage) error
-	finalValue  goja.Value
-	finalSet    bool
-	returned    goja.Value
-	returnedSet bool
+	vm            *goja.Runtime
+	policy        workflowpolicy.EffectivePolicy
+	sessionID     string
+	records       *recordCollector
+	childExecutor ChildExecutor
+	onArtifact    func(kind string, content json.RawMessage) error
+	finalValue    goja.Value
+	finalSet      bool
+	returned      goja.Value
+	returnedSet   bool
 }
 
 func (g *runtimeGlobals) bindArgs(argsValue goja.Value) {
@@ -42,6 +43,9 @@ func (g *runtimeGlobals) bindWorkflowAPI() error {
 	}
 	if err := g.vm.Set("workflow", workflow); err != nil {
 		return fmt.Errorf("bind workflow: %w", err)
+	}
+	if err := g.bindAgentAPI(); err != nil {
+		return err
 	}
 	return g.bindHostPrimitives()
 }

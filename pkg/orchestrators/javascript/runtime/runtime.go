@@ -38,12 +38,14 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 
 	vm := goja.New()
 	records := newRecordCollector()
+	sessionID := strings.TrimSpace(req.SessionID)
 	globals := &runtimeGlobals{
-		vm:         vm,
-		policy:     policy,
-		sessionID:  strings.TrimSpace(req.SessionID),
-		records:    records,
-		onArtifact: hooks.OnArtifact,
+		vm:            vm,
+		policy:        policy,
+		sessionID:     sessionID,
+		records:       records,
+		childExecutor: NewFakeChildExecutor(sessionID, records),
+		onArtifact:    hooks.OnArtifact,
 	}
 	if err := globals.bindWorkflowAPI(); err != nil {
 		return Outcome{}, err
