@@ -82,6 +82,64 @@ describe("FactoryGraphVisualGroupLayer", () => {
     expect(onSelectGroup).toHaveBeenCalledWith("group-1");
   });
 
+  it("renders nothing when there are no groups", () => {
+    const { container } = render(
+      <ReactFlowProvider>
+        <div style={{ height: 480, width: 640 }}>
+          <ReactFlow defaultViewport={{ x: 0, y: 0, zoom: 1 }} edges={[]} nodes={[]}>
+            <FactoryGraphVisualGroupLayer
+              canEdit
+              groupAriaLabel={(group) => group.label ?? group.id}
+              groups={[]}
+              onSelectGroup={vi.fn()}
+              resizeHandleAriaLabel={(corner) => `Resize ${corner}`}
+              selectedGroupId={null}
+            />
+          </ReactFlow>
+        </div>
+      </ReactFlowProvider>,
+    );
+
+    expect(
+      container.querySelector("[data-factory-visual-group-layer]"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("selects a group on click when the pointer does not move enough to drag", () => {
+    const { onSelectGroup } = renderVisualGroupLayer({ onMoveGroup: vi.fn() });
+    const groupBody = screen.getByRole("button", { name: "Review" });
+
+    enablePointerCapture(groupBody);
+    fireEvent.pointerDown(groupBody, {
+      clientX: 100,
+      clientY: 120,
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(groupBody, {
+      clientX: 101,
+      clientY: 121,
+      pointerId: 1,
+    });
+
+    expect(onSelectGroup).toHaveBeenCalledWith("group-1");
+  });
+
+  it("hides resize handles and removes keyboard focus when editing is disabled", () => {
+    renderVisualGroupLayer({
+      canEdit: false,
+      onResizeGroup: vi.fn(),
+      selectedGroupId: "group-1",
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Resize se" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Review" })).toHaveAttribute(
+      "tabindex",
+      "-1",
+    );
+  });
+
   it("commits group move and resize interactions on pointer up", () => {
     const onMoveGroup = vi.fn();
     const onResizeGroup = vi.fn();
@@ -145,6 +203,91 @@ describe("FactoryGraphVisualGroupLayer", () => {
         x: 40,
         y: 60,
       }),
+    );
+  });
+
+  it.each(["nw", "ne", "sw"] as const)(
+    "commits resize interactions from the %s corner",
+    (corner) => {
+      const onResizeGroup = vi.fn();
+
+      renderVisualGroupLayer(
+        {
+          onResizeGroup,
+          selectedGroupId: "group-1",
+        },
+        { height: 480, position: "relative", width: 640 },
+      );
+
+      const resizeHandle = screen.getByRole("button", { name: `Resize ${corner}` });
+      enablePointerCapture(resizeHandle);
+      fireEvent.pointerDown(resizeHandle, {
+        clientX: 240,
+        clientY: 180,
+        pointerId: 3,
+      });
+      fireEvent.pointerMove(resizeHandle, {
+        clientX: 280,
+        clientY: 220,
+        pointerId: 3,
+      });
+      fireEvent.pointerUp(resizeHandle, {
+        clientX: 280,
+        clientY: 220,
+        pointerId: 3,
+      });
+
+      expect(onResizeGroup).toHaveBeenCalledWith(
+        "group-1",
+        expect.objectContaining({
+          height: expect.any(Number),
+          width: expect.any(Number),
+          x: expect.any(Number),
+          y: expect.any(Number),
+        }),
+      );
+    },
+  );
+
+  it("commits group moves that include saved member node ids", () => {
+    const onMoveGroup = vi.fn();
+
+    renderVisualGroupLayer(
+      {
+        groups: [
+          {
+            ...sampleGroup,
+            nodeIds: ["workstation:draft"],
+          },
+        ],
+        onMoveGroup,
+        selectedGroupId: "group-1",
+      },
+      { height: 480, position: "relative", width: 640 },
+    );
+
+    const groupBody = screen.getByRole("button", { name: "Review" });
+    enablePointerCapture(groupBody);
+    fireEvent.pointerDown(groupBody, {
+      clientX: 100,
+      clientY: 120,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(groupBody, {
+      clientX: 140,
+      clientY: 150,
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(groupBody, {
+      clientX: 140,
+      clientY: 150,
+      pointerId: 1,
+    });
+
+    expect(onMoveGroup).toHaveBeenCalledWith(
+      "group-1",
+      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
+      expect.any(Map),
     );
   });
 });

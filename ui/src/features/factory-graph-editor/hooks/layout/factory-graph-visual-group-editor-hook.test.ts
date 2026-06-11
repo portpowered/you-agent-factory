@@ -172,6 +172,68 @@ describe("useFactoryGraphVisualGroupEditor", () => {
     expect(result.current.canEditVisualGroups).toBe(false);
   });
 
+  it("toggles selection off when the same group is selected again", () => {
+    const { result } = renderHook(() =>
+      useFactoryGraphVisualGroupEditor({
+        activeTool: null,
+        addNodeToVisualGroup: vi.fn(),
+        canInteractWithEditor: true,
+        canvasNodeOptions: [],
+        createVisualGroup: vi.fn(() => null),
+        deleteVisualGroup: vi.fn(),
+        editorMode: true,
+        layout: layoutWithGroup(),
+        moveVisualGroupByDelta: vi.fn(),
+        removeNodeFromVisualGroup: vi.fn(),
+        renameVisualGroup: vi.fn(),
+        resizeVisualGroup: vi.fn(),
+        resolveViewportCenter: () => ({ x: 0, y: 0 }),
+        setVisualGroupColor: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      result.current.handleSelectVisualGroup("group-1");
+    });
+    expect(result.current.selectedGroupId).toBe("group-1");
+
+    act(() => {
+      result.current.handleSelectVisualGroup("group-1");
+    });
+    expect(result.current.selectedGroupId).toBeNull();
+  });
+
+  it("clears selection and skips create when viewport center is unavailable", () => {
+    const createVisualGroup = vi.fn(() => ({ id: "group-new" }));
+    const { result } = renderHook(() =>
+      useFactoryGraphVisualGroupEditor({
+        activeTool: null,
+        addNodeToVisualGroup: vi.fn(),
+        canInteractWithEditor: true,
+        canvasNodeOptions: [],
+        createVisualGroup,
+        deleteVisualGroup: vi.fn(),
+        editorMode: true,
+        layout: layoutWithGroup(),
+        moveVisualGroupByDelta: vi.fn(),
+        removeNodeFromVisualGroup: vi.fn(),
+        renameVisualGroup: vi.fn(),
+        resizeVisualGroup: vi.fn(),
+        resolveViewportCenter: () => null,
+        setVisualGroupColor: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      result.current.handleSelectVisualGroup("group-1");
+      result.current.clearSelectedVisualGroup();
+      result.current.handleCreateVisualGroup();
+    });
+
+    expect(result.current.selectedGroupId).toBeNull();
+    expect(createVisualGroup).not.toHaveBeenCalled();
+  });
+
   it("surfaces stale members and invalid bounds on the selected group controls", () => {
     const layout = addFactoryLayoutGroup(createDefaultFactoryLayout(), {
       bounds: {

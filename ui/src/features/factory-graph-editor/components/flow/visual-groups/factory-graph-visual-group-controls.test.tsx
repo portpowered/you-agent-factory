@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -189,6 +189,133 @@ describe("FactoryGraphVisualGroupControls", () => {
     expect(
       screen.getByText("No canvas nodes are available to assign."),
     ).toBeInTheDocument();
+  });
+
+  it("reports rename changes and empty label validation", async () => {
+    const user = userEvent.setup();
+    const onRenameGroup = vi.fn();
+
+    const { rerender } = render(
+      <FactoryGraphVisualGroupControls
+        canvasNodeOptions={[]}
+        colorLabel="Group color"
+        colorOptionLabel={(token) => `Use ${token} group color`}
+        boundsError={null}
+        deleteGroupLabel="Delete group"
+        emptyLabelError="Enter a group label."
+        group={{
+          bounds: { height: 120, width: 200, x: 0, y: 0 },
+          id: "group-1",
+          label: "   ",
+          nodeIds: [],
+        }}
+        isNodeMember={() => false}
+        labelFieldLabel="Group label"
+        membershipEmptyLabel="No canvas nodes are available to assign."
+        membershipLabel="Group members"
+        membershipNodeLabel={(label) => `Include ${label} in this group`}
+        membershipStaleNodeLabel={(nodeId) =>
+          `Saved member ${nodeId} is no longer on the canvas.`
+        }
+        onDeleteGroup={vi.fn()}
+        onRenameGroup={onRenameGroup}
+        onSetGroupColor={vi.fn()}
+        onToggleNodeMembership={vi.fn()}
+        selectedGroupLabel="Selected visual group"
+        staleMemberNodeIds={[]}
+      />,
+    );
+
+    expect(screen.getByText("Enter a group label.")).toBeInTheDocument();
+
+    rerender(
+      <FactoryGraphVisualGroupControls
+        canvasNodeOptions={[]}
+        colorLabel="Group color"
+        colorOptionLabel={(token) => `Use ${token} group color`}
+        boundsError={null}
+        deleteGroupLabel="Delete group"
+        emptyLabelError="Enter a group label."
+        group={{
+          bounds: { height: 120, width: 200, x: 0, y: 0 },
+          id: "group-1",
+          label: "Planning",
+          nodeIds: [],
+        }}
+        isNodeMember={() => false}
+        labelFieldLabel="Group label"
+        membershipEmptyLabel="No canvas nodes are available to assign."
+        membershipLabel="Group members"
+        membershipNodeLabel={(label) => `Include ${label} in this group`}
+        membershipStaleNodeLabel={(nodeId) =>
+          `Saved member ${nodeId} is no longer on the canvas.`
+        }
+        onDeleteGroup={vi.fn()}
+        onRenameGroup={onRenameGroup}
+        onSetGroupColor={vi.fn()}
+        onToggleNodeMembership={vi.fn()}
+        selectedGroupLabel="Selected visual group"
+        staleMemberNodeIds={[]}
+      />,
+    );
+
+    const labelField = screen.getByRole("textbox", { name: "Group label" });
+    fireEvent.change(labelField, { target: { value: "Planning lane" } });
+    expect(onRenameGroup).toHaveBeenLastCalledWith("Planning lane");
+    await user.click(labelField);
+  });
+
+  it("unchecks a member and falls back to the primary color token", async () => {
+    const user = userEvent.setup();
+    const onToggleNodeMembership = vi.fn();
+
+    render(
+      <FactoryGraphVisualGroupControls
+        canvasNodeOptions={[
+          { id: "workstation:draft", label: "Draft" },
+        ]}
+        colorLabel="Group color"
+        colorOptionLabel={(token) => `Use ${token} group color`}
+        boundsError={null}
+        deleteGroupLabel="Delete group"
+        emptyLabelError="Enter a group label."
+        group={{
+          bounds: { height: 120, width: 200, x: 0, y: 0 },
+          color: "not-a-token",
+          id: "group-1",
+          label: "Review",
+          nodeIds: ["workstation:draft"],
+        }}
+        isNodeMember={(nodeId) => nodeId === "workstation:draft"}
+        labelFieldLabel="Group label"
+        membershipEmptyLabel="No canvas nodes are available to assign."
+        membershipLabel="Group members"
+        membershipNodeLabel={(label) => `Include ${label} in this group`}
+        membershipStaleNodeLabel={(nodeId) =>
+          `Saved member ${nodeId} is no longer on the canvas.`
+        }
+        onDeleteGroup={vi.fn()}
+        onRenameGroup={vi.fn()}
+        onSetGroupColor={vi.fn()}
+        onToggleNodeMembership={onToggleNodeMembership}
+        selectedGroupLabel="Selected visual group"
+        staleMemberNodeIds={[]}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Use primary group color" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "Include Draft in this group",
+      }),
+    );
+    expect(onToggleNodeMembership).toHaveBeenCalledWith(
+      "workstation:draft",
+      false,
+    );
   });
 
   it("shows invalid bounds feedback without blocking other controls", () => {

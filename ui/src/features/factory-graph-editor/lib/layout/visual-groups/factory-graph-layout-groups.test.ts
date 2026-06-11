@@ -3,15 +3,19 @@ import { describe, expect, it } from "vitest";
 import {
   addFactoryLayoutGroup,
   addNodeToFactoryLayoutGroup,
+  clampFactoryLayoutGroupBounds,
   createFactoryLayoutGroup,
   createFactoryLayoutGroupId,
   defaultFactoryLayoutGroupBounds,
   factoryLayoutGroupById,
   factoryLayoutGroupCanvasNodeOptions,
+  factoryLayoutGroupColorCssVariable,
+  factoryLayoutGroupColorSurfaceCssVariable,
   factoryLayoutGroupContainsNode,
   isApprovedFactoryLayoutGroupColor,
   moveFactoryLayoutGroupByDelta,
   removeFactoryLayoutGroup,
+  removeNodeFromAllFactoryLayoutGroups,
   removeNodeFromFactoryLayoutGroup,
   resizeFactoryLayoutGroup,
   updateFactoryLayoutGroup,
@@ -307,6 +311,69 @@ describe("factory graph layout groups", () => {
       x: -239,
       y: -158,
     });
+  });
+
+  it("maps approved and fallback group colors to css variables", () => {
+    expect(factoryLayoutGroupColorCssVariable("success")).toBe(
+      "var(--color-success)",
+    );
+    expect(factoryLayoutGroupColorCssVariable("unknown")).toBe(
+      "var(--color-primary)",
+    );
+    expect(factoryLayoutGroupColorSurfaceCssVariable("outline")).toBe(
+      "var(--color-surface-container-low)",
+    );
+    expect(factoryLayoutGroupColorSurfaceCssVariable("primary")).toBe(
+      "var(--color-primary-container)",
+    );
+    expect(factoryLayoutGroupColorSurfaceCssVariable("warning")).toBe(
+      "var(--color-warning-container)",
+    );
+    expect(factoryLayoutGroupColorSurfaceCssVariable(undefined)).toBe(
+      "var(--color-primary-container)",
+    );
+  });
+
+  it("clamps undersized group bounds during resize", () => {
+    expect(
+      clampFactoryLayoutGroupBounds({
+        height: 10,
+        width: 20,
+        x: 5,
+        y: 6,
+      }),
+    ).toEqual({
+      height: 80,
+      width: 120,
+      x: 5,
+      y: 6,
+    });
+  });
+
+  it("removes a node from other groups when reassigning membership", () => {
+    const layout = addFactoryLayoutGroup(
+      addFactoryLayoutGroup(createDefaultFactoryLayout(), {
+        bounds: defaultFactoryLayoutGroupBounds({ x: 0, y: 0 }),
+        id: "group-1",
+        label: "Lane A",
+        nodeIds: ["workstation:draft"],
+      }),
+      {
+        bounds: defaultFactoryLayoutGroupBounds({ x: 120, y: 0 }),
+        id: "group-2",
+        label: "Lane B",
+        nodeIds: [],
+      },
+    );
+
+    const withoutNode = removeNodeFromAllFactoryLayoutGroups(
+      layout,
+      "workstation:draft",
+      "group-2",
+    );
+
+    expect(factoryLayoutGroupById(withoutNode, "group-1")?.nodeIds).toEqual([]);
+    expect(factoryLayoutGroupById(withoutNode, "group-2")?.nodeIds).toEqual([]);
   });
 
   it("builds sorted canvas node options from topology nodes", () => {
