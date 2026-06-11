@@ -223,6 +223,9 @@ export function useCurrentActivityGraphState(
     resetPreferences,
     undoLayout: editableGraph.actions.undoLayout,
     updateLayoutViewport: editableGraph.actions.updateLayoutViewport,
+    createVisualGroup: editableGraph.actions.createVisualGroup,
+    renameVisualGroup: editableGraph.actions.renameVisualGroup,
+    setVisualGroupColor: editableGraph.actions.setVisualGroupColor,
     editorUnavailableClassifierWorkstationName:
       session.editorUnavailableClassifierWorkstationName,
     editorMode,

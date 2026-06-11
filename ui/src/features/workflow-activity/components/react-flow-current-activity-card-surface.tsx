@@ -85,6 +85,7 @@ function CurrentActivityGraphSurfaceContent({
   const saveError = model.status.saveError;
   const editorControls = model.editorControls;
   const removalControls = model.removalControls;
+  const visualGroupControls = model.visualGroupControls;
   const editorValidationProjection = useMemo(() => {
     if (!editorControls.isEditing) {
       return model.validationControls.projection;
@@ -217,7 +218,16 @@ function CurrentActivityGraphSurfaceContent({
         selectedWaypointEdgeId={edgeWaypointControls.selectedWaypointEdgeId}
         waypointAriaLabel={edgeWaypointControls.waypointAriaLabel}
         waypointControls={edgeWaypointControls.waypointControls}
-        onEditorNodeClick={removalControls.deleteNode}
+        onCreateVisualGroup={visualGroupControls.handleCreateVisualGroup}
+        onEditorNodeClick={(nodeId) => {
+          visualGroupControls.clearSelectedVisualGroup();
+          removalControls.deleteNode(nodeId);
+        }}
+        onSelectVisualGroup={visualGroupControls.handleSelectVisualGroup}
+        selectedVisualGroupId={visualGroupControls.selectedGroupId}
+        visualGroupControls={visualGroupControls.visualGroupControls}
+        visualGroupAriaLabel={visualGroupControls.groupAriaLabel}
+        visualGroups={visualGroupControls.groups}
         saveControls={model.saveControls}
         saveDisabledReason={model.status.saveBlockedReason}
       />

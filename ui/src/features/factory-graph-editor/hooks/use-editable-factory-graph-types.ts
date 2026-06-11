@@ -86,6 +86,12 @@ export interface EditableFactoryGraphViewModel {
       y: number;
       zoom: number;
     }) => void;
+    createVisualGroup: (center: { x: number; y: number }) => { id: string } | null;
+    renameVisualGroup: (groupId: string, label: string) => void;
+    setVisualGroupColor: (
+      groupId: string,
+      color: "primary" | "info" | "success" | "warning" | "outline",
+    ) => void;
     updateNodeField: (
       update: FactoryGraphNodeFieldUpdate,
     ) => FactoryGraphOperationResult<CanonicalFactoryDefinition>;

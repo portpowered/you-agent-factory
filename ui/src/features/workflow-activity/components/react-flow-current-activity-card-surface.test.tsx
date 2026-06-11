@@ -202,6 +202,22 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
       ...((merged as { edgeWaypointControls?: object })
         .edgeWaypointControls ?? {}),
     },
+    visualGroupControls: {
+      canEditVisualGroups: true,
+      clearSelectedVisualGroup: vi.fn(),
+      groupAriaLabel: (group: { id: string; label?: string }) =>
+        group.label ?? group.id,
+      groups: [],
+      handleCreateVisualGroup: vi.fn(),
+      handleRenameSelectedGroup: vi.fn(),
+      handleSelectVisualGroup: vi.fn(),
+      handleSetSelectedGroupColor: vi.fn(),
+      selectedGroup: undefined,
+      selectedGroupId: null,
+      visualGroupControls: null,
+      ...((merged as { visualGroupControls?: object }).visualGroupControls ??
+        {}),
+    },
     graphState: {
       canonicalLayout,
       canonicalLayoutViewport: null,

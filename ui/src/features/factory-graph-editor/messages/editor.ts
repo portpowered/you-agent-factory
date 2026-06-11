@@ -93,6 +93,16 @@ export interface FactoryGraphEditorMessages {
   edgeWaypointSelectedLabel: string;
   edgeWaypointSourceLabel: string;
   edgeWaypointTargetLabel: string;
+  visualGroupAriaLabel: (group: { id: string; label?: string }) => string;
+  visualGroupColorLabel: string;
+  visualGroupColorOptionLabel: (
+    token: "primary" | "info" | "success" | "warning" | "outline",
+  ) => string;
+  visualGroupEmptyLabelError: string;
+  visualGroupLabelFieldLabel: string;
+  visualGroupSelectedLabel: string;
+  toolbarCreateGroupDescription: string;
+  toolbarCreateGroupLabel: string;
   edgeKindLabel: (
     kind:
       | "worker-assignment"
@@ -679,6 +689,17 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       edgeWaypointSelectedLabel: "Selected edge route",
       edgeWaypointSourceLabel: "Source",
       edgeWaypointTargetLabel: "Target",
+      visualGroupAriaLabel: (group) =>
+        group.label?.trim()
+          ? `Visual group ${group.label.trim()}`
+          : `Visual group ${group.id}`,
+      visualGroupColorLabel: "Group color",
+      visualGroupColorOptionLabel: (token) => `Use ${token} group color`,
+      visualGroupEmptyLabelError: "Enter a group label.",
+      visualGroupLabelFieldLabel: "Group label",
+      visualGroupSelectedLabel: "Selected visual group",
+      toolbarCreateGroupDescription: "Create a labeled background group",
+      toolbarCreateGroupLabel: "Create group",
       edgeKindLabel: describeEnglishEdgeKind,
       flowConnectionHint: "Use labeled anchors for compatible connections.",
       flowPendingLabel: "Pending",
@@ -1082,6 +1103,17 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       edgeWaypointSelectedLabel: "已选边路由",
       edgeWaypointSourceLabel: "来源",
       edgeWaypointTargetLabel: "目标",
+      visualGroupAriaLabel: (group) =>
+        group.label?.trim()
+          ? `视觉分组 ${group.label.trim()}`
+          : `视觉分组 ${group.id}`,
+      visualGroupColorLabel: "分组颜色",
+      visualGroupColorOptionLabel: (token) => `使用 ${token} 分组颜色`,
+      visualGroupEmptyLabelError: "请输入分组标签。",
+      visualGroupLabelFieldLabel: "分组标签",
+      visualGroupSelectedLabel: "已选视觉分组",
+      toolbarCreateGroupDescription: "创建带标签的背景分组",
+      toolbarCreateGroupLabel: "创建分组",
       edgeKindLabel: (kind) => {
         switch (kind) {
           case "worker-assignment":

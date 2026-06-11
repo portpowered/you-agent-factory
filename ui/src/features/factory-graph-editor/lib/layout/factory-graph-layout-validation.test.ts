@@ -1,4 +1,5 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: layout validation scenarios stay grouped around shared topology fixtures.
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: layout validation scenarios stay grouped around shared topology fixtures.
 import { describe, expect, it } from "vitest";
 
 import { buildFactoryGraphTopologyFromDefinition } from "../draft/factory-graph-draft-graph";
@@ -205,7 +206,6 @@ describe("factory-graph-layout-validation", () => {
     const topology = buildFactoryGraphTopologyFromDefinition(
       baseFactoryDefinition,
     );
-    const validEdgeIds = factoryLayoutTopologyEdgeIds(topology);
     const layout: ReturnType<typeof createDefaultFactoryLayout> = {
       schemaVersion: 1,
       edges: [
@@ -246,7 +246,6 @@ describe("factory-graph-layout-validation", () => {
     const topology = buildFactoryGraphTopologyFromDefinition(
       baseFactoryDefinition,
     );
-    const validEdgeIds = factoryLayoutTopologyEdgeIds(topology);
     const layout: ReturnType<typeof createDefaultFactoryLayout> = {
       schemaVersion: 1,
       edges: [

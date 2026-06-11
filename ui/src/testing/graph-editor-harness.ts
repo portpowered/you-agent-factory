@@ -26,6 +26,13 @@ import {
   removeFactoryLayoutEdgeWaypoint,
 } from "../features/factory-graph-editor/lib/layout/factory-graph-layout-edge-waypoints";
 import {
+  addFactoryLayoutGroup,
+  createFactoryLayoutGroup,
+  createFactoryLayoutGroupId,
+  defaultFactoryLayoutGroupBounds,
+  updateFactoryLayoutGroup,
+} from "../features/factory-graph-editor/lib/layout/factory-graph-layout-groups";
+import {
   createDefaultFactoryLayout,
   moveFactoryLayoutNode,
 } from "../features/factory-graph-editor/lib/layout/factory-graph-layout-operations";
@@ -309,6 +316,52 @@ export function createHookTestGraphEditorDraftState(
   return state;
 }
 
+function createMockVisualGroupLayoutActions(state: {
+  hasChanges: boolean;
+  layout: ReturnType<typeof createDefaultFactoryLayout>;
+  layoutDirty: boolean;
+}) {
+  return {
+    createVisualGroup: vi.fn((center: { x: number; y: number }) => {
+      const groupId = createFactoryLayoutGroupId(state.layout);
+      const group = createFactoryLayoutGroup({
+        bounds: defaultFactoryLayoutGroupBounds(center),
+        id: groupId,
+        layout: state.layout,
+      });
+      state.layout = addFactoryLayoutGroup(state.layout, group);
+      state.hasChanges = true;
+      state.layoutDirty = true;
+      return group;
+    }),
+    renameVisualGroup: vi.fn((groupId: string, label: string) => {
+      state.layout = updateFactoryLayoutGroup(state.layout, groupId, (group) => ({
+        ...group,
+        label,
+      }));
+      state.hasChanges = true;
+      state.layoutDirty = true;
+    }),
+    setVisualGroupColor: vi.fn(
+      (
+        groupId: string,
+        color: "primary" | "info" | "success" | "warning" | "outline",
+      ) => {
+        state.layout = updateFactoryLayoutGroup(
+          state.layout,
+          groupId,
+          (group) => ({
+            ...group,
+            color,
+          }),
+        );
+        state.hasChanges = true;
+        state.layoutDirty = true;
+      },
+    ),
+  };
+}
+
 function createMockLayoutDraftState() {
   const baseLayout = createDefaultFactoryLayout();
   const state = {
@@ -391,6 +444,8 @@ function createMockLayoutDraftState() {
       },
     ),
   };
+
+  Object.assign(state, createMockVisualGroupLayoutActions(state));
 
   return state;
 }
@@ -517,6 +572,9 @@ function createMockEditableFactoryGraphActions(
       return true;
     },
     updateLayoutViewport: layoutDraftState.updateViewport,
+    createVisualGroup: layoutDraftState.createVisualGroup,
+    renameVisualGroup: layoutDraftState.renameVisualGroup,
+    setVisualGroupColor: layoutDraftState.setVisualGroupColor,
     updateNodeField: () => ({
       message: "Field editing is not exercised by this component test.",
       ok: false,

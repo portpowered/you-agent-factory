@@ -83,6 +83,12 @@ type BuildCurrentActivityGraphStateValueArgs = {
     y: number;
     zoom: number;
   }) => void;
+  createVisualGroup: (center: { x: number; y: number }) => { id: string } | null;
+  renameVisualGroup: (groupId: string, label: string) => void;
+  setVisualGroupColor: (
+    groupId: string,
+    color: "primary" | "info" | "success" | "warning" | "outline",
+  ) => void;
   editorUnavailableClassifierWorkstationName?: string;
   editorMode: boolean;
   handleCancelRemoval: () => void;
@@ -178,6 +184,9 @@ function buildCurrentActivityGraphLayoutControls(
     reset: args.resetLayout,
     undo: args.undoLayout,
     updateViewport: args.updateLayoutViewport,
+    createVisualGroup: args.createVisualGroup,
+    renameVisualGroup: args.renameVisualGroup,
+    setVisualGroupColor: args.setVisualGroupColor,
   };
 }
 
