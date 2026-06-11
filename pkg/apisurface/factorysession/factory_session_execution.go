@@ -8,7 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	jssource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 // StartRequestFromAPI maps one public durable execution request into the shared
@@ -117,12 +117,12 @@ func executionSourceFromAPI(source factoryapi.FactorySessionExecutionSource) (fa
 		return factorysessionexecution.Source{}, err
 	}
 	switch kind {
-	case workflowsource.KindFactoryID:
+	case jssource.KindFactoryID:
 		return factorysessionexecution.Source{
 			Kind:      kind,
 			FactoryID: derefString(source.FactoryId),
 		}, nil
-	case workflowsource.KindFactoryInline:
+	case jssource.KindFactoryInline:
 		if source.FactoryInline == nil {
 			return factorysessionexecution.Source{}, &apisurface.RequestValidationError{Message: "source.factoryInline is required when source.kind is FACTORY_INLINE"}
 		}
@@ -134,17 +134,17 @@ func executionSourceFromAPI(source factoryapi.FactorySessionExecutionSource) (fa
 			Kind:          kind,
 			FactoryInline: encoded,
 		}, nil
-	case workflowsource.KindWorkflowFile:
+	case jssource.KindWorkflowFile:
 		return factorysessionexecution.Source{
 			Kind:         kind,
 			WorkflowFile: derefString(source.WorkflowFile),
 		}, nil
-	case workflowsource.KindWorkflowName:
+	case jssource.KindWorkflowName:
 		return factorysessionexecution.Source{
 			Kind:         kind,
 			WorkflowName: derefString(source.WorkflowName),
 		}, nil
-	case workflowsource.KindInlineWorkflow:
+	case jssource.KindInlineWorkflow:
 		if source.InlineWorkflow == nil {
 			return factorysessionexecution.Source{}, &apisurface.RequestValidationError{Message: "source.inlineWorkflow is required when source.kind is INLINE_WORKFLOW"}
 		}
@@ -169,14 +169,14 @@ func executionSourceFromAPI(source factoryapi.FactorySessionExecutionSource) (fa
 	}
 }
 
-func executionSourceKindFromAPI(kind factoryapi.FactorySessionExecutionSourceKind) (workflowsource.Kind, error) {
-	switch workflowsource.Kind(strings.TrimSpace(string(kind))) {
-	case workflowsource.KindFactoryID,
-		workflowsource.KindFactoryInline,
-		workflowsource.KindWorkflowFile,
-		workflowsource.KindWorkflowName,
-		workflowsource.KindInlineWorkflow:
-		return workflowsource.Kind(strings.TrimSpace(string(kind))), nil
+func executionSourceKindFromAPI(kind factoryapi.FactorySessionExecutionSourceKind) (jssource.Kind, error) {
+	switch jssource.Kind(strings.TrimSpace(string(kind))) {
+	case jssource.KindFactoryID,
+		jssource.KindFactoryInline,
+		jssource.KindWorkflowFile,
+		jssource.KindWorkflowName,
+		jssource.KindInlineWorkflow:
+		return jssource.Kind(strings.TrimSpace(string(kind))), nil
 	default:
 		return "", &apisurface.RequestValidationError{Message: "source.kind must be one of FACTORY_ID, FACTORY_INLINE, WORKFLOW_FILE, WORKFLOW_NAME, or INLINE_WORKFLOW"}
 	}

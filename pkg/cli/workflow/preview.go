@@ -10,8 +10,8 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/workflowpreview"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 // PreviewConfig holds parameters for workflow preview output.
@@ -43,23 +43,23 @@ func Preview(cfg PreviewConfig) error {
 	return renderPreviewHuman(result, cfg.Output)
 }
 
-func previewRequestFromConfig(cfg PreviewConfig) (workflowpreview.Request, error) {
+func previewRequestFromConfig(cfg PreviewConfig) (preview.Request, error) {
 	projectRoot := strings.TrimSpace(cfg.Dir)
 	if projectRoot == "" {
-		return workflowpreview.Request{}, fmt.Errorf("project root is required")
+		return preview.Request{}, fmt.Errorf("project root is required")
 	}
-	ctx, err := workflowsource.DefaultContext(projectRoot)
+	ctx, err := source.DefaultContext(projectRoot)
 	if err != nil {
-		return workflowpreview.Request{}, err
+		return preview.Request{}, err
 	}
 
 	sourceKind, err := workflowSourceKindFromCLI(cfg.SourceKind)
 	if err != nil {
-		return workflowpreview.Request{}, err
+		return preview.Request{}, err
 	}
 
-	return workflowpreview.Request{
-		Source: workflowsource.Request{
+	return preview.Request{
+		Source: source.Request{
 			Kind:         sourceKind,
 			Value:        strings.TrimSpace(cfg.SourceValue),
 			InlineSource: strings.TrimSpace(cfg.InlineSource),
@@ -69,14 +69,14 @@ func previewRequestFromConfig(cfg PreviewConfig) (workflowpreview.Request, error
 	}, nil
 }
 
-func workflowSourceKindFromCLI(kind string) (workflowsource.Kind, error) {
-	switch workflowsource.Kind(strings.TrimSpace(kind)) {
-	case workflowsource.KindFactoryID,
-		workflowsource.KindFactoryInline,
-		workflowsource.KindWorkflowFile,
-		workflowsource.KindWorkflowName,
-		workflowsource.KindInlineWorkflow:
-		return workflowsource.Kind(strings.TrimSpace(kind)), nil
+func workflowSourceKindFromCLI(kind string) (source.Kind, error) {
+	switch source.Kind(strings.TrimSpace(kind)) {
+	case source.KindFactoryID,
+		source.KindFactoryInline,
+		source.KindWorkflowFile,
+		source.KindWorkflowName,
+		source.KindInlineWorkflow:
+		return source.Kind(strings.TrimSpace(kind)), nil
 	default:
 		return "", fmt.Errorf("source kind must be one of FACTORY_ID, FACTORY_INLINE, WORKFLOW_FILE, WORKFLOW_NAME, or INLINE_WORKFLOW")
 	}

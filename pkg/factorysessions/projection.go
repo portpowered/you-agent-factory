@@ -15,7 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/workflowpolicy"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 )
 
 // ProjectionContext carries the runtime inputs needed to project one live session.
@@ -116,7 +116,7 @@ func projectOrchestratorIdentity(runtime *factoryapi.FactorySessionRuntime, cfg 
 		runtime.Dialect = stringPointerOrNil(js.Dialect)
 		runtime.SourceRef = stringPointerOrNil(js.SourceRef)
 		runtime.SourceHash = stringPointerOrNil(js.SourceHash)
-		if policyHash := workflowpolicy.HashDocument(js.DefaultPolicy); policyHash != "" {
+		if policyHash := policy.HashDocument(js.DefaultPolicy); policyHash != "" {
 			runtime.PolicyHash = &policyHash
 		}
 		if budgets := projectedJavaScriptBudgets(js.DefaultPolicy); budgets != nil {
@@ -302,7 +302,7 @@ func projectedCheckpointArtifactRef(ref interfaces.JavaScriptCheckpointArtifactR
 }
 
 func projectedJavaScriptBudgets(raw json.RawMessage) *factoryapi.FactorySessionBudgets {
-	resolution := apisurface.ResolveWorkflowPolicy(workflowpolicy.Request{FactoryDefault: raw})
+	resolution := apisurface.ResolveWorkflowPolicy(policy.Request{FactoryDefault: raw})
 	if resolution.Policy.MaxAgents <= 0 {
 		return nil
 	}

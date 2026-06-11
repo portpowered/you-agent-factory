@@ -5,38 +5,38 @@ import (
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/workflowpolicy"
-	"github.com/portpowered/infinite-you/pkg/workflowpreview"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
-// BuildWorkflowPreview is the shared API, CLI, MCP, and website entry point for
-// workflow validation, source resolution, and policy preview projection.
-func BuildWorkflowPreview(input workflowpreview.Request) workflowpreview.Preview {
-	return workflowpreview.BuildPreview(input)
+// BuildWorkflowPreview is a transitional compatibility entry point for obsolete
+// workflow-preview surfaces. Prefer BuildFactoryPreview for Factory preview semantics.
+func BuildWorkflowPreview(input preview.Request) preview.Preview {
+	return preview.BuildPreview(input)
 }
 
 // WorkflowPreviewRequestFromAPI maps one public request into the shared preview contract.
-func WorkflowPreviewRequestFromAPI(req factoryapi.WorkflowPreviewRequest) (workflowpreview.Request, error) {
+func WorkflowPreviewRequestFromAPI(req factoryapi.WorkflowPreviewRequest) (preview.Request, error) {
 	sourceKind, err := workflowSourceKindFromAPI(string(req.SourceKind))
 	if err != nil {
-		return workflowpreview.Request{}, err
+		return preview.Request{}, err
 	}
 
 	projectRoot := strings.TrimSpace(derefString(req.ProjectRoot))
 	if projectRoot == "" {
-		return workflowpreview.Request{}, &RequestValidationError{Message: "projectRoot is required"}
+		return preview.Request{}, &RequestValidationError{Message: "projectRoot is required"}
 	}
-	ctx, err := workflowsource.DefaultContext(projectRoot)
+	ctx, err := source.DefaultContext(projectRoot)
 	if err != nil {
-		return workflowpreview.Request{}, &RequestValidationError{Message: err.Error()}
+		return preview.Request{}, &RequestValidationError{Message: err.Error()}
 	}
 
 	var argsSchema []byte
 	if req.ArgsSchema != nil {
 		encoded, marshalErr := json.Marshal(req.ArgsSchema)
 		if marshalErr != nil {
-			return workflowpreview.Request{}, &RequestValidationError{Message: "argsSchema must be a JSON object"}
+			return preview.Request{}, &RequestValidationError{Message: "argsSchema must be a JSON object"}
 		}
 		argsSchema = encoded
 	}
@@ -45,7 +45,7 @@ func WorkflowPreviewRequestFromAPI(req factoryapi.WorkflowPreviewRequest) (workf
 	if req.DefaultPolicy != nil {
 		encoded, marshalErr := json.Marshal(req.DefaultPolicy)
 		if marshalErr != nil {
-			return workflowpreview.Request{}, &RequestValidationError{Message: "defaultPolicy must be a JSON object"}
+			return preview.Request{}, &RequestValidationError{Message: "defaultPolicy must be a JSON object"}
 		}
 		factoryDefault = encoded
 	}
@@ -60,8 +60,8 @@ func WorkflowPreviewRequestFromAPI(req factoryapi.WorkflowPreviewRequest) (workf
 		metadata = *req.Metadata
 	}
 
-	return workflowpreview.Request{
-		Source: workflowsource.Request{
+	return preview.Request{
+		Source: source.Request{
 			Kind:               sourceKind,
 			Value:              derefString(req.SourceValue),
 			InlineSource:       derefString(req.InlineSource),
@@ -81,7 +81,7 @@ func WorkflowPreviewRequestFromAPI(req factoryapi.WorkflowPreviewRequest) (workf
 }
 
 // WorkflowPreviewResultFromPreview maps the shared preview contract to the public API shape.
-func WorkflowPreviewResultFromPreview(preview workflowpreview.Preview) factoryapi.WorkflowPreviewResult {
+func WorkflowPreviewResultFromPreview(preview preview.Preview) factoryapi.WorkflowPreviewResult {
 	return factoryapi.WorkflowPreviewResult{
 		Valid:                  preview.Valid,
 		SourceResolution:       workflowSourceResolutionFromPreview(preview.SourceResolution),
@@ -91,20 +91,20 @@ func WorkflowPreviewResultFromPreview(preview workflowpreview.Preview) factoryap
 	}
 }
 
-func workflowSourceKindFromAPI(kind string) (workflowsource.Kind, error) {
-	switch workflowsource.Kind(strings.TrimSpace(kind)) {
-	case workflowsource.KindFactoryID,
-		workflowsource.KindFactoryInline,
-		workflowsource.KindWorkflowFile,
-		workflowsource.KindWorkflowName,
-		workflowsource.KindInlineWorkflow:
-		return workflowsource.Kind(strings.TrimSpace(kind)), nil
+func workflowSourceKindFromAPI(kind string) (source.Kind, error) {
+	switch source.Kind(strings.TrimSpace(kind)) {
+	case source.KindFactoryID,
+		source.KindFactoryInline,
+		source.KindWorkflowFile,
+		source.KindWorkflowName,
+		source.KindInlineWorkflow:
+		return source.Kind(strings.TrimSpace(kind)), nil
 	default:
 		return "", &RequestValidationError{Message: "sourceKind must be one of FACTORY_ID, FACTORY_INLINE, WORKFLOW_FILE, WORKFLOW_NAME, or INLINE_WORKFLOW"}
 	}
 }
 
-func workflowSourceResolutionFromPreview(resolution workflowsource.Resolution) factoryapi.WorkflowSourceResolution {
+func workflowSourceResolutionFromPreview(resolution source.Resolution) factoryapi.WorkflowSourceResolution {
 	out := factoryapi.WorkflowSourceResolution{
 		RequestKind: string(resolution.RequestKind),
 		Found:       resolution.Found,
@@ -138,7 +138,7 @@ func workflowSourceResolutionFromPreview(resolution workflowsource.Resolution) f
 	return out
 }
 
-func workflowArtifactRootFromPreview(decision workflowsource.ArtifactRootDecision) factoryapi.WorkflowArtifactRootDecision {
+func workflowArtifactRootFromPreview(decision source.ArtifactRootDecision) factoryapi.WorkflowArtifactRootDecision {
 	out := factoryapi.WorkflowArtifactRootDecision{
 		Requested: decision.Requested,
 		Allowed:   decision.Allowed,
@@ -153,7 +153,7 @@ func workflowArtifactRootFromPreview(decision workflowsource.ArtifactRootDecisio
 	return out
 }
 
-func workflowPolicyPreviewFromPreview(preview workflowpolicy.Preview) factoryapi.WorkflowPolicyPreview {
+func workflowPolicyPreviewFromPreview(preview policy.Preview) factoryapi.WorkflowPolicyPreview {
 	effectivePolicy := map[string]interface{}{}
 	if encoded, err := json.Marshal(preview.EffectivePolicy); err == nil {
 		_ = json.Unmarshal(encoded, &effectivePolicy)
@@ -194,7 +194,7 @@ func workflowPolicyPreviewFromPreview(preview workflowpolicy.Preview) factoryapi
 	return out
 }
 
-func workflowResultConstraintsFromPreview(constraints workflowpreview.ResultConstraints) factoryapi.WorkflowResultConstraints {
+func workflowResultConstraintsFromPreview(constraints preview.ResultConstraints) factoryapi.WorkflowResultConstraints {
 	return factoryapi.WorkflowResultConstraints{
 		RequiresStructuredCloneableJson: constraints.RequiresStructuredCloneableJSON,
 		ArtifactUriScheme:               constraints.ArtifactURIScheme,
@@ -203,7 +203,7 @@ func workflowResultConstraintsFromPreview(constraints workflowpreview.ResultCons
 	}
 }
 
-func workflowDiagnosticsFromSourceIssues(issues []workflowpreview.SourceValidationIssue) []factoryapi.WorkflowDiagnostic {
+func workflowDiagnosticsFromSourceIssues(issues []preview.SourceValidationIssue) []factoryapi.WorkflowDiagnostic {
 	out := make([]factoryapi.WorkflowDiagnostic, 0, len(issues))
 	for _, issue := range issues {
 		out = append(out, workflowDiagnosticFromSourceIssue(issue))
@@ -211,7 +211,7 @@ func workflowDiagnosticsFromSourceIssues(issues []workflowpreview.SourceValidati
 	return out
 }
 
-func workflowDiagnosticFromSourceIssue(issue workflowpreview.SourceValidationIssue) factoryapi.WorkflowDiagnostic {
+func workflowDiagnosticFromSourceIssue(issue preview.SourceValidationIssue) factoryapi.WorkflowDiagnostic {
 	out := factoryapi.WorkflowDiagnostic{
 		Code:    issue.Code,
 		Message: issue.Message,
@@ -230,7 +230,7 @@ func workflowDiagnosticFromSourceIssue(issue workflowpreview.SourceValidationIss
 	return out
 }
 
-func workflowDiagnosticsFromSource(diagnostics []workflowsource.Diagnostic) []factoryapi.WorkflowDiagnostic {
+func workflowDiagnosticsFromSource(diagnostics []source.Diagnostic) []factoryapi.WorkflowDiagnostic {
 	out := make([]factoryapi.WorkflowDiagnostic, 0, len(diagnostics))
 	for _, diagnostic := range diagnostics {
 		out = append(out, workflowDiagnosticFromSource(diagnostic))
@@ -238,14 +238,14 @@ func workflowDiagnosticsFromSource(diagnostics []workflowsource.Diagnostic) []fa
 	return out
 }
 
-func workflowDiagnosticFromSource(diagnostic workflowsource.Diagnostic) factoryapi.WorkflowDiagnostic {
+func workflowDiagnosticFromSource(diagnostic source.Diagnostic) factoryapi.WorkflowDiagnostic {
 	return factoryapi.WorkflowDiagnostic{
 		Code:    diagnostic.Code,
 		Message: diagnostic.Message,
 	}
 }
 
-func workflowDiagnosticsFromPolicy(diagnostics []workflowpolicy.Diagnostic) []factoryapi.WorkflowDiagnostic {
+func workflowDiagnosticsFromPolicy(diagnostics []policy.Diagnostic) []factoryapi.WorkflowDiagnostic {
 	out := make([]factoryapi.WorkflowDiagnostic, 0, len(diagnostics))
 	for _, diagnostic := range diagnostics {
 		out = append(out, factoryapi.WorkflowDiagnostic{
@@ -256,7 +256,7 @@ func workflowDiagnosticsFromPolicy(diagnostics []workflowpolicy.Diagnostic) []fa
 	return out
 }
 
-func workflowDiagnosticsFromPolicyIssues(issues []workflowpolicy.Issue) []factoryapi.WorkflowDiagnostic {
+func workflowDiagnosticsFromPolicyIssues(issues []policy.Issue) []factoryapi.WorkflowDiagnostic {
 	out := make([]factoryapi.WorkflowDiagnostic, 0, len(issues))
 	for _, issue := range issues {
 		diagnostic := factoryapi.WorkflowDiagnostic{

@@ -308,6 +308,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factories/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Preview JavaScript-orchestrated factory validation and policy
+     * @description Primary Factory preview entrypoint for JavaScript-orchestrated factories. Resolves orchestrator source, validates JavaScript or TypeScript source without execution, and projects effective policy, artifact-root, and structured-result constraints before durable Factory Session start.
+     */
+    post: operations["previewFactory"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/workflow-previews": {
     parameters: {
       query?: never;
@@ -318,8 +338,9 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Preview workflow validation and policy
-     * @description Resolves workflow source, validates JavaScript or TypeScript source without execution, and projects effective policy, artifact-root, and structured-result constraints for preview or session-start surfaces.
+     * [Obsolete] Preview workflow validation and policy
+     * @deprecated
+     * @description Obsolete transitional Batch 001 compatibility route. Use POST /factories/preview for JavaScript-orchestrated Factory preview semantics. This route remains temporarily for backward compatibility and will be removed after downstream surfaces migrate.
      */
     post: operations["previewWorkflow"];
     delete?: never;
@@ -3954,6 +3975,63 @@ export interface components {
         [key: string]: unknown;
       };
     };
+    FactoryPreviewRequest: {
+      /**
+       * @description JavaScript-orchestrated factory source request kind for Factory preview.
+       * @enum {string}
+       */
+      sourceKind: FactoryPreviewRequestSourceKind;
+      /** @description Requested workflow name, file ref, factory id, or inline label. */
+      sourceValue?: string;
+      /** @description Inline workflow source text for INLINE_WORKFLOW or FACTORY_INLINE requests. */
+      inlineSource?: string;
+      /** @description Optional absolute artifact root requested with the factory source. */
+      artifactRoot?: string;
+      /** @description When true, explicit factory lookup is attempted after ordered workflow lookup. */
+      allowFactoryLookup?: boolean;
+      /** @description Project root used for ordered JavaScript orchestrator source lookup. */
+      projectRoot?: string;
+      /** @description Optional JavaScript orchestrator metadata to validate with the source. */
+      metadata?: {
+        [key: string]: string;
+      };
+      /** @description Optional JSON Schema object describing factory invocation arguments. */
+      argsSchema?: {
+        [key: string]: unknown;
+      };
+      /** @description Optional factory default policy layer merged into the effective policy preview. */
+      defaultPolicy?: {
+        [key: string]: unknown;
+      };
+      /** @description Optional request policy overrides merged into the effective policy preview. */
+      requestedPolicy?: {
+        [key: string]: unknown;
+      };
+      /** @description Optional runner requested for preview decision projection. */
+      requestedRunner?: string;
+      /** @description Optional model requested for preview decision projection. */
+      requestedModel?: string;
+      /** @description Optional route profile requested for preview decision projection. */
+      requestedProfile?: string;
+      /**
+       * Format: int64
+       * @description Optional requested timeout in milliseconds for preview decision projection.
+       */
+      timeoutMillis?: number;
+    };
+    FactoryPreviewResult: {
+      /** @description True when source resolution, validation, policy, and artifact-root checks pass for the JavaScript-orchestrated factory preview. */
+      valid: boolean;
+      sourceResolution: components["schemas"]["WorkflowSourceResolution"];
+      /** @description Factory source, loader, and orchestrator validation diagnostics. */
+      sourceValidationIssues: components["schemas"]["WorkflowDiagnostic"][];
+      policyPreview: components["schemas"]["WorkflowPolicyPreview"];
+      resultConstraints: components["schemas"]["WorkflowResultConstraints"];
+    };
+    /**
+     * @deprecated
+     * @description Obsolete transitional Batch 001 workflow-preview request shape. Use FactoryPreviewRequest on POST /factories/preview for JavaScript-orchestrated Factory preview semantics.
+     */
     WorkflowPreviewRequest: {
       /**
        * @description Workflow source request kind.
@@ -3998,6 +4076,10 @@ export interface components {
        */
       timeoutMillis?: number;
     };
+    /**
+     * @deprecated
+     * @description Obsolete transitional Batch 001 workflow-preview result shape. Use FactoryPreviewResult on POST /factories/preview for JavaScript-orchestrated Factory preview semantics.
+     */
     WorkflowPreviewResult: {
       /** @description True when source resolution, validation, policy, and artifact-root checks pass. */
       valid: boolean;
@@ -4955,6 +5037,32 @@ export interface operations {
       };
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  previewFactory: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["FactoryPreviewRequest"];
+      };
+    };
+    responses: {
+      /** @description Factory preview validation, source resolution, and policy projection. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactoryPreviewResult"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
       500: components["responses"]["InternalError"];
     };
   };
@@ -6578,6 +6686,15 @@ export const PromptTemplateDiagnosticKind = {
 } as const;
 export type PromptTemplateDiagnosticKind =
   (typeof PromptTemplateDiagnosticKind)[keyof typeof PromptTemplateDiagnosticKind];
+export const FactoryPreviewRequestSourceKind = {
+  FACTORY_ID: "FACTORY_ID",
+  FACTORY_INLINE: "FACTORY_INLINE",
+  WORKFLOW_FILE: "WORKFLOW_FILE",
+  WORKFLOW_NAME: "WORKFLOW_NAME",
+  INLINE_WORKFLOW: "INLINE_WORKFLOW",
+} as const;
+export type FactoryPreviewRequestSourceKind =
+  (typeof FactoryPreviewRequestSourceKind)[keyof typeof FactoryPreviewRequestSourceKind];
 export const WorkflowPreviewRequestSourceKind = {
   FACTORY_ID: "FACTORY_ID",
   FACTORY_INLINE: "FACTORY_INLINE",

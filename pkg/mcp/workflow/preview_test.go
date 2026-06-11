@@ -9,8 +9,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	mcpworkflow "github.com/portpowered/infinite-you/pkg/mcp/workflow"
-	"github.com/portpowered/infinite-you/pkg/workflowpreview"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 const validWorkflowSource = `
@@ -34,13 +34,13 @@ func TestValidateTool_MatchesAPISurfacePreview(t *testing.T) {
 		t.Fatalf("ValidateTool: %v", err)
 	}
 
-	ctx, err := workflowsource.DefaultContext(projectRoot)
+	ctx, err := source.DefaultContext(projectRoot)
 	if err != nil {
 		t.Fatalf("DefaultContext: %v", err)
 	}
-	expected := apisurface.WorkflowPreviewResultFromPreview(apisurface.BuildWorkflowPreview(workflowpreview.Request{
-		Source: workflowsource.Request{
-			Kind:  workflowsource.KindWorkflowName,
+	expected := apisurface.WorkflowPreviewResultFromPreview(apisurface.BuildWorkflowPreview(preview.Request{
+		Source: source.Request{
+			Kind:  source.KindWorkflowName,
 			Value: "review",
 		},
 		Context: ctx,
@@ -123,7 +123,7 @@ func TestStructuredErrorFromPreview_UsesFirstBlockingIssue(t *testing.T) {
 
 func writeWorkflow(t *testing.T, projectRoot, name, content string) {
 	t.Helper()
-	workflowDir := filepath.Join(projectRoot, workflowsource.ProjectClaudeWorkflowsDir)
+	workflowDir := filepath.Join(projectRoot, source.ProjectClaudeWorkflowsDir)
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}

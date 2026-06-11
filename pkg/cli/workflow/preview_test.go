@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/cli/workflow"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 const validWorkflowSource = `
@@ -24,7 +24,7 @@ func TestPreview_ValidWorkflowNameHumanOutput(t *testing.T) {
 	var output bytes.Buffer
 	err := workflow.Preview(workflow.PreviewConfig{
 		Dir:         projectRoot,
-		SourceKind:  string(workflowsource.KindWorkflowName),
+		SourceKind:  string(source.KindWorkflowName),
 		SourceValue: "review",
 		Output:      &output,
 	})
@@ -46,7 +46,7 @@ func TestPreview_InvalidWorkflowReportsDiagnostics(t *testing.T) {
 	var output bytes.Buffer
 	err := workflow.Preview(workflow.PreviewConfig{
 		Dir:         projectRoot,
-		SourceKind:  string(workflowsource.KindWorkflowName),
+		SourceKind:  string(source.KindWorkflowName),
 		SourceValue: "broken",
 		Output:      &output,
 	})
@@ -60,7 +60,7 @@ func TestPreview_InvalidWorkflowReportsDiagnostics(t *testing.T) {
 
 func writeWorkflow(t *testing.T, projectRoot, name, content string) {
 	t.Helper()
-	workflowDir := filepath.Join(projectRoot, workflowsource.ProjectClaudeWorkflowsDir)
+	workflowDir := filepath.Join(projectRoot, source.ProjectClaudeWorkflowsDir)
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}

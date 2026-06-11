@@ -8,7 +8,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	jssource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 // OrchestratorOverrideFromAPI maps one public orchestrator override into the shared
@@ -467,7 +467,7 @@ func ControlErrorToAPI(sessionID string, err *factorysessionexecution.ControlErr
 
 func resolvedSourceFromAPI(source factoryapi.FactorySessionResolvedSourceIdentity) factorysessionexecution.ResolvedSource {
 	result := factorysessionexecution.ResolvedSource{
-		Kind: workflowsource.Kind(source.Kind),
+		Kind: jssource.Kind(source.Kind),
 	}
 	if source.Dialect != nil {
 		result.Dialect = strings.TrimSpace(*source.Dialect)

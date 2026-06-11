@@ -28,7 +28,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/spf13/cobra"
 )
 
@@ -888,7 +888,7 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *co
 		},
 	}
 	previewCmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "project root used for ordered workflow source lookup")
-	previewCmd.Flags().StringVar(&cfg.SourceKind, "kind", string(workflowsource.KindWorkflowName), "workflow source kind")
+	previewCmd.Flags().StringVar(&cfg.SourceKind, "kind", string(source.KindWorkflowName), "workflow source kind")
 	previewCmd.Flags().StringVar(&cfg.SourceValue, "value", "", "workflow name, file ref, or factory id")
 	previewCmd.Flags().StringVar(&cfg.InlineSource, "inline", "", "inline workflow source text")
 	previewCmd.Flags().StringVar(&cfg.ArtifactRoot, "artifact-root", "", "optional absolute artifact root")

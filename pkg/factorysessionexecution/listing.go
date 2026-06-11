@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	jssource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 // IsPersistedListCandidate reports whether one durable session belongs in the
@@ -331,7 +331,7 @@ const DefaultSessionListScope = SessionListScopeLive
 type SessionListFilters struct {
 	Statuses          []LifecycleStatus
 	OrchestratorKinds []string
-	SourceKind        workflowsource.Kind
+	SourceKind        jssource.Kind
 	SourceRef         string
 	ProjectBoundary   string
 	Recoverable       *bool
@@ -457,13 +457,13 @@ func normalizeSessionListFilters(filters SessionListFilters) (SessionListFilters
 	return normalized, nil
 }
 
-func isKnownWorkflowSourceKind(kind workflowsource.Kind) bool {
+func isKnownWorkflowSourceKind(kind jssource.Kind) bool {
 	switch kind {
-	case workflowsource.KindFactoryID,
-		workflowsource.KindFactoryInline,
-		workflowsource.KindWorkflowFile,
-		workflowsource.KindWorkflowName,
-		workflowsource.KindInlineWorkflow:
+	case jssource.KindFactoryID,
+		jssource.KindFactoryInline,
+		jssource.KindWorkflowFile,
+		jssource.KindWorkflowName,
+		jssource.KindInlineWorkflow:
 		return true
 	default:
 		return false

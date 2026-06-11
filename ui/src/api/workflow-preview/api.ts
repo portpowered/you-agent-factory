@@ -7,10 +7,12 @@ import {
 } from "../transport";
 import { workflowPreviewAPIErrorMessages } from "./messages";
 
+/** @deprecated Obsolete transitional alias. Prefer Factory preview types. */
 export type WorkflowPreviewRequest =
-  components["schemas"]["WorkflowPreviewRequest"];
+  components["schemas"]["FactoryPreviewRequest"];
+/** @deprecated Obsolete transitional alias. Prefer Factory preview types. */
 export type WorkflowPreviewResult =
-  components["schemas"]["WorkflowPreviewResult"];
+  components["schemas"]["FactoryPreviewResult"];
 export type WorkflowDiagnostic = components["schemas"]["WorkflowDiagnostic"];
 
 export type WorkflowPreviewAPIErrorCode =
@@ -49,7 +51,7 @@ export class WorkflowPreviewAPIError extends Error {
   }
 }
 
-const WORKFLOW_PREVIEW_ENDPOINT = "/workflow-previews";
+const FACTORY_PREVIEW_ENDPOINT = "/factories/preview";
 
 export async function previewWorkflow(
   request: WorkflowPreviewRequest,
@@ -67,7 +69,7 @@ export async function previewWorkflow(
   let response: Response;
   try {
     response = await fetchImplementation(
-      factoryAPIURL(WORKFLOW_PREVIEW_ENDPOINT),
+      factoryAPIURL(FACTORY_PREVIEW_ENDPOINT),
       {
         body: JSON.stringify(request),
         headers: {

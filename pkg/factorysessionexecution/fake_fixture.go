@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	jssource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 // LoadFakeScenariosFromContractFixtures loads deterministic fake scenarios from the
@@ -476,7 +476,7 @@ func artifactDetailFromFixtureMap(artifact map[string]any) ArtifactDetail {
 
 func resolvedSourceFromFixtureMap(source map[string]any) ResolvedSource {
 	result := ResolvedSource{
-		Kind:       workflowsource.Kind(fixtureStringValue(source, "kind")),
+		Kind:       jssource.Kind(fixtureStringValue(source, "kind")),
 		SourceRef:  fixtureStringValue(source, "sourceRef"),
 		SourceHash: fixtureStringValue(source, "sourceHash"),
 		Dialect:    fixtureStringValue(source, "dialect"),
@@ -820,7 +820,7 @@ func BuiltinInterruptedRecoverableScenario() FakeScenario {
 		OrchestratorKind: "JAVASCRIPT",
 		Dialect:          "you-workflow-v1",
 		ResolvedSource: ResolvedSource{
-			Kind:       workflowsource.KindWorkflowName,
+			Kind:       jssource.KindWorkflowName,
 			SourceRef:  "workflow/recoverable-audit",
 			SourceHash: "sha256:js-workflow-recoverable-audit",
 			Dialect:    "you-workflow-v1",

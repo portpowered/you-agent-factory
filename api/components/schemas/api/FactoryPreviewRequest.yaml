@@ -1,0 +1,59 @@
+type: object
+additionalProperties: false
+required:
+  - sourceKind
+properties:
+  sourceKind:
+    type: string
+    description: JavaScript-orchestrated factory source request kind for Factory preview.
+    enum:
+      - FACTORY_ID
+      - FACTORY_INLINE
+      - WORKFLOW_FILE
+      - WORKFLOW_NAME
+      - INLINE_WORKFLOW
+  sourceValue:
+    type: string
+    description: Requested workflow name, file ref, factory id, or inline label.
+  inlineSource:
+    type: string
+    description: Inline workflow source text for INLINE_WORKFLOW or FACTORY_INLINE requests.
+  artifactRoot:
+    type: string
+    description: Optional absolute artifact root requested with the factory source.
+  allowFactoryLookup:
+    type: boolean
+    description: When true, explicit factory lookup is attempted after ordered workflow lookup.
+  projectRoot:
+    type: string
+    description: Project root used for ordered JavaScript orchestrator source lookup.
+  metadata:
+    type: object
+    additionalProperties:
+      type: string
+    description: Optional JavaScript orchestrator metadata to validate with the source.
+  argsSchema:
+    type: object
+    additionalProperties: true
+    description: Optional JSON Schema object describing factory invocation arguments.
+  defaultPolicy:
+    type: object
+    additionalProperties: true
+    description: Optional factory default policy layer merged into the effective policy preview.
+  requestedPolicy:
+    type: object
+    additionalProperties: true
+    description: Optional request policy overrides merged into the effective policy preview.
+  requestedRunner:
+    type: string
+    description: Optional runner requested for preview decision projection.
+  requestedModel:
+    type: string
+    description: Optional model requested for preview decision projection.
+  requestedProfile:
+    type: string
+    description: Optional route profile requested for preview decision projection.
+  timeoutMillis:
+    type: integer
+    format: int64
+    description: Optional requested timeout in milliseconds for preview decision projection.

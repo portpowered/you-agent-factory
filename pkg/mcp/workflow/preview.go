@@ -6,7 +6,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/workflowpreview"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview"
 )
 
 // ToolError is a structured MCP tool failure for workflow validation or start surfaces.
@@ -69,6 +69,6 @@ func MarshalToolError(err ToolError) ([]byte, error) {
 }
 
 // PreviewInputFromRequest adapts one workflow preview request for MCP tool wiring.
-func PreviewInputFromRequest(input workflowpreview.Request) factoryapi.WorkflowPreviewResult {
+func PreviewInputFromRequest(input preview.Request) factoryapi.WorkflowPreviewResult {
 	return apisurface.WorkflowPreviewResultFromPreview(apisurface.BuildWorkflowPreview(input))
 }

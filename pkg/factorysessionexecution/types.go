@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	jssource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 // SyncOutcome reports how a sync start wait ended.
@@ -26,7 +26,7 @@ type InlineWorkflowSource struct {
 
 // Source is the normalized durable execution source selector.
 type Source struct {
-	Kind            workflowsource.Kind
+	Kind            jssource.Kind
 	FactoryID       string
 	FactoryInline   json.RawMessage
 	WorkflowFile    string
@@ -59,7 +59,7 @@ type StartRequest struct {
 
 // ResolvedSource is the customer-visible resolved source identity for one session.
 type ResolvedSource struct {
-	Kind            workflowsource.Kind
+	Kind            jssource.Kind
 	SourceRef       string
 	SourceHash      string
 	Dialect         string

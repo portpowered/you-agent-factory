@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	jssource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 func TestNormalizeListSessionsRequest_DefaultsToLiveAndRejectsUnsupportedScope(t *testing.T) {
@@ -37,7 +37,7 @@ func TestApplySessionListScope_LivePersistedAndAllDedup(t *testing.T) {
 				Status:           LifecycleStatusSucceeded,
 				OrchestratorKind: "PETRI",
 				ResolvedSource: ResolvedSource{
-					Kind:       workflowsource.KindFactoryID,
+					Kind:       jssource.KindFactoryID,
 					SourceRef:  "factory/customer-support-triage",
 					SourceHash: "sha256:petri-factory-001",
 				},
@@ -52,7 +52,7 @@ func TestApplySessionListScope_LivePersistedAndAllDedup(t *testing.T) {
 				Status:           LifecycleStatusCanceled,
 				OrchestratorKind: "PETRI",
 				ResolvedSource: ResolvedSource{
-					Kind:       workflowsource.KindFactoryID,
+					Kind:       jssource.KindFactoryID,
 					SourceRef:  "factory/customer-support-triage",
 					SourceHash: "sha256:petri-factory-001",
 				},
@@ -64,7 +64,7 @@ func TestApplySessionListScope_LivePersistedAndAllDedup(t *testing.T) {
 				Status:           LifecycleStatusRunning,
 				OrchestratorKind: "PETRI",
 				ResolvedSource: ResolvedSource{
-					Kind:       workflowsource.KindFactoryID,
+					Kind:       jssource.KindFactoryID,
 					SourceRef:  "factory/customer-support-triage",
 					SourceHash: "sha256:petri-factory-001",
 				},
@@ -117,7 +117,7 @@ func TestMatchesDurableSessionListFilters_StatusOrchestratorAndRecoverability(t 
 		Status:           LifecycleStatusInterrupted,
 		OrchestratorKind: "JAVASCRIPT",
 		ResolvedSource: ResolvedSource{
-			Kind:      workflowsource.KindWorkflowFile,
+			Kind:      jssource.KindWorkflowFile,
 			SourceRef: "workflow/.claude/workflows/docs-refresh.yaml",
 		},
 		Recoverable: true,
@@ -127,7 +127,7 @@ func TestMatchesDurableSessionListFilters_StatusOrchestratorAndRecoverability(t 
 	if !MatchesDurableSessionListFilters(summary, SessionListFilters{
 		Statuses:          []LifecycleStatus{LifecycleStatusInterrupted},
 		OrchestratorKinds: []string{"javascript"},
-		SourceKind:        workflowsource.KindWorkflowFile,
+		SourceKind:        jssource.KindWorkflowFile,
 		SourceRef:         "docs-refresh",
 		Recoverable:       boolPtr(true),
 		StaleLease:        boolPtr(true),

@@ -6,8 +6,8 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workflowpolicy"
-	"github.com/portpowered/infinite-you/pkg/workflowvalidation"
+	jspolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	jsvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
 )
 
 const validationRoot = "factory"
@@ -269,11 +269,11 @@ func javascriptWorkflowPolicyTargets(jsCfg *interfaces.FactoryOrchestratorJavaSc
 	if jsCfg == nil {
 		return nil
 	}
-	resolution := workflowpolicy.ResolveFromFactoryDefault(jsCfg.DefaultPolicy)
+	resolution := jspolicy.ResolveFromFactoryDefault(jsCfg.DefaultPolicy)
 	return workflowPolicyIssuesToTargets(resolution.Issues)
 }
 
-func workflowPolicyIssuesToTargets(issues []workflowpolicy.Issue) []Target {
+func workflowPolicyIssuesToTargets(issues []jspolicy.Issue) []Target {
 	if len(issues) == 0 {
 		return nil
 	}
@@ -315,13 +315,13 @@ func WorkflowSourceTargets(jsCfg *interfaces.FactoryOrchestratorJavaScriptConfig
 	}
 	content, err := reader.ReadWorkflowSource(sourceRef)
 	if err != nil {
-		return []Target{workflowSourceTarget(workflowvalidation.Issue{
-			Code:    workflowvalidation.CodeSourceUnreadable,
+		return []Target{workflowSourceTarget(jsvalidation.Issue{
+			Code:    jsvalidation.CodeSourceUnreadable,
 			Message: fmt.Sprintf("unable to read workflow source %q: %v", sourceRef, err),
 			Path:    "orchestrator.javascript.sourceRef",
 		})}
 	}
-	loaded, loadIssues := workflowvalidation.Load(workflowvalidation.LoadRequest{
+	loaded, loadIssues := jsvalidation.Load(jsvalidation.LoadRequest{
 		SourceRef: sourceRef,
 		Content:   content,
 	})
@@ -329,13 +329,13 @@ func WorkflowSourceTargets(jsCfg *interfaces.FactoryOrchestratorJavaScriptConfig
 		return workflowSourceIssuesToTargets(loadIssues)
 	}
 	if expectedHash := strings.TrimSpace(jsCfg.SourceHash); expectedHash != "" && expectedHash != loaded.SourceHash {
-		return []Target{workflowSourceTarget(workflowvalidation.Issue{
-			Code:    workflowvalidation.CodeSourceHashMismatch,
+		return []Target{workflowSourceTarget(jsvalidation.Issue{
+			Code:    jsvalidation.CodeSourceHashMismatch,
 			Message: fmt.Sprintf("orchestrator.javascript.sourceHash %q does not match loaded workflow source hash %q", expectedHash, loaded.SourceHash),
 			Path:    "orchestrator.javascript.sourceHash",
 		})}
 	}
-	fileResult := workflowvalidation.ValidateLoaded(loaded, workflowvalidation.Request{
+	fileResult := jsvalidation.ValidateLoaded(loaded, jsvalidation.Request{
 		ConfigPath: "orchestrator.javascript.sourceRef",
 		Metadata:   jsCfg.Metadata,
 		ArgsSchema: jsCfg.ArgsSchema,
@@ -348,7 +348,7 @@ func javascriptWorkflowConfigAndInlineTargets(jsCfg *interfaces.FactoryOrchestra
 		return nil
 	}
 	var targets []Target
-	configResult := workflowvalidation.Validate(workflowvalidation.Request{
+	configResult := jsvalidation.Validate(jsvalidation.Request{
 		ConfigPath: "orchestrator.javascript",
 		Metadata:   jsCfg.Metadata,
 		ArgsSchema: jsCfg.ArgsSchema,
@@ -362,7 +362,7 @@ func javascriptWorkflowConfigAndInlineTargets(jsCfg *interfaces.FactoryOrchestra
 	if inline == "" {
 		return targets
 	}
-	inlineResult := workflowvalidation.Validate(workflowvalidation.Request{
+	inlineResult := jsvalidation.Validate(jsvalidation.Request{
 		Source:     inline,
 		SourceRef:  "inline",
 		ConfigPath: "orchestrator.javascript.inlineSource",
@@ -371,7 +371,7 @@ func javascriptWorkflowConfigAndInlineTargets(jsCfg *interfaces.FactoryOrchestra
 	return targets
 }
 
-func workflowSourceIssuesToTargets(issues []workflowvalidation.Issue) []Target {
+func workflowSourceIssuesToTargets(issues []jsvalidation.Issue) []Target {
 	if len(issues) == 0 {
 		return nil
 	}
@@ -382,7 +382,7 @@ func workflowSourceIssuesToTargets(issues []workflowvalidation.Issue) []Target {
 	return targets
 }
 
-func workflowSourceTarget(issue workflowvalidation.Issue) Target {
+func workflowSourceTarget(issue jsvalidation.Issue) Target {
 	targetPath := "javascript"
 	switch {
 	case strings.HasPrefix(issue.Path, "orchestrator.javascript."):

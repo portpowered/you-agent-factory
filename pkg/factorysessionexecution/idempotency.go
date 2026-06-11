@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	jssource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 // IdempotencyTupleHash returns a stable digest for the normalized execution tuple
@@ -70,19 +70,19 @@ func normalizeSourceForIdempotency(source Source) (map[string]any, error) {
 		"kind": string(source.Kind),
 	}
 	switch source.Kind {
-	case workflowsource.KindFactoryID:
+	case jssource.KindFactoryID:
 		document["factoryId"] = strings.TrimSpace(source.FactoryID)
-	case workflowsource.KindFactoryInline:
+	case jssource.KindFactoryInline:
 		inline, err := canonicalizeRawJSON(source.FactoryInline)
 		if err != nil {
 			return nil, err
 		}
 		document["factoryInline"] = inline
-	case workflowsource.KindWorkflowFile:
+	case jssource.KindWorkflowFile:
 		document["workflowFile"] = strings.TrimSpace(source.WorkflowFile)
-	case workflowsource.KindWorkflowName:
+	case jssource.KindWorkflowName:
 		document["workflowName"] = strings.TrimSpace(source.WorkflowName)
-	case workflowsource.KindInlineWorkflow:
+	case jssource.KindInlineWorkflow:
 		if source.InlineWorkflow == nil {
 			return nil, NewValidationError("source.inlineWorkflow", "inlineWorkflow is required when source.kind is INLINE_WORKFLOW")
 		}

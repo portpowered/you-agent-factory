@@ -449,13 +449,38 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factories/preview:
+    post:
+      tags:
+        - Factory
+      operationId: previewFactory
+      summary: Preview JavaScript-orchestrated factory validation and policy
+      description: Primary Factory preview entrypoint for JavaScript-orchestrated factories. Resolves orchestrator source, validates JavaScript or TypeScript source without execution, and projects effective policy, artifact-root, and structured-result constraints before durable Factory Session start.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactoryPreviewRequest'
+      responses:
+        '200':
+          description: Factory preview validation, source resolution, and policy projection.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactoryPreviewResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /workflow-previews:
     post:
+      deprecated: true
       tags:
         - Workflows
       operationId: previewWorkflow
-      summary: Preview workflow validation and policy
-      description: Resolves workflow source, validates JavaScript or TypeScript source without execution, and projects effective policy, artifact-root, and structured-result constraints for preview or session-start surfaces.
+      summary: '[Obsolete] Preview workflow validation and policy'
+      description: Obsolete transitional Batch 001 compatibility route. Use POST /factories/preview for JavaScript-orchestrated Factory preview semantics. This route remains temporarily for backward compatibility and will be removed after downstream surfaces migrate.
       requestBody:
         required: true
         content:
@@ -7792,7 +7817,93 @@ components:
           type: object
           additionalProperties: true
           description: Child and concurrency budget decisions for preview surfaces.
+    FactoryPreviewRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - sourceKind
+      properties:
+        sourceKind:
+          type: string
+          description: JavaScript-orchestrated factory source request kind for Factory preview.
+          enum:
+            - FACTORY_ID
+            - FACTORY_INLINE
+            - WORKFLOW_FILE
+            - WORKFLOW_NAME
+            - INLINE_WORKFLOW
+        sourceValue:
+          type: string
+          description: Requested workflow name, file ref, factory id, or inline label.
+        inlineSource:
+          type: string
+          description: Inline workflow source text for INLINE_WORKFLOW or FACTORY_INLINE requests.
+        artifactRoot:
+          type: string
+          description: Optional absolute artifact root requested with the factory source.
+        allowFactoryLookup:
+          type: boolean
+          description: When true, explicit factory lookup is attempted after ordered workflow lookup.
+        projectRoot:
+          type: string
+          description: Project root used for ordered JavaScript orchestrator source lookup.
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+          description: Optional JavaScript orchestrator metadata to validate with the source.
+        argsSchema:
+          type: object
+          additionalProperties: true
+          description: Optional JSON Schema object describing factory invocation arguments.
+        defaultPolicy:
+          type: object
+          additionalProperties: true
+          description: Optional factory default policy layer merged into the effective policy preview.
+        requestedPolicy:
+          type: object
+          additionalProperties: true
+          description: Optional request policy overrides merged into the effective policy preview.
+        requestedRunner:
+          type: string
+          description: Optional runner requested for preview decision projection.
+        requestedModel:
+          type: string
+          description: Optional model requested for preview decision projection.
+        requestedProfile:
+          type: string
+          description: Optional route profile requested for preview decision projection.
+        timeoutMillis:
+          type: integer
+          format: int64
+          description: Optional requested timeout in milliseconds for preview decision projection.
+    FactoryPreviewResult:
+      type: object
+      additionalProperties: false
+      required:
+        - valid
+        - sourceResolution
+        - sourceValidationIssues
+        - policyPreview
+        - resultConstraints
+      properties:
+        valid:
+          type: boolean
+          description: True when source resolution, validation, policy, and artifact-root checks pass for the JavaScript-orchestrated factory preview.
+        sourceResolution:
+          $ref: '#/components/schemas/WorkflowSourceResolution'
+        sourceValidationIssues:
+          type: array
+          description: Factory source, loader, and orchestrator validation diagnostics.
+          items:
+            $ref: '#/components/schemas/WorkflowDiagnostic'
+        policyPreview:
+          $ref: '#/components/schemas/WorkflowPolicyPreview'
+        resultConstraints:
+          $ref: '#/components/schemas/WorkflowResultConstraints'
     WorkflowPreviewRequest:
+      deprecated: true
+      description: Obsolete transitional Batch 001 workflow-preview request shape. Use FactoryPreviewRequest on POST /factories/preview for JavaScript-orchestrated Factory preview semantics.
       type: object
       additionalProperties: false
       required:
@@ -7853,6 +7964,8 @@ components:
           format: int64
           description: Optional requested timeout in milliseconds for preview decision projection.
     WorkflowPreviewResult:
+      deprecated: true
+      description: Obsolete transitional Batch 001 workflow-preview result shape. Use FactoryPreviewResult on POST /factories/preview for JavaScript-orchestrated Factory preview semantics.
       type: object
       additionalProperties: false
       required:

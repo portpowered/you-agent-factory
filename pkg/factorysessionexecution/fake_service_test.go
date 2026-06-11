@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	jssource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 func contractFixturesPath(t *testing.T) string {
@@ -28,7 +28,7 @@ func startAsyncByRequestID(t *testing.T, service *FakeService, requestID string)
 	t.Helper()
 	result, err := service.StartAsync(context.Background(), StartRequest{
 		RequestID: requestID,
-		Source:    Source{Kind: workflowsource.KindFactoryID, FactoryID: "customer-support-triage"},
+		Source:    Source{Kind: jssource.KindFactoryID, FactoryID: "customer-support-triage"},
 	})
 	if err != nil {
 		t.Fatalf("StartAsync(%q): %v", requestID, err)
@@ -56,7 +56,7 @@ func TestFakeService_StartAsync_ProjectsFixtureScenarios(t *testing.T) {
 		t.Run(tc.requestID, func(t *testing.T) {
 			started, err := service.StartAsync(context.Background(), StartRequest{
 				RequestID: tc.requestID,
-				Source:    Source{Kind: workflowsource.KindFactoryID, FactoryID: "customer-support-triage"},
+				Source:    Source{Kind: jssource.KindFactoryID, FactoryID: "customer-support-triage"},
 			})
 			if err != nil {
 				t.Fatalf("StartAsync: %v", err)
@@ -87,7 +87,7 @@ func TestFakeService_StartAsync_IdempotentReplay(t *testing.T) {
 	req := StartRequest{
 		RequestID: "req-idempotent-replay-001",
 		Source: Source{
-			Kind:         workflowsource.KindWorkflowFile,
+			Kind:         jssource.KindWorkflowFile,
 			WorkflowFile: ".claude/workflows/idempotent.yaml",
 		},
 		Args: map[string]any{"task": "replay"},
@@ -119,7 +119,7 @@ func TestFakeService_StartSync_TerminalAndTimeoutFixtures(t *testing.T) {
 
 	terminal, err := service.StartSync(context.Background(), StartRequest{
 		RequestID: "req-petri-success-001",
-		Source:    Source{Kind: workflowsource.KindFactoryID, FactoryID: "customer-support-triage"},
+		Source:    Source{Kind: jssource.KindFactoryID, FactoryID: "customer-support-triage"},
 	})
 	if err != nil {
 		t.Fatalf("StartSync terminal: %v", err)
@@ -133,7 +133,7 @@ func TestFakeService_StartSync_TerminalAndTimeoutFixtures(t *testing.T) {
 
 	timedOut, err := service.StartSync(context.Background(), StartRequest{
 		RequestID: "req-js-timeout-001",
-		Source:    Source{Kind: workflowsource.KindWorkflowName, WorkflowName: "long-running-audit"},
+		Source:    Source{Kind: jssource.KindWorkflowName, WorkflowName: "long-running-audit"},
 		Wait:      &WaitOptions{TimeoutMillis: int64Ptr(30000)},
 	})
 	if err != nil {
@@ -300,7 +300,7 @@ func TestFakeService_StartAsync_ConcurrentIdempotentStarts(t *testing.T) {
 			defer wg.Done()
 			results[index], errs[index] = service.StartAsync(context.Background(), StartRequest{
 				RequestID: "req-petri-run-001",
-				Source:    Source{Kind: workflowsource.KindFactoryID, FactoryID: "customer-support-triage"},
+				Source:    Source{Kind: jssource.KindFactoryID, FactoryID: "customer-support-triage"},
 			})
 		}(i)
 	}

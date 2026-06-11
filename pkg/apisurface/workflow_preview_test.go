@@ -8,8 +8,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	mcpworkflow "github.com/portpowered/infinite-you/pkg/mcp/workflow"
-	"github.com/portpowered/infinite-you/pkg/workflowpreview"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 const validWorkflowSource = `
@@ -22,13 +22,13 @@ func TestWorkflowPreviewSurfaces_MatchForValidWorkflow(t *testing.T) {
 	projectRoot := t.TempDir()
 	writeWorkflow(t, projectRoot, "review.js", validWorkflowSource)
 
-	ctx, err := workflowsource.DefaultContext(projectRoot)
+	ctx, err := source.DefaultContext(projectRoot)
 	if err != nil {
 		t.Fatalf("DefaultContext: %v", err)
 	}
-	input := workflowpreview.Request{
-		Source: workflowsource.Request{
-			Kind:  workflowsource.KindWorkflowName,
+	input := preview.Request{
+		Source: source.Request{
+			Kind:  source.KindWorkflowName,
 			Value: "review",
 		},
 		Context: ctx,
@@ -63,7 +63,7 @@ func TestWorkflowPreviewSurfaces_MatchForValidWorkflow(t *testing.T) {
 
 func writeWorkflow(t *testing.T, projectRoot, name, content string) {
 	t.Helper()
-	workflowDir := filepath.Join(projectRoot, workflowsource.ProjectClaudeWorkflowsDir)
+	workflowDir := filepath.Join(projectRoot, source.ProjectClaudeWorkflowsDir)
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}

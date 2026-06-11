@@ -7,7 +7,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	jssource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 func TestListSessionsRequestFromAPI_DefaultsToLiveScope(t *testing.T) {
@@ -78,7 +78,7 @@ func TestListSessionsResponseToAPI_ScopedPersistedAndAll(t *testing.T) {
 				Status:           factorysessionexecution.LifecycleStatusSucceeded,
 				OrchestratorKind: "PETRI",
 				ResolvedSource: factorysessionexecution.ResolvedSource{
-					Kind:       workflowsource.KindFactoryID,
+					Kind:       jssource.KindFactoryID,
 					SourceRef:  "factory/customer-support-triage",
 					SourceHash: "sha256:petri-factory-001",
 				},

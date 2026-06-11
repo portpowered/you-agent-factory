@@ -12,7 +12,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	jssource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 func TestSessionReadResponseToAPI_MapsRunningFixture(t *testing.T) {
@@ -202,14 +202,14 @@ func lifecycleControlFromFixture(control map[string]any) factorysessionexecution
 	return result
 }
 
-func resolvedSourceFromFixture(source map[string]any) factorysessionexecution.ResolvedSource {
+func resolvedSourceFromFixture(fixture map[string]any) factorysessionexecution.ResolvedSource {
 	result := factorysessionexecution.ResolvedSource{
-		Kind:       workflowsource.Kind(stringValue(source, "kind")),
-		SourceRef:  stringValue(source, "sourceRef"),
-		SourceHash: stringValue(source, "sourceHash"),
-		Dialect:    stringValue(source, "dialect"),
+		Kind:       jssource.Kind(stringValue(fixture, "kind")),
+		SourceRef:  stringValue(fixture, "sourceRef"),
+		SourceHash: stringValue(fixture, "sourceHash"),
+		Dialect:    stringValue(fixture, "dialect"),
 	}
-	if order, ok := source["resolutionOrder"].([]any); ok {
+	if order, ok := fixture["resolutionOrder"].([]any); ok {
 		for _, item := range order {
 			if value, ok := item.(string); ok {
 				result.ResolutionOrder = append(result.ResolutionOrder, value)

@@ -10,7 +10,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workflowresult"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 )
 
 // JavaScriptCheckpointStore keeps orchestrator-owned checkpoint bundles for one
@@ -203,14 +203,14 @@ func ProjectSessionResult(
 	store *JavaScriptCheckpointStore,
 ) factoryapi.FactorySessionLiveResult {
 	runtime := ProjectRuntime(ctx)
-	input := workflowresult.SessionResultInput{
+	input := result.SessionResultInput{
 		SessionID: sessionID,
 		Status:    runtime.Status,
 	}
 	if ctx.JavaScript != nil {
 		input.Artifacts = append(input.Artifacts, ctx.JavaScript.Artifacts...)
 		if primaryJSON := primaryResultJSON(ctx.JavaScript.PrimaryResult); len(primaryJSON) > 0 {
-			input.PrimaryValue = workflowresult.TypedValue{JSON: primaryJSON}
+			input.PrimaryValue = result.TypedValue{JSON: primaryJSON}
 		}
 	}
 	if checkpointRefs := ProjectCheckpointRefs(store.List()); len(checkpointRefs) > 0 {

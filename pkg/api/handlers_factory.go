@@ -43,7 +43,34 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, result.FactoryValidationResult())
 }
 
-// PreviewWorkflow handles POST /workflow-previews using the shared workflow preview contract.
+// PreviewFactory handles POST /factories/preview using JavaScript-orchestrated Factory preview semantics.
+func (s *Server) PreviewFactory(w http.ResponseWriter, r *http.Request) {
+	req, err := decodeStrictJSON[factoryapi.FactoryPreviewRequest](r.Body)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+
+	previewInput, err := apisurface.FactoryPreviewRequestFromAPI(req)
+	if err != nil {
+		var validationErr *apisurface.RequestValidationError
+		if errors.As(err, &validationErr) {
+			s.writeError(w, http.StatusBadRequest, validationErr.Error(), "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+
+	result := apisurface.FactoryPreviewResultFromPreview(apisurface.BuildFactoryPreview(previewInput))
+	s.writeJSON(w, http.StatusOK, result)
+}
+
+// PreviewWorkflow handles obsolete POST /workflow-previews compatibility requests.
 func (s *Server) PreviewWorkflow(w http.ResponseWriter, r *http.Request) {
 	req, err := decodeStrictJSON[factoryapi.WorkflowPreviewRequest](r.Body)
 	if err != nil {

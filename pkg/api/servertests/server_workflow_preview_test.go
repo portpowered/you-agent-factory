@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 const validWorkflowPreviewSource = `
@@ -24,7 +24,7 @@ func TestPreviewWorkflow_ReturnsSharedPreviewContract(t *testing.T) {
 	writeWorkflowPreviewFixture(t, projectRoot, "review.js", validWorkflowPreviewSource)
 
 	body, err := json.Marshal(factoryapi.WorkflowPreviewRequest{
-		SourceKind:  factoryapi.WORKFLOWNAME,
+		SourceKind:  factoryapi.WorkflowPreviewRequestSourceKindWORKFLOWNAME,
 		ProjectRoot: stringPtr(projectRoot),
 		SourceValue: stringPtr("review"),
 	})
@@ -61,7 +61,7 @@ func TestPreviewWorkflow_RejectsForbiddenHostAccess(t *testing.T) {
 	writeWorkflowPreviewFixture(t, projectRoot, "unsafe.js", "require('fs');")
 
 	body, err := json.Marshal(factoryapi.WorkflowPreviewRequest{
-		SourceKind:  factoryapi.WORKFLOWNAME,
+		SourceKind:  factoryapi.WorkflowPreviewRequestSourceKindWORKFLOWNAME,
 		ProjectRoot: stringPtr(projectRoot),
 		SourceValue: stringPtr("unsafe"),
 	})
@@ -89,7 +89,7 @@ func TestPreviewWorkflow_RejectsForbiddenHostAccess(t *testing.T) {
 
 func writeWorkflowPreviewFixture(t *testing.T, projectRoot, name, content string) {
 	t.Helper()
-	workflowDir := filepath.Join(projectRoot, workflowsource.ProjectClaudeWorkflowsDir)
+	workflowDir := filepath.Join(projectRoot, source.ProjectClaudeWorkflowsDir)
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}

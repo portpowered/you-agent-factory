@@ -5,14 +5,14 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/workflowsource"
+	jssource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 func baseRequest() factorysessionexecution.StartRequest {
 	return factorysessionexecution.StartRequest{
 		RequestID: "req-idempotent",
 		Source: factorysessionexecution.Source{
-			Kind:         workflowsource.KindWorkflowFile,
+			Kind:         jssource.KindWorkflowFile,
 			WorkflowFile: ".claude/workflows/idempotent.yaml",
 		},
 		Args: map[string]any{"task": "replay"},
@@ -97,7 +97,7 @@ func TestNormalizeStartRequest_AcceptsFactoryIDSource(t *testing.T) {
 	normalized, err := factorysessionexecution.NormalizeStartRequest(factorysessionexecution.StartRequest{
 		RequestID: "req-001",
 		Source: factorysessionexecution.Source{
-			Kind:      workflowsource.KindFactoryID,
+			Kind:      jssource.KindFactoryID,
 			FactoryID: "customer-support-triage",
 		},
 		Args: map[string]any{"ticketId": "TKT-1001"},
@@ -116,7 +116,7 @@ func TestNormalizeStartRequest_AcceptsFactoryIDSource(t *testing.T) {
 func TestNormalizeStartRequest_RejectsMissingRequestID(t *testing.T) {
 	_, err := factorysessionexecution.NormalizeStartRequest(factorysessionexecution.StartRequest{
 		Source: factorysessionexecution.Source{
-			Kind:      workflowsource.KindFactoryID,
+			Kind:      jssource.KindFactoryID,
 			FactoryID: "factory",
 		},
 	})
@@ -133,7 +133,7 @@ func TestNormalizeStartRequest_RejectsMismatchedSourcePayload(t *testing.T) {
 	_, err := factorysessionexecution.NormalizeStartRequest(factorysessionexecution.StartRequest{
 		RequestID: "req-002",
 		Source: factorysessionexecution.Source{
-			Kind: workflowsource.KindWorkflowFile,
+			Kind: jssource.KindWorkflowFile,
 		},
 	})
 	if err == nil {
@@ -149,7 +149,7 @@ func TestNormalizeStartRequest_AcceptsInlineWorkflowSource(t *testing.T) {
 	normalized, err := factorysessionexecution.NormalizeStartRequest(factorysessionexecution.StartRequest{
 		RequestID: "req-inline",
 		Source: factorysessionexecution.Source{
-			Kind: workflowsource.KindInlineWorkflow,
+			Kind: jssource.KindInlineWorkflow,
 			InlineWorkflow: &factorysessionexecution.InlineWorkflowSource{
 				InlineSource: `meta({ name: "demo" });`,
 				Dialect:      "you-workflow-v1",

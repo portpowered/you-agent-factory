@@ -11,7 +11,7 @@ import (
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workflowresult"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 )
 
 func TestReconstructFactoryWorldState_PetriFixtureReconstructsMarkingWithoutJavaScriptProjection(t *testing.T) {
@@ -59,10 +59,10 @@ func TestReconstructFactoryWorldState_SessionResultUpdatedMatchesSessionResultPr
 		Kind:       factoryapi.FactoryArtifactKindFINALRESULT,
 		Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC,
 	}
-	input := workflowresult.SessionResultInput{
+	input := result.SessionResultInput{
 		SessionID:    sessionID,
 		Status:       factoryapi.FactorySessionStatusFINISHED,
-		PrimaryValue: workflowresult.TypedValue{JSON: primaryJSON},
+		PrimaryValue: result.TypedValue{JSON: primaryJSON},
 		ResultArtifact: &resultArtifact,
 		Artifacts: []interfaces.FactorySessionArtifactState{{
 			ID:         "artifact-result-1",

@@ -1,3 +1,8 @@
+deprecated: true
+description: >-
+  Obsolete transitional Batch 001 workflow-preview request shape. Use
+  FactoryPreviewRequest on POST /factories/preview for JavaScript-orchestrated
+  Factory preview semantics.
 type: object
 additionalProperties: false
 required:
