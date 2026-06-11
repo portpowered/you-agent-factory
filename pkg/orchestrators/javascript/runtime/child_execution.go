@@ -3,6 +3,7 @@ package workflowruntime
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 )
@@ -19,6 +20,13 @@ type ChildExecutionRequest struct {
 	OutputSchema    map[string]any
 	WorkflowName    string
 	ArgsSubject     string
+	ReservedIdentity *ChildDispatchIdentity
+}
+
+// ChildDispatchIdentity reserves stable dispatch metadata before concurrent execution.
+type ChildDispatchIdentity struct {
+	DispatchID string
+	ChildIndex int
 }
 
 // ChildExecutionResult is the typed child-agent result returned to host primitives.
@@ -54,8 +62,11 @@ func NewFakeChildExecutor(sessionID string, records *recordCollector) *FakeChild
 // Execute records queued, running, and completed child dispatch transitions and
 // returns a deterministic fake child result derived from the request.
 func (e *FakeChildExecutor) Execute(req ChildExecutionRequest) (ChildExecutionResult, error) {
-	dispatchID := e.records.nextChildDispatchID()
-	childIndex := e.records.childDispatchCount
+	if strings.HasPrefix(req.Prompt, "fail:") {
+		return e.executeFailed(req)
+	}
+
+	dispatchID, childIndex := e.childDispatchIdentity(req)
 	providerSessionRef := fmt.Sprintf("fake-provider-session-%d", childIndex)
 	artifactID := e.records.nextChildArtifactID()
 	artifactRef := workflowresult.FormatArtifactURI(e.sessionID, artifactID)
@@ -94,6 +105,38 @@ func (e *FakeChildExecutor) Execute(req ChildExecutionRequest) (ChildExecutionRe
 		ProviderSessionRef: providerSessionRef,
 		Request:            req,
 	}, nil
+}
+
+func (e *FakeChildExecutor) executeFailed(req ChildExecutionRequest) (ChildExecutionResult, error) {
+	dispatchID, childIndex := e.childDispatchIdentity(req)
+	base := ChildDispatchRecord{
+		DispatchID:      dispatchID,
+		ChildIndex:      childIndex,
+		Label:           req.Label,
+		PromptDigest:    textDigest(req.Prompt),
+		Model:           req.Model,
+		ReasoningEffort: req.ReasoningEffort,
+		Command:         req.Command,
+		Sandbox:         req.Sandbox,
+		SchemaDigest:    schemaDigest(req.OutputSchema),
+		ExecutionMode:   childExecutionModeFake,
+	}
+	e.appendChildDispatch(base, ChildDispatchStatusQueued)
+	e.appendChildDispatch(base, ChildDispatchStatusRunning)
+	failed := base
+	failed.Status = ChildDispatchStatusFailed
+	e.records.append(RuntimeRecord{
+		Kind:          RecordKindChildDispatch,
+		ChildDispatch: &failed,
+	})
+	return ChildExecutionResult{}, fmt.Errorf("fake child failed: %s", strings.TrimPrefix(req.Prompt, "fail:"))
+}
+
+func (e *FakeChildExecutor) childDispatchIdentity(req ChildExecutionRequest) (string, int) {
+	if req.ReservedIdentity != nil {
+		return req.ReservedIdentity.DispatchID, req.ReservedIdentity.ChildIndex
+	}
+	return e.records.nextChildDispatchIdentity()
 }
 
 func (e *FakeChildExecutor) appendChildDispatch(base ChildDispatchRecord, status string) {
@@ -165,6 +208,18 @@ func schemaDigest(schema map[string]any) string {
 
 func textDigest(text string) string {
 	return contentDigest([]byte(text))
+}
+
+func failedChildResultValue(label string, err error) map[string]any {
+	value := map[string]any{
+		"status":      ChildDispatchStatusFailed,
+		"executionMode": childExecutionModeFake,
+		"diagnostic":  err.Error(),
+	}
+	if label != "" {
+		value["label"] = label
+	}
+	return value
 }
 
 func childResultValueMap(result ChildExecutionResult) map[string]any {

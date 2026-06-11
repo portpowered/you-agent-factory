@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sync"
 )
 
 const (
@@ -20,6 +21,7 @@ const (
 	ChildDispatchStatusQueued    = "QUEUED"
 	ChildDispatchStatusRunning   = "RUNNING"
 	ChildDispatchStatusCompleted = "COMPLETED"
+	ChildDispatchStatusFailed    = "FAILED"
 )
 
 const childExecutionModeFake = "fake"
@@ -101,10 +103,11 @@ type BudgetRecord struct {
 }
 
 type recordCollector struct {
-	sequence          int
-	records           []RuntimeRecord
-	artifactCount     int
-	checkpointCount   int
+	mu                 sync.Mutex
+	sequence           int
+	records            []RuntimeRecord
+	artifactCount      int
+	checkpointCount    int
 	childDispatchCount int
 }
 
@@ -113,13 +116,20 @@ func newRecordCollector() *recordCollector {
 }
 
 func (c *recordCollector) append(record RuntimeRecord) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.sequence++
 	record.Sequence = c.sequence
 	c.records = append(c.records, record)
 }
 
 func (c *recordCollector) list() []RuntimeRecord {
-	if c == nil || len(c.records) == 0 {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.records) == 0 {
 		return nil
 	}
 	out := make([]RuntimeRecord, len(c.records))
@@ -128,21 +138,35 @@ func (c *recordCollector) list() []RuntimeRecord {
 }
 
 func (c *recordCollector) nextArtifactID() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.artifactCount++
 	return fmt.Sprintf("artifact-%d", c.artifactCount)
 }
 
 func (c *recordCollector) nextCheckpointID() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.checkpointCount++
 	return fmt.Sprintf("checkpoint-%d", c.checkpointCount)
 }
 
 func (c *recordCollector) nextChildDispatchID() string {
+	id, _ := c.nextChildDispatchIdentity()
+	return id
+}
+
+func (c *recordCollector) nextChildDispatchIdentity() (string, int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.childDispatchCount++
-	return fmt.Sprintf("dispatch-%d", c.childDispatchCount)
+	index := c.childDispatchCount
+	return fmt.Sprintf("dispatch-%d", index), index
 }
 
 func (c *recordCollector) nextChildArtifactID() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return fmt.Sprintf("child-artifact-%d", c.childDispatchCount)
 }
 
