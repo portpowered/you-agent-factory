@@ -10,12 +10,16 @@ func (a *sourceAnalyzer) validateSupportedPrimitiveShape(call *js.CallExpr, prim
 	switch primitive {
 	case "meta":
 		a.validateMetaCall(call)
-	case "phase", "log":
+	case "phase":
 		a.validateSingleStringArgCall(call, primitive)
-	case "workflow.log":
-		a.validateSingleStringArgCall(call, "workflow.log")
+	case "log", "workflow.log":
+		a.validateLogCall(call, primitive)
 	case "workflow.artifact":
 		a.validateWorkflowArtifactCall(call)
+	case "workflow.checkpoint":
+		a.validateWorkflowCheckpointCall(call)
+	case "workflow.budget":
+		a.validateWorkflowBudgetCall(call)
 	case "workflow.final":
 		a.validateArity(call, "workflow.final", 1)
 	case "agent.run":
@@ -36,6 +40,44 @@ func (a *sourceAnalyzer) validateMetaCall(call *js.CallExpr) {
 	if value, found := objectProperty(obj, "version"); !found || !isNumberLiteral(value) {
 		a.addIssue(CodeInvalidMetadata, `meta() requires an object argument with a numeric "version" property`, call)
 	}
+}
+
+func (a *sourceAnalyzer) validateLogCall(call *js.CallExpr, primitive string) {
+	arity := callArity(call)
+	if arity < 1 || arity > 2 {
+		a.addIssue(shapeIssueCode(primitive), fmt.Sprintf("%s() requires 1 or 2 argument(s)", primitive), call)
+		return
+	}
+	arg, ok := firstCallArg(call)
+	if !ok || !isLiteralExpr(arg) {
+		return
+	}
+	if !isStringLiteral(arg) {
+		a.addIssue(CodeUnsupportedPrimitive, fmt.Sprintf("%s() requires a string message argument", primitive), call)
+		return
+	}
+	if arity == 1 {
+		return
+	}
+	second := call.Args.List[1].Value
+	if !isLiteralExpr(second) {
+		return
+	}
+	if _, ok := isObjectLiteral(second); !ok {
+		a.addIssue(shapeIssueCode(primitive), fmt.Sprintf("%s() optional fields argument must be an object literal", primitive), call)
+	}
+}
+
+func (a *sourceAnalyzer) validateWorkflowCheckpointCall(call *js.CallExpr) {
+	obj, ok := a.requireSingleObjectArg(call, "workflow.checkpoint")
+	if !ok || obj == nil {
+		return
+	}
+	a.requireObjectStringProperty(call, obj, "workflow.checkpoint", "label")
+}
+
+func (a *sourceAnalyzer) validateWorkflowBudgetCall(call *js.CallExpr) {
+	a.validateArity(call, "workflow.budget", 0)
 }
 
 func (a *sourceAnalyzer) validateWorkflowArtifactCall(call *js.CallExpr) {

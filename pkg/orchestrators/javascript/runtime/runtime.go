@@ -37,7 +37,14 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 	}
 
 	vm := goja.New()
-	globals := &runtimeGlobals{vm: vm, policy: policy}
+	records := newRecordCollector()
+	globals := &runtimeGlobals{
+		vm:         vm,
+		policy:     policy,
+		sessionID:  strings.TrimSpace(req.SessionID),
+		records:    records,
+		onArtifact: hooks.OnArtifact,
+	}
 	if err := globals.bindWorkflowAPI(); err != nil {
 		return Outcome{}, err
 	}
@@ -91,7 +98,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 			return Outcome{}, err
 		}
 	}
-	return Outcome{OK: true, Value: typed}, nil
+	return Outcome{OK: true, Value: typed, Records: records.list()}, nil
 }
 
 func argsValueForRequest(vm *goja.Runtime, raw json.RawMessage) (goja.Value, error) {

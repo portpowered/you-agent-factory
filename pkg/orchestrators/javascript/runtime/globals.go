@@ -1,6 +1,7 @@
 package workflowruntime
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/dop251/goja"
@@ -8,15 +9,19 @@ import (
 )
 
 // runtimeGlobals binds the narrow default workflow surface: structured args, meta,
-// and workflow.final. Host filesystem, process, network, and shell globals are
-// not injected; forbidden host access is rejected before execution.
+// progress/state host primitives, and workflow.final. Host filesystem, process,
+// network, and shell globals are not injected; forbidden host access is rejected
+// before execution.
 type runtimeGlobals struct {
-	vm           *goja.Runtime
-	policy       workflowpolicy.EffectivePolicy
-	finalValue   goja.Value
-	finalSet     bool
-	returned     goja.Value
-	returnedSet  bool
+	vm          *goja.Runtime
+	policy      workflowpolicy.EffectivePolicy
+	sessionID   string
+	records     *recordCollector
+	onArtifact  func(kind string, content json.RawMessage) error
+	finalValue  goja.Value
+	finalSet    bool
+	returned    goja.Value
+	returnedSet bool
 }
 
 func (g *runtimeGlobals) bindArgs(argsValue goja.Value) {
@@ -32,7 +37,13 @@ func (g *runtimeGlobals) bindWorkflowAPI() error {
 	if err := workflow.Set("final", g.workflowFinal); err != nil {
 		return fmt.Errorf("bind workflow.final: %w", err)
 	}
-	return g.vm.Set("workflow", workflow)
+	if err := g.bindExtendedWorkflowAPI(workflow); err != nil {
+		return err
+	}
+	if err := g.vm.Set("workflow", workflow); err != nil {
+		return fmt.Errorf("bind workflow: %w", err)
+	}
+	return g.bindHostPrimitives()
 }
 
 func (g *runtimeGlobals) workflowFinal(call goja.FunctionCall) goja.Value {

@@ -1,0 +1,138 @@
+package workflowruntime
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+)
+
+const (
+	RecordKindPhase      = "phase"
+	RecordKindLog        = "log"
+	RecordKindArtifact   = "artifact"
+	RecordKindCheckpoint = "checkpoint"
+	RecordKindBudget     = "budget"
+)
+
+// RuntimeRecord is one ordered host-effect record emitted during workflow execution.
+// Records are typed so they can later map into factory session events, dispatches,
+// and artifacts without changing workflow source syntax.
+type RuntimeRecord struct {
+	Sequence   int               `json:"sequence"`
+	Kind       string            `json:"kind"`
+	Phase      *PhaseRecord      `json:"phase,omitempty"`
+	Log        *LogRecord        `json:"log,omitempty"`
+	Artifact   *ArtifactRecord   `json:"artifact,omitempty"`
+	Checkpoint *CheckpointRecord `json:"checkpoint,omitempty"`
+	Budget     *BudgetRecord     `json:"budget,omitempty"`
+}
+
+// PhaseRecord captures one workflow phase transition.
+type PhaseRecord struct {
+	Name string `json:"name"`
+}
+
+// LogRecord captures one structured workflow log line.
+type LogRecord struct {
+	Message string         `json:"message"`
+	Fields  map[string]any `json:"fields,omitempty"`
+}
+
+// ArtifactRecord captures artifact metadata for one workflow.artifact call.
+type ArtifactRecord struct {
+	ID          string `json:"id"`
+	URI         string `json:"uri"`
+	Kind        string `json:"kind"`
+	Label       string `json:"label"`
+	Visibility  string `json:"visibility,omitempty"`
+	ContentHash string `json:"contentHash,omitempty"`
+	SizeBytes   int64  `json:"sizeBytes,omitempty"`
+}
+
+// CheckpointRecord captures checkpoint metadata without raw VM internals.
+type CheckpointRecord struct {
+	ID      string         `json:"id"`
+	Label   string         `json:"label"`
+	Summary string         `json:"summary"`
+	State   map[string]any `json:"state,omitempty"`
+}
+
+// BudgetRecord captures effective policy budget values observed by the runtime.
+type BudgetRecord struct {
+	MaxAgents               int    `json:"maxAgents"`
+	Concurrency             int    `json:"concurrency"`
+	SandboxMode             string `json:"sandboxMode,omitempty"`
+	MaxRunDurationMs        *int64 `json:"maxRunDurationMs,omitempty"`
+	MaxWorkerDurationMs     *int64 `json:"maxWorkerDurationMs,omitempty"`
+	MaxOutputBytesPerWorker *int64 `json:"maxOutputBytesPerWorker,omitempty"`
+	MaxArtifactBytes        *int64 `json:"maxArtifactBytes,omitempty"`
+	MaxTokens               *int64 `json:"maxTokens,omitempty"`
+}
+
+type recordCollector struct {
+	sequence       int
+	records        []RuntimeRecord
+	artifactCount  int
+	checkpointCount int
+}
+
+func newRecordCollector() *recordCollector {
+	return &recordCollector{}
+}
+
+func (c *recordCollector) append(record RuntimeRecord) {
+	c.sequence++
+	record.Sequence = c.sequence
+	c.records = append(c.records, record)
+}
+
+func (c *recordCollector) list() []RuntimeRecord {
+	if c == nil || len(c.records) == 0 {
+		return nil
+	}
+	out := make([]RuntimeRecord, len(c.records))
+	copy(out, c.records)
+	return out
+}
+
+func (c *recordCollector) nextArtifactID() string {
+	c.artifactCount++
+	return fmt.Sprintf("artifact-%d", c.artifactCount)
+}
+
+func (c *recordCollector) nextCheckpointID() string {
+	c.checkpointCount++
+	return fmt.Sprintf("checkpoint-%d", c.checkpointCount)
+}
+
+func contentDigest(payload []byte) string {
+	sum := sha256.Sum256(payload)
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
+func checkpointSummary(label string, state map[string]any) string {
+	fieldCount := 0
+	if state != nil {
+		fieldCount = len(state)
+	}
+	if label != "" {
+		return fmt.Sprintf("checkpoint %q with %d state field(s)", label, fieldCount)
+	}
+	return fmt.Sprintf("checkpoint with %d state field(s)", fieldCount)
+}
+
+func exportJSONMap(value any) (map[string]any, error) {
+	if value == nil {
+		return nil, nil
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return nil, err
+	}
+	return decoded, nil
+}

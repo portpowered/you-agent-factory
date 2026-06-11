@@ -34,4 +34,5 @@ type Outcome struct {
 	OK      bool
 	Value   workflowresult.TypedValue
 	Failure Failure
+	Records []RuntimeRecord
 }
