@@ -93,4 +93,28 @@ describe("worker-workstation taxonomy helpers", () => {
       ),
     ).toEqual(EDITABLE_WORKSTATION_TYPE_CONVERSION_OPTIONS);
   });
+
+  it("returns classifier-only conversion options for classifier workstations", () => {
+    expect(
+      resolveEditableWorkstationTypeConversionOptions(
+        WorkstationType.WorkstationTypeClassifierWorkstation,
+      ),
+    ).toEqual([WorkstationType.WorkstationTypeClassifierWorkstation]);
+  });
+
+  it("returns preferred conversion options for unsupported workstation types", () => {
+    expect(
+      resolveEditableWorkstationTypeConversionOptions(
+        WorkstationType.WorkstationTypeScriptRun,
+      ),
+    ).toEqual(EDITABLE_WORKSTATION_TYPE_CONVERSION_OPTIONS);
+  });
+
+  it("returns preferred worker options for unsupported worker types", () => {
+    expect(
+      resolveEditableWorkerTypeOptions(
+        "UNSUPPORTED_WORKER" as (typeof EDITABLE_WORKER_TYPES)[number],
+      ),
+    ).toEqual(EDITABLE_WORKER_TYPES);
+  });
 });
