@@ -33,6 +33,13 @@ func TestRuntimeService_ReadProjections_MatchAPIShapedExpectations(t *testing.T)
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
+	assertCompletedRuntimeSessionRead(t, read)
+	assertAPIShapedCompletedSessionRead(t, read)
+	assertCompletedRuntimeResultProjection(t, service, read, completed.SessionID)
+}
+
+func assertCompletedRuntimeSessionRead(t *testing.T, read factorysessionexecution.SessionReadResult) {
+	t.Helper()
 	if read.Status != factorysessionexecution.LifecycleStatusSucceeded {
 		t.Fatalf("status = %q, want SUCCEEDED", read.Status)
 	}
@@ -48,7 +55,10 @@ func TestRuntimeService_ReadProjections_MatchAPIShapedExpectations(t *testing.T)
 	if read.Links.Session == "" || read.Links.Results == "" {
 		t.Fatal("expected inspection links on session read")
 	}
+}
 
+func assertAPIShapedCompletedSessionRead(t *testing.T, read factorysessionexecution.SessionReadResult) {
+	t.Helper()
 	mappedSession := factorysession.SessionReadResponseToAPI(read)
 	if mappedSession.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("mapped status = %q, want SUCCEEDED", mappedSession.Status)
@@ -73,8 +83,16 @@ func TestRuntimeService_ReadProjections_MatchAPIShapedExpectations(t *testing.T)
 	if listSummary.Links.Session != read.Links.Session {
 		t.Fatalf("list summary link = %q, want %q", listSummary.Links.Session, read.Links.Session)
 	}
+}
 
-	result, err := service.GetResult(context.Background(), completed.SessionID, factorysessionexecution.ResultRequest{
+func assertCompletedRuntimeResultProjection(
+	t *testing.T,
+	service factorysessionexecution.Service,
+	read factorysessionexecution.SessionReadResult,
+	sessionID string,
+) {
+	t.Helper()
+	result, err := service.GetResult(context.Background(), sessionID, factorysessionexecution.ResultRequest{
 		Mode: factorysessionexecution.ResultModeFinal,
 	})
 	if err != nil {
@@ -106,7 +124,7 @@ func TestRuntimeService_ReadProjections_MatchAPIShapedExpectations(t *testing.T)
 		t.Fatalf("echo = %#v, want you:workflows", payload["echo"])
 	}
 
-	events, err := service.ReadEvents(context.Background(), completed.SessionID, factorysessionexecution.EventReconnectRequest{})
+	events, err := service.ReadEvents(context.Background(), sessionID, factorysessionexecution.EventReconnectRequest{})
 	if err != nil {
 		t.Fatalf("ReadEvents: %v", err)
 	}
@@ -114,7 +132,7 @@ func TestRuntimeService_ReadProjections_MatchAPIShapedExpectations(t *testing.T)
 		t.Fatalf("ValidateResultMatchesEventProjection: %v", err)
 	}
 
-	dispatches, err := service.ListDispatches(context.Background(), completed.SessionID)
+	dispatches, err := service.ListDispatches(context.Background(), sessionID)
 	if err != nil {
 		t.Fatalf("ListDispatches: %v", err)
 	}
