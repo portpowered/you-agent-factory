@@ -27,17 +27,28 @@ function canEditFactoryGraphVisualGroups(input: {
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: visual group editor wiring stays colocated with selection state.
 export function useFactoryGraphVisualGroupEditor(input: {
   activeTool: FactoryGraphEditorTool;
   addNodeToVisualGroup: (groupId: string, nodeId: string) => void;
   canInteractWithEditor: boolean;
   canvasNodeOptions: readonly FactoryLayoutGroupCanvasNodeOption[];
   createVisualGroup: (center: FactoryLayoutPoint) => { id: string } | null;
+  deleteVisualGroup: (groupId: string) => void;
   editorMode: boolean;
   layout: FactoryLayout;
   locale?: string | null;
+  moveVisualGroupByDelta: (
+    groupId: string,
+    delta: FactoryLayoutPoint,
+    resolvedNodePositions?: ReadonlyMap<string, FactoryLayoutPoint>,
+  ) => void;
   removeNodeFromVisualGroup: (groupId: string, nodeId: string) => void;
   renameVisualGroup: (groupId: string, label: string) => void;
+  resizeVisualGroup: (
+    groupId: string,
+    bounds: NonNullable<FactoryLayout["groups"]>[number]["bounds"],
+  ) => void;
   setVisualGroupColor: (
     groupId: string,
     color: FactoryLayoutGroupColorToken,
@@ -128,6 +139,44 @@ export function useFactoryGraphVisualGroupEditor(input: {
     setSelectedGroupId(null);
   }, []);
 
+  const handleMoveVisualGroup = useCallback(
+    (
+      groupId: string,
+      delta: FactoryLayoutPoint,
+      startMemberPositions: ReadonlyMap<string, FactoryLayoutPoint>,
+    ) => {
+      if (!canEditVisualGroups) {
+        return;
+      }
+
+      input.moveVisualGroupByDelta(groupId, delta, startMemberPositions);
+    },
+    [canEditVisualGroups, input],
+  );
+
+  const handleResizeVisualGroup = useCallback(
+    (
+      groupId: string,
+      bounds: NonNullable<FactoryLayout["groups"]>[number]["bounds"],
+    ) => {
+      if (!canEditVisualGroups) {
+        return;
+      }
+
+      input.resizeVisualGroup(groupId, bounds);
+    },
+    [canEditVisualGroups, input],
+  );
+
+  const handleDeleteSelectedGroup = useCallback(() => {
+    if (!selectedGroupId || !canEditVisualGroups) {
+      return;
+    }
+
+    input.deleteVisualGroup(selectedGroupId);
+    setSelectedGroupId(null);
+  }, [canEditVisualGroups, input, selectedGroupId]);
+
   const canvasNodeOptionIds = useMemo(
     () => new Set(input.canvasNodeOptions.map((option) => option.id)),
     [input.canvasNodeOptions],
@@ -148,9 +197,13 @@ export function useFactoryGraphVisualGroupEditor(input: {
     groups,
     groupAriaLabel: messages.visualGroupAriaLabel,
     handleCreateVisualGroup,
+    handleDeleteSelectedGroup,
+    handleMoveVisualGroup,
     handleRenameSelectedGroup,
+    handleResizeVisualGroup,
     handleSelectVisualGroup,
     handleSetSelectedGroupColor,
+    resizeHandleAriaLabel: messages.visualGroupResizeHandleLabel,
     selectedGroup,
     selectedGroupId,
     visualGroupControls:
@@ -159,6 +212,7 @@ export function useFactoryGraphVisualGroupEditor(input: {
             canvasNodeOptions: input.canvasNodeOptions,
             colorLabel: messages.visualGroupColorLabel,
             colorOptionLabel: messages.visualGroupColorOptionLabel,
+            deleteGroupLabel: messages.visualGroupDeleteLabel,
             emptyLabelError: messages.visualGroupEmptyLabelError,
             group: selectedGroup,
             isNodeMember: (nodeId: string) =>
@@ -169,6 +223,7 @@ export function useFactoryGraphVisualGroupEditor(input: {
             membershipNodeLabel: messages.visualGroupMembershipNodeLabel,
             membershipStaleNodeLabel:
               messages.visualGroupMembershipStaleNodeLabel,
+            onDeleteGroup: handleDeleteSelectedGroup,
             onRenameGroup: handleRenameSelectedGroup,
             onSetGroupColor: handleSetSelectedGroupColor,
             onToggleNodeMembership: handleToggleSelectedGroupNodeMembership,

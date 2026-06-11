@@ -4,6 +4,10 @@ import type {
   FactoryLayout,
   FactoryLayoutPoint,
 } from "./factory-graph-layout-operations";
+import {
+  factoryLayoutNodePosition,
+  moveFactoryLayoutNodesByDelta,
+} from "./factory-graph-layout-operations";
 
 export type FactoryLayoutGroupCanvasNodeOption = {
   id: string;
@@ -19,6 +23,11 @@ export type FactoryLayoutGroup = NonNullable<
 export const FACTORY_LAYOUT_GROUP_DEFAULT_SIZE = {
   height: 320,
   width: 480,
+} as const;
+
+export const FACTORY_LAYOUT_GROUP_MIN_SIZE = {
+  height: 80,
+  width: 120,
 } as const;
 
 export const FACTORY_LAYOUT_GROUP_COLOR_TOKENS = [
@@ -275,4 +284,84 @@ export function removeNodeFromFactoryLayoutGroup(
       nodeIds: nodeIds.filter((id) => id !== nodeId),
     };
   });
+}
+
+export function clampFactoryLayoutGroupBounds(
+  bounds: FactoryLayoutGroup["bounds"],
+): FactoryLayoutGroup["bounds"] {
+  return {
+    height: Math.max(FACTORY_LAYOUT_GROUP_MIN_SIZE.height, bounds.height),
+    width: Math.max(FACTORY_LAYOUT_GROUP_MIN_SIZE.width, bounds.width),
+    x: bounds.x,
+    y: bounds.y,
+  };
+}
+
+export function factoryLayoutGroupMemberNodeIds(
+  layout: FactoryLayout,
+  groupId: string,
+): readonly string[] {
+  return factoryLayoutGroupById(layout, groupId)?.nodeIds ?? [];
+}
+
+export function moveFactoryLayoutGroupByDelta(
+  layout: FactoryLayout,
+  groupId: string,
+  delta: FactoryLayoutPoint,
+  resolvedNodePositions: ReadonlyMap<string, FactoryLayoutPoint> = new Map(),
+): FactoryLayout {
+  const group = factoryLayoutGroupById(layout, groupId);
+  if (!group) {
+    return layout;
+  }
+
+  const nextLayout = updateFactoryLayoutGroup(layout, groupId, (currentGroup) => ({
+    ...currentGroup,
+    bounds: {
+      ...currentGroup.bounds,
+      x: currentGroup.bounds.x + delta.x,
+      y: currentGroup.bounds.y + delta.y,
+    },
+  }));
+
+  const memberNodeIds = group.nodeIds ?? [];
+  if (memberNodeIds.length === 0) {
+    return nextLayout;
+  }
+
+  return moveFactoryLayoutNodesByDelta(
+    nextLayout,
+    memberNodeIds,
+    delta,
+    resolvedNodePositions,
+  );
+}
+
+export function resizeFactoryLayoutGroup(
+  layout: FactoryLayout,
+  groupId: string,
+  bounds: FactoryLayoutGroup["bounds"],
+): FactoryLayout {
+  return updateFactoryLayoutGroup(layout, groupId, (group) => ({
+    ...group,
+    bounds: clampFactoryLayoutGroupBounds(bounds),
+  }));
+}
+
+export function factoryLayoutGroupMemberStartPositions(
+  layout: FactoryLayout,
+  groupId: string,
+  resolvedNodePositions: ReadonlyMap<string, FactoryLayoutPoint> = new Map(),
+): Map<string, FactoryLayoutPoint> {
+  const positions = new Map<string, FactoryLayoutPoint>();
+  for (const nodeId of factoryLayoutGroupMemberNodeIds(layout, groupId)) {
+    const position =
+      factoryLayoutNodePosition(layout, nodeId) ??
+      resolvedNodePositions.get(nodeId);
+    if (position) {
+      positions.set(nodeId, position);
+    }
+  }
+
+  return positions;
 }

@@ -10,14 +10,20 @@ import {
   factoryLayoutGroupCanvasNodeOptions,
   factoryLayoutGroupContainsNode,
   isApprovedFactoryLayoutGroupColor,
+  moveFactoryLayoutGroupByDelta,
+  removeFactoryLayoutGroup,
   removeNodeFromFactoryLayoutGroup,
+  resizeFactoryLayoutGroup,
   updateFactoryLayoutGroup,
 } from "./factory-graph-layout-groups";
 import {
   createDefaultFactoryLayout,
+  factoryLayoutNodePosition,
   hasFactoryLayoutChanges,
+  moveFactoryLayoutNode,
 } from "./factory-graph-layout-operations";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: group layout scenarios share fixtures.
 describe("factory graph layout groups", () => {
   it("creates stable group ids and finite default bounds", () => {
     const layout = createDefaultFactoryLayout();
@@ -91,10 +97,11 @@ describe("factory graph layout groups", () => {
       "workstation:draft",
     );
 
-    expect(factoryLayoutGroupContainsNode(
-      factoryLayoutGroupById(withMember, "group-1")!,
-      "workstation:draft",
-    )).toBe(true);
+    const group = factoryLayoutGroupById(withMember, "group-1");
+    expect(group).toBeDefined();
+    expect(factoryLayoutGroupContainsNode(group, "workstation:draft")).toBe(
+      true,
+    );
     expect(withMember.nodes).toEqual(baseLayout.nodes);
     expect(withMember.edges).toEqual(baseLayout.edges);
 
@@ -142,6 +149,107 @@ describe("factory graph layout groups", () => {
     expect(factoryLayoutGroupById(reassigned, "group-2")?.nodeIds).toEqual([
       "workstation:draft",
     ]);
+  });
+
+  it("moves group bounds and member nodes by the same delta", () => {
+    const layout = moveFactoryLayoutNode(
+      addFactoryLayoutGroup(
+        createDefaultFactoryLayout(),
+        createFactoryLayoutGroup({
+          bounds: defaultFactoryLayoutGroupBounds({ x: 0, y: 0 }),
+          id: "group-1",
+          layout: createDefaultFactoryLayout(),
+        }),
+      ),
+      "workstation:draft",
+      { x: 40, y: 60 },
+    );
+    const withMember = addNodeToFactoryLayoutGroup(
+      layout,
+      "group-1",
+      "workstation:draft",
+    );
+    const moved = moveFactoryLayoutGroupByDelta(withMember, "group-1", {
+      x: 20,
+      y: 10,
+    });
+
+    expect(factoryLayoutGroupById(moved, "group-1")?.bounds).toEqual({
+      height: 320,
+      width: 480,
+      x: -220,
+      y: -150,
+    });
+    expect(factoryLayoutNodePosition(moved, "workstation:draft")).toEqual({
+      x: 60,
+      y: 70,
+    });
+    expect(moved.edges).toEqual(withMember.edges);
+  });
+
+  it("resizes group bounds without moving member nodes", () => {
+    const layout = moveFactoryLayoutNode(
+      addFactoryLayoutGroup(
+        createDefaultFactoryLayout(),
+        createFactoryLayoutGroup({
+          bounds: defaultFactoryLayoutGroupBounds({ x: 0, y: 0 }),
+          id: "group-1",
+          layout: createDefaultFactoryLayout(),
+        }),
+      ),
+      "workstation:draft",
+      { x: 40, y: 60 },
+    );
+    const withMember = addNodeToFactoryLayoutGroup(
+      layout,
+      "group-1",
+      "workstation:draft",
+    );
+    const resized = resizeFactoryLayoutGroup(withMember, "group-1", {
+      height: 200,
+      width: 300,
+      x: 10,
+      y: 20,
+    });
+
+    expect(factoryLayoutGroupById(resized, "group-1")?.bounds).toEqual({
+      height: 200,
+      width: 300,
+      x: 10,
+      y: 20,
+    });
+    expect(factoryLayoutNodePosition(resized, "workstation:draft")).toEqual({
+      x: 40,
+      y: 60,
+    });
+  });
+
+  it("deletes only the group entry and preserves member nodes", () => {
+    const layout = moveFactoryLayoutNode(
+      addFactoryLayoutGroup(
+        createDefaultFactoryLayout(),
+        createFactoryLayoutGroup({
+          bounds: defaultFactoryLayoutGroupBounds({ x: 0, y: 0 }),
+          id: "group-1",
+          layout: createDefaultFactoryLayout(),
+        }),
+      ),
+      "workstation:draft",
+      { x: 40, y: 60 },
+    );
+    const withMember = addNodeToFactoryLayoutGroup(
+      layout,
+      "group-1",
+      "workstation:draft",
+    );
+    const withoutGroup = removeFactoryLayoutGroup(withMember, "group-1");
+
+    expect(withoutGroup.groups).toBeUndefined();
+    expect(factoryLayoutNodePosition(withoutGroup, "workstation:draft")).toEqual({
+      x: 40,
+      y: 60,
+    });
+    expect(withoutGroup.edges).toEqual(withMember.edges);
   });
 
   it("builds sorted canvas node options from topology nodes", () => {

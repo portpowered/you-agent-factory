@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: layout draft hook scenarios stay grouped for undo coverage.
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
@@ -6,7 +7,7 @@ import { baseFactoryDefinition } from "../../lib/draft/factory-graph-draft.test-
 import { factoryLayoutEdgeWaypoints } from "../../lib/layout/factory-graph-layout-edge-waypoints";
 import {
   addFactoryLayoutGroup,
-  createFactoryLayoutGroup,
+  addNodeToFactoryLayoutGroup,
   defaultFactoryLayoutGroupBounds,
   factoryLayoutGroupById,
 } from "../../lib/layout/factory-graph-layout-groups";
@@ -471,5 +472,95 @@ describe("useFactoryGraphLayoutDraftState visual group membership", () => {
     expect(
       factoryLayoutGroupById(result.current.layout, "group-1")?.nodeIds,
     ).toEqual([]);
+  });
+});
+
+describe("useFactoryGraphLayoutDraftState visual group geometry", () => {
+  it("records group move, resize, and delete with undo and redo", () => {
+    const layoutDocument = {
+      ...baseFactoryDefinition,
+      layout: addNodeToFactoryLayoutGroup(
+        moveFactoryLayoutNode(
+          addFactoryLayoutGroup(createDefaultFactoryLayout(), {
+            bounds: defaultFactoryLayoutGroupBounds({ x: 0, y: 0 }),
+            id: "group-1",
+            label: "Review",
+            nodeIds: [],
+          }),
+          "workstation:draft",
+          { x: 40, y: 60 },
+        ),
+        "group-1",
+        "workstation:draft",
+      ),
+    };
+    const { result } = renderHook(() =>
+      useFactoryGraphLayoutDraftState({
+        currentFactoryDocument: layoutDocument,
+        factoryDocumentScopeKey: "session-group-geometry",
+      }),
+    );
+
+    act(() => {
+      result.current.moveVisualGroupByDelta("group-1", { x: 10, y: 5 });
+    });
+
+    expect(factoryLayoutGroupById(result.current.layout, "group-1")?.bounds).toEqual({
+      height: 320,
+      width: 480,
+      x: -230,
+      y: -155,
+    });
+    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+      x: 50,
+      y: 65,
+    });
+
+    act(() => {
+      result.current.undoLayout();
+    });
+
+    expect(factoryLayoutGroupById(result.current.layout, "group-1")?.bounds).toEqual(
+      defaultFactoryLayoutGroupBounds({ x: 0, y: 0 }),
+    );
+
+    act(() => {
+      result.current.redoLayout();
+      result.current.resizeVisualGroup("group-1", {
+        height: 200,
+        width: 300,
+        x: 0,
+        y: 0,
+      });
+    });
+
+    expect(factoryLayoutGroupById(result.current.layout, "group-1")?.bounds).toEqual({
+      height: 200,
+      width: 300,
+      x: 0,
+      y: 0,
+    });
+    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+      x: 50,
+      y: 65,
+    });
+
+    act(() => {
+      result.current.deleteVisualGroup("group-1");
+    });
+
+    expect(result.current.layout.groups).toBeUndefined();
+    expect(factoryLayoutNodePosition(result.current.layout, "workstation:draft")).toEqual({
+      x: 50,
+      y: 65,
+    });
+
+    act(() => {
+      result.current.undoLayout();
+    });
+
+    expect(factoryLayoutGroupById(result.current.layout, "group-1")?.id).toBe(
+      "group-1",
+    );
   });
 });

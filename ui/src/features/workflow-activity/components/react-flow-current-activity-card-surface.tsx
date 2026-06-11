@@ -223,8 +223,14 @@ function CurrentActivityGraphSurfaceContent({
           visualGroupControls.clearSelectedVisualGroup();
           removalControls.deleteNode(nodeId);
         }}
+        onMoveVisualGroup={visualGroupControls.handleMoveVisualGroup}
+        onResizeVisualGroup={visualGroupControls.handleResizeVisualGroup}
         onSelectVisualGroup={visualGroupControls.handleSelectVisualGroup}
         selectedVisualGroupId={visualGroupControls.selectedGroupId}
+        visualGroupCanEdit={visualGroupControls.canEditVisualGroups}
+        visualGroupResizeHandleAriaLabel={
+          visualGroupControls.resizeHandleAriaLabel
+        }
         visualGroupControls={visualGroupControls.visualGroupControls}
         visualGroupAriaLabel={visualGroupControls.groupAriaLabel}
         visualGroups={visualGroupControls.groups}

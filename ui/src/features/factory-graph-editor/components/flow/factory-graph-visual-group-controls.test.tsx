@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { FactoryGraphVisualGroupControls } from "./factory-graph-visual-group-controls";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: control scenarios share one fixture shape.
 describe("FactoryGraphVisualGroupControls", () => {
   it("renders membership checkboxes and reports toggle changes", async () => {
     const user = userEvent.setup();
@@ -18,6 +19,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         ]}
         colorLabel="Group color"
         colorOptionLabel={(token) => `Use ${token} group color`}
+        deleteGroupLabel="Delete group"
         emptyLabelError="Enter a group label."
         group={{
           bounds: { height: 120, width: 200, x: 0, y: 0 },
@@ -33,6 +35,7 @@ describe("FactoryGraphVisualGroupControls", () => {
         membershipStaleNodeLabel={(nodeId) =>
           `Saved member ${nodeId} is no longer on the canvas.`
         }
+        onDeleteGroup={vi.fn()}
         onRenameGroup={vi.fn()}
         onSetGroupColor={vi.fn()}
         onToggleNodeMembership={onToggleNodeMembership}
@@ -69,12 +72,16 @@ describe("FactoryGraphVisualGroupControls", () => {
     );
   });
 
-  it("shows an empty membership state when no canvas nodes are available", () => {
+  it("invokes delete when the delete group action is activated", async () => {
+    const user = userEvent.setup();
+    const onDeleteGroup = vi.fn();
+
     render(
       <FactoryGraphVisualGroupControls
         canvasNodeOptions={[]}
         colorLabel="Group color"
         colorOptionLabel={(token) => `Use ${token} group color`}
+        deleteGroupLabel="Delete group"
         emptyLabelError="Enter a group label."
         group={{
           bounds: { height: 120, width: 200, x: 0, y: 0 },
@@ -90,6 +97,42 @@ describe("FactoryGraphVisualGroupControls", () => {
         membershipStaleNodeLabel={(nodeId) =>
           `Saved member ${nodeId} is no longer on the canvas.`
         }
+        onDeleteGroup={onDeleteGroup}
+        onRenameGroup={vi.fn()}
+        onSetGroupColor={vi.fn()}
+        onToggleNodeMembership={vi.fn()}
+        selectedGroupLabel="Selected visual group"
+        staleMemberNodeIds={[]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Delete group" }));
+    expect(onDeleteGroup).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows an empty membership state when no canvas nodes are available", () => {
+    render(
+      <FactoryGraphVisualGroupControls
+        canvasNodeOptions={[]}
+        colorLabel="Group color"
+        colorOptionLabel={(token) => `Use ${token} group color`}
+        deleteGroupLabel="Delete group"
+        emptyLabelError="Enter a group label."
+        group={{
+          bounds: { height: 120, width: 200, x: 0, y: 0 },
+          id: "group-1",
+          label: "Review",
+          nodeIds: [],
+        }}
+        isNodeMember={() => false}
+        labelFieldLabel="Group label"
+        membershipEmptyLabel="No canvas nodes are available to assign."
+        membershipLabel="Group members"
+        membershipNodeLabel={(label) => `Include ${label} in this group`}
+        membershipStaleNodeLabel={(nodeId) =>
+          `Saved member ${nodeId} is no longer on the canvas.`
+        }
+        onDeleteGroup={vi.fn()}
         onRenameGroup={vi.fn()}
         onSetGroupColor={vi.fn()}
         onToggleNodeMembership={vi.fn()}

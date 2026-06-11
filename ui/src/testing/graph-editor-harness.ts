@@ -32,7 +32,10 @@ import {
   createFactoryLayoutGroup,
   createFactoryLayoutGroupId,
   defaultFactoryLayoutGroupBounds,
+  moveFactoryLayoutGroupByDelta,
+  removeFactoryLayoutGroup,
   removeNodeFromFactoryLayoutGroup,
+  resizeFactoryLayoutGroup,
   updateFactoryLayoutGroup,
 } from "../features/factory-graph-editor/lib/layout/factory-graph-layout-groups";
 import {
@@ -380,6 +383,37 @@ function createMockVisualGroupLayoutActions(state: {
       state.hasChanges = true;
       state.layoutDirty = true;
     }),
+    moveVisualGroupByDelta: vi.fn(
+      (
+        groupId: string,
+        delta: { x: number; y: number },
+        resolvedNodePositions?: ReadonlyMap<string, { x: number; y: number }>,
+      ) => {
+        state.layout = moveFactoryLayoutGroupByDelta(
+          state.layout,
+          groupId,
+          delta,
+          resolvedNodePositions,
+        );
+        state.hasChanges = true;
+        state.layoutDirty = true;
+      },
+    ),
+    resizeVisualGroup: vi.fn(
+      (
+        groupId: string,
+        bounds: { height: number; width: number; x: number; y: number },
+      ) => {
+        state.layout = resizeFactoryLayoutGroup(state.layout, groupId, bounds);
+        state.hasChanges = true;
+        state.layoutDirty = true;
+      },
+    ),
+    deleteVisualGroup: vi.fn((groupId: string) => {
+      state.layout = removeFactoryLayoutGroup(state.layout, groupId);
+      state.hasChanges = true;
+      state.layoutDirty = true;
+    }),
   };
 }
 
@@ -471,6 +505,7 @@ function createMockLayoutDraftState() {
   return state as unknown as FactoryGraphLayoutDraftDerivedState;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: editable graph mock actions mirror production wiring.
 function createMockEditableFactoryGraphActions(
   options: UseEditableFactoryGraphOptions,
   draftState: MockGraphEditorDraftState,
@@ -598,6 +633,9 @@ function createMockEditableFactoryGraphActions(
     setVisualGroupColor: layoutDraftState.setVisualGroupColor,
     addNodeToVisualGroup: layoutDraftState.addNodeToVisualGroup,
     removeNodeFromVisualGroup: layoutDraftState.removeNodeFromVisualGroup,
+    moveVisualGroupByDelta: layoutDraftState.moveVisualGroupByDelta,
+    resizeVisualGroup: layoutDraftState.resizeVisualGroup,
+    deleteVisualGroup: layoutDraftState.deleteVisualGroup,
     updateNodeField: () => ({
       message: "Field editing is not exercised by this component test.",
       ok: false,

@@ -96,6 +96,9 @@ export function useCurrentActivityGraphCardViewModel(
     locale: input.locale,
     removeNodeFromVisualGroup:
       publicEditor.layoutControls.removeNodeFromVisualGroup,
+    moveVisualGroupByDelta: publicEditor.layoutControls.moveVisualGroupByDelta,
+    resizeVisualGroup: publicEditor.layoutControls.resizeVisualGroup,
+    deleteVisualGroup: publicEditor.layoutControls.deleteVisualGroup,
     renameVisualGroup: publicEditor.layoutControls.renameVisualGroup,
     resolveViewportCenter,
     setVisualGroupColor: publicEditor.layoutControls.setVisualGroupColor,

@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyFactoryLayoutCommand,
+  createDeleteFactoryLayoutGroupCommand,
   createMoveFactoryLayoutNodeCommand,
   createMoveFactoryLayoutNodesCommand,
+  createMoveFactoryLayoutVisualGroupCommand,
   createResetFactoryLayoutCommand,
   createUpdateFactoryLayoutEdgeWaypointsCommand,
   createUpdateFactoryLayoutViewportCommand,
@@ -20,6 +22,13 @@ import {
   removeFactoryLayoutEdgeWaypoint,
   setFactoryLayoutEdgeWaypoints,
 } from "../factory-graph-layout-edge-waypoints";
+import {
+  addFactoryLayoutGroup,
+  addNodeToFactoryLayoutGroup,
+  createFactoryLayoutGroup,
+  defaultFactoryLayoutGroupBounds,
+  factoryLayoutGroupById,
+} from "../factory-graph-layout-groups";
 import {
   createDefaultFactoryLayout,
   factoryLayoutNodePosition,
@@ -273,6 +282,92 @@ describe("factory graph layout commands", () => {
         to: factoryLayoutEdgeWaypoints(layout, EDGE_ID) ?? null,
       }),
     ).toBeNull();
+  });
+
+  it("creates and inverts visual group move commands with member nodes", () => {
+    const layout = moveFactoryLayoutNode(
+      addFactoryLayoutGroup(
+        createDefaultFactoryLayout(),
+        createFactoryLayoutGroup({
+          bounds: defaultFactoryLayoutGroupBounds({ x: 0, y: 0 }),
+          id: "group-1",
+          layout: createDefaultFactoryLayout(),
+        }),
+      ),
+      "workstation:draft",
+      { x: 40, y: 60 },
+    );
+    const withMember = addNodeToFactoryLayoutGroup(
+      layout,
+      "group-1",
+      "workstation:draft",
+    );
+    const command = requireCommand(
+      createMoveFactoryLayoutVisualGroupCommand({
+        delta: { x: 12, y: 8 },
+        groupId: "group-1",
+        layout: withMember,
+      }),
+    );
+
+    expect(command.type).toBe("move-visual-group");
+
+    const nextLayout = applyFactoryLayoutCommand(withMember, command);
+    const undoneLayout = applyFactoryLayoutCommand(
+      nextLayout,
+      invertFactoryLayoutCommand(command),
+    );
+
+    expect(factoryLayoutGroupById(nextLayout, "group-1")?.bounds).toEqual({
+      height: 320,
+      width: 480,
+      x: -228,
+      y: -152,
+    });
+    expect(factoryLayoutNodePosition(nextLayout, "workstation:draft")).toEqual({
+      x: 52,
+      y: 68,
+    });
+    expect(factoryLayoutGroupById(undoneLayout, "group-1")?.bounds).toEqual(
+      factoryLayoutGroupById(withMember, "group-1")?.bounds,
+    );
+    expect(factoryLayoutNodePosition(undoneLayout, "workstation:draft")).toEqual({
+      x: 40,
+      y: 60,
+    });
+  });
+
+  it("creates and inverts visual group delete commands", () => {
+    const layout = addFactoryLayoutGroup(
+      moveFactoryLayoutNode(createDefaultFactoryLayout(), "workstation:draft", {
+        x: 40,
+        y: 60,
+      }),
+      createFactoryLayoutGroup({
+        bounds: defaultFactoryLayoutGroupBounds({ x: 0, y: 0 }),
+        id: "group-1",
+        layout: createDefaultFactoryLayout(),
+      }),
+    );
+    const command = requireCommand(
+      createDeleteFactoryLayoutGroupCommand({
+        groupId: "group-1",
+        layout,
+      }),
+    );
+
+    const nextLayout = applyFactoryLayoutCommand(layout, command);
+    const undoneLayout = applyFactoryLayoutCommand(
+      nextLayout,
+      invertFactoryLayoutCommand(command),
+    );
+
+    expect(nextLayout.groups).toBeUndefined();
+    expect(factoryLayoutNodePosition(nextLayout, "workstation:draft")).toEqual({
+      x: 40,
+      y: 60,
+    });
+    expect(factoryLayoutGroupById(undoneLayout, "group-1")?.id).toBe("group-1");
   });
 
   it("flags commands that reference deleted graph ids", () => {

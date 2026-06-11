@@ -14,6 +14,7 @@ export function FactoryGraphVisualGroupControls({
   canvasNodeOptions,
   colorLabel,
   colorOptionLabel,
+  deleteGroupLabel,
   emptyLabelError,
   group,
   isNodeMember,
@@ -22,6 +23,7 @@ export function FactoryGraphVisualGroupControls({
   membershipLabel,
   membershipNodeLabel,
   membershipStaleNodeLabel,
+  onDeleteGroup,
   onRenameGroup,
   onSetGroupColor,
   onToggleNodeMembership,
@@ -31,6 +33,7 @@ export function FactoryGraphVisualGroupControls({
   canvasNodeOptions: readonly FactoryLayoutGroupCanvasNodeOption[];
   colorLabel: string;
   colorOptionLabel: (token: FactoryLayoutGroupColorToken) => string;
+  deleteGroupLabel: string;
   emptyLabelError: string;
   group: FactoryLayoutGroup;
   isNodeMember: (nodeId: string) => boolean;
@@ -39,6 +42,7 @@ export function FactoryGraphVisualGroupControls({
   membershipLabel: string;
   membershipNodeLabel: (label: string) => string;
   membershipStaleNodeLabel: (nodeId: string) => string;
+  onDeleteGroup: () => void;
   onRenameGroup: (label: string) => void;
   onSetGroupColor: (color: FactoryLayoutGroupColorToken) => void;
   onToggleNodeMembership: (nodeId: string, selected: boolean) => void;
@@ -107,6 +111,16 @@ export function FactoryGraphVisualGroupControls({
           ))}
         </div>
       </fieldset>
+      <div className="mt-3">
+        <button
+          className="w-full rounded-lg border border-af-danger-border px-3 py-2 text-sm font-medium text-on-error-container focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          data-factory-visual-group-delete=""
+          onClick={onDeleteGroup}
+          type="button"
+        >
+          {deleteGroupLabel}
+        </button>
+      </div>
       <fieldset
         className="mt-3 grid max-h-48 gap-2 overflow-y-auto border-0 p-0"
         data-factory-visual-group-membership=""

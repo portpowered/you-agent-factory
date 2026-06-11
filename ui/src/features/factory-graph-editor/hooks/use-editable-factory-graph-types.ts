@@ -94,6 +94,16 @@ export interface EditableFactoryGraphViewModel {
     ) => void;
     addNodeToVisualGroup: (groupId: string, nodeId: string) => void;
     removeNodeFromVisualGroup: (groupId: string, nodeId: string) => void;
+    moveVisualGroupByDelta: (
+      groupId: string,
+      delta: { x: number; y: number },
+      resolvedNodePositions?: ReadonlyMap<string, { x: number; y: number }>,
+    ) => void;
+    resizeVisualGroup: (
+      groupId: string,
+      bounds: { height: number; width: number; x: number; y: number },
+    ) => void;
+    deleteVisualGroup: (groupId: string) => void;
     updateNodeField: (
       update: FactoryGraphNodeFieldUpdate,
     ) => FactoryGraphOperationResult<CanonicalFactoryDefinition>;

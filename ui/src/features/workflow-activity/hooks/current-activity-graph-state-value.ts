@@ -93,6 +93,16 @@ type BuildCurrentActivityGraphStateValueArgs = {
   ) => void;
   addNodeToVisualGroup: (groupId: string, nodeId: string) => void;
   removeNodeFromVisualGroup: (groupId: string, nodeId: string) => void;
+  moveVisualGroupByDelta: (
+    groupId: string,
+    delta: { x: number; y: number },
+    resolvedNodePositions?: ReadonlyMap<string, { x: number; y: number }>,
+  ) => void;
+  resizeVisualGroup: (
+    groupId: string,
+    bounds: { height: number; width: number; x: number; y: number },
+  ) => void;
+  deleteVisualGroup: (groupId: string) => void;
   topologyNodes: readonly FactoryGraphNode[];
   editorUnavailableClassifierWorkstationName?: string;
   editorMode: boolean;
@@ -195,6 +205,9 @@ function buildCurrentActivityGraphLayoutControls(
     addNodeToVisualGroup: args.addNodeToVisualGroup,
     canvasNodeOptions: factoryLayoutGroupCanvasNodeOptions(args.topologyNodes),
     removeNodeFromVisualGroup: args.removeNodeFromVisualGroup,
+    moveVisualGroupByDelta: args.moveVisualGroupByDelta,
+    resizeVisualGroup: args.resizeVisualGroup,
+    deleteVisualGroup: args.deleteVisualGroup,
   };
 }
 

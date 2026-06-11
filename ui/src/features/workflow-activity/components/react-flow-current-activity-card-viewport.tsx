@@ -305,13 +305,17 @@ export function CurrentActivityGraphViewport({
   onCreateVisualGroup,
   onEditorNodeClick,
   onMoveEdgeWaypoint,
+  onMoveVisualGroup,
   onRemoveEdgeWaypoint,
+  onResizeVisualGroup,
   onSelectVisualGroup,
   selectedEdgeWaypoints = [],
   selectedVisualGroupId = null,
   selectedWaypointEdgeId = null,
   visualGroupAriaLabel,
+  visualGroupCanEdit = false,
   visualGroupControls = null,
+  visualGroupResizeHandleAriaLabel,
   visualGroups = [],
   waypointAriaLabel,
   waypointControls = null,
@@ -342,6 +346,15 @@ export function CurrentActivityGraphViewport({
   ) => void;
   onCreateVisualGroup?: () => void;
   onEditorNodeClick?: (nodeId: string) => void;
+  onMoveVisualGroup?: (
+    groupId: string,
+    delta: FactoryLayoutPoint,
+    startMemberPositions: ReadonlyMap<string, FactoryLayoutPoint>,
+  ) => void;
+  onResizeVisualGroup?: (
+    groupId: string,
+    bounds: FactoryLayoutGroup["bounds"],
+  ) => void;
   onSelectVisualGroup?: (groupId: string) => void;
   onMoveEdgeWaypoint?: (
     edgeId: string,
@@ -353,6 +366,10 @@ export function CurrentActivityGraphViewport({
   selectedVisualGroupId?: string | null;
   selectedWaypointEdgeId?: string | null;
   visualGroupAriaLabel?: (group: FactoryLayoutGroup) => string;
+  visualGroupCanEdit?: boolean;
+  visualGroupResizeHandleAriaLabel?: (
+    corner: "ne" | "nw" | "se" | "sw",
+  ) => string;
   visualGroupControls?: ComponentProps<
     typeof FactoryGraphVisualGroupControls
   > | null;
@@ -680,9 +697,16 @@ export function CurrentActivityGraphViewport({
               onSelectVisualGroup &&
               visualGroupAriaLabel ? (
                 <FactoryGraphVisualGroupLayer
+                  canEdit={visualGroupCanEdit}
                   groupAriaLabel={visualGroupAriaLabel}
                   groups={visualGroups}
+                  onMoveGroup={onMoveVisualGroup}
+                  onResizeGroup={onResizeVisualGroup}
                   onSelectGroup={onSelectVisualGroup}
+                  resizeHandleAriaLabel={
+                    visualGroupResizeHandleAriaLabel ??
+                    ((corner) => `Resize group from ${corner} corner`)
+                  }
                   selectedGroupId={selectedVisualGroupId}
                 />
               ) : null}

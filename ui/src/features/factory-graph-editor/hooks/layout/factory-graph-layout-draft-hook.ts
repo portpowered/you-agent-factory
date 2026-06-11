@@ -10,8 +10,10 @@ import {
 } from "../../lib/layout/factory-graph-layout-edge-waypoints";
 import {
   createCreateFactoryLayoutGroupCommand,
+  createDeleteFactoryLayoutGroupCommand,
   createMoveFactoryLayoutNodeCommand,
   createMoveFactoryLayoutNodesCommand,
+  createMoveFactoryLayoutVisualGroupCommand,
   createResetFactoryLayoutCommand,
   createUpdateFactoryLayoutEdgeWaypointsCommand,
   createUpdateFactoryLayoutGroupCommand,
@@ -26,7 +28,10 @@ import {
   defaultFactoryLayoutGroupBounds,
   type FactoryLayoutGroup,
   type FactoryLayoutGroupColorToken,
+  moveFactoryLayoutGroupByDelta,
+  removeFactoryLayoutGroup,
   removeNodeFromFactoryLayoutGroup,
+  resizeFactoryLayoutGroup,
   updateFactoryLayoutGroup,
 } from "../../lib/layout/factory-graph-layout-groups";
 import {
@@ -90,6 +95,16 @@ export interface FactoryGraphLayoutDraftDerivedState {
   ) => void;
   addNodeToVisualGroup: (groupId: string, nodeId: string) => void;
   removeNodeFromVisualGroup: (groupId: string, nodeId: string) => void;
+  moveVisualGroupByDelta: (
+    groupId: string,
+    delta: FactoryLayoutPoint,
+    resolvedNodePositions?: ReadonlyMap<string, FactoryLayoutPoint>,
+  ) => void;
+  resizeVisualGroup: (
+    groupId: string,
+    bounds: FactoryLayoutGroup["bounds"],
+  ) => void;
+  deleteVisualGroup: (groupId: string) => void;
 }
 
 interface FactoryGraphLayoutSessionState {
@@ -557,6 +572,70 @@ export function useFactoryGraphLayoutDraftState(
     },
     [commitLayoutUpdate],
   );
+  const moveVisualGroupByDelta = useCallback(
+    (
+      groupId: string,
+      delta: FactoryLayoutPoint,
+      resolvedNodePositions: ReadonlyMap<string, FactoryLayoutPoint> = new Map(),
+    ) => {
+      commitLayoutUpdate(({ currentLayout }) => {
+        const nextLayout = moveFactoryLayoutGroupByDelta(
+          currentLayout,
+          groupId,
+          delta,
+          resolvedNodePositions,
+        );
+        return {
+          command: createMoveFactoryLayoutVisualGroupCommand({
+            delta,
+            groupId,
+            layout: currentLayout,
+            resolvedNodePositions,
+          }),
+          layout: nextLayout,
+        };
+      });
+    },
+    [commitLayoutUpdate],
+  );
+  const resizeVisualGroup = useCallback(
+    (groupId: string, bounds: FactoryLayoutGroup["bounds"]) => {
+      commitLayoutUpdate(({ currentLayout }) => {
+        const nextLayout = resizeFactoryLayoutGroup(
+          currentLayout,
+          groupId,
+          bounds,
+        );
+        const updatedGroup = nextLayout.groups?.find(
+          (group) => group.id === groupId,
+        );
+        return {
+          command:
+            updatedGroup === undefined
+              ? null
+              : createUpdateFactoryLayoutGroupCommand({
+                  groupId,
+                  layout: currentLayout,
+                  to: updatedGroup,
+                }),
+          layout: nextLayout,
+        };
+      });
+    },
+    [commitLayoutUpdate],
+  );
+  const deleteVisualGroup = useCallback(
+    (groupId: string) => {
+      commitLayoutUpdate(({ currentLayout }) => ({
+        command: createDeleteFactoryLayoutGroupCommand({
+          groupId,
+          layout: currentLayout,
+        }),
+        layout: removeFactoryLayoutGroup(currentLayout, groupId),
+      }));
+    },
+    [commitLayoutUpdate],
+  );
 
   const layoutDirty = hasFactoryLayoutChanges(baseLayout, layout);
 
@@ -584,6 +663,9 @@ export function useFactoryGraphLayoutDraftState(
     setVisualGroupColor,
     addNodeToVisualGroup,
     removeNodeFromVisualGroup,
+    moveVisualGroupByDelta,
+    resizeVisualGroup,
+    deleteVisualGroup,
   };
 }
 
