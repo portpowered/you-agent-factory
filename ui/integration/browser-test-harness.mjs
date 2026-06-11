@@ -23,6 +23,89 @@ export const replayDelayMs = 25;
 export const uiInteractionTimeoutMs = 10_000;
 export const defaultFactorySessionID = "~default";
 
+/**
+ * Poll until a durable checkpoint becomes true (API request captured, download
+ * hook populated, dialog closed). Prefer this over asserting transient status
+ * copy, animation frames, or heading visibility during teardown.
+ */
+export async function waitForDurableCheckpoint(
+  label,
+  conditionFn,
+  timeoutMs = uiInteractionTimeoutMs,
+  intervalMs = 100,
+) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    if (await conditionFn()) {
+      return;
+    }
+    await delay(intervalMs);
+  }
+
+  throw new Error(`Timed out waiting for durable checkpoint: ${label}`);
+}
+
+/**
+ * Poll until a form action control is enabled. Use after filling required
+ * fields instead of waiting for helper/status copy such as selected-file labels.
+ */
+export async function waitForDurableControlEnabled(
+  locator,
+  timeoutMs = uiInteractionTimeoutMs,
+) {
+  await waitForDurableCheckpoint(
+    "control enabled",
+    async () => await locator.isEnabled(),
+    timeoutMs,
+  );
+}
+
+/**
+ * Wait for a Radix/dialog surface to close using dialog role state instead of
+ * heading copy that may unmount asynchronously.
+ */
+export async function waitForDialogHidden(
+  dialogLocator,
+  timeoutMs = uiInteractionTimeoutMs,
+) {
+  await dialogLocator.waitFor({
+    state: "hidden",
+    timeout: timeoutMs,
+  });
+}
+
+/**
+ * Race a captured download hook against a dialog alert. Requires
+ * `installCapturedDownloadHook(page)` before triggering export.
+ */
+export async function waitForCapturedDownloadOrDialogError(
+  page,
+  dialogLocator,
+  timeoutMs = uiInteractionTimeoutMs,
+) {
+  const outcome = await Promise.race([
+    page
+      .waitForFunction(
+        () => window.__agentFactoryCapturedDownloads.length > 0,
+        null,
+        { timeout: timeoutMs },
+      )
+      .then(() => "download"),
+    dialogLocator
+      .getByRole("alert")
+      .waitFor({
+        state: "visible",
+        timeout: timeoutMs,
+      })
+      .then(() => "error"),
+  ]);
+
+  if (outcome === "error") {
+    throw new Error(await dialogLocator.getByRole("alert").innerText());
+  }
+}
+
 const workstationPromptEditorTimeoutMs = 60_000;
 
 /** Playwright locator for Monaco's hidden input textarea (aria-label varies by a11y mode). */
