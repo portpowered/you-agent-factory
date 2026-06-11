@@ -245,6 +245,64 @@ func HydratePublishedFixtureProjectionHashes(identities map[string]FixtureScenar
 	return hydrated
 }
 
+// ProjectedResultReadHash returns a stable digest for one projected result read so
+// downstream cells can assert fixture-backed result behavior without ad hoc comparisons.
+func ProjectedResultReadHash(result ResultReadResult) (string, error) {
+	document := map[string]any{
+		"sessionId":        result.SessionID,
+		"resultStatus":     string(result.ResultStatus),
+		"sessionStatus":    string(result.SessionStatus),
+		"mode":             string(result.Mode),
+		"includeArtifacts": result.IncludeArtifacts,
+	}
+	if len(result.PrimaryResult) > 0 {
+		sum := sha256.Sum256(result.PrimaryResult)
+		document["primaryResultHash"] = "sha256:" + hex.EncodeToString(sum[:])
+	}
+	if result.Availability != nil {
+		document["availabilityReason"] = result.Availability.Reason
+	}
+	if len(result.ArtifactIDs) > 0 {
+		document["artifactIds"] = append([]string(nil), result.ArtifactIDs...)
+	}
+	if len(result.ArtifactRefs) > 0 {
+		refs := make([]string, 0, len(result.ArtifactRefs))
+		for _, ref := range result.ArtifactRefs {
+			if id := strings.TrimSpace(ref.ID); id != "" {
+				refs = append(refs, id)
+			}
+		}
+		sort.Strings(refs)
+		document["artifactRefIds"] = refs
+	}
+	encoded, err := json.Marshal(document)
+	if err != nil {
+		return "", fmt.Errorf("marshal projected result read: %w", err)
+	}
+	sum := sha256.Sum256(encoded)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+// SyncStartResultHash returns a stable digest for one sync start outcome.
+func SyncStartResultHash(result SyncStartResult) (string, error) {
+	document := map[string]any{
+		"sessionId":   result.SessionID,
+		"status":      result.Status,
+		"syncOutcome": string(result.SyncOutcome),
+		"timedOut":    result.TimedOut,
+	}
+	if len(result.Result) > 0 {
+		sum := sha256.Sum256(result.Result)
+		document["resultHash"] = "sha256:" + hex.EncodeToString(sum[:])
+	}
+	encoded, err := json.Marshal(document)
+	if err != nil {
+		return "", fmt.Errorf("marshal sync start result: %w", err)
+	}
+	sum := sha256.Sum256(encoded)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
 func eventIDsFromFixtureEvents(events []json.RawMessage) ([]string, error) {
 	if len(events) == 0 {
 		return nil, nil
