@@ -85,7 +85,7 @@ jobs:
             echo "reason=Push events stay on the full shared-risk verification path."
             echo "run_ui_coverage=true"
             echo "ui_coverage_reason=Runs because shared-risk changes stay on the full verification safety path."
-            echo "ui_coverage_command=make test-ui-coverage"
+            echo "ui_coverage_command=make run-sharded-ui-coverage"
             echo "run_ui_browser_integration=true"
             echo "ui_browser_integration_reason=Runs because shared-risk changes stay on the full verification safety path."
             echo "ui_browser_integration_command=make ui-integration-test"

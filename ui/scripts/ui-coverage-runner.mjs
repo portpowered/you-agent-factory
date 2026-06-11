@@ -151,6 +151,9 @@ export function buildMainCoveredVitestArgs(options = {}) {
 
   if (options.shard) {
     args.push(`--shard=${options.shard.index}/${options.shard.total}`);
+    args.push(
+      `--coverage.reportsDirectory=coverage/shard-${options.shard.index}`,
+    );
   }
 
   return args;

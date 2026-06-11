@@ -288,8 +288,8 @@ func TestConcurrentUIVerificationLanesScriptSmoke_RunsBothOwnedLanesConcurrently
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makePath := writeExecutableScript(t, "fake-make-concurrent-ui", `#!/bin/sh
 case "$1" in
-  test-ui-coverage)
-    printf '%s\n' "fake-make:test-ui-coverage"
+  run-sharded-ui-coverage)
+    printf '%s\n' "fake-make:run-sharded-ui-coverage"
     sleep 0.2
     ;;
   ui-integration-test)
@@ -313,7 +313,7 @@ esac
 		t.Fatalf("run concurrent UI verification script: %v\n%s", err, output)
 	}
 
-	if !strings.Contains(output, "[UI Coverage] fake-make:test-ui-coverage") {
+	if !strings.Contains(output, "[UI Coverage] fake-make:run-sharded-ui-coverage") {
 		t.Fatalf("concurrent UI verification script missing prefixed coverage output:\n%s", output)
 	}
 	if !strings.Contains(output, "[UI Browser Integration] fake-make:ui-integration-test") {
@@ -321,7 +321,7 @@ esac
 	}
 
 	assertOutputOrder(t, output,
-		"==> UI Coverage lane [make test-ui-coverage] (concurrent)",
+		"==> UI Coverage lane [make run-sharded-ui-coverage] (concurrent)",
 		"==> UI Browser Integration lane [make ui-integration-test] (concurrent)",
 	)
 
@@ -346,8 +346,8 @@ func TestConcurrentUIVerificationLanesScriptSmoke_FailureReportsExactLaneRerun(t
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makePath := writeExecutableScript(t, "fake-make-concurrent-ui-fail", `#!/bin/sh
 case "$1" in
-  test-ui-coverage)
-    printf '%s\n' "fake-make:test-ui-coverage"
+  run-sharded-ui-coverage)
+    printf '%s\n' "fake-make:run-sharded-ui-coverage"
     ;;
   ui-integration-test)
     printf '%s\n' "fake-make:ui-integration-test"
@@ -372,6 +372,93 @@ esac
 	}
 	if !strings.Contains(output, "FAIL: UI Browser Integration lane [make ui-integration-test] failed. Rerun with: make ui-integration-test") {
 		t.Fatalf("concurrent UI verification script missing exact browser lane rerun hint:\n%s", output)
+	}
+}
+
+func TestShardedUICoverageScriptSmoke_RunsAllShardsThenMerge(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makePath := writeExecutableScript(t, "fake-make-sharded-ui", `#!/bin/sh
+case "$1" in
+  ui-test-coverage)
+    printf '%s\n' "fake-make:ui-test-coverage UI_COVERAGE_SHARD=${UI_COVERAGE_SHARD:-unset}"
+    ;;
+  test-ui-coverage-merge)
+    printf '%s\n' "fake-make:test-ui-coverage-merge"
+    ;;
+  *)
+    printf '%s\n' "fake-make:unexpected:$*"
+    exit 99
+    ;;
+esac
+`)
+	artifactRoot := filepath.Join(t.TempDir(), "sharded-ui-coverage-artifacts")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "run-sharded-ui-coverage.sh"),
+		fmt.Sprintf("ARTIFACT_ROOT=%s", artifactRoot),
+		fmt.Sprintf("MAKE_BIN=%s", makePath),
+		"UI_COVERAGE_SHARD_TOTAL=2",
+	)
+	if err != nil {
+		t.Fatalf("run sharded UI coverage script: %v\n%s", err, output)
+	}
+
+	for _, expected := range []string{
+		"==> Sharded UI Coverage (2 main covered Vitest shards + merge)",
+		"[UI Coverage Shard 1/2] fake-make:ui-test-coverage UI_COVERAGE_SHARD=1/2",
+		"[UI Coverage Shard 2/2] fake-make:ui-test-coverage UI_COVERAGE_SHARD=2/2",
+		"==> UI Coverage merge lane [make test-ui-coverage-merge]",
+		"fake-make:test-ui-coverage-merge",
+	} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("sharded UI coverage script missing %q:\n%s", expected, output)
+		}
+	}
+}
+
+func TestShardedUICoverageScriptSmoke_FailureReportsExactShardRerun(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makePath := writeExecutableScript(t, "fake-make-sharded-ui-fail", `#!/bin/sh
+case "$1" in
+  ui-test-coverage)
+    case "${UI_COVERAGE_SHARD:-}" in
+      2/2)
+        printf '%s\n' "fake-make:ui-test-coverage UI_COVERAGE_SHARD=${UI_COVERAGE_SHARD}"
+        exit 19
+        ;;
+      *)
+        printf '%s\n' "fake-make:ui-test-coverage UI_COVERAGE_SHARD=${UI_COVERAGE_SHARD:-unset}"
+        ;;
+    esac
+    ;;
+  test-ui-coverage-merge)
+    printf '%s\n' "fake-make:test-ui-coverage-merge"
+    exit 99
+    ;;
+  *)
+    printf '%s\n' "fake-make:unexpected:$*"
+    exit 99
+    ;;
+esac
+`)
+	artifactRoot := filepath.Join(t.TempDir(), "sharded-ui-coverage-artifacts")
+
+	output, err := runScript(
+		repoRoot,
+		filepath.Join(repoRoot, "scripts", "ci", "run-sharded-ui-coverage.sh"),
+		fmt.Sprintf("ARTIFACT_ROOT=%s", artifactRoot),
+		fmt.Sprintf("MAKE_BIN=%s", makePath),
+		"UI_COVERAGE_SHARD_TOTAL=2",
+	)
+	if err == nil {
+		t.Fatalf("sharded UI coverage script unexpectedly succeeded:\n%s", output)
+	}
+	if !strings.Contains(output, "FAIL: UI Coverage Shard 2/2 failed. Rerun with: UI_COVERAGE_SHARD=2/2 make ui-test-coverage") {
+		t.Fatalf("sharded UI coverage script missing exact shard rerun hint:\n%s", output)
+	}
+	if strings.Contains(output, "fake-make:test-ui-coverage-merge") {
+		t.Fatalf("sharded UI coverage script should not run merge after shard failure:\n%s", output)
 	}
 }
 
