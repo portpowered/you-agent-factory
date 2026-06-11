@@ -2,6 +2,7 @@
 - Use `factorysessionexecution.PrepareStart` to normalize durable JavaScript session starts: it chains `NormalizeStartRequest`, `resolveStartSourceWithResolution`, wrapped-source validation (IIFE wrap matching `workflowruntime.Run`), args JSON checks, `workflowpolicy.Resolve`, and wait-option validation before runtime execution.
 - Runtime simple-workflow fixtures live in `pkg/orchestrators/javascript/runtime/testdata/`; factorysessionexecution tests can read them via `../orchestrators/javascript/runtime/testdata/<name>`.
 - Durable start source resolution is shared through `resolveStartSourceWithResolution`; `ResolveStartSource` is a thin wrapper returning only `ResolvedSource`.
+- `factorysessionexecution.RuntimeService` implements async/sync simple-JS starts via `PrepareStart` + background `workflowruntime.Run` (`runSession` closes per-session `runtimeDone` when execution finishes). `StartAsync` returns immediate `RUNNING`; `StartSync` waits for terminal completion or `wait.timeoutMillis`, returns `COMPLETED` with projected result JSON or `TIMED_OUT` with `SYNC_WAIT_TIMED_OUT` availability while keeping the session running unless `wait.cancelOnTimeout` is true. In-memory `GetSession`/`GetResult`/`ReadEvents` read `runtimeSessionState`; canonical events use `BuildCanonicalRuntimeSessionEvents` (`runtime-service` source). Use `busy-loop.workflow.js` for non-terminating sync-timeout tests; use `simple-final.workflow.js` for completion; use a temp-dir spin-loop workflow when proving eventual completion after sync timeout.
 
 ## 2026-06-11T12:49:03Z - dynamic-workflows-cell-session-backend-runtime-001
 - Implemented `PrepareStart`, `StartPrepareContext`, and `PreparedStart` in `pkg/factorysessionexecution/prepare_start.go` to normalize real JavaScript session starts through orchestrator-owned source resolution, validation, policy projection, args checks, and wait validation before runtime execution.
@@ -12,4 +13,26 @@
   - Pre-execution source validation must wrap executable source in an IIFE like `workflowruntime.Run`; validating raw top-level `return` fixtures fails incorrectly.
   - Policy denial surfaces as `ValidationError` with field `requestedPolicy`; source issues use field `source`.
   - `PreparedStart` carries `SourceContent` (executable), `EffectivePolicy`, `PolicyProjection`, and `TupleHash` for downstream runtime-backed `StartAsync`/`StartSync` work in story 002+.
+---
+
+## 2026-06-11T13:15:00Z - dynamic-workflows-cell-session-backend-runtime-002
+- Implemented `RuntimeService` with `StartAsync`, in-memory session projection (`GetSession`, `GetResult`, dispatch/artifact stubs, `ReadEvents`), and background `workflowruntime.Run` execution for simple JavaScript workflows.
+- Added `BuildCanonicalRuntimeSessionEvents` for runtime-backed canonical `SESSION_STARTED` / `SESSION_RESULT_UPDATED` / `SESSION_COMPLETED` facts.
+- Added focused tests for async start response shape, running-session inspection (`busy-loop`), event modeling, and `simple-final` background completion.
+- Updated `docs/internal/processes/api-relevant-files.md` with the runtime service wiring pattern.
+- **Learnings for future iterations:**
+  - `StartAsync` must build and return the async response before launching the background goroutine so callers always observe `RUNNING` even for fast fixtures like `simple-final`.
+  - Simple runtime sessions have zero dispatch/artifact stubs; progress counts stay at zero until fanout work lands in later cells.
+  - `StartSync`, lifecycle controls, and richer result projection remain for stories 003–004; `RuntimeService.StartSync` currently returns a not-implemented error.
+---
+
+## 2026-06-11T12:59:59Z - dynamic-workflows-cell-session-backend-runtime-003
+- Implemented `RuntimeService.StartSync` with sync wait budgeting, `COMPLETED` responses carrying projected `ResultReadResult` JSON, and `TIMED_OUT` responses that keep sessions `RUNNING`, set `SYNC_WAIT_TIMED_OUT` availability, and allow background execution to finish unless `wait.cancelOnTimeout` cancels the runtime context.
+- Refactored runtime execution through shared `runSession` with per-session `runtimeDone` signaling used by both async and sync paths.
+- Added focused tests for sync completion (`simple-final`), sync timeout shape (`busy-loop`), and eventual result preservation after timeout (temp-dir `slow-final` spin loop).
+- Updated `docs/internal/processes/api-relevant-files.md` with sync runtime service wiring.
+- **Learnings for future iterations:**
+  - Sync completed `Result` JSON comes from `ProjectResultRead` + `json.Marshal`; runtime `PrimaryResult` is still the raw workflow JSON object until story 004 normalization lands.
+  - `busy-loop.workflow.js` never terminates, so use it only for timeout-shape assertions; prove eventual completion after timeout with a finite spin-loop fixture in a temp project root.
+  - Request-id replay for sync timeout responses that must reproduce `TIMED_OUT` while still `RUNNING` is story 005; current replay derives from live session state via `syncStartFromStateLocked`.
 ---
