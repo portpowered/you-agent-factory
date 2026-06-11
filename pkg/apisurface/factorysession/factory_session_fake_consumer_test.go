@@ -58,7 +58,10 @@ func TestFakeServiceConsumer_ProjectsFixtureThroughApisurfaceMappers(t *testing.
 		t.Fatalf("dispatches = %#v", mappedDispatches.Dispatches)
 	}
 
-	result, err := service.GetResult(context.Background(), mappedStart.SessionId, factorysessionexecution.ResultRequest{})
+	result, err := service.GetResult(context.Background(), mappedStart.SessionId, factorysessionexecution.ResultRequest{
+		Mode:             factorysessionexecution.ResultModeFinal,
+		IncludeArtifacts: true,
+	})
 	if err != nil {
 		t.Fatalf("GetResult: %v", err)
 	}

@@ -691,8 +691,14 @@
             "text": "Awaiting operator approval."
           }
         ],
-        "artifactIds": [
-          "art-js-pause-001"
+        "artifactRefs": [
+          {
+            "id": "art-js-pause-001",
+            "kind": "FINDING",
+            "visibility": "PUBLIC",
+            "contentHash": "sha256:js-pause-art-001",
+            "sizeBytes": 512
+          }
         ]
       },
       "lifecycleControl": {

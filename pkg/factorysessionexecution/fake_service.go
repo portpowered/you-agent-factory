@@ -210,14 +210,15 @@ func (s *FakeService) GetResult(ctx context.Context, sessionID string, req Resul
 	if err != nil {
 		return ResultReadResult{}, err
 	}
-	if _, err := NormalizeResultRequest(req); err != nil {
+	normalized, err := NormalizeResultRequest(req)
+	if err != nil {
 		return ResultReadResult{}, err
 	}
 	state, err := s.sessionState(id)
 	if err != nil {
 		return ResultReadResult{}, err
 	}
-	return cloneResultRead(state.result), nil
+	return ProjectResultRead(state.result, state.session, state.artifacts, normalized)
 }
 
 func (s *FakeService) ListDispatches(ctx context.Context, sessionID string) (ListDispatchesResult, error) {

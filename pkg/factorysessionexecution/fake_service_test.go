@@ -39,19 +39,20 @@ func startAsyncByRequestID(t *testing.T, service *FakeService, requestID string)
 func TestFakeService_StartAsync_ProjectsFixtureScenarios(t *testing.T) {
 	service := newContractFakeService(t)
 	cases := []struct {
-		requestID string
-		sessionID string
-		status    LifecycleStatus
-		result    ResultStatus
+		requestID     string
+		sessionID     string
+		status        LifecycleStatus
+		result        ResultStatus
+		resultRequest ResultRequest
 	}{
-		{"req-petri-run-001", "dur-sess-petri-run-001", LifecycleStatusRunning, ResultStatusNotReady},
-		{"req-js-run-n-001", "dur-sess-js-run-n-001", LifecycleStatusRunning, ResultStatusPartial},
-		{"req-js-awaiting-001", "dur-sess-js-awaiting-001", LifecycleStatusAwaitingApproval, ResultStatusNotReady},
-		{"req-petri-success-001", "dur-sess-petri-success-001", LifecycleStatusSucceeded, ResultStatusFinal},
-		{"req-js-failed-partial-001", "dur-sess-js-failed-partial-001", LifecycleStatusFailed, ResultStatusFailedWithPartial},
-		{"req-petri-cancel-001", "dur-sess-petri-cancel-001", LifecycleStatusCanceled, ResultStatusUnavailable},
-		{"req-js-timeout-001", "dur-sess-js-timeout-001", LifecycleStatusRunning, ResultStatusNotReady},
-		{"req-js-interrupted-001", "dur-sess-js-interrupted-001", LifecycleStatusInterrupted, ResultStatusPartial},
+		{"req-petri-run-001", "dur-sess-petri-run-001", LifecycleStatusRunning, ResultStatusNotReady, ResultRequest{Mode: ResultModeFinal}},
+		{"req-js-run-n-001", "dur-sess-js-run-n-001", LifecycleStatusRunning, ResultStatusPartial, ResultRequest{Mode: ResultModePartial}},
+		{"req-js-awaiting-001", "dur-sess-js-awaiting-001", LifecycleStatusAwaitingApproval, ResultStatusNotReady, ResultRequest{Mode: ResultModeFinal}},
+		{"req-petri-success-001", "dur-sess-petri-success-001", LifecycleStatusSucceeded, ResultStatusFinal, ResultRequest{Mode: ResultModeFinal}},
+		{"req-js-failed-partial-001", "dur-sess-js-failed-partial-001", LifecycleStatusFailed, ResultStatusFailedWithPartial, ResultRequest{Mode: ResultModePartial}},
+		{"req-petri-cancel-001", "dur-sess-petri-cancel-001", LifecycleStatusCanceled, ResultStatusUnavailable, ResultRequest{Mode: ResultModeFinal}},
+		{"req-js-timeout-001", "dur-sess-js-timeout-001", LifecycleStatusRunning, ResultStatusNotReady, ResultRequest{Mode: ResultModeFinal}},
+		{"req-js-interrupted-001", "dur-sess-js-interrupted-001", LifecycleStatusInterrupted, ResultStatusPartial, ResultRequest{Mode: ResultModePartial}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.requestID, func(t *testing.T) {
@@ -72,7 +73,7 @@ func TestFakeService_StartAsync_ProjectsFixtureScenarios(t *testing.T) {
 			if read.Status != tc.status {
 				t.Fatalf("status = %q, want %q", read.Status, tc.status)
 			}
-			result, err := service.GetResult(context.Background(), tc.sessionID, ResultRequest{})
+			result, err := service.GetResult(context.Background(), tc.sessionID, tc.resultRequest)
 			if err != nil {
 				t.Fatalf("GetResult: %v", err)
 			}

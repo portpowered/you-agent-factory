@@ -195,7 +195,11 @@ func TestDurableSessionMapperRoundTrip_FakeServiceProjections(t *testing.T) {
 			}
 			assertSessionReadMapperRoundTrip(t, scenarioID, mustFixtureMap(t, factorysession.SessionReadResponseToAPI(read)))
 
-			result, err := service.GetResult(context.Background(), started.SessionID, factorysessionexecution.ResultRequest{})
+			resultFixture, ok := rawScenario["result"].(map[string]any)
+			if !ok {
+				t.Fatal("missing result fixture")
+			}
+			result, err := service.GetResult(context.Background(), started.SessionID, resultRequestFromFixture(resultFixture))
 			if err != nil {
 				t.Fatalf("GetResult: %v", err)
 			}
