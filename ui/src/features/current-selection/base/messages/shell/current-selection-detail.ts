@@ -600,7 +600,7 @@ const currentSelectionDetailMessagesByLocale = {
     localizedTimezoneContext: "此卡片中的时间会按你的本地时区显示。",
     localizedTimezoneLabel: "时区",
     runnerLabel: "Model provider",
-    runnerSelectionSourceLabel: "Runner 来源",
+    runnerSelectionSourceLabel: "Model provider 来源",
     collapseAction: "折叠",
     expandAction: "展开",
     expandAttemptAction: (attemptNumber: number) => `展开尝试 ${attemptNumber}`,
