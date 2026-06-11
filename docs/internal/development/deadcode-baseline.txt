@@ -2,7 +2,7 @@ pkg/apisurface/factorysession/factory_session_lifecycle.go: unreachable func: Ap
 pkg/apisurface/factorysession/factory_session_lifecycle.go: unreachable func: ControlRequestFromAPI
 pkg/apisurface/factorysession/factory_session_projection.go: unreachable func: WorkContentJSONFromParts
 pkg/apisurface/factorysession/helpers.go: unreachable func: deref
-pkg/factorysessionexecution/fake_service.go: unreachable func: WithPersistedSessionSeeds
 pkg/factorysessionexecution/lifecycle.go: unreachable func: AllowsPostTerminalInspection
+pkg/factorysessionexecution/runtimetests/runtime_idempotency_test.go: unreachable func: int64Ptr
 pkg/factorysessionexecution/lifecycle.go: unreachable func: NormalizeLifecycleStatus
 pkg/interfaces/factory_config.go: unreachable func: PermissivePublicFactoryOrchestratorKind
