@@ -14,9 +14,10 @@ if ! [[ "$shard_total" =~ ^[1-9][0-9]*$ ]]; then
 fi
 
 reports_dir="ui/.vitest-reports"
+timing_reports_dir="ui/.vitest-report-timings"
 mkdir -p "$artifact_root"
-rm -rf "$reports_dir"
-mkdir -p "$reports_dir"
+rm -rf "$reports_dir" "$timing_reports_dir"
+mkdir -p "$reports_dir" "$timing_reports_dir"
 
 printf '%s\n' \
   "==> Sharded UI Coverage (${shard_total} main covered Vitest shards + merge)" \

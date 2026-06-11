@@ -27,6 +27,7 @@ export const defaultMainCoveredMaxWorkers = "2";
 export const defaultShardMainCoveredMaxWorkers = "1";
 export { defaultSlowFileSummaryLimit, defaultCapturedStdoutMaxBuffer };
 export const defaultUiCoverageShardTotal = 10;
+export const defaultTimingReportsDir = ".vitest-report-timings";
 
 export function getMainCoveredMaxWorkers(env = process.env, options = {}) {
   if (env.UI_COVERAGE_MAIN_MAX_WORKERS) {
@@ -78,9 +79,9 @@ export function mainCoveredShardBlobPath(
 
 export function mainCoveredShardTimingBlobPath(
   shardIndex,
-  reportsDir = ".vitest-reports",
+  timingReportsDir = defaultTimingReportsDir,
 ) {
-  return join(reportsDir, `main-shard-${shardIndex}-timings.json`);
+  return join(timingReportsDir, `main-shard-${shardIndex}-timings.json`);
 }
 
 export function parseUiCoverageMerge(env = process.env) {
@@ -115,7 +116,6 @@ export function allowedShardReportBasenames(shardTotal) {
 
   for (let index = 1; index <= shardTotal; index += 1) {
     allowed.add(`main-shard-${index}.json`);
-    allowed.add(`main-shard-${index}-timings.json`);
   }
 
   return allowed;
@@ -284,19 +284,23 @@ export {
 export function writeShardTimingArtifact(
   shardIndex,
   fileDurations,
-  reportsDir = ".vitest-reports",
+  timingReportsDir = defaultTimingReportsDir,
 ) {
+  mkdirSync(timingReportsDir, { recursive: true });
   writeFileSync(
-    mainCoveredShardTimingBlobPath(shardIndex, reportsDir),
+    mainCoveredShardTimingBlobPath(shardIndex, timingReportsDir),
     `${JSON.stringify(fileDurations, null, 2)}\n`,
   );
 }
 
-export function readShardTimingArtifacts(shardTotal, reportsDir = ".vitest-reports") {
+export function readShardTimingArtifacts(
+  shardTotal,
+  timingReportsDir = defaultTimingReportsDir,
+) {
   const fileDurations = [];
 
   for (let index = 1; index <= shardTotal; index += 1) {
-    const timingPath = mainCoveredShardTimingBlobPath(index, reportsDir);
+    const timingPath = mainCoveredShardTimingBlobPath(index, timingReportsDir);
     if (!existsSync(timingPath)) {
       continue;
     }
@@ -314,6 +318,7 @@ export function formatPhaseElapsed(phaseName, elapsedMs) {
 export function cleanCoverageArtifacts() {
   rmSync("coverage", { force: true, recursive: true });
   rmSync(".vitest-reports", { force: true, recursive: true });
+  rmSync(defaultTimingReportsDir, { force: true, recursive: true });
   mkdirSync("coverage/.tmp", { recursive: true });
   mkdirSync(".vitest-reports", { recursive: true });
 }
@@ -356,9 +361,12 @@ export function logSlowFileSummary(capturedStdout, summaryTitle) {
   });
 }
 
-export function logMergedShardSlowFileSummary(shardTotal, reportsDir = ".vitest-reports") {
+export function logMergedShardSlowFileSummary(
+  shardTotal,
+  timingReportsDir = defaultTimingReportsDir,
+) {
   const merged = mergeFileDurations(
-    readShardTimingArtifacts(shardTotal, reportsDir),
+    readShardTimingArtifacts(shardTotal, timingReportsDir),
   );
   const slowFiles = rankSlowestTestFiles(merged);
 
@@ -385,7 +393,7 @@ export function runUiCoverageShard(shard, options = {}) {
   writeShardTimingArtifact(
     shard.index,
     fileDurations,
-    options.reportsDir ?? ".vitest-reports",
+    options.timingReportsDir ?? defaultTimingReportsDir,
   );
   logSlowFileSummary(capturedStdout);
 }
@@ -416,7 +424,10 @@ export function runUiCoverageMerge(options = {}) {
     }
   }
 
-  logMergedShardSlowFileSummary(shardTotal, reportsDir);
+  logMergedShardSlowFileSummary(
+    shardTotal,
+    options.timingReportsDir ?? defaultTimingReportsDir,
+  );
 }
 
 export function runUiCoverage(phases = uiCoveragePhases, options = {}) {

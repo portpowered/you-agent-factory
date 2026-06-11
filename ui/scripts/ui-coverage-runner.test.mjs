@@ -277,7 +277,7 @@ test("sanitizeVitestReportsDirForShardMerge removes stale monolithic and out-of-
   const reportsDir = mkdtempSync(join(tmpdir(), "ui-coverage-reports-"));
   writeFileSync(mainCoveredShardBlobPath(1, reportsDir), "{}");
   writeFileSync(
-    mainCoveredShardTimingBlobPath(1, reportsDir),
+    join(reportsDir, "main-shard-1-timings.json"),
     JSON.stringify([{ durationMs: 1000, path: "src/a.test.ts" }]),
   );
   writeFileSync(join(reportsDir, "main.json"), "{}");
@@ -290,25 +290,34 @@ test("sanitizeVitestReportsDirForShardMerge removes stale monolithic and out-of-
   const removed = sanitizeVitestReportsDirForShardMerge(2, { reportsDir });
 
   expect(removed.sort()).toEqual([
+    "main-shard-1-timings.json",
     "main-shard-3.json",
     "main.json",
     "react-flow-current-activity-card.json",
   ]);
   expect(existsSync(mainCoveredShardBlobPath(1, reportsDir))).toBe(true);
-  expect(existsSync(mainCoveredShardTimingBlobPath(1, reportsDir))).toBe(true);
+  expect(existsSync(join(reportsDir, "main-shard-1-timings.json"))).toBe(
+    false,
+  );
   expect(existsSync(join(reportsDir, "main.json"))).toBe(false);
   expect(existsSync(join(reportsDir, "main-shard-3.json"))).toBe(false);
 });
 
 test("runUiCoverageMerge ignores stale blobs before running merge phases", () => {
   const reportsDir = mkdtempSync(join(tmpdir(), "ui-coverage-reports-"));
+  const timingReportsDir = mkdtempSync(join(tmpdir(), "ui-coverage-timings-"));
   writeFileSync(mainCoveredShardBlobPath(1, reportsDir), "{}");
-  writeFileSync(
-    mainCoveredShardTimingBlobPath(1, reportsDir),
-    JSON.stringify([{ durationMs: 1000, path: "src/slow.test.ts" }]),
+  writeShardTimingArtifact(
+    1,
+    [{ durationMs: 1000, path: "src/slow.test.ts" }],
+    timingReportsDir,
   );
   writeFileSync(join(reportsDir, "main.json"), "{}");
   writeFileSync(join(reportsDir, "main-shard-99.json"), "{}");
+  writeFileSync(
+    join(reportsDir, "main-shard-1-timings.json"),
+    JSON.stringify([{ durationMs: 1, path: "src/stale.test.ts" }]),
+  );
   const spawn = vi.fn(() => ({ status: 0 }));
   const exit = vi.spyOn(process, "exit").mockImplementation(() => {});
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -316,11 +325,15 @@ test("runUiCoverageMerge ignores stale blobs before running merge phases", () =>
   runUiCoverage(uiCoveragePhases, {
     env: { UI_COVERAGE_MERGE: "1", UI_COVERAGE_SHARD_TOTAL: "1" },
     reportsDir,
+    timingReportsDir,
     spawn,
   });
 
   expect(existsSync(join(reportsDir, "main.json"))).toBe(false);
   expect(existsSync(join(reportsDir, "main-shard-99.json"))).toBe(false);
+  expect(existsSync(join(reportsDir, "main-shard-1-timings.json"))).toBe(
+    false,
+  );
   expect(spawn).toHaveBeenCalledTimes(3);
   expect(exit).not.toHaveBeenCalled();
 
@@ -337,11 +350,11 @@ test("findMissingShardBlobIndices reports absent shard blobs", () => {
 });
 
 test("logMergedShardSlowFileSummary ranks merged shard timing artifacts", () => {
-  const reportsDir = mkdtempSync(join(tmpdir(), "ui-coverage-reports-"));
+  const timingReportsDir = mkdtempSync(join(tmpdir(), "ui-coverage-timings-"));
   writeShardTimingArtifact(
     1,
     [{ durationMs: 1000, path: "src/a.test.ts" }],
-    reportsDir,
+    timingReportsDir,
   );
   writeShardTimingArtifact(
     2,
@@ -349,11 +362,11 @@ test("logMergedShardSlowFileSummary ranks merged shard timing artifacts", () => 
       { durationMs: 5000, path: "src/App.test.tsx" },
       { durationMs: 2000, path: "src/a.test.ts" },
     ],
-    reportsDir,
+    timingReportsDir,
   );
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
 
-  logMergedShardSlowFileSummary(2, reportsDir);
+  logMergedShardSlowFileSummary(2, timingReportsDir);
 
   expect(log).toHaveBeenCalledWith(
     `${phaseLogPrefix} Merged main covered pass slowest test files (top 2):`,
@@ -370,10 +383,12 @@ test("logMergedShardSlowFileSummary ranks merged shard timing artifacts", () => 
 
 test("runUiCoverage in merge mode runs follow-on phases when shard blobs exist", () => {
   const reportsDir = mkdtempSync(join(tmpdir(), "ui-coverage-reports-"));
+  const timingReportsDir = mkdtempSync(join(tmpdir(), "ui-coverage-timings-"));
   writeFileSync(mainCoveredShardBlobPath(1, reportsDir), "{}");
-  writeFileSync(
-    mainCoveredShardTimingBlobPath(1, reportsDir),
-    JSON.stringify([{ durationMs: 1000, path: "src/slow.test.ts" }]),
+  writeShardTimingArtifact(
+    1,
+    [{ durationMs: 1000, path: "src/slow.test.ts" }],
+    timingReportsDir,
   );
   const spawn = vi.fn(() => ({ status: 0 }));
   const exit = vi.spyOn(process, "exit").mockImplementation(() => {});
@@ -382,6 +397,7 @@ test("runUiCoverage in merge mode runs follow-on phases when shard blobs exist",
   runUiCoverage(uiCoveragePhases, {
     env: { UI_COVERAGE_MERGE: "1", UI_COVERAGE_SHARD_TOTAL: "1" },
     reportsDir,
+    timingReportsDir,
     spawn,
   });
 
