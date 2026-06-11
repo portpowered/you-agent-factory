@@ -10,6 +10,7 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 )
 
 // Run executes one simple JavaScript workflow source with explicit inputs and hooks.
@@ -81,6 +82,9 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 				Message: err.Error(),
 			},
 		}, nil
+	}
+	if validation := workflowresult.ValidateTypedValue(typed); validation.HasIssues() {
+		return invalidResultFailure(validation), nil
 	}
 	if hooks.OnResult != nil {
 		if err := hooks.OnResult(typed); err != nil {

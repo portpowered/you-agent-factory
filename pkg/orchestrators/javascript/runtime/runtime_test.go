@@ -207,6 +207,91 @@ func TestRun_UnresolvedFinal_ReturnsStableFailure(t *testing.T) {
 	assertFailureDoesNotProjectPrimaryResult(t, req.SessionID, outcome)
 }
 
+func TestRun_InvalidTerminalValue_ReturnsStableInvalidResultFailure(t *testing.T) {
+	cases := []struct {
+		fixture      string
+		wantCode     string
+		wantFragment string
+	}{
+		{
+			fixture:      "invalid-return-function.workflow.js",
+			wantCode:     workflowresult.CodeUnsupportedType,
+			wantFragment: "function value",
+		},
+		{
+			fixture:      "invalid-unresolved-promise.workflow.js",
+			wantCode:     workflowresult.CodeUnresolvedPromise,
+			wantFragment: "unresolved promise",
+		},
+		{
+			fixture:      "invalid-host-path-json.workflow.js",
+			wantCode:     workflowresult.CodeArtifactURIHostPath,
+			wantFragment: "/etc/passwd",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.fixture, func(t *testing.T) {
+			source := readFixture(t, tc.fixture)
+			req := workflowruntime.Request{
+				Source:    source,
+				SourceRef: tc.fixture,
+				SessionID: "session-" + strings.TrimSuffix(tc.fixture, ".workflow.js"),
+				Args:      marshalArgs(t, map[string]any{}),
+				Metadata:  map[string]string{"name": strings.TrimSuffix(tc.fixture, ".workflow.js")},
+				Policy:    workflowpolicy.DefaultEffectivePolicy(),
+			}
+
+			outcome := runInvalidResultFailure(t, req)
+			if outcome.Failure.Code != workflowruntime.CodeInvalidResult {
+				t.Fatalf("failure code = %q, want %q", outcome.Failure.Code, workflowruntime.CodeInvalidResult)
+			}
+			if !strings.Contains(outcome.Failure.Message, tc.wantCode) {
+				t.Fatalf("failure message = %q, want validation code %q", outcome.Failure.Message, tc.wantCode)
+			}
+			if !strings.Contains(outcome.Failure.Message, tc.wantFragment) {
+				t.Fatalf("failure message = %q, want fragment %q", outcome.Failure.Message, tc.wantFragment)
+			}
+			assertFailureDoesNotProjectPrimaryResult(t, req.SessionID, outcome)
+		})
+	}
+}
+
+func TestRun_InvalidTerminalValue_DoesNotInvokeHooks(t *testing.T) {
+	source := readFixture(t, "invalid-return-function.workflow.js")
+	req := workflowruntime.Request{
+		Source:    source,
+		SourceRef: "invalid-return-function.workflow.js",
+		SessionID: "session-invalid-result-hooks",
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}
+	hooksCalled := false
+	hooks := workflowruntime.Hooks{
+		OnResult: func(workflowresult.TypedValue) error {
+			hooksCalled = true
+			return nil
+		},
+		OnArtifact: func(string, json.RawMessage) error {
+			hooksCalled = true
+			return nil
+		},
+	}
+
+	outcome, err := workflowruntime.Run(context.Background(), req, hooks)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if outcome.OK {
+		t.Fatal("expected invalid-result failure")
+	}
+	if outcome.Failure.Code != workflowruntime.CodeInvalidResult {
+		t.Fatalf("failure code = %q, want %q", outcome.Failure.Code, workflowruntime.CodeInvalidResult)
+	}
+	if hooksCalled {
+		t.Fatal("result/artifact hooks were invoked for invalid terminal value")
+	}
+}
+
 func TestRun_ExecutionFailure_DoesNotInvokeHooks(t *testing.T) {
 	source := readFixture(t, "throw-error.workflow.js")
 	req := workflowruntime.Request{
@@ -518,6 +603,21 @@ func marshalArgs(t *testing.T, args map[string]any) json.RawMessage {
 		t.Fatalf("marshal args: %v", err)
 	}
 	return raw
+}
+
+func runInvalidResultFailure(t *testing.T, req workflowruntime.Request) workflowruntime.Outcome {
+	t.Helper()
+	outcome, err := workflowruntime.Run(t.Context(), req, workflowruntime.Hooks{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if outcome.OK {
+		t.Fatalf("Run() expected invalid-result failure, got success value = %#v", outcome.Value)
+	}
+	if outcome.Failure.Code == "" {
+		t.Fatalf("Run() missing failure diagnostic: %#v", outcome)
+	}
+	return outcome
 }
 
 func runExecutionFailure(t *testing.T, req workflowruntime.Request) workflowruntime.Outcome {

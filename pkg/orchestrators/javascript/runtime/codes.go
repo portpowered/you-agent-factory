@@ -8,4 +8,5 @@ const (
 	CodeDeniedCapability    = "WORKFLOW_RUNTIME_DENIED_CAPABILITY"
 	CodeUnsupportedFinal    = "WORKFLOW_RUNTIME_UNSUPPORTED_FINAL"
 	CodePreExecutionInvalid = "WORKFLOW_RUNTIME_PRE_EXECUTION_INVALID"
+	CodeInvalidResult       = "WORKFLOW_RUNTIME_INVALID_RESULT"
 )
