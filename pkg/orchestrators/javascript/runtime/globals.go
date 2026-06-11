@@ -50,6 +50,9 @@ func (g *runtimeGlobals) bindWorkflowAPI() error {
 	if err := g.bindParallelAPI(); err != nil {
 		return err
 	}
+	if err := g.bindPipelineAPI(); err != nil {
+		return err
+	}
 	return g.bindHostPrimitives()
 }
 

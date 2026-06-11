@@ -24,8 +24,10 @@ func (a *sourceAnalyzer) validateSupportedPrimitiveShape(call *js.CallExpr, prim
 		a.validateArity(call, "workflow.final", 1)
 	case "agent.run":
 		a.validateAgentRunCall(call)
-	case "parallel", "pipeline":
+	case "parallel":
 		a.validateSingleArrayArgCall(call, primitive)
+	case "pipeline":
+		a.validatePipelineCall(call)
 	}
 }
 
@@ -109,6 +111,21 @@ func (a *sourceAnalyzer) validateSingleStringArgCall(call *js.CallExpr, primitiv
 	}
 	if !isStringLiteral(arg) {
 		a.addIssue(CodeUnsupportedPrimitive, fmt.Sprintf("%s() requires a string argument", primitive), call)
+	}
+}
+
+func (a *sourceAnalyzer) validatePipelineCall(call *js.CallExpr) {
+	arity := callArity(call)
+	if arity < 2 || arity > 3 {
+		a.addIssue(shapeIssueCode("pipeline"), "pipeline() requires 2 or 3 argument(s)", call)
+		return
+	}
+	arg, ok := firstCallArg(call)
+	if !ok || !isLiteralExpr(arg) {
+		return
+	}
+	if _, ok := isArrayLiteral(arg); !ok {
+		a.addIssue(CodeUnsupportedPrimitive, "pipeline() requires an array items argument", call)
 	}
 }
 
