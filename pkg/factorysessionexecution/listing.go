@@ -508,14 +508,28 @@ type parsedCanonicalEvent struct {
 	SessionSequence *int
 }
 
+const (
+	canonicalEventSourceFakeService    = "fake-service"
+	canonicalEventSourceRuntimeService = "runtime-service"
+)
+
 // BuildCanonicalSessionEvents synthesizes canonical FactoryEvent documents for one
 // durable session read and result projection pair.
 func BuildCanonicalSessionEvents(session SessionReadResult, result ResultReadResult) []json.RawMessage {
+	return buildCanonicalSessionEvents(session, result, canonicalEventSourceFakeService)
+}
+
+// BuildCanonicalRuntimeSessionEvents synthesizes canonical FactoryEvent documents
+// for one runtime-backed durable session read and result projection pair.
+func BuildCanonicalRuntimeSessionEvents(session SessionReadResult, result ResultReadResult) []json.RawMessage {
+	return buildCanonicalSessionEvents(session, result, canonicalEventSourceRuntimeService)
+}
+
+func buildCanonicalSessionEvents(session SessionReadResult, result ResultReadResult, source string) []json.RawMessage {
 	if strings.TrimSpace(session.SessionID) == "" {
 		return nil
 	}
 	eventTime := canonicalSessionEventTime(session)
-	source := "fake-service"
 	sessionID := session.SessionID
 	orchestratorKind := string(session.OrchestratorKind)
 	var orchestratorDialect *string
