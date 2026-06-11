@@ -7,6 +7,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 )
 
+// runtimeGlobals binds the narrow default workflow surface: structured args, meta,
+// and workflow.final. Host filesystem, process, network, and shell globals are
+// not injected; forbidden host access is rejected before execution.
 type runtimeGlobals struct {
 	vm           *goja.Runtime
 	policy       workflowpolicy.EffectivePolicy

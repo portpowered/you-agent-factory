@@ -359,6 +359,83 @@ func TestRun_CancelOrTimeout_DoesNotInvokeHooks(t *testing.T) {
 	})
 }
 
+func TestRun_ForbiddenHostAccess_ReturnsDeniedCapabilityFailure(t *testing.T) {
+	cases := []struct {
+		fixture string
+		keyword string
+	}{
+		{fixture: "host-access-fs.workflow.js", keyword: "require"},
+		{fixture: "host-access-process.workflow.js", keyword: "process"},
+		{fixture: "host-access-network.workflow.js", keyword: "network"},
+		{fixture: "host-access-shell.workflow.js", keyword: "process"},
+		{fixture: "host-access-import.workflow.js", keyword: "import"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.fixture, func(t *testing.T) {
+			source := readFixture(t, tc.fixture)
+			req := workflowruntime.Request{
+				Source:    source,
+				SourceRef: tc.fixture,
+				SessionID: "session-" + strings.TrimSuffix(tc.fixture, ".workflow.js"),
+				Args:      marshalArgs(t, map[string]any{"subject": "workflows"}),
+				Metadata:  map[string]string{"name": strings.TrimSuffix(tc.fixture, ".workflow.js")},
+				Policy:    workflowpolicy.DefaultEffectivePolicy(),
+			}
+
+			outcome := runHostAccessFailure(t, req)
+			if outcome.Failure.Code != workflowruntime.CodeDeniedCapability {
+				t.Fatalf("failure code = %q, want %q", outcome.Failure.Code, workflowruntime.CodeDeniedCapability)
+			}
+			if !strings.Contains(outcome.Failure.Message, workflowvalidation.CodeForbiddenHostAccess) {
+				t.Fatalf("failure message = %q, want validation code %q", outcome.Failure.Message, workflowvalidation.CodeForbiddenHostAccess)
+			}
+			if !strings.Contains(strings.ToLower(outcome.Failure.Message), tc.keyword) {
+				t.Fatalf("failure message = %q, want host-access context %q", outcome.Failure.Message, tc.keyword)
+			}
+			if !strings.Contains(outcome.Failure.Message, tc.fixture) {
+				t.Fatalf("failure message = %q, want source ref context", outcome.Failure.Message)
+			}
+			assertFailureDoesNotProjectPrimaryResult(t, req.SessionID, outcome)
+		})
+	}
+}
+
+func TestRun_ForbiddenHostAccess_DoesNotInvokeHooks(t *testing.T) {
+	source := readFixture(t, "host-access-fs.workflow.js")
+	req := workflowruntime.Request{
+		Source:    source,
+		SourceRef: "host-access-fs.workflow.js",
+		SessionID: "session-host-access-hooks",
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}
+	hooksCalled := false
+	hooks := workflowruntime.Hooks{
+		OnResult: func(workflowresult.TypedValue) error {
+			hooksCalled = true
+			return nil
+		},
+		OnArtifact: func(string, json.RawMessage) error {
+			hooksCalled = true
+			return nil
+		},
+	}
+
+	outcome, err := workflowruntime.Run(context.Background(), req, hooks)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if outcome.OK {
+		t.Fatal("expected host-access denial")
+	}
+	if outcome.Failure.Code != workflowruntime.CodeDeniedCapability {
+		t.Fatalf("failure code = %q, want %q", outcome.Failure.Code, workflowruntime.CodeDeniedCapability)
+	}
+	if hooksCalled {
+		t.Fatal("result/artifact hooks were invoked for forbidden host access")
+	}
+}
+
 func TestRun_WorkflowFinalAndReturn_PrefersWorkflowFinal(t *testing.T) {
 	source := readFixture(t, "workflow-final-and-return.workflow.js")
 	args := marshalArgs(t, map[string]any{
@@ -467,6 +544,21 @@ func assertFailureDoesNotProjectPrimaryResult(t *testing.T, sessionID string, ou
 	if !projection.HasIssues() && len(parts) > 0 {
 		t.Fatalf("failure outcome projected primary result parts=%#v", parts)
 	}
+}
+
+func runHostAccessFailure(t *testing.T, req workflowruntime.Request) workflowruntime.Outcome {
+	t.Helper()
+	outcome, err := workflowruntime.Run(t.Context(), req, workflowruntime.Hooks{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if outcome.OK {
+		t.Fatalf("Run() expected host-access denial, got success value = %#v", outcome.Value)
+	}
+	if outcome.Failure.Code == "" {
+		t.Fatalf("Run() missing failure diagnostic: %#v", outcome)
+	}
+	return outcome
 }
 
 func runPreExecutionFailure(t *testing.T, req workflowruntime.Request) workflowruntime.Outcome {

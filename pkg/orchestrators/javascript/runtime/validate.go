@@ -28,10 +28,17 @@ func preExecutionFailure(req Request, issue workflowvalidation.Issue) Outcome {
 	return Outcome{
 		OK: false,
 		Failure: Failure{
-			Code:    CodePreExecutionInvalid,
+			Code:    preExecutionFailureCode(issue),
 			Message: formatPreExecutionMessage(req, issue),
 		},
 	}
+}
+
+func preExecutionFailureCode(issue workflowvalidation.Issue) string {
+	if issue.Code == workflowvalidation.CodeForbiddenHostAccess {
+		return CodeDeniedCapability
+	}
+	return CodePreExecutionInvalid
 }
 
 func formatPreExecutionMessage(req Request, issue workflowvalidation.Issue) string {

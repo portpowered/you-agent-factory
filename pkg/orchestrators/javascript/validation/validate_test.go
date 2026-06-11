@@ -74,6 +74,19 @@ func TestValidate_RejectsForbiddenHostAccess(t *testing.T) {
 	}
 }
 
+func TestValidate_RejectsDynamicImportHostAccess(t *testing.T) {
+	result := workflowvalidation.Validate(workflowvalidation.Request{
+		Source:    `import("fs");`,
+		SourceRef: "inline",
+	})
+	if !result.HasIssues() {
+		t.Fatal("expected forbidden host-access validation issue for dynamic import")
+	}
+	if result.Issues[0].Code != workflowvalidation.CodeForbiddenHostAccess {
+		t.Fatalf("issue code = %q, want %q", result.Issues[0].Code, workflowvalidation.CodeForbiddenHostAccess)
+	}
+}
+
 func TestWorkflowSourceTargets_ValidatesFileBackedSource(t *testing.T) {
 	dir := t.TempDir()
 	sourcePath := filepath.Join(dir, "review.js")
