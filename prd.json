@@ -1,0 +1,118 @@
+{
+  "project": "UI CI Acceleration and Test Rationalization",
+  "branchName": "prd-ui-ci-acceleration-and-test-rationalization",
+  "description": "Accelerate the UI-heavy portions of the required CI path by surfacing browser integration failures earlier, using sharded UI coverage, adding stable slow-test reporting, and reducing redundant UI test coverage without weakening defect detection.",
+  "context": {
+    "customerAsk": "Accelerate UI CI and rationalize redundant tests so browser integration regressions fail faster, covered UI runs complete sooner, and maintainers have timing evidence to keep the suite from regressing.",
+    "problem": "The current required CI path runs expensive UI verification lanes serially, so browser integration failures can be delayed until after a long covered UI pass. Existing coverage sharding is not used by the canonical PR flow, slow app-shell and React Flow-heavy tests dominate runtime, and some browser/jsdom/unit assertions overlap without adding proportional confidence.",
+    "solution": "Introduce a canonical PR verification flow that starts browser integration before covered UI completion, use the repo-owned sharded coverage and merge behavior, emit stable slow-test reports, define lane boundaries, split at least one high-cost app-shell suite into lower-cost feature tests, and preserve deterministic browser integration behavior."
+  },
+  "acceptanceCriteria": [
+    "Browser integration no longer waits for the full covered UI lane to finish before starting in the canonical PR verification flow.",
+    "Required UI-related CI wall clock time is reduced by at least 30% from the current measured baseline, or the closeout artifact explains the measured blocker and next tuning step.",
+    "Sharded UI coverage preserves merged coverage reports, threshold enforcement, replay coverage checking, and clear failure output when a shard fails.",
+    "Covered UI and browser integration lanes emit stable slow-file summaries that maintainers can compare across runs.",
+    "Lane boundaries explain what belongs in unit/jsdom coverage, covered feature integration, and browser integration, with duplicate assertion patterns removed from at least one high-cost area.",
+    "Browser integration remains deterministic: failures identify the lane and rerun command, and concurrent execution avoids port, preview server, and shared download conflicts.",
+    "Typecheck, lint, and relevant tests pass for CI orchestration, coverage sharding, reporting, and changed UI test behavior."
+  ],
+  "userStories": [
+    {
+      "id": "prd-ui-ci-acceleration-and-test-rationalization-001",
+      "title": "Fast-Fail Required UI CI Flow",
+      "description": "As an engineer merging a UI change, I want browser integration to start before or alongside covered UI verification so that browser regressions become actionable sooner.",
+      "acceptanceCriteria": [
+        "The canonical PR verification flow starts browser integration before covered UI completion, either by ordering browser first or by running browser and coverage through one orchestrated concurrent flow.",
+        "Failure output names the failed lane and includes the target or command an engineer should rerun locally.",
+        "Concurrent lanes, if used, keep lane logs attributable and avoid shared-state conflicts between browser-oriented processes.",
+        "The chosen ordering or concurrency behavior is documented in the developer-facing CI target help or adjacent CI documentation.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "prd-ui-ci-acceleration-and-test-rationalization-002",
+      "title": "Sharded Covered UI Verification",
+      "description": "As an engineer waiting on CI, I want covered UI tests to run in shards and merge coverage afterward so that wall clock time drops without weakening coverage enforcement.",
+      "acceptanceCriteria": [
+        "The canonical PR verification flow uses the repo-owned UI coverage shard and merge behavior with a documented default shard count.",
+        "The merged coverage report preserves threshold enforcement and replay coverage checking after all expected shards finish.",
+        "A missing or failed shard produces a clear failure that identifies the shard and does not silently produce partial coverage.",
+        "Shard count can be tuned through a documented environment variable or CI setting without changing test semantics.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "prd-ui-ci-acceleration-and-test-rationalization-003",
+      "title": "Stable UI Test Cost Reporting",
+      "description": "As a maintainer, I want CI to report the slowest covered UI and browser integration files with cost categories so that runtime regressions are visible and actionable.",
+      "acceptanceCriteria": [
+        "Covered UI verification emits a stable top-slowest file summary after the run or after shard merge.",
+        "Browser integration emits per-file timing or an equivalent top-slowest summary after the run.",
+        "The report categorizes slow files into app-shell integration, React Flow graph tests, replay/timeline tests, import/export tests, script-style tests, or uncategorized.",
+        "The report format is suitable for closeout notes and can be compared across CI runs without requiring source topology assertions.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "prd-ui-ci-acceleration-and-test-rationalization-004",
+      "title": "Lane Boundary and Redundancy Policy",
+      "description": "As a maintainer, I want explicit test-lane boundaries so that unit, covered jsdom, and browser tests each verify distinct behavior.",
+      "acceptanceCriteria": [
+        "The test strategy defines what observable contracts belong in unit tests, covered feature/jsdom integration tests, and browser integration tests.",
+        "Browser integration guidance prioritizes durable behavior such as saved payloads, network effects, downloads, imports, and final visible state over repeated copy-only assertions.",
+        "Export/import and graph-editing flows have a documented minimum browser contract that avoids repeating every jsdom UI assertion.",
+        "At least one existing duplicate assertion pattern is removed or moved to the cheaper lane while preserving the durable behavior check.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 4,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "prd-ui-ci-acceleration-and-test-rationalization-005",
+      "title": "Split One High-Cost App-Shell Suite",
+      "description": "As a maintainer, I want at least one oversized app-shell test suite replaced with smaller feature-focused coverage so that the same behavior is proven with less setup cost.",
+      "acceptanceCriteria": [
+        "One high-cost app-shell suite is selected from the current slow-file inventory and its unique observable behaviors are listed before changes.",
+        "Equivalent behavior is covered by smaller feature-owned tests where whole-dashboard mounting is not required.",
+        "Any remaining app-shell coverage is limited to cross-feature behavior that cannot be proven reliably at a lower layer.",
+        "Before/after timing for the selected suite or replacement tests is captured in the closeout artifact.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "prd-ui-ci-acceleration-and-test-rationalization-006",
+      "title": "Browser Integration Stability and Runtime Boundaries",
+      "description": "As an engineer debugging browser failures, I want browser integration tests to be isolated and deterministic so that failures are attributable and retries remain rare.",
+      "acceptanceCriteria": [
+        "Browser integration documentation states which suites must remain sequential because of shared preview servers, ports, downloads, or global browser state.",
+        "Any browser test concurrency introduced by this project uses isolated ports, preview state, and download locations per worker or file.",
+        "Shared browser helpers expose or document a recommended wait pattern for durable network and UI checkpoints.",
+        "At least one flaky or over-constrained browser assertion is simplified to assert durable behavior rather than transient copy, animation, or timing state.",
+        "Direct browser verification confirms changed browser-visible test flows still exercise the intended final UI state.",
+        "Tests pass",
+        "Typecheck passes"
+      ],
+      "priority": 6,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

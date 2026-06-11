@@ -1,0 +1,26 @@
+## Codebase Patterns
+- Canonical PR verification tiers live in the root `Makefile`: `verify-pr` → `verify-build-contracts` + `verify-tests`; use `run_verification_step` for owned lane labels and exact `make <target>` rerun hints on failure.
+- `scripts/ci/run-sharded-ui-coverage.sh` runs `UI_COVERAGE_SHARD=<i>/<total> make ui-test-coverage` shards in parallel (default `UI_COVERAGE_SHARD_TOTAL=10`), then `make test-ui-coverage-merge` for thresholds and replay check; stale `ui/.vitest-reports/main-shard-*.json` blobs are removed before each run.
+- `scripts/ci/run-concurrent-ui-verification-lanes.sh` orchestrates concurrent `make run-sharded-ui-coverage` and `make ui-integration-test` with `[UI Coverage]` / `[UI Browser Integration]` stdout prefixes and per-lane logs under `.artifacts/concurrent-ui-verification-lanes/`.
+- GitHub Actions already runs `ui-coverage-shard` and `ui-browser-integration` as parallel jobs; local `make verify-tests` matches that shard-and-merge plus fast-fail concurrency model.
+- Shard main passes use per-shard coverage dirs (`coverage/shard-<index>`) in `ui/scripts/ui-coverage-runner.mjs` so parallel local shards avoid shared `coverage/` races.
+- Browser integration harness (`ui/integration/browser-test-harness.mjs`) picks isolated preview/API ports via `findAvailablePort()`, so concurrent browser and covered UI lanes avoid port conflicts when run locally.
+- Verification command smoke tests live in `tests/functional/smoke/verify_fast_command_smoke_test.go` and use wrapper Makefiles to assert tier ordering without running full suites.
+
+## 2026-06-11T11:19:15Z - prd-ui-ci-acceleration-and-test-rationalization-001
+- Implemented concurrent UI verification in the canonical PR path: `make verify-tests` and `make ci-verify-tests` now invoke `make run-concurrent-ui-verification-lanes`, which starts `test-ui-coverage` and `ui-integration-test` together with prefixed stdout and per-lane artifact logs.
+- Added `scripts/ci/run-concurrent-ui-verification-lanes.sh`, updated `Makefile`, documented behavior in `docs/internal/development/development.md`, and extended `verify_fast_command_smoke_test.go` with orchestrator smoke coverage.
+- **Learnings for future iterations:**
+  - Patterns discovered: mirror CI lane orchestration with small `scripts/ci/*.sh` helpers when Make sequential steps block fast-fail goals; keep individual `make <lane>` targets as the rerun contract.
+  - Gotchas encountered: do not assert interleaved stdout ordering between concurrent lanes in tests—scheduler buffering makes it flaky; assert both lanes ran, prefixes exist, and start banners appear.
+  - Useful context: `release-surface-smoke` still runs before concurrent UI lanes and installs Playwright; backend verification remains sequential after UI lanes complete.
+---
+
+## 2026-06-11T12:05:00Z - prd-ui-ci-acceleration-and-test-rationalization-002
+- Wired canonical PR verification to sharded UI coverage: added `scripts/ci/run-sharded-ui-coverage.sh` and `make run-sharded-ui-coverage`, updated `run-concurrent-ui-verification-lanes.sh` to invoke it, isolated per-shard coverage dirs in `ui-coverage-runner.mjs`, and documented default `UI_COVERAGE_SHARD_TOTAL=10` tuning in `development.md`.
+- Updated `cmd/ciclassify`, CI push classification output, and smoke tests for shard failure attribution (`UI_COVERAGE_SHARD=<i>/<total> make ui-test-coverage`) and merge rerun (`make test-ui-coverage-merge`).
+- **Learnings for future iterations:**
+  - Patterns discovered: mirror CI shard+merge locally with a dedicated `scripts/ci/*.sh` orchestrator; keep `make test-ui-coverage` as monolithic compatibility while `make run-sharded-ui-coverage` is the PR-tier lane contract.
+  - Gotchas encountered: parallel local shards need isolated `--coverage.reportsDirectory` values; clean stale `main-shard-*.json` blobs before orchestration or merge can pass with partial prior artifacts.
+  - Useful context: merge still runs through `make test-ui-coverage-merge` which invokes `UI_COVERAGE_MERGE=1` plus `ui-replay-coverage-check`; shard logs land under `.artifacts/sharded-ui-coverage/shard-<index>.log`.
+---
