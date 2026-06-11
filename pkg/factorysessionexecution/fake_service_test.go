@@ -406,6 +406,126 @@ func TestFakeService_DerivedProjectionEvents_AreCanonicalWhenFixtureEventsMissin
 	}
 }
 
+func TestFakeService_ReadEvents_ReplayMatchesDirectProjections(t *testing.T) {
+	service := newContractFakeService(t)
+	cases := []struct {
+		requestID     string
+		sessionID     string
+		resultRequest ResultRequest
+		wantEvents    int
+	}{
+		{"req-petri-success-001", "dur-sess-petri-success-001", ResultRequest{Mode: ResultModeFinal, IncludeArtifacts: true}, 3},
+		{"req-petri-run-001", "dur-sess-petri-run-001", ResultRequest{Mode: ResultModePartial}, 2},
+		{"req-js-failed-partial-001", "dur-sess-js-failed-partial-001", ResultRequest{Mode: ResultModePartial}, 3},
+		{"req-js-interrupted-001", "dur-sess-js-interrupted-001", ResultRequest{Mode: ResultModePartial}, 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.sessionID, func(t *testing.T) {
+			startAsyncByRequestID(t, service, tc.requestID)
+
+			session, err := service.GetSession(context.Background(), tc.sessionID)
+			if err != nil {
+				t.Fatalf("GetSession: %v", err)
+			}
+			result, err := service.GetResult(context.Background(), tc.sessionID, tc.resultRequest)
+			if err != nil {
+				t.Fatalf("GetResult: %v", err)
+			}
+			dispatches, err := service.ListDispatches(context.Background(), tc.sessionID)
+			if err != nil {
+				t.Fatalf("ListDispatches: %v", err)
+			}
+			artifacts, err := service.ListArtifacts(context.Background(), tc.sessionID)
+			if err != nil {
+				t.Fatalf("ListArtifacts: %v", err)
+			}
+
+			first, err := service.ReadEvents(context.Background(), tc.sessionID, EventReconnectRequest{})
+			if err != nil {
+				t.Fatalf("ReadEvents first: %v", err)
+			}
+			second, err := service.ReadEvents(context.Background(), tc.sessionID, EventReconnectRequest{})
+			if err != nil {
+				t.Fatalf("ReadEvents second: %v", err)
+			}
+			if len(first.Events) != tc.wantEvents {
+				t.Fatalf("events = %d, want %d", len(first.Events), tc.wantEvents)
+			}
+			if len(second.Events) != len(first.Events) {
+				t.Fatalf("repeated read event count = %d, want %d", len(second.Events), len(first.Events))
+			}
+			for index := range first.Events {
+				if string(first.Events[index]) != string(second.Events[index]) {
+					t.Fatalf("event[%d] changed between reads", index)
+				}
+			}
+
+			if err := ValidateEventReplayMatchesDirectProjections(
+				session,
+				result,
+				dispatches.Dispatches,
+				artifacts.Artifacts,
+				first.Events,
+			); err != nil {
+				t.Fatalf("ValidateEventReplayMatchesDirectProjections: %v", err)
+			}
+		})
+	}
+}
+
+func TestFakeService_ReadEvents_ReconnectAfterSequenceReturnsLaterEvents(t *testing.T) {
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-js-success-002")
+
+	all, err := service.ReadEvents(context.Background(), "dur-sess-js-success-002", EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents all: %v", err)
+	}
+	if len(all.Events) != 3 {
+		t.Fatalf("events = %d, want 3", len(all.Events))
+	}
+
+	sequence := 1
+	afterSequence, err := service.ReadEvents(context.Background(), "dur-sess-js-success-002", EventReconnectRequest{
+		AfterSequence: &sequence,
+	})
+	if err != nil {
+		t.Fatalf("ReadEvents after sequence: %v", err)
+	}
+	if len(afterSequence.Events) != 1 {
+		t.Fatalf("after sequence events = %d, want 1", len(afterSequence.Events))
+	}
+	assertCanonicalEventEnvelope(t, afterSequence.Events[0], "SESSION_COMPLETED", "session-completed/dur-sess-js-success-002")
+}
+
+func TestFakeService_ReadEvents_NotFoundDoesNotMutateState(t *testing.T) {
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-js-run-n-001")
+
+	before, err := service.ReadEvents(context.Background(), "dur-sess-js-run-n-001", EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents before: %v", err)
+	}
+
+	_, err = service.ReadEvents(context.Background(), "dur-sess-missing-001", EventReconnectRequest{})
+	if !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("ReadEvents error = %v, want ErrSessionNotFound", err)
+	}
+
+	after, err := service.ReadEvents(context.Background(), "dur-sess-js-run-n-001", EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents after: %v", err)
+	}
+	if len(after.Events) != len(before.Events) {
+		t.Fatalf("event count changed after not-found read: before=%d after=%d", len(before.Events), len(after.Events))
+	}
+	for index := range before.Events {
+		if string(before.Events[index]) != string(after.Events[index]) {
+			t.Fatalf("event[%d] changed after not-found read", index)
+		}
+	}
+}
+
 func TestFakeService_ListAndDetail_ScopedSummariesAndConsistency(t *testing.T) {
 	service := newContractFakeService(t)
 	cases := []struct {

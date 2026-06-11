@@ -190,6 +190,58 @@ func TestValidateResultMatchesEventProjection(t *testing.T) {
 	}
 }
 
+func TestValidateEventReplayMatchesDirectProjections(t *testing.T) {
+	events := []json.RawMessage{
+		json.RawMessage(`{"id":"session-started/s1","type":"SESSION_STARTED","context":{"sequence":1,"sessionId":"s1","sessionSequence":0},"payload":{}}`),
+		json.RawMessage(`{"id":"session-result-updated/s1","type":"SESSION_RESULT_UPDATED","context":{"sequence":2,"sessionId":"s1","sessionSequence":1},"payload":{"resultStatus":"FINAL","artifactIds":["art-1"]}}`),
+		json.RawMessage(`{"id":"session-completed/s1","type":"SESSION_COMPLETED","context":{"sequence":3,"sessionId":"s1","sessionSequence":2},"payload":{"finalStatus":"SUCCEEDED","resultStatus":"FINAL","artifactIds":["art-1"]}}`),
+	}
+	session := SessionReadResult{
+		SessionID: "s1",
+		Status:    LifecycleStatusSucceeded,
+		Progress: &ProgressCounts{
+			TotalDispatches:     1,
+			CompletedDispatches: 1,
+		},
+	}
+	result := ResultReadResult{
+		SessionID:    "s1",
+		ResultStatus: ResultStatusFinal,
+		ArtifactRefs: []ArtifactRefSummary{{ID: "art-1"}},
+	}
+	dispatches := []DispatchSummary{{ID: "disp-1", Status: DispatchStatusCompleted}}
+	artifacts := []ArtifactSummary{{ID: "art-1"}}
+	if err := ValidateEventReplayMatchesDirectProjections(session, result, dispatches, artifacts, events); err != nil {
+		t.Fatalf("ValidateEventReplayMatchesDirectProjections: %v", err)
+	}
+
+	runningEvents := []json.RawMessage{
+		json.RawMessage(`{"id":"session-started/s1","type":"SESSION_STARTED","context":{"sequence":1,"sessionId":"s1","sessionSequence":0},"payload":{}}`),
+		json.RawMessage(`{"id":"session-result-updated/s1","type":"SESSION_RESULT_UPDATED","context":{"sequence":2,"sessionId":"s1","sessionSequence":1},"payload":{"resultStatus":"PARTIAL"}}`),
+	}
+	runningSession := SessionReadResult{
+		SessionID: "s1",
+		Status:    LifecycleStatusRunning,
+		Progress: &ProgressCounts{
+			TotalDispatches:     1,
+			CompletedDispatches: 1,
+		},
+	}
+	runningResult := ResultReadResult{
+		SessionID:    "s1",
+		ResultStatus: ResultStatusPartial,
+	}
+	if err := ValidateEventReplayMatchesDirectProjections(runningSession, runningResult, dispatches, artifacts, runningEvents); err != nil {
+		t.Fatalf("running ValidateEventReplayMatchesDirectProjections: %v", err)
+	}
+
+	terminalMissingCompleted := runningEvents
+	terminalSession := session
+	if err := ValidateEventReplayMatchesDirectProjections(terminalSession, result, dispatches, artifacts, terminalMissingCompleted); err == nil {
+		t.Fatal("error = nil, want missing SESSION_COMPLETED for terminal session")
+	}
+}
+
 func TestProjectionServiceMethods_PropagateContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

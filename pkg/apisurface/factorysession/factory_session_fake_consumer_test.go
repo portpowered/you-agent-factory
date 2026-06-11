@@ -337,6 +337,101 @@ func TestFakeServiceConsumer_ResultDispatchArtifact_ProjectsCoherentReads(t *tes
 	}
 }
 
+func TestFakeServiceConsumer_ReadEvents_ReconnectAndReplayMatchesDirectReads(t *testing.T) {
+	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+	}
+
+	cases := []struct {
+		name       string
+		scenarioID string
+		requestID  string
+		resultMode factorysessionexecution.ResultMode
+	}{
+		{"failed-with-partial", "javascript-failed-with-partial", "", factorysessionexecution.ResultModePartial},
+		{"interrupted", "", "req-js-interrupted-001", factorysessionexecution.ResultModePartial},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var request factorysessionexecution.StartRequest
+			if tc.scenarioID != "" {
+				scenario := findScenario(t, loadDurableFixtureCatalog(t), tc.scenarioID)
+				executionRequest, ok := scenario["executionRequest"].(map[string]any)
+				if !ok {
+					t.Fatal("missing executionRequest fixture")
+				}
+				request, err = factorysession.StartRequestFromAPI(decodeExecutionRequest(t, executionRequest))
+				if err != nil {
+					t.Fatalf("StartRequestFromAPI: %v", err)
+				}
+			} else {
+				request = factorysessionexecution.StartRequest{
+					RequestID: tc.requestID,
+					Source: factorysessionexecution.Source{
+						Kind:      workflowsource.KindFactoryID,
+						FactoryID: "customer-support-triage",
+					},
+				}
+			}
+			started, err := service.StartAsync(context.Background(), request)
+			if err != nil {
+				t.Fatalf("StartAsync: %v", err)
+			}
+
+			session, err := service.GetSession(context.Background(), started.SessionID)
+			if err != nil {
+				t.Fatalf("GetSession: %v", err)
+			}
+			result, err := service.GetResult(context.Background(), started.SessionID, factorysessionexecution.ResultRequest{
+				Mode: tc.resultMode,
+			})
+			if err != nil {
+				t.Fatalf("GetResult: %v", err)
+			}
+			dispatches, err := service.ListDispatches(context.Background(), started.SessionID)
+			if err != nil {
+				t.Fatalf("ListDispatches: %v", err)
+			}
+			artifacts, err := service.ListArtifacts(context.Background(), started.SessionID)
+			if err != nil {
+				t.Fatalf("ListArtifacts: %v", err)
+			}
+
+			events, err := service.ReadEvents(context.Background(), started.SessionID, factorysessionexecution.EventReconnectRequest{})
+			if err != nil {
+				t.Fatalf("ReadEvents: %v", err)
+			}
+			mapped := factorysession.EventReadResponseToAPI(events)
+			if len(mapped) == 0 {
+				t.Fatal("mapped events missing")
+			}
+			if err := factorysessionexecution.ValidateEventReplayMatchesDirectProjections(
+				session,
+				result,
+				dispatches.Dispatches,
+				artifacts.Artifacts,
+				events.Events,
+			); err != nil {
+				t.Fatalf("ValidateEventReplayMatchesDirectProjections: %v", err)
+			}
+
+			sequence := 0
+			reconnect, err := service.ReadEvents(context.Background(), started.SessionID, factorysessionexecution.EventReconnectRequest{
+				AfterSequence: &sequence,
+			})
+			if err != nil {
+				t.Fatalf("ReadEvents reconnect: %v", err)
+			}
+			reconnectMapped := factorysession.EventReadResponseToAPI(reconnect)
+			if len(reconnectMapped) >= len(mapped) {
+				t.Fatalf("reconnect events = %d, want fewer than full replay %d", len(reconnectMapped), len(mapped))
+			}
+		})
+	}
+}
+
 func TestFakeServiceConsumer_ProjectsCanonicalFixtureEventsForRunningApprovalTerminal(t *testing.T) {
 	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)

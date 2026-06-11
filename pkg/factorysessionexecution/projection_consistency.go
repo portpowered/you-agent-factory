@@ -24,11 +24,24 @@ var SessionProjectionEventKinds = []string{
 }
 
 type sessionResultUpdatedProjection struct {
-	ResultStatus string `json:"resultStatus"`
+	ResultStatus string   `json:"resultStatus"`
+	ArtifactIDs  []string `json:"artifactIds"`
+}
+
+type sessionCompletedProjection struct {
+	FinalStatus  string   `json:"finalStatus"`
+	ResultStatus string   `json:"resultStatus"`
+	ArtifactIDs  []string `json:"artifactIds"`
 }
 
 type factoryEventEnvelope struct {
+	ID      string          `json:"id"`
 	Type    string          `json:"type"`
+	Context struct {
+		Sequence        int    `json:"sequence"`
+		SessionID       string `json:"sessionId"`
+		SessionSequence *int   `json:"sessionSequence"`
+	} `json:"context"`
 	Payload json.RawMessage `json:"payload"`
 }
 
@@ -245,6 +258,198 @@ func ValidateResultMatchesEventProjection(result ResultReadResult, events []json
 	}
 	if eventStatus != result.ResultStatus {
 		return fmt.Errorf("result status %q does not match latest SESSION_RESULT_UPDATED event %q", result.ResultStatus, eventStatus)
+	}
+	return nil
+}
+
+// LatestArtifactIDsFromEvents returns artifactIds from the latest event payload
+// that carries them.
+func LatestArtifactIDsFromEvents(events []json.RawMessage) ([]string, bool) {
+	var latest []string
+	found := false
+	for _, raw := range events {
+		ids, ok := artifactIDsFromEvent(raw)
+		if !ok {
+			continue
+		}
+		latest = append([]string(nil), ids...)
+		found = true
+	}
+	return latest, found
+}
+
+// LatestTerminalStatusFromEvents returns finalStatus from the latest
+// SESSION_COMPLETED event when present.
+func LatestTerminalStatusFromEvents(events []json.RawMessage) (LifecycleStatus, bool) {
+	var latest LifecycleStatus
+	found := false
+	for _, raw := range events {
+		var envelope factoryEventEnvelope
+		if err := json.Unmarshal(raw, &envelope); err != nil {
+			continue
+		}
+		if strings.TrimSpace(envelope.Type) != "SESSION_COMPLETED" {
+			continue
+		}
+		var payload sessionCompletedProjection
+		if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+			continue
+		}
+		status := strings.TrimSpace(payload.FinalStatus)
+		if status == "" {
+			continue
+		}
+		latest = LifecycleStatus(status)
+		found = true
+	}
+	return latest, found
+}
+
+// ValidateEventEnvelopeOrdering checks that replayed events have stable ids,
+// monotonic sequence values, and session context for one durable session.
+func ValidateEventEnvelopeOrdering(sessionID string, events []json.RawMessage) error {
+	if len(events) == 0 {
+		return fmt.Errorf("event stream is empty")
+	}
+	seenIDs := make(map[string]struct{}, len(events))
+	lastSequence := 0
+	for index, raw := range events {
+		var envelope factoryEventEnvelope
+		if err := json.Unmarshal(raw, &envelope); err != nil {
+			return fmt.Errorf("parse event %d: %w", index, err)
+		}
+		if strings.TrimSpace(envelope.ID) == "" {
+			return fmt.Errorf("event %d missing id", index)
+		}
+		if _, exists := seenIDs[envelope.ID]; exists {
+			return fmt.Errorf("duplicate event id %q", envelope.ID)
+		}
+		seenIDs[envelope.ID] = struct{}{}
+		if envelope.Context.Sequence <= 0 {
+			return fmt.Errorf("event %d sequence = %d, want positive", index, envelope.Context.Sequence)
+		}
+		if envelope.Context.Sequence <= lastSequence {
+			return fmt.Errorf("event %d sequence = %d, want greater than %d", index, envelope.Context.Sequence, lastSequence)
+		}
+		lastSequence = envelope.Context.Sequence
+		if contextSessionID := strings.TrimSpace(envelope.Context.SessionID); contextSessionID != "" && contextSessionID != sessionID {
+			return fmt.Errorf("event %d sessionId = %q, want %q", index, contextSessionID, sessionID)
+		}
+	}
+	return nil
+}
+
+// ValidateEventReplayMatchesDirectProjections checks that one fake event stream
+// aligns with direct session, result, dispatch, and artifact reads.
+func ValidateEventReplayMatchesDirectProjections(
+	session SessionReadResult,
+	result ResultReadResult,
+	dispatches []DispatchSummary,
+	artifacts []ArtifactSummary,
+	events []json.RawMessage,
+) error {
+	if err := ValidateEventEnvelopeOrdering(session.SessionID, events); err != nil {
+		return err
+	}
+	if err := ValidateResultMatchesEventProjection(result, events); err != nil {
+		return err
+	}
+	if err := ValidateDispatchListMatchesSessionProgress(session, dispatches); err != nil {
+		return err
+	}
+
+	wantArtifactIDs := append([]string(nil), result.ArtifactIDs...)
+	if len(wantArtifactIDs) == 0 {
+		for _, ref := range result.ArtifactRefs {
+			if id := strings.TrimSpace(ref.ID); id != "" {
+				wantArtifactIDs = append(wantArtifactIDs, id)
+			}
+		}
+	}
+	if len(wantArtifactIDs) == 0 {
+		for _, artifact := range artifacts {
+			if id := strings.TrimSpace(artifact.ID); id != "" {
+				wantArtifactIDs = append(wantArtifactIDs, id)
+			}
+		}
+	}
+	if eventArtifactIDs, ok := LatestArtifactIDsFromEvents(events); ok {
+		if err := validateStringSetsEqual("artifact ids", wantArtifactIDs, eventArtifactIDs); err != nil {
+			return err
+		}
+	}
+
+	if terminalStatus, ok := LatestTerminalStatusFromEvents(events); ok {
+		if session.Status != terminalStatus {
+			return fmt.Errorf("session status %q does not match latest SESSION_COMPLETED finalStatus %q", session.Status, terminalStatus)
+		}
+	} else if IsTerminalLifecycleStatus(session.Status) {
+		return fmt.Errorf("terminal session %q missing SESSION_COMPLETED event", session.Status)
+	}
+
+	hasCompleted := false
+	for _, raw := range events {
+		var envelope factoryEventEnvelope
+		if err := json.Unmarshal(raw, &envelope); err != nil {
+			continue
+		}
+		if envelope.Type == "SESSION_COMPLETED" {
+			hasCompleted = true
+			break
+		}
+	}
+	if hasCompleted && !IsTerminalLifecycleStatus(session.Status) {
+		return fmt.Errorf("non-terminal session %q includes SESSION_COMPLETED event", session.Status)
+	}
+
+	return nil
+}
+
+func artifactIDsFromEvent(raw json.RawMessage) ([]string, bool) {
+	var envelope factoryEventEnvelope
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return nil, false
+	}
+	switch strings.TrimSpace(envelope.Type) {
+	case "SESSION_RESULT_UPDATED":
+		var payload sessionResultUpdatedProjection
+		if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+			return nil, false
+		}
+		if len(payload.ArtifactIDs) == 0 {
+			return nil, false
+		}
+		return append([]string(nil), payload.ArtifactIDs...), true
+	case "SESSION_COMPLETED":
+		var payload sessionCompletedProjection
+		if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+			return nil, false
+		}
+		if len(payload.ArtifactIDs) == 0 {
+			return nil, false
+		}
+		return append([]string(nil), payload.ArtifactIDs...), true
+	default:
+		return nil, false
+	}
+}
+
+func validateStringSetsEqual(label string, want, got []string) error {
+	wantSet := make(map[string]struct{}, len(want))
+	for _, value := range want {
+		wantSet[value] = struct{}{}
+	}
+	gotSet := make(map[string]struct{}, len(got))
+	for _, value := range got {
+		gotSet[value] = struct{}{}
+	}
+	if len(wantSet) != len(gotSet) {
+		return fmt.Errorf("%s mismatch: want %v, got %v", label, want, got)
+	}
+	for value := range wantSet {
+		if _, ok := gotSet[value]; !ok {
+			return fmt.Errorf("%s mismatch: want %v, got %v", label, want, got)
+		}
 	}
 	return nil
 }
