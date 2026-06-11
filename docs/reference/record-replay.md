@@ -114,6 +114,24 @@ Maintainers who need the internal event-log and fixture workflow can use
 `you docs record-replay`;
 customer runs only need the CLI flags above.
 
+## Legacy Dispatch Provider Metadata
+
+New dispatch events record `modelProvider` and `modelProviderSelectionSource`.
+Replay of older artifacts that still carry `runnerId` or `runnerSelectionSource`
+is supported only through the replay compatibility adapter: during artifact
+hydration, legacy runner metadata is normalized to provider metadata for
+historical inspection.
+
+- Supported legacy `runnerId` values map to the current public provider enum.
+- Unknown legacy values fail replay with an error that names the legacy
+  `runnerId` field.
+- New recordings and live API responses use `modelProvider` only; do not add
+  new `runnerId` fields to authored configs or new event payloads.
+
+Authoring configs with retired `runner` fields is separate from replay
+compatibility. Old authored configs must be edited manually; see
+`you docs config` → **Retired `runner` Fields**.
+
 ## Related
 
 - `you docs config` — brief run-flag summary with pointers to this topic

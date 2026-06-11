@@ -96,6 +96,11 @@ func decodeStrictJSON[T any](body io.Reader) (T, error) {
 	if err != nil {
 		return zero, err
 	}
+	return decodeStrictJSONFromBytes[T](data)
+}
+
+func decodeStrictJSONFromBytes[T any](data []byte) (T, error) {
+	var zero T
 
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()

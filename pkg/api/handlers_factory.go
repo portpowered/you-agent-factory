@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -85,7 +87,17 @@ func (s *Server) writeFactoryPreview(w http.ResponseWriter, r *http.Request, com
 }
 
 func decodeNamedFactoryBody(body io.Reader) (factoryapi.Factory, error) {
-	return decodeStrictJSON[factoryapi.Factory](body)
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	if err := factoryconfig.ValidateRetiredFactoryFieldAliasesJSON(data); err != nil {
+		if message, ok := factoryconfig.GeneratedFactoryBoundaryValidationMessage(err); ok {
+			return factoryapi.Factory{}, requestFieldValidationError{message: message}
+		}
+		return factoryapi.Factory{}, err
+	}
+	return decodeStrictJSONFromBytes[factoryapi.Factory](data)
 }
 
 func (s *Server) requireSessionRuntime(w http.ResponseWriter) (apisurface.SessionAPISurface, bool) {
@@ -513,7 +525,31 @@ func decodeOpenFactorySessionBody(body io.Reader) (factoryapi.OpenFactorySession
 }
 
 func decodeSaveCurrentFactoryBody(body io.Reader) (factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody, error) {
-	return decodeStrictJSON[factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody](body)
+	data, err := io.ReadAll(body)
+	if err != nil {
+		return factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{}, err
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	var payload struct {
+		Factory json.RawMessage `json:"factory"`
+	}
+	if err := decoder.Decode(&payload); err != nil {
+		return factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{}, err
+	}
+	if err := ensureSingleJSONObject(decoder); err != nil {
+		return factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{}, err
+	}
+	if len(payload.Factory) > 0 {
+		if err := factoryconfig.ValidateRetiredFactoryFieldAliasesJSON(payload.Factory); err != nil {
+			if message, ok := factoryconfig.GeneratedFactoryBoundaryValidationMessage(err); ok {
+				return factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{}, requestFieldValidationError{message: message}
+			}
+			return factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody{}, err
+		}
+	}
+	return decodeStrictJSONFromBytes[factoryapi.SaveCurrentFactoryBySessionIdJSONRequestBody](data)
 }
 
 func decodePromptTemplateValidationRequestBody(body io.Reader) (factoryapi.ValidateCurrentFactoryWorkstationPromptTemplateBySessionIdJSONRequestBody, error) {

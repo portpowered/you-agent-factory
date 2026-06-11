@@ -31,7 +31,7 @@ type generatedFactoryBoundary struct {
 	generated factoryapi.Factory
 }
 
-const generatedFactoryBoundaryErrorPrefix = "decode factory generated-schema boundary"
+const generatedFactoryBoundaryErrorPrefix = GeneratedFactoryBoundaryErrorPrefix
 
 // Expand parses and normalizes a user-provided factory payload into the internal
 // canonical configuration representation.

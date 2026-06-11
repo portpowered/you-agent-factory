@@ -35,9 +35,10 @@ status API fields, and `--server` / `--session` on HTTP client commands), see
 - **Portable export** (`config flatten`, PNG export) is the explicit opt-in path
   for a single-file `factory.json` that inlines runtime bodies and bundled
   content. That inline-only shape is not what session/API saves write by default.
-- Use factory-level `runner` in `factory.json` to set the default runner for
-  the factory. Supported built-in runner IDs are `codex`, `gemini`, `kiro`,
-  `cursor-cli`, and `opencode`.
+- Use factory-level `modelProvider` in `factory.json` to set the default execution-family
+  provider for the factory. Supported built-in values include `CLAUDE`, `CODEX`,
+  `GEMINI`, `CURSOR`, `KIRO`, and `OPENCODE`, plus symbolic `DEFAULT` to defer
+  to worker provider and operator default.
 - When both inline runtime fields and a split `AGENTS.md` file exist for the
   same workstation, the split runtime definition is authoritative for the
   overlapping runtime fields.
@@ -127,7 +128,7 @@ Each `workType` and `state` pair becomes a place named
 | `resources` | No | Bounded concurrency pools. Workers and workstations declare requirements against these pools through their `resources` entries. |
 | `layout` | No | Non-executable portable graph-editor layout metadata keyed by canonical graph node and edge ids. It must not change runtime topology or execution behavior. |
 | `supportingFiles` | No | Portability-only manifest for validation-only external tools and bundled files. This is distinct from runtime-capacity `resources`. |
-| `runner` | No | Factory-level default runner ID. Supported built-ins are `codex`, `gemini`, `kiro`, `cursor-cli`, and `opencode`. |
+| `modelProvider` | No | Factory-level default execution-family provider. Use a concrete provider value or `DEFAULT` to defer to worker `modelProvider` and then the operator default. |
 | `workers` | Yes | Worker identities that workstations reference by `name`; see `you docs workers` for worker runtime fields. |
 | `workstations` | Yes | Dispatch steps that consume input states and produce output states; see `you docs workstations` for the workstation field contract. |
 
@@ -548,11 +549,10 @@ and `you docs workers` for worker-side requirement metadata.
   used in `factory.json`.
 - Use camelCase public config fields in `factory.json`; do not author new
   configs with retired snake_case aliases.
-- Runner precedence is explicit: workstation `runner` override first, then
-  factory `runner`, then worker `modelProvider` compatibility when no explicit runner is set, then the
-  default `codex` runner.
-- Validate runner prerequisites before execution. Built-in runner selection
-  expects the corresponding local CLI on `PATH`, and runner-specific auth or
+- Provider precedence is explicit: workstation `modelProvider` override first, then
+  factory `modelProvider`, then worker `modelProvider`, then the operator default.
+- Validate provider prerequisites before execution. Built-in provider selection
+  expects the corresponding local CLI on `PATH`, and provider-specific auth or
   local setup must already be in place.
 - Keep portability-only declarations under `supportingFiles`; do not overload
   runtime-capacity `resources` with bundled files or external tool checks.
@@ -595,6 +595,25 @@ expansion as named-factory persist: expect a one-time diff that adds
 and prunes stale split dirs for entities removed from the submitted config.
 Subsequent saves refresh split files in place without re-inflating
 `factory.json`.
+
+### Retired `runner` Fields (Manual Migration Required)
+
+The public factory and workstation config contract now uses `modelProvider` as
+the only execution-family selector. Retired `runner` fields are rejected with
+field-path guidance and are never silently migrated or persisted.
+
+| Retired field | Replacement | Example rejection |
+|---------------|-------------|-------------------|
+| `factory.runner` | `factory.modelProvider` | `factory.runner is retired; use factory.modelProvider` |
+| `workstations[n].runner` | `workstations[n].modelProvider` | `workstations[0].runner is retired; use workstations[0].modelProvider` |
+| `frontmatter.runner` in `AGENTS.md` | `frontmatter.modelProvider` | `frontmatter.runner is retired; use frontmatter.modelProvider` |
+
+CLI validation (`LoadRuntimeConfig`, `you factory save`, and `you run --dir`)
+and API validation (`POST /factory-validations`, `PUT /factory-sessions/{id}/factory`)
+return the same field-path language. Edit authored configs manually. There is no automatic config migration command; replace retired `runner` fields by hand.
+
+**Release note:** existing authored configs that still set `runner` must replace
+that field with `modelProvider` before validation or save succeeds.
 
 ## Portable Bundled Files
 

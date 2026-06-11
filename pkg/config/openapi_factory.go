@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -13,6 +14,33 @@ import (
 )
 
 var defaultFactoryConfigMapper = NewFactoryConfigMapper()
+
+// GeneratedFactoryBoundaryErrorPrefix is the stable prefix for generated-schema
+// boundary rejections such as retired field aliases.
+const GeneratedFactoryBoundaryErrorPrefix = "decode factory generated-schema boundary"
+
+// GeneratedFactoryBoundaryValidationMessage returns the customer-facing boundary
+// message when err wraps a generated factory boundary rejection.
+func GeneratedFactoryBoundaryValidationMessage(err error) (string, bool) {
+	for err != nil {
+		msg := err.Error()
+		if after, ok := strings.CutPrefix(msg, GeneratedFactoryBoundaryErrorPrefix+": "); ok {
+			return after, true
+		}
+		err = errors.Unwrap(err)
+	}
+	return "", false
+}
+
+// ValidateRetiredFactoryFieldAliasesJSON rejects retired factory and workstation
+// field aliases before strict OpenAPI decode so API and CLI paths share migration
+// guidance without changing generic JSON decode errors.
+func ValidateRetiredFactoryFieldAliasesJSON(data []byte) error {
+	if err := rejectRetiredGeneratedBoundaryAliases(data); err != nil {
+		return fmt.Errorf("%s: %w", GeneratedFactoryBoundaryErrorPrefix, err)
+	}
+	return nil
+}
 
 // GeneratedFactoryFromOpenAPIJSON converts an OpenAPI-compatible factory JSON
 // payload into the generated Factory boundary model.
