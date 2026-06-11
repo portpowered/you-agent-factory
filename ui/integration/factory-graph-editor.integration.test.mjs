@@ -336,6 +336,15 @@ describe.sequential("factory graph editor browser integration", () => {
       const pngCoverageScenario = replayCoverageReport.scenarios.find(
         (scenario) => scenario.id === "pngRoundTrip",
       );
+
+      expect(pngCoverageScenario).toEqual(expect.objectContaining({
+        description:
+          "Browser export/import PNG roundtrip layered on jsdom activation-body coverage and unit PNG helpers; jsdom no longer re-proves export dialog copy.",
+        id: "pngRoundTrip",
+        surfaces: ["png-export", "png-import-preview", "png-import-activation"],
+        verificationLayers: ["browser-integration", "jsdom", "unit"],
+      }));
+
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
         currentFactory: exportFactoryDefinition,
@@ -348,14 +357,6 @@ describe.sequential("factory graph editor browser integration", () => {
       const downloadDirectory = await mkdtemp(
         path.join(os.tmpdir(), "agent-factory-export-"),
       );
-
-      expect(pngCoverageScenario).toEqual(expect.objectContaining({
-        description:
-          "Browser export/import PNG roundtrip smoke layered on top of existing jsdom and unit PNG coverage.",
-        id: "pngRoundTrip",
-        surfaces: ["png-export", "png-import-preview", "png-import-activation"],
-        verificationLayers: ["browser-integration", "jsdom", "unit"],
-      }));
 
       await browserPage.page.addInitScript(() => {
         window.__agentFactoryCapturedDownloads = [];
