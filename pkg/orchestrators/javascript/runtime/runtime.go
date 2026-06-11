@@ -57,7 +57,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 		return canceledOutcome(ctxErr), nil
 	}
 	if runErr != nil {
-		return scriptErrorOutcome(runErr), nil
+		return scriptErrorOutcome(vm, runErr), nil
 	}
 	globals.captureReturn(value)
 
@@ -134,7 +134,7 @@ func canceledOutcome(err error) Outcome {
 	}
 }
 
-func scriptErrorOutcome(err error) Outcome {
+func scriptErrorOutcome(vm *goja.Runtime, err error) Outcome {
 	message := err.Error()
 	var interrupted *goja.InterruptedError
 	if errors.As(err, &interrupted) {
@@ -153,8 +153,8 @@ func scriptErrorOutcome(err error) Outcome {
 	}
 	var exception *goja.Exception
 	if errors.As(err, &exception) {
-		if exported := exception.Value().Export(); exported != nil {
-			message = fmt.Sprint(exported)
+		if extracted := javascriptExceptionMessage(vm, exception); extracted != "" {
+			message = extracted
 		}
 	}
 	return Outcome{
@@ -164,6 +164,24 @@ func scriptErrorOutcome(err error) Outcome {
 			Message: message,
 		},
 	}
+}
+
+func javascriptExceptionMessage(vm *goja.Runtime, exception *goja.Exception) string {
+	value := exception.Value()
+	if value == nil {
+		return ""
+	}
+	if obj := value.ToObject(vm); obj != nil {
+		if msg := obj.Get("message"); msg != nil && !goja.IsUndefined(msg) {
+			if exported := msg.Export(); exported != nil {
+				return fmt.Sprint(exported)
+			}
+		}
+	}
+	if exported := value.Export(); exported != nil {
+		return fmt.Sprint(exported)
+	}
+	return ""
 }
 
 // RunWithTimeout executes one workflow with a bounded timeout derived from the context deadline.

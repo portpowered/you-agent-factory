@@ -164,6 +164,80 @@ func TestRun_PreExecutionFailure_DoesNotInvokeHooks(t *testing.T) {
 	}
 }
 
+func TestRun_ThrowError_ReturnsStableScriptFailure(t *testing.T) {
+	source := readFixture(t, "throw-error.workflow.js")
+	req := workflowruntime.Request{
+		Source:    source,
+		SourceRef: "throw-error.workflow.js",
+		SessionID: "session-throw-error",
+		Args:      marshalArgs(t, map[string]any{"subject": "workflows"}),
+		Metadata:  map[string]string{"name": "throw-error"},
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}
+
+	outcome := runExecutionFailure(t, req)
+	if outcome.Failure.Code != workflowruntime.CodeScriptError {
+		t.Fatalf("failure code = %q, want %q", outcome.Failure.Code, workflowruntime.CodeScriptError)
+	}
+	if !strings.Contains(outcome.Failure.Message, "workflow execution failed: workflows") {
+		t.Fatalf("failure message = %q, want preserved JavaScript error text", outcome.Failure.Message)
+	}
+	assertFailureDoesNotProjectPrimaryResult(t, req.SessionID, outcome)
+}
+
+func TestRun_UnresolvedFinal_ReturnsStableFailure(t *testing.T) {
+	source := readFixture(t, "unresolved-final.workflow.js")
+	req := workflowruntime.Request{
+		Source:    source,
+		SourceRef: "unresolved-final.workflow.js",
+		SessionID: "session-unresolved-final",
+		Args:      marshalArgs(t, map[string]any{"subject": "workflows"}),
+		Metadata:  map[string]string{"name": "unresolved-final"},
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}
+
+	outcome := runExecutionFailure(t, req)
+	if outcome.Failure.Code != workflowruntime.CodeUnresolvedFinal {
+		t.Fatalf("failure code = %q, want %q", outcome.Failure.Code, workflowruntime.CodeUnresolvedFinal)
+	}
+	if !strings.Contains(outcome.Failure.Message, "without a returned or final value") {
+		t.Fatalf("failure message = %q, want unresolved-final diagnostic", outcome.Failure.Message)
+	}
+	assertFailureDoesNotProjectPrimaryResult(t, req.SessionID, outcome)
+}
+
+func TestRun_ExecutionFailure_DoesNotInvokeHooks(t *testing.T) {
+	source := readFixture(t, "throw-error.workflow.js")
+	req := workflowruntime.Request{
+		Source:    source,
+		SourceRef: "throw-error.workflow.js",
+		SessionID: "session-throw-error-hooks",
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}
+	hooksCalled := false
+	hooks := workflowruntime.Hooks{
+		OnResult: func(workflowresult.TypedValue) error {
+			hooksCalled = true
+			return nil
+		},
+		OnArtifact: func(string, json.RawMessage) error {
+			hooksCalled = true
+			return nil
+		},
+	}
+
+	outcome, err := workflowruntime.Run(context.Background(), req, hooks)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if outcome.OK {
+		t.Fatal("expected execution failure")
+	}
+	if hooksCalled {
+		t.Fatal("result/artifact hooks were invoked for execution failure")
+	}
+}
+
 func TestRun_WorkflowFinalAndReturn_PrefersWorkflowFinal(t *testing.T) {
 	source := readFixture(t, "workflow-final-and-return.workflow.js")
 	args := marshalArgs(t, map[string]any{
@@ -210,6 +284,32 @@ func marshalArgs(t *testing.T, args map[string]any) json.RawMessage {
 		t.Fatalf("marshal args: %v", err)
 	}
 	return raw
+}
+
+func runExecutionFailure(t *testing.T, req workflowruntime.Request) workflowruntime.Outcome {
+	t.Helper()
+	outcome, err := workflowruntime.Run(t.Context(), req, workflowruntime.Hooks{})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if outcome.OK {
+		t.Fatalf("Run() expected execution failure, got success value = %#v", outcome.Value)
+	}
+	if outcome.Failure.Code == "" {
+		t.Fatalf("Run() missing failure diagnostic: %#v", outcome)
+	}
+	return outcome
+}
+
+func assertFailureDoesNotProjectPrimaryResult(t *testing.T, sessionID string, outcome workflowruntime.Outcome) {
+	t.Helper()
+	if outcome.OK {
+		t.Fatal("expected failure outcome")
+	}
+	parts, projection := workflowresult.ProjectPrimaryResult(sessionID, outcome.Value, nil)
+	if !projection.HasIssues() && len(parts) > 0 {
+		t.Fatalf("failure outcome projected primary result parts=%#v", parts)
+	}
 }
 
 func runPreExecutionFailure(t *testing.T, req workflowruntime.Request) workflowruntime.Outcome {
