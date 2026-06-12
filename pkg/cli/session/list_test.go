@@ -276,6 +276,38 @@ func TestList_AllScopeCombinesLiveHTTPAndDurableProviderRows(t *testing.T) {
 	t.Fatal("published sync-success scenario missing from catalog")
 }
 
+func TestList_UnsupportedScopeReturnsCommandError(t *testing.T) {
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Scope:  "workspace",
+		Output: &out,
+	})
+	if err == nil {
+		t.Fatal("expected unsupported scope to fail")
+	}
+	if !strings.Contains(err.Error(), "scope must be live, persisted, or all") {
+		t.Fatalf("error = %q", err.Error())
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty output on scope validation failure", out.String())
+	}
+}
+
+func TestList_UnsupportedScopeJSONKeepsStdoutEmpty(t *testing.T) {
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Scope:  "workspace",
+		JSON:   true,
+		Output: &out,
+	})
+	if err == nil {
+		t.Fatal("expected unsupported scope to fail")
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty JSON output on scope validation failure", out.String())
+	}
+}
+
 func TestList_PersistedScopeProviderFailureReturnsErrorWithoutPartialOutput(t *testing.T) {
 	failingLister := func(context.Context, fse.ListSessionsRequest) (fse.ListSessionsResult, error) {
 		return fse.ListSessionsResult{}, fmt.Errorf("provider unavailable")
@@ -284,6 +316,59 @@ func TestList_PersistedScopeProviderFailureReturnsErrorWithoutPartialOutput(t *t
 	var out bytes.Buffer
 	err := List(ListConfig{
 		Scope:         "persisted",
+		Output:        &out,
+		DurableLister: failingLister,
+	})
+	if err == nil {
+		t.Fatal("expected provider failure")
+	}
+	if !strings.Contains(err.Error(), "list durable factory sessions failed") {
+		t.Fatalf("error = %q", err.Error())
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty output on provider failure", out.String())
+	}
+}
+
+func TestList_PersistedScopeProviderFailureJSONKeepsStdoutEmpty(t *testing.T) {
+	failingLister := func(context.Context, fse.ListSessionsRequest) (fse.ListSessionsResult, error) {
+		return fse.ListSessionsResult{}, fmt.Errorf("provider unavailable")
+	}
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Scope:         "persisted",
+		JSON:          true,
+		Output:        &out,
+		DurableLister: failingLister,
+	})
+	if err == nil {
+		t.Fatal("expected provider failure")
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty JSON output on provider failure", out.String())
+	}
+}
+
+func TestList_AllScopeProviderFailureReturnsErrorWithoutPartialOutput(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListFactorySessionsResponse{
+			Sessions: []factoryapi.FactorySessionSummary{sampleSessionSummary()},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	failingLister := func(context.Context, fse.ListSessionsRequest) (fse.ListSessionsResult, error) {
+		return fse.ListSessionsResult{}, fmt.Errorf("provider unavailable")
+	}
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Scope:         "all",
+		Port:          serverPort(t, srv),
 		Output:        &out,
 		DurableLister: failingLister,
 	})

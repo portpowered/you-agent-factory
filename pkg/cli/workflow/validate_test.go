@@ -239,6 +239,168 @@ func TestValidate_PolicyDeniedHostAccessHumanOutput(t *testing.T) {
 	}
 }
 
+func TestValidate_MissingWorkflowNameValueReturnsCommandError(t *testing.T) {
+	projectRoot := t.TempDir()
+
+	var output bytes.Buffer
+	err := workflow.Validate(workflow.ValidateConfig{
+		SourceConfig: workflow.SourceConfig{
+			Dir:        projectRoot,
+			SourceKind: string(workflowsource.KindWorkflowName),
+		},
+		Output: &output,
+	})
+	if err == nil {
+		t.Fatal("expected missing workflow name value to fail")
+	}
+	if !strings.Contains(err.Error(), "value is required when kind is WORKFLOW_NAME") {
+		t.Fatalf("error = %q", err.Error())
+	}
+	if output.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty output before validation", output.String())
+	}
+}
+
+func TestValidate_MissingInlineWorkflowSourceReturnsCommandError(t *testing.T) {
+	projectRoot := t.TempDir()
+
+	var output bytes.Buffer
+	err := workflow.Validate(workflow.ValidateConfig{
+		SourceConfig: workflow.SourceConfig{
+			Dir:        projectRoot,
+			SourceKind: string(workflowsource.KindInlineWorkflow),
+		},
+		Output: &output,
+	})
+	if err == nil {
+		t.Fatal("expected missing inline workflow source to fail")
+	}
+	if !strings.Contains(err.Error(), "inline is required when kind is INLINE_WORKFLOW") {
+		t.Fatalf("error = %q", err.Error())
+	}
+	if output.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty output before validation", output.String())
+	}
+}
+
+func TestValidate_ConflictingWorkflowNameAndInlineReturnsCommandError(t *testing.T) {
+	projectRoot := t.TempDir()
+
+	var output bytes.Buffer
+	err := workflow.Validate(workflow.ValidateConfig{
+		SourceConfig: workflow.SourceConfig{
+			Dir:          projectRoot,
+			SourceKind:   string(workflowsource.KindWorkflowName),
+			SourceValue:  "review",
+			InlineSource: `phase("setup");`,
+		},
+		Output: &output,
+	})
+	if err == nil {
+		t.Fatal("expected conflicting source inputs to fail")
+	}
+	if !strings.Contains(err.Error(), "--inline cannot be used when kind is WORKFLOW_NAME") {
+		t.Fatalf("error = %q", err.Error())
+	}
+	if output.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty output before validation", output.String())
+	}
+}
+
+func TestValidate_InvalidSourceKindReturnsCommandError(t *testing.T) {
+	projectRoot := t.TempDir()
+
+	var output bytes.Buffer
+	err := workflow.Validate(workflow.ValidateConfig{
+		SourceConfig: workflow.SourceConfig{
+			Dir:        projectRoot,
+			SourceKind: "UNSUPPORTED",
+		},
+		Output: &output,
+	})
+	if err == nil {
+		t.Fatal("expected invalid source kind to fail")
+	}
+	if !strings.Contains(err.Error(), "source kind must be one of") {
+		t.Fatalf("error = %q", err.Error())
+	}
+	if output.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty output before validation", output.String())
+	}
+}
+
+func TestValidate_InvalidRequestedPolicyJSONReturnsCommandError(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeWorkflow(t, projectRoot, "review.js", validWorkflowSource)
+
+	var output bytes.Buffer
+	err := workflow.Validate(workflow.ValidateConfig{
+		SourceConfig: workflow.SourceConfig{
+			Dir:                 projectRoot,
+			SourceKind:          string(workflowsource.KindWorkflowName),
+			SourceValue:         "review",
+			RequestedPolicyJSON: `{`,
+		},
+		Output: &output,
+	})
+	if err == nil {
+		t.Fatal("expected invalid requested policy JSON to fail")
+	}
+	if !strings.Contains(err.Error(), "requested policy must be valid JSON") {
+		t.Fatalf("error = %q", err.Error())
+	}
+	if output.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty output before validation", output.String())
+	}
+}
+
+func TestValidate_JSONCommandErrorsKeepStdoutEmpty(t *testing.T) {
+	projectRoot := t.TempDir()
+	cases := []struct {
+		name string
+		cfg  workflow.SourceConfig
+		want string
+	}{
+		{
+			name: "missing workflow name value",
+			cfg: workflow.SourceConfig{
+				Dir:        projectRoot,
+				SourceKind: string(workflowsource.KindWorkflowName),
+			},
+			want: "value is required when kind is WORKFLOW_NAME",
+		},
+		{
+			name: "conflicting workflow name and inline",
+			cfg: workflow.SourceConfig{
+				Dir:          projectRoot,
+				SourceKind:   string(workflowsource.KindWorkflowName),
+				SourceValue:  "review",
+				InlineSource: `phase("setup");`,
+			},
+			want: "--inline cannot be used when kind is WORKFLOW_NAME",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var output bytes.Buffer
+			err := workflow.Validate(workflow.ValidateConfig{
+				SourceConfig: tc.cfg,
+				JSON:         true,
+				Output:       &output,
+			})
+			if err == nil {
+				t.Fatal("expected command error")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %q, want substring %q", err.Error(), tc.want)
+			}
+			if output.Len() != 0 {
+				t.Fatalf("stdout = %q, want empty JSON output on command error", output.String())
+			}
+		})
+	}
+}
+
 func TestValidate_JSONBlockingDiagnosticsMatchCanonicalResult(t *testing.T) {
 	cases := []struct {
 		name      string

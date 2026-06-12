@@ -25,12 +25,16 @@ func previewRequestFromSourceConfig(cfg SourceConfig) (workflowpreview.Request, 
 	if projectRoot == "" {
 		return workflowpreview.Request{}, fmt.Errorf("project root is required")
 	}
-	ctx, err := workflowsource.DefaultContext(projectRoot)
+
+	sourceKind, err := workflowSourceKindFromCLI(cfg.SourceKind)
 	if err != nil {
 		return workflowpreview.Request{}, err
 	}
+	if err := validateSourceConfig(cfg, sourceKind); err != nil {
+		return workflowpreview.Request{}, err
+	}
 
-	sourceKind, err := workflowSourceKindFromCLI(cfg.SourceKind)
+	ctx, err := workflowsource.DefaultContext(projectRoot)
 	if err != nil {
 		return workflowpreview.Request{}, err
 	}
@@ -71,4 +75,48 @@ func workflowSourceKindFromCLI(kind string) (workflowsource.Kind, error) {
 	default:
 		return "", fmt.Errorf("source kind must be one of FACTORY_ID, FACTORY_INLINE, WORKFLOW_FILE, WORKFLOW_NAME, or INLINE_WORKFLOW")
 	}
+}
+
+func validateSourceConfig(cfg SourceConfig, kind workflowsource.Kind) error {
+	value := strings.TrimSpace(cfg.SourceValue)
+	inline := strings.TrimSpace(cfg.InlineSource)
+
+	switch kind {
+	case workflowsource.KindFactoryID:
+		if value == "" {
+			return fmt.Errorf("value is required when kind is FACTORY_ID")
+		}
+		if inline != "" {
+			return fmt.Errorf("--inline cannot be used when kind is FACTORY_ID")
+		}
+	case workflowsource.KindWorkflowFile:
+		if value == "" {
+			return fmt.Errorf("value is required when kind is WORKFLOW_FILE")
+		}
+		if inline != "" {
+			return fmt.Errorf("--inline cannot be used when kind is WORKFLOW_FILE")
+		}
+	case workflowsource.KindWorkflowName:
+		if value == "" {
+			return fmt.Errorf("value is required when kind is WORKFLOW_NAME")
+		}
+		if inline != "" {
+			return fmt.Errorf("--inline cannot be used when kind is WORKFLOW_NAME")
+		}
+	case workflowsource.KindFactoryInline:
+		if inline == "" {
+			return fmt.Errorf("inline is required when kind is FACTORY_INLINE")
+		}
+		if value != "" {
+			return fmt.Errorf("--value cannot be used when kind is FACTORY_INLINE")
+		}
+	case workflowsource.KindInlineWorkflow:
+		if inline == "" {
+			return fmt.Errorf("inline is required when kind is INLINE_WORKFLOW")
+		}
+		if value != "" {
+			return fmt.Errorf("--value cannot be used when kind is INLINE_WORKFLOW")
+		}
+	}
+	return nil
 }
