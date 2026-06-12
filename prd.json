@@ -1,30 +1,31 @@
 {
-  "project": "Dynamic Workflows Cell Provider Fixtures",
-  "branchName": "dynamic-workflows-cell-provider-fixtures",
-  "description": "Stabilize the shared deterministic Factory Session provider fixtures so downstream CLI, MCP, API, and website cells can start, list, inspect, poll, replay, and control JavaScript Factory Sessions without requiring a real JavaScript runtime.",
+  "project": "infinite-you",
+  "branchName": "dynamic-workflows-recovery-mcp-tools",
+  "description": "Recover the canonical MCP tool discovery, validation, run, status, and result loopback for dynamic workflows by exposing Factory Session-oriented tools backed by deterministic mock session-provider fixtures, with focused tests proving discovery and invocation without host packaging.",
   "context": {
-    "customerAsk": "Use the existing deterministic FakeService and contract fixtures as the mock session-provider path. Add or repair deterministic fixture scenarios for validation failure, async running, sync success, sync timeout, failed recoverable session, dispatch summaries, artifact detail, event reconnect, and lifecycle-control outcomes. FakeService must drive direct tests for async start, sync start, session listing, session reads, results, dispatches, artifacts, event reconnect, lifecycle controls, idempotent replay, and request-id conflict, while avoiding HTTP handler, CLI command, MCP tool, UI component, real JavaScript VM, or generated OpenAPI changes unless required for fixture compilation.",
-    "problem": "Parallel CLI, MCP, API, and website cells need the same session IDs, statuses, result hashes, dispatch IDs, artifact IDs, event cursors, and typed error behavior. Without a stable fixture catalog, each downstream surface either waits for the real runtime or invents local mock data, creating drift and unreliable cross-surface verification.",
-    "solution": "Extend the deterministic Factory Session fake provider and contract fixture catalog so direct package tests can exercise shared JavaScript Factory Session scenarios. Document stable scenario IDs and expected hashes in tests, return typed errors for known failure cases, preserve canonical Factory Session vocabulary, and keep the work scoped to provider fixtures and direct service behavior."
+    "customerAsk": "Recover canonical MCP tool discovery, validation, run, status, and result behavior so an MCP client can discover Factory Session-oriented tools, validate a JavaScript workflow fixture, start a mock-backed session, poll status, and read final or partial results.",
+    "problem": "The earlier dynamic-workflows-cell-mcp-tools work is blocked by failed paired plan-token recovery, and downstream MCP install or real-runtime swap-in work has no narrow, verified canonical tool contract to depend on.",
+    "solution": "Define or repair canonical Factory Session MCP tools for list, validate, run simple, run async, status, result, dispatches, artifacts, controls, and events; keep workflow-named tools as compatibility aliases; wire behavior to deterministic mock session-provider fixtures or shared session execution interfaces; and add focused MCP registry or mock-client tests for discovery and invocation."
   },
   "acceptanceCriteria": [
-    "FakeService direct tests cover async start, sync start, live/persisted/all session listing, get session, final and partial results, dispatch list/detail, artifact list/detail, event reconnect, lifecycle controls, idempotent replay, and request-id conflict behavior.",
-    "Fixture scenario IDs and expected session/result hashes are stable and documented in tests so downstream CLI, MCP, API, and UI cells can reuse them.",
-    "Unknown scenario, unknown session, malformed request, reconnect cursor miss, and lifecycle conflict failures return stable typed errors.",
-    "Fixture-backed scenarios use canonical Factory Session vocabulary and do not introduce DynamicWorkflowRun or workflow run as service/resource nouns.",
-    "No HTTP handler, CLI command, MCP tool, UI component, real JavaScript VM behavior, or generated OpenAPI change is introduced unless strictly required for fixture compilation.",
-    "Quality gate passes: go test ./pkg/factorysessionexecution, scoped vocabulary verification, typecheck, lint where touched, and any focused tests required by touched fixture consumers."
+    "MCP tool discovery exposes canonical Factory Session-oriented tools with stable request and response schemas for list, validate, run simple, run async, status, result, dispatches, artifacts, controls, and events.",
+    "Workflow-named MCP aliases remain compatibility-only and invoke the same Factory Session implementations and response shapes as the canonical tools.",
+    "MCP validate and run simple tools return deterministic fixture success responses and typed validation failure responses.",
+    "MCP run async, status, and result tools cover completed, running/not-ready, failed-with-partial-result, missing-session, and request-conflict cases with deterministic typed responses.",
+    "Tool implementation uses deterministic mock session-provider fixtures or shared session execution interfaces and does not add dependencies on API handlers or host packaging.",
+    "Focused MCP registry or mock-client tests prove tool discovery and invocation without requiring Cursor, OpenCode, Codex, Kiro, Gemini, Claude Code, or other host packaging.",
+    "Typecheck, lint, and targeted tests including go test ./pkg/mcp/... ./pkg/factorysessionexecution pass."
   ],
   "userStories": [
     {
-      "id": "dynamic-workflows-cell-provider-fixtures-001",
-      "title": "Publish Stable Fixture Scenario Identity",
-      "description": "As a downstream cell implementer, I want stable fixture scenario IDs and expected hashes so CLI, MCP, API, and website tests can all target the same JavaScript Factory Session examples.",
+      "id": "dynamic-workflows-recovery-mcp-tools-001",
+      "title": "Discover canonical Factory Session MCP tools",
+      "description": "As an MCP client, I want to discover stable Factory Session-oriented tool names and schemas so I can integrate with dynamic workflow sessions without relying on transitional workflow terminology.",
       "acceptanceCriteria": [
-        "The fixture catalog exposes deterministic scenario IDs for validation failure, async running, sync success, sync timeout, failed recoverable session, dispatch inspection, artifact inspection, event reconnect, and lifecycle-control outcomes.",
-        "Direct tests document each reusable scenario ID with the expected session ID, lifecycle status, result status when applicable, and stable result or projection hash.",
-        "Re-loading the same fixture catalog produces the same scenario IDs, session IDs, event ordering, dispatch IDs, artifact IDs, and result hashes.",
-        "Scenario payloads use Factory Session, FactoryEvent, Dispatch, Artifact, and Provider Session vocabulary in public-facing fixture fields.",
+        "MCP discovery includes canonical Factory Session tools for session list, validate, run simple, run async, status, result, dispatches, artifacts, controls, and events.",
+        "Each canonical tool exposes a deterministic input schema and response schema with Factory Session vocabulary such as session_id, status, diagnostics, dispatches, artifacts, events, and typed errors where applicable.",
+        "Workflow-named tool aliases, if present, are marked or documented as compatibility-only and resolve to the same behavior and response shape as their canonical Factory Session tool.",
+        "A focused MCP registry or mock-client test asserts discovery of the canonical tools and verifies one compatibility alias maps to the same implementation behavior without asserting unrelated package or route inventories.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -33,16 +34,14 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-provider-fixtures-002",
-      "title": "Exercise Start, List, Read, And Result Behavior",
-      "description": "As a provider consumer, I want the fake Factory Session service to start and inspect deterministic sessions so surface cells can build against the shared service contract before the real runtime exists.",
+      "id": "dynamic-workflows-recovery-mcp-tools-002",
+      "title": "Validate JavaScript workflow fixtures through MCP",
+      "description": "As an MCP client, I want validation to return deterministic success and typed failure responses so I can check workflow source before starting a Factory Session.",
       "acceptanceCriteria": [
-        "Async start returns a deterministic running Factory Session with inspection links and a replayable event prefix.",
-        "Sync start returns a deterministic successful terminal result for the success scenario and a stable timeout result for the timeout scenario.",
-        "Listing with live, persisted, and all scopes returns the expected fixture-backed sessions, with duplicate live/persisted identities handled deterministically.",
-        "Get session returns the expected read model for running, completed, timed-out, and failed recoverable sessions.",
-        "Final and partial result reads return the expected status, availability, primary result, artifact inclusion behavior, and stable hash for each supported scenario.",
-        "Replaying the same request ID with the same idempotency tuple returns the original start result instead of creating a new session.",
+        "Invoking the canonical validate tool with the simple valid JavaScript workflow fixture returns a deterministic success response that includes validation status and any expected normalized metadata.",
+        "Invoking the canonical validate tool with an invalid fixture returns a typed validation failure response with stable diagnostic fields and no unstructured panic or transport-level failure for expected validation errors.",
+        "Workflow-named validate alias invocation returns the same success and typed validation failure semantics as the canonical validate tool.",
+        "Validation invocation uses deterministic fixtures or shared session execution interfaces and does not depend on API handlers or external provider credentials.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -51,16 +50,14 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-provider-fixtures-003",
-      "title": "Provide Dispatch, Artifact, And Event Inspection Fixtures",
-      "description": "As an inspection surface implementer, I want deterministic dispatch, artifact, and event fixture behavior so detail views and tools can verify session progress without a real JavaScript runtime.",
+      "id": "dynamic-workflows-recovery-mcp-tools-003",
+      "title": "Run a simple mock-backed Factory Session through MCP",
+      "description": "As an MCP client, I want to start a simple mock-backed Factory Session and read its completed result so I can prove the MCP loopback works before real runtime swap-in.",
       "acceptanceCriteria": [
-        "List dispatches returns deterministic summaries with stable dispatch IDs, status, timestamps, provider session references when present, and links back to the owning Factory Session.",
-        "Get dispatch returns deterministic detail for known dispatch IDs and a stable typed error for unknown dispatch IDs.",
-        "List artifacts returns deterministic summaries with stable artifact IDs, names, media or content metadata, retrieval refs, and ownership by Factory Session.",
-        "Get artifact returns deterministic detail for known artifact IDs and a stable typed error for unknown artifact IDs.",
-        "Event reads return ordered canonical Factory Session events for running, terminal, dispatch, artifact, and awaiting-approval scenarios.",
-        "Event reconnect after a known cursor returns only later events, while a missing cursor returns the stable reconnect-cursor typed error.",
+        "Invoking the canonical run simple tool with the deterministic simple workflow fixture returns a success response containing a stable Factory Session identifier, completed status, and final result payload or result reference.",
+        "The result tool can read the same completed session and returns the expected deterministic final result without requiring a separate host installation step.",
+        "Repeating the same deterministic fixture invocation produces stable reviewer-verifiable values for session identity policy, status, and result content where the fixture contract defines stability.",
+        "The run simple path uses the mock session-provider fixture or shared session execution interface and avoids direct API-handler dependencies.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -69,15 +66,14 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-provider-fixtures-004",
-      "title": "Model Lifecycle Controls And Idempotency Outcomes",
-      "description": "As a lifecycle-control consumer, I want the fake provider to apply pause, resume, cancel, terminate, approve, and retry-dispatch outcomes deterministically so downstream cells can verify controls before the real backend is complete.",
+      "id": "dynamic-workflows-recovery-mcp-tools-004",
+      "title": "Support async status and not-ready result polling",
+      "description": "As an MCP client, I want async run, status, and result tools to represent running and not-ready states consistently so host agents can poll without treating in-progress work as a failure.",
       "acceptanceCriteria": [
-        "Pause, resume, cancel, terminate, approve, and retry-dispatch return deterministic accepted, no-op, invalid-state, terminal-session, or conflict outcomes according to the fixture scenario state.",
-        "Accepted controls return stable post-control inspection links for session, result, dispatch, artifact, or event reads when those resources are available.",
-        "Lifecycle controls do not mutate unrelated fixture scenarios or hidden global state; repeating the same fixture setup produces the same outcomes.",
-        "Control request idempotency returns the original lifecycle outcome for an equivalent replay and returns a stable conflict for the same request ID with a different idempotency tuple.",
-        "Lifecycle-control tests cover at least one recoverable failed session, one terminal session, one awaiting-approval session, and one retry-dispatch path.",
+        "Invoking the canonical run async tool with a running fixture returns a Factory Session identifier and an in-progress status rather than a completed final result.",
+        "The status tool returns a deterministic running or not-ready response for the in-progress mock session.",
+        "The result tool returns a typed not-ready response for the in-progress session without losing the session identifier or returning an untyped error.",
+        "A later completed fixture state for the same session can be observed through status and result with completed status and the expected final result.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -86,19 +82,34 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-provider-fixtures-005",
-      "title": "Stabilize Typed Failures And Scope Boundaries",
-      "description": "As a maintainer, I want fixture failures and scope boundaries to be explicit so downstream cells receive predictable errors without this cell widening into transport or UI work.",
+      "id": "dynamic-workflows-recovery-mcp-tools-005",
+      "title": "Return typed responses for failure, missing session, and conflict cases",
+      "description": "As an MCP client, I want predictable status and result errors for failed, missing, and conflicting requests so agent hosts can recover or report the right failure reason.",
       "acceptanceCriteria": [
-        "Unknown scenario, unknown session, malformed start or control request, unknown dispatch, unknown artifact, reconnect cursor miss, lifecycle conflict, and request-id conflict return stable typed errors.",
-        "Error values preserve enough structured context for API, CLI, MCP, and UI adapters to map them later without parsing free-form strings.",
-        "Malformed request tests prove validation fails before fixture state changes or session creation.",
-        "The fixture provider remains directly testable without HTTP server startup, CLI command execution, MCP host wiring, UI rendering, generated OpenAPI regeneration, or real JavaScript VM execution.",
-        "Public-facing fixture names, error names, event names, and test descriptions avoid DynamicWorkflowRun and workflow run as canonical resource terminology.",
+        "Status and result tools return deterministic typed responses for a failed session that includes a partial result or partial artifact reference when the fixture defines one.",
+        "Status and result tools return a typed missing-session response for an unknown Factory Session identifier.",
+        "Run or result requests that conflict with an existing request/session fixture return a typed request-conflict response with stable machine-readable fields.",
+        "Failure-path tests assert observable MCP response semantics and do not require scanning source-file structure, command inventories, or host package configuration.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 5,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "dynamic-workflows-recovery-mcp-tools-006",
+      "title": "Inspect dispatches, artifacts, controls, and events through MCP fixtures",
+      "description": "As an MCP client, I want inspection and control tools to expose deterministic session-owned dispatches, artifacts, controls, and events so host agents can inspect mock-backed Factory Sessions through the same vocabulary later used by the real runtime.",
+      "acceptanceCriteria": [
+        "Dispatch inspection returns deterministic session-owned dispatch records for the mock fixture using Factory Session and Dispatch vocabulary.",
+        "Artifact inspection returns deterministic session-owned artifact records or content references for the mock fixture using FactoryArtifact vocabulary.",
+        "Event inspection returns ordered Factory Session event facts for the mock fixture without exposing internal Petri-net terminology as the primary public vocabulary.",
+        "Control tool invocation returns deterministic accepted, rejected, or unsupported responses for the fixture-defined control cases without mutating unrelated sessions.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 6,
       "passes": false,
       "notes": ""
     }

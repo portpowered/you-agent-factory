@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Canonical Factory Session MCP discovery lives in `pkg/mcp/factorysession/` (`DiscoverTools`, `DiscoverCompatibilityAliases`, `ResolveToolName`); canonical names use `you.factory_session.*`, workflow `you.workflow.*` aliases are compatibility-only and route through `ResolveToolName` before `Client.CallTool`.
 - Published Factory Session fixture scenario IDs and stable projection hashes live in `pkg/factorysessionexecution/fixture_catalog.go` (`PublishedFixtureScenarios`, `FixtureScenarioIdentityFromScenario`, `FixtureScenarioProjectionHash`); contract JSON remains in `pkg/api/testdata/durable-session-contract-fixtures.json` and loads through `LoadFakeScenariosFromContractFixtures`.
 - Use `ContractFixtureCatalogRelativePath` when downstream cells need the repository-relative catalog path; prove stable identity with `fixture_catalog_test.go` golden projection hashes rather than recomputing ad hoc in each consumer package.
 - Built-in recoverable interrupted JavaScript session `javascript-interrupted-recoverable` is appended by `LoadFakeScenariosFromContractFixtures` even though it is not in the JSON catalog.
@@ -23,4 +24,24 @@
   - Patterns discovered: drive story-level FakeService tests from `PublishedFixtureScenarios` + `publishedScenarioByPurpose` rather than duplicating request/session IDs; fixture `asyncResponse.links` may omit events/dispatches/artifacts even when `InspectionLinksForSession` includes them.
   - Gotchas encountered: `GetSession` read models for running/timeout fixtures may omit `resultSummary` — assert result status via `GetResult` instead; idempotent-replay conflict tests must copy `Args` into a new map before mutation.
   - Useful context: sync timeout scenario returns `SYNC_WAIT_TIMED_OUT` availability on final result reads; terminal success dedupes from live rows in `scope=all` when also present in persisted durable listing.
+---
+
+## 2026-06-12 UTC - dynamic-workflows-recovery-mcp-tools-001
+- Added `pkg/mcp/factorysession` with canonical MCP discovery for ten Factory Session tools (list, validate_source, start_sync, start_async, get, get_result, list_dispatches, list_artifacts, control, read_events), typed JSON schemas mirroring durable REST contracts, workflow `you.workflow.*` compatibility aliases, and a mock client that routes aliases to canonical handlers.
+- Wired `you.factory_session.validate_source` through Factory preview (`ValidateSource`) so alias parity can be proven without provider execution; added focused registry and mock-client discovery tests.
+- Files changed: `pkg/mcp/factorysession/*`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: keep discovery (`registry.go`, `schemas.go`, `aliases.go`) separate from invocation handlers; use `ResolveToolName` in `Client.CallTool` so compatibility aliases share canonical behavior without duplicating handlers.
+  - Gotchas encountered: story 001 discovery requires control and read_events schemas even though invocation wiring lands in later stories; validate alias parity is the cheapest end-to-end alias proof because it needs no `FakeService`.
+  - Useful context: cell branch `dynamic-workflows-cell-mcp-tools` is a useful reference for later validate/run/status/result handler stories but omitted controls/events/aliases from discovery.
+---
+
+## 2026-06-12 UTC - dynamic-workflows-recovery-mcp-tools-002
+- Added focused `validate_source_test.go` proving canonical `you.factory_session.validate_source` returns deterministic success for the simple valid JavaScript workflow fixture (valid flag, sourceHash, policyHash aligned with `apisurface` preview), typed validation-failure envelopes for forbidden host access without transport-level errors, and workflow `you.workflow.validate` alias parity for both success and failure paths.
+- Documented validate invocation test location in `api-relevant-files.md`; handler wiring from story 001 (`ValidateSource` via `apisurface.BuildFactoryPreview`) required no further code changes.
+- Files changed: `pkg/mcp/factorysession/validate_source_test.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: assert MCP validate outcomes through `ToolResponse` envelopes (`result` vs `error`) and prove alias parity with byte-identical `Client.CallTool` responses; compare success metadata against `apisurface.FactoryPreviewResultFromPreview` rather than hardcoded hashes.
+  - Gotchas encountered: `WorkflowPolicyPreview` exposes `policyHash` (string), not `effectivePolicyHash`; error `details.sourceValidationIssues` type-asserts as `[]factoryapi.WorkflowDiagnostic` when read directly from Go structs.
+  - Useful context: invalid-fixture tests can reuse `require('fs');` with `workflowvalidation.CodeForbiddenHostAccess` and path-aware diagnostics under `.claude/workflows/`.
 ---
