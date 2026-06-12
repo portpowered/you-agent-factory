@@ -126,15 +126,17 @@ func newWorkMoveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 func newSessionCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	sessionCmd := &cobra.Command{
 		Use:   "session",
-		Short: "List, open, and close live factory sessions on a running host",
-		Long: "Manage live factory sessions on a running you-agent-factory service.\n\n" +
+		Short: "List, open, and close factory sessions on a running host",
+		Long: "Manage factory sessions on a running you-agent-factory service.\n\n" +
 			"Subcommands:\n" +
-			"  list    list live factory sessions from GET /factory-sessions\n" +
+			"  list    list live workspace sessions or durable Factory Sessions with --scope live|persisted|all\n" +
 			"  show    show one live factory session from GET /factory-sessions/{session_id}\n" +
 			"  create  open another live session from a folder path\n" +
 			"  delete  close a live session by session id\n\n" +
-			"Session commands use the same default --port as work list. Use --json to emit API-shaped " +
-			"responses on stdout; diagnostics stay on stderr when --verbose or --debug is set.",
+			"Durable list output uses Factory Session status, source identity, result availability, " +
+			"progress, and action availability. Session commands use the same default --port as work list. " +
+			"Use --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose " +
+			"or --debug is set.",
 		Example: "  # List live sessions on the default local port.\n" +
 			"  " + cliBinaryName + " session list\n\n" +
 			"  # Show orchestrator-aware runtime for one live session.\n" +

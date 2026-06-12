@@ -909,16 +909,18 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *co
 
 	cmd := &cobra.Command{
 		Use:   "workflow",
-		Short: "Validate and preview JavaScript workflow sources",
-		Long: "Validate and preview JavaScript or TypeScript workflow sources using the shared workflow preview contract.\n\n" +
+		Short: "Validate JavaScript workflow sources for Factory Session execution",
+		Long: "Validate JavaScript or TypeScript workflow sources before starting a Factory Session.\n\n" +
 			"Subcommands:\n" +
-			"  validate  resolve workflow source and validate it without execution\n" +
-			"  preview   resolve workflow source, validate it without execution, and project policy and result constraints",
+			"  validate  primary CLI path: resolve workflow source and validate it without execution\n" +
+			"  preview   compatibility alias for the Factory preview contract; prefer validate for CLI checks",
 	}
 	previewCmd := &cobra.Command{
 		Use:   "preview",
-		Short: "Preview workflow validation and policy",
-		Long:  "Resolve workflow source, validate it without execution, and print source, loader, policy, and result-shape diagnostics.",
+		Short: "Compatibility preview of workflow validation and policy",
+		Long: "Compatibility command for the Factory preview contract. Resolve workflow source, validate it " +
+			"without execution, and print source, loader, policy, and result-shape diagnostics. Prefer " +
+			cliBinaryName + " workflow validate for CLI source checks before Factory Session execution.",
 		Example: "  # Preview a project workflow by name.\n" +
 			"  " + cliBinaryName + " workflow preview --kind WORKFLOW_NAME --value review\n\n" +
 			"  # Preview inline workflow source.\n" +

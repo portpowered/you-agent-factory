@@ -65,7 +65,7 @@ func TestRootCommand_HelpDocumentsSessionCommand(t *testing.T) {
 	help := out.String()
 	for _, want := range []string{
 		"session",
-		"List, open, and close live factory sessions on a running host",
+		"List, open, and close factory sessions on a running host",
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("root help missing %q:\n%s", want, help)
