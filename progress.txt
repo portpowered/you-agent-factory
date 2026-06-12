@@ -45,3 +45,21 @@
   - Gotchas encountered: `WorkflowPolicyPreview` exposes `policyHash` (string), not `effectivePolicyHash`; error `details.sourceValidationIssues` type-asserts as `[]factoryapi.WorkflowDiagnostic` when read directly from Go structs.
   - Useful context: invalid-fixture tests can reuse `require('fs');` with `workflowvalidation.CodeForbiddenHostAccess` and path-aware diagnostics under `.claude/workflows/`.
 ---
+
+## 2026-06-12 UTC - dynamic-workflows-recovery-mcp-tools-003
+- Wired `you.factory_session.start_sync` and `you.factory_session.get_result` through `factorysessionexecution.Service` (`StartSync`, `GetResult`) with apisurface request/response mappers, typed execution error envelopes, `NewClientWithService`, and contract-fixture-backed mock-client tests proving terminal sync success, deterministic final result reads, idempotent replay stability, and workflow run alias parity.
+- Files changed: `pkg/mcp/factorysession/start_sync.go`, `pkg/mcp/factorysession/get_result.go`, `pkg/mcp/factorysession/client.go`, `pkg/mcp/factorysession/errors.go`, `pkg/mcp/factorysession/start_sync_test.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: inject `factorysessionexecution.Service` into `Client` via `NewClientWithService`; keep validate on preview-only path while run/status/result tools route through shared execution mappers (`StartRequestFromAPI`, `SyncStartResponseToAPI`, `ResultRequestFromAPI`, `ResultResponseToAPI`).
+  - Gotchas encountered: alias parity tests for start_sync need separate `FakeService` instances per call — a second invocation on the same client replays from session state and can diverge from the first-start projection shape; use `fixtures.SyncStartResultHash` and `fixtures.ProjectedResultReadHash` golden digests for sync-success (`req-petri-success-001` / `dur-sess-petri-success-001`).
+  - Useful context: the published sync-success fixture uses factory id `customer-support-triage`, not the JavaScript `review.js` validate fixture; story 004 will extend async/status/not-ready paths on the same client service seam.
+---
+
+## 2026-06-12 UTC - dynamic-workflows-recovery-mcp-tools-004
+- Wired `you.factory_session.start_async` and `you.factory_session.get` through `factorysessionexecution.Service` (`StartAsync`, `GetSession`) with apisurface mappers, extended `Client.CallTool` routing, and mock-client tests proving async running fixture acceptance, deterministic RUNNING status reads, typed `factory_session.result.not_ready` final-result polling with sessionId retention, and completed status/result observation on the same mock client after sync-success start.
+- Files changed: `pkg/mcp/factorysession/start_async.go`, `pkg/mcp/factorysession/get_session.go`, `pkg/mcp/factorysession/client.go`, `pkg/mcp/factorysession/start_async_test.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: async MCP handlers mirror sync (`StartAsync` / `GetSession` + `AsyncStartResponseToAPI` / `SessionReadResponseToAPI`); reuse published async-running IDs (`req-js-run-n-001` / `dur-sess-js-run-n-001`) and golden `fixtures.ProjectedResultReadHash` for NOT_READY final reads (`sha256:5847ff5f39efb7f12c0a8ca67635c7e7d7332b56dbf7d724d4669450b3c8f765`).
+  - Gotchas encountered: `FactorySessionExecutionResponse` has no embedded terminal `result` field (unlike sync) — assert in-progress async starts via `status` and links only; running session read models may omit `resultSummary` even when partial results exist via `get_result` partial mode.
+  - Useful context: story 005 owns missing-session and request-conflict envelopes — keep those out of story 004 tests; completed-state polling demo can pair async-running start with sync-success terminal reads on one shared `FakeService` client.
+---
