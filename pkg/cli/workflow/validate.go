@@ -32,7 +32,13 @@ func Validate(cfg ValidateConfig) error {
 		apisurface.BuildFactoryWorkflowValidation(input),
 	)
 	if cfg.JSON {
-		return json.NewEncoder(cfg.Output).Encode(result)
+		if err := json.NewEncoder(cfg.Output).Encode(result); err != nil {
+			return err
+		}
+		if !result.Valid {
+			return fmt.Errorf("workflow validation found blocking issues")
+		}
+		return nil
 	}
 	return renderValidateHuman(result, cfg.Output)
 }
@@ -44,8 +50,11 @@ func renderValidateHuman(result apisurface.FactoryWorkflowValidationResult, outp
 		fmt.Fprintf(output, "Workflow validation failed.\n")
 	}
 	renderValidationSourceMetadata(result, output)
-	for _, diagnostic := range result.BlockingDiagnostics {
-		fmt.Fprintf(output, "%s\n", formatWorkflowDiagnostic(diagnostic))
+	if len(result.BlockingDiagnostics) > 0 {
+		fmt.Fprintf(output, "Blocking diagnostics:\n")
+		for _, diagnostic := range result.BlockingDiagnostics {
+			fmt.Fprintf(output, "  %s\n", formatWorkflowDiagnostic(diagnostic))
+		}
 	}
 	if !result.Valid {
 		return fmt.Errorf("workflow validation found blocking issues")

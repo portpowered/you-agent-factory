@@ -949,6 +949,8 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *co
 		command.Flags().StringVar(&cfg.SourceValue, "value", "", "workflow name, file ref, or factory id")
 		command.Flags().StringVar(&cfg.InlineSource, "inline", "", "inline workflow source text")
 		command.Flags().StringVar(&cfg.ArtifactRoot, "artifact-root", "", "optional absolute artifact root")
+		command.Flags().StringVar(&cfg.ArgsSchema, "args-schema", "", "optional orchestrator.javascript argsSchema JSON")
+		command.Flags().StringVar(&cfg.RequestedPolicyJSON, "requested-policy", "", "optional requested policy override JSON")
 	}
 	addWorkflowSourceFlags(previewCmd, &previewCfg.SourceConfig)
 	addWorkflowSourceFlags(validateCmd, &validateCfg.SourceConfig)

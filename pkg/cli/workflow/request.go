@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -10,11 +11,13 @@ import (
 
 // SourceConfig holds shared workflow source CLI inputs.
 type SourceConfig struct {
-	Dir          string
-	SourceKind   string
-	SourceValue  string
-	InlineSource string
-	ArtifactRoot string
+	Dir                 string
+	SourceKind          string
+	SourceValue         string
+	InlineSource        string
+	ArtifactRoot        string
+	ArgsSchema          string
+	RequestedPolicyJSON string
 }
 
 func previewRequestFromSourceConfig(cfg SourceConfig) (workflowpreview.Request, error) {
@@ -32,6 +35,18 @@ func previewRequestFromSourceConfig(cfg SourceConfig) (workflowpreview.Request, 
 		return workflowpreview.Request{}, err
 	}
 
+	var argsSchema []byte
+	if trimmed := strings.TrimSpace(cfg.ArgsSchema); trimmed != "" {
+		argsSchema = []byte(trimmed)
+	}
+
+	var requestedPolicy map[string]any
+	if trimmed := strings.TrimSpace(cfg.RequestedPolicyJSON); trimmed != "" {
+		if err := json.Unmarshal([]byte(trimmed), &requestedPolicy); err != nil {
+			return workflowpreview.Request{}, fmt.Errorf("requested policy must be valid JSON: %w", err)
+		}
+	}
+
 	return workflowpreview.Request{
 		Source: workflowsource.Request{
 			Kind:         sourceKind,
@@ -39,7 +54,9 @@ func previewRequestFromSourceConfig(cfg SourceConfig) (workflowpreview.Request, 
 			InlineSource: strings.TrimSpace(cfg.InlineSource),
 			ArtifactRoot: strings.TrimSpace(cfg.ArtifactRoot),
 		},
-		Context: ctx,
+		Context:         ctx,
+		ArgsSchema:      argsSchema,
+		RequestedPolicy: requestedPolicy,
 	}, nil
 }
 

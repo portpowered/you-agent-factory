@@ -1,112 +1,37 @@
 ## Codebase Patterns
-- Canonical PR verification tiers live in the root `Makefile`: `verify-pr` → `verify-build-contracts` + `verify-tests`; use `run_verification_step` for owned lane labels and exact `make <target>` rerun hints on failure.
-- `scripts/ci/run-sharded-ui-coverage.sh` runs `UI_COVERAGE_SHARD=<i>/<total> make ui-test-coverage` shards in parallel (default `UI_COVERAGE_SHARD_TOTAL=10`), then `make test-ui-coverage-merge` for thresholds and replay check; it wipes `ui/.vitest-reports` before shard launch and `sanitizeVitestReportsDirForShardMerge` in `ui-coverage-runner.mjs` strips stale monolithic/out-of-range blobs before `vitest --mergeReports`.
-- `scripts/ci/run-concurrent-ui-verification-lanes.sh` orchestrates concurrent `make run-sharded-ui-coverage` and `make ui-integration-test` with `[UI Coverage]` / `[UI Browser Integration]` stdout prefixes and per-lane logs under `.artifacts/concurrent-ui-verification-lanes/`.
-- GitHub Actions already runs `ui-coverage-shard` and `ui-browser-integration` as parallel jobs; local `make verify-tests` matches that shard-and-merge plus fast-fail concurrency model.
-- Shard main passes use per-shard coverage dirs (`coverage/shard-<index>`) in `ui/scripts/ui-coverage-runner.mjs` so parallel local shards avoid shared `coverage/` races.
-- Browser integration harness (`ui/integration/browser-test-harness.mjs`) picks isolated preview/API ports via `findAvailablePort()`, so concurrent browser and covered UI lanes avoid port conflicts when run locally.
-- High-cost `App.*` suites can be split by deleting cases already owned by feature/widget tests and moving canonical layout walks onto `CurrentSelectionWidget` harnesses; record before/after timings in `docs/internal/development/ui-*-split-closeout.md`.
-- Shared slow-file reporting lives in `ui/scripts/ui-test-cost-report.mjs`; covered UI writes per-shard `ui/.vitest-report-timings/main-shard-<index>-timings.json` (outside `.vitest-reports` so `vitest --mergeReports` only sees Vitest blobs) and merge mode prints `[ui-coverage] Merged main covered pass slowest test files`; browser integration uses `ui/scripts/ui-integration-runner.mjs` with `[ui-browser-integration]` summaries and `[category]` suffixes.
-- Verification command smoke tests live in `tests/functional/smoke/verify_fast_command_smoke_test.go` and use wrapper Makefiles to assert tier ordering without running full suites.
-- UI test lane boundaries and redundancy policy live in `docs/internal/development/ui-test-lane-boundaries.md`; keep theme/CSS token contracts in jsdom (`styles.page-shell-background.test.ts`, `theme-role-regression.test.ts`) and durable import/export/graph behavior in `ui/integration/*.integration.test.mjs`.
-- Browser integration stability (sequential suites, port/download isolation, durable wait helpers) lives in `docs/internal/development/ui-browser-integration-stability.md`; shared checkpoints are `waitForDurableControlEnabled`, `waitForCapturedDownloadOrDialogError`, and `waitForDialogHidden` in `browser-test-harness.mjs`.
-- Exclude every `ui-coverage-runner*.test.mjs` from the main covered Vitest pass: merge-mode tests call `runUiCoverageMerge`, which `rmSync("coverage")` and will break in-flight shard coverage if the file lands in a shard (story 002 split `ui-coverage-runner.shard-merge.test.mjs` into shard 8/10).
+- CLI workflow source validation loopback uses `pkg/apisurface/factory_workflow_validation.go` (`BuildFactoryWorkflowValidation`, `FactoryWorkflowValidationResultFromPreview`) on top of `BuildFactoryPreview`; `you workflow validate` lives in `pkg/cli/workflow/validate.go` with shared source flags via `SourceConfig` in `request.go`. JSON uses generated `WorkflowSourceResolution` plus `blockingDiagnostics` (`[]WorkflowDiagnostic`); denied capabilities from READ_ONLY policy preview are informational, not blocking.
+- Published Factory Session fixture scenario IDs and stable projection hashes live in `pkg/factorysessionexecution/fixture_catalog.go` (`PublishedFixtureScenarios`, `FixtureScenarioIdentityFromScenario`, `FixtureScenarioProjectionHash`); contract JSON remains in `pkg/api/testdata/durable-session-contract-fixtures.json` and loads through `LoadFakeScenariosFromContractFixtures`.
+- Use `ContractFixtureCatalogRelativePath` when downstream cells need the repository-relative catalog path; prove stable identity with `fixture_catalog_test.go` golden projection hashes rather than recomputing ad hoc in each consumer package.
+- Built-in recoverable interrupted JavaScript session `javascript-interrupted-recoverable` is appended by `LoadFakeScenariosFromContractFixtures` even though it is not in the JSON catalog.
+- Prove FakeService start/list/read/result behavior against `PublishedFixtureScenarios` in `start_list_read_result_test.go`; use `ProjectedResultReadHash` and `SyncStartResultHash` for golden result digests instead of ad hoc field comparisons.
 
-## 2026-06-11T11:19:15Z - prd-ui-ci-acceleration-and-test-rationalization-001
-- Implemented concurrent UI verification in the canonical PR path: `make verify-tests` and `make ci-verify-tests` now invoke `make run-concurrent-ui-verification-lanes`, which starts `test-ui-coverage` and `ui-integration-test` together with prefixed stdout and per-lane artifact logs.
-- Added `scripts/ci/run-concurrent-ui-verification-lanes.sh`, updated `Makefile`, documented behavior in `docs/internal/development/development.md`, and extended `verify_fast_command_smoke_test.go` with orchestrator smoke coverage.
+## 2026-06-11 UTC - dynamic-workflows-cell-provider-fixtures-001
+- Published stable fixture scenario identity catalog with purpose-to-scenario mappings for validation failure, async running, sync success, sync timeout, failed recoverable session, dispatch inspection, artifact inspection, event reconnect, and lifecycle-control outcomes.
+- Added `FixtureScenarioIdentityFromScenario` and `FixtureScenarioProjectionHash` to derive deterministic session/dispatch/artifact/event IDs and stable `sha256:` projection digests from loaded contract fixtures.
+- Added direct tests documenting golden scenario identities, reload stability, canonical Factory Session vocabulary, and hydrated published catalog rows.
+- Files changed: `pkg/factorysessionexecution/fixture_catalog.go`, `pkg/factorysessionexecution/fixture_catalog_test.go`, `docs/internal/processes/api-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: mirror CI lane orchestration with small `scripts/ci/*.sh` helpers when Make sequential steps block fast-fail goals; keep individual `make <lane>` targets as the rerun contract.
-  - Gotchas encountered: do not assert interleaved stdout ordering between concurrent lanes in tests—scheduler buffering makes it flaky; assert both lanes ran, prefixes exist, and start banners appear.
-  - Useful context: `release-surface-smoke` still runs before concurrent UI lanes and installs Playwright; backend verification remains sequential after UI lanes complete.
+  - Patterns discovered: mirror UI replay catalog style with exported Go constants plus a published slice (`PublishedFixtureScenarios`) keyed by `FixtureScenarioPurpose`; hash identity bundles via canonical JSON of sorted ID lists plus optional `primaryResultHash`.
+  - Gotchas encountered: `javascript-interrupted-recoverable` is injected at load time from `BuiltinInterruptedRecoverableScenario()` — include it when asserting full scenario counts from the loader, not only JSON `scenarios[]` length.
+  - Useful context: existing `fake_service_test.go` already exercises runtime behavior; story 001 focuses on documenting reusable scenario IDs/hashes for downstream cells without widening into transport surfaces.
 ---
 
-## 2026-06-11T12:05:00Z - prd-ui-ci-acceleration-and-test-rationalization-002
-- Wired canonical PR verification to sharded UI coverage: added `scripts/ci/run-sharded-ui-coverage.sh` and `make run-sharded-ui-coverage`, updated `run-concurrent-ui-verification-lanes.sh` to invoke it, isolated per-shard coverage dirs in `ui-coverage-runner.mjs`, and documented default `UI_COVERAGE_SHARD_TOTAL=10` tuning in `development.md`.
-- Updated `cmd/ciclassify`, CI push classification output, and smoke tests for shard failure attribution (`UI_COVERAGE_SHARD=<i>/<total> make ui-test-coverage`) and merge rerun (`make test-ui-coverage-merge`).
+## 2026-06-11 UTC - dynamic-workflows-cell-provider-fixtures-002
+- Added `ProjectedResultReadHash` and `SyncStartResultHash` helpers for stable downstream result assertions.
+- Added `start_list_read_result_test.go` proving published-scenario async/sync start, scoped session listing with all-scope dedup, get-session read models, result reads with golden hashes, artifact inclusion shaping, and start idempotency replay/conflict through direct `FakeService` tests.
+- Files changed: `pkg/factorysessionexecution/fixture_catalog.go`, `pkg/factorysessionexecution/start_list_read_result_test.go`, `docs/internal/processes/api-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: mirror CI shard+merge locally with a dedicated `scripts/ci/*.sh` orchestrator; keep `make test-ui-coverage` as monolithic compatibility while `make run-sharded-ui-coverage` is the PR-tier lane contract.
-  - Gotchas encountered: parallel local shards need isolated `--coverage.reportsDirectory` values; clean stale `main-shard-*.json` blobs before orchestration or merge can pass with partial prior artifacts.
-  - Useful context: merge still runs through `make test-ui-coverage-merge` which invokes `UI_COVERAGE_MERGE=1` plus `ui-replay-coverage-check`; shard logs land under `.artifacts/sharded-ui-coverage/shard-<index>.log`.
+  - Patterns discovered: drive story-level FakeService tests from `PublishedFixtureScenarios` + `publishedScenarioByPurpose` rather than duplicating request/session IDs; fixture `asyncResponse.links` may omit events/dispatches/artifacts even when `InspectionLinksForSession` includes them.
+  - Gotchas encountered: `GetSession` read models for running/timeout fixtures may omit `resultSummary` — assert result status via `GetResult` instead; idempotent-replay conflict tests must copy `Args` into a new map before mutation.
+  - Useful context: sync timeout scenario returns `SYNC_WAIT_TIMED_OUT` availability on final result reads; terminal success dedupes from live rows in `scope=all` when also present in persisted durable listing.
 ---
 
-## 2026-06-11T18:33:00Z - prd-ui-ci-acceleration-and-test-rationalization-003
-- Added shared `ui/scripts/ui-test-cost-report.mjs` with Vitest log parsing, cost categories, and stable slow-file summary formatting; covered UI shards now write timing artifacts and merge mode emits a merged top-slowest summary with `[category]` labels.
-- Wired browser integration through `ui/scripts/ui-integration-runner.mjs` and `run-ui-integration-with-timings.mjs` so `test:integration` prints `[ui-browser-integration]` per-file timing summaries; documented reporting in `development.md` and cleaned stale timing blobs in `run-sharded-ui-coverage.sh`.
+## 2026-06-11 UTC - dynamic-workflows-cell-cli-validate-list-001
+- Added `you workflow validate` CLI loopback command with human output (`Workflow validation passed.` plus source ref/hash) and stable JSON using `FactoryWorkflowValidationResult` (`valid`, `sourceResolution`, empty `blockingDiagnostics` on success).
+- Introduced shared apisurface validation mapping (`BuildFactoryWorkflowValidation`, `FactoryWorkflowValidationResultFromPreview`) and extracted CLI source input helpers (`SourceConfig`, `request.go`) reused by preview and validate.
+- Files changed: `pkg/apisurface/factory_workflow_validation.go`, `pkg/apisurface/factory_workflow_validation_test.go`, `pkg/cli/workflow/validate.go`, `pkg/cli/workflow/validate_test.go`, `pkg/cli/workflow/request.go`, `pkg/cli/workflow/preview.go`, `pkg/cli/workflow/preview_test.go`, `pkg/cli/root.go`, `docs/internal/processes/api-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: keep lane-specific log prefixes (`[ui-coverage]`, `[ui-browser-integration]`) while sharing parse/rank/categorize helpers from one module; write small JSON timing artifacts per shard for merge-time aggregation instead of re-parsing prefixed lane logs.
-  - Gotchas encountered: integration test paths use `integration/...` without a leading slash—categorization heuristics must match both forms; `src/App.import.test.tsx` needs import-export classification before the generic `App.*` app-shell rule.
-  - Useful context: slow-file lines look like `[prefix]   <path> <seconds>s [<category>]` and are suitable to paste into closeout notes for cross-run comparison.
----
-
-## 2026-06-11T18:42:00Z - prd-ui-ci-acceleration-and-test-rationalization-004
-- Added `docs/internal/development/ui-test-lane-boundaries.md` with observable contracts per lane, durable-behavior browser guidance, and minimum import/export plus graph-editing browser contracts; linked from `development.md`.
-- Removed redundant browser integration suites `page-shell-background.integration.test.mjs` and `header-palette-menu-selected-state.integration.test.mjs` in favor of cheaper jsdom theme/CSS coverage; narrowed `App.import.test.tsx` roundtrip to assert activation `PUT` from a harness-built PNG without re-proving export dialog copy.
-- Updated `replay-fixture-catalog.ts` PNG roundtrip metadata to reflect narrowed jsdom ownership.
-- **Learnings for future iterations:**
-  - Patterns discovered: document lane boundaries in a dedicated maintainer guide and record applied redundancy removals in a table so future stories can split suites without re-litigating ownership.
-  - Gotchas encountered: when narrowing jsdom import roundtrips, build `importValue.factory` from the full named export fixture (minus version) so activation-body assertions still match production payload shape.
-  - Useful context: browser import/export minimum contract is spread across `factory-name-preservation.integration.test.mjs`, `factory-import-second-session.integration.test.mjs`, and `factory-graph-editor.integration.test.mjs`—jsdom should stop at request bodies and stream refresh.
----
-
-## 2026-06-11T19:04:00Z - prd-ui-ci-acceleration-and-test-rationalization-005
-- Split `App.current-selection.test.tsx` from 26 whole-dashboard cases to 10 cross-feature app-shell regressions; moved dispatch history, locale, workstation editing, chart refresh, responsive catalog, and terminal occupancy ownership to existing feature/widget suites and added `current-selection-widget.canonical-section-layout.test.tsx`.
-- Added `docs/internal/development/ui-current-selection-app-shell-split-closeout.md` with behavior inventory and before/after timing (90.31s → 31.99s on the same local runner for the app-shell file).
-- **Learnings for future iterations:**
-  - Patterns discovered: when an `App.*` file duplicates feature tests, delete the redundant `renderApp` cases first and add a widget-harness replacement only for layout contracts that lack a direct owner; document the mapping in a split closeout note.
-  - Gotchas encountered: Python/regex block removal must match nested `describe` indentation (`    it(`) and brace-balanced blocks—orphaned bodies break Vitest silently; run the target file immediately after mechanical deletions.
-  - Useful context: worker/resource/work-type canonical sections already live in `current-selection-widget.test.tsx` and `current-selection-widget.work-type.test.tsx`; app-shell should keep graph+bento+trace cross-wiring only.
----
-
-## 2026-06-11T19:12:00Z - prd-ui-ci-acceleration-and-test-rationalization-006
-- Added `docs/internal/development/ui-browser-integration-stability.md` documenting sequential browser suites, concurrent-lane port/download isolation, and failure rerun paths; linked from `development.md` and `ui-test-lane-boundaries.md`.
-- Exposed durable wait helpers in `browser-test-harness.mjs` (`waitForDurableCheckpoint`, `waitForDurableControlEnabled`, `waitForDialogHidden`, `waitForCapturedDownloadOrDialogError`) with unit coverage in `browser-test-harness.wait-patterns.test.mjs`.
-- Simplified export/import browser assertions: removed `Selected image: dashboard.png` and duplicate `textContent` checks in favor of enabled-control polling, dialog hidden state, and preview-image visibility; verified `factory-name-preservation.integration.test.mjs` (3 tests, ~220s local).
-- **Learnings for future iterations:**
-  - Patterns discovered: encode browser wait guidance as exported harness helpers with small node-environment unit tests; document every `describe.sequential` file and its shared preview/build cache in one stability guide.
-  - Gotchas encountered: dialog teardown should wait on `role="dialog"` hidden state, not heading copy that unmounts on a different schedule than the dialog node.
-  - Useful context: `make ui-integration-test` already forces `--no-file-parallelism --maxWorkers 1`; concurrent PR verification only parallelizes the browser lane against covered UI in separate processes with isolated ports from `findAvailablePort()`.
----
-
-## 2026-06-11T19:26:00Z - mergeability (PR #799 blocking feedback)
-- Addressed BLOCKING review on stale Vitest blob merge: `run-sharded-ui-coverage.sh` now wipes `ui/.vitest-reports` before launching shards; `sanitizeVitestReportsDirForShardMerge` in `ui-coverage-runner.mjs` removes monolithic/out-of-range/react-flow blobs before merge mode runs `vitest --mergeReports`.
-- Added stale-blob coverage in `ui-coverage-runner.test.mjs` and `TestShardedUICoverageScriptSmoke_CleansStaleVitestReportBlobsBeforeShards`; documented hermetic report-dir behavior in `development.md`.
-- **Learnings for future iterations:**
-  - Patterns discovered: shard orchestrators should reset shared blob report directories wholesale; merge mode still needs a second sanitize pass because `vitest --mergeReports <dir>` ingests every blob in that directory.
-  - Gotchas encountered: timing artifacts (`main-shard-<index>-timings.json`) are not Vitest blobs—keep them in `ui/.vitest-report-timings/`, not `ui/.vitest-reports/`, or `vitest --mergeReports` will crash parsing them.
-  - Useful context: only mergeability work for this iteration; all PRD stories were already `passes: true`.
----
-
-## 2026-06-11T12:35:00Z - mergeability (PR #799 CI deadcode)
-- Fixed `Build, Lint, and API` CI failure: removed unused `mockCurrentFactoryDocument` export from `app-shell-test-utils.tsx` after story 005 deleted the only consumers during the app-shell split.
-- **Learnings for future iterations:**
-  - Patterns discovered: when deleting `App.*` test cases, grep for helpers that become single-file exports and run `make ui-deadcode` before pushing—CI enforces the reviewed baseline.
-  - Gotchas encountered: deadcode drift fails the whole `Build, Lint, and API` job even when typecheck and shard lanes pass independently.
-  - Useful context: mergeability-only follow-up; no PRD story status changes required.
----
-
-## 2026-06-11T12:50:00Z - mergeability (PR #799 UI Coverage merge)
-- Fixed CI `UI Coverage` merge failure (`TypeError: parse is not a function`): moved slow-file timing artifacts from `ui/.vitest-reports/` to `ui/.vitest-report-timings/` and stopped allowlisting `*-timings.json` in `sanitizeVitestReportsDirForShardMerge` so `vitest --mergeReports` only ingests Vitest blob reports.
-- Updated `run-sharded-ui-coverage.sh`, runner tests, and `development.md`.
-- **Learnings for future iterations:**
-  - Patterns discovered: never store non-Vitest JSON beside shard blob reports—`vitest --mergeReports <dir>` parses every file in that directory.
-  - Gotchas encountered: the stale-blob sanitize fix accidentally kept timing JSON in `.vitest-reports`, which passed local shard-only runs but broke CI merge when shard artifacts uploaded timing files with blobs.
-  - Useful context: mergeability-only follow-up; all PRD stories remain `passes: true`.
----
-
-## 2026-06-11T13:10:00Z - mergeability (PR #799 lint + main merge)
-- Merged `origin/main` to clear PR conflict; split `ui-coverage-runner.test.mjs` into `ui-coverage-runner.shard-merge.test.mjs` after Biome `noExcessiveLinesPerFile` failed at 461 lines (max 450).
-- **Learnings for future iterations:**
-  - Patterns discovered: when shard/merge tests push a script test file over the 450-line Biome cap, split merge-mode coverage into a sibling `*.shard-merge.test.mjs` file instead of disabling the rule.
-  - Gotchas encountered: merging main can introduce unrelated lint warnings, but the nursery line-count rule is an error that fails `make ui-lint` even when warnings are tolerable.
-  - Useful context: mergeability-only follow-up on head `ee360d880`.
----
-
-## 2026-06-11T13:35:00Z - mergeability (PR #799 UI Coverage shard 8)
-- Fixed CI `UI Coverage Shard (8/10)` / merge failure: excluded `scripts/ui-coverage-runner.shard-merge.test.mjs` from the main covered pass alongside `ui-coverage-runner.test.mjs`; shard-merge tests invoke `runUiCoverageMerge`, which deletes `coverage/` while Vitest is still writing shard temp coverage files.
-- Shard runs now use `--coverage.clean=true` and pre-clean `coverage/shard-<index>` for isolated shard dirs.
-- **Learnings for future iterations:**
-  - Patterns discovered: when splitting runner tests into sibling files for lint, mirror every new `ui-coverage-runner*.test.mjs` path in `buildMainCoveredVitestArgs` excludes or shard coverage will intermittently ENOENT mid-pass.
-  - Gotchas encountered: Vitest's ENOENT on `coverage-*.json` during `readCoverageFiles` can be a symptom of another test deleting `coverage/`, not a Vitest shard bug—check which files the failing shard index actually runs.
-  - Useful context: reproduced locally with `UI_COVERAGE_SHARD=8/10 make ui-test-coverage`; mergeability-only follow-up on head `6e7462b1a`.
+  - Patterns discovered: validation JSON should aggregate blocking diagnostics from source resolution failures/conflicts, artifact-root rejection, source validation issues, and policy validation issues only—do not treat READ_ONLY `DeniedCapabilities` as blocking because `Preview.HasBlockingIssues` ignores them.
+  - Gotchas encountered: generated `WorkflowArtifactRootDecision.requested` is a string, not a bool; check `strings.TrimSpace(requested) != ""` when mirroring preview blocking rules.
+  - Useful context: prove validate JSON parity by marshaling `apisurface.FactoryWorkflowValidationResultFromPreview(BuildFactoryWorkflowValidation(input))` in tests, matching the preview package's canonical seam pattern.
 ---

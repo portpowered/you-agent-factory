@@ -1,117 +1,119 @@
 {
-  "project": "UI CI Acceleration and Test Rationalization",
-  "branchName": "prd-ui-ci-acceleration-and-test-rationalization",
-  "description": "Accelerate the UI-heavy portions of the required CI path by surfacing browser integration failures earlier, using sharded UI coverage, adding stable slow-test reporting, and reducing redundant UI test coverage without weakening defect detection.",
+  "project": "Dynamic Workflows CLI Validate And Durable Session List",
+  "branchName": "dynamic-workflows-cell-cli-validate-list",
+  "description": "Add CLI loopback behavior for dynamic JavaScript workflows so customers can validate workflow source and list durable Factory Sessions with stable human-readable and JSON output before the full runtime or HTTP parity path is complete.",
   "context": {
-    "customerAsk": "Accelerate UI CI and rationalize redundant tests so browser integration regressions fail faster, covered UI runs complete sooner, and maintainers have timing evidence to keep the suite from regressing.",
-    "problem": "The current required CI path runs expensive UI verification lanes serially, so browser integration failures can be delayed until after a long covered UI pass. Existing coverage sharding is not used by the canonical PR flow, slow app-shell and React Flow-heavy tests dominate runtime, and some browser/jsdom/unit assertions overlap without adding proportional confidence.",
-    "solution": "Introduce a canonical PR verification flow that starts browser integration before covered UI completion, use the repo-owned sharded coverage and merge behavior, emit stable slow-test reports, define lane boundaries, split at least one high-cost app-shell suite into lower-cost feature tests, and preserve deterministic browser integration behavior."
+    "customerAsk": "Add CLI validation and durable session list loopback for dynamic workflows. CLI validation must succeed for a valid simple JavaScript workflow fixture and return blocking diagnostics for syntax errors, unsupported globals, invalid args schema, and policy-denied host access. CLI list output must show durable JavaScript Factory Session rows with status, source identity, result availability, phase/progress summary, and action availability when present. JSON output must be stable enough for tests and use generated or shared API/domain shapes where appropriate. Focused CLI tests must cover human output, JSON output, invalid input, and provider/service failure.",
+    "problem": "Dynamic workflow work needs a fast, customer-testable CLI path. Users currently cannot rely on the CLI to validate JavaScript workflow source with stable diagnostics or list durable Factory Sessions with live, persisted, and all-session views that expose session status and result availability.",
+    "solution": "Add command behavior for workflow source validation using existing source-kind, source-ref, and inline-source inputs, and extend CLI session listing to surface durable Factory Session summaries from deterministic provider data. Use the mock session-provider path first, or an equivalent direct factorysessionexecution.Service implementation, while keeping the command output contract stable for a later real service or HTTP API swap."
   },
   "acceptanceCriteria": [
-    "Browser integration no longer waits for the full covered UI lane to finish before starting in the canonical PR verification flow.",
-    "Required UI-related CI wall clock time is reduced by at least 30% from the current measured baseline, or the closeout artifact explains the measured blocker and next tuning step.",
-    "Sharded UI coverage preserves merged coverage reports, threshold enforcement, replay coverage checking, and clear failure output when a shard fails.",
-    "Covered UI and browser integration lanes emit stable slow-file summaries that maintainers can compare across runs.",
-    "Lane boundaries explain what belongs in unit/jsdom coverage, covered feature integration, and browser integration, with duplicate assertion patterns removed from at least one high-cost area.",
-    "Browser integration remains deterministic: failures identify the lane and rerun command, and concurrent execution avoids port, preview server, and shared download conflicts.",
-    "Typecheck, lint, and relevant tests pass for CI orchestration, coverage sharding, reporting, and changed UI test behavior."
+    "CLI validation succeeds for a valid simple JavaScript workflow fixture and exits successfully for both human-readable and JSON output.",
+    "CLI validation returns blocking diagnostics for syntax errors, unsupported globals or host access, invalid args schema, and policy-denied host access with stable machine-readable fields.",
+    "CLI session list output shows durable JavaScript Factory Session rows with lifecycle status, source identity, result availability, phase or progress summary, and action availability when present.",
+    "CLI session listing supports durable session scopes for live, persisted, and all sessions when the current command structure supports scoped listing.",
+    "JSON output for validation and listing is stable enough for tests and uses generated or shared API/domain shapes where appropriate rather than duplicating ad hoc response models.",
+    "Provider or service failure is reported as a clear CLI error with a non-zero exit and without partial misleading success output.",
+    "Quality gate: typecheck, lint, and focused CLI tests pass, including go test ./pkg/cli/workflow ./pkg/cli/session ./pkg/cli."
   ],
   "userStories": [
     {
-      "id": "prd-ui-ci-acceleration-and-test-rationalization-001",
-      "title": "Fast-Fail Required UI CI Flow",
-      "description": "As an engineer merging a UI change, I want browser integration to start before or alongside covered UI verification so that browser regressions become actionable sooner.",
+      "id": "dynamic-workflows-cell-cli-validate-list-001",
+      "title": "Validate a simple JavaScript workflow from CLI inputs",
+      "description": "As a workflow author, I want to validate a simple JavaScript workflow source from the CLI so I can confirm the source is acceptable before starting a Factory Session.",
       "acceptanceCriteria": [
-        "The canonical PR verification flow starts browser integration before covered UI completion, either by ordering browser first or by running browser and coverage through one orchestrated concurrent flow.",
-        "Failure output names the failed lane and includes the target or command an engineer should rerun locally.",
-        "Concurrent lanes, if used, keep lane logs attributable and avoid shared-state conflicts between browser-oriented processes.",
-        "The chosen ordering or concurrency behavior is documented in the developer-facing CI target help or adjacent CI documentation.",
-        "Tests pass",
-        "Typecheck passes"
+        "A valid simple JavaScript workflow fixture validates successfully from a supported source input path such as source kind plus source ref or inline source.",
+        "Human output clearly reports that validation passed and includes safe source identity details when available.",
+        "JSON output reports a successful validation result with stable source identity, source hash when available, and an empty blocking diagnostics collection.",
+        "The validation command uses shared source normalization and validation behavior where available, not a separate CLI-only parser contract.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 1,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "prd-ui-ci-acceleration-and-test-rationalization-002",
-      "title": "Sharded Covered UI Verification",
-      "description": "As an engineer waiting on CI, I want covered UI tests to run in shards and merge coverage afterward so that wall clock time drops without weakening coverage enforcement.",
+      "id": "dynamic-workflows-cell-cli-validate-list-002",
+      "title": "Report blocking JavaScript validation diagnostics",
+      "description": "As a workflow author, I want CLI validation to reject invalid JavaScript workflow sources with clear blocking diagnostics so I can fix source, schema, and policy issues before execution.",
       "acceptanceCriteria": [
-        "The canonical PR verification flow uses the repo-owned UI coverage shard and merge behavior with a documented default shard count.",
-        "The merged coverage report preserves threshold enforcement and replay coverage checking after all expected shards finish.",
-        "A missing or failed shard produces a clear failure that identifies the shard and does not silently produce partial coverage.",
-        "Shard count can be tuned through a documented environment variable or CI setting without changing test semantics.",
-        "Tests pass",
-        "Typecheck passes"
+        "Syntax errors return a non-zero exit and at least one blocking diagnostic with stable code, severity, message, and source location when available.",
+        "Unsupported globals or forbidden host access return blocking diagnostics without executing workflow source.",
+        "Invalid args schema returns a blocking diagnostic that identifies the args schema problem rather than a generic command failure.",
+        "Policy-denied host access returns a blocking diagnostic that distinguishes policy denial from syntax or schema failure.",
+        "Human output groups or labels blocking diagnostics in a readable way; JSON output preserves the same cases in stable machine-readable fields.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "prd-ui-ci-acceleration-and-test-rationalization-003",
-      "title": "Stable UI Test Cost Reporting",
-      "description": "As a maintainer, I want CI to report the slowest covered UI and browser integration files with cost categories so that runtime regressions are visible and actionable.",
+      "id": "dynamic-workflows-cell-cli-validate-list-003",
+      "title": "List durable JavaScript Factory Sessions in human output",
+      "description": "As an operator, I want the supported session-listing CLI path to show durable JavaScript Factory Sessions in human-readable output so I can inspect current and historical workflow sessions from the terminal.",
       "acceptanceCriteria": [
-        "Covered UI verification emits a stable top-slowest file summary after the run or after shard merge.",
-        "Browser integration emits per-file timing or an equivalent top-slowest summary after the run.",
-        "The report categorizes slow files into app-shell integration, React Flow graph tests, replay/timeline tests, import/export tests, script-style tests, or uncategorized.",
-        "The report format is suitable for closeout notes and can be compared across CI runs without requiring source topology assertions.",
-        "Tests pass",
-        "Typecheck passes"
+        "Human list output includes durable JavaScript Factory Session rows from deterministic provider data.",
+        "Each durable row shows session id, lifecycle status, safe source identity, result availability, phase or progress summary, and action availability when present.",
+        "Live, persisted, and all-session scopes are supported when the current command structure exposes scoped listing options.",
+        "Empty durable result sets produce a clear empty state that distinguishes a reachable provider with no matching sessions from a provider failure.",
+        "Legacy live-session list behavior remains compatible for existing live session rows.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "prd-ui-ci-acceleration-and-test-rationalization-004",
-      "title": "Lane Boundary and Redundancy Policy",
-      "description": "As a maintainer, I want explicit test-lane boundaries so that unit, covered jsdom, and browser tests each verify distinct behavior.",
+      "id": "dynamic-workflows-cell-cli-validate-list-004",
+      "title": "Provide stable JSON list output for durable sessions",
+      "description": "As an automation user, I want durable Factory Session list JSON to use stable shared shapes so scripts and future HTTP parity tests can consume list output without scraping human tables.",
       "acceptanceCriteria": [
-        "The test strategy defines what observable contracts belong in unit tests, covered feature/jsdom integration tests, and browser integration tests.",
-        "Browser integration guidance prioritizes durable behavior such as saved payloads, network effects, downloads, imports, and final visible state over repeated copy-only assertions.",
-        "Export/import and graph-editing flows have a documented minimum browser contract that avoids repeating every jsdom UI assertion.",
-        "At least one existing duplicate assertion pattern is removed or moved to the cheaper lane while preserving the durable behavior check.",
-        "Tests pass",
-        "Typecheck passes"
+        "JSON list output includes durable JavaScript Factory Session summaries with status, source identity, result availability, phase or progress summary, and action availability when present.",
+        "JSON list output preserves live, persisted, and all-session scope behavior and deterministic ordering from the provider or shared normalizer.",
+        "JSON fields use generated API types, shared apisurface, or factorysessionexecution shapes where appropriate instead of a divergent CLI-only schema.",
+        "JSON output omits unrestricted host paths, raw workflow source, and secret-bearing provider internals.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 4,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "prd-ui-ci-acceleration-and-test-rationalization-005",
-      "title": "Split One High-Cost App-Shell Suite",
-      "description": "As a maintainer, I want at least one oversized app-shell test suite replaced with smaller feature-focused coverage so that the same behavior is proven with less setup cost.",
+      "id": "dynamic-workflows-cell-cli-validate-list-005",
+      "title": "Handle invalid input and provider failures consistently",
+      "description": "As a CLI user, I want invalid command input and provider or service failures to return clear errors and non-zero exits so automation can distinguish bad requests from unavailable execution infrastructure.",
       "acceptanceCriteria": [
-        "One high-cost app-shell suite is selected from the current slow-file inventory and its unique observable behaviors are listed before changes.",
-        "Equivalent behavior is covered by smaller feature-owned tests where whole-dashboard mounting is not required.",
-        "Any remaining app-shell coverage is limited to cross-feature behavior that cannot be proven reliably at a lower layer.",
-        "Before/after timing for the selected suite or replacement tests is captured in the closeout artifact.",
-        "Tests pass",
-        "Typecheck passes"
+        "Missing or conflicting validation source inputs fail before provider invocation with a clear command error and non-zero exit.",
+        "Unsupported session-list scope values fail with a clear command error and non-zero exit.",
+        "Provider or service validation failures return a clear CLI error without emitting a successful validation result.",
+        "Provider or service session-list failures return a clear CLI error without emitting partial success rows.",
+        "JSON error output, when requested by the existing command structure, is stable enough for focused CLI tests.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 5,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "prd-ui-ci-acceleration-and-test-rationalization-006",
-      "title": "Browser Integration Stability and Runtime Boundaries",
-      "description": "As an engineer debugging browser failures, I want browser integration tests to be isolated and deterministic so that failures are attributable and retries remain rare.",
+      "id": "dynamic-workflows-cell-cli-validate-list-006",
+      "title": "Preserve compatibility wording while steering users to Factory Sessions",
+      "description": "As a user migrating from workflow preview commands, I want compatibility paths to keep working while new validation and listing behavior uses Factory Session execution terminology.",
       "acceptanceCriteria": [
-        "Browser integration documentation states which suites must remain sequential because of shared preview servers, ports, downloads, or global browser state.",
-        "Any browser test concurrency introduced by this project uses isolated ports, preview state, and download locations per worker or file.",
-        "Shared browser helpers expose or document a recommended wait pattern for durable network and UI checkpoints.",
-        "At least one flaky or over-constrained browser assertion is simplified to assert durable behavior rather than transient copy, animation, or timing state.",
-        "Direct browser verification confirms changed browser-visible test flows still exercise the intended final UI state.",
-        "Tests pass",
-        "Typecheck passes"
+        "Legacy workflow preview command behavior remains compatibility-only and does not become the primary wording for durable execution list behavior.",
+        "New or changed CLI human output refers to Factory Sessions, session status, source identity, results, and actions rather than introducing a canonical dynamic workflow run noun.",
+        "Existing compatibility command tests continue to pass or are updated only for intentional terminology changes that preserve behavior.",
+        "Focused CLI tests cover human output, JSON output, invalid input, and provider/service failure for the new behavior.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 6,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]
