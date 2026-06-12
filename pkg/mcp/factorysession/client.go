@@ -42,6 +42,20 @@ func (c *Client) CallTool(name string, input json.RawMessage) (json.RawMessage, 
 		}
 		response := StartSync(c.service, request)
 		return json.Marshal(response)
+	case ToolStartAsync:
+		var request factoryapi.FactorySessionExecutionRequest
+		if err := json.Unmarshal(input, &request); err != nil {
+			return nil, fmt.Errorf("decode start async input: %w", err)
+		}
+		response := StartAsync(c.service, request)
+		return json.Marshal(response)
+	case ToolGetSession:
+		var request GetSessionInput
+		if err := json.Unmarshal(input, &request); err != nil {
+			return nil, fmt.Errorf("decode get session input: %w", err)
+		}
+		response := GetSession(c.service, request)
+		return json.Marshal(response)
 	case ToolGetResult:
 		var request GetResultInput
 		if err := json.Unmarshal(input, &request); err != nil {
@@ -67,6 +81,40 @@ func (c *Client) StartSync(input factoryapi.FactorySessionExecutionRequest) (Too
 	var response ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]
 	if err := json.Unmarshal(raw, &response); err != nil {
 		return ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]{}, err
+	}
+	return response, nil
+}
+
+// StartAsync calls you.factory_session.start_async through the mock client.
+func (c *Client) StartAsync(input factoryapi.FactorySessionExecutionRequest) (ToolResponse[factoryapi.FactorySessionExecutionResponse], error) {
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		return ToolResponse[factoryapi.FactorySessionExecutionResponse]{}, err
+	}
+	raw, err := c.CallTool(ToolStartAsync, encoded)
+	if err != nil {
+		return ToolResponse[factoryapi.FactorySessionExecutionResponse]{}, err
+	}
+	var response ToolResponse[factoryapi.FactorySessionExecutionResponse]
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return ToolResponse[factoryapi.FactorySessionExecutionResponse]{}, err
+	}
+	return response, nil
+}
+
+// GetSession calls you.factory_session.get through the mock client.
+func (c *Client) GetSession(input GetSessionInput) (ToolResponse[factoryapi.FactorySessionDurableReadModel], error) {
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		return ToolResponse[factoryapi.FactorySessionDurableReadModel]{}, err
+	}
+	raw, err := c.CallTool(ToolGetSession, encoded)
+	if err != nil {
+		return ToolResponse[factoryapi.FactorySessionDurableReadModel]{}, err
+	}
+	var response ToolResponse[factoryapi.FactorySessionDurableReadModel]
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return ToolResponse[factoryapi.FactorySessionDurableReadModel]{}, err
 	}
 	return response, nil
 }
