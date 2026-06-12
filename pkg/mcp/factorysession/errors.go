@@ -17,11 +17,13 @@ const (
 	errorCodeStartUnknownScenario      = "factory_session.start.unknown_scenario"
 	errorCodeStartRequestIDConflict    = "factory_session.start.request_id_conflict"
 	errorCodeSessionNotFound           = "factory_session.session.not_found"
-	errorCodeResultNotReady            = "factory_session.result.not_ready"
-	errorMessageServiceUnavailable     = "factory session execution service is unavailable"
-	errorMessageStartRequestIDConflict = "execution request id was reused with a different start tuple"
-	errorMessageSessionNotFound        = "factory session not found"
-	errorMessageResultNotReady         = "factory session result is not ready"
+	errorCodeResultNotReady                = "factory_session.result.not_ready"
+	errorCodeReconnectCursorNotFound     = "factory_session.events.reconnect_cursor_not_found"
+	errorMessageServiceUnavailable         = "factory session execution service is unavailable"
+	errorMessageStartRequestIDConflict     = "execution request id was reused with a different start tuple"
+	errorMessageSessionNotFound            = "factory session not found"
+	errorMessageResultNotReady             = "factory session result is not ready"
+	errorMessageReconnectCursorNotFound    = "event reconnect cursor not found in session history"
 )
 
 func requestValidationErrorEnvelope(err error) ToolErrorEnvelope {
@@ -114,6 +116,39 @@ func resultNotReadyErrorEnvelope(sessionID string, availability *factorysessione
 		SessionID: strings.TrimSpace(sessionID),
 		Details:   details,
 	}
+}
+
+func eventReadErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
+	if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+		return sessionNotFoundErrorEnvelope(sessionID)
+	}
+	if errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
+		return ToolErrorEnvelope{
+			Code:      errorCodeReconnectCursorNotFound,
+			Message:   errorMessageReconnectCursorNotFound,
+			Retryable: false,
+			SessionID: strings.TrimSpace(sessionID),
+			Details: map[string]any{
+				"reason": "RECONNECT_CURSOR_NOT_FOUND",
+			},
+		}
+	}
+	return executionErrorEnvelope(err)
+}
+
+func controlErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
+	if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+		return sessionNotFoundErrorEnvelope(sessionID)
+	}
+	if errors.Is(err, factorysessionexecution.ErrDispatchNotFound) {
+		return ToolErrorEnvelope{
+			Code:      "factory_session.dispatch.not_found",
+			Message:   "dispatch not found",
+			Retryable: false,
+			SessionID: strings.TrimSpace(sessionID),
+		}
+	}
+	return executionErrorEnvelope(err)
 }
 
 func executionErrorEnvelope(err error) ToolErrorEnvelope {
