@@ -1,5 +1,4 @@
 ## Codebase Patterns
-- CLI workflow source validation loopback uses `pkg/apisurface/factory_workflow_validation.go` (`BuildFactoryWorkflowValidation`, `FactoryWorkflowValidationResultFromPreview`) on top of `BuildFactoryPreview`; `you workflow validate` lives in `pkg/cli/workflow/validate.go` with shared source flags via `SourceConfig` in `request.go`. JSON uses generated `WorkflowSourceResolution` plus `blockingDiagnostics` (`[]WorkflowDiagnostic`); denied capabilities from READ_ONLY policy preview are informational, not blocking.
 - Published Factory Session fixture scenario IDs and stable projection hashes live in `pkg/factorysessionexecution/fixture_catalog.go` (`PublishedFixtureScenarios`, `FixtureScenarioIdentityFromScenario`, `FixtureScenarioProjectionHash`); contract JSON remains in `pkg/api/testdata/durable-session-contract-fixtures.json` and loads through `LoadFakeScenariosFromContractFixtures`.
 - Use `ContractFixtureCatalogRelativePath` when downstream cells need the repository-relative catalog path; prove stable identity with `fixture_catalog_test.go` golden projection hashes rather than recomputing ad hoc in each consumer package.
 - Built-in recoverable interrupted JavaScript session `javascript-interrupted-recoverable` is appended by `LoadFakeScenariosFromContractFixtures` even though it is not in the JSON catalog.
@@ -24,14 +23,4 @@
   - Patterns discovered: drive story-level FakeService tests from `PublishedFixtureScenarios` + `publishedScenarioByPurpose` rather than duplicating request/session IDs; fixture `asyncResponse.links` may omit events/dispatches/artifacts even when `InspectionLinksForSession` includes them.
   - Gotchas encountered: `GetSession` read models for running/timeout fixtures may omit `resultSummary` — assert result status via `GetResult` instead; idempotent-replay conflict tests must copy `Args` into a new map before mutation.
   - Useful context: sync timeout scenario returns `SYNC_WAIT_TIMED_OUT` availability on final result reads; terminal success dedupes from live rows in `scope=all` when also present in persisted durable listing.
----
-
-## 2026-06-11 UTC - dynamic-workflows-cell-cli-validate-list-001
-- Added `you workflow validate` CLI loopback command with human output (`Workflow validation passed.` plus source ref/hash) and stable JSON using `FactoryWorkflowValidationResult` (`valid`, `sourceResolution`, empty `blockingDiagnostics` on success).
-- Introduced shared apisurface validation mapping (`BuildFactoryWorkflowValidation`, `FactoryWorkflowValidationResultFromPreview`) and extracted CLI source input helpers (`SourceConfig`, `request.go`) reused by preview and validate.
-- Files changed: `pkg/apisurface/factory_workflow_validation.go`, `pkg/apisurface/factory_workflow_validation_test.go`, `pkg/cli/workflow/validate.go`, `pkg/cli/workflow/validate_test.go`, `pkg/cli/workflow/request.go`, `pkg/cli/workflow/preview.go`, `pkg/cli/workflow/preview_test.go`, `pkg/cli/root.go`, `docs/internal/processes/api-relevant-files.md`
-- **Learnings for future iterations:**
-  - Patterns discovered: validation JSON should aggregate blocking diagnostics from source resolution failures/conflicts, artifact-root rejection, source validation issues, and policy validation issues only—do not treat READ_ONLY `DeniedCapabilities` as blocking because `Preview.HasBlockingIssues` ignores them.
-  - Gotchas encountered: generated `WorkflowArtifactRootDecision.requested` is a string, not a bool; check `strings.TrimSpace(requested) != ""` when mirroring preview blocking rules.
-  - Useful context: prove validate JSON parity by marshaling `apisurface.FactoryWorkflowValidationResultFromPreview(BuildFactoryWorkflowValidation(input))` in tests, matching the preview package's canonical seam pattern.
 ---
