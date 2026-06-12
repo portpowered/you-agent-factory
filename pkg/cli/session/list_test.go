@@ -2,15 +2,33 @@ package session
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 )
+
+func contractFixtureCatalogPath(t *testing.T) string {
+	t.Helper()
+	return filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+}
+
+func newContractDurableLister(t *testing.T) durableSessionLister {
+	t.Helper()
+	service, err := fse.NewFakeServiceFromContractFixtures(contractFixtureCatalogPath(t))
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+	}
+	return service.ListSessions
+}
 
 func TestList_PerformsGETFactorySessions(t *testing.T) {
 	var gotPath string
@@ -163,6 +181,119 @@ func TestList_UnreachableServiceNamesEndpoint(t *testing.T) {
 	}
 	if out.Len() != 0 {
 		t.Fatalf("stdout = %q, want empty output when --json is set", out.String())
+	}
+}
+
+func TestList_PersistedScopeRendersDurableJavaScriptFactorySessions(t *testing.T) {
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Scope:         "persisted",
+		Output:        &out,
+		DurableLister: newContractDurableLister(t),
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	output := out.String()
+	if !strings.Contains(output, "Factory Sessions (durable):") {
+		t.Fatalf("output missing durable section: %q", output)
+	}
+	for _, want := range []string{
+		"dur-sess-js-success-002",
+		"SUCCEEDED",
+		"JAVASCRIPT",
+		"WORKFLOW_FILE",
+		"workflow/.claude/workflows/docs-refresh.yaml",
+		"FINAL",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output missing %q:\n%s", want, output)
+		}
+	}
+}
+
+func TestList_PersistedScopeEmptyStateWithoutMatchingRows(t *testing.T) {
+	emptyLister := func(context.Context, fse.ListSessionsRequest) (fse.ListSessionsResult, error) {
+		return fse.ListSessionsResult{Scope: fse.SessionListScopePersisted}, nil
+	}
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Scope:         "persisted",
+		Output:        &out,
+		DurableLister: emptyLister,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if got := out.String(); got != "No persisted Factory Sessions were found.\n" {
+		t.Fatalf("output = %q", got)
+	}
+}
+
+func TestList_AllScopeCombinesLiveHTTPAndDurableProviderRows(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListFactorySessionsResponse{
+			Sessions: []factoryapi.FactorySessionSummary{sampleSessionSummary()},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Scope:         "all",
+		Port:          serverPort(t, srv),
+		Output:        &out,
+		DurableLister: newContractDurableLister(t),
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	output := out.String()
+	if !strings.Contains(output, "SESSION ID\tPROJECT\tFOLDER PATH") {
+		t.Fatalf("output missing live table header: %q", output)
+	}
+	if !strings.Contains(output, "session-alpha") {
+		t.Fatalf("output missing live session row: %q", output)
+	}
+	if !strings.Contains(output, "Factory Sessions (durable):") {
+		t.Fatalf("output missing durable section: %q", output)
+	}
+	for _, row := range fixtures.PublishedFixtureScenarios {
+		if row.Purpose == fixtures.FixturePurposeSyncSuccess {
+			if !strings.Contains(output, row.SessionID) {
+				t.Fatalf("output missing persisted durable row %q: %q", row.SessionID, output)
+			}
+			return
+		}
+	}
+	t.Fatal("published sync-success scenario missing from catalog")
+}
+
+func TestList_PersistedScopeProviderFailureReturnsErrorWithoutPartialOutput(t *testing.T) {
+	failingLister := func(context.Context, fse.ListSessionsRequest) (fse.ListSessionsResult, error) {
+		return fse.ListSessionsResult{}, fmt.Errorf("provider unavailable")
+	}
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Scope:         "persisted",
+		Output:        &out,
+		DurableLister: failingLister,
+	})
+	if err == nil {
+		t.Fatal("expected provider failure")
+	}
+	if !strings.Contains(err.Error(), "list durable factory sessions failed") {
+		t.Fatalf("error = %q", err.Error())
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty output on provider failure", out.String())
 	}
 }
 

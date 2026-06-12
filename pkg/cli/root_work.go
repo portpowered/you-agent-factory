@@ -195,14 +195,21 @@ func newSessionShowCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 }
 
 func newSessionListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := sessioncli.ListConfig{Port: defaultcmd.FactoryPort}
+	cfg := sessioncli.ListConfig{Port: defaultcmd.FactoryPort, Scope: "live"}
 
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List live factory sessions",
-		Long: "List every live factory session that the running host currently has open.\n\n" +
-			"Human output prints session id, project, folder path, factory dir, default marker, and " +
-			"target kind/name. Use --json to emit ListFactorySessionsResponse on stdout.",
+		Short: "List live and durable factory sessions",
+		Long: "List factory sessions for the requested scope.\n\n" +
+			"live returns workspace sessions kept open by the running host. persisted returns durable " +
+			"Factory Sessions from the deterministic provider loopback. all returns both live workspace " +
+			"sessions and durable Factory Sessions.\n\n" +
+			"Human output prints the legacy live-session table for workspace rows and a durable Factory " +
+			"Session table with status, source identity, result availability, progress, and actions. " +
+			"Use --json to emit ListFactorySessionsResponse on stdout.",
+		Example: "  " + cliBinaryName + " session list\n\n" +
+			"  " + cliBinaryName + " session list --scope persisted\n\n" +
+			"  " + cliBinaryName + " session list --scope all --json",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
@@ -213,6 +220,7 @@ func newSessionListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	}
 
 	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
+	cmd.Flags().StringVar(&cfg.Scope, "scope", cfg.Scope, "session list scope: live, persisted, or all")
 	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API list-factory-sessions JSON response")
 	return cmd
 }
