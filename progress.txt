@@ -63,3 +63,13 @@
   - Gotchas encountered: `FactorySessionExecutionResponse` has no embedded terminal `result` field (unlike sync) — assert in-progress async starts via `status` and links only; running session read models may omit `resultSummary` even when partial results exist via `get_result` partial mode.
   - Useful context: story 005 owns missing-session and request-conflict envelopes — keep those out of story 004 tests; completed-state polling demo can pair async-running start with sync-success terminal reads on one shared `FakeService` client.
 ---
+
+## 2026-06-12 UTC - dynamic-workflows-recovery-mcp-tools-005
+- Added focused `failure_paths_test.go` proving canonical `you.factory_session.get` and `you.factory_session.get_result` return deterministic FAILED_WITH_PARTIAL status and partial result payloads for fixture `req-js-failed-partial-001` / `dur-sess-js-failed-partial-001`, typed `factory_session.session.not_found` envelopes with sessionId retention for unknown sessions, typed `factory_session.start.request_id_conflict` envelopes for async and sync start tuple conflicts, and workflow status alias parity for missing-session reads.
+- Documented failure-path MCP invocation test location in `api-relevant-files.md`; existing error mapping in `errors.go` and get/start handlers required no further code changes.
+- Files changed: `pkg/mcp/factorysession/failure_paths_test.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: prove MCP failure semantics through `ToolResponse` error envelopes (`factory_session.session.not_found`, `factory_session.start.request_id_conflict`) and success-path FAILED_WITH_PARTIAL reads via `GetSession`/`GetResult`; use golden `fixtures.ProjectedResultReadHash` for failed-with-partial partial-mode reads (`sha256:36530c7711e80e60d05ab82c87a6cebbf9db4966b028dfdcbf0b9008d1d47a68`).
+  - Gotchas encountered: failed-with-partial sessions start successfully through `StartAsync` — failure semantics appear on status/result reads, not as transport-level start errors; request-id conflict tests must copy `Args` into a new map before mutation to avoid shared-map aliasing.
+  - Useful context: distinguish `javascript-failed-with-partial` (`FAILED` + `FAILED_WITH_PARTIAL`) from `javascript-interrupted-recoverable` (`INTERRUPTED` + `PARTIAL`) when selecting fixtures for story 005 vs lifecycle-control stories.
+---
