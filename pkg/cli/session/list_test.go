@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 )
@@ -297,6 +298,193 @@ func TestList_PersistedScopeProviderFailureReturnsErrorWithoutPartialOutput(t *t
 	}
 }
 
+func TestList_PersistedScopeJSONMatchesCanonicalListResponse(t *testing.T) {
+	lister := newContractDurableLister(t)
+	want := canonicalListResponse(t, lister, fse.SessionListScopePersisted, nil)
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Scope:         "persisted",
+		JSON:          true,
+		Output:        &out,
+		DurableLister: lister,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	assertListJSONMatchesCanonical(t, out.Bytes(), want)
+}
+
+func TestList_PersistedScopeJSONIncludesDurableJavaScriptSessionFields(t *testing.T) {
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Scope:         "persisted",
+		JSON:          true,
+		Output:        &out,
+		DurableLister: newContractDurableLister(t),
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	got := decodeListResponse(t, out.Bytes())
+	if got.Scope == nil || *got.Scope != factoryapi.FactorySessionListScopePersisted {
+		t.Fatalf("scope = %#v, want PERSISTED", got.Scope)
+	}
+	if len(got.Sessions) != 0 {
+		t.Fatalf("sessions = %#v, want none for persisted scope", got.Sessions)
+	}
+	if got.DurableSessions == nil || len(*got.DurableSessions) == 0 {
+		t.Fatal("durableSessions missing persisted rows")
+	}
+
+	row := durableRowBySessionID(t, got, "dur-sess-js-success-002")
+	if row.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("status = %q, want SUCCEEDED", row.Status)
+	}
+	if row.OrchestratorKind != factoryapi.JAVASCRIPT {
+		t.Fatalf("orchestratorKind = %q, want JAVASCRIPT", row.OrchestratorKind)
+	}
+	if row.ResolvedSource.SourceRef == nil || *row.ResolvedSource.SourceRef != "workflow/.claude/workflows/docs-refresh.yaml" {
+		t.Fatalf("resolvedSource = %#v", row.ResolvedSource)
+	}
+	if row.EffectivePolicyHash == nil || *row.EffectivePolicyHash != "eff-policy-docs-refresh" {
+		t.Fatalf("effectivePolicyHash = %#v", row.EffectivePolicyHash)
+	}
+	if row.Actions == nil {
+		t.Fatal("actions missing from durable JavaScript list row")
+	}
+}
+
+func TestList_AllScopeJSONMatchesCanonicalListResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.ListFactorySessionsResponse{
+			Sessions: []factoryapi.FactorySessionSummary{sampleSessionSummary()},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	lister := newContractDurableLister(t)
+	liveSessions := []fse.LiveSessionSummary{{
+		ID:         "session-alpha",
+		FactoryDir: "/workspace/fleet/alpha",
+		FolderPath: "/workspace/fleet",
+		Project:    "alpha",
+	}}
+	want := canonicalListResponse(t, lister, fse.SessionListScopeAll, liveSessions)
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Scope:         "all",
+		Port:          serverPort(t, srv),
+		JSON:          true,
+		Output:        &out,
+		DurableLister: lister,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	assertListJSONMatchesCanonical(t, out.Bytes(), want)
+	if !strings.Contains(out.String(), "dur-sess-js-success-002") {
+		t.Fatalf("JSON missing durable JavaScript row: %s", out.String())
+	}
+	if !strings.Contains(out.String(), "session-alpha") {
+		t.Fatalf("JSON missing live session row: %s", out.String())
+	}
+}
+
+func TestList_PersistedScopeJSONOmitsSensitiveProviderInternals(t *testing.T) {
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Scope:         "persisted",
+		JSON:          true,
+		Output:        &out,
+		DurableLister: newContractDurableLister(t),
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	payload := out.String()
+	for _, forbidden := range []string{
+		"/Users/",
+		"primaryResult",
+		"artifactDetail",
+		"Documentation refresh complete.",
+		"approvalPreviewId",
+		"\"javascript\"",
+		"meta({",
+		"workflowFile",
+	} {
+		if strings.Contains(payload, forbidden) {
+			t.Fatalf("JSON leaked sensitive provider field %q:\n%s", forbidden, payload)
+		}
+	}
+}
+
+func TestList_PersistedScopeJSONEmptyState(t *testing.T) {
+	emptyLister := func(context.Context, fse.ListSessionsRequest) (fse.ListSessionsResult, error) {
+		return fse.ListSessionsResult{Scope: fse.SessionListScopePersisted}, nil
+	}
+
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Scope:         "persisted",
+		JSON:          true,
+		Output:        &out,
+		DurableLister: emptyLister,
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	got := decodeListResponse(t, out.Bytes())
+	if got.Scope == nil || *got.Scope != factoryapi.FactorySessionListScopePersisted {
+		t.Fatalf("scope = %#v, want PERSISTED", got.Scope)
+	}
+	if len(got.Sessions) != 0 {
+		t.Fatalf("sessions = %#v, want empty array", got.Sessions)
+	}
+	if got.DurableSessions != nil && len(*got.DurableSessions) != 0 {
+		t.Fatalf("durableSessions = %#v, want omitted or empty", got.DurableSessions)
+	}
+	if strings.Contains(out.String(), "Factory Sessions (durable):") {
+		t.Fatalf("JSON included human table header: %q", out.String())
+	}
+}
+
+func TestList_PersistedScopeJSONPreservesDeterministicOrdering(t *testing.T) {
+	var out bytes.Buffer
+	err := List(ListConfig{
+		Scope:         "persisted",
+		JSON:          true,
+		Output:        &out,
+		DurableLister: newContractDurableLister(t),
+	})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	got := decodeListResponse(t, out.Bytes())
+	if got.DurableSessions == nil || len(*got.DurableSessions) < 2 {
+		t.Fatalf("durableSessions = %#v, want at least two rows for ordering check", got.DurableSessions)
+	}
+	ids := make([]string, 0, len(*got.DurableSessions))
+	for _, row := range *got.DurableSessions {
+		ids = append(ids, row.SessionId)
+	}
+	for i := 1; i < len(ids); i++ {
+		if ids[i-1] > ids[i] {
+			t.Fatalf("durable session ids not sorted: %v", ids)
+		}
+	}
+}
+
 func TestList_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -335,6 +523,75 @@ func TestList_JSONVerboseKeepsStdoutParseableAndDiagnosticsSeparate(t *testing.T
 			t.Fatalf("diagnostics missing %q:\n%s", want, diag)
 		}
 	}
+}
+
+func canonicalListResponse(
+	t *testing.T,
+	lister durableSessionLister,
+	scope fse.SessionListScope,
+	liveSessions []fse.LiveSessionSummary,
+) factoryapi.ListFactorySessionsResponse {
+	t.Helper()
+
+	normalized, err := fse.NormalizeListSessionsRequest(fse.ListSessionsRequest{Scope: scope})
+	if err != nil {
+		t.Fatalf("NormalizeListSessionsRequest: %v", err)
+	}
+	durableResult, err := lister(context.Background(), fse.ListSessionsRequest{Scope: fse.SessionListScopeAll})
+	if err != nil {
+		t.Fatalf("list durable sessions: %v", err)
+	}
+	scoped := fse.ApplySessionListScope(fse.ListSessionsResult{
+		Scope:           normalized.Scope,
+		LiveSessions:    liveSessions,
+		DurableSessions: durableResult.DurableSessions,
+	}, normalized)
+	return factorysession.ListSessionsResponseToAPI(scoped)
+}
+
+func assertListJSONMatchesCanonical(t *testing.T, gotJSON []byte, want factoryapi.ListFactorySessionsResponse) {
+	t.Helper()
+
+	wantJSON, err := json.Marshal(want)
+	if err != nil {
+		t.Fatalf("marshal canonical list response: %v", err)
+	}
+	if !bytes.Equal(bytes.TrimSpace(gotJSON), wantJSON) {
+		var got factoryapi.ListFactorySessionsResponse
+		if err := json.Unmarshal(gotJSON, &got); err != nil {
+			t.Fatalf("decode list JSON: %v\n%s", err, string(gotJSON))
+		}
+		t.Fatalf("list JSON = %#v, want %#v", got, want)
+	}
+}
+
+func decodeListResponse(t *testing.T, payload []byte) factoryapi.ListFactorySessionsResponse {
+	t.Helper()
+
+	var got factoryapi.ListFactorySessionsResponse
+	if err := json.Unmarshal(payload, &got); err != nil {
+		t.Fatalf("decode list JSON: %v\n%s", err, string(payload))
+	}
+	return got
+}
+
+func durableRowBySessionID(
+	t *testing.T,
+	response factoryapi.ListFactorySessionsResponse,
+	sessionID string,
+) factoryapi.FactorySessionDurableSummary {
+	t.Helper()
+
+	if response.DurableSessions == nil {
+		t.Fatalf("durableSessions missing while searching for %q", sessionID)
+	}
+	for _, row := range *response.DurableSessions {
+		if row.SessionId == sessionID {
+			return row
+		}
+	}
+	t.Fatalf("durable row %q not found in %#v", sessionID, response.DurableSessions)
+	return factoryapi.FactorySessionDurableSummary{}
 }
 
 func sampleSessionSummary() factoryapi.FactorySessionSummary {
