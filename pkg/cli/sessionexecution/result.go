@@ -129,36 +129,10 @@ func renderResultHuman(output io.Writer, result factoryapi.FactorySessionResult)
 			return err
 		}
 	}
-	if result.Availability != nil {
-		if reason := result.Availability.Reason; reason != nil && strings.TrimSpace(*reason) != "" {
-			if _, err := fmt.Fprintf(output, "Availability reason: %s\n", strings.TrimSpace(*reason)); err != nil {
-				return err
-			}
-		}
-		if message := result.Availability.Message; message != nil && strings.TrimSpace(*message) != "" {
-			if _, err := fmt.Fprintf(output, "Availability message: %s\n", strings.TrimSpace(*message)); err != nil {
-				return err
-			}
-		}
-		if retryable := result.Availability.Retryable; retryable != nil && *retryable {
-			if _, err := fmt.Fprintf(output, "Retryable: true\n"); err != nil {
-				return err
-			}
-		}
+	if err := writeResultAvailabilityHuman(output, result.Availability); err != nil {
+		return err
 	}
-	if result.Failure != nil {
-		if reason := result.Failure.Reason; reason != nil && strings.TrimSpace(*reason) != "" {
-			if _, err := fmt.Fprintf(output, "Failure reason: %s\n", strings.TrimSpace(*reason)); err != nil {
-				return err
-			}
-		}
-		if message := result.Failure.Message; message != nil && strings.TrimSpace(*message) != "" {
-			if _, err := fmt.Fprintf(output, "Failure message: %s\n", strings.TrimSpace(*message)); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return writeResultFailureHuman(output, result.Failure)
 }
 
 func resultDisplaySummary(result *factoryapi.FactorySessionResult) string {

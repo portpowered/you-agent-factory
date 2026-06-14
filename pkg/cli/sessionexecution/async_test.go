@@ -161,6 +161,15 @@ func TestRunAsyncThenStatus_ReportsSameMockProviderState(t *testing.T) {
 	if err := json.Unmarshal(bytes.TrimSpace(statusOutput.Bytes()), &status); err != nil {
 		t.Fatalf("decode status output: %v", err)
 	}
+	assertAsyncRunningStatusFields(t, status, sessionID)
+}
+
+func assertAsyncRunningStatusFields(
+	t *testing.T,
+	status factoryapi.FactorySessionDurableReadModel,
+	sessionID string,
+) {
+	t.Helper()
 	if status.SessionId != sessionID {
 		t.Fatalf("sessionId = %q, want %q", status.SessionId, sessionID)
 	}

@@ -145,6 +145,15 @@ func assertSyncSuccessAPIResponse(
 	got, want factoryapi.FactorySessionSyncExecutionResponse,
 ) {
 	t.Helper()
+	assertSyncSuccessIdentity(t, got, want)
+	assertSyncSuccessResultAndLinks(t, got, want)
+}
+
+func assertSyncSuccessIdentity(
+	t *testing.T,
+	got, want factoryapi.FactorySessionSyncExecutionResponse,
+) {
+	t.Helper()
 	if got.SessionId != want.SessionId {
 		t.Fatalf("sessionId = %q, want %q", got.SessionId, want.SessionId)
 	}
@@ -157,6 +166,13 @@ func assertSyncSuccessAPIResponse(
 	if got.SourceHash == nil || want.SourceHash == nil || *got.SourceHash != *want.SourceHash {
 		t.Fatalf("sourceHash = %#v, want %#v", got.SourceHash, want.SourceHash)
 	}
+}
+
+func assertSyncSuccessResultAndLinks(
+	t *testing.T,
+	got, want factoryapi.FactorySessionSyncExecutionResponse,
+) {
+	t.Helper()
 	if got.Result == nil || want.Result == nil {
 		t.Fatalf("result = %#v, want %#v", got.Result, want.Result)
 	}

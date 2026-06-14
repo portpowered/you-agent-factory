@@ -77,8 +77,8 @@ func renderStatusHuman(output io.Writer, result factoryapi.FactorySessionDurable
 	); err != nil {
 		return err
 	}
-	if result.Phase != nil && strings.TrimSpace(*result.Phase) != "" {
-		if _, err := fmt.Fprintf(output, "Phase: %s\n", strings.TrimSpace(*result.Phase)); err != nil {
+	if result.Phase != nil {
+		if err := writeOptionalTrimmedLine(output, "Phase", *result.Phase); err != nil {
 			return err
 		}
 	}
@@ -101,19 +101,7 @@ func renderStatusHuman(output io.Writer, result factoryapi.FactorySessionDurable
 			return err
 		}
 	}
-	if result.Links != nil {
-		if result.Links.Results != nil && strings.TrimSpace(*result.Links.Results) != "" {
-			if _, err := fmt.Fprintf(output, "Results link: %s\n", strings.TrimSpace(*result.Links.Results)); err != nil {
-				return err
-			}
-		}
-		if result.Links.Status != nil && strings.TrimSpace(*result.Links.Status) != "" {
-			if _, err := fmt.Fprintf(output, "Status link: %s\n", strings.TrimSpace(*result.Links.Status)); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return writeExecutionLinksHuman(output, result.Links)
 }
 
 func formatProgressSummary(progress *factoryapi.FactorySessionDurableProgressCounts) string {

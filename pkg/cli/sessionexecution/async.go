@@ -107,43 +107,19 @@ func renderAsyncRunHuman(
 	); err != nil {
 		return err
 	}
-	if trimmed := strings.TrimSpace(requestID); trimmed != "" {
-		if _, err := fmt.Fprintf(output, "Request id: %s\n", trimmed); err != nil {
-			return err
-		}
+	if err := writeOptionalTrimmedLine(output, "Request id", requestID); err != nil {
+		return err
 	}
-	if result.SourceHash != nil && strings.TrimSpace(*result.SourceHash) != "" {
-		if _, err := fmt.Fprintf(output, "Source hash: %s\n", strings.TrimSpace(*result.SourceHash)); err != nil {
-			return err
-		}
-	} else if ref := result.ResolvedSource.SourceRef; ref != nil && strings.TrimSpace(*ref) != "" {
-		if _, err := fmt.Fprintf(output, "Source ref: %s\n", strings.TrimSpace(*ref)); err != nil {
-			return err
-		}
+	if err := writeResolvedSourceHuman(output, result.SourceHash, result.ResolvedSource); err != nil {
+		return err
 	}
-	if result.Links != nil {
-		if result.Links.Status != nil && strings.TrimSpace(*result.Links.Status) != "" {
-			if _, err := fmt.Fprintf(output, "Status link: %s\n", strings.TrimSpace(*result.Links.Status)); err != nil {
-				return err
-			}
-		}
-		if result.Links.Results != nil && strings.TrimSpace(*result.Links.Results) != "" {
-			if _, err := fmt.Fprintf(output, "Results link: %s\n", strings.TrimSpace(*result.Links.Results)); err != nil {
-				return err
-			}
-		}
-		if result.Links.Session != nil && strings.TrimSpace(*result.Links.Session) != "" {
-			if _, err := fmt.Fprintf(output, "Session link: %s\n", strings.TrimSpace(*result.Links.Session)); err != nil {
-				return err
-			}
-		}
+	if err := writeExecutionLinksHuman(output, result.Links); err != nil {
+		return err
 	}
-	if _, err := fmt.Fprintf(
+	_, err := fmt.Fprintf(
 		output,
 		"Follow-up: you workflow status %s\n",
 		result.SessionId,
-	); err != nil {
-		return err
-	}
-	return nil
+	)
+	return err
 }
