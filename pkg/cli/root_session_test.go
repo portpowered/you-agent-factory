@@ -196,8 +196,8 @@ func TestWorkflowCommand_LongHelpSteersUsersToValidateBeforePreview(t *testing.T
 
 	for _, want := range []string{
 		"Factory Session",
-		"validate  primary CLI path",
-		"preview   compatibility alias",
+		"validate   primary CLI path",
+		"preview    compatibility alias",
 	} {
 		if !strings.Contains(workflowCmd.Long, want) {
 			t.Fatalf("workflow long help missing %q:\n%s", want, workflowCmd.Long)

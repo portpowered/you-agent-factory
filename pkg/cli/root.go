@@ -23,13 +23,11 @@ import (
 	sessioncli "github.com/portpowered/infinite-you/pkg/cli/session"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
-	workflowcli "github.com/portpowered/infinite-you/pkg/cli/workflow"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/spf13/cobra"
 )
 
@@ -900,63 +898,4 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 	}
 	cfg.CleanInvocationInputSource = input.Source
 	return nil
-}
-
-func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *cobra.Command {
-	sourceCfg := workflowcli.SourceConfig{Dir: defaultcmd.FactoryDir}
-	previewCfg := workflowcli.PreviewConfig{SourceConfig: sourceCfg}
-	validateCfg := workflowcli.ValidateConfig{SourceConfig: sourceCfg}
-
-	cmd := &cobra.Command{
-		Use:   "workflow",
-		Short: "Validate JavaScript workflow sources for Factory Session execution",
-		Long: "Validate JavaScript or TypeScript workflow sources before starting a Factory Session.\n\n" +
-			"Subcommands:\n" +
-			"  validate  primary CLI path: resolve workflow source and validate it without execution\n" +
-			"  preview   compatibility alias for the Factory preview contract; prefer validate for CLI checks",
-	}
-	previewCmd := &cobra.Command{
-		Use:   "preview",
-		Short: "Compatibility preview of workflow validation and policy",
-		Long: "Compatibility command for the Factory preview contract. Resolve workflow source, validate it " +
-			"without execution, and print source, loader, policy, and result-shape diagnostics. Prefer " +
-			cliBinaryName + " workflow validate for CLI source checks before Factory Session execution.",
-		Example: "  # Preview a project workflow by name.\n" +
-			"  " + cliBinaryName + " workflow preview --kind WORKFLOW_NAME --value review\n\n" +
-			"  # Preview inline workflow source.\n" +
-			"  " + cliBinaryName + " workflow preview --kind INLINE_WORKFLOW --inline \"phase('setup');\"",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			previewCfg.JSON = globals.json
-			previewCfg.Output = cmd.OutOrStdout()
-			return workflowcli.Preview(previewCfg)
-		},
-	}
-	validateCmd := &cobra.Command{
-		Use:   "validate",
-		Short: "Validate JavaScript workflow source",
-		Long:  "Resolve workflow source and validate it without execution using the shared workflow validation contract.",
-		Example: "  # Validate a project workflow by name.\n" +
-			"  " + cliBinaryName + " workflow validate --kind WORKFLOW_NAME --value review\n\n" +
-			"  # Validate inline workflow source.\n" +
-			"  " + cliBinaryName + " workflow validate --kind INLINE_WORKFLOW --inline \"phase('setup');\"",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			validateCfg.JSON = globals.json
-			validateCfg.Output = cmd.OutOrStdout()
-			return workflowcli.Validate(validateCfg)
-		},
-	}
-	addWorkflowSourceFlags := func(command *cobra.Command, cfg *workflowcli.SourceConfig) {
-		command.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "project root used for ordered workflow source lookup")
-		command.Flags().StringVar(&cfg.SourceKind, "kind", string(workflowsource.KindWorkflowName), "workflow source kind")
-		command.Flags().StringVar(&cfg.SourceValue, "value", "", "workflow name, file ref, or factory id")
-		command.Flags().StringVar(&cfg.InlineSource, "inline", "", "inline workflow source text")
-		command.Flags().StringVar(&cfg.ArtifactRoot, "artifact-root", "", "optional absolute artifact root")
-		command.Flags().StringVar(&cfg.ArgsSchema, "args-schema", "", "optional orchestrator.javascript argsSchema JSON")
-		command.Flags().StringVar(&cfg.RequestedPolicyJSON, "requested-policy", "", "optional requested policy override JSON")
-	}
-	addWorkflowSourceFlags(previewCmd, &previewCfg.SourceConfig)
-	addWorkflowSourceFlags(validateCmd, &validateCfg.SourceConfig)
-	cmd.AddCommand(validateCmd)
-	cmd.AddCommand(previewCmd)
-	return cmd
 }
