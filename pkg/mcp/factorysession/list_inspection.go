@@ -31,3 +31,27 @@ func ListDispatches(service factorysessionexecution.Service, input ListDispatche
 	mapped := apifactorysession.ListDispatchesResponseToAPI(result)
 	return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Result: &mapped}
 }
+
+// ListArtifactsInput is the MCP request shape for you.factory_session.list_artifacts.
+type ListArtifactsInput struct {
+	SessionID string `json:"sessionId"`
+}
+
+// ListArtifacts returns durable Factory Session artifact summaries through the
+// you.factory_session.list_artifacts MCP tool.
+func ListArtifacts(service factorysessionexecution.Service, input ListArtifactsInput) ToolResponse[factoryapi.ListFactorySessionArtifactsResponse] {
+	if service == nil {
+		envelope := unavailableServiceErrorEnvelope()
+		return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{Error: &envelope}
+	}
+
+	sessionID := input.SessionID
+	result, err := service.ListArtifacts(context.Background(), sessionID)
+	if err != nil {
+		envelope := readErrorEnvelope(sessionID, err)
+		return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{Error: &envelope}
+	}
+
+	mapped := apifactorysession.ListArtifactsResponseToAPI(result)
+	return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{Result: &mapped}
+}
