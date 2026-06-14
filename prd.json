@@ -1,117 +1,139 @@
 {
-  "project": "UI CI Acceleration and Test Rationalization",
-  "branchName": "prd-ui-ci-acceleration-and-test-rationalization",
-  "description": "Accelerate the UI-heavy portions of the required CI path by surfacing browser integration failures earlier, using sharded UI coverage, adding stable slow-test reporting, and reducing redundant UI test coverage without weakening defect detection.",
+  "project": "Mock-Backed CLI Run, Status, And Result Loopback For Dynamic Workflows",
+  "branchName": "dynamic-workflows-cell-cli-run-status-result",
+  "description": "Add the first customer-testable CLI loopback for JavaScript Factory Sessions using the deterministic mock session-provider path. Users can start fixture-backed sessions in synchronous or asynchronous mode, receive durable session ids and inspection links, poll status, retrieve final or partial results, and observe deterministic timeout and failure behavior.",
   "context": {
-    "customerAsk": "Accelerate UI CI and rationalize redundant tests so browser integration regressions fail faster, covered UI runs complete sooner, and maintainers have timing evidence to keep the suite from regressing.",
-    "problem": "The current required CI path runs expensive UI verification lanes serially, so browser integration failures can be delayed until after a long covered UI pass. Existing coverage sharding is not used by the canonical PR flow, slow app-shell and React Flow-heavy tests dominate runtime, and some browser/jsdom/unit assertions overlap without adding proportional confidence.",
-    "solution": "Introduce a canonical PR verification flow that starts browser integration before covered UI completion, use the repo-owned sharded coverage and merge behavior, emit stable slow-test reports, define lane boundaries, split at least one high-cost app-shell suite into lower-cost feature tests, and preserve deterministic browser integration behavior."
+    "customerAsk": "Add mock-backed CLI behavior for dynamic workflow run/status/result. A sync run of a fixture returns a completed outcome and expected primary result hash or structured result. An async run returns a durable session id, status links, and later status/result commands report the mock scenario state. Timed-out sync runs report timeout without pretending completion, cancel-on-timeout is visible when requested, and focused CLI tests cover not-ready result, missing session, unsupported mode, bad source, and requestId conflict paths.",
+    "problem": "Dynamic workflow planning has deterministic mock Factory Session provider fixtures and shared execution request/result types, but users still need a CLI surface that proves the run, status, and result loop from their point of view. Without this loopback, downstream runtime and API work cannot demonstrate that you commands normalize inputs consistently, preserve request-id behavior, render stable JSON, or expose session inspection paths for completed, running, timed-out, failed, and not-ready states.",
+    "solution": "Extend CLI command behavior, using existing command boundaries where possible, so run/status/result-style commands call the shared mock-backed Factory Session execution service. Normalize source, args, request id, wait options, cancel-on-timeout, and requested result policy through shared service or API-surface helpers. Render concise human output and deterministic JSON for started, completed, timed-out, running, failed, and not-ready outcomes, with focused CLI tests against deterministic provider fixtures."
   },
   "acceptanceCriteria": [
-    "Browser integration no longer waits for the full covered UI lane to finish before starting in the canonical PR verification flow.",
-    "Required UI-related CI wall clock time is reduced by at least 30% from the current measured baseline, or the closeout artifact explains the measured blocker and next tuning step.",
-    "Sharded UI coverage preserves merged coverage reports, threshold enforcement, replay coverage checking, and clear failure output when a shard fails.",
-    "Covered UI and browser integration lanes emit stable slow-file summaries that maintainers can compare across runs.",
-    "Lane boundaries explain what belongs in unit/jsdom coverage, covered feature integration, and browser integration, with duplicate assertion patterns removed from at least one high-cost area.",
-    "Browser integration remains deterministic: failures identify the lane and rerun command, and concurrent execution avoids port, preview server, and shared download conflicts.",
-    "Typecheck, lint, and relevant tests pass for CI orchestration, coverage sharding, reporting, and changed UI test behavior."
+    "A sync CLI run of the success fixture returns a completed outcome and either the expected primary result hash or the expected structured primary result.",
+    "An async CLI run returns a durable Factory Session id, status/result links or follow-up command hints, and later CLI status/result commands report the deterministic mock scenario state.",
+    "A sync CLI run that exceeds the wait budget reports a timeout outcome, keeps the session inspectable, and does not render the session as completed.",
+    "When cancel-on-timeout is requested, CLI output makes the cancel request or cancellation outcome visible in both human and JSON modes.",
+    "CLI JSON output is deterministic for started, completed, timed-out, running, failed, and not-ready result outcomes.",
+    "Focused CLI tests cover not-ready result, missing session, unsupported mode, bad source, request-id idempotent replay, and request-id conflict behavior.",
+    "Quality gate passes: typecheck, lint where touched, and go test ./pkg/cli/session ./pkg/cli/workflow ./pkg/factorysessionexecution."
   ],
   "userStories": [
     {
-      "id": "prd-ui-ci-acceleration-and-test-rationalization-001",
-      "title": "Fast-Fail Required UI CI Flow",
-      "description": "As an engineer merging a UI change, I want browser integration to start before or alongside covered UI verification so that browser regressions become actionable sooner.",
+      "id": "dynamic-workflows-cell-cli-run-status-result-001",
+      "title": "Normalize CLI Session Execution Requests",
+      "description": "As a CLI user, I want run/status/result commands to interpret source, args, request id, wait options, and result policy consistently so retries and later API parity do not depend on transport-specific rules.",
       "acceptanceCriteria": [
-        "The canonical PR verification flow starts browser integration before covered UI completion, either by ordering browser first or by running browser and coverage through one orchestrated concurrent flow.",
-        "Failure output names the failed lane and includes the target or command an engineer should rerun locally.",
-        "Concurrent lanes, if used, keep lane logs attributable and avoid shared-state conflicts between browser-oriented processes.",
-        "The chosen ordering or concurrency behavior is documented in the developer-facing CI target help or adjacent CI documentation.",
-        "Tests pass",
-        "Typecheck passes"
+        "CLI run input resolves fixture source, args, request id, sync versus async mode, wait timeout, cancel-on-timeout, and requested result policy into the shared Factory Session execution request shape.",
+        "Positional arguments, flags, and stdin or file source inputs follow the existing invocation input ownership rules and reject conflicting logical input sources with a clear CLI error.",
+        "Unsupported execution modes fail before a session is created and return deterministic human and JSON errors.",
+        "Bad or missing source fails before a session is created and returns deterministic human and JSON errors.",
+        "Request normalization tests prove equivalent CLI inputs produce the same idempotency tuple used by the mock provider.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 1,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "prd-ui-ci-acceleration-and-test-rationalization-002",
-      "title": "Sharded Covered UI Verification",
-      "description": "As an engineer waiting on CI, I want covered UI tests to run in shards and merge coverage afterward so that wall clock time drops without weakening coverage enforcement.",
+      "id": "dynamic-workflows-cell-cli-run-status-result-002",
+      "title": "Run A Fixture Synchronously To Completion",
+      "description": "As a CLI user, I want a synchronous run of a fixture-backed JavaScript Factory Session to return the completed outcome and primary result so I can prove the simplest dynamic workflow path from the terminal.",
       "acceptanceCriteria": [
-        "The canonical PR verification flow uses the repo-owned UI coverage shard and merge behavior with a documented default shard count.",
-        "The merged coverage report preserves threshold enforcement and replay coverage checking after all expected shards finish.",
-        "A missing or failed shard produces a clear failure that identifies the shard and does not silently produce partial coverage.",
-        "Shard count can be tuned through a documented environment variable or CI setting without changing test semantics.",
-        "Tests pass",
-        "Typecheck passes"
+        "A sync run command against the success fixture exits successfully and renders completed or the established terminal success status in human output.",
+        "JSON output for the same sync run includes session id, lifecycle/result status, source identity or hash, primary result hash or structured primary result, and inspection links.",
+        "The primary result is selected through the shared Factory Session execution or invocation result behavior rather than a CLI-only shortcut.",
+        "Re-running the command with the same request id and equivalent inputs returns the original result without creating a new session.",
+        "CLI tests assert the completed human output and deterministic JSON fields for the success fixture.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 2,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "prd-ui-ci-acceleration-and-test-rationalization-003",
-      "title": "Stable UI Test Cost Reporting",
-      "description": "As a maintainer, I want CI to report the slowest covered UI and browser integration files with cost categories so that runtime regressions are visible and actionable.",
+      "id": "dynamic-workflows-cell-cli-run-status-result-003",
+      "title": "Start A Fixture Asynchronously And Poll Status",
+      "description": "As a CLI user, I want to start a fixture-backed JavaScript Factory Session asynchronously and poll its status later so long-running dynamic workflows have an inspectable terminal loop.",
       "acceptanceCriteria": [
-        "Covered UI verification emits a stable top-slowest file summary after the run or after shard merge.",
-        "Browser integration emits per-file timing or an equivalent top-slowest summary after the run.",
-        "The report categorizes slow files into app-shell integration, React Flow graph tests, replay/timeline tests, import/export tests, script-style tests, or uncategorized.",
-        "The report format is suitable for closeout notes and can be compared across CI runs without requiring source topology assertions.",
-        "Tests pass",
-        "Typecheck passes"
+        "An async run command exits successfully after start and renders a durable Factory Session id plus follow-up status/result links or command hints.",
+        "JSON output for async start includes session id, lifecycle status, status/result links, request id when provided, and result availability.",
+        "A status command for the returned session id renders the deterministic running, completed, timed-out, or failed mock scenario state.",
+        "Status JSON includes lifecycle status, progress or phase summary when available, result availability, dispatch/artifact counts when available, and inspection links.",
+        "CLI tests start an async fixture session and then use its returned session id to verify status output from the same mock provider state.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 3,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "prd-ui-ci-acceleration-and-test-rationalization-004",
-      "title": "Lane Boundary and Redundancy Policy",
-      "description": "As a maintainer, I want explicit test-lane boundaries so that unit, covered jsdom, and browser tests each verify distinct behavior.",
+      "id": "dynamic-workflows-cell-cli-run-status-result-004",
+      "title": "Retrieve Final And Partial Results",
+      "description": "As a CLI user, I want result commands to return final results when available and partial or not-ready responses when not available so automation can handle both terminal and in-progress sessions.",
       "acceptanceCriteria": [
-        "The test strategy defines what observable contracts belong in unit tests, covered feature/jsdom integration tests, and browser integration tests.",
-        "Browser integration guidance prioritizes durable behavior such as saved payloads, network effects, downloads, imports, and final visible state over repeated copy-only assertions.",
-        "Export/import and graph-editing flows have a documented minimum browser contract that avoids repeating every jsdom UI assertion.",
-        "At least one existing duplicate assertion pattern is removed or moved to the cheaper lane while preserving the durable behavior check.",
-        "Tests pass",
-        "Typecheck passes"
+        "A result command for a completed fixture session renders the expected primary result hash or structured primary result in human and JSON modes.",
+        "A result command for a running fixture session returns a not-ready result outcome without treating it as command success with empty data or as an unknown session.",
+        "Partial result retrieval, when supported by existing command boundaries, renders available partial data with availability status and stable JSON fields.",
+        "Result JSON distinguishes available, not_ready, failed, and missing_session outcomes with deterministic fields and exit behavior appropriate for CLI automation.",
+        "CLI tests cover final result, partial or not-ready result, and missing-session result paths against deterministic provider data.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 4,
       "passes": true,
       "notes": ""
     },
     {
-      "id": "prd-ui-ci-acceleration-and-test-rationalization-005",
-      "title": "Split One High-Cost App-Shell Suite",
-      "description": "As a maintainer, I want at least one oversized app-shell test suite replaced with smaller feature-focused coverage so that the same behavior is proven with less setup cost.",
+      "id": "dynamic-workflows-cell-cli-run-status-result-005",
+      "title": "Report Timeout And Cancel-On-Timeout Clearly",
+      "description": "As a CLI user, I want a synchronous run that times out to report timeout and optional cancellation explicitly so I do not mistake a live or canceled session for a completed one.",
       "acceptanceCriteria": [
-        "One high-cost app-shell suite is selected from the current slow-file inventory and its unique observable behaviors are listed before changes.",
-        "Equivalent behavior is covered by smaller feature-owned tests where whole-dashboard mounting is not required.",
-        "Any remaining app-shell coverage is limited to cross-feature behavior that cannot be proven reliably at a lower layer.",
-        "Before/after timing for the selected suite or replacement tests is captured in the closeout artifact.",
-        "Tests pass",
-        "Typecheck passes"
+        "A sync run with a wait budget smaller than the fixture completion window renders a timeout outcome with session id and status/result inspection links.",
+        "Timeout JSON includes lifecycle status, timeout status, result availability, wait duration or timeout flag, and does not include a completed primary result.",
+        "When cancel-on-timeout is requested, human output and JSON output include the cancel-on-timeout request and the deterministic cancellation or cancel-submitted outcome from the provider.",
+        "A timed-out session remains inspectable through status/result commands unless the deterministic provider scenario reports it as canceled.",
+        "CLI tests cover timeout without cancel-on-timeout and timeout with cancel-on-timeout.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 5,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "prd-ui-ci-acceleration-and-test-rationalization-006",
-      "title": "Browser Integration Stability and Runtime Boundaries",
-      "description": "As an engineer debugging browser failures, I want browser integration tests to be isolated and deterministic so that failures are attributable and retries remain rare.",
+      "id": "dynamic-workflows-cell-cli-run-status-result-006",
+      "title": "List Dispatches, Artifacts, And Events When Available",
+      "description": "As a CLI user, I want inspection commands for dispatches, artifacts, and events to expose deterministic provider data so I can understand what a dynamic workflow session produced.",
       "acceptanceCriteria": [
-        "Browser integration documentation states which suites must remain sequential because of shared preview servers, ports, downloads, or global browser state.",
-        "Any browser test concurrency introduced by this project uses isolated ports, preview state, and download locations per worker or file.",
-        "Shared browser helpers expose or document a recommended wait pattern for durable network and UI checkpoints.",
-        "At least one flaky or over-constrained browser assertion is simplified to assert durable behavior rather than transient copy, animation, or timing state.",
-        "Direct browser verification confirms changed browser-visible test flows still exercise the intended final UI state.",
-        "Tests pass",
-        "Typecheck passes"
+        "Dispatch listing, artifact listing, and event polling commands are added or extended only where existing CLI command boundaries permit a clear session inspection behavior.",
+        "Dispatch output includes stable dispatch ids, status, provider session references when present, and owning Factory Session id.",
+        "Artifact output includes stable artifact ids, names, metadata or retrieval refs, and owning Factory Session id.",
+        "Event polling output includes ordered Factory Session events and supports a cursor or since option when the existing command shape permits it.",
+        "JSON output for each supported inspection command is deterministic and matches the mock provider fixture data.",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 6,
-      "passes": true,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "dynamic-workflows-cell-cli-run-status-result-007",
+      "title": "Stabilize CLI Failure And Idempotency Paths",
+      "description": "As a CLI maintainer, I want failure and request-id replay paths to be explicit so users get actionable errors and tests protect the loopback contract.",
+      "acceptanceCriteria": [
+        "Missing session status/result requests return clear deterministic CLI errors in human and JSON modes.",
+        "Unsupported mode and bad source paths return clear deterministic CLI errors and do not create provider sessions.",
+        "Reusing a request id with the same normalized request returns the original start/result behavior.",
+        "Reusing a request id with a different normalized request returns a clear request-id conflict error and does not create a new provider session.",
+        "Focused CLI tests cover not-ready result, missing session, unsupported mode, bad source, request-id replay, and request-id conflict without relying on real JavaScript runtime or HTTP API.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
+      "passes": false,
       "notes": ""
     }
   ]

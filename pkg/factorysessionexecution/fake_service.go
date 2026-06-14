@@ -21,8 +21,10 @@ type FakeService struct {
 }
 
 type startReplayRecord struct {
-	sessionID string
-	tupleHash string
+	sessionID  string
+	tupleHash  string
+	syncStart  *SyncStartResult
+	asyncStart *AsyncStartResult
 }
 
 type controlReplayRecord struct {
@@ -108,6 +110,9 @@ func (s *FakeService) StartAsync(ctx context.Context, req StartRequest) (AsyncSt
 		if !ok {
 			return AsyncStartResult{}, ErrSessionNotFound
 		}
+		if replay.asyncStart != nil {
+			return *replay.asyncStart, nil
+		}
 		return s.asyncStartFromState(state), nil
 	}
 
@@ -117,11 +122,14 @@ func (s *FakeService) StartAsync(ctx context.Context, req StartRequest) (AsyncSt
 	}
 	state := fakeSessionStateFromScenario(scenario)
 	s.sessions[state.session.SessionID] = state
+	result := s.asyncStartFromScenario(scenario, state)
+	cloned := cloneAsyncStartResult(result)
 	s.startReplay[normalized.RequestID] = startReplayRecord{
-		sessionID: state.session.SessionID,
-		tupleHash: tupleHash,
+		sessionID:  state.session.SessionID,
+		tupleHash:  tupleHash,
+		asyncStart: &cloned,
 	}
-	return s.asyncStartFromScenario(scenario, state), nil
+	return result, nil
 }
 
 func (s *FakeService) StartSync(ctx context.Context, req StartRequest) (SyncStartResult, error) {
@@ -147,6 +155,9 @@ func (s *FakeService) StartSync(ctx context.Context, req StartRequest) (SyncStar
 		if !ok {
 			return SyncStartResult{}, ErrSessionNotFound
 		}
+		if replay.syncStart != nil {
+			return *replay.syncStart, nil
+		}
 		return s.syncStartFromState(state), nil
 	}
 
@@ -156,11 +167,15 @@ func (s *FakeService) StartSync(ctx context.Context, req StartRequest) (SyncStar
 	}
 	state := fakeSessionStateFromScenario(scenario)
 	s.sessions[state.session.SessionID] = state
+	result := s.syncStartFromScenario(scenario, state)
+	applySyncWaitOutcome(&result, state, normalized)
+	cloned := cloneSyncStartResult(result)
 	s.startReplay[normalized.RequestID] = startReplayRecord{
 		sessionID: state.session.SessionID,
 		tupleHash: tupleHash,
+		syncStart: &cloned,
 	}
-	return s.syncStartFromScenario(scenario, state), nil
+	return result, nil
 }
 
 func (s *FakeService) GetSession(ctx context.Context, sessionID string) (SessionReadResult, error) {
@@ -595,6 +610,38 @@ func (s *FakeService) asyncStartFromState(state *fakeSessionState) AsyncStartRes
 	}
 }
 
+func applySyncWaitOutcome(result *SyncStartResult, state *fakeSessionState, req StartRequest) {
+	if result == nil || state == nil {
+		return
+	}
+	if result.SyncOutcome != SyncOutcomeTimedOut && !result.TimedOut {
+		return
+	}
+	if req.Wait == nil || !req.Wait.CancelOnTimeout {
+		return
+	}
+
+	result.SessionCanceledByTimeout = true
+	result.Result = nil
+	switch state.session.Status {
+	case LifecycleStatusRunning,
+		LifecycleStatusPaused,
+		LifecycleStatusResuming,
+		LifecycleStatusQueued,
+		LifecycleStatusAwaitingApproval:
+		state.session.Status = LifecycleStatusCanceling
+		state.result.SessionStatus = LifecycleStatusCanceling
+		state.result.ResultStatus = ResultStatusUnavailable
+		state.result.Availability = &ResultAvailabilityDetail{
+			Reason:    "SESSION_CANCELED",
+			Message:   "Session cancel was submitted after sync wait timed out.",
+			Retryable: false,
+		}
+	}
+	result.Status = string(state.session.Status)
+	state.events = deriveProjectionEvents(state.session, state.result)
+}
+
 func (s *FakeService) syncStartFromScenario(scenario FakeScenario, state *fakeSessionState) SyncStartResult {
 	if scenario.SyncStart != nil {
 		return *scenario.SyncStart
@@ -795,6 +842,20 @@ func cloneResultAvailability(availability *ResultAvailabilityDetail) *ResultAvai
 	}
 	cloned := *availability
 	return &cloned
+}
+
+func cloneAsyncStartResult(result AsyncStartResult) AsyncStartResult {
+	cloned := result
+	cloned.ResolvedSource = cloneResolvedSource(result.ResolvedSource)
+	cloned.Policy = clonePolicyProjection(result.Policy)
+	return cloned
+}
+
+func cloneSyncStartResult(result SyncStartResult) SyncStartResult {
+	cloned := result
+	cloned.AsyncStartResult = cloneAsyncStartResult(result.AsyncStartResult)
+	cloned.Result = cloneRawJSON(result.Result)
+	return cloned
 }
 
 func cloneRawJSON(raw json.RawMessage) json.RawMessage {
