@@ -101,10 +101,8 @@ func TestContractFixtureCatalog_UsesCanonicalFactorySessionVocabulary(t *testing
 		t.Fatalf("read fixtures: %v", err)
 	}
 	text := string(raw)
-	for _, term := range fixtures.ForbiddenFixtureVocabularyTerms() {
-		if strings.Contains(text, term) {
-			t.Fatalf("fixture catalog contains forbidden term %q", term)
-		}
+	if term, found := fixtures.ContainsForbiddenFixtureVocabulary(text); found {
+		t.Fatalf("fixture catalog contains forbidden term %q", term)
 	}
 
 	var document map[string]any

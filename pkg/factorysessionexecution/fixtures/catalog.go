@@ -653,6 +653,40 @@ func ForbiddenFixtureVocabularyTerms() []string {
 	return []string{"DynamicWorkflowRun", "workflow run"}
 }
 
+// ContainsForbiddenFixtureVocabulary reports whether text introduces forbidden
+// recovered-lane vocabulary. Matching stays phrase-aware so allowed compounds such
+// as "workflow runtime" do not false-positive on the standalone "workflow run" noun.
+func ContainsForbiddenFixtureVocabulary(text string) (string, bool) {
+	for _, term := range ForbiddenFixtureVocabularyTerms() {
+		if forbiddenFixtureVocabularyPresent(text, term) {
+			return term, true
+		}
+	}
+	return "", false
+}
+
+func forbiddenFixtureVocabularyPresent(text, term string) bool {
+	switch term {
+	case "workflow run":
+		index := 0
+		for {
+			position := strings.Index(text[index:], term)
+			if position < 0 {
+				return false
+			}
+			absolute := index + position
+			after := absolute + len(term)
+			if after < len(text) && strings.HasPrefix(text[after:], "time") {
+				index = absolute + 1
+				continue
+			}
+			return true
+		}
+	default:
+		return strings.Contains(text, term)
+	}
+}
+
 // TypedFailureHash returns a stable digest for one typed failure identity.
 func TypedFailureHash(identity TypedFailureIdentity) (string, error) {
 	document := map[string]any{
