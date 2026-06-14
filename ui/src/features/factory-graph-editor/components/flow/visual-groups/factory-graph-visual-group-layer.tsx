@@ -4,16 +4,18 @@ import { useCallback, useRef, useState } from "react";
 import { GraphNodeButton } from "../../../../graphs/public";
 import { cn } from "../../../../../lib/cn";
 import {
-  FACTORY_LAYOUT_GROUP_MIN_SIZE,
   type FactoryLayoutGroup,
   factoryLayoutGroupColorCssVariable,
   factoryLayoutGroupColorSurfaceCssVariable,
 } from "../../../lib/layout/visual-groups/factory-graph-layout-groups";
 import type { FactoryLayoutPoint } from "../../../lib/layout/factory-graph-layout-operations";
-
-const DRAG_CLICK_THRESHOLD_PX = 4;
-
-type ResizeCorner = "ne" | "nw" | "se" | "sw";
+import {
+  type ResizeCorner,
+  RESIZE_CORNERS,
+  isDragBeyondClickThreshold,
+  resizeBoundsFromCorner,
+  resizeHandleStyle,
+} from "./factory-graph-visual-group-layer-geometry";
 
 type DragSession =
   | {
@@ -236,10 +238,10 @@ export function FactoryGraphVisualGroupLayer({
       if (dragSession.kind === "move") {
         if (
           !dragSession.moved &&
-          Math.hypot(
-            event.clientX - dragSession.startScreenPosition.x,
-            event.clientY - dragSession.startScreenPosition.y,
-          ) >= DRAG_CLICK_THRESHOLD_PX
+          isDragBeyondClickThreshold(dragSession.startScreenPosition, {
+            x: event.clientX,
+            y: event.clientY,
+          })
         ) {
           dragSession.moved = true;
         }
@@ -433,70 +435,4 @@ export function FactoryGraphVisualGroupLayer({
       })}
     </div>
   );
-}
-
-const RESIZE_CORNERS: readonly ResizeCorner[] = ["nw", "ne", "sw", "se"];
-
-function resizeHandleStyle(corner: ResizeCorner): React.CSSProperties {
-  switch (corner) {
-    case "nw":
-      return { cursor: "nwse-resize", left: -8, top: -8 };
-    case "ne":
-      return { cursor: "nesw-resize", right: -8, top: -8 };
-    case "sw":
-      return { bottom: -8, cursor: "nesw-resize", left: -8 };
-    case "se":
-      return { bottom: -8, cursor: "nwse-resize", right: -8 };
-  }
-}
-
-function resizeBoundsFromCorner(
-  startBounds: FactoryLayoutGroup["bounds"],
-  corner: ResizeCorner,
-  delta: FactoryLayoutPoint,
-): FactoryLayoutGroup["bounds"] {
-  const minWidth = FACTORY_LAYOUT_GROUP_MIN_SIZE.width;
-  const minHeight = FACTORY_LAYOUT_GROUP_MIN_SIZE.height;
-
-  switch (corner) {
-    case "se":
-      return {
-        height: Math.max(minHeight, startBounds.height + delta.y),
-        width: Math.max(minWidth, startBounds.width + delta.x),
-        x: startBounds.x,
-        y: startBounds.y,
-      };
-    case "sw": {
-      const width = Math.max(minWidth, startBounds.width - delta.x);
-      const widthDelta = width - startBounds.width;
-      return {
-        height: Math.max(minHeight, startBounds.height + delta.y),
-        width,
-        x: startBounds.x - widthDelta,
-        y: startBounds.y,
-      };
-    }
-    case "ne": {
-      const height = Math.max(minHeight, startBounds.height - delta.y);
-      const heightDelta = height - startBounds.height;
-      return {
-        height,
-        width: Math.max(minWidth, startBounds.width + delta.x),
-        x: startBounds.x,
-        y: startBounds.y - heightDelta,
-      };
-    }
-    case "nw": {
-      const width = Math.max(minWidth, startBounds.width - delta.x);
-      const height = Math.max(minHeight, startBounds.height - delta.y);
-      const widthDelta = width - startBounds.width;
-      const heightDelta = height - startBounds.height;
-      return {
-        height,
-        width,
-        x: startBounds.x - widthDelta,
-        y: startBounds.y - heightDelta,
-      };
-    }
-  }
 }
