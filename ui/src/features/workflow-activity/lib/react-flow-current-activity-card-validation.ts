@@ -26,6 +26,29 @@ export function mergeFactoryValidationTargets(
   return projectFactoryValidationTargets(targets);
 }
 
+export function layoutValidationWarningMessages(
+  targets: readonly FactoryValidationTarget[],
+): string[] {
+  const messages = new Set<string>();
+
+  for (const target of targets) {
+    if (
+      target.severity !== "warning" ||
+      target.subject.type !== "FACTORY" ||
+      !target.code.startsWith("factory.layout.")
+    ) {
+      continue;
+    }
+
+    const message = target.message.trim();
+    if (message.length > 0) {
+      messages.add(message);
+    }
+  }
+
+  return [...messages];
+}
+
 export function saveErrorNoticeMessages(error: unknown): string[] {
   if (error instanceof CurrentFactoryDefinitionError) {
     const messages = new Set<string>();

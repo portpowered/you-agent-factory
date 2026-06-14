@@ -22,6 +22,7 @@ import { FactoryGraphEditorModeToggle } from "../chrome/factory-graph-editor-mod
 import { FactoryGraphEditorTooltipActionButton } from "../chrome/factory-graph-editor-tooltip-button";
 import {
   DiscardIcon,
+  GroupIcon,
   RedoIcon,
   ResetLayoutIcon,
   SaveIcon,
@@ -73,6 +74,7 @@ export function FactoryGraphEditorToolbar({
   hideShowVisible = true,
   isSaving = false,
   locale,
+  onCreateVisualGroup,
   onDiscard,
   onAddAction,
   onAddMenuOpenChange,
@@ -108,6 +110,7 @@ export function FactoryGraphEditorToolbar({
   hideShowVisible?: boolean;
   isSaving?: boolean;
   locale?: string;
+  onCreateVisualGroup?: () => void;
   onDiscard?: () => void;
   onAddAction?: (actionID: string) => void;
   onAddMenuOpenChange?: (open: boolean) => void;
@@ -177,6 +180,15 @@ export function FactoryGraphEditorToolbar({
             onAction={onAddAction}
             onOpenChange={onAddMenuOpenChange}
             open={openAddMenu}
+          />
+          <FactoryGraphEditorToolbarButton
+            active={false}
+            description={messages.toolbarCreateGroupDescription}
+            disabled={toolbarButtonsDisabled || onCreateVisualGroup === undefined}
+            icon={<GroupIcon />}
+            label={messages.toolbarCreateGroupLabel}
+            onClick={() => onCreateVisualGroup?.()}
+            tone="outline"
           />
           <FactoryGraphEditorToolbarButton
             active={activeTool === "delete"}

@@ -41,6 +41,26 @@ describe("graph-editor-harness layout and mutation helpers", () => {
     expect(draftState.resetDraft).toHaveBeenCalled();
   });
 
+  it("createMockEditableFactoryGraph saves visual group layout edits", async () => {
+    const saveMutation = mockFactoryDocumentSave({ mode: "success" });
+    vi.mocked(useFactoryDocumentSave).mockReturnValue(saveMutation);
+
+    const draftState = createMockGraphEditorDraftState({
+      pendingFactoryDefinition: baseFactoryDefinitionDocument,
+    });
+    const graph = createMockEditableFactoryGraph(
+      { factoryDocumentScopeKey: "session-default" },
+      draftState,
+    );
+
+    graph.actions.createVisualGroup({ x: 80, y: 120 });
+    expect(graph.layoutDraftState.hasChanges).toBe(true);
+
+    await expect(graph.actions.save()).resolves.toBe(true);
+    expect(saveMutation.saveAsync).toHaveBeenCalled();
+    expect(graph.layoutDraftState.adoptSavedLayout).toHaveBeenCalled();
+  });
+
   it("createMockEditableFactoryGraph wires document save controls and graph mutations", () => {
     const draftState = createMockGraphEditorDraftState();
     const graph = createMockEditableFactoryGraph(

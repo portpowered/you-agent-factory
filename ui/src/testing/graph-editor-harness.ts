@@ -10,6 +10,7 @@ import type { DashboardSnapshot } from "../api/dashboard/types";
 import { singleNodeDashboardSnapshot } from "../components/dashboard/test-fixtures";
 import { useFactoryDocumentSave } from "../features/current-factory-definition/hooks/useFactoryDocumentSave";
 import type { FactoryDocumentSaveState } from "../features/current-selection/base/hooks/factory-document-save-types";
+import type { FactoryGraphLayoutDraftDerivedState } from "../features/factory-graph-editor/hooks/layout/factory-graph-layout-draft-hook";
 import type {
   EditableFactoryGraphViewModel,
   UseEditableFactoryGraphOptions,
@@ -25,6 +26,18 @@ import {
   moveFactoryLayoutEdgeWaypoint,
   removeFactoryLayoutEdgeWaypoint,
 } from "../features/factory-graph-editor/lib/layout/factory-graph-layout-edge-waypoints";
+import {
+  addFactoryLayoutGroup,
+  addNodeToFactoryLayoutGroup,
+  createFactoryLayoutGroup,
+  createFactoryLayoutGroupId,
+  defaultFactoryLayoutGroupBounds,
+  moveFactoryLayoutGroupByDelta,
+  removeFactoryLayoutGroup,
+  removeNodeFromFactoryLayoutGroup,
+  resizeFactoryLayoutGroup,
+  updateFactoryLayoutGroup,
+} from "../features/factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import {
   createDefaultFactoryLayout,
   moveFactoryLayoutNode,
@@ -309,6 +322,101 @@ export function createHookTestGraphEditorDraftState(
   return state;
 }
 
+function createMockVisualGroupLayoutActions(state: {
+  hasChanges: boolean;
+  layout: ReturnType<typeof createDefaultFactoryLayout>;
+  layoutDirty: boolean;
+}) {
+  return {
+    createVisualGroup: vi.fn((center: { x: number; y: number }) => {
+      const groupId = createFactoryLayoutGroupId(state.layout);
+      const group = createFactoryLayoutGroup({
+        bounds: defaultFactoryLayoutGroupBounds(center),
+        id: groupId,
+        layout: state.layout,
+      });
+      state.layout = addFactoryLayoutGroup(state.layout, group);
+      state.hasChanges = true;
+      state.layoutDirty = true;
+      return group;
+    }),
+    renameVisualGroup: vi.fn((groupId: string, label: string) => {
+      state.layout = updateFactoryLayoutGroup(state.layout, groupId, (group) => ({
+        ...group,
+        label,
+      }));
+      state.hasChanges = true;
+      state.layoutDirty = true;
+    }),
+    setVisualGroupColor: vi.fn(
+      (
+        groupId: string,
+        color: "primary" | "info" | "success" | "warning" | "outline",
+      ) => {
+        state.layout = updateFactoryLayoutGroup(
+          state.layout,
+          groupId,
+          (group) => ({
+            ...group,
+            color,
+          }),
+        );
+        state.hasChanges = true;
+        state.layoutDirty = true;
+      },
+    ),
+    addNodeToVisualGroup: vi.fn((groupId: string, nodeId: string) => {
+      state.layout = addNodeToFactoryLayoutGroup(
+        state.layout,
+        groupId,
+        nodeId,
+      );
+      state.hasChanges = true;
+      state.layoutDirty = true;
+    }),
+    removeNodeFromVisualGroup: vi.fn((groupId: string, nodeId: string) => {
+      state.layout = removeNodeFromFactoryLayoutGroup(
+        state.layout,
+        groupId,
+        nodeId,
+      );
+      state.hasChanges = true;
+      state.layoutDirty = true;
+    }),
+    moveVisualGroupByDelta: vi.fn(
+      (
+        groupId: string,
+        delta: { x: number; y: number },
+        resolvedNodePositions?: ReadonlyMap<string, { x: number; y: number }>,
+      ) => {
+        state.layout = moveFactoryLayoutGroupByDelta(
+          state.layout,
+          groupId,
+          delta,
+          resolvedNodePositions,
+        );
+        state.hasChanges = true;
+        state.layoutDirty = true;
+      },
+    ),
+    resizeVisualGroup: vi.fn(
+      (
+        groupId: string,
+        bounds: { height: number; width: number; x: number; y: number },
+      ) => {
+        state.layout = resizeFactoryLayoutGroup(state.layout, groupId, bounds);
+        state.hasChanges = true;
+        state.layoutDirty = true;
+      },
+    ),
+    deleteVisualGroup: vi.fn((groupId: string) => {
+      state.layout = removeFactoryLayoutGroup(state.layout, groupId);
+      state.hasChanges = true;
+      state.layoutDirty = true;
+    }),
+  };
+}
+
 function createMockLayoutDraftState() {
   const baseLayout = createDefaultFactoryLayout();
   const state = {
@@ -392,9 +500,12 @@ function createMockLayoutDraftState() {
     ),
   };
 
-  return state;
+  Object.assign(state, createMockVisualGroupLayoutActions(state));
+
+  return state as unknown as FactoryGraphLayoutDraftDerivedState;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: editable graph mock actions mirror production wiring.
 function createMockEditableFactoryGraphActions(
   options: UseEditableFactoryGraphOptions,
   draftState: MockGraphEditorDraftState,
@@ -517,6 +628,14 @@ function createMockEditableFactoryGraphActions(
       return true;
     },
     updateLayoutViewport: layoutDraftState.updateViewport,
+    createVisualGroup: layoutDraftState.createVisualGroup,
+    renameVisualGroup: layoutDraftState.renameVisualGroup,
+    setVisualGroupColor: layoutDraftState.setVisualGroupColor,
+    addNodeToVisualGroup: layoutDraftState.addNodeToVisualGroup,
+    removeNodeFromVisualGroup: layoutDraftState.removeNodeFromVisualGroup,
+    moveVisualGroupByDelta: layoutDraftState.moveVisualGroupByDelta,
+    resizeVisualGroup: layoutDraftState.resizeVisualGroup,
+    deleteVisualGroup: layoutDraftState.deleteVisualGroup,
     updateNodeField: () => ({
       message: "Field editing is not exercised by this component test.",
       ok: false,
