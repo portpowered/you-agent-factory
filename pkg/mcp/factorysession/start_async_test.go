@@ -36,6 +36,7 @@ func TestMockClient_StartAsync_RunningFixtureReturnsInProgressSession(t *testing
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this MCP running-status test keeps read-model and direct-service assertions together on one mock-client seam.
 func TestMockClient_GetSession_RunningFixtureReturnsDeterministicStatus(t *testing.T) {
 	client := newFixtureMCPClient(t)
 
@@ -125,6 +126,7 @@ func TestMockClient_GetResult_RunningFixtureReturnsTypedNotReadyEnvelope(t *test
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this MCP async polling test keeps running, not-ready, and completed fixture assertions together on one mock-client seam.
 func TestMockClient_AsyncPolling_ObservesCompletedFixtureThroughStatusAndResult(t *testing.T) {
 	client := newFixtureMCPClient(t)
 

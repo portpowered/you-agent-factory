@@ -61,6 +61,7 @@ func TestMockClient_ListDispatches_DispatchInspectionFixtureReturnsStableSummari
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this MCP artifact inspection test keeps fixture summaries and golden-hash assertions together on one mock-client seam.
 func TestMockClient_ListArtifacts_ArtifactInspectionFixtureReturnsStableSummaries(t *testing.T) {
 	client := newFixtureMCPClient(t)
 	row := publishedScenario(t, fixtures.FixturePurposeArtifactInspection)
@@ -150,6 +151,7 @@ func TestMockClient_ListArtifacts_WorkflowAliasParity(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this MCP event inspection test keeps canonical event vocabulary and golden-hash assertions together on one mock-client seam.
 func TestMockClient_ReadEvents_EventReconnectFixtureReturnsOrderedCanonicalEvents(t *testing.T) {
 	client := newFixtureMCPClient(t)
 	row := publishedScenario(t, fixtures.FixturePurposeEventReconnect)
@@ -206,6 +208,7 @@ func TestMockClient_ReadEvents_EventReconnectFixtureReturnsOrderedCanonicalEvent
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this MCP lifecycle control test keeps accepted, rejected, and session-isolation assertions together on one mock-client seam.
 func TestMockClient_Control_LifecycleFixtureReturnsAcceptedRejectedAndIsolatesSessions(t *testing.T) {
 	client := newFixtureMCPClient(t)
 	pausedRow := publishedScenario(t, fixtures.FixturePurposeLifecycleControl)

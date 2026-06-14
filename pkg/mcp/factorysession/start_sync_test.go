@@ -13,6 +13,7 @@ import (
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this MCP sync-start test keeps terminal session fields and golden-hash assertions together on one mock-client seam.
 func TestMockClient_StartSync_SuccessFixtureReturnsTerminalSession(t *testing.T) {
 	client := newFixtureMCPClient(t)
 	request := syncSuccessExecutionRequest()
@@ -69,6 +70,7 @@ func TestMockClient_StartSync_SuccessFixtureReturnsTerminalSession(t *testing.T)
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this MCP terminal-result test keeps result payload fields and golden-hash assertions together on one mock-client seam.
 func TestMockClient_GetResult_TerminalSessionReturnsDeterministicResult(t *testing.T) {
 	client := newFixtureMCPClient(t)
 	request := syncSuccessExecutionRequest()

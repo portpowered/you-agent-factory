@@ -49,6 +49,7 @@ func TestMockClient_GetSession_FailedFixtureReturnsDeterministicStatusWithPartia
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this MCP failure-path test keeps partial-result and golden-hash assertions together on one mock-client seam.
 func TestMockClient_GetResult_FailedFixtureReturnsPartialResultWithFailureDetails(t *testing.T) {
 	client := newFixtureMCPClient(t)
 
