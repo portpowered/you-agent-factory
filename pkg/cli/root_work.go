@@ -129,15 +129,17 @@ func newWorkMoveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 func newSessionCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	sessionCmd := &cobra.Command{
 		Use:   "session",
-		Short: "List, open, and close live factory sessions on a running host",
-		Long: "Manage live factory sessions on a running you-agent-factory service.\n\n" +
+		Short: "List, open, and close factory sessions on a running host",
+		Long: "Manage factory sessions on a running you-agent-factory service.\n\n" +
 			"Subcommands:\n" +
-			"  list    list live factory sessions from GET /factory-sessions\n" +
+			"  list    list live workspace sessions or durable Factory Sessions with --scope live|persisted|all\n" +
 			"  show    show one live factory session from GET /factory-sessions/{session_id}\n" +
 			"  create  open another live session from a folder path\n" +
 			"  delete  close a live session by session id\n\n" +
-			"Session commands use the same default --port as work list. Use --json to emit API-shaped " +
-			"responses on stdout; diagnostics stay on stderr when --verbose or --debug is set.",
+			"Durable list output uses Factory Session status, source identity, result availability, " +
+			"progress, and action availability. Session commands use the same default --port as work list. " +
+			"Use --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose " +
+			"or --debug is set.",
 		Example: "  # List live sessions on the default local port.\n" +
 			"  " + cliBinaryName + " session list\n\n" +
 			"  # Show orchestrator-aware runtime for one live session.\n" +
@@ -198,14 +200,21 @@ func newSessionShowCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 }
 
 func newSessionListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := sessioncli.ListConfig{Port: defaultcmd.FactoryPort}
+	cfg := sessioncli.ListConfig{Port: defaultcmd.FactoryPort, Scope: "live"}
 
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List live factory sessions",
-		Long: "List every live factory session that the running host currently has open.\n\n" +
-			"Human output prints session id, project, folder path, factory dir, default marker, and " +
-			"target kind/name. Use --json to emit ListFactorySessionsResponse on stdout.",
+		Short: "List live and durable factory sessions",
+		Long: "List factory sessions for the requested scope.\n\n" +
+			"live returns workspace sessions kept open by the running host. persisted returns durable " +
+			"Factory Sessions from the deterministic provider loopback. all returns both live workspace " +
+			"sessions and durable Factory Sessions.\n\n" +
+			"Human output prints the legacy live-session table for workspace rows and a durable Factory " +
+			"Session table with status, source identity, result availability, progress, and actions. " +
+			"Use --json to emit ListFactorySessionsResponse on stdout.",
+		Example: "  " + cliBinaryName + " session list\n\n" +
+			"  " + cliBinaryName + " session list --scope persisted\n\n" +
+			"  " + cliBinaryName + " session list --scope all --json",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
@@ -216,6 +225,7 @@ func newSessionListCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	}
 
 	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
+	cmd.Flags().StringVar(&cfg.Scope, "scope", cfg.Scope, "session list scope: live, persisted, or all")
 	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API list-factory-sessions JSON response")
 	return cmd
 }
@@ -284,10 +294,11 @@ func newSessionDeleteCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command 
 func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "workflow",
-		Short: "Validate, preview, and run JavaScript workflow sources",
-		Long: "Validate, preview, and run JavaScript or TypeScript workflow sources using the shared workflow contracts.\n\n" +
+		Short: "Validate JavaScript workflow sources for Factory Session execution",
+		Long: "Validate JavaScript or TypeScript workflow sources before starting a Factory Session.\n\n" +
 			"Subcommands:\n" +
-			"  preview    resolve workflow source, validate it without execution, and project policy and result constraints\n" +
+			"  validate   primary CLI path: resolve workflow source and validate it without execution\n" +
+			"  preview    compatibility alias for the Factory preview contract; prefer validate for CLI checks\n" +
 			"  run        start one durable Factory Session synchronously through the mock-backed execution loop\n" +
 			"  start      start one durable Factory Session asynchronously and return inspection links\n" +
 			"  status     read the durable Factory Session lifecycle and progress state\n" +
@@ -297,6 +308,7 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *co
 			"  events     poll ordered durable Factory Session events with optional reconnect cursors",
 	}
 	cmd.AddCommand(
+		newWorkflowValidateCommand(globals),
 		newWorkflowPreviewCommand(globals),
 		newWorkflowRunCommand(globals),
 		newWorkflowStartCommand(globals),
@@ -309,12 +321,34 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *co
 	return cmd
 }
 
+func newWorkflowValidateCommand(globals *cliGlobalOptions) *cobra.Command {
+	cfg := workflowcli.ValidateConfig{SourceConfig: workflowcli.SourceConfig{Dir: defaultcmd.FactoryDir}}
+	cmd := &cobra.Command{
+		Use:   "validate",
+		Short: "Validate JavaScript workflow source",
+		Long:  "Resolve workflow source and validate it without execution using the shared workflow validation contract.",
+		Example: "  # Validate a project workflow by name.\n" +
+			"  " + cliBinaryName + " workflow validate --kind WORKFLOW_NAME --value review\n\n" +
+			"  # Validate inline workflow source.\n" +
+			"  " + cliBinaryName + " workflow validate --kind INLINE_WORKFLOW --inline \"phase('setup');\"",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.JSON = globals.json
+			cfg.Output = cmd.OutOrStdout()
+			return workflowcli.Validate(cfg)
+		},
+	}
+	addWorkflowSourceFlags(cmd, &cfg.SourceConfig)
+	return cmd
+}
+
 func newWorkflowPreviewCommand(globals *cliGlobalOptions) *cobra.Command {
-	cfg := workflowcli.PreviewConfig{Dir: defaultcmd.FactoryDir}
+	cfg := workflowcli.PreviewConfig{SourceConfig: workflowcli.SourceConfig{Dir: defaultcmd.FactoryDir}}
 	cmd := &cobra.Command{
 		Use:   "preview",
-		Short: "Preview workflow validation and policy",
-		Long:  "Resolve workflow source, validate it without execution, and print source, loader, policy, and result-shape diagnostics.",
+		Short: "Compatibility preview of workflow validation and policy",
+		Long: "Compatibility command for the Factory preview contract. Resolve workflow source, validate it " +
+			"without execution, and print source, loader, policy, and result-shape diagnostics. Prefer " +
+			cliBinaryName + " workflow validate for CLI source checks before Factory Session execution.",
 		Example: "  # Preview a project workflow by name.\n" +
 			"  " + cliBinaryName + " workflow preview --kind WORKFLOW_NAME --value review\n\n" +
 			"  # Preview inline workflow source.\n" +
@@ -325,12 +359,18 @@ func newWorkflowPreviewCommand(globals *cliGlobalOptions) *cobra.Command {
 			return workflowcli.Preview(cfg)
 		},
 	}
-	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "project root used for ordered workflow source lookup")
-	cmd.Flags().StringVar(&cfg.SourceKind, "kind", string(workflowsource.KindWorkflowName), "workflow source kind")
-	cmd.Flags().StringVar(&cfg.SourceValue, "value", "", "workflow name, file ref, or factory id")
-	cmd.Flags().StringVar(&cfg.InlineSource, "inline", "", "inline workflow source text")
-	cmd.Flags().StringVar(&cfg.ArtifactRoot, "artifact-root", "", "optional absolute artifact root")
+	addWorkflowSourceFlags(cmd, &cfg.SourceConfig)
 	return cmd
+}
+
+func addWorkflowSourceFlags(command *cobra.Command, cfg *workflowcli.SourceConfig) {
+	command.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "project root used for ordered workflow source lookup")
+	command.Flags().StringVar(&cfg.SourceKind, "kind", string(workflowsource.KindWorkflowName), "workflow source kind")
+	command.Flags().StringVar(&cfg.SourceValue, "value", "", "workflow name, file ref, or factory id")
+	command.Flags().StringVar(&cfg.InlineSource, "inline", "", "inline workflow source text")
+	command.Flags().StringVar(&cfg.ArtifactRoot, "artifact-root", "", "optional absolute artifact root")
+	command.Flags().StringVar(&cfg.ArgsSchema, "args-schema", "", "optional orchestrator.javascript argsSchema JSON")
+	command.Flags().StringVar(&cfg.RequestedPolicyJSON, "requested-policy", "", "optional requested policy override JSON")
 }
 
 func newWorkflowRunCommand(globals *cliGlobalOptions) *cobra.Command {
