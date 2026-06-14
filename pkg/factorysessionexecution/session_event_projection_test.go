@@ -140,6 +140,39 @@ func TestReplaySessionProjection_ReplacesArtifactStubsWithoutDuplication(t *test
 	}
 }
 
+func TestReplaySessionProjection_PreservesSyncTimeoutAvailability(t *testing.T) {
+	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	sessionID := "dur-sess-replay-timeout-availability"
+	events := BuildCanonicalRuntimeSessionEvents(
+		SessionReadResult{
+			SessionID:        sessionID,
+			Status:           LifecycleStatusRunning,
+			OrchestratorKind: "JAVASCRIPT",
+			SourceHash:       "sha256:fixture",
+			Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
+			ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
+			Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+		},
+		ResultReadResult{
+			SessionID:    sessionID,
+			ResultStatus: ResultStatusNotReady,
+			Availability: &ResultAvailabilityDetail{
+				Reason:    "SYNC_WAIT_TIMED_OUT",
+				Message:   "Sync wait ended before a terminal result was available.",
+				Retryable: true,
+			},
+		},
+	)
+
+	_, result, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if result.Availability == nil || result.Availability.Reason != "SYNC_WAIT_TIMED_OUT" {
+		t.Fatalf("availability = %#v, want SYNC_WAIT_TIMED_OUT", result.Availability)
+	}
+}
+
 func TestReplaySessionProjection_IgnoresUnknownEventTypes(t *testing.T) {
 	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
 	sessionID := "dur-sess-replay-004"

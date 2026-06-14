@@ -125,6 +125,12 @@ func TestRuntimeService_EventReplay_ReconstructsSyncTimeoutProjection(t *testing
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
+	liveResult, err := service.GetResult(context.Background(), timedOut.SessionID, factorysessionexecution.ResultRequest{
+		Mode: factorysessionexecution.ResultModeFinal,
+	})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
 	events, err := service.ReadEvents(context.Background(), timedOut.SessionID, factorysessionexecution.EventReconnectRequest{})
 	if err != nil {
 		t.Fatalf("ReadEvents: %v", err)
@@ -135,8 +141,9 @@ func TestRuntimeService_EventReplay_ReconstructsSyncTimeoutProjection(t *testing
 		t.Fatalf("ReplaySessionProjection: %v", err)
 	}
 	assertReplayedSessionMatchesLive(t, liveSession, replayedSession)
-	if replayedResult.ResultStatus != factorysessionexecution.ResultStatusNotReady {
-		t.Fatalf("replayed resultStatus = %q, want NOT_READY", replayedResult.ResultStatus)
+	assertReplayedResultStatusMatchesLive(t, liveResult, replayedResult)
+	if replayedResult.Availability == nil || replayedResult.Availability.Reason != "SYNC_WAIT_TIMED_OUT" {
+		t.Fatalf("replayed availability = %#v, want SYNC_WAIT_TIMED_OUT", replayedResult.Availability)
 	}
 }
 
@@ -275,5 +282,23 @@ func assertReplayedResultStatusMatchesLive(t *testing.T, live, replayed factorys
 	}
 	if replayed.SessionStatus != live.SessionStatus {
 		t.Fatalf("sessionStatus = %q, want %q", replayed.SessionStatus, live.SessionStatus)
+	}
+	if live.Availability == nil {
+		if replayed.Availability != nil {
+			t.Fatalf("replayed availability = %#v, want nil", replayed.Availability)
+		}
+		return
+	}
+	if replayed.Availability == nil {
+		t.Fatalf("replayed availability missing, want %#v", live.Availability)
+	}
+	if replayed.Availability.Reason != live.Availability.Reason {
+		t.Fatalf("availability.reason = %q, want %q", replayed.Availability.Reason, live.Availability.Reason)
+	}
+	if replayed.Availability.Message != live.Availability.Message {
+		t.Fatalf("availability.message = %q, want %q", replayed.Availability.Message, live.Availability.Message)
+	}
+	if replayed.Availability.Retryable != live.Availability.Retryable {
+		t.Fatalf("availability.retryable = %v, want %v", replayed.Availability.Retryable, live.Availability.Retryable)
 	}
 }

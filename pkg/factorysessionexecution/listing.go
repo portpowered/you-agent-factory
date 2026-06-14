@@ -563,20 +563,12 @@ func buildCanonicalSessionEvents(session SessionReadResult, result ResultReadRes
 	}
 
 	if result.ResultStatus != "" {
-		payload := map[string]any{
-			"resultStatus": string(result.ResultStatus),
-		}
-		if session.ResultSummary != nil {
-			if summary := strings.TrimSpace(session.ResultSummary.Summary); summary != "" {
-				payload["resultSummary"] = []map[string]any{
-					{"type": "text", "text": summary},
-				}
-			}
-		}
-		if len(result.ArtifactIDs) > 0 {
-			payload["artifactIds"] = append([]string(nil), result.ArtifactIDs...)
-		}
-		events = append(events, builder.event("SESSION_RESULT_UPDATED", "session-result-updated/"+sessionID, 1, mustMarshalPayload(payload)))
+		events = append(events, builder.event(
+			"SESSION_RESULT_UPDATED",
+			"session-result-updated/"+sessionID,
+			1,
+			mustMarshalPayload(canonicalSessionResultUpdatedPayload(session, result)),
+		))
 	}
 
 	if IsTerminalLifecycleStatus(session.Status) {
@@ -605,6 +597,47 @@ func buildCanonicalSessionEvents(session SessionReadResult, result ResultReadRes
 	}
 
 	return events
+}
+
+func canonicalSessionResultUpdatedPayload(session SessionReadResult, result ResultReadResult) map[string]any {
+	payload := map[string]any{
+		"resultStatus": string(result.ResultStatus),
+	}
+	if session.ResultSummary != nil {
+		if summary := strings.TrimSpace(session.ResultSummary.Summary); summary != "" {
+			payload["resultSummary"] = []map[string]any{
+				{"type": "text", "text": summary},
+			}
+		}
+	}
+	if len(result.ArtifactIDs) > 0 {
+		payload["artifactIds"] = append([]string(nil), result.ArtifactIDs...)
+	}
+	if availability := canonicalResultAvailabilityPayload(result.Availability); availability != nil {
+		payload["availability"] = availability
+	}
+	return payload
+}
+
+func canonicalResultAvailabilityPayload(availability *ResultAvailabilityDetail) map[string]any {
+	if availability == nil {
+		return nil
+	}
+	reason := strings.TrimSpace(availability.Reason)
+	message := strings.TrimSpace(availability.Message)
+	if reason == "" && message == "" {
+		return nil
+	}
+	payload := map[string]any{
+		"retryable": availability.Retryable,
+	}
+	if reason != "" {
+		payload["reason"] = reason
+	}
+	if message != "" {
+		payload["message"] = message
+	}
+	return payload
 }
 
 type canonicalSessionEventBuilder struct {

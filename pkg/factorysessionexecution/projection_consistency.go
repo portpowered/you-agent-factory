@@ -333,8 +333,9 @@ func NormalizeEventReconnectRequest(req EventReconnectRequest) (EventReconnectRe
 }
 
 type sessionProjectionReducer struct {
-	session SessionReadResult
-	result  ResultReadResult
+	session            SessionReadResult
+	result             ResultReadResult
+	resultAvailability *ResultAvailabilityDetail
 }
 
 // ReplaySessionProjection reconstructs durable session and result read projections
@@ -422,6 +423,11 @@ func (r *sessionProjectionReducer) applySessionResultUpdated(envelope canonicalF
 		ResultStatus  string          `json:"resultStatus"`
 		ArtifactIDs   []string        `json:"artifactIds"`
 		ResultSummary json.RawMessage `json:"resultSummary"`
+		Availability  *struct {
+			Reason    string `json:"reason"`
+			Message   string `json:"message"`
+			Retryable bool   `json:"retryable"`
+		} `json:"availability"`
 	}
 	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
 		return fmt.Errorf("unmarshal SESSION_RESULT_UPDATED payload: %w", err)
@@ -429,6 +435,13 @@ func (r *sessionProjectionReducer) applySessionResultUpdated(envelope canonicalF
 	r.mergeSessionIdentity(envelope.Context)
 	r.applyResultStatus(payload.ResultStatus, summaryTextFromWorkContent(payload.ResultSummary))
 	r.replaceArtifactStubs(payload.ArtifactIDs)
+	if payload.Availability != nil {
+		r.resultAvailability = &ResultAvailabilityDetail{
+			Reason:    strings.TrimSpace(payload.Availability.Reason),
+			Message:   strings.TrimSpace(payload.Availability.Message),
+			Retryable: payload.Availability.Retryable,
+		}
+	}
 	return nil
 }
 
@@ -545,7 +558,9 @@ func (r *sessionProjectionReducer) finalize() {
 	if r.session.Failure != nil {
 		r.result.Failure = cloneFailureSummary(r.session.Failure)
 	}
-	if r.result.ResultStatus == ResultStatusNotReady && !IsTerminalLifecycleStatus(r.session.Status) {
+	if r.resultAvailability != nil {
+		r.result.Availability = cloneResultAvailability(r.resultAvailability)
+	} else if r.result.ResultStatus == ResultStatusNotReady && !IsTerminalLifecycleStatus(r.session.Status) {
 		r.result.Availability = defaultNotReadyAvailability(r.session)
 	}
 	if r.result.ResultStatus == ResultStatusUnavailable {

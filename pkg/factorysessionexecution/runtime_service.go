@@ -226,6 +226,9 @@ func (s *RuntimeService) syncStartOutcomeOnWaitDone(
 	sessionID string,
 	stopRuntime context.CancelFunc,
 ) (SyncStartResult, error) {
+	if err := ctx.Err(); err != nil {
+		return SyncStartResult{}, err
+	}
 	if errors.Is(waitCtx.Err(), context.DeadlineExceeded) && syncWaitTimeout(prepared.Request.Wait) > 0 {
 		cancelOnTimeout := prepared.Request.Wait != nil && prepared.Request.Wait.CancelOnTimeout
 		if cancelOnTimeout && stopRuntime != nil {
@@ -242,9 +245,6 @@ func (s *RuntimeService) syncStartOutcomeOnWaitDone(
 		s.mu.RUnlock()
 		s.recordSyncStartReplay(prepared.Request.RequestID, result)
 		return result, nil
-	}
-	if err := ctx.Err(); err != nil {
-		return SyncStartResult{}, err
 	}
 	return SyncStartResult{}, waitCtx.Err()
 }

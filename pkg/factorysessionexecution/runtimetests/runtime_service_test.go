@@ -3,6 +3,7 @@ package factorysessionexecution_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -160,6 +161,27 @@ func TestRuntimeService_StartSync_CompletesSimpleFinalWithPrimaryResult(t *testi
 	}
 	assertSyncCompletedPrimaryResult(t, completed)
 	assertFinalRuntimeSessionResult(t, service, completed.SessionID)
+}
+
+func TestRuntimeService_StartSync_ReturnsCallerContextDeadlineExceeded(t *testing.T) {
+	_, service := newRuntimeServiceWithFixture(t, "busy-loop.workflow.js", "busy-loop")
+	timeoutMillis := int64(5000)
+	callerCtx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	defer cancel()
+
+	_, err := service.StartSync(callerCtx, factorysessionexecution.StartRequest{
+		RequestID: "req-runtime-sync-caller-deadline",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "busy-loop",
+		},
+		Wait: &factorysessionexecution.WaitOptions{
+			TimeoutMillis: &timeoutMillis,
+		},
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("StartSync error = %v, want context deadline exceeded", err)
+	}
 }
 
 func TestRuntimeService_StartSync_TimesOutBusyLoopAndPreservesSession(t *testing.T) {
