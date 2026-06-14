@@ -15,62 +15,21 @@ import (
 func TestMockClient_GetResult_TerminalSessionReturnsDeterministicResult(t *testing.T) {
 	client := newFixtureMCPClient(t)
 
-	started, err := client.StartSync(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "req-petri-success-001",
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind:      factoryapi.FactorySessionExecutionSourceKindFactoryId,
-			FactoryId: strPtr("customer-support-triage"),
-		},
-		Args: &map[string]any{"ticketId": "TKT-2002"},
-	})
-	if err != nil {
-		t.Fatalf("StartSync: %v", err)
-	}
-	if started.Error != nil || started.Result == nil {
-		t.Fatalf("start = %#v, want success", started)
-	}
+	startResponse, startErr := client.StartSync(petriSuccessSyncRequest())
+	started := requireSyncStartSuccess(t, startResponse, startErr)
 
 	mode := factoryapi.FactorySessionResultModeFinal
 	response, err := client.GetResult(mcpfactorysession.GetResultInput{
-		SessionID: started.Result.SessionId,
+		SessionID: started.SessionId,
 		Mode:      &mode,
 	})
 	if err != nil {
 		t.Fatalf("GetResult: %v", err)
 	}
-	if response.Error != nil {
-		t.Fatalf("error = %#v, want terminal result", response.Error)
-	}
-	if response.Result == nil {
-		t.Fatal("result = nil, want terminal Factory Session result")
-	}
-	if response.Result.SessionId != "dur-sess-petri-success-001" {
-		t.Fatalf("sessionId = %q, want dur-sess-petri-success-001", response.Result.SessionId)
-	}
-	if response.Result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
-		t.Fatalf("resultStatus = %q, want FINAL", response.Result.ResultStatus)
-	}
-	if response.Result.SessionStatus == nil || *response.Result.SessionStatus != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-		t.Fatalf("sessionStatus = %#v, want SUCCEEDED", response.Result.SessionStatus)
-	}
-	if response.Result.PrimaryResult == nil {
-		t.Fatal("primaryResult missing from terminal result")
-	}
-	if response.Result.ArtifactIds == nil || len(*response.Result.ArtifactIds) == 0 {
-		t.Fatalf("artifactIds = %#v, want related artifact identifiers", response.Result.ArtifactIds)
-	}
+	assertTerminalGetResult(t, response)
 
 	service := fixtureFakeService(t)
-	if _, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
-		RequestID: "req-petri-success-001",
-		Source: factorysessionexecution.Source{
-			Kind:      workflowsource.KindFactoryID,
-			FactoryID: "customer-support-triage",
-		},
-		Args: map[string]any{"ticketId": "TKT-2002"},
-	}); err != nil {
-		t.Fatalf("direct StartSync: %v", err)
-	}
+	seedPetriSuccessOnService(t, service)
 	serviceResult, err := service.GetResult(
 		context.Background(),
 		"dur-sess-petri-success-001",
@@ -83,31 +42,17 @@ func TestMockClient_GetResult_TerminalSessionReturnsDeterministicResult(t *testi
 	if err != nil {
 		t.Fatalf("fixtures.ProjectedResultReadHash: %v", err)
 	}
-	if wantHash != "sha256:977772c884f0ec53b9292ca8fa0374fec1673fec8d0d481e358b3dd4ae65fb95" {
-		t.Fatalf("golden hash drift = %q", wantHash)
-	}
+	requireGoldenHash(t, wantHash, "sha256:977772c884f0ec53b9292ca8fa0374fec1673fec8d0d481e358b3dd4ae65fb95")
 }
 
 func TestMockClient_ListDispatches_DispatchInspectionFixtureReturnsStableSummaries(t *testing.T) {
 	client := newFixtureMCPClient(t)
 
-	started, err := client.StartSync(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "req-petri-success-001",
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind:      factoryapi.FactorySessionExecutionSourceKindFactoryId,
-			FactoryId: strPtr("customer-support-triage"),
-		},
-		Args: &map[string]any{"ticketId": "TKT-2002"},
-	})
-	if err != nil {
-		t.Fatalf("StartSync: %v", err)
-	}
-	if started.Error != nil || started.Result == nil {
-		t.Fatalf("start = %#v, want success", started)
-	}
+	startResponse, startErr := client.StartSync(petriSuccessSyncRequest())
+	started := requireSyncStartSuccess(t, startResponse, startErr)
 
 	response, err := client.ListDispatches(mcpfactorysession.ListDispatchesInput{
-		SessionID: started.Result.SessionId,
+		SessionID: started.SessionId,
 	})
 	if err != nil {
 		t.Fatalf("ListDispatches: %v", err)
@@ -118,34 +63,10 @@ func TestMockClient_ListDispatches_DispatchInspectionFixtureReturnsStableSummari
 	if response.Result == nil {
 		t.Fatal("result = nil, want dispatch list response")
 	}
-	if response.Result.SessionId != "dur-sess-petri-success-001" {
-		t.Fatalf("sessionId = %q, want dur-sess-petri-success-001", response.Result.SessionId)
-	}
-	if len(response.Result.Dispatches) != 1 {
-		t.Fatalf("dispatches = %#v, want one summary", response.Result.Dispatches)
-	}
-	dispatch := response.Result.Dispatches[0]
-	if dispatch.Id != "disp-petri-success-001" {
-		t.Fatalf("dispatchId = %q, want disp-petri-success-001", dispatch.Id)
-	}
-	if dispatch.Status == "" || dispatch.DispatchKind == "" {
-		t.Fatalf("dispatch missing status/kind: %#v", dispatch)
-	}
-	if dispatch.Label == nil || *dispatch.Label == "" {
-		t.Fatal("label missing from dispatch summary")
-	}
+	assertDispatchListSummary(t, response.Result)
 
 	service := fixtureFakeService(t)
-	if _, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
-		RequestID: "req-petri-success-001",
-		Source: factorysessionexecution.Source{
-			Kind:      workflowsource.KindFactoryID,
-			FactoryID: "customer-support-triage",
-		},
-		Args: map[string]any{"ticketId": "TKT-2002"},
-	}); err != nil {
-		t.Fatalf("direct StartSync: %v", err)
-	}
+	seedPetriSuccessOnService(t, service)
 	serviceListed, err := service.ListDispatches(context.Background(), "dur-sess-petri-success-001")
 	if err != nil {
 		t.Fatalf("direct ListDispatches: %v", err)
@@ -154,9 +75,7 @@ func TestMockClient_ListDispatches_DispatchInspectionFixtureReturnsStableSummari
 	if err != nil {
 		t.Fatalf("fixtures.ListDispatchesResultHash: %v", err)
 	}
-	if wantHash != "sha256:a32d5d0f136dcfef8061746c8f270702163c92a04e3c9f75eb9248e19bebd34a" {
-		t.Fatalf("golden hash drift = %q", wantHash)
-	}
+	requireGoldenHash(t, wantHash, "sha256:a32d5d0f136dcfef8061746c8f270702163c92a04e3c9f75eb9248e19bebd34a")
 }
 
 func TestMockClient_ListArtifacts_ArtifactInspectionFixtureReturnsStableSummaries(t *testing.T) {
@@ -189,34 +108,7 @@ func TestMockClient_ListArtifacts_ArtifactInspectionFixtureReturnsStableSummarie
 	if response.Result == nil {
 		t.Fatal("result = nil, want artifact list response")
 	}
-	if response.Result.SessionId != "dur-sess-js-paused-001" {
-		t.Fatalf("sessionId = %q, want dur-sess-js-paused-001", response.Result.SessionId)
-	}
-	if len(response.Result.Artifacts) != 1 {
-		t.Fatalf("artifacts = %#v, want one summary", response.Result.Artifacts)
-	}
-	artifact := response.Result.Artifacts[0]
-	if artifact.Id != "art-js-pause-001" {
-		t.Fatalf("artifactId = %q, want art-js-pause-001", artifact.Id)
-	}
-	if artifact.Kind == "" {
-		t.Fatalf("kind missing from artifact summary: %#v", artifact)
-	}
-	if artifact.Visibility == "" {
-		t.Fatalf("visibility missing from artifact summary: %#v", artifact)
-	}
-	if artifact.ContentHash == nil || *artifact.ContentHash == "" {
-		t.Fatalf("contentHash missing from artifact summary: %#v", artifact)
-	}
-	if artifact.SizeBytes == nil || *artifact.SizeBytes <= 0 {
-		t.Fatalf("sizeBytes missing from artifact summary: %#v", artifact)
-	}
-	if artifact.DispatchId == nil || *artifact.DispatchId != "disp-js-pause-001" {
-		t.Fatalf("dispatchId = %#v, want disp-js-pause-001", artifact.DispatchId)
-	}
-	if artifact.RetrievalRef == nil || artifact.RetrievalRef.Href == "" {
-		t.Fatalf("retrievalRef missing from artifact summary: %#v", artifact)
-	}
+	assertArtifactListSummary(t, response.Result)
 
 	service := fixtureFakeService(t)
 	if _, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
@@ -237,9 +129,7 @@ func TestMockClient_ListArtifacts_ArtifactInspectionFixtureReturnsStableSummarie
 	if err != nil {
 		t.Fatalf("fixtures.ListArtifactsResultHash: %v", err)
 	}
-	if wantHash != "sha256:57fa7af131ce29cb2a254d2548ef8b8f9b0ccf6de7fb6cc185beabf8190f1dcb" {
-		t.Fatalf("golden hash drift = %q", wantHash)
-	}
+	requireGoldenHash(t, wantHash, "sha256:57fa7af131ce29cb2a254d2548ef8b8f9b0ccf6de7fb6cc185beabf8190f1dcb")
 }
 
 func TestMockClient_ListDispatches_MissingSessionReturnsStableEnvelope(t *testing.T) {

@@ -64,22 +64,28 @@ func TestMockClient_StartAsync_MalformedRequestReturnsStableEnvelope(t *testing.
 func TestMockClient_GetSession_PollsRunningThenTerminalStatus(t *testing.T) {
 	client := newFixtureMCPClient(t)
 
-	started, err := client.StartAsync(factoryapi.FactorySessionExecutionRequest{
+	assertRunningSessionPoll(t, client)
+	assertTerminalSessionPoll(t, client)
+}
+
+func assertRunningSessionPoll(t *testing.T, client *mcpfactorysession.Client) {
+	t.Helper()
+	startResponse, startErr := client.StartAsync(factoryapi.FactorySessionExecutionRequest{
 		RequestId: "req-petri-run-001",
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind:      factoryapi.FactorySessionExecutionSourceKindFactoryId,
 			FactoryId: strPtr("customer-support-triage"),
 		},
 	})
-	if err != nil {
-		t.Fatalf("StartAsync running: %v", err)
+	if startErr != nil {
+		t.Fatalf("StartAsync running: %v", startErr)
 	}
-	if started.Error != nil || started.Result == nil {
-		t.Fatalf("running start = %#v, want success", started)
+	if startResponse.Error != nil || startResponse.Result == nil {
+		t.Fatalf("running start = %#v, want success", startResponse)
 	}
 
 	running, err := client.GetSession(mcpfactorysession.GetSessionInput{
-		SessionID: started.Result.SessionId,
+		SessionID: startResponse.Result.SessionId,
 	})
 	if err != nil {
 		t.Fatalf("GetSession running: %v", err)
@@ -90,15 +96,11 @@ func TestMockClient_GetSession_PollsRunningThenTerminalStatus(t *testing.T) {
 	if running.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
 		t.Fatalf("status = %q, want RUNNING", running.Result.Status)
 	}
+}
 
-	terminalStart, err := client.StartAsync(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "req-petri-success-001",
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind:      factoryapi.FactorySessionExecutionSourceKindFactoryId,
-			FactoryId: strPtr("customer-support-triage"),
-		},
-		Args: &map[string]any{"ticketId": "TKT-2002"},
-	})
+func assertTerminalSessionPoll(t *testing.T, client *mcpfactorysession.Client) {
+	t.Helper()
+	terminalStart, err := client.StartAsync(petriSuccessSyncRequest())
 	if err != nil {
 		t.Fatalf("StartAsync terminal: %v", err)
 	}

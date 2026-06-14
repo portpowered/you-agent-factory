@@ -2,66 +2,21 @@ package factorysession_test
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 func TestMockClient_StartSync_SuccessFixtureReturnsTerminalSession(t *testing.T) {
 	client := newFixtureMCPClient(t)
 
-	response, err := client.StartSync(factoryapi.FactorySessionExecutionRequest{
-		RequestId: "req-petri-success-001",
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind:      factoryapi.FactorySessionExecutionSourceKindFactoryId,
-			FactoryId: strPtr("customer-support-triage"),
-		},
-		Args: &map[string]any{"ticketId": "TKT-2002"},
-	})
-	if err != nil {
-		t.Fatalf("StartSync: %v", err)
-	}
-	if response.Error != nil {
-		t.Fatalf("error = %#v, want success result", response.Error)
-	}
-	if response.Result == nil {
-		t.Fatal("result = nil, want sync execution response")
-	}
-	if response.Result.SessionId != "dur-sess-petri-success-001" {
-		t.Fatalf("sessionId = %q, want dur-sess-petri-success-001", response.Result.SessionId)
-	}
-	if response.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-		t.Fatalf("status = %q, want SUCCEEDED", response.Result.Status)
-	}
-	if response.Result.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeCompleted {
-		t.Fatalf("syncOutcome = %q, want COMPLETED", response.Result.SyncOutcome)
-	}
-	if response.Result.SourceHash == nil || *response.Result.SourceHash == "" {
-		t.Fatal("sourceHash missing from sync success response")
-	}
-	if response.Result.ResolvedSource.SourceHash == nil || *response.Result.ResolvedSource.SourceHash == "" {
-		t.Fatal("resolvedSource.sourceHash missing from sync success response")
-	}
-	if response.Result.Result == nil || response.Result.Result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
-		t.Fatalf("result = %#v, want FINAL result summary", response.Result.Result)
-	}
-	if response.Result.Links == nil || response.Result.Links.Results == nil {
-		t.Fatal("links.results missing from sync success response")
-	}
+	response, err := client.StartSync(petriSuccessSyncRequest())
+	result := requireSyncStartSuccess(t, response, err)
+	assertSyncSuccessResponse(t, result)
 
-	serviceResult, err := fixtureFakeService(t).StartSync(context.Background(), factorysessionexecution.StartRequest{
-		RequestID: "req-petri-success-001",
-		Source: factorysessionexecution.Source{
-			Kind:      workflowsource.KindFactoryID,
-			FactoryID: "customer-support-triage",
-		},
-		Args: map[string]any{"ticketId": "TKT-2002"},
-	})
+	serviceResult, err := fixtureFakeService(t).StartSync(context.Background(), petriSuccessStartRequest())
 	if err != nil {
 		t.Fatalf("direct StartSync: %v", err)
 	}
@@ -69,9 +24,7 @@ func TestMockClient_StartSync_SuccessFixtureReturnsTerminalSession(t *testing.T)
 	if err != nil {
 		t.Fatalf("fixtures.SyncStartResultHash: %v", err)
 	}
-	if wantHash != "sha256:89b3a278be3192017c6fcd9fbd4ca57154fb84ab6154ce961e4a597ba5fa6c05" {
-		t.Fatalf("golden hash drift = %q", wantHash)
-	}
+	requireGoldenHash(t, wantHash, "sha256:89b3a278be3192017c6fcd9fbd4ca57154fb84ab6154ce961e4a597ba5fa6c05")
 }
 
 func TestMockClient_StartSync_ProviderErrorFixtureReturnsFailedSession(t *testing.T) {
@@ -164,19 +117,4 @@ func TestMockClient_StartSync_WithoutServiceReturnsUnavailableEnvelope(t *testin
 	if response.Error.Code != "factory_session.service.unavailable" {
 		t.Fatalf("error code = %q, want factory_session.service.unavailable", response.Error.Code)
 	}
-}
-
-func newFixtureMCPClient(t *testing.T) *mcpfactorysession.Client {
-	t.Helper()
-	return mcpfactorysession.NewClientWithService(fixtureFakeService(t))
-}
-
-func fixtureFakeService(t *testing.T) *factorysessionexecution.FakeService {
-	t.Helper()
-	path := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
-	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(path)
-	if err != nil {
-		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
-	}
-	return service
 }

@@ -24,58 +24,45 @@ func NewClientWithService(service factorysessionexecution.Service) *Client {
 	return &Client{service: service}
 }
 
+func marshalToolCall[T any](input json.RawMessage, decodeMsg string, invoke func(T) any) (json.RawMessage, error) {
+	var request T
+	if err := json.Unmarshal(input, &request); err != nil {
+		return nil, fmt.Errorf("%s: %w", decodeMsg, err)
+	}
+	return json.Marshal(invoke(request))
+}
+
 // CallTool invokes one discovered Factory Session MCP tool by stable name.
 func (c *Client) CallTool(name string, input json.RawMessage) (json.RawMessage, error) {
 	switch name {
 	case ToolValidateSource:
-		var request factoryapi.FactoryPreviewRequest
-		if err := json.Unmarshal(input, &request); err != nil {
-			return nil, fmt.Errorf("decode validate source input: %w", err)
-		}
-		response := ValidateSource(request)
-		return json.Marshal(response)
+		return marshalToolCall(input, "decode validate source input", func(request factoryapi.FactoryPreviewRequest) any {
+			return ValidateSource(request)
+		})
 	case ToolStartSync:
-		var request factoryapi.FactorySessionExecutionRequest
-		if err := json.Unmarshal(input, &request); err != nil {
-			return nil, fmt.Errorf("decode start sync input: %w", err)
-		}
-		response := StartSync(c.service, request)
-		return json.Marshal(response)
+		return marshalToolCall(input, "decode start sync input", func(request factoryapi.FactorySessionExecutionRequest) any {
+			return StartSync(c.service, request)
+		})
 	case ToolStartAsync:
-		var request factoryapi.FactorySessionExecutionRequest
-		if err := json.Unmarshal(input, &request); err != nil {
-			return nil, fmt.Errorf("decode start async input: %w", err)
-		}
-		response := StartAsync(c.service, request)
-		return json.Marshal(response)
+		return marshalToolCall(input, "decode start async input", func(request factoryapi.FactorySessionExecutionRequest) any {
+			return StartAsync(c.service, request)
+		})
 	case ToolGetSession:
-		var request GetSessionInput
-		if err := json.Unmarshal(input, &request); err != nil {
-			return nil, fmt.Errorf("decode get session input: %w", err)
-		}
-		response := GetSession(c.service, request)
-		return json.Marshal(response)
+		return marshalToolCall(input, "decode get session input", func(request GetSessionInput) any {
+			return GetSession(c.service, request)
+		})
 	case ToolGetResult:
-		var request GetResultInput
-		if err := json.Unmarshal(input, &request); err != nil {
-			return nil, fmt.Errorf("decode get result input: %w", err)
-		}
-		response := GetResult(c.service, request)
-		return json.Marshal(response)
+		return marshalToolCall(input, "decode get result input", func(request GetResultInput) any {
+			return GetResult(c.service, request)
+		})
 	case ToolListDispatches:
-		var request ListDispatchesInput
-		if err := json.Unmarshal(input, &request); err != nil {
-			return nil, fmt.Errorf("decode list dispatches input: %w", err)
-		}
-		response := ListDispatches(c.service, request)
-		return json.Marshal(response)
+		return marshalToolCall(input, "decode list dispatches input", func(request ListDispatchesInput) any {
+			return ListDispatches(c.service, request)
+		})
 	case ToolListArtifacts:
-		var request ListArtifactsInput
-		if err := json.Unmarshal(input, &request); err != nil {
-			return nil, fmt.Errorf("decode list artifacts input: %w", err)
-		}
-		response := ListArtifacts(c.service, request)
-		return json.Marshal(response)
+		return marshalToolCall(input, "decode list artifacts input", func(request ListArtifactsInput) any {
+			return ListArtifacts(c.service, request)
+		})
 	default:
 		return nil, fmt.Errorf("unsupported tool %q", name)
 	}

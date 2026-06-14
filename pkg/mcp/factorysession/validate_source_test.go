@@ -138,7 +138,3 @@ func writeWorkflowFixture(t *testing.T, name, content string) string {
 	}
 	return projectRoot
 }
-
-func strPtr(value string) *string {
-	return &value
-}
