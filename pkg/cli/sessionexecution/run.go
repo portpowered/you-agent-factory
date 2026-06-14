@@ -179,65 +179,17 @@ func renderSyncRunHuman(
 	result factoryapi.FactorySessionSyncExecutionResponse,
 	cancelOnTimeout bool,
 ) error {
-	switch result.SyncOutcome {
-	case factoryapi.FactorySessionSyncExecutionOutcomeCompleted:
-		if _, err := fmt.Fprintf(
-			output,
-			"Factory session %s completed (%s).\n",
-			result.SessionId,
-			result.Status,
-		); err != nil {
-			return err
-		}
-	case factoryapi.FactorySessionSyncExecutionOutcomeTimedOut:
-		if _, err := fmt.Fprintf(
-			output,
-			"Factory session %s timed out (%s).\n",
-			result.SessionId,
-			result.Status,
-		); err != nil {
-			return err
-		}
-	default:
-		if _, err := fmt.Fprintf(
-			output,
-			"Factory session %s finished with sync outcome %s (%s).\n",
-			result.SessionId,
-			result.SyncOutcome,
-			result.Status,
-		); err != nil {
-			return err
-		}
+	if err := writeSyncRunOutcomeHeader(output, result); err != nil {
+		return err
 	}
-
 	if isSyncTimeoutOutcome(result) {
-		if cancelOnTimeout {
-			if _, err := fmt.Fprintln(output, "Cancel on timeout: requested"); err != nil {
-				return err
-			}
-		}
-		if result.SessionCanceledByTimeout != nil && *result.SessionCanceledByTimeout {
-			if _, err := fmt.Fprintln(output, "Session canceled by timeout: true"); err != nil {
-				return err
-			}
-		}
-		if result.TimedOut != nil && *result.TimedOut {
-			if _, err := fmt.Fprintln(output, "Timed out: true"); err != nil {
-				return err
-			}
-		}
-	}
-
-	if result.SourceHash != nil && strings.TrimSpace(*result.SourceHash) != "" {
-		if _, err := fmt.Fprintf(output, "Source hash: %s\n", strings.TrimSpace(*result.SourceHash)); err != nil {
-			return err
-		}
-	} else if ref := result.ResolvedSource.SourceRef; ref != nil && strings.TrimSpace(*ref) != "" {
-		if _, err := fmt.Fprintf(output, "Source ref: %s\n", strings.TrimSpace(*ref)); err != nil {
+		if err := writeSyncTimeoutHumanDetails(output, result, cancelOnTimeout); err != nil {
 			return err
 		}
 	}
-
+	if err := writeSyncRunSourceHuman(output, result); err != nil {
+		return err
+	}
 	if !isSyncTimeoutOutcome(result) {
 		if summary := primaryResultSummary(result.Result); summary != "" {
 			if _, err := fmt.Fprintf(output, "Primary result: %s\n", summary); err != nil {
@@ -245,31 +197,102 @@ func renderSyncRunHuman(
 			}
 		}
 	}
-
-	if result.Links != nil {
-		if result.Links.Status != nil && strings.TrimSpace(*result.Links.Status) != "" {
-			if _, err := fmt.Fprintf(output, "Status link: %s\n", strings.TrimSpace(*result.Links.Status)); err != nil {
-				return err
-			}
-		}
-		if result.Links.Session != nil && strings.TrimSpace(*result.Links.Session) != "" {
-			if _, err := fmt.Fprintf(output, "Session link: %s\n", strings.TrimSpace(*result.Links.Session)); err != nil {
-				return err
-			}
-		}
-		if result.Links.Results != nil && strings.TrimSpace(*result.Links.Results) != "" {
-			if _, err := fmt.Fprintf(output, "Results link: %s\n", strings.TrimSpace(*result.Links.Results)); err != nil {
-				return err
-			}
-		}
+	if err := writeSyncRunLinksHuman(output, result); err != nil {
+		return err
 	}
-
 	if isSyncTimeoutOutcome(result) {
 		if _, err := fmt.Fprintf(
 			output,
 			"Follow-up: you workflow status %s\n",
 			result.SessionId,
 		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeSyncRunOutcomeHeader(output io.Writer, result factoryapi.FactorySessionSyncExecutionResponse) error {
+	switch result.SyncOutcome {
+	case factoryapi.FactorySessionSyncExecutionOutcomeCompleted:
+		_, err := fmt.Fprintf(
+			output,
+			"Factory session %s completed (%s).\n",
+			result.SessionId,
+			result.Status,
+		)
+		return err
+	case factoryapi.FactorySessionSyncExecutionOutcomeTimedOut:
+		_, err := fmt.Fprintf(
+			output,
+			"Factory session %s timed out (%s).\n",
+			result.SessionId,
+			result.Status,
+		)
+		return err
+	default:
+		_, err := fmt.Fprintf(
+			output,
+			"Factory session %s finished with sync outcome %s (%s).\n",
+			result.SessionId,
+			result.SyncOutcome,
+			result.Status,
+		)
+		return err
+	}
+}
+
+func writeSyncTimeoutHumanDetails(
+	output io.Writer,
+	result factoryapi.FactorySessionSyncExecutionResponse,
+	cancelOnTimeout bool,
+) error {
+	if cancelOnTimeout {
+		if _, err := fmt.Fprintln(output, "Cancel on timeout: requested"); err != nil {
+			return err
+		}
+	}
+	if result.SessionCanceledByTimeout != nil && *result.SessionCanceledByTimeout {
+		if _, err := fmt.Fprintln(output, "Session canceled by timeout: true"); err != nil {
+			return err
+		}
+	}
+	if result.TimedOut != nil && *result.TimedOut {
+		if _, err := fmt.Fprintln(output, "Timed out: true"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeSyncRunSourceHuman(output io.Writer, result factoryapi.FactorySessionSyncExecutionResponse) error {
+	if result.SourceHash != nil && strings.TrimSpace(*result.SourceHash) != "" {
+		_, err := fmt.Fprintf(output, "Source hash: %s\n", strings.TrimSpace(*result.SourceHash))
+		return err
+	}
+	if ref := result.ResolvedSource.SourceRef; ref != nil && strings.TrimSpace(*ref) != "" {
+		_, err := fmt.Fprintf(output, "Source ref: %s\n", strings.TrimSpace(*ref))
+		return err
+	}
+	return nil
+}
+
+func writeSyncRunLinksHuman(output io.Writer, result factoryapi.FactorySessionSyncExecutionResponse) error {
+	if result.Links == nil {
+		return nil
+	}
+	if result.Links.Status != nil && strings.TrimSpace(*result.Links.Status) != "" {
+		if _, err := fmt.Fprintf(output, "Status link: %s\n", strings.TrimSpace(*result.Links.Status)); err != nil {
+			return err
+		}
+	}
+	if result.Links.Session != nil && strings.TrimSpace(*result.Links.Session) != "" {
+		if _, err := fmt.Fprintf(output, "Session link: %s\n", strings.TrimSpace(*result.Links.Session)); err != nil {
+			return err
+		}
+	}
+	if result.Links.Results != nil && strings.TrimSpace(*result.Links.Results) != "" {
+		if _, err := fmt.Fprintf(output, "Results link: %s\n", strings.TrimSpace(*result.Links.Results)); err != nil {
 			return err
 		}
 	}
