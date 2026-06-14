@@ -230,6 +230,65 @@ func TestRuntimeService_StartSync_IdempotentReplayTimeout_SlowFinal(t *testing.T
 	}
 }
 
+func TestRuntimeService_CrossModeRequestIDReuse_AsyncThenSync_Conflict(t *testing.T) {
+	_, service := newRuntimeServiceWithFixture(t, "busy-loop.workflow.js", "busy-loop")
+	req := factorysessionexecution.StartRequest{
+		RequestID: "req-runtime-cross-mode-async-sync",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "busy-loop",
+		},
+	}
+
+	asyncFirst, err := service.StartAsync(context.Background(), req)
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+	if asyncFirst.Status != string(factorysessionexecution.LifecycleStatusRunning) {
+		t.Fatalf("async status = %q, want RUNNING", asyncFirst.Status)
+	}
+
+	_, err = service.StartSync(context.Background(), req)
+	if !errors.Is(err, factorysessionexecution.ErrExecutionRequestIDConflict) {
+		t.Fatalf("StartSync after async error = %v, want ErrExecutionRequestIDConflict", err)
+	}
+	if after := runtimeSessionCount(t, service); after != 1 {
+		t.Fatalf("session count = %d, want 1 after cross-mode conflict", after)
+	}
+}
+
+func TestRuntimeService_CrossModeRequestIDReuse_SyncThenAsync_Conflict(t *testing.T) {
+	_, service := newRuntimeServiceWithFixture(t, "simple-final.workflow.js", "simple-final")
+	req := factorysessionexecution.StartRequest{
+		RequestID: "req-runtime-cross-mode-sync-async",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "simple-final",
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+			"count":   3,
+			"prefix":  "you",
+		},
+	}
+
+	syncFirst, err := service.StartSync(context.Background(), req)
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+	if syncFirst.SyncOutcome != factorysessionexecution.SyncOutcomeCompleted {
+		t.Fatalf("syncOutcome = %q, want COMPLETED", syncFirst.SyncOutcome)
+	}
+
+	_, err = service.StartAsync(context.Background(), req)
+	if !errors.Is(err, factorysessionexecution.ErrExecutionRequestIDConflict) {
+		t.Fatalf("StartAsync after sync error = %v, want ErrExecutionRequestIDConflict", err)
+	}
+	if _, err := service.GetSession(context.Background(), syncFirst.SessionID); err != nil {
+		t.Fatalf("GetSession after cross-mode conflict: %v", err)
+	}
+}
+
 func assertAsyncStartReplayEqual(t *testing.T, first, second factorysessionexecution.AsyncStartResult) {
 	t.Helper()
 	if second.SessionID != first.SessionID {

@@ -86,17 +86,11 @@ func (s *RuntimeService) StartAsync(ctx context.Context, req StartRequest) (Asyn
 			s.mu.Unlock()
 			return AsyncStartResult{}, err
 		}
-		if replay.asyncStart != nil {
-			result := cloneAsyncStartResult(*replay.asyncStart)
+		if err := CheckAsyncStartReplayMode(replay.asyncStart); err != nil {
 			s.mu.Unlock()
-			return result, nil
+			return AsyncStartResult{}, err
 		}
-		state, ok := s.sessions[replay.sessionID]
-		if !ok {
-			s.mu.Unlock()
-			return AsyncStartResult{}, ErrSessionNotFound
-		}
-		result := s.asyncStartFromState(state)
+		result := cloneAsyncStartResult(*replay.asyncStart)
 		s.mu.Unlock()
 		return result, nil
 	}
@@ -177,12 +171,10 @@ func (s *RuntimeService) tryReplaySyncStartLocked(prepared PreparedStart) (*Sync
 	if replay.syncStartDone != nil {
 		return nil, replay.syncStartDone, nil
 	}
-	state, ok := s.sessions[replay.sessionID]
-	if !ok {
-		return nil, nil, ErrSessionNotFound
+	if err := CheckSyncStartReplayMode(replay.asyncStart, replay.syncStart, false); err != nil {
+		return nil, nil, err
 	}
-	result := s.syncStartFromStateLocked(state)
-	return &result, nil, nil
+	return nil, nil, ErrSessionNotFound
 }
 
 func (s *RuntimeService) replayStoredSyncStart(requestID string) (SyncStartResult, error) {

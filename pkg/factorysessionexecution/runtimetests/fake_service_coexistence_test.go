@@ -2,6 +2,7 @@ package factorysessionexecution_test
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -187,6 +188,57 @@ func TestFakeService_IdempotencyRemainsCompatibleWithRuntimeBackedPath(t *testin
 	}
 	if runtimeSecond.SessionID != runtimeFirst.SessionID {
 		t.Fatalf("runtime replay sessionId = %q, want %q", runtimeSecond.SessionID, runtimeFirst.SessionID)
+	}
+}
+
+func TestFakeService_CrossModeRequestIDReuse_Conflict(t *testing.T) {
+	running := factorysessionexecution.BuiltinInterruptedRecoverableScenario()
+	running.RequestID = "req-fake-cross-mode-async-sync"
+	service := factorysessionexecution.NewFakeService(factorysessionexecution.WithFakeScenarios(running))
+
+	asyncReq := factorysessionexecution.StartRequest{
+		RequestID: "req-fake-cross-mode-async-sync",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "long-running-audit",
+		},
+	}
+	if _, err := service.StartAsync(context.Background(), asyncReq); err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+	if _, err := service.StartSync(context.Background(), asyncReq); !errors.Is(err, factorysessionexecution.ErrExecutionRequestIDConflict) {
+		t.Fatalf("StartSync after async error = %v, want ErrExecutionRequestIDConflict", err)
+	}
+
+	scenarios, err := factorysessionexecution.LoadFakeScenariosFromContractFixtures(contractFixturesPath(t))
+	if err != nil {
+		t.Fatalf("LoadFakeScenariosFromContractFixtures: %v", err)
+	}
+	var completed factorysessionexecution.FakeScenario
+	for _, scenario := range scenarios {
+		if scenario.RequestID == "req-petri-success-001" {
+			completed = scenario
+			completed.RequestID = "req-fake-cross-mode-sync-async"
+			break
+		}
+	}
+	if completed.RequestID == "" {
+		t.Fatal("expected req-petri-success-001 fixture scenario")
+	}
+	syncService := factorysessionexecution.NewFakeService(factorysessionexecution.WithFakeScenarios(completed))
+
+	syncReq := factorysessionexecution.StartRequest{
+		RequestID: "req-fake-cross-mode-sync-async",
+		Source: factorysessionexecution.Source{
+			Kind:      workflowsource.KindFactoryID,
+			FactoryID: "customer-support-triage",
+		},
+	}
+	if _, err := syncService.StartSync(context.Background(), syncReq); err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+	if _, err := syncService.StartAsync(context.Background(), syncReq); !errors.Is(err, factorysessionexecution.ErrExecutionRequestIDConflict) {
+		t.Fatalf("StartAsync after sync error = %v, want ErrExecutionRequestIDConflict", err)
 	}
 }
 
