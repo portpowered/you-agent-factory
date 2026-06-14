@@ -705,26 +705,9 @@ func cloneAsyncStartResultPtr(result AsyncStartResult) *AsyncStartResult {
 	return &cloned
 }
 
-func cloneAsyncStartResult(result AsyncStartResult) AsyncStartResult {
-	cloned := result
-	cloned.ResolvedSource = cloneResolvedSource(result.ResolvedSource)
-	cloned.Policy = clonePolicyProjection(result.Policy)
-	cloned.Links = result.Links
-	return cloned
-}
-
 func cloneSyncStartResultPtr(result SyncStartResult) *SyncStartResult {
 	cloned := cloneSyncStartResult(result)
 	return &cloned
-}
-
-func cloneSyncStartResult(result SyncStartResult) SyncStartResult {
-	cloned := result
-	cloned.AsyncStartResult = cloneAsyncStartResult(result.AsyncStartResult)
-	if len(result.Result) > 0 {
-		cloned.Result = append(json.RawMessage(nil), result.Result...)
-	}
-	return cloned
 }
 
 func (s *RuntimeService) syncTimedOutFromStateLocked(state *runtimeSessionState, sessionCanceledByTimeout bool) SyncStartResult {
