@@ -180,7 +180,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"# Docs",
 		"`agents` - Agent orientation",
 		"`authoring-factories` - Practical factory authoring workflow",
-		"`config` - factory.json topology",
+		"`config` - factory.json topology, operator model defaults",
 		"`mock-workers` - Mock-worker runs",
 		"`record-replay` - Record and replay run modes",
 		"`work` - Submitted work",
@@ -371,6 +371,34 @@ func TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown(t *testing.T) {
 	} {
 		if strings.Contains(got, wrapper) {
 			t.Fatalf("Markdown(authoring-factories) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
+func TestMarkdown_ConfigDocumentsOperatorDefaults(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("config")
+	if err != nil {
+		t.Fatalf("Markdown(config) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"## Operator Model Defaults",
+		"~/.you-agent-factory/config.json",
+		"YOU_DEFAULT_WORKER_MODEL_PROVIDER",
+		"YOU_DEFAULT_WORKER_MODEL",
+		"--default-worker-model-provider",
+		"--default-worker-model",
+		"file < env < flag",
+		"`DEFAULT`",
+		"you run --runner",
+		"`factory.json` and OpenAPI `runner` fields are unchanged by operator defaults",
+		"Malformed JSON fails before service construction",
+		"Unsupported `workerModelProvider`",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(config) missing %q:\n%s", want, got)
 		}
 	}
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
@@ -1182,9 +1183,16 @@ func runtimeBuildConfigFromService(cfg *FactoryServiceConfig) runtimebuild.Confi
 	if cfg == nil {
 		return runtimebuild.Config{}
 	}
+	applyOperatorDefaults := cfg != nil && cfg.ReplayPath == ""
+	operatorDefaults := operatorconfig.ResolvedDefaults{}
+	if cfg != nil {
+		operatorDefaults = cfg.OperatorDefaults
+	}
 	return runtimebuild.Config{
 		ExecutionBaseDir:                        cfg.ExecutionBaseDir,
 		RunnerID:                                cfg.RunnerID,
+		OperatorDefaults:                        operatorDefaults,
+		ApplyOperatorDefaults:                   applyOperatorDefaults,
 		RuntimeMode:                             cfg.RuntimeMode,
 		Verbose:                                 cfg.Verbose,
 		RuntimeInstanceID:                       cfg.RuntimeInstanceID,
