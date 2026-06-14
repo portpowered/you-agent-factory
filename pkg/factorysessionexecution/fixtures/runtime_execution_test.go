@@ -45,7 +45,24 @@ func TestJavaScriptRuntimeService_StartSync_SimpleWorkflowCompletesWithPrimaryRe
 		t.Fatalf("NewExecutionService: %v", err)
 	}
 
-	started, err := service.StartSync(context.Background(), fse.StartRequest{
+	started, err := service.StartSync(context.Background(), simpleFinalSyncStartRequest())
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+	assertSyncStartCompleted(t, started)
+	assertSucceededSessionReads(t, service, started.SessionID)
+
+	result, err := service.GetResult(context.Background(), started.SessionID, fse.ResultRequest{
+		Mode: fse.ResultModeFinal,
+	})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	assertSimpleFinalPrimaryResult(t, result)
+}
+
+func simpleFinalSyncStartRequest() fse.StartRequest {
+	return fse.StartRequest{
 		RequestID: "req-runtime-sync-simple-final-001",
 		Source: fse.Source{
 			Kind: workflowsource.KindInlineWorkflow,
@@ -66,10 +83,11 @@ func TestJavaScriptRuntimeService_StartSync_SimpleWorkflowCompletesWithPrimaryRe
 		RequestedPolicy: map[string]any{
 			"policyHash": "req-policy-runtime-sync-001",
 		},
-	})
-	if err != nil {
-		t.Fatalf("StartSync: %v", err)
 	}
+}
+
+func assertSyncStartCompleted(t *testing.T, started fse.SyncStartResult) {
+	t.Helper()
 	if started.SyncOutcome != fse.SyncOutcomeCompleted {
 		t.Fatalf("syncOutcome = %q, want COMPLETED", started.SyncOutcome)
 	}
@@ -85,8 +103,11 @@ func TestJavaScriptRuntimeService_StartSync_SimpleWorkflowCompletesWithPrimaryRe
 	if started.ResolvedSource.SourceRef == "" || started.SourceHash == "" {
 		t.Fatalf("resolved source = %#v", started.ResolvedSource)
 	}
+}
 
-	session, err := service.GetSession(context.Background(), started.SessionID)
+func assertSucceededSessionReads(t *testing.T, service fse.Service, sessionID string) {
+	t.Helper()
+	session, err := service.GetSession(context.Background(), sessionID)
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
@@ -103,13 +124,10 @@ func TestJavaScriptRuntimeService_StartSync_SimpleWorkflowCompletesWithPrimaryRe
 	}); err != nil {
 		t.Fatalf("ValidateResultMatchesSessionRead: %v", err)
 	}
+}
 
-	result, err := service.GetResult(context.Background(), started.SessionID, fse.ResultRequest{
-		Mode: fse.ResultModeFinal,
-	})
-	if err != nil {
-		t.Fatalf("GetResult: %v", err)
-	}
+func assertSimpleFinalPrimaryResult(t *testing.T, result fse.ResultReadResult) {
+	t.Helper()
 	if result.ResultStatus != fse.ResultStatusFinal {
 		t.Fatalf("resultStatus = %q, want FINAL", result.ResultStatus)
 	}
