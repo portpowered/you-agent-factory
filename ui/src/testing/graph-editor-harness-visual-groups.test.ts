@@ -74,4 +74,45 @@ describe("graph-editor-harness visual groups", () => {
     );
     expect(graph.layoutDraftState.layout.groups ?? []).toEqual([]);
   });
+
+  it("createMockLayoutDraftState mutates visual group layout through harness actions", () => {
+    const draftState = createMockGraphEditorDraftState();
+    const graph = createMockEditableFactoryGraph(
+      { factoryDocumentScopeKey: "session-default" },
+      draftState,
+    );
+    const layoutDraftState = graph.layoutDraftState;
+
+    const createdGroup = layoutDraftState.createVisualGroup({ x: 200, y: 100 });
+    expect(createdGroup.label).toBeTruthy();
+    expect(layoutDraftState.layoutDirty).toBe(true);
+
+    layoutDraftState.renameVisualGroup(createdGroup.id, "Release lane");
+    layoutDraftState.setVisualGroupColor(createdGroup.id, "warning");
+    layoutDraftState.addNodeToVisualGroup(createdGroup.id, "workstation:draft");
+    layoutDraftState.moveVisualGroupByDelta(
+      createdGroup.id,
+      { x: 4, y: 6 },
+      new Map([["workstation:draft", { x: 80, y: 120 }]]),
+    );
+    layoutDraftState.resizeVisualGroup(createdGroup.id, {
+      height: 180,
+      width: 260,
+      x: 16,
+      y: 24,
+    });
+
+    const savedGroup = layoutDraftState.layout.groups?.find(
+      (group) => group.id === createdGroup.id,
+    );
+    expect(savedGroup).toMatchObject({
+      color: "warning",
+      label: "Release lane",
+      nodeIds: ["workstation:draft"],
+    });
+
+    layoutDraftState.adoptSavedLayout(structuredClone(layoutDraftState.layout));
+    expect(layoutDraftState.hasChanges).toBe(false);
+    expect(layoutDraftState.layoutDirty).toBe(false);
+  });
 });

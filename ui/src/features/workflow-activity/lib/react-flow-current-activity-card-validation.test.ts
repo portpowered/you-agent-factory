@@ -13,6 +13,24 @@ import {
 } from "./react-flow-current-activity-card-validation";
 
 describe("validationMessagesForSelectedWorkstation", () => {
+  it("returns no messages when the workstation selection is missing", () => {
+    expect(
+      validationMessagesForSelectedWorkstation({
+        projection: projectFactoryValidationTargets([]),
+        selectionNodeId: null,
+      }),
+    ).toEqual([]);
+  });
+
+  it("returns no messages for an unknown workstation selection", () => {
+    expect(
+      validationMessagesForSelectedWorkstation({
+        projection: projectFactoryValidationTargets([]),
+        selectionNodeId: "missing-workstation",
+      }),
+    ).toEqual([]);
+  });
+
   it("returns workstation validation messages for the selected graph node", () => {
     const targets: FactoryValidationTarget[] = [
       {
@@ -166,6 +184,16 @@ describe("validationMessagesForSelectedWorkstation", () => {
 });
 
 describe("saveErrorNoticeMessages", () => {
+  it("returns generic error message text for non-factory errors", () => {
+    expect(saveErrorNoticeMessages(new Error("Network save failed"))).toEqual([
+      "Network save failed",
+    ]);
+  });
+
+  it("returns an empty list for non-error values", () => {
+    expect(saveErrorNoticeMessages("not-an-error")).toEqual([]);
+  });
+
   it("returns server message text and target messages from save rejections", () => {
     const messages = saveErrorNoticeMessages(
       new CurrentFactoryDefinitionError("The factory definition is invalid.", {
@@ -195,6 +223,14 @@ describe("saveErrorNoticeMessages", () => {
 });
 
 describe("mergeFactoryValidationTargets", () => {
+  it("returns an empty projection when no target groups are provided", () => {
+    const projection = mergeFactoryValidationTargets();
+
+    expect(projection.workstationMessagesByNodeId.size).toBe(0);
+    expect(projection.workTypeMessagesByNodeId.size).toBe(0);
+    expect(projection.workStateMessagesByNodeId.size).toBe(0);
+  });
+
   it("projects live validation and save rejection targets together", () => {
     const projection = mergeFactoryValidationTargets(
       [
@@ -236,6 +272,66 @@ describe("mergeFactoryValidationTargets", () => {
 });
 
 describe("validationMessagesForGraphSelection", () => {
+  it("merges workstation, work type, and work state messages for the active selection", () => {
+    const targets = [
+      {
+        code: "factory.workstation.missingFailureRoute",
+        message: 'Workstation "review" must define a failure route.',
+        severity: "error" as const,
+        subject: {
+          id: "review",
+          location: "ON_FAILURE" as const,
+          type: "WORKSTATION" as const,
+        },
+      },
+      {
+        code: "factory.workType.missingFailureState",
+        message: 'work type "story" must declare a failure state.',
+        severity: "error" as const,
+        subject: {
+          id: "story",
+          location: "STATES" as const,
+          type: "WORK_TYPE" as const,
+        },
+      },
+      {
+        code: "factory.workState.missingTerminalCompletionPath",
+        message: 'work state "story:queued" has no terminal completion path.',
+        severity: "error" as const,
+        subject: {
+          id: "story:queued",
+          location: "TERMINAL" as const,
+          type: "WORK_STATE" as const,
+        },
+      },
+    ];
+
+    const messages = validationMessagesForGraphSelection({
+      factoryDefinition: {
+        name: "alpha",
+        workTypes: [],
+        workers: [{ name: "worker-a", type: "MODEL_WORKER" }],
+        workstations: [
+          {
+            inputs: [],
+            name: "review",
+            outputs: [],
+            type: "MODEL_WORKSTATION",
+            worker: "worker-a",
+          },
+        ],
+      },
+      projection: projectFactoryValidationTargets(targets),
+      selectionNodeId: "work-type:story",
+      selectionPlaceId: "story:queued",
+    });
+
+    expect(messages).toEqual([
+      'work type "story" must declare a failure state.',
+      'work state "story:queued" has no terminal completion path.',
+    ]);
+  });
+
   it("returns work type validation messages for the selected graph node", () => {
     const targets = [
       {
