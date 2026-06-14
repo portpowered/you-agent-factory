@@ -66,6 +66,27 @@ describe("graph-editor-harness graph actions", () => {
     await expect(graph.actions.save()).resolves.toBe(false);
   });
 
+  it("createHookTestGraphEditorDraftState resets draft through resetDraft", () => {
+    const draftState = createHookTestGraphEditorDraftState({ hasChanges: true });
+
+    draftState.resetDraft();
+
+    expect(draftState.hasChanges).toBe(false);
+  });
+
+  it("createMockEditableFactoryGraph removes graph nodes when the factory is loaded", () => {
+    const draftState = createHookTestGraphEditorDraftState();
+    const graph = createMockEditableFactoryGraph(
+      { factoryDocumentScopeKey: "session-default" },
+      draftState,
+    );
+
+    const removed = graph.actions.removeNode("resource:gpu");
+
+    expect(removed.ok).toBe(true);
+    expect(draftState.replaceDraft).toHaveBeenCalled();
+  });
+
   it("createMockEditableFactoryGraph rejects unsupported field updates", () => {
     const graph = createMockEditableFactoryGraph(
       { factoryDocumentScopeKey: "session-default" },

@@ -272,6 +272,38 @@ describe("mergeFactoryValidationTargets", () => {
 });
 
 describe("validationMessagesForGraphSelection", () => {
+  it("ignores work type validation messages for unrelated graph nodes", () => {
+    const projection = projectFactoryValidationTargets([
+      {
+        code: "factory.workType.missingFailureState",
+        message: 'work type "epic" must declare a failure state.',
+        severity: "error",
+        subject: {
+          id: "epic",
+          location: "STATES",
+          type: "WORK_TYPE",
+        },
+      },
+      {
+        code: "factory.workType.missingFailureState",
+        message: 'work type "story" must declare a failure state.',
+        severity: "error",
+        subject: {
+          id: "story",
+          location: "STATES",
+          type: "WORK_TYPE",
+        },
+      },
+    ]);
+
+    expect(
+      validationMessagesForGraphSelection({
+        projection,
+        selectionNodeId: "work-type:story",
+      }),
+    ).toEqual(['work type "story" must declare a failure state.']);
+  });
+
   it("merges workstation, work type, and work state messages for the active selection", () => {
     const targets = [
       {

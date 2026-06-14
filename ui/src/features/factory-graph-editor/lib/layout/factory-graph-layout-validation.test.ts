@@ -408,6 +408,66 @@ describe("factory-graph-layout-validation", () => {
     expect(prunedLayout.edges).toEqual(expectedEdges);
   });
 
+  it("projects group layout validation targets with recoverable warning messages", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const layout: ReturnType<typeof createDefaultFactoryLayout> = {
+      schemaVersion: 1,
+      groups: [
+        {
+          bounds: { x: 10, y: Number.NaN, width: 320, height: 180 },
+          id: "broken-lane",
+          nodeIds: ["workstation:draft", "workstation:missing"],
+        },
+      ],
+    };
+
+    expect(projectFactoryLayoutValidationTargets(layout, topology)).toEqual([
+      expect.objectContaining({
+        code: FACTORY_LAYOUT_VALIDATION_CODE.invalidGeometry,
+        message:
+          'Layout group "broken-lane" bounds contain non-finite geometry.',
+      }),
+      expect.objectContaining({
+        code: FACTORY_LAYOUT_VALIDATION_CODE.unknownGroupMemberReference,
+        message:
+          'Layout group "broken-lane" references unknown graph node "workstation:missing".',
+      }),
+    ]);
+  });
+
+  it("ignores groups without ids and blank group member ids when collecting targets", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const validNodeIds = factoryLayoutTopologyNodeIds(topology);
+    const layout: ReturnType<typeof createDefaultFactoryLayout> = {
+      schemaVersion: 1,
+      groups: [
+        {
+          bounds: { x: 0, y: 0, width: 100, height: 100 },
+          id: "",
+          nodeIds: ["workstation:missing"],
+        },
+        {
+          bounds: { x: 40, y: 60, width: 120, height: 80 },
+          id: "valid-lane",
+          nodeIds: ["", "workstation:missing"],
+        },
+      ],
+    };
+
+    expect(
+      collectFactoryLayoutGroupValidationTargets(layout, validNodeIds),
+    ).toEqual([
+      {
+        code: FACTORY_LAYOUT_VALIDATION_CODE.unknownGroupMemberReference,
+        path: "factory.layout.groups[1].nodeIds[1]",
+      },
+    ]);
+  });
+
   it("reports stale group member references against pending topology", () => {
     const topology = buildFactoryGraphTopologyFromDefinition(
       baseFactoryDefinition,
