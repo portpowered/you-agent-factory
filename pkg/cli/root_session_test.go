@@ -3,8 +3,16 @@ package cli
 import (
 	"bytes"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/cli/session"
+	"github.com/portpowered/infinite-you/pkg/cli/workflow"
+	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 func TestSessionCommand_RegistersSubcommands(t *testing.T) {
@@ -167,6 +175,223 @@ func TestFactoryQueryCommand_HelpDocumentsSessionListDiscoverability(t *testing.
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("factory query help missing %q:\n%s", want, help)
+		}
+	}
+}
+
+func TestWorkflowCommand_LongHelpSteersUsersToValidateBeforePreview(t *testing.T) {
+	root := NewRootCommand()
+	workflowCmd, _, err := root.Find([]string{"workflow"})
+	if err != nil {
+		t.Fatalf("find workflow: %v", err)
+	}
+	previewCmd, _, err := root.Find([]string{"workflow", "preview"})
+	if err != nil {
+		t.Fatalf("find workflow preview: %v", err)
+	}
+	validateCmd, _, err := root.Find([]string{"workflow", "validate"})
+	if err != nil {
+		t.Fatalf("find workflow validate: %v", err)
+	}
+
+	for _, want := range []string{
+		"Factory Session",
+		"validate  primary CLI path",
+		"preview   compatibility alias",
+	} {
+		if !strings.Contains(workflowCmd.Long, want) {
+			t.Fatalf("workflow long help missing %q:\n%s", want, workflowCmd.Long)
+		}
+	}
+	if !strings.Contains(previewCmd.Long, "Compatibility command for the Factory preview contract") {
+		t.Fatalf("preview long help missing compatibility wording:\n%s", previewCmd.Long)
+	}
+	if !strings.Contains(previewCmd.Long, "workflow validate") {
+		t.Fatalf("preview long help should steer to validate:\n%s", previewCmd.Long)
+	}
+	if strings.Contains(validateCmd.Long, "compatibility") {
+		t.Fatalf("validate long help should not be labeled compatibility:\n%s", validateCmd.Long)
+	}
+}
+
+func TestSessionListCommand_LongHelpDocumentsDurableFactorySessions(t *testing.T) {
+	root := NewRootCommand()
+	sessionCmd, _, err := root.Find([]string{"session"})
+	if err != nil {
+		t.Fatalf("find session: %v", err)
+	}
+	listCmd, _, err := root.Find([]string{"session", "list"})
+	if err != nil {
+		t.Fatalf("find session list: %v", err)
+	}
+
+	for _, want := range []string{
+		"durable Factory Sessions",
+		"--scope live|persisted|all",
+		"source identity",
+		"result availability",
+		"action availability",
+	} {
+		if !strings.Contains(sessionCmd.Long, want) {
+			t.Fatalf("session long help missing %q:\n%s", want, sessionCmd.Long)
+		}
+	}
+	for _, want := range []string{
+		"durable Factory Sessions",
+		"Factory Session table",
+		"ListFactorySessionsResponse",
+	} {
+		if !strings.Contains(listCmd.Long, want) {
+			t.Fatalf("session list long help missing %q:\n%s", want, listCmd.Long)
+		}
+	}
+	if strings.Contains(listCmd.Long, "workflow preview") {
+		t.Fatalf("session list long help should not promote workflow preview:\n%s", listCmd.Long)
+	}
+}
+
+func TestWorkflowValidateHumanOutputUsesFactorySessionTerminology(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeTerminologyWorkflow(t, projectRoot, "review.js", validTerminologyWorkflowSource)
+
+	var output bytes.Buffer
+	if err := workflow.Validate(workflow.ValidateConfig{
+		SourceConfig: workflow.SourceConfig{
+			Dir:         projectRoot,
+			SourceKind:  string(workflowsource.KindWorkflowName),
+			SourceValue: "review",
+		},
+		Output: &output,
+	}); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+
+	text := output.String()
+	for _, want := range []string{"Workflow validation passed.", "Source ref:", "Source hash:"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("output missing %q:\n%s", want, text)
+		}
+	}
+	assertForbiddenWorkflowRunVocabulary(t, text)
+}
+
+func TestWorkflowPreviewHumanOutputRemainsCompatibilitySurface(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeTerminologyWorkflow(t, projectRoot, "review.js", validTerminologyWorkflowSource)
+
+	var output bytes.Buffer
+	if err := workflow.Preview(workflow.PreviewConfig{
+		SourceConfig: workflow.SourceConfig{
+			Dir:         projectRoot,
+			SourceKind:  string(workflowsource.KindWorkflowName),
+			SourceValue: "review",
+		},
+		Output: &output,
+	}); err != nil {
+		t.Fatalf("Preview: %v", err)
+	}
+
+	text := output.String()
+	for _, want := range []string{"Factory preview passed.", "Policy hash:"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("output missing %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "Workflow validation passed.") {
+		t.Fatalf("preview output should keep Factory preview compatibility wording:\n%s", text)
+	}
+	assertForbiddenWorkflowRunVocabulary(t, text)
+}
+
+func TestSessionListPersistedHumanOutputUsesFactorySessionTerminology(t *testing.T) {
+	service, err := fse.NewFakeServiceFromContractFixtures(contractFixtureCatalogPathForTerminology(t))
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+	}
+
+	var output bytes.Buffer
+	if err := session.List(session.ListConfig{
+		Scope:         "persisted",
+		Output:        &output,
+		DurableLister: service.ListSessions,
+	}); err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	text := output.String()
+	for _, want := range []string{
+		"Factory Sessions (durable):",
+		"SESSION ID\tSTATUS\tORCHESTRATOR\tSOURCE KIND\tSOURCE REF\tRESULT STATUS\tPHASE\tPROGRESS\tACTIONS",
+		"SUCCEEDED",
+		"WORKFLOW_FILE",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("output missing %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "workflow preview") {
+		t.Fatalf("durable list output should not promote workflow preview:\n%s", text)
+	}
+	assertForbiddenWorkflowRunVocabulary(t, text)
+}
+
+func TestWorkflowSessionCLI_NewBehaviorSurfacesCovered(t *testing.T) {
+	cases := []struct {
+		name string
+		path []string
+	}{
+		{name: "workflow validate human", path: []string{"workflow", "validate"}},
+		{name: "workflow preview compatibility", path: []string{"workflow", "preview"}},
+		{name: "session list durable", path: []string{"session", "list"}},
+	}
+	root := NewRootCommand()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd, _, err := root.Find(tc.path)
+			if err != nil {
+				t.Fatalf("find %v: %v", tc.path, err)
+			}
+			if strings.TrimSpace(cmd.Short) == "" || strings.TrimSpace(cmd.Long) == "" {
+				t.Fatalf("command %v missing short/long help", tc.path)
+			}
+		})
+	}
+
+	for _, term := range fixtures.ForbiddenFixtureVocabularyTerms() {
+		if strings.Contains(strings.ToLower("Factory Sessions (durable)"), strings.ToLower(term)) {
+			t.Fatalf("forbidden vocabulary helper collides with canonical wording: %q", term)
+		}
+	}
+}
+
+const validTerminologyWorkflowSource = `
+meta({ name: "review", version: 1 });
+phase("setup");
+log("starting");
+`
+
+func contractFixtureCatalogPathForTerminology(t *testing.T) string {
+	t.Helper()
+	return filepath.Join("..", "api", "testdata", "durable-session-contract-fixtures.json")
+}
+
+func writeTerminologyWorkflow(t *testing.T, projectRoot, name, content string) {
+	t.Helper()
+	workflowDir := filepath.Join(projectRoot, workflowsource.ProjectClaudeWorkflowsDir)
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, name), []byte(content), 0o600); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+}
+
+func assertForbiddenWorkflowRunVocabulary(t *testing.T, text string) {
+	t.Helper()
+	lower := strings.ToLower(text)
+	for _, term := range fixtures.ForbiddenFixtureVocabularyTerms() {
+		if strings.Contains(lower, strings.ToLower(term)) {
+			t.Fatalf("output introduced forbidden vocabulary %q:\n%s", term, text)
 		}
 	}
 }
