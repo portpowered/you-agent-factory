@@ -225,107 +225,105 @@ func TestJavaScriptRuntimeService_StartAsync_RunningBeforeCompletion(t *testing.
 	}
 }
 
-func TestJavaScriptRuntimeService_StartAsync_TerminalOutcomes(t *testing.T) {
-	t.Run("failed", func(t *testing.T) {
-		service := newJavaScriptRuntimeService(t)
-		started, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
-			"req-runtime-async-failed-001",
-			throwErrorWorkflowSource,
-			map[string]any{"subject": "workflows"},
-			nil,
-		))
-		if err != nil {
-			t.Fatalf("StartAsync: %v", err)
-		}
+func TestJavaScriptRuntimeService_StartAsync_Failed(t *testing.T) {
+	service := newJavaScriptRuntimeService(t)
+	started, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-async-failed-001",
+		throwErrorWorkflowSource,
+		map[string]any{"subject": "workflows"},
+		nil,
+	))
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
 
-		session := waitUntilSessionStatus(t, service, started.SessionID, fse.LifecycleStatusFailed, 5*time.Second)
-		if session.Failure == nil || session.Failure.Reason == "" {
-			t.Fatalf("failure = %#v, want runtime failure summary", session.Failure)
-		}
+	session := waitUntilSessionStatus(t, service, started.SessionID, fse.LifecycleStatusFailed, 5*time.Second)
+	if session.Failure == nil || session.Failure.Reason == "" {
+		t.Fatalf("failure = %#v, want runtime failure summary", session.Failure)
+	}
 
-		result, err := service.GetResult(context.Background(), started.SessionID, fse.ResultRequest{
-			Mode: fse.ResultModeFinal,
-		})
-		if err != nil {
-			t.Fatalf("GetResult: %v", err)
-		}
-		if result.ResultStatus != fse.ResultStatusUnavailable {
-			t.Fatalf("resultStatus = %q, want UNAVAILABLE", result.ResultStatus)
-		}
-		if result.SessionStatus != fse.LifecycleStatusFailed {
-			t.Fatalf("sessionStatus = %q, want FAILED", result.SessionStatus)
-		}
+	result, err := service.GetResult(context.Background(), started.SessionID, fse.ResultRequest{
+		Mode: fse.ResultModeFinal,
 	})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.ResultStatus != fse.ResultStatusUnavailable {
+		t.Fatalf("resultStatus = %q, want UNAVAILABLE", result.ResultStatus)
+	}
+	if result.SessionStatus != fse.LifecycleStatusFailed {
+		t.Fatalf("sessionStatus = %q, want FAILED", result.SessionStatus)
+	}
+}
 
-	t.Run("timed-out", func(t *testing.T) {
-		service := newJavaScriptRuntimeService(t)
-		maxRunDurationMs := int64(50)
-		started, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
-			"req-runtime-async-timeout-001",
-			busyLoopWorkflowSource,
-			map[string]any{"subject": "workflows"},
-			map[string]any{"maxRunDurationMs": maxRunDurationMs},
-		))
-		if err != nil {
-			t.Fatalf("StartAsync: %v", err)
-		}
+func TestJavaScriptRuntimeService_StartAsync_TimedOut(t *testing.T) {
+	service := newJavaScriptRuntimeService(t)
+	maxRunDurationMs := int64(50)
+	started, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-async-timeout-001",
+		busyLoopWorkflowSource,
+		map[string]any{"subject": "workflows"},
+		map[string]any{"maxRunDurationMs": maxRunDurationMs},
+	))
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
 
-		session := waitUntilSessionStatus(t, service, started.SessionID, fse.LifecycleStatusTimedOut, 5*time.Second)
-		if session.Failure == nil || session.Failure.Reason != "WORKFLOW_RUNTIME_TIMEOUT" {
-			t.Fatalf("failure = %#v, want WORKFLOW_RUNTIME_TIMEOUT", session.Failure)
-		}
+	session := waitUntilSessionStatus(t, service, started.SessionID, fse.LifecycleStatusTimedOut, 5*time.Second)
+	if session.Failure == nil || session.Failure.Reason != "WORKFLOW_RUNTIME_TIMEOUT" {
+		t.Fatalf("failure = %#v, want WORKFLOW_RUNTIME_TIMEOUT", session.Failure)
+	}
 
-		result, err := service.GetResult(context.Background(), started.SessionID, fse.ResultRequest{
-			Mode: fse.ResultModeFinal,
-		})
-		if err != nil {
-			t.Fatalf("GetResult: %v", err)
-		}
-		if result.ResultStatus != fse.ResultStatusUnavailable {
-			t.Fatalf("resultStatus = %q, want UNAVAILABLE", result.ResultStatus)
-		}
-		if result.Availability != nil && result.Availability.Reason == "SYNC_WAIT_TIMED_OUT" {
-			t.Fatalf("availability = %#v, must not use sync-wait reason for runtime policy timeout", result.Availability)
-		}
-		if result.SessionStatus != fse.LifecycleStatusTimedOut {
-			t.Fatalf("sessionStatus = %q, want TIMED_OUT", result.SessionStatus)
-		}
+	result, err := service.GetResult(context.Background(), started.SessionID, fse.ResultRequest{
+		Mode: fse.ResultModeFinal,
 	})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.ResultStatus != fse.ResultStatusUnavailable {
+		t.Fatalf("resultStatus = %q, want UNAVAILABLE", result.ResultStatus)
+	}
+	if result.Availability != nil && result.Availability.Reason == "SYNC_WAIT_TIMED_OUT" {
+		t.Fatalf("availability = %#v, must not use sync-wait reason for runtime policy timeout", result.Availability)
+	}
+	if result.SessionStatus != fse.LifecycleStatusTimedOut {
+		t.Fatalf("sessionStatus = %q, want TIMED_OUT", result.SessionStatus)
+	}
+}
 
-	t.Run("canceled", func(t *testing.T) {
-		service := newJavaScriptRuntimeService(t)
-		started, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
-			"req-runtime-async-canceled-001",
-			busyLoopWorkflowSource,
-			map[string]any{"subject": "workflows"},
-			nil,
-		))
-		if err != nil {
-			t.Fatalf("StartAsync: %v", err)
-		}
+func TestJavaScriptRuntimeService_StartAsync_Canceled(t *testing.T) {
+	service := newJavaScriptRuntimeService(t)
+	started, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-async-canceled-001",
+		busyLoopWorkflowSource,
+		map[string]any{"subject": "workflows"},
+		nil,
+	))
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
 
-		if _, err := service.Cancel(context.Background(), started.SessionID, fse.ControlRequest{}); err != nil {
-			t.Fatalf("Cancel: %v", err)
-		}
+	if _, err := service.Cancel(context.Background(), started.SessionID, fse.ControlRequest{}); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
 
-		session := waitUntilSessionStatus(t, service, started.SessionID, fse.LifecycleStatusCanceled, 5*time.Second)
-		if session.Failure == nil || session.Failure.Reason != "WORKFLOW_RUNTIME_CANCELED" {
-			t.Fatalf("failure = %#v, want WORKFLOW_RUNTIME_CANCELED", session.Failure)
-		}
+	session := waitUntilSessionStatus(t, service, started.SessionID, fse.LifecycleStatusCanceled, 5*time.Second)
+	if session.Failure == nil || session.Failure.Reason != "WORKFLOW_RUNTIME_CANCELED" {
+		t.Fatalf("failure = %#v, want WORKFLOW_RUNTIME_CANCELED", session.Failure)
+	}
 
-		result, err := service.GetResult(context.Background(), started.SessionID, fse.ResultRequest{
-			Mode: fse.ResultModeFinal,
-		})
-		if err != nil {
-			t.Fatalf("GetResult: %v", err)
-		}
-		if result.SessionStatus != fse.LifecycleStatusCanceled {
-			t.Fatalf("sessionStatus = %q, want CANCELED", result.SessionStatus)
-		}
-		if result.ResultStatus != fse.ResultStatusUnavailable {
-			t.Fatalf("resultStatus = %q, want UNAVAILABLE", result.ResultStatus)
-		}
+	result, err := service.GetResult(context.Background(), started.SessionID, fse.ResultRequest{
+		Mode: fse.ResultModeFinal,
 	})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.SessionStatus != fse.LifecycleStatusCanceled {
+		t.Fatalf("sessionStatus = %q, want CANCELED", result.SessionStatus)
+	}
+	if result.ResultStatus != fse.ResultStatusUnavailable {
+		t.Fatalf("resultStatus = %q, want UNAVAILABLE", result.ResultStatus)
+	}
 }
 
 func TestJavaScriptRuntimeService_StartSync_WaitTimeoutWithoutCancelKeepsSessionRunning(t *testing.T) {
