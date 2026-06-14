@@ -9,6 +9,110 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 )
 
+// ListDispatchesInput is the MCP request shape for you.factory_session.list_dispatches.
+type ListDispatchesInput struct {
+	SessionID string `json:"sessionId"`
+}
+
+// ListDispatches returns deterministic dispatch summaries for one Factory Session
+// through the you.factory_session.list_dispatches MCP tool.
+func ListDispatches(
+	service factorysessionexecution.Service,
+	input ListDispatchesInput,
+) ToolResponse[factoryapi.ListFactorySessionDispatchesResponse] {
+	if service == nil {
+		envelope := unavailableServiceErrorEnvelope()
+		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
+	}
+
+	sessionID := input.SessionID
+	result, err := service.ListDispatches(context.Background(), sessionID)
+	if err != nil {
+		envelope := readErrorEnvelope(sessionID, err)
+		return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Error: &envelope}
+	}
+
+	mapped := apifactorysession.ListDispatchesResponseToAPI(result)
+	return ToolResponse[factoryapi.ListFactorySessionDispatchesResponse]{Result: &mapped}
+}
+
+// ListArtifactsInput is the MCP request shape for you.factory_session.list_artifacts.
+type ListArtifactsInput struct {
+	SessionID string `json:"sessionId"`
+}
+
+// ListArtifacts returns deterministic FactoryArtifact summaries for one Factory
+// Session through the you.factory_session.list_artifacts MCP tool.
+func ListArtifacts(
+	service factorysessionexecution.Service,
+	input ListArtifactsInput,
+) ToolResponse[factoryapi.ListFactorySessionArtifactsResponse] {
+	if service == nil {
+		envelope := unavailableServiceErrorEnvelope()
+		return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{Error: &envelope}
+	}
+
+	sessionID := input.SessionID
+	result, err := service.ListArtifacts(context.Background(), sessionID)
+	if err != nil {
+		envelope := readErrorEnvelope(sessionID, err)
+		return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{Error: &envelope}
+	}
+
+	mapped := apifactorysession.ListArtifactsResponseToAPI(result)
+	return ToolResponse[factoryapi.ListFactorySessionArtifactsResponse]{Result: &mapped}
+}
+
+// ReadEventsInput is the MCP request shape for you.factory_session.read_events.
+type ReadEventsInput struct {
+	SessionID     string `json:"sessionId"`
+	AfterEventID  string `json:"afterEventId,omitempty"`
+	AfterSequence *int   `json:"afterSequence,omitempty"`
+}
+
+// ReadEventsResult is the MCP response shape for you.factory_session.read_events.
+type ReadEventsResult struct {
+	SessionID string                    `json:"sessionId"`
+	Events    []factoryapi.FactoryEvent `json:"events,omitempty"`
+}
+
+// ReadEvents returns ordered Factory Session event facts for reconnect and
+// inspection through the you.factory_session.read_events MCP tool.
+func ReadEvents(service factorysessionexecution.Service, input ReadEventsInput) ToolResponse[ReadEventsResult] {
+	if service == nil {
+		envelope := unavailableServiceErrorEnvelope()
+		return ToolResponse[ReadEventsResult]{Error: &envelope}
+	}
+
+	params := factoryapi.GetEventsBySessionIdParams{}
+	if trimmed := input.AfterEventID; trimmed != "" {
+		afterEventID := factoryapi.AfterEventId(trimmed)
+		params.AfterEventId = &afterEventID
+	}
+	if input.AfterSequence != nil {
+		sequence := factoryapi.AfterSequence(*input.AfterSequence)
+		params.AfterSequence = &sequence
+	}
+	reconnect, err := apifactorysession.EventReconnectRequestFromAPI(params)
+	if err != nil {
+		envelope := requestValidationErrorEnvelope(err)
+		return ToolResponse[ReadEventsResult]{Error: &envelope}
+	}
+
+	sessionID := input.SessionID
+	result, err := service.ReadEvents(context.Background(), sessionID, reconnect)
+	if err != nil {
+		envelope := eventReadErrorEnvelope(sessionID, err)
+		return ToolResponse[ReadEventsResult]{Error: &envelope}
+	}
+
+	mapped := ReadEventsResult{
+		SessionID: result.SessionID,
+		Events:    apifactorysession.EventReadResponseToAPI(result),
+	}
+	return ToolResponse[ReadEventsResult]{Result: &mapped}
+}
+
 // ControlInput is the MCP request shape for you.factory_session.control.
 type ControlInput struct {
 	SessionID         string                                        `json:"sessionId"`
