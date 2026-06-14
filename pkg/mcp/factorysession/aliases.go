@@ -52,13 +52,3 @@ func ResolveToolName(name string) string {
 	}
 	return name
 }
-
-// IsCompatibilityAlias reports whether name is a workflow-named compatibility alias.
-func IsCompatibilityAlias(name string) bool {
-	for _, alias := range DiscoverCompatibilityAliases() {
-		if alias.Name == name {
-			return true
-		}
-	}
-	return false
-}
