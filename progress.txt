@@ -1,15 +1,12 @@
 ## Codebase Patterns
-- Normalize durable Factory Session CLI start flags through `pkg/cli/sessionexecution.NormalizeStartRequest` → `pkg/apisurface/factorysession.StartRequestFromCLI` → `factorysessionexecution.NormalizeStartRequest`; render deterministic human/JSON failures with `sessionexecution.WriteExecutionError`.
-- Inline workflow CLI source text reuses `invocations.ResolveTextInput` ownership rules; explicit `--factory`, `--workflow`, and `--workflow-file` selectors are mutually exclusive.
+- CLI workflow source validation loopback uses `pkg/apisurface/factory_workflow_validation.go` (`BuildFactoryWorkflowValidation`, `FactoryWorkflowValidationResultFromPreview`) on top of `BuildFactoryPreview`; `you workflow validate` lives in `pkg/cli/workflow/validate.go` with shared source flags via `SourceConfig` in `request.go` (including optional `--args-schema` and `--requested-policy`). JSON uses generated `WorkflowSourceResolution` plus `blockingDiagnostics` (`[]WorkflowDiagnostic`); denied capabilities from READ_ONLY policy preview are informational, not blocking. Human failure output labels a `Blocking diagnostics:` section; JSON failure emits the validation result then exits non-zero.
+- CLI durable Factory Session listing loopback uses `you session list --scope live|persisted|all` in `pkg/cli/session/list.go` with durable rows from `factorysessionexecution.FakeService` (`NewFakeServiceFromContractFixtures`, catalog `fixtures.ContractFixtureCatalogRelativePath`) merged through `ApplySessionListScope` and `factorysession.ListSessionsResponseToAPI`; `scope=live` keeps the legacy HTTP `GET /factory-sessions` workspace table. Reject unsupported scopes via `NormalizeListSessionsRequest` before HTTP/durable calls; provider and scope-validation failures keep stdout empty for `--json`. Human durable output uses a `Factory Sessions (durable):` table; JSON uses the same generated `ListFactorySessionsResponse` / `FactorySessionDurableSummary` shapes (no CLI-only list schema). Prove JSON parity by marshaling `factorysession.ListSessionsResponseToAPI(ApplySessionListScope(...))` in `list_test.go`; inject `ListConfig.DurableLister` in tests.
+- CLI workflow source input validation rejects missing/conflicting `--kind`/`--value`/`--inline` combinations in `pkg/cli/workflow/request.go` (`validateSourceConfig`) before `DefaultContext` or preview validation; command errors keep stdout empty even when `--json` is set. JSON blocking-validation failures still emit the structured result then exit non-zero.
 - Published Factory Session fixture scenario IDs and stable projection hashes live in `pkg/factorysessionexecution/fixture_catalog.go` (`PublishedFixtureScenarios`, `FixtureScenarioIdentityFromScenario`, `FixtureScenarioProjectionHash`); contract JSON remains in `pkg/api/testdata/durable-session-contract-fixtures.json` and loads through `LoadFakeScenariosFromContractFixtures`.
 - Use `ContractFixtureCatalogRelativePath` when downstream cells need the repository-relative catalog path; prove stable identity with `fixture_catalog_test.go` golden projection hashes rather than recomputing ad hoc in each consumer package.
 - Built-in recoverable interrupted JavaScript session `javascript-interrupted-recoverable` is appended by `LoadFakeScenariosFromContractFixtures` even though it is not in the JSON catalog.
 - Prove FakeService start/list/read/result behavior against `PublishedFixtureScenarios` in `start_list_read_result_test.go`; use `ProjectedResultReadHash` and `SyncStartResultHash` for golden result digests instead of ad hoc field comparisons.
-- Wire mock-backed synchronous CLI starts through `sessionexecution.RunSync` and `you workflow run`; render human/JSON via `factorysession.SyncStartResponseToAPI`; default to contract-fixture `FakeService` when no service is injected.
-- `FakeService.StartSync` stores the first sync start payload on the start replay record so request-id replays return the original fixture sync response instead of re-projecting from session state.
-- Wire mock-backed asynchronous CLI starts through `sessionexecution.RunAsync` and `you workflow start`; poll status through `RunStatus` and `you workflow status <session-id>`; async JSON adds `requestId` and shared partial `GetResult` `resultAvailability` atop `FactorySessionExecutionResponse`.
-- `FakeService.StartAsync` stores the first async start payload on the start replay record so request-id replays return the original fixture async response instead of re-projecting from session read state.
-- Wire mock-backed durable result reads through `sessionexecution.RunResult` and `you workflow result <session-id>`; normalize `--mode` / `--include-artifacts` via `ResultRequestFromCLI`; render `FactorySessionResult` through `ResultResponseToAPI`; return `ResultOutcomeError` for `NOT_READY`, `UNAVAILABLE`, and `FAILED_WITH_PARTIAL` after writing human/JSON output so automation gets non-zero exits without `SESSION_NOT_FOUND`.
+- CLI compatibility wording: keep `you workflow validate` primary and `you workflow preview` compatibility-only in `pkg/cli/root.go`; parent `you session` help documents durable Factory Session listing in `pkg/cli/root_work.go`. Prove command help and human-output vocabulary with `fixtures.ForbiddenFixtureVocabularyTerms()` in `pkg/cli/root_workflow_session_terminology_test.go`.
 
 ## 2026-06-11 UTC - dynamic-workflows-cell-provider-fixtures-001
 - Published stable fixture scenario identity catalog with purpose-to-scenario mappings for validation failure, async running, sync success, sync timeout, failed recoverable session, dispatch inspection, artifact inspection, event reconnect, and lifecycle-control outcomes.
@@ -32,49 +29,62 @@
   - Useful context: sync timeout scenario returns `SYNC_WAIT_TIMED_OUT` availability on final result reads; terminal success dedupes from live rows in `scope=all` when also present in persisted durable listing.
 ---
 
-## 2026-06-11 UTC - dynamic-workflows-cell-cli-run-status-result-001
-- Added `pkg/cli/sessionexecution` to resolve sync/async mode, source selectors, args/policy JSON, wait options, and inline workflow positional/stdin input into shared `factorysessionexecution.StartRequest` via `factorysession.StartRequestFromCLI`.
-- Added deterministic CLI execution errors (`WriteExecutionError`) for unsupported mode, missing/conflicting source, invalid args/policy, and shared validation failures.
-- Added focused normalization/idempotency tests proving equivalent CLI inputs hash to the same mock-provider idempotency tuple.
-- Files changed: `pkg/cli/sessionexecution/*`, `pkg/apisurface/factorysession/factory_session_execution_cli.go`, `pkg/apisurface/factorysession/factory_session_execution_test.go`, `docs/internal/processes/api-relevant-files.md`
+## 2026-06-11 UTC - dynamic-workflows-cell-cli-validate-list-001
+- Added `you workflow validate` CLI loopback command with human output (`Workflow validation passed.` plus source ref/hash) and stable JSON using `FactoryWorkflowValidationResult` (`valid`, `sourceResolution`, empty `blockingDiagnostics` on success).
+- Introduced shared apisurface validation mapping (`BuildFactoryWorkflowValidation`, `FactoryWorkflowValidationResultFromPreview`) and extracted CLI source input helpers (`SourceConfig`, `request.go`) reused by preview and validate.
+- Files changed: `pkg/apisurface/factory_workflow_validation.go`, `pkg/apisurface/factory_workflow_validation_test.go`, `pkg/cli/workflow/validate.go`, `pkg/cli/workflow/validate_test.go`, `pkg/cli/workflow/request.go`, `pkg/cli/workflow/preview.go`, `pkg/cli/workflow/preview_test.go`, `pkg/cli/root.go`, `docs/internal/processes/api-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: keep CLI transport parsing in `pkg/cli/sessionexecution` and delegate canonical request shaping to `StartRequestFromCLI`; only attach `Wait` options for sync mode.
-  - Gotchas encountered: whitespace-only `--factory` must still count as an explicit selector so `NormalizeStartRequest` can return `source.factoryId` validation errors; existing filesystem paths win over inline stdin without treating file+stdin as invocation text conflicts.
-  - Useful context: story 002 should wire a mock-backed run command that calls `NormalizeStartRequest` then `FakeService.StartSync`/`StartAsync` without introducing HTTP dependencies.
+  - Patterns discovered: validation JSON should aggregate blocking diagnostics from source resolution failures/conflicts, artifact-root rejection, source validation issues, and policy validation issues only—do not treat READ_ONLY `DeniedCapabilities` as blocking because `Preview.HasBlockingIssues` ignores them.
+  - Gotchas encountered: generated `WorkflowArtifactRootDecision.requested` is a string, not a bool; check `strings.TrimSpace(requested) != ""` when mirroring preview blocking rules.
+  - Useful context: prove validate JSON parity by marshaling `apisurface.FactoryWorkflowValidationResultFromPreview(BuildFactoryWorkflowValidation(input))` in tests, matching the preview package's canonical seam pattern.
 ---
 
-## 2026-06-11 UTC - dynamic-workflows-cell-cli-run-status-result-002
-- Added `sessionexecution.RunSync` to normalize CLI start inputs, call shared `factorysessionexecution.Service.StartSync`, and render deterministic human or `FactorySessionSyncExecutionResponse` JSON through `factorysession.SyncStartResponseToAPI`.
-- Wired `you workflow run` with sync-only execution flags, contract-fixture catalog discovery, and mock-backed `FakeService` fallback.
-- Fixed `FakeService` sync start replay to return the stored first sync response for equivalent `requestId` retries.
-- Added CLI tests for completed human output, deterministic JSON, request-id replay, async rejection, and shared primary-result projection.
-- Files changed: `pkg/cli/sessionexecution/run.go`, `pkg/cli/sessionexecution/run_test.go`, `pkg/cli/sessionexecution/error.go`, `pkg/cli/root.go`, `pkg/factorysessionexecution/fake_service.go`, `docs/internal/processes/api-relevant-files.md`
+## 2026-06-12 UTC - dynamic-workflows-cell-cli-validate-list-002
+- Added blocking diagnostic coverage for `you workflow validate` human and JSON failure paths: syntax errors, unsupported globals, forbidden host access, invalid args schema, and policy-denied host access (`workflow.policy.deniedCapability`).
+- Extended shared CLI source inputs with `--args-schema` and `--requested-policy`, labeled human `Blocking diagnostics:` output, and made JSON validation failures exit non-zero after emitting the structured result.
+- Files changed: `pkg/cli/workflow/request.go`, `pkg/cli/workflow/validate.go`, `pkg/cli/workflow/validate_test.go`, `pkg/cli/root.go`, `pkg/apisurface/factory_workflow_validation_test.go`, `docs/internal/processes/api-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: keep CLI execution transport in `sessionexecution.RunSync` and project responses only through apisurface `SyncStartResponseToAPI`; inject `factorysessionexecution.Service` in tests and resolve contract fixtures from cwd for the default mock path.
-  - Gotchas encountered: `WorkContentPart` is a generated union—use `AsWorkTextContentPart` for human summaries; first sync start comes from fixture `syncResponse` while replay previously re-projected from session state until the replay record stored the original payload.
-  - Useful context: story 003 should add async start and status polling commands beside `workflow run`, reusing `NormalizeStartRequest` and the same output/error helpers.
+  - Patterns discovered: prove CLI blocking diagnostics against `FactoryWorkflowValidationResultFromPreview(BuildFactoryWorkflowValidation(input))` for JSON parity; use `console.log(...)` for `workflow.source.unsupportedGlobal`, `require('fs')` for `workflow.source.forbiddenHostAccess`, invalid `argsSchema` type arrays for `workflow.source.invalidArgsSchema`, and `{"allowNetwork":true}` requested policy for `workflow.policy.deniedCapability`.
+  - Gotchas encountered: `WorkflowDiagnostic` has no severity field in the OpenAPI contract — assert stable `code`, `message`, and optional `path`/`line`/`column` instead; JSON validate must return an error after encoding when `valid` is false so automation gets a non-zero exit.
+  - Useful context: policy `DeniedCapabilities` remain informational in validation results; blocking policy issues come from `PolicyPreview.ValidationIssues` aggregated into `blockingDiagnostics`.
 ---
 
-## 2026-06-11 UTC - dynamic-workflows-cell-cli-run-status-result-003
-- Added `sessionexecution.RunAsync` and `sessionexecution.RunStatus` for mock-backed async starts and durable session status reads through shared `StartAsync` / `GetSession` projections.
-- Wired `you workflow start` and `you workflow status <session-id>` in `pkg/cli/root.go` with shared start flags and deterministic human/JSON rendering.
-- Extended CLI execution errors with `SESSION_NOT_FOUND` and fixed `FakeService` async request-id replay to return the stored first async start response.
-- Added CLI tests covering async-running fixture human/JSON output, async-then-status polling, missing-session errors, and deterministic status JSON.
-- Files changed: `pkg/cli/sessionexecution/{async,status}.go`, `pkg/cli/sessionexecution/*_test.go`, `pkg/cli/sessionexecution/error.go`, `pkg/cli/root.go`, `pkg/factorysessionexecution/fake_service.go`, `docs/internal/processes/api-relevant-files.md`
+
+## 2026-06-12 UTC - dynamic-workflows-cell-cli-validate-list-004
+- Added focused JSON list coverage for scoped durable Factory Session listing: canonical parity with `factorysession.ListSessionsResponseToAPI`, persisted JavaScript row field assertions, all-scope live+durable merge, empty persisted JSON state, deterministic session-id ordering, and redaction checks for raw source/provider internals.
+- Documented JSON list output contract in `docs/internal/processes/api-relevant-files.md`.
+- Files changed: `pkg/cli/session/list_test.go`, `docs/internal/processes/api-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: keep async JSON deterministic with a typed `asyncRunCLIResponse` embed of `FactorySessionExecutionResponse` rather than round-tripping through `map[string]any`; enrich async JSON `resultAvailability` via shared `GetResult` partial reads.
-  - Gotchas encountered: fixture `asyncResponse` and `session` projections differ (source hash vs ref), so async replay must store the first async payload like sync replay; map-based JSON merges randomize key order.
-  - Useful context: story 004 should add `you workflow result` beside `workflow status`, reusing the same service resolver and `WriteExecutionError` paths.
+  - Patterns discovered: durable scoped JSON reuses the same apisurface mapper as HTTP/API listing—prove CLI parity by building `ApplySessionListScope` + `ListSessionsResponseToAPI` in tests the same way as `mergeScopedListResult`/`listResponseFromScopedResult`.
+  - Gotchas encountered: contract-fixture `listSummary` rows may omit `resultSummary`/`progress` even though mapper supports them when present; assert stable seeded IDs like `dur-sess-js-success-002` rather than inferring fields from unrelated persisted rows (e.g. petri success carries `FINAL`).
+  - Useful context: story 005 should cover invalid scope/input and provider failure JSON error stability; compatibility wording remains story 006.
 ---
 
-## 2026-06-11 UTC - dynamic-workflows-cell-cli-run-status-result-004
-- Added `sessionexecution.RunResult` for mock-backed final/partial durable session result reads through shared `GetResult` projections.
-- Wired `you workflow result <session-id>` with `--mode final|partial`, `--include-artifacts`, and deterministic human/JSON rendering via `ResultResponseToAPI`.
-- Added `ResultRequestFromCLI` and `ResultOutcomeError` so not-ready/failed/unavailable results render stable output then exit non-zero without using missing-session errors.
-- Added CLI tests covering final success, partial running, not-ready final, missing session, shared projection parity, and deterministic JSON.
-- Files changed: `pkg/cli/sessionexecution/{result,result_test}.go`, `pkg/cli/root.go`, `pkg/apisurface/factorysession/factory_session_execution_cli.go`, `pkg/apisurface/factorysession/factory_session_execution_test.go`, `docs/internal/processes/api-relevant-files.md`
+## 2026-06-12 UTC - dynamic-workflows-cell-cli-validate-list-005
+- Added CLI workflow source input guards (`validateSourceConfig`) so missing or conflicting `--kind`/`--value`/`--inline` combinations fail before preview validation with clear command errors and empty stdout (including `--json`).
+- Added focused CLI tests for unsupported session-list scopes, durable provider failures on persisted/all scopes without partial stdout, and validate command/JSON error stability for invalid source inputs and requested-policy JSON.
+- Documented invalid-input and provider-failure contracts in `docs/internal/processes/api-relevant-files.md`.
+- Files changed: `pkg/cli/workflow/request.go`, `pkg/cli/workflow/validate_test.go`, `pkg/cli/session/list_test.go`, `docs/internal/processes/api-relevant-files.md`
 - **Learnings for future iterations:**
-  - Patterns discovered: keep result CLI transport in `sessionexecution.RunResult` and map only through `ResultRequestFromCLI` + `ResultResponseToAPI`; use `ResultOutcomeError` when automation needs a non-zero exit after successful stdout rendering.
-  - Gotchas encountered: running sessions return `NOT_READY` for `--mode final` but `PARTIAL` with JSON primary result for `--mode partial`; human summaries need `AsWorkJsonContentPart` in addition to text parts.
-  - Useful context: story 005 should extend sync timeout rendering and reuse `RunResult` for timed-out session inspection where appropriate.
+  - Patterns discovered: mirror durable execution source normalization rules at the CLI boundary (`validateSourceConfig`) so missing `--value`/`--inline` and cross-flag conflicts fail before `DefaultContext` or `BuildFactoryWorkflowValidation`; keep command-error stdout empty under `--json`, while blocking validation JSON still emits `valid:false` then exits non-zero.
+  - Gotchas encountered: without CLI guards, missing `WORKFLOW_NAME --value` surfaces as `workflow.source.notFound` blocking diagnostics instead of a command error; `scope=all` fetches live HTTP rows before durable merge, so provider-failure tests must assert stdout stays empty even when the HTTP path succeeded.
+  - Useful context: story 006 remains for compatibility wording and consolidated focused CLI coverage across human/JSON/invalid/provider paths.
+---
+
+## 2026-06-12 UTC - dynamic-workflows-cell-cli-validate-list-006
+- Updated `you workflow` and `you session` command help so validate and durable Factory Session listing are primary surfaces while `you workflow preview` stays a compatibility-only Factory preview path.
+- Added `root_workflow_session_terminology_test.go` proving command help steering, validate/preview/durable human vocabulary, and absence of forbidden dynamic-workflow-run nouns via `fixtures.ForbiddenFixtureVocabularyTerms()`.
+- Updated `root_session_test.go` for the session command short-help wording change.
+- Files changed: `pkg/cli/root.go`, `pkg/cli/root_work.go`, `pkg/cli/root_workflow_session_terminology_test.go`, `pkg/cli/root_session_test.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: position `workflow validate` before `workflow preview` in parent Long help and label preview explicitly as a compatibility alias; reuse `ForbiddenFixtureVocabularyTerms()` when asserting CLI human output avoids dynamic-workflow-run nouns.
+  - Gotchas encountered: `TestRootCommand_HelpDocumentsSessionCommand` asserts the session command Short text shown in root `--help`; update it when changing session parent Short wording.
+  - Useful context: preview human output should keep `Factory preview passed.` compatibility wording; durable list human output should keep `Factory Sessions (durable):` plus STATUS/SOURCE/RESULT/PHASE/PROGRESS/ACTIONS columns.
+---
+- Extended `you session list` with `--scope live|persisted|all`; persisted/all durable rows load from contract-fixture `FakeService`, merge with HTTP live rows via `ApplySessionListScope`, and render a human `Factory Sessions (durable):` table with status, source identity, result availability, phase/progress, and actions while preserving the legacy live workspace table.
+- Files changed: `pkg/cli/session/list.go`, `pkg/cli/session/durable_list.go`, `pkg/cli/session/list_human.go`, `pkg/cli/session/list_test.go`, `pkg/cli/root_work.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: keep `scope=live` on the existing HTTP path for backward compatibility; only persisted/all invoke the fixture-backed durable lister and apisurface mapper merge. Use injectable `ListConfig.DurableLister` rather than repo-root discovery in focused CLI tests.
+  - Gotchas encountered: `listSummary` fixture rows may omit progress/result fields even though human rendering supports them when mapped — assert stable seeded session IDs like `dur-sess-js-success-002` rather than scenario slug constants.
+  - Useful context: story 004 should tighten JSON list output/tests for scoped durable listing; provider-failure and invalid-scope handling remain story 005.
 ---

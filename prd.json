@@ -1,32 +1,31 @@
 {
-  "project": "Mock-Backed CLI Run, Status, And Result Loopback For Dynamic Workflows",
-  "branchName": "dynamic-workflows-cell-cli-run-status-result",
-  "description": "Add the first customer-testable CLI loopback for JavaScript Factory Sessions using the deterministic mock session-provider path. Users can start fixture-backed sessions in synchronous or asynchronous mode, receive durable session ids and inspection links, poll status, retrieve final or partial results, and observe deterministic timeout and failure behavior.",
+  "project": "Dynamic Workflows CLI Validate And Durable Session List",
+  "branchName": "dynamic-workflows-cell-cli-validate-list",
+  "description": "Add CLI loopback behavior for dynamic JavaScript workflows so customers can validate workflow source and list durable Factory Sessions with stable human-readable and JSON output before the full runtime or HTTP parity path is complete.",
   "context": {
-    "customerAsk": "Add mock-backed CLI behavior for dynamic workflow run/status/result. A sync run of a fixture returns a completed outcome and expected primary result hash or structured result. An async run returns a durable session id, status links, and later status/result commands report the mock scenario state. Timed-out sync runs report timeout without pretending completion, cancel-on-timeout is visible when requested, and focused CLI tests cover not-ready result, missing session, unsupported mode, bad source, and requestId conflict paths.",
-    "problem": "Dynamic workflow planning has deterministic mock Factory Session provider fixtures and shared execution request/result types, but users still need a CLI surface that proves the run, status, and result loop from their point of view. Without this loopback, downstream runtime and API work cannot demonstrate that you commands normalize inputs consistently, preserve request-id behavior, render stable JSON, or expose session inspection paths for completed, running, timed-out, failed, and not-ready states.",
-    "solution": "Extend CLI command behavior, using existing command boundaries where possible, so run/status/result-style commands call the shared mock-backed Factory Session execution service. Normalize source, args, request id, wait options, cancel-on-timeout, and requested result policy through shared service or API-surface helpers. Render concise human output and deterministic JSON for started, completed, timed-out, running, failed, and not-ready outcomes, with focused CLI tests against deterministic provider fixtures."
+    "customerAsk": "Add CLI validation and durable session list loopback for dynamic workflows. CLI validation must succeed for a valid simple JavaScript workflow fixture and return blocking diagnostics for syntax errors, unsupported globals, invalid args schema, and policy-denied host access. CLI list output must show durable JavaScript Factory Session rows with status, source identity, result availability, phase/progress summary, and action availability when present. JSON output must be stable enough for tests and use generated or shared API/domain shapes where appropriate. Focused CLI tests must cover human output, JSON output, invalid input, and provider/service failure.",
+    "problem": "Dynamic workflow work needs a fast, customer-testable CLI path. Users currently cannot rely on the CLI to validate JavaScript workflow source with stable diagnostics or list durable Factory Sessions with live, persisted, and all-session views that expose session status and result availability.",
+    "solution": "Add command behavior for workflow source validation using existing source-kind, source-ref, and inline-source inputs, and extend CLI session listing to surface durable Factory Session summaries from deterministic provider data. Use the mock session-provider path first, or an equivalent direct factorysessionexecution.Service implementation, while keeping the command output contract stable for a later real service or HTTP API swap."
   },
   "acceptanceCriteria": [
-    "A sync CLI run of the success fixture returns a completed outcome and either the expected primary result hash or the expected structured primary result.",
-    "An async CLI run returns a durable Factory Session id, status/result links or follow-up command hints, and later CLI status/result commands report the deterministic mock scenario state.",
-    "A sync CLI run that exceeds the wait budget reports a timeout outcome, keeps the session inspectable, and does not render the session as completed.",
-    "When cancel-on-timeout is requested, CLI output makes the cancel request or cancellation outcome visible in both human and JSON modes.",
-    "CLI JSON output is deterministic for started, completed, timed-out, running, failed, and not-ready result outcomes.",
-    "Focused CLI tests cover not-ready result, missing session, unsupported mode, bad source, request-id idempotent replay, and request-id conflict behavior.",
-    "Quality gate passes: typecheck, lint where touched, and go test ./pkg/cli/session ./pkg/cli/workflow ./pkg/factorysessionexecution."
+    "CLI validation succeeds for a valid simple JavaScript workflow fixture and exits successfully for both human-readable and JSON output.",
+    "CLI validation returns blocking diagnostics for syntax errors, unsupported globals or host access, invalid args schema, and policy-denied host access with stable machine-readable fields.",
+    "CLI session list output shows durable JavaScript Factory Session rows with lifecycle status, source identity, result availability, phase or progress summary, and action availability when present.",
+    "CLI session listing supports durable session scopes for live, persisted, and all sessions when the current command structure supports scoped listing.",
+    "JSON output for validation and listing is stable enough for tests and uses generated or shared API/domain shapes where appropriate rather than duplicating ad hoc response models.",
+    "Provider or service failure is reported as a clear CLI error with a non-zero exit and without partial misleading success output.",
+    "Quality gate: typecheck, lint, and focused CLI tests pass, including go test ./pkg/cli/workflow ./pkg/cli/session ./pkg/cli."
   ],
   "userStories": [
     {
-      "id": "dynamic-workflows-cell-cli-run-status-result-001",
-      "title": "Normalize CLI Session Execution Requests",
-      "description": "As a CLI user, I want run/status/result commands to interpret source, args, request id, wait options, and result policy consistently so retries and later API parity do not depend on transport-specific rules.",
+      "id": "dynamic-workflows-cell-cli-validate-list-001",
+      "title": "Validate a simple JavaScript workflow from CLI inputs",
+      "description": "As a workflow author, I want to validate a simple JavaScript workflow source from the CLI so I can confirm the source is acceptable before starting a Factory Session.",
       "acceptanceCriteria": [
-        "CLI run input resolves fixture source, args, request id, sync versus async mode, wait timeout, cancel-on-timeout, and requested result policy into the shared Factory Session execution request shape.",
-        "Positional arguments, flags, and stdin or file source inputs follow the existing invocation input ownership rules and reject conflicting logical input sources with a clear CLI error.",
-        "Unsupported execution modes fail before a session is created and return deterministic human and JSON errors.",
-        "Bad or missing source fails before a session is created and returns deterministic human and JSON errors.",
-        "Request normalization tests prove equivalent CLI inputs produce the same idempotency tuple used by the mock provider.",
+        "A valid simple JavaScript workflow fixture validates successfully from a supported source input path such as source kind plus source ref or inline source.",
+        "Human output clearly reports that validation passed and includes safe source identity details when available.",
+        "JSON output reports a successful validation result with stable source identity, source hash when available, and an empty blocking diagnostics collection.",
+        "The validation command uses shared source normalization and validation behavior where available, not a separate CLI-only parser contract.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -35,15 +34,15 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-cli-run-status-result-002",
-      "title": "Run A Fixture Synchronously To Completion",
-      "description": "As a CLI user, I want a synchronous run of a fixture-backed JavaScript Factory Session to return the completed outcome and primary result so I can prove the simplest dynamic workflow path from the terminal.",
+      "id": "dynamic-workflows-cell-cli-validate-list-002",
+      "title": "Report blocking JavaScript validation diagnostics",
+      "description": "As a workflow author, I want CLI validation to reject invalid JavaScript workflow sources with clear blocking diagnostics so I can fix source, schema, and policy issues before execution.",
       "acceptanceCriteria": [
-        "A sync run command against the success fixture exits successfully and renders completed or the established terminal success status in human output.",
-        "JSON output for the same sync run includes session id, lifecycle/result status, source identity or hash, primary result hash or structured primary result, and inspection links.",
-        "The primary result is selected through the shared Factory Session execution or invocation result behavior rather than a CLI-only shortcut.",
-        "Re-running the command with the same request id and equivalent inputs returns the original result without creating a new session.",
-        "CLI tests assert the completed human output and deterministic JSON fields for the success fixture.",
+        "Syntax errors return a non-zero exit and at least one blocking diagnostic with stable code, severity, message, and source location when available.",
+        "Unsupported globals or forbidden host access return blocking diagnostics without executing workflow source.",
+        "Invalid args schema returns a blocking diagnostic that identifies the args schema problem rather than a generic command failure.",
+        "Policy-denied host access returns a blocking diagnostic that distinguishes policy denial from syntax or schema failure.",
+        "Human output groups or labels blocking diagnostics in a readable way; JSON output preserves the same cases in stable machine-readable fields.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -52,15 +51,15 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-cli-run-status-result-003",
-      "title": "Start A Fixture Asynchronously And Poll Status",
-      "description": "As a CLI user, I want to start a fixture-backed JavaScript Factory Session asynchronously and poll its status later so long-running dynamic workflows have an inspectable terminal loop.",
+      "id": "dynamic-workflows-cell-cli-validate-list-003",
+      "title": "List durable JavaScript Factory Sessions in human output",
+      "description": "As an operator, I want the supported session-listing CLI path to show durable JavaScript Factory Sessions in human-readable output so I can inspect current and historical workflow sessions from the terminal.",
       "acceptanceCriteria": [
-        "An async run command exits successfully after start and renders a durable Factory Session id plus follow-up status/result links or command hints.",
-        "JSON output for async start includes session id, lifecycle status, status/result links, request id when provided, and result availability.",
-        "A status command for the returned session id renders the deterministic running, completed, timed-out, or failed mock scenario state.",
-        "Status JSON includes lifecycle status, progress or phase summary when available, result availability, dispatch/artifact counts when available, and inspection links.",
-        "CLI tests start an async fixture session and then use its returned session id to verify status output from the same mock provider state.",
+        "Human list output includes durable JavaScript Factory Session rows from deterministic provider data.",
+        "Each durable row shows session id, lifecycle status, safe source identity, result availability, phase or progress summary, and action availability when present.",
+        "Live, persisted, and all-session scopes are supported when the current command structure exposes scoped listing options.",
+        "Empty durable result sets produce a clear empty state that distinguishes a reachable provider with no matching sessions from a provider failure.",
+        "Legacy live-session list behavior remains compatible for existing live session rows.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -69,15 +68,14 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-cli-run-status-result-004",
-      "title": "Retrieve Final And Partial Results",
-      "description": "As a CLI user, I want result commands to return final results when available and partial or not-ready responses when not available so automation can handle both terminal and in-progress sessions.",
+      "id": "dynamic-workflows-cell-cli-validate-list-004",
+      "title": "Provide stable JSON list output for durable sessions",
+      "description": "As an automation user, I want durable Factory Session list JSON to use stable shared shapes so scripts and future HTTP parity tests can consume list output without scraping human tables.",
       "acceptanceCriteria": [
-        "A result command for a completed fixture session renders the expected primary result hash or structured primary result in human and JSON modes.",
-        "A result command for a running fixture session returns a not-ready result outcome without treating it as command success with empty data or as an unknown session.",
-        "Partial result retrieval, when supported by existing command boundaries, renders available partial data with availability status and stable JSON fields.",
-        "Result JSON distinguishes available, not_ready, failed, and missing_session outcomes with deterministic fields and exit behavior appropriate for CLI automation.",
-        "CLI tests cover final result, partial or not-ready result, and missing-session result paths against deterministic provider data.",
+        "JSON list output includes durable JavaScript Factory Session summaries with status, source identity, result availability, phase or progress summary, and action availability when present.",
+        "JSON list output preserves live, persisted, and all-session scope behavior and deterministic ordering from the provider or shared normalizer.",
+        "JSON fields use generated API types, shared apisurface, or factorysessionexecution shapes where appropriate instead of a divergent CLI-only schema.",
+        "JSON output omits unrestricted host paths, raw workflow source, and secret-bearing provider internals.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -86,54 +84,36 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-cli-run-status-result-005",
-      "title": "Report Timeout And Cancel-On-Timeout Clearly",
-      "description": "As a CLI user, I want a synchronous run that times out to report timeout and optional cancellation explicitly so I do not mistake a live or canceled session for a completed one.",
+      "id": "dynamic-workflows-cell-cli-validate-list-005",
+      "title": "Handle invalid input and provider failures consistently",
+      "description": "As a CLI user, I want invalid command input and provider or service failures to return clear errors and non-zero exits so automation can distinguish bad requests from unavailable execution infrastructure.",
       "acceptanceCriteria": [
-        "A sync run with a wait budget smaller than the fixture completion window renders a timeout outcome with session id and status/result inspection links.",
-        "Timeout JSON includes lifecycle status, timeout status, result availability, wait duration or timeout flag, and does not include a completed primary result.",
-        "When cancel-on-timeout is requested, human output and JSON output include the cancel-on-timeout request and the deterministic cancellation or cancel-submitted outcome from the provider.",
-        "A timed-out session remains inspectable through status/result commands unless the deterministic provider scenario reports it as canceled.",
-        "CLI tests cover timeout without cancel-on-timeout and timeout with cancel-on-timeout.",
+        "Missing or conflicting validation source inputs fail before provider invocation with a clear command error and non-zero exit.",
+        "Unsupported session-list scope values fail with a clear command error and non-zero exit.",
+        "Provider or service validation failures return a clear CLI error without emitting a successful validation result.",
+        "Provider or service session-list failures return a clear CLI error without emitting partial success rows.",
+        "JSON error output, when requested by the existing command structure, is stable enough for focused CLI tests.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-cli-run-status-result-006",
-      "title": "List Dispatches, Artifacts, And Events When Available",
-      "description": "As a CLI user, I want inspection commands for dispatches, artifacts, and events to expose deterministic provider data so I can understand what a dynamic workflow session produced.",
+      "id": "dynamic-workflows-cell-cli-validate-list-006",
+      "title": "Preserve compatibility wording while steering users to Factory Sessions",
+      "description": "As a user migrating from workflow preview commands, I want compatibility paths to keep working while new validation and listing behavior uses Factory Session execution terminology.",
       "acceptanceCriteria": [
-        "Dispatch listing, artifact listing, and event polling commands are added or extended only where existing CLI command boundaries permit a clear session inspection behavior.",
-        "Dispatch output includes stable dispatch ids, status, provider session references when present, and owning Factory Session id.",
-        "Artifact output includes stable artifact ids, names, metadata or retrieval refs, and owning Factory Session id.",
-        "Event polling output includes ordered Factory Session events and supports a cursor or since option when the existing command shape permits it.",
-        "JSON output for each supported inspection command is deterministic and matches the mock provider fixture data.",
+        "Legacy workflow preview command behavior remains compatibility-only and does not become the primary wording for durable execution list behavior.",
+        "New or changed CLI human output refers to Factory Sessions, session status, source identity, results, and actions rather than introducing a canonical dynamic workflow run noun.",
+        "Existing compatibility command tests continue to pass or are updated only for intentional terminology changes that preserve behavior.",
+        "Focused CLI tests cover human output, JSON output, invalid input, and provider/service failure for the new behavior.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
-    },
-    {
-      "id": "dynamic-workflows-cell-cli-run-status-result-007",
-      "title": "Stabilize CLI Failure And Idempotency Paths",
-      "description": "As a CLI maintainer, I want failure and request-id replay paths to be explicit so users get actionable errors and tests protect the loopback contract.",
-      "acceptanceCriteria": [
-        "Missing session status/result requests return clear deterministic CLI errors in human and JSON modes.",
-        "Unsupported mode and bad source paths return clear deterministic CLI errors and do not create provider sessions.",
-        "Reusing a request id with the same normalized request returns the original start/result behavior.",
-        "Reusing a request id with a different normalized request returns a clear request-id conflict error and does not create a new provider session.",
-        "Focused CLI tests cover not-ready result, missing session, unsupported mode, bad source, request-id replay, and request-id conflict without relying on real JavaScript runtime or HTTP API.",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 7,
-      "passes": false,
+      "passes": true,
       "notes": ""
     }
   ]
