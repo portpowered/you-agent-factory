@@ -234,10 +234,6 @@ export function FactoryGraphVisualGroupLayer({
       });
 
       if (dragSession.kind === "move") {
-        const delta = {
-          x: currentFlowPosition.x - dragSession.startFlowPosition.x,
-          y: currentFlowPosition.y - dragSession.startFlowPosition.y,
-        };
         if (
           !dragSession.moved &&
           Math.hypot(
@@ -248,6 +244,14 @@ export function FactoryGraphVisualGroupLayer({
           dragSession.moved = true;
         }
 
+        if (!dragSession.moved) {
+          return;
+        }
+
+        const delta = {
+          x: currentFlowPosition.x - dragSession.startFlowPosition.x,
+          y: currentFlowPosition.y - dragSession.startFlowPosition.y,
+        };
         const nextBounds = {
           ...dragSession.startBounds,
           x: dragSession.startBounds.x + delta.x,
@@ -311,6 +315,11 @@ export function FactoryGraphVisualGroupLayer({
         });
 
         if (!dragSession.moved) {
+          updateMemberNodePreview(
+            dragSession.memberNodeIds,
+            dragSession.startMemberPositions,
+            { x: 0, y: 0 },
+          );
           onSelectGroup(dragSession.groupId);
           return;
         }
@@ -335,7 +344,13 @@ export function FactoryGraphVisualGroupLayer({
       });
       onResizeGroup?.(dragSession.groupId, nextBounds);
     },
-    [onMoveGroup, onResizeGroup, onSelectGroup, screenToFlowPosition],
+    [
+      onMoveGroup,
+      onResizeGroup,
+      onSelectGroup,
+      screenToFlowPosition,
+      updateMemberNodePreview,
+    ],
   );
 
   if (groups.length === 0) {

@@ -159,6 +159,70 @@ describe("FactoryGraphVisualGroupLayer", () => {
     expect(onSelectGroup).toHaveBeenCalledWith("group-1");
   });
 
+  it("does not move member nodes when click-selecting a group with slight pointer jitter", () => {
+    const restoreBrowserShims = installDashboardBrowserTestShims();
+    const onMoveGroup = vi.fn();
+    const onSelectGroup = vi.fn();
+
+    render(
+      <ReactFlowProvider>
+        <div style={{ height: 480, position: "relative", width: 640 }}>
+          <ReactFlow
+            defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+            edges={[]}
+            nodes={[
+              {
+                data: { factoryGraphNodeId: "workstation:draft" },
+                id: "workstation:draft",
+                position: { x: 40, y: 60 },
+              },
+            ]}
+          >
+            <FactoryGraphVisualGroupLayer
+              canEdit
+              groupAriaLabel={(group) => group.label ?? group.id}
+              groups={[
+                {
+                  ...sampleGroup,
+                  nodeIds: ["workstation:draft"],
+                },
+              ]}
+              onMoveGroup={onMoveGroup}
+              onSelectGroup={onSelectGroup}
+              resizeHandleAriaLabel={(corner) => `Resize ${corner}`}
+              selectedGroupId={null}
+            />
+          </ReactFlow>
+        </div>
+      </ReactFlowProvider>,
+    );
+
+    const groupBody = screen.getByRole("button", { name: "Review" });
+    enablePointerCapture(groupBody);
+    fireEvent.pointerDown(groupBody, {
+      clientX: 100,
+      clientY: 120,
+      pointerId: 1,
+    });
+    fireEvent.pointerMove(groupBody, {
+      clientX: 102,
+      clientY: 122,
+      pointerId: 1,
+    });
+    fireEvent.pointerUp(groupBody, {
+      clientX: 102,
+      clientY: 122,
+      pointerId: 1,
+    });
+
+    expect(onSelectGroup).toHaveBeenCalledWith("group-1");
+    expect(onMoveGroup).not.toHaveBeenCalled();
+    expect(screen.getByTestId("rf__node-workstation:draft")).toHaveStyle({
+      transform: "translate(40px,60px)",
+    });
+    restoreBrowserShims();
+  });
+
   it("hides resize handles and removes keyboard focus when editing is disabled", () => {
     renderVisualGroupLayer({
       canEdit: false,
