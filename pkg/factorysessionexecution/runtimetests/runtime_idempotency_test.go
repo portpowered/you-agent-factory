@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -135,6 +136,51 @@ func TestRuntimeService_StartSync_IdempotentReplayTimeout_BusyLoop(t *testing.T)
 	second, err := service.StartSync(context.Background(), req)
 	if err != nil {
 		t.Fatalf("second StartSync: %v", err)
+	}
+	assertSyncStartReplayEqual(t, first, second)
+}
+
+func TestRuntimeService_StartSync_IdempotentReplayConcurrentInFlight(t *testing.T) {
+	_, service := newRuntimeServiceWithFixture(t, "busy-loop.workflow.js", "busy-loop")
+	timeoutMillis := int64(200)
+	req := factorysessionexecution.StartRequest{
+		RequestID: "req-runtime-idempotent-sync-inflight",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "busy-loop",
+		},
+		Wait: &factorysessionexecution.WaitOptions{
+			TimeoutMillis:   &timeoutMillis,
+			CancelOnTimeout: false,
+		},
+	}
+
+	var first, second factorysessionexecution.SyncStartResult
+	var firstErr, secondErr error
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		first, firstErr = service.StartSync(context.Background(), req)
+	}()
+	time.Sleep(50 * time.Millisecond)
+	go func() {
+		defer wg.Done()
+		second, secondErr = service.StartSync(context.Background(), req)
+	}()
+	wg.Wait()
+
+	if firstErr != nil {
+		t.Fatalf("first StartSync: %v", firstErr)
+	}
+	if secondErr != nil {
+		t.Fatalf("second StartSync: %v", secondErr)
+	}
+	if first.SyncOutcome != factorysessionexecution.SyncOutcomeTimedOut || !first.TimedOut {
+		t.Fatalf("first timeout response = %#v", first)
+	}
+	if second.SyncOutcome == "" || !second.TimedOut {
+		t.Fatalf("in-flight replay returned incomplete sync shape = %#v", second)
 	}
 	assertSyncStartReplayEqual(t, first, second)
 }

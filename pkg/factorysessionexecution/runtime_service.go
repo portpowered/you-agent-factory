@@ -29,10 +29,11 @@ type RuntimeService struct {
 }
 
 type runtimeStartReplayRecord struct {
-	sessionID  string
-	tupleHash  string
-	asyncStart *AsyncStartResult
-	syncStart  *SyncStartResult
+	sessionID     string
+	tupleHash     string
+	asyncStart    *AsyncStartResult
+	syncStart     *SyncStartResult
+	syncStartDone chan struct{}
 }
 
 type runtimeSessionState struct {
@@ -125,12 +126,20 @@ func (s *RuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncS
 	}
 
 	s.mu.Lock()
-	if replayResult, ok, replayErr := s.tryReplaySyncStartLocked(prepared); replayErr != nil {
+	if replayResult, waitDone, replayErr := s.tryReplaySyncStartLocked(prepared); replayErr != nil {
 		s.mu.Unlock()
 		return SyncStartResult{}, replayErr
-	} else if ok {
+	} else if replayResult != nil {
 		s.mu.Unlock()
-		return replayResult, nil
+		return *replayResult, nil
+	} else if waitDone != nil {
+		s.mu.Unlock()
+		select {
+		case <-waitDone:
+		case <-ctx.Done():
+			return SyncStartResult{}, ctx.Err()
+		}
+		return s.replayStoredSyncStart(prepared.Request.RequestID)
 	}
 
 	state := s.newRunningSessionState(prepared)
@@ -138,31 +147,55 @@ func (s *RuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncS
 	runtimeDone := state.runtimeDone
 	s.sessions[sessionID] = state
 	s.startReplay[prepared.Request.RequestID] = runtimeStartReplayRecord{
-		sessionID: sessionID,
-		tupleHash: prepared.TupleHash,
+		sessionID:     sessionID,
+		tupleHash:     prepared.TupleHash,
+		syncStartDone: make(chan struct{}),
 	}
 	s.mu.Unlock()
 
 	stopRuntime := s.launchSyncRuntimeSession(prepared, sessionID)
-	return s.awaitSyncStartOutcome(ctx, prepared, sessionID, runtimeDone, stopRuntime)
+	result, err := s.awaitSyncStartOutcome(ctx, prepared, sessionID, runtimeDone, stopRuntime)
+	if err != nil {
+		s.finalizeSyncStartReplay(prepared.Request.RequestID, nil)
+		return SyncStartResult{}, err
+	}
+	return result, nil
 }
 
-func (s *RuntimeService) tryReplaySyncStartLocked(prepared PreparedStart) (SyncStartResult, bool, error) {
+func (s *RuntimeService) tryReplaySyncStartLocked(prepared PreparedStart) (*SyncStartResult, <-chan struct{}, error) {
 	replay, ok := s.startReplay[prepared.Request.RequestID]
 	if !ok {
-		return SyncStartResult{}, false, nil
+		return nil, nil, nil
 	}
 	if err := CheckRequestIDReplay(prepared.Request.RequestID, replay.tupleHash, prepared.TupleHash); err != nil {
-		return SyncStartResult{}, false, err
+		return nil, nil, err
 	}
 	if replay.syncStart != nil {
-		return cloneSyncStartResult(*replay.syncStart), true, nil
+		result := cloneSyncStartResult(*replay.syncStart)
+		return &result, nil, nil
+	}
+	if replay.syncStartDone != nil {
+		return nil, replay.syncStartDone, nil
 	}
 	state, ok := s.sessions[replay.sessionID]
 	if !ok {
-		return SyncStartResult{}, false, ErrSessionNotFound
+		return nil, nil, ErrSessionNotFound
 	}
-	return s.syncStartFromStateLocked(state), true, nil
+	result := s.syncStartFromStateLocked(state)
+	return &result, nil, nil
+}
+
+func (s *RuntimeService) replayStoredSyncStart(requestID string) (SyncStartResult, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	replay, ok := s.startReplay[requestID]
+	if !ok {
+		return SyncStartResult{}, ErrSessionNotFound
+	}
+	if replay.syncStart == nil {
+		return SyncStartResult{}, fmt.Errorf("factorysessionexecution: sync start outcome unavailable for request %q", requestID)
+	}
+	return cloneSyncStartResult(*replay.syncStart), nil
 }
 
 func (s *RuntimeService) launchSyncRuntimeSession(prepared PreparedStart, sessionID string) context.CancelFunc {
@@ -215,7 +248,7 @@ func (s *RuntimeService) syncStartOutcomeOnRuntimeDone(requestID, sessionID stri
 	}
 	result := s.syncStartFromStateLocked(state)
 	s.mu.RUnlock()
-	s.recordSyncStartReplay(requestID, result)
+	s.finalizeSyncStartReplay(requestID, &result)
 	return result, nil
 }
 
@@ -243,7 +276,7 @@ func (s *RuntimeService) syncStartOutcomeOnWaitDone(
 		}
 		result := s.syncTimedOutFromStateLocked(state, cancelOnTimeout)
 		s.mu.RUnlock()
-		s.recordSyncStartReplay(prepared.Request.RequestID, result)
+		s.finalizeSyncStartReplay(prepared.Request.RequestID, &result)
 		return result, nil
 	}
 	return SyncStartResult{}, waitCtx.Err()
@@ -642,15 +675,29 @@ func (s *RuntimeService) syncStartFromStateLocked(state *runtimeSessionState) Sy
 	return result
 }
 
-func (s *RuntimeService) recordSyncStartReplay(requestID string, result SyncStartResult) {
+func (s *RuntimeService) finalizeSyncStartReplay(requestID string, result *SyncStartResult) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	record, ok := s.startReplay[requestID]
 	if !ok {
 		return
 	}
-	record.syncStart = cloneSyncStartResultPtr(result)
-	s.startReplay[requestID] = record
+	if result != nil {
+		record.syncStart = cloneSyncStartResultPtr(*result)
+		s.startReplay[requestID] = record
+	}
+	signalSyncStartDone(record.syncStartDone)
+}
+
+func signalSyncStartDone(done chan struct{}) {
+	if done == nil {
+		return
+	}
+	select {
+	case <-done:
+	default:
+		close(done)
+	}
 }
 
 func cloneAsyncStartResultPtr(result AsyncStartResult) *AsyncStartResult {
