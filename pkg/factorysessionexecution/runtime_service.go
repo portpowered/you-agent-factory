@@ -20,9 +20,10 @@ func NewDurableSessionID() string {
 }
 
 type runtimeSessionState struct {
-	session SessionReadResult
-	result  ResultReadResult
-	events  []json.RawMessage
+	session   SessionReadResult
+	result    ResultReadResult
+	events    []json.RawMessage
+	runCancel context.CancelFunc
 }
 
 func projectRuntimeSessionState(
@@ -67,6 +68,52 @@ func projectRuntimeSessionState(
 		projectRuntimeFailure(&session, &result, outcome)
 	}
 
+	state := runtimeSessionState{
+		session: session,
+		result:  result,
+	}
+	state.events = deriveProjectionEvents(state.session, state.result)
+	return state
+}
+
+func projectRuntimeRunningSessionState(
+	sessionID string,
+	normalized StartRequest,
+	resolved ResolvedSource,
+	policyResolution workflowpolicy.Resolution,
+	startedAt time.Time,
+) runtimeSessionState {
+	policyProjection := policyProjectionFromResolution(normalized, policyResolution)
+	links := InspectionLinksForSession(sessionID, true)
+
+	session := SessionReadResult{
+		SessionID:        sessionID,
+		Status:           LifecycleStatusRunning,
+		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+		Dialect:          resolvedDialect(resolved),
+		ResolvedSource:   resolved,
+		SourceHash:       resolved.SourceHash,
+		Policy:           policyProjection,
+		Usage:            EmptySessionUsage(),
+		ResultSummary: &ResultSummary{
+			ResultStatus: string(ResultStatusNotReady),
+		},
+		Lifecycle: &LifecycleTimestamps{
+			StartedAt: &startedAt,
+		},
+		Links: links,
+	}
+	result := ResultReadResult{
+		SessionID:     sessionID,
+		Mode:          ResultModeFinal,
+		ResultStatus:  ResultStatusNotReady,
+		SessionStatus: LifecycleStatusRunning,
+		Availability: &ResultAvailabilityDetail{
+			Reason:    "RESULT_NOT_READY",
+			Message:   "Session is still running.",
+			Retryable: true,
+		},
+	}
 	state := runtimeSessionState{
 		session: session,
 		result:  result,
@@ -166,8 +213,61 @@ func NewJavaScriptRuntimeService(config JavaScriptRuntimeServiceConfig) *JavaScr
 	}
 }
 
-func (s *JavaScriptRuntimeService) StartAsync(_ context.Context, _ StartRequest) (AsyncStartResult, error) {
-	return AsyncStartResult{}, fmt.Errorf("asynchronous JavaScript runtime session start is not implemented")
+func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequest) (AsyncStartResult, error) {
+	if err := ctx.Err(); err != nil {
+		return AsyncStartResult{}, err
+	}
+	normalized, err := NormalizeStartRequest(req)
+	if err != nil {
+		return AsyncStartResult{}, err
+	}
+	tupleHash, err := IdempotencyTupleHash(normalized)
+	if err != nil {
+		return AsyncStartResult{}, err
+	}
+
+	s.mu.Lock()
+	if replay, ok := s.startReplay[normalized.RequestID]; ok {
+		if err := CheckRequestIDReplay(normalized.RequestID, replay.tupleHash, tupleHash); err != nil {
+			s.mu.Unlock()
+			return AsyncStartResult{}, err
+		}
+		state, ok := s.sessions[replay.sessionID]
+		s.mu.Unlock()
+		if !ok {
+			return AsyncStartResult{}, ErrSessionNotFound
+		}
+		return s.asyncStartFromState(state), nil
+	}
+	s.mu.Unlock()
+
+	resolved, err := ResolveStartSource(normalized, StartSourceContext{ProjectRoot: s.projectRoot})
+	if err != nil {
+		return AsyncStartResult{}, err
+	}
+	sourceContent, err := LoadStartSourceContent(normalized, resolved, StartSourceContext{ProjectRoot: s.projectRoot})
+	if err != nil {
+		return AsyncStartResult{}, err
+	}
+
+	policyResolution := workflowpolicy.Resolve(workflowpolicy.Request{Requested: normalized.RequestedPolicy})
+	sessionID := NewDurableSessionID()
+	startedAt := time.Now().UTC()
+	state := projectRuntimeRunningSessionState(sessionID, normalized, resolved, policyResolution, startedAt)
+	runCtx, runCancel := workflowRunContext(context.Background(), policyResolution.Policy)
+
+	s.mu.Lock()
+	state.runCancel = runCancel
+	s.sessions[sessionID] = &state
+	s.startReplay[normalized.RequestID] = startReplayRecord{
+		sessionID: sessionID,
+		tupleHash: tupleHash,
+	}
+	s.mu.Unlock()
+
+	go s.runAsyncSession(runCtx, sessionID, normalized, resolved, sourceContent, policyResolution, startedAt)
+
+	return s.asyncStartFromState(&state), nil
 }
 
 func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncStartResult, error) {
@@ -237,8 +337,8 @@ func (s *JavaScriptRuntimeService) Resume(ctx context.Context, _ string, _ Contr
 	return s.unsupportedLifecycleControl(ctx)
 }
 
-func (s *JavaScriptRuntimeService) Cancel(ctx context.Context, _ string, _ ControlRequest) (LifecycleControlResult, error) {
-	return s.unsupportedLifecycleControl(ctx)
+func (s *JavaScriptRuntimeService) Cancel(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
+	return s.applyRuntimeLifecycleControl(ctx, sessionID, LifecycleControlCancel, req, ApproveRequest{}, RetryDispatchRequest{})
 }
 
 func (s *JavaScriptRuntimeService) Terminate(ctx context.Context, _ string, _ ControlRequest) (LifecycleControlResult, error) {
@@ -396,15 +496,90 @@ func (s *JavaScriptRuntimeService) executeSyncSession(ctx context.Context, norma
 		defer cancel()
 	}
 
-	argsJSON, err := marshalStartArgs(normalized.Args)
-	if err != nil {
-		return nil, err
-	}
 	policyResolution := workflowpolicy.Resolve(workflowpolicy.Request{Requested: normalized.RequestedPolicy})
 	sessionID := NewDurableSessionID()
 	startedAt := time.Now().UTC()
 
-	outcome, err := workflowruntime.Run(runCtx, workflowruntime.Request{
+	outcome, err := s.invokeWorkflowRuntime(runCtx, normalized, resolved, sourceContent, policyResolution, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	state := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, outcome, startedAt)
+	return &state, nil
+}
+
+func (s *JavaScriptRuntimeService) runAsyncSession(
+	runCtx context.Context,
+	sessionID string,
+	normalized StartRequest,
+	resolved ResolvedSource,
+	sourceContent string,
+	policyResolution workflowpolicy.Resolution,
+	startedAt time.Time,
+) {
+	defer func() {
+		s.mu.Lock()
+		if state, ok := s.sessions[sessionID]; ok {
+			state.runCancel = nil
+		}
+		s.mu.Unlock()
+	}()
+
+	outcome, err := s.invokeWorkflowRuntime(runCtx, normalized, resolved, sourceContent, policyResolution, sessionID)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, ok := s.sessions[sessionID]
+	if !ok {
+		return
+	}
+	if err != nil {
+		failureOutcome := workflowruntime.Outcome{
+			OK: false,
+			Failure: workflowruntime.Failure{
+				Code:    workflowruntime.CodeScriptError,
+				Message: err.Error(),
+			},
+		}
+		terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, failureOutcome, startedAt)
+		s.applyTerminalRuntimeState(state, terminal, startedAt)
+		return
+	}
+
+	terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, outcome, startedAt)
+	s.applyTerminalRuntimeState(state, terminal, startedAt)
+}
+
+func (s *JavaScriptRuntimeService) applyTerminalRuntimeState(state *runtimeSessionState, terminal runtimeSessionState, startedAt time.Time) {
+	finishedAt := time.Now().UTC()
+	state.session = terminal.session
+	state.result = terminal.result
+	state.events = terminal.events
+	if state.session.Lifecycle == nil {
+		state.session.Lifecycle = &LifecycleTimestamps{}
+	}
+	if state.session.Lifecycle.StartedAt == nil {
+		state.session.Lifecycle.StartedAt = &startedAt
+	}
+	state.session.Lifecycle.FinishedAt = &finishedAt
+	state.result.SessionStatus = state.session.Status
+}
+
+func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
+	ctx context.Context,
+	normalized StartRequest,
+	resolved ResolvedSource,
+	sourceContent string,
+	policyResolution workflowpolicy.Resolution,
+	sessionID string,
+) (workflowruntime.Outcome, error) {
+	argsJSON, err := marshalStartArgs(normalized.Args)
+	if err != nil {
+		return workflowruntime.Outcome{}, err
+	}
+	return workflowruntime.Run(ctx, workflowruntime.Request{
 		Source:    sourceContent,
 		SourceRef: resolved.SourceRef,
 		SessionID: sessionID,
@@ -412,12 +587,92 @@ func (s *JavaScriptRuntimeService) executeSyncSession(ctx context.Context, norma
 		Metadata:  workflowMetadataFromResolved(resolved, normalized),
 		Policy:    policyResolution.Policy,
 	}, workflowruntime.Hooks{})
+}
+
+func (s *JavaScriptRuntimeService) applyRuntimeLifecycleControl(
+	ctx context.Context,
+	sessionID string,
+	operation LifecycleControlKind,
+	control ControlRequest,
+	approve ApproveRequest,
+	retry RetryDispatchRequest,
+) (LifecycleControlResult, error) {
+	if err := ctx.Err(); err != nil {
+		return LifecycleControlResult{}, err
+	}
+	id, err := NormalizeSessionID(sessionID)
 	if err != nil {
-		return nil, err
+		return LifecycleControlResult{}, err
+	}
+	if _, err := NormalizeControlRequest(control); err != nil {
+		return LifecycleControlResult{}, err
 	}
 
-	state := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, outcome, startedAt)
-	return &state, nil
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, ok := s.sessions[id]
+	if !ok {
+		return LifecycleControlResult{}, ErrSessionNotFound
+	}
+
+	currentStatus := state.session.Status
+	outcome := EvaluateLifecycleControl(operation, currentStatus)
+	if outcome == LifecycleControlOutcomeInvalidState || outcome == LifecycleControlOutcomeTerminalSession {
+		return LifecycleControlResult{}, &ControlError{
+			Operation: operation,
+			Outcome:   outcome,
+			Status:    currentStatus,
+			Message:   fmt.Sprintf("%s rejected for session %s in status %s", operation, id, currentStatus),
+		}
+	}
+
+	if outcome == LifecycleControlOutcomeAccepted && operation == LifecycleControlCancel {
+		state.session.Status = LifecycleStatusCanceling
+		state.result.SessionStatus = LifecycleStatusCanceling
+		if state.runCancel != nil {
+			state.runCancel()
+		}
+		state.events = deriveProjectionEvents(state.session, state.result)
+	}
+
+	return runtimeLifecycleControlResultFromState(state, id, operation, outcome, retry), nil
+}
+
+func runtimeLifecycleControlResultFromState(
+	state *runtimeSessionState,
+	id string,
+	operation LifecycleControlKind,
+	outcome LifecycleControlOutcome,
+	retry RetryDispatchRequest,
+) LifecycleControlResult {
+	result := LifecycleControlResult{
+		SessionID: id,
+		Operation: operation,
+		Outcome:   outcome,
+		Status:    state.session.Status,
+		Links:     LifecycleControlLinksForSession(id, true),
+	}
+	if operation == LifecycleControlRetryDispatch {
+		result.DispatchID = retry.DispatchID
+	}
+	if outcome == LifecycleControlOutcomeAccepted || outcome == LifecycleControlOutcomeNoOp {
+		session := cloneSessionRead(state.session)
+		result.Session = &session
+	}
+	return result
+}
+
+func workflowRunContext(parent context.Context, policy workflowpolicy.EffectivePolicy) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(parent)
+	if policy.MaxRunDurationMs == nil || *policy.MaxRunDurationMs <= 0 {
+		return ctx, cancel
+	}
+	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Duration(*policy.MaxRunDurationMs)*time.Millisecond)
+	return timeoutCtx, func() {
+		timeoutCancel()
+		cancel()
+	}
 }
 
 func (s *JavaScriptRuntimeService) sessionState(sessionID string) (*runtimeSessionState, error) {
