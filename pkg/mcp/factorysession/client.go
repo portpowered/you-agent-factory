@@ -35,6 +35,10 @@ func marshalToolCall[T any](input json.RawMessage, decodeMsg string, invoke func
 // CallTool invokes one discovered Factory Session MCP tool by stable name.
 func (c *Client) CallTool(name string, input json.RawMessage) (json.RawMessage, error) {
 	switch name {
+	case ToolListSessions:
+		return marshalToolCall(input, "decode list sessions input", func(request ListSessionsInput) any {
+			return ListSessions(c.service, request)
+		})
 	case ToolValidateSource:
 		return marshalToolCall(input, "decode validate source input", func(request factoryapi.FactoryPreviewRequest) any {
 			return ValidateSource(request)
@@ -66,6 +70,23 @@ func (c *Client) CallTool(name string, input json.RawMessage) (json.RawMessage, 
 	default:
 		return nil, fmt.Errorf("unsupported tool %q", name)
 	}
+}
+
+// ListSessions calls you.factory_session.list through the mock client.
+func (c *Client) ListSessions(input ListSessionsInput) (ToolResponse[factoryapi.ListFactorySessionsResponse], error) {
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		return ToolResponse[factoryapi.ListFactorySessionsResponse]{}, err
+	}
+	raw, err := c.CallTool(ToolListSessions, encoded)
+	if err != nil {
+		return ToolResponse[factoryapi.ListFactorySessionsResponse]{}, err
+	}
+	var response ToolResponse[factoryapi.ListFactorySessionsResponse]
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return ToolResponse[factoryapi.ListFactorySessionsResponse]{}, err
+	}
+	return response, nil
 }
 
 // ValidateSource calls you.factory_session.validate_source through the mock client.

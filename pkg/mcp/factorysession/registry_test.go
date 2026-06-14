@@ -2,10 +2,13 @@ package factorysession_test
 
 import (
 	"encoding/json"
+	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 )
 
@@ -150,8 +153,110 @@ func TestDiscoverTools_RepresentativeSchemaFields(t *testing.T) {
 		t.Fatal("list dispatches output missing dispatches array schema")
 	}
 	itemProps := dispatches["items"].(map[string]any)["properties"].(map[string]any)
-	if _, ok := itemProps["dispatchId"]; !ok {
-		t.Fatal("dispatch summary schema missing dispatchId")
+	if _, ok := itemProps["id"]; !ok {
+		t.Fatal("dispatch summary schema missing id")
+	}
+	if _, ok := itemProps["dispatchId"]; ok {
+		t.Fatal("dispatch summary schema should use id, not dispatchId")
+	}
+}
+
+func TestDiscoverTools_SchemasAlignWithGeneratedAPITypes(t *testing.T) {
+	byName := map[string]mcpfactorysession.ToolDefinition{}
+	for _, tool := range mcpfactorysession.DiscoverTools() {
+		byName[tool.Name] = tool
+	}
+
+	syncResultProps := byName[mcpfactorysession.ToolStartSync].OutputSchema["properties"].(map[string]any)["result"].(map[string]any)["properties"].(map[string]any)
+	syncOutcome := syncResultProps["syncOutcome"].(map[string]any)
+	assertEnumMatchesGeneratedType(
+		t,
+		"syncOutcome",
+		syncOutcome["enum"],
+		reflect.TypeOf(factoryapi.FactorySessionSyncExecutionOutcome("")),
+	)
+
+	dispatchItemProps := dispatchSummaryItemProperties(t, byName[mcpfactorysession.ToolListDispatches])
+	assertSchemaUsesPublicJSONFields(t, dispatchItemProps, "dispatch summary", "id", "status", "dispatchKind")
+	assertSchemaOmitsDeprecatedJSONFields(t, dispatchItemProps, "dispatch summary", "dispatchId", "artifactId")
+
+	artifactItemProps := artifactSummaryItemProperties(t, byName[mcpfactorysession.ToolListArtifacts])
+	assertSchemaUsesPublicJSONFields(t, artifactItemProps, "artifact summary", "id", "kind", "visibility", "dispatchId")
+	assertSchemaOmitsDeprecatedJSONFields(t, artifactItemProps, "artifact summary", "artifactId")
+}
+
+func dispatchSummaryItemProperties(t *testing.T, tool mcpfactorysession.ToolDefinition) map[string]any {
+	t.Helper()
+	dispatchResultProps := tool.OutputSchema["properties"].(map[string]any)["result"].(map[string]any)["properties"].(map[string]any)
+	dispatches, ok := dispatchResultProps["dispatches"].(map[string]any)
+	if !ok {
+		t.Fatal("list dispatches output missing dispatches array schema")
+	}
+	return dispatches["items"].(map[string]any)["properties"].(map[string]any)
+}
+
+func artifactSummaryItemProperties(t *testing.T, tool mcpfactorysession.ToolDefinition) map[string]any {
+	t.Helper()
+	artifactResultProps := tool.OutputSchema["properties"].(map[string]any)["result"].(map[string]any)["properties"].(map[string]any)
+	artifacts, ok := artifactResultProps["artifacts"].(map[string]any)
+	if !ok {
+		t.Fatal("list artifacts output missing artifacts array schema")
+	}
+	return artifacts["items"].(map[string]any)["properties"].(map[string]any)
+}
+
+func assertEnumMatchesGeneratedType(t *testing.T, field string, actual any, enumType reflect.Type) {
+	t.Helper()
+	gotStrings, err := enumValuesAsStrings(actual)
+	if err != nil {
+		t.Fatalf("%s enum: %v", field, err)
+	}
+	var want []string
+	switch enumType.Name() {
+	case "FactorySessionSyncExecutionOutcome":
+		want = []string{
+			string(factoryapi.FactorySessionSyncExecutionOutcomeCompleted),
+			string(factoryapi.FactorySessionSyncExecutionOutcomeStillRunning),
+			string(factoryapi.FactorySessionSyncExecutionOutcomeTimedOut),
+		}
+	default:
+		t.Fatalf("unsupported generated enum type %q", enumType.Name())
+	}
+	if !slices.Equal(gotStrings, want) {
+		t.Fatalf("%s enum = %#v, want %#v", field, gotStrings, want)
+	}
+}
+
+func enumValuesAsStrings(actual any) ([]string, error) {
+	switch values := actual.(type) {
+	case []string:
+		return values, nil
+	case []any:
+		got := make([]string, 0, len(values))
+		for _, value := range values {
+			got = append(got, value.(string))
+		}
+		return got, nil
+	default:
+		return nil, fmt.Errorf("enum = %T, want []string or []any", actual)
+	}
+}
+
+func assertSchemaUsesPublicJSONFields(t *testing.T, properties map[string]any, label string, fields ...string) {
+	t.Helper()
+	for _, field := range fields {
+		if _, ok := properties[field]; !ok {
+			t.Fatalf("%s schema missing public field %q", label, field)
+		}
+	}
+}
+
+func assertSchemaOmitsDeprecatedJSONFields(t *testing.T, properties map[string]any, label string, fields ...string) {
+	t.Helper()
+	for _, field := range fields {
+		if _, ok := properties[field]; ok {
+			t.Fatalf("%s schema should not expose deprecated field %q", label, field)
+		}
 	}
 }
 

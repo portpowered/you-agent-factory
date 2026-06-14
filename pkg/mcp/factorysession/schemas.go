@@ -164,7 +164,7 @@ func factorySessionSyncExecutionResponseSchema() map[string]any {
 	props := factorySessionExecutionResponseSchema()["properties"].(map[string]any)
 	props["syncOutcome"] = enumStringProperty(
 		"Sync wait outcome for POST /factory-sessions/sync.",
-		"COMPLETED", "TIMED_OUT", "FAILED",
+		"COMPLETED", "STILL_RUNNING", "TIMED_OUT",
 	)
 	props["timedOut"] = booleanProperty("Whether sync wait timed out before terminal completion.")
 	props["result"] = factorySessionResultSchema()
@@ -259,13 +259,12 @@ func listFactorySessionDispatchesResponseSchema() map[string]any {
 		"dispatches": map[string]any{
 			"type": "array",
 			"items": objectSchema(map[string]any{
-				"dispatchId": stringProperty("Stable dispatch identifier."),
-				"sessionId":  stringProperty("Owning Factory Session identifier."),
-				"status":     stringProperty("Dispatch lifecycle status."),
-				"kind":       stringProperty("Orchestrator dispatch kind."),
-				"phase":      stringProperty("JavaScript phase when available."),
-				"label":      stringProperty("Customer-visible dispatch label when available."),
-			}, "dispatchId", "sessionId", "status"),
+				"id":           stringProperty("Stable dispatch identifier."),
+				"status":       stringProperty("Dispatch lifecycle status."),
+				"dispatchKind": stringProperty("Canonical dispatch kind shared across orchestrators."),
+				"phase":        stringProperty("JavaScript phase when available."),
+				"label":        stringProperty("Customer-visible dispatch label when available."),
+			}, "id", "status", "dispatchKind"),
 		},
 	}, "sessionId", "dispatches")
 }
@@ -276,14 +275,13 @@ func listFactorySessionArtifactsResponseSchema() map[string]any {
 		"artifacts": map[string]any{
 			"type": "array",
 			"items": objectSchema(map[string]any{
-				"artifactId": stringProperty("Stable FactoryArtifact identifier."),
-				"sessionId":  stringProperty("Owning Factory Session identifier."),
-				"kind":       stringProperty("FactoryArtifact kind."),
-				"visibility": stringProperty("Artifact visibility classification."),
-				"sizeBytes":  map[string]any{"type": "integer", "description": "Artifact size in bytes when known."},
+				"id":          stringProperty("Stable FactoryArtifact identifier."),
+				"kind":        stringProperty("FactoryArtifact kind."),
+				"visibility":  stringProperty("Artifact visibility classification."),
+				"sizeBytes":   map[string]any{"type": "integer", "description": "Artifact size in bytes when known."},
 				"contentHash": stringProperty("Stable content hash when available."),
-				"dispatchId": stringProperty("Linked dispatch identifier when available."),
-			}, "artifactId", "sessionId", "kind"),
+				"dispatchId":  stringProperty("Linked dispatch identifier when available."),
+			}, "id", "kind"),
 		},
 	}, "sessionId", "artifacts")
 }

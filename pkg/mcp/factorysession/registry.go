@@ -169,9 +169,9 @@ func listDispatchesTool() ToolDefinition {
 		SuccessStableFields: []string{
 			"result.sessionId",
 			"result.dispatches",
-			"result.dispatches[].dispatchId",
+			"result.dispatches[].id",
 			"result.dispatches[].status",
-			"result.dispatches[].kind",
+			"result.dispatches[].dispatchKind",
 			"result.dispatches[].phase",
 		},
 		ErrorStableFields: sharedErrorStableFields,
@@ -190,7 +190,7 @@ func listArtifactsTool() ToolDefinition {
 		SuccessStableFields: []string{
 			"result.sessionId",
 			"result.artifacts",
-			"result.artifacts[].artifactId",
+			"result.artifacts[].id",
 			"result.artifacts[].kind",
 			"result.artifacts[].visibility",
 			"result.artifacts[].dispatchId",

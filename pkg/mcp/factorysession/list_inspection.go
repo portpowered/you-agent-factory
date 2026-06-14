@@ -8,6 +8,37 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 )
 
+// ListSessionsInput is the MCP request shape for you.factory_session.list.
+type ListSessionsInput struct {
+	Scope *factoryapi.FactorySessionListScope `json:"scope,omitempty"`
+}
+
+// ListSessions returns scoped Factory Session summaries through the
+// you.factory_session.list MCP tool.
+func ListSessions(service factorysessionexecution.Service, input ListSessionsInput) ToolResponse[factoryapi.ListFactorySessionsResponse] {
+	if service == nil {
+		envelope := unavailableServiceErrorEnvelope()
+		return ToolResponse[factoryapi.ListFactorySessionsResponse]{Error: &envelope}
+	}
+
+	listReq, err := apifactorysession.ListSessionsRequestFromAPI(factoryapi.ListFactorySessionsParams{
+		Scope: input.Scope,
+	})
+	if err != nil {
+		envelope := executionErrorEnvelope(err)
+		return ToolResponse[factoryapi.ListFactorySessionsResponse]{Error: &envelope}
+	}
+
+	result, err := service.ListSessions(context.Background(), listReq)
+	if err != nil {
+		envelope := executionErrorEnvelope(err)
+		return ToolResponse[factoryapi.ListFactorySessionsResponse]{Error: &envelope}
+	}
+
+	mapped := apifactorysession.ListSessionsResponseToAPI(result)
+	return ToolResponse[factoryapi.ListFactorySessionsResponse]{Result: &mapped}
+}
+
 // ListDispatchesInput is the MCP request shape for you.factory_session.list_dispatches.
 type ListDispatchesInput struct {
 	SessionID string `json:"sessionId"`
