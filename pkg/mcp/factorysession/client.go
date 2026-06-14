@@ -40,6 +40,10 @@ func callToolJSON[Input any, Response any](
 // Workflow-named compatibility aliases resolve to the same canonical handlers.
 func (c *Client) CallTool(name string, input json.RawMessage) (json.RawMessage, error) {
 	switch ResolveToolName(name) {
+	case ToolListSessions:
+		return callToolJSON(input, "decode list sessions input", func(request ListSessionsInput) ToolResponse[factoryapi.ListFactorySessionsResponse] {
+			return ListSessions(c.service, request)
+		})
 	case ToolValidateSource:
 		return callToolJSON(input, "decode validate source input", ValidateSource)
 	case ToolStartSync:
@@ -77,6 +81,23 @@ func (c *Client) CallTool(name string, input json.RawMessage) (json.RawMessage, 
 	default:
 		return nil, fmt.Errorf("unsupported tool %q", name)
 	}
+}
+
+// ListSessions calls you.factory_session.list through the mock client.
+func (c *Client) ListSessions(input ListSessionsInput) (ToolResponse[factoryapi.ListFactorySessionsResponse], error) {
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		return ToolResponse[factoryapi.ListFactorySessionsResponse]{}, err
+	}
+	raw, err := c.CallTool(ToolListSessions, encoded)
+	if err != nil {
+		return ToolResponse[factoryapi.ListFactorySessionsResponse]{}, err
+	}
+	var response ToolResponse[factoryapi.ListFactorySessionsResponse]
+	if err := json.Unmarshal(raw, &response); err != nil {
+		return ToolResponse[factoryapi.ListFactorySessionsResponse]{}, err
+	}
+	return response, nil
 }
 
 // StartSync calls you.factory_session.start_sync through the mock client.

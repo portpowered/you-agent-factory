@@ -553,3 +553,143 @@ func fixtureFakeService(t *testing.T) *factorysessionexecution.FakeService {
 func strPtr(value string) *string {
 	return &value
 }
+
+func TestMockClient_ListSessions_DefaultsToLiveScope(t *testing.T) {
+	client := newFixtureMCPClient(t)
+
+	response, err := client.ListSessions(mcpfactorysession.ListSessionsInput{})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if response.Error != nil || response.Result == nil {
+		t.Fatalf("list = %#v, want success", response)
+	}
+	if response.Result.Scope == nil || *response.Result.Scope != factoryapi.FactorySessionListScopeLive {
+		t.Fatalf("scope = %#v, want live", response.Result.Scope)
+	}
+}
+
+func TestMockClient_ListSessions_ScopedPersistedAndAll(t *testing.T) {
+	client := newFixtureMCPClient(t)
+	seedRunningAndSuccessSessions(t, client)
+
+	persistedScope := factoryapi.FactorySessionListScopePersisted
+	persisted, err := client.ListSessions(mcpfactorysession.ListSessionsInput{Scope: &persistedScope})
+	if err != nil {
+		t.Fatalf("ListSessions persisted: %v", err)
+	}
+	persistedResult := requireListSessionsSuccess(t, persisted)
+	assertListScope(t, persistedResult, factoryapi.FactorySessionListScopePersisted)
+	if len(persistedResult.Sessions) != 0 {
+		t.Fatalf("sessions = %#v, want none for persisted scope", persistedResult.Sessions)
+	}
+	assertContainsDurableSession(t, persistedResult, "dur-sess-petri-success-001")
+	assertOmitsDurableSession(t, persistedResult, "dur-sess-petri-run-001")
+
+	allScope := factoryapi.FactorySessionListScopeAll
+	all, err := client.ListSessions(mcpfactorysession.ListSessionsInput{Scope: &allScope})
+	if err != nil {
+		t.Fatalf("ListSessions all: %v", err)
+	}
+	allResult := requireListSessionsSuccess(t, all)
+	assertListScope(t, allResult, factoryapi.FactorySessionListScopeAll)
+	if len(allResult.Sessions) != 1 || allResult.Sessions[0].Id != "dur-sess-petri-run-001" {
+		t.Fatalf("sessions = %#v, want deduped live running row", allResult.Sessions)
+	}
+	assertContainsDurableSession(t, allResult, "dur-sess-petri-success-001")
+}
+
+func seedRunningAndSuccessSessions(t *testing.T, client *mcpfactorysession.Client) {
+	t.Helper()
+	if _, err := client.StartAsync(factoryapi.FactorySessionExecutionRequest{
+		RequestId: "req-petri-run-001",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:      factoryapi.FactorySessionExecutionSourceKindFactoryId,
+			FactoryId: strPtr("customer-support-triage"),
+		},
+		Args: &map[string]any{"ticketId": "TKT-1001"},
+	}); err != nil {
+		t.Fatalf("StartAsync running: %v", err)
+	}
+	if _, err := client.StartSync(syncSuccessExecutionRequest()); err != nil {
+		t.Fatalf("StartSync success: %v", err)
+	}
+}
+
+func requireListSessionsSuccess(
+	t *testing.T,
+	response mcpfactorysession.ToolResponse[factoryapi.ListFactorySessionsResponse],
+) *factoryapi.ListFactorySessionsResponse {
+	t.Helper()
+	if response.Error != nil || response.Result == nil {
+		t.Fatalf("list = %#v, want success", response)
+	}
+	return response.Result
+}
+
+func assertListScope(t *testing.T, result *factoryapi.ListFactorySessionsResponse, scope factoryapi.FactorySessionListScope) {
+	t.Helper()
+	if result.Scope == nil || *result.Scope != scope {
+		t.Fatalf("scope = %#v, want %q", result.Scope, scope)
+	}
+}
+
+func assertContainsDurableSession(t *testing.T, result *factoryapi.ListFactorySessionsResponse, sessionID string) {
+	t.Helper()
+	if result.DurableSessions == nil {
+		t.Fatalf("durableSessions = nil, want row %q", sessionID)
+	}
+	for _, row := range *result.DurableSessions {
+		if row.SessionId == sessionID {
+			return
+		}
+	}
+	t.Fatalf("durableSessions = %#v, want row %q", result.DurableSessions, sessionID)
+}
+
+func assertOmitsDurableSession(t *testing.T, result *factoryapi.ListFactorySessionsResponse, sessionID string) {
+	t.Helper()
+	if result.DurableSessions == nil {
+		return
+	}
+	for _, row := range *result.DurableSessions {
+		if row.SessionId == sessionID {
+			t.Fatalf("durableSessions unexpectedly contain %q", sessionID)
+		}
+	}
+}
+
+func TestMockClient_ListSessions_UnsupportedScopeReturnsStableEnvelope(t *testing.T) {
+	client := newFixtureMCPClient(t)
+	scope := factoryapi.FactorySessionListScope("workspace")
+	response, err := client.ListSessions(mcpfactorysession.ListSessionsInput{Scope: &scope})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if response.Result != nil {
+		t.Fatalf("result = %#v, want validation envelope", response.Result)
+	}
+	if response.Error == nil {
+		t.Fatal("error = nil, want stable validation envelope")
+	}
+	if response.Error.Code != "BAD_REQUEST" {
+		t.Fatalf("error code = %q, want BAD_REQUEST", response.Error.Code)
+	}
+}
+
+func TestMockClient_ListSessions_UnavailableServiceReturnsStableEnvelope(t *testing.T) {
+	client := mcpfactorysession.NewClient()
+	response, err := client.ListSessions(mcpfactorysession.ListSessionsInput{})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if response.Result != nil {
+		t.Fatalf("result = %#v, want unavailable service envelope", response.Result)
+	}
+	if response.Error == nil {
+		t.Fatal("error = nil, want unavailable service envelope")
+	}
+	if response.Error.Code != "factory_session.service.unavailable" {
+		t.Fatalf("error code = %q, want factory_session.service.unavailable", response.Error.Code)
+	}
+}
