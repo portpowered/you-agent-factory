@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: coordinates layout draft session state with typed undo history and visual groups.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { CurrentFactoryDocument } from "../../lib/draft/factory-graph-draft-types";
@@ -8,13 +9,31 @@ import {
   removeFactoryLayoutEdgeWaypoint,
 } from "../../lib/layout/factory-graph-layout-edge-waypoints";
 import {
+  createCreateFactoryLayoutGroupCommand,
+  createDeleteFactoryLayoutGroupCommand,
   createMoveFactoryLayoutNodeCommand,
   createMoveFactoryLayoutNodesCommand,
+  createMoveFactoryLayoutVisualGroupCommand,
   createResetFactoryLayoutCommand,
   createUpdateFactoryLayoutEdgeWaypointsCommand,
+  createUpdateFactoryLayoutGroupCommand,
   createUpdateFactoryLayoutViewportCommand,
   type FactoryLayoutCommand,
 } from "../../lib/layout/history/factory-graph-layout-commands";
+import {
+  addFactoryLayoutGroup,
+  addNodeToFactoryLayoutGroup,
+  createFactoryLayoutGroup,
+  createFactoryLayoutGroupId,
+  defaultFactoryLayoutGroupBounds,
+  type FactoryLayoutGroup,
+  type FactoryLayoutGroupColorToken,
+  moveFactoryLayoutGroupByDelta,
+  removeFactoryLayoutGroup,
+  removeNodeFromFactoryLayoutGroup,
+  resizeFactoryLayoutGroup,
+  updateFactoryLayoutGroup,
+} from "../../lib/layout/visual-groups/factory-graph-layout-groups";
 import {
   canRedoFactoryLayoutHistory,
   canUndoFactoryLayoutHistory,
@@ -68,6 +87,24 @@ export interface FactoryGraphLayoutDraftDerivedState {
   resetLayout: (options?: { recordHistory?: boolean }) => void;
   undoLayout: () => void;
   updateViewport: (viewport: FactoryLayoutViewport) => void;
+  createVisualGroup: (center: FactoryLayoutPoint) => FactoryLayoutGroup | null;
+  renameVisualGroup: (groupId: string, label: string) => void;
+  setVisualGroupColor: (
+    groupId: string,
+    color: FactoryLayoutGroupColorToken,
+  ) => void;
+  addNodeToVisualGroup: (groupId: string, nodeId: string) => void;
+  removeNodeFromVisualGroup: (groupId: string, nodeId: string) => void;
+  moveVisualGroupByDelta: (
+    groupId: string,
+    delta: FactoryLayoutPoint,
+    resolvedNodePositions?: ReadonlyMap<string, FactoryLayoutPoint>,
+  ) => void;
+  resizeVisualGroup: (
+    groupId: string,
+    bounds: FactoryLayoutGroup["bounds"],
+  ) => void;
+  deleteVisualGroup: (groupId: string) => void;
 }
 
 interface FactoryGraphLayoutSessionState {
@@ -404,6 +441,201 @@ export function useFactoryGraphLayoutDraftState(
       ),
     }));
   }, []);
+  const createVisualGroup = useCallback(
+    (center: FactoryLayoutPoint): FactoryLayoutGroup | null => {
+      let createdGroup: FactoryLayoutGroup | null = null;
+      commitLayoutUpdate(({ currentLayout }) => {
+        const groupId = createFactoryLayoutGroupId(currentLayout);
+        const group = createFactoryLayoutGroup({
+          bounds: defaultFactoryLayoutGroupBounds(center),
+          id: groupId,
+          layout: currentLayout,
+        });
+        createdGroup = group;
+        const nextLayout = addFactoryLayoutGroup(currentLayout, group);
+        return {
+          command: createCreateFactoryLayoutGroupCommand({ group }),
+          layout: nextLayout,
+        };
+      });
+      return createdGroup;
+    },
+    [commitLayoutUpdate],
+  );
+  const renameVisualGroup = useCallback(
+    (groupId: string, label: string) => {
+      commitLayoutUpdate(({ currentLayout }) => {
+        const nextLayout = updateFactoryLayoutGroup(
+          currentLayout,
+          groupId,
+          (group) => ({
+            ...group,
+            label,
+          }),
+        );
+        const updatedGroup = nextLayout.groups?.find(
+          (group) => group.id === groupId,
+        );
+        return {
+          command:
+            updatedGroup === undefined
+              ? null
+              : createUpdateFactoryLayoutGroupCommand({
+                  groupId,
+                  layout: currentLayout,
+                  to: updatedGroup,
+                }),
+          layout: nextLayout,
+        };
+      });
+    },
+    [commitLayoutUpdate],
+  );
+  const setVisualGroupColor = useCallback(
+    (groupId: string, color: FactoryLayoutGroupColorToken) => {
+      commitLayoutUpdate(({ currentLayout }) => {
+        const nextLayout = updateFactoryLayoutGroup(
+          currentLayout,
+          groupId,
+          (group) => ({
+            ...group,
+            color,
+          }),
+        );
+        const updatedGroup = nextLayout.groups?.find(
+          (group) => group.id === groupId,
+        );
+        return {
+          command:
+            updatedGroup === undefined
+              ? null
+              : createUpdateFactoryLayoutGroupCommand({
+                  groupId,
+                  layout: currentLayout,
+                  to: updatedGroup,
+                }),
+          layout: nextLayout,
+        };
+      });
+    },
+    [commitLayoutUpdate],
+  );
+  const addNodeToVisualGroup = useCallback(
+    (groupId: string, nodeId: string) => {
+      commitLayoutUpdate(({ currentLayout }) => {
+        const nextLayout = addNodeToFactoryLayoutGroup(
+          currentLayout,
+          groupId,
+          nodeId,
+        );
+        const updatedGroup = nextLayout.groups?.find(
+          (group) => group.id === groupId,
+        );
+        return {
+          command:
+            updatedGroup === undefined
+              ? null
+              : createUpdateFactoryLayoutGroupCommand({
+                  groupId,
+                  layout: currentLayout,
+                  to: updatedGroup,
+                }),
+          layout: nextLayout,
+        };
+      });
+    },
+    [commitLayoutUpdate],
+  );
+  const removeNodeFromVisualGroup = useCallback(
+    (groupId: string, nodeId: string) => {
+      commitLayoutUpdate(({ currentLayout }) => {
+        const nextLayout = removeNodeFromFactoryLayoutGroup(
+          currentLayout,
+          groupId,
+          nodeId,
+        );
+        const updatedGroup = nextLayout.groups?.find(
+          (group) => group.id === groupId,
+        );
+        return {
+          command:
+            updatedGroup === undefined
+              ? null
+              : createUpdateFactoryLayoutGroupCommand({
+                  groupId,
+                  layout: currentLayout,
+                  to: updatedGroup,
+                }),
+          layout: nextLayout,
+        };
+      });
+    },
+    [commitLayoutUpdate],
+  );
+  const moveVisualGroupByDelta = useCallback(
+    (
+      groupId: string,
+      delta: FactoryLayoutPoint,
+      resolvedNodePositions: ReadonlyMap<string, FactoryLayoutPoint> = new Map(),
+    ) => {
+      commitLayoutUpdate(({ currentLayout }) => {
+        const nextLayout = moveFactoryLayoutGroupByDelta(
+          currentLayout,
+          groupId,
+          delta,
+          resolvedNodePositions,
+        );
+        return {
+          command: createMoveFactoryLayoutVisualGroupCommand({
+            delta,
+            groupId,
+            layout: currentLayout,
+            resolvedNodePositions,
+          }),
+          layout: nextLayout,
+        };
+      });
+    },
+    [commitLayoutUpdate],
+  );
+  const resizeVisualGroup = useCallback(
+    (groupId: string, bounds: FactoryLayoutGroup["bounds"]) => {
+      commitLayoutUpdate(({ currentLayout }) => {
+        const nextLayout = resizeFactoryLayoutGroup(
+          currentLayout,
+          groupId,
+          bounds,
+        );
+        const updatedGroup = nextLayout.groups?.find(
+          (group) => group.id === groupId,
+        );
+        return {
+          command:
+            updatedGroup === undefined
+              ? null
+              : createUpdateFactoryLayoutGroupCommand({
+                  groupId,
+                  layout: currentLayout,
+                  to: updatedGroup,
+                }),
+          layout: nextLayout,
+        };
+      });
+    },
+    [commitLayoutUpdate],
+  );
+  const deleteVisualGroup = useCallback(
+    (groupId: string) => {
+      commitLayoutUpdate(({ currentLayout }) => ({
+        command: createDeleteFactoryLayoutGroupCommand({
+          groupId,
+          layout: currentLayout,
+        }),
+        layout: removeFactoryLayoutGroup(currentLayout, groupId),
+      }));
+    },
+    [commitLayoutUpdate],
+  );
 
   const layoutDirty = hasFactoryLayoutChanges(baseLayout, layout);
 
@@ -426,6 +658,14 @@ export function useFactoryGraphLayoutDraftState(
     resetLayout,
     undoLayout,
     updateViewport,
+    createVisualGroup,
+    renameVisualGroup,
+    setVisualGroupColor,
+    addNodeToVisualGroup,
+    removeNodeFromVisualGroup,
+    moveVisualGroupByDelta,
+    resizeVisualGroup,
+    deleteVisualGroup,
   };
 }
 

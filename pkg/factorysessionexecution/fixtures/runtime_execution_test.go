@@ -284,8 +284,11 @@ func TestJavaScriptRuntimeService_StartAsync_TerminalOutcomes(t *testing.T) {
 		if result.ResultStatus != fse.ResultStatusUnavailable {
 			t.Fatalf("resultStatus = %q, want UNAVAILABLE", result.ResultStatus)
 		}
-		if result.Availability == nil || result.Availability.Reason != "SYNC_WAIT_TIMED_OUT" {
-			t.Fatalf("availability = %#v, want SYNC_WAIT_TIMED_OUT", result.Availability)
+		if result.Availability != nil && result.Availability.Reason == "SYNC_WAIT_TIMED_OUT" {
+			t.Fatalf("availability = %#v, must not use sync-wait reason for runtime policy timeout", result.Availability)
+		}
+		if result.SessionStatus != fse.LifecycleStatusTimedOut {
+			t.Fatalf("sessionStatus = %q, want TIMED_OUT", result.SessionStatus)
 		}
 	})
 
@@ -323,6 +326,54 @@ func TestJavaScriptRuntimeService_StartAsync_TerminalOutcomes(t *testing.T) {
 			t.Fatalf("resultStatus = %q, want UNAVAILABLE", result.ResultStatus)
 		}
 	})
+}
+
+func TestJavaScriptRuntimeService_StartSync_WaitTimeoutWithoutCancelKeepsSessionRunning(t *testing.T) {
+	service := newJavaScriptRuntimeService(t)
+	waitMillis := int64(50)
+	started, err := service.StartSync(context.Background(), fse.StartRequest{
+		RequestID: "req-runtime-sync-wait-timeout-001",
+		Source: fse.Source{
+			Kind: workflowsource.KindInlineWorkflow,
+			InlineWorkflow: &fse.InlineWorkflowSource{
+				InlineSource: busyLoopWorkflowSource,
+				Dialect:      "you-workflow-v1",
+				Metadata:     map[string]string{"name": "runtime-sync-wait-fixture"},
+			},
+		},
+		Args: map[string]any{"subject": "workflows"},
+		Wait: &fse.WaitOptions{TimeoutMillis: &waitMillis},
+	})
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+	if started.SyncOutcome != fse.SyncOutcomeTimedOut || !started.TimedOut {
+		t.Fatalf("sync response = %#v, want TIMED_OUT", started)
+	}
+	if started.SessionCanceledByTimeout {
+		t.Fatal("sessionCanceledByTimeout = true, want false")
+	}
+	if started.Status != string(fse.LifecycleStatusRunning) {
+		t.Fatalf("status = %q, want RUNNING", started.Status)
+	}
+
+	session, err := service.GetSession(context.Background(), started.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if session.Status != fse.LifecycleStatusRunning {
+		t.Fatalf("session status = %q, want RUNNING after sync wait timeout", session.Status)
+	}
+
+	result, err := service.GetResult(context.Background(), started.SessionID, fse.ResultRequest{
+		Mode: fse.ResultModeFinal,
+	})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.Availability == nil || result.Availability.Reason != "SYNC_WAIT_TIMED_OUT" {
+		t.Fatalf("availability = %#v, want SYNC_WAIT_TIMED_OUT", result.Availability)
+	}
 }
 
 func TestNewExecutionService_SelectsFakeAndJavaScriptRuntimeProviders(t *testing.T) {

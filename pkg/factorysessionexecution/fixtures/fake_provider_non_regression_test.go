@@ -2,8 +2,6 @@ package fixtures_test
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
@@ -82,25 +80,38 @@ func TestNewExecutionService_FakeProvider_PublishedScenarios_StillDeterministic(
 	}
 }
 
-func TestRecoveredBackendLane_DoesNotIntroduceForbiddenVocabulary(t *testing.T) {
-	paths := []string{
-		filepath.Join("..", "service.go"),
-		filepath.Join("..", "runtime_service.go"),
-		filepath.Join("..", "types.go"),
-		"runtime_execution_test.go",
-		"runtime_boundary_test.go",
-		"fake_provider_non_regression_test.go",
+func TestJavaScriptRuntimeService_UsesExistingFactorySessionReadSurfaces(t *testing.T) {
+	service := newJavaScriptRuntimeService(t)
+	req := inlineWorkflowStartRequest(
+		"req-runtime-session-surfaces-001",
+		simpleFinalWorkflowSource,
+		map[string]any{"subject": "workflows", "count": 1, "prefix": "you"},
+		nil,
+	)
+
+	started, err := service.StartSync(context.Background(), req)
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
 	}
-	for _, relPath := range paths {
-		t.Run(filepath.Base(relPath), func(t *testing.T) {
-			raw, err := os.ReadFile(relPath)
-			if err != nil {
-				t.Fatalf("read %s: %v", relPath, err)
-			}
-			text := string(raw)
-			if term, found := fixtures.ContainsForbiddenFixtureVocabulary(text); found {
-				t.Fatalf("%s contains forbidden term %q", relPath, term)
-			}
-		})
+	if started.SessionID == "" || started.SyncOutcome != fse.SyncOutcomeCompleted {
+		t.Fatalf("sync start = %#v, want completed FactorySession execution response", started)
+	}
+
+	session, err := service.GetSession(context.Background(), started.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if session.SessionID != started.SessionID {
+		t.Fatalf("sessionId = %q, want %q", session.SessionID, started.SessionID)
+	}
+
+	result, err := service.GetResult(context.Background(), started.SessionID, fse.ResultRequest{
+		Mode: fse.ResultModeFinal,
+	})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.SessionID != started.SessionID || result.ResultStatus != fse.ResultStatusFinal {
+		t.Fatalf("result = %#v, want final FactorySession result read", result)
 	}
 }

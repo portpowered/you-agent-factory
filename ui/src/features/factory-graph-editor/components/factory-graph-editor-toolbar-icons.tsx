@@ -1,3 +1,22 @@
+export function GroupIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <rect height="14" rx="2" width="18" x="3" y="5" />
+      <path d="M7 9h10" />
+    </svg>
+  );
+}
+
 export function ConnectIcon() {
   return (
     <svg

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
@@ -97,6 +98,72 @@ func TestJavaScriptRuntimeService_Start_ExecutionRequestIDConflict(t *testing.T)
 		conflict.Args = map[string]any{"subject": "different"}
 		_, err := service.StartSync(context.Background(), conflict)
 		assertRuntimeTypedFailure(t, err, fixtures.TypedFailureExecutionRequestConflict, "")
+	})
+}
+
+func TestJavaScriptRuntimeService_Start_ConcurrentIdempotentStarts(t *testing.T) {
+	t.Run("async", func(t *testing.T) {
+		service := newJavaScriptRuntimeService(t)
+		const workers = 12
+		var wg sync.WaitGroup
+		results := make([]fse.AsyncStartResult, workers)
+		errs := make([]error, workers)
+		req := inlineWorkflowStartRequest(
+			"req-runtime-async-concurrent-001",
+			simpleFinalWorkflowSource,
+			map[string]any{"subject": "workflows", "count": 1, "prefix": "you"},
+			nil,
+		)
+		for i := 0; i < workers; i++ {
+			wg.Add(1)
+			go func(index int) {
+				defer wg.Done()
+				results[index], errs[index] = service.StartAsync(context.Background(), req)
+			}(i)
+		}
+		wg.Wait()
+		for i, err := range errs {
+			if err != nil {
+				t.Fatalf("StartAsync worker %d: %v", i, err)
+			}
+		}
+		for i := 1; i < workers; i++ {
+			if results[i].SessionID != results[0].SessionID {
+				t.Fatalf("sessionId[%d] = %q, want %q", i, results[i].SessionID, results[0].SessionID)
+			}
+		}
+	})
+
+	t.Run("sync", func(t *testing.T) {
+		service := newJavaScriptRuntimeService(t)
+		const workers = 12
+		var wg sync.WaitGroup
+		results := make([]fse.SyncStartResult, workers)
+		errs := make([]error, workers)
+		req := inlineWorkflowStartRequest(
+			"req-runtime-sync-concurrent-001",
+			simpleFinalWorkflowSource,
+			map[string]any{"subject": "workflows", "count": 1, "prefix": "you"},
+			nil,
+		)
+		for i := 0; i < workers; i++ {
+			wg.Add(1)
+			go func(index int) {
+				defer wg.Done()
+				results[index], errs[index] = service.StartSync(context.Background(), req)
+			}(i)
+		}
+		wg.Wait()
+		for i, err := range errs {
+			if err != nil {
+				t.Fatalf("StartSync worker %d: %v", i, err)
+			}
+		}
+		for i := 1; i < workers; i++ {
+			if results[i].SessionID != results[0].SessionID {
+				t.Fatalf("sessionId[%d] = %q, want %q", i, results[i].SessionID, results[0].SessionID)
+			}
+		}
 	})
 }
 

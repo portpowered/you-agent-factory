@@ -1,5 +1,4 @@
 import type {
-  FactoryPreviewAPIError,
   FactoryPreviewRequest,
   FactoryPreviewResult,
 } from "../factory-preview";

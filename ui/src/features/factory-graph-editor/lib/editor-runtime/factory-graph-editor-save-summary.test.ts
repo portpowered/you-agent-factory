@@ -63,7 +63,7 @@ describe("buildFactoryGraphSaveSummary", () => {
       confirmActionLabel: "Save layout",
       createdEntities: 0,
       description:
-        "This save will update shared graph layout positions and viewport. Factory topology stays unchanged.",
+        "This save will update shared graph layout, visual groups, and viewport. Factory topology stays unchanged.",
       dirtyState: {
         layoutDirty: true,
         preferencesDirty: false,

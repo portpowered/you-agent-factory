@@ -305,6 +305,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "../../factory-graph-editor/lib/editor/factory-graph-editor-additions",
       "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state",
       "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary",
+      "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups",
       "../../factory-graph-editor/messages/editor",
     ],
     reason:
@@ -350,6 +351,15 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     importSpecifiers: ["../../flowchart/lib/layout"],
     reason:
       "Workflow-activity graph projection currently reuses flowchart layout internals pending a public boundary split.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/hooks/use-current-activity-graph-card-view-model.ts",
+    importSpecifiers: [
+      "../../factory-graph-editor/hooks/layout/factory-graph-visual-group-editor-hook",
+    ],
+    reason:
+      "Workflow-activity graph view-model currently reuses factory-graph-editor internals pending a public boundary split.",
   },
   {
     relativeFilePath:
@@ -1365,7 +1375,10 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "../../factory-graph-editor/lib/editor/factory-graph-editor-connections",
       "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-controls",
       "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-layer",
+      "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-controls",
+      "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-layer",
       "../../factory-graph-editor/lib/layout/factory-graph-layout-operations",
+      "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups",
       "../../factory-graph-editor/lib/layout/history/factory-graph-layout-keyboard-shortcuts",
       "../../factory-graph-editor/messages/editor",
     ],

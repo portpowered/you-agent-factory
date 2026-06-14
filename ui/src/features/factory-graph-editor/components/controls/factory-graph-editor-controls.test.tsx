@@ -19,6 +19,7 @@ function renderToolbar({
   hasPendingChanges = true,
   hiddenNodeClasses = new Set<FactoryGraphNodeKind>(),
   hideShowVisible = true,
+  onCreateVisualGroup = vi.fn(),
   onToggleEditMode = vi.fn(),
   onToggleHiddenNodeClass = vi.fn(),
   visible = true,
@@ -27,6 +28,7 @@ function renderToolbar({
   hasPendingChanges?: boolean;
   hiddenNodeClasses?: ReadonlySet<FactoryGraphNodeKind>;
   hideShowVisible?: boolean;
+  onCreateVisualGroup?: () => void;
   onToggleEditMode?: () => void;
   onToggleHiddenNodeClass?: (kind: FactoryGraphNodeKind) => void;
   visible?: boolean;
@@ -58,6 +60,7 @@ function renderToolbar({
           hiddenNodeClasses={hiddenNodeClasses}
           hideShowMenuOpen={hideShowMenuOpen}
           hideShowVisible={hideShowVisible}
+          onCreateVisualGroup={onCreateVisualGroup}
           onDiscard={() => {}}
           onAddAction={() => {}}
           onAddMenuOpenChange={setMenuOpen}

@@ -9,8 +9,10 @@ import type { useFactoryValidation } from "../../factory-graph-editor/hooks/vali
 import type {
   CanonicalFactoryDefinition,
   FactoryGraphDraftValidationError,
+  FactoryGraphNode,
   FactoryGraphNodeKind,
 } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
+import { factoryLayoutGroupCanvasNodeOptions } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import type { buildFactoryGraphAddEntityMenuActions } from "../../factory-graph-editor/lib/editor/factory-graph-editor-additions";
 import type { FactoryGraphEditorDirtyState } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-dirty-state";
 import type { buildFactoryGraphSaveSummary } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-save-summary";
@@ -83,6 +85,25 @@ type BuildCurrentActivityGraphStateValueArgs = {
     y: number;
     zoom: number;
   }) => void;
+  createVisualGroup: (center: { x: number; y: number }) => { id: string } | null;
+  renameVisualGroup: (groupId: string, label: string) => void;
+  setVisualGroupColor: (
+    groupId: string,
+    color: "primary" | "info" | "success" | "warning" | "outline",
+  ) => void;
+  addNodeToVisualGroup: (groupId: string, nodeId: string) => void;
+  removeNodeFromVisualGroup: (groupId: string, nodeId: string) => void;
+  moveVisualGroupByDelta: (
+    groupId: string,
+    delta: { x: number; y: number },
+    resolvedNodePositions?: ReadonlyMap<string, { x: number; y: number }>,
+  ) => void;
+  resizeVisualGroup: (
+    groupId: string,
+    bounds: { height: number; width: number; x: number; y: number },
+  ) => void;
+  deleteVisualGroup: (groupId: string) => void;
+  topologyNodes: readonly FactoryGraphNode[];
   editorUnavailableClassifierWorkstationName?: string;
   editorMode: boolean;
   handleCancelRemoval: () => void;
@@ -178,6 +199,15 @@ function buildCurrentActivityGraphLayoutControls(
     reset: args.resetLayout,
     undo: args.undoLayout,
     updateViewport: args.updateLayoutViewport,
+    createVisualGroup: args.createVisualGroup,
+    renameVisualGroup: args.renameVisualGroup,
+    setVisualGroupColor: args.setVisualGroupColor,
+    addNodeToVisualGroup: args.addNodeToVisualGroup,
+    canvasNodeOptions: factoryLayoutGroupCanvasNodeOptions(args.topologyNodes),
+    removeNodeFromVisualGroup: args.removeNodeFromVisualGroup,
+    moveVisualGroupByDelta: args.moveVisualGroupByDelta,
+    resizeVisualGroup: args.resizeVisualGroup,
+    deleteVisualGroup: args.deleteVisualGroup,
   };
 }
 
