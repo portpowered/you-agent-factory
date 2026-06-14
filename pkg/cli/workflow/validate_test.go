@@ -401,16 +401,18 @@ func TestValidate_JSONCommandErrorsKeepStdoutEmpty(t *testing.T) {
 	}
 }
 
-func TestValidate_JSONBlockingDiagnosticsMatchCanonicalResult(t *testing.T) {
-	cases := []struct {
-		name      string
-		setup     func(projectRoot string) workflow.SourceConfig
-		wantCode  string
-		wantLine  bool
-	}{
+type jsonBlockingDiagnosticCase struct {
+	name     string
+	setup    func(t *testing.T, projectRoot string) workflow.SourceConfig
+	wantCode string
+	wantLine bool
+}
+
+func jsonBlockingDiagnosticCases() []jsonBlockingDiagnosticCase {
+	return []jsonBlockingDiagnosticCase{
 		{
 			name: "syntax error",
-			setup: func(projectRoot string) workflow.SourceConfig {
+			setup: func(t *testing.T, projectRoot string) workflow.SourceConfig {
 				writeWorkflow(t, projectRoot, "broken.js", `meta({ name: "broken" );`)
 				return workflow.SourceConfig{
 					Dir:         projectRoot,
@@ -423,7 +425,7 @@ func TestValidate_JSONBlockingDiagnosticsMatchCanonicalResult(t *testing.T) {
 		},
 		{
 			name: "unsupported global",
-			setup: func(projectRoot string) workflow.SourceConfig {
+			setup: func(t *testing.T, projectRoot string) workflow.SourceConfig {
 				writeWorkflow(t, projectRoot, "unsafe.js", `console.log("unsupported global");`)
 				return workflow.SourceConfig{
 					Dir:         projectRoot,
@@ -435,7 +437,7 @@ func TestValidate_JSONBlockingDiagnosticsMatchCanonicalResult(t *testing.T) {
 		},
 		{
 			name: "forbidden host access",
-			setup: func(projectRoot string) workflow.SourceConfig {
+			setup: func(t *testing.T, projectRoot string) workflow.SourceConfig {
 				writeWorkflow(t, projectRoot, "unsafe.js", `require('fs');`)
 				return workflow.SourceConfig{
 					Dir:         projectRoot,
@@ -447,7 +449,7 @@ func TestValidate_JSONBlockingDiagnosticsMatchCanonicalResult(t *testing.T) {
 		},
 		{
 			name: "invalid args schema",
-			setup: func(projectRoot string) workflow.SourceConfig {
+			setup: func(t *testing.T, projectRoot string) workflow.SourceConfig {
 				writeWorkflow(t, projectRoot, "review.js", validWorkflowSource)
 				return workflow.SourceConfig{
 					Dir:         projectRoot,
@@ -460,7 +462,7 @@ func TestValidate_JSONBlockingDiagnosticsMatchCanonicalResult(t *testing.T) {
 		},
 		{
 			name: "policy denied host access",
-			setup: func(projectRoot string) workflow.SourceConfig {
+			setup: func(t *testing.T, projectRoot string) workflow.SourceConfig {
 				writeWorkflow(t, projectRoot, "review.js", validWorkflowSource)
 				return workflow.SourceConfig{
 					Dir:                 projectRoot,
@@ -472,49 +474,57 @@ func TestValidate_JSONBlockingDiagnosticsMatchCanonicalResult(t *testing.T) {
 			wantCode: workflowpolicy.CodeDeniedCapability,
 		},
 	}
-	for _, tc := range cases {
+}
+
+func TestValidate_JSONBlockingDiagnosticsMatchCanonicalResult(t *testing.T) {
+	for _, tc := range jsonBlockingDiagnosticCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			projectRoot := t.TempDir()
-			sourceCfg := tc.setup(projectRoot)
-			want := canonicalValidationResult(t, projectRoot, sourceCfg)
-			if want.Valid {
-				t.Fatal("expected invalid canonical validation result")
-			}
-
-			var output bytes.Buffer
-			err := workflow.Validate(workflow.ValidateConfig{
-				SourceConfig: sourceCfg,
-				JSON:         true,
-				Output:       &output,
-			})
-			if err == nil {
-				t.Fatal("expected validation failure exit")
-			}
-
-			wantJSON, err := json.Marshal(want)
-			if err != nil {
-				t.Fatalf("marshal canonical validation result: %v", err)
-			}
-			gotJSON := bytes.TrimSpace(output.Bytes())
-			if !bytes.Equal(gotJSON, wantJSON) {
-				var got apisurface.FactoryWorkflowValidationResult
-				if err := json.Unmarshal(gotJSON, &got); err != nil {
-					t.Fatalf("decode validation JSON: %v", err)
-				}
-				t.Fatalf("validation JSON = %#v, want %#v", got, want)
-			}
-
-			diagnostic := findBlockingDiagnostic(want.BlockingDiagnostics, tc.wantCode)
-			if diagnostic == nil {
-				t.Fatalf("blocking diagnostics = %#v, want code %q", want.BlockingDiagnostics, tc.wantCode)
-			}
-			if strings.TrimSpace(diagnostic.Message) == "" {
-				t.Fatalf("diagnostic = %#v, want message", diagnostic)
-			}
-			if tc.wantLine && (diagnostic.Line == nil || *diagnostic.Line <= 0) {
-				t.Fatalf("diagnostic = %#v, want source line", diagnostic)
-			}
+			assertValidateJSONBlockingDiagnostics(t, tc)
 		})
+	}
+}
+
+func assertValidateJSONBlockingDiagnostics(t *testing.T, tc jsonBlockingDiagnosticCase) {
+	t.Helper()
+	projectRoot := t.TempDir()
+	sourceCfg := tc.setup(t, projectRoot)
+	want := canonicalValidationResult(t, projectRoot, sourceCfg)
+	if want.Valid {
+		t.Fatal("expected invalid canonical validation result")
+	}
+
+	var output bytes.Buffer
+	err := workflow.Validate(workflow.ValidateConfig{
+		SourceConfig: sourceCfg,
+		JSON:         true,
+		Output:       &output,
+	})
+	if err == nil {
+		t.Fatal("expected validation failure exit")
+	}
+
+	wantJSON, err := json.Marshal(want)
+	if err != nil {
+		t.Fatalf("marshal canonical validation result: %v", err)
+	}
+	gotJSON := bytes.TrimSpace(output.Bytes())
+	if !bytes.Equal(gotJSON, wantJSON) {
+		var got apisurface.FactoryWorkflowValidationResult
+		if err := json.Unmarshal(gotJSON, &got); err != nil {
+			t.Fatalf("decode validation JSON: %v", err)
+		}
+		t.Fatalf("validation JSON = %#v, want %#v", got, want)
+	}
+
+	diagnostic := findBlockingDiagnostic(want.BlockingDiagnostics, tc.wantCode)
+	if diagnostic == nil {
+		t.Fatalf("blocking diagnostics = %#v, want code %q", want.BlockingDiagnostics, tc.wantCode)
+	}
+	if strings.TrimSpace(diagnostic.Message) == "" {
+		t.Fatalf("diagnostic = %#v, want message", diagnostic)
+	}
+	if tc.wantLine && (diagnostic.Line == nil || *diagnostic.Line <= 0) {
+		t.Fatalf("diagnostic = %#v, want source line", diagnostic)
 	}
 }
 
