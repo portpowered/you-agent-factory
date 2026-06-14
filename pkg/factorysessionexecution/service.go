@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
 )
 
 // Service is the shared durable factory-session execution contract consumed by
@@ -152,5 +153,72 @@ func resolutionOrderForLookupStage(stage workflowsource.LookupStage) string {
 		return "EXPLICIT_FACTORY_LOOKUP"
 	default:
 		return ""
+	}
+}
+
+// ExecutionProvider selects which durable Factory Session execution backend serves
+// start and inspection calls at the shared service boundary.
+type ExecutionProvider string
+
+const (
+	// ExecutionProviderFake selects the deterministic in-memory fake session path.
+	ExecutionProviderFake ExecutionProvider = "fake"
+	// ExecutionProviderJavaScriptRuntime selects the real simple JavaScript runtime path.
+	ExecutionProviderJavaScriptRuntime ExecutionProvider = "javascript-runtime"
+)
+
+// ServiceConfig carries dependencies required by production execution providers.
+type ServiceConfig struct {
+	ProjectRoot string
+	FakeOptions []FakeServiceOption
+}
+
+// NewExecutionService constructs one shared Factory Session execution service for
+// the requested provider.
+func NewExecutionService(provider ExecutionProvider, config ServiceConfig) (Service, error) {
+	switch provider {
+	case ExecutionProviderFake:
+		return NewFakeService(config.FakeOptions...), nil
+	case ExecutionProviderJavaScriptRuntime:
+		projectRoot := strings.TrimSpace(config.ProjectRoot)
+		if projectRoot == "" {
+			return nil, NewValidationError("projectRoot", "projectRoot is required")
+		}
+		return NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
+			ProjectRoot: projectRoot,
+		}), nil
+	default:
+		return nil, NewValidationError("provider", "unsupported execution provider")
+	}
+}
+
+// LoadStartSourceContent reads workflow source bytes for one normalized start request
+// after source identity resolution.
+func LoadStartSourceContent(req StartRequest, resolved ResolvedSource, ctx StartSourceContext) (string, error) {
+	switch req.Source.Kind {
+	case workflowsource.KindInlineWorkflow:
+		if req.Source.InlineWorkflow == nil {
+			return "", NewValidationError("source.inlineWorkflow", "inlineWorkflow is required")
+		}
+		inlineSource := strings.TrimSpace(req.Source.InlineWorkflow.InlineSource)
+		if inlineSource == "" {
+			return "", NewValidationError("source.inlineWorkflow.inlineSource", "inlineSource is required")
+		}
+		return inlineSource, nil
+	default:
+		projectRoot := strings.TrimSpace(ctx.ProjectRoot)
+		if projectRoot == "" {
+			return "", NewValidationError("projectRoot", "projectRoot is required")
+		}
+		sourceRef := strings.TrimSpace(resolved.SourceRef)
+		if sourceRef == "" {
+			return "", NewValidationError("source", "resolved workflow source ref is empty")
+		}
+		reader := workflowvalidation.FileSourceReader(projectRoot)
+		content, err := reader.ReadWorkflowSource(sourceRef)
+		if err != nil {
+			return "", NewValidationError("source", fmt.Sprintf("workflow source %q is not readable: %v", sourceRef, err))
+		}
+		return content, nil
 	}
 }
