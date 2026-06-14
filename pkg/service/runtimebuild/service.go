@@ -7,10 +7,23 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"go.uber.org/zap"
 )
+
+func applyOperatorDefaultsToLoadedConfig(defaults operatorconfig.ResolvedDefaults, loaded *factoryconfig.LoadedFactoryConfig) error {
+	if loaded == nil {
+		return nil
+	}
+	if err := operatordefaultsruntime.ApplyToLoadedConfig(loaded, defaults); err != nil {
+		return fmt.Errorf("apply operator defaults: %w", err)
+	}
+	return operatordefaultsruntime.ValidateModelWorkerRuntimeProviders(loaded)
+}
 
 // BundleBuilder constructs a runnable runtime bundle from an immutable session
 // build spec.
@@ -70,6 +83,11 @@ func (s *Service) BuildSpec(
 		loadedFactoryCfg.PortableBundledFileReplacements(),
 	)
 	loadedFactoryCfg.SetRuntimeBaseDir(input.ExecutionBaseDir)
+	if s.cfg.ApplyOperatorDefaults {
+		if err := applyOperatorDefaultsToLoadedConfig(s.cfg.OperatorDefaults, loadedFactoryCfg); err != nil {
+			return SessionBuildSpec{}, err
+		}
+	}
 	clock := factory.EnsureClock(s.clock)
 	recordPath := SessionScopedRecordPath(s.cfg.RecordPath, input.SessionID)
 	runtimeInstanceID := strings.TrimSpace(input.RuntimeInstanceID)

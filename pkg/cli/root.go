@@ -26,6 +26,7 @@ import (
 	workflowcli "github.com/portpowered/infinite-you/pkg/cli/workflow"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
@@ -68,9 +69,15 @@ type cliGlobalOptions struct {
 	json   bool
 }
 
+type cliOperatorDefaultsOptions struct {
+	defaultWorkerModelProvider string
+	defaultWorkerModel         string
+}
+
 func NewRootCommand() *cobra.Command {
 	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
 	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
 	root := &cobra.Command{
 		Use:          cliBinaryName,
 		Short:        "Run and manage CPN-based workflow factories",
@@ -89,13 +96,28 @@ func NewRootCommand() *cobra.Command {
 			"  # Agent orientation and command matrix.\n" +
 			"  " + cliBinaryName + " docs agents",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runFactory(cmd, defaultcmd.OOTBRunConfig(), nil, globals, diagnostics.verboseEnabled(), diagnostics.debug)
+			return runFactory(cmd, defaultcmd.OOTBRunConfig(), nil, globals, operatorDefaults, diagnostics.verboseEnabled(), diagnostics.debug)
 		},
 	}
 	root.PersistentFlags().BoolVarP(&diagnostics.verbose, "verbose", "v", false, "emit concise command diagnostics to stderr")
 	root.PersistentFlags().BoolVarP(&diagnostics.debug, "debug", "d", false, "emit lower-level command diagnostics where supported (implies --verbose)")
 	root.PersistentFlags().StringVar(&globals.server, "server", cliserver.DefaultBaseURI, "factory API base URI (http:// or https://); HTTP client commands target this URI and you run binds locally to its host and port")
 	root.PersistentFlags().BoolVar(&globals.json, "json", false, "emit structured JSON on stdout for supported commands; diagnostics remain on stderr")
+	root.PersistentFlags().StringVar(
+		&operatorDefaults.defaultWorkerModelProvider,
+		"default-worker-model-provider",
+		"",
+		fmt.Sprintf(
+			"default worker model provider for model workers with omitted modelProvider (%s; DEFAULT resolves through lower-precedence concrete provider)",
+			interfaces.AcceptedPublicWorkerModelProviderSummary(),
+		),
+	)
+	root.PersistentFlags().StringVar(
+		&operatorDefaults.defaultWorkerModel,
+		"default-worker-model",
+		"",
+		"default worker model for model workers with omitted model",
+	)
 
 	root.AddCommand(
 		newConfigCommand(diagnostics),
@@ -103,7 +125,7 @@ func NewRootCommand() *cobra.Command {
 		newFactoryCommand(globals, diagnostics),
 		newInitCommand(globals, diagnostics),
 		newModelsCommand(globals, diagnostics),
-		newRunCommand(globals, diagnostics),
+		newRunCommand(globals, diagnostics, operatorDefaults),
 		newSubmitCommand(globals, diagnostics),
 		newSessionCommand(globals, diagnostics),
 		newWorkCommand(globals, diagnostics),
@@ -605,7 +627,7 @@ func newInitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOption
 	return cmd
 }
 
-func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions) *cobra.Command {
 	cfg := defaultcmd.ExplicitRunConfig()
 
 	cmd := &cobra.Command{
@@ -619,7 +641,7 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 			"Default execution uses batch mode and exits after idle completion. " +
 			"Normal live runs record by default unless you pass --no-record. " +
 			"Replay artifacts are sensitive and can contain prompts, payloads, stdout, stderr, and diagnostic metadata. " +
-			"Use --runner to override the factory-level runner for this run while still allowing workstation-specific runner overrides to win. " +
+			"Use global --default-worker-model-provider and --default-worker-model to set operator-level model defaults for omitted model-worker fields. " +
 			"Use --continuously to keep the factory alive while idle until you cancel it. " +
 			"Use --with-mock-workers with an optional JSON config path to test workflows with deterministic mock worker outcomes. " +
 			"Use --quiet to suppress dashboard output for scripted or CI-oriented runs. " +
@@ -654,7 +676,7 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 					cfg.MockWorkersConfigPath = ""
 				}
 			}
-			err := runFactory(cmd, cfg, promptArgs, globals, diagnostics.verboseEnabled(), diagnostics.debug)
+			err := runFactory(cmd, cfg, promptArgs, globals, operatorDefaults, diagnostics.verboseEnabled(), diagnostics.debug)
 			if err != nil && !runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 			}
@@ -669,13 +691,6 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory base directory")
 	cmd.Flags().StringVar(&cfg.NamedFactoryName, "named", "", "canonical persisted factory name resolved from ./factory before ~/.you-agent-factory/factories; built-ins materialize there on first use and remain editable")
 	cmd.Flags().StringVar(&cfg.FactoryConfigPath, "factory", "", "path to factory.json for portable one-shot runs; use positional text or piped stdin for the invocation input")
-	cmd.Flags().StringVar(&cfg.RunnerID, "runner", "", fmt.Sprintf("factory-level runner override (%s)", strings.Join([]string{
-		interfaces.RunnerIDCodex,
-		interfaces.RunnerIDGemini,
-		interfaces.RunnerIDKiro,
-		interfaces.RunnerIDCursorCLI,
-		interfaces.RunnerIDOpenCode,
-	}, ", ")))
 	cmd.Flags().StringVar(&cfg.RecordPath, "record", "", "path to write a replay artifact for this run; replay artifacts are sensitive, and default live runs record automatically unless --no-record is used")
 	cmd.Flags().BoolVar(&cfg.DisableDefaultRecording, "no-record", false, "disable the default replay artifact for this invocation")
 	cmd.Flags().StringVar(&cfg.ReplayPath, "replay", "", "path to replay an existing sensitive replay artifact")
@@ -695,13 +710,19 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 	return cmd
 }
 
-func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, verbose, debug bool) error {
+func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, verbose, debug bool) error {
 	logger, err := logging.BuildLogger(verbose, debug)
 	if err != nil {
 		return err
 	}
 	cfg.Logger = logger
 	cfg.Verbose = verbose || debug
+
+	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults)
+	if err != nil {
+		return err
+	}
+	cfg.OperatorDefaults = resolvedOperatorDefaults
 
 	if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
 		return err
@@ -757,6 +778,24 @@ func runInvocationModes(cmd *cobra.Command, cfg runcli.RunConfig) (cleanInvocati
 		!cfg.Continuously &&
 		(cfg.InvocationPositionalText != nil || cfg.InvocationStdinText != nil)
 	return cleanInvocation, textInvocation
+}
+
+func resolveOperatorDefaults(cmd *cobra.Command, operatorDefaults *cliOperatorDefaultsOptions) (operatorconfig.ResolvedDefaults, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return operatorconfig.ResolvedDefaults{}, fmt.Errorf("resolve operator home directory: %w", err)
+	}
+	return operatorconfig.ResolveFromHome(homeDir, operatorconfig.FlagOverrides{
+		WorkerModelProvider: persistentFlagValueIfChanged(cmd, "default-worker-model-provider", operatorDefaults.defaultWorkerModelProvider),
+		WorkerModel:         persistentFlagValueIfChanged(cmd, "default-worker-model", operatorDefaults.defaultWorkerModel),
+	})
+}
+
+func persistentFlagValueIfChanged(cmd *cobra.Command, name, value string) string {
+	if cmd.Root().PersistentFlags().Changed(name) {
+		return value
+	}
+	return ""
 }
 
 func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.RunConfig) error {

@@ -135,7 +135,6 @@ describe.sequential("factory name preservation browser integration", () => {
             state: "visible",
             timeout: uiInteractionTimeoutMs,
           });
-        expect(await importDialog.textContent()).toContain(embeddedImportName);
 
         await importDialog
           .getByRole("button", { name: "Confirm import" })

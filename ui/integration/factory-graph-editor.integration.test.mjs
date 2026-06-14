@@ -17,6 +17,9 @@ import {
   startBrowserPreview,
   startFactoryApiServer,
   uiInteractionTimeoutMs,
+  waitForCapturedDownloadOrDialogError,
+  waitForDialogHidden,
+  waitForDurableControlEnabled,
 } from "./browser-test-harness.mjs";
 
 const exportFactoryDefinition = {
@@ -333,6 +336,15 @@ describe.sequential("factory graph editor browser integration", () => {
       const pngCoverageScenario = replayCoverageReport.scenarios.find(
         (scenario) => scenario.id === "pngRoundTrip",
       );
+
+      expect(pngCoverageScenario).toEqual(expect.objectContaining({
+        description:
+          "Browser export/import PNG roundtrip layered on jsdom activation-body coverage and unit PNG helpers; jsdom no longer re-proves export dialog copy.",
+        id: "pngRoundTrip",
+        surfaces: ["png-export", "png-import-preview", "png-import-activation"],
+        verificationLayers: ["browser-integration", "jsdom", "unit"],
+      }));
+
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
         currentFactory: exportFactoryDefinition,
@@ -345,14 +357,6 @@ describe.sequential("factory graph editor browser integration", () => {
       const downloadDirectory = await mkdtemp(
         path.join(os.tmpdir(), "agent-factory-export-"),
       );
-
-      expect(pngCoverageScenario).toEqual(expect.objectContaining({
-        description:
-          "Browser export/import PNG roundtrip smoke layered on top of existing jsdom and unit PNG coverage.",
-        id: "pngRoundTrip",
-        surfaces: ["png-export", "png-import-preview", "png-import-activation"],
-        verificationLayers: ["browser-integration", "jsdom", "unit"],
-      }));
 
       await browserPage.page.addInitScript(() => {
         window.__agentFactoryCapturedDownloads = [];
@@ -419,39 +423,16 @@ describe.sequential("factory graph editor browser integration", () => {
         await exportDialog
           .getByLabel("Cover image")
           .setInputFiles(exportCoverImagePath);
-        await exportDialog.getByText("Selected image: dashboard.png").waitFor({
-          state: "visible",
-          timeout: uiInteractionTimeoutMs,
-        });
         const exportDialogButton = exportDialog.getByRole("button", {
           name: "Export PNG",
         });
-        await expect
-          .poll(async () => await exportDialogButton.isEnabled(), {
-            timeout: uiInteractionTimeoutMs,
-          })
-          .toBe(true);
+        await waitForDurableControlEnabled(exportDialogButton);
 
         await exportDialogButton.click();
-        const exportOutcome = await Promise.race([
-          browserPage.page
-            .waitForFunction(
-              () => window.__agentFactoryCapturedDownloads.length > 0,
-              null,
-              { timeout: uiInteractionTimeoutMs },
-            )
-            .then(() => "download"),
-          exportDialog
-            .getByRole("alert")
-            .waitFor({
-              state: "visible",
-              timeout: uiInteractionTimeoutMs,
-            })
-            .then(() => "error"),
-        ]);
-        if (exportOutcome === "error") {
-          throw new Error(await exportDialog.getByRole("alert").innerText());
-        }
+        await waitForCapturedDownloadOrDialogError(
+          browserPage.page,
+          exportDialog,
+        );
         const download = await browserPage.page.evaluate(
           () => window.__agentFactoryCapturedDownloads[0] ?? null,
         );
@@ -463,12 +444,7 @@ describe.sequential("factory graph editor browser integration", () => {
         await exportDialog
           .getByRole("button", { exact: true, name: "Close" })
           .click();
-        await browserPage.page
-          .getByRole("heading", { name: "Export factory" })
-          .waitFor({
-            state: "hidden",
-            timeout: uiInteractionTimeoutMs,
-          });
+        await waitForDialogHidden(exportDialog);
         expectNoBrowserErrors(
           browserPage.pageErrors,
           browserPage.consoleErrors,

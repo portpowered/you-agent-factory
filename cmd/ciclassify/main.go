@@ -277,7 +277,7 @@ func lanePlans(classification string) []lanePlan {
 		return []lanePlan{
 			{
 				Name:      "UI Coverage",
-				Command:   "make test-ui-coverage",
+				Command:   "make run-sharded-ui-coverage",
 				ShouldRun: false,
 				Reason:    "Skipped because documentation-only changes do not require UI coverage.",
 			},
@@ -298,7 +298,7 @@ func lanePlans(classification string) []lanePlan {
 		return []lanePlan{
 			{
 				Name:      "UI Coverage",
-				Command:   "make test-ui-coverage",
+				Command:   "make run-sharded-ui-coverage",
 				ShouldRun: true,
 				Reason:    "Runs because UI-only changes still require the owned UI coverage lane.",
 			},
@@ -319,7 +319,7 @@ func lanePlans(classification string) []lanePlan {
 		return []lanePlan{
 			{
 				Name:      "UI Coverage",
-				Command:   "make test-ui-coverage",
+				Command:   "make run-sharded-ui-coverage",
 				ShouldRun: false,
 				Reason:    "Skipped because backend-only changes do not require UI coverage.",
 			},
@@ -340,7 +340,7 @@ func lanePlans(classification string) []lanePlan {
 		return []lanePlan{
 			{
 				Name:      "UI Coverage",
-				Command:   "make test-ui-coverage",
+				Command:   "make run-sharded-ui-coverage",
 				ShouldRun: true,
 				Reason:    "Runs because shared-risk changes stay on the full verification safety path.",
 			},

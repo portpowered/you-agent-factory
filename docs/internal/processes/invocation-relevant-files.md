@@ -25,6 +25,11 @@ primary-result behavior.
   outcomes into `InvocationResponse`; it also owns invocation boundary logs and
   optional `InvocationMetricsRecorder` counter emission for runtime outcomes.
 - `pkg/cli/run/` is the `you run --factory` CLI boundary.
+- Operator default worker model settings resolve at the CLI/process boundary in
+  `pkg/cli/root.go` (`resolveOperatorDefaults`) and flow through
+  `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
+  `cmd/factory/compose.InjectFactoryService`; Wire providers must not read
+  `~/.you-agent-factory/config.json` or `YOU_DEFAULT_WORKER_MODEL_*` directly.
 - `pkg/cli/run/run.go` resolves positional versus non-TTY stdin through the
   shared `pkg/invocations` contract, then runs the local service in
   invocation-only service mode so stdout stays reserved for primary-result

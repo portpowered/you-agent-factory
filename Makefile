@@ -68,7 +68,7 @@ define run_timed_step
 	exit $$status
 endef
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build-contracts verify-tests verify test-ui-coverage test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count readme-check deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage test-ui-coverage-merge test-ui-browser-integration test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count readme-check deadcode ui-deadcode test-race fmt vet deps deps-tidy dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook clean
 
 default:
 	$(MAKE) generate-api
@@ -245,11 +245,16 @@ verify-build-contracts:
 	$(MAKE) api-smoke
 	$(MAKE) wire-smoke
 
+run-sharded-ui-coverage:
+	./scripts/ci/run-sharded-ui-coverage.sh
+
+run-concurrent-ui-verification-lanes:
+	./scripts/ci/run-concurrent-ui-verification-lanes.sh
+
 verify-tests:
-	@printf '%s\n' "Running required CI-equivalent test lanes: release surface smoke + UI coverage + browser integration + backend verification"
+	@printf '%s\n' "Running required CI-equivalent test lanes: release surface smoke + concurrent UI coverage/browser integration + backend verification"
 	$(call run_verification_step,release-surface-smoke,Release surface smoke lane)
-	$(call run_verification_step,test-ui-coverage,UI Coverage lane)
-	$(call run_verification_step,ui-integration-test,UI Browser Integration lane)
+	$(call run_verification_step,run-concurrent-ui-verification-lanes,Concurrent UI Coverage + UI Browser Integration lanes)
 	$(call run_verification_step,test-backend-verification,Backend Verification lane)
 
 verify:
@@ -280,8 +285,7 @@ ci-verify-build-contracts: ci-typecheck
 ci-verify-tests: ci-verify-build-contracts
 	$(MAKE) ui-install-playwright
 	$(MAKE) release-surface-smoke
-	$(MAKE) test-ui-coverage
-	$(MAKE) ui-integration-test
+	$(MAKE) run-concurrent-ui-verification-lanes
 	$(MAKE) test-backend-verification
 
 release:
