@@ -95,6 +95,13 @@ func WithMockWorkersConfig(mockCfg *factoryconfig.MockWorkersConfig) ServiceTest
 	}
 }
 
+// WithRuntimeMode sets the factory service runtime mode (batch vs service).
+func WithRuntimeMode(mode interfaces.RuntimeMode) ServiceTestHarnessOption {
+	return func(cfg *harnessConfig) {
+		cfg.serviceConfig.RuntimeMode = mode
+	}
+}
+
 // WithRuntimeLogDir writes service runtime logs under dir for assertions.
 func WithRuntimeLogDir(dir string) ServiceTestHarnessOption {
 	return func(cfg *harnessConfig) {

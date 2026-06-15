@@ -72,20 +72,14 @@ func workIDForNamedTokenAtPlace(marking petri.MarkingSnapshot, placeID, name str
 
 func TestSameNameConsumePathHistoricalRecovery_HiddenIdeaTwinAtComplete_ClassifiesAsArtifact(t *testing.T) {
 	dir := scaffoldConsumePathFactoryBuiltInOrder(t)
-	h := testutil.NewServiceTestHarness(t, dir)
+	h := newSameNameConsumePathServiceHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-cli-validate-list"
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
-	for _, req := range []interfaces.SubmitRequest{
-		{Name: cellName, WorkTypeID: "idea", TargetState: "to-complete", TraceID: "trace-idea-" + cellName},
-		{Name: cellName, WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-task-a-" + cellName},
-		{Name: cellName, WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-orphan-" + cellName},
-	} {
-		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
-	}
+	submitSameNameOrphanAfterConsumePattern(t, h, cellName, "trace-orphan-"+cellName)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)
@@ -110,7 +104,7 @@ func TestSameNameConsumePathHistoricalRecovery_HiddenIdeaTwinAtComplete_Classifi
 
 func TestSameNameConsumePathHistoricalRecovery_LivePairWaitingForConsume_IsNotHistoricalArtifact(t *testing.T) {
 	dir := scaffoldConsumePathFactoryBuiltInOrder(t)
-	h := testutil.NewServiceTestHarness(t, dir)
+	h := newSameNameConsumePathServiceHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-cli-run-status-result"
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -152,20 +146,14 @@ func TestSameNameConsumePathHistoricalRecovery_LivePairWaitingForConsume_IsNotHi
 
 func TestSameNameConsumePathHistoricalRecovery_BoundedManualMoveCompletesOrphanTask(t *testing.T) {
 	dir := scaffoldConsumePathFactoryBuiltInOrder(t)
-	h := testutil.NewServiceTestHarness(t, dir)
+	h := newSameNameConsumePathServiceHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-mcp-tools"
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
-	for _, req := range []interfaces.SubmitRequest{
-		{Name: cellName, WorkTypeID: "idea", TargetState: "to-complete", TraceID: "trace-idea-" + cellName},
-		{Name: cellName, WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-task-a-" + cellName},
-		{Name: cellName, WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-manual-repair-" + cellName},
-	} {
-		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
-	}
+	submitSameNameOrphanAfterConsumePattern(t, h, cellName, "trace-manual-repair-"+cellName)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)
@@ -205,7 +193,7 @@ func TestSameNameConsumePathHistoricalRecovery_BoundedManualMoveCompletesOrphanT
 
 func TestSameNameConsumePathHistoricalRecovery_UnrelatedLanesCompleteWithOrphanPresent(t *testing.T) {
 	dir := scaffoldConsumePathFactoryBuiltInOrder(t)
-	h := testutil.NewServiceTestHarness(t, dir)
+	h := newSameNameConsumePathServiceHarness(t, dir)
 
 	const (
 		orphanCell = "dynamic-workflows-cell-cli-validate-list"
@@ -215,13 +203,7 @@ func TestSameNameConsumePathHistoricalRecovery_UnrelatedLanesCompleteWithOrphanP
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
-	submitConsumePathPair(t, h, orphanCell)
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
-		Name:        orphanCell,
-		WorkTypeID:  "task",
-		TargetState: "to-complete",
-		TraceID:     "trace-orphan-unrelated",
-	}})
+	submitSameNameOrphanAfterConsumePattern(t, h, orphanCell, "trace-orphan-unrelated")
 	submitConsumePathPair(t, h, liveCell)
 	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 2, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 2, time.Second)
@@ -245,7 +227,7 @@ func TestSameNameConsumePathHistoricalRecovery_UnrelatedLanesCompleteWithOrphanP
 
 func TestSameNameConsumePathHistoricalRecovery_TaskOnlyWithoutIdeaTwin_BlocksBoundedRepair(t *testing.T) {
 	dir := scaffoldConsumePathFactoryBuiltInOrder(t)
-	h := testutil.NewServiceTestHarness(t, dir)
+	h := newSameNameConsumePathServiceHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-cli-run-status-result"
 	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{

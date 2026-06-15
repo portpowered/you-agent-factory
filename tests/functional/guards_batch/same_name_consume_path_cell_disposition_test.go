@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -41,13 +40,7 @@ func reproduceLiveQueueOrphanPattern(
 ) {
 	t.Helper()
 
-	for _, req := range []interfaces.SubmitRequest{
-		{Name: cellName, WorkTypeID: "idea", TargetState: "to-complete", TraceID: "trace-idea-" + cellName},
-		{Name: cellName, WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-task-a-" + cellName},
-		{Name: cellName, WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-orphan-" + cellName},
-	} {
-		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
-	}
+	submitSameNameOrphanAfterConsumePattern(t, h, cellName, "trace-orphan-"+cellName)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)
@@ -110,7 +103,7 @@ func TestSameNameConsumePathCellDisposition_ReviewedCLIAndMCPCells(t *testing.T)
 	for _, tc := range cases {
 		t.Run(tc.cellName, func(t *testing.T) {
 			dir := scaffoldConsumePathFactoryBuiltInOrder(t)
-			h := testutil.NewServiceTestHarness(t, dir)
+			h := newSameNameConsumePathServiceHarness(t, dir)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
@@ -147,7 +140,7 @@ func TestSameNameConsumePathCellDisposition_ManualMoveReachesExpectedPostRepairS
 	const cellName = "dynamic-workflows-cell-mcp-tools"
 
 	dir := scaffoldConsumePathFactoryBuiltInOrder(t)
-	h := testutil.NewServiceTestHarness(t, dir)
+	h := newSameNameConsumePathServiceHarness(t, dir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -199,7 +192,7 @@ func TestSameNameConsumePathCellDisposition_FreshReviewedPairIsCompleteWithoutMa
 	const cellName = "dynamic-workflows-cell-cli-validate-list"
 
 	dir := scaffoldConsumePathFactoryBuiltInOrder(t)
-	h := testutil.NewServiceTestHarness(t, dir)
+	h := newSameNameConsumePathServiceHarness(t, dir)
 
 	submitConsumePathPair(t, h, cellName)
 

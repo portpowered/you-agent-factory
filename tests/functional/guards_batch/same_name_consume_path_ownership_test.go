@@ -141,20 +141,14 @@ func TestSameNameConsumePathOwnership_TaskOnlyWithoutIdeaTwin_StrandedAsHistoric
 
 func TestSameNameConsumePathOwnership_OrphanTaskAfterPriorConsume_MatchesLiveQueuePattern(t *testing.T) {
 	dir := scaffoldConsumePathFactory(t)
-	h := testutil.NewServiceTestHarness(t, dir)
+	h := newSameNameConsumePathServiceHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-mcp-tools"
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
-	for _, req := range []interfaces.SubmitRequest{
-		{Name: cellName, WorkTypeID: "idea", TargetState: "to-complete", TraceID: "trace-idea-" + cellName},
-		{Name: cellName, WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-task-a-" + cellName},
-		{Name: cellName, WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-task-b-" + cellName},
-	} {
-		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
-	}
+	submitSameNameOrphanAfterConsumePattern(t, h, cellName, "trace-task-b-"+cellName)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)
@@ -247,6 +241,49 @@ func submitConsumePathPair(t *testing.T, h *testutil.ServiceTestHarness, cellNam
 	} {
 		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
 	}
+}
+
+// submitSameNameOrphanAfterConsumePattern injects a reviewed same-name pair,
+// waits for consume to finish, then submits the duplicate orphan task. Service
+// mode is required so the runtime accepts the post-consume orphan submission.
+func submitSameNameOrphanAfterConsumePattern(
+	t *testing.T,
+	h *testutil.ServiceTestHarness,
+	cellName string,
+	orphanTraceID string,
+) {
+	t.Helper()
+
+	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+		Name:        cellName,
+		WorkTypeID:  "idea",
+		TargetState: "to-complete",
+		TraceID:     "trace-idea-" + cellName,
+	}})
+	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+		Name:        cellName,
+		WorkTypeID:  "task",
+		TargetState: "to-complete",
+		TraceID:     "trace-task-a-" + cellName,
+	}})
+	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)
+	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+		Name:        cellName,
+		WorkTypeID:  "task",
+		TargetState: "to-complete",
+		TraceID:     orphanTraceID,
+	}})
+}
+
+func newSameNameConsumePathServiceHarness(t *testing.T, dir string) *testutil.ServiceTestHarness {
+	t.Helper()
+
+	return testutil.NewServiceTestHarness(
+		t,
+		dir,
+		testutil.WithRuntimeMode(interfaces.RuntimeModeService),
+	)
 }
 
 func classifyConsumePathOutcome(
