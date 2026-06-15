@@ -213,6 +213,66 @@ func (m *MockFactory) StartDurableFactorySessionSync(
 	return factorysession.SyncStartResponseToAPI(result), nil
 }
 
+func (m *MockFactory) ListDurableFactorySessionDispatches(
+	ctx context.Context,
+	sessionID string,
+) (factoryapi.ListFactorySessionDispatchesResponse, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.ListFactorySessionDispatchesResponse{}, err
+	}
+	result, err := service.ListDispatches(ctx, sessionID)
+	if err != nil {
+		return factoryapi.ListFactorySessionDispatchesResponse{}, err
+	}
+	return factorysession.ListDispatchesResponseToAPI(result), nil
+}
+
+func (m *MockFactory) GetDurableFactorySessionDispatch(
+	ctx context.Context,
+	sessionID, dispatchID string,
+) (factoryapi.FactoryDispatch, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactoryDispatch{}, err
+	}
+	result, err := service.GetDispatch(ctx, sessionID, dispatchID)
+	if err != nil {
+		return factoryapi.FactoryDispatch{}, err
+	}
+	return factorysession.DispatchDetailResponseToAPI(result), nil
+}
+
+func (m *MockFactory) ListDurableFactorySessionArtifacts(
+	ctx context.Context,
+	sessionID string,
+) (factoryapi.ListFactorySessionArtifactsResponse, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.ListFactorySessionArtifactsResponse{}, err
+	}
+	result, err := service.ListArtifacts(ctx, sessionID)
+	if err != nil {
+		return factoryapi.ListFactorySessionArtifactsResponse{}, err
+	}
+	return factorysession.ListArtifactsResponseToAPI(result), nil
+}
+
+func (m *MockFactory) GetDurableFactorySessionArtifact(
+	ctx context.Context,
+	sessionID, artifactID string,
+) (factoryapi.FactorySessionArtifactDetail, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionArtifactDetail{}, err
+	}
+	result, err := service.GetArtifact(ctx, sessionID, artifactID)
+	if err != nil {
+		return factoryapi.FactorySessionArtifactDetail{}, err
+	}
+	return factorysession.ArtifactDetailResponseToAPI(result), nil
+}
+
 func (m *MockFactory) requireDurableExecutionService() (factorysessionexecution.Service, error) {
 	if m == nil || m.DurableExecutionService == nil {
 		return nil, errors.New("durable execution service is unavailable")

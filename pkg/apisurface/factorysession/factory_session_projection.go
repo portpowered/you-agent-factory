@@ -80,7 +80,8 @@ func ResultResponseToAPI(result factorysessionexecution.ResultReadResult) factor
 // ListDispatchesResponseToAPI maps one durable dispatch list projection to the public response shape.
 func ListDispatchesResponseToAPI(result factorysessionexecution.ListDispatchesResult) factoryapi.ListFactorySessionDispatchesResponse {
 	response := factoryapi.ListFactorySessionDispatchesResponse{
-		SessionId: result.SessionID,
+		SessionId:  result.SessionID,
+		Dispatches: []factoryapi.FactorySessionDispatchSummary{},
 	}
 	if len(result.Dispatches) > 0 {
 		dispatches := make([]factoryapi.FactorySessionDispatchSummary, 0, len(result.Dispatches))
@@ -148,6 +149,7 @@ func DispatchDetailResponseToAPI(result factorysessionexecution.DispatchDetail) 
 func ListArtifactsResponseToAPI(result factorysessionexecution.ListArtifactsResult) factoryapi.ListFactorySessionArtifactsResponse {
 	response := factoryapi.ListFactorySessionArtifactsResponse{
 		SessionId: result.SessionID,
+		Artifacts: []factoryapi.FactorySessionArtifactSummary{},
 	}
 	if len(result.Artifacts) > 0 {
 		artifacts := make([]factoryapi.FactorySessionArtifactSummary, 0, len(result.Artifacts))
@@ -200,6 +202,8 @@ func ArtifactDetailResponseToAPI(result factorysessionexecution.ArtifactDetail) 
 		}
 	}
 	if ref := artifactRetrievalRefToAPI(result.ContentRef); ref != nil {
+		response.ContentRef = ref
+	} else if ref := artifactRetrievalRefToAPI(result.RetrievalRef); ref != nil {
 		response.ContentRef = ref
 	}
 	if metadata := artifactCaptureMetadataToAPI(result.CaptureMetadata); metadata != nil {

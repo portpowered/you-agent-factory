@@ -211,25 +211,91 @@ func (s *Server) GetFactorySessionResults(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) ListFactorySessionDispatches(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	_ = sessionID
-	s.writeError(w, http.StatusNotImplemented, "durable factory session dispatch listing is not implemented", "INTERNAL_ERROR")
+	if !isDurableExecutionSessionID(string(sessionID)) {
+		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+		return
+	}
+
+	reader, ok := s.requireDurableSessionDispatchReader(w)
+	if !ok {
+		return
+	}
+	response, err := reader.ListDurableFactorySessionDispatches(r.Context(), string(sessionID))
+	if err != nil {
+		if s.writeDurableSessionReadError(w, err) {
+			return
+		}
+		s.logger.Error("list durable factory session dispatches failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to list factory session dispatches", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) GetFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, dispatchID factoryapi.DispatchID) {
-	_ = sessionID
-	_ = dispatchID
-	s.writeError(w, http.StatusNotImplemented, "durable factory session dispatch retrieval is not implemented", "INTERNAL_ERROR")
+	if !isDurableExecutionSessionID(string(sessionID)) {
+		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+		return
+	}
+
+	reader, ok := s.requireDurableSessionDispatchReader(w)
+	if !ok {
+		return
+	}
+	response, err := reader.GetDurableFactorySessionDispatch(r.Context(), string(sessionID), string(dispatchID))
+	if err != nil {
+		if s.writeDurableSessionReadError(w, err) {
+			return
+		}
+		s.logger.Error("get durable factory session dispatch failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to get factory session dispatch", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) ListFactorySessionArtifacts(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	_ = sessionID
-	s.writeError(w, http.StatusNotImplemented, "durable factory session artifact listing is not implemented", "INTERNAL_ERROR")
+	if !isDurableExecutionSessionID(string(sessionID)) {
+		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+		return
+	}
+
+	reader, ok := s.requireDurableSessionArtifactReader(w)
+	if !ok {
+		return
+	}
+	response, err := reader.ListDurableFactorySessionArtifacts(r.Context(), string(sessionID))
+	if err != nil {
+		if s.writeDurableSessionReadError(w, err) {
+			return
+		}
+		s.logger.Error("list durable factory session artifacts failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to list factory session artifacts", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) GetFactorySessionArtifact(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, artifactID factoryapi.ArtifactID) {
-	_ = sessionID
-	_ = artifactID
-	s.writeError(w, http.StatusNotImplemented, "durable factory session artifact retrieval is not implemented", "INTERNAL_ERROR")
+	if !isDurableExecutionSessionID(string(sessionID)) {
+		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+		return
+	}
+
+	reader, ok := s.requireDurableSessionArtifactReader(w)
+	if !ok {
+		return
+	}
+	response, err := reader.GetDurableFactorySessionArtifact(r.Context(), string(sessionID), string(artifactID))
+	if err != nil {
+		if s.writeDurableSessionReadError(w, err) {
+			return
+		}
+		s.logger.Error("get durable factory session artifact failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to get factory session artifact", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
@@ -562,6 +628,54 @@ func currentFactoryBundledDocTargetPaths(factory factoryapi.Factory) []string {
 	return paths
 }
 
+type durableSessionDispatchReader interface {
+	ListDurableFactorySessionDispatches(
+		ctx context.Context,
+		sessionID string,
+	) (factoryapi.ListFactorySessionDispatchesResponse, error)
+	GetDurableFactorySessionDispatch(
+		ctx context.Context,
+		sessionID, dispatchID string,
+	) (factoryapi.FactoryDispatch, error)
+}
+
+type durableSessionArtifactReader interface {
+	ListDurableFactorySessionArtifacts(
+		ctx context.Context,
+		sessionID string,
+	) (factoryapi.ListFactorySessionArtifactsResponse, error)
+	GetDurableFactorySessionArtifact(
+		ctx context.Context,
+		sessionID, artifactID string,
+	) (factoryapi.FactorySessionArtifactDetail, error)
+}
+
+func (s *Server) requireDurableSessionDispatchReader(w http.ResponseWriter) (durableSessionDispatchReader, bool) {
+	if s.runtime == nil {
+		s.writeError(w, http.StatusInternalServerError, "durable factory session dispatch read is unavailable", "INTERNAL_ERROR")
+		return nil, false
+	}
+	reader, ok := s.runtime.(durableSessionDispatchReader)
+	if !ok {
+		s.writeError(w, http.StatusNotImplemented, "durable factory session dispatch read is not implemented", "INTERNAL_ERROR")
+		return nil, false
+	}
+	return reader, true
+}
+
+func (s *Server) requireDurableSessionArtifactReader(w http.ResponseWriter) (durableSessionArtifactReader, bool) {
+	if s.runtime == nil {
+		s.writeError(w, http.StatusInternalServerError, "durable factory session artifact read is unavailable", "INTERNAL_ERROR")
+		return nil, false
+	}
+	reader, ok := s.runtime.(durableSessionArtifactReader)
+	if !ok {
+		s.writeError(w, http.StatusNotImplemented, "durable factory session artifact read is not implemented", "INTERNAL_ERROR")
+		return nil, false
+	}
+	return reader, true
+}
+
 func currentFactoryWorkstation(factory factoryapi.Factory, workstationName string) (factoryapi.Workstation, bool) {
 	if factory.Workstations == nil {
 		return factoryapi.Workstation{}, false
@@ -832,6 +946,14 @@ func sortMergedFactorySessionSummaries(sessions []factoryapi.FactorySessionSumma
 func (s *Server) writeDurableSessionReadError(w http.ResponseWriter, err error) bool {
 	if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
 		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+		return true
+	}
+	if errors.Is(err, factorysessionexecution.ErrDispatchNotFound) {
+		s.writeError(w, http.StatusNotFound, "factory session dispatch not found", "NOT_FOUND")
+		return true
+	}
+	if errors.Is(err, factorysessionexecution.ErrArtifactNotFound) {
+		s.writeError(w, http.StatusNotFound, "factory session artifact not found", "NOT_FOUND")
 		return true
 	}
 	var validationErr *factorysessionexecution.ValidationError

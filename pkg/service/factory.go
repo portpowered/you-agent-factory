@@ -173,7 +173,6 @@ type FactoryService struct {
 	coordinator   FactoryCoordinator
 	definitions   FactoryDefinitionService
 	modelInitOnce sync.Once
-
 	durableExecutionMu sync.Mutex
 	durableExecution   factorysessionexecution.Service
 }
