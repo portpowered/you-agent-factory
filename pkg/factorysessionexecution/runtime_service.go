@@ -73,7 +73,7 @@ func projectRuntimeSessionState(
 	} else {
 		projectRuntimeFailure(&state.session, &state.result, outcome)
 	}
-	state.events = deriveProjectionEvents(state.session, state.result)
+	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
 	return state
 }
 
@@ -119,7 +119,7 @@ func projectRuntimeRunningSessionState(
 		session: session,
 		result:  result,
 	}
-	state.events = deriveProjectionEvents(state.session, state.result)
+	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
 	return state
 }
 
@@ -708,7 +708,7 @@ func (s *JavaScriptRuntimeService) projectSyncWaitTimeout(sessionID string, canc
 	} else {
 		state.session.ResultSummary.ResultStatus = string(ResultStatusNotReady)
 	}
-	state.events = deriveProjectionEvents(state.session, state.result)
+	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
 	snapshot := cloneRuntimeSessionState(state)
 	s.mu.Unlock()
 
@@ -840,7 +840,7 @@ func (s *JavaScriptRuntimeService) applyRuntimeLifecycleControl(
 		if state.runCancel != nil {
 			state.runCancel()
 		}
-		state.events = deriveProjectionEvents(state.session, state.result)
+		state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
 	}
 
 	return runtimeLifecycleControlResultFromState(state, id, operation, outcome, retry), nil
