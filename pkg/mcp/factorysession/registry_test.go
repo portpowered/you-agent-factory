@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -115,11 +116,13 @@ func TestDiscoverTools_OutputSchemasDocumentSharedErrorEnvelope(t *testing.T) {
 }
 
 func TestDiscoverTools_RepresentativeSchemaFields(t *testing.T) {
-	byName := map[string]mcpfactorysession.ToolDefinition{}
-	for _, tool := range mcpfactorysession.DiscoverTools() {
-		byName[tool.Name] = tool
-	}
+	byName := toolDefinitionsByName(t)
+	assertRepresentativeInputSchemaFields(t, byName)
+	assertRepresentativeOutputSchemaFields(t, byName)
+}
 
+func assertRepresentativeInputSchemaFields(t *testing.T, byName map[string]mcpfactorysession.ToolDefinition) {
+	t.Helper()
 	listProps := byName[mcpfactorysession.ToolListSessions].InputSchema["properties"].(map[string]any)
 	if _, ok := listProps["scope"]; !ok {
 		t.Fatal("list sessions input missing scope")
@@ -158,7 +161,10 @@ func TestDiscoverTools_RepresentativeSchemaFields(t *testing.T) {
 			t.Fatalf("read events input missing %q", field)
 		}
 	}
+}
 
+func assertRepresentativeOutputSchemaFields(t *testing.T, byName map[string]mcpfactorysession.ToolDefinition) {
+	t.Helper()
 	syncResultProps := byName[mcpfactorysession.ToolStartSync].OutputSchema["properties"].(map[string]any)["result"].(map[string]any)["properties"].(map[string]any)
 	if _, ok := syncResultProps["syncOutcome"]; !ok {
 		t.Fatal("start sync output result missing syncOutcome")
@@ -170,8 +176,285 @@ func TestDiscoverTools_RepresentativeSchemaFields(t *testing.T) {
 		t.Fatal("list dispatches output missing dispatches array schema")
 	}
 	itemProps := dispatches["items"].(map[string]any)["properties"].(map[string]any)
-	if _, ok := itemProps["dispatchId"]; !ok {
-		t.Fatal("dispatch summary schema missing dispatchId")
+	if _, ok := itemProps["id"]; !ok {
+		t.Fatal("dispatch summary schema missing id")
+	}
+	if _, ok := itemProps["dispatchKind"]; !ok {
+		t.Fatal("dispatch summary schema missing dispatchKind")
+	}
+}
+
+func TestDiscoverTools_ResponseSchemasMatchGeneratedAPITypes(t *testing.T) {
+	byName := toolDefinitionsByName(t)
+
+	t.Run("validate_source", func(t *testing.T) {
+		assertValidateSourceSchemaMatchesGeneratedAPI(t, byName[mcpfactorysession.ToolValidateSource])
+	})
+	t.Run("get_session", func(t *testing.T) {
+		assertGetSessionSchemaMatchesGeneratedAPI(t, byName[mcpfactorysession.ToolGetSession])
+	})
+	t.Run("get_result", func(t *testing.T) {
+		assertGetResultSchemaMatchesGeneratedAPI(t, byName[mcpfactorysession.ToolGetResult])
+	})
+	t.Run("list_dispatches", func(t *testing.T) {
+		assertListDispatchesSchemaMatchesGeneratedAPI(t, byName[mcpfactorysession.ToolListDispatches])
+	})
+	t.Run("list_artifacts", func(t *testing.T) {
+		assertListArtifactsSchemaMatchesGeneratedAPI(t, byName[mcpfactorysession.ToolListArtifacts])
+	})
+	t.Run("read_events", func(t *testing.T) {
+		assertReadEventsSchemaMatchesGeneratedAPI(t, byName[mcpfactorysession.ToolReadEvents])
+	})
+}
+
+func toolDefinitionsByName(t *testing.T) map[string]mcpfactorysession.ToolDefinition {
+	t.Helper()
+	byName := map[string]mcpfactorysession.ToolDefinition{}
+	for _, tool := range mcpfactorysession.DiscoverTools() {
+		byName[tool.Name] = tool
+	}
+	return byName
+}
+
+func assertValidateSourceSchemaMatchesGeneratedAPI(t *testing.T, tool mcpfactorysession.ToolDefinition) {
+	t.Helper()
+	resultSchema := toolResultSchema(t, tool)
+	requireSchemaFieldsMatchGenerated(
+		t,
+		resultSchema,
+		reflect.TypeOf(factoryapi.FactoryPreviewResult{}),
+		"valid",
+		"sourceResolution",
+		"policyPreview",
+		"sourceValidationIssues",
+	)
+	policyPreview := nestedSchemaProperties(t, resultSchema, "policyPreview")
+	requireSchemaFieldsMatchGenerated(
+		t,
+		policyPreview,
+		reflect.TypeOf(factoryapi.WorkflowPolicyPreview{}),
+		"policyHash",
+	)
+	requireSchemaFieldsAbsent(t, policyPreview, "effectivePolicyHash")
+}
+
+func assertGetSessionSchemaMatchesGeneratedAPI(t *testing.T, tool mcpfactorysession.ToolDefinition) {
+	t.Helper()
+	resultSchema := toolResultSchema(t, tool)
+	requireSchemaFieldsMatchGenerated(
+		t,
+		resultSchema,
+		reflect.TypeOf(factoryapi.FactorySessionDurableReadModel{}),
+		"sessionId",
+		"status",
+		"orchestratorKind",
+		"resolvedSource",
+		"progress",
+		"resultSummary",
+	)
+	progress := nestedSchemaProperties(t, resultSchema, "progress")
+	requireSchemaFieldsMatchGenerated(
+		t,
+		progress,
+		reflect.TypeOf(factoryapi.FactorySessionDurableProgressCounts{}),
+		"totalDispatches",
+		"completedDispatches",
+		"failedDispatches",
+		"inFlightDispatches",
+		"phaseCount",
+	)
+	requireSchemaFieldsAbsent(t, progress, "queued", "running", "succeeded", "failed")
+}
+
+func assertGetResultSchemaMatchesGeneratedAPI(t *testing.T, tool mcpfactorysession.ToolDefinition) {
+	t.Helper()
+	resultSchema := toolResultSchema(t, tool)
+	requireSchemaFieldsMatchGenerated(
+		t,
+		resultSchema,
+		reflect.TypeOf(factoryapi.FactorySessionResult{}),
+		"sessionId",
+		"resultStatus",
+		"sessionStatus",
+		"availability",
+		"failure",
+	)
+	availability := nestedSchemaProperties(t, resultSchema, "availability")
+	requireSchemaFieldsMatchGenerated(
+		t,
+		availability,
+		reflect.TypeOf(factoryapi.FactorySessionResultAvailabilityDetail{}),
+		"reason",
+		"message",
+		"retryable",
+	)
+	requireSchemaFieldsAbsent(t, availability, "code")
+	failure := nestedSchemaProperties(t, resultSchema, "failure")
+	requireSchemaFieldsMatchGenerated(
+		t,
+		failure,
+		reflect.TypeOf(factoryapi.FactorySessionDurableFailureDetail{}),
+		"reason",
+		"message",
+	)
+	requireSchemaFieldsAbsent(t, failure, "code")
+}
+
+func assertListDispatchesSchemaMatchesGeneratedAPI(t *testing.T, tool mcpfactorysession.ToolDefinition) {
+	t.Helper()
+	resultSchema := toolResultSchema(t, tool)
+	dispatches := arrayItemSchemaProperties(t, resultSchema, "dispatches")
+	requireSchemaFieldsMatchGenerated(
+		t,
+		dispatches,
+		reflect.TypeOf(factoryapi.FactorySessionDispatchSummary{}),
+		"id",
+		"dispatchKind",
+		"status",
+		"phase",
+		"label",
+	)
+	requireSchemaFieldsAbsent(t, dispatches, "dispatchId", "kind", "sessionId")
+}
+
+func assertListArtifactsSchemaMatchesGeneratedAPI(t *testing.T, tool mcpfactorysession.ToolDefinition) {
+	t.Helper()
+	resultSchema := toolResultSchema(t, tool)
+	artifacts := arrayItemSchemaProperties(t, resultSchema, "artifacts")
+	requireSchemaFieldsMatchGenerated(
+		t,
+		artifacts,
+		reflect.TypeOf(factoryapi.FactorySessionArtifactSummary{}),
+		"id",
+		"kind",
+		"visibility",
+		"contentHash",
+		"dispatchId",
+	)
+	requireSchemaFieldsAbsent(t, artifacts, "artifactId", "sessionId")
+}
+
+func assertReadEventsSchemaMatchesGeneratedAPI(t *testing.T, tool mcpfactorysession.ToolDefinition) {
+	t.Helper()
+	resultSchema := toolResultSchema(t, tool)
+	events := arrayItemSchemaProperties(t, resultSchema, "events")
+	requireSchemaFieldsMatchGenerated(
+		t,
+		events,
+		reflect.TypeOf(factoryapi.FactoryEvent{}),
+		"id",
+		"type",
+		"schemaVersion",
+		"context",
+		"payload",
+	)
+	requireSchemaFieldsAbsent(t, events, "timestamp")
+	contextSchema := nestedSchemaProperties(t, events, "context")
+	requireSchemaFieldsMatchGenerated(
+		t,
+		contextSchema,
+		reflect.TypeOf(factoryapi.FactoryEventContext{}),
+		"eventTime",
+		"sequence",
+		"sessionId",
+		"sessionSequence",
+	)
+}
+
+func toolResultSchema(t *testing.T, tool mcpfactorysession.ToolDefinition) map[string]any {
+	t.Helper()
+	properties, ok := tool.OutputSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("tool %q output schema properties missing", tool.Name)
+	}
+	resultSchema, ok := properties["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("tool %q output schema missing result envelope", tool.Name)
+	}
+	resultProps, ok := resultSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("tool %q result schema properties missing", tool.Name)
+	}
+	return resultProps
+}
+
+func nestedSchemaProperties(t *testing.T, schema map[string]any, field string) map[string]any {
+	t.Helper()
+	nested, ok := schema[field].(map[string]any)
+	if !ok {
+		t.Fatalf("schema missing nested field %q", field)
+	}
+	props, ok := nested["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema field %q missing properties", field)
+	}
+	return props
+}
+
+func arrayItemSchemaProperties(t *testing.T, schema map[string]any, field string) map[string]any {
+	t.Helper()
+	arraySchema, ok := schema[field].(map[string]any)
+	if !ok {
+		t.Fatalf("schema missing array field %q", field)
+	}
+	items, ok := arraySchema["items"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema field %q missing items", field)
+	}
+	props, ok := items["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("schema field %q items missing properties", field)
+	}
+	return props
+}
+
+func jsonFieldNames(typ reflect.Type) map[string]struct{} {
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	names := make(map[string]struct{})
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		if !field.IsExported() {
+			continue
+		}
+		tag := field.Tag.Get("json")
+		if tag == "-" {
+			continue
+		}
+		name := strings.Split(tag, ",")[0]
+		if name == "" {
+			name = field.Name
+		}
+		names[name] = struct{}{}
+	}
+	return names
+}
+
+func requireSchemaFieldsMatchGenerated(
+	t *testing.T,
+	schema map[string]any,
+	typ reflect.Type,
+	fields ...string,
+) {
+	t.Helper()
+	generated := jsonFieldNames(typ)
+	for _, field := range fields {
+		if _, ok := schema[field]; !ok {
+			t.Fatalf("schema missing field %q", field)
+		}
+		if _, ok := generated[field]; !ok {
+			t.Fatalf("generated type %s missing json field %q", typ.Name(), field)
+		}
+	}
+}
+
+func requireSchemaFieldsAbsent(t *testing.T, schema map[string]any, fields ...string) {
+	t.Helper()
+	for _, field := range fields {
+		if _, ok := schema[field]; ok {
+			t.Fatalf("schema should not document stale field %q", field)
+		}
 	}
 }
 
