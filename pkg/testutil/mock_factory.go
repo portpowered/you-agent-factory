@@ -149,6 +149,32 @@ func (m *MockFactory) GetDurableFactorySessionResult(
 	return factorysession.ResultResponseToAPI(result), nil
 }
 
+func (m *MockFactory) ReadDurableFactorySessionEvents(
+	ctx context.Context,
+	sessionID string,
+	params factoryapi.GetEventsBySessionIdParams,
+) (*interfaces.FactoryEventStream, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return nil, err
+	}
+	reconnect, err := factorysession.EventReconnectRequestFromAPI(params)
+	if err != nil {
+		return nil, err
+	}
+	result, err := service.ReadEvents(ctx, sessionID, reconnect)
+	if err != nil {
+		if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+			return nil, apisurface.ErrFactorySessionNotFound
+		}
+		if errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
+			return nil, apisurface.ErrInvalidEventReconnectCursor
+		}
+		return nil, err
+	}
+	return factorysession.FactoryEventStreamFromReadResult(result), nil
+}
+
 func (m *MockFactory) StartDurableFactorySessionAsync(
 	ctx context.Context,
 	request factoryapi.FactorySessionExecutionRequest,

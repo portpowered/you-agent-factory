@@ -10,6 +10,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"go.uber.org/zap"
 )
 
@@ -23,6 +24,14 @@ type durableSessionResultGetter interface {
 		sessionID string,
 		params factoryapi.GetFactorySessionResultsParams,
 	) (factoryapi.FactorySessionResult, error)
+}
+
+type durableSessionEventsReader interface {
+	ReadDurableFactorySessionEvents(
+		ctx context.Context,
+		sessionID string,
+		params factoryapi.GetEventsBySessionIdParams,
+	) (*interfaces.FactoryEventStream, error)
 }
 
 type durableExecutionSessionLister interface {
@@ -56,6 +65,19 @@ func (s *Server) requireDurableSessionResultGetter(w http.ResponseWriter) (durab
 		return nil, false
 	}
 	return getter, true
+}
+
+func (s *Server) requireDurableSessionEventsReader(w http.ResponseWriter) (durableSessionEventsReader, bool) {
+	if s.runtime == nil {
+		s.writeError(w, http.StatusInternalServerError, "durable factory session event replay is unavailable", "INTERNAL_ERROR")
+		return nil, false
+	}
+	reader, ok := s.runtime.(durableSessionEventsReader)
+	if !ok {
+		s.writeError(w, http.StatusNotImplemented, "durable factory session event replay is not implemented", "INTERNAL_ERROR")
+		return nil, false
+	}
+	return reader, true
 }
 
 func isDurableExecutionSessionID(sessionID string) bool {

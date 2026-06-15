@@ -2,11 +2,14 @@ package service
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 var _ apisurface.DurableSessionListingAPI = (*FactoryService)(nil)
@@ -60,4 +63,26 @@ func (fs *FactoryService) GetDurableFactorySessionResult(
 		return factoryapi.FactorySessionResult{}, err
 	}
 	return factorysession.ResultResponseToAPI(result), nil
+}
+
+func (fs *FactoryService) ReadDurableFactorySessionEvents(
+	ctx context.Context,
+	sessionID string,
+	params factoryapi.GetEventsBySessionIdParams,
+) (*interfaces.FactoryEventStream, error) {
+	reconnect, err := factorysession.EventReconnectRequestFromAPI(params)
+	if err != nil {
+		return nil, err
+	}
+	result, err := fs.durableExecutionService().ReadEvents(ctx, sessionID, reconnect)
+	if err != nil {
+		if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+			return nil, apisurface.ErrFactorySessionNotFound
+		}
+		if errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
+			return nil, fmt.Errorf("%w: %v", apisurface.ErrInvalidEventReconnectCursor, err)
+		}
+		return nil, err
+	}
+	return factorysession.FactoryEventStreamFromReadResult(result), nil
 }
