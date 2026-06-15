@@ -126,3 +126,10 @@ Expected post-repair observable state:
   runtime behavior is already correct for a lane shape.
 - Story 004 owns focused replay and lifecycle verification across executor
   completion, review completion, and the duplicate-review regression shape.
+- `tests/functional/guards_batch/executor_review_state_lifecycle_test.go`
+  proves completed-executor supersede, completed-review residue cleanup, full
+  process→review terminal convergence, duplicate-review regression for lane three,
+  replayed projection parity via `ReconstructFactoryWorldState`, and planner
+  classification evidence for all three named PRD lanes.
+- `pkg/factory/subsystems/executor_review_reconcile_test.go` includes transitioner
+  pipeline coverage for both process-accept and review-accept reconcile paths.
