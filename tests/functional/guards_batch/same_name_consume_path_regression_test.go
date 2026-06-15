@@ -160,16 +160,25 @@ func TestSameNameConsumePathRegression_MismatchedNamesStayAtToComplete(t *testin
 	dir := scaffoldConsumePathFactoryBuiltInOrder(t)
 	h := testutil.NewServiceTestHarness(t, dir)
 
+	// Queue the first arrival before the engine run loop starts so the
+	// runtime cannot terminate on an empty initial tick pass.
+	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+		Name:        "idea-alpha",
+		WorkTypeID:  "idea",
+		TargetState: "to-complete",
+		TraceID:     "trace-idea-alpha",
+	}})
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
-	for _, req := range []interfaces.SubmitRequest{
-		{Name: "idea-alpha", WorkTypeID: "idea", TargetState: "to-complete", TraceID: "trace-idea-alpha"},
-		{Name: "task-beta", WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-task-beta"},
-	} {
-		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
-	}
+	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+		Name:        "task-beta",
+		WorkTypeID:  "task",
+		TargetState: "to-complete",
+		TraceID:     "trace-task-beta",
+	}})
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "idea:to-complete", 1, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, time.Second)
@@ -191,10 +200,6 @@ func TestSameNameConsumePathRegression_ConcurrentPairsCompleteIndependently(t *t
 	dir := scaffoldConsumePathFactoryBuiltInOrder(t)
 	h := testutil.NewServiceTestHarness(t, dir)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	errCh := h.RunInBackground(ctx)
-
 	pairs := [][2]string{
 		{"dynamic-workflows-cell-cli-validate-list", "dynamic-workflows-cell-cli-run-status-result"},
 		{"dynamic-workflows-cell-mcp-tools", "unrelated-cell-name"},
@@ -203,6 +208,10 @@ func TestSameNameConsumePathRegression_ConcurrentPairsCompleteIndependently(t *t
 		submitConsumePathPair(t, h, pair[0])
 		submitConsumePathPair(t, h, pair[1])
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	errCh := h.RunInBackground(ctx)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 4, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 4, time.Second)
