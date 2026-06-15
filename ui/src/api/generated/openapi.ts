@@ -6600,9 +6600,17 @@ export const WorkstationKind = {
 export type WorkstationKind =
   (typeof WorkstationKind)[keyof typeof WorkstationKind];
 export const WorkstationType = {
-  // Model-backed workstation that renders prompts and dispatches work through the configured worker.
+  // One-shot inference workstation that resolves operation bindings and dispatches through an inference worker.
+  WorkstationTypeInferenceRun: "INFERENCE_RUN",
+  // Agent-run workstation reserved for future agent-loop execution that renders prompts and dispatches through an agent worker.
+  WorkstationTypeAgentRun: "AGENT_RUN",
+  // Script-run workstation that executes deterministic command or script behavior through a script worker.
+  WorkstationTypeScriptRun: "SCRIPT_RUN",
+  // Poller-run workstation that supervises ingress polling through a poller worker.
+  WorkstationTypePollerRun: "POLLER_RUN",
+  // Legacy alias for agent-run behavior during the runtime taxonomy migration window.
   WorkstationTypeModelWorkstation: "MODEL_WORKSTATION",
-  // Provider-agnostic model-operation workstation that selects a worker by declared capability and uppercase operation contract.
+  // Legacy alias for inference-run behavior during the runtime taxonomy migration window.
   WorkstationTypeModelInvoke: "MODEL_INVOKE",
   // Logical pass-through workstation used for routing and guarded loop-breaker transitions without model execution.
   WorkstationTypeLogicalMove: "LOGICAL_MOVE",

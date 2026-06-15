@@ -39,7 +39,7 @@ func ShouldFormatInvocationMetadata(workstation *interfaces.FactoryWorkstationCo
 	if strings.TrimSpace(workstation.Name) != PackagedInvokeWorkstationName {
 		return false
 	}
-	return workstation.Type == interfaces.WorkstationTypeInvoke &&
+	return interfaces.IsInferenceRunWorkstationType(workstation.Type) &&
 		strings.EqualFold(strings.TrimSpace(workstation.Operation), "TTS")
 }
 

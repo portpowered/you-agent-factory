@@ -309,7 +309,7 @@ func TestRuleModelInvokeWorkstations_RejectsOperationOnNonModelInvokeType(t *tes
 	}}
 
 	findings := ruleModelInvokeWorkstations(cfg)
-	assertFindingMatch(t, findings, "workstation-model-invoke-type", "workstations[0](legacy).operation", "only supported on MODEL_INVOKE")
+	assertFindingMatch(t, findings, "workstation-model-invoke-type", "workstations[0](legacy).operation", "only supported on INFERENCE_RUN or legacy MODEL_INVOKE")
 }
 
 func TestRuleModelInvokeWorkstations_RejectsWorkerCompatibilityAndOperationMismatch(t *testing.T) {

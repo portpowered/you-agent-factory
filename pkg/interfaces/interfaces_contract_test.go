@@ -122,6 +122,12 @@ type publicFactoryEnumNormalizerCase struct {
 }
 
 func publicFactoryEnumNormalizerCases() []publicFactoryEnumNormalizerCase {
+	cases := publicFactoryWorkerEnumNormalizerCases()
+	cases = append(cases, publicFactoryNonWorkerEnumNormalizerCases()...)
+	return cases
+}
+
+func publicFactoryWorkerEnumNormalizerCases() []publicFactoryEnumNormalizerCase {
 	return []publicFactoryEnumNormalizerCase{
 		{
 			name:       "worker type legacy model",
@@ -203,6 +209,11 @@ func publicFactoryEnumNormalizerCases() []publicFactoryEnumNormalizerCase {
 			permissive: PermissivePublicFactoryWorkerModelOperationContentType,
 			strict:     StrictPublicFactoryWorkerModelOperationContentType,
 		},
+	}
+}
+
+func publicFactoryNonWorkerEnumNormalizerCases() []publicFactoryEnumNormalizerCase {
+	return []publicFactoryEnumNormalizerCase{
 		{
 			name:       "resource type",
 			alias:      "MODEL",
@@ -212,7 +223,15 @@ func publicFactoryEnumNormalizerCases() []publicFactoryEnumNormalizerCase {
 			strict:     StrictPublicFactoryResourceType,
 		},
 		{
-			name:       "workstation type",
+			name:       "workstation type inference run",
+			alias:      "INFERENCE_RUN",
+			unknown:    "CUSTOM_WORKSTATION",
+			want:       WorkstationTypeInference,
+			permissive: PermissivePublicFactoryWorkstationType,
+			strict:     StrictPublicFactoryWorkstationType,
+		},
+		{
+			name:       "workstation type legacy model invoke",
 			alias:      "MODEL_INVOKE",
 			unknown:    "CUSTOM_WORKSTATION",
 			want:       WorkstationTypeInvoke,

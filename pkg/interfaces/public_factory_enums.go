@@ -161,10 +161,77 @@ var publicFactoryResourceTypeAliases = map[string]string{
 }
 
 var publicFactoryWorkstationTypeAliases = map[string]string{
-	WorkstationTypeClassify: WorkstationTypeClassify,
-	WorkstationTypeLogical:  WorkstationTypeLogical,
-	WorkstationTypeInvoke:   WorkstationTypeInvoke,
-	WorkstationTypeModel:    WorkstationTypeModel,
+	WorkstationTypeInference: WorkstationTypeInference,
+	WorkstationTypeAgent:     WorkstationTypeAgent,
+	WorkstationTypeScript:    WorkstationTypeScript,
+	WorkstationTypePoller:    WorkstationTypePoller,
+	WorkstationTypeInvoke:    WorkstationTypeInvoke,
+	WorkstationTypeModel:     WorkstationTypeModel,
+	WorkstationTypeClassify:  WorkstationTypeClassify,
+	WorkstationTypeLogical:   WorkstationTypeLogical,
+}
+
+// IsInferenceRunWorkstationType reports whether workstationType is an accepted
+// inference-run taxonomy value, including the legacy MODEL_INVOKE compatibility alias.
+func IsInferenceRunWorkstationType(workstationType string) bool {
+	switch StrictPublicFactoryWorkstationType(workstationType) {
+	case WorkstationTypeInference, WorkstationTypeInvoke:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsAgentRunWorkstationType reports whether workstationType is an accepted agent-run
+// taxonomy value, including the legacy MODEL_WORKSTATION compatibility alias.
+func IsAgentRunWorkstationType(workstationType string) bool {
+	switch StrictPublicFactoryWorkstationType(workstationType) {
+	case WorkstationTypeAgent, WorkstationTypeModel:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsScriptRunWorkstationType reports whether workstationType is an accepted script-run taxonomy value.
+func IsScriptRunWorkstationType(workstationType string) bool {
+	return StrictPublicFactoryWorkstationType(workstationType) == WorkstationTypeScript
+}
+
+// IsPollerRunWorkstationType reports whether workstationType and workstation kind
+// denote poller-run behavior, including explicit POLLER_RUN values and legacy
+// poller-kind workstations without an explicit type.
+func IsPollerRunWorkstationType(workstationType string, kind WorkstationKind) bool {
+	switch StrictPublicFactoryWorkstationType(workstationType) {
+	case WorkstationTypePoller:
+		return true
+	default:
+		return strings.TrimSpace(workstationType) == "" && kind == WorkstationKindPoller
+	}
+}
+
+// ProjectWorkstationBehaviorClass maps accepted workstation taxonomy values to the
+// runtime behavior class used for compatibility projection during the migration window.
+func ProjectWorkstationBehaviorClass(workstationType string, kind WorkstationKind) string {
+	switch StrictPublicFactoryWorkstationType(workstationType) {
+	case WorkstationTypeInference, WorkstationTypeInvoke:
+		return WorkstationTypeInference
+	case WorkstationTypeAgent, WorkstationTypeModel:
+		return WorkstationTypeAgent
+	case WorkstationTypeScript:
+		return WorkstationTypeScript
+	case WorkstationTypePoller:
+		return WorkstationTypePoller
+	case WorkstationTypeLogical:
+		return WorkstationTypeLogical
+	case WorkstationTypeClassify:
+		return WorkstationTypeClassify
+	default:
+		if strings.TrimSpace(workstationType) == "" && kind == WorkstationKindPoller {
+			return WorkstationTypePoller
+		}
+		return ""
+	}
 }
 
 var publicFactoryRunnerIDAliases = map[string]string{

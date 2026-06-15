@@ -122,8 +122,13 @@ const (
 	HostedWorkerProviderLinear = "LINEAR"
 )
 
-// WorkstationType constants for workstation AGENTS.md frontmatter.
+// WorkstationType constants for workstation AGENTS.md frontmatter and runtime config.
 const (
+	WorkstationTypeInference = "INFERENCE_RUN"
+	WorkstationTypeAgent     = "AGENT_RUN"
+	WorkstationTypeScript    = "SCRIPT_RUN"
+	WorkstationTypePoller    = "POLLER_RUN"
+	// Legacy runtime identifiers retained during the migration window.
 	WorkstationTypeModel    = "MODEL_WORKSTATION"
 	WorkstationTypeInvoke   = "MODEL_INVOKE"
 	WorkstationTypeLogical  = "LOGICAL_MOVE"
