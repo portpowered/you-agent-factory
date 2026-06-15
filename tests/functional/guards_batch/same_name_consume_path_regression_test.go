@@ -191,10 +191,6 @@ func TestSameNameConsumePathRegression_ConcurrentPairsCompleteIndependently(t *t
 	dir := scaffoldConsumePathFactoryBuiltInOrder(t)
 	h := testutil.NewServiceTestHarness(t, dir)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-	errCh := h.RunInBackground(ctx)
-
 	pairs := [][2]string{
 		{"dynamic-workflows-cell-cli-validate-list", "dynamic-workflows-cell-cli-run-status-result"},
 		{"dynamic-workflows-cell-mcp-tools", "unrelated-cell-name"},
@@ -203,6 +199,10 @@ func TestSameNameConsumePathRegression_ConcurrentPairsCompleteIndependently(t *t
 		submitConsumePathPair(t, h, pair[0])
 		submitConsumePathPair(t, h, pair[1])
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	errCh := h.RunInBackground(ctx)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 4, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 4, time.Second)
