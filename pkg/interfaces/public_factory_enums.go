@@ -91,6 +91,12 @@ func IsAgentWorkerType(workerType string) bool {
 	return StrictPublicFactoryWorkerType(workerType) == WorkerTypeAgent
 }
 
+// IsProviderBackedWorkerType reports whether workerType dispatches through the
+// provider-backed agent executor path, including inference-worker aliases.
+func IsProviderBackedWorkerType(workerType string) bool {
+	return IsInferenceWorkerType(workerType) || IsAgentWorkerType(workerType)
+}
+
 // IsScriptWorkerType reports whether workerType is an accepted script-worker taxonomy value.
 func IsScriptWorkerType(workerType string) bool {
 	return StrictPublicFactoryWorkerType(workerType) == WorkerTypeScript

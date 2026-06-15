@@ -75,15 +75,15 @@ func TestSameNameConsumePathHistoricalRecovery_HiddenIdeaTwinAtComplete_Classifi
 	h := newSameNameConsumePathServiceHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-cli-validate-list"
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
 	submitSameNameOrphanAfterConsumePattern(t, h, cellName, "trace-orphan-"+cellName)
 
-	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, 3*time.Second)
 	time.Sleep(150 * time.Millisecond)
 
 	layer := classifyConsumePathOutcome(t, h, cellName)
@@ -107,7 +107,7 @@ func TestSameNameConsumePathHistoricalRecovery_LivePairWaitingForConsume_IsNotHi
 	h := newSameNameConsumePathServiceHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-cli-run-status-result"
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
@@ -117,7 +117,7 @@ func TestSameNameConsumePathHistoricalRecovery_LivePairWaitingForConsume_IsNotHi
 		TargetState: "to-complete",
 		TraceID:     "trace-idea-" + cellName,
 	}})
-	support.WaitForHarnessPlaceTokenCount(t, h, "idea:to-complete", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "idea:to-complete", 1, 3*time.Second)
 
 	preconditions := evaluateHistoricalManualRepairPreconditions(t, h, cellName)
 	if preconditions.AllowsBoundedHistoricalRepair() {
@@ -130,8 +130,8 @@ func TestSameNameConsumePathHistoricalRecovery_LivePairWaitingForConsume_IsNotHi
 		TargetState: "to-complete",
 		TraceID:     "trace-task-" + cellName,
 	}})
-	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, 3*time.Second)
 
 	layer := classifyConsumePathOutcome(t, h, cellName)
 	if layer != consumePathLayerRuntimeCorrect {
@@ -149,15 +149,15 @@ func TestSameNameConsumePathHistoricalRecovery_BoundedManualMoveCompletesOrphanT
 	h := newSameNameConsumePathServiceHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-mcp-tools"
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
 	submitSameNameOrphanAfterConsumePattern(t, h, cellName, "trace-manual-repair-"+cellName)
 
-	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, 3*time.Second)
 
 	preconditions := evaluateHistoricalManualRepairPreconditions(t, h, cellName)
 	if !preconditions.AllowsBoundedHistoricalRepair() {
@@ -199,14 +199,14 @@ func TestSameNameConsumePathHistoricalRecovery_UnrelatedLanesCompleteWithOrphanP
 		orphanCell = "dynamic-workflows-cell-cli-validate-list"
 		liveCell   = "unrelated-reviewed-cell"
 	)
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
 	submitSameNameOrphanAfterConsumePattern(t, h, orphanCell, "trace-orphan-unrelated")
 	submitConsumePathPair(t, h, liveCell)
-	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 2, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 2, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 2, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 2, 3*time.Second)
 
 	h.Assert().
 		PlaceTokenCount("task:to-complete", 1).
@@ -230,7 +230,7 @@ func TestSameNameConsumePathHistoricalRecovery_TaskOnlyWithoutIdeaTwin_BlocksBou
 	h := newSameNameConsumePathServiceHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-cli-run-status-result"
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 

@@ -1183,6 +1183,73 @@ You are a helpful assistant.
 	}
 }
 
+func TestLoadWorkersFromConfig_AgentWorkerUsesAgentExecutorPath(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
+type: AGENT_WORKER
+model: gpt-5.4
+executorProvider: script_wrap
+modelProvider: codex
+stopToken: COMPLETE
+---
+You are a helpful assistant.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	reviewWorkstation := mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review"))
+	reviewWorkstation.Type = interfaces.WorkstationTypeAgent
+
+	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review", Type: interfaces.WorkstationTypeAgent}},
+		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": reviewWorkstation,
+		},
+	)
+
+	opts, err := loadWorkersFromConfigForServiceTest(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, nil, nil, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+
+	exec, ok := fc.WorkerExecutors["worker-a"]
+	if !ok {
+		t.Fatal("expected worker-a executor to be registered")
+	}
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+	if _, ok := wsExec.Executor.(*workers.AgentExecutor); !ok {
+		t.Fatalf("expected wrapped executor to be *workers.AgentExecutor, got %T", wsExec.Executor)
+	}
+
+	workerDef, ok := wsExec.RuntimeConfig.Worker("worker-a")
+	if !ok {
+		t.Fatal("expected worker-a in runtime config")
+	}
+	if workerDef.Type != interfaces.WorkerTypeAgent {
+		t.Fatalf("worker type = %q, want %q", workerDef.Type, interfaces.WorkerTypeAgent)
+	}
+	workstationDef, ok := wsExec.RuntimeConfig.Workstation("review")
+	if !ok {
+		t.Fatal("expected review workstation in runtime config")
+	}
+	if workstationDef.Type != interfaces.WorkstationTypeAgent {
+		t.Fatalf("workstation type = %q, want %q", workstationDef.Type, interfaces.WorkstationTypeAgent)
+	}
+}
+
 func TestLoadWorkersFromConfig_ModelWorkerUsesCanonicalProviderCommandRunnerAndRecordingProvider(t *testing.T) {
 	dir := t.TempDir()
 

@@ -63,6 +63,9 @@ func TestWorkerTaxonomyBehaviorProjection(t *testing.T) {
 			if got := interfaces.IsAgentWorkerType(tt.workerType); got != tt.agent {
 				t.Fatalf("IsAgentWorkerType(%q) = %v, want %v", tt.workerType, got, tt.agent)
 			}
+			if got := interfaces.IsProviderBackedWorkerType(tt.workerType); got != (tt.inference || tt.agent) {
+				t.Fatalf("IsProviderBackedWorkerType(%q) = %v, want %v", tt.workerType, got, tt.inference || tt.agent)
+			}
 			if got := interfaces.IsScriptWorkerType(tt.workerType); got != tt.script {
 				t.Fatalf("IsScriptWorkerType(%q) = %v, want %v", tt.workerType, got, tt.script)
 			}

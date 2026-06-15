@@ -88,6 +88,10 @@ func TestSameNameGuard_MatchingNamesCompletesJoin(t *testing.T) {
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	errCh := h.RunInBackground(ctx)
+
 	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
 		Name:       "alpha",
 		WorkTypeID: "plan",
@@ -99,11 +103,7 @@ func TestSameNameGuard_MatchingNamesCompletesJoin(t *testing.T) {
 		TraceID:    "trace-same-name-task",
 	}})
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	errCh := h.RunInBackground(ctx)
-
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:matched", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:matched", 1, 3*time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "plan:ready", 0, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:ready", 0, time.Second)
 

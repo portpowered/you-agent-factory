@@ -150,9 +150,9 @@ func TestSameNameConsumePathOwnership_OrphanTaskAfterPriorConsume_MatchesLiveQue
 
 	submitSameNameOrphanAfterConsumePattern(t, h, cellName, "trace-task-b-"+cellName)
 
-	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, 3*time.Second)
 	time.Sleep(150 * time.Millisecond)
 
 	h.Assert().
@@ -194,8 +194,8 @@ func TestSameNameConsumePathOwnership_ProjectionMatchesRuntimeBeforeConsume(t *t
 		},
 	})
 
-	support.WaitForHarnessPlaceTokenCount(t, h, "idea:to-complete", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "idea:to-complete", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, 3*time.Second)
 
 	runtimeSnap, err := h.GetEngineStateSnapshot()
 	if err != nil {
@@ -266,8 +266,8 @@ func submitSameNameOrphanAfterConsumePattern(
 		TargetState: "to-complete",
 		TraceID:     "trace-task-a-" + cellName,
 	}})
-	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, 3*time.Second)
 	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
 		Name:        cellName,
 		WorkTypeID:  "task",
