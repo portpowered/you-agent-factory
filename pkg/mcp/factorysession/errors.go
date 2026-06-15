@@ -17,11 +17,13 @@ const (
 	errorCodeStartUnknownScenario      = "factory_session.start.unknown_scenario"
 	errorCodeStartRequestIDConflict    = "factory_session.start.request_id_conflict"
 	errorCodeSessionNotFound           = "factory_session.session.not_found"
-	errorCodeResultNotReady            = "factory_session.result.not_ready"
-	errorMessageServiceUnavailable     = "factory session execution service is unavailable"
-	errorMessageStartRequestIDConflict = "execution request id was reused with a different start tuple"
-	errorMessageSessionNotFound        = "factory session not found"
-	errorMessageResultNotReady         = "factory session result is not ready"
+	errorCodeResultNotReady                = "factory_session.result.not_ready"
+	errorCodeReconnectCursorNotFound     = "factory_session.events.reconnect_cursor_not_found"
+	errorMessageServiceUnavailable         = "factory session execution service is unavailable"
+	errorMessageStartRequestIDConflict     = "execution request id was reused with a different start tuple"
+	errorMessageSessionNotFound            = "factory session not found"
+	errorMessageResultNotReady             = "factory session result is not ready"
+	errorMessageReconnectCursorNotFound    = "event reconnect cursor not found in session history"
 )
 
 func requestValidationErrorEnvelope(err error) ToolErrorEnvelope {
@@ -116,6 +118,39 @@ func resultNotReadyErrorEnvelope(sessionID string, availability *factorysessione
 	}
 }
 
+func eventReadErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
+	if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+		return sessionNotFoundErrorEnvelope(sessionID)
+	}
+	if errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
+		return ToolErrorEnvelope{
+			Code:      errorCodeReconnectCursorNotFound,
+			Message:   errorMessageReconnectCursorNotFound,
+			Retryable: false,
+			SessionID: strings.TrimSpace(sessionID),
+			Details: map[string]any{
+				"reason": "RECONNECT_CURSOR_NOT_FOUND",
+			},
+		}
+	}
+	return executionErrorEnvelope(err)
+}
+
+func controlErrorEnvelope(sessionID string, err error) ToolErrorEnvelope {
+	if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+		return sessionNotFoundErrorEnvelope(sessionID)
+	}
+	if errors.Is(err, factorysessionexecution.ErrDispatchNotFound) {
+		return ToolErrorEnvelope{
+			Code:      "factory_session.dispatch.not_found",
+			Message:   "dispatch not found",
+			Retryable: false,
+			SessionID: strings.TrimSpace(sessionID),
+		}
+	}
+	return executionErrorEnvelope(err)
+}
+
 func executionErrorEnvelope(err error) ToolErrorEnvelope {
 	var validationErr *factorysessionexecution.ValidationError
 	if errors.As(err, &validationErr) {
@@ -146,26 +181,14 @@ func validationDetailsFromPreview(preview factoryapi.FactoryPreviewResult) map[s
 	details := map[string]any{
 		"valid": preview.Valid,
 	}
+	if preview.SourceResolution.SourceHash != nil {
+		details["sourceHash"] = *preview.SourceResolution.SourceHash
+	}
 	if len(preview.SourceValidationIssues) > 0 {
 		details["sourceValidationIssues"] = preview.SourceValidationIssues
 	}
 	if preview.SourceResolution.Diagnostics != nil && len(*preview.SourceResolution.Diagnostics) > 0 {
-		details["sourceResolutionDiagnostics"] = *preview.SourceResolution.Diagnostics
-	}
-	if len(preview.PolicyPreview.ValidationIssues) > 0 {
-		details["policyValidationIssues"] = preview.PolicyPreview.ValidationIssues
-	}
-	if preview.SourceResolution.SourceHash != nil {
-		details["sourceHash"] = *preview.SourceResolution.SourceHash
-	}
-	if preview.SourceResolution.SourceRef != nil {
-		details["sourceRef"] = *preview.SourceResolution.SourceRef
-	}
-	if preview.PolicyPreview.PolicyHash != "" {
-		details["effectivePolicyHash"] = preview.PolicyPreview.PolicyHash
-	}
-	if len(preview.PolicyPreview.EffectivePolicy) > 0 {
-		details["effectivePolicy"] = preview.PolicyPreview.EffectivePolicy
+		details["diagnostics"] = *preview.SourceResolution.Diagnostics
 	}
 	return details
 }
