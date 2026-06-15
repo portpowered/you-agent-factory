@@ -144,12 +144,41 @@ go test ./pkg/cli/... ./pkg/mcp/...
 go test ./tests/functional/smoke -run TestMCPServe_RealCLI
 ```
 
-## Follow-Up Work Outside This Doc
+## Follow-Up Cell For Async Install Smoke
+
+Recovery lane `dynamic-workflows-recovery-mcp-install-plan-scope` completes
+with preview-only install proof. Async Factory Session install smoke remains
+blocked by one explicit follow-up cell:
+
+**Cell:** `dynamic-workflows-cell-mcp-session-serve`
+
+**Missing shared MCP surface:** `you mcp serve` registers only
+`PreviewToolDefinitions()` (`you.factory_session.validate_source`,
+`you.factory_session.start_preview`). Factory Session execution and inspection
+tools from `pkg/mcp/factorysession.DiscoverTools()` — including
+`you.factory_session.start_async`, `you.factory_session.get`, and
+`you.factory_session.get_result` — are implemented for mock-client tests but
+not wired onto the canonical stdio serve path in `pkg/mcp/server/server.go`.
+
+**Blocked install behavior until that cell lands:**
+
+| Blocked behavior | Tool | Why hosts cannot prove it today |
+|------------------|------|----------------------------------|
+| Async Factory Session start | `you.factory_session.start_async` | Tool is not registered on `you mcp serve` |
+| Factory Session status polling | `you.factory_session.get` | Tool is not registered on `you mcp serve` |
+| Factory Session result retrieval | `you.factory_session.get_result` | Tool is not registered on `you mcp serve` |
+
+The full follow-up scope, non-goals, and evidence table live in
+`docs/internal/development/plans/dynamic-workflows/follow-up-cell-mcp-session-serve.md`.
+
+No additional follow-up blocker remains for preview-only discovery and
+validate/start-preview install smoke covered by this doc.
+
+## Out Of Scope For Any Follow-Up Cell Named Here
 
 | Behavior | Status |
 |----------|--------|
-| Async run, status, or result install smoke through MCP | Deferred until the serve catalog exposes the needed Factory Session session tools |
-| Multi-host parity matrices across every MCP client UI | Out of scope for this recovery lane |
+| Multi-host parity matrices across every MCP client UI | Out of scope for the recovery lane and the session-serve follow-up cell |
 
 ## Related Topics
 

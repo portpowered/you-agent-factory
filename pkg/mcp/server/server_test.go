@@ -54,6 +54,46 @@ func TestNewPreviewServer_AdvertisesWorkflowPreviewCatalog(t *testing.T) {
 	}
 }
 
+func TestServeStdio_ExcludesFactorySessionExecutionTools(t *testing.T) {
+	ctx := context.Background()
+	serverTransport, clientTransport := sdkmcp.NewInMemoryTransports()
+
+	server := mcpserver.NewPreviewServer()
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		t.Fatalf("connect server: %v", err)
+	}
+	defer serverSession.Close()
+
+	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "test-client", Version: "1.0.0"}, nil)
+	clientSession, err := client.Connect(ctx, clientTransport, nil)
+	if err != nil {
+		t.Fatalf("connect client: %v", err)
+	}
+	defer clientSession.Close()
+
+	listResult, err := clientSession.ListTools(ctx, &sdkmcp.ListToolsParams{})
+	if err != nil {
+		t.Fatalf("list tools: %v", err)
+	}
+
+	gotNames := make(map[string]struct{}, len(listResult.Tools))
+	for _, tool := range listResult.Tools {
+		gotNames[tool.Name] = struct{}{}
+	}
+
+	for _, excluded := range []string{
+		mcpfactorysession.ToolStartAsync,
+		mcpfactorysession.ToolStartSync,
+		mcpfactorysession.ToolGetSession,
+		mcpfactorysession.ToolGetResult,
+	} {
+		if _, found := gotNames[excluded]; found {
+			t.Fatalf("serve catalog unexpectedly exposed %q", excluded)
+		}
+	}
+}
+
 func TestServeStdio_DiscoverToolsOverOwnedTransport(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
