@@ -79,6 +79,29 @@ func TestListDispatchesResponseToAPI_MapsQueuedRunningAndFailedFixtures(t *testi
 	}
 }
 
+func TestListDispatchesResponseToAPI_PreservesNonLegacyModelProvider(t *testing.T) {
+	catalog := loadDurableFixtureCatalog(t)
+	scenario := findScenario(t, catalog, "petri-running-one-dispatch")
+	mapped := factorysession.ListDispatchesResponseToAPI(listDispatchesFromFixture(scenario))
+	if len(mapped.Dispatches) != 1 {
+		t.Fatalf("dispatch count = %d, want 1", len(mapped.Dispatches))
+	}
+	if mapped.Dispatches[0].ModelProvider == nil {
+		t.Fatal("modelProvider missing for CLAUDE durable dispatch summary")
+	}
+	if *mapped.Dispatches[0].ModelProvider != factoryapi.WorkerModelProviderClaude {
+		t.Fatalf("modelProvider = %q, want CLAUDE", *mapped.Dispatches[0].ModelProvider)
+	}
+
+	detailMapped := factorysession.DispatchDetailResponseToAPI(dispatchDetailFromFixture(scenario["dispatchDetail"].(map[string]any)))
+	if detailMapped.ModelProvider == nil {
+		t.Fatal("modelProvider missing for CLAUDE durable dispatch detail")
+	}
+	if *detailMapped.ModelProvider != factoryapi.WorkerModelProviderClaude {
+		t.Fatalf("detail modelProvider = %q, want CLAUDE", *detailMapped.ModelProvider)
+	}
+}
+
 func TestDispatchDetailResponseToAPI_MapsPetriAndJavaScriptFixtures(t *testing.T) {
 	catalog := loadDurableFixtureCatalog(t)
 
@@ -252,9 +275,10 @@ func dispatchSummaryFromFixture(dispatch map[string]any) factorysessionexecution
 		DispatchKind: stringValue(dispatch, "dispatchKind"),
 		Phase:        stringValue(dispatch, "phase"),
 		Label:        stringValue(dispatch, "label"),
-		Attempt:      intValue(dispatch, "attempt"),
-		RunnerID:     dispatchRunnerIDFromFixtureMap(dispatch),
-		Model:        stringValue(dispatch, "model"),
+		Attempt:       intValue(dispatch, "attempt"),
+		ModelProvider: stringValue(dispatch, "modelProvider"),
+		RunnerID:      dispatchRunnerIDFromFixtureMap(dispatch),
+		Model:         stringValue(dispatch, "model"),
 		Provider:     stringValue(dispatch, "provider"),
 	}
 	if ids, ok := dispatch["outputArtifactIds"].([]any); ok {

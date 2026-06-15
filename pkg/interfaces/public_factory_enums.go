@@ -461,6 +461,16 @@ func GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProviderPtr(value stri
 	return nil
 }
 
+// GeneratedPublicFactoryWorkerModelProviderFromStoredSelection returns the generated
+// public WorkerModelProvider enum preferring a canonical stored provider value over
+// legacy runner identifiers.
+func GeneratedPublicFactoryWorkerModelProviderFromStoredSelection(modelProvider, runnerID string) *factoryapi.WorkerModelProvider {
+	if ptr := GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProviderPtr(modelProvider); ptr != nil {
+		return ptr
+	}
+	return GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProviderPtr(runnerID)
+}
+
 const (
 	publicFactoryWorkstationKindStandard = "STANDARD"
 	publicFactoryWorkstationKindRepeater = "REPEATER"

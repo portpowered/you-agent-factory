@@ -222,6 +222,7 @@ type DispatchSummary struct {
 	Phase               string
 	Label               string
 	Attempt             int
+	ModelProvider       string
 	RunnerID            string
 	Model               string
 	Provider            string

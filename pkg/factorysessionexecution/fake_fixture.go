@@ -388,9 +388,10 @@ func dispatchSummaryFromFixtureMap(dispatch map[string]any) DispatchSummary {
 		DispatchKind: fixtureStringValue(dispatch, "dispatchKind"),
 		Phase:        fixtureStringValue(dispatch, "phase"),
 		Label:        fixtureStringValue(dispatch, "label"),
-		Attempt:      fixtureIntValue(dispatch, "attempt"),
-		RunnerID:     dispatchRunnerIDFromFixture(dispatch),
-		Model:        fixtureStringValue(dispatch, "model"),
+		Attempt:       fixtureIntValue(dispatch, "attempt"),
+		ModelProvider: fixtureStringValue(dispatch, "modelProvider"),
+		RunnerID:      dispatchRunnerIDFromFixture(dispatch),
+		Model:         fixtureStringValue(dispatch, "model"),
 		Provider:     fixtureStringValue(dispatch, "provider"),
 	}
 	if ids, ok := dispatch["outputArtifactIds"].([]any); ok {

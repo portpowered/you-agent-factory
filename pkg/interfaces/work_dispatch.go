@@ -352,6 +352,7 @@ type FactorySessionDispatchState struct {
 	Status         string                              `json:"status"`
 	Phase          string                              `json:"phase,omitempty"`
 	Label          string                              `json:"label,omitempty"`
+	ModelProvider  string                              `json:"modelProvider,omitempty"`
 	RunnerID       string                              `json:"runnerId,omitempty"`
 	Model          string                              `json:"model,omitempty"`
 	Provider       string                              `json:"provider,omitempty"`

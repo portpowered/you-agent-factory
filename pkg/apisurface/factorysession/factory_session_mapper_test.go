@@ -12,6 +12,7 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/workflowsource"
 )
 
 func TestDurableSessionMapperRoundTrip_AllFixtureResponses(t *testing.T) {
@@ -212,6 +213,55 @@ func TestDurableSessionMapperRoundTrip_FakeServiceProjections(t *testing.T) {
 			mappedDispatches := factorysession.ListDispatchesResponseToAPI(dispatches)
 			assertDispatchListMapperRoundTrip(t, scenarioID, map[string]any{"sessionId": started.SessionID}, fixtureDispatchRows(mappedDispatches.Dispatches))
 		})
+	}
+}
+
+func TestListDispatchesResponseToAPI_FakeServicePreservesClaudeModelProvider(t *testing.T) {
+	fixturesPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(fixturesPath)
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+	}
+
+	if _, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-petri-run-001",
+		Source: factorysessionexecution.Source{
+			Kind:      workflowsource.KindFactoryID,
+			FactoryID: "customer-support-triage",
+		},
+	}); err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	listed, err := service.ListDispatches(context.Background(), "dur-sess-petri-run-001")
+	if err != nil {
+		t.Fatalf("ListDispatches: %v", err)
+	}
+	if len(listed.Dispatches) != 1 {
+		t.Fatalf("dispatch count = %d, want 1", len(listed.Dispatches))
+	}
+	if listed.Dispatches[0].ModelProvider != "CLAUDE" {
+		t.Fatalf("internal modelProvider = %q, want CLAUDE", listed.Dispatches[0].ModelProvider)
+	}
+
+	mapped := factorysession.ListDispatchesResponseToAPI(listed)
+	if mapped.Dispatches[0].ModelProvider == nil {
+		t.Fatal("public modelProvider missing for CLAUDE durable dispatch summary")
+	}
+	if *mapped.Dispatches[0].ModelProvider != factoryapi.WorkerModelProviderClaude {
+		t.Fatalf("public modelProvider = %q, want CLAUDE", *mapped.Dispatches[0].ModelProvider)
+	}
+
+	detail, err := service.GetDispatch(context.Background(), "dur-sess-petri-run-001", "disp-petri-001")
+	if err != nil {
+		t.Fatalf("GetDispatch: %v", err)
+	}
+	mappedDetail := factorysession.DispatchDetailResponseToAPI(detail)
+	if mappedDetail.ModelProvider == nil {
+		t.Fatal("public modelProvider missing for CLAUDE durable dispatch detail")
+	}
+	if *mappedDetail.ModelProvider != factoryapi.WorkerModelProviderClaude {
+		t.Fatalf("detail modelProvider = %q, want CLAUDE", *mappedDetail.ModelProvider)
 	}
 }
 

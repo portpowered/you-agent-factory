@@ -598,9 +598,10 @@ func (r *factoryWorldReducer) applyDispatchQueuedEvent(event factoryapi.FactoryE
 		DispatchKind: string(payload.DispatchKind),
 		Status:       string(factoryapi.FactoryDispatchStatusQUEUED),
 		Phase:        dispatchLifecyclePhase(event.Context),
-		Label:        stringValue(payload.Label),
-		RunnerID:     internalRunnerIDFromDispatchModelProvider(payload.ModelProvider),
-		Model:        stringValue(payload.Model),
+		Label:         stringValue(payload.Label),
+		ModelProvider: publicWorkerModelProviderString(payload.ModelProvider),
+		RunnerID:      internalRunnerIDFromDispatchModelProvider(payload.ModelProvider),
+		Model:         stringValue(payload.Model),
 		Provider:     stringValue(payload.Provider),
 		PromptDigest: stringValue(payload.PromptDigest),
 		SchemaDigest: stringValue(payload.SchemaDigest),
@@ -717,6 +718,9 @@ func mergeJavaScriptDispatchState(
 	if incoming.Label != "" {
 		merged.Label = incoming.Label
 	}
+	if incoming.ModelProvider != "" {
+		merged.ModelProvider = incoming.ModelProvider
+	}
 	if incoming.RunnerID != "" {
 		merged.RunnerID = incoming.RunnerID
 	}
@@ -810,6 +814,13 @@ func int32Value(value *int32) int {
 		return 0
 	}
 	return int(*value)
+}
+
+func publicWorkerModelProviderString(value *factoryapi.WorkerModelProvider) string {
+	if value == nil {
+		return ""
+	}
+	return string(*value)
 }
 
 func internalRunnerIDFromDispatchModelProvider(value *factoryapi.WorkerModelProvider) string {

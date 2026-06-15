@@ -168,7 +168,7 @@ func projectedDispatch(
 	if label := strings.TrimSpace(state.Label); label != "" {
 		dispatch.Label = &label
 	}
-	if modelProvider := interfaces.GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProviderPtr(state.RunnerID); modelProvider != nil {
+	if modelProvider := interfaces.GeneratedPublicFactoryWorkerModelProviderFromStoredSelection(state.ModelProvider, state.RunnerID); modelProvider != nil {
 		dispatch.ModelProvider = modelProvider
 	}
 	if model := strings.TrimSpace(state.Model); model != "" {
