@@ -62,6 +62,7 @@ func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 		"relationships",
 		"work",
 		"sessions",
+		"mcp-hosts",
 		"orchestrators",
 		"workstations",
 		"workers",
@@ -96,6 +97,7 @@ func TestSupportedTopicCommands_ReturnsCanonicalTopicsAndAliases(t *testing.T) {
 		"relationships",
 		"work",
 		"sessions",
+		"mcp-hosts",
 		"orchestrators",
 		"workstations",
 		"workstation",
@@ -909,7 +911,7 @@ func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, sessions, orchestrators, workstations, workers, resources, models, packaged-tts, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, sessions, mcp-hosts, orchestrators, workstations, workers, resources, models, packaged-tts, batch-inputs, templates)` {
 		t.Fatalf("unsupported topic error = %q", got)
 	}
 }

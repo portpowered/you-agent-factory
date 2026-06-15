@@ -178,6 +178,7 @@ changing repository files. Prompt composition rules live in `docs/reference/auth
 | Batch relations (`DEPENDS_ON`, `PARENT_CHILD`, `SPAWNED_BY`) | `you docs relationships` |
 | Submitted work (`POST /factory-sessions/{session_id}/work`, tags, tokens) | `you docs work` |
 | Sessions, factory query, status API, dashboard | `you docs sessions` |
+| Dynamic workflow MCP host setup | `you docs mcp-hosts` |
 | Workstation routing and runtime fields | `you docs workstations` |
 | Worker types and providers | `you docs workers` |
 | Resource capacity | `you docs resources` |

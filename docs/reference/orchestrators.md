@@ -84,6 +84,7 @@ partial result refs without raw checkpoint bodies.
 
 ## Related Topics
 
+- `you docs mcp-hosts` — dynamic workflow MCP host setup and `you mcp serve`
 - `you docs sessions` — session list, show, factory query, status API, and routing
 - `you docs config` — `factory.json` topology and portability
 - `you docs work` — submitted work and verification commands
