@@ -11,6 +11,8 @@
 - Canonical runtime session lifecycle events replay through `ReplaySessionProjection` (`session_event_projection.go`) into durable `SessionReadResult`/`ResultReadResult` projections; `BuildCanonicalRuntimeSessionEvents` may include bounded `resultSummary` text on `SESSION_RESULT_UPDATED`, and sync-timeout paths rebuild events after `SYNC_WAIT_TIMED_OUT` availability changes. Prove live-vs-replayed parity and idempotent replay in `runtime_event_replay_test.go`.
 - Durable `GET /factory-sessions/{session_id}/events` routes `dur-sess-*` ids through `ReadDurableFactorySessionEvents` on `FactoryService`/`MockFactory`, maps reconnect params with `EventReconnectRequestFromAPI`, projects SSE history via `FactoryEventStreamFromReadResult` (closed live channel for history-only durable replay), and preserves live Petri session streams on the existing `SessionAPI` path. Prove reconnect cursor filtering, missing cursor `BAD_REQUEST`, and replay/read/result parity in `server_durable_session_events_test.go`.
 - CI `Build, Lint, and API` runs `make backend-size` on owned Go packages (100-line function cap). Split large test functions with `t.Helper()` assertion helpers (see `runtime_projection_test.go`) rather than inline assertion blocks.
+- Real-backend Factory Session API slice contract alignment: when handlers return `400 BadRequest` for invalid event reconnect cursors, document it on `/events` and `/factory-sessions/{session_id}/events` in authored OpenAPI; prove route family, reconnect parameters, `FactoryEvent` SSE schema, and absence of workflow-run routes via `assertDurableSessionEventSurfaceSchemas` and `assertRealBackendSessionAPISliceRoutes` in `pkg/api/contracttests/generated_contract_durable_session_test.go`.
+- Real-backend API parity lane defers dispatch/artifact reads, lifecycle controls (including resume), website inspection, MCP host installation, and live-provider bridge parity to named follow-up cells in `follow-up-cell-real-backend-api-session-parity-deferred.md`; prove deferred posture with `assertDeferredRealBackendSessionRouteFamilies` and `server_durable_session_deferred_routes_test.go` while keeping `501` stubs in `handlers_factory.go`.
 
 ## 2026-06-11T12:49:03Z - dynamic-workflows-cell-session-backend-runtime-001
 - Implemented `PrepareStart`, `StartPrepareContext`, and `PreparedStart` in `pkg/factorysessionexecution/prepare_start.go` to normalize real JavaScript session starts through orchestrator-owned source resolution, validation, policy projection, args checks, and wait validation before runtime execution.
@@ -149,4 +151,26 @@
   - Durable event SSE must use a closed `Events` channel in `FactoryEventStreamFromReadResult`; a nil or open channel leaves `getEvents` blocked after history flush.
   - `httptest.NewRecorder` event tests need a closed live channel; `httptest.NewServer` can rely on client disconnect to cancel the request context.
   - API event replay parity tests should marshal streamed `FactoryEvent` bodies back to `json.RawMessage` before calling `ReplaySessionProjection`.
+---
+
+## 2026-06-16T12:00:00Z - dynamic-workflows-cell-real-backend-api-session-parity-005
+- Authored OpenAPI `400 BadRequest` responses on `/events` and `/factory-sessions/{session_id}/events` for invalid reconnect cursors; regenerated bundled `api/openapi.yaml` and `ui/src/api/generated/openapi.ts`.
+- Added `assertDurableSessionEventSurfaceSchemas` and `assertRealBackendSessionAPISliceRoutes` contract coverage for the narrow start/list/get/result/events route family, reconnect cursor parameters, `FactoryEvent` SSE schema, and workflow-run route absence.
+- Extended mapper boundary tests for positive `EventReconnectRequestFromAPI` cursor mapping.
+- Files changed: `api/openapi-main.yaml`, `api/openapi.yaml`, `pkg/api/contracttests/generated_contract_durable_session_test.go`, `pkg/api/contracttests/openapi_contract_surface_test.go`, `pkg/apisurface/factorysession/factory_session_mapper_test.go`, `ui/src/api/generated/openapi.ts`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Existing durable execution/read/result contract assertions already covered start/list/get/result; story 005 mainly closed the events/reconnect-cursor contract gap plus documented invalid-cursor `400` on SSE routes.
+  - `make generate-api` requires `ui/node_modules` (`npm ci` in `ui/`) before TypeScript OpenAPI regeneration in fresh worktrees.
+  - `assertRealBackendSessionAPISliceRoutes` is the lightweight guard for "no workflow-run API noun" on this lane without scanning generated type names.
+---
+
+## 2026-06-16T19:15:00Z - dynamic-workflows-cell-real-backend-api-session-parity-006
+- Recorded deferred route families as named follow-up cells in `follow-up-cell-real-backend-api-session-parity-deferred.md`: dispatch/artifact reads, lifecycle controls (including resume), website inspection, MCP host installation (`follow-up-cell-mcp-session-serve.md`), and live-provider bridge parity.
+- Added `assertDeferredRealBackendSessionRouteFamilies` contract coverage and `server_durable_session_deferred_routes_test.go` proving runtime-backed sessions still receive `501 NotImplemented` on deferred routes.
+- Updated `docs/internal/processes/api-relevant-files.md` with the real-backend API parity lane boundary.
+- Files changed: `docs/internal/development/plans/dynamic-workflows/follow-up-cell-real-backend-api-session-parity-deferred.md`, `docs/internal/processes/api-relevant-files.md`, `pkg/api/contracttests/generated_contract_durable_session_test.go`, `pkg/api/contracttests/openapi_contract_surface_test.go`, `pkg/api/server_durable_session_deferred_routes_test.go`
+- **Learnings for future iterations:**
+  - Story 006 is documentation + guardrail tests only; deferred routes stay `501` stubs in `handlers_factory.go` until their named follow-up cells schedule wiring.
+  - `assertDeferredRealBackendSessionRouteFamilies` complements `assertRealBackendSessionAPISliceRoutes` by proving OpenAPI still documents deferred families without treating them as in-scope for this lane.
+  - MCP host install deferral already has `follow-up-cell-mcp-session-serve.md`; cross-reference it instead of duplicating MCP install scope in the API parity deferred note.
 ---
