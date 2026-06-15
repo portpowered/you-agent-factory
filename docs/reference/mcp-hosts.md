@@ -212,6 +212,70 @@ After configuration, verify the install path in this order:
 This sequence uses Factory Session vocabulary end to end. It does not require a
 separate workflow-run surface.
 
+## Smoke Proof Boundaries
+
+Use this matrix to tell what the repository proves in CI versus what still needs
+a human-host check. Coverage here is limited to MCP install and smoke behavior.
+It does not claim API parity, dashboard parity, or real-runtime execution parity.
+
+### Coverage Matrix
+
+| Host / path | Coverage | What this batch proves |
+|-------------|----------|------------------------|
+| Shared `you mcp serve` stdio server (all host examples depend on this) | **Automated in-repo** | Stdio JSON-RPC install path: `initialize`, `tools/list`, `you.factory_session.validate_source`, `you.factory_session.start_async`, `you.factory_session.get`, and not-ready `you.factory_session.get_result` through `pkg/cli/mcp/serve_smoke_test.go` |
+| Generic stdio MCP client config pattern | **Documented manual** | Host respawn, config reload, and tool discovery through a real MCP client UI; shared server/tool behavior is automated above |
+| Cursor (`.cursor/mcp.json` or `~/.cursor/mcp.json`) | **Documented manual** | Same command/args/cwd as the generic pattern plus Cursor-specific config path and reload behavior |
+| Codex | **Documented manual** | Same stdio child-process launch through Codex MCP settings; no Codex-specific in-repo automation in this batch |
+| OpenCode | **Documented manual** | Same stdio child-process launch through OpenCode MCP settings; no OpenCode-specific in-repo automation in this batch |
+| Kiro | **Documented manual** | Same stdio child-process launch through Kiro MCP settings; no Kiro-specific in-repo automation in this batch |
+| Gemini | **Documented manual** | Same stdio child-process launch through Gemini MCP settings; no Gemini-specific in-repo automation in this batch |
+| HTTP or SSE MCP transport | **Unsupported this batch** | `you mcp serve` is stdio-only for this install lane |
+| Live factory HTTP runtime backing | **Out of scope for install smoke** | Default `you mcp serve` uses the durable session fixture catalog; real-runtime swap-in is not part of this proof matrix |
+
+### Automated In-Repo Proof
+
+`pkg/cli/mcp/serve_smoke_test.go` exercises the documented install path through
+`mcpcli.RunServe` with injected `ServeConfig.Service` and piped stdio (an
+equivalent MCP-client harness, not a host-specific config file):
+
+| Step | MCP method / tool | Behavior proved |
+|------|-------------------|-----------------|
+| Handshake | `initialize` | Protocol version `2024-11-05` |
+| Discovery | `tools/list` | Canonical tools present: `you.factory_session.validate_source`, `you.factory_session.start_async`, `you.factory_session.get`, `you.factory_session.get_result` |
+| Validate fixture | `tools/call` → `you.factory_session.validate_source` | Valid preview outcome for a temp workflow fixture |
+| Async start | `tools/call` → `you.factory_session.start_async` | Fixture `req-js-run-n-001` returns `RUNNING` |
+| Status poll | `tools/call` → `you.factory_session.get` | Running session status for the started session id |
+| Result poll | `tools/call` → `you.factory_session.get_result` | Typed `factory_session.result.not_ready` envelope while the session is still running |
+
+The same file also proves missing `--fixture-catalog` startup failure when no
+service is injected.
+
+This automation proves the shared MCP server and tool invocation surface that
+every host example above depends on. It does **not** prove host UI discovery,
+host config file parsing, or live factory HTTP runtime execution.
+
+### Manual Host Smoke Sequence
+
+For each **documented manual** host row above, run this exact sequence after
+saving the host configuration from the matching section earlier in this guide:
+
+1. Start or respawn the MCP server through the host configuration (host must
+   launch `you mcp serve` with the documented `command`, `args`, and `cwd`).
+2. Discover tools in the host UI or tool catalog and confirm the
+   `you.factory_session.*` catalog is present (compatibility `you.workflow.*`
+   aliases may also appear).
+3. Call `you.factory_session.validate_source` against a known fixture workflow
+   source in the configured project root.
+4. Call `you.factory_session.start_async` for one simple fixture session (for
+   example factory id `customer-support-triage` with request id
+   `req-js-run-n-001` when using the default fixture catalog).
+5. Poll with `you.factory_session.get` until the session is observable, then
+   call `you.factory_session.get_result` and confirm either a not-ready envelope
+   while running or a terminal result after completion.
+
+Record manual pass/fail per host in release notes or QA checklists outside this
+repository when host-specific behavior is under review.
+
 ## Related
 
 - `you docs orchestrators`
