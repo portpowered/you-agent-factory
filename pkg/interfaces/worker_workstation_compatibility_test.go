@@ -6,7 +6,25 @@ import (
 )
 
 func TestCompatibleWorkerWorkstationBehavior(t *testing.T) {
-	tests := []struct {
+	for _, tt := range compatibleWorkerWorkstationBehaviorCases() {
+		t.Run(tt.name, func(t *testing.T) {
+			got := CompatibleWorkerWorkstationBehavior(tt.workerType, tt.workstationType, tt.kind)
+			if got != tt.wantCompatible {
+				t.Fatalf("CompatibleWorkerWorkstationBehavior(%q, %q, %q) = %v, want %v",
+					tt.workerType, tt.workstationType, tt.kind, got, tt.wantCompatible)
+			}
+		})
+	}
+}
+
+func compatibleWorkerWorkstationBehaviorCases() []struct {
+	name            string
+	workerType      string
+	workstationType string
+	kind            WorkstationKind
+	wantCompatible  bool
+} {
+	return []struct {
 		name            string
 		workerType      string
 		workstationType string
@@ -34,6 +52,12 @@ func TestCompatibleWorkerWorkstationBehavior(t *testing.T) {
 		{
 			name:            "legacy model workstation with model worker",
 			workerType:      WorkerTypeModel,
+			workstationType: WorkstationTypeModel,
+			wantCompatible:  true,
+		},
+		{
+			name:            "legacy model workstation with script worker",
+			workerType:      WorkerTypeScript,
 			workstationType: WorkstationTypeModel,
 			wantCompatible:  true,
 		},
@@ -82,22 +106,12 @@ func TestCompatibleWorkerWorkstationBehavior(t *testing.T) {
 			wantCompatible:  false,
 		},
 		{
-			name:            "legacy agent default with inference worker",
+			name:            "legacy default workstation with inference worker",
 			workerType:      WorkerTypeInference,
 			workstationType: "",
 			kind:            WorkstationKindStandard,
-			wantCompatible:  false,
+			wantCompatible:  true,
 		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := CompatibleWorkerWorkstationBehavior(tt.workerType, tt.workstationType, tt.kind)
-			if got != tt.wantCompatible {
-				t.Fatalf("CompatibleWorkerWorkstationBehavior(%q, %q, %q) = %v, want %v",
-					tt.workerType, tt.workstationType, tt.kind, got, tt.wantCompatible)
-			}
-		})
 	}
 }
 
