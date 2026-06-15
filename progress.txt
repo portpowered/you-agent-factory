@@ -1,4 +1,5 @@
 ## Codebase Patterns
+- Runtime worker taxonomy: author `INFERENCE_WORKER`, `AGENT_WORKER`, `SCRIPT_WORKER`, and `POLLER_WORKER` in `api/components/schemas/data-models/WorkerType.yaml` while keeping legacy `MODEL_WORKER` / `HOSTED_WORKER` accepted. Normalize enum values through `pkg/interfaces/public_factory_enums.go` and gate compatibility through `IsInferenceWorkerType`, `IsPollerWorkerType`, and `ProjectWorkerBehaviorClass` instead of comparing only legacy constants.
 - Keep `FakeService` and `RuntimeService` as parallel `factorysessionexecution.Service` implementations: mock-provider transports inject `FakeService` via `NewFakeService`, `NewFakeServiceFromContractFixtures`, `WithFakeScenarios`, and `WithPersistedSessionSeeds` without JavaScript runtime setup; real simple-workflow execution uses `NewRuntimeService` behind the same contract. Prove coexistence in `fake_service_coexistence_test.go` alongside `fake_service_test.go` and runtime-backed tests.
 - Use `factorysessionexecution.PrepareStart` to normalize durable JavaScript session starts: it chains `NormalizeStartRequest`, `resolveStartSourceWithResolution`, wrapped-source validation (IIFE wrap matching `workflowruntime.Run`), args JSON checks, `workflowpolicy.Resolve`, and wait-option validation before runtime execution.
 - Runtime simple-workflow fixtures live in `pkg/orchestrators/javascript/runtime/testdata/`; factorysessionexecution tests can read them via `../orchestrators/javascript/runtime/testdata/<name>`.
@@ -105,4 +106,15 @@
 - **Learnings for future iterations:**
   - CI `Build, Lint, and API` runs `make backend-size` after `make vet`; large table-driven or assertion-heavy tests should use `t.Helper()` assertion helpers early to stay under the 100-line function cap.
   - `go vet` passing locally does not imply the full `Build, Lint, and API` job is green—run `make backend-size` when adding substantial test functions in owned backend packages.
+---
+
+## 2026-06-15T15:25:00Z - local-agent-cli-runtime-taxonomy-split-001
+- Added runtime worker taxonomy to `WorkerType.yaml` (`INFERENCE_WORKER`, `AGENT_WORKER`, `SCRIPT_WORKER`, `POLLER_WORKER`) while preserving legacy `MODEL_WORKER` and `HOSTED_WORKER` acceptance.
+- Introduced worker behavior-class helpers in `pkg/interfaces/public_factory_enums.go` and wired inference/poller compatibility through config validation, operator defaults, runtime build, and poller watcher paths.
+- Regenerated OpenAPI/Go/TypeScript artifacts and added contract/load/projection tests in `worker_taxonomy_test.go` and `openapi_factory_worker_taxonomy_test.go`.
+- Updated `docs/internal/processes/api-relevant-files.md` with the worker taxonomy wiring pattern.
+- **Learnings for future iterations:**
+  - Keep legacy worker strings intact in normalized config; use `ProjectWorkerBehaviorClass` for inference/poller compatibility instead of rewriting `MODEL_WORKER` to `INFERENCE_WORKER` during load.
+  - `make generate-api` needs `ui/node_modules` installed in worktrees (`npm ci` in `ui/`) before TypeScript enum regeneration succeeds.
+  - OpenAPI taxonomy acceptance tests should assert `GeneratedFactoryFromOpenAPIJSON` + `FactoryConfigFromOpenAPI` outcomes; full `NewConfigValidator().Validate` needs complete factory fixtures unrelated to taxonomy.
 ---

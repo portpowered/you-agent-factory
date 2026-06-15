@@ -1,186 +1,240 @@
-# PRD: UI CI Acceleration and Test Rationalization
+# PRD: Local Agent CLI Runtime Taxonomy Split
+
+---
+author: Codex
+last modified: 2026, june, 15
+status: draft
+work item: batch-local-agent-cli-runtime-20260615-local-agent-cli-runtime-taxonomy-split
+---
 
 ## Introduction
 
-The current required CI path spends too much wall clock time in UI verification, especially covered Vitest runs and browser integration tests. Because the required lanes run serially today, browser integration failures can arrive only after a long covered UI pass completes. This slows merge feedback, makes flaky failures more expensive, and makes it harder for maintainers to tell whether a failing test is proving a unique product contract or repeating assertions already covered elsewhere.
-
-This project will make browser failures surface earlier, reduce required UI CI wall clock time, use the existing sharded coverage runner, add stable timing visibility, and rationalize redundant UI tests while preserving defect detection. The intended outcome is a faster, more trustworthy PR verification path where each test lane has a clear purpose, clear rerun command, and clear failure output.
+Introduce the runtime taxonomy split that separates one-shot inference, agent loops, scripts, and pollers in public factory configuration and CLI/API behavior. Existing docs and config still use `MODEL_WORKER` and `MODEL_INVOKE` as the default model execution vocabulary, which makes OmniVoice and other bounded model operations look like agent execution. This project introduces `INFERENCE_WORKER`, `AGENT_WORKER`, `SCRIPT_WORKER`, and `POLLER_WORKER` for worker capability, plus `INFERENCE_RUN`, `AGENT_RUN`, `SCRIPT_RUN`, and `POLLER_RUN` for workstation behavior, while preserving compatibility aliases for existing factories.
 
 ## Context
 
 ### Customer Ask
 
-Accelerate the UI-heavy portions of CI and rationalize redundant tests so browser integration regressions fail faster, covered UI runs complete sooner, and maintainers have enough timing evidence to keep the suite from regressing.
+Introduce the new `INFERENCE_WORKER`, `AGENT_WORKER`, `SCRIPT_WORKER`, `POLLER_WORKER` and `INFERENCE_RUN`, `AGENT_RUN`, `SCRIPT_RUN`, `POLLER_RUN` vocabulary with compatibility aliases for existing factories. Treat the split as still unimplemented even though previous runtime taxonomy work items exist in factory inputs and failed live work state.
 
-### Concrete Problem
+### Problem
 
-The current `make ci` flow waits for long covered UI verification before browser integration can report failures. The covered UI runner already has sharding support, but the canonical PR path does not use it. Several slow tests are broad app-shell or React Flow-heavy suites that repeatedly mount expensive dashboard state for narrower behaviors. Browser, jsdom integration, and unit-style tests also overlap in places, increasing runtime without adding proportional confidence.
+`MODEL_WORKER` and `MODEL_INVOKE` conflate bounded inference operations with agentic execution. OmniVoice is real managed model behavior, but it is still modeled through the old model-worker mental model. Factory authors, CLI users, API clients, and dashboard users need vocabulary that makes the runtime behavior clear without forcing existing factories to migrate immediately.
 
-### High-Level Solution
+### Solution
 
-Introduce a canonical PR verification flow that either runs browser integration before UI coverage or runs both through a repo-owned orchestrator with fast-fail semantics. Use sharded UI coverage in CI with deterministic merged coverage output. Add stable slow-test reporting for covered UI and browser lanes. Define lane boundaries and split the highest-cost redundant suites into lower-cost feature-scoped tests where that preserves the same observable confidence.
+Add the new worker and workstation taxonomy to the public contract, config loader, validation, runtime dispatch, CLI/API projections, dashboard editing surfaces, docs, and examples. Keep `MODEL_WORKER` as a compatibility alias for inference-worker behavior, keep `MODEL_INVOKE` as a compatibility alias for inference-run behavior, and preserve existing hosted/poller compatibility while new factories prefer poller vocabulary. Use behavioral tests to prove load, validation, execution, event emission, save, UI, and docs outcomes.
 
-## Project-Level Acceptance Criteria
+## Project Acceptance Criteria
 
-- [ ] Browser integration no longer waits for the full covered UI lane to finish before starting in the canonical PR verification flow.
-- [ ] The required UI-related CI wall clock time is reduced by at least 30% from the current measured baseline, or the closeout artifact explains the measured blocker and next tuning step.
-- [ ] Sharded UI coverage preserves merged coverage reports, threshold enforcement, replay coverage checking, and clear failure output when a shard fails.
-- [ ] Covered UI and browser integration lanes emit stable slow-file summaries that maintainers can compare across runs.
-- [ ] Lane boundaries explain what belongs in unit/jsdom coverage, covered feature integration, and browser integration, with duplicate assertion patterns removed from at least one high-cost area.
-- [ ] Browser integration remains deterministic: failures identify the lane and rerun command, and concurrent execution avoids port, preview server, and shared download conflicts.
-- [ ] Typecheck, lint, and relevant tests pass for CI orchestration, coverage sharding, reporting, and changed UI test behavior.
+- [ ] Factory config, CLI/API payloads, generated Go types, and generated TypeScript types accept the new worker and workstation taxonomy while continuing to accept legacy aliases.
+- [ ] Existing factories using `MODEL_WORKER`, `MODEL_INVOKE`, and hosted/poller compatibility vocabulary load, validate, execute, and save without customer edits.
+- [ ] New factory creation, CLI/API output, dashboard labels, docs, and examples prefer `INFERENCE_WORKER`, `INFERENCE_RUN`, `AGENT_WORKER`, `AGENT_RUN`, `SCRIPT_WORKER`, `SCRIPT_RUN`, `POLLER_WORKER`, and `POLLER_RUN`.
+- [ ] Validation rejects incompatible worker/workstation pairings before dispatch and explains failures with inference, agent, script, or poller terminology.
+- [ ] OmniVoice default behavior is represented and tested as inference worker/run behavior, not as agent behavior.
+- [ ] Dashboard graph projections and current-factory save flows preserve worker identity, workstation identity, relationships, and layout when loading new or legacy taxonomy values.
+- [ ] Quality gate: generated contracts are current, typecheck passes, lint passes, focused backend/API/CLI/UI/docs tests pass, and changed browser-visible UI is verified in browser.
 
 ## Goals
 
-- Reduce required UI-related CI wall clock time by at least 30%.
-- Surface browser integration failures before or alongside covered UI failures.
-- Cut median time-to-first-actionable browser regression failure to under 10 minutes.
-- Use existing UI coverage sharding and merge behavior instead of weakening coverage thresholds.
-- Establish stable timing visibility for the slowest covered UI and browser integration files.
-- Reduce redundant UI coverage across app-shell, replay, React Flow, and import/export scenarios.
-- Preserve or improve defect detection quality while decreasing runtime and flake exposure.
+- Make one-shot inference behavior first-class and clearly distinct from agent-loop behavior.
+- Reserve `AGENT_WORKER` and `AGENT_RUN` for real agent execution semantics.
+- Keep legacy factory compatibility during the migration window.
+- Align OpenAPI, generated clients, config mapping, validation, runtime dispatch, events, CLI output, dashboard projections, docs, and examples.
+- Avoid broad package reshaping unless it is required to deliver observable taxonomy behavior.
 
 ## User Stories
 
-### prd-ui-ci-acceleration-and-test-rationalization-001: Fast-Fail Required UI CI Flow
+### local-agent-cli-runtime-taxonomy-split-001: Accept New Worker Taxonomy With Legacy Aliases
 
-**Description:** As an engineer merging a UI change, I want browser integration to start before or alongside covered UI verification so that browser regressions become actionable sooner.
-
-**Acceptance Criteria:**
-
-- [ ] The canonical PR verification flow starts browser integration before covered UI completion, either by ordering browser first or by running browser and coverage through one orchestrated concurrent flow.
-- [ ] Failure output names the failed lane and includes the target or command an engineer should rerun locally.
-- [ ] Concurrent lanes, if used, keep lane logs attributable and avoid shared-state conflicts between browser-oriented processes.
-- [ ] The chosen ordering or concurrency behavior is documented in the developer-facing CI target help or adjacent CI documentation.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
-
-### prd-ui-ci-acceleration-and-test-rationalization-002: Sharded Covered UI Verification
-
-**Description:** As an engineer waiting on CI, I want covered UI tests to run in shards and merge coverage afterward so that wall clock time drops without weakening coverage enforcement.
+**Description:** As a factory author, I want worker type names that describe inference, agent, script, or poller capability so that config is clearer without breaking existing factories.
 
 **Acceptance Criteria:**
 
-- [ ] The canonical PR verification flow uses the repo-owned UI coverage shard and merge behavior with a documented default shard count.
-- [ ] The merged coverage report preserves threshold enforcement and replay coverage checking after all expected shards finish.
-- [ ] A missing or failed shard produces a clear failure that identifies the shard and does not silently produce partial coverage.
-- [ ] Shard count can be tuned through a documented environment variable or CI setting without changing test semantics.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
+- [ ] Public factory config and API payloads accept `INFERENCE_WORKER`, `AGENT_WORKER`, `SCRIPT_WORKER`, and `POLLER_WORKER` wherever worker type values are accepted.
+- [ ] Existing factories using `MODEL_WORKER`, `SCRIPT_WORKER`, and hosted-worker compatibility values still load and validate successfully.
+- [ ] `MODEL_WORKER` projects to inference-worker behavior unless a future explicit agent migration rule identifies otherwise.
+- [ ] Hosted-worker compatibility preserves existing poller behavior while allowing new factories to use `POLLER_WORKER`.
+- [ ] Generated OpenAPI, Go, and TypeScript artifacts reflect the accepted worker vocabulary.
+- [ ] Contract and config tests cover new worker values and legacy aliases through observable load/projection outcomes.
+- [ ] Typecheck passes
+- [ ] Tests pass
 
-### prd-ui-ci-acceleration-and-test-rationalization-003: Stable UI Test Cost Reporting
+### local-agent-cli-runtime-taxonomy-split-002: Accept New Workstation Taxonomy With Legacy Aliases
 
-**Description:** As a maintainer, I want CI to report the slowest covered UI and browser integration files with cost categories so that runtime regressions are visible and actionable.
-
-**Acceptance Criteria:**
-
-- [ ] Covered UI verification emits a stable top-slowest file summary after the run or after shard merge.
-- [ ] Browser integration emits per-file timing or an equivalent top-slowest summary after the run.
-- [ ] The report categorizes slow files into app-shell integration, React Flow graph tests, replay/timeline tests, import/export tests, script-style tests, or uncategorized.
-- [ ] The report format is suitable for closeout notes and can be compared across CI runs without requiring source topology assertions.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
-
-### prd-ui-ci-acceleration-and-test-rationalization-004: Lane Boundary and Redundancy Policy
-
-**Description:** As a maintainer, I want explicit test-lane boundaries so that unit, covered jsdom, and browser tests each verify distinct behavior.
+**Description:** As a factory author, I want workstation type names that describe inference runs, agent runs, script runs, or poller runs so that workflow behavior is clear and legacy workstations still execute.
 
 **Acceptance Criteria:**
 
-- [ ] The test strategy defines what observable contracts belong in unit tests, covered feature/jsdom integration tests, and browser integration tests.
-- [ ] Browser integration guidance prioritizes durable behavior such as saved payloads, network effects, downloads, imports, and final visible state over repeated copy-only assertions.
-- [ ] Export/import and graph-editing flows have a documented minimum browser contract that avoids repeating every jsdom UI assertion.
-- [ ] At least one existing duplicate assertion pattern is removed or moved to the cheaper lane while preserving the durable behavior check.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
+- [ ] Public factory config and API payloads accept `INFERENCE_RUN`, `AGENT_RUN`, `SCRIPT_RUN`, and `POLLER_RUN` wherever workstation type values are accepted.
+- [ ] Existing factories using `MODEL_INVOKE` still load, validate, and execute as inference-run behavior.
+- [ ] Existing poller workstations still load, validate, and execute through poller-run compatibility behavior.
+- [ ] New authored factory documents save new workstation names without downgrading to legacy names.
+- [ ] Legacy factory save behavior follows the documented compatibility policy and does not silently break executable factories.
+- [ ] Contract and config tests cover new workstation values and legacy aliases through observable load/projection/save outcomes.
+- [ ] Typecheck passes
+- [ ] Tests pass
 
-### prd-ui-ci-acceleration-and-test-rationalization-005: Split One High-Cost App-Shell Suite
+### local-agent-cli-runtime-taxonomy-split-003: Validate Worker And Workstation Compatibility
 
-**Description:** As a maintainer, I want at least one oversized app-shell test suite replaced with smaller feature-focused coverage so that the same behavior is proven with less setup cost.
-
-**Acceptance Criteria:**
-
-- [ ] One high-cost app-shell suite is selected from the current slow-file inventory and its unique observable behaviors are listed before changes.
-- [ ] Equivalent behavior is covered by smaller feature-owned tests where whole-dashboard mounting is not required.
-- [ ] Any remaining app-shell coverage is limited to cross-feature behavior that cannot be proven reliably at a lower layer.
-- [ ] Before/after timing for the selected suite or replacement tests is captured in the closeout artifact.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
-
-### prd-ui-ci-acceleration-and-test-rationalization-006: Browser Integration Stability and Runtime Boundaries
-
-**Description:** As an engineer debugging browser failures, I want browser integration tests to be isolated and deterministic so that failures are attributable and retries remain rare.
+**Description:** As a factory author, I want invalid worker/workstation pairings to fail with behavior-specific messages so I can correct taxonomy mistakes before dispatch.
 
 **Acceptance Criteria:**
 
-- [ ] Browser integration documentation states which suites must remain sequential because of shared preview servers, ports, downloads, or global browser state.
-- [ ] Any browser test concurrency introduced by this project uses isolated ports, preview state, and download locations per worker or file.
-- [ ] Shared browser helpers expose or document a recommended wait pattern for durable network and UI checkpoints.
-- [ ] At least one flaky or over-constrained browser assertion is simplified to assert durable behavior rather than transient copy, animation, or timing state.
-- [ ] Direct browser verification confirms changed browser-visible test flows still exercise the intended final UI state.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
+- [ ] Validation accepts compatible pairings: `INFERENCE_RUN` with `INFERENCE_WORKER`, `AGENT_RUN` with `AGENT_WORKER`, `SCRIPT_RUN` with `SCRIPT_WORKER`, and `POLLER_RUN` with `POLLER_WORKER`, including supported legacy aliases.
+- [ ] Validation rejects incompatible pairings such as `AGENT_RUN` with `INFERENCE_WORKER`, `INFERENCE_RUN` with `AGENT_WORKER`, and `POLLER_RUN` with non-poller workers.
+- [ ] Validation findings identify the incompatible worker and workstation values and use inference, agent, script, or poller terminology.
+- [ ] Legacy config reports actionable findings without requiring immediate migration to new names.
+- [ ] Tests cover valid pairings, invalid pairings, and legacy aliases using behavior assertions rather than source-file or route inventories.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### local-agent-cli-runtime-taxonomy-split-004: Preserve Runtime Execution And Events For Inference Compatibility
+
+**Description:** As a maintainer, I want new inference taxonomy and legacy model aliases to produce equivalent runtime outcomes so compatibility aliases do not hide dispatch or event regressions.
+
+**Acceptance Criteria:**
+
+- [ ] A configured `INFERENCE_WORKER` with `INFERENCE_RUN` executes one bounded inference operation and emits canonical dispatch/work result events.
+- [ ] Legacy `MODEL_WORKER` plus `MODEL_INVOKE` execution produces the same observable inference-run result shape during the migration window.
+- [ ] OmniVoice default configuration or fixtures use inference worker/run behavior and do not require agent-loop fields to execute.
+- [ ] `AGENT_RUN` does not execute against an inference worker and fails validation before dispatch with an actionable compatibility finding.
+- [ ] Runtime tests verify dispatch outcome, emitted events, routed output, and failure classification without asserting helper or package topology.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### local-agent-cli-runtime-taxonomy-split-005: Expose The New Taxonomy In CLI And API User Flows
+
+**Description:** As a CLI or API user, I want validation, inspection, and factory output to use the new runtime vocabulary so I can understand worker and run behavior consistently.
+
+**Acceptance Criteria:**
+
+- [ ] CLI factory validation and inspection output displays new taxonomy names for newly authored factories.
+- [ ] CLI and API responses for legacy factories remain understandable by either preserving legacy values with documented alias behavior or projecting them consistently according to compatibility policy.
+- [ ] Error output for incompatible taxonomy values identifies the expected behavior class and the provided values.
+- [ ] CLI/API behavior remains equivalent for shared invocation and validation flows.
+- [ ] Focused CLI/API tests cover new taxonomy output, legacy alias output, and incompatible pairing errors.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### local-agent-cli-runtime-taxonomy-split-006: Preserve Dashboard Projection And Save Behavior
+
+**Description:** As a dashboard user, I want the graph editor and current-factory views to display and save the new taxonomy without losing graph identity, layout, or accessibility.
+
+**Acceptance Criteria:**
+
+- [ ] Dashboard graph projections preserve worker IDs, workstation IDs, edge relationships, and layout references after loading factories with new taxonomy values.
+- [ ] Dashboard graph projections preserve the same identity and layout references after loading legacy `MODEL_WORKER`, `MODEL_INVOKE`, and hosted/poller-compatible factories.
+- [ ] New factory creation and editor controls prefer labels and values for inference, agent, script, and poller behavior.
+- [ ] Loading, empty, validation-error, save-error, and successful-save states remain explicit when taxonomy-related values are edited.
+- [ ] Changed controls remain keyboard-operable and expose accessible labels that make the selected behavior class clear.
+- [ ] Focused UI tests cover projection/save behavior for new and legacy values.
+- [ ] Typecheck passes
+- [ ] Tests pass
+- [ ] Verify in browser using dev-browser skill
+
+### local-agent-cli-runtime-taxonomy-split-007: Update Docs And Examples To Teach The Split
+
+**Description:** As a factory author, I want docs and examples to use the new taxonomy so I learn the intended vocabulary and understand legacy alias behavior.
+
+**Acceptance Criteria:**
+
+- [ ] Public reference docs explain `INFERENCE_WORKER`/`INFERENCE_RUN`, `AGENT_WORKER`/`AGENT_RUN`, `SCRIPT_WORKER`/`SCRIPT_RUN`, and `POLLER_WORKER`/`POLLER_RUN` in customer-facing terms.
+- [ ] Docs describe `MODEL_WORKER`, `MODEL_INVOKE`, and hosted/poller compatibility as migration aliases rather than removed behavior.
+- [ ] OmniVoice or default inference examples use inference worker/run terminology and do not describe harnessless inference as agent behavior.
+- [ ] Agent examples or placeholders use `AGENT_WORKER` and `AGENT_RUN` only for agent-loop behavior and do not imply agent runtime implementation is part of this taxonomy split.
+- [ ] Packaged reference-doc smoke checks pass for changed docs.
+- [ ] Typecheck passes
+- [ ] Tests pass
 
 ## High-Level Technical Design
 
-The canonical PR verification path should remain easy to run by target name. If the implementation chooses concurrency, use a repo-owned orchestration target or script that prefixes or buffers lane output so failures remain attributable. If the implementation chooses ordering, run browser integration as an earlier fast-fail lane and keep covered UI as the authoritative coverage lane.
+### Canonical Taxonomy
 
-Covered UI verification should use the existing shard and merge model. Each shard must produce an identifiable artifact, and merge must fail when an expected shard result is missing. The merged report remains the only source for coverage threshold enforcement and replay coverage checking.
+- Worker capability values:
+  - `INFERENCE_WORKER`: performs one bounded inference operation such as TTS, embeddings, transcription, image generation, chat, or text generation.
+  - `AGENT_WORKER`: runs an agent loop that may plan, call tools, maintain transcript state, and decide completion.
+  - `SCRIPT_WORKER`: runs deterministic command or script work.
+  - `POLLER_WORKER`: runs long-lived ingress polling work.
+- Workstation behavior values:
+  - `INFERENCE_RUN`: resolves operation bindings, calls an inference worker, and routes content output.
+  - `AGENT_RUN`: starts or resumes one agent run for a work item and routes the final agent result.
+  - `SCRIPT_RUN`: runs script or command behavior.
+  - `POLLER_RUN`: runs ingress polling and submits new work.
 
-Slow-test observability should be generated by the test lanes themselves or by repo-owned wrappers, not by a one-time spreadsheet. Reports should include top slow files, elapsed time, lane name, and a likely cost category. Categories are for maintainer triage and should not become a brittle source-inventory test.
+### Compatibility Policy
 
-Test rationalization should start with the slowest app-shell and React Flow-heavy suites. Implementers should preserve user-visible or maintainer-visible behavior while moving repeated setup-heavy assertions into feature-scoped tests where possible. Browser tests should keep durable end-to-end contracts and avoid duplicating copy-only assertions already covered in jsdom.
+- Keep legacy names accepted in config, CLI, and public API payloads during this migration window.
+- Project `MODEL_WORKER` to inference-worker behavior unless a future explicit agent migration rule exists.
+- Project `MODEL_INVOKE` to inference-run behavior.
+- Preserve existing hosted/poller behavior while allowing `POLLER_WORKER` and `POLLER_RUN` as the preferred vocabulary.
+- Do not remove legacy enum values or require customers to migrate existing factories in this project.
+
+### Contract And Generated Artifact Alignment
+
+- Author OpenAPI changes in component fragments, then regenerate bundled OpenAPI, generated Go server/client types, and generated TypeScript types.
+- Keep backend config mapping, public API surface mapping, CLI adapters, dashboard generated-type consumers, and contract tests aligned with the generated contract.
+- Public docs and API surfaces should use customer-facing taxonomy rather than internal Petri-net terms.
+
+### Runtime And Validation Boundaries
+
+- Factory sessions continue to own orchestration, event emission, dispatch lifecycle, replay, cancellation, and primary result selection.
+- The taxonomy update should map new public values onto existing runtime behavior paths unless the behavior truly differs.
+- Validation owns compatibility checks and should produce direct, actionable findings before dispatch.
+- Model host lifecycle and agent-harness execution are not implemented by this taxonomy split, but docs may state that inference and agent workers borrow ready model capacity while factory sessions decide factory behavior.
+
+### Frontend State And Projection Boundaries
+
+- The current-factory document remains canonical for editable factory configuration.
+- Graph nodes, edges, labels, and layout are projections of the canonical factory document and must not become a separate source of truth for taxonomy values.
+- Save operations should update selected worker or workstation behavior values without mutating unrelated IDs, relationships, layout data, or legacy compatibility fields.
 
 ## Functional Requirements
 
-- FR-1: The canonical PR verification flow must start browser integration before the covered UI lane completes.
-- FR-2: If test lanes run concurrently, lane logs must remain attributable, buffered or prefixed, and rerunnable by target name.
-- FR-3: Browser integration failures must provide a fast-fail signal without waiting for the full covered UI lane to complete.
-- FR-4: The covered UI lane must support shard-based execution in CI using the repo-owned shard and merge behavior.
-- FR-5: The default coverage shard count and tuning mechanism must be documented.
-- FR-6: Coverage merge must fail clearly when expected shard artifacts are missing.
-- FR-7: The covered UI lane must preserve merged coverage reports, coverage thresholds, and replay coverage checks.
-- FR-8: Covered UI and browser integration lanes must emit stable slow-file summaries.
-- FR-9: Slow-file summaries must include top N files, lane name, elapsed time, and a likely optimization category.
-- FR-10: The maintained slow-test inventory must include current-selection app shell, layout/graph app shell, replay stream, React Flow edit integration, import/export browser flows, and layout performance tests when present in the measured run.
-- FR-11: The test strategy must define lane boundaries for unit tests, covered jsdom integration tests, and browser integration tests.
-- FR-12: Browser integration tests must prioritize durable assertions such as saved payloads, network requests, downloaded or imported artifacts, and final visible state.
-- FR-13: Repeated whole-dashboard setup patterns must be replaced with lower-cost feature harnesses where the behavior under test is feature-local.
-- FR-14: At least one broad app-shell suite must be split or reduced without removing coverage of its unique observable behavior.
-- FR-15: Browser integration sequencing and any safe concurrency rules must be documented with port, preview server, and download-state constraints.
-- FR-16: The project must produce a closeout artifact or note with before/after timing for CI wall clock time, covered UI time, browser lane time, and top slow files.
+- FR-1: The public worker type contract must include `INFERENCE_WORKER`, `AGENT_WORKER`, `SCRIPT_WORKER`, and `POLLER_WORKER`.
+- FR-2: The public workstation type contract must include `INFERENCE_RUN`, `AGENT_RUN`, `SCRIPT_RUN`, and `POLLER_RUN`.
+- FR-3: The system must continue accepting and executing legacy `MODEL_WORKER`, `MODEL_INVOKE`, and hosted/poller compatibility values during the migration window.
+- FR-4: Legacy `MODEL_WORKER` must map to inference-worker behavior unless a future explicit agent migration rule identifies otherwise.
+- FR-5: Legacy `MODEL_INVOKE` must map to inference-run behavior.
+- FR-6: New factory authoring and save flows must preserve new taxonomy values.
+- FR-7: Legacy factory save flows must preserve executable behavior and follow a documented compatibility policy.
+- FR-8: Validation must reject incompatible worker/workstation pairings before dispatch.
+- FR-9: Validation findings must name the behavior class involved: inference, agent, script, or poller.
+- FR-10: Runtime dispatch and emitted events must preserve existing inference behavior for new inference taxonomy and legacy aliases.
+- FR-11: CLI/API output must expose taxonomy behavior consistently for validation, inspection, and invocation surfaces.
+- FR-12: Dashboard graph projections must preserve node identity, relationships, and layout references when loading and saving new or legacy taxonomy values.
+- FR-13: New UI creation flows, labels, docs, and examples must prefer new taxonomy names.
+- FR-14: OmniVoice default inference behavior must use inference worker/run terminology and must not require agent-worker configuration.
 
 ## Non-Goals
 
-- Rewriting the entire UI test stack.
-- Eliminating browser integration tests.
-- Lowering coverage thresholds as the primary speed strategy.
-- Parallelizing browser tests in a way that knowingly increases flakiness or port conflicts.
-- Replacing targeted end-to-end coverage with only unit tests.
-- Fixing every historical React `act(...)` warning or unrelated console warning.
-- Performing broad unrelated cleanup while changing CI and test strategy.
+- Removing `MODEL_WORKER`, `MODEL_INVOKE`, or hosted/poller compatibility values.
+- Implementing llama.cpp process supervision or changing model host lifecycle ownership.
+- Integrating `go-agent-harness` or implementing agent-loop execution semantics.
+- Redesigning the graph editor beyond taxonomy labels, compatible controls, projections, and save behavior.
+- Reorganizing runtime packages unless required to preserve observable taxonomy behavior.
+- Changing internal Petri-net semantics or exposing Petri-net terms in public docs.
 
-## Supporting Technical and UX Considerations
+## Supporting Technical And UX Considerations
 
-- CI operator experience matters: required lanes should remain easy to run locally and failures should identify the exact rerun command.
-- Faster CI is only valuable if failures remain deterministic and attributable.
-- Browser integration logs must stay readable when run near other long-running lanes.
-- Sharding should respect CI executor capacity; too many shards may add overhead without improving wall clock time.
-- Browser tests that use preview servers, downloads, ports, or global browser state need explicit isolation before any file-level concurrency.
-- Frontend-visible changes to test fixtures or browser flows should still be verified in a browser, including loading, success, empty, and failure states when those states are affected.
-- Test reports should measure runtime behavior and outcomes, not enforce brittle source-file inventories unless the report itself is the product behavior under test.
+- Start from authored OpenAPI fragments and regenerate derived artifacts rather than hand-editing generated files.
+- Prefer generated enum types in backend and frontend code over handwritten duplicate enum lists.
+- Keep compatibility mapping explicit and covered by focused tests so future alias retirement can be planned safely.
+- UI controls that expose taxonomy values should use accessible labels and keyboard-operable select, segmented-control, or menu patterns consistent with existing dashboard primitives.
+- Error messages should tell authors what value is incompatible and which behavior class is expected.
+- Docs should describe the behavior model in customer-facing vocabulary and avoid making internal model-host or Petri-net implementation details the primary explanation.
+- Verification should include `make generate-api`, focused config/API/CLI/backend/runtime tests, focused UI tests where UI changes occur, browser verification for visible UI changes, and docs-reference smoke checks when packaged docs change.
 
 ## Success Metrics
 
-- Required UI-related `make ci` wall clock time drops by at least 30% from the current measured baseline.
-- Browser integration failures surface before full UI coverage completion in at least 90% of failing browser-regression cases.
-- Main covered UI wall clock time drops by at least 25%.
-- The top 10 slowest UI test files are remeasured after changes, and at least 5 improve materially or have documented blockers.
-- The number of broad app-shell tests above 10 seconds decreases release over release.
-- Browser integration retries due to flake do not increase after CI orchestration and sharding changes.
+- New factories can be authored without using `MODEL_WORKER` for default inference behavior.
+- Legacy factory fixtures continue to load, validate, execute, and save without customer action.
+- Validation errors clearly distinguish inference, agent, script, and poller incompatibilities.
+- CLI/API and dashboard views present the same behavior class for a given factory configuration.
+- Dashboard save/reload preserves graph identity and layout across both new and legacy taxonomy values.
+- OmniVoice is represented and tested as inference behavior, not agent behavior.
 
 ## Open Questions
 
-- Should the canonical PR path run browser integration first, or run browser integration and UI coverage concurrently under a shared orchestrator?
-- Should the layout performance test remain in the required covered lane, or move to a separate performance verification lane with its own runtime budget?
-- What CI executor capacity is available for coverage sharding, and what default shard count gives the best wall clock improvement without overhead dominating?
+- Should legacy `MODEL_WORKER` values be preserved exactly after editing a legacy factory, or normalized to `INFERENCE_WORKER` once the user saves?
+- Should hosted/poller legacy values be preserved exactly after editing a legacy factory, or normalized to `POLLER_WORKER` and `POLLER_RUN` once the user saves?
