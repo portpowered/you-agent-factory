@@ -182,9 +182,29 @@ func (s *Server) GetFactorySessionResult(w http.ResponseWriter, r *http.Request,
 }
 
 func (s *Server) GetFactorySessionResults(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, params factoryapi.GetFactorySessionResultsParams) {
-	_ = sessionID
-	_ = params
-	s.writeError(w, http.StatusNotImplemented, "durable factory session result retrieval is not implemented", "INTERNAL_ERROR")
+	if !isDurableExecutionSessionID(string(sessionID)) {
+		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+		return
+	}
+
+	getter, ok := s.requireDurableSessionResultGetter(w)
+	if !ok {
+		return
+	}
+	response, err := getter.GetDurableFactorySessionResult(r.Context(), string(sessionID), params)
+	if err != nil {
+		if status, errResp, handled := factorysession.ExecutionErrorResponse(err); handled {
+			s.writeJSON(w, status, errResp)
+			return
+		}
+		if s.writeDurableSessionReadError(w, err) {
+			return
+		}
+		s.logger.Error("get durable factory session result failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to get factory session result", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) ListFactorySessionDispatches(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {

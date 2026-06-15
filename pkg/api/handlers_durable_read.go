@@ -17,6 +17,14 @@ type durableSessionGetter interface {
 	GetDurableFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySessionDurableReadModel, error)
 }
 
+type durableSessionResultGetter interface {
+	GetDurableFactorySessionResult(
+		ctx context.Context,
+		sessionID string,
+		params factoryapi.GetFactorySessionResultsParams,
+	) (factoryapi.FactorySessionResult, error)
+}
+
 type durableExecutionSessionLister interface {
 	ListDurableExecutionSessions(
 		context.Context,
@@ -32,6 +40,19 @@ func (s *Server) requireDurableSessionGetter(w http.ResponseWriter) (durableSess
 	getter, ok := s.runtime.(durableSessionGetter)
 	if !ok {
 		s.writeError(w, http.StatusNotImplemented, "durable factory session read is not implemented", "INTERNAL_ERROR")
+		return nil, false
+	}
+	return getter, true
+}
+
+func (s *Server) requireDurableSessionResultGetter(w http.ResponseWriter) (durableSessionResultGetter, bool) {
+	if s.runtime == nil {
+		s.writeError(w, http.StatusInternalServerError, "durable factory session result read is unavailable", "INTERNAL_ERROR")
+		return nil, false
+	}
+	getter, ok := s.runtime.(durableSessionResultGetter)
+	if !ok {
+		s.writeError(w, http.StatusNotImplemented, "durable factory session result retrieval is not implemented", "INTERNAL_ERROR")
 		return nil, false
 	}
 	return getter, true

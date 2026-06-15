@@ -45,3 +45,19 @@ func (fs *FactoryService) GetDurableFactorySession(
 	}
 	return factorysession.SessionReadResponseToAPI(result), nil
 }
+
+func (fs *FactoryService) GetDurableFactorySessionResult(
+	ctx context.Context,
+	sessionID string,
+	params factoryapi.GetFactorySessionResultsParams,
+) (factoryapi.FactorySessionResult, error) {
+	req, err := factorysession.ResultRequestFromAPI(params)
+	if err != nil {
+		return factoryapi.FactorySessionResult{}, err
+	}
+	result, err := fs.durableExecutionService().GetResult(ctx, sessionID, req)
+	if err != nil {
+		return factoryapi.FactorySessionResult{}, err
+	}
+	return factorysession.ResultResponseToAPI(result), nil
+}

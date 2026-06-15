@@ -129,6 +129,26 @@ func (m *MockFactory) GetDurableFactorySession(
 	return factorysession.SessionReadResponseToAPI(result), nil
 }
 
+func (m *MockFactory) GetDurableFactorySessionResult(
+	ctx context.Context,
+	sessionID string,
+	params factoryapi.GetFactorySessionResultsParams,
+) (factoryapi.FactorySessionResult, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionResult{}, err
+	}
+	req, err := factorysession.ResultRequestFromAPI(params)
+	if err != nil {
+		return factoryapi.FactorySessionResult{}, err
+	}
+	result, err := service.GetResult(ctx, sessionID, req)
+	if err != nil {
+		return factoryapi.FactorySessionResult{}, err
+	}
+	return factorysession.ResultResponseToAPI(result), nil
+}
+
 func (m *MockFactory) StartDurableFactorySessionAsync(
 	ctx context.Context,
 	request factoryapi.FactorySessionExecutionRequest,
