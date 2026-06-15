@@ -182,16 +182,52 @@ def branch_exists_on_remote(repo_root, branch):
     return result.returncode == 0
 
 
+def branch_upstream_ref(git_dir, branch):
+    """Return upstream ref for branch, or None when no upstream is configured."""
+    result = run_git(
+        "rev-parse", "--abbrev-ref", f"{branch}@{{upstream}}",
+        cwd=git_dir, check=False,
+    )
+    if result.returncode != 0:
+        return None
+    upstream = result.stdout.strip()
+    return upstream or None
+
+
+def sync_reused_worktree_branch(repo_root, worktree_path, branch):
+    """Checkout branch in a reused worktree and fast-forward when safe.
+
+    No-upstream and missing-remote-branch conditions are non-fatal. Unsafe
+    fast-forward failures raise RuntimeError for worktree-preparation reporting.
+    Returns a human-readable outcome string for logging.
+    """
+    run_git("checkout", branch, cwd=worktree_path)
+
+    if branch_upstream_ref(worktree_path, branch) is None:
+        return "skipped (no upstream configured)"
+
+    if not branch_exists_on_remote(repo_root, branch):
+        return "skipped (branch has no origin ref)"
+
+    pull_result = run_git("pull", "--ff-only", cwd=worktree_path, check=False)
+    if pull_result.returncode == 0:
+        return "fast-forwarded from upstream"
+
+    stderr = pull_result.stderr.strip()
+    lowered = stderr.lower()
+    if "no tracking information" in lowered:
+        return "skipped (no upstream configured)"
+
+    raise RuntimeError(
+        f"worktree branch update failed for {branch}: {stderr}"
+    )
+
+
 def create_or_reuse_worktree(repo_root, branch, worktree_path):
     """Create a new worktree or reuse an existing one. Returns reused flag."""
     if worktree_path.exists() and worktree_is_valid(worktree_path):
-        # Reuse: checkout branch and pull latest.
-        run_git("-C", str(worktree_path), "checkout", branch, cwd=repo_root)
-        if branch_exists_on_remote(repo_root, branch):
-            run_git(
-                "-C", str(worktree_path), "pull", "--ff-only",
-                cwd=repo_root, check=False,
-            )
+        sync_outcome = sync_reused_worktree_branch(repo_root, worktree_path, branch)
+        print(f"Worktree branch sync: {sync_outcome}", file=sys.stderr)
         return True
 
     # Remove stale path if it exists but is invalid.
@@ -283,7 +319,7 @@ def main():
     try:
         reused = create_or_reuse_worktree(repo_root, branch, worktree_dir)
     except RuntimeError as e:
-        print(f"Worktree setup failed: {e}", file=sys.stderr)
+        print(f"Worktree preparation failed: {e}", file=sys.stderr)
         sys.exit(1)
 
     # Copy PRD files into worktree.

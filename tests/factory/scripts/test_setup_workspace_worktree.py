@@ -72,6 +72,32 @@ def write_prd(repo_path, prd_name, include_md=False):
     return prd_json, prd_md
 
 
+def setup_repo_with_origin_main_ahead(local_repo, repo_root):
+    """Create a bare remote ahead of local main; local repo on a feature branch."""
+    bare_remote = repo_root / "remote.git"
+    bare_remote.mkdir()
+    git(["init", "--bare", "-b", "main"], bare_remote)
+
+    upstream = repo_root / "upstream"
+    upstream.mkdir()
+    init_local_repo(upstream)
+    git(["remote", "add", "origin", str(bare_remote)], upstream)
+    git(["push", "-u", "origin", "main"], upstream)
+
+    (upstream / "ahead.txt").write_text("origin is ahead\n", encoding="utf-8")
+    git(["add", "ahead.txt"], upstream)
+    git(["commit", "-m", "advance origin main"], upstream)
+    git(["push", "origin", "main"], upstream)
+
+    git(["clone", str(bare_remote), str(local_repo.name)], repo_root)
+    git(["reset", "--hard", "HEAD~1"], local_repo)
+    git(["checkout", "-b", "feature-branch"], local_repo)
+    (local_repo / "dirty.txt").write_text("unstaged change\n", encoding="utf-8")
+    git(["fetch", "origin"], local_repo)
+
+    return bare_remote
+
+
 def run_setup_workspace(repo_path, prd_name):
     return subprocess.run(
         ["python3", str(SCRIPT_PATH), prd_name],
@@ -210,6 +236,110 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         self.assertTrue((worktree_path / "prd.json").exists())
         self.assertFalse((worktree_path / "prd.md").exists())
         self.assertIsNone(payload["prd_md_path"])
+
+    def test_reuses_valid_worktree_when_root_has_staged_changes(self):
+        local_repo = self.repo_path / "local"
+        setup_repo_with_origin_main_ahead(local_repo, self.repo_path)
+
+        staged_file = local_repo / "staged.txt"
+        staged_file.write_text("staged change\n", encoding="utf-8")
+        git(["add", "staged.txt"], local_repo)
+
+        prd_name = "reuse-dirty-root-prd"
+        write_prd(local_repo, prd_name)
+
+        first = run_setup_workspace(local_repo, prd_name)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        first_payload = json.loads(first.stdout)
+        marker = Path(first_payload["worktree"]) / "reuse-marker.txt"
+        marker.write_text("keep me\n", encoding="utf-8")
+
+        second = run_setup_workspace(local_repo, prd_name)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        second_payload = json.loads(second.stdout)
+        self.assertTrue(second_payload["reused"])
+        self.assertEqual(second_payload["worktree"], first_payload["worktree"])
+        self.assertTrue(marker.exists())
+        self.assertIn("A  staged.txt", git(["status", "--porcelain"], local_repo).stdout)
+        self.assertIn("?? dirty.txt", git(["status", "--porcelain"], local_repo).stdout)
+
+    def test_creates_worktree_when_branch_has_no_upstream(self):
+        init_local_repo(self.repo_path)
+        prd_name = "no-upstream-create-prd"
+        write_prd(self.repo_path, prd_name)
+
+        result = run_setup_workspace(self.repo_path, prd_name)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        payload = json.loads(result.stdout)
+        worktree_path = Path(payload["worktree"])
+        self.assertTrue(worktree_path.exists())
+        self.assertIsNone(self.module.branch_upstream_ref(worktree_path, prd_name))
+
+    def test_reuses_worktree_when_branch_has_no_upstream(self):
+        init_local_repo(self.repo_path)
+        prd_name = "no-upstream-reuse-prd"
+        write_prd(self.repo_path, prd_name)
+
+        first = run_setup_workspace(self.repo_path, prd_name)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        first_payload = json.loads(first.stdout)
+        worktree_path = Path(first_payload["worktree"])
+        self.assertIsNone(self.module.branch_upstream_ref(worktree_path, prd_name))
+        marker = worktree_path / "reuse-marker.txt"
+        marker.write_text("keep me\n", encoding="utf-8")
+
+        second = run_setup_workspace(self.repo_path, prd_name)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        second_payload = json.loads(second.stdout)
+        self.assertTrue(second_payload["reused"])
+        self.assertTrue(marker.exists())
+        self.assertIn("no upstream", second.stderr.lower())
+
+    def test_reports_worktree_preparation_failure_when_branch_update_unsafe(self):
+        bare_remote = self.repo_path / "remote.git"
+        bare_remote.mkdir()
+        git(["init", "--bare", "-b", "main"], bare_remote)
+
+        upstream = self.repo_path / "upstream"
+        upstream.mkdir()
+        init_local_repo(upstream)
+        git(["remote", "add", "origin", str(bare_remote)], upstream)
+        git(["push", "-u", "origin", "main"], upstream)
+
+        local_repo = self.repo_path / "local"
+        git(["clone", str(bare_remote), str(local_repo.name)], self.repo_path)
+
+        prd_name = "unsafe-branch-update-prd"
+        write_prd(local_repo, prd_name)
+        git(["checkout", "-b", prd_name], local_repo)
+        (local_repo / "seed.txt").write_text("seed\n", encoding="utf-8")
+        git(["add", "seed.txt"], local_repo)
+        git(["commit", "-m", "seed branch"], local_repo)
+        git(["push", "-u", "origin", prd_name], local_repo)
+        git(["checkout", "main"], local_repo)
+
+        first = run_setup_workspace(local_repo, prd_name)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        worktree_path = Path(json.loads(first.stdout)["worktree"])
+
+        (worktree_path / "local-only.txt").write_text("local commit\n", encoding="utf-8")
+        git(["add", "local-only.txt"], worktree_path)
+        git(["commit", "-m", "diverge locally"], worktree_path)
+
+        git(["fetch", "origin"], upstream)
+        git(["checkout", "-B", prd_name, f"origin/{prd_name}"], upstream)
+        (upstream / "remote-only.txt").write_text("remote commit\n", encoding="utf-8")
+        git(["add", "remote-only.txt"], upstream)
+        git(["commit", "-m", "diverge on remote"], upstream)
+        git(["push", "origin", prd_name], upstream)
+        git(["fetch", "origin"], local_repo)
+
+        second = run_setup_workspace(local_repo, prd_name)
+        self.assertEqual(second.returncode, 1, second.stdout)
+        self.assertIn("Worktree preparation failed", second.stderr)
+        self.assertNotIn("Git sync failed", second.stderr)
+        self.assertIn("worktree branch update failed", second.stderr.lower())
 
 
 if __name__ == "__main__":
