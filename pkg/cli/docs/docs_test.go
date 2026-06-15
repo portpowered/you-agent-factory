@@ -817,7 +817,7 @@ func TestMarkdown_MCPReturnsRawAuthoredMarkdown(t *testing.T) {
 		"you.factory_session.start_preview",
 		"you.factory_session.start_async",
 		"Automation-Backed In Repo",
-		"Follow-Up Work Outside This Doc",
+		"Follow-Up Cell For Async Install Smoke",
 		"`you docs orchestrators`",
 	} {
 		if !strings.Contains(got, want) {
