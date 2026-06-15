@@ -63,6 +63,7 @@ func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 		"work",
 		"sessions",
 		"orchestrators",
+		"mcp",
 		"workstations",
 		"workers",
 		"resources",
@@ -97,6 +98,7 @@ func TestSupportedTopicCommands_ReturnsCanonicalTopicsAndAliases(t *testing.T) {
 		"work",
 		"sessions",
 		"orchestrators",
+		"mcp",
 		"workstations",
 		"workstation",
 		"workers",
@@ -799,6 +801,38 @@ func TestMarkdown_PackagedTTSReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
+func TestMarkdown_MCPReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("mcp")
+	if err != nil {
+		t.Fatalf("Markdown(mcp) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# MCP Install Path For Factory Preview Tools",
+		"you mcp serve",
+		`"args": ["mcp", "serve"]`,
+		"you.factory_session.validate_source",
+		"you.factory_session.start_preview",
+		"you.factory_session.start_async",
+		"Automation-Backed In Repo",
+		"Follow-Up Work Outside This Doc",
+		"`you docs orchestrators`",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(mcp) missing %q:\n%s", want, got)
+		}
+	}
+	for _, absent := range []string{
+		"[Orchestrators](orchestrators.md)",
+	} {
+		if strings.Contains(got, absent) {
+			t.Fatalf("Markdown(mcp) still contains packaged-topic markdown link %q:\n%s", absent, got)
+		}
+	}
+}
+
 func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
 	t.Parallel()
 
@@ -909,7 +943,7 @@ func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, sessions, orchestrators, workstations, workers, resources, models, packaged-tts, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, sessions, orchestrators, mcp, workstations, workers, resources, models, packaged-tts, batch-inputs, templates)` {
 		t.Fatalf("unsupported topic error = %q", got)
 	}
 }

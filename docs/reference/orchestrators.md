@@ -84,6 +84,7 @@ partial result refs without raw checkpoint bodies.
 
 ## Related Topics
 
+- `you docs mcp` — canonical `you mcp serve` install path and preview tool scope
 - `you docs sessions` — session list, show, factory query, status API, and routing
 - `you docs config` — `factory.json` topology and portability
 - `you docs work` — submitted work and verification commands

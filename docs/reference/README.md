@@ -30,6 +30,7 @@ concept owners below when you need the complete customer-facing contract.
 | `work` | Submitted work: session-scoped work routes, tags, and batch cross-links | [Submitted work](work.md) |
 | `sessions` | Session list, session show, factory query, status API, dashboard, and run modes | [Sessions](sessions.md) |
 | `orchestrators` | Factory orchestrator identity, FactorySession runtime nouns, dispatch/artifact/event aliases | [Orchestrators](orchestrators.md) |
+| `mcp` | Canonical `you mcp serve` install path, preview tool catalog, and scope boundaries | [MCP install path](mcp.md) |
 | `workstations` | Workstation kinds, routes, runtime fields, and scoped execution settings | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
 | `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Config](config.md) |
@@ -81,6 +82,8 @@ filesystem work around that invocation.
 - [Orchestrators](orchestrators.md) owns `Factory`, `FactoryOrchestrator`,
   `FactorySession`, `Dispatch`, `FactoryArtifact`, `FactoryEvent`, and accepted
   dynamic workflow aliases.
+- [MCP install path](mcp.md) owns the canonical `you mcp serve` host
+  configuration, preview tool catalog, and install scope boundaries.
 - [Workstations](workstations.md) owns workstation kinds, route fields, runtime
   step behavior, prompt/runtime fields, and workstation-scoped execution
   settings.
