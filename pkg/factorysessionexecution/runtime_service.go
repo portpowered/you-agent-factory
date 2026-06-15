@@ -160,22 +160,10 @@ func policyProjectionFromResolution(req StartRequest, resolution workflowpolicy.
 		Requested:     cloneArgs(req.RequestedPolicy),
 		EffectiveHash: resolution.Hash,
 	}
-	if effective := effectivePolicyMap(resolution.Policy); len(effective) > 0 {
+	if effective, err := effectivePolicyMap(resolution.Policy); err == nil && len(effective) > 0 {
 		projection.Effective = effective
 	}
 	return projection
-}
-
-func effectivePolicyMap(policy workflowpolicy.EffectivePolicy) map[string]any {
-	encoded, err := json.Marshal(policy)
-	if err != nil {
-		return nil
-	}
-	var decoded map[string]any
-	if err := json.Unmarshal(encoded, &decoded); err != nil {
-		return nil
-	}
-	return decoded
 }
 
 func resolvedDialect(resolved ResolvedSource) string {
@@ -939,6 +927,14 @@ func (s *JavaScriptRuntimeService) unsupportedLifecycleControl(ctx context.Conte
 		return LifecycleControlResult{}, err
 	}
 	return LifecycleControlResult{}, ErrUnsupportedControl
+}
+
+func defaultUnavailableAvailability() *ResultAvailabilityDetail {
+	return &ResultAvailabilityDetail{
+		Reason:    "UNAVAILABLE",
+		Message:   "session result is unavailable",
+		Retryable: false,
+	}
 }
 
 func marshalStartArgs(args map[string]any) (json.RawMessage, error) {

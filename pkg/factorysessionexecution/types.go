@@ -106,7 +106,7 @@ type SyncStartResult struct {
 }
 
 // ErrExecutionRequestIDConflict reports that requestId was reused with a different
-// normalized execution tuple.
+// normalized execution tuple or a different start operation (async vs sync).
 var ErrExecutionRequestIDConflict = errors.New("execution request id conflict")
 
 // ErrControlRequestIDConflict reports that requestId was reused with a different

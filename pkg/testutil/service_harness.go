@@ -95,6 +95,13 @@ func WithMockWorkersConfig(mockCfg *factoryconfig.MockWorkersConfig) ServiceTest
 	}
 }
 
+// WithRuntimeMode sets the factory service runtime mode (batch vs service).
+func WithRuntimeMode(mode interfaces.RuntimeMode) ServiceTestHarnessOption {
+	return func(cfg *harnessConfig) {
+		cfg.serviceConfig.RuntimeMode = mode
+	}
+}
+
 // WithRuntimeLogDir writes service runtime logs under dir for assertions.
 func WithRuntimeLogDir(dir string) ServiceTestHarnessOption {
 	return func(cfg *harnessConfig) {
@@ -597,6 +604,11 @@ func cloneMarkingSnapshot(snapshot *petri.MarkingSnapshot) *petri.MarkingSnapsho
 // GetFactoryEvents returns the canonical factory event history recorded by the service.
 func (h *ServiceTestHarness) GetFactoryEvents(ctx context.Context) ([]factoryapi.FactoryEvent, error) {
 	return h.svc.GetFactoryEvents(ctx)
+}
+
+// MoveWork applies a synchronous operator relocation through the service layer.
+func (h *ServiceTestHarness) MoveWork(ctx context.Context, workID, stateName string) (interfaces.OperatorMoveResult, error) {
+	return h.svc.MoveWork(ctx, workID, stateName, interfaces.WorkStateChangeSourceAPI, "")
 }
 
 // RunInBackground starts the factory's Run loop in a background goroutine
