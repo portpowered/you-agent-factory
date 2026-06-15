@@ -365,6 +365,20 @@ function editableConfigurationSection(
   return section;
 }
 
+function workerConfigurationSection(
+  currentSelection: HTMLElement,
+): HTMLElement {
+  const section = within(currentSelection)
+    .getByRole("heading", { name: "Worker configuration" })
+    .closest("section");
+
+  if (!(section instanceof HTMLElement)) {
+    throw new Error("expected worker configuration section");
+  }
+
+  return section;
+}
+
 async function expectSingleEditableConfigurationSection(
   currentSelection: HTMLElement,
 ): Promise<HTMLElement> {
@@ -375,6 +389,18 @@ async function expectSingleEditableConfigurationSection(
   ).toHaveLength(1);
 
   return editableConfigurationSection(currentSelection);
+}
+
+async function ensureEditableConfigurationExpanded(
+  sectionScope: ReturnType<typeof within>,
+): Promise<void> {
+  const expandButton = sectionScope.getByRole("button", {
+    name: "Expand editable configuration",
+  });
+  if (expandButton.getAttribute("aria-expanded") !== "true") {
+    await userEvent.click(expandButton);
+  }
+  await expect(expandButton).toHaveAttribute("aria-expanded", "true");
 }
 
 async function prepareEditableConfigurationReadyToSave(
@@ -473,22 +499,17 @@ async function expectEditableConfigurationBrowserFlow(
     }),
   );
   const workerSelection = currentSelectionCard(canvasElement);
-  const workerConfiguration = within(workerSelection).getByRole("heading", {
-    name: "Worker configuration",
-  }).parentElement;
-  if (!(workerConfiguration instanceof HTMLElement)) {
-    throw new Error("expected worker configuration section");
-  }
-  const workerScope = within(workerConfiguration);
+  const workerSection = workerConfigurationSection(workerSelection);
+  const workerScope = within(workerSection);
   await expect(
     within(workerSelection).getByRole("heading", {
       name: "Worker configuration",
     }),
   ).toBeVisible();
-  await expect(workerScope.getByText("Model worker (legacy)")).toBeVisible();
   const workerTypeField = workerScope.getByRole("combobox", {
     name: "Worker type",
   });
+  await expect(workerTypeField).toHaveTextContent("Model worker (legacy)");
   await userEvent.click(workerTypeField);
   await expect(
     screen.getByRole("option", { name: "Inference worker" }),
@@ -515,31 +536,37 @@ async function expectEditableConfigurationBrowserFlow(
     reboundCurrentSelection,
   );
   const reboundScope = within(reboundSection);
-  const reboundExpandButton = reboundScope.getByRole("button", {
-    name: "Expand editable configuration",
-  });
 
-  await expect(
-    within(reboundCurrentSelection).getByText("Plan", { selector: "p" }),
-  ).toBeVisible();
+  await waitFor(() => {
+    expect(
+      within(reboundCurrentSelection).getByText("Plan", { selector: "p" }),
+    ).toBeVisible();
+  });
   await expect(
     within(reboundCurrentSelection).getAllByRole("heading", {
       name: "Configuration",
     }),
   ).toHaveLength(1);
 
-  await userEvent.click(reboundExpandButton);
+  await ensureEditableConfigurationExpanded(reboundScope);
 
   await expect(
-    await reboundScope.findByText(
-      "This running factory definition does not expose editable worker and prompt values for the selected workstation.",
-    ),
+    reboundScope.getByRole("combobox", { name: "Worker" }),
+  ).toHaveTextContent("planner");
+  const planWorkstationTypeField = reboundScope.getByRole("combobox", {
+    name: "Workstation type",
+  });
+  await expect(planWorkstationTypeField).toHaveTextContent(
+    "Model workstation (legacy)",
+  );
+  await userEvent.click(planWorkstationTypeField);
+  await expect(
+    screen.getByRole("option", { name: "Agent run" }),
   ).toBeVisible();
   await expect(
-    within(reboundCurrentSelection).getByRole("button", {
-      name: "Save changes",
-    }),
-  ).toBeDisabled();
+    screen.getByRole("option", { name: "Inference run" }),
+  ).toBeVisible();
+  await userEvent.keyboard("{Escape}");
 }
 
 async function expectEditableConfigurationSaveBrowserFlow(
