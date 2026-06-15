@@ -18,7 +18,8 @@ workflow recovery lanes or reconciling same-trace task and review residue.
 - `tests/functional/guards_batch/executor_review_state_reconcile_test.go`
   proves duplicate `review:init` collapse through the review workstation after
   executor/review reconcile wiring; stale `task:init`/`task:failed` cleanup is
-  covered in `pkg/factory/subsystems/executor_review_reconcile_test.go`.
+  covered in `pkg/factory/subsystems/subsystem_transitioner_test.go` and
+  `pkg/factory/subsystems/subsystem_transitioner_classifier_test.go`.
 - `tests/functional/workflow/process_review_contract_long_test.go` proves the
   owning `process`/`review` workstation contract for continue, rejection, and
   loop-breaker paths.
@@ -120,7 +121,7 @@ Expected post-repair observable state:
 
 - Story 002 owns runtime/projection reconciliation for duplicate `review:init`
   cleanup and stale task residue on the spawned trace via
-  `executorReviewReconcileMutations` in `pkg/factory/subsystems/executor_review_reconcile.go`,
+  `executorReviewReconcileMutations` in `pkg/factory/subsystems/termination.go`,
   wired from `subsystem_transitioner.go` after process/review accepted outputs.
   Reconcile keys duplicate `review:init` by same chaining trace **and** lane name
   (`TokenColor.Name`) so sibling lanes sharing one trace keep legitimate review work.
@@ -133,5 +134,7 @@ Expected post-repair observable state:
   process→review terminal convergence, duplicate-review regression for lane three,
   replayed projection parity via `ReconstructFactoryWorldState`, and planner
   classification evidence for all three named PRD lanes.
-- `pkg/factory/subsystems/executor_review_reconcile_test.go` includes transitioner
-  pipeline coverage for both process-accept and review-accept reconcile paths.
+- `pkg/factory/subsystems/subsystem_transitioner_test.go` and
+  `pkg/factory/subsystems/subsystem_transitioner_classifier_test.go` include
+  transitioner pipeline and unit coverage for process-accept and review-accept
+  reconcile paths.
