@@ -229,6 +229,49 @@ func (s *JavaScriptRuntimeService) RetryDispatch(ctx context.Context, sessionID 
 	)
 }
 
+type runtimeExtendedControlReplayLookup struct {
+	requestID string
+	tupleHash string
+	result    LifecycleControlResult
+	err       error
+	stop      bool
+}
+
+func lookupRuntimeExtendedControlReplay(
+	controlReplay map[string]controlReplayRecord,
+	operation LifecycleControlKind,
+	sessionID string,
+	control ControlRequest,
+	approve ApproveRequest,
+	retry RetryDispatchRequest,
+	currentStatus LifecycleStatus,
+) runtimeExtendedControlReplayLookup {
+	requestID := strings.TrimSpace(control.RequestID)
+	if requestID == "" {
+		return runtimeExtendedControlReplayLookup{}
+	}
+	tupleHash, err := ControlIdempotencyTupleHash(operation, sessionID, approve, retry)
+	if err != nil {
+		return runtimeExtendedControlReplayLookup{requestID: requestID, err: err, stop: true}
+	}
+	if replayResult, replayErr, replayed := lookupControlReplay(
+		controlReplay,
+		requestID,
+		tupleHash,
+		operation,
+		currentStatus,
+	); replayed {
+		return runtimeExtendedControlReplayLookup{
+			requestID: requestID,
+			tupleHash: tupleHash,
+			result:    replayResult,
+			err:       replayErr,
+			stop:      true,
+		}
+	}
+	return runtimeExtendedControlReplayLookup{requestID: requestID, tupleHash: tupleHash}
+}
+
 func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 	ctx context.Context,
 	sessionID string,
@@ -256,27 +299,20 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 		return LifecycleControlResult{}, ErrSessionNotFound
 	}
 
-	currentStatus := state.session.Status
-	requestID := strings.TrimSpace(control.RequestID)
-	var tupleHash string
-	if requestID != "" {
-		var hashErr error
-		tupleHash, hashErr = ControlIdempotencyTupleHash(operation, id, approve, retry)
-		if hashErr != nil {
-			return LifecycleControlResult{}, hashErr
+	replay := lookupRuntimeExtendedControlReplay(
+		s.controlReplay,
+		operation,
+		id,
+		control,
+		approve,
+		retry,
+		state.session.Status,
+	)
+	if replay.stop {
+		if replay.err != nil {
+			return LifecycleControlResult{}, replay.err
 		}
-		if replayResult, replayErr, replayed := lookupControlReplay(
-			s.controlReplay,
-			requestID,
-			tupleHash,
-			operation,
-			currentStatus,
-		); replayed {
-			if replayErr != nil {
-				return LifecycleControlResult{}, replayErr
-			}
-			return replayResult, nil
-		}
+		return replay.result, nil
 	}
 
 	if operation == LifecycleControlRetryDispatch {
@@ -285,15 +321,15 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 		}
 	}
 
-	outcome := EvaluateLifecycleControl(operation, currentStatus)
+	outcome := EvaluateLifecycleControl(operation, state.session.Status)
 	if outcome == LifecycleControlOutcomeInvalidState || outcome == LifecycleControlOutcomeTerminalSession {
 		controlErr := &ControlError{
 			Operation: operation,
 			Outcome:   outcome,
-			Status:    currentStatus,
-			Message:   fmt.Sprintf("%s rejected for session %s in status %s", operation, id, currentStatus),
+			Status:    state.session.Status,
+			Message:   fmt.Sprintf("%s rejected for session %s in status %s", operation, id, state.session.Status),
 		}
-		storeControlReplay(s.controlReplay, requestID, tupleHash, LifecycleControlResult{}, controlErr)
+		storeControlReplay(s.controlReplay, replay.requestID, replay.tupleHash, LifecycleControlResult{}, controlErr)
 		return LifecycleControlResult{}, controlErr
 	}
 
@@ -306,7 +342,7 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 	}
 
 	result := runtimeExtendedLifecycleControlResultFromState(state, id, operation, outcome, retry)
-	storeControlReplay(s.controlReplay, requestID, tupleHash, result, nil)
+	storeControlReplay(s.controlReplay, replay.requestID, replay.tupleHash, result, nil)
 	return result, nil
 }
 
