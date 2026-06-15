@@ -1,140 +1,169 @@
 package factorysession_test
 
 import (
-	"os"
-	"path/filepath"
+	"encoding/json"
 	"strings"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
+	workflowpreview "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
 )
 
-const validWorkflowSource = `
+const simpleValidWorkflowSource = `
 meta({ name: "review", version: 1 });
 phase("setup");
 log("starting");
 `
 
-func TestMockClient_ValidateSource_ValidFixtureReturnsSuccessPreview(t *testing.T) {
-	projectRoot := writeWorkflowFixture(t, "review.js", validWorkflowSource)
-	client := mcpfactorysession.NewClient()
+func TestValidateSource_ValidSimpleWorkflowFixtureReturnsDeterministicSuccess(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeWorkflow(t, projectRoot, "review.js", simpleValidWorkflowSource)
 
-	response, err := client.ValidateSource(factoryapi.FactoryPreviewRequest{
-		SourceKind:  factoryapi.WORKFLOWNAME,
-		ProjectRoot: &projectRoot,
-		SourceValue: strPtr("review"),
-	})
-	if err != nil {
-		t.Fatalf("ValidateSource: %v", err)
-	}
+	request := workflowNamePreviewRequest(projectRoot, "review")
+	response := mcpfactorysession.ValidateSource(request)
+
 	if response.Error != nil {
-		t.Fatalf("error = %#v, want success result", response.Error)
+		t.Fatalf("response error = %#v, want success result", response.Error)
 	}
 	if response.Result == nil {
-		t.Fatal("result = nil, want Factory preview result")
+		t.Fatal("expected typed success result")
 	}
 	if !response.Result.Valid {
-		t.Fatal("valid = false, want true for fixture workflow")
+		t.Fatalf("result.valid = false, want true; preview = %#v", response.Result)
 	}
 	if response.Result.SourceResolution.SourceHash == nil || strings.TrimSpace(*response.Result.SourceResolution.SourceHash) == "" {
-		t.Fatal("sourceHash missing from valid preview result")
+		t.Fatal("expected normalized sourceHash in success response")
 	}
-	if response.Result.PolicyPreview.PolicyHash == "" {
-		t.Fatal("policyPreview.policyHash missing from valid preview result")
+	if strings.TrimSpace(response.Result.PolicyPreview.PolicyHash) == "" {
+		t.Fatal("expected policyHash in success response")
+	}
+
+	ctx, err := workflowsource.DefaultContext(projectRoot)
+	if err != nil {
+		t.Fatalf("DefaultContext: %v", err)
+	}
+	expected := apisurface.FactoryPreviewResultFromPreview(apisurface.BuildFactoryPreview(workflowpreview.Request{
+		Source: workflowsource.Request{
+			Kind:  workflowsource.KindWorkflowName,
+			Value: "review",
+		},
+		Context: ctx,
+	}))
+	if response.Result.Valid != expected.Valid || deref(response.Result.SourceResolution.SourceHash) != deref(expected.SourceResolution.SourceHash) {
+		t.Fatalf("mcp = %#v, api surface = %#v", response.Result, expected)
 	}
 }
 
-func TestMockClient_ValidateSource_InvalidFixtureReturnsStableValidationError(t *testing.T) {
-	projectRoot := writeWorkflowFixture(t, "broken.js", "require('fs');")
-	client := mcpfactorysession.NewClient()
+func TestValidateSource_InvalidWorkflowFixtureReturnsTypedValidationFailure(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeWorkflow(t, projectRoot, "broken.js", "require('fs');")
 
-	response, err := client.ValidateSource(factoryapi.FactoryPreviewRequest{
-		SourceKind:  factoryapi.WORKFLOWNAME,
-		ProjectRoot: &projectRoot,
-		SourceValue: strPtr("broken"),
-	})
-	if err != nil {
-		t.Fatalf("ValidateSource: %v", err)
-	}
+	request := workflowNamePreviewRequest(projectRoot, "broken")
+	response := mcpfactorysession.ValidateSource(request)
+
 	if response.Result != nil {
-		t.Fatalf("result = %#v, want validation error envelope", response.Result)
+		t.Fatalf("response result = %#v, want typed validation error envelope", response.Result)
 	}
 	if response.Error == nil {
-		t.Fatal("error = nil, want stable validation error envelope")
+		t.Fatal("expected typed validation error envelope")
 	}
-	if response.Error.Code == "" || response.Error.Message == "" {
-		t.Fatalf("error = %#v, want code and message", response.Error)
+	if response.Error.Code != workflowvalidation.CodeForbiddenHostAccess {
+		t.Fatalf("error code = %q, want %q", response.Error.Code, workflowvalidation.CodeForbiddenHostAccess)
+	}
+	if strings.TrimSpace(response.Error.Message) == "" {
+		t.Fatal("expected stable validation error message")
 	}
 	if response.Error.Retryable {
-		t.Fatal("retryable = true, want false for validation failure")
+		t.Fatal("validation failure should not be retryable")
 	}
-	if response.Error.Details == nil {
-		t.Fatal("details = nil, want validation diagnostics")
+	valid, ok := response.Error.Details["valid"].(bool)
+	if !ok || valid {
+		t.Fatalf("error details valid = %#v, want false", response.Error.Details["valid"])
 	}
-	issues, ok := response.Error.Details["sourceValidationIssues"].([]interface{})
-	if !ok || len(issues) == 0 {
-		t.Fatalf("details = %#v, want sourceValidationIssues diagnostics", response.Error.Details)
+	issuesRaw, ok := response.Error.Details["sourceValidationIssues"].([]factoryapi.WorkflowDiagnostic)
+	if !ok || len(issuesRaw) == 0 {
+		t.Fatalf("error details issues = %#v, want source validation issues", response.Error.Details["sourceValidationIssues"])
+	}
+	wantPath := workflowsource.ProjectClaudeWorkflowsDir + "/broken.js"
+	if issuesRaw[0].Path == nil || strings.TrimSpace(*issuesRaw[0].Path) != wantPath {
+		t.Fatalf("issue path = %v, want %q", issuesRaw[0].Path, wantPath)
 	}
 }
 
-func TestMockClient_ValidateSource_MissingSourceReturnsNotFoundDiagnostic(t *testing.T) {
+func TestMockClient_ValidateSourceRoundTripDoesNotSurfaceTransportFailureForExpectedValidationErrors(t *testing.T) {
 	projectRoot := t.TempDir()
-	client := mcpfactorysession.NewClient()
+	writeWorkflow(t, projectRoot, "broken.js", "require('fs');")
 
-	response, err := client.ValidateSource(factoryapi.FactoryPreviewRequest{
+	request := workflowNamePreviewRequest(projectRoot, "broken")
+	encoded, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+
+	client := mcpfactorysession.NewClient()
+	raw, err := client.CallTool(mcpfactorysession.ToolValidateSource, encoded)
+	if err != nil {
+		t.Fatalf("CallTool returned transport error for expected validation failure: %v", err)
+	}
+
+	var response mcpfactorysession.ToolResponse[factoryapi.FactoryPreviewResult]
+	if err := json.Unmarshal(raw, &response); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if response.Error == nil || response.Result != nil {
+		t.Fatalf("response = %#v, want typed validation error envelope", response)
+	}
+}
+
+func TestMockClient_WorkflowValidateAliasMatchesCanonicalSuccess(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeWorkflow(t, projectRoot, "review.js", simpleValidWorkflowSource)
+
+	request := workflowNamePreviewRequest(projectRoot, "review")
+	encoded, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+
+	client := mcpfactorysession.NewClient()
+	canonicalRaw, err := client.CallTool(mcpfactorysession.ToolValidateSource, encoded)
+	if err != nil {
+		t.Fatalf("canonical validate: %v", err)
+	}
+	aliasRaw, err := client.CallTool(mcpfactorysession.ToolWorkflowValidate, encoded)
+	if err != nil {
+		t.Fatalf("alias validate: %v", err)
+	}
+	if string(canonicalRaw) != string(aliasRaw) {
+		t.Fatalf("alias response = %s, want canonical %s", aliasRaw, canonicalRaw)
+	}
+
+	var response mcpfactorysession.ToolResponse[factoryapi.FactoryPreviewResult]
+	if err := json.Unmarshal(aliasRaw, &response); err != nil {
+		t.Fatalf("unmarshal alias response: %v", err)
+	}
+	if response.Error != nil || response.Result == nil || !response.Result.Valid {
+		t.Fatalf("response = %#v, want valid success result", response)
+	}
+}
+
+func workflowNamePreviewRequest(projectRoot, workflowName string) factoryapi.FactoryPreviewRequest {
+	projectRootPtr := projectRoot
+	sourceValue := workflowName
+	return factoryapi.FactoryPreviewRequest{
 		SourceKind:  factoryapi.WORKFLOWNAME,
-		ProjectRoot: &projectRoot,
-		SourceValue: strPtr("missing"),
-	})
-	if err != nil {
-		t.Fatalf("ValidateSource: %v", err)
-	}
-	if response.Error == nil {
-		t.Fatal("error = nil, want validation error envelope")
-	}
-	if response.Error.Code != workflowsource.CodeSourceNotFound {
-		t.Fatalf("error code = %q, want %q", response.Error.Code, workflowsource.CodeSourceNotFound)
-	}
-	diagnostics, ok := response.Error.Details["sourceResolutionDiagnostics"].([]interface{})
-	if !ok || len(diagnostics) == 0 {
-		t.Fatalf("details = %#v, want sourceResolutionDiagnostics", response.Error.Details)
+		ProjectRoot: &projectRootPtr,
+		SourceValue: &sourceValue,
 	}
 }
 
-func TestMockClient_ValidateSource_BadRequestReturnsStableEnvelope(t *testing.T) {
-	client := mcpfactorysession.NewClient()
-
-	response, err := client.ValidateSource(factoryapi.FactoryPreviewRequest{
-		SourceKind: factoryapi.WORKFLOWNAME,
-	})
-	if err != nil {
-		t.Fatalf("ValidateSource: %v", err)
+func deref(value *string) string {
+	if value == nil {
+		return ""
 	}
-	if response.Error == nil {
-		t.Fatal("error = nil, want request validation envelope")
-	}
-	if response.Error.Code != "BAD_REQUEST" {
-		t.Fatalf("error code = %q, want BAD_REQUEST", response.Error.Code)
-	}
-	if response.Error.Retryable {
-		t.Fatal("retryable = true, want false for request validation failure")
-	}
-	if !strings.Contains(response.Error.Message, "projectRoot") {
-		t.Fatalf("message = %q, want projectRoot validation detail", response.Error.Message)
-	}
-}
-
-func writeWorkflowFixture(t *testing.T, name, content string) string {
-	t.Helper()
-	projectRoot := t.TempDir()
-	workflowDir := filepath.Join(projectRoot, workflowsource.ProjectClaudeWorkflowsDir)
-	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
-		t.Fatalf("mkdir workflows: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(workflowDir, name), []byte(content), 0o600); err != nil {
-		t.Fatalf("write workflow: %v", err)
-	}
-	return projectRoot
+	return *value
 }

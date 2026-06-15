@@ -31,3 +31,27 @@ func StartAsync(service factorysessionexecution.Service, input factoryapi.Factor
 	mapped := apifactorysession.AsyncStartResponseToAPI(result)
 	return ToolResponse[factoryapi.FactorySessionExecutionResponse]{Result: &mapped}
 }
+
+// StartSync runs the durable sync Factory Session contract for the
+// you.factory_session.start_sync MCP tool through the shared execution service.
+func StartSync(service factorysessionexecution.Service, input factoryapi.FactorySessionExecutionRequest) ToolResponse[factoryapi.FactorySessionSyncExecutionResponse] {
+	if service == nil {
+		envelope := unavailableServiceErrorEnvelope()
+		return ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]{Error: &envelope}
+	}
+
+	startReq, err := apifactorysession.StartRequestFromAPI(input)
+	if err != nil {
+		envelope := requestValidationErrorEnvelope(err)
+		return ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]{Error: &envelope}
+	}
+
+	result, err := service.StartSync(context.Background(), startReq)
+	if err != nil {
+		envelope := executionErrorEnvelope(err)
+		return ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]{Error: &envelope}
+	}
+
+	mapped := apifactorysession.SyncStartResponseToAPI(result)
+	return ToolResponse[factoryapi.FactorySessionSyncExecutionResponse]{Result: &mapped}
+}
