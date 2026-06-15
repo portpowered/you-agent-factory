@@ -1,186 +1,175 @@
-# PRD: UI CI Acceleration and Test Rationalization
+# PRD: Wire Real-Backend Factory Session Lifecycle-Control APIs
 
 ## Introduction
 
-The current required CI path spends too much wall clock time in UI verification, especially covered Vitest runs and browser integration tests. Because the required lanes run serially today, browser integration failures can arrive only after a long covered UI pass completes. This slows merge feedback, makes flaky failures more expensive, and makes it harder for maintainers to tell whether a failing test is proving a unique product contract or repeating assertions already covered elsewhere.
+Customers can already use the real durable JavaScript Factory Session backend for start, list, get, result, events, dispatch reads, and artifact reads. The remaining backend API parity gap is lifecycle control: durable session clients still receive `501` stubs or incomplete behavior when they try to pause, resume, cancel, terminate, approve, or retry dispatches through the public Factory Session API.
 
-This project will make browser failures surface earlier, reduce required UI CI wall clock time, use the existing sharded coverage runner, add stable timing visibility, and rationalize redundant UI tests while preserving defect detection. The intended outcome is a faster, more trustworthy PR verification path where each test lane has a clear purpose, clear rerun command, and clear failure output.
+This work routes the existing lifecycle-control routes under `/factory-sessions/{session_id}` through the durable backend service and shared API surface mappers. HTTP clients should receive typed lifecycle-control success, no-op, invalid-state, terminal-session, conflict, and not-found responses while existing live Petri session compatibility remains intact for non-durable session IDs.
 
 ## Context
 
 ### Customer Ask
 
-Accelerate the UI-heavy portions of CI and rationalize redundant tests so browser integration regressions fail faster, covered UI runs complete sooner, and maintainers have enough timing evidence to keep the suite from regressing.
+Wire real-backend Factory Session lifecycle-control APIs so HTTP clients can pause, resume, cancel, terminate, approve, and retry durable JavaScript Factory Sessions through the shared Factory Session API instead of receiving `501` stubs.
 
-### Concrete Problem
+### Problem
 
-The current `make ci` flow waits for long covered UI verification before browser integration can report failures. The covered UI runner already has sharding support, but the canonical PR path does not use it. Several slow tests are broad app-shell or React Flow-heavy suites that repeatedly mount expensive dashboard state for narrower behaviors. Browser, jsdom integration, and unit-style tests also overlap in places, increasing runtime without adding proportional confidence.
+The real-backend session parity and dispatch/artifact parity slices are complete, but lifecycle-control endpoints are still the route family explicitly left as deferred stubs. This blocks generated clients and API consumers from controlling durable JavaScript sessions through the same typed public API they use for reads and inspection. It also leaves typed control errors, idempotent request handling, and inspection-link behavior unproven at the HTTP boundary.
 
-### High-Level Solution
+### Solution
 
-Introduce a canonical PR verification flow that either runs browser integration before UI coverage or runs both through a repo-owned orchestrator with fast-fail semantics. Use sharded UI coverage in CI with deterministic merged coverage output. Add stable slow-test reporting for covered UI and browser lanes. Define lane boundaries and split the highest-cost redundant suites into lower-cost feature-scoped tests where that preserves the same observable confidence.
-
-## Project-Level Acceptance Criteria
-
-- [ ] Browser integration no longer waits for the full covered UI lane to finish before starting in the canonical PR verification flow.
-- [ ] The required UI-related CI wall clock time is reduced by at least 30% from the current measured baseline, or the closeout artifact explains the measured blocker and next tuning step.
-- [ ] Sharded UI coverage preserves merged coverage reports, threshold enforcement, replay coverage checking, and clear failure output when a shard fails.
-- [ ] Covered UI and browser integration lanes emit stable slow-file summaries that maintainers can compare across runs.
-- [ ] Lane boundaries explain what belongs in unit/jsdom coverage, covered feature integration, and browser integration, with duplicate assertion patterns removed from at least one high-cost area.
-- [ ] Browser integration remains deterministic: failures identify the lane and rerun command, and concurrent execution avoids port, preview server, and shared download conflicts.
-- [ ] Typecheck, lint, and relevant tests pass for CI orchestration, coverage sharding, reporting, and changed UI test behavior.
+Replace durable lifecycle-control stubs with handlers that route durable session IDs to the `factorysessionexecution.Service` lifecycle methods through `FactoryService` and shared `pkg/apisurface/factorysession` mappers. Use the real durable JavaScript runtime service for at least cancel or terminate loopback coverage, use fixture-backed fake service scenarios where real runtime support is not yet available, preserve existing live Petri behavior for non-durable IDs, and keep OpenAPI/generated clients synchronized if contract corrections are required.
 
 ## Goals
 
-- Reduce required UI-related CI wall clock time by at least 30%.
-- Surface browser integration failures before or alongside covered UI failures.
-- Cut median time-to-first-actionable browser regression failure to under 10 minutes.
-- Use existing UI coverage sharding and merge behavior instead of weakening coverage thresholds.
-- Establish stable timing visibility for the slowest covered UI and browser integration files.
-- Reduce redundant UI coverage across app-shell, replay, React Flow, and import/export scenarios.
-- Preserve or improve defect detection quality while decreasing runtime and flake exposure.
+- Return typed lifecycle-control responses for durable cancel and terminate instead of `501` stubs.
+- Return typed pause and resume success or invalid-state/conflict responses through shared service and mapper code.
+- Wire approve and retry-dispatch through the same durable lifecycle-control API boundary, with fixture-backed coverage acceptable where runtime scenarios are not yet available.
+- Preserve generated response vocabulary for typed errors, including operation, outcome, status, and inspection links when available.
+- Map missing durable sessions to the existing typed not-found API shape.
+- Preserve prior start/list/get/result/events and dispatch/artifact read parity after lifecycle-control wiring.
+- Keep this lane scoped to lifecycle-control APIs and related regression checks.
+
+## Project-Level Acceptance Criteria
+
+- [ ] `POST /factory-sessions/{session_id}/cancel` or `POST /factory-sessions/{session_id}/terminate` for a runtime-backed durable JavaScript session returns a typed lifecycle-control response through the durable backend path and no longer returns a `501` stub.
+- [ ] `POST /factory-sessions/{session_id}/pause` and `POST /factory-sessions/{session_id}/resume` return typed lifecycle-control responses or typed invalid-state/conflict responses through shared service and mapper code.
+- [ ] `POST /factory-sessions/{session_id}/approve` and `POST /factory-sessions/{session_id}/retry-dispatch` are wired through the same durable lifecycle-control API boundary, with fixture-backed coverage acceptable where real runtime scenarios are not yet available.
+- [ ] Typed control errors preserve generated response vocabulary, include operation/outcome/status when available, and map missing sessions to the existing not-found API shape.
+- [ ] Focused tests prove lifecycle controls do not break prior start/list/get/result/events or dispatch/artifact read parity.
+- [ ] The lane does not implement website inspection, MCP install work, live-provider bridge behavior, standalone workflow-run resources, `/workflow-previews` expansion, or another broad API/event batch.
+- [ ] Quality gate passes: generated artifacts are synchronized when OpenAPI changes are made, typecheck passes, lint passes where applicable, and focused backend/API tests pass.
 
 ## User Stories
 
-### prd-ui-ci-acceleration-and-test-rationalization-001: Fast-Fail Required UI CI Flow
+### dynamic-workflows-cell-real-backend-api-lifecycle-control-001: Cancel or Terminate Runtime-Backed Durable Sessions
 
-**Description:** As an engineer merging a UI change, I want browser integration to start before or alongside covered UI verification so that browser regressions become actionable sooner.
-
-**Acceptance Criteria:**
-
-- [ ] The canonical PR verification flow starts browser integration before covered UI completion, either by ordering browser first or by running browser and coverage through one orchestrated concurrent flow.
-- [ ] Failure output names the failed lane and includes the target or command an engineer should rerun locally.
-- [ ] Concurrent lanes, if used, keep lane logs attributable and avoid shared-state conflicts between browser-oriented processes.
-- [ ] The chosen ordering or concurrency behavior is documented in the developer-facing CI target help or adjacent CI documentation.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
-
-### prd-ui-ci-acceleration-and-test-rationalization-002: Sharded Covered UI Verification
-
-**Description:** As an engineer waiting on CI, I want covered UI tests to run in shards and merge coverage afterward so that wall clock time drops without weakening coverage enforcement.
+**Description:** As an HTTP client controlling a durable JavaScript Factory Session, I want cancel or terminate to return a typed lifecycle-control response from the real backend so that I can stop durable work without receiving a stub response.
 
 **Acceptance Criteria:**
 
-- [ ] The canonical PR verification flow uses the repo-owned UI coverage shard and merge behavior with a documented default shard count.
-- [ ] The merged coverage report preserves threshold enforcement and replay coverage checking after all expected shards finish.
-- [ ] A missing or failed shard produces a clear failure that identifies the shard and does not silently produce partial coverage.
-- [ ] Shard count can be tuned through a documented environment variable or CI setting without changing test semantics.
-- [ ] Tests pass.
+- [ ] `POST /factory-sessions/{session_id}/cancel` or `POST /factory-sessions/{session_id}/terminate` routes `dur-sess-*` session IDs to the durable execution service instead of returning `501 NotImplemented`.
+- [ ] At least one focused API server test starts or uses a runtime-backed durable JavaScript session and proves cancel or terminate returns a typed lifecycle-control response.
+- [ ] The response includes generated lifecycle-control fields such as operation, outcome, lifecycle status, request identifier, and inspection links when available.
+- [ ] Missing durable sessions return the existing typed not-found API response.
+- [ ] Non-durable live session IDs preserve existing live Petri-compatible lifecycle behavior.
 - [ ] Typecheck passes.
+- [ ] Tests pass.
 
-### prd-ui-ci-acceleration-and-test-rationalization-003: Stable UI Test Cost Reporting
+### dynamic-workflows-cell-real-backend-api-lifecycle-control-002: Pause and Resume Durable Sessions with Typed Outcomes
 
-**Description:** As a maintainer, I want CI to report the slowest covered UI and browser integration files with cost categories so that runtime regressions are visible and actionable.
+**Description:** As an HTTP client managing a durable JavaScript Factory Session, I want pause and resume to return typed success or invalid-state responses so that generated clients can react without parsing strings.
 
 **Acceptance Criteria:**
 
-- [ ] Covered UI verification emits a stable top-slowest file summary after the run or after shard merge.
-- [ ] Browser integration emits per-file timing or an equivalent top-slowest summary after the run.
-- [ ] The report categorizes slow files into app-shell integration, React Flow graph tests, replay/timeline tests, import/export tests, script-style tests, or uncategorized.
-- [ ] The report format is suitable for closeout notes and can be compared across CI runs without requiring source topology assertions.
-- [ ] Tests pass.
+- [ ] `POST /factory-sessions/{session_id}/pause` routes durable session IDs through the durable lifecycle service boundary and returns a typed lifecycle-control response or typed invalid-state/conflict response.
+- [ ] `POST /factory-sessions/{session_id}/resume` routes durable session IDs through the durable lifecycle service boundary and returns a typed lifecycle-control response or typed invalid-state/conflict response.
+- [ ] Terminal sessions produce the generated terminal-session or invalid-state lifecycle-control vocabulary rather than an untyped server error.
+- [ ] Fixture-backed fake service coverage is acceptable for pause/resume states that cannot yet be produced by the real runtime, but HTTP behavior must still be proven at the API boundary.
+- [ ] Non-durable live session IDs continue to use the existing live Petri-compatible pause/resume behavior.
 - [ ] Typecheck passes.
+- [ ] Tests pass.
 
-### prd-ui-ci-acceleration-and-test-rationalization-004: Lane Boundary and Redundancy Policy
+### dynamic-workflows-cell-real-backend-api-lifecycle-control-003: Approve and Retry Dispatch Through the Durable Boundary
 
-**Description:** As a maintainer, I want explicit test-lane boundaries so that unit, covered jsdom, and browser tests each verify distinct behavior.
+**Description:** As an HTTP client resolving gated or failed durable work, I want approve and retry-dispatch to use the same typed lifecycle-control API boundary so that all lifecycle operations behave consistently.
 
 **Acceptance Criteria:**
 
-- [ ] The test strategy defines what observable contracts belong in unit tests, covered feature/jsdom integration tests, and browser integration tests.
-- [ ] Browser integration guidance prioritizes durable behavior such as saved payloads, network effects, downloads, imports, and final visible state over repeated copy-only assertions.
-- [ ] Export/import and graph-editing flows have a documented minimum browser contract that avoids repeating every jsdom UI assertion.
-- [ ] At least one existing duplicate assertion pattern is removed or moved to the cheaper lane while preserving the durable behavior check.
-- [ ] Tests pass.
+- [ ] `POST /factory-sessions/{session_id}/approve` normalizes the request through shared API surface code and delegates durable session IDs to the durable lifecycle service.
+- [ ] `POST /factory-sessions/{session_id}/retry-dispatch` normalizes the request through shared API surface code and delegates durable session IDs to the durable lifecycle service.
+- [ ] Approve and retry-dispatch responses use generated lifecycle-control success, no-op, invalid-state, terminal-session, or conflict shapes as appropriate for the scenario.
+- [ ] Fixture-backed fake service scenarios cover approve and retry-dispatch when real runtime scenarios for guarded approvals or retryable provider dispatches are not yet available.
+- [ ] The API does not introduce standalone workflow-run route families or `/workflow-previews` expansion for these controls.
 - [ ] Typecheck passes.
+- [ ] Tests pass.
 
-### prd-ui-ci-acceleration-and-test-rationalization-005: Split One High-Cost App-Shell Suite
+### dynamic-workflows-cell-real-backend-api-lifecycle-control-004: Preserve Typed Control Errors and Request-Id Semantics
 
-**Description:** As a maintainer, I want at least one oversized app-shell test suite replaced with smaller feature-focused coverage so that the same behavior is proven with less setup cost.
+**Description:** As a generated-client consumer, I want lifecycle-control failures and request-id replays to use stable typed API shapes so that client error handling is deterministic.
 
 **Acceptance Criteria:**
 
-- [ ] One high-cost app-shell suite is selected from the current slow-file inventory and its unique observable behaviors are listed before changes.
-- [ ] Equivalent behavior is covered by smaller feature-owned tests where whole-dashboard mounting is not required.
-- [ ] Any remaining app-shell coverage is limited to cross-feature behavior that cannot be proven reliably at a lower layer.
-- [ ] Before/after timing for the selected suite or replacement tests is captured in the closeout artifact.
-- [ ] Tests pass.
+- [ ] Validation failures, missing durable sessions, terminal-session controls, invalid-state controls, and request-id conflicts map to generated typed API response shapes with existing HTTP status semantics.
+- [ ] Missing durable sessions use the existing not-found API shape rather than a lifecycle-specific ad hoc error.
+- [ ] Idempotent request-id replay returns the same typed lifecycle-control result for the same control tuple where the service supports replay.
+- [ ] Conflicting request-id reuse returns the generated conflict response vocabulary without mutating session state.
+- [ ] Error responses preserve operation, outcome, status, and inspection-link fields when the service result provides them.
 - [ ] Typecheck passes.
+- [ ] Tests pass.
 
-### prd-ui-ci-acceleration-and-test-rationalization-006: Browser Integration Stability and Runtime Boundaries
+### dynamic-workflows-cell-real-backend-api-lifecycle-control-005: Keep Lifecycle Contract and Mappers Synchronized
 
-**Description:** As an engineer debugging browser failures, I want browser integration tests to be isolated and deterministic so that failures are attributable and retries remain rare.
+**Description:** As a maintainer of the public Factory Session API, I want lifecycle-control route contracts and mappers to stay aligned so that generated Go and TypeScript clients receive stable typed responses.
 
 **Acceptance Criteria:**
 
-- [ ] Browser integration documentation states which suites must remain sequential because of shared preview servers, ports, downloads, or global browser state.
-- [ ] Any browser test concurrency introduced by this project uses isolated ports, preview state, and download locations per worker or file.
-- [ ] Shared browser helpers expose or document a recommended wait pattern for durable network and UI checkpoints.
-- [ ] At least one flaky or over-constrained browser assertion is simplified to assert durable behavior rather than transient copy, animation, or timing state.
-- [ ] Direct browser verification confirms changed browser-visible test flows still exercise the intended final UI state.
-- [ ] Tests pass.
+- [x] If lifecycle-control route, schema, response, or error refs need correction, the authored OpenAPI fragments are updated and `make generate-api` synchronizes generated Go and TypeScript clients.
+- [x] API surface mapper tests cover lifecycle-control request normalization and response/error shaping for success, no-op or terminal-session, conflict, and not-found cases.
+- [x] Contract tests cover the existing lifecycle-control route family under `/factory-sessions/{session_id}` and the generated lifecycle-control response vocabulary.
+- [x] The deferred-route regression no longer treats lifecycle-control routes as unsupported future routes; only genuinely unsupported future routes remain deferred.
+- [x] Public vocabulary remains Factory Session lifecycle-control vocabulary and does not expose internal Petri-net terms or standalone workflow-run nouns.
+- [x] Typecheck passes.
+- [x] Tests pass.
+
+### dynamic-workflows-cell-real-backend-api-lifecycle-control-006: Protect Prior Durable Read and Inspection Parity
+
+**Description:** As a maintainer extending durable Factory Session parity, I want lifecycle-control wiring to preserve start, read, result, event, dispatch, and artifact behavior so that the new controls do not regress completed slices.
+
+**Acceptance Criteria:**
+
+- [ ] Focused regression coverage proves durable JavaScript start, list, get, result, and event read/reconnect behavior still passes after lifecycle-control wiring.
+- [ ] Focused regression coverage proves durable dispatch and artifact list/detail reads still pass after lifecycle-control wiring.
+- [ ] Tests demonstrate lifecycle-control calls do not remove stable inspection links for session, result, dispatch, artifact, or event reads when those links are available.
+- [ ] Website inspection parity and live-provider bridge parity are recorded as named follow-up cells if encountered rather than implemented in this lane.
 - [ ] Typecheck passes.
+- [ ] Tests pass.
 
 ## High-Level Technical Design
 
-The canonical PR verification path should remain easy to run by target name. If the implementation chooses concurrency, use a repo-owned orchestration target or script that prefixes or buffers lane output so failures remain attributable. If the implementation chooses ordering, run browser integration as an earlier fast-fail lane and keep covered UI as the authoritative coverage lane.
+Durable lifecycle-control requests should stay under the existing public Factory Session route family. API handlers identify durable session IDs and delegate approve, pause, resume, cancel, terminate, and retry-dispatch through `FactoryService` to `factorysessionexecution.Service`. Non-durable session IDs continue on the existing live Petri-compatible path.
 
-Covered UI verification should use the existing shard and merge model. Each shard must produce an identifiable artifact, and merge must fail when an expected shard result is missing. The merged report remains the only source for coverage threshold enforcement and replay coverage checking.
+Request normalization and response shaping belong in `pkg/apisurface/factorysession`, especially the existing control request and lifecycle-control response/error mappers. Handlers should not build durable lifecycle projections locally. Per-session runtime state remains owned by the durable session runtime/service layer; `FactoryService` coordinates access and dependencies but does not become the state owner.
 
-Slow-test observability should be generated by the test lanes themselves or by repo-owned wrappers, not by a one-time spreadsheet. Reports should include top slow files, elapsed time, lane name, and a likely cost category. Categories are for maintainer triage and should not become a brittle source-inventory test.
-
-Test rationalization should start with the slowest app-shell and React Flow-heavy suites. Implementers should preserve user-visible or maintainer-visible behavior while moving repeated setup-heavy assertions into feature-scoped tests where possible. Browser tests should keep durable end-to-end contracts and avoid duplicating copy-only assertions already covered in jsdom.
+Tests should prove behavior at the API boundary and mapper boundary. At least cancel or terminate must use the real durable JavaScript runtime service for loopback coverage. Pause/resume, approve, retry-dispatch, and typed conflict cases may use fixture-backed fake service scenarios when real runtime support is not yet available. If OpenAPI lifecycle-control schemas or refs need correction, update authored fragments first, then run `make generate-api`.
 
 ## Functional Requirements
 
-- FR-1: The canonical PR verification flow must start browser integration before the covered UI lane completes.
-- FR-2: If test lanes run concurrently, lane logs must remain attributable, buffered or prefixed, and rerunnable by target name.
-- FR-3: Browser integration failures must provide a fast-fail signal without waiting for the full covered UI lane to complete.
-- FR-4: The covered UI lane must support shard-based execution in CI using the repo-owned shard and merge behavior.
-- FR-5: The default coverage shard count and tuning mechanism must be documented.
-- FR-6: Coverage merge must fail clearly when expected shard artifacts are missing.
-- FR-7: The covered UI lane must preserve merged coverage reports, coverage thresholds, and replay coverage checks.
-- FR-8: Covered UI and browser integration lanes must emit stable slow-file summaries.
-- FR-9: Slow-file summaries must include top N files, lane name, elapsed time, and a likely optimization category.
-- FR-10: The maintained slow-test inventory must include current-selection app shell, layout/graph app shell, replay stream, React Flow edit integration, import/export browser flows, and layout performance tests when present in the measured run.
-- FR-11: The test strategy must define lane boundaries for unit tests, covered jsdom integration tests, and browser integration tests.
-- FR-12: Browser integration tests must prioritize durable assertions such as saved payloads, network requests, downloaded or imported artifacts, and final visible state.
-- FR-13: Repeated whole-dashboard setup patterns must be replaced with lower-cost feature harnesses where the behavior under test is feature-local.
-- FR-14: At least one broad app-shell suite must be split or reduced without removing coverage of its unique observable behavior.
-- FR-15: Browser integration sequencing and any safe concurrency rules must be documented with port, preview server, and download-state constraints.
-- FR-16: The project must produce a closeout artifact or note with before/after timing for CI wall clock time, covered UI time, browser lane time, and top slow files.
+- FR-1: `POST /factory-sessions/{session_id}/cancel` must return a typed lifecycle-control response for durable JavaScript Factory Sessions through the durable execution service.
+- FR-2: `POST /factory-sessions/{session_id}/terminate` must return a typed lifecycle-control response for durable JavaScript Factory Sessions through the durable execution service.
+- FR-3: `POST /factory-sessions/{session_id}/pause` and `/resume` must return typed lifecycle-control responses or typed invalid-state/conflict responses for durable sessions.
+- FR-4: `POST /factory-sessions/{session_id}/approve` and `/retry-dispatch` must be wired through the same durable lifecycle-control service and mapper boundary.
+- FR-5: Missing durable sessions must map to the existing not-found API shape.
+- FR-6: Typed lifecycle-control errors must preserve generated response vocabulary, including operation, outcome, status, and inspection links when available.
+- FR-7: Request-id replay and conflict behavior must be deterministic and must not mutate unrelated session state.
+- FR-8: Existing live Petri session compatibility must remain intact for non-durable session IDs.
+- FR-9: Prior durable start/list/get/result/events and dispatch/artifact read parity must continue to pass focused regression coverage.
+- FR-10: Public route structure must remain under `/factory-sessions/{session_id}` lifecycle controls without introducing workflow-run resources.
 
 ## Non-Goals
 
-- Rewriting the entire UI test stack.
-- Eliminating browser integration tests.
-- Lowering coverage thresholds as the primary speed strategy.
-- Parallelizing browser tests in a way that knowingly increases flakiness or port conflicts.
-- Replacing targeted end-to-end coverage with only unit tests.
-- Fixing every historical React `act(...)` warning or unrelated console warning.
-- Performing broad unrelated cleanup while changing CI and test strategy.
+- No website or dashboard inspection parity.
+- No MCP host installation or install-smoke changes.
+- No live-provider bridge parity for JavaScript child-agent dispatch execution.
+- No standalone workflow-run API resources or `/workflow-previews` expansion.
+- No broad API/event route family beyond lifecycle controls and the regression checks needed to protect completed parity slices.
+- No broad handler refactor, package reshaping, or unrelated cleanup.
 
 ## Supporting Technical and UX Considerations
 
-- CI operator experience matters: required lanes should remain easy to run locally and failures should identify the exact rerun command.
-- Faster CI is only valuable if failures remain deterministic and attributable.
-- Browser integration logs must stay readable when run near other long-running lanes.
-- Sharding should respect CI executor capacity; too many shards may add overhead without improving wall clock time.
-- Browser tests that use preview servers, downloads, ports, or global browser state need explicit isolation before any file-level concurrency.
-- Frontend-visible changes to test fixtures or browser flows should still be verified in a browser, including loading, success, empty, and failure states when those states are affected.
-- Test reports should measure runtime behavior and outcomes, not enforce brittle source-file inventories unless the report itself is the product behavior under test.
+- Relevant references include `docs/temp/customer-ask.md`, `docs/temp/dynamic-workflow-plan.md`, `docs/internal/development/plans/dynamic-workflows/dynamic-workflow-design.md`, `docs/internal/processes/api-relevant-files.md`, `docs/architecture/architecture.md`, and `docs/architecture/data-model.md`.
+- Hard dependencies are completed `dynamic-workflows-cell-real-backend-api-session-parity`, completed `dynamic-workflows-cell-real-backend-api-dispatch-artifact`, and existing lifecycle-control service methods plus `pkg/apisurface/factorysession` mappers.
+- Recommended verification commands are `make generate-api` when contract files change, `go test ./pkg/api/servertests ./pkg/api/contracttests ./pkg/apisurface/... ./pkg/factorysessionexecution/...`, and `make api-smoke` when feasible.
+- The change is backend/API-visible, not browser-visible. Direct browser verification is not required unless implementation expands into dashboard behavior, which is out of scope for this lane.
 
 ## Success Metrics
 
-- Required UI-related `make ci` wall clock time drops by at least 30% from the current measured baseline.
-- Browser integration failures surface before full UI coverage completion in at least 90% of failing browser-regression cases.
-- Main covered UI wall clock time drops by at least 25%.
-- The top 10 slowest UI test files are remeasured after changes, and at least 5 improve materially or have documented blockers.
-- The number of broad app-shell tests above 10 seconds decreases release over release.
-- Browser integration retries due to flake do not increase after CI orchestration and sharding changes.
+- Durable lifecycle-control routes return typed responses instead of `501` stubs.
+- At least one real runtime-backed cancel or terminate API test proves the durable backend path.
+- Generated clients can distinguish accepted, no-op, invalid-state, terminal-session, conflict, and not-found outcomes using typed response vocabulary.
+- Prior durable read and inspection parity tests remain green.
+- No new workflow-run API resource, website behavior, MCP install behavior, or live-provider bridge behavior is introduced.
 
 ## Open Questions
 
-- Should the canonical PR path run browser integration first, or run browser integration and UI coverage concurrently under a shared orchestrator?
-- Should the layout performance test remain in the required covered lane, or move to a separate performance verification lane with its own runtime budget?
-- What CI executor capacity is available for coverage sharding, and what default shard count gives the best wall clock improvement without overhead dominating?
+None. Where real runtime scenarios are not yet available for a lifecycle operation, implementation should use fixture-backed coverage for this lane and record the missing real-provider/runtime scenario as follow-up work rather than expanding scope.

@@ -8,6 +8,12 @@
 - Terminal runtime session results normalize through `projectRuntimeSuccessResult` (`workflowresult.ProjectPrimaryResult` + `workcontent.GeneratedPtrFromParts`); durable `PrimaryResult` is WorkContent JSON (e.g. `[{"type":"JSON","json":{...}}]`), not raw workflow return JSON. Prove API-shaped parity with `factorysession.SessionReadResponseToAPI` / `ResultResponseToAPI` plus `ValidateResultMatchesSessionRead` in `runtime_projection_test.go`.
 - Canonical runtime session lifecycle events replay through `ReplaySessionProjection` (`session_event_projection.go`) into durable `SessionReadResult`/`ResultReadResult` projections; `BuildCanonicalRuntimeSessionEvents` may include bounded `resultSummary` text on `SESSION_RESULT_UPDATED`, and sync-timeout paths rebuild events after `SYNC_WAIT_TIMED_OUT` availability changes. Prove live-vs-replayed parity and idempotent replay in `runtime_event_replay_test.go`.
 - CI `Build, Lint, and API` runs `make backend-size` on owned Go packages (100-line function cap). Split large test functions with `t.Helper()` assertion helpers (see `runtime_projection_test.go`) rather than inline assertion blocks.
+- Route durable lifecycle-control HTTP for `dur-sess-*` IDs through `apisurface.DurableSessionLifecycleAPI` (`handlers_factory_durable.go`); map typed `ControlError` outcomes to `409` lifecycle-control responses, missing sessions and dispatches to `404` via `factory_session_lifecycle_errors.go`. Inject `factorysessionexecution.Service` through `testutil.MockFactory.DurableExecutionService` for API server tests without full `FactoryService` wiring.
+- Lifecycle-control `requestId` replay uses `ControlIdempotencyTupleHash` + shared `lookupControlReplay`/`storeControlReplay` in `control.go` on both `FakeService` and `RuntimeService`; tuple conflicts return `ControlError` with `CONFLICT` outcome without mutating session state, and accepted/terminal/invalid control errors replay the stored result or error for exact replays.
+- `JavaScriptRuntimeService` lifecycle controls live in `pkg/factorysessionexecution/control.go` (`applyRuntimeExtendedLifecycleControl`, `applyRuntimeAcceptedLifecycleControl`) with `controlReplay` on the service struct; port runtime lifecycle tests to `pkg/factorysessionexecution/fixtures/runtime_lifecycle_control_test.go` using `newJavaScriptRuntimeServiceWithFixture`.
+- Real-backend API slice contract tests use `assertRealBackendSessionAPISliceRoutes` for in-scope lifecycle/read routes and `assertDeferredRealBackendSessionRouteFamilies` with an empty deferred map once lifecycle controls ship; `server_durable_session_deferred_routes_test.go` proves implemented lifecycle routes return typed responses instead of `501`.
+- `RuntimeService` lifecycle controls live in `pkg/factorysessionexecution/control.go` (`applyRuntimeExtendedLifecycleControl`, `applyRuntimeAcceptedLifecycleControl`) to stay within package file-count and backend-size limits; fixture-backed `FakeService` scenarios cover approve/retry-dispatch at the HTTP boundary when runtime-backed guarded approvals or retryable dispatches are unavailable.
+- Lifecycle-control read-parity regression tests live in `pkg/api/servertests/server_durable_session_lifecycle_read_parity_test.go`: exercise pause/resume/cancel on runtime-backed sessions, then prove list/get/result/event reconnect, dispatch/artifact reads, and inspection links (`FactorySessionExecutionLinks` on session reads; `FactorySessionLifecycleControlLinks` on control responses) remain stable.
 
 ## 2026-06-11T12:49:03Z - dynamic-workflows-cell-session-backend-runtime-001
 - Implemented `PrepareStart`, `StartPrepareContext`, and `PreparedStart` in `pkg/factorysessionexecution/prepare_start.go` to normalize real JavaScript session starts through orchestrator-owned source resolution, validation, policy projection, args checks, and wait validation before runtime execution.
@@ -105,4 +111,70 @@
 - **Learnings for future iterations:**
   - CI `Build, Lint, and API` runs `make backend-size` after `make vet`; large table-driven or assertion-heavy tests should use `t.Helper()` assertion helpers early to stay under the 100-line function cap.
   - `go vet` passing locally does not imply the full `Build, Lint, and API` job is green—run `make backend-size` when adding substantial test functions in owned backend packages.
+---
+
+## 2026-06-16T12:00:00Z - dynamic-workflows-cell-real-backend-api-lifecycle-control-001
+- Implemented runtime-backed `Cancel` and `Terminate` in `RuntimeService` via `applyRuntimeLifecycleControl`, per-session `runCancel`, and canceled-runtime projection to `CANCELED`/`SESSION_CANCELED` availability.
+- Routed `POST /factory-sessions/{session_id}/cancel` and `/terminate` for `dur-sess-*` session IDs through `DurableSessionLifecycleAPI` handlers with typed success (`200`/`202`) and conflict/not-found mapping in `factory_session_lifecycle_errors.go`.
+- Extended `testutil.MockFactory` with durable execution/lifecycle delegation for focused API server tests.
+- Added runtime and API tests in `runtime_lifecycle_control_test.go` and `server_durable_session_lifecycle_control_test.go`.
+- Updated `docs/internal/processes/api-relevant-files.md` with runtime lifecycle-control and handler wiring notes.
+- **Learnings for future iterations:**
+  - `RuntimeService` must store `runCancel` on `runtimeSessionState` for both async and sync starts so lifecycle controls can interrupt `workflowruntime.Run`.
+  - Accepted cancel returns `202` with `CANCELING`; accepted terminate returns `200` with `TERMINATED`.
+  - Non-`dur-sess-*` session IDs should keep the existing `501` live-session stub until live lifecycle parity lands.
+  - API lifecycle tests can seed sessions through `DurableExecutionService.StartAsync` while proving HTTP cancel/terminate behavior through `MockFactory`.
+---
+
+
+## 2026-06-16T20:15:00Z - dynamic-workflows-cell-real-backend-api-lifecycle-control-003
+- Routed `POST /factory-sessions/{session_id}/approve` and `/retry-dispatch` for `dur-sess-*` session IDs through `handleDurableApproveControl` / `handleDurableRetryDispatchControl`, `MockFactory` durable lifecycle delegation, and `RuntimeService.applyRuntimeExtendedLifecycleControl` in `control.go`.
+- Added fixture-backed API tests for approve (`AWAITING_APPROVAL` → `RUNNING`), retry-dispatch on failed sessions, terminal-session retry conflict, and non-durable `501` stubs; runtime tests for approve invalid-state and missing-dispatch not-found.
+- Mapped `ErrDispatchNotFound` to `404` in `factory_session_lifecycle_errors.go`.
+- Updated `docs/internal/processes/api-relevant-files.md` with approve/retry handler and runtime lifecycle-control wiring.
+- **Learnings for future iterations:**
+  - Approve/retry use distinct OpenAPI request bodies (`FactorySessionApproveRequest`, `FactorySessionRetryDispatchRequest`); share decode via generic `decodeOptionalJSONRequest` but keep separate handler entrypoints.
+  - `pkg/factorysessionexecution` is at the 15-file cap—extend `control.go` for runtime lifecycle mutations instead of adding `runtime_lifecycle_control.go`.
+  - Fixture-backed `FakeService` is the right API-boundary proof path for approve/retry when runtime sessions lack `AWAITING_APPROVAL` or dispatch fanout.
+---
+
+## 2026-06-16T21:30:00Z - dynamic-workflows-cell-real-backend-api-lifecycle-control-004
+- Added shared lifecycle-control `requestId` replay via `lookupControlReplay`/`storeControlReplay` in `control.go`, wired `controlReplay` on `RuntimeService`, and refactored `FakeService` to use the same helpers.
+- Extended `ControlErrorToAPI` to include post-control inspection links on typed conflict/terminal/invalid responses.
+- Added runtime and API tests for idempotent control replay, request-id tuple conflicts without mutation, validation `400`, and dispatch-not-found `404`; extended mapper/error unit tests.
+- Updated `docs/internal/processes/api-relevant-files.md` with control replay wiring notes.
+- **Learnings for future iterations:**
+  - Control replay must run before dispatch existence checks so retry-dispatch replays match `FakeService` ordering.
+  - Terminal/invalid control errors should be stored in `controlReplay` so exact `requestId` replays return the same typed `409` shape without re-evaluating live session state.
+  - `ControlErrorToAPI` can derive inspection links from `sessionId` even when the service `ControlError` omits a links field.
+---
+
+## 2026-06-16T18:30:00Z - dynamic-workflows-cell-real-backend-api-lifecycle-control-002
+- Implemented runtime-backed `Pause` and `Resume` in `RuntimeService` through `applyRuntimeLifecycleControl` with projection-only state transitions (`PAUSED`/`RUNNING`, `pausedAt`/`resumedAt`) that do not invoke `runCancel`.
+- Routed `POST /factory-sessions/{session_id}/pause` and `/resume` for `dur-sess-*` session IDs through `DurableSessionLifecycleAPI` handlers; extended `testutil.MockFactory` pause/resume delegation to match cancel/terminate.
+- Added runtime and API tests for accepted pause/resume, terminal-session `409` conflict vocabulary, and non-durable `501` live stubs in `runtime_lifecycle_control_test.go` and `server_durable_session_lifecycle_control_test.go`.
+- Updated `docs/internal/processes/api-relevant-files.md` with pause/resume runtime and handler wiring notes.
+- **Learnings for future iterations:**
+  - `applyRuntimeLifecycleControl` must gate `runCancel` behind an `interruptRuntime` flag so pause/resume do not kill the background `workflowruntime.Run` goroutine.
+  - Terminal-session pause/resume map to `TERMINAL_SESSION` `ControlError` and HTTP `409` lifecycle-control responses at the API boundary—the same pattern as cancel on succeeded sessions.
+  - Fixture-backed `FakeService` pause/resume scenarios already exist in `fixtures/lifecycle_test.go`; runtime-backed API tests can prove the HTTP path with `busy-loop` sessions.
+---
+
+## 2026-06-16T22:30:00Z - dynamic-workflows-cell-real-backend-api-lifecycle-control-005
+- Merged `origin/main` (session-parity and dispatch-artifact lanes) and ported lifecycle controls from `RuntimeService` to `JavaScriptRuntimeService` with `controlReplay` on the service struct.
+- Moved lifecycle-control routes into `assertRealBackendSessionAPISliceRoutes`, cleared lifecycle entries from `assertDeferredRealBackendSessionRouteFamilies`, and replaced deferred-route `501` regression with `TestRealBackendFactorySessionRoutes_LifecycleControlsAreImplemented`.
+- Added lifecycle request-normalization mapper tests (`ControlRequestFromAPI`, `ApproveRequestFromAPI`, `RetryDispatchRequestFromAPI`) and updated `api-relevant-files.md` for `JavaScriptRuntimeService` lifecycle wiring.
+- **Learnings for future iterations:**
+  - Main renamed `RuntimeService` to `JavaScriptRuntimeService` with `NewExecutionService(ExecutionProviderJavaScriptRuntime)`; lifecycle methods belong on `JavaScriptRuntimeService` in `control.go`, not stubbed in `runtime_service.go`.
+  - `runtime_lifecycle_control_test.go` lives in `pkg/factorysessionexecution/fixtures/` as `fixtures_test` and reuses `newJavaScriptRuntimeServiceWithFixture`.
+  - Merge from main can duplicate `MockFactory` durable methods and `isDurableExecutionSessionID`; keep main's full execution/read implementations and our lifecycle delegation.
+---
+
+## 2026-06-16T23:45:00Z - dynamic-workflows-cell-real-backend-api-lifecycle-control-006
+- Added `server_durable_session_lifecycle_read_parity_test.go` with focused API regression tests proving pause/resume/cancel lifecycle controls preserve durable list/get/result/event reconnect reads, dispatch/artifact list/detail parity, and stable inspection links on session and lifecycle-control responses.
+- Updated `docs/internal/processes/api-relevant-files.md` with lifecycle read-parity test wiring notes.
+- **Learnings for future iterations:**
+  - `FactorySessionExecutionLinks` on session reads exposes session/results/events/status only; dispatch/artifact links appear on `FactorySessionLifecycleControlLinks` after controls—prove dispatch/artifact read reachability via direct GET paths in parity tests.
+  - Running durable sessions appear in `scope=all` live `sessions`, not `scope=persisted` (`IsPersistedListCandidate` excludes non-terminal/non-recoverable rows).
+  - Runtime-backed pause/resume return HTTP `200` (synchronous projection), not `202` like cancel.
 ---

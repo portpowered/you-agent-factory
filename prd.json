@@ -1,31 +1,32 @@
 {
-  "project": "Factory Session Backend Runtime for Simple JavaScript Workflows",
-  "branchName": "dynamic-workflows-cell-session-backend-runtime",
-  "description": "Wire the shared Factory Session execution service to the real simple JavaScript runtime path so simple JavaScript workflows can be started, inspected, replayed, and retrieved through stable backend session read models while preserving request-id idempotency and keeping FakeService available for mock-provider transports.",
+  "project": "Wire Real-Backend Factory Session Lifecycle-Control APIs",
+  "branchName": "dynamic-workflows-cell-real-backend-api-lifecycle-control",
+  "description": "Replace durable Factory Session lifecycle-control stubs with typed real-backend API behavior for durable JavaScript sessions, covering cancel, terminate, pause, resume, approve, and retry-dispatch while preserving existing live session compatibility and prior durable read parity.",
   "context": {
-    "customerAsk": "The shared Factory Session execution service can start a simple JavaScript workflow against the real runtime path, expose status/result/progress/read models, and preserve idempotent request behavior.",
-    "problem": "The durable Factory Session contract and fake service paths exist, but the backend service path still needs a real simple JavaScript runtime implementation for session start and inspection. Transports can prove fixture shapes today, but they cannot yet run a real simple JavaScript workflow through lifecycle, result projection, replay, and request-id semantics.",
-    "solution": "Add a real runtime-backed implementation or mode behind the existing factorysessionexecution.Service contract. Normalize starts through orchestrator-owned source, validation, policy, args, wait, and result packages; execute simple JavaScript sessions through the runtime boundary; maintain explicit in-memory session projections and canonical events; preserve request-id replay/conflict behavior; and keep FakeService available for mock-provider paths."
+    "customerAsk": "Wire real-backend Factory Session lifecycle-control APIs so HTTP clients can pause, resume, cancel, terminate, approve, and retry durable JavaScript Factory Sessions through the shared Factory Session API instead of receiving 501 stubs.",
+    "problem": "The real-backend start/list/get/result/events slice and dispatch/artifact read slice are complete, but durable lifecycle-control endpoints remain stubbed or incomplete. API consumers and generated clients cannot reliably control durable JavaScript Factory Sessions or handle typed lifecycle-control errors through the public Factory Session API.",
+    "solution": "Route durable lifecycle-control requests under `/factory-sessions/{session_id}` through `FactoryService`, `factorysessionexecution.Service`, and shared `pkg/apisurface/factorysession` mappers; use real runtime-backed cancel or terminate coverage, fixture-backed scenarios for lifecycle states not yet produced by the runtime, typed error mapping, idempotent request handling, and focused regression tests for prior parity slices."
   },
   "acceptanceCriteria": [
-    "Service tests prove async start, sync completed start, sync timeout, get session, and get result using a real simple JavaScript fixture through the runtime-backed service path",
-    "Service tests prove exact request-id replay returns the same session/result response and conflicting request-id reuse is rejected",
-    "Projection tests show session lifecycle, result summary, source hash, policy hash, and inspection links remain consistent with existing API-shaped read models",
-    "Canonical lifecycle and result update events can be replayed idempotently to reconstruct the same session projection",
-    "FakeService tests continue to pass and remain usable for CLI, MCP, API, and mock-provider paths",
-    "No provider dispatch bridge, website UI, MCP install packaging, or broad persistent database storage is introduced in this cell",
-    "Quality gate: Go typecheck/compile, lint where applicable, and focused tests pass, including go test ./pkg/factorysessionexecution ./pkg/orchestrators/javascript/..."
+    "`POST /factory-sessions/{session_id}/cancel` or `/terminate` for a runtime-backed durable JavaScript session returns a typed lifecycle-control response through the durable backend path and no longer returns a 501 stub.",
+    "`POST /factory-sessions/{session_id}/pause` and `/resume` return typed lifecycle-control responses or typed invalid-state/conflict responses through shared service and mapper code.",
+    "`POST /factory-sessions/{session_id}/approve` and `/retry-dispatch` are wired through the same durable lifecycle-control API boundary, with fixture-backed coverage acceptable where real runtime scenarios are not yet available.",
+    "Typed control errors preserve generated response vocabulary, include operation/outcome/status when available, and map missing sessions to the existing not-found API shape.",
+    "Focused tests prove lifecycle controls do not break prior start/list/get/result/events or dispatch/artifact read parity.",
+    "The lane does not implement website inspection, MCP install work, live-provider bridge behavior, standalone workflow-run resources, `/workflow-previews` expansion, or another broad API/event batch.",
+    "Quality gate passes: generated artifacts are synchronized when OpenAPI changes are made, typecheck passes, lint passes where applicable, and focused backend/API tests pass."
   ],
   "userStories": [
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-001",
-      "title": "Normalize real session start inputs",
-      "description": "As a backend maintainer, I want real JavaScript session starts to use the shared start contract and orchestrator-owned normalization so the runtime path behaves like API, CLI, and MCP callers expect.",
+      "id": "dynamic-workflows-cell-real-backend-api-lifecycle-control-001",
+      "title": "Cancel or Terminate Runtime-Backed Durable Sessions",
+      "description": "As an HTTP client controlling a durable JavaScript Factory Session, I want cancel or terminate to return a typed lifecycle-control response from the real backend so that I can stop durable work without receiving a stub response.",
       "acceptanceCriteria": [
-        "A start request resolves JavaScript source using the existing Factory Session start source flow and records the resolved source identity and source hash on the session read model",
-        "A start request validates source, args, requested policy, and wait options before runtime execution begins",
-        "Policy projection records the effective policy hash used for the session",
-        "Invalid source, invalid args, or denied policy returns the existing service error shape without creating a completed session",
+        "`POST /factory-sessions/{session_id}/cancel` or `POST /factory-sessions/{session_id}/terminate` routes `dur-sess-*` session IDs to the durable execution service instead of returning `501 NotImplemented`.",
+        "At least one focused API server test starts or uses a runtime-backed durable JavaScript session and proves cancel or terminate returns a typed lifecycle-control response.",
+        "The response includes generated lifecycle-control fields such as operation, outcome, lifecycle status, request identifier, and inspection links when available.",
+        "Missing durable sessions return the existing typed not-found API response.",
+        "Non-durable live session IDs preserve existing live Petri-compatible lifecycle behavior.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -34,14 +35,15 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-002",
-      "title": "Start simple JavaScript sessions asynchronously",
-      "description": "As a transport caller, I want to start a simple JavaScript workflow asynchronously so I can receive a session identifier immediately and inspect progress through the shared service.",
+      "id": "dynamic-workflows-cell-real-backend-api-lifecycle-control-002",
+      "title": "Pause and Resume Durable Sessions with Typed Outcomes",
+      "description": "As an HTTP client managing a durable JavaScript Factory Session, I want pause and resume to return typed success or invalid-state responses so that generated clients can react without parsing strings.",
       "acceptanceCriteria": [
-        "StartAsync against a real simple JavaScript fixture returns a session id, accepted/running lifecycle state, orchestrator identity, source hash, policy hash, and inspection links",
-        "The runtime-backed service records enough in-memory session state for a later GetSession call to report lifecycle status, progress, result availability, dispatch stubs, artifact stubs, and links",
-        "The service emits or models canonical session-started and lifecycle/progress facts for the async session",
-        "Async service tests use a real simple JavaScript fixture rather than a fake scenario fixture",
+        "`POST /factory-sessions/{session_id}/pause` routes durable session IDs through the durable lifecycle service boundary and returns a typed lifecycle-control response or typed invalid-state/conflict response.",
+        "`POST /factory-sessions/{session_id}/resume` routes durable session IDs through the durable lifecycle service boundary and returns a typed lifecycle-control response or typed invalid-state/conflict response.",
+        "Terminal sessions produce the generated terminal-session or invalid-state lifecycle-control vocabulary rather than an untyped server error.",
+        "Fixture-backed fake service coverage is acceptable for pause/resume states that cannot yet be produced by the real runtime, but HTTP behavior must still be proven at the API boundary.",
+        "Non-durable live session IDs continue to use the existing live Petri-compatible pause/resume behavior.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -50,14 +52,15 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-003",
-      "title": "Complete or time out synchronous starts",
-      "description": "As a transport caller, I want synchronous JavaScript session starts to either return the completed result within the wait budget or return a live session that can be inspected later.",
+      "id": "dynamic-workflows-cell-real-backend-api-lifecycle-control-003",
+      "title": "Approve and Retry Dispatch Through the Durable Boundary",
+      "description": "As an HTTP client resolving gated or failed durable work, I want approve and retry-dispatch to use the same typed lifecycle-control API boundary so that all lifecycle operations behave consistently.",
       "acceptanceCriteria": [
-        "StartSync with a sufficient wait budget runs the real simple JavaScript fixture and returns a completed session result with the expected primary result summary",
-        "StartSync with an exhausted or too-small wait budget returns the existing timeout/pending result shape with session id, lifecycle status, result availability, and inspection links",
-        "Sync completion and timeout paths both persist the same session state that GetSession and GetResult later read",
-        "Timeout behavior does not duplicate sessions or lose the eventual runtime result",
+        "`POST /factory-sessions/{session_id}/approve` normalizes the request through shared API surface code and delegates durable session IDs to the durable lifecycle service.",
+        "`POST /factory-sessions/{session_id}/retry-dispatch` normalizes the request through shared API surface code and delegates durable session IDs to the durable lifecycle service.",
+        "Approve and retry-dispatch responses use generated lifecycle-control success, no-op, invalid-state, terminal-session, or conflict shapes as appropriate for the scenario.",
+        "Fixture-backed fake service scenarios cover approve and retry-dispatch when real runtime scenarios for guarded approvals or retryable provider dispatches are not yet available.",
+        "The API does not introduce standalone workflow-run route families or `/workflow-previews` expansion for these controls.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -66,14 +69,15 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-004",
-      "title": "Read session and result projections",
-      "description": "As a caller inspecting a Factory Session, I want status and result reads to match the established durable session API shapes so later API, CLI, and MCP work can consume one shared backend projection.",
+      "id": "dynamic-workflows-cell-real-backend-api-lifecycle-control-004",
+      "title": "Preserve Typed Control Errors and Request-Id Semantics",
+      "description": "As a generated-client consumer, I want lifecycle-control failures and request-id replays to use stable typed API shapes so that client error handling is deterministic.",
       "acceptanceCriteria": [
-        "GetSession returns a durable session read model with lifecycle status, phase/progress summary, result summary, source hash, policy hash, dispatch/artifact counts or stubs, recoverability/action availability, and inspection links",
-        "GetResult returns final result data for a completed simple JavaScript session and an availability response for sessions that are still running or timed out",
-        "Result projection uses the existing JavaScript result normalization rules for primary result, artifacts, and summary fields",
-        "Projection tests compare the runtime-backed read models to the existing API-shaped expectations without changing public schema names",
+        "Validation failures, missing durable sessions, terminal-session controls, invalid-state controls, and request-id conflicts map to generated typed API response shapes with existing HTTP status semantics.",
+        "Missing durable sessions use the existing not-found API shape rather than a lifecycle-specific ad hoc error.",
+        "Idempotent request-id replay returns the same typed lifecycle-control result for the same control tuple where the service supports replay.",
+        "Conflicting request-id reuse returns the generated conflict response vocabulary without mutating session state.",
+        "Error responses preserve operation, outcome, status, and inspection-link fields when the service result provides them.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -82,14 +86,15 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-005",
-      "title": "Preserve request-id idempotency",
-      "description": "As a caller retrying a start request, I want exact request-id replays to be safe and conflicting request-id reuse to fail so retries do not create duplicate or ambiguous sessions.",
+      "id": "dynamic-workflows-cell-real-backend-api-lifecycle-control-005",
+      "title": "Keep Lifecycle Contract and Mappers Synchronized",
+      "description": "As a maintainer of the public Factory Session API, I want lifecycle-control route contracts and mappers to stay aligned so that generated Go and TypeScript clients receive stable typed responses.",
       "acceptanceCriteria": [
-        "Replaying the same normalized async start request with the same request id returns the original async start response and session id",
-        "Replaying the same normalized sync start request with the same request id returns the original sync response shape, including completed or timeout status as originally observed",
-        "Reusing a request id with a different normalized tuple returns the existing request-id conflict error and does not create a new runtime session",
-        "Idempotency tests cover async start, sync completed start, sync timeout, and conflict using the real simple JavaScript fixture",
+        "If lifecycle-control route, schema, response, or error refs need correction, the authored OpenAPI fragments are updated and `make generate-api` synchronizes generated Go and TypeScript clients.",
+        "API surface mapper tests cover lifecycle-control request normalization and response/error shaping for success, no-op or terminal-session, conflict, and not-found cases.",
+        "Contract tests cover the existing lifecycle-control route family under `/factory-sessions/{session_id}` and the generated lifecycle-control response vocabulary.",
+        "The deferred-route regression no longer treats lifecycle-control routes as unsupported future routes; only genuinely unsupported future routes remain deferred.",
+        "Public vocabulary remains Factory Session lifecycle-control vocabulary and does not expose internal Petri-net terms or standalone workflow-run nouns.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -98,34 +103,18 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-006",
-      "title": "Replay lifecycle and result events consistently",
-      "description": "As a maintainer, I want canonical session lifecycle and result update events from real JavaScript sessions to replay into the same projection so API/event parity has a stable source.",
+      "id": "dynamic-workflows-cell-real-backend-api-lifecycle-control-006",
+      "title": "Protect Prior Durable Read and Inspection Parity",
+      "description": "As a maintainer extending durable Factory Session parity, I want lifecycle-control wiring to preserve start, read, result, event, dispatch, and artifact behavior so that the new controls do not regress completed slices.",
       "acceptanceCriteria": [
-        "Runtime-backed sessions model or emit canonical start, result-updated, completed, and timeout/recoverable lifecycle events where applicable",
-        "Replaying the event sequence reconstructs the same lifecycle status, result summary, source hash, policy hash, and links as the live service projection",
-        "Replaying the same event sequence more than once does not duplicate result summaries, links, dispatch stubs, or artifact stubs",
-        "Projection tests use the real simple JavaScript fixture event sequence and existing durable session API-shaped projection expectations",
+        "Focused regression coverage proves durable JavaScript start, list, get, result, and event read/reconnect behavior still passes after lifecycle-control wiring.",
+        "Focused regression coverage proves durable dispatch and artifact list/detail reads still pass after lifecycle-control wiring.",
+        "Tests demonstrate lifecycle-control calls do not remove stable inspection links for session, result, dispatch, artifact, or event reads when those links are available.",
+        "Website inspection parity and live-provider bridge parity are recorded as named follow-up cells if encountered rather than implemented in this lane.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "dynamic-workflows-cell-session-backend-runtime-007",
-      "title": "Keep FakeService mock paths intact",
-      "description": "As a maintainer of CLI, MCP, and API mock paths, I want the fake session service to keep working while real runtime support is added so parallel transport work stays unblocked.",
-      "acceptanceCriteria": [
-        "Existing FakeService behavior and fixture-backed scenarios continue to pass without requiring real JavaScript runtime setup",
-        "Fake async, sync, get session, get result, event replay, and idempotency behaviors remain compatible with the shared factorysessionexecution.Service contract",
-        "Runtime-backed service wiring does not remove or rename fake-service constructors or scenario-loading APIs used by mock-provider tests",
-        "Focused fake service tests pass alongside the new runtime-backed service tests",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 7,
       "passes": true,
       "notes": ""
     }
