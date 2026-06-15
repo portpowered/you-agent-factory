@@ -9,6 +9,7 @@ import (
 	"time"
 
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
@@ -513,4 +514,182 @@ func waitUntilSessionStatus(
 	}
 	t.Fatalf("session %s did not reach status %q within %s", sessionID, want, timeout)
 	return fse.SessionReadResult{}
+}
+
+func TestJavaScriptRuntimeService_EventReplay_ReconstructsCompletedSessionProjection(t *testing.T) {
+	service := newJavaScriptRuntimeServiceWithFixture(t, "simple-final.workflow.js", "simple-final")
+
+	completed, err := service.StartSync(context.Background(), fse.StartRequest{
+		RequestID: "req-runtime-event-replay-complete",
+		Source: fse.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "simple-final",
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+			"count":   3,
+			"prefix":  "you",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+
+	liveSession, liveResult, events := readRuntimeSessionEvents(t, service, completed.SessionID)
+	assertRuntimeEventSource(t, events.Events)
+
+	replayedSession, replayedResult, err := fse.ReplaySessionProjection(events.Events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	assertReplayedSessionMatchesLive(t, liveSession, replayedSession)
+	assertReplayedResultStatusMatchesLive(t, liveResult, replayedResult)
+	assertReplayedResultMatchesEventProjection(t, replayedResult, events.Events)
+	assertReplayedResultMatchesSessionRead(t, replayedSession, replayedResult)
+
+	mappedSession := factorysession.SessionReadResponseToAPI(replayedSession)
+	if mappedSession.Status != factorysession.SessionReadResponseToAPI(liveSession).Status {
+		t.Fatalf("mapped replayed status = %q, want %q", mappedSession.Status, factorysession.SessionReadResponseToAPI(liveSession).Status)
+	}
+}
+
+func TestJavaScriptRuntimeService_EventReplay_ReconstructsRunningSessionProjection(t *testing.T) {
+	service := newJavaScriptRuntimeServiceWithFixture(t, "busy-loop.workflow.js", "busy-loop")
+
+	started, err := service.StartAsync(context.Background(), fse.StartRequest{
+		RequestID: "req-runtime-event-replay-running",
+		Source: fse.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "busy-loop",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	liveSession, _, events := readRuntimeSessionEvents(t, service, started.SessionID)
+	assertRuntimeEventSource(t, events.Events)
+	if len(events.Events) < 2 {
+		t.Fatalf("events = %d, want start and result-updated", len(events.Events))
+	}
+
+	replayedSession, replayedResult, err := fse.ReplaySessionProjection(events.Events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	assertReplayedSessionMatchesLive(t, liveSession, replayedSession)
+	if replayedResult.ResultStatus != fse.ResultStatusNotReady {
+		t.Fatalf("replayed resultStatus = %q, want NOT_READY", replayedResult.ResultStatus)
+	}
+}
+
+func TestJavaScriptRuntimeService_EventReplay_ReconstructsSyncTimeoutProjection(t *testing.T) {
+	service := newJavaScriptRuntimeServiceWithFixture(t, "busy-loop.workflow.js", "busy-loop")
+	timeoutMillis := int64(25)
+
+	timedOut, err := service.StartSync(context.Background(), fse.StartRequest{
+		RequestID: "req-runtime-event-replay-timeout",
+		Source: fse.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "busy-loop",
+		},
+		Wait: &fse.WaitOptions{
+			TimeoutMillis: &timeoutMillis,
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+
+	liveSession, liveResult, events := readRuntimeSessionEvents(t, service, timedOut.SessionID)
+	assertRuntimeEventSource(t, events.Events)
+
+	replayedSession, replayedResult, err := fse.ReplaySessionProjection(events.Events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	assertReplayedSessionMatchesLive(t, liveSession, replayedSession)
+	assertReplayedResultStatusMatchesLive(t, liveResult, replayedResult)
+	if replayedResult.Availability == nil || replayedResult.Availability.Reason != "SYNC_WAIT_TIMED_OUT" {
+		t.Fatalf("replayed availability = %#v, want SYNC_WAIT_TIMED_OUT", replayedResult.Availability)
+	}
+}
+
+func TestJavaScriptRuntimeService_EventReplay_IsIdempotent(t *testing.T) {
+	service := newJavaScriptRuntimeServiceWithFixture(t, "simple-final.workflow.js", "simple-final")
+
+	completed, err := service.StartSync(context.Background(), fse.StartRequest{
+		RequestID: "req-runtime-event-replay-idempotent",
+		Source: fse.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "simple-final",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+
+	events, err := service.ReadEvents(context.Background(), completed.SessionID, fse.EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
+	}
+	assertRuntimeEventSource(t, events.Events)
+
+	firstSession, firstResult, err := fse.ReplaySessionProjection(events.Events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection first: %v", err)
+	}
+	secondSession, secondResult, err := fse.ReplaySessionProjection(events.Events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection second: %v", err)
+	}
+	assertReplayProjectionStable(t, firstSession, secondSession, firstResult, secondResult)
+}
+
+func TestJavaScriptRuntimeService_EventReplay_ReconstructsAsyncCompletedSession(t *testing.T) {
+	service := newJavaScriptRuntimeServiceWithFixture(t, "simple-final.workflow.js", "simple-final")
+
+	started, err := service.StartAsync(context.Background(), fse.StartRequest{
+		RequestID: "req-runtime-event-replay-async-complete",
+		Source: fse.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "simple-final",
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+			"count":   3,
+			"prefix":  "you",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		liveSession, err := service.GetSession(context.Background(), started.SessionID)
+		if err != nil {
+			t.Fatalf("GetSession: %v", err)
+		}
+		if liveSession.Status == fse.LifecycleStatusSucceeded {
+			events, err := service.ReadEvents(context.Background(), started.SessionID, fse.EventReconnectRequest{})
+			if err != nil {
+				t.Fatalf("ReadEvents: %v", err)
+			}
+			assertRuntimeEventSource(t, events.Events)
+			replayedSession, replayedResult, err := fse.ReplaySessionProjection(events.Events)
+			if err != nil {
+				t.Fatalf("ReplaySessionProjection: %v", err)
+			}
+			assertReplayedSessionMatchesLive(t, liveSession, replayedSession)
+			if replayedResult.ResultStatus != fse.ResultStatusFinal {
+				t.Fatalf("replayed resultStatus = %q, want FINAL", replayedResult.ResultStatus)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("session still %q after wait, want SUCCEEDED", liveSession.Status)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
