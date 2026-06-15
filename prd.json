@@ -1,31 +1,30 @@
 {
-  "project": "Factory Session Backend Runtime for Simple JavaScript Workflows",
-  "branchName": "dynamic-workflows-cell-session-backend-runtime",
-  "description": "Wire the shared Factory Session execution service to the real simple JavaScript runtime path so simple JavaScript workflows can be started, inspected, replayed, and retrieved through stable backend session read models while preserving request-id idempotency and keeping FakeService available for mock-provider transports.",
+  "project": "infinite-you",
+  "branchName": "dynamic-workflows-recovery-setup-workspace-git-pull-hygiene",
+  "description": "Repair shared setup-workspace behavior so executor worktrees can be created or reused from safe local repository state even when the root checkout has pull-blocking local changes, while preserving user work, emitting categorized setup failures, and proving dirty-root, no-upstream, and reusable-worktree behavior with focused verification.",
   "context": {
-    "customerAsk": "The shared Factory Session execution service can start a simple JavaScript workflow against the real runtime path, expose status/result/progress/read models, and preserve idempotent request behavior.",
-    "problem": "The durable Factory Session contract and fake service paths exist, but the backend service path still needs a real simple JavaScript runtime implementation for session start and inspection. Transports can prove fixture shapes today, but they cannot yet run a real simple JavaScript workflow through lifecycle, result projection, replay, and request-id semantics.",
-    "solution": "Add a real runtime-backed implementation or mode behind the existing factorysessionexecution.Service contract. Normalize starts through orchestrator-owned source, validation, policy, args, wait, and result packages; execute simple JavaScript sessions through the runtime boundary; maintain explicit in-memory session projections and canonical events; preserve request-id replay/conflict behavior; and keep FakeService available for mock-provider paths."
+    "customerAsk": "Repair shared setup-workspace behavior so a plan lane can create or reuse its executor worktree even when the root repository has staged or otherwise pull-blocking local changes, while preserving user work, emitting concrete failure diagnostics, and leaving a clear next step for requeueing the blocked MCP-install plan lanes.",
+    "problem": "The current setup-workspace script unconditionally runs a root-level git pull before any worktree reuse or creation, so dirty root state blocks unrelated plan lanes before they reach safe reusable-worktree or local-state creation paths, and the resulting failure output is too generic for later queue recovery to classify confidently.",
+    "solution": "Make root sync a safe, explicit prerequisite rather than an unconditional blocker, continue workspace setup from local repository state when dirty-root or no-upstream conditions allow it, preserve existing valid worktree reuse, and emit stage-specific failure diagnostics for root sync, worktree preparation, and PRD copy outcomes backed by focused regression coverage."
   },
   "acceptanceCriteria": [
-    "Service tests prove async start, sync completed start, sync timeout, get session, and get result using a real simple JavaScript fixture through the runtime-backed service path",
-    "Service tests prove exact request-id replay returns the same session/result response and conflicting request-id reuse is rejected",
-    "Projection tests show session lifecycle, result summary, source hash, policy hash, and inspection links remain consistent with existing API-shaped read models",
-    "Canonical lifecycle and result update events can be replayed idempotently to reconstruct the same session projection",
-    "FakeService tests continue to pass and remain usable for CLI, MCP, API, and mock-provider paths",
-    "No provider dispatch bridge, website UI, MCP install packaging, or broad persistent database storage is introduced in this cell",
-    "Quality gate: Go typecheck/compile, lint where applicable, and focused tests pass, including go test ./pkg/factorysessionexecution ./pkg/orchestrators/javascript/..."
+    "setup-workspace can create a new executor worktree from local repository state when the root checkout has staged or otherwise pull-blocking local changes, without resetting, overwriting, or unstaging that root state.",
+    "setup-workspace can reuse an existing valid executor worktree when the root checkout cannot be pulled, and reusable-worktree preparation still completes when no additional sync is required.",
+    "Root sync behavior still treats no-upstream configuration as non-fatal when local state is sufficient for workspace preparation.",
+    "Failure output identifies whether setup stopped during root sync, worktree preparation, or PRD copy so later planner or queue-repair passes do not need to guess.",
+    "The fix stays within shared workspace-preparation behavior, preserves current Factory and worktree vocabulary, and leaves a clear rerun-and-requeue path for the blocked MCP-install plan lanes.",
+    "Typecheck, lint, and focused tests for setup-workspace behavior pass."
   ],
   "userStories": [
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-001",
-      "title": "Normalize real session start inputs",
-      "description": "As a backend maintainer, I want real JavaScript session starts to use the shared start contract and orchestrator-owned normalization so the runtime path behaves like API, CLI, and MCP callers expect.",
+      "id": "dynamic-workflows-recovery-setup-workspace-git-pull-hygiene-001",
+      "title": "Continue workspace setup when root sync is blocked by local changes",
+      "description": "As a maintainer recovering blocked plan lanes, I want workspace setup to continue from safe local repository state when root pull is blocked by local changes so executor worktrees can still be created without mutating the root checkout.",
       "acceptanceCriteria": [
-        "A start request resolves JavaScript source using the existing Factory Session start source flow and records the resolved source identity and source hash on the session read model",
-        "A start request validates source, args, requested policy, and wait options before runtime execution begins",
-        "Policy projection records the effective policy hash used for the session",
-        "Invalid source, invalid args, or denied policy returns the existing service error shape without creating a completed session",
+        "When the root checkout has staged or otherwise pull-blocking local changes, running setup-workspace does not reset, overwrite, or unstage those root changes.",
+        "In the same dirty-root scenario, setup-workspace can still create the expected executor worktree for a PRD lane when the local repository already has enough history to do so safely.",
+        "If root sync is skipped or downgraded because local changes would block pull, the observable script output makes that outcome explicit.",
+        "The story remains limited to shared workspace-preparation behavior and does not introduce separate workflow-run terminology or unrelated git tooling cleanup.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -34,14 +33,14 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-002",
-      "title": "Start simple JavaScript sessions asynchronously",
-      "description": "As a transport caller, I want to start a simple JavaScript workflow asynchronously so I can receive a session identifier immediately and inspect progress through the shared service.",
+      "id": "dynamic-workflows-recovery-setup-workspace-git-pull-hygiene-002",
+      "title": "Reuse existing worktrees and preserve no-upstream behavior",
+      "description": "As a maintainer rerunning blocked work items, I want reusable-worktree and no-upstream cases to keep working under the repaired sync policy so existing plan lanes can recover without extra manual branch repair.",
       "acceptanceCriteria": [
-        "StartAsync against a real simple JavaScript fixture returns a session id, accepted/running lifecycle state, orchestrator identity, source hash, policy hash, and inspection links",
-        "The runtime-backed service records enough in-memory session state for a later GetSession call to report lifecycle status, progress, result availability, dispatch stubs, artifact stubs, and links",
-        "The service emits or models canonical session-started and lifecycle/progress facts for the async session",
-        "Async service tests use a real simple JavaScript fixture rather than a fake scenario fixture",
+        "When the expected executor worktree already exists and is valid, setup-workspace reuses it successfully even if the root checkout has pull-blocking local changes.",
+        "When the repository branch has no upstream configured, setup-workspace still treats that condition as non-fatal and can continue to reuse or create the executor worktree from local state.",
+        "If a reusable worktree needs its own branch update and that update cannot proceed safely, the script reports that failure as a worktree-preparation problem rather than a generic root-sync error.",
+        "Focused verification covers reusable-worktree and no-upstream paths without depending on unrelated dynamic-workflow runtime, API, or MCP-install behavior.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -50,82 +49,18 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-003",
-      "title": "Complete or time out synchronous starts",
-      "description": "As a transport caller, I want synchronous JavaScript session starts to either return the completed result within the wait budget or return a live session that can be inspected later.",
+      "id": "dynamic-workflows-recovery-setup-workspace-git-pull-hygiene-003",
+      "title": "Emit categorized setup failures that support queue recovery",
+      "description": "As a later planner or queue-repair pass, I want setup-workspace failures categorized by stage so I can distinguish root sync failure, worktree preparation failure, and PRD copy failure without guessing.",
       "acceptanceCriteria": [
-        "StartSync with a sufficient wait budget runs the real simple JavaScript fixture and returns a completed session result with the expected primary result summary",
-        "StartSync with an exhausted or too-small wait budget returns the existing timeout/pending result shape with session id, lifecycle status, result availability, and inspection links",
-        "Sync completion and timeout paths both persist the same session state that GetSession and GetResult later read",
-        "Timeout behavior does not duplicate sessions or lose the eventual runtime result",
+        "When root sync truly fails in a way that should still block setup, the script emits failure output that identifies the root-sync stage and the concrete blocking reason.",
+        "When worktree creation or reuse fails, the script emits failure output that identifies the worktree-preparation stage and preserves the actionable git or filesystem reason.",
+        "When PRD artifact copy fails after worktree preparation, the script emits failure output that identifies the PRD-copy stage separately from git setup failures.",
+        "Failure output is concrete enough that a reviewer can map a blocked lane to the right follow-up action, including rerunning workspace setup and requeueing blocked MCP-install plan lanes after the shared blocker is fixed.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "dynamic-workflows-cell-session-backend-runtime-004",
-      "title": "Read session and result projections",
-      "description": "As a caller inspecting a Factory Session, I want status and result reads to match the established durable session API shapes so later API, CLI, and MCP work can consume one shared backend projection.",
-      "acceptanceCriteria": [
-        "GetSession returns a durable session read model with lifecycle status, phase/progress summary, result summary, source hash, policy hash, dispatch/artifact counts or stubs, recoverability/action availability, and inspection links",
-        "GetResult returns final result data for a completed simple JavaScript session and an availability response for sessions that are still running or timed out",
-        "Result projection uses the existing JavaScript result normalization rules for primary result, artifacts, and summary fields",
-        "Projection tests compare the runtime-backed read models to the existing API-shaped expectations without changing public schema names",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 4,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "dynamic-workflows-cell-session-backend-runtime-005",
-      "title": "Preserve request-id idempotency",
-      "description": "As a caller retrying a start request, I want exact request-id replays to be safe and conflicting request-id reuse to fail so retries do not create duplicate or ambiguous sessions.",
-      "acceptanceCriteria": [
-        "Replaying the same normalized async start request with the same request id returns the original async start response and session id",
-        "Replaying the same normalized sync start request with the same request id returns the original sync response shape, including completed or timeout status as originally observed",
-        "Reusing a request id with a different normalized tuple returns the existing request-id conflict error and does not create a new runtime session",
-        "Idempotency tests cover async start, sync completed start, sync timeout, and conflict using the real simple JavaScript fixture",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 5,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "dynamic-workflows-cell-session-backend-runtime-006",
-      "title": "Replay lifecycle and result events consistently",
-      "description": "As a maintainer, I want canonical session lifecycle and result update events from real JavaScript sessions to replay into the same projection so API/event parity has a stable source.",
-      "acceptanceCriteria": [
-        "Runtime-backed sessions model or emit canonical start, result-updated, completed, and timeout/recoverable lifecycle events where applicable",
-        "Replaying the event sequence reconstructs the same lifecycle status, result summary, source hash, policy hash, and links as the live service projection",
-        "Replaying the same event sequence more than once does not duplicate result summaries, links, dispatch stubs, or artifact stubs",
-        "Projection tests use the real simple JavaScript fixture event sequence and existing durable session API-shaped projection expectations",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 6,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "dynamic-workflows-cell-session-backend-runtime-007",
-      "title": "Keep FakeService mock paths intact",
-      "description": "As a maintainer of CLI, MCP, and API mock paths, I want the fake session service to keep working while real runtime support is added so parallel transport work stays unblocked.",
-      "acceptanceCriteria": [
-        "Existing FakeService behavior and fixture-backed scenarios continue to pass without requiring real JavaScript runtime setup",
-        "Fake async, sync, get session, get result, event replay, and idempotency behaviors remain compatible with the shared factorysessionexecution.Service contract",
-        "Runtime-backed service wiring does not remove or rename fake-service constructors or scenario-loading APIs used by mock-provider tests",
-        "Focused fake service tests pass alongside the new runtime-backed service tests",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 7,
       "passes": true,
       "notes": ""
     }
