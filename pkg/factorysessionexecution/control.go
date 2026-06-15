@@ -67,6 +67,55 @@ type controlIdempotencyDocument struct {
 	ApprovedPolicy    any    `json:"approvedPolicy,omitempty"`
 }
 
+type controlReplayRecord struct {
+	tupleHash string
+	result    LifecycleControlResult
+	err       error
+}
+
+func lookupControlReplay(
+	controlReplay map[string]controlReplayRecord,
+	requestID, tupleHash string,
+	operation LifecycleControlKind,
+	currentStatus LifecycleStatus,
+) (LifecycleControlResult, error, bool) {
+	if strings.TrimSpace(requestID) == "" {
+		return LifecycleControlResult{}, nil, false
+	}
+	recorded, ok := controlReplay[requestID]
+	if !ok {
+		return LifecycleControlResult{}, nil, false
+	}
+	if err := CheckControlRequestIDReplay(requestID, recorded.tupleHash, tupleHash); err != nil {
+		return LifecycleControlResult{}, &ControlError{
+			Operation: operation,
+			Outcome:   LifecycleControlOutcomeConflict,
+			Status:    currentStatus,
+			Message:   "control requestId was reused with a different operation or target",
+		}, true
+	}
+	if recorded.err != nil {
+		return LifecycleControlResult{}, recorded.err, true
+	}
+	return recorded.result, nil, true
+}
+
+func storeControlReplay(
+	controlReplay map[string]controlReplayRecord,
+	requestID, tupleHash string,
+	result LifecycleControlResult,
+	err error,
+) {
+	if strings.TrimSpace(requestID) == "" {
+		return
+	}
+	controlReplay[requestID] = controlReplayRecord{
+		tupleHash: tupleHash,
+		result:    result,
+		err:       err,
+	}
+}
+
 // ControlIdempotencyTupleHash returns a stable digest for one normalized lifecycle
 // control tuple used to compare replay safety for one requestId.
 func ControlIdempotencyTupleHash(
@@ -206,21 +255,45 @@ func (s *RuntimeService) applyRuntimeExtendedLifecycleControl(
 		return LifecycleControlResult{}, ErrSessionNotFound
 	}
 
+	currentStatus := state.session.Status
+	requestID := strings.TrimSpace(control.RequestID)
+	var tupleHash string
+	if requestID != "" {
+		var hashErr error
+		tupleHash, hashErr = ControlIdempotencyTupleHash(operation, id, approve, retry)
+		if hashErr != nil {
+			return LifecycleControlResult{}, hashErr
+		}
+		if replayResult, replayErr, replayed := lookupControlReplay(
+			s.controlReplay,
+			requestID,
+			tupleHash,
+			operation,
+			currentStatus,
+		); replayed {
+			if replayErr != nil {
+				return LifecycleControlResult{}, replayErr
+			}
+			return replayResult, nil
+		}
+	}
+
 	if operation == LifecycleControlRetryDispatch {
 		if _, ok := findDispatchSummary(state.dispatches, retry.DispatchID); !ok {
 			return LifecycleControlResult{}, ErrDispatchNotFound
 		}
 	}
 
-	currentStatus := state.session.Status
 	outcome := EvaluateLifecycleControl(operation, currentStatus)
 	if outcome == LifecycleControlOutcomeInvalidState || outcome == LifecycleControlOutcomeTerminalSession {
-		return LifecycleControlResult{}, &ControlError{
+		controlErr := &ControlError{
 			Operation: operation,
 			Outcome:   outcome,
 			Status:    currentStatus,
 			Message:   fmt.Sprintf("%s rejected for session %s in status %s", operation, id, currentStatus),
 		}
+		storeControlReplay(s.controlReplay, requestID, tupleHash, LifecycleControlResult{}, controlErr)
+		return LifecycleControlResult{}, controlErr
 	}
 
 	if outcome == LifecycleControlOutcomeAccepted {
@@ -231,7 +304,9 @@ func (s *RuntimeService) applyRuntimeExtendedLifecycleControl(
 		state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
 	}
 
-	return runtimeExtendedLifecycleControlResultFromState(state, id, operation, outcome, retry), nil
+	result := runtimeExtendedLifecycleControlResultFromState(state, id, operation, outcome, retry)
+	storeControlReplay(s.controlReplay, requestID, tupleHash, result, nil)
+	return result, nil
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this runtime mutation helper keeps accepted lifecycle control transitions together on one seam.

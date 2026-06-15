@@ -24,8 +24,9 @@ type RuntimeService struct {
 	prepareCtx StartPrepareContext
 	now        func() time.Time
 
-	sessions    map[string]*runtimeSessionState
-	startReplay map[string]runtimeStartReplayRecord
+	sessions      map[string]*runtimeSessionState
+	startReplay   map[string]runtimeStartReplayRecord
+	controlReplay map[string]controlReplayRecord
 }
 
 type runtimeStartReplayRecord struct {
@@ -61,8 +62,9 @@ func NewRuntimeService(prepareCtx StartPrepareContext, options ...RuntimeService
 	service := &RuntimeService{
 		prepareCtx:  prepareCtx,
 		now:         time.Now,
-		sessions:    make(map[string]*runtimeSessionState),
-		startReplay: make(map[string]runtimeStartReplayRecord),
+		sessions:      make(map[string]*runtimeSessionState),
+		startReplay:   make(map[string]runtimeStartReplayRecord),
+		controlReplay: make(map[string]controlReplayRecord),
 	}
 	for _, option := range options {
 		option(service)

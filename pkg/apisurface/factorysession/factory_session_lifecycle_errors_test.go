@@ -73,3 +73,35 @@ func TestLifecycleControlErrorResponse_ReturnsFalseForUnknownErrors(t *testing.T
 		t.Fatal("LifecycleControlErrorResponse = true, want false")
 	}
 }
+
+func TestLifecycleControlErrorResponse_MapsValidationAndDispatchNotFound(t *testing.T) {
+	status, response, ok := factorysession.LifecycleControlErrorResponse(
+		"dur-sess-js-run-n-001",
+		factorysessionexecution.NewValidationError("dispatchId", "dispatchId is required"),
+	)
+	if !ok {
+		t.Fatal("LifecycleControlErrorResponse = false, want true for validation")
+	}
+	if status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", status)
+	}
+	errResp, ok := response.(factoryapi.ErrorResponse)
+	if !ok || errResp.Code != factoryapi.BADREQUEST {
+		t.Fatalf("response = %#v, want BAD_REQUEST ErrorResponse", response)
+	}
+
+	status, response, ok = factorysession.LifecycleControlErrorResponse(
+		"dur-sess-js-run-n-001",
+		factorysessionexecution.ErrDispatchNotFound,
+	)
+	if !ok {
+		t.Fatal("LifecycleControlErrorResponse = false, want true for dispatch not found")
+	}
+	if status != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", status)
+	}
+	errResp, ok = response.(factoryapi.ErrorResponse)
+	if !ok || errResp.Code != factoryapi.NOTFOUND {
+		t.Fatalf("response = %#v, want NOT_FOUND ErrorResponse", response)
+	}
+}

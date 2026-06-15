@@ -337,6 +337,122 @@ func TestRetryFactorySessionDispatch_NonDurableSessionPreservesLiveStub(t *testi
 	}
 }
 
+func TestPauseFactorySession_IdempotentRequestIdReplayReturnsSameOutcome(t *testing.T) {
+	service := newAPILifecycleFakeService(t)
+	row := startAPIRunningSessionForControl(t, service)
+	serverURL := serverURLForLifecycle(t, service)
+
+	requestID := "ctrl-api-lifecycle-replay-001"
+	body := &factoryapi.FactorySessionLifecycleControlRequest{RequestId: &requestID}
+
+	first, status := postFactorySessionLifecycleControl(t, serverURL, row.SessionID, "pause", body)
+	if status != http.StatusOK {
+		t.Fatalf("first status = %d, want 200", status)
+	}
+	second, status := postFactorySessionLifecycleControl(t, serverURL, row.SessionID, "pause", body)
+	if status != http.StatusOK {
+		t.Fatalf("replay status = %d, want 200", status)
+	}
+	if first.Outcome != second.Outcome || first.Status != second.Status || first.Operation != second.Operation {
+		t.Fatalf("replay drift: first=%#v second=%#v", first, second)
+	}
+}
+
+func TestPauseFactorySession_ConflictingRequestIdReturnsTypedConflictWithoutMutation(t *testing.T) {
+	service := newAPILifecycleFakeService(t)
+	row := startAPIRunningSessionForControl(t, service)
+	serverURL := serverURLForLifecycle(t, service)
+
+	requestID := "ctrl-api-lifecycle-conflict-001"
+	if _, status := postFactorySessionLifecycleControl(t, serverURL, row.SessionID, "pause", &factoryapi.FactorySessionLifecycleControlRequest{
+		RequestId: &requestID,
+	}); status != http.StatusOK {
+		t.Fatalf("pause status = %d, want 200", status)
+	}
+
+	response, status := postFactorySessionLifecycleControl(t, serverURL, row.SessionID, "resume", &factoryapi.FactorySessionLifecycleControlRequest{
+		RequestId: &requestID,
+	})
+	if status != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", status)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeConflict {
+		t.Fatalf("outcome = %q, want CONFLICT", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("status = %q, want PAUSED unchanged", response.Status)
+	}
+
+	read, err := service.GetSession(context.Background(), row.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if read.Status != factorysessionexecution.LifecycleStatusPaused {
+		t.Fatalf("session status = %q, want PAUSED unchanged", read.Status)
+	}
+}
+
+func TestRetryFactorySessionDispatch_MissingDispatchIdReturnsBadRequest(t *testing.T) {
+	service := newAPILifecycleFakeService(t)
+	startAPIRunningSessionForControl(t, service)
+
+	status, errResp := postFactorySessionRetryDispatchExpectError(
+		t,
+		serverURLForLifecycle(t, service),
+		"dur-sess-js-run-n-001",
+		factoryapi.FactorySessionRetryDispatchRequest{},
+	)
+	if status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", status)
+	}
+	if errResp.Code != factoryapi.BADREQUEST {
+		t.Fatalf("code = %q, want BAD_REQUEST", errResp.Code)
+	}
+}
+
+func TestRetryFactorySessionDispatch_MissingDispatchReturnsNotFound(t *testing.T) {
+	service := newAPILifecycleRuntimeService(t, "busy-loop.workflow.js", "busy-loop")
+	started := startRuntimeBackedDurableSession(t, service)
+
+	status, errResp := postFactorySessionRetryDispatchExpectError(
+		t,
+		serverURLForLifecycle(t, service),
+		started.SessionID,
+		factoryapi.FactorySessionRetryDispatchRequest{DispatchId: "disp-missing-001"},
+	)
+	if status != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", status)
+	}
+	if errResp.Code != factoryapi.NOTFOUND {
+		t.Fatalf("code = %q, want NOT_FOUND", errResp.Code)
+	}
+}
+
+func serverURLForLifecycle(t *testing.T, service factorysessionexecution.Service) string {
+	t.Helper()
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
+func startAPIRunningSessionForControl(t *testing.T, service *factorysessionexecution.FakeService) struct {
+	SessionID string
+} {
+	t.Helper()
+	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-js-run-n-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowFile,
+			WorkflowFile: ".claude/workflows/run-n.yaml",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync running session: %v", err)
+	}
+	return struct{ SessionID string }{SessionID: started.SessionID}
+}
+
 func newAPILifecycleRuntimeService(t *testing.T, fixtureName, workflowName string) *factorysessionexecution.RuntimeService {
 	t.Helper()
 	projectRoot := setupAPILifecycleWorkflowFixture(t, fixtureName, workflowName)

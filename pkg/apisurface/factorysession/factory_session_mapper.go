@@ -469,6 +469,9 @@ func ControlErrorToAPI(sessionID string, err *factorysessionexecution.ControlErr
 	if message := strings.TrimSpace(err.Message); message != "" {
 		response.Detail = &message
 	}
+	if links := lifecycleControlLinksToAPI(factorysessionexecution.LifecycleControlLinksForSession(sessionID, true)); links != nil {
+		response.Links = links
+	}
 	return response
 }
 

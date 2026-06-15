@@ -27,12 +27,6 @@ type startReplayRecord struct {
 	asyncStart *AsyncStartResult
 }
 
-type controlReplayRecord struct {
-	tupleHash string
-	result    LifecycleControlResult
-	err       error
-}
-
 // FakeServiceOption configures one FakeService instance.
 type FakeServiceOption func(*FakeService)
 
@@ -478,19 +472,17 @@ func (s *FakeService) applyLifecycleControl(
 		if err != nil {
 			return LifecycleControlResult{}, err
 		}
-		if recorded, ok := s.controlReplay[requestID]; ok {
-			if err := CheckControlRequestIDReplay(requestID, recorded.tupleHash, tupleHash); err != nil {
-				return LifecycleControlResult{}, &ControlError{
-					Operation: operation,
-					Outcome:   LifecycleControlOutcomeConflict,
-					Status:    currentStatus,
-					Message:   "control requestId was reused with a different operation or target",
-				}
+		if replayResult, replayErr, replayed := lookupControlReplay(
+			s.controlReplay,
+			requestID,
+			tupleHash,
+			operation,
+			currentStatus,
+		); replayed {
+			if replayErr != nil {
+				return LifecycleControlResult{}, replayErr
 			}
-			if recorded.err != nil {
-				return LifecycleControlResult{}, recorded.err
-			}
-			return recorded.result, nil
+			return replayResult, nil
 		}
 	}
 
@@ -508,7 +500,7 @@ func (s *FakeService) applyLifecycleControl(
 			Status:    currentStatus,
 			Message:   fmt.Sprintf("%s rejected for session %s in status %s", operation, id, state.session.Status),
 		}
-		s.recordControlReplay(requestID, tupleHash, LifecycleControlResult{}, controlErr)
+		storeControlReplay(s.controlReplay, requestID, tupleHash, LifecycleControlResult{}, controlErr)
 		return LifecycleControlResult{}, controlErr
 	}
 
@@ -517,19 +509,8 @@ func (s *FakeService) applyLifecycleControl(
 	}
 
 	result := lifecycleControlResultFromState(state, id, operation, outcome, retry)
-	s.recordControlReplay(requestID, tupleHash, result, nil)
+	storeControlReplay(s.controlReplay, requestID, tupleHash, result, nil)
 	return result, nil
-}
-
-func (s *FakeService) recordControlReplay(requestID, tupleHash string, result LifecycleControlResult, err error) {
-	if strings.TrimSpace(requestID) == "" {
-		return
-	}
-	s.controlReplay[requestID] = controlReplayRecord{
-		tupleHash: tupleHash,
-		result:    result,
-		err:       err,
-	}
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this fake mutation helper keeps lifecycle control state transitions together for deterministic fixtures.

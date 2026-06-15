@@ -245,3 +245,53 @@ func TestRuntimeService_RetryDispatchMissingDispatchReturnsNotFound(t *testing.T
 		t.Fatalf("retry missing dispatch = %v, want ErrDispatchNotFound", err)
 	}
 }
+
+func TestRuntimeService_ControlIdempotentReplayAndConflict(t *testing.T) {
+	_, service := newRuntimeServiceWithFixture(t, "busy-loop.workflow.js", "busy-loop")
+
+	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-runtime-control-replay-start-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "busy-loop",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	first, err := service.Pause(context.Background(), started.SessionID, factorysessionexecution.ControlRequest{
+		RequestID: "ctrl-runtime-replay-001",
+	})
+	if err != nil {
+		t.Fatalf("first Pause: %v", err)
+	}
+	second, err := service.Pause(context.Background(), started.SessionID, factorysessionexecution.ControlRequest{
+		RequestID: "ctrl-runtime-replay-001",
+	})
+	if err != nil {
+		t.Fatalf("replay Pause: %v", err)
+	}
+	if first.Outcome != second.Outcome || first.Status != second.Status || first.Operation != second.Operation {
+		t.Fatalf("replay drift: first=%#v second=%#v", first, second)
+	}
+
+	read, err := service.GetSession(context.Background(), started.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession after replay: %v", err)
+	}
+	if read.Status != factorysessionexecution.LifecycleStatusPaused {
+		t.Fatalf("status after replay = %q, want PAUSED", read.Status)
+	}
+
+	_, err = service.Resume(context.Background(), started.SessionID, factorysessionexecution.ControlRequest{
+		RequestID: "ctrl-runtime-replay-001",
+	})
+	var controlErr *factorysessionexecution.ControlError
+	if !errors.As(err, &controlErr) || controlErr.Outcome != factorysessionexecution.LifecycleControlOutcomeConflict {
+		t.Fatalf("conflict = %v, want CONFLICT ControlError", err)
+	}
+	if controlErr.Status != factorysessionexecution.LifecycleStatusPaused {
+		t.Fatalf("conflict status = %q, want PAUSED unchanged", controlErr.Status)
+	}
+}
