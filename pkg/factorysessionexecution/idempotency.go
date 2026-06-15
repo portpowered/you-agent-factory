@@ -37,6 +37,27 @@ func CheckRequestIDReplay(requestID, recordedHash, incomingHash string) error {
 	return ErrExecutionRequestIDConflict
 }
 
+// CheckAsyncStartReplayMode reports ErrExecutionRequestIDConflict when requestId
+// was previously used for a sync start rather than an exact async replay.
+func CheckAsyncStartReplayMode(asyncStart *AsyncStartResult) error {
+	if asyncStart != nil {
+		return nil
+	}
+	return ErrExecutionRequestIDConflict
+}
+
+// CheckSyncStartReplayMode reports ErrExecutionRequestIDConflict when requestId
+// was previously used for an async start rather than an exact sync replay.
+func CheckSyncStartReplayMode(asyncStart *AsyncStartResult, syncStart *SyncStartResult, syncStartInFlight bool) error {
+	if syncStart != nil || syncStartInFlight {
+		return nil
+	}
+	if asyncStart != nil {
+		return ErrExecutionRequestIDConflict
+	}
+	return nil
+}
+
 func normalizeIdempotencyDocument(req StartRequest) (map[string]any, error) {
 	source, err := normalizeSourceForIdempotency(req.Source)
 	if err != nil {

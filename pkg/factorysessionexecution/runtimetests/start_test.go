@@ -85,6 +85,28 @@ func TestCheckRequestIDReplay_AllowsReplay(t *testing.T) {
 	}
 }
 
+func TestCheckAsyncStartReplayMode_ConflictsWithoutStoredAsyncStart(t *testing.T) {
+	err := factorysessionexecution.CheckAsyncStartReplayMode(nil)
+	if !errors.Is(err, factorysessionexecution.ErrExecutionRequestIDConflict) {
+		t.Fatalf("error = %v, want ErrExecutionRequestIDConflict", err)
+	}
+}
+
+func TestCheckSyncStartReplayMode_ConflictsAfterAsyncStart(t *testing.T) {
+	asyncStart := &factorysessionexecution.AsyncStartResult{SessionID: "dur-sess-001"}
+	err := factorysessionexecution.CheckSyncStartReplayMode(asyncStart, nil, false)
+	if !errors.Is(err, factorysessionexecution.ErrExecutionRequestIDConflict) {
+		t.Fatalf("error = %v, want ErrExecutionRequestIDConflict", err)
+	}
+}
+
+func TestCheckSyncStartReplayMode_AllowsStoredSyncReplay(t *testing.T) {
+	syncStart := &factorysessionexecution.SyncStartResult{}
+	if err := factorysessionexecution.CheckSyncStartReplayMode(nil, syncStart, false); err != nil {
+		t.Fatalf("error = %v, want nil for stored sync replay", err)
+	}
+}
+
 func TestInspectionLinksForSession(t *testing.T) {
 	links := factorysessionexecution.InspectionLinksForSession("dur-sess-001", true)
 	if links.Session != "/factory-sessions/dur-sess-001" {

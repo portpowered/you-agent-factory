@@ -1,75 +1,108 @@
 ## Codebase Patterns
-- Canonical Factory Session MCP discovery lives in `pkg/mcp/factorysession/` (`DiscoverTools`, `DiscoverCompatibilityAliases`, `ResolveToolName`); canonical names use `you.factory_session.*`, workflow `you.workflow.*` aliases are compatibility-only and route through `ResolveToolName` before `Client.CallTool`.
-- Published Factory Session fixture scenario IDs and stable projection hashes live in `pkg/factorysessionexecution/fixture_catalog.go` (`PublishedFixtureScenarios`, `FixtureScenarioIdentityFromScenario`, `FixtureScenarioProjectionHash`); contract JSON remains in `pkg/api/testdata/durable-session-contract-fixtures.json` and loads through `LoadFakeScenariosFromContractFixtures`.
-- Use `ContractFixtureCatalogRelativePath` when downstream cells need the repository-relative catalog path; prove stable identity with `fixture_catalog_test.go` golden projection hashes rather than recomputing ad hoc in each consumer package.
-- Built-in recoverable interrupted JavaScript session `javascript-interrupted-recoverable` is appended by `LoadFakeScenariosFromContractFixtures` even though it is not in the JSON catalog.
-- Prove FakeService start/list/read/result behavior against `PublishedFixtureScenarios` in `start_list_read_result_test.go`; use `ProjectedResultReadHash` and `SyncStartResultHash` for golden result digests instead of ad hoc field comparisons.
+- Keep `FakeService` and `RuntimeService` as parallel `factorysessionexecution.Service` implementations: mock-provider transports inject `FakeService` via `NewFakeService`, `NewFakeServiceFromContractFixtures`, `WithFakeScenarios`, and `WithPersistedSessionSeeds` without JavaScript runtime setup; real simple-workflow execution uses `NewRuntimeService` behind the same contract. Prove coexistence in `fake_service_coexistence_test.go` alongside `fake_service_test.go` and runtime-backed tests.
+- Use `factorysessionexecution.PrepareStart` to normalize durable JavaScript session starts: it chains `NormalizeStartRequest`, `resolveStartSourceWithResolution`, wrapped-source validation (IIFE wrap matching `workflowruntime.Run`), args JSON checks, `workflowpolicy.Resolve`, and wait-option validation before runtime execution.
+- Runtime simple-workflow fixtures live in `pkg/orchestrators/javascript/runtime/testdata/`; factorysessionexecution tests can read them via `../orchestrators/javascript/runtime/testdata/<name>`.
+- Durable start source resolution is shared through `resolveStartSourceWithResolution`; `ResolveStartSource` is a thin wrapper returning only `ResolvedSource`.
+- `RuntimeService` request-id replay stores the first observed async/sync start responses in `runtimeStartReplayRecord` (`asyncStart` / `syncStart`); sync timeout replays must return the stored `TIMED_OUT` shape even after the session eventually completes. Idempotency tuple hashing excludes `wait` options—use args/source/policy changes to prove conflicts in tests.
+- `factorysessionexecution.RuntimeService` implements async/sync simple-JS starts via `PrepareStart` + background `workflowruntime.Run` (`runSession` closes per-session `runtimeDone` when execution finishes). `StartAsync` returns immediate `RUNNING`; `StartSync` waits for terminal completion or `wait.timeoutMillis`, returns `COMPLETED` with projected result JSON or `TIMED_OUT` with `SYNC_WAIT_TIMED_OUT` availability while keeping the session running unless `wait.cancelOnTimeout` is true. In-memory `GetSession`/`GetResult`/`ReadEvents` read `runtimeSessionState`; canonical events use `BuildCanonicalRuntimeSessionEvents` (`runtime-service` source). Use `busy-loop.workflow.js` for non-terminating sync-timeout tests; use `simple-final.workflow.js` for completion; use a temp-dir spin-loop workflow when proving eventual completion after sync timeout.
+- Terminal runtime session results normalize through `projectRuntimeSuccessResult` (`workflowresult.ProjectPrimaryResult` + `workcontent.GeneratedPtrFromParts`); durable `PrimaryResult` is WorkContent JSON (e.g. `[{"type":"JSON","json":{...}}]`), not raw workflow return JSON. Prove API-shaped parity with `factorysession.SessionReadResponseToAPI` / `ResultResponseToAPI` plus `ValidateResultMatchesSessionRead` in `runtime_projection_test.go`.
+- Canonical runtime session lifecycle events replay through `ReplaySessionProjection` (`session_event_projection.go`) into durable `SessionReadResult`/`ResultReadResult` projections; `BuildCanonicalRuntimeSessionEvents` may include bounded `resultSummary` text on `SESSION_RESULT_UPDATED`, and sync-timeout paths rebuild events after `SYNC_WAIT_TIMED_OUT` availability changes. Prove live-vs-replayed parity and idempotent replay in `runtime_event_replay_test.go`.
+- CI `Build, Lint, and API` runs `make backend-size` on owned Go packages (100-line function cap). Split large test functions with `t.Helper()` assertion helpers (see `runtime_projection_test.go`) rather than inline assertion blocks.
 
-## 2026-06-11 UTC - dynamic-workflows-cell-provider-fixtures-001
-- Published stable fixture scenario identity catalog with purpose-to-scenario mappings for validation failure, async running, sync success, sync timeout, failed recoverable session, dispatch inspection, artifact inspection, event reconnect, and lifecycle-control outcomes.
-- Added `FixtureScenarioIdentityFromScenario` and `FixtureScenarioProjectionHash` to derive deterministic session/dispatch/artifact/event IDs and stable `sha256:` projection digests from loaded contract fixtures.
-- Added direct tests documenting golden scenario identities, reload stability, canonical Factory Session vocabulary, and hydrated published catalog rows.
-- Files changed: `pkg/factorysessionexecution/fixture_catalog.go`, `pkg/factorysessionexecution/fixture_catalog_test.go`, `docs/internal/processes/api-relevant-files.md`
+## 2026-06-11T12:49:03Z - dynamic-workflows-cell-session-backend-runtime-001
+- Implemented `PrepareStart`, `StartPrepareContext`, and `PreparedStart` in `pkg/factorysessionexecution/prepare_start.go` to normalize real JavaScript session starts through orchestrator-owned source resolution, validation, policy projection, args checks, and wait validation before runtime execution.
+- Refactored `ResolveStartSource` to delegate to shared `resolveStartSourceWithResolution`.
+- Added focused tests for successful preparation and invalid source/args/policy/wait rejection paths using runtime `simple-final` and `syntax-error` fixtures.
+- Updated `docs/internal/processes/api-relevant-files.md` with the `PrepareStart` wiring pattern.
 - **Learnings for future iterations:**
-  - Patterns discovered: mirror UI replay catalog style with exported Go constants plus a published slice (`PublishedFixtureScenarios`) keyed by `FixtureScenarioPurpose`; hash identity bundles via canonical JSON of sorted ID lists plus optional `primaryResultHash`.
-  - Gotchas encountered: `javascript-interrupted-recoverable` is injected at load time from `BuiltinInterruptedRecoverableScenario()` — include it when asserting full scenario counts from the loader, not only JSON `scenarios[]` length.
-  - Useful context: existing `fake_service_test.go` already exercises runtime behavior; story 001 focuses on documenting reusable scenario IDs/hashes for downstream cells without widening into transport surfaces.
+  - Pre-execution source validation must wrap executable source in an IIFE like `workflowruntime.Run`; validating raw top-level `return` fixtures fails incorrectly.
+  - Policy denial surfaces as `ValidationError` with field `requestedPolicy`; source issues use field `source`.
+  - `PreparedStart` carries `SourceContent` (executable), `EffectivePolicy`, `PolicyProjection`, and `TupleHash` for downstream runtime-backed `StartAsync`/`StartSync` work in story 002+.
 ---
 
-## 2026-06-11 UTC - dynamic-workflows-cell-provider-fixtures-002
-- Added `ProjectedResultReadHash` and `SyncStartResultHash` helpers for stable downstream result assertions.
-- Added `start_list_read_result_test.go` proving published-scenario async/sync start, scoped session listing with all-scope dedup, get-session read models, result reads with golden hashes, artifact inclusion shaping, and start idempotency replay/conflict through direct `FakeService` tests.
-- Files changed: `pkg/factorysessionexecution/fixture_catalog.go`, `pkg/factorysessionexecution/start_list_read_result_test.go`, `docs/internal/processes/api-relevant-files.md`
+## 2026-06-11T13:15:00Z - dynamic-workflows-cell-session-backend-runtime-002
+- Implemented `RuntimeService` with `StartAsync`, in-memory session projection (`GetSession`, `GetResult`, dispatch/artifact stubs, `ReadEvents`), and background `workflowruntime.Run` execution for simple JavaScript workflows.
+- Added `BuildCanonicalRuntimeSessionEvents` for runtime-backed canonical `SESSION_STARTED` / `SESSION_RESULT_UPDATED` / `SESSION_COMPLETED` facts.
+- Added focused tests for async start response shape, running-session inspection (`busy-loop`), event modeling, and `simple-final` background completion.
+- Updated `docs/internal/processes/api-relevant-files.md` with the runtime service wiring pattern.
 - **Learnings for future iterations:**
-  - Patterns discovered: drive story-level FakeService tests from `PublishedFixtureScenarios` + `publishedScenarioByPurpose` rather than duplicating request/session IDs; fixture `asyncResponse.links` may omit events/dispatches/artifacts even when `InspectionLinksForSession` includes them.
-  - Gotchas encountered: `GetSession` read models for running/timeout fixtures may omit `resultSummary` — assert result status via `GetResult` instead; idempotent-replay conflict tests must copy `Args` into a new map before mutation.
-  - Useful context: sync timeout scenario returns `SYNC_WAIT_TIMED_OUT` availability on final result reads; terminal success dedupes from live rows in `scope=all` when also present in persisted durable listing.
+  - `StartAsync` must build and return the async response before launching the background goroutine so callers always observe `RUNNING` even for fast fixtures like `simple-final`.
+  - Simple runtime sessions have zero dispatch/artifact stubs; progress counts stay at zero until fanout work lands in later cells.
+  - `StartSync`, lifecycle controls, and richer result projection remain for stories 003–004; `RuntimeService.StartSync` currently returns a not-implemented error.
 ---
 
-## 2026-06-12 UTC - dynamic-workflows-recovery-mcp-tools-001
-- Added `pkg/mcp/factorysession` with canonical MCP discovery for ten Factory Session tools (list, validate_source, start_sync, start_async, get, get_result, list_dispatches, list_artifacts, control, read_events), typed JSON schemas mirroring durable REST contracts, workflow `you.workflow.*` compatibility aliases, and a mock client that routes aliases to canonical handlers.
-- Wired `you.factory_session.validate_source` through Factory preview (`ValidateSource`) so alias parity can be proven without provider execution; added focused registry and mock-client discovery tests.
-- Files changed: `pkg/mcp/factorysession/*`, `docs/internal/processes/api-relevant-files.md`
+## 2026-06-11T12:59:59Z - dynamic-workflows-cell-session-backend-runtime-003
+- Implemented `RuntimeService.StartSync` with sync wait budgeting, `COMPLETED` responses carrying projected `ResultReadResult` JSON, and `TIMED_OUT` responses that keep sessions `RUNNING`, set `SYNC_WAIT_TIMED_OUT` availability, and allow background execution to finish unless `wait.cancelOnTimeout` cancels the runtime context.
+- Refactored runtime execution through shared `runSession` with per-session `runtimeDone` signaling used by both async and sync paths.
+- Added focused tests for sync completion (`simple-final`), sync timeout shape (`busy-loop`), and eventual result preservation after timeout (temp-dir `slow-final` spin loop).
+- Updated `docs/internal/processes/api-relevant-files.md` with sync runtime service wiring.
 - **Learnings for future iterations:**
-  - Patterns discovered: keep discovery (`registry.go`, `schemas.go`, `aliases.go`) separate from invocation handlers; use `ResolveToolName` in `Client.CallTool` so compatibility aliases share canonical behavior without duplicating handlers.
-  - Gotchas encountered: story 001 discovery requires control and read_events schemas even though invocation wiring lands in later stories; validate alias parity is the cheapest end-to-end alias proof because it needs no `FakeService`.
-  - Useful context: cell branch `dynamic-workflows-cell-mcp-tools` is a useful reference for later validate/run/status/result handler stories but omitted controls/events/aliases from discovery.
+  - Sync completed `Result` JSON comes from `ProjectResultRead` + `json.Marshal`; runtime `PrimaryResult` is still the raw workflow JSON object until story 004 normalization lands.
+  - `busy-loop.workflow.js` never terminates, so use it only for timeout-shape assertions; prove eventual completion after timeout with a finite spin-loop fixture in a temp project root.
+  - Request-id replay for sync timeout responses that must reproduce `TIMED_OUT` while still `RUNNING` is story 005; current replay derives from live session state via `syncStartFromStateLocked`.
 ---
 
-## 2026-06-12 UTC - dynamic-workflows-recovery-mcp-tools-002
-- Added focused `validate_source_test.go` proving canonical `you.factory_session.validate_source` returns deterministic success for the simple valid JavaScript workflow fixture (valid flag, sourceHash, policyHash aligned with `apisurface` preview), typed validation-failure envelopes for forbidden host access without transport-level errors, and workflow `you.workflow.validate` alias parity for both success and failure paths.
-- Documented validate invocation test location in `api-relevant-files.md`; handler wiring from story 001 (`ValidateSource` via `apisurface.BuildFactoryPreview`) required no further code changes.
-- Files changed: `pkg/mcp/factorysession/validate_source_test.go`, `docs/internal/processes/api-relevant-files.md`
+## 2026-06-11T14:30:00Z - dynamic-workflows-cell-session-backend-runtime-004
+- Added `projectRuntimeSuccessResult` to normalize terminal runtime results through `workflowresult.ProjectPrimaryResult` and `workcontent.GeneratedPtrFromParts`, updating session `ResultSummary`, artifact refs/counts, and canonical result state on success.
+- Added `runtime_projection_test.go` proving runtime-backed `GetSession`/`GetResult` parity with API-shaped mappers, list-summary action/recoverability metadata, and projection consistency validators for completed, running, and sync-timeout sessions.
+- Updated sync completion assertions to expect WorkContent `JSON` primary-result parts instead of raw workflow JSON.
+- Updated `docs/internal/processes/api-relevant-files.md` with runtime result projection wiring.
 - **Learnings for future iterations:**
-  - Patterns discovered: assert MCP validate outcomes through `ToolResponse` envelopes (`result` vs `error`) and prove alias parity with byte-identical `Client.CallTool` responses; compare success metadata against `apisurface.FactoryPreviewResultFromPreview` rather than hardcoded hashes.
-  - Gotchas encountered: `WorkflowPolicyPreview` exposes `policyHash` (string), not `effectivePolicyHash`; error `details.sourceValidationIssues` type-asserts as `[]factoryapi.WorkflowDiagnostic` when read directly from Go structs.
-  - Useful context: invalid-fixture tests can reuse `require('fs');` with `workflowvalidation.CodeForbiddenHostAccess` and path-aware diagnostics under `.claude/workflows/`.
+  - Durable `PrimaryResult` stores marshaled `factoryapi.WorkContent` arrays; tests must assert `type:"JSON"` parts, not raw workflow objects.
+  - `DurableListSummaryFromSessionRead` is the right helper for recoverability/action availability checks on runtime session reads.
+  - `ValidateResultMatchesEventProjection` only compares latest `SESSION_RESULT_UPDATED` payload `resultStatus`; keep session/result status aligned when rebuilding events after normalization.
 ---
 
-## 2026-06-12 UTC - dynamic-workflows-recovery-mcp-tools-003
-- Wired `you.factory_session.start_sync` and `you.factory_session.get_result` through `factorysessionexecution.Service` (`StartSync`, `GetResult`) with apisurface request/response mappers, typed execution error envelopes, `NewClientWithService`, and contract-fixture-backed mock-client tests proving terminal sync success, deterministic final result reads, idempotent replay stability, and workflow run alias parity.
-- Files changed: `pkg/mcp/factorysession/start_sync.go`, `pkg/mcp/factorysession/get_result.go`, `pkg/mcp/factorysession/client.go`, `pkg/mcp/factorysession/errors.go`, `pkg/mcp/factorysession/start_sync_test.go`, `docs/internal/processes/api-relevant-files.md`
+## 2026-06-11T15:10:00Z - dynamic-workflows-cell-session-backend-runtime-005
+- Stored first observed async/sync start responses in `runtimeStartReplayRecord` so exact `requestId` replays return the original response shape; sync timeout replays stay `TIMED_OUT`/`RUNNING` even after background completion.
+- Added `runtime_idempotency_test.go` covering async replay after completion, sync completed replay, sync timeout immediate/after-completion replay, and tuple conflict rejection without new sessions.
+- Updated `docs/internal/processes/api-relevant-files.md` with runtime idempotency wiring.
 - **Learnings for future iterations:**
-  - Patterns discovered: inject `factorysessionexecution.Service` into `Client` via `NewClientWithService`; keep validate on preview-only path while run/status/result tools route through shared execution mappers (`StartRequestFromAPI`, `SyncStartResponseToAPI`, `ResultRequestFromAPI`, `ResultResponseToAPI`).
-  - Gotchas encountered: alias parity tests for start_sync need separate `FakeService` instances per call — a second invocation on the same client replays from session state and can diverge from the first-start projection shape; use `fixtures.SyncStartResultHash` and `fixtures.ProjectedResultReadHash` golden digests for sync-success (`req-petri-success-001` / `dur-sess-petri-success-001`).
-  - Useful context: the published sync-success fixture uses factory id `customer-support-triage`, not the JavaScript `review.js` validate fixture; story 004 will extend async/status/not-ready paths on the same client service seam.
+  - Idempotency tuple hashing intentionally excludes `wait` options; conflict tests must change source/args/policy, not timeout millis alone.
+  - `busy-loop` never completes—use `slow-final` temp fixture when proving replay shape after eventual runtime success following sync timeout.
+  - Async replay must return stored `RUNNING` response, not live terminal session status from `asyncStartFromState`.
 ---
 
-## 2026-06-12 UTC - dynamic-workflows-recovery-mcp-tools-004
-- Wired `you.factory_session.start_async` and `you.factory_session.get` through `factorysessionexecution.Service` (`StartAsync`, `GetSession`) with apisurface mappers, extended `Client.CallTool` routing, and mock-client tests proving async running fixture acceptance, deterministic RUNNING status reads, typed `factory_session.result.not_ready` final-result polling with sessionId retention, and completed status/result observation on the same mock client after sync-success start.
-- Files changed: `pkg/mcp/factorysession/start_async.go`, `pkg/mcp/factorysession/get_session.go`, `pkg/mcp/factorysession/client.go`, `pkg/mcp/factorysession/start_async_test.go`, `docs/internal/processes/api-relevant-files.md`
+## 2026-06-11T16:20:00Z - dynamic-workflows-cell-session-backend-runtime-006
+- Added `ReplaySessionProjection` to reconstruct durable session/result read models from canonical `SESSION_STARTED` / `SESSION_RESULT_UPDATED` / `SESSION_COMPLETED` events without duplicating summaries, links, or artifact stubs on repeated replay.
+- Sync-timeout sessions now rebuild canonical runtime events after `SYNC_WAIT_TIMED_OUT` availability is recorded; `SESSION_RESULT_UPDATED` payloads may carry bounded `resultSummary` text when present on the live projection.
+- Added focused replay tests for completed, running, sync-timeout, and async-completed runtime sessions plus pure reducer/idempotency coverage.
+- Increased `TestRuntimeService_StartSync_TimeoutPreservesEventualRuntimeResult` wait budget to 15s so background completion stays reliable under parallel package test load.
+- Updated `docs/internal/processes/api-relevant-files.md` with runtime event replay wiring.
 - **Learnings for future iterations:**
-  - Patterns discovered: async MCP handlers mirror sync (`StartAsync` / `GetSession` + `AsyncStartResponseToAPI` / `SessionReadResponseToAPI`); reuse published async-running IDs (`req-js-run-n-001` / `dur-sess-js-run-n-001`) and golden `fixtures.ProjectedResultReadHash` for NOT_READY final reads (`sha256:5847ff5f39efb7f12c0a8ca67635c7e7d7332b56dbf7d724d4669450b3c8f765`).
-  - Gotchas encountered: `FactorySessionExecutionResponse` has no embedded terminal `result` field (unlike sync) — assert in-progress async starts via `status` and links only; running session read models may omit `resultSummary` even when partial results exist via `get_result` partial mode.
-  - Useful context: story 005 owns missing-session and request-conflict envelopes — keep those out of story 004 tests; completed-state polling demo can pair async-running start with sync-success terminal reads on one shared `FakeService` client.
+  - Event replay reconstructs lifecycle status, result summary status, source hash, policy hash, and links—not `PrimaryResult` JSON, which remains a live runtime projection concern.
+  - `applySyncWaitTimeout` must rebuild `state.events` or replayed running-timeout sessions only show `SESSION_STARTED`.
+  - `resultSummary` WorkContent parts use lowercase `text` type identifiers when embedded in canonical event payloads.
 ---
 
-## 2026-06-12 UTC - dynamic-workflows-recovery-mcp-tools-005
-- Added focused `failure_paths_test.go` proving canonical `you.factory_session.get` and `you.factory_session.get_result` return deterministic FAILED_WITH_PARTIAL status and partial result payloads for fixture `req-js-failed-partial-001` / `dur-sess-js-failed-partial-001`, typed `factory_session.session.not_found` envelopes with sessionId retention for unknown sessions, typed `factory_session.start.request_id_conflict` envelopes for async and sync start tuple conflicts, and workflow status alias parity for missing-session reads.
-- Documented failure-path MCP invocation test location in `api-relevant-files.md`; existing error mapping in `errors.go` and get/start handlers required no further code changes.
-- Files changed: `pkg/mcp/factorysession/failure_paths_test.go`, `docs/internal/processes/api-relevant-files.md`
+## 2026-06-11T17:00:00Z - dynamic-workflows-cell-session-backend-runtime-007
+- Added `fake_service_coexistence_test.go` proving `FakeService` and `RuntimeService` both satisfy `factorysessionexecution.Service`, constructor/scenario-loading APIs (`NewFakeService`, `WithFakeScenarios`, `WithPersistedSessionSeeds`, `LoadFakeScenariosFromContractFixtures`) remain available, fixture event replay reconstructs live fake projections, and idempotency works on both paths without interference.
+- Updated `docs/internal/processes/api-relevant-files.md` to document parallel fake/runtime service injection.
 - **Learnings for future iterations:**
-  - Patterns discovered: prove MCP failure semantics through `ToolResponse` error envelopes (`factory_session.session.not_found`, `factory_session.start.request_id_conflict`) and success-path FAILED_WITH_PARTIAL reads via `GetSession`/`GetResult`; use golden `fixtures.ProjectedResultReadHash` for failed-with-partial partial-mode reads (`sha256:36530c7711e80e60d05ab82c87a6cebbf9db4966b028dfdcbf0b9008d1d47a68`).
-  - Gotchas encountered: failed-with-partial sessions start successfully through `StartAsync` — failure semantics appear on status/result reads, not as transport-level start errors; request-id conflict tests must copy `Args` into a new map before mutation to avoid shared-map aliasing.
-  - Useful context: distinguish `javascript-failed-with-partial` (`FAILED` + `FAILED_WITH_PARTIAL`) from `javascript-interrupted-recoverable` (`INTERRUPTED` + `PARTIAL`) when selecting fixtures for story 005 vs lifecycle-control stories.
+  - Fixture-backed terminal sessions may omit `Links.Events` on live reads while `ReplaySessionProjection` always projects event links—compare lifecycle/source/policy/result summary for fake replay parity, not every link field.
+  - Contract idempotent-replay scenarios use `req-idempotent-replay-001` from `durable-session-contract-fixtures.json`; custom request ids need explicit `WithFakeScenarios` registration.
+  - `BuiltinInterruptedRecoverableScenario()` is the built-in recoverable fake scenario for `WithFakeScenarios` smoke tests without contract fixture files.
+---
+
+## 2026-06-11T18:30:00Z - mergeability
+- Merged `origin/main` into the branch and resolved `docs/internal/processes/api-relevant-files.md` by combining main's JavaScript host-runtime and fixtures-catalog documentation with this cell's `PrepareStart` / `RuntimeService` / fake-runtime coexistence notes.
+- Fixed flaky `TestRuntimeService_StartSync_IdempotentReplayTimeout` slow-final subtest by aligning its background-completion wait budget to 15s (matching `runtime_service_test.go`).
+- Pushed merge commit `a32cefd73`; posted PR conversation follow-up on #803.
+- **Learnings for future iterations:**
+  - Under parallel `pkg/factorysessionexecution` test load, temp-dir `slow-final` spin-loop fixtures need 15s completion waits, not 5s.
+  - Main's `api-relevant-files.md` may reference `canonical_events.go` while the package still uses `listing.go` for `BuildCanonicalSessionEvents` / `BuildCanonicalRuntimeSessionEvents`—prefer the actual file names when merging docs.
+  - `go vet` rejects `StartSync` holding a `context.WithCancel` func without calling it on every return path—only create a cancellable runtime context when `wait.cancelOnTimeout` is true and `defer cancel()` inside the background goroutine.
+---
+
+## 2026-06-11T18:45:00Z - mergeability (CI)
+- Fixed `go vet` context-leak failure in `RuntimeService.StartSync` by scoping cancellable runtime contexts to `cancelOnTimeout` sessions and deferring `cancel()` inside the background goroutine.
+- Pushed fix commit `408399daf`.
+---
+
+## 2026-06-11T19:10:00Z - mergeability (CI)
+- Fixed `make backend-size` failure: `TestRuntimeService_ReadProjections_MatchAPIShapedExpectations` exceeded the 100-line function limit (112 lines). Extracted `assertCompletedRuntimeSessionRead`, `assertAPIShapedCompletedSessionRead`, and `assertCompletedRuntimeResultProjection` helpers in `runtime_projection_test.go`.
+- Pushed fix commit `96b699d42`.
+- **Learnings for future iterations:**
+  - CI `Build, Lint, and API` runs `make backend-size` after `make vet`; large table-driven or assertion-heavy tests should use `t.Helper()` assertion helpers early to stay under the 100-line function cap.
+  - `go vet` passing locally does not imply the full `Build, Lint, and API` job is green—run `make backend-size` when adding substantial test functions in owned backend packages.
 ---

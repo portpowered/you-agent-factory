@@ -1,31 +1,31 @@
 {
-  "project": "infinite-you",
-  "branchName": "dynamic-workflows-recovery-mcp-tools",
-  "description": "Recover the canonical MCP tool discovery, validation, run, status, and result loopback for dynamic workflows by exposing Factory Session-oriented tools backed by deterministic mock session-provider fixtures, with focused tests proving discovery and invocation without host packaging.",
+  "project": "Factory Session Backend Runtime for Simple JavaScript Workflows",
+  "branchName": "dynamic-workflows-cell-session-backend-runtime",
+  "description": "Wire the shared Factory Session execution service to the real simple JavaScript runtime path so simple JavaScript workflows can be started, inspected, replayed, and retrieved through stable backend session read models while preserving request-id idempotency and keeping FakeService available for mock-provider transports.",
   "context": {
-    "customerAsk": "Recover canonical MCP tool discovery, validation, run, status, and result behavior so an MCP client can discover Factory Session-oriented tools, validate a JavaScript workflow fixture, start a mock-backed session, poll status, and read final or partial results.",
-    "problem": "The earlier dynamic-workflows-cell-mcp-tools work is blocked by failed paired plan-token recovery, and downstream MCP install or real-runtime swap-in work has no narrow, verified canonical tool contract to depend on.",
-    "solution": "Define or repair canonical Factory Session MCP tools for list, validate, run simple, run async, status, result, dispatches, artifacts, controls, and events; keep workflow-named tools as compatibility aliases; wire behavior to deterministic mock session-provider fixtures or shared session execution interfaces; and add focused MCP registry or mock-client tests for discovery and invocation."
+    "customerAsk": "The shared Factory Session execution service can start a simple JavaScript workflow against the real runtime path, expose status/result/progress/read models, and preserve idempotent request behavior.",
+    "problem": "The durable Factory Session contract and fake service paths exist, but the backend service path still needs a real simple JavaScript runtime implementation for session start and inspection. Transports can prove fixture shapes today, but they cannot yet run a real simple JavaScript workflow through lifecycle, result projection, replay, and request-id semantics.",
+    "solution": "Add a real runtime-backed implementation or mode behind the existing factorysessionexecution.Service contract. Normalize starts through orchestrator-owned source, validation, policy, args, wait, and result packages; execute simple JavaScript sessions through the runtime boundary; maintain explicit in-memory session projections and canonical events; preserve request-id replay/conflict behavior; and keep FakeService available for mock-provider paths."
   },
   "acceptanceCriteria": [
-    "MCP tool discovery exposes canonical Factory Session-oriented tools with stable request and response schemas for list, validate, run simple, run async, status, result, dispatches, artifacts, controls, and events.",
-    "Workflow-named MCP aliases remain compatibility-only and invoke the same Factory Session implementations and response shapes as the canonical tools.",
-    "MCP validate and run simple tools return deterministic fixture success responses and typed validation failure responses.",
-    "MCP run async, status, and result tools cover completed, running/not-ready, failed-with-partial-result, missing-session, and request-conflict cases with deterministic typed responses.",
-    "Tool implementation uses deterministic mock session-provider fixtures or shared session execution interfaces and does not add dependencies on API handlers or host packaging.",
-    "Focused MCP registry or mock-client tests prove tool discovery and invocation without requiring Cursor, OpenCode, Codex, Kiro, Gemini, Claude Code, or other host packaging.",
-    "Typecheck, lint, and targeted tests including go test ./pkg/mcp/... ./pkg/factorysessionexecution pass."
+    "Service tests prove async start, sync completed start, sync timeout, get session, and get result using a real simple JavaScript fixture through the runtime-backed service path",
+    "Service tests prove exact request-id replay returns the same session/result response and conflicting request-id reuse is rejected",
+    "Projection tests show session lifecycle, result summary, source hash, policy hash, and inspection links remain consistent with existing API-shaped read models",
+    "Canonical lifecycle and result update events can be replayed idempotently to reconstruct the same session projection",
+    "FakeService tests continue to pass and remain usable for CLI, MCP, API, and mock-provider paths",
+    "No provider dispatch bridge, website UI, MCP install packaging, or broad persistent database storage is introduced in this cell",
+    "Quality gate: Go typecheck/compile, lint where applicable, and focused tests pass, including go test ./pkg/factorysessionexecution ./pkg/orchestrators/javascript/..."
   ],
   "userStories": [
     {
-      "id": "dynamic-workflows-recovery-mcp-tools-001",
-      "title": "Discover canonical Factory Session MCP tools",
-      "description": "As an MCP client, I want to discover stable Factory Session-oriented tool names and schemas so I can integrate with dynamic workflow sessions without relying on transitional workflow terminology.",
+      "id": "dynamic-workflows-cell-session-backend-runtime-001",
+      "title": "Normalize real session start inputs",
+      "description": "As a backend maintainer, I want real JavaScript session starts to use the shared start contract and orchestrator-owned normalization so the runtime path behaves like API, CLI, and MCP callers expect.",
       "acceptanceCriteria": [
-        "MCP discovery includes canonical Factory Session tools for session list, validate, run simple, run async, status, result, dispatches, artifacts, controls, and events.",
-        "Each canonical tool exposes a deterministic input schema and response schema with Factory Session vocabulary such as session_id, status, diagnostics, dispatches, artifacts, events, and typed errors where applicable.",
-        "Workflow-named tool aliases, if present, are marked or documented as compatibility-only and resolve to the same behavior and response shape as their canonical Factory Session tool.",
-        "A focused MCP registry or mock-client test asserts discovery of the canonical tools and verifies one compatibility alias maps to the same implementation behavior without asserting unrelated package or route inventories.",
+        "A start request resolves JavaScript source using the existing Factory Session start source flow and records the resolved source identity and source hash on the session read model",
+        "A start request validates source, args, requested policy, and wait options before runtime execution begins",
+        "Policy projection records the effective policy hash used for the session",
+        "Invalid source, invalid args, or denied policy returns the existing service error shape without creating a completed session",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -34,14 +34,14 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-recovery-mcp-tools-002",
-      "title": "Validate JavaScript workflow fixtures through MCP",
-      "description": "As an MCP client, I want validation to return deterministic success and typed failure responses so I can check workflow source before starting a Factory Session.",
+      "id": "dynamic-workflows-cell-session-backend-runtime-002",
+      "title": "Start simple JavaScript sessions asynchronously",
+      "description": "As a transport caller, I want to start a simple JavaScript workflow asynchronously so I can receive a session identifier immediately and inspect progress through the shared service.",
       "acceptanceCriteria": [
-        "Invoking the canonical validate tool with the simple valid JavaScript workflow fixture returns a deterministic success response that includes validation status and any expected normalized metadata.",
-        "Invoking the canonical validate tool with an invalid fixture returns a typed validation failure response with stable diagnostic fields and no unstructured panic or transport-level failure for expected validation errors.",
-        "Workflow-named validate alias invocation returns the same success and typed validation failure semantics as the canonical validate tool.",
-        "Validation invocation uses deterministic fixtures or shared session execution interfaces and does not depend on API handlers or external provider credentials.",
+        "StartAsync against a real simple JavaScript fixture returns a session id, accepted/running lifecycle state, orchestrator identity, source hash, policy hash, and inspection links",
+        "The runtime-backed service records enough in-memory session state for a later GetSession call to report lifecycle status, progress, result availability, dispatch stubs, artifact stubs, and links",
+        "The service emits or models canonical session-started and lifecycle/progress facts for the async session",
+        "Async service tests use a real simple JavaScript fixture rather than a fake scenario fixture",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -50,14 +50,14 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-recovery-mcp-tools-003",
-      "title": "Run a simple mock-backed Factory Session through MCP",
-      "description": "As an MCP client, I want to start a simple mock-backed Factory Session and read its completed result so I can prove the MCP loopback works before real runtime swap-in.",
+      "id": "dynamic-workflows-cell-session-backend-runtime-003",
+      "title": "Complete or time out synchronous starts",
+      "description": "As a transport caller, I want synchronous JavaScript session starts to either return the completed result within the wait budget or return a live session that can be inspected later.",
       "acceptanceCriteria": [
-        "Invoking the canonical run simple tool with the deterministic simple workflow fixture returns a success response containing a stable Factory Session identifier, completed status, and final result payload or result reference.",
-        "The result tool can read the same completed session and returns the expected deterministic final result without requiring a separate host installation step.",
-        "Repeating the same deterministic fixture invocation produces stable reviewer-verifiable values for session identity policy, status, and result content where the fixture contract defines stability.",
-        "The run simple path uses the mock session-provider fixture or shared session execution interface and avoids direct API-handler dependencies.",
+        "StartSync with a sufficient wait budget runs the real simple JavaScript fixture and returns a completed session result with the expected primary result summary",
+        "StartSync with an exhausted or too-small wait budget returns the existing timeout/pending result shape with session id, lifecycle status, result availability, and inspection links",
+        "Sync completion and timeout paths both persist the same session state that GetSession and GetResult later read",
+        "Timeout behavior does not duplicate sessions or lose the eventual runtime result",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -66,14 +66,14 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-recovery-mcp-tools-004",
-      "title": "Support async status and not-ready result polling",
-      "description": "As an MCP client, I want async run, status, and result tools to represent running and not-ready states consistently so host agents can poll without treating in-progress work as a failure.",
+      "id": "dynamic-workflows-cell-session-backend-runtime-004",
+      "title": "Read session and result projections",
+      "description": "As a caller inspecting a Factory Session, I want status and result reads to match the established durable session API shapes so later API, CLI, and MCP work can consume one shared backend projection.",
       "acceptanceCriteria": [
-        "Invoking the canonical run async tool with a running fixture returns a Factory Session identifier and an in-progress status rather than a completed final result.",
-        "The status tool returns a deterministic running or not-ready response for the in-progress mock session.",
-        "The result tool returns a typed not-ready response for the in-progress session without losing the session identifier or returning an untyped error.",
-        "A later completed fixture state for the same session can be observed through status and result with completed status and the expected final result.",
+        "GetSession returns a durable session read model with lifecycle status, phase/progress summary, result summary, source hash, policy hash, dispatch/artifact counts or stubs, recoverability/action availability, and inspection links",
+        "GetResult returns final result data for a completed simple JavaScript session and an availability response for sessions that are still running or timed out",
+        "Result projection uses the existing JavaScript result normalization rules for primary result, artifacts, and summary fields",
+        "Projection tests compare the runtime-backed read models to the existing API-shaped expectations without changing public schema names",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -82,14 +82,14 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-recovery-mcp-tools-005",
-      "title": "Return typed responses for failure, missing session, and conflict cases",
-      "description": "As an MCP client, I want predictable status and result errors for failed, missing, and conflicting requests so agent hosts can recover or report the right failure reason.",
+      "id": "dynamic-workflows-cell-session-backend-runtime-005",
+      "title": "Preserve request-id idempotency",
+      "description": "As a caller retrying a start request, I want exact request-id replays to be safe and conflicting request-id reuse to fail so retries do not create duplicate or ambiguous sessions.",
       "acceptanceCriteria": [
-        "Status and result tools return deterministic typed responses for a failed session that includes a partial result or partial artifact reference when the fixture defines one.",
-        "Status and result tools return a typed missing-session response for an unknown Factory Session identifier.",
-        "Run or result requests that conflict with an existing request/session fixture return a typed request-conflict response with stable machine-readable fields.",
-        "Failure-path tests assert observable MCP response semantics and do not require scanning source-file structure, command inventories, or host package configuration.",
+        "Replaying the same normalized async start request with the same request id returns the original async start response and session id",
+        "Replaying the same normalized sync start request with the same request id returns the original sync response shape, including completed or timeout status as originally observed",
+        "Reusing a request id with a different normalized tuple returns the existing request-id conflict error and does not create a new runtime session",
+        "Idempotency tests cover async start, sync completed start, sync timeout, and conflict using the real simple JavaScript fixture",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -98,19 +98,35 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-recovery-mcp-tools-006",
-      "title": "Inspect dispatches, artifacts, controls, and events through MCP fixtures",
-      "description": "As an MCP client, I want inspection and control tools to expose deterministic session-owned dispatches, artifacts, controls, and events so host agents can inspect mock-backed Factory Sessions through the same vocabulary later used by the real runtime.",
+      "id": "dynamic-workflows-cell-session-backend-runtime-006",
+      "title": "Replay lifecycle and result events consistently",
+      "description": "As a maintainer, I want canonical session lifecycle and result update events from real JavaScript sessions to replay into the same projection so API/event parity has a stable source.",
       "acceptanceCriteria": [
-        "Dispatch inspection returns deterministic session-owned dispatch records for the mock fixture using Factory Session and Dispatch vocabulary.",
-        "Artifact inspection returns deterministic session-owned artifact records or content references for the mock fixture using FactoryArtifact vocabulary.",
-        "Event inspection returns ordered Factory Session event facts for the mock fixture without exposing internal Petri-net terminology as the primary public vocabulary.",
-        "Control tool invocation returns deterministic accepted, rejected, or unsupported responses for the fixture-defined control cases without mutating unrelated sessions.",
+        "Runtime-backed sessions model or emit canonical start, result-updated, completed, and timeout/recoverable lifecycle events where applicable",
+        "Replaying the event sequence reconstructs the same lifecycle status, result summary, source hash, policy hash, and links as the live service projection",
+        "Replaying the same event sequence more than once does not duplicate result summaries, links, dispatch stubs, or artifact stubs",
+        "Projection tests use the real simple JavaScript fixture event sequence and existing durable session API-shaped projection expectations",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 6,
-      "passes": false,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "dynamic-workflows-cell-session-backend-runtime-007",
+      "title": "Keep FakeService mock paths intact",
+      "description": "As a maintainer of CLI, MCP, and API mock paths, I want the fake session service to keep working while real runtime support is added so parallel transport work stays unblocked.",
+      "acceptanceCriteria": [
+        "Existing FakeService behavior and fixture-backed scenarios continue to pass without requiring real JavaScript runtime setup",
+        "Fake async, sync, get session, get result, event replay, and idempotency behaviors remain compatible with the shared factorysessionexecution.Service contract",
+        "Runtime-backed service wiring does not remove or rename fake-service constructors or scenario-loading APIs used by mock-provider tests",
+        "Focused fake service tests pass alongside the new runtime-backed service tests",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 7,
+      "passes": true,
       "notes": ""
     }
   ]

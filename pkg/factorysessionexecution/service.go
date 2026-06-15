@@ -3,7 +3,6 @@ package factorysessionexecution
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
@@ -67,38 +66,8 @@ type StartSourceContext struct {
 // ResolveStartSource resolves one normalized start request through the JavaScript
 // orchestrator source contract used by durable Factory Session start paths.
 func ResolveStartSource(req StartRequest, ctx StartSourceContext) (ResolvedSource, error) {
-	projectRoot := strings.TrimSpace(ctx.ProjectRoot)
-	if projectRoot == "" {
-		return ResolvedSource{}, NewValidationError("projectRoot", "projectRoot is required")
-	}
-
-	sourceCtx, err := workflowsource.DefaultContext(projectRoot)
-	if err != nil {
-		return ResolvedSource{}, NewValidationError("projectRoot", err.Error())
-	}
-
-	resolution := workflowsource.Resolve(startSourceRequest(req.Source), sourceCtx)
-	if !resolution.Found {
-		message := "workflow source could not be resolved"
-		if len(resolution.Diagnostics) > 0 && strings.TrimSpace(resolution.Diagnostics[0].Message) != "" {
-			message = resolution.Diagnostics[0].Message
-		}
-		return ResolvedSource{}, NewValidationError("source", message)
-	}
-
-	resolved := ResolvedSource{
-		Kind:       resolution.ResolvedKind,
-		SourceRef:  resolution.SourceRef,
-		SourceHash: resolution.SourceHash,
-		Dialect:    resolution.Dialect,
-		Metadata: map[string]string{
-			"project": sourceCtx.ProjectRoot,
-		},
-	}
-	if stage := resolutionOrderForLookupStage(resolution.LookupStage); stage != "" {
-		resolved.ResolutionOrder = []string{stage}
-	}
-	return resolved, nil
+	resolved, _, err := resolveStartSourceWithResolution(req, ctx)
+	return resolved, err
 }
 
 func startSourceRequest(source Source) workflowsource.Request {
