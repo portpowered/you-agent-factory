@@ -27,6 +27,8 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	assertDurableSessionResultSurfaceSchemas(t, schemas, paths)
 	assertDurableSessionDispatchArtifactSurfaceSchemas(t, schemas, paths)
 	assertDurableSessionLifecycleControlSurfaceSchemas(t, schemas, paths)
+	assertDurableSessionEventSurfaceSchemas(t, schemas, paths)
+	assertRealBackendSessionAPISliceRoutes(t, paths)
 	assertWorkRequestSurfaceSchemas(t, schemas)
 	assertWorkContentSurfaceSchemas(t, schemas)
 	assertWorkstationSurfaceSchemas(t, schemas)
