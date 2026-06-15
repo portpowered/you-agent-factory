@@ -1,8 +1,18 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: layout command inverses stay colocated for undo/redo coverage.
 import {
   factoryLayoutEdgeWaypoints,
   factoryLayoutWaypointArraysEqual,
   setFactoryLayoutEdgeWaypoints,
 } from "../factory-graph-layout-edge-waypoints";
+import {
+  addFactoryLayoutGroup,
+  type FactoryLayoutGroup,
+  factoryLayoutGroupById,
+  factoryLayoutGroupsEqual,
+  moveFactoryLayoutGroupByDelta,
+  removeFactoryLayoutGroup,
+  updateFactoryLayoutGroup,
+} from "../visual-groups/factory-graph-layout-groups";
 import {
   type FactoryLayout,
   type FactoryLayoutPoint,
@@ -10,6 +20,10 @@ import {
   factoryLayoutNodePosition,
   moveFactoryLayoutNode,
 } from "../factory-graph-layout-operations";
+
+export type FactoryLayoutGroupSnapshot =
+  | { kind: "absent" }
+  | { kind: "present"; group: FactoryLayoutGroup };
 
 export type FactoryLayoutNodePositionSnapshot =
   | { kind: "absent" }
@@ -45,6 +59,27 @@ export type FactoryLayoutCommand =
       edgeId: string;
       from: FactoryLayoutPoint[] | null;
       to: FactoryLayoutPoint[] | null;
+    }
+  | {
+      type: "create-group";
+      group: FactoryLayoutGroup;
+    }
+  | {
+      type: "update-group";
+      groupId: string;
+      from: FactoryLayoutGroupSnapshot;
+      to: FactoryLayoutGroupSnapshot;
+    }
+  | {
+      type: "move-visual-group";
+      groupId: string;
+      fromGroup: FactoryLayoutGroupSnapshot;
+      toGroup: FactoryLayoutGroupSnapshot;
+      nodeMoves: Array<{
+        nodeId: string;
+        from: FactoryLayoutNodePositionSnapshot;
+        to: FactoryLayoutNodePositionSnapshot;
+      }>;
     };
 
 export function snapshotFactoryLayoutNodePosition(
@@ -200,6 +235,138 @@ export function createUpdateFactoryLayoutEdgeWaypointsCommand(input: {
   };
 }
 
+export function snapshotFactoryLayoutGroup(
+  layout: FactoryLayout,
+  groupId: string,
+): FactoryLayoutGroupSnapshot {
+  const group = factoryLayoutGroupById(layout, groupId);
+  if (!group) {
+    return { kind: "absent" };
+  }
+
+  return { kind: "present", group: structuredClone(group) };
+}
+
+export function factoryLayoutGroupSnapshotsEqual(
+  left: FactoryLayoutGroupSnapshot,
+  right: FactoryLayoutGroupSnapshot,
+): boolean {
+  if (left.kind !== right.kind) {
+    return false;
+  }
+  if (left.kind === "absent") {
+    return true;
+  }
+
+  return (
+    right.kind === "present" &&
+    factoryLayoutGroupsEqual(left.group, right.group)
+  );
+}
+
+export function createCreateFactoryLayoutGroupCommand(input: {
+  group: FactoryLayoutGroup;
+}): FactoryLayoutCommand {
+  return {
+    type: "create-group",
+    group: structuredClone(input.group),
+  };
+}
+
+export function createDeleteFactoryLayoutGroupCommand(input: {
+  groupId: string;
+  layout: FactoryLayout;
+}): FactoryLayoutCommand | null {
+  const from = snapshotFactoryLayoutGroup(input.layout, input.groupId);
+  if (from.kind === "absent") {
+    return null;
+  }
+
+  return {
+    type: "update-group",
+    groupId: input.groupId,
+    from,
+    to: { kind: "absent" },
+  };
+}
+
+export function createMoveFactoryLayoutVisualGroupCommand(input: {
+  delta: FactoryLayoutPoint;
+  groupId: string;
+  layout: FactoryLayout;
+  resolvedNodePositions?: ReadonlyMap<string, FactoryLayoutPoint>;
+}): FactoryLayoutCommand | null {
+  if (input.delta.x === 0 && input.delta.y === 0) {
+    return null;
+  }
+
+  const fromGroup = snapshotFactoryLayoutGroup(input.layout, input.groupId);
+  if (fromGroup.kind === "absent") {
+    return null;
+  }
+
+  const nextLayout = moveFactoryLayoutGroupByDelta(
+    input.layout,
+    input.groupId,
+    input.delta,
+    input.resolvedNodePositions,
+  );
+  const toGroup = snapshotFactoryLayoutGroup(nextLayout, input.groupId);
+  if (toGroup.kind === "absent") {
+    return null;
+  }
+
+  const memberNodeIds = fromGroup.group.nodeIds ?? [];
+  const nodeMoves = memberNodeIds
+    .map((nodeId) => {
+      const from = snapshotFactoryLayoutNodePosition(input.layout, nodeId);
+      const to = snapshotFactoryLayoutNodePosition(nextLayout, nodeId);
+      if (factoryLayoutNodePositionSnapshotsEqual(from, to)) {
+        return null;
+      }
+
+      return { nodeId, from, to };
+    })
+    .filter((move): move is NonNullable<typeof move> => move !== null);
+
+  if (
+    factoryLayoutGroupSnapshotsEqual(fromGroup, toGroup) &&
+    nodeMoves.length === 0
+  ) {
+    return null;
+  }
+
+  return {
+    type: "move-visual-group",
+    groupId: input.groupId,
+    fromGroup,
+    toGroup,
+    nodeMoves,
+  };
+}
+
+export function createUpdateFactoryLayoutGroupCommand(input: {
+  groupId: string;
+  layout: FactoryLayout;
+  to: FactoryLayoutGroup;
+}): FactoryLayoutCommand | null {
+  const from = snapshotFactoryLayoutGroup(input.layout, input.groupId);
+  const to: FactoryLayoutGroupSnapshot = {
+    kind: "present",
+    group: structuredClone(input.to),
+  };
+  if (factoryLayoutGroupSnapshotsEqual(from, to)) {
+    return null;
+  }
+
+  return {
+    type: "update-group",
+    groupId: input.groupId,
+    from,
+    to,
+  };
+}
+
 export function createResetFactoryLayoutCommand(input: {
   fromLayout: FactoryLayout;
   toLayout: FactoryLayout;
@@ -257,6 +424,32 @@ export function invertFactoryLayoutCommand(
         from: command.to,
         to: command.from,
       };
+    case "create-group":
+      return {
+        type: "update-group",
+        groupId: command.group.id,
+        from: { kind: "present", group: structuredClone(command.group) },
+        to: { kind: "absent" },
+      };
+    case "update-group":
+      return {
+        type: "update-group",
+        groupId: command.groupId,
+        from: command.to,
+        to: command.from,
+      };
+    case "move-visual-group":
+      return {
+        type: "move-visual-group",
+        groupId: command.groupId,
+        fromGroup: command.toGroup,
+        toGroup: command.fromGroup,
+        nodeMoves: command.nodeMoves.map((move) => ({
+          nodeId: move.nodeId,
+          from: move.to,
+          to: move.from,
+        })),
+      };
   }
 }
 
@@ -282,6 +475,12 @@ export function factoryLayoutCommandAffectedNodeIds(
     }
     case "update-edge-waypoints":
       return [];
+    case "create-group":
+      return [];
+    case "update-group":
+      return [];
+    case "move-visual-group":
+      return command.nodeMoves.map((move) => move.nodeId);
   }
 }
 
@@ -362,6 +561,45 @@ export function applyFactoryLayoutCommand(
         command.edgeId,
         command.to,
       );
+    case "create-group":
+      return addFactoryLayoutGroup(layout, command.group);
+    case "update-group": {
+      if (command.to.kind === "absent") {
+        return removeFactoryLayoutGroup(layout, command.groupId);
+      }
+
+      const nextGroup = command.to.group;
+      if (factoryLayoutGroupById(layout, command.groupId)) {
+        return updateFactoryLayoutGroup(
+          layout,
+          command.groupId,
+          () => nextGroup,
+        );
+      }
+
+      return addFactoryLayoutGroup(layout, nextGroup);
+    }
+    case "move-visual-group": {
+      let nextLayout = layout;
+      const toGroup = command.toGroup;
+      if (toGroup.kind === "present") {
+        nextLayout = updateFactoryLayoutGroup(
+          nextLayout,
+          command.groupId,
+          () => toGroup.group,
+        );
+      }
+
+      for (const move of command.nodeMoves) {
+        nextLayout = applyFactoryLayoutNodePositionSnapshot(
+          nextLayout,
+          move.nodeId,
+          move.to,
+        );
+      }
+
+      return nextLayout;
+    }
   }
 }
 

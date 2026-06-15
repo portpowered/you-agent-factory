@@ -1,9 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
 
+import { useFactoryGraphVisualGroupEditor } from "../../factory-graph-editor/hooks/layout/factory-graph-visual-group-editor-hook";
 import {
   factoryGraphNodeIdForAddEntityDraft,
   type GraphEditorAddNodePlacementViewport,
   resolveInitialPlacementTopLeftForViewport,
+  viewportCenterFromPlacementViewport,
 } from "../lib/graph-editor-add-node-placement";
 import {
   type CurrentActivityGraphRenderProjection,
@@ -76,6 +78,31 @@ export function useCurrentActivityGraphCardViewModel(
     [publicEditor.addControls, submitAddEntity],
   );
   const edgeWaypointControls = publicEditor.edgeWaypointControls;
+  const resolveViewportCenter = useCallback(() => {
+    if (!addNodePlacementViewport) {
+      return null;
+    }
+
+    return viewportCenterFromPlacementViewport(addNodePlacementViewport);
+  }, [addNodePlacementViewport]);
+  const visualGroupControls = useFactoryGraphVisualGroupEditor({
+    activeTool: publicEditor.editorControls.activeTool,
+    addNodeToVisualGroup: publicEditor.layoutControls.addNodeToVisualGroup,
+    canInteractWithEditor: publicEditor.editorControls.canInteract,
+    canvasNodeOptions: publicEditor.layoutControls.canvasNodeOptions,
+    createVisualGroup: publicEditor.layoutControls.createVisualGroup,
+    editorMode: publicEditor.editorControls.isEditing,
+    layout: publicEditor.layoutControls.currentLayout,
+    locale: input.locale,
+    removeNodeFromVisualGroup:
+      publicEditor.layoutControls.removeNodeFromVisualGroup,
+    moveVisualGroupByDelta: publicEditor.layoutControls.moveVisualGroupByDelta,
+    resizeVisualGroup: publicEditor.layoutControls.resizeVisualGroup,
+    deleteVisualGroup: publicEditor.layoutControls.deleteVisualGroup,
+    renameVisualGroup: publicEditor.layoutControls.renameVisualGroup,
+    resolveViewportCenter,
+    setVisualGroupColor: publicEditor.layoutControls.setVisualGroupColor,
+  });
   const {
     canonicalLayoutViewport: _canonicalLayoutViewport,
     initialFitViewKey,
@@ -87,6 +114,7 @@ export function useCurrentActivityGraphCardViewModel(
     addControls,
     ...publicGraph,
     edgeWaypointControls,
+    visualGroupControls,
     layoutControls: {
       ...publicEditor.layoutControls,
       initialFitViewKey,
@@ -128,6 +156,7 @@ export interface CurrentActivityGraphCardViewModel
     CurrentActivityReactFlowRenderModel {
   addControls: CurrentActivityGraphCardAddControls;
   layoutControls: CurrentActivityGraphCardLayoutControls;
+  visualGroupControls: ReturnType<typeof useFactoryGraphVisualGroupEditor>;
 }
 
 function currentActivityGraphRenderProjection(
