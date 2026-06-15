@@ -1,186 +1,114 @@
-# PRD: UI CI Acceleration and Test Rationalization
-
-## Introduction
-
-The current required CI path spends too much wall clock time in UI verification, especially covered Vitest runs and browser integration tests. Because the required lanes run serially today, browser integration failures can arrive only after a long covered UI pass completes. This slows merge feedback, makes flaky failures more expensive, and makes it harder for maintainers to tell whether a failing test is proving a unique product contract or repeating assertions already covered elsewhere.
-
-This project will make browser failures surface earlier, reduce required UI CI wall clock time, use the existing sharded coverage runner, add stable timing visibility, and rationalize redundant UI tests while preserving defect detection. The intended outcome is a faster, more trustworthy PR verification path where each test lane has a clear purpose, clear rerun command, and clear failure output.
+# PRD: Dynamic Workflows Recovery Setup Workspace Git Pull Hygiene
 
 ## Context
 
+### Project Overview
+
+`infinite-you` uses a shared workspace-preparation path to create or reuse executor worktrees for queued implementation lanes. Dynamic workflow plan lanes depend on `factory/scripts/setup-workspace.py` to prepare a `.claude/worktrees/<work-item>` checkout, copy the PRD artifacts into that worktree, and leave the lane ready for implementation work without damaging the user's existing root checkout.
+
 ### Customer Ask
 
-Accelerate the UI-heavy portions of CI and rationalize redundant tests so browser integration regressions fail faster, covered UI runs complete sooner, and maintainers have enough timing evidence to keep the suite from regressing.
+Repair shared `setup-workspace` behavior so a plan lane can create or reuse its executor worktree even when the root repository has staged or otherwise pull-blocking local changes. The fix must preserve user work, emit concrete failure diagnostics, cover the dirty-root or pull-failure cases with focused verification, and leave a clear next step for requeueing the blocked MCP-install plan lanes after the shared blocker is removed.
 
-### Concrete Problem
+### Problem
 
-The current `make ci` flow waits for long covered UI verification before browser integration can report failures. The covered UI runner already has sharding support, but the canonical PR path does not use it. Several slow tests are broad app-shell or React Flow-heavy suites that repeatedly mount expensive dashboard state for narrower behaviors. Browser, jsdom integration, and unit-style tests also overlap in places, increasing runtime without adding proportional confidence.
+`factory/scripts/setup-workspace.py` currently runs a root-level `git pull` before any worktree reuse or creation. When the root checkout has local staged or otherwise pull-blocking changes, setup fails before it reaches reusable-worktree or new-worktree paths. This blocks unrelated PRD execution lanes even though those lanes only need a safe executor worktree and PRD copies. The current failure surface is also too generic for later planning or queue-repair passes to distinguish root sync failure from worktree creation failure or PRD copy failure.
 
 ### High-Level Solution
 
-Introduce a canonical PR verification flow that either runs browser integration before UI coverage or runs both through a repo-owned orchestrator with fast-fail semantics. Use sharded UI coverage in CI with deterministic merged coverage output. Add stable slow-test reporting for covered UI and browser lanes. Define lane boundaries and split the highest-cost redundant suites into lower-cost feature-scoped tests where that preserves the same observable confidence.
+Adjust shared workspace preparation so root-repo sync is attempted only when it is safe and necessary, and so dirty-root or pull-blocked conditions do not prevent reuse or creation of an executor worktree from the existing local repository state. Keep the change bounded to setup-workspace behavior, reuse current Factory and worktree vocabulary, and make remaining failures concrete enough for later queue inspection and requeue work. Add focused regression coverage for dirty-root fallback, no-upstream behavior, reusable-worktree behavior, and categorized failure output.
 
 ## Project-Level Acceptance Criteria
 
-- [ ] Browser integration no longer waits for the full covered UI lane to finish before starting in the canonical PR verification flow.
-- [ ] The required UI-related CI wall clock time is reduced by at least 30% from the current measured baseline, or the closeout artifact explains the measured blocker and next tuning step.
-- [ ] Sharded UI coverage preserves merged coverage reports, threshold enforcement, replay coverage checking, and clear failure output when a shard fails.
-- [ ] Covered UI and browser integration lanes emit stable slow-file summaries that maintainers can compare across runs.
-- [ ] Lane boundaries explain what belongs in unit/jsdom coverage, covered feature integration, and browser integration, with duplicate assertion patterns removed from at least one high-cost area.
-- [ ] Browser integration remains deterministic: failures identify the lane and rerun command, and concurrent execution avoids port, preview server, and shared download conflicts.
-- [ ] Typecheck, lint, and relevant tests pass for CI orchestration, coverage sharding, reporting, and changed UI test behavior.
+- `setup-workspace` can create a new executor worktree from the local repository state when the root checkout has staged or otherwise pull-blocking local changes, without resetting, overwriting, or unstaging that root state.
+- `setup-workspace` can reuse an existing valid executor worktree when the root checkout cannot be pulled, and reusable-worktree preparation still completes when no additional sync is required.
+- Root sync behavior still handles the no-upstream case safely and does not convert "no upstream configured" into a fatal error for workspace preparation.
+- Failure output from `setup-workspace` identifies whether the blocking problem happened during root sync, worktree preparation, or PRD copy so later planner or queue-repair passes do not need to guess.
+- The change stays inside shared workspace-preparation surfaces and preserves current Factory, Factory Session, and worktree terminology without introducing a separate workflow-run model.
+- The repaired behavior leaves blocked plan lanes with an obvious requeue path once setup succeeds, such as rerunning workspace setup and moving the blocked MCP-install plan lanes back toward `plan:init`.
+- Typecheck, lint, and focused tests for setup-workspace behavior pass.
 
 ## Goals
 
-- Reduce required UI-related CI wall clock time by at least 30%.
-- Surface browser integration failures before or alongside covered UI failures.
-- Cut median time-to-first-actionable browser regression failure to under 10 minutes.
-- Use existing UI coverage sharding and merge behavior instead of weakening coverage thresholds.
-- Establish stable timing visibility for the slowest covered UI and browser integration files.
-- Reduce redundant UI coverage across app-shell, replay, React Flow, and import/export scenarios.
-- Preserve or improve defect detection quality while decreasing runtime and flake exposure.
+- Preserve user work in the root checkout while allowing executor worktree setup to proceed.
+- Make dirty-root and pull-blocked cases observable, intentional, and reviewer-verifiable.
+- Keep reusable-worktree and no-upstream paths working as part of the same shared setup flow.
+- Produce concrete diagnostics that support later queue inspection and plan-lane recovery.
+- Keep the fix narrowly scoped to workspace preparation rather than widening into dynamic workflow runtime or MCP behavior.
 
 ## User Stories
 
-### prd-ui-ci-acceleration-and-test-rationalization-001: Fast-Fail Required UI CI Flow
-
-**Description:** As an engineer merging a UI change, I want browser integration to start before or alongside covered UI verification so that browser regressions become actionable sooner.
-
-**Acceptance Criteria:**
-
-- [ ] The canonical PR verification flow starts browser integration before covered UI completion, either by ordering browser first or by running browser and coverage through one orchestrated concurrent flow.
-- [ ] Failure output names the failed lane and includes the target or command an engineer should rerun locally.
-- [ ] Concurrent lanes, if used, keep lane logs attributable and avoid shared-state conflicts between browser-oriented processes.
-- [ ] The chosen ordering or concurrency behavior is documented in the developer-facing CI target help or adjacent CI documentation.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
-
-### prd-ui-ci-acceleration-and-test-rationalization-002: Sharded Covered UI Verification
-
-**Description:** As an engineer waiting on CI, I want covered UI tests to run in shards and merge coverage afterward so that wall clock time drops without weakening coverage enforcement.
+### dynamic-workflows-recovery-setup-workspace-git-pull-hygiene-001: Continue workspace setup when root sync is blocked by local changes
+**Description:** As a maintainer recovering blocked plan lanes, I want workspace setup to continue from safe local repository state when root pull is blocked by local changes so executor worktrees can still be created without mutating the root checkout.
 
 **Acceptance Criteria:**
-
-- [ ] The canonical PR verification flow uses the repo-owned UI coverage shard and merge behavior with a documented default shard count.
-- [ ] The merged coverage report preserves threshold enforcement and replay coverage checking after all expected shards finish.
-- [ ] A missing or failed shard produces a clear failure that identifies the shard and does not silently produce partial coverage.
-- [ ] Shard count can be tuned through a documented environment variable or CI setting without changing test semantics.
-- [ ] Tests pass.
+- [ ] When the root checkout has staged or otherwise pull-blocking local changes, running `setup-workspace` does not reset, overwrite, or unstage those root changes.
+- [ ] In the same dirty-root scenario, `setup-workspace` can still create the expected executor worktree for a PRD lane when the local repository already has enough history to do so safely.
+- [ ] If root sync is skipped or downgraded because local changes would block pull, the outcome is explicit in observable script output rather than hidden behavior.
+- [ ] The story remains limited to shared workspace-preparation behavior and does not introduce separate workflow-run terminology or unrelated git tooling cleanup.
 - [ ] Typecheck passes.
+- [ ] Tests pass.
 
-### prd-ui-ci-acceleration-and-test-rationalization-003: Stable UI Test Cost Reporting
-
-**Description:** As a maintainer, I want CI to report the slowest covered UI and browser integration files with cost categories so that runtime regressions are visible and actionable.
+### dynamic-workflows-recovery-setup-workspace-git-pull-hygiene-002: Reuse existing worktrees and preserve no-upstream behavior under the safer sync policy
+**Description:** As a maintainer rerunning blocked work items, I want reusable-worktree and no-upstream cases to keep working under the repaired sync policy so existing plan lanes can recover without extra manual branch repair.
 
 **Acceptance Criteria:**
+- [x] When the expected executor worktree already exists and is valid, `setup-workspace` reuses it successfully even if the root checkout has pull-blocking local changes.
+- [x] When the repository branch has no upstream configured, `setup-workspace` still treats that condition as non-fatal and can continue to reuse or create the executor worktree from local state.
+- [x] If a reusable worktree needs its own branch update and that update cannot proceed safely, the script reports that failure as a worktree-preparation problem rather than a generic root-sync error.
+- [x] Focused verification covers reusable-worktree and no-upstream paths without depending on unrelated dynamic-workflow runtime, API, or MCP-install behavior.
+- [x] Typecheck passes.
+- [x] Tests pass.
 
-- [ ] Covered UI verification emits a stable top-slowest file summary after the run or after shard merge.
-- [ ] Browser integration emits per-file timing or an equivalent top-slowest summary after the run.
-- [ ] The report categorizes slow files into app-shell integration, React Flow graph tests, replay/timeline tests, import/export tests, script-style tests, or uncategorized.
-- [ ] The report format is suitable for closeout notes and can be compared across CI runs without requiring source topology assertions.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
-
-### prd-ui-ci-acceleration-and-test-rationalization-004: Lane Boundary and Redundancy Policy
-
-**Description:** As a maintainer, I want explicit test-lane boundaries so that unit, covered jsdom, and browser tests each verify distinct behavior.
+### dynamic-workflows-recovery-setup-workspace-git-pull-hygiene-003: Emit categorized setup failures that support queue recovery
+**Description:** As a later planner or queue-repair pass, I want setup-workspace failures categorized by stage so I can distinguish root sync failure, worktree preparation failure, and PRD copy failure without guessing.
 
 **Acceptance Criteria:**
-
-- [ ] The test strategy defines what observable contracts belong in unit tests, covered feature/jsdom integration tests, and browser integration tests.
-- [ ] Browser integration guidance prioritizes durable behavior such as saved payloads, network effects, downloads, imports, and final visible state over repeated copy-only assertions.
-- [ ] Export/import and graph-editing flows have a documented minimum browser contract that avoids repeating every jsdom UI assertion.
-- [ ] At least one existing duplicate assertion pattern is removed or moved to the cheaper lane while preserving the durable behavior check.
-- [ ] Tests pass.
+- [ ] When root sync truly fails in a way that should still block setup, the script emits failure output that identifies the root-sync stage and the concrete blocking reason.
+- [ ] When worktree creation or reuse fails, the script emits failure output that identifies the worktree-preparation stage and preserves the actionable git or filesystem reason.
+- [ ] When PRD artifact copy fails after worktree preparation, the script emits failure output that identifies the PRD-copy stage separately from git setup failures.
+- [ ] Failure output is concrete enough that a reviewer can map a blocked lane to the right follow-up action, including rerunning workspace setup and requeueing blocked MCP-install plan lanes after the shared blocker is fixed.
 - [ ] Typecheck passes.
-
-### prd-ui-ci-acceleration-and-test-rationalization-005: Split One High-Cost App-Shell Suite
-
-**Description:** As a maintainer, I want at least one oversized app-shell test suite replaced with smaller feature-focused coverage so that the same behavior is proven with less setup cost.
-
-**Acceptance Criteria:**
-
-- [ ] One high-cost app-shell suite is selected from the current slow-file inventory and its unique observable behaviors are listed before changes.
-- [ ] Equivalent behavior is covered by smaller feature-owned tests where whole-dashboard mounting is not required.
-- [ ] Any remaining app-shell coverage is limited to cross-feature behavior that cannot be proven reliably at a lower layer.
-- [ ] Before/after timing for the selected suite or replacement tests is captured in the closeout artifact.
 - [ ] Tests pass.
-- [ ] Typecheck passes.
-
-### prd-ui-ci-acceleration-and-test-rationalization-006: Browser Integration Stability and Runtime Boundaries
-
-**Description:** As an engineer debugging browser failures, I want browser integration tests to be isolated and deterministic so that failures are attributable and retries remain rare.
-
-**Acceptance Criteria:**
-
-- [ ] Browser integration documentation states which suites must remain sequential because of shared preview servers, ports, downloads, or global browser state.
-- [ ] Any browser test concurrency introduced by this project uses isolated ports, preview state, and download locations per worker or file.
-- [ ] Shared browser helpers expose or document a recommended wait pattern for durable network and UI checkpoints.
-- [ ] At least one flaky or over-constrained browser assertion is simplified to assert durable behavior rather than transient copy, animation, or timing state.
-- [ ] Direct browser verification confirms changed browser-visible test flows still exercise the intended final UI state.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
 
 ## High-Level Technical Design
 
-The canonical PR verification path should remain easy to run by target name. If the implementation chooses concurrency, use a repo-owned orchestration target or script that prefixes or buffers lane output so failures remain attributable. If the implementation chooses ordering, run browser integration as an earlier fast-fail lane and keep covered UI as the authoritative coverage lane.
-
-Covered UI verification should use the existing shard and merge model. Each shard must produce an identifiable artifact, and merge must fail when an expected shard result is missing. The merged report remains the only source for coverage threshold enforcement and replay coverage checking.
-
-Slow-test observability should be generated by the test lanes themselves or by repo-owned wrappers, not by a one-time spreadsheet. Reports should include top slow files, elapsed time, lane name, and a likely cost category. Categories are for maintainer triage and should not become a brittle source-inventory test.
-
-Test rationalization should start with the slowest app-shell and React Flow-heavy suites. Implementers should preserve user-visible or maintainer-visible behavior while moving repeated setup-heavy assertions into feature-scoped tests where possible. Browser tests should keep durable end-to-end contracts and avoid duplicating copy-only assertions already covered in jsdom.
+- Keep ownership in the shared setup-workspace script and any directly associated verification surfaces. Do not widen into runtime, MCP host install, or API contract changes.
+- Treat root sync as a best-effort preparation step with explicit safety checks. If local root state would make `git pull` unsafe or impossible, continue from local state when worktree preparation can still proceed safely.
+- Preserve current worktree creation and reuse semantics, but make the decision points explicit: root sync outcome, worktree reuse or add outcome, and PRD copy outcome should each have distinct observable result categories.
+- Prefer deterministic, stage-oriented diagnostics over generic shell failure text so later queue inspection can distinguish whether the next step is "retry after cleaning root," "repair or remove invalid worktree," or "fix PRD artifact copy."
+- Verification should focus on observable script behavior: dirty-root fallback, no-upstream continuation, reusable-worktree success, and categorized failures.
 
 ## Functional Requirements
 
-- FR-1: The canonical PR verification flow must start browser integration before the covered UI lane completes.
-- FR-2: If test lanes run concurrently, lane logs must remain attributable, buffered or prefixed, and rerunnable by target name.
-- FR-3: Browser integration failures must provide a fast-fail signal without waiting for the full covered UI lane to complete.
-- FR-4: The covered UI lane must support shard-based execution in CI using the repo-owned shard and merge behavior.
-- FR-5: The default coverage shard count and tuning mechanism must be documented.
-- FR-6: Coverage merge must fail clearly when expected shard artifacts are missing.
-- FR-7: The covered UI lane must preserve merged coverage reports, coverage thresholds, and replay coverage checks.
-- FR-8: Covered UI and browser integration lanes must emit stable slow-file summaries.
-- FR-9: Slow-file summaries must include top N files, lane name, elapsed time, and a likely optimization category.
-- FR-10: The maintained slow-test inventory must include current-selection app shell, layout/graph app shell, replay stream, React Flow edit integration, import/export browser flows, and layout performance tests when present in the measured run.
-- FR-11: The test strategy must define lane boundaries for unit tests, covered jsdom integration tests, and browser integration tests.
-- FR-12: Browser integration tests must prioritize durable assertions such as saved payloads, network requests, downloaded or imported artifacts, and final visible state.
-- FR-13: Repeated whole-dashboard setup patterns must be replaced with lower-cost feature harnesses where the behavior under test is feature-local.
-- FR-14: At least one broad app-shell suite must be split or reduced without removing coverage of its unique observable behavior.
-- FR-15: Browser integration sequencing and any safe concurrency rules must be documented with port, preview server, and download-state constraints.
-- FR-16: The project must produce a closeout artifact or note with before/after timing for CI wall clock time, covered UI time, browser lane time, and top slow files.
+1. FR-1: The workspace-setup flow must preserve staged and other local root changes and must not reset, overwrite, or unstage them as part of creating or reusing an executor worktree.
+2. FR-2: The workspace-setup flow must allow worktree creation to continue from existing local repository state when root-level pull is blocked by local changes and no additional remote sync is required for safe creation.
+3. FR-3: The workspace-setup flow must continue treating "no tracking information for the current branch" or equivalent no-upstream conditions as non-fatal when local state is sufficient to continue.
+4. FR-4: The workspace-setup flow must reuse an existing valid executor worktree when possible under the same safer sync policy.
+5. FR-5: The script must emit failure output that categorizes the failed stage as root sync, worktree preparation, or PRD copy.
+6. FR-6: Focused automated verification must cover dirty-root fallback, reusable-worktree behavior, no-upstream behavior, and categorized failure output.
+7. FR-7: Documentation or task-facing output must leave a clear recovery path for rerunning setup and requeueing blocked plan lanes after the shared blocker is removed.
 
 ## Non-Goals
 
-- Rewriting the entire UI test stack.
-- Eliminating browser integration tests.
-- Lowering coverage thresholds as the primary speed strategy.
-- Parallelizing browser tests in a way that knowingly increases flakiness or port conflicts.
-- Replacing targeted end-to-end coverage with only unit tests.
-- Fixing every historical React `act(...)` warning or unrelated console warning.
-- Performing broad unrelated cleanup while changing CI and test strategy.
+- No changes to dynamic workflow runtime, Factory Session execution, MCP tools, MCP host installation, API handlers, or dashboard behavior.
+- No broad git-tooling cleanup outside the shared workspace-preparation flow.
+- No new workflow-run vocabulary or separate product model outside the current Factory and worktree grammar.
+- No automatic queue mutation or lane requeue orchestration beyond leaving clear diagnostics and next steps.
 
-## Supporting Technical and UX Considerations
+## Supporting Technical Considerations
 
-- CI operator experience matters: required lanes should remain easy to run locally and failures should identify the exact rerun command.
-- Faster CI is only valuable if failures remain deterministic and attributable.
-- Browser integration logs must stay readable when run near other long-running lanes.
-- Sharding should respect CI executor capacity; too many shards may add overhead without improving wall clock time.
-- Browser tests that use preview servers, downloads, ports, or global browser state need explicit isolation before any file-level concurrency.
-- Frontend-visible changes to test fixtures or browser flows should still be verified in a browser, including loading, success, empty, and failure states when those states are affected.
-- Test reports should measure runtime behavior and outcomes, not enforce brittle source-file inventories unless the report itself is the product behavior under test.
+- The script sits at a process and filesystem boundary, so failure handling should preserve actionable subprocess stderr while still classifying the stage clearly.
+- Safe behavior should prefer existing local refs and worktree reuse before requiring remote sync.
+- Regression tests should stay focused on behavior and avoid asserting internal helper layout or script structure.
+- If script output is machine-consumed by later automation, failure categorization should remain stable enough for a planner pass to branch on it.
 
 ## Success Metrics
 
-- Required UI-related `make ci` wall clock time drops by at least 30% from the current measured baseline.
-- Browser integration failures surface before full UI coverage completion in at least 90% of failing browser-regression cases.
-- Main covered UI wall clock time drops by at least 25%.
-- The top 10 slowest UI test files are remeasured after changes, and at least 5 improve materially or have documented blockers.
-- The number of broad app-shell tests above 10 seconds decreases release over release.
-- Browser integration retries due to flake do not increase after CI orchestration and sharding changes.
+- A blocked plan lane can prepare its executor worktree successfully in a dirty-root repository without altering root user work.
+- Reviewers can tell from one failed setup run whether the next action belongs to root cleanup, worktree repair, or PRD artifact repair.
+- The two blocked MCP-install-related plan lanes have a clear shared-path recovery once workspace setup is repaired.
 
 ## Open Questions
 
-- Should the canonical PR path run browser integration first, or run browser integration and UI coverage concurrently under a shared orchestrator?
-- Should the layout performance test remain in the required covered lane, or move to a separate performance verification lane with its own runtime budget?
-- What CI executor capacity is available for coverage sharding, and what default shard count gives the best wall clock improvement without overhead dominating?
+- None.
