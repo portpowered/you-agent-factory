@@ -599,6 +599,11 @@ func (h *ServiceTestHarness) GetFactoryEvents(ctx context.Context) ([]factoryapi
 	return h.svc.GetFactoryEvents(ctx)
 }
 
+// MoveWork applies a synchronous operator relocation through the service layer.
+func (h *ServiceTestHarness) MoveWork(ctx context.Context, workID, stateName string) (interfaces.OperatorMoveResult, error) {
+	return h.svc.MoveWork(ctx, workID, stateName, interfaces.WorkStateChangeSourceAPI, "")
+}
+
 // RunInBackground starts the factory's Run loop in a background goroutine
 // and returns the error channel. Unlike RunUntilComplete, this does NOT
 // block — the caller controls when to stop (via context cancel) and can
