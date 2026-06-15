@@ -8,11 +8,13 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/engine"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
@@ -71,6 +73,7 @@ type MockFactory struct {
 	CloseFactorySessionErr      error
 	MoveWorkErr                 error
 	AppliedOperatorMoveRequests map[string]interfaces.OperatorMoveResult
+	DurableExecutionService     factorysessionexecution.Service
 }
 
 var _ factory.APIFactory = (*MockFactory)(nil)
@@ -82,6 +85,128 @@ var _ apisurface.WorkAPI = (*MockFactory)(nil)
 var _ apisurface.InvocationAPI = (*MockFactory)(nil)
 var _ apisurface.APISurface = (*MockFactory)(nil)
 var _ apisurface.SessionAPISurface = (*MockFactory)(nil)
+var _ apisurface.DurableSessionExecutionAPI = (*MockFactory)(nil)
+var _ apisurface.DurableSessionLifecycleAPI = (*MockFactory)(nil)
+
+func (m *MockFactory) StartDurableFactorySessionAsync(
+	ctx context.Context,
+	request factoryapi.FactorySessionExecutionRequest,
+) (factoryapi.FactorySessionExecutionResponse, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionExecutionResponse{}, err
+	}
+	startReq, err := factorysession.StartRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionExecutionResponse{}, err
+	}
+	result, err := service.StartAsync(ctx, startReq)
+	if err != nil {
+		return factoryapi.FactorySessionExecutionResponse{}, err
+	}
+	return factorysession.AsyncStartResponseToAPI(result), nil
+}
+
+func (m *MockFactory) CancelDurableFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.FactorySessionLifecycleControlRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	control, err := factorysession.ControlRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := service.Cancel(ctx, sessionID, control)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
+}
+
+func (m *MockFactory) TerminateDurableFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.FactorySessionLifecycleControlRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	control, err := factorysession.ControlRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := service.Terminate(ctx, sessionID, control)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
+}
+
+func (m *MockFactory) PauseDurableFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.FactorySessionLifecycleControlRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	return factoryapi.FactorySessionLifecycleControlResponse{}, errors.New("pause durable factory session is not implemented")
+}
+
+func (m *MockFactory) ResumeDurableFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.FactorySessionLifecycleControlRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	return factoryapi.FactorySessionLifecycleControlResponse{}, errors.New("resume durable factory session is not implemented")
+}
+
+func (m *MockFactory) ApproveDurableFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.FactorySessionApproveRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	return factoryapi.FactorySessionLifecycleControlResponse{}, errors.New("approve durable factory session is not implemented")
+}
+
+func (m *MockFactory) RetryDurableFactorySessionDispatch(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.FactorySessionRetryDispatchRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	return factoryapi.FactorySessionLifecycleControlResponse{}, errors.New("retry durable factory session dispatch is not implemented")
+}
+
+func (m *MockFactory) GetDurableFactorySession(
+	ctx context.Context,
+	sessionID string,
+) (factoryapi.FactorySessionDurableReadModel, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionDurableReadModel{}, err
+	}
+	result, err := service.GetSession(ctx, sessionID)
+	if err != nil {
+		return factoryapi.FactorySessionDurableReadModel{}, err
+	}
+	return factorysession.SessionReadResponseToAPI(result), nil
+}
+
+func (m *MockFactory) StartDurableFactorySessionSync(
+	ctx context.Context,
+	request factoryapi.FactorySessionExecutionRequest,
+) (factoryapi.FactorySessionSyncExecutionResponse, error) {
+	return factoryapi.FactorySessionSyncExecutionResponse{}, errors.New("sync durable factory session start is not implemented")
+}
+
+func (m *MockFactory) requireDurableExecutionService() (factorysessionexecution.Service, error) {
+	if m == nil || m.DurableExecutionService == nil {
+		return nil, errors.New("durable execution service is unavailable")
+	}
+	return m.DurableExecutionService, nil
+}
 
 func (m *MockFactory) Run(_ context.Context) error   { return nil }
 func (m *MockFactory) Pause(_ context.Context) error { return nil }

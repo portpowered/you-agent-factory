@@ -42,7 +42,8 @@ type runtimeSessionState struct {
 	dispatches    []DispatchSummary
 	artifacts     []ArtifactSummary
 	events        []json.RawMessage
-	runtimeDone chan struct{}
+	runtimeDone   chan struct{}
+	runCancel     context.CancelFunc
 }
 
 // RuntimeServiceOption configures one RuntimeService instance.
@@ -106,7 +107,9 @@ func (s *RuntimeService) StartAsync(ctx context.Context, req StartRequest) (Asyn
 	s.startReplay[prepared.Request.RequestID] = record
 	s.mu.Unlock()
 
-	go s.runSession(context.Background(), prepared, state.session.SessionID)
+	runCtx, runCancel := context.WithCancel(context.Background())
+	s.attachRuntimeCancel(state.session.SessionID, runCancel)
+	go s.runSession(runCtx, prepared, state.session.SessionID)
 	return asyncResult, nil
 }
 
@@ -191,20 +194,10 @@ func (s *RuntimeService) replayStoredSyncStart(requestID string) (SyncStartResul
 }
 
 func (s *RuntimeService) launchSyncRuntimeSession(prepared PreparedStart, sessionID string) context.CancelFunc {
-	runCtx := context.Background()
-	var stopRuntime context.CancelFunc
-	if prepared.Request.Wait != nil && prepared.Request.Wait.CancelOnTimeout {
-		var cancel context.CancelFunc
-		runCtx, cancel = context.WithCancel(context.Background())
-		stopRuntime = cancel
-		go func() {
-			defer cancel()
-			s.runSession(runCtx, prepared, sessionID)
-		}()
-		return stopRuntime
-	}
+	runCtx, runCancel := context.WithCancel(context.Background())
+	s.attachRuntimeCancel(sessionID, runCancel)
 	go s.runSession(runCtx, prepared, sessionID)
-	return nil
+	return runCancel
 }
 
 func (s *RuntimeService) awaitSyncStartOutcome(
@@ -300,11 +293,11 @@ func (s *RuntimeService) Resume(ctx context.Context, sessionID string, req Contr
 }
 
 func (s *RuntimeService) Cancel(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
-	return s.unsupportedLifecycleControl(ctx, sessionID, LifecycleControlCancel)
+	return s.applyRuntimeLifecycleControl(ctx, sessionID, LifecycleControlCancel, req)
 }
 
 func (s *RuntimeService) Terminate(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
-	return s.unsupportedLifecycleControl(ctx, sessionID, LifecycleControlTerminate)
+	return s.applyRuntimeLifecycleControl(ctx, sessionID, LifecycleControlTerminate, req)
 }
 
 func (s *RuntimeService) Approve(ctx context.Context, sessionID string, req ApproveRequest) (LifecycleControlResult, error) {
@@ -612,24 +605,47 @@ func (s *RuntimeService) applyRuntimeFailure(sessionID string, failure workflowr
 	if !ok {
 		return
 	}
+	if state.session.Status == LifecycleStatusTerminated {
+		return
+	}
 	finishedAt := s.now().UTC()
-	state.session.Status = LifecycleStatusFailed
+	sessionStatus := LifecycleStatusFailed
+	resultStatus := ResultStatusUnavailable
+	switch failure.Code {
+	case workflowruntime.CodeCanceled:
+		sessionStatus = LifecycleStatusCanceled
+	case workflowruntime.CodeTimeout:
+		sessionStatus = LifecycleStatusTimedOut
+	default:
+		sessionStatus = LifecycleStatusFailed
+	}
+	state.session.Status = sessionStatus
 	if state.session.Lifecycle != nil {
 		state.session.Lifecycle.FinishedAt = &finishedAt
 	}
-	state.session.Failure = &FailureSummary{
-		Reason:  failure.Code,
-		Message: failure.Message,
+	if code := strings.TrimSpace(failure.Code); code != "" && sessionStatus != LifecycleStatusCanceled {
+		state.session.Failure = &FailureSummary{
+			Reason:  code,
+			Message: failure.Message,
+		}
 	}
 	state.session.ResultSummary = &ResultSummary{
-		ResultStatus: string(ResultStatusUnavailable),
+		ResultStatus: string(resultStatus),
+	}
+	availability := defaultUnavailableAvailability()
+	if sessionStatus == LifecycleStatusCanceled {
+		availability = &ResultAvailabilityDetail{
+			Reason:    "SESSION_CANCELED",
+			Message:   "Session was canceled before a final result was produced.",
+			Retryable: false,
+		}
 	}
 	state.result = ResultReadResult{
 		SessionID:     sessionID,
-		ResultStatus:  ResultStatusUnavailable,
-		SessionStatus: LifecycleStatusFailed,
+		ResultStatus:  resultStatus,
+		SessionStatus: sessionStatus,
 		Failure:       cloneFailureSummary(state.session.Failure),
-		Availability:  defaultUnavailableAvailability(),
+		Availability:  availability,
 	}
 	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
 }
@@ -788,6 +804,101 @@ func (s *RuntimeService) unsupportedLifecycleControl(ctx context.Context, sessio
 		Status:    state.session.Status,
 		Message:   ErrUnsupportedControl.Error(),
 	}
+}
+
+func (s *RuntimeService) applyRuntimeLifecycleControl(
+	ctx context.Context,
+	sessionID string,
+	operation LifecycleControlKind,
+	control ControlRequest,
+) (LifecycleControlResult, error) {
+	if err := ctx.Err(); err != nil {
+		return LifecycleControlResult{}, err
+	}
+	id, err := NormalizeSessionID(sessionID)
+	if err != nil {
+		return LifecycleControlResult{}, err
+	}
+	if _, err := NormalizeControlRequest(control); err != nil {
+		return LifecycleControlResult{}, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, ok := s.sessions[id]
+	if !ok {
+		return LifecycleControlResult{}, ErrSessionNotFound
+	}
+
+	currentStatus := state.session.Status
+	outcome := EvaluateLifecycleControl(operation, currentStatus)
+	if outcome == LifecycleControlOutcomeInvalidState || outcome == LifecycleControlOutcomeTerminalSession {
+		return LifecycleControlResult{}, &ControlError{
+			Operation: operation,
+			Outcome:   outcome,
+			Status:    currentStatus,
+			Message:   fmt.Sprintf("%s rejected for session %s in status %s", operation, id, currentStatus),
+		}
+	}
+
+	if outcome == LifecycleControlOutcomeAccepted {
+		switch operation {
+		case LifecycleControlCancel:
+			state.session.Status = LifecycleStatusCanceling
+			state.result.SessionStatus = LifecycleStatusCanceling
+		case LifecycleControlTerminate:
+			finishedAt := s.now().UTC()
+			state.session.Status = LifecycleStatusTerminated
+			state.result.SessionStatus = LifecycleStatusTerminated
+			state.result.ResultStatus = ResultStatusUnavailable
+			state.result.Availability = defaultUnavailableAvailability()
+			if state.session.Lifecycle != nil {
+				state.session.Lifecycle.FinishedAt = &finishedAt
+				state.session.Lifecycle.TerminatedAt = &finishedAt
+			}
+			state.session.ResultSummary = &ResultSummary{
+				ResultStatus: string(ResultStatusUnavailable),
+			}
+		}
+		if state.runCancel != nil {
+			state.runCancel()
+		}
+		state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+	}
+
+	return runtimeLifecycleControlResultFromState(state, id, operation, outcome), nil
+}
+
+func runtimeLifecycleControlResultFromState(
+	state *runtimeSessionState,
+	id string,
+	operation LifecycleControlKind,
+	outcome LifecycleControlOutcome,
+) LifecycleControlResult {
+	result := LifecycleControlResult{
+		SessionID: id,
+		Operation: operation,
+		Outcome:   outcome,
+		Status:    state.session.Status,
+		Links:     LifecycleControlLinksForSession(id, true),
+	}
+	if outcome == LifecycleControlOutcomeAccepted || outcome == LifecycleControlOutcomeNoOp {
+		session := cloneSessionRead(state.session)
+		result.Session = &session
+	}
+	return result
+}
+
+func (s *RuntimeService) attachRuntimeCancel(sessionID string, runCancel context.CancelFunc) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	state, ok := s.sessions[sessionID]
+	if !ok {
+		runCancel()
+		return
+	}
+	state.runCancel = runCancel
 }
 
 func newDurableSessionID() string {
