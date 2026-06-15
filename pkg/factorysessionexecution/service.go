@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
-	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
 )
 
 // Service is the shared durable factory-session execution contract consumed by
@@ -63,13 +62,6 @@ func LifecycleControlLinksForSession(sessionID string, includeEvents bool) Lifec
 // StartSourceContext supplies filesystem roots for durable start source resolution.
 type StartSourceContext struct {
 	ProjectRoot string
-}
-
-// ResolveStartSource resolves one normalized start request through the JavaScript
-// orchestrator source contract used by durable Factory Session start paths.
-func ResolveStartSource(req StartRequest, ctx StartSourceContext) (ResolvedSource, error) {
-	resolved, _, err := resolveStartSourceWithResolution(req, ctx)
-	return resolved, err
 }
 
 func startSourceRequest(source Source) workflowsource.Request {
@@ -159,36 +151,5 @@ func NewExecutionService(provider ExecutionProvider, config ServiceConfig) (Serv
 		}), nil
 	default:
 		return nil, NewValidationError("provider", "unsupported execution provider")
-	}
-}
-
-// LoadStartSourceContent reads workflow source bytes for one normalized start request
-// after source identity resolution.
-func LoadStartSourceContent(req StartRequest, resolved ResolvedSource, ctx StartSourceContext) (string, error) {
-	switch req.Source.Kind {
-	case workflowsource.KindInlineWorkflow:
-		if req.Source.InlineWorkflow == nil {
-			return "", NewValidationError("source.inlineWorkflow", "inlineWorkflow is required")
-		}
-		inlineSource := strings.TrimSpace(req.Source.InlineWorkflow.InlineSource)
-		if inlineSource == "" {
-			return "", NewValidationError("source.inlineWorkflow.inlineSource", "inlineSource is required")
-		}
-		return inlineSource, nil
-	default:
-		projectRoot := strings.TrimSpace(ctx.ProjectRoot)
-		if projectRoot == "" {
-			return "", NewValidationError("projectRoot", "projectRoot is required")
-		}
-		sourceRef := strings.TrimSpace(resolved.SourceRef)
-		if sourceRef == "" {
-			return "", NewValidationError("source", "resolved workflow source ref is empty")
-		}
-		reader := workflowvalidation.FileSourceReader(projectRoot)
-		content, err := reader.ReadWorkflowSource(sourceRef)
-		if err != nil {
-			return "", NewValidationError("source", fmt.Sprintf("workflow source %q is not readable: %v", sourceRef, err))
-		}
-		return content, nil
 	}
 }
