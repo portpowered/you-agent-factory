@@ -7,7 +7,7 @@ Reads tasks/todo/<prd-name>.json, uses <prd-name> as the branch/worktree name,
 syncs main, creates or reuses a git worktree, copies the PRD (and optional .md)
 into the worktree root, and prints a JSON result to stdout.
 
-Exit 0 on success (stdout = JSON blob), exit 1 on failure (stderr = error).
+Exit 0 on success (stdout = JSON blob), exit 1 on failure (stderr = stage-specific error).
 """
 
 import json
@@ -311,7 +311,7 @@ def main():
         print(f"Root sync: {sync_outcome}", file=sys.stderr)
         prune_worktrees(repo_root)
     except RuntimeError as e:
-        print(f"Git sync failed: {e}", file=sys.stderr)
+        print(f"Root sync failed: {e}", file=sys.stderr)
         sys.exit(1)
 
     # Create or reuse worktree.
@@ -326,7 +326,7 @@ def main():
     try:
         dest_json, dest_md = copy_prd_files(prd_json_path, prd_md_path, worktree_dir)
     except OSError as e:
-        print(f"Failed to copy PRD files: {e}", file=sys.stderr)
+        print(f"PRD copy failed: {e}", file=sys.stderr)
         sys.exit(1)
 
     # Output result.

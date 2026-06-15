@@ -338,7 +338,7 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         second = run_setup_workspace(local_repo, prd_name)
         self.assertEqual(second.returncode, 1, second.stdout)
         self.assertIn("Worktree preparation failed", second.stderr)
-        self.assertNotIn("Git sync failed", second.stderr)
+        self.assertNotIn("Root sync failed", second.stderr)
         self.assertIn("worktree branch update failed", second.stderr.lower())
 
 
