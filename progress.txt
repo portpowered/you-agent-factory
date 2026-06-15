@@ -1,5 +1,7 @@
 ## Codebase Patterns
 - Runtime worker taxonomy: author `INFERENCE_WORKER`, `AGENT_WORKER`, `SCRIPT_WORKER`, and `POLLER_WORKER` in `api/components/schemas/data-models/WorkerType.yaml` while keeping legacy `MODEL_WORKER` / `HOSTED_WORKER` accepted. Normalize enum values through `pkg/interfaces/public_factory_enums.go` and gate compatibility through `IsInferenceWorkerType`, `IsPollerWorkerType`, and `ProjectWorkerBehaviorClass` instead of comparing only legacy constants.
+- Runtime workstation taxonomy: author `INFERENCE_RUN`, `AGENT_RUN`, `SCRIPT_RUN`, and `POLLER_RUN` in `api/components/schemas/data-models/WorkstationType.yaml` while keeping legacy `MODEL_INVOKE` / `MODEL_WORKSTATION` accepted. Normalize enum values through `pkg/interfaces/public_factory_enums.go` and gate compatibility through `IsInferenceRunWorkstationType`, `IsPollerRunWorkstationType`, and `ProjectWorkstationBehaviorClass` instead of comparing only legacy string constants. Map public `behavior: POLLER` through `internalFactoryWorkstationKindFromPublic` to `WorkstationKindPoller`.
+- Worker/workstation behavior compatibility: compare normalized behavior labels via `RuntimeBehaviorClassLabel` (`INFERENCE_WORKER` pairs with `INFERENCE_RUN`) in `pkg/interfaces/worker_workstation_compatibility.go`; grandfather legacy `MODEL_WORKSTATION` + `MODEL_WORKER`, legacy `MODEL_WORKSTATION` + `SCRIPT_WORKER`, legacy empty standard workstations + inference workers, and poller script/hosted bindings through `IsLegacyGrandfatheredWorkerWorkstationPair`; enforce mismatches in `ruleWorkerWorkstationBehaviorCompatibility` with `workstation-worker-behavior-compatibility` findings.
 - Keep `FakeService` and `RuntimeService` as parallel `factorysessionexecution.Service` implementations: mock-provider transports inject `FakeService` via `NewFakeService`, `NewFakeServiceFromContractFixtures`, `WithFakeScenarios`, and `WithPersistedSessionSeeds` without JavaScript runtime setup; real simple-workflow execution uses `NewRuntimeService` behind the same contract. Prove coexistence in `fake_service_coexistence_test.go` alongside `fake_service_test.go` and runtime-backed tests.
 - Use `factorysessionexecution.PrepareStart` to normalize durable JavaScript session starts: it chains `NormalizeStartRequest`, `resolveStartSourceWithResolution`, wrapped-source validation (IIFE wrap matching `workflowruntime.Run`), args JSON checks, `workflowpolicy.Resolve`, and wait-option validation before runtime execution.
 - Runtime simple-workflow fixtures live in `pkg/orchestrators/javascript/runtime/testdata/`; factorysessionexecution tests can read them via `../orchestrators/javascript/runtime/testdata/<name>`.
@@ -117,4 +119,39 @@
   - Keep legacy worker strings intact in normalized config; use `ProjectWorkerBehaviorClass` for inference/poller compatibility instead of rewriting `MODEL_WORKER` to `INFERENCE_WORKER` during load.
   - `make generate-api` needs `ui/node_modules` installed in worktrees (`npm ci` in `ui/`) before TypeScript enum regeneration succeeds.
   - OpenAPI taxonomy acceptance tests should assert `GeneratedFactoryFromOpenAPIJSON` + `FactoryConfigFromOpenAPI` outcomes; full `NewConfigValidator().Validate` needs complete factory fixtures unrelated to taxonomy.
+---
+
+## 2026-06-15T15:50:00Z - local-agent-cli-runtime-taxonomy-split-002
+- Added runtime workstation taxonomy to `WorkstationType.yaml` (`INFERENCE_RUN`, `AGENT_RUN`, `SCRIPT_RUN`, `POLLER_RUN`) while preserving legacy `MODEL_INVOKE` / `MODEL_WORKSTATION` acceptance.
+- Introduced workstation behavior-class helpers in `pkg/interfaces/public_factory_enums.go` and wired inference-run validation, model-operation binding resolution, and poller kind mapping through `IsInferenceRunWorkstationType`, `IsPollerRunWorkstationType`, and `ProjectWorkstationBehaviorClass`.
+- Fixed public `behavior: POLLER` mapping to internal `WorkstationKindPoller` in `factory_config_mapping_internal.go`.
+- Regenerated OpenAPI/Go/TypeScript artifacts and added contract/load/projection/save tests in `workstation_taxonomy_test.go` and `openapi_factory_workstation_taxonomy_test.go`.
+- Updated `docs/internal/processes/api-relevant-files.md` with the workstation taxonomy wiring pattern.
+- **Learnings for future iterations:**
+  - Keep legacy workstation strings intact in normalized config; use `ProjectWorkstationBehaviorClass` for inference/agent/script/poller compatibility instead of rewriting `MODEL_INVOKE` to `INFERENCE_RUN` during load.
+  - `internalFactoryWorkstationKindFromPublic` must include the `POLLER` case or legacy poller factories store kind `"POLLER"` and fail poller validation/runtime paths expecting `WorkstationKindPoller`.
+  - Split large taxonomy table tests with `t.Helper()` assertion helpers early to stay under the `make backend-size` 100-line function cap.
+---
+
+## 2026-06-15T16:30:00Z - local-agent-cli-runtime-taxonomy-split-003
+- Added worker/workstation behavior compatibility helpers in `pkg/interfaces/worker_workstation_compatibility.go` with normalized behavior-class comparison, legacy grandfathered pairings, and actionable mismatch messages using inference/agent/script/poller terminology.
+- Wired `ruleWorkerWorkstationBehaviorCompatibility` into `ConfigValidator` and delegated inference-run worker type mismatches from model-invoke validation to the shared compatibility rule.
+- Added focused compatibility tests in `worker_workstation_compatibility_test.go` and `config_validator_taxonomy_compatibility_test.go`.
+- Updated `docs/internal/processes/api-relevant-files.md` with the compatibility wiring pattern.
+- **Learnings for future iterations:**
+  - Compare worker/workstation behavior through `RuntimeBehaviorClassLabel`, not raw enum strings (`INFERENCE_WORKER` != `INFERENCE_RUN` even when compatible).
+  - Keep legacy `MODEL_WORKSTATION` + `MODEL_WORKER` grandfathered explicitly; new `AGENT_RUN` + `INFERENCE_WORKER` pairings should fail validation.
+  - Skip `ruleWorkerWorkstationBehaviorCompatibility` for `WorkstationKindPoller` workstations so existing poller-specific findings stay authoritative.
+  - `assertFindingMatch` should continue scanning when the rule matches but the path does not, so multi-finding tables can target specific workstations.
+---
+
+## 2026-06-15T17:15:00Z - local-agent-cli-runtime-taxonomy-split-004
+- Added `pkg/service/inference_runtime_taxonomy_test.go` proving bounded inference execution parity for `INFERENCE_WORKER`/`INFERENCE_RUN` and legacy `MODEL_WORKER`/`MODEL_INVOKE`, canonical inference events via `providerCommandRunner` + `RecordingProvider`, equivalent result/provider-call shapes, OmniVoice packaged-factory inference behavior, managed-runtime OmniVoice routing, and `AGENT_RUN` rejection before dispatch.
+- Extended managed-runtime inference gates in `pkg/localmodels/runtime.go` and `pkg/localmodels/catalog.go` to use `interfaces.IsInferenceWorkerType` instead of literal `MODEL_WORKER` checks; added catalog/manager coverage for inference-worker aliases.
+- Grandfathered additional legacy workstation bindings (`MODEL_WORKSTATION` + `SCRIPT_WORKER`, empty standard workstations + inference workers) so existing service/runtime fixtures keep loading while explicit taxonomy mismatches still fail.
+- Updated `pkg/packagedfactories/tts/metadata_test.go` to accept `INFERENCE_RUN` invoke workstations and documented runtime inference parity wiring in `docs/internal/processes/api-relevant-files.md`.
+- **Learnings for future iterations:**
+  - Provider override fixtures record inference events only through `providerCommandRunner` + `RecordingProvider`; direct `providerCallRecorder` overrides execute inference but do not emit canonical inference events in service tests.
+  - Managed-runtime catalog/build paths must gate on `IsInferenceWorkerType`, not only `MODEL_WORKER`, or `INFERENCE_WORKER` OmniVoice factories fail readiness with `model not found`.
+  - Legacy factories commonly pair empty/`MODEL_WORKSTATION` workstations with `SCRIPT_WORKER` or inference workers; grandfather those bindings separately from new explicit `AGENT_RUN` + `INFERENCE_WORKER` mismatches.
 ---

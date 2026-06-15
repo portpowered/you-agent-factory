@@ -66,14 +66,14 @@ Add the new worker and workstation taxonomy to the public contract, config loade
 
 **Acceptance Criteria:**
 
-- [ ] Public factory config and API payloads accept `INFERENCE_RUN`, `AGENT_RUN`, `SCRIPT_RUN`, and `POLLER_RUN` wherever workstation type values are accepted.
-- [ ] Existing factories using `MODEL_INVOKE` still load, validate, and execute as inference-run behavior.
-- [ ] Existing poller workstations still load, validate, and execute through poller-run compatibility behavior.
-- [ ] New authored factory documents save new workstation names without downgrading to legacy names.
-- [ ] Legacy factory save behavior follows the documented compatibility policy and does not silently break executable factories.
-- [ ] Contract and config tests cover new workstation values and legacy aliases through observable load/projection/save outcomes.
-- [ ] Typecheck passes
-- [ ] Tests pass
+- [x] Public factory config and API payloads accept `INFERENCE_RUN`, `AGENT_RUN`, `SCRIPT_RUN`, and `POLLER_RUN` wherever workstation type values are accepted.
+- [x] Existing factories using `MODEL_INVOKE` still load, validate, and execute as inference-run behavior.
+- [x] Existing poller workstations still load, validate, and execute through poller-run compatibility behavior.
+- [x] New authored factory documents save new workstation names without downgrading to legacy names.
+- [x] Legacy factory save behavior follows the documented compatibility policy and does not silently break executable factories.
+- [x] Contract and config tests cover new workstation values and legacy aliases through observable load/projection/save outcomes.
+- [x] Typecheck passes
+- [x] Tests pass
 
 ### local-agent-cli-runtime-taxonomy-split-003: Validate Worker And Workstation Compatibility
 
@@ -81,13 +81,13 @@ Add the new worker and workstation taxonomy to the public contract, config loade
 
 **Acceptance Criteria:**
 
-- [ ] Validation accepts compatible pairings: `INFERENCE_RUN` with `INFERENCE_WORKER`, `AGENT_RUN` with `AGENT_WORKER`, `SCRIPT_RUN` with `SCRIPT_WORKER`, and `POLLER_RUN` with `POLLER_WORKER`, including supported legacy aliases.
-- [ ] Validation rejects incompatible pairings such as `AGENT_RUN` with `INFERENCE_WORKER`, `INFERENCE_RUN` with `AGENT_WORKER`, and `POLLER_RUN` with non-poller workers.
-- [ ] Validation findings identify the incompatible worker and workstation values and use inference, agent, script, or poller terminology.
-- [ ] Legacy config reports actionable findings without requiring immediate migration to new names.
-- [ ] Tests cover valid pairings, invalid pairings, and legacy aliases using behavior assertions rather than source-file or route inventories.
-- [ ] Typecheck passes
-- [ ] Tests pass
+- [x] Validation accepts compatible pairings: `INFERENCE_RUN` with `INFERENCE_WORKER`, `AGENT_RUN` with `AGENT_WORKER`, `SCRIPT_RUN` with `SCRIPT_WORKER`, and `POLLER_RUN` with `POLLER_WORKER`, including supported legacy aliases.
+- [x] Validation rejects incompatible pairings such as `AGENT_RUN` with `INFERENCE_WORKER`, `INFERENCE_RUN` with `AGENT_WORKER`, and `POLLER_RUN` with non-poller workers.
+- [x] Validation findings identify the incompatible worker and workstation values and use inference, agent, script, or poller terminology.
+- [x] Legacy config reports actionable findings without requiring immediate migration to new names.
+- [x] Tests cover valid pairings, invalid pairings, and legacy aliases using behavior assertions rather than source-file or route inventories.
+- [x] Typecheck passes
+- [x] Tests pass
 
 ### local-agent-cli-runtime-taxonomy-split-004: Preserve Runtime Execution And Events For Inference Compatibility
 
