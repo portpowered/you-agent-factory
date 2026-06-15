@@ -106,14 +106,10 @@ func (s *FakeService) StartAsync(ctx context.Context, req StartRequest) (AsyncSt
 		if err := CheckRequestIDReplay(normalized.RequestID, replay.tupleHash, tupleHash); err != nil {
 			return AsyncStartResult{}, err
 		}
-		state, ok := s.sessions[replay.sessionID]
-		if !ok {
-			return AsyncStartResult{}, ErrSessionNotFound
+		if err := CheckAsyncStartReplayMode(replay.asyncStart); err != nil {
+			return AsyncStartResult{}, err
 		}
-		if replay.asyncStart != nil {
-			return *replay.asyncStart, nil
-		}
-		return s.asyncStartFromState(state), nil
+		return *replay.asyncStart, nil
 	}
 
 	scenario, ok := s.scenariosByRequestID[normalized.RequestID]
@@ -151,14 +147,13 @@ func (s *FakeService) StartSync(ctx context.Context, req StartRequest) (SyncStar
 		if err := CheckRequestIDReplay(normalized.RequestID, replay.tupleHash, tupleHash); err != nil {
 			return SyncStartResult{}, err
 		}
-		state, ok := s.sessions[replay.sessionID]
-		if !ok {
-			return SyncStartResult{}, ErrSessionNotFound
-		}
 		if replay.syncStart != nil {
 			return *replay.syncStart, nil
 		}
-		return s.syncStartFromState(state), nil
+		if err := CheckSyncStartReplayMode(replay.asyncStart, replay.syncStart, false); err != nil {
+			return SyncStartResult{}, err
+		}
+		return SyncStartResult{}, ErrSessionNotFound
 	}
 
 	scenario, ok := s.scenariosByRequestID[normalized.RequestID]
