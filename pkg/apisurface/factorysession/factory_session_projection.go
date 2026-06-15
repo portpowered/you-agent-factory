@@ -227,13 +227,17 @@ func EventReadResponseToAPI(result factorysessionexecution.EventReadResult) []fa
 // FactoryEventStreamFromReadResult maps one durable event read result into the
 // shared reconnect stream shape used by API, CLI, MCP, and UI transports.
 func FactoryEventStreamFromReadResult(result factorysessionexecution.EventReadResult) *interfaces.FactoryEventStream {
+	closed := make(chan factoryapi.FactoryEvent)
+	close(closed)
+	stream := &interfaces.FactoryEventStream{
+		Events: closed,
+	}
 	events := EventReadResponseToAPI(result)
 	if len(events) == 0 {
-		return &interfaces.FactoryEventStream{}
+		return stream
 	}
-	return &interfaces.FactoryEventStream{
-		History: events,
-	}
+	stream.History = events
+	return stream
 }
 
 func dispatchSummaryToAPI(dispatch factorysessionexecution.DispatchSummary) factoryapi.FactorySessionDispatchSummary {
