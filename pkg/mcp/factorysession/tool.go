@@ -2,7 +2,11 @@
 // operations backed by the shared factorysessionexecution service contract.
 package factorysession
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+)
 
 // Tool names use Factory Session vocabulary and align with durable REST routes.
 const (
@@ -77,4 +81,18 @@ type ToolResponse[T any] struct {
 func (t ToolDefinition) MarshalJSON() ([]byte, error) {
 	type alias ToolDefinition
 	return json.Marshal(alias(t))
+}
+
+// PreviewToolResponse maps one Factory preview outcome into the stable MCP tool
+// response envelope shared by validate and start-preview tools.
+func PreviewToolResponse(result factoryapi.FactoryPreviewResult, err error) ToolResponse[factoryapi.FactoryPreviewResult] {
+	if err != nil {
+		envelope := requestValidationErrorEnvelope(err)
+		return ToolResponse[factoryapi.FactoryPreviewResult]{Error: &envelope}
+	}
+	if !result.Valid {
+		envelope := validationErrorEnvelopeFromPreview(result)
+		return ToolResponse[factoryapi.FactoryPreviewResult]{Error: &envelope}
+	}
+	return ToolResponse[factoryapi.FactoryPreviewResult]{Result: &result}
 }

@@ -1,4 +1,4 @@
-package cli
+package mcpcli
 
 import (
 	"context"
@@ -6,11 +6,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	mcpcli "github.com/portpowered/infinite-you/pkg/cli/mcp"
 	"github.com/spf13/cobra"
 )
 
-func newMCPCommand(_ *cliDiagnosticsOptions) *cobra.Command {
+// NewCommand returns the top-level `you mcp` command with the canonical serve subcommand.
+func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "mcp",
 		Short: "Serve repo-owned MCP tools over stdio",
@@ -18,11 +18,11 @@ func newMCPCommand(_ *cliDiagnosticsOptions) *cobra.Command {
 			"Subcommands:\n" +
 			"  serve   start the canonical stdio MCP server for Factory preview tools",
 	}
-	cmd.AddCommand(newMCPServeCommand())
+	cmd.AddCommand(newServeCommand())
 	return cmd
 }
 
-func newMCPServeCommand() *cobra.Command {
+func newServeCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Serve workflow preview MCP tools over stdio",
@@ -33,7 +33,7 @@ func newMCPServeCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			return mcpcli.Serve(ctx, mcpcli.ServeConfig{
+			return Serve(ctx, ServeConfig{
 				Input:  cmd.InOrStdin(),
 				Output: cmd.OutOrStdout(),
 			})

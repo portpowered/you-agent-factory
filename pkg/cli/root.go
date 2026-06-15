@@ -18,6 +18,7 @@ import (
 	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
+	mcpcli "github.com/portpowered/infinite-you/pkg/cli/mcp"
 	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	sessioncli "github.com/portpowered/infinite-you/pkg/cli/session"
@@ -122,7 +123,7 @@ func NewRootCommand() *cobra.Command {
 		newDocsCommand(diagnostics),
 		newFactoryCommand(globals, diagnostics),
 		newInitCommand(globals, diagnostics),
-		newMCPCommand(diagnostics),
+		mcpcli.NewCommand(),
 		newModelsCommand(globals, diagnostics),
 		newRunCommand(globals, diagnostics, operatorDefaults),
 		newSubmitCommand(globals, diagnostics),
