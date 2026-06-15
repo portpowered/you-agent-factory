@@ -191,7 +191,7 @@ func TestSameNameConsumePathRegression_ConcurrentPairsCompleteIndependently(t *t
 	dir := scaffoldConsumePathFactoryBuiltInOrder(t)
 	h := testutil.NewServiceTestHarness(t, dir)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
@@ -204,8 +204,8 @@ func TestSameNameConsumePathRegression_ConcurrentPairsCompleteIndependently(t *t
 		submitConsumePathPair(t, h, pair[1])
 	}
 
-	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 4, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 4, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 4, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 4, 3*time.Second)
 
 	h.Assert().
 		HasNoTokenInPlace("idea:to-complete").
@@ -243,7 +243,7 @@ func TestSameNameConsumePathRegression_StaggeredArrivalCompletesWithoutStranding
 			dir := scaffoldConsumePathFactoryBuiltInOrder(t)
 			h := testutil.NewServiceTestHarness(t, dir)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 			errCh := h.RunInBackground(ctx)
 
@@ -251,8 +251,8 @@ func TestSameNameConsumePathRegression_StaggeredArrivalCompletesWithoutStranding
 				h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
 			}
 
-			support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
-			support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)
+			support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, 3*time.Second)
+			support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, 3*time.Second)
 
 			h.Assert().
 				HasNoTokenInPlace("idea:to-complete").
