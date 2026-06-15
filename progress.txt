@@ -4,9 +4,10 @@
 - Use `factorysessionexecution.PrepareStart` to normalize durable JavaScript session starts: it chains `NormalizeStartRequest`, `resolveStartSourceWithResolution`, wrapped-source validation (IIFE wrap matching `workflowruntime.Run`), args JSON checks, `workflowpolicy.Resolve`, and wait-option validation before runtime execution.
 - Runtime simple-workflow fixtures live in `pkg/orchestrators/javascript/runtime/testdata/`; factorysessionexecution tests can read them via `../orchestrators/javascript/runtime/testdata/<name>`.
 - Durable start source resolution is shared through `resolveStartSourceWithResolution`; `ResolveStartSource` is a thin wrapper returning only `ResolvedSource`.
+- Scoped `GET /factory-sessions` merges workspace `FactorySessionSummary` rows unchanged with durable execution listing from `ListDurableExecutionSessions` + `ApplySessionListScope`; do not round-trip workspace rows through `LiveSessionSummary` or `Target` metadata is lost. `dur-sess-*` reads route to `GetDurableFactorySession`; live Petri ids keep the existing `SessionAPI` path.
 - `RuntimeService` request-id replay stores the first observed async/sync start responses in `runtimeStartReplayRecord` (`asyncStart` / `syncStart`); sync timeout replays must return the stored `TIMED_OUT` shape even after the session eventually completes. Idempotency tuple hashing excludes `wait` options—use args/source/policy changes to prove conflicts in tests.
 - `factorysessionexecution.RuntimeService` implements async/sync simple-JS starts via `PrepareStart` + background `workflowruntime.Run` (`runSession` closes per-session `runtimeDone` when execution finishes). `StartAsync` returns immediate `RUNNING`; `StartSync` waits for terminal completion or `wait.timeoutMillis`, returns `COMPLETED` with projected result JSON or `TIMED_OUT` with `SYNC_WAIT_TIMED_OUT` availability while keeping the session running unless `wait.cancelOnTimeout` is true. In-memory `GetSession`/`GetResult`/`ReadEvents` read `runtimeSessionState`; canonical events use `BuildCanonicalRuntimeSessionEvents` (`runtime-service` source). Use `busy-loop.workflow.js` for non-terminating sync-timeout tests; use `simple-final.workflow.js` for completion; use a temp-dir spin-loop workflow when proving eventual completion after sync timeout.
-- Terminal runtime session results normalize through `projectRuntimeSuccessResult` (`workflowresult.ProjectPrimaryResult` + `workcontent.GeneratedPtrFromParts`); durable `PrimaryResult` is WorkContent JSON (e.g. `[{"type":"JSON","json":{...}}]`), not raw workflow return JSON. Prove API-shaped parity with `factorysession.SessionReadResponseToAPI` / `ResultResponseToAPI` plus `ValidateResultMatchesSessionRead` in `runtime_projection_test.go`.
+- Durable `GET /factory-sessions/{session_id}/results` routes `dur-sess-*` ids through `GetDurableFactorySessionResult` on `FactoryService`/`MockFactory`, maps params with `ResultRequestFromAPI`, projects responses with `ResultResponseToAPI`, and returns HTTP 200 typed `FactorySessionResult` bodies for `NOT_READY`/`UNAVAILABLE` (not error envelopes). Live Petri ids on `/results` return `NOT_FOUND`.
 - Canonical runtime session lifecycle events replay through `ReplaySessionProjection` (`session_event_projection.go`) into durable `SessionReadResult`/`ResultReadResult` projections; `BuildCanonicalRuntimeSessionEvents` may include bounded `resultSummary` text on `SESSION_RESULT_UPDATED`, and sync-timeout paths rebuild events after `SYNC_WAIT_TIMED_OUT` availability changes. Prove live-vs-replayed parity and idempotent replay in `runtime_event_replay_test.go`.
 - CI `Build, Lint, and API` runs `make backend-size` on owned Go packages (100-line function cap). Split large test functions with `t.Helper()` assertion helpers (see `runtime_projection_test.go`) rather than inline assertion blocks.
 
@@ -116,4 +117,25 @@
   - Durable async/sync starts are not session-scoped routes—handlers type-assert `apisurface.DurableSessionExecutionAPI` on `s.runtime`, not `requireSessionRuntime`.
   - `FactoryService.durableProjectRoot()` prefers `cfg.ExecutionBaseDir`, then `cfg.Dir`, then `factoryRootDir` for `StartPrepareContext.ProjectRoot`.
   - API tests should inject `RuntimeService` via `MockFactory.DurableExecutionService` to prove real-backend loopback without standing up full `FactoryService`.
+---
+
+## 2026-06-15T18:45:14Z - dynamic-workflows-cell-real-backend-api-session-parity-002
+- Wired scoped `GET /factory-sessions` to merge workspace Petri session rows with runtime-backed durable listing via `ListDurableExecutionSessions`, `ApplySessionListScope`, and `factorysession.ListSessionsResponseToAPI`.
+- Routed `dur-sess-*` `GET /factory-sessions/{session_id}` reads through `GetDurableFactorySession` with typed `NOT_FOUND` mapping for missing durable sessions; preserved live Petri get compatibility for non-durable ids.
+- Added `pkg/service/durable_session_read.go`, `pkg/api/handlers_durable_read.go`, runtime-backed API tests in `pkg/api/server_durable_session_read_test.go`, and `MockFactory` durable list/get delegation.
+- Files changed: `pkg/service/durable_session_read.go`, `pkg/api/handlers_durable_read.go`, `pkg/api/handlers_factory.go`, `pkg/api/server_durable_session_read_test.go`, `pkg/api/server_factory_sessions_test.go`, `pkg/testutil/mock_factory.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Workspace list rows must stay as original `FactorySessionSummary` values during merge; converting through `LiveSessionSummary` drops `Target` and other live-session fields.
+  - `MockFactory.ListDurableExecutionSessions` should return an empty scoped result (not error) when `DurableExecutionService` is nil so legacy live-only list tests keep passing.
+  - Terminal simple-final durable sessions appear under `scope=persisted` via `IsPersistedListCandidate`, not `scope=live`.
+---
+
+## 2026-06-15T18:49:22Z - dynamic-workflows-cell-real-backend-api-session-parity-003
+- Wired `GET /factory-sessions/{session_id}/results` for `dur-sess-*` sessions through `GetDurableFactorySessionResult`: service delegates to `RuntimeService.GetResult`, handlers map validation/not-found errors, and non-ready/unavailable results return HTTP 200 `FactorySessionResult` bodies with availability details.
+- Added runtime-backed API tests for completed final results, service-vs-API `ResultResponseToAPI` parity, running `NOT_READY`, sync-timeout `SYNC_WAIT_TIMED_OUT`, missing durable session, and live Petri `NOT_FOUND` on `/results`.
+- Files changed: `pkg/service/durable_session_read.go`, `pkg/api/handlers_durable_read.go`, `pkg/api/handlers_factory.go`, `pkg/api/server_durable_session_result_test.go`, `pkg/testutil/mock_factory.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Durable result reads follow the OpenAPI contract: `NOT_READY` and `UNAVAILABLE` are success responses with typed availability fields, unlike MCP envelopes that wrap them as tool errors.
+  - API loopback projection parity tests should compare marshaled `ResultResponseToAPI(service.GetResult(...))` JSON to the HTTP response rather than re-asserting fixture field values that depend on start args (e.g. `simple-final` echo uses request args subject).
+  - Reuse `requireDurableSessionResultGetter` + `durableSessionResultGetter` alongside the existing durable get/list helpers when adding events/dispatch/artifact routes in story 004+.
 ---
