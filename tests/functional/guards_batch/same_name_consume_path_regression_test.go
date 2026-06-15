@@ -245,11 +245,15 @@ func TestSameNameConsumePathRegression_StaggeredArrivalCompletesWithoutStranding
 
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
+
+			// Queue the first arrival before the engine run loop starts so the
+			// runtime cannot terminate on an empty initial tick pass.
+			h.SubmitFull(context.Background(), []interfaces.SubmitRequest{tc.order[0]})
+
 			errCh := h.RunInBackground(ctx)
 
-			for _, req := range tc.order {
-				h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
-			}
+			// Second arrival lands while the engine is already running.
+			h.SubmitFull(context.Background(), []interfaces.SubmitRequest{tc.order[1]})
 
 			support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
 			support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)

@@ -622,5 +622,8 @@ func (h *ServiceTestHarness) RunInBackground(ctx context.Context) <-chan error {
 	go func() {
 		errCh <- h.run(ctx)
 	}()
+	if err := h.waitForRuntimeAvailability(ctx, errCh); err != nil {
+		h.t.Fatalf("ServiceTestHarness.RunInBackground: %v", err)
+	}
 	return errCh
 }
