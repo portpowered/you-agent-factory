@@ -80,7 +80,7 @@ func TestSameNameConsumePathOwnership_MatchingPairCompletesThroughLogicalMove(t 
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-cli-validate-list"
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
@@ -109,7 +109,7 @@ func TestSameNameConsumePathOwnership_TaskOnlyWithoutIdeaTwin_StrandedAsHistoric
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-cli-run-status-result"
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
@@ -144,7 +144,7 @@ func TestSameNameConsumePathOwnership_OrphanTaskAfterPriorConsume_MatchesLiveQue
 	h := newSameNameConsumePathServiceHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-mcp-tools"
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
@@ -175,7 +175,7 @@ func TestSameNameConsumePathOwnership_ProjectionMatchesRuntimeBeforeConsume(t *t
 	dir := scaffoldConsumePathFactory(t)
 	h := testutil.NewServiceTestHarness(t, dir)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 

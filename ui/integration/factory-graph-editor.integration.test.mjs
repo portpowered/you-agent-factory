@@ -686,7 +686,7 @@ describe.sequential("factory graph editor browser integration", () => {
               body: "Review the drafted story.",
               inputs: [],
               name: "review",
-              type: "AGENT_RUN",
+              type: "INFERENCE_RUN",
               worker: "writer",
             },
           ],
