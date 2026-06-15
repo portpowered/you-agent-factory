@@ -303,6 +303,50 @@ func TestEnablementEvaluator_SameNameGuardFindsLaterMatchingBinding(t *testing.T
 	}
 }
 
+func TestEnablementEvaluator_SameNameGuardFactoryConsumeInputOrder(t *testing.T) {
+	eval := NewEnablementEvaluator(nil)
+
+	n := &state.Net{
+		Places: map[string]*petri.Place{
+			"idea:to-complete": {ID: "idea:to-complete"},
+			"task:to-complete": {ID: "task:to-complete"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"consume": {
+				ID:   "consume",
+				Name: "consume",
+				InputArcs: []petri.Arc{
+					{
+						ID:          "idea-in",
+						Name:        "idea:to-complete:to:consume",
+						PlaceID:     "idea:to-complete",
+						Direction:   petri.ArcInput,
+						Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+						Guard:       &petri.SameNameGuard{MatchBinding: "task:to-complete:to:consume"},
+					},
+					{
+						ID:          "task-in",
+						Name:        "task:to-complete:to:consume",
+						PlaceID:     "task:to-complete",
+						Direction:   petri.ArcInput,
+						Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+						Guard:       &petri.DependencyGuard{},
+					},
+				},
+			},
+		},
+	}
+	marking := makeTestSnapshot(map[string]*interfaces.Token{
+		"idea-cell": {ID: "idea-cell", PlaceID: "idea:to-complete", Color: interfaces.TokenColor{Name: "dynamic-workflows-cell-cli-validate-list"}},
+		"task-cell": {ID: "task-cell", PlaceID: "task:to-complete", Color: interfaces.TokenColor{Name: "dynamic-workflows-cell-cli-validate-list"}},
+	})
+
+	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
+	if len(enabled) != 1 {
+		t.Fatalf("enabled transitions = %d, want 1; marking=%#v", len(enabled), marking.PlaceTokens)
+	}
+}
+
 func TestEnablementEvaluator_VisitCountGuardEnablesAtThreshold(t *testing.T) {
 	eval := NewEnablementEvaluator(nil)
 
