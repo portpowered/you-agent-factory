@@ -122,6 +122,8 @@ Expected post-repair observable state:
   cleanup and stale task residue on the spawned trace via
   `executorReviewReconcileMutations` in `pkg/factory/subsystems/executor_review_reconcile.go`,
   wired from `subsystem_transitioner.go` after process/review accepted outputs.
+  Reconcile keys duplicate `review:init` by same chaining trace **and** lane name
+  (`TokenColor.Name`) so sibling lanes sharing one trace keep legitimate review work.
 - Story 003 owns bounded manual-repair preconditions when investigation proves
   runtime behavior is already correct for a lane shape.
 - Story 004 owns focused replay and lifecycle verification across executor

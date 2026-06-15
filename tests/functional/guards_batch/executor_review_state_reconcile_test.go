@@ -126,7 +126,10 @@ func submitExecutorReviewDuplicateAndStalePattern(
 ) {
 	t.Helper()
 
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{
+	// Submit each work item in its own batch so shared lane names are not
+	// uniquified by WorkRequestFromSubmitRequests (duplicate review residue
+	// keeps the same Color.Name as the active task/review dispatch).
+	requests := []interfaces.SubmitRequest{
 		{
 			Name:                   laneName,
 			WorkTypeID:             "task",
@@ -171,7 +174,10 @@ func submitExecutorReviewDuplicateAndStalePattern(
 			CurrentChainingTraceID: traceID,
 			ChainingTraceDepth:     2,
 		},
-	})
+	}
+	for _, req := range requests {
+		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
+	}
 }
 
 func activeReviewInitForTrace(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], traceID string) int {

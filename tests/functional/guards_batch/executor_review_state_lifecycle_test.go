@@ -410,7 +410,7 @@ func submitExecutorReviewProcessResiduePattern(
 ) {
 	t.Helper()
 
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{
+	requests := []interfaces.SubmitRequest{
 		{
 			Name:                   laneName,
 			WorkTypeID:             "task",
@@ -437,7 +437,10 @@ func submitExecutorReviewProcessResiduePattern(
 			CurrentChainingTraceID: traceID,
 			ChainingTraceDepth:     3,
 		},
-	})
+	}
+	for _, req := range requests {
+		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
+	}
 }
 
 func executorReviewProjectionView(t *testing.T, h *testutil.ServiceTestHarness) (interfaces.FactoryWorldView, interfaces.FactoryWorldState, error) {

@@ -37,14 +37,14 @@ func executorReviewReconcileMutations(
 	outputPlaces := outputPlaceIDs(outputArcs)
 	switch workstationName {
 	case executorReviewWorkstationProcess:
-		if !containsPlace(outputPlaces, state.PlaceID("review", "init")) {
+		if !containsPlace(outputPlaces, state.PlaceID("review", "init")) || laneName == "" {
 			return nil
 		}
 		return consumeTokensAtPlaceForTrace(
 			marking,
 			state.PlaceID("review", "init"),
 			traceID,
-			"",
+			laneName,
 			consumedTokenIDs(consumedTokens),
 			now,
 			"executor-review reconcile: supersede duplicate review:init before process output",
@@ -55,15 +55,18 @@ func executorReviewReconcileMutations(
 			return nil
 		}
 		excluded := consumedTokenIDs(consumedTokens)
-		mutations := consumeTokensAtPlaceForTrace(
-			marking,
-			state.PlaceID("review", "init"),
-			traceID,
-			"",
-			excluded,
-			now,
-			"executor-review reconcile: remove duplicate review:init after review completion",
-		)
+		var mutations []interfaces.MarkingMutation
+		if laneName != "" {
+			mutations = consumeTokensAtPlaceForTrace(
+				marking,
+				state.PlaceID("review", "init"),
+				traceID,
+				laneName,
+				excluded,
+				now,
+				"executor-review reconcile: remove duplicate review:init after review completion",
+			)
+		}
 		mutations = append(mutations, consumeTokensAtPlaceForTrace(
 			marking,
 			state.PlaceID("task", "init"),
