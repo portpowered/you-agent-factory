@@ -45,18 +45,102 @@ def read_prd(prd_path):
         return json.load(f)
 
 
+def has_origin_remote(repo_root):
+    """Return True when an origin remote is configured."""
+    result = run_git("remote", "get-url", "origin", cwd=repo_root, check=False)
+    return result.returncode == 0
+
+
+def origin_main_ref_exists(repo_root):
+    """Return True when refs/remotes/origin/main exists locally."""
+    result = run_git(
+        "rev-parse", "--verify", "refs/remotes/origin/main",
+        cwd=repo_root, check=False,
+    )
+    return result.returncode == 0
+
+
+def local_main_ref_exists(repo_root):
+    """Return True when refs/heads/main exists locally."""
+    result = run_git(
+        "rev-parse", "--verify", "refs/heads/main",
+        cwd=repo_root, check=False,
+    )
+    return result.returncode == 0
+
+
+def remote_main_sha(repo_root):
+    """Return origin/main sha from ls-remote, or None when missing/unreachable."""
+    result = run_git(
+        "ls-remote", "--exit-code", "origin", "refs/heads/main",
+        cwd=repo_root, check=False,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    return result.stdout.strip().split()[0]
+
+
+def is_main_checked_out_with_local_changes(repo_root):
+    """True when main is checked out and the working tree has local changes."""
+    current = run_git(
+        "branch", "--show-current", cwd=repo_root, check=False,
+    ).stdout.strip()
+    if current != "main":
+        return False
+    status = run_git("status", "--porcelain", cwd=repo_root, check=False)
+    return bool(status.stdout.strip())
+
+
+def can_fast_forward_main(repo_root, local_sha, remote_sha):
+    """True when remote_sha is a strict fast-forward of local_sha."""
+    if local_sha == remote_sha:
+        return False
+    merge_base = run_git(
+        "merge-base", local_sha, remote_sha,
+        cwd=repo_root, check=False,
+    )
+    return merge_base.returncode == 0 and merge_base.stdout.strip() == local_sha
+
+
 def sync_main(repo_root):
-    """Run git pull unless the repo has no upstream configured."""
-    result = run_git("pull", cwd=repo_root, check=False)
-    if result.returncode == 0:
-        return
+    """Best-effort root main sync without disturbing the working tree.
 
-    stderr = result.stderr.lower()
-    if "there is no tracking information for the current branch" in stderr:
-        return
+    Uses fetch plus refs/heads/main fast-forward when safe instead of git pull,
+    so dirty-root checkouts can continue workspace setup from local state.
+    Returns a human-readable outcome string for logging.
+    """
+    if not has_origin_remote(repo_root):
+        return "skipped (no origin remote)"
 
-    raise RuntimeError(
-        f"git pull failed (exit {result.returncode}): {result.stderr.strip()}"
+    fetch_result = run_git("fetch", "origin", cwd=repo_root, check=False)
+    if fetch_result.returncode != 0:
+        return f"skipped (fetch failed: {fetch_result.stderr.strip()})"
+
+    remote_sha = remote_main_sha(repo_root)
+    if remote_sha is None:
+        return "skipped (origin has no main branch)"
+
+    if not local_main_ref_exists(repo_root):
+        run_git("update-ref", "refs/heads/main", remote_sha, cwd=repo_root)
+        return f"created refs/heads/main at {remote_sha[:8]}"
+
+    local_sha = run_git("rev-parse", "refs/heads/main", cwd=repo_root).stdout.strip()
+    if local_sha == remote_sha:
+        return "already up to date"
+
+    if is_main_checked_out_with_local_changes(repo_root):
+        return (
+            "skipped (main checked out with local changes; "
+            "did not run git pull or fast-forward refs/heads/main)"
+        )
+
+    if not can_fast_forward_main(repo_root, local_sha, remote_sha):
+        return "skipped (local main is not a fast-forward behind origin/main)"
+
+    run_git("update-ref", "refs/heads/main", remote_sha, cwd=repo_root)
+    return (
+        f"fast-forwarded refs/heads/main to {remote_sha[:8]} "
+        "(fetch-only; did not run git pull)"
     )
 
 
@@ -187,7 +271,8 @@ def main():
 
     # Sync main and prune worktrees.
     try:
-        sync_main(repo_root)
+        sync_outcome = sync_main(repo_root)
+        print(f"Root sync: {sync_outcome}", file=sys.stderr)
         prune_worktrees(repo_root)
     except RuntimeError as e:
         print(f"Git sync failed: {e}", file=sys.stderr)

@@ -357,6 +357,74 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
         self.assertTrue((worktree_path / "prd.json").exists())
         self.assertEqual(payload["branch"], prd_name)
 
+    def test_setup_workspace_creates_worktree_with_staged_root_changes(self):
+        local_repo = self.repo_path / "local"
+        setup_repo_with_origin_main_ahead(local_repo, self.repo_path)
+
+        staged_file = local_repo / "staged.txt"
+        staged_file.write_text("staged change\n", encoding="utf-8")
+        git(["add", "staged.txt"], local_repo)
+
+        prd_name = "staged-root-prd"
+        tasks_dir = local_repo / "tasks" / "todo"
+        tasks_dir.mkdir(parents=True)
+        prd_json = tasks_dir / f"{prd_name}.json"
+        prd_json.write_text(
+            json.dumps({"branchName": prd_name}),
+            encoding="utf-8",
+        )
+
+        result = subprocess.run(
+            ["python3", str(SCRIPT_PATH), prd_name],
+            cwd=local_repo,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("A  staged.txt", git(["status", "--porcelain"], local_repo).stdout)
+        self.assertIn("?? dirty.txt", git(["status", "--porcelain"], local_repo).stdout)
+        self.assertEqual(
+            staged_file.read_text(encoding="utf-8"),
+            "staged change\n",
+        )
+        payload = json.loads(result.stdout)
+        worktree_path = Path(payload["worktree"])
+        self.assertTrue(worktree_path.exists())
+        self.assertTrue((worktree_path / "prd.json").exists())
+        self.assertIn("Root sync:", result.stderr)
+
+    def test_setup_workspace_reports_sync_skip_on_dirty_main_checkout(self):
+        local_repo = self.repo_path / "local"
+        setup_repo_with_origin_main_ahead(local_repo, self.repo_path)
+        git(["checkout", "main"], local_repo)
+
+        dirty_file = local_repo / "dirty-main.txt"
+        dirty_file.write_text("dirty on main\n", encoding="utf-8")
+
+        prd_name = "dirty-main-prd"
+        tasks_dir = local_repo / "tasks" / "todo"
+        tasks_dir.mkdir(parents=True)
+        prd_json = tasks_dir / f"{prd_name}.json"
+        prd_json.write_text(
+            json.dumps({"branchName": prd_name}),
+            encoding="utf-8",
+        )
+
+        result = subprocess.run(
+            ["python3", str(SCRIPT_PATH), prd_name],
+            cwd=local_repo,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Root sync:", result.stderr)
+        self.assertIn("local changes", result.stderr.lower())
+        self.assertIn("?? dirty-main.txt", git(["status", "--porcelain"], local_repo).stdout)
+
 
 if __name__ == "__main__":
     unittest.main()
