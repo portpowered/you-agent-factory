@@ -203,6 +203,8 @@ func ArtifactDetailResponseToAPI(result factorysessionexecution.ArtifactDetail) 
 	}
 	if ref := artifactRetrievalRefToAPI(result.ContentRef); ref != nil {
 		response.ContentRef = ref
+	} else if ref := artifactRetrievalRefToAPI(result.RetrievalRef); ref != nil {
+		response.ContentRef = ref
 	}
 	if metadata := artifactCaptureMetadataToAPI(result.CaptureMetadata); metadata != nil {
 		response.CaptureMetadata = metadata

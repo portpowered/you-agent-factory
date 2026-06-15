@@ -159,3 +159,142 @@ func TestListFactorySessionArtifacts_LivePetriSessionReturnsNotFound(t *testing.
 		t.Fatalf("status = %d, want 404: %s", resp.StatusCode, readAPIDispatchBody(t, resp))
 	}
 }
+
+func TestGetFactorySessionArtifact_RuntimeBackedReturnsTypedDetail(t *testing.T) {
+	projectRoot := setupAPIDispatchRuntimeWorkflowFixture(t, "progress-primitives.workflow.js", "progress-primitives")
+	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
+		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	})
+	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-api-runtime-artifact-detail-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "progress-primitives",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+
+	srv := newAPIDispatchTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/factory-sessions/" + completed.SessionID + "/artifacts/artifact-1")
+	if err != nil {
+		t.Fatalf("GET /factory-sessions/{session_id}/artifacts/{artifact_id}: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, readAPIDispatchBody(t, resp))
+	}
+
+	var response factoryapi.FactorySessionArtifactDetail
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		t.Fatalf("decode artifact detail response: %v", err)
+	}
+	if response.Id != "artifact-1" || string(response.Kind) != "log" {
+		t.Fatalf("artifact = %#v, want artifact-1 log", response)
+	}
+	if response.SessionId != completed.SessionID {
+		t.Fatalf("sessionId = %q, want %q", response.SessionId, completed.SessionID)
+	}
+	if response.Label == nil || *response.Label != "step-output" {
+		t.Fatalf("label = %#v, want step-output", response.Label)
+	}
+	wantHref := "/factory-sessions/" + completed.SessionID + "/artifacts/artifact-1"
+	if response.ContentRef == nil || response.ContentRef.Href != wantHref {
+		t.Fatalf("contentRef = %#v, want %q", response.ContentRef, wantHref)
+	}
+}
+
+func TestGetFactorySessionArtifact_RuntimeBackedUnknownArtifactReturnsNotFound(t *testing.T) {
+	projectRoot := setupAPIDispatchRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
+	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
+		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	})
+	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-api-runtime-artifact-detail-missing-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "simple-final",
+		},
+		Args: map[string]any{
+			"subject": "api",
+			"count":   2,
+			"prefix":  "you",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+	waitForAPIDispatchRuntimeSessionTerminal(t, service, started.SessionID)
+
+	srv := newAPIDispatchTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/factory-sessions/" + started.SessionID + "/artifacts/artifact-missing-001")
+	if err != nil {
+		t.Fatalf("GET /factory-sessions/{session_id}/artifacts/{artifact_id}: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404: %s", resp.StatusCode, readAPIDispatchBody(t, resp))
+	}
+	var errResp factoryapi.ErrorResponse
+	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if errResp.Code != factoryapi.NOTFOUND {
+		t.Fatalf("code = %q, want NOT_FOUND", errResp.Code)
+	}
+}
+
+func TestGetFactorySessionArtifact_RuntimeBackedMissingSessionReturnsNotFound(t *testing.T) {
+	projectRoot := setupAPIDispatchRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
+	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
+		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	})
+	srv := newAPIDispatchTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/factory-sessions/dur-sess-missing-artifact-detail-001/artifacts/artifact-1")
+	if err != nil {
+		t.Fatalf("GET /factory-sessions/{session_id}/artifacts/{artifact_id}: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404: %s", resp.StatusCode, readAPIDispatchBody(t, resp))
+	}
+	var errResp factoryapi.ErrorResponse
+	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if errResp.Code != factoryapi.NOTFOUND {
+		t.Fatalf("code = %q, want NOT_FOUND", errResp.Code)
+	}
+}
+
+func TestGetFactorySessionArtifact_LivePetriSessionReturnsNotFound(t *testing.T) {
+	srv := newAPIDispatchTestServer(&testutil.MockFactory{
+		FactorySession: factoryapi.FactorySession{
+			Id:         "session-beta",
+			FactoryDir: "/workspace/root/beta",
+			FolderPath: "/workspace/root",
+			Project:    "beta",
+		},
+	})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/factory-sessions/session-beta/artifacts/artifact-1")
+	if err != nil {
+		t.Fatalf("GET /factory-sessions/session-beta/artifacts/artifact-1: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404: %s", resp.StatusCode, readAPIDispatchBody(t, resp))
+	}
+}

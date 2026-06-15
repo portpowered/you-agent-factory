@@ -248,9 +248,25 @@ func (s *Server) ListFactorySessionArtifacts(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) GetFactorySessionArtifact(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, artifactID factoryapi.ArtifactID) {
-	_ = sessionID
-	_ = artifactID
-	s.writeError(w, http.StatusNotImplemented, "durable factory session artifact retrieval is not implemented", "INTERNAL_ERROR")
+	if !isDurableExecutionSessionID(string(sessionID)) {
+		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+		return
+	}
+
+	reader, ok := s.requireDurableSessionArtifactReader(w)
+	if !ok {
+		return
+	}
+	response, err := reader.GetDurableFactorySessionArtifact(r.Context(), string(sessionID), string(artifactID))
+	if err != nil {
+		if s.writeDurableSessionReadError(w, err) {
+			return
+		}
+		s.logger.Error("get durable factory session artifact failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to get factory session artifact", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
@@ -607,6 +623,10 @@ type durableSessionArtifactReader interface {
 		ctx context.Context,
 		sessionID string,
 	) (factoryapi.ListFactorySessionArtifactsResponse, error)
+	GetDurableFactorySessionArtifact(
+		ctx context.Context,
+		sessionID, artifactID string,
+	) (factoryapi.FactorySessionArtifactDetail, error)
 }
 
 func (s *Server) requireDurableSessionDispatchReader(w http.ResponseWriter) (durableSessionDispatchReader, bool) {
@@ -646,6 +666,10 @@ func (s *Server) writeDurableSessionReadError(w http.ResponseWriter, err error) 
 	}
 	if errors.Is(err, factorysessionexecution.ErrDispatchNotFound) {
 		s.writeError(w, http.StatusNotFound, "factory session dispatch not found", "NOT_FOUND")
+		return true
+	}
+	if errors.Is(err, factorysessionexecution.ErrArtifactNotFound) {
+		s.writeError(w, http.StatusNotFound, "factory session artifact not found", "NOT_FOUND")
 		return true
 	}
 	var validationErr *factorysessionexecution.ValidationError

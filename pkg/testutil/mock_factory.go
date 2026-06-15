@@ -131,6 +131,21 @@ func (m *MockFactory) ListDurableFactorySessionArtifacts(
 	return factorysession.ListArtifactsResponseToAPI(result), nil
 }
 
+func (m *MockFactory) GetDurableFactorySessionArtifact(
+	ctx context.Context,
+	sessionID, artifactID string,
+) (factoryapi.FactorySessionArtifactDetail, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionArtifactDetail{}, err
+	}
+	result, err := service.GetArtifact(ctx, sessionID, artifactID)
+	if err != nil {
+		return factoryapi.FactorySessionArtifactDetail{}, err
+	}
+	return factorysession.ArtifactDetailResponseToAPI(result), nil
+}
+
 func (m *MockFactory) requireDurableExecutionService() (factorysessionexecution.Service, error) {
 	if m == nil || m.DurableExecutionService == nil {
 		return nil, errors.New("durable execution service is unavailable")
