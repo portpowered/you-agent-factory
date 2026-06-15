@@ -1038,6 +1038,7 @@ func sortFactorySessionSummaries(summaries []factoryapi.FactorySessionSummary) {
 
 var _ apisurface.DurableSessionExecutionAPI = (*FactoryService)(nil)
 var _ apisurface.DurableSessionListingAPI = (*FactoryService)(nil)
+var _ apisurface.DurableSessionLifecycleAPI = (*FactoryService)(nil)
 
 func (fs *FactoryService) StartDurableFactorySessionAsync(
 	ctx context.Context,
@@ -1213,4 +1214,100 @@ func (fs *FactoryService) GetDurableFactorySessionArtifact(
 		return factoryapi.FactorySessionArtifactDetail{}, err
 	}
 	return factorysession.ArtifactDetailResponseToAPI(result), nil
+}
+
+func (fs *FactoryService) PauseDurableFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.FactorySessionLifecycleControlRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	control, err := factorysession.ControlRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := fs.durableExecutionService().Pause(ctx, sessionID, control)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
+}
+
+func (fs *FactoryService) ResumeDurableFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.FactorySessionLifecycleControlRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	control, err := factorysession.ControlRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := fs.durableExecutionService().Resume(ctx, sessionID, control)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
+}
+
+func (fs *FactoryService) CancelDurableFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.FactorySessionLifecycleControlRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	control, err := factorysession.ControlRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := fs.durableExecutionService().Cancel(ctx, sessionID, control)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
+}
+
+func (fs *FactoryService) TerminateDurableFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.FactorySessionLifecycleControlRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	control, err := factorysession.ControlRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := fs.durableExecutionService().Terminate(ctx, sessionID, control)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
+}
+
+func (fs *FactoryService) ApproveDurableFactorySession(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.FactorySessionApproveRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	approve, err := factorysession.ApproveRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := fs.durableExecutionService().Approve(ctx, sessionID, approve)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
+}
+
+func (fs *FactoryService) RetryDurableFactorySessionDispatch(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.FactorySessionRetryDispatchRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	retry, err := factorysession.RetryDispatchRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := fs.durableExecutionService().RetryDispatch(ctx, sessionID, retry)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
 }
