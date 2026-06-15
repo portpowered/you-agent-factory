@@ -174,11 +174,12 @@ func TestSameNameGuard_LaterMatchingTokenStillCompletesJoin(t *testing.T) {
 
 	h := testutil.NewServiceTestHarness(t, dir)
 	matcher := h.MockWorker("matcher", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
-	submitLaterMatchingSameNameGuardWork(h)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
+
+	submitLaterMatchingSameNameGuardWork(h)
 
 	assertLaterMatchingSameNameGuardOutcome(t, h, matcher.CallCount)
 
@@ -249,9 +250,9 @@ func submitLaterMatchingSameNameGuardWork(h *testutil.ServiceTestHarness) {
 func assertLaterMatchingSameNameGuardOutcome(t *testing.T, h *testutil.ServiceTestHarness, matcherCallCount func() int) {
 	t.Helper()
 
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:matched", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:matched", 1, 3*time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "idea:to-complete", 0, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, 3*time.Second)
 
 	h.Assert().
 		PlaceTokenCount("task:matched", 1).

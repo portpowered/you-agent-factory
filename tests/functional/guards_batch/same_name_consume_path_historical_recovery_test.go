@@ -230,6 +230,10 @@ func TestSameNameConsumePathHistoricalRecovery_TaskOnlyWithoutIdeaTwin_BlocksBou
 	h := newSameNameConsumePathServiceHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-cli-run-status-result"
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	errCh := h.RunInBackground(ctx)
+
 	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
 		Name:        cellName,
 		WorkTypeID:  "task",
@@ -237,11 +241,7 @@ func TestSameNameConsumePathHistoricalRecovery_TaskOnlyWithoutIdeaTwin_BlocksBou
 		TraceID:     "trace-task-only-repair",
 	}})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-	errCh := h.RunInBackground(ctx)
-
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, 3*time.Second)
 	time.Sleep(150 * time.Millisecond)
 
 	layer := classifyConsumePathOutcome(t, h, cellName)

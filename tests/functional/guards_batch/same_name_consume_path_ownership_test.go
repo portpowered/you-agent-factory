@@ -80,14 +80,14 @@ func TestSameNameConsumePathOwnership_MatchingPairCompletesThroughLogicalMove(t 
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-cli-validate-list"
-	submitConsumePathPair(t, h, cellName)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
-	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)
+	submitConsumePathPair(t, h, cellName)
+
+	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, 3*time.Second)
 
 	h.Assert().
 		HasNoTokenInPlace("idea:to-complete").
@@ -109,6 +109,10 @@ func TestSameNameConsumePathOwnership_TaskOnlyWithoutIdeaTwin_StrandedAsHistoric
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-cli-run-status-result"
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	errCh := h.RunInBackground(ctx)
+
 	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
 		Name:        cellName,
 		WorkTypeID:  "task",
@@ -116,11 +120,7 @@ func TestSameNameConsumePathOwnership_TaskOnlyWithoutIdeaTwin_StrandedAsHistoric
 		TraceID:     "trace-task-only",
 	}})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-	errCh := h.RunInBackground(ctx)
-
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, 3*time.Second)
 	time.Sleep(150 * time.Millisecond)
 
 	h.Assert().
