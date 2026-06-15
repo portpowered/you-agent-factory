@@ -25,9 +25,8 @@ for live JavaScript orchestrator execution.
 | Served today through fixture-backed `you mcp serve` | Not yet selectable for install smoke |
 |-----------------------------------------------------|--------------------------------------|
 | `you.factory_session.validate_source` | Runtime-backed `you.factory_session.start_async` |
-| `you.factory_session.start_preview` | Runtime-backed `you.factory_session.get` |
-| `you.factory_session.start_async` | Runtime-backed `you.factory_session.get_result` |
-| `you.factory_session.get` | |
+| `you.factory_session.start_async` | Runtime-backed `you.factory_session.get` |
+| `you.factory_session.get` | Runtime-backed `you.factory_session.get_result` |
 | `you.factory_session.get_result` | |
 
 ## Blocked Install Behavior
@@ -74,4 +73,4 @@ One executor lane should:
 | `docs/reference/mcp-hosts.md` | Current full host setup and fixture-backed smoke matrix |
 | `docs/reference/mcp.md` | Recovery-lane preview scope boundary and follow-up pointer |
 | `pkg/cli/mcp/serve_smoke_test.go` | Automated fixture-backed install smoke |
-| `pkg/mcp/factorysession/registry.go` | `PreviewToolDefinitions()` preview-only catalog helper |
+| `pkg/mcp/factorysession/registry.go` | `DiscoverTools()` Factory Session MCP catalog |

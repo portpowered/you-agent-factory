@@ -37,8 +37,7 @@ transport. Do not run it as an interactive terminal command.
 
 Point your MCP host at the installed `you` binary, pass `mcp serve` as the only
 arguments, and set `cwd` to the JavaScript workflow project root whose sources
-you want `you.factory_session.validate_source` and
-`you.factory_session.start_preview` to resolve.
+you want `you.factory_session.validate_source` to resolve.
 
 No additional environment variables are required for the current preview-only
 serve path. The `you` executable must be on the host `PATH`, or you must use an
@@ -93,26 +92,23 @@ This recovery lane proves one installable MCP path for:
 
 1. **Tool discovery** over the owned stdio transport.
 2. **Factory preview validation** through `you.factory_session.validate_source`.
-3. **Factory preview start checks** through `you.factory_session.start_preview`.
 
-Both preview tools use the canonical `FactoryPreviewRequest` /
-`FactoryPreviewResult` contract (`POST /factories/preview` vocabulary). They
+Preview validation uses the canonical `FactoryPreviewRequest` /
+`FactoryPreviewResult` contract (`POST /factories/preview` vocabulary) to
 validate JavaScript orchestrator source and policy before Factory Session
 execution.
 
-### Tools exposed by `you mcp serve`
+### Preview tools exposed by `you mcp serve`
 
 | MCP tool | Purpose |
 |----------|---------|
 | `you.factory_session.validate_source` | Validate JavaScript orchestrator factory source through the canonical Factory preview contract |
-| `you.factory_session.start_preview` | Run the start-preview step through the same Factory preview contract |
 
-### Preview-only recovery scope
+### Fixture-backed Factory Session tools
 
-This recovery doc names the preview-only install proof that originally bounded
-lane `dynamic-workflows-recovery-mcp-install-plan-scope`. The current serve
-path also exposes async Factory Session tools through the default fixture-backed
-service; see `you docs mcp-hosts` for that full catalog and smoke matrix.
+The default serve path also exposes async Factory Session tools through the
+fixture-backed service documented in `you docs mcp-hosts`. See that guide for
+the full catalog, host examples, and automated install smoke matrix.
 
 ### Out of scope for live-runtime install smoke
 Live factory HTTP runtime backing for `you mcp serve` remains out of scope for
@@ -127,7 +123,7 @@ The repository already proves the following without manual host UI smoke:
 | Check | Where it lives |
 |-------|----------------|
 | CLI registration for `you mcp serve` | `pkg/cli/root.go` and `pkg/cli/mcp/serve.go` |
-| Preview catalog boundary helper | `pkg/mcp/factorysession/registry.go` (`PreviewToolDefinitions`) |
+| Factory Session MCP catalog | `pkg/mcp/factorysession/registry.go` (`DiscoverTools`) |
 | Shared stdio install smoke for validate plus async polling | `pkg/cli/mcp/serve_smoke_test.go` |
 | Packaged recovery scope and follow-up markers | `tests/functional/smoke/cli_docs_smoke_test.go` |
 
@@ -166,7 +162,7 @@ The full follow-up scope, non-goals, and evidence table live in
 `docs/internal/development/plans/dynamic-workflows/follow-up-cell-mcp-session-serve.md`.
 
 No additional follow-up blocker remains for preview-only discovery and
-validate/start-preview install smoke covered by this doc.
+validate install smoke covered by this doc.
 
 ## Out Of Scope For Any Follow-Up Cell Named Here
 

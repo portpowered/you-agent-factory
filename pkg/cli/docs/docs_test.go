@@ -816,7 +816,6 @@ func TestMarkdown_MCPReturnsRawAuthoredMarkdown(t *testing.T) {
 		"you mcp serve",
 		`"args": ["mcp", "serve"]`,
 		"you.factory_session.validate_source",
-		"you.factory_session.start_preview",
 		"you.factory_session.start_async",
 		"Automation-Backed In Repo",
 		"Follow-Up Cell For Async Install Smoke",

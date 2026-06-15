@@ -1,15 +1,5 @@
 package factorysession
 
-// PreviewToolDefinitions returns the repo-owned workflow preview MCP tool catalog
-// exposed by the canonical serve path. The catalog covers Factory preview
-// validation and start-preview behavior only.
-func PreviewToolDefinitions() []ToolDefinition {
-	return []ToolDefinition{
-		validateSourceTool(),
-		startPreviewTool(),
-	}
-}
-
 // DiscoverTools returns the canonical dynamic workflow Factory Session MCP tool
 // catalog in stable discovery order. Schemas mirror durable REST and Factory
 // preview contracts; deprecated /workflow-previews is not a primary surface.
@@ -77,24 +67,6 @@ func validateSourceTool() ToolDefinition {
 		Name: ToolValidateSource,
 		Description: "Validate JavaScript orchestrator factory source through the canonical Factory preview contract " +
 			"(POST /factories/preview) before starting a Factory Session.",
-		InputSchema:  factoryPreviewRequestSchema(),
-		OutputSchema: toolResponseSchema(factoryPreviewResultSchema()),
-		SuccessStableFields: []string{
-			"result.valid",
-			"result.sourceResolution.sourceHash",
-			"result.sourceResolution.sourceRef",
-			"result.policyPreview.policyHash",
-			"result.sourceValidationIssues",
-		},
-		ErrorStableFields: sharedErrorStableFields,
-	}
-}
-
-func startPreviewTool() ToolDefinition {
-	return ToolDefinition{
-		Name: ToolStartPreview,
-		Description: "Validate JavaScript orchestrator factory source through the canonical Factory preview contract " +
-			"as the start-preview step before Factory Session execution (POST /factories/preview).",
 		InputSchema:  factoryPreviewRequestSchema(),
 		OutputSchema: toolResponseSchema(factoryPreviewResultSchema()),
 		SuccessStableFields: []string{
