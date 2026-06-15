@@ -8,8 +8,10 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"go.uber.org/zap"
@@ -97,47 +99,53 @@ func (s *Server) requireSessionRuntime(w http.ResponseWriter) (apisurface.Sessio
 }
 
 func (s *Server) ListFactorySessions(w http.ResponseWriter, r *http.Request, params factoryapi.ListFactorySessionsParams) {
-	scope := factoryapi.FactorySessionListScopeLive
-	if params.Scope != nil {
-		scope = *params.Scope
-	}
-	switch scope {
-	case factoryapi.FactorySessionListScopeLive,
-		factoryapi.FactorySessionListScopePersisted,
-		factoryapi.FactorySessionListScopeAll:
-	default:
-		s.writeError(w, http.StatusBadRequest, "scope must be live, persisted, or all", "BAD_REQUEST")
-		return
-	}
-
-	response := factoryapi.ListFactorySessionsResponse{Scope: &scope}
-	if scope == factoryapi.FactorySessionListScopePersisted {
-		emptyDurableSessions := []factoryapi.FactorySessionDurableSummary{}
-		response.Sessions = []factoryapi.FactorySessionSummary{}
-		response.DurableSessions = &emptyDurableSessions
-		s.writeJSON(w, http.StatusOK, response)
-		return
-	}
-
-	sessionRuntime, ok := s.requireSessionRuntime(w)
-	if !ok {
-		return
-	}
-	liveResponse, err := sessionRuntime.ListFactorySessions(r.Context())
+	normalized, err := factorysession.ListSessionsRequestFromAPI(params)
 	if err != nil {
-		s.logger.Error("list factory sessions failed", zap.Error(err))
-		s.writeError(w, http.StatusInternalServerError, "failed to list factory sessions", "INTERNAL_ERROR")
+		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
 		return
 	}
-	response.Sessions = liveResponse.Sessions
-	if scope == factoryapi.FactorySessionListScopeAll {
-		emptyDurableSessions := []factoryapi.FactorySessionDurableSummary{}
-		response.DurableSessions = &emptyDurableSessions
+
+	if normalized.Scope == factorysessionexecution.SessionListScopePersisted {
+		if _, ok := s.runtime.(durableExecutionSessionLister); !ok {
+			s.writeError(w, http.StatusNotImplemented, "durable factory session listing is not implemented", "INTERNAL_ERROR")
+			return
+		}
+	}
+
+	needsWorkspaceLive := normalized.Scope == factorysessionexecution.SessionListScopeLive ||
+		normalized.Scope == factorysessionexecution.SessionListScopeAll
+	if needsWorkspaceLive && s.sessionRuntime == nil {
+		s.writeError(w, http.StatusInternalServerError, "session-scoped API is unavailable", "INTERNAL_ERROR")
+		return
+	}
+
+	response, err := s.mergeScopedFactorySessionList(r.Context(), normalized)
+	if err != nil {
+		s.writeDurableSessionListError(w, err)
+		return
 	}
 	s.writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) GetFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	if isDurableExecutionSessionID(string(sessionID)) {
+		getter, ok := s.requireDurableSessionGetter(w)
+		if !ok {
+			return
+		}
+		response, err := getter.GetDurableFactorySession(r.Context(), string(sessionID))
+		if err != nil {
+			if s.writeDurableSessionReadError(w, err) {
+				return
+			}
+			s.logger.Error("get durable factory session failed", zap.Error(err))
+			s.writeError(w, http.StatusInternalServerError, "failed to get factory session", "INTERNAL_ERROR")
+			return
+		}
+		s.writeJSON(w, http.StatusOK, response)
+		return
+	}
+
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
 		return

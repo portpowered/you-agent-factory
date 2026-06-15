@@ -87,6 +87,47 @@ var _ apisurface.APISurface = (*MockFactory)(nil)
 var _ apisurface.SessionAPISurface = (*MockFactory)(nil)
 
 var _ apisurface.DurableSessionExecutionAPI = (*MockFactory)(nil)
+var _ apisurface.DurableSessionListingAPI = (*MockFactory)(nil)
+
+func (m *MockFactory) ListDurableFactorySessions(
+	ctx context.Context,
+	params factoryapi.ListFactorySessionsParams,
+) (factoryapi.ListFactorySessionsResponse, error) {
+	req, err := factorysession.ListSessionsRequestFromAPI(params)
+	if err != nil {
+		return factoryapi.ListFactorySessionsResponse{}, err
+	}
+	result, err := m.ListDurableExecutionSessions(ctx, req)
+	if err != nil {
+		return factoryapi.ListFactorySessionsResponse{}, err
+	}
+	return factorysession.ListSessionsResponseToAPI(result), nil
+}
+
+func (m *MockFactory) ListDurableExecutionSessions(
+	ctx context.Context,
+	req factorysessionexecution.ListSessionsRequest,
+) (factorysessionexecution.ListSessionsResult, error) {
+	if m == nil || m.DurableExecutionService == nil {
+		return factorysessionexecution.ListSessionsResult{Scope: req.Scope}, nil
+	}
+	return m.DurableExecutionService.ListSessions(ctx, req)
+}
+
+func (m *MockFactory) GetDurableFactorySession(
+	ctx context.Context,
+	sessionID string,
+) (factoryapi.FactorySessionDurableReadModel, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionDurableReadModel{}, err
+	}
+	result, err := service.GetSession(ctx, sessionID)
+	if err != nil {
+		return factoryapi.FactorySessionDurableReadModel{}, err
+	}
+	return factorysession.SessionReadResponseToAPI(result), nil
+}
 
 func (m *MockFactory) StartDurableFactorySessionAsync(
 	ctx context.Context,
