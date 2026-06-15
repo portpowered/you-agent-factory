@@ -44,15 +44,13 @@ func (fs *FactoryService) StartDurableFactorySessionSync(
 
 func (fs *FactoryService) durableExecutionService() factorysessionexecution.Service {
 	if fs == nil {
-		return factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{})
+		return factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{})
 	}
 	fs.durableExecutionMu.Lock()
 	defer fs.durableExecutionMu.Unlock()
 	if fs.durableExecution == nil {
-		fs.durableExecution = factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
-			StartSourceContext: factorysessionexecution.StartSourceContext{
-				ProjectRoot: fs.durableProjectRoot(),
-			},
+		fs.durableExecution = factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+			ProjectRoot: fs.durableProjectRoot(),
 		})
 	}
 	return fs.durableExecution

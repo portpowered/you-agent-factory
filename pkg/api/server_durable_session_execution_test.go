@@ -19,8 +19,8 @@ import (
 
 func TestStartDurableFactorySessionAsync_RuntimeBackedSimpleFinalReturnsStableSession(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
-		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
 	})
 	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
@@ -58,8 +58,8 @@ func TestStartDurableFactorySessionAsync_RuntimeBackedSimpleFinalReturnsStableSe
 
 func TestStartDurableFactorySessionAsync_RequestIDConflictReturnsTypedError(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
-		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
 	})
 	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
@@ -87,8 +87,8 @@ func TestStartDurableFactorySessionAsync_RequestIDConflictReturnsTypedError(t *t
 
 func TestStartDurableFactorySessionAsync_InvalidSourceDoesNotCreateSession(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
-		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
 	})
 	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
@@ -113,8 +113,8 @@ func TestStartDurableFactorySessionAsync_InvalidSourceDoesNotCreateSession(t *te
 
 func TestStartDurableFactorySessionAsync_MissingRequestIDReturnsValidationError(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
-		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
 	})
 	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())

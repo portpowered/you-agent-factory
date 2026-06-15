@@ -12,8 +12,8 @@ import (
 
 func TestDeferredFactorySessionRoutes_RemainNotImplementedForRuntimeBackedSession(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
-		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
 	})
 	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())

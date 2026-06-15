@@ -18,8 +18,8 @@ import (
 
 func TestListFactorySessions_RuntimeBackedIncludesLiveAndPersistedScopes(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
-		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
 	})
 	srv := newTestServer(&testutil.MockFactory{
 		DurableExecutionService: service,
@@ -57,8 +57,8 @@ func TestListFactorySessions_RuntimeBackedIncludesLiveAndPersistedScopes(t *test
 
 func TestGetFactorySession_RuntimeBackedReturnsTerminalReadModel(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
-		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
 	})
 	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
@@ -107,8 +107,8 @@ func TestGetFactorySession_RuntimeBackedReturnsTerminalReadModel(t *testing.T) {
 
 func TestGetFactorySession_RuntimeBackedMissingSessionReturnsNotFound(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
-		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
 	})
 	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
@@ -212,7 +212,7 @@ func containsDurableSessionID(response factoryapi.ListFactorySessionsResponse, s
 
 func waitForRuntimeSessionTerminal(
 	t *testing.T,
-	service *factorysessionexecution.RuntimeService,
+	service factorysessionexecution.Service,
 	sessionID string,
 ) {
 	t.Helper()
