@@ -29,6 +29,7 @@ concept owners below when you need the complete customer-facing contract.
 | `record-replay` | Default recording, `--record`, `--replay`, and `--no-record` | [Record and replay](record-replay.md) |
 | `work` | Submitted work: session-scoped work routes, tags, and batch cross-links | [Submitted work](work.md) |
 | `sessions` | Session list, session show, factory query, status API, dashboard, and run modes | [Sessions](sessions.md) |
+| `mcp-hosts` | Dynamic workflow MCP host setup, `you mcp serve`, transport assumptions, and host examples | [MCP host setup](mcp-hosts.md) |
 | `orchestrators` | Factory orchestrator identity, FactorySession runtime nouns, dispatch/artifact/event aliases | [Orchestrators](orchestrators.md) |
 | `workstations` | Workstation kinds, routes, runtime fields, and scoped execution settings | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
