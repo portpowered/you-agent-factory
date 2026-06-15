@@ -10,6 +10,7 @@ import (
 
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
@@ -131,6 +132,9 @@ func TestJavaScriptRuntimeService_Start_ConcurrentIdempotentStarts(t *testing.T)
 			if results[i].SessionID != results[0].SessionID {
 				t.Fatalf("sessionId[%d] = %q, want %q", i, results[i].SessionID, results[0].SessionID)
 			}
+		}
+		for i, started := range results {
+			assertAsyncStartInitialized(t, i, started)
 		}
 	})
 
@@ -256,5 +260,24 @@ func assertServiceBoundaryError(t *testing.T, err error) {
 	case errors.As(err, new(*fse.ControlError)):
 	default:
 		t.Fatalf("error = %T %v, want ValidationError or service sentinel", err, err)
+	}
+}
+
+func assertAsyncStartInitialized(t *testing.T, worker int, started fse.AsyncStartResult) {
+	t.Helper()
+	if started.SessionID == "" {
+		t.Fatalf("worker %d: expected durable session id", worker)
+	}
+	if started.Status == "" {
+		t.Fatalf("worker %d: status = %q, want initialized lifecycle status", worker, started.Status)
+	}
+	if started.OrchestratorKind != interfaces.OrchestratorKindJavaScript {
+		t.Fatalf("worker %d: orchestratorKind = %q, want JAVASCRIPT", worker, started.OrchestratorKind)
+	}
+	if started.ResolvedSource.SourceRef == "" || started.SourceHash == "" {
+		t.Fatalf("worker %d: resolved source = %#v", worker, started.ResolvedSource)
+	}
+	if started.Links.Session == "" || started.Links.Status == "" || started.Links.Results == "" {
+		t.Fatalf("worker %d: links = %#v, want session inspection links", worker, started.Links)
 	}
 }

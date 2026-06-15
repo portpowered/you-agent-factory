@@ -228,7 +228,7 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 		return AsyncStartResult{}, err
 	}
 
-	reserved, err := s.reserveStartSession(ctx, normalized, tupleHash, false)
+	reserved, err := s.reserveStartSession(ctx, normalized, tupleHash, true)
 	if err != nil {
 		return AsyncStartResult{}, err
 	}
