@@ -23,6 +23,9 @@ Use this map when changing terminal reviewed-lane completion through the
   bounds duplicate-history and queue-artifact recovery, documents bounded
   historical manual-repair preconditions, and proves unrelated reviewed lanes
   still complete when an orphan task token remains.
+- `tests/functional/guards_batch/same_name_consume_path_cell_disposition_test.go`
+  leaves reviewer-verifiable disposition evidence for the three PRD stranded
+  cells using observable runtime and projection outcomes.
 - `pkg/testutil/service_harness.go` exposes `MoveWork` for focused operator-move
   recovery tests through the service layer.
 - `pkg/cli/work/move.go` and `pkg/service/runtime_sessions.go` are the CLI/API
@@ -55,3 +58,30 @@ When preconditions are not met (for example task-only residue without
 `idea:complete`, or both twins still queued for consume), do not apply a manual
 move; classify the cell with the ownership tests above and queue a bounded
 runtime or projection repair instead.
+
+## Reviewed CLI and MCP Cell Disposition
+
+Story 004 maps the live queue symptom for each PRD cell to a follow-up planner
+disposition. Evidence comes from
+`same_name_consume_path_cell_disposition_test.go`, which reproduces the orphan
+`task:to-complete` pattern (successful consume plus duplicate task residue) and
+evaluates runtime marking plus projection queue parity.
+
+| Cell | Live queue symptom | Ownership layer | Disposition | Follow-up action |
+| --- | --- | --- | --- | --- |
+| `dynamic-workflows-cell-cli-validate-list` | `task:to-complete` stranded; idea twin hidden at `idea:complete` | `historical_queue_artifact` | `needs_bounded_manual_move` | `you work move <orphan-work-id> complete` when bounded preconditions hold |
+| `dynamic-workflows-cell-cli-run-status-result` | same orphan pattern | `historical_queue_artifact` | `needs_bounded_manual_move` | same bounded manual move |
+| `dynamic-workflows-cell-mcp-tools` | same orphan pattern | `historical_queue_artifact` | `needs_bounded_manual_move` | same bounded manual move; post-repair disposition is `complete` |
+
+Fresh reviewed same-name pairs for these cell names complete through the
+repaired consume path without manual intervention (`cellDispositionComplete` in
+the disposition test). The stranded live cells are historical residue from
+duplicate task submissions after an earlier successful consume, not a live
+runtime defect after story 002 enablement repair.
+
+Expected post-repair observable state for each manual move:
+
+- Orphan `task:to-complete` token moves to `task:complete`.
+- No `task:to-complete` token remains for the cell name.
+- `idea:complete` remains unchanged for the hidden idea twin.
+- Other reviewed lanes continue to complete through the existing consume path.
