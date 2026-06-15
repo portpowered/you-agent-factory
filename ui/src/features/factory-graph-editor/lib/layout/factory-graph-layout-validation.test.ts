@@ -1,4 +1,5 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: layout validation scenarios stay grouped around shared topology fixtures.
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: layout validation scenarios stay grouped around shared topology fixtures.
 import { describe, expect, it } from "vitest";
 
 import { buildFactoryGraphTopologyFromDefinition } from "../draft/factory-graph-draft-graph";
@@ -7,11 +8,14 @@ import { setFactoryLayoutEdgeWaypoints } from "./factory-graph-layout-edge-waypo
 import { createDefaultFactoryLayout } from "./factory-graph-layout-operations";
 import {
   collectFactoryLayoutEdgeValidationTargets,
+  collectFactoryLayoutGroupValidationTargets,
   FACTORY_LAYOUT_VALIDATION_CODE,
   factoryLayoutTopologyEdgeIds,
+  factoryLayoutTopologyNodeIds,
   preparePendingFactoryLayoutForSave,
   projectFactoryLayoutValidationTargets,
   pruneFactoryLayoutEdgesForTopology,
+  pruneFactoryLayoutGroupsForTopology,
   resolveFactoryLayoutEdgeWaypointsForRendering,
 } from "./factory-graph-layout-validation";
 
@@ -202,7 +206,6 @@ describe("factory-graph-layout-validation", () => {
     const topology = buildFactoryGraphTopologyFromDefinition(
       baseFactoryDefinition,
     );
-    const validEdgeIds = factoryLayoutTopologyEdgeIds(topology);
     const layout: ReturnType<typeof createDefaultFactoryLayout> = {
       schemaVersion: 1,
       edges: [
@@ -217,7 +220,7 @@ describe("factory-graph-layout-validation", () => {
       ],
     };
 
-    expect(projectFactoryLayoutValidationTargets(layout, validEdgeIds)).toEqual([
+    expect(projectFactoryLayoutValidationTargets(layout, topology)).toEqual([
       expect.objectContaining({
         code: FACTORY_LAYOUT_VALIDATION_CODE.invalidGeometry,
         severity: "warning",
@@ -243,7 +246,6 @@ describe("factory-graph-layout-validation", () => {
     const topology = buildFactoryGraphTopologyFromDefinition(
       baseFactoryDefinition,
     );
-    const validEdgeIds = factoryLayoutTopologyEdgeIds(topology);
     const layout: ReturnType<typeof createDefaultFactoryLayout> = {
       schemaVersion: 1,
       edges: [
@@ -254,7 +256,7 @@ describe("factory-graph-layout-validation", () => {
       ],
     };
 
-    const prepared = preparePendingFactoryLayoutForSave(layout, validEdgeIds);
+    const prepared = preparePendingFactoryLayoutForSave(layout, topology);
 
     expect(prepared.layout.edges).toBeUndefined();
   });
@@ -404,5 +406,244 @@ describe("factory-graph-layout-validation", () => {
 
     expect(prunedEdgeIds).toEqual(expectedPrunedEdgeIds);
     expect(prunedLayout.edges).toEqual(expectedEdges);
+  });
+
+  it("projects group layout validation targets with recoverable warning messages", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const layout: ReturnType<typeof createDefaultFactoryLayout> = {
+      schemaVersion: 1,
+      groups: [
+        {
+          bounds: { x: 10, y: Number.NaN, width: 320, height: 180 },
+          id: "broken-lane",
+          nodeIds: ["workstation:draft", "workstation:missing"],
+        },
+      ],
+    };
+
+    expect(projectFactoryLayoutValidationTargets(layout, topology)).toEqual([
+      expect.objectContaining({
+        code: FACTORY_LAYOUT_VALIDATION_CODE.invalidGeometry,
+        message:
+          'Layout group "broken-lane" bounds contain non-finite geometry.',
+      }),
+      expect.objectContaining({
+        code: FACTORY_LAYOUT_VALIDATION_CODE.unknownGroupMemberReference,
+        message:
+          'Layout group "broken-lane" references unknown graph node "workstation:missing".',
+      }),
+    ]);
+  });
+
+  it("ignores groups without ids and blank group member ids when collecting targets", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const validNodeIds = factoryLayoutTopologyNodeIds(topology);
+    const layout: ReturnType<typeof createDefaultFactoryLayout> = {
+      schemaVersion: 1,
+      groups: [
+        {
+          bounds: { x: 0, y: 0, width: 100, height: 100 },
+          id: "",
+          nodeIds: ["workstation:missing"],
+        },
+        {
+          bounds: { x: 40, y: 60, width: 120, height: 80 },
+          id: "valid-lane",
+          nodeIds: ["", "workstation:missing"],
+        },
+      ],
+    };
+
+    expect(
+      collectFactoryLayoutGroupValidationTargets(layout, validNodeIds),
+    ).toEqual([
+      {
+        code: FACTORY_LAYOUT_VALIDATION_CODE.unknownGroupMemberReference,
+        path: "factory.layout.groups[1].nodeIds[1]",
+      },
+    ]);
+  });
+
+  it("reports stale group member references against pending topology", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const validNodeIds = factoryLayoutTopologyNodeIds(topology);
+    const layout: ReturnType<typeof createDefaultFactoryLayout> = {
+      schemaVersion: 1,
+      groups: [
+        {
+          bounds: { x: 10, y: 20, width: 320, height: 180 },
+          id: "review-lane",
+          label: "Review",
+          nodeIds: ["workstation:draft", "workstation:missing"],
+        },
+      ],
+    };
+
+    expect(
+      collectFactoryLayoutGroupValidationTargets(layout, validNodeIds),
+    ).toEqual([
+      {
+        code: FACTORY_LAYOUT_VALIDATION_CODE.unknownGroupMemberReference,
+        path: "factory.layout.groups[0].nodeIds[1]",
+      },
+    ]);
+  });
+
+  it("reports non-finite group bounds as recoverable layout validation targets", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const validNodeIds = factoryLayoutTopologyNodeIds(topology);
+    const layout: ReturnType<typeof createDefaultFactoryLayout> = {
+      schemaVersion: 1,
+      groups: [
+        {
+          bounds: {
+            x: 10,
+            y: Number.NaN,
+            width: 320,
+            height: 180,
+          },
+          id: "broken-lane",
+          nodeIds: ["workstation:draft"],
+        },
+      ],
+    };
+
+    expect(
+      collectFactoryLayoutGroupValidationTargets(layout, validNodeIds),
+    ).toEqual([
+      {
+        code: FACTORY_LAYOUT_VALIDATION_CODE.invalidGeometry,
+        path: "factory.layout.groups[0].bounds",
+      },
+    ]);
+  });
+
+  it("prunes stale group members while preserving empty groups and group metadata", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const validNodeIds = factoryLayoutTopologyNodeIds(topology);
+    const layout: ReturnType<typeof createDefaultFactoryLayout> = {
+      schemaVersion: 1,
+      groups: [
+        {
+          bounds: { x: 360, y: 120, width: 520, height: 360 },
+          color: "blue",
+          id: "review-lane",
+          label: "Review",
+          locked: false,
+          nodeIds: ["workstation:draft", "workstation:missing"],
+          parentGroupId: null,
+        },
+        {
+          bounds: { x: 0, y: 0, width: 10, height: 10 },
+          id: "empty-lane",
+          nodeIds: ["workstation:missing"],
+        },
+      ],
+    };
+
+    const { layout: prunedLayout, prunedGroupMemberNodeIds, rejectedGroupIds } =
+      pruneFactoryLayoutGroupsForTopology(layout, validNodeIds);
+
+    expect(prunedGroupMemberNodeIds).toEqual([
+      "workstation:missing",
+      "workstation:missing",
+    ]);
+    expect(rejectedGroupIds).toEqual([]);
+    expect(prunedLayout.groups).toEqual([
+      {
+        bounds: { x: 360, y: 120, width: 520, height: 360 },
+        color: "blue",
+        id: "review-lane",
+        label: "Review",
+        locked: false,
+        nodeIds: ["workstation:draft"],
+        parentGroupId: null,
+      },
+      {
+        bounds: { x: 0, y: 0, width: 10, height: 10 },
+        id: "empty-lane",
+        nodeIds: [],
+      },
+    ]);
+  });
+
+  it("drops groups without ids and blank member ids during topology pruning", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const validNodeIds = factoryLayoutTopologyNodeIds(topology);
+    const layout: ReturnType<typeof createDefaultFactoryLayout> = {
+      schemaVersion: 1,
+      groups: [
+        {
+          bounds: { x: 0, y: 0, width: 120, height: 80 },
+          id: "",
+          nodeIds: ["workstation:missing"],
+        },
+        {
+          bounds: { x: 40, y: 60, width: 120, height: 80 },
+          id: "valid-lane",
+          nodeIds: ["", "workstation:missing", "workstation:draft"],
+        },
+      ],
+    };
+
+    const { layout: prunedLayout, prunedGroupMemberNodeIds } =
+      pruneFactoryLayoutGroupsForTopology(layout, validNodeIds);
+
+    expect(prunedGroupMemberNodeIds).toEqual(["workstation:missing"]);
+    expect(prunedLayout.groups).toEqual([
+      {
+        bounds: { x: 40, y: 60, width: 120, height: 80 },
+        id: "valid-lane",
+        nodeIds: ["workstation:draft"],
+      },
+    ]);
+  });
+
+  it("rejects groups with non-finite bounds during save preparation", () => {
+    const topology = buildFactoryGraphTopologyFromDefinition(
+      baseFactoryDefinition,
+    );
+    const layout: ReturnType<typeof createDefaultFactoryLayout> = {
+      schemaVersion: 1,
+      groups: [
+        {
+          bounds: {
+            x: 10,
+            y: 20,
+            width: Number.POSITIVE_INFINITY,
+            height: 180,
+          },
+          id: "broken-lane",
+          nodeIds: ["workstation:draft"],
+        },
+        {
+          bounds: { x: 40, y: 60, width: 120, height: 80 },
+          id: "valid-lane",
+          nodeIds: ["workstation:draft"],
+        },
+      ],
+    };
+
+    const prepared = preparePendingFactoryLayoutForSave(layout, topology);
+
+    expect(prepared.layout.groups).toEqual([
+      {
+        bounds: { x: 40, y: 60, width: 120, height: 80 },
+        id: "valid-lane",
+        nodeIds: ["workstation:draft"],
+      },
+    ]);
   });
 });

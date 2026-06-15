@@ -202,6 +202,22 @@ function createEditorStub(overrides: Record<string, unknown> = {}) {
       ...((merged as { edgeWaypointControls?: object })
         .edgeWaypointControls ?? {}),
     },
+    visualGroupControls: {
+      canEditVisualGroups: true,
+      clearSelectedVisualGroup: vi.fn(),
+      groupAriaLabel: (group: { id: string; label?: string }) =>
+        group.label ?? group.id,
+      groups: [],
+      handleCreateVisualGroup: vi.fn(),
+      handleRenameSelectedGroup: vi.fn(),
+      handleSelectVisualGroup: vi.fn(),
+      handleSetSelectedGroupColor: vi.fn(),
+      selectedGroup: undefined,
+      selectedGroupId: null,
+      visualGroupControls: null,
+      ...((merged as { visualGroupControls?: object }).visualGroupControls ??
+        {}),
+    },
     graphState: {
       canonicalLayout,
       canonicalLayoutViewport: null,
@@ -394,6 +410,79 @@ describe("CurrentActivityGraphSurface", () => {
     expect(viewModel.removalControls.deleteEdge).toHaveBeenCalledTimes(1);
     expect(viewModel.removalControls.deleteNode).toHaveBeenCalledTimes(1);
     expect(viewModel.setActiveTool).toHaveBeenCalledWith("connect");
+  });
+
+  it("renders recoverable layout group warnings separately from blocking validation errors", () => {
+    render(
+      <CurrentActivityGraphSurface
+        viewModel={
+          createViewModelStub({
+            blockedRemovalReason: null,
+            connectionNotice: null,
+            draftState: { hasChanges: true },
+            hasActiveWork: false,
+            isStaleDraft: false,
+            structuralValidation: {
+              projection: projectFactoryValidationTargets([]),
+              targets: [
+                {
+                  code: "factory.layout.unknownGroupMemberReference",
+                  message:
+                    'Layout group "review-lane" references unknown graph node "workstation:missing".',
+                  severity: "warning",
+                  subject: {
+                    id: "review-lane",
+                    location: "REFERENCE",
+                    type: "FACTORY",
+                  },
+                },
+                {
+                  code: "factory.workstation.missingFailureRoute",
+                  message:
+                    'Workstation "review" must define a failure route.',
+                  severity: "error",
+                  subject: {
+                    id: "review",
+                    location: "ON_FAILURE",
+                    type: "WORKSTATION",
+                  },
+                },
+              ],
+            },
+            validationControls: {
+              draftErrors: [
+                {
+                  code: "MISSING_REQUIRED_FIELD",
+                  field: "worker",
+                  message:
+                    'Workstation "review" must assign a worker before saving.',
+                  target: {
+                    id: "workstation:review",
+                    kind: "node",
+                  },
+                },
+              ],
+            },
+          }) as never
+        }
+        imports={{} as never}
+        selection={null}
+        snapshot={semanticWorkflowDashboardSnapshot}
+      />,
+    );
+
+    expect(screen.getByText("Recoverable layout warning")).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Layout group "review-lane" references unknown graph node "workstation:missing".',
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Factory validation issue")).toBeTruthy();
+    expect(
+      screen.getByText(
+        'Workstation "review" must assign a worker before saving.',
+      ),
+    ).toBeTruthy();
   });
 
   it("renders workstation validation messages in the failure notice when a marked workstation is selected", () => {

@@ -145,6 +145,49 @@ func TestFakeService_StartSync_TerminalAndTimeoutFixtures(t *testing.T) {
 	if timedOut.SyncOutcome != SyncOutcomeTimedOut || !timedOut.TimedOut {
 		t.Fatalf("timeout response = %#v", timedOut)
 	}
+	if timedOut.SessionCanceledByTimeout {
+		t.Fatal("sessionCanceledByTimeout = true, want false without cancel-on-timeout")
+	}
+}
+
+func TestFakeService_StartSync_AppliesCancelOnTimeoutOverlay(t *testing.T) {
+	service := newContractFakeService(t)
+	timedOut, err := service.StartSync(context.Background(), StartRequest{
+		RequestID: "req-js-timeout-001",
+		Source:    Source{Kind: workflowsource.KindWorkflowName, WorkflowName: "long-running-audit"},
+		Wait: &WaitOptions{
+			TimeoutMillis:   int64Ptr(30000),
+			CancelOnTimeout: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartSync timeout with cancel: %v", err)
+	}
+	if !timedOut.SessionCanceledByTimeout {
+		t.Fatal("sessionCanceledByTimeout = false, want true")
+	}
+	if timedOut.Status != string(LifecycleStatusCanceling) {
+		t.Fatalf("status = %q, want CANCELING", timedOut.Status)
+	}
+
+	session, err := service.GetSession(context.Background(), "dur-sess-js-timeout-001")
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if session.Status != LifecycleStatusCanceling {
+		t.Fatalf("session status = %q, want CANCELING", session.Status)
+	}
+
+	result, err := service.GetResult(context.Background(), "dur-sess-js-timeout-001", ResultRequest{Mode: ResultModeFinal})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.ResultStatus != ResultStatusUnavailable {
+		t.Fatalf("resultStatus = %q, want UNAVAILABLE", result.ResultStatus)
+	}
+	if result.Availability == nil || result.Availability.Reason != "SESSION_CANCELED" {
+		t.Fatalf("availability = %#v, want SESSION_CANCELED", result.Availability)
+	}
 }
 
 func TestFakeService_LifecycleControl_IdempotentReplayAndConflict(t *testing.T) {

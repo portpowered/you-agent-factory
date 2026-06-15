@@ -15,6 +15,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
+	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 )
 
 const listRequestTimeout = 10 * time.Second
@@ -22,24 +23,92 @@ const listRequestTimeout = 10 * time.Second
 // ListConfig holds parameters for the session list command.
 type ListConfig struct {
 	Port        int
+	Scope       string
 	JSON        bool
 	Verbose     bool
 	Debug       bool
 	Output      io.Writer
 	Diagnostics io.Writer
+	DurableLister durableSessionLister
 }
 
-// List requests live factory sessions from a running host via HTTP.
+// List requests factory sessions from a running host and, when scoped listing
+// includes durable rows, from the deterministic fixture-backed provider.
 func List(cfg ListConfig) error {
 	if cfg.Output == nil {
 		cfg.Output = os.Stdout
 	}
 
+	normalized, err := fse.NormalizeListSessionsRequest(fse.ListSessionsRequest{
+		Scope: fse.SessionListScope(strings.TrimSpace(cfg.Scope)),
+	})
+	if err != nil {
+		return err
+	}
+
+	needsLive := normalized.Scope == fse.SessionListScopeLive || normalized.Scope == fse.SessionListScopeAll
+	needsDurable := normalized.Scope == fse.SessionListScopePersisted || normalized.Scope == fse.SessionListScopeAll
+
+	if needsDurable && !needsLive {
+		scoped, err := mergeScopedListResult(context.Background(), cfg, normalized, nil)
+		if err != nil {
+			return err
+		}
+		return emitListResult(cfg, listResponseFromScopedResult(scoped), len(scoped.LiveSessions), len(scoped.DurableSessions))
+	}
+
+	if !needsLive {
+		return fmt.Errorf("unsupported session list scope %q", normalized.Scope)
+	}
+
+	liveSessions, httpResult, err := fetchLiveSessions(cfg)
+	if err != nil {
+		return err
+	}
+	if !needsDurable {
+		if cfg.JSON {
+			encoder := json.NewEncoder(cfg.Output)
+			return encoder.Encode(httpResult)
+		}
+		return renderListResult(cfg.Output, httpResult)
+	}
+
+	scoped, err := mergeScopedListResult(context.Background(), cfg, normalized, liveSessions)
+	if err != nil {
+		return err
+	}
+	return emitListResult(cfg, listResponseFromScopedResult(scoped), len(scoped.LiveSessions), len(scoped.DurableSessions))
+}
+
+func emitListResult(cfg ListConfig, result factoryapi.ListFactorySessionsResponse, liveCount, durableCount int) error {
+	clidiag.Printf(
+		cfg.Diagnostics,
+		cfg.Verbose,
+		"session list response scope=%s liveSessionCount=%d durableSessionCount=%d",
+		scopeLabel(result.Scope),
+		liveCount,
+		durableCount,
+	)
+	if cfg.JSON {
+		encoder := json.NewEncoder(cfg.Output)
+		return encoder.Encode(result)
+	}
+	return renderListResult(cfg.Output, result)
+}
+
+func scopeLabel(scope *factoryapi.FactorySessionListScope) string {
+	if scope == nil {
+		return string(fse.DefaultSessionListScope)
+	}
+	return string(*scope)
+}
+
+func fetchLiveSessions(cfg ListConfig) ([]fse.LiveSessionSummary, factoryapi.ListFactorySessionsResponse, error) {
 	endpoint := listEndpoint(cfg)
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
-		"session list request endpointPath=%s endpoint=%s port=%d",
+		"session list request endpointPath=%s endpoint=%s port=%d scope=live",
 		endpoint.Path,
 		endpoint.String(),
 		cfg.Port,
@@ -61,15 +130,23 @@ func List(cfg ListConfig) error {
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("factory sessions endpoint not reachable at %s: %w", endpoint.String(), err)
+		return nil, factoryapi.ListFactorySessionsResponse{}, fmt.Errorf(
+			"factory sessions endpoint not reachable at %s: %w",
+			endpoint.String(),
+			err,
+		)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		if errResp, ok := clihttp.DecodeAPIError(resp); ok {
-			return fmt.Errorf("list factory sessions failed (%d): %s", resp.StatusCode, errResp.Message)
+			return nil, factoryapi.ListFactorySessionsResponse{}, fmt.Errorf(
+				"list factory sessions failed (%d): %s",
+				resp.StatusCode,
+				errResp.Message,
+			)
 		}
-		return fmt.Errorf("list factory sessions failed (%d)", resp.StatusCode)
+		return nil, factoryapi.ListFactorySessionsResponse{}, fmt.Errorf("list factory sessions failed (%d)", resp.StatusCode)
 	}
 	clidiag.Printf(
 		cfg.Diagnostics,
@@ -80,11 +157,18 @@ func List(cfg ListConfig) error {
 		time.Since(started).Milliseconds(),
 		len(result.Sessions),
 	)
-	if cfg.JSON {
-		encoder := json.NewEncoder(cfg.Output)
-		return encoder.Encode(result)
+
+	liveSessions := make([]fse.LiveSessionSummary, 0, len(result.Sessions))
+	for _, session := range result.Sessions {
+		liveSessions = append(liveSessions, fse.LiveSessionSummary{
+			ID:         session.Id,
+			FactoryDir: session.FactoryDir,
+			FolderPath: session.FolderPath,
+			Project:    session.Project,
+			IsDefault:  session.IsDefault,
+		})
 	}
-	return renderListResult(cfg.Output, result)
+	return liveSessions, result, nil
 }
 
 func listEndpoint(cfg ListConfig) url.URL {
@@ -93,34 +177,6 @@ func listEndpoint(cfg ListConfig) url.URL {
 		Host:   fmt.Sprintf("localhost:%d", cfg.Port),
 		Path:   "/factory-sessions",
 	}
-}
-
-func renderListResult(output io.Writer, result factoryapi.ListFactorySessionsResponse) error {
-	if len(result.Sessions) == 0 {
-		_, err := fmt.Fprintln(output, "No live factory sessions were found.")
-		return err
-	}
-
-	if _, err := fmt.Fprintln(output, "SESSION ID\tPROJECT\tFOLDER PATH\tFACTORY DIR\tDEFAULT\tORCHESTRATOR KIND\tTARGET KIND\tTARGET NAME"); err != nil {
-		return err
-	}
-	for _, session := range result.Sessions {
-		if _, err := fmt.Fprintf(
-			output,
-			"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-			session.Id,
-			session.Project,
-			session.FolderPath,
-			session.FactoryDir,
-			defaultMarker(session.IsDefault),
-			orchestratorKindLabel(session),
-			session.Target.Kind,
-			targetName(session.Target.Name),
-		); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func defaultMarker(isDefault bool) string {

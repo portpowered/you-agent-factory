@@ -119,4 +119,36 @@ describe("factory graph layout operations", () => {
     expect(hasFactoryLayoutChanges(baseLayout, pendingLayout)).toBe(true);
     expect(hasFactoryLayoutChanges(baseLayout, baseLayout)).toBe(false);
   });
+
+  it("loads visual groups from the factory document without dropping metadata", () => {
+    const layout = factoryLayoutFromDefinition({
+      ...baseFactoryDefinition,
+      layout: {
+        schemaVersion: 1,
+        groups: [
+          {
+            bounds: { x: 360, y: 120, width: 520, height: 360 },
+            color: "blue",
+            id: "review-lane",
+            label: "Review",
+            locked: false,
+            nodeIds: ["workstation:draft"],
+            parentGroupId: null,
+          },
+        ],
+      },
+    });
+
+    expect(layout.groups).toEqual([
+      {
+        bounds: { x: 360, y: 120, width: 520, height: 360 },
+        color: "blue",
+        id: "review-lane",
+        label: "Review",
+        locked: false,
+        nodeIds: ["workstation:draft"],
+        parentGroupId: null,
+      },
+    ]);
+  });
 });

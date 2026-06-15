@@ -139,5 +139,6 @@ describe("graph-editor-harness", () => {
 
     expect(graph.saveState.isStale).toBe(true);
     expect(graph.saveState.canSave).toBe(false);
+    expect(graph.saveState.documentSave.status).toBe("warning");
   });
 });
