@@ -149,6 +149,7 @@ func DispatchDetailResponseToAPI(result factorysessionexecution.DispatchDetail) 
 func ListArtifactsResponseToAPI(result factorysessionexecution.ListArtifactsResult) factoryapi.ListFactorySessionArtifactsResponse {
 	response := factoryapi.ListFactorySessionArtifactsResponse{
 		SessionId: result.SessionID,
+		Artifacts: []factoryapi.FactorySessionArtifactSummary{},
 	}
 	if len(result.Artifacts) > 0 {
 		artifacts := make([]factoryapi.FactorySessionArtifactSummary, 0, len(result.Artifacts))

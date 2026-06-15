@@ -1088,3 +1088,14 @@ func (fs *FactoryService) GetDurableFactorySessionDispatch(
 	}
 	return factorysession.DispatchDetailResponseToAPI(result), nil
 }
+
+func (fs *FactoryService) ListDurableFactorySessionArtifacts(
+	ctx context.Context,
+	sessionID string,
+) (factoryapi.ListFactorySessionArtifactsResponse, error) {
+	result, err := fs.durableExecutionService().ListArtifacts(ctx, sessionID)
+	if err != nil {
+		return factoryapi.ListFactorySessionArtifactsResponse{}, err
+	}
+	return factorysession.ListArtifactsResponseToAPI(result), nil
+}

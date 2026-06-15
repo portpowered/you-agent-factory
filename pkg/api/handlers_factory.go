@@ -226,8 +226,25 @@ func (s *Server) GetFactorySessionDispatch(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) ListFactorySessionArtifacts(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	_ = sessionID
-	s.writeError(w, http.StatusNotImplemented, "durable factory session artifact listing is not implemented", "INTERNAL_ERROR")
+	if !isDurableExecutionSessionID(string(sessionID)) {
+		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+		return
+	}
+
+	reader, ok := s.requireDurableSessionArtifactReader(w)
+	if !ok {
+		return
+	}
+	response, err := reader.ListDurableFactorySessionArtifacts(r.Context(), string(sessionID))
+	if err != nil {
+		if s.writeDurableSessionReadError(w, err) {
+			return
+		}
+		s.logger.Error("list durable factory session artifacts failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to list factory session artifacts", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) GetFactorySessionArtifact(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, artifactID factoryapi.ArtifactID) {
@@ -585,6 +602,13 @@ type durableSessionDispatchReader interface {
 	) (factoryapi.FactoryDispatch, error)
 }
 
+type durableSessionArtifactReader interface {
+	ListDurableFactorySessionArtifacts(
+		ctx context.Context,
+		sessionID string,
+	) (factoryapi.ListFactorySessionArtifactsResponse, error)
+}
+
 func (s *Server) requireDurableSessionDispatchReader(w http.ResponseWriter) (durableSessionDispatchReader, bool) {
 	if s.runtime == nil {
 		s.writeError(w, http.StatusInternalServerError, "durable factory session dispatch read is unavailable", "INTERNAL_ERROR")
@@ -593,6 +617,19 @@ func (s *Server) requireDurableSessionDispatchReader(w http.ResponseWriter) (dur
 	reader, ok := s.runtime.(durableSessionDispatchReader)
 	if !ok {
 		s.writeError(w, http.StatusNotImplemented, "durable factory session dispatch read is not implemented", "INTERNAL_ERROR")
+		return nil, false
+	}
+	return reader, true
+}
+
+func (s *Server) requireDurableSessionArtifactReader(w http.ResponseWriter) (durableSessionArtifactReader, bool) {
+	if s.runtime == nil {
+		s.writeError(w, http.StatusInternalServerError, "durable factory session artifact read is unavailable", "INTERNAL_ERROR")
+		return nil, false
+	}
+	reader, ok := s.runtime.(durableSessionArtifactReader)
+	if !ok {
+		s.writeError(w, http.StatusNotImplemented, "durable factory session artifact read is not implemented", "INTERNAL_ERROR")
 		return nil, false
 	}
 	return reader, true
