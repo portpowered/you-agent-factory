@@ -114,6 +114,55 @@ class SetupWorkspaceFailureTest(unittest.TestCase):
         self.assertNotIn("Worktree preparation failed", stderr)
         self.assertNotIn("PRD copy failed", stderr)
 
+    def test_reports_root_sync_failure_when_fetch_fails_without_local_main(self):
+        bare_remote = self.repo_path / "remote.git"
+        bare_remote.mkdir()
+        subprocess.run(
+            ["git", "init", "--bare", "-b", "main"],
+            cwd=bare_remote,
+            check=True,
+        )
+
+        local_repo = self.repo_path / "local"
+        subprocess.run(
+            ["git", "clone", str(bare_remote), str(local_repo.name)],
+            cwd=self.repo_path,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "checkout", "-b", "feature-branch"],
+            cwd=local_repo,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "update-ref", "-d", "refs/heads/main"],
+            cwd=local_repo,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "update-ref", "-d", "refs/remotes/origin/main"],
+            cwd=local_repo,
+            check=True,
+        )
+
+        unreachable_remote = self.repo_path / "missing-remote.git"
+        subprocess.run(
+            ["git", "remote", "set-url", "origin", str(unreachable_remote)],
+            cwd=local_repo,
+            check=True,
+        )
+
+        prd_name = "blocking-root-sync-prd"
+        write_prd(local_repo, prd_name)
+
+        result = run_setup_workspace(local_repo, prd_name)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("Root sync failed:", result.stderr)
+        self.assertIn("fetch failed", result.stderr.lower())
+        self.assertIn("refs/heads/main is missing", result.stderr)
+        self.assertNotIn("Worktree preparation failed", result.stderr)
+        self.assertNotIn("PRD copy failed", result.stderr)
+
     def test_reports_worktree_preparation_failure_without_root_sync_label(self):
         bare_remote = self.repo_path / "remote.git"
         bare_remote.mkdir()

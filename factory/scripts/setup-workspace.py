@@ -80,6 +80,26 @@ def remote_main_sha(repo_root):
     return result.stdout.strip().split()[0]
 
 
+def stale_origin_main_sha(repo_root):
+    """Return local origin/main sha when the remote-tracking ref exists."""
+    if not origin_main_ref_exists(repo_root):
+        return None
+    result = run_git(
+        "rev-parse", "refs/remotes/origin/main",
+        cwd=repo_root, check=False,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
+
+
+def resolve_remote_main_sha(repo_root, fetch_succeeded):
+    """Resolve the best available origin/main sha for root sync."""
+    if fetch_succeeded:
+        return remote_main_sha(repo_root)
+    return stale_origin_main_sha(repo_root)
+
+
 def is_main_checked_out_with_local_changes(repo_root):
     """True when main is checked out and the working tree has local changes."""
     current = run_git(
@@ -113,12 +133,23 @@ def sync_main(repo_root):
         return "skipped (no origin remote)"
 
     fetch_result = run_git("fetch", "origin", cwd=repo_root, check=False)
-    if fetch_result.returncode != 0:
-        return f"skipped (fetch failed: {fetch_result.stderr.strip()})"
+    fetch_succeeded = fetch_result.returncode == 0
+    if not fetch_succeeded:
+        if local_main_ref_exists(repo_root):
+            return f"skipped (fetch failed: {fetch_result.stderr.strip()})"
+        if not origin_main_ref_exists(repo_root):
+            raise RuntimeError(
+                "fetch failed and refs/heads/main is missing: "
+                f"{fetch_result.stderr.strip()}"
+            )
 
-    remote_sha = remote_main_sha(repo_root)
+    remote_sha = resolve_remote_main_sha(repo_root, fetch_succeeded)
     if remote_sha is None:
-        return "skipped (origin has no main branch)"
+        if local_main_ref_exists(repo_root):
+            return "skipped (origin has no main branch)"
+        raise RuntimeError(
+            "origin has no main branch and refs/heads/main is missing"
+        )
 
     if not local_main_ref_exists(repo_root):
         run_git("update-ref", "refs/heads/main", remote_sha, cwd=repo_root)
