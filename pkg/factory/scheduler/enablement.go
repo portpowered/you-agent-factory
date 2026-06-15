@@ -141,39 +141,24 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 		}
 	}
 
-	// Phase 2: evaluate guarded arcs with bindings from phase 1.
+	// Phase 2: evaluate guarded arcs that do not require peer bindings first.
+	var guardedPeerBinding []int
 	for _, idx := range guarded {
 		arc := &tr.InputArcs[idx]
-		candidates := stableTokens(marking.TokensInPlace(arc.PlaceID))
-		guardMatched, ok := e.evaluateGuard(arc.Guard, petri.RuntimeGuardContext{
-			Now:                 e.now(),
-			CurrentTransitionID: tr.ID,
-			DispatchHistory:     snapshot.DispatchHistory,
-			RuntimeConfig:       e.runtimeConfig,
-			TransitionWorkers:   transitionWorkerTypes(snapshot.Topology, tr),
-		}, candidates, guardBindings, marking)
-		if !ok {
-			e.logger.Debug("enablement: transition disabled",
-				"transitionID", tr.ID,
-				"transitionName", tr.Name,
-				"reason", fmt.Sprintf("guard failed for arc %q (place %s, candidates %d)",
-					arcKey(arc), arc.PlaceID, len(candidates)))
+		if guardRequiresPeerBinding(arc.Guard) {
+			guardedPeerBinding = append(guardedPeerBinding, idx)
+			continue
+		}
+		if !e.evaluateGuardedArc(tr, snapshot, arc, marking, guardBindings, result, arcModes) {
 			return interfaces.EnabledTransition{}, false
 		}
-		matched := ApplyCardinality(stableTokens(guardMatched), arc.Cardinality)
-		if matched == nil {
-			e.logger.Debug("enablement: transition disabled",
-				"transitionID", tr.ID,
-				"transitionName", tr.Name,
-				"reason", fmt.Sprintf("insufficient tokens after guard for arc %q (place %s, cardinality %d, matched %d)",
-					arcKey(arc), arc.PlaceID, arc.Cardinality.Mode, len(guardMatched)))
+	}
+
+	// Phase 3: evaluate peer-binding guards after their match arcs are bound.
+	for _, idx := range guardedPeerBinding {
+		arc := &tr.InputArcs[idx]
+		if !e.evaluateGuardedArc(tr, snapshot, arc, marking, guardBindings, result, arcModes) {
 			return interfaces.EnabledTransition{}, false
-		}
-		key := arcKey(arc)
-		result[key] = matched
-		arcModes[key] = arc.Mode
-		if len(matched) > 0 {
-			guardBindings[key] = &matched[0]
 		}
 	}
 
@@ -183,6 +168,70 @@ func (e *EnablementEvaluator) checkTransitionEnabled(_ context.Context, tr *petr
 		Bindings:     result,
 		ArcModes:     arcModes,
 	}, true
+}
+
+func (e *EnablementEvaluator) evaluateGuardedArc(
+	tr *petri.Transition,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	arc *petri.Arc,
+	marking *petri.MarkingSnapshot,
+	guardBindings map[string]*interfaces.Token,
+	result map[string][]interfaces.Token,
+	arcModes map[string]interfaces.ArcMode,
+) bool {
+	candidates := stableTokens(marking.TokensInPlace(arc.PlaceID))
+	guardMatched, ok := e.evaluateGuard(arc.Guard, petri.RuntimeGuardContext{
+		Now:                 e.now(),
+		CurrentTransitionID: tr.ID,
+		DispatchHistory:     snapshot.DispatchHistory,
+		RuntimeConfig:       e.runtimeConfig,
+		TransitionWorkers:   transitionWorkerTypes(snapshot.Topology, tr),
+	}, candidates, guardBindings, marking)
+	if !ok {
+		e.logger.Debug("enablement: transition disabled",
+			"transitionID", tr.ID,
+			"transitionName", tr.Name,
+			"reason", fmt.Sprintf("guard failed for arc %q (place %s, candidates %d)",
+				arcKey(arc), arc.PlaceID, len(candidates)))
+		return false
+	}
+	matched := ApplyCardinality(stableTokens(guardMatched), arc.Cardinality)
+	if matched == nil {
+		e.logger.Debug("enablement: transition disabled",
+			"transitionID", tr.ID,
+			"transitionName", tr.Name,
+			"reason", fmt.Sprintf("insufficient tokens after guard for arc %q (place %s, cardinality %d, matched %d)",
+				arcKey(arc), arc.PlaceID, arc.Cardinality.Mode, len(guardMatched)))
+		return false
+	}
+	key := arcKey(arc)
+	result[key] = matched
+	arcModes[key] = arc.Mode
+	if len(matched) > 0 {
+		guardBindings[key] = &matched[0]
+	}
+	return true
+}
+
+func guardRequiresPeerBinding(guard petri.Guard) bool {
+	if guard == nil {
+		return false
+	}
+	switch typed := guard.(type) {
+	case *petri.SameNameGuard, *petri.SameTraceIDGuard:
+		return true
+	case *petri.MatchesFieldsGuard:
+		return typed.MatchBinding != ""
+	case *petri.AllGuard:
+		for _, nested := range typed.Guards {
+			if guardRequiresPeerBinding(nested) {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
 }
 
 func (e *EnablementEvaluator) findSingleTokenBindingTransition(
@@ -238,7 +287,12 @@ func singleTokenBindingOrder(tr *petri.Transition) []int {
 		}
 	}
 	for i := range tr.InputArcs {
-		if tr.InputArcs[i].Guard != nil {
+		if tr.InputArcs[i].Guard != nil && !guardRequiresPeerBinding(tr.InputArcs[i].Guard) {
+			order = append(order, i)
+		}
+	}
+	for i := range tr.InputArcs {
+		if guardRequiresPeerBinding(tr.InputArcs[i].Guard) {
 			order = append(order, i)
 		}
 	}
