@@ -1,5 +1,10 @@
 ## Codebase Patterns
+- Classify residual dynamic-workflow recovery lanes from durable `you work list --json` snapshots via `classifyExecutorReviewLaneFromQueueEvidence` in `tests/functional/guards_batch/executor_review_state_lane_classification.go`; live evidence fixtures and harness reproduction live in `executor_review_state_lane_evidence_test.go`. Disposition table and follow-up ownership are documented in `docs/internal/processes/executor-review-state-relevant-files.md`.
+- Reconcile same-trace executor/review queue residue in `executorReviewReconcileMutations` (`pkg/factory/subsystems/executor_review_reconcile.go`): process accepted outputs supersede existing same-lane `review:init` for the trace before creating a new review token; review accepted outputs consume duplicate same-lane `review:init` plus stale `task:init`/`task:failed` for the same trace and lane name (`TokenColor.Name`). Sibling lanes sharing one chaining trace keep distinct review work. Wired from `subsystem_transitioner.go`; prove with `executor_review_reconcile_test.go` and `executor_review_state_reconcile_test.go`.
+- Executor/review lifecycle harness residue fixtures must submit duplicate same-lane tokens in separate `SubmitFull` batches; `WorkRequestFromSubmitRequests` uniquifies repeated names inside one batch (`lane-2`, `lane-3`), which breaks lane-scoped reconcile matching.
+- Bounded executor/review manual repair uses `evaluateExecutorReviewManualRepairPreconditions` in `executor_review_state_lane_classification.go`: only `failed_post_processing` lanes with `safe_manual_repair`, complete worktree delivery, one authoritative `task:failed`, `plan:complete`, and zero active `review:init` may use `you work move <task-id> init`. Duplicate-review lanes (`needs_runtime_reconcile`) and recovery-trace superseded rows must not be manually moved; prove in `executor_review_state_manual_repair_test.go` and `docs/internal/processes/executor-review-state-relevant-files.md`.
 - Keep `FakeService` and `RuntimeService` as parallel `factorysessionexecution.Service` implementations: mock-provider transports inject `FakeService` via `NewFakeService`, `NewFakeServiceFromContractFixtures`, `WithFakeScenarios`, and `WithPersistedSessionSeeds` without JavaScript runtime setup; real simple-workflow execution uses `NewRuntimeService` behind the same contract. Prove coexistence in `fake_service_coexistence_test.go` alongside `fake_service_test.go` and runtime-backed tests.
+- Executor/review lifecycle harness tests: use `scaffoldExecutorReviewProcessOnlyFactory` when proving process-accept supersede without review stealing provider responses; use `scaffoldExecutorReviewReconcileFactory` (review-only) for duplicate-review collapse; use full `scaffoldExecutorReviewLifecycleFactory` only when the test needs process→review terminal convergence with multiple queued `<COMPLETE>` responses. Stale `task:init`/`task:failed` cleanup at the service harness layer can remain nondeterministic—prove full residue cleanup in `executor_review_reconcile_test.go` transitioner pipeline tests instead.
 - Use `factorysessionexecution.PrepareStart` to normalize durable JavaScript session starts: it chains `NormalizeStartRequest`, `resolveStartSourceWithResolution`, wrapped-source validation (IIFE wrap matching `workflowruntime.Run`), args JSON checks, `workflowpolicy.Resolve`, and wait-option validation before runtime execution.
 - Runtime simple-workflow fixtures live in `pkg/orchestrators/javascript/runtime/testdata/`; factorysessionexecution tests can read them via `../orchestrators/javascript/runtime/testdata/<name>`.
 - Durable start source resolution is shared through `resolveStartSourceWithResolution`; `ResolveStartSource` is a thin wrapper returning only `ResolvedSource`.
@@ -105,4 +110,58 @@
 - **Learnings for future iterations:**
   - CI `Build, Lint, and API` runs `make backend-size` after `make vet`; large table-driven or assertion-heavy tests should use `t.Helper()` assertion helpers early to stay under the 100-line function cap.
   - `go vet` passing locally does not imply the full `Build, Lint, and API` job is green—run `make backend-size` when adding substantial test functions in owned backend packages.
+---
+
+## 2026-06-15T20:30:00Z - dynamic-workflows-recovery-executor-review-state-reconciliation-001
+- Captured live queue evidence from `you work list --session '~default' --name <lane> --json` for all three PRD recovery lanes and embedded it in `executor_review_state_lane_evidence_test.go`.
+- Added `classifyExecutorReviewLaneFromQueueEvidence` with mismatch causes (`failed_post_processing`, `duplicate_review_creation`, `historical_residual_queue_state`) and planner dispositions (`safe_manual_repair`, `needs_runtime_reconcile`, `superseded_queue_noise`).
+- Documented per-lane work IDs, trace lineage, symptoms, and follow-up ownership in `docs/internal/processes/executor-review-state-relevant-files.md`.
+- Proved duplicate `review:init` injection through `SubmitFull` plus `WaitForHarnessPlaceTokenCount` while the engine runs in the background.
+- Files changed: `tests/functional/guards_batch/executor_review_state_lane_classification.go`, `tests/functional/guards_batch/executor_review_state_lane_evidence_test.go`, `docs/internal/processes/executor-review-state-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: recovery-batch ideas stay on `trace-dynamic-workflows-*-recovery-*` while setup-workspace spawns a second plan/task trace (`trace-<hash>`); classify recovery-trace `plan:failed` rows as superseded noise when the spawned trace has `plan:complete`.
+  - Gotchas encountered: `SubmitFull` tokens are not visible in marking until `RunInBackground` is active—start the harness loop before submit and wait on place counts.
+  - Useful context: lane 3 live queue now shows `work-task-59` at `task:in-review` with three `review:init` tokens (`work-review-64`, `work-review-65`, `work-review-69`), not `task:init` with only two reviews as in the original PRD symptom snapshot.
+---
+
+## 2026-06-15T21:15:00Z - dynamic-workflows-recovery-executor-review-state-reconciliation-002
+- Added `executorReviewReconcileMutations` in `pkg/factory/subsystems/executor_review_reconcile.go` and wired it from `subsystem_transitioner.go` so process accepted outputs supersede prior same-trace `review:init` tokens and review accepted outputs consume duplicate reviews plus stale `task:init`/`task:failed` residue.
+- Added unit and transitioner pipeline coverage in `executor_review_reconcile_test.go` plus functional duplicate-review collapse coverage in `executor_review_state_reconcile_test.go`.
+- Updated `docs/internal/processes/executor-review-state-relevant-files.md` with reconcile ownership and test map.
+- Files changed: `pkg/factory/subsystems/executor_review_reconcile.go`, `pkg/factory/subsystems/executor_review_reconcile_test.go`, `pkg/factory/subsystems/subsystem_transitioner.go`, `tests/functional/guards_batch/executor_review_state_reconcile_test.go`, `docs/internal/processes/executor-review-state-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: prepend reconcile `MutationConsume` entries before transitioner `MutationCreate` outputs so superseded same-trace tokens are removed before new review/task places are written.
+  - Gotchas encountered: async service harness submissions after `RunInBackground` can place historical residue tokens on a later tick than the first review completion; prove stale task cleanup at the transitioner pipeline layer when full async ordering is nondeterministic.
+  - Useful context: transition IDs for authored workstations use `ws.Name` (`process`, `review`), which is the hook key for reconcile ownership.
+---
+
+## 2026-06-15T23:00:00Z - dynamic-workflows-recovery-executor-review-state-reconciliation-004
+- Added `executor_review_state_lifecycle_test.go` proving completed-executor supersede (process-only harness), completed-review duplicate collapse with replay idempotency, full process→review terminal convergence, duplicate-review regression for lane three, and planner classification evidence for all three PRD lanes.
+- Added `TestHistoryTransitionerPipeline_ProcessAcceptReconcilesDuplicateReviewInit` and `buildProcessReconcilePipelineNet` in `executor_review_reconcile_test.go` for transitioner pipeline coverage of process-accept reconcile.
+- Updated `docs/internal/processes/executor-review-state-relevant-files.md` with lifecycle verification test map.
+- Files changed: `tests/functional/guards_batch/executor_review_state_lifecycle_test.go`, `pkg/factory/subsystems/executor_review_reconcile_test.go`, `docs/internal/processes/executor-review-state-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: use process-only factories when proving process-accept reconcile so review does not consume the single queued `<COMPLETE>` response; full process→review lifecycle tests need at least two queued responses.
+  - Gotchas encountered: service harness stale `task:init`/`task:failed` cleanup can remain nondeterministic after review completion—assert duplicate-review collapse at harness layer and stale residue cleanup in transitioner pipeline tests; reconcile consumes may not appear in `ReconstructFactoryWorldState` occupancy for pre-existing injected tokens.
+  - Useful context: `assertExecutorReviewReplayProjectionIdempotent` uses `ReconstructFactoryWorldState` twice at the same tick to prove replay stability without requiring live/projection token-count parity for reconcile consumes.
+---
+- Added `executorReviewManualRepairPreconditions` and `evaluateExecutorReviewManualRepairPreconditions` for bounded `you work move` rules on failed-post-processing recovery lanes.
+- Documented preconditions, allowed move (`task:failed` -> `task:init`), unsafe counterexamples, and per-lane outcomes (lanes 1–2 allow bounded repair when live evidence still matches; lane 3 requires runtime reconcile, not manual move) in `docs/internal/processes/executor-review-state-relevant-files.md`.
+- Added `executor_review_state_manual_repair_test.go` proving live lane preconditions, duplicate-review blocks, incomplete-worktree blocks, and harness `MoveWork` for the bounded repair path.
+- Files changed: `tests/functional/guards_batch/executor_review_state_lane_classification.go`, `tests/functional/guards_batch/executor_review_state_manual_repair_test.go`, `docs/internal/processes/executor-review-state-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: manual repair applies only to `safe_manual_repair` + `failed_post_processing` shapes; duplicate `review:init` lanes stay on story 002 reconcile ownership even when worktree delivery is complete.
+  - Gotchas encountered: minimal scaffold factories with only terminal/failed tokens can terminate the service `Run` loop before `MoveWork`; keep a non-terminal `task:in-review` token alive during operator-move harness tests.
+  - Useful context: authoritative trace for split-trace lanes is the spawned trace (`SpawnedTraceID`); recovery-trace `idea:to-complete` + `plan:failed` rows are superseded noise and must not be moved.
+---
+
+## 2026-06-15T14:10:00Z - PR feedback (lane-scoped review reconcile)
+- Narrowed `executorReviewReconcileMutations` so `review:init` cleanup keys on same chaining trace **and** `TokenColor.Name` (lane), preventing one lane's process/review completion from consuming sibling review work on the same trace.
+- Added unit and transitioner pipeline tests proving same-lane duplicate collapse still works while sibling-lane `review:init` tokens survive (`TestExecutorReviewReconcile_*PreservesSiblingLaneReviewInit`, `TestHistoryTransitionerPipeline_ProcessAcceptPreservesSiblingLaneReviewInit`).
+- Fixed functional residue fixtures to submit duplicate same-lane tokens in separate `SubmitFull` batches so `WorkRequestFromSubmitRequests` does not uniquify shared lane names inside one batch.
+- Files changed: `pkg/factory/subsystems/executor_review_reconcile.go`, `pkg/factory/subsystems/executor_review_reconcile_test.go`, `tests/functional/guards_batch/executor_review_state_reconcile_test.go`, `tests/functional/guards_batch/executor_review_state_lifecycle_test.go`, `docs/internal/processes/executor-review-state-relevant-files.md`
+- **Learnings for future iterations:**
+  - Patterns discovered: `CurrentChainingTraceID` is a dispatch-chain key, not a per-lane uniqueness guarantee; reconcile duplicate `review:init` by trace + lane name.
+  - Gotchas encountered: multi-item `SubmitFull` batches uniquify repeated `Name` values (`lane-2`, `lane-3`), which breaks lane-scoped reconcile assertions—submit residue duplicates one item per batch.
+  - Useful context: blocking PR #815 feedback on over-broad trace-only `review:init` consumption; addressed in commit `b2b3c6a0d`.
 ---
