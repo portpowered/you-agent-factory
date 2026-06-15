@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"go.uber.org/zap"
 )
@@ -180,8 +182,25 @@ func (s *Server) GetFactorySessionResults(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) ListFactorySessionDispatches(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	_ = sessionID
-	s.writeError(w, http.StatusNotImplemented, "durable factory session dispatch listing is not implemented", "INTERNAL_ERROR")
+	if !isDurableExecutionSessionID(string(sessionID)) {
+		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+		return
+	}
+
+	lister, ok := s.requireDurableSessionDispatchLister(w)
+	if !ok {
+		return
+	}
+	response, err := lister.ListDurableFactorySessionDispatches(r.Context(), string(sessionID))
+	if err != nil {
+		if s.writeDurableSessionReadError(w, err) {
+			return
+		}
+		s.logger.Error("list durable factory session dispatches failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to list factory session dispatches", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) GetFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, dispatchID factoryapi.DispatchID) {
@@ -537,6 +556,43 @@ func currentFactoryBundledDocTargetPaths(factory factoryapi.Factory) []string {
 	}
 
 	return paths
+}
+
+type durableSessionDispatchLister interface {
+	ListDurableFactorySessionDispatches(
+		ctx context.Context,
+		sessionID string,
+	) (factoryapi.ListFactorySessionDispatchesResponse, error)
+}
+
+func (s *Server) requireDurableSessionDispatchLister(w http.ResponseWriter) (durableSessionDispatchLister, bool) {
+	if s.runtime == nil {
+		s.writeError(w, http.StatusInternalServerError, "durable factory session dispatch read is unavailable", "INTERNAL_ERROR")
+		return nil, false
+	}
+	lister, ok := s.runtime.(durableSessionDispatchLister)
+	if !ok {
+		s.writeError(w, http.StatusNotImplemented, "durable factory session dispatch listing is not implemented", "INTERNAL_ERROR")
+		return nil, false
+	}
+	return lister, true
+}
+
+func isDurableExecutionSessionID(sessionID string) bool {
+	return strings.HasPrefix(strings.TrimSpace(sessionID), "dur-sess-")
+}
+
+func (s *Server) writeDurableSessionReadError(w http.ResponseWriter, err error) bool {
+	if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+		return true
+	}
+	var validationErr *factorysessionexecution.ValidationError
+	if errors.As(err, &validationErr) {
+		s.writeError(w, http.StatusBadRequest, validationErr.Message, "BAD_REQUEST")
+		return true
+	}
+	return false
 }
 
 func currentFactoryWorkstation(factory factoryapi.Factory, workstationName string) (factoryapi.Workstation, bool) {

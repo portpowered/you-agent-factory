@@ -14,6 +14,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
@@ -21,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -1032,4 +1034,46 @@ func sortFactorySessionSummaries(summaries []factoryapi.FactorySessionSummary) {
 		}
 		return summaries[i].Id < summaries[j].Id
 	})
+}
+
+func (fs *FactoryService) durableExecutionService() factorysessionexecution.Service {
+	if fs == nil {
+		return factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{})
+	}
+	fs.durableExecutionMu.Lock()
+	defer fs.durableExecutionMu.Unlock()
+	if fs.durableExecution == nil {
+		fs.durableExecution = factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
+			StartSourceContext: factorysessionexecution.StartSourceContext{
+				ProjectRoot: fs.durableProjectRoot(),
+			},
+		})
+	}
+	return fs.durableExecution
+}
+
+func (fs *FactoryService) durableProjectRoot() string {
+	if fs == nil {
+		return ""
+	}
+	if fs.cfg != nil {
+		if root := strings.TrimSpace(fs.cfg.ExecutionBaseDir); root != "" {
+			return root
+		}
+		if root := strings.TrimSpace(fs.cfg.Dir); root != "" {
+			return root
+		}
+	}
+	return strings.TrimSpace(fs.factoryRootDir)
+}
+
+func (fs *FactoryService) ListDurableFactorySessionDispatches(
+	ctx context.Context,
+	sessionID string,
+) (factoryapi.ListFactorySessionDispatchesResponse, error) {
+	result, err := fs.durableExecutionService().ListDispatches(ctx, sessionID)
+	if err != nil {
+		return factoryapi.ListFactorySessionDispatchesResponse{}, err
+	}
+	return factorysession.ListDispatchesResponseToAPI(result), nil
 }

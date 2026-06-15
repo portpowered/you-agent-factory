@@ -8,11 +8,13 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/engine"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
@@ -71,6 +73,7 @@ type MockFactory struct {
 	CloseFactorySessionErr      error
 	MoveWorkErr                 error
 	AppliedOperatorMoveRequests map[string]interfaces.OperatorMoveResult
+	DurableExecutionService     factorysessionexecution.Service
 }
 
 var _ factory.APIFactory = (*MockFactory)(nil)
@@ -82,6 +85,28 @@ var _ apisurface.WorkAPI = (*MockFactory)(nil)
 var _ apisurface.InvocationAPI = (*MockFactory)(nil)
 var _ apisurface.APISurface = (*MockFactory)(nil)
 var _ apisurface.SessionAPISurface = (*MockFactory)(nil)
+
+func (m *MockFactory) ListDurableFactorySessionDispatches(
+	ctx context.Context,
+	sessionID string,
+) (factoryapi.ListFactorySessionDispatchesResponse, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.ListFactorySessionDispatchesResponse{}, err
+	}
+	result, err := service.ListDispatches(ctx, sessionID)
+	if err != nil {
+		return factoryapi.ListFactorySessionDispatchesResponse{}, err
+	}
+	return factorysession.ListDispatchesResponseToAPI(result), nil
+}
+
+func (m *MockFactory) requireDurableExecutionService() (factorysessionexecution.Service, error) {
+	if m == nil || m.DurableExecutionService == nil {
+		return nil, errors.New("durable execution service is unavailable")
+	}
+	return m.DurableExecutionService, nil
+}
 
 func (m *MockFactory) Run(_ context.Context) error   { return nil }
 func (m *MockFactory) Pause(_ context.Context) error { return nil }
