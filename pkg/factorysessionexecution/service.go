@@ -3,6 +3,7 @@ package factorysessionexecution
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
@@ -63,13 +64,6 @@ type StartSourceContext struct {
 	ProjectRoot string
 }
 
-// ResolveStartSource resolves one normalized start request through the JavaScript
-// orchestrator source contract used by durable Factory Session start paths.
-func ResolveStartSource(req StartRequest, ctx StartSourceContext) (ResolvedSource, error) {
-	resolved, _, err := resolveStartSourceWithResolution(req, ctx)
-	return resolved, err
-}
-
 func startSourceRequest(source Source) workflowsource.Request {
 	switch source.Kind {
 	case workflowsource.KindFactoryID:
@@ -121,5 +115,41 @@ func resolutionOrderForLookupStage(stage workflowsource.LookupStage) string {
 		return "EXPLICIT_FACTORY_LOOKUP"
 	default:
 		return ""
+	}
+}
+
+// ExecutionProvider selects which durable Factory Session execution backend serves
+// start and inspection calls at the shared service boundary.
+type ExecutionProvider string
+
+const (
+	// ExecutionProviderFake selects the deterministic in-memory fake session path.
+	ExecutionProviderFake ExecutionProvider = "fake"
+	// ExecutionProviderJavaScriptRuntime selects the real simple JavaScript runtime path.
+	ExecutionProviderJavaScriptRuntime ExecutionProvider = "javascript-runtime"
+)
+
+// ServiceConfig carries dependencies required by production execution providers.
+type ServiceConfig struct {
+	ProjectRoot string
+	FakeOptions []FakeServiceOption
+}
+
+// NewExecutionService constructs one shared Factory Session execution service for
+// the requested provider.
+func NewExecutionService(provider ExecutionProvider, config ServiceConfig) (Service, error) {
+	switch provider {
+	case ExecutionProviderFake:
+		return NewFakeService(config.FakeOptions...), nil
+	case ExecutionProviderJavaScriptRuntime:
+		projectRoot := strings.TrimSpace(config.ProjectRoot)
+		if projectRoot == "" {
+			return nil, NewValidationError("projectRoot", "projectRoot is required")
+		}
+		return NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
+			ProjectRoot: projectRoot,
+		}), nil
+	default:
+		return nil, NewValidationError("provider", "unsupported execution provider")
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
 // SessionProjectionEventKinds lists canonical event types that project durable
@@ -810,4 +811,119 @@ func indexOfString(values []string, target string) (int, bool) {
 		}
 	}
 	return -1, false
+}
+
+func applyRuntimeSessionFields(target *runtimeSessionState, source runtimeSessionState) {
+	target.session = source.session
+	target.result = source.result
+	target.dispatches = cloneDispatchSummaries(source.dispatches)
+	target.artifacts = cloneArtifactSummaries(source.artifacts)
+	target.events = source.events
+}
+
+func applyRuntimeSuccessProjection(
+	state *runtimeSessionState,
+	sessionID string,
+	outcome workflowruntime.Outcome,
+	finishedAt time.Time,
+) {
+	recordProjection := ProjectRuntimeExecutionRecords(sessionID, outcome.Records, finishedAt)
+	if recordProjection.Phase != "" {
+		state.session.Phase = recordProjection.Phase
+	}
+	state.dispatches = cloneDispatchSummaries(recordProjection.Dispatches)
+	state.artifacts = cloneArtifactSummaries(recordProjection.Artifacts)
+	state.session.Progress = &recordProjection.Progress
+	state.session.ArtifactRefs = artifactRefsFromSummaries(state.artifacts)
+	state.session.ArtifactCount = len(state.session.ArtifactRefs)
+
+	projected, resultSummary, err := projectRuntimeSuccessResult(sessionID, outcome.Value, state.artifacts)
+	if err != nil {
+		state.session.Status = LifecycleStatusFailed
+		state.session.Failure = &FailureSummary{
+			Reason:  "WORKFLOW_RUNTIME_INVALID_RESULT",
+			Message: err.Error(),
+		}
+		state.session.ResultSummary = &ResultSummary{
+			ResultStatus: string(ResultStatusUnavailable),
+		}
+		state.result = ResultReadResult{
+			SessionID:     sessionID,
+			ResultStatus:  ResultStatusUnavailable,
+			SessionStatus: LifecycleStatusFailed,
+			Failure:       cloneFailureSummary(state.session.Failure),
+			Availability:  defaultUnavailableAvailability(),
+		}
+		return
+	}
+	state.session.Status = LifecycleStatusSucceeded
+	state.session.ResultSummary = resultSummary
+	state.result = projected
+}
+
+func projectRuntimeSuccessResult(
+	sessionID string,
+	value workflowresult.TypedValue,
+	artifacts []ArtifactSummary,
+) (ResultReadResult, *ResultSummary, error) {
+	parts, validation := workflowresult.ProjectPrimaryResult(sessionID, value, artifactStatesFromSummaries(artifacts))
+	if validation.HasIssues() {
+		return ResultReadResult{}, nil, fmt.Errorf("project primary result: %v", validation.Issues)
+	}
+
+	primaryJSON := workContentJSONFromParts(parts)
+	result := ResultReadResult{
+		SessionID:     sessionID,
+		ResultStatus:  ResultStatusFinal,
+		SessionStatus: LifecycleStatusSucceeded,
+		PrimaryResult: primaryJSON,
+		ArtifactIDs:   artifactIDsFromSummaries(artifacts),
+	}
+	summary := &ResultSummary{
+		ResultStatus: string(ResultStatusFinal),
+		Summary:      resultSummaryTextFromParts(parts),
+	}
+	return result, summary, nil
+}
+
+func workContentJSONFromParts(parts []interfaces.WorkContentPart) json.RawMessage {
+	content := workcontent.GeneratedPtrFromParts(parts)
+	if content == nil {
+		return nil
+	}
+	encoded, err := json.Marshal(content)
+	if err != nil {
+		return nil
+	}
+	return encoded
+}
+
+func resultSummaryTextFromParts(parts []interfaces.WorkContentPart) string {
+	for _, part := range parts {
+		if part.Type.Normalized() == interfaces.WorkContentPartTypeText {
+			if text := strings.TrimSpace(part.Text); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+func artifactStatesFromSummaries(artifacts []ArtifactSummary) []interfaces.FactorySessionArtifactState {
+	if len(artifacts) == 0 {
+		return nil
+	}
+	states := make([]interfaces.FactorySessionArtifactState, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		states = append(states, interfaces.FactorySessionArtifactState{
+			ID:          artifact.ID,
+			Kind:        artifact.Kind,
+			Visibility:  artifact.Visibility,
+			Label:       artifact.Label,
+			ContentHash: artifact.ContentHash,
+			SizeBytes:   artifact.SizeBytes,
+			AuditMode:   artifact.AuditMode,
+		})
+	}
+	return states
 }

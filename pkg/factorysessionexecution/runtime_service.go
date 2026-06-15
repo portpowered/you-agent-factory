@@ -3,7 +3,6 @@ package factorysessionexecution
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -11,270 +10,343 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
-	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
-// RuntimeService executes simple JavaScript workflows through the real runtime
-// boundary and projects in-memory durable session state.
-type RuntimeService struct {
-	mu sync.RWMutex
-
-	prepareCtx StartPrepareContext
-	now        func() time.Time
-
-	sessions    map[string]*runtimeSessionState
-	startReplay map[string]runtimeStartReplayRecord
-}
-
-type runtimeStartReplayRecord struct {
-	sessionID     string
-	tupleHash     string
-	asyncStart    *AsyncStartResult
-	syncStart     *SyncStartResult
-	syncStartDone chan struct{}
+// NewDurableSessionID allocates one durable Factory Session identifier.
+func NewDurableSessionID() string {
+	return "dur-sess-" + strings.ReplaceAll(uuid.NewString(), "-", "")
 }
 
 type runtimeSessionState struct {
-	session       SessionReadResult
-	result        ResultReadResult
-	dispatches    []DispatchSummary
-	artifacts     []ArtifactSummary
-	events        []json.RawMessage
-	runtimeDone chan struct{}
+	session    SessionReadResult
+	result     ResultReadResult
+	dispatches []DispatchSummary
+	artifacts  []ArtifactSummary
+	events     []json.RawMessage
+	runCancel  context.CancelFunc
 }
 
-// RuntimeServiceOption configures one RuntimeService instance.
-type RuntimeServiceOption func(*RuntimeService)
+type startInflightFlight struct {
+	done chan struct{}
+}
 
-// WithRuntimeClock overrides the clock used for lifecycle timestamps and events.
-func WithRuntimeClock(now func() time.Time) RuntimeServiceOption {
-	return func(service *RuntimeService) {
-		service.now = now
+func projectRuntimeSessionState(
+	sessionID string,
+	normalized StartRequest,
+	resolved ResolvedSource,
+	policyResolution workflowpolicy.Resolution,
+	outcome workflowruntime.Outcome,
+	startedAt time.Time,
+) runtimeSessionState {
+	finishedAt := startedAt
+	policyProjection := policyProjectionFromResolution(normalized, policyResolution)
+	links := InspectionLinksForSession(sessionID, true)
+
+	session := SessionReadResult{
+		SessionID:        sessionID,
+		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+		Dialect:          resolvedDialect(resolved),
+		ResolvedSource:   resolved,
+		SourceHash:       resolved.SourceHash,
+		Policy:           policyProjection,
+		Usage:            EmptySessionUsage(),
+		Links:            links,
+		Lifecycle: &LifecycleTimestamps{
+			StartedAt:  &startedAt,
+			FinishedAt: &finishedAt,
+		},
+	}
+
+	result := ResultReadResult{
+		SessionID: sessionID,
+		Mode:      ResultModeFinal,
+	}
+
+	state := runtimeSessionState{
+		session: session,
+		result:  result,
+	}
+	if outcome.OK {
+		applyRuntimeSuccessProjection(&state, sessionID, outcome, finishedAt)
+	} else {
+		projectRuntimeFailure(&state.session, &state.result, outcome)
+	}
+	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+	return state
+}
+
+func projectRuntimeRunningSessionState(
+	sessionID string,
+	normalized StartRequest,
+	resolved ResolvedSource,
+	policyResolution workflowpolicy.Resolution,
+	startedAt time.Time,
+) runtimeSessionState {
+	policyProjection := policyProjectionFromResolution(normalized, policyResolution)
+	links := InspectionLinksForSession(sessionID, true)
+
+	session := SessionReadResult{
+		SessionID:        sessionID,
+		Status:           LifecycleStatusRunning,
+		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+		Dialect:          resolvedDialect(resolved),
+		ResolvedSource:   resolved,
+		SourceHash:       resolved.SourceHash,
+		Policy:           policyProjection,
+		Usage:            EmptySessionUsage(),
+		ResultSummary: &ResultSummary{
+			ResultStatus: string(ResultStatusNotReady),
+		},
+		Lifecycle: &LifecycleTimestamps{
+			StartedAt: &startedAt,
+		},
+		Links: links,
+	}
+	result := ResultReadResult{
+		SessionID:     sessionID,
+		Mode:          ResultModeFinal,
+		ResultStatus:  ResultStatusNotReady,
+		SessionStatus: LifecycleStatusRunning,
+		Availability: &ResultAvailabilityDetail{
+			Reason:    "RESULT_NOT_READY",
+			Message:   "Session is still running.",
+			Retryable: true,
+		},
+	}
+	state := runtimeSessionState{
+		session: session,
+		result:  result,
+	}
+	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+	return state
+}
+
+func projectRuntimeFailure(session *SessionReadResult, result *ResultReadResult, outcome workflowruntime.Outcome) {
+	failure := outcome.Failure
+	switch failure.Code {
+	case workflowruntime.CodeTimeout:
+		session.Status = LifecycleStatusTimedOut
+		result.SessionStatus = LifecycleStatusTimedOut
+		result.ResultStatus = ResultStatusUnavailable
+	default:
+		if failure.Code == workflowruntime.CodeCanceled {
+			session.Status = LifecycleStatusCanceled
+			result.SessionStatus = LifecycleStatusCanceled
+		} else {
+			session.Status = LifecycleStatusFailed
+			result.SessionStatus = LifecycleStatusFailed
+		}
+		result.ResultStatus = ResultStatusUnavailable
+	}
+	if code := strings.TrimSpace(failure.Code); code != "" {
+		session.Failure = &FailureSummary{
+			Reason:  code,
+			Message: failure.Message,
+		}
+		result.Failure = session.Failure
+	}
+	if session.ResultSummary == nil {
+		session.ResultSummary = &ResultSummary{ResultStatus: string(result.ResultStatus)}
 	}
 }
 
-// NewRuntimeService constructs one in-memory runtime-backed durable session service.
-func NewRuntimeService(prepareCtx StartPrepareContext, options ...RuntimeServiceOption) *RuntimeService {
-	service := &RuntimeService{
-		prepareCtx:  prepareCtx,
-		now:         time.Now,
-		sessions:    make(map[string]*runtimeSessionState),
-		startReplay: make(map[string]runtimeStartReplayRecord),
+func policyProjectionFromResolution(req StartRequest, resolution workflowpolicy.Resolution) PolicyProjection {
+	projection := PolicyProjection{
+		Requested:     cloneArgs(req.RequestedPolicy),
+		EffectiveHash: resolution.Hash,
 	}
-	for _, option := range options {
-		option(service)
+	if effective, err := effectivePolicyMap(resolution.Policy); err == nil && len(effective) > 0 {
+		projection.Effective = effective
 	}
-	return service
+	return projection
 }
 
-var _ Service = (*RuntimeService)(nil)
+func resolvedDialect(resolved ResolvedSource) string {
+	if dialect := strings.TrimSpace(resolved.Dialect); dialect != "" {
+		return dialect
+	}
+	return "you-workflow-v1"
+}
 
-func (s *RuntimeService) StartAsync(ctx context.Context, req StartRequest) (AsyncStartResult, error) {
+// JavaScriptRuntimeServiceConfig carries dependencies for the real JavaScript runtime
+// durable session execution path.
+type JavaScriptRuntimeServiceConfig struct {
+	ProjectRoot string
+}
+
+// JavaScriptRuntimeService executes simple JavaScript workflows through the real
+// workflow runtime and projects outcomes through shared durable session read models.
+type JavaScriptRuntimeService struct {
+	projectRoot string
+
+	mu           sync.RWMutex
+	sessions     map[string]*runtimeSessionState
+	startReplay  map[string]startReplayRecord
+	startInflight map[string]*startInflightFlight
+}
+
+var _ Service = (*JavaScriptRuntimeService)(nil)
+
+// NewJavaScriptRuntimeService constructs one JavaScript runtime-backed durable session service.
+func NewJavaScriptRuntimeService(config JavaScriptRuntimeServiceConfig) *JavaScriptRuntimeService {
+	return &JavaScriptRuntimeService{
+		projectRoot:   strings.TrimSpace(config.ProjectRoot),
+		sessions:      make(map[string]*runtimeSessionState),
+		startReplay:   make(map[string]startReplayRecord),
+		startInflight: make(map[string]*startInflightFlight),
+	}
+}
+
+func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequest) (AsyncStartResult, error) {
 	if err := ctx.Err(); err != nil {
 		return AsyncStartResult{}, err
 	}
-	prepared, err := PrepareStart(req, s.prepareCtx)
+	normalized, tupleHash, err := normalizeStartTuple(req)
 	if err != nil {
 		return AsyncStartResult{}, err
 	}
 
-	s.mu.Lock()
-	if replay, ok := s.startReplay[prepared.Request.RequestID]; ok {
-		if err := CheckRequestIDReplay(prepared.Request.RequestID, replay.tupleHash, prepared.TupleHash); err != nil {
-			s.mu.Unlock()
-			return AsyncStartResult{}, err
-		}
-		if err := CheckAsyncStartReplayMode(replay.asyncStart); err != nil {
-			s.mu.Unlock()
-			return AsyncStartResult{}, err
-		}
-		result := cloneAsyncStartResult(*replay.asyncStart)
-		s.mu.Unlock()
+	if result, ok, err := s.tryReplayAsyncStart(ctx, normalized.RequestID, tupleHash, true); ok {
 		return result, nil
+	} else if err != nil {
+		return AsyncStartResult{}, err
 	}
 
-	state := s.newRunningSessionState(prepared)
-	s.sessions[state.session.SessionID] = state
-	asyncResult := s.asyncStartFromState(state)
-	record := runtimeStartReplayRecord{
-		sessionID:  state.session.SessionID,
-		tupleHash:  prepared.TupleHash,
-		asyncStart: cloneAsyncStartResultPtr(asyncResult),
+	prepared, err := s.prepareStart(normalized)
+	if err != nil {
+		return AsyncStartResult{}, err
 	}
-	s.startReplay[prepared.Request.RequestID] = record
+	resolved := prepared.ResolvedSource
+	sourceContent := prepared.SourceContent
+	policyResolution := policyResolutionFromPrepared(prepared)
+
+	reserved, err := s.reserveStartSession(ctx, normalized, tupleHash, true)
+	if err != nil {
+		return AsyncStartResult{}, err
+	}
+	defer reserved.release()
+
+	if !reserved.isNew {
+		result, ok, err := s.tryReplayAsyncStart(ctx, normalized.RequestID, tupleHash, true)
+		if ok {
+			return result, nil
+		}
+		return AsyncStartResult{}, err
+	}
+
+	startedAt := time.Now().UTC()
+	running := projectRuntimeRunningSessionState(
+		reserved.state.session.SessionID,
+		normalized,
+		resolved,
+		policyResolution,
+		startedAt,
+	)
+	runCtx, runCancel := workflowRunContext(context.Background(), policyResolution.Policy)
+	s.mu.Lock()
+	reserved.state.session = running.session
+	reserved.state.result = running.result
+	reserved.state.events = running.events
+	reserved.state.runCancel = runCancel
 	s.mu.Unlock()
 
-	go s.runSession(context.Background(), prepared, state.session.SessionID)
-	return asyncResult, nil
+	go s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt)
+
+	snapshot, err := s.snapshotSessionState(reserved.state.session.SessionID)
+	if err != nil {
+		return AsyncStartResult{}, err
+	}
+	result := s.asyncStartFromState(snapshot)
+	s.recordAsyncStartReplay(normalized.RequestID, result)
+	return result, nil
 }
 
-func (s *RuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncStartResult, error) {
+func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncStartResult, error) {
 	if err := ctx.Err(); err != nil {
 		return SyncStartResult{}, err
 	}
-	prepared, err := PrepareStart(req, s.prepareCtx)
+	normalized, tupleHash, err := normalizeStartTuple(req)
 	if err != nil {
 		return SyncStartResult{}, err
 	}
 
-	s.mu.Lock()
-	if replayResult, waitDone, replayErr := s.tryReplaySyncStartLocked(prepared); replayErr != nil {
-		s.mu.Unlock()
-		return SyncStartResult{}, replayErr
-	} else if replayResult != nil {
-		s.mu.Unlock()
-		return *replayResult, nil
-	} else if waitDone != nil {
-		s.mu.Unlock()
-		select {
-		case <-waitDone:
-		case <-ctx.Done():
-			return SyncStartResult{}, ctx.Err()
-		}
-		return s.replayStoredSyncStart(prepared.Request.RequestID)
+	if result, ok, err := s.tryReplaySyncStart(ctx, normalized.RequestID, tupleHash, true); ok {
+		return result, nil
+	} else if err != nil {
+		return SyncStartResult{}, err
 	}
 
-	state := s.newRunningSessionState(prepared)
-	sessionID := state.session.SessionID
-	runtimeDone := state.runtimeDone
-	s.sessions[sessionID] = state
-	s.startReplay[prepared.Request.RequestID] = runtimeStartReplayRecord{
-		sessionID:     sessionID,
-		tupleHash:     prepared.TupleHash,
-		syncStartDone: make(chan struct{}),
-	}
-	s.mu.Unlock()
-
-	stopRuntime := s.launchSyncRuntimeSession(prepared, sessionID)
-	result, err := s.awaitSyncStartOutcome(ctx, prepared, sessionID, runtimeDone, stopRuntime)
+	prepared, err := s.prepareStart(normalized)
 	if err != nil {
-		s.finalizeSyncStartReplay(prepared.Request.RequestID, nil)
 		return SyncStartResult{}, err
 	}
-	return result, nil
-}
+	resolved := prepared.ResolvedSource
+	sourceContent := prepared.SourceContent
+	policyResolution := policyResolutionFromPrepared(prepared)
 
-func (s *RuntimeService) tryReplaySyncStartLocked(prepared PreparedStart) (*SyncStartResult, <-chan struct{}, error) {
-	replay, ok := s.startReplay[prepared.Request.RequestID]
-	if !ok {
-		return nil, nil, nil
-	}
-	if err := CheckRequestIDReplay(prepared.Request.RequestID, replay.tupleHash, prepared.TupleHash); err != nil {
-		return nil, nil, err
-	}
-	if replay.syncStart != nil {
-		result := cloneSyncStartResult(*replay.syncStart)
-		return &result, nil, nil
-	}
-	if replay.syncStartDone != nil {
-		return nil, replay.syncStartDone, nil
-	}
-	if err := CheckSyncStartReplayMode(replay.asyncStart, replay.syncStart, false); err != nil {
-		return nil, nil, err
-	}
-	return nil, nil, ErrSessionNotFound
-}
-
-func (s *RuntimeService) replayStoredSyncStart(requestID string) (SyncStartResult, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	replay, ok := s.startReplay[requestID]
-	if !ok {
-		return SyncStartResult{}, ErrSessionNotFound
-	}
-	if replay.syncStart == nil {
-		return SyncStartResult{}, fmt.Errorf("factorysessionexecution: sync start outcome unavailable for request %q", requestID)
-	}
-	return cloneSyncStartResult(*replay.syncStart), nil
-}
-
-func (s *RuntimeService) launchSyncRuntimeSession(prepared PreparedStart, sessionID string) context.CancelFunc {
-	runCtx := context.Background()
-	var stopRuntime context.CancelFunc
-	if prepared.Request.Wait != nil && prepared.Request.Wait.CancelOnTimeout {
-		var cancel context.CancelFunc
-		runCtx, cancel = context.WithCancel(context.Background())
-		stopRuntime = cancel
-		go func() {
-			defer cancel()
-			s.runSession(runCtx, prepared, sessionID)
-		}()
-		return stopRuntime
-	}
-	go s.runSession(runCtx, prepared, sessionID)
-	return nil
-}
-
-func (s *RuntimeService) awaitSyncStartOutcome(
-	ctx context.Context,
-	prepared PreparedStart,
-	sessionID string,
-	runtimeDone <-chan struct{},
-	stopRuntime context.CancelFunc,
-) (SyncStartResult, error) {
-	waitCtx := ctx
-	var cancelWait context.CancelFunc
-	if timeout := syncWaitTimeout(prepared.Request.Wait); timeout > 0 {
-		waitCtx, cancelWait = context.WithTimeout(ctx, timeout)
-	}
-	if cancelWait != nil {
-		defer cancelWait()
-	}
-
-	select {
-	case <-runtimeDone:
-		return s.syncStartOutcomeOnRuntimeDone(prepared.Request.RequestID, sessionID)
-	case <-waitCtx.Done():
-		return s.syncStartOutcomeOnWaitDone(ctx, waitCtx, prepared, sessionID, stopRuntime)
-	}
-}
-
-func (s *RuntimeService) syncStartOutcomeOnRuntimeDone(requestID, sessionID string) (SyncStartResult, error) {
-	s.mu.RLock()
-	state, ok := s.sessions[sessionID]
-	if !ok {
-		s.mu.RUnlock()
-		return SyncStartResult{}, ErrSessionNotFound
-	}
-	result := s.syncStartFromStateLocked(state)
-	s.mu.RUnlock()
-	s.finalizeSyncStartReplay(requestID, &result)
-	return result, nil
-}
-
-func (s *RuntimeService) syncStartOutcomeOnWaitDone(
-	ctx context.Context,
-	waitCtx context.Context,
-	prepared PreparedStart,
-	sessionID string,
-	stopRuntime context.CancelFunc,
-) (SyncStartResult, error) {
-	if err := ctx.Err(); err != nil {
+	waitTimeout, hasSyncWait := syncWaitTimeout(normalized)
+	reserved, err := s.reserveStartSession(ctx, normalized, tupleHash, !hasSyncWait)
+	if err != nil {
 		return SyncStartResult{}, err
 	}
-	if errors.Is(waitCtx.Err(), context.DeadlineExceeded) && syncWaitTimeout(prepared.Request.Wait) > 0 {
-		cancelOnTimeout := prepared.Request.Wait != nil && prepared.Request.Wait.CancelOnTimeout
-		if cancelOnTimeout && stopRuntime != nil {
-			stopRuntime()
+	defer reserved.release()
+
+	if !reserved.isNew {
+		result, ok, err := s.tryReplaySyncStart(ctx, normalized.RequestID, tupleHash, true)
+		if ok {
+			return result, nil
 		}
-		s.applySyncWaitTimeout(sessionID)
-		s.mu.RLock()
-		state, ok := s.sessions[sessionID]
-		if !ok {
-			s.mu.RUnlock()
-			return SyncStartResult{}, ErrSessionNotFound
+		return SyncStartResult{}, err
+	}
+
+	if hasSyncWait {
+		startedAt := time.Now().UTC()
+		running := projectRuntimeRunningSessionState(
+			reserved.state.session.SessionID,
+			normalized,
+			resolved,
+			policyResolution,
+			startedAt,
+		)
+		runCtx, runCancel := workflowRunContext(context.Background(), policyResolution.Policy)
+		s.mu.Lock()
+		reserved.state.session = running.session
+		reserved.state.result = running.result
+		reserved.state.events = running.events
+		reserved.state.runCancel = runCancel
+		s.mu.Unlock()
+
+		go s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt)
+
+		result, err := s.waitSyncCompletion(ctx, reserved.state.session.SessionID, waitTimeout, normalized.Wait.CancelOnTimeout)
+		if err != nil {
+			return SyncStartResult{}, err
 		}
-		result := s.syncTimedOutFromStateLocked(state, cancelOnTimeout)
-		s.mu.RUnlock()
-		s.finalizeSyncStartReplay(prepared.Request.RequestID, &result)
+		s.recordSyncStartReplay(normalized.RequestID, result)
 		return result, nil
 	}
-	return SyncStartResult{}, waitCtx.Err()
+
+	terminal, err := s.executeImmediateSyncSession(ctx, normalized, resolved, sourceContent, policyResolution, reserved.state.session.SessionID)
+	if err != nil {
+		return SyncStartResult{}, err
+	}
+	s.mu.Lock()
+	applyRuntimeSessionFields(reserved.state, terminal)
+	reserved.state.runCancel = nil
+	s.mu.Unlock()
+
+	snapshot, err := s.snapshotSessionState(reserved.state.session.SessionID)
+	if err != nil {
+		return SyncStartResult{}, err
+	}
+	result := s.syncStartFromState(snapshot)
+	s.recordSyncStartReplay(normalized.RequestID, result)
+	return result, nil
 }
 
-func (s *RuntimeService) GetSession(ctx context.Context, sessionID string) (SessionReadResult, error) {
+func (s *JavaScriptRuntimeService) GetSession(ctx context.Context, sessionID string) (SessionReadResult, error) {
 	if err := ctx.Err(); err != nil {
 		return SessionReadResult{}, err
 	}
@@ -282,40 +354,38 @@ func (s *RuntimeService) GetSession(ctx context.Context, sessionID string) (Sess
 	if err != nil {
 		return SessionReadResult{}, err
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	state, err := s.sessionStateLocked(id)
+	state, err := s.snapshotSessionState(id)
 	if err != nil {
 		return SessionReadResult{}, err
 	}
-	return cloneSessionRead(state.session), nil
+	return state.session, nil
 }
 
-func (s *RuntimeService) Pause(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
-	return s.unsupportedLifecycleControl(ctx, sessionID, LifecycleControlPause)
+func (s *JavaScriptRuntimeService) Pause(ctx context.Context, _ string, _ ControlRequest) (LifecycleControlResult, error) {
+	return s.unsupportedLifecycleControl(ctx)
 }
 
-func (s *RuntimeService) Resume(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
-	return s.unsupportedLifecycleControl(ctx, sessionID, LifecycleControlResume)
+func (s *JavaScriptRuntimeService) Resume(ctx context.Context, _ string, _ ControlRequest) (LifecycleControlResult, error) {
+	return s.unsupportedLifecycleControl(ctx)
 }
 
-func (s *RuntimeService) Cancel(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
-	return s.unsupportedLifecycleControl(ctx, sessionID, LifecycleControlCancel)
+func (s *JavaScriptRuntimeService) Cancel(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
+	return s.applyRuntimeLifecycleControl(ctx, sessionID, LifecycleControlCancel, req, ApproveRequest{}, RetryDispatchRequest{})
 }
 
-func (s *RuntimeService) Terminate(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
-	return s.unsupportedLifecycleControl(ctx, sessionID, LifecycleControlTerminate)
+func (s *JavaScriptRuntimeService) Terminate(ctx context.Context, _ string, _ ControlRequest) (LifecycleControlResult, error) {
+	return s.unsupportedLifecycleControl(ctx)
 }
 
-func (s *RuntimeService) Approve(ctx context.Context, sessionID string, req ApproveRequest) (LifecycleControlResult, error) {
-	return s.unsupportedLifecycleControl(ctx, sessionID, LifecycleControlApprove)
+func (s *JavaScriptRuntimeService) Approve(ctx context.Context, _ string, _ ApproveRequest) (LifecycleControlResult, error) {
+	return s.unsupportedLifecycleControl(ctx)
 }
 
-func (s *RuntimeService) RetryDispatch(ctx context.Context, sessionID string, req RetryDispatchRequest) (LifecycleControlResult, error) {
-	return s.unsupportedLifecycleControl(ctx, sessionID, LifecycleControlRetryDispatch)
+func (s *JavaScriptRuntimeService) RetryDispatch(ctx context.Context, _ string, _ RetryDispatchRequest) (LifecycleControlResult, error) {
+	return s.unsupportedLifecycleControl(ctx)
 }
 
-func (s *RuntimeService) GetResult(ctx context.Context, sessionID string, req ResultRequest) (ResultReadResult, error) {
+func (s *JavaScriptRuntimeService) GetResult(ctx context.Context, sessionID string, req ResultRequest) (ResultReadResult, error) {
 	if err := ctx.Err(); err != nil {
 		return ResultReadResult{}, err
 	}
@@ -327,16 +397,14 @@ func (s *RuntimeService) GetResult(ctx context.Context, sessionID string, req Re
 	if err != nil {
 		return ResultReadResult{}, err
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	state, err := s.sessionStateLocked(id)
+	state, err := s.snapshotSessionState(id)
 	if err != nil {
 		return ResultReadResult{}, err
 	}
 	return ProjectResultRead(state.result, state.session, state.artifacts, normalized)
 }
 
-func (s *RuntimeService) ListDispatches(ctx context.Context, sessionID string) (ListDispatchesResult, error) {
+func (s *JavaScriptRuntimeService) ListDispatches(ctx context.Context, sessionID string) (ListDispatchesResult, error) {
 	if err := ctx.Err(); err != nil {
 		return ListDispatchesResult{}, err
 	}
@@ -344,9 +412,7 @@ func (s *RuntimeService) ListDispatches(ctx context.Context, sessionID string) (
 	if err != nil {
 		return ListDispatchesResult{}, err
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	state, err := s.sessionStateLocked(id)
+	state, err := s.snapshotSessionState(id)
 	if err != nil {
 		return ListDispatchesResult{}, err
 	}
@@ -356,7 +422,7 @@ func (s *RuntimeService) ListDispatches(ctx context.Context, sessionID string) (
 	}, nil
 }
 
-func (s *RuntimeService) GetDispatch(ctx context.Context, sessionID, dispatchID string) (DispatchDetail, error) {
+func (s *JavaScriptRuntimeService) GetDispatch(ctx context.Context, sessionID, dispatchID string) (DispatchDetail, error) {
 	if err := ctx.Err(); err != nil {
 		return DispatchDetail{}, err
 	}
@@ -364,9 +430,7 @@ func (s *RuntimeService) GetDispatch(ctx context.Context, sessionID, dispatchID 
 	if err != nil {
 		return DispatchDetail{}, err
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	state, err := s.sessionStateLocked(id)
+	state, err := s.snapshotSessionState(id)
 	if err != nil {
 		return DispatchDetail{}, err
 	}
@@ -382,7 +446,7 @@ func (s *RuntimeService) GetDispatch(ctx context.Context, sessionID, dispatchID 
 	return DispatchDetail{}, ErrDispatchNotFound
 }
 
-func (s *RuntimeService) ListArtifacts(ctx context.Context, sessionID string) (ListArtifactsResult, error) {
+func (s *JavaScriptRuntimeService) ListArtifacts(ctx context.Context, sessionID string) (ListArtifactsResult, error) {
 	if err := ctx.Err(); err != nil {
 		return ListArtifactsResult{}, err
 	}
@@ -390,9 +454,7 @@ func (s *RuntimeService) ListArtifacts(ctx context.Context, sessionID string) (L
 	if err != nil {
 		return ListArtifactsResult{}, err
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	state, err := s.sessionStateLocked(id)
+	state, err := s.snapshotSessionState(id)
 	if err != nil {
 		return ListArtifactsResult{}, err
 	}
@@ -402,7 +464,7 @@ func (s *RuntimeService) ListArtifacts(ctx context.Context, sessionID string) (L
 	}, nil
 }
 
-func (s *RuntimeService) GetArtifact(ctx context.Context, sessionID, artifactID string) (ArtifactDetail, error) {
+func (s *JavaScriptRuntimeService) GetArtifact(ctx context.Context, sessionID, artifactID string) (ArtifactDetail, error) {
 	if err := ctx.Err(); err != nil {
 		return ArtifactDetail{}, err
 	}
@@ -410,9 +472,7 @@ func (s *RuntimeService) GetArtifact(ctx context.Context, sessionID, artifactID 
 	if err != nil {
 		return ArtifactDetail{}, err
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	state, err := s.sessionStateLocked(id)
+	state, err := s.snapshotSessionState(id)
 	if err != nil {
 		return ArtifactDetail{}, err
 	}
@@ -424,7 +484,7 @@ func (s *RuntimeService) GetArtifact(ctx context.Context, sessionID, artifactID 
 	return ArtifactDetail{}, ErrArtifactNotFound
 }
 
-func (s *RuntimeService) ReadEvents(ctx context.Context, sessionID string, req EventReconnectRequest) (EventReadResult, error) {
+func (s *JavaScriptRuntimeService) ReadEvents(ctx context.Context, sessionID string, req EventReconnectRequest) (EventReadResult, error) {
 	if err := ctx.Err(); err != nil {
 		return EventReadResult{}, err
 	}
@@ -435,26 +495,18 @@ func (s *RuntimeService) ReadEvents(ctx context.Context, sessionID string, req E
 	if _, err := NormalizeEventReconnectRequest(req); err != nil {
 		return EventReadResult{}, err
 	}
-	s.mu.RLock()
-	state, err := s.sessionStateLocked(id)
-	if err != nil {
-		s.mu.RUnlock()
-		return EventReadResult{}, err
-	}
-	events := append([]json.RawMessage(nil), state.events...)
-	s.mu.RUnlock()
-
-	filtered, err := FilterEventsAfterReconnect(events, req, id)
+	state, err := s.snapshotSessionState(id)
 	if err != nil {
 		return EventReadResult{}, err
 	}
-	return EventReadResult{
-		SessionID: id,
-		Events:    filtered,
-	}, nil
+	filtered, err := FilterEventsAfterReconnect(state.events, req, id)
+	if err != nil {
+		return EventReadResult{}, err
+	}
+	return EventReadResult{SessionID: id, Events: filtered}, nil
 }
 
-func (s *RuntimeService) ListSessions(ctx context.Context, req ListSessionsRequest) (ListSessionsResult, error) {
+func (s *JavaScriptRuntimeService) ListSessions(ctx context.Context, req ListSessionsRequest) (ListSessionsResult, error) {
 	if err := ctx.Err(); err != nil {
 		return ListSessionsResult{}, err
 	}
@@ -464,6 +516,8 @@ func (s *RuntimeService) ListSessions(ctx context.Context, req ListSessionsReque
 	}
 
 	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	live := make([]LiveSessionSummary, 0, len(s.sessions))
 	durable := make([]DurableSessionListSummary, 0, len(s.sessions))
 	for _, state := range s.sessions {
@@ -474,8 +528,6 @@ func (s *RuntimeService) ListSessions(ctx context.Context, req ListSessionsReque
 			durable = append(durable, summary)
 		}
 	}
-	s.mu.RUnlock()
-
 	return ApplySessionListScope(ListSessionsResult{
 		Scope:           normalized.Scope,
 		LiveSessions:    live,
@@ -483,165 +535,267 @@ func (s *RuntimeService) ListSessions(ctx context.Context, req ListSessionsReque
 	}, normalized), nil
 }
 
-func (s *RuntimeService) newRunningSessionState(prepared PreparedStart) *runtimeSessionState {
-	sessionID := newDurableSessionID()
-	startedAt := s.now().UTC()
-	links := InspectionLinksForSession(sessionID, true)
-	session := SessionReadResult{
-		SessionID:        sessionID,
-		Status:           LifecycleStatusRunning,
-		OrchestratorKind: orchestratorKindForPrepared(prepared),
-		Dialect:          dialectForPrepared(prepared),
-		ResolvedSource:   prepared.ResolvedSource,
-		SourceHash:       prepared.ResolvedSource.SourceHash,
-		Policy:           prepared.Policy,
-		Progress: &ProgressCounts{
-			TotalDispatches:     0,
-			CompletedDispatches: 0,
-			FailedDispatches:    0,
-			InFlightDispatches:  0,
-		},
-		Budgets: &SessionBudgets{
-			MaxAgents: prepared.EffectivePolicy.MaxAgents,
-		},
-		Usage: EmptySessionUsage(),
-		ResultSummary: &ResultSummary{
-			ResultStatus: string(ResultStatusNotReady),
-		},
-		Lifecycle: &LifecycleTimestamps{
-			StartedAt: &startedAt,
-		},
-		Links: links,
-	}
-	result := ResultReadResult{
-		SessionID:     sessionID,
-		ResultStatus:  ResultStatusNotReady,
-		SessionStatus: LifecycleStatusRunning,
-		Availability: defaultNotReadyAvailability(session),
-	}
-	state := &runtimeSessionState{
-		session:     session,
-		result:      result,
-		runtimeDone: make(chan struct{}),
-	}
-	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
-	return state
-}
+func (s *JavaScriptRuntimeService) executeImmediateSyncSession(
+	ctx context.Context,
+	normalized StartRequest,
+	resolved ResolvedSource,
+	sourceContent string,
+	policyResolution workflowpolicy.Resolution,
+	sessionID string,
+) (runtimeSessionState, error) {
+	runCtx, cancel := workflowRunContext(ctx, policyResolution.Policy)
+	defer cancel()
 
-func (s *RuntimeService) runSession(ctx context.Context, prepared PreparedStart, sessionID string) {
-	defer s.markRuntimeDone(sessionID)
-
-	argsJSON, err := json.Marshal(prepared.Request.Args)
+	startedAt := time.Now().UTC()
+	outcome, err := s.invokeWorkflowRuntime(runCtx, normalized, resolved, sourceContent, policyResolution, sessionID)
 	if err != nil {
-		s.applyRuntimeError(sessionID, fmt.Errorf("marshal workflow args: %w", err))
-		return
+		return runtimeSessionState{}, err
 	}
 
-	outcome, err := workflowruntime.Run(ctx, workflowruntime.Request{
-		Source:    prepared.SourceContent,
-		SourceRef: prepared.SourceRef,
-		SessionID: sessionID,
-		Args:      argsJSON,
-		Metadata:  prepared.ResolvedSource.Metadata,
-		Policy:    prepared.EffectivePolicy,
-	}, workflowruntime.Hooks{})
+	return projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, outcome, startedAt), nil
+}
+
+func normalizeStartTuple(req StartRequest) (StartRequest, string, error) {
+	normalized, err := NormalizeStartRequest(req)
 	if err != nil {
-		s.applyRuntimeError(sessionID, err)
-		return
+		return StartRequest{}, "", err
 	}
-	if !outcome.OK {
-		s.applyRuntimeFailure(sessionID, outcome.Failure)
-		return
-	}
-	s.applyRuntimeSuccess(sessionID, outcome)
-}
-
-func (s *RuntimeService) applyRuntimeSuccess(sessionID string, outcome workflowruntime.Outcome) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	state, ok := s.sessions[sessionID]
-	if !ok {
-		return
-	}
-	finishedAt := s.now().UTC()
-	state.session.Status = LifecycleStatusSucceeded
-	if state.session.Lifecycle != nil {
-		state.session.Lifecycle.FinishedAt = &finishedAt
-	}
-	recordProjection := ProjectRuntimeExecutionRecords(sessionID, outcome.Records, finishedAt)
-	if recordProjection.Phase != "" {
-		state.session.Phase = recordProjection.Phase
-	}
-	state.dispatches = cloneDispatchSummaries(recordProjection.Dispatches)
-	state.artifacts = cloneArtifactSummaries(recordProjection.Artifacts)
-	state.session.Progress = &recordProjection.Progress
-	projected, resultSummary, err := projectRuntimeSuccessResult(sessionID, outcome.Value, state.artifacts)
+	tupleHash, err := IdempotencyTupleHash(normalized)
 	if err != nil {
-		state.session.Status = LifecycleStatusFailed
-		state.session.Lifecycle.FinishedAt = &finishedAt
-		state.session.Failure = &FailureSummary{
-			Reason:  "WORKFLOW_RUNTIME_INVALID_RESULT",
-			Message: err.Error(),
-		}
-		state.session.ResultSummary = &ResultSummary{
-			ResultStatus: string(ResultStatusUnavailable),
-		}
-		state.result = ResultReadResult{
-			SessionID:     sessionID,
-			ResultStatus:  ResultStatusUnavailable,
-			SessionStatus: LifecycleStatusFailed,
-			Failure:       cloneFailureSummary(state.session.Failure),
-			Availability:  defaultUnavailableAvailability(),
-		}
-		state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
-		return
+		return StartRequest{}, "", err
 	}
-	state.session.ResultSummary = resultSummary
-	state.session.ArtifactRefs = artifactRefsFromSummaries(state.artifacts)
-	state.session.ArtifactCount = len(state.session.ArtifactRefs)
-	state.result = projected
-	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+	return normalized, tupleHash, nil
 }
 
-func (s *RuntimeService) applyRuntimeFailure(sessionID string, failure workflowruntime.Failure) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	state, ok := s.sessions[sessionID]
-	if !ok {
-		return
-	}
-	finishedAt := s.now().UTC()
-	state.session.Status = LifecycleStatusFailed
-	if state.session.Lifecycle != nil {
-		state.session.Lifecycle.FinishedAt = &finishedAt
-	}
-	state.session.Failure = &FailureSummary{
-		Reason:  failure.Code,
-		Message: failure.Message,
-	}
-	state.session.ResultSummary = &ResultSummary{
-		ResultStatus: string(ResultStatusUnavailable),
-	}
-	state.result = ResultReadResult{
-		SessionID:     sessionID,
-		ResultStatus:  ResultStatusUnavailable,
-		SessionStatus: LifecycleStatusFailed,
-		Failure:       cloneFailureSummary(state.session.Failure),
-		Availability:  defaultUnavailableAvailability(),
-	}
-	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
-}
-
-func (s *RuntimeService) applyRuntimeError(sessionID string, err error) {
-	s.applyRuntimeFailure(sessionID, workflowruntime.Failure{
-		Code:    "WORKFLOW_RUNTIME_ERROR",
-		Message: err.Error(),
+func (s *JavaScriptRuntimeService) prepareStart(normalized StartRequest) (PreparedStart, error) {
+	return PrepareStart(normalized, StartPrepareContext{
+		StartSourceContext: StartSourceContext{ProjectRoot: s.projectRoot},
 	})
 }
 
-func (s *RuntimeService) asyncStartFromState(state *runtimeSessionState) AsyncStartResult {
+func policyResolutionFromPrepared(prepared PreparedStart) workflowpolicy.Resolution {
+	return workflowpolicy.Resolution{
+		Policy: prepared.EffectivePolicy,
+		Hash:   prepared.Policy.EffectiveHash,
+	}
+}
+
+func (s *JavaScriptRuntimeService) runAsyncSession(
+	runCtx context.Context,
+	sessionID string,
+	normalized StartRequest,
+	resolved ResolvedSource,
+	sourceContent string,
+	policyResolution workflowpolicy.Resolution,
+	startedAt time.Time,
+) {
+	defer func() {
+		s.mu.Lock()
+		if state, ok := s.sessions[sessionID]; ok {
+			state.runCancel = nil
+		}
+		s.mu.Unlock()
+	}()
+
+	outcome, err := s.invokeWorkflowRuntime(runCtx, normalized, resolved, sourceContent, policyResolution, sessionID)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, ok := s.sessions[sessionID]
+	if !ok {
+		return
+	}
+	if err != nil {
+		failureOutcome := workflowruntime.Outcome{
+			OK: false,
+			Failure: workflowruntime.Failure{
+				Code:    workflowruntime.CodeScriptError,
+				Message: err.Error(),
+			},
+		}
+		terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, failureOutcome, startedAt)
+		s.applyTerminalRuntimeState(state, terminal, startedAt)
+		return
+	}
+
+	terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, outcome, startedAt)
+	s.applyTerminalRuntimeState(state, terminal, startedAt)
+}
+
+func (s *JavaScriptRuntimeService) applyTerminalRuntimeState(state *runtimeSessionState, terminal runtimeSessionState, startedAt time.Time) {
+	finishedAt := time.Now().UTC()
+	applyRuntimeSessionFields(state, terminal)
+	if state.session.Lifecycle == nil {
+		state.session.Lifecycle = &LifecycleTimestamps{}
+	}
+	if state.session.Lifecycle.StartedAt == nil {
+		state.session.Lifecycle.StartedAt = &startedAt
+	}
+	state.session.Lifecycle.FinishedAt = &finishedAt
+	state.result.SessionStatus = state.session.Status
+}
+
+func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
+	ctx context.Context,
+	normalized StartRequest,
+	resolved ResolvedSource,
+	sourceContent string,
+	policyResolution workflowpolicy.Resolution,
+	sessionID string,
+) (workflowruntime.Outcome, error) {
+	argsJSON, err := marshalStartArgs(normalized.Args)
+	if err != nil {
+		return workflowruntime.Outcome{}, err
+	}
+	return workflowruntime.Run(ctx, workflowruntime.Request{
+		Source:    sourceContent,
+		SourceRef: resolved.SourceRef,
+		SessionID: sessionID,
+		Args:      argsJSON,
+		Metadata:  workflowMetadataFromResolved(resolved, normalized),
+		Policy:    policyResolution.Policy,
+	}, workflowruntime.Hooks{})
+}
+
+func (s *JavaScriptRuntimeService) applyRuntimeLifecycleControl(
+	ctx context.Context,
+	sessionID string,
+	operation LifecycleControlKind,
+	control ControlRequest,
+	approve ApproveRequest,
+	retry RetryDispatchRequest,
+) (LifecycleControlResult, error) {
+	if err := ctx.Err(); err != nil {
+		return LifecycleControlResult{}, err
+	}
+	id, err := NormalizeSessionID(sessionID)
+	if err != nil {
+		return LifecycleControlResult{}, err
+	}
+	if _, err := NormalizeControlRequest(control); err != nil {
+		return LifecycleControlResult{}, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, ok := s.sessions[id]
+	if !ok {
+		return LifecycleControlResult{}, ErrSessionNotFound
+	}
+
+	currentStatus := state.session.Status
+	outcome := EvaluateLifecycleControl(operation, currentStatus)
+	if outcome == LifecycleControlOutcomeInvalidState || outcome == LifecycleControlOutcomeTerminalSession {
+		return LifecycleControlResult{}, &ControlError{
+			Operation: operation,
+			Outcome:   outcome,
+			Status:    currentStatus,
+			Message:   fmt.Sprintf("%s rejected for session %s in status %s", operation, id, currentStatus),
+		}
+	}
+
+	if outcome == LifecycleControlOutcomeAccepted && operation == LifecycleControlCancel {
+		state.session.Status = LifecycleStatusCanceling
+		state.result.SessionStatus = LifecycleStatusCanceling
+		if state.runCancel != nil {
+			state.runCancel()
+		}
+		state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+	}
+
+	return runtimeLifecycleControlResultFromState(state, id, operation, outcome, retry), nil
+}
+
+func runtimeLifecycleControlResultFromState(
+	state *runtimeSessionState,
+	id string,
+	operation LifecycleControlKind,
+	outcome LifecycleControlOutcome,
+	retry RetryDispatchRequest,
+) LifecycleControlResult {
+	result := LifecycleControlResult{
+		SessionID: id,
+		Operation: operation,
+		Outcome:   outcome,
+		Status:    state.session.Status,
+		Links:     LifecycleControlLinksForSession(id, true),
+	}
+	if operation == LifecycleControlRetryDispatch {
+		result.DispatchID = retry.DispatchID
+	}
+	if outcome == LifecycleControlOutcomeAccepted || outcome == LifecycleControlOutcomeNoOp {
+		session := cloneSessionRead(state.session)
+		result.Session = &session
+	}
+	return result
+}
+
+func workflowRunContext(parent context.Context, policy workflowpolicy.EffectivePolicy) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(parent)
+	if policy.MaxRunDurationMs == nil || *policy.MaxRunDurationMs <= 0 {
+		return ctx, cancel
+	}
+	timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Duration(*policy.MaxRunDurationMs)*time.Millisecond)
+	return timeoutCtx, func() {
+		timeoutCancel()
+		cancel()
+	}
+}
+
+func (s *JavaScriptRuntimeService) snapshotSessionState(sessionID string) (runtimeSessionState, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	state, ok := s.sessions[sessionID]
+	if !ok {
+		return runtimeSessionState{}, ErrSessionNotFound
+	}
+	return cloneRuntimeSessionState(state), nil
+}
+
+func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
+	if state == nil {
+		return runtimeSessionState{}
+	}
+	cloned := runtimeSessionState{
+		session:    cloneSessionRead(state.session),
+		result:     cloneResultRead(state.result),
+		dispatches: cloneDispatchSummaries(state.dispatches),
+		artifacts:  cloneArtifactSummaries(state.artifacts),
+	}
+	if len(state.events) > 0 {
+		cloned.events = make([]json.RawMessage, len(state.events))
+		for i, event := range state.events {
+			cloned.events[i] = append(json.RawMessage(nil), event...)
+		}
+	}
+	return cloned
+}
+
+func (s *JavaScriptRuntimeService) syncStartFromState(state runtimeSessionState) SyncStartResult {
+	async := s.asyncStartFromState(state)
+	result := SyncStartResult{AsyncStartResult: async}
+	if state.result.Availability != nil && state.result.Availability.Reason == "SYNC_WAIT_TIMED_OUT" {
+		result.SyncOutcome = SyncOutcomeTimedOut
+		result.TimedOut = true
+		return result
+	}
+	if IsTerminalLifecycleStatus(state.session.Status) {
+		result.SyncOutcome = SyncOutcomeCompleted
+		projected, err := ProjectResultRead(state.result, state.session, state.artifacts, ResultRequest{
+			Mode: ResultModeFinal,
+		})
+		if err == nil {
+			if encoded, err := json.Marshal(projected); err == nil {
+				result.Result = encoded
+			}
+		}
+	}
+	return result
+}
+
+func (s *JavaScriptRuntimeService) asyncStartFromState(state runtimeSessionState) AsyncStartResult {
 	return AsyncStartResult{
 		SessionID:        state.session.SessionID,
 		Status:           string(state.session.Status),
@@ -654,164 +808,11 @@ func (s *RuntimeService) asyncStartFromState(state *runtimeSessionState) AsyncSt
 	}
 }
 
-func (s *RuntimeService) syncStartFromStateLocked(state *runtimeSessionState) SyncStartResult {
-	result := SyncStartResult{AsyncStartResult: s.asyncStartFromState(state)}
-	if !IsTerminalLifecycleStatus(state.session.Status) {
-		return result
-	}
-	result.SyncOutcome = SyncOutcomeCompleted
-	projected, err := ProjectResultRead(state.result, state.session, state.artifacts, ResultRequest{
-		Mode: ResultModeFinal,
-	})
-	if err != nil {
-		return result
-	}
-	encoded, err := json.Marshal(projected)
-	if err != nil {
-		return result
-	}
-	result.Result = encoded
-	return result
-}
-
-func (s *RuntimeService) finalizeSyncStartReplay(requestID string, result *SyncStartResult) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	record, ok := s.startReplay[requestID]
-	if !ok {
-		return
-	}
-	if result != nil {
-		record.syncStart = cloneSyncStartResultPtr(*result)
-		s.startReplay[requestID] = record
-	}
-	signalSyncStartDone(record.syncStartDone)
-}
-
-func signalSyncStartDone(done chan struct{}) {
-	if done == nil {
-		return
-	}
-	select {
-	case <-done:
-	default:
-		close(done)
-	}
-}
-
-func cloneAsyncStartResultPtr(result AsyncStartResult) *AsyncStartResult {
-	cloned := cloneAsyncStartResult(result)
-	return &cloned
-}
-
-func cloneSyncStartResultPtr(result SyncStartResult) *SyncStartResult {
-	cloned := cloneSyncStartResult(result)
-	return &cloned
-}
-
-func (s *RuntimeService) syncTimedOutFromStateLocked(state *runtimeSessionState, sessionCanceledByTimeout bool) SyncStartResult {
-	return SyncStartResult{
-		AsyncStartResult:         s.asyncStartFromState(state),
-		SyncOutcome:              SyncOutcomeTimedOut,
-		TimedOut:                 true,
-		SessionCanceledByTimeout: sessionCanceledByTimeout,
-	}
-}
-
-func (s *RuntimeService) applySyncWaitTimeout(sessionID string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	state, ok := s.sessions[sessionID]
-	if !ok || IsTerminalLifecycleStatus(state.session.Status) {
-		return
-	}
-	state.result = ResultReadResult{
-		SessionID:     sessionID,
-		ResultStatus:  ResultStatusNotReady,
-		SessionStatus: state.session.Status,
-		Availability: &ResultAvailabilityDetail{
-			Reason:    "SYNC_WAIT_TIMED_OUT",
-			Message:   "Sync wait ended before a terminal result was available.",
-			Retryable: true,
-		},
-	}
-	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
-}
-
-func (s *RuntimeService) markRuntimeDone(sessionID string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	state, ok := s.sessions[sessionID]
-	if !ok || state.runtimeDone == nil {
-		return
-	}
-	select {
-	case <-state.runtimeDone:
-	default:
-		close(state.runtimeDone)
-	}
-}
-
-func syncWaitTimeout(wait *WaitOptions) time.Duration {
-	if wait == nil || wait.TimeoutMillis == nil {
-		return 0
-	}
-	return time.Duration(*wait.TimeoutMillis) * time.Millisecond
-}
-
-func (s *RuntimeService) sessionStateLocked(sessionID string) (*runtimeSessionState, error) {
-	state, ok := s.sessions[sessionID]
-	if !ok {
-		return nil, ErrSessionNotFound
-	}
-	return state, nil
-}
-
-func (s *RuntimeService) unsupportedLifecycleControl(ctx context.Context, sessionID string, operation LifecycleControlKind) (LifecycleControlResult, error) {
+func (s *JavaScriptRuntimeService) unsupportedLifecycleControl(ctx context.Context) (LifecycleControlResult, error) {
 	if err := ctx.Err(); err != nil {
 		return LifecycleControlResult{}, err
 	}
-	id, err := NormalizeSessionID(sessionID)
-	if err != nil {
-		return LifecycleControlResult{}, err
-	}
-	s.mu.RLock()
-	state, stateErr := s.sessionStateLocked(id)
-	s.mu.RUnlock()
-	if stateErr != nil {
-		return LifecycleControlResult{}, stateErr
-	}
-	return LifecycleControlResult{}, &ControlError{
-		Operation: operation,
-		Outcome:   LifecycleControlOutcomeInvalidState,
-		Status:    state.session.Status,
-		Message:   ErrUnsupportedControl.Error(),
-	}
-}
-
-func newDurableSessionID() string {
-	token := strings.ReplaceAll(uuid.NewString(), "-", "")
-	if len(token) > 12 {
-		token = token[:12]
-	}
-	return "dur-sess-" + token
-}
-
-func orchestratorKindForPrepared(prepared PreparedStart) string {
-	if prepared.Request.Orchestrator != nil {
-		if kind := strings.TrimSpace(prepared.Request.Orchestrator.Kind); kind != "" {
-			return strings.ToUpper(kind)
-		}
-	}
-	return "JAVASCRIPT"
-}
-
-func dialectForPrepared(prepared PreparedStart) string {
-	if dialect := strings.TrimSpace(prepared.ResolvedSource.Dialect); dialect != "" {
-		return dialect
-	}
-	return "you-workflow-v1"
+	return LifecycleControlResult{}, ErrUnsupportedControl
 }
 
 func defaultUnavailableAvailability() *ResultAvailabilityDetail {
@@ -822,65 +823,34 @@ func defaultUnavailableAvailability() *ResultAvailabilityDetail {
 	}
 }
 
-func projectRuntimeSuccessResult(sessionID string, value workflowresult.TypedValue, artifacts []ArtifactSummary) (ResultReadResult, *ResultSummary, error) {
-	parts, validation := workflowresult.ProjectPrimaryResult(sessionID, value, artifactStatesFromSummaries(artifacts))
-	if validation.HasIssues() {
-		return ResultReadResult{}, nil, fmt.Errorf("project primary result: %v", validation.Issues)
+func marshalStartArgs(args map[string]any) (json.RawMessage, error) {
+	if len(args) == 0 {
+		return nil, nil
 	}
-
-	primaryJSON := workContentJSONFromParts(parts)
-	result := ResultReadResult{
-		SessionID:     sessionID,
-		ResultStatus:  ResultStatusFinal,
-		SessionStatus: LifecycleStatusSucceeded,
-		PrimaryResult: primaryJSON,
-		ArtifactIDs:   artifactIDsFromSummaries(artifacts),
-	}
-	summary := &ResultSummary{
-		ResultStatus: string(ResultStatusFinal),
-		Summary:      resultSummaryTextFromParts(parts),
-	}
-	return result, summary, nil
-}
-
-func workContentJSONFromParts(parts []interfaces.WorkContentPart) json.RawMessage {
-	content := workcontent.GeneratedPtrFromParts(parts)
-	if content == nil {
-		return nil
-	}
-	encoded, err := json.Marshal(content)
+	encoded, err := json.Marshal(args)
 	if err != nil {
-		return nil
+		return nil, NewValidationError("args", "args must be JSON-compatible")
 	}
-	return encoded
+	return encoded, nil
 }
 
-func resultSummaryTextFromParts(parts []interfaces.WorkContentPart) string {
-	for _, part := range parts {
-		if part.Type.Normalized() == interfaces.WorkContentPartTypeText {
-			if text := strings.TrimSpace(part.Text); text != "" {
-				return text
-			}
+func workflowMetadataFromResolved(resolved ResolvedSource, req StartRequest) map[string]string {
+	metadata := map[string]string{}
+	if req.Source.InlineWorkflow != nil {
+		for key, value := range req.Source.InlineWorkflow.Metadata {
+			metadata[key] = value
 		}
 	}
-	return ""
-}
-
-func artifactStatesFromSummaries(artifacts []ArtifactSummary) []interfaces.FactorySessionArtifactState {
-	if len(artifacts) == 0 {
-		return nil
+	for key, value := range resolved.Metadata {
+		metadata[key] = value
 	}
-	states := make([]interfaces.FactorySessionArtifactState, 0, len(artifacts))
-	for _, artifact := range artifacts {
-		states = append(states, interfaces.FactorySessionArtifactState{
-			ID:          artifact.ID,
-			Kind:        artifact.Kind,
-			Visibility:  artifact.Visibility,
-			Label:       artifact.Label,
-			ContentHash: artifact.ContentHash,
-			SizeBytes:   artifact.SizeBytes,
-			AuditMode:   artifact.AuditMode,
-		})
+	if name := strings.TrimSpace(req.Source.WorkflowName); name != "" {
+		metadata["name"] = name
+	} else if _, ok := metadata["name"]; !ok {
+		base := strings.TrimSpace(resolved.SourceRef)
+		if base != "" {
+			metadata["name"] = base
+		}
 	}
-	return states
+	return metadata
 }
