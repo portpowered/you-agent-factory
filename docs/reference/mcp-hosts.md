@@ -276,6 +276,38 @@ saving the host configuration from the matching section earlier in this guide:
 Record manual pass/fail per host in release notes or QA checklists outside this
 repository when host-specific behavior is under review.
 
+## Shared MCP Install Blockers
+
+Install smoke for this batch found **no bounded follow-up blocker** on the shared
+MCP server startup or tool invocation path.
+
+Evidence:
+
+| Shared MCP step | Harness | Outcome |
+|-----------------|---------|---------|
+| Stdio server startup (`you mcp serve`) | `pkg/cli/mcp/serve_smoke_test.go` via `RunServe` with injected fixture service | Succeeds; missing `--fixture-catalog` failure is expected and documented when no service is injected |
+| JSON-RPC handshake | Same harness | `initialize` returns protocol version `2024-11-05` |
+| Tool discovery | Same harness | `tools/list` exposes canonical `you.factory_session.*` tools |
+| Fixture validation | Same harness | `you.factory_session.validate_source` returns a valid preview outcome |
+| Async start | Same harness | `you.factory_session.start_async` returns `RUNNING` for fixture `req-js-run-n-001` |
+| Status / result polling | Same harness | `you.factory_session.get` returns running session status; `you.factory_session.get_result` returns typed `factory_session.result.not_ready` while running |
+
+These steps exercise the shared stdio MCP path that every host example in this
+guide depends on. They do not require a host-specific wrapper, a new
+workflow-run surface, or live factory HTTP runtime backing.
+
+The following gaps are **not** shared MCP blockers for this batch:
+
+| Gap | Why it is out of scope here |
+|-----|----------------------------|
+| Host UI config reload and tool discovery (Cursor, Codex, OpenCode, Kiro, Gemini) | Host-only wrapper behavior; shared server/tool invocation is automated above |
+| HTTP or SSE MCP transport | Unsupported transport choice for `you mcp serve` in this batch, not a startup failure on the documented stdio path |
+| Live factory HTTP runtime backing for `you mcp serve` | Deliberate fixture-catalog default for install smoke; swapping in real runtime is a separate bounded batch, not a blocker discovered while proving the documented install path |
+
+No additional shared MCP startup, registration, or invocation follow-up batch is
+required before customers can configure hosts against the current `you mcp serve`
+command and Factory Session tool catalog documented above.
+
 ## Related
 
 - `you docs orchestrators`
