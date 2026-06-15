@@ -187,11 +187,11 @@ func (s *Server) ListFactorySessionDispatches(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	lister, ok := s.requireDurableSessionDispatchLister(w)
+	reader, ok := s.requireDurableSessionDispatchReader(w)
 	if !ok {
 		return
 	}
-	response, err := lister.ListDurableFactorySessionDispatches(r.Context(), string(sessionID))
+	response, err := reader.ListDurableFactorySessionDispatches(r.Context(), string(sessionID))
 	if err != nil {
 		if s.writeDurableSessionReadError(w, err) {
 			return
@@ -204,9 +204,25 @@ func (s *Server) ListFactorySessionDispatches(w http.ResponseWriter, r *http.Req
 }
 
 func (s *Server) GetFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, dispatchID factoryapi.DispatchID) {
-	_ = sessionID
-	_ = dispatchID
-	s.writeError(w, http.StatusNotImplemented, "durable factory session dispatch retrieval is not implemented", "INTERNAL_ERROR")
+	if !isDurableExecutionSessionID(string(sessionID)) {
+		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+		return
+	}
+
+	reader, ok := s.requireDurableSessionDispatchReader(w)
+	if !ok {
+		return
+	}
+	response, err := reader.GetDurableFactorySessionDispatch(r.Context(), string(sessionID), string(dispatchID))
+	if err != nil {
+		if s.writeDurableSessionReadError(w, err) {
+			return
+		}
+		s.logger.Error("get durable factory session dispatch failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to get factory session dispatch", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) ListFactorySessionArtifacts(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
@@ -558,24 +574,28 @@ func currentFactoryBundledDocTargetPaths(factory factoryapi.Factory) []string {
 	return paths
 }
 
-type durableSessionDispatchLister interface {
+type durableSessionDispatchReader interface {
 	ListDurableFactorySessionDispatches(
 		ctx context.Context,
 		sessionID string,
 	) (factoryapi.ListFactorySessionDispatchesResponse, error)
+	GetDurableFactorySessionDispatch(
+		ctx context.Context,
+		sessionID, dispatchID string,
+	) (factoryapi.FactoryDispatch, error)
 }
 
-func (s *Server) requireDurableSessionDispatchLister(w http.ResponseWriter) (durableSessionDispatchLister, bool) {
+func (s *Server) requireDurableSessionDispatchReader(w http.ResponseWriter) (durableSessionDispatchReader, bool) {
 	if s.runtime == nil {
 		s.writeError(w, http.StatusInternalServerError, "durable factory session dispatch read is unavailable", "INTERNAL_ERROR")
 		return nil, false
 	}
-	lister, ok := s.runtime.(durableSessionDispatchLister)
+	reader, ok := s.runtime.(durableSessionDispatchReader)
 	if !ok {
-		s.writeError(w, http.StatusNotImplemented, "durable factory session dispatch listing is not implemented", "INTERNAL_ERROR")
+		s.writeError(w, http.StatusNotImplemented, "durable factory session dispatch read is not implemented", "INTERNAL_ERROR")
 		return nil, false
 	}
-	return lister, true
+	return reader, true
 }
 
 func isDurableExecutionSessionID(sessionID string) bool {
@@ -585,6 +605,10 @@ func isDurableExecutionSessionID(sessionID string) bool {
 func (s *Server) writeDurableSessionReadError(w http.ResponseWriter, err error) bool {
 	if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
 		s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+		return true
+	}
+	if errors.Is(err, factorysessionexecution.ErrDispatchNotFound) {
+		s.writeError(w, http.StatusNotFound, "factory session dispatch not found", "NOT_FOUND")
 		return true
 	}
 	var validationErr *factorysessionexecution.ValidationError

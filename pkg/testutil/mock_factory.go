@@ -101,6 +101,21 @@ func (m *MockFactory) ListDurableFactorySessionDispatches(
 	return factorysession.ListDispatchesResponseToAPI(result), nil
 }
 
+func (m *MockFactory) GetDurableFactorySessionDispatch(
+	ctx context.Context,
+	sessionID, dispatchID string,
+) (factoryapi.FactoryDispatch, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactoryDispatch{}, err
+	}
+	result, err := service.GetDispatch(ctx, sessionID, dispatchID)
+	if err != nil {
+		return factoryapi.FactoryDispatch{}, err
+	}
+	return factorysession.DispatchDetailResponseToAPI(result), nil
+}
+
 func (m *MockFactory) requireDurableExecutionService() (factorysessionexecution.Service, error) {
 	if m == nil || m.DurableExecutionService == nil {
 		return nil, errors.New("durable execution service is unavailable")
