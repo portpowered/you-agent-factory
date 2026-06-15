@@ -31,6 +31,7 @@ const (
 	TopicModels             Topic = "models"
 	TopicMCPHosts           Topic = "mcp-hosts"
 	TopicOrchestrators      Topic = "orchestrators"
+	TopicMCP                Topic = "mcp"
 	TopicPackagedTTS        Topic = "packaged-tts"
 	TopicBatchInputs        Topic = "batch-inputs"
 	TopicTemplates          Topic = "templates"
@@ -57,6 +58,7 @@ const (
 	referenceModelsPath             = "models.md"
 	referenceMCPHostsPath           = "mcp-hosts.md"
 	referenceOrchestratorsPath      = "orchestrators.md"
+	referenceMCPPath                = "mcp.md"
 	referencePackagedTTSPath        = "packaged-tts.md"
 	referenceBatchInputsPath        = "batch-inputs.md"
 	referenceTemplatesPath          = "templates.md"
@@ -82,6 +84,7 @@ var topicDocuments = []topicDocument{
 	{topic: TopicSessions, description: "Live factory sessions: session list, session show, factory query, status API, dashboard URL, and run modes.", path: referenceSessionsPath, displayOrder: 35},
 	{topic: TopicMCPHosts, description: "Dynamic workflow MCP host setup: you mcp serve, stdio transport, tool catalog, and practical host examples.", path: referenceMCPHostsPath, displayOrder: 36},
 	{topic: TopicOrchestrators, description: "Factory, FactoryOrchestrator, FactorySession, Dispatch, FactoryArtifact, FactoryEvent, and dynamic workflow aliases.", path: referenceOrchestratorsPath, displayOrder: 37},
+	{topic: TopicMCP, description: "Canonical you mcp serve install path, preview tool catalog, scope boundaries, and automation-backed checks.", path: referenceMCPPath, displayOrder: 38},
 	{topic: TopicWorkstations, description: "Workstation kinds, route fields, runtime step behavior, and scoped execution settings.", path: referenceWorkstationsPath, displayOrder: 40, aliases: []Topic{TopicWorkstationAlias}},
 	{topic: TopicWorkers, description: "Worker types, model providers, script workers, and worker configuration.", path: referenceWorkersPath, displayOrder: 50},
 	{topic: TopicResources, description: "Resource capacity, bounded concurrency, and workstation resource requirements.", path: referenceResourcesPath, displayOrder: 60},
