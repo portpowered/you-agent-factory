@@ -1,31 +1,30 @@
 {
-  "project": "Factory Session Backend Runtime for Simple JavaScript Workflows",
-  "branchName": "dynamic-workflows-cell-session-backend-runtime",
-  "description": "Wire the shared Factory Session execution service to the real simple JavaScript runtime path so simple JavaScript workflows can be started, inspected, replayed, and retrieved through stable backend session read models while preserving request-id idempotency and keeping FakeService available for mock-provider transports.",
+  "project": "infinite-you",
+  "branchName": "dynamic-workflows-recovery-executor-review-state-reconciliation",
+  "description": "Recover executor and review queue-state reconciliation for dynamic workflow recovery lanes so completed same-trace work converges to one coherent durable outcome instead of leaving stale task residue or duplicate review:init tokens, and so the remaining residual lanes can be classified confidently as complete, safe manual-repair, or superseded queue noise.",
   "context": {
-    "customerAsk": "The shared Factory Session execution service can start a simple JavaScript workflow against the real runtime path, expose status/result/progress/read models, and preserve idempotent request behavior.",
-    "problem": "The durable Factory Session contract and fake service paths exist, but the backend service path still needs a real simple JavaScript runtime implementation for session start and inspection. Transports can prove fixture shapes today, but they cannot yet run a real simple JavaScript workflow through lifecycle, result projection, replay, and request-id semantics.",
-    "solution": "Add a real runtime-backed implementation or mode behind the existing factorysessionexecution.Service contract. Normalize starts through orchestrator-owned source, validation, policy, args, wait, and result packages; execute simple JavaScript sessions through the runtime boundary; maintain explicit in-memory session projections and canonical events; preserve request-id replay/conflict behavior; and keep FakeService available for mock-provider paths."
+    "customerAsk": "Recover executor and review state reconciliation for dynamic workflow recovery lanes so completed executor or review work no longer leaves stale task failures, active task:init residue, or duplicate review:init tokens for the same trace, while also explaining the remaining three residual lanes concretely enough for a later planner pass to classify each one as complete, safe manual-repair, or superseded queue noise without guesswork.",
+    "problem": "Live queue evidence and worktree evidence diverge for three recovery lanes, including failed task residue and duplicate review:init state that no longer matches completed implementation and review-ready worktree progress. That mismatch blocks further planning because the owning queue-reconciliation path is not explained well enough to tell whether the problem is active runtime behavior, projection drift, duplicate review creation, failed post-processing, or historical queue residue.",
+    "solution": "Inspect the exact runtime, projection, and same-trace ownership path for executor completion, review creation, review completion, and residue cleanup; implement the smallest safe reconciliation fix so one recovery trace produces one durable queue outcome; and, only if runtime behavior is already correct, document the exact safe preconditions for a bounded manual repair path."
   },
   "acceptanceCriteria": [
-    "Service tests prove async start, sync completed start, sync timeout, get session, and get result using a real simple JavaScript fixture through the runtime-backed service path",
-    "Service tests prove exact request-id replay returns the same session/result response and conflicting request-id reuse is rejected",
-    "Projection tests show session lifecycle, result summary, source hash, policy hash, and inspection links remain consistent with existing API-shaped read models",
-    "Canonical lifecycle and result update events can be replayed idempotently to reconstruct the same session projection",
-    "FakeService tests continue to pass and remain usable for CLI, MCP, API, and mock-provider paths",
-    "No provider dispatch bridge, website UI, MCP install packaging, or broad persistent database storage is introduced in this cell",
-    "Quality gate: Go typecheck/compile, lint where applicable, and focused tests pass, including go test ./pkg/factorysessionexecution ./pkg/orchestrators/javascript/..."
+    "Focused backend tests, replay coverage, or equivalent behavioral proof show that completed executor or review work no longer leaves duplicate review:init tokens or stale task:init or task:failed residue for the same recovery trace.",
+    "The implementation or investigation output explains the current residual state of dynamic-workflows-recovery-session-backend-runtime, dynamic-workflows-recovery-mcp-install-plan-scope, and dynamic-workflows-recovery-setup-workspace-git-pull-hygiene concretely enough that a later planner pass can classify each lane as complete, safe manual-repair, or superseded queue noise without guessing.",
+    "If durable runtime behavior is already correct and a manual move remains necessary for historical residue, the final repair path records exact safe preconditions, the exact lane shapes it applies to, and the exact queue states it must not be used for.",
+    "The recovered behavior keeps executor completion, review creation, review completion, and consume-path state transitions aligned across runtime state and replayed projections for the same trace.",
+    "The work stays within existing Factory runtime, session, service, and projection vocabulary and does not introduce a standalone workflow-run model, new customer-facing dynamic-workflow nouns, or unrelated product-surface work.",
+    "Quality gate: typecheck, lint, and focused backend tests for factory runtime, session execution, service, and replay surfaces pass."
   ],
   "userStories": [
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-001",
-      "title": "Normalize real session start inputs",
-      "description": "As a backend maintainer, I want real JavaScript session starts to use the shared start contract and orchestrator-owned normalization so the runtime path behaves like API, CLI, and MCP callers expect.",
+      "id": "dynamic-workflows-recovery-executor-review-state-reconciliation-001",
+      "title": "Explain the three residual recovery lanes from durable queue evidence",
+      "description": "As a follow-up planner, I want the three residual recovery lanes explained from queue and replay evidence so I can tell whether each lane is complete, safe to repair manually, or just superseded residue.",
       "acceptanceCriteria": [
-        "A start request resolves JavaScript source using the existing Factory Session start source flow and records the resolved source identity and source hash on the session read model",
-        "A start request validates source, args, requested policy, and wait options before runtime execution begins",
-        "Policy projection records the effective policy hash used for the session",
-        "Invalid source, invalid args, or denied policy returns the existing service error shape without creating a completed session",
+        "The implementation or attached investigation output identifies the exact work IDs, review IDs, and same-trace lineage for the three named recovery lanes.",
+        "For each of the three lanes, the output states whether the observed mismatch comes from active runtime behavior, projection drift, duplicate review creation, failed post-processing, or historical residual queue state.",
+        "Reviewers can map each named lane to one of these states from the produced evidence: complete, safe manual-repair, or superseded queue noise.",
+        "The explanation uses existing Factory Session, work, review, and event terminology and does not require hidden source-file knowledge to understand the classification.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -34,14 +33,14 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-002",
-      "title": "Start simple JavaScript sessions asynchronously",
-      "description": "As a transport caller, I want to start a simple JavaScript workflow asynchronously so I can receive a session identifier immediately and inspect progress through the shared service.",
+      "id": "dynamic-workflows-recovery-executor-review-state-reconciliation-002",
+      "title": "Reconcile same-trace executor and review completion into one durable queue outcome",
+      "description": "As a maintainer of recovery lanes, I want executor and review completion to reconcile to one durable queue outcome so the same recovery trace does not leave duplicate review starts or stale task residue behind.",
       "acceptanceCriteria": [
-        "StartAsync against a real simple JavaScript fixture returns a session id, accepted/running lifecycle state, orchestrator identity, source hash, policy hash, and inspection links",
-        "The runtime-backed service records enough in-memory session state for a later GetSession call to report lifecycle status, progress, result availability, dispatch stubs, artifact stubs, and links",
-        "The service emits or models canonical session-started and lifecycle/progress facts for the async session",
-        "Async service tests use a real simple JavaScript fixture rather than a fake scenario fixture",
+        "When executor completion creates or advances review work for a recovery trace, the durable queue contains at most one active review:init outcome for that same trace.",
+        "When review work completes for that same trace, stale task:init, task:failed, or equivalent no-longer-authoritative residue is not left behind as if the lane were still blocked.",
+        "Replay or projection rebuilding from the same event history reaches the same reconciled queue outcome rather than reintroducing duplicate review or stale task-state residue.",
+        "The change stays inside existing queue-state ownership paths and does not introduce a new workflow-run model or unrelated dynamic workflow surface changes.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -50,14 +49,14 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-003",
-      "title": "Complete or time out synchronous starts",
-      "description": "As a transport caller, I want synchronous JavaScript session starts to either return the completed result within the wait budget or return a live session that can be inspected later.",
+      "id": "dynamic-workflows-recovery-executor-review-state-reconciliation-003",
+      "title": "Define a bounded manual repair path only for proven historical residue",
+      "description": "As a planner recovering old queue residue, I want an exact manual-repair rule only when the runtime is already correct so I can fix safe leftovers without turning a one-off move into a general shortcut.",
       "acceptanceCriteria": [
-        "StartSync with a sufficient wait budget runs the real simple JavaScript fixture and returns a completed session result with the expected primary result summary",
-        "StartSync with an exhausted or too-small wait budget returns the existing timeout/pending result shape with session id, lifecycle status, result availability, and inspection links",
-        "Sync completion and timeout paths both persist the same session state that GetSession and GetResult later read",
-        "Timeout behavior does not duplicate sessions or lose the eventual runtime result",
+        "If the investigation proves current runtime behavior is correct and the remaining mismatch is historical residue, the plan documents the exact preconditions required before any manual you work move repair is allowed.",
+        "The documented manual path names the exact queue states, trace shape, and evidence required before moving work, including what would make the move unsafe.",
+        "The documented manual path is explicitly limited to the proven residual lane shape and is not framed as a replacement for executor, review, or projection reconciliation logic.",
+        "If code changes fully remove the need for manual repair, the story records that no manual move is required for the final path.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -66,66 +65,18 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-004",
-      "title": "Read session and result projections",
-      "description": "As a caller inspecting a Factory Session, I want status and result reads to match the established durable session API shapes so later API, CLI, and MCP work can consume one shared backend projection.",
+      "id": "dynamic-workflows-recovery-executor-review-state-reconciliation-004",
+      "title": "Prove reconciled queue behavior with focused replay and lifecycle verification",
+      "description": "As a reviewer, I want focused replay and lifecycle evidence for executor and review reconciliation so I can trust that completed recovery work no longer looks active in the durable queue.",
       "acceptanceCriteria": [
-        "GetSession returns a durable session read model with lifecycle status, phase/progress summary, result summary, source hash, policy hash, dispatch/artifact counts or stubs, recoverability/action availability, and inspection links",
-        "GetResult returns final result data for a completed simple JavaScript session and an availability response for sessions that are still running or timed out",
-        "Result projection uses the existing JavaScript result normalization rules for primary result, artifacts, and summary fields",
-        "Projection tests compare the runtime-backed read models to the existing API-shaped expectations without changing public schema names",
+        "Focused tests or equivalent behavioral proof cover at least one completed-executor path, one completed-review path, and the duplicate-review historical regression shape described in the customer ask.",
+        "Verification proves the reconciled behavior across the owning runtime or projection layer rather than only asserting helper-level implementation details.",
+        "Verification shows the three named residual recovery lanes have enough evidence for later planner classification without requiring a source-code audit.",
+        "Verification remains focused on queue reconciliation and does not expand into API parity, MCP install expansion, or unrelated factory cleanup.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 4,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "dynamic-workflows-cell-session-backend-runtime-005",
-      "title": "Preserve request-id idempotency",
-      "description": "As a caller retrying a start request, I want exact request-id replays to be safe and conflicting request-id reuse to fail so retries do not create duplicate or ambiguous sessions.",
-      "acceptanceCriteria": [
-        "Replaying the same normalized async start request with the same request id returns the original async start response and session id",
-        "Replaying the same normalized sync start request with the same request id returns the original sync response shape, including completed or timeout status as originally observed",
-        "Reusing a request id with a different normalized tuple returns the existing request-id conflict error and does not create a new runtime session",
-        "Idempotency tests cover async start, sync completed start, sync timeout, and conflict using the real simple JavaScript fixture",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 5,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "dynamic-workflows-cell-session-backend-runtime-006",
-      "title": "Replay lifecycle and result events consistently",
-      "description": "As a maintainer, I want canonical session lifecycle and result update events from real JavaScript sessions to replay into the same projection so API/event parity has a stable source.",
-      "acceptanceCriteria": [
-        "Runtime-backed sessions model or emit canonical start, result-updated, completed, and timeout/recoverable lifecycle events where applicable",
-        "Replaying the event sequence reconstructs the same lifecycle status, result summary, source hash, policy hash, and links as the live service projection",
-        "Replaying the same event sequence more than once does not duplicate result summaries, links, dispatch stubs, or artifact stubs",
-        "Projection tests use the real simple JavaScript fixture event sequence and existing durable session API-shaped projection expectations",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 6,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "dynamic-workflows-cell-session-backend-runtime-007",
-      "title": "Keep FakeService mock paths intact",
-      "description": "As a maintainer of CLI, MCP, and API mock paths, I want the fake session service to keep working while real runtime support is added so parallel transport work stays unblocked.",
-      "acceptanceCriteria": [
-        "Existing FakeService behavior and fixture-backed scenarios continue to pass without requiring real JavaScript runtime setup",
-        "Fake async, sync, get session, get result, event replay, and idempotency behaviors remain compatible with the shared factorysessionexecution.Service contract",
-        "Runtime-backed service wiring does not remove or rename fake-service constructors or scenario-loading APIs used by mock-provider tests",
-        "Focused fake service tests pass alongside the new runtime-backed service tests",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 7,
       "passes": true,
       "notes": ""
     }

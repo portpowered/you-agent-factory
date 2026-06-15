@@ -1,186 +1,130 @@
-# PRD: UI CI Acceleration and Test Rationalization
-
-## Introduction
-
-The current required CI path spends too much wall clock time in UI verification, especially covered Vitest runs and browser integration tests. Because the required lanes run serially today, browser integration failures can arrive only after a long covered UI pass completes. This slows merge feedback, makes flaky failures more expensive, and makes it harder for maintainers to tell whether a failing test is proving a unique product contract or repeating assertions already covered elsewhere.
-
-This project will make browser failures surface earlier, reduce required UI CI wall clock time, use the existing sharded coverage runner, add stable timing visibility, and rationalize redundant UI tests while preserving defect detection. The intended outcome is a faster, more trustworthy PR verification path where each test lane has a clear purpose, clear rerun command, and clear failure output.
+# PRD: Dynamic Workflows Recovery Executor Review State Reconciliation
 
 ## Context
 
+### Project Overview
+
+`infinite-you` uses a queue-driven Factory Session runtime to move recovery work through `task:init -> process -> task:in-review -> review -> task:to-complete` and then into the final consume path. The planner depends on the durable queue and replayable event history to decide whether a recovery lane is still active, needs manual repair, or is already effectively complete.
+
 ### Customer Ask
 
-Accelerate the UI-heavy portions of CI and rationalize redundant tests so browser integration regressions fail faster, covered UI runs complete sooner, and maintainers have enough timing evidence to keep the suite from regressing.
+Recover executor and review state reconciliation for dynamic workflow recovery lanes so completed executor or review work no longer leaves stale `task:init`, `task:failed`, or duplicate `review:init` residue for the same recovery trace. The result must explain the remaining three residual lanes concretely enough for a later planner pass to classify each lane as complete, safe manual-repair, or superseded queue noise without guesswork.
 
-### Concrete Problem
+### Problem
 
-The current `make ci` flow waits for long covered UI verification before browser integration can report failures. The covered UI runner already has sharding support, but the canonical PR path does not use it. Several slow tests are broad app-shell or React Flow-heavy suites that repeatedly mount expensive dashboard state for narrower behaviors. Browser, jsdom integration, and unit-style tests also overlap in places, increasing runtime without adding proportional confidence.
+As of 2026-06-15, live queue evidence and worktree evidence disagree for three dynamic workflow recovery lanes:
+
+- `dynamic-workflows-recovery-session-backend-runtime` still appears at `idea:to-complete` with `work-task-24` failed even though its worktree progress shows implementation, verification, and review-ready status.
+- `dynamic-workflows-recovery-mcp-install-plan-scope` still appears at `idea:to-complete` with `work-task-58` failed even though its worktree progress shows completed install-path implementation and smoke coverage.
+- `dynamic-workflows-recovery-setup-workspace-git-pull-hygiene` still shows `work-task-59` at `task:init` plus duplicate `work-review-64` and `work-review-65` at `review:init` even though its worktree progress shows completed stories and verification.
+
+This mismatch blocks further planning because the owning queue-reconciliation layer is not explained well enough to distinguish a real runtime bug from historical residue that can be repaired safely.
 
 ### High-Level Solution
 
-Introduce a canonical PR verification flow that either runs browser integration before UI coverage or runs both through a repo-owned orchestrator with fast-fail semantics. Use sharded UI coverage in CI with deterministic merged coverage output. Add stable slow-test reporting for covered UI and browser lanes. Define lane boundaries and split the highest-cost redundant suites into lower-cost feature-scoped tests where that preserves the same observable confidence.
+Investigate the exact runtime, projection, and same-trace ownership path that handles executor completion, review creation, review completion, and residual token cleanup. Then implement the smallest safe repair that makes durable queue state converge on one coherent outcome per recovery trace. If investigation proves the runtime is already correct and only bounded historical residue remains, document exact preconditions for a manual `you work move` repair so later planning does not generalize it into a shortcut.
 
 ## Project-Level Acceptance Criteria
 
-- [ ] Browser integration no longer waits for the full covered UI lane to finish before starting in the canonical PR verification flow.
-- [ ] The required UI-related CI wall clock time is reduced by at least 30% from the current measured baseline, or the closeout artifact explains the measured blocker and next tuning step.
-- [ ] Sharded UI coverage preserves merged coverage reports, threshold enforcement, replay coverage checking, and clear failure output when a shard fails.
-- [ ] Covered UI and browser integration lanes emit stable slow-file summaries that maintainers can compare across runs.
-- [ ] Lane boundaries explain what belongs in unit/jsdom coverage, covered feature integration, and browser integration, with duplicate assertion patterns removed from at least one high-cost area.
-- [ ] Browser integration remains deterministic: failures identify the lane and rerun command, and concurrent execution avoids port, preview server, and shared download conflicts.
-- [ ] Typecheck, lint, and relevant tests pass for CI orchestration, coverage sharding, reporting, and changed UI test behavior.
+- Focused backend tests, replay coverage, or equivalent behavioral proof show that completed executor or review work no longer leaves duplicate `review:init` tokens or stale `task:init` or `task:failed` residue for the same recovery trace.
+- The implementation or investigation output explains the current residual state of `dynamic-workflows-recovery-session-backend-runtime`, `dynamic-workflows-recovery-mcp-install-plan-scope`, and `dynamic-workflows-recovery-setup-workspace-git-pull-hygiene` concretely enough that a later planner pass can classify each lane as complete, safe manual-repair, or superseded queue noise without guessing.
+- If durable runtime behavior is already correct and a manual move remains necessary for historical residue, the final repair path records exact safe preconditions, the exact lane shapes it applies to, and the exact queue states it must not be used for.
+- Queue-state ownership stays in the existing Factory runtime, session, service, and projection vocabulary and does not introduce a standalone workflow-run model, new customer-facing dynamic-workflow nouns, or unrelated product-surface work.
+- The recovered behavior keeps executor completion, review creation, review completion, and consume-path state transitions aligned across runtime state and replayed projections for the same trace.
+- Quality gate: typecheck, lint, and focused backend tests for factory runtime, session execution, service, and replay surfaces pass.
 
 ## Goals
 
-- Reduce required UI-related CI wall clock time by at least 30%.
-- Surface browser integration failures before or alongside covered UI failures.
-- Cut median time-to-first-actionable browser regression failure to under 10 minutes.
-- Use existing UI coverage sharding and merge behavior instead of weakening coverage thresholds.
-- Establish stable timing visibility for the slowest covered UI and browser integration files.
-- Reduce redundant UI coverage across app-shell, replay, React Flow, and import/export scenarios.
-- Preserve or improve defect detection quality while decreasing runtime and flake exposure.
+- Restore planner trust in durable queue state for dynamic workflow recovery lanes.
+- Ensure one same-trace recovery lane converges to one coherent task or review outcome.
+- Distinguish active runtime bugs from historical queue residue with reviewer-verifiable evidence.
+- Keep any manual repair path narrow, explicit, and safe.
+- Limit the work to queue reconciliation rather than widening into new dynamic workflow features.
 
 ## User Stories
 
-### prd-ui-ci-acceleration-and-test-rationalization-001: Fast-Fail Required UI CI Flow
-
-**Description:** As an engineer merging a UI change, I want browser integration to start before or alongside covered UI verification so that browser regressions become actionable sooner.
-
-**Acceptance Criteria:**
-
-- [ ] The canonical PR verification flow starts browser integration before covered UI completion, either by ordering browser first or by running browser and coverage through one orchestrated concurrent flow.
-- [ ] Failure output names the failed lane and includes the target or command an engineer should rerun locally.
-- [ ] Concurrent lanes, if used, keep lane logs attributable and avoid shared-state conflicts between browser-oriented processes.
-- [ ] The chosen ordering or concurrency behavior is documented in the developer-facing CI target help or adjacent CI documentation.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
-
-### prd-ui-ci-acceleration-and-test-rationalization-002: Sharded Covered UI Verification
-
-**Description:** As an engineer waiting on CI, I want covered UI tests to run in shards and merge coverage afterward so that wall clock time drops without weakening coverage enforcement.
+### dynamic-workflows-recovery-executor-review-state-reconciliation-001: Explain the three residual recovery lanes from durable queue evidence
+**Description:** As a follow-up planner, I want the three residual recovery lanes explained from queue and replay evidence so I can tell whether each lane is complete, safe to repair manually, or just superseded residue.
 
 **Acceptance Criteria:**
+- [x] The implementation or attached investigation output identifies the exact work IDs, review IDs, and same-trace lineage for the three named recovery lanes.
+- [x] For each of the three lanes, the output states whether the observed mismatch comes from active runtime behavior, projection drift, duplicate review creation, failed post-processing, or historical residual queue state.
+- [x] The explanation uses existing Factory Session, work, review, and event terminology and does not rely on hidden source-file knowledge to understand the classification.
+- [x] Reviewers can map each named lane to one of these states from the produced evidence: complete, safe manual-repair, or superseded queue noise.
+- [x] Typecheck passes.
+- [x] Tests pass.
 
-- [ ] The canonical PR verification flow uses the repo-owned UI coverage shard and merge behavior with a documented default shard count.
-- [ ] The merged coverage report preserves threshold enforcement and replay coverage checking after all expected shards finish.
-- [ ] A missing or failed shard produces a clear failure that identifies the shard and does not silently produce partial coverage.
-- [ ] Shard count can be tuned through a documented environment variable or CI setting without changing test semantics.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
-
-### prd-ui-ci-acceleration-and-test-rationalization-003: Stable UI Test Cost Reporting
-
-**Description:** As a maintainer, I want CI to report the slowest covered UI and browser integration files with cost categories so that runtime regressions are visible and actionable.
+### dynamic-workflows-recovery-executor-review-state-reconciliation-002: Reconcile same-trace executor and review completion into one durable queue outcome
+**Description:** As a maintainer of recovery lanes, I want executor and review completion to reconcile to one durable queue outcome so the same recovery trace does not leave duplicate review starts or stale task residue behind.
 
 **Acceptance Criteria:**
+- [x] When executor completion creates or advances review work for a recovery trace, the durable queue contains at most one active `review:init` outcome for that same trace.
+- [x] When review work completes for that same trace, stale `task:init`, `task:failed`, or equivalent no-longer-authoritative residue is not left behind as if the lane were still blocked.
+- [x] Replay or projection rebuilding from the same event history reaches the same reconciled queue outcome rather than reintroducing duplicate review or stale task-state residue.
+- [x] The change stays inside existing queue-state ownership paths and does not introduce a new workflow-run model or unrelated dynamic workflow surface changes.
+- [x] Typecheck passes.
+- [x] Tests pass.
 
-- [ ] Covered UI verification emits a stable top-slowest file summary after the run or after shard merge.
-- [ ] Browser integration emits per-file timing or an equivalent top-slowest summary after the run.
-- [ ] The report categorizes slow files into app-shell integration, React Flow graph tests, replay/timeline tests, import/export tests, script-style tests, or uncategorized.
-- [ ] The report format is suitable for closeout notes and can be compared across CI runs without requiring source topology assertions.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
-
-### prd-ui-ci-acceleration-and-test-rationalization-004: Lane Boundary and Redundancy Policy
-
-**Description:** As a maintainer, I want explicit test-lane boundaries so that unit, covered jsdom, and browser tests each verify distinct behavior.
+### dynamic-workflows-recovery-executor-review-state-reconciliation-003: Define a bounded manual repair path only for proven historical residue
+**Description:** As a planner recovering old queue residue, I want an exact manual-repair rule only when the runtime is already correct so I can fix safe leftovers without turning a one-off move into a general shortcut.
 
 **Acceptance Criteria:**
-
-- [ ] The test strategy defines what observable contracts belong in unit tests, covered feature/jsdom integration tests, and browser integration tests.
-- [ ] Browser integration guidance prioritizes durable behavior such as saved payloads, network effects, downloads, imports, and final visible state over repeated copy-only assertions.
-- [ ] Export/import and graph-editing flows have a documented minimum browser contract that avoids repeating every jsdom UI assertion.
-- [ ] At least one existing duplicate assertion pattern is removed or moved to the cheaper lane while preserving the durable behavior check.
-- [ ] Tests pass.
+- [ ] If the investigation proves current runtime behavior is correct and the remaining mismatch is historical residue, the plan documents the exact preconditions required before any manual `you work move` repair is allowed.
+- [ ] The documented manual path names the exact queue states, trace shape, and evidence required before moving work, including what would make the move unsafe.
+- [ ] The documented manual path is explicitly limited to the proven residual lane shape and is not framed as a replacement for executor, review, or projection reconciliation logic.
+- [ ] If code changes fully remove the need for manual repair, the story records that no manual move is required for the final path.
 - [ ] Typecheck passes.
+- [ ] Tests pass.
 
-### prd-ui-ci-acceleration-and-test-rationalization-005: Split One High-Cost App-Shell Suite
-
-**Description:** As a maintainer, I want at least one oversized app-shell test suite replaced with smaller feature-focused coverage so that the same behavior is proven with less setup cost.
+### dynamic-workflows-recovery-executor-review-state-reconciliation-004: Prove reconciled queue behavior with focused replay and lifecycle verification
+**Description:** As a reviewer, I want focused replay and lifecycle evidence for executor and review reconciliation so I can trust that completed recovery work no longer looks active in the durable queue.
 
 **Acceptance Criteria:**
-
-- [ ] One high-cost app-shell suite is selected from the current slow-file inventory and its unique observable behaviors are listed before changes.
-- [ ] Equivalent behavior is covered by smaller feature-owned tests where whole-dashboard mounting is not required.
-- [ ] Any remaining app-shell coverage is limited to cross-feature behavior that cannot be proven reliably at a lower layer.
-- [ ] Before/after timing for the selected suite or replacement tests is captured in the closeout artifact.
-- [ ] Tests pass.
+- [ ] Focused tests or equivalent behavioral proof cover at least one completed-executor path, one completed-review path, and the duplicate-review historical regression shape described in the customer ask.
+- [ ] Verification proves the reconciled behavior across the owning runtime or projection layer rather than only asserting helper-level implementation details.
+- [ ] Verification shows the three named residual recovery lanes have enough evidence for later planner classification without requiring a source-code audit.
+- [ ] Verification remains focused on queue reconciliation and does not expand into API parity, MCP install expansion, or unrelated factory cleanup.
 - [ ] Typecheck passes.
-
-### prd-ui-ci-acceleration-and-test-rationalization-006: Browser Integration Stability and Runtime Boundaries
-
-**Description:** As an engineer debugging browser failures, I want browser integration tests to be isolated and deterministic so that failures are attributable and retries remain rare.
-
-**Acceptance Criteria:**
-
-- [ ] Browser integration documentation states which suites must remain sequential because of shared preview servers, ports, downloads, or global browser state.
-- [ ] Any browser test concurrency introduced by this project uses isolated ports, preview state, and download locations per worker or file.
-- [ ] Shared browser helpers expose or document a recommended wait pattern for durable network and UI checkpoints.
-- [ ] At least one flaky or over-constrained browser assertion is simplified to assert durable behavior rather than transient copy, animation, or timing state.
-- [ ] Direct browser verification confirms changed browser-visible test flows still exercise the intended final UI state.
 - [ ] Tests pass.
-- [ ] Typecheck passes.
 
 ## High-Level Technical Design
 
-The canonical PR verification path should remain easy to run by target name. If the implementation chooses concurrency, use a repo-owned orchestration target or script that prefixes or buffers lane output so failures remain attributable. If the implementation chooses ordering, run browser integration as an earlier fast-fail lane and keep covered UI as the authoritative coverage lane.
-
-Covered UI verification should use the existing shard and merge model. Each shard must produce an identifiable artifact, and merge must fail when an expected shard result is missing. The merged report remains the only source for coverage threshold enforcement and replay coverage checking.
-
-Slow-test observability should be generated by the test lanes themselves or by repo-owned wrappers, not by a one-time spreadsheet. Reports should include top slow files, elapsed time, lane name, and a likely cost category. Categories are for maintainer triage and should not become a brittle source-inventory test.
-
-Test rationalization should start with the slowest app-shell and React Flow-heavy suites. Implementers should preserve user-visible or maintainer-visible behavior while moving repeated setup-heavy assertions into feature-scoped tests where possible. Browser tests should keep durable end-to-end contracts and avoid duplicating copy-only assertions already covered in jsdom.
+- Keep ownership in the existing queue-state runtime and projection layers that decide task completion, review creation, review completion, and consume-path advancement for a recovery trace.
+- Use the event stream as the canonical source of truth. The repair must explain whether the mismatch is caused by bad event emission, incorrect transition ownership, replay drift, duplicate same-trace review creation, or residue that only persists in durable queue state from older runs.
+- Prefer one authoritative reconciliation rule per same-trace lane: once later work for the trace is authoritative, earlier stale task or review residue must no longer remain active in the durable queue or replayed projection.
+- If bounded manual repair is necessary, record it as an operational rule with hard preconditions rather than as an implicit runtime behavior change.
+- Verification should stay at the behavioral layer that owns trust for planners: focused runtime, replay, session, or service tests that demonstrate the final queue state and trace classification directly.
 
 ## Functional Requirements
 
-- FR-1: The canonical PR verification flow must start browser integration before the covered UI lane completes.
-- FR-2: If test lanes run concurrently, lane logs must remain attributable, buffered or prefixed, and rerunnable by target name.
-- FR-3: Browser integration failures must provide a fast-fail signal without waiting for the full covered UI lane to complete.
-- FR-4: The covered UI lane must support shard-based execution in CI using the repo-owned shard and merge behavior.
-- FR-5: The default coverage shard count and tuning mechanism must be documented.
-- FR-6: Coverage merge must fail clearly when expected shard artifacts are missing.
-- FR-7: The covered UI lane must preserve merged coverage reports, coverage thresholds, and replay coverage checks.
-- FR-8: Covered UI and browser integration lanes must emit stable slow-file summaries.
-- FR-9: Slow-file summaries must include top N files, lane name, elapsed time, and a likely optimization category.
-- FR-10: The maintained slow-test inventory must include current-selection app shell, layout/graph app shell, replay stream, React Flow edit integration, import/export browser flows, and layout performance tests when present in the measured run.
-- FR-11: The test strategy must define lane boundaries for unit tests, covered jsdom integration tests, and browser integration tests.
-- FR-12: Browser integration tests must prioritize durable assertions such as saved payloads, network requests, downloaded or imported artifacts, and final visible state.
-- FR-13: Repeated whole-dashboard setup patterns must be replaced with lower-cost feature harnesses where the behavior under test is feature-local.
-- FR-14: At least one broad app-shell suite must be split or reduced without removing coverage of its unique observable behavior.
-- FR-15: Browser integration sequencing and any safe concurrency rules must be documented with port, preview server, and download-state constraints.
-- FR-16: The project must produce a closeout artifact or note with before/after timing for CI wall clock time, covered UI time, browser lane time, and top slow files.
+1. FR-1: The system must explain the durable queue and trace lineage for the three named residual recovery lanes using existing work, review, and event vocabulary.
+2. FR-2: The system must prevent the same recovery trace from retaining multiple active `review:init` outcomes after executor or review completion.
+3. FR-3: The system must prevent stale `task:init`, `task:failed`, or equivalent no-longer-authoritative task residue from remaining active once a later same-trace outcome is authoritative.
+4. FR-4: Replay or projection rebuilding from canonical event history must produce the same reconciled queue state as the live runtime for the covered regression shapes.
+5. FR-5: If manual repair remains part of the final path, the implementation artifacts must document exact safe preconditions and unsafe counterexamples for that move.
+6. FR-6: Focused automated or reviewer-verifiable behavioral proof must cover executor completion, review completion, and the duplicate-review regression shape.
+7. FR-7: The work must stay within queue-state reconciliation boundaries and must not introduce standalone workflow-run resources, new customer-facing dynamic-workflow nouns, or unrelated surface changes.
 
 ## Non-Goals
 
-- Rewriting the entire UI test stack.
-- Eliminating browser integration tests.
-- Lowering coverage thresholds as the primary speed strategy.
-- Parallelizing browser tests in a way that knowingly increases flakiness or port conflicts.
-- Replacing targeted end-to-end coverage with only unit tests.
-- Fixing every historical React `act(...)` warning or unrelated console warning.
-- Performing broad unrelated cleanup while changing CI and test strategy.
+- No new standalone workflow-run model or new customer-facing dynamic-workflow resource vocabulary.
+- No widening into MCP install expansion, API parity work, or unrelated dynamic workflow feature work.
+- No broad cleanup of runtime or factory packages beyond what is required to repair queue-state reconciliation.
+- No generic manual queue-move shortcut for future recovery work without the exact proven preconditions from this investigation.
 
-## Supporting Technical and UX Considerations
+## Supporting Technical Considerations
 
-- CI operator experience matters: required lanes should remain easy to run locally and failures should identify the exact rerun command.
-- Faster CI is only valuable if failures remain deterministic and attributable.
-- Browser integration logs must stay readable when run near other long-running lanes.
-- Sharding should respect CI executor capacity; too many shards may add overhead without improving wall clock time.
-- Browser tests that use preview servers, downloads, ports, or global browser state need explicit isolation before any file-level concurrency.
-- Frontend-visible changes to test fixtures or browser flows should still be verified in a browser, including loading, success, empty, and failure states when those states are affected.
-- Test reports should measure runtime behavior and outcomes, not enforce brittle source-file inventories unless the report itself is the product behavior under test.
+- The most important boundary is ownership: the same layer that decides completion and review creation must also own cleanup or suppression of obsolete same-trace residue.
+- Evidence must be trace-shaped, not only state-shaped. The planner needs to know whether duplicate or stale queue entries belong to the same recovery lineage.
+- Replay matters because planner trust depends on durable history, not only in-memory live state.
+- If the final answer includes a manual move, the artifact should name the exact command intent and preconditions without normalizing that move into routine product behavior.
 
 ## Success Metrics
 
-- Required UI-related `make ci` wall clock time drops by at least 30% from the current measured baseline.
-- Browser integration failures surface before full UI coverage completion in at least 90% of failing browser-regression cases.
-- Main covered UI wall clock time drops by at least 25%.
-- The top 10 slowest UI test files are remeasured after changes, and at least 5 improve materially or have documented blockers.
-- The number of broad app-shell tests above 10 seconds decreases release over release.
-- Browser integration retries due to flake do not increase after CI orchestration and sharding changes.
+- A completed executor or review recovery lane no longer appears to have duplicate active review work or stale failed or initial task residue for the same trace.
+- Reviewers can classify each of the three named residual lanes from the produced evidence without additional source-code archaeology.
+- Any remaining manual repair path is narrow enough that later planners can apply it safely without overgeneralizing it.
 
 ## Open Questions
 
-- Should the canonical PR path run browser integration first, or run browser integration and UI coverage concurrently under a shared orchestrator?
-- Should the layout performance test remain in the required covered lane, or move to a separate performance verification lane with its own runtime budget?
-- What CI executor capacity is available for coverage sharding, and what default shard count gives the best wall clock improvement without overhead dominating?
+- None.
