@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
@@ -168,6 +169,119 @@ func TestJavaScriptRuntimeService_Start_ConcurrentIdempotentStarts(t *testing.T)
 				t.Fatalf("sessionId[%d] = %q, want %q", i, results[i].SessionID, results[0].SessionID)
 			}
 		}
+	})
+}
+
+func TestJavaScriptRuntimeService_StartAsyncReplay_PreservesFirstObservedRunningResponse(t *testing.T) {
+	service := newJavaScriptRuntimeService(t)
+	maxRunDurationMs := int64(200)
+	req := inlineWorkflowStartRequest(
+		"req-runtime-async-replay-running-001",
+		busyLoopWorkflowSource,
+		map[string]any{"subject": "workflows"},
+		map[string]any{"maxRunDurationMs": maxRunDurationMs},
+	)
+
+	first, err := service.StartAsync(context.Background(), req)
+	if err != nil {
+		t.Fatalf("first StartAsync: %v", err)
+	}
+	if first.Status != string(fse.LifecycleStatusRunning) {
+		t.Fatalf("first status = %q, want RUNNING", first.Status)
+	}
+
+	waitUntilSessionStatus(t, service, first.SessionID, fse.LifecycleStatusTimedOut, 5*time.Second)
+
+	replay, err := service.StartAsync(context.Background(), req)
+	if err != nil {
+		t.Fatalf("replay StartAsync: %v", err)
+	}
+	if replay.SessionID != first.SessionID {
+		t.Fatalf("replay sessionId = %q, want %q", replay.SessionID, first.SessionID)
+	}
+	if replay.Status != first.Status {
+		t.Fatalf("replay status = %q, want preserved first status %q", replay.Status, first.Status)
+	}
+}
+
+func TestJavaScriptRuntimeService_StartSyncWaitTimeoutReplay_PreservesFirstObservedTimedOutResponse(t *testing.T) {
+	service := newJavaScriptRuntimeService(t)
+	waitMillis := int64(50)
+	maxRunDurationMs := int64(200)
+	req := fse.StartRequest{
+		RequestID: "req-runtime-sync-replay-wait-timeout-001",
+		Source: fse.Source{
+			Kind: workflowsource.KindInlineWorkflow,
+			InlineWorkflow: &fse.InlineWorkflowSource{
+				InlineSource: busyLoopWorkflowSource,
+				Dialect:      "you-workflow-v1",
+				Metadata:     map[string]string{"name": "runtime-sync-replay-fixture"},
+			},
+		},
+		Args: map[string]any{"subject": "workflows"},
+		RequestedPolicy: map[string]any{
+			"maxRunDurationMs": maxRunDurationMs,
+		},
+		Wait: &fse.WaitOptions{TimeoutMillis: &waitMillis},
+	}
+
+	first, err := service.StartSync(context.Background(), req)
+	if err != nil {
+		t.Fatalf("first StartSync: %v", err)
+	}
+	if first.SyncOutcome != fse.SyncOutcomeTimedOut || !first.TimedOut {
+		t.Fatalf("first sync response = %#v, want TIMED_OUT", first)
+	}
+	if first.Status != string(fse.LifecycleStatusRunning) {
+		t.Fatalf("first status = %q, want RUNNING", first.Status)
+	}
+
+	waitUntilSessionStatus(t, service, first.SessionID, fse.LifecycleStatusTimedOut, 5*time.Second)
+
+	replay, err := service.StartSync(context.Background(), req)
+	if err != nil {
+		t.Fatalf("replay StartSync: %v", err)
+	}
+	if replay.SessionID != first.SessionID {
+		t.Fatalf("replay sessionId = %q, want %q", replay.SessionID, first.SessionID)
+	}
+	if replay.SyncOutcome != first.SyncOutcome || !replay.TimedOut {
+		t.Fatalf("replay syncOutcome = %#v, want preserved TIMED_OUT %#v", replay, first)
+	}
+	if replay.Status != first.Status {
+		t.Fatalf("replay status = %q, want preserved first status %q", replay.Status, first.Status)
+	}
+}
+
+func TestJavaScriptRuntimeService_Start_CrossModeRequestIDConflict(t *testing.T) {
+	t.Run("sync after async", func(t *testing.T) {
+		service := newJavaScriptRuntimeService(t)
+		req := inlineWorkflowStartRequest(
+			"req-runtime-cross-mode-async-then-sync-001",
+			simpleFinalWorkflowSource,
+			map[string]any{"subject": "workflows", "count": 1, "prefix": "you"},
+			nil,
+		)
+		if _, err := service.StartAsync(context.Background(), req); err != nil {
+			t.Fatalf("StartAsync: %v", err)
+		}
+		_, err := service.StartSync(context.Background(), req)
+		assertRuntimeTypedFailure(t, err, fixtures.TypedFailureExecutionRequestConflict, "")
+	})
+
+	t.Run("async after sync", func(t *testing.T) {
+		service := newJavaScriptRuntimeService(t)
+		req := inlineWorkflowStartRequest(
+			"req-runtime-cross-mode-sync-then-async-001",
+			simpleFinalWorkflowSource,
+			map[string]any{"subject": "workflows", "count": 1, "prefix": "you"},
+			nil,
+		)
+		if _, err := service.StartSync(context.Background(), req); err != nil {
+			t.Fatalf("StartSync: %v", err)
+		}
+		_, err := service.StartAsync(context.Background(), req)
+		assertRuntimeTypedFailure(t, err, fixtures.TypedFailureExecutionRequestConflict, "")
 	})
 }
 

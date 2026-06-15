@@ -208,6 +208,12 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 		return AsyncStartResult{}, err
 	}
 
+	if result, ok, err := s.tryReplayAsyncStart(ctx, normalized.RequestID, tupleHash, true); ok {
+		return result, nil
+	} else if err != nil {
+		return AsyncStartResult{}, err
+	}
+
 	resolved, sourceContent, policyResolution, err := s.prepareStartExecution(normalized)
 	if err != nil {
 		return AsyncStartResult{}, err
@@ -219,7 +225,77 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	}
 	defer reserved.release()
 
-	if reserved.isNew {
+	if !reserved.isNew {
+		result, ok, err := s.tryReplayAsyncStart(ctx, normalized.RequestID, tupleHash, true)
+		if ok {
+			return result, nil
+		}
+		return AsyncStartResult{}, err
+	}
+
+	startedAt := time.Now().UTC()
+	running := projectRuntimeRunningSessionState(
+		reserved.state.session.SessionID,
+		normalized,
+		resolved,
+		policyResolution,
+		startedAt,
+	)
+	runCtx, runCancel := workflowRunContext(context.Background(), policyResolution.Policy)
+	s.mu.Lock()
+	reserved.state.session = running.session
+	reserved.state.result = running.result
+	reserved.state.events = running.events
+	reserved.state.runCancel = runCancel
+	s.mu.Unlock()
+
+	go s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt)
+
+	snapshot, err := s.snapshotSessionState(reserved.state.session.SessionID)
+	if err != nil {
+		return AsyncStartResult{}, err
+	}
+	result := s.asyncStartFromState(snapshot)
+	s.recordAsyncStartReplay(normalized.RequestID, result)
+	return result, nil
+}
+
+func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncStartResult, error) {
+	if err := ctx.Err(); err != nil {
+		return SyncStartResult{}, err
+	}
+	normalized, tupleHash, err := normalizeStartTuple(req)
+	if err != nil {
+		return SyncStartResult{}, err
+	}
+
+	if result, ok, err := s.tryReplaySyncStart(ctx, normalized.RequestID, tupleHash, true); ok {
+		return result, nil
+	} else if err != nil {
+		return SyncStartResult{}, err
+	}
+
+	resolved, sourceContent, policyResolution, err := s.prepareStartExecution(normalized)
+	if err != nil {
+		return SyncStartResult{}, err
+	}
+
+	waitTimeout, hasSyncWait := syncWaitTimeout(normalized)
+	reserved, err := s.reserveStartSession(ctx, normalized, tupleHash, !hasSyncWait)
+	if err != nil {
+		return SyncStartResult{}, err
+	}
+	defer reserved.release()
+
+	if !reserved.isNew {
+		result, ok, err := s.tryReplaySyncStart(ctx, normalized.RequestID, tupleHash, true)
+		if ok {
+			return result, nil
+		}
+		return SyncStartResult{}, err
+	}
+
+	if hasSyncWait {
 		startedAt := time.Now().UTC()
 		running := projectRuntimeRunningSessionState(
 			reserved.state.session.SessionID,
@@ -237,84 +313,31 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 		s.mu.Unlock()
 
 		go s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt)
-	}
 
-	snapshot, err := s.snapshotSessionState(reserved.state.session.SessionID)
-	if err != nil {
-		return AsyncStartResult{}, err
-	}
-	return s.asyncStartFromState(snapshot), nil
-}
-
-func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncStartResult, error) {
-	if err := ctx.Err(); err != nil {
-		return SyncStartResult{}, err
-	}
-	normalized, tupleHash, err := normalizeStartTuple(req)
-	if err != nil {
-		return SyncStartResult{}, err
-	}
-
-	resolved, sourceContent, policyResolution, err := s.prepareStartExecution(normalized)
-	if err != nil {
-		return SyncStartResult{}, err
-	}
-
-	waitTimeout, hasSyncWait := syncWaitTimeout(normalized)
-	reserved, err := s.reserveStartSession(ctx, normalized, tupleHash, !hasSyncWait)
-	if err != nil {
-		return SyncStartResult{}, err
-	}
-	defer reserved.release()
-
-	if snapshot, snapErr := s.snapshotSessionState(reserved.state.session.SessionID); snapErr == nil {
-		if IsTerminalLifecycleStatus(snapshot.session.Status) {
-			return s.syncStartFromState(snapshot), nil
-		}
-		if snapshot.result.Availability != nil && snapshot.result.Availability.Reason == "SYNC_WAIT_TIMED_OUT" {
-			return s.syncStartFromState(snapshot), nil
-		}
-	}
-
-	if hasSyncWait {
-		if reserved.isNew {
-			startedAt := time.Now().UTC()
-			running := projectRuntimeRunningSessionState(
-				reserved.state.session.SessionID,
-				normalized,
-				resolved,
-				policyResolution,
-				startedAt,
-			)
-			runCtx, runCancel := workflowRunContext(context.Background(), policyResolution.Policy)
-			s.mu.Lock()
-			reserved.state.session = running.session
-			reserved.state.result = running.result
-			reserved.state.events = running.events
-			reserved.state.runCancel = runCancel
-			s.mu.Unlock()
-
-			go s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt)
-		}
-		return s.waitSyncCompletion(ctx, reserved.state.session.SessionID, waitTimeout, normalized.Wait.CancelOnTimeout)
-	}
-
-	if reserved.isNew {
-		terminal, err := s.executeImmediateSyncSession(ctx, normalized, resolved, sourceContent, policyResolution, reserved.state.session.SessionID)
+		result, err := s.waitSyncCompletion(ctx, reserved.state.session.SessionID, waitTimeout, normalized.Wait.CancelOnTimeout)
 		if err != nil {
 			return SyncStartResult{}, err
 		}
-		s.mu.Lock()
-		applyRuntimeSessionFields(reserved.state, terminal)
-		reserved.state.runCancel = nil
-		s.mu.Unlock()
+		s.recordSyncStartReplay(normalized.RequestID, result)
+		return result, nil
 	}
+
+	terminal, err := s.executeImmediateSyncSession(ctx, normalized, resolved, sourceContent, policyResolution, reserved.state.session.SessionID)
+	if err != nil {
+		return SyncStartResult{}, err
+	}
+	s.mu.Lock()
+	applyRuntimeSessionFields(reserved.state, terminal)
+	reserved.state.runCancel = nil
+	s.mu.Unlock()
 
 	snapshot, err := s.snapshotSessionState(reserved.state.session.SessionID)
 	if err != nil {
 		return SyncStartResult{}, err
 	}
-	return s.syncStartFromState(snapshot), nil
+	result := s.syncStartFromState(snapshot)
+	s.recordSyncStartReplay(normalized.RequestID, result)
+	return result, nil
 }
 
 func (s *JavaScriptRuntimeService) GetSession(ctx context.Context, sessionID string) (SessionReadResult, error) {
@@ -551,171 +574,6 @@ func (s *JavaScriptRuntimeService) prepareStartExecution(
 	}
 	policyResolution := workflowpolicy.Resolve(workflowpolicy.Request{Requested: normalized.RequestedPolicy})
 	return resolved, sourceContent, policyResolution, nil
-}
-
-type reservedStartSession struct {
-	state   *runtimeSessionState
-	isNew   bool
-	release func()
-}
-
-func (s *JavaScriptRuntimeService) reserveStartSession(
-	ctx context.Context,
-	normalized StartRequest,
-	tupleHash string,
-	waitIfInflight bool,
-) (*reservedStartSession, error) {
-	for {
-		s.mu.Lock()
-		if replay, ok := s.startReplay[normalized.RequestID]; ok {
-			if err := CheckRequestIDReplay(normalized.RequestID, replay.tupleHash, tupleHash); err != nil {
-				s.mu.Unlock()
-				return nil, err
-			}
-			state, ok := s.sessions[replay.sessionID]
-			if !ok {
-				s.mu.Unlock()
-				return nil, ErrSessionNotFound
-			}
-			if waitIfInflight {
-				if flight, ok := s.startInflight[normalized.RequestID]; ok &&
-					!IsTerminalLifecycleStatus(state.session.Status) &&
-					(state.result.Availability == nil || state.result.Availability.Reason != "SYNC_WAIT_TIMED_OUT") {
-					done := flight.done
-					s.mu.Unlock()
-					select {
-					case <-ctx.Done():
-						return nil, ctx.Err()
-					case <-done:
-						continue
-					}
-				}
-			}
-			s.mu.Unlock()
-			return &reservedStartSession{state: state, isNew: false, release: func() {}}, nil
-		}
-
-		flight := &startInflightFlight{done: make(chan struct{})}
-		sessionID := NewDurableSessionID()
-		placeholder := &runtimeSessionState{
-			session: SessionReadResult{SessionID: sessionID},
-		}
-		s.sessions[sessionID] = placeholder
-		s.startReplay[normalized.RequestID] = startReplayRecord{
-			sessionID: sessionID,
-			tupleHash: tupleHash,
-		}
-		s.startInflight[normalized.RequestID] = flight
-		s.mu.Unlock()
-
-		release := func() {
-			s.mu.Lock()
-			delete(s.startInflight, normalized.RequestID)
-			close(flight.done)
-			s.mu.Unlock()
-		}
-		return &reservedStartSession{state: placeholder, isNew: true, release: release}, nil
-	}
-}
-
-func syncWaitTimeout(normalized StartRequest) (time.Duration, bool) {
-	if normalized.Wait == nil || normalized.Wait.TimeoutMillis == nil || *normalized.Wait.TimeoutMillis <= 0 {
-		return 0, false
-	}
-	return time.Duration(*normalized.Wait.TimeoutMillis) * time.Millisecond, true
-}
-
-func (s *JavaScriptRuntimeService) waitSyncCompletion(
-	ctx context.Context,
-	sessionID string,
-	waitTimeout time.Duration,
-	cancelOnTimeout bool,
-) (SyncStartResult, error) {
-	deadline := time.Now().Add(waitTimeout)
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return SyncStartResult{}, ctx.Err()
-		case <-ticker.C:
-			if time.Now().After(deadline) {
-				return s.projectSyncWaitTimeout(sessionID, cancelOnTimeout)
-			}
-
-			snapshot, err := s.snapshotSessionState(sessionID)
-			if err != nil {
-				return SyncStartResult{}, err
-			}
-			if IsTerminalLifecycleStatus(snapshot.session.Status) {
-				return s.syncStartFromState(snapshot), nil
-			}
-		}
-	}
-}
-
-func (s *JavaScriptRuntimeService) projectSyncWaitTimeout(sessionID string, cancelOnTimeout bool) (SyncStartResult, error) {
-	s.mu.Lock()
-	state, ok := s.sessions[sessionID]
-	if !ok {
-		s.mu.Unlock()
-		return SyncStartResult{}, ErrSessionNotFound
-	}
-
-	if cancelOnTimeout && state.runCancel != nil {
-		state.runCancel()
-	}
-	s.mu.Unlock()
-
-	if cancelOnTimeout {
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) {
-			snapshot, err := s.snapshotSessionState(sessionID)
-			if err != nil {
-				return SyncStartResult{}, err
-			}
-			if IsTerminalLifecycleStatus(snapshot.session.Status) {
-				result := s.syncStartFromState(snapshot)
-				result.SyncOutcome = SyncOutcomeTimedOut
-				result.TimedOut = true
-				result.SessionCanceledByTimeout = true
-				return result, nil
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-	}
-
-	s.mu.Lock()
-	state, ok = s.sessions[sessionID]
-	if !ok {
-		s.mu.Unlock()
-		return SyncStartResult{}, ErrSessionNotFound
-	}
-	state.result = ResultReadResult{
-		SessionID:     sessionID,
-		Mode:          ResultModeFinal,
-		ResultStatus:  ResultStatusNotReady,
-		SessionStatus: LifecycleStatusRunning,
-		Availability: &ResultAvailabilityDetail{
-			Reason:    "SYNC_WAIT_TIMED_OUT",
-			Message:   "Sync wait ended before a terminal result was available.",
-			Retryable: true,
-		},
-	}
-	if state.session.ResultSummary == nil {
-		state.session.ResultSummary = &ResultSummary{ResultStatus: string(ResultStatusNotReady)}
-	} else {
-		state.session.ResultSummary.ResultStatus = string(ResultStatusNotReady)
-	}
-	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
-	snapshot := cloneRuntimeSessionState(state)
-	s.mu.Unlock()
-
-	result := s.syncStartFromState(snapshot)
-	result.SyncOutcome = SyncOutcomeTimedOut
-	result.TimedOut = true
-	return result, nil
 }
 
 func (s *JavaScriptRuntimeService) runAsyncSession(
