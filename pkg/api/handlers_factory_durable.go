@@ -5,17 +5,12 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"go.uber.org/zap"
 )
-
-func isDurableExecutionSessionID(sessionID string) bool {
-	return strings.HasPrefix(strings.TrimSpace(sessionID), "dur-sess-")
-}
 
 func (s *Server) requireDurableSessionLifecycleAPI(w http.ResponseWriter) (apisurface.DurableSessionLifecycleAPI, bool) {
 	if s.runtime == nil {

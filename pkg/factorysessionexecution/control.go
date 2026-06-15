@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // NormalizeControlRequest validates optional metadata for pause/resume/cancel/terminate.
@@ -182,23 +183,23 @@ func normalizeControlIdempotencyDocument(
 	return document, nil
 }
 
-func (s *RuntimeService) Pause(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
+func (s *JavaScriptRuntimeService) Pause(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
 	return s.applyRuntimeExtendedLifecycleControl(ctx, sessionID, LifecycleControlPause, req, ApproveRequest{}, RetryDispatchRequest{})
 }
 
-func (s *RuntimeService) Resume(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
+func (s *JavaScriptRuntimeService) Resume(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
 	return s.applyRuntimeExtendedLifecycleControl(ctx, sessionID, LifecycleControlResume, req, ApproveRequest{}, RetryDispatchRequest{})
 }
 
-func (s *RuntimeService) Cancel(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
+func (s *JavaScriptRuntimeService) Cancel(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
 	return s.applyRuntimeExtendedLifecycleControl(ctx, sessionID, LifecycleControlCancel, req, ApproveRequest{}, RetryDispatchRequest{})
 }
 
-func (s *RuntimeService) Terminate(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
+func (s *JavaScriptRuntimeService) Terminate(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
 	return s.applyRuntimeExtendedLifecycleControl(ctx, sessionID, LifecycleControlTerminate, req, ApproveRequest{}, RetryDispatchRequest{})
 }
 
-func (s *RuntimeService) Approve(ctx context.Context, sessionID string, req ApproveRequest) (LifecycleControlResult, error) {
+func (s *JavaScriptRuntimeService) Approve(ctx context.Context, sessionID string, req ApproveRequest) (LifecycleControlResult, error) {
 	normalized, err := NormalizeApproveRequest(req)
 	if err != nil {
 		return LifecycleControlResult{}, err
@@ -213,7 +214,7 @@ func (s *RuntimeService) Approve(ctx context.Context, sessionID string, req Appr
 	)
 }
 
-func (s *RuntimeService) RetryDispatch(ctx context.Context, sessionID string, req RetryDispatchRequest) (LifecycleControlResult, error) {
+func (s *JavaScriptRuntimeService) RetryDispatch(ctx context.Context, sessionID string, req RetryDispatchRequest) (LifecycleControlResult, error) {
 	normalized, err := NormalizeRetryDispatchRequest(req)
 	if err != nil {
 		return LifecycleControlResult{}, err
@@ -228,7 +229,7 @@ func (s *RuntimeService) RetryDispatch(ctx context.Context, sessionID string, re
 	)
 }
 
-func (s *RuntimeService) applyRuntimeExtendedLifecycleControl(
+func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 	ctx context.Context,
 	sessionID string,
 	operation LifecycleControlKind,
@@ -311,7 +312,7 @@ func (s *RuntimeService) applyRuntimeExtendedLifecycleControl(
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this runtime mutation helper keeps accepted lifecycle control transitions together on one seam.
 func applyRuntimeAcceptedLifecycleControl(
-	s *RuntimeService,
+	s *JavaScriptRuntimeService,
 	state *runtimeSessionState,
 	operation LifecycleControlKind,
 	retry RetryDispatchRequest,
@@ -320,7 +321,7 @@ func applyRuntimeAcceptedLifecycleControl(
 	switch operation {
 	case LifecycleControlPause:
 		if state.session.Status == LifecycleStatusRunning || state.session.Status == LifecycleStatusResuming {
-			pausedAt := s.now().UTC()
+			pausedAt := time.Now().UTC()
 			state.session.Status = LifecycleStatusPaused
 			state.result.SessionStatus = LifecycleStatusPaused
 			if state.session.Lifecycle != nil {
@@ -329,7 +330,7 @@ func applyRuntimeAcceptedLifecycleControl(
 		}
 	case LifecycleControlResume:
 		if state.session.Status == LifecycleStatusPaused {
-			resumedAt := s.now().UTC()
+			resumedAt := time.Now().UTC()
 			state.session.Status = LifecycleStatusRunning
 			state.result.SessionStatus = LifecycleStatusRunning
 			if state.session.Lifecycle != nil {
@@ -341,7 +342,7 @@ func applyRuntimeAcceptedLifecycleControl(
 		state.result.SessionStatus = LifecycleStatusCanceling
 		interruptRuntime = true
 	case LifecycleControlTerminate:
-		finishedAt := s.now().UTC()
+		finishedAt := time.Now().UTC()
 		state.session.Status = LifecycleStatusTerminated
 		state.result.SessionStatus = LifecycleStatusTerminated
 		state.result.ResultStatus = ResultStatusUnavailable
@@ -356,7 +357,7 @@ func applyRuntimeAcceptedLifecycleControl(
 		interruptRuntime = true
 	case LifecycleControlApprove:
 		if state.session.Status == LifecycleStatusAwaitingApproval {
-			startedAt := s.now().UTC()
+			startedAt := time.Now().UTC()
 			state.session.Status = LifecycleStatusRunning
 			state.result.SessionStatus = LifecycleStatusRunning
 			if state.session.Lifecycle != nil {

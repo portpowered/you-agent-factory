@@ -227,6 +227,31 @@ func (m *MockFactory) RetryDurableFactorySessionDispatch(
 	return factorysession.LifecycleControlResponseToAPI(result), nil
 }
 
+func (m *MockFactory) ListDurableFactorySessions(
+	ctx context.Context,
+	params factoryapi.ListFactorySessionsParams,
+) (factoryapi.ListFactorySessionsResponse, error) {
+	req, err := factorysession.ListSessionsRequestFromAPI(params)
+	if err != nil {
+		return factoryapi.ListFactorySessionsResponse{}, err
+	}
+	result, err := m.ListDurableExecutionSessions(ctx, req)
+	if err != nil {
+		return factoryapi.ListFactorySessionsResponse{}, err
+	}
+	return factorysession.ListSessionsResponseToAPI(result), nil
+}
+
+func (m *MockFactory) ListDurableExecutionSessions(
+	ctx context.Context,
+	req factorysessionexecution.ListSessionsRequest,
+) (factorysessionexecution.ListSessionsResult, error) {
+	if m == nil || m.DurableExecutionService == nil {
+		return factorysessionexecution.ListSessionsResult{Scope: req.Scope}, nil
+	}
+	return m.DurableExecutionService.ListSessions(ctx, req)
+}
+
 func (m *MockFactory) GetDurableFactorySession(
 	ctx context.Context,
 	sessionID string,
@@ -242,11 +267,129 @@ func (m *MockFactory) GetDurableFactorySession(
 	return factorysession.SessionReadResponseToAPI(result), nil
 }
 
+func (m *MockFactory) GetDurableFactorySessionResult(
+	ctx context.Context,
+	sessionID string,
+	params factoryapi.GetFactorySessionResultsParams,
+) (factoryapi.FactorySessionResult, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionResult{}, err
+	}
+	req, err := factorysession.ResultRequestFromAPI(params)
+	if err != nil {
+		return factoryapi.FactorySessionResult{}, err
+	}
+	result, err := service.GetResult(ctx, sessionID, req)
+	if err != nil {
+		return factoryapi.FactorySessionResult{}, err
+	}
+	return factorysession.ResultResponseToAPI(result), nil
+}
+
+func (m *MockFactory) ReadDurableFactorySessionEvents(
+	ctx context.Context,
+	sessionID string,
+	params factoryapi.GetEventsBySessionIdParams,
+) (*interfaces.FactoryEventStream, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return nil, err
+	}
+	reconnect, err := factorysession.EventReconnectRequestFromAPI(params)
+	if err != nil {
+		return nil, err
+	}
+	result, err := service.ReadEvents(ctx, sessionID, reconnect)
+	if err != nil {
+		if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+			return nil, apisurface.ErrFactorySessionNotFound
+		}
+		if errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
+			return nil, apisurface.ErrInvalidEventReconnectCursor
+		}
+		return nil, err
+	}
+	return factorysession.FactoryEventStreamFromReadResult(result), nil
+}
+
 func (m *MockFactory) StartDurableFactorySessionSync(
 	ctx context.Context,
 	request factoryapi.FactorySessionExecutionRequest,
 ) (factoryapi.FactorySessionSyncExecutionResponse, error) {
-	return factoryapi.FactorySessionSyncExecutionResponse{}, errors.New("sync durable factory session start is not implemented")
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionSyncExecutionResponse{}, err
+	}
+	startReq, err := factorysession.StartRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionSyncExecutionResponse{}, err
+	}
+	result, err := service.StartSync(ctx, startReq)
+	if err != nil {
+		return factoryapi.FactorySessionSyncExecutionResponse{}, err
+	}
+	return factorysession.SyncStartResponseToAPI(result), nil
+}
+
+func (m *MockFactory) ListDurableFactorySessionDispatches(
+	ctx context.Context,
+	sessionID string,
+) (factoryapi.ListFactorySessionDispatchesResponse, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.ListFactorySessionDispatchesResponse{}, err
+	}
+	result, err := service.ListDispatches(ctx, sessionID)
+	if err != nil {
+		return factoryapi.ListFactorySessionDispatchesResponse{}, err
+	}
+	return factorysession.ListDispatchesResponseToAPI(result), nil
+}
+
+func (m *MockFactory) GetDurableFactorySessionDispatch(
+	ctx context.Context,
+	sessionID, dispatchID string,
+) (factoryapi.FactoryDispatch, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactoryDispatch{}, err
+	}
+	result, err := service.GetDispatch(ctx, sessionID, dispatchID)
+	if err != nil {
+		return factoryapi.FactoryDispatch{}, err
+	}
+	return factorysession.DispatchDetailResponseToAPI(result), nil
+}
+
+func (m *MockFactory) ListDurableFactorySessionArtifacts(
+	ctx context.Context,
+	sessionID string,
+) (factoryapi.ListFactorySessionArtifactsResponse, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.ListFactorySessionArtifactsResponse{}, err
+	}
+	result, err := service.ListArtifacts(ctx, sessionID)
+	if err != nil {
+		return factoryapi.ListFactorySessionArtifactsResponse{}, err
+	}
+	return factorysession.ListArtifactsResponseToAPI(result), nil
+}
+
+func (m *MockFactory) GetDurableFactorySessionArtifact(
+	ctx context.Context,
+	sessionID, artifactID string,
+) (factoryapi.FactorySessionArtifactDetail, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionArtifactDetail{}, err
+	}
+	result, err := service.GetArtifact(ctx, sessionID, artifactID)
+	if err != nil {
+		return factoryapi.FactorySessionArtifactDetail{}, err
+	}
+	return factorysession.ArtifactDetailResponseToAPI(result), nil
 }
 
 func (m *MockFactory) requireDurableExecutionService() (factorysessionexecution.Service, error) {

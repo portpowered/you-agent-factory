@@ -89,6 +89,54 @@ func TestRetryDispatchRequestFromAPI_RequiresDispatchID(t *testing.T) {
 	}
 }
 
+func TestControlRequestFromAPI_NormalizesOptionalMetadata(t *testing.T) {
+	requestID := "req-control-001"
+	reason := "operator pause"
+	mapped, err := factorysession.ControlRequestFromAPI(factoryapi.FactorySessionLifecycleControlRequest{
+		RequestId: &requestID,
+		Reason:    &reason,
+	})
+	if err != nil {
+		t.Fatalf("ControlRequestFromAPI: %v", err)
+	}
+	if mapped.RequestID != requestID || mapped.Reason != reason {
+		t.Fatalf("mapped = %#v, want requestId=%q reason=%q", mapped, requestID, reason)
+	}
+}
+
+func TestApproveRequestFromAPI_NormalizesApprovalFields(t *testing.T) {
+	requestID := "req-approve-001"
+	previewID := "preview-001"
+	mapped, err := factorysession.ApproveRequestFromAPI(factoryapi.FactorySessionApproveRequest{
+		RequestId:         &requestID,
+		ApprovalPreviewId: &previewID,
+	})
+	if err != nil {
+		t.Fatalf("ApproveRequestFromAPI: %v", err)
+	}
+	if mapped.RequestID != requestID || mapped.ApprovalPreviewID != previewID {
+		t.Fatalf("mapped = %#v", mapped)
+	}
+}
+
+func TestRetryDispatchRequestFromAPI_NormalizesDispatchAndFlags(t *testing.T) {
+	requestID := "req-retry-001"
+	force := true
+	reset := true
+	mapped, err := factorysession.RetryDispatchRequestFromAPI(factoryapi.FactorySessionRetryDispatchRequest{
+		RequestId:         &requestID,
+		DispatchId:        "disp-001",
+		ForceNewAttempt:   &force,
+		ResetAttemptCount: &reset,
+	})
+	if err != nil {
+		t.Fatalf("RetryDispatchRequestFromAPI: %v", err)
+	}
+	if mapped.DispatchID != "disp-001" || !mapped.ForceNewAttempt || !mapped.ResetAttemptCount {
+		t.Fatalf("mapped = %#v", mapped)
+	}
+}
+
 func TestEvaluateLifecycleControlFromServiceSpec_MatchesRetryTerminalFixture(t *testing.T) {
 	outcome := factorysessionexecution.EvaluateLifecycleControl(
 		factorysessionexecution.LifecycleControlRetryDispatch,

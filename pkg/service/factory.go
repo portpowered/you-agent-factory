@@ -18,6 +18,7 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
@@ -172,6 +173,8 @@ type FactoryService struct {
 	coordinator   FactoryCoordinator
 	definitions   FactoryDefinitionService
 	modelInitOnce sync.Once
+	durableExecutionMu sync.Mutex
+	durableExecution   factorysessionexecution.Service
 }
 
 var _ factory.APIFactory = (*FactoryService)(nil)

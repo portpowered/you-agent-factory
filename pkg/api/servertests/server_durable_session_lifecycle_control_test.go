@@ -453,17 +453,17 @@ func startAPIRunningSessionForControl(t *testing.T, service *factorysessionexecu
 	return struct{ SessionID string }{SessionID: started.SessionID}
 }
 
-func newAPILifecycleRuntimeService(t *testing.T, fixtureName, workflowName string) *factorysessionexecution.RuntimeService {
+func newAPILifecycleRuntimeService(t *testing.T, fixtureName, workflowName string) factorysessionexecution.Service {
 	t.Helper()
 	projectRoot := setupAPILifecycleWorkflowFixture(t, fixtureName, workflowName)
-	return factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
-		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	return factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
 	})
 }
 
 func startRuntimeBackedDurableSession(
 	t *testing.T,
-	service *factorysessionexecution.RuntimeService,
+	service factorysessionexecution.Service,
 ) factorysessionexecution.AsyncStartResult {
 	t.Helper()
 	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
