@@ -53,7 +53,7 @@ describe("factory graph editor additions", () => {
       cron: null,
       kind: "workstation",
       workerName: "writer",
-      workstationType: "MODEL_WORKSTATION",
+      workstationType: "INFERENCE_RUN",
     });
     expect(
       createFactoryGraphAddEntityDraft("work-state", baseFactoryDefinition),
@@ -72,7 +72,8 @@ describe("factory graph editor additions", () => {
       modelProvider: "",
       name: "",
       operations: [],
-      workerType: "MODEL_WORKER",
+      provider: "",
+      workerType: "INFERENCE_WORKER",
     });
   });
 
@@ -87,7 +88,8 @@ describe("factory graph editor additions", () => {
           modelProvider: "CURSOR",
           name: "reviewer",
           operations: [],
-          workerType: "MODEL_WORKER",
+          provider: "",
+          workerType: "INFERENCE_WORKER",
         },
         baseFactoryDefinition,
       ),
@@ -103,7 +105,8 @@ describe("factory graph editor additions", () => {
           modelProvider: "",
           name: "reviewer",
           operations: [],
-          workerType: "MODEL_WORKER",
+          provider: "",
+          workerType: "INFERENCE_WORKER",
         },
         baseFactoryDefinition,
       ),
@@ -123,6 +126,7 @@ describe("factory graph editor additions", () => {
           modelProvider: "",
           name: "runner",
           operations: [],
+          provider: "",
           workerType: "SCRIPT_WORKER",
         },
         baseFactoryDefinition,
@@ -139,6 +143,7 @@ describe("factory graph editor additions", () => {
           modelProvider: "",
           name: "runner",
           operations: [],
+          provider: "",
           workerType: "SCRIPT_WORKER",
         },
         baseFactoryDefinition,
@@ -157,6 +162,7 @@ describe("factory graph editor additions", () => {
           modelProvider: "",
           name: "runner",
           operations: [],
+          provider: "",
           workerType: "SCRIPT_WORKER",
         },
         baseFactoryDefinition,
@@ -175,6 +181,7 @@ describe("factory graph editor additions", () => {
           modelProvider: "CURSOR",
           name: "runner",
           operations: [],
+          provider: "",
           workerType: "SCRIPT_WORKER",
         },
         baseFactoryDefinition,
@@ -193,7 +200,8 @@ describe("factory graph editor additions", () => {
           modelProvider: "CURSOR",
           name: "writer",
           operations: [minimalModelWorkerOperation],
-          workerType: "MODEL_WORKER",
+          provider: "",
+          workerType: "INFERENCE_WORKER",
         },
         baseFactoryDefinition,
       ),
@@ -210,7 +218,7 @@ describe("factory graph editor additions", () => {
           kind: "workstation",
           name: "linear-poller",
           workerName: "writer",
-          workstationType: "MODEL_WORKSTATION",
+          workstationType: "AGENT_RUN",
         },
         baseFactoryDefinition,
       ),
@@ -227,7 +235,7 @@ describe("factory graph editor additions", () => {
           kind: "workstation",
           name: "linear-poller",
           workerName: "poller-runner",
-          workstationType: "MODEL_WORKSTATION",
+          workstationType: "AGENT_RUN",
         },
         {
           ...baseFactoryDefinition,
@@ -267,7 +275,7 @@ describe("factory graph editor additions", () => {
         kind: "workstation",
         name: "review",
         workerName: "writer",
-        workstationType: "MODEL_WORKSTATION",
+        workstationType: "AGENT_RUN",
       },
     );
 
@@ -278,7 +286,7 @@ describe("factory graph editor additions", () => {
         inputs: [],
         name: "review",
         outputs: [],
-        type: "MODEL_WORKSTATION",
+        type: "AGENT_RUN",
         worker: "writer",
       },
     ]);
@@ -295,14 +303,15 @@ describe("factory graph editor additions", () => {
         modelProvider: "CURSOR",
         name: "reviewer",
         operations: [],
-        workerType: "MODEL_WORKER",
+        provider: "",
+        workerType: "INFERENCE_WORKER",
       },
     );
     expect(providerOnlyDraft.additions.workers).toEqual([
       {
         modelProvider: "CURSOR",
         name: "reviewer",
-        type: "MODEL_WORKER",
+        type: "INFERENCE_WORKER",
       },
     ]);
 
@@ -316,7 +325,8 @@ describe("factory graph editor additions", () => {
         modelProvider: "CODEX",
         name: "writer",
         operations: [],
-        workerType: "MODEL_WORKER",
+        provider: "",
+        workerType: "INFERENCE_WORKER",
       },
     );
     expect(withModelDraft.additions.workers).toEqual([
@@ -324,7 +334,7 @@ describe("factory graph editor additions", () => {
         model: "gpt-5",
         modelProvider: "CODEX",
         name: "writer",
-        type: "MODEL_WORKER",
+        type: "INFERENCE_WORKER",
       },
     ]);
   });
@@ -340,6 +350,7 @@ describe("factory graph editor additions", () => {
         modelProvider: "",
         name: "runner",
         operations: [],
+        provider: "",
         workerType: "SCRIPT_WORKER",
       },
     );
@@ -361,6 +372,7 @@ describe("factory graph editor additions", () => {
         modelProvider: "",
         name: "packager",
         operations: [],
+        provider: "",
         workerType: "SCRIPT_WORKER",
       },
     );
@@ -384,7 +396,7 @@ describe("factory graph editor additions", () => {
         kind: "workstation",
         name: "review",
         workerName: "writer",
-        workstationType: "MODEL_WORKSTATION",
+        workstationType: "AGENT_RUN",
       },
     );
 
@@ -394,7 +406,7 @@ describe("factory graph editor additions", () => {
         inputs: [],
         name: "review",
         outputs: [],
-        type: "MODEL_WORKSTATION",
+        type: "AGENT_RUN",
         worker: "writer",
       },
     ]);

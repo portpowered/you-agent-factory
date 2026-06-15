@@ -35,8 +35,10 @@ func IsLegacyGrandfatheredWorkerWorkstationPair(workerType, workstationType stri
 	if wsType == WorkstationTypeModel && worker == WorkerTypeScript {
 		return true
 	}
-	if wsType == "" && (kind == "" || kind == WorkstationKindStandard) && IsInferenceWorkerType(worker) {
-		return true
+	if wsType == "" && (kind == "" || kind == WorkstationKindStandard) {
+		if IsInferenceWorkerType(worker) || worker == WorkerTypeScript {
+			return true
+		}
 	}
 	if !IsPollerRunWorkstationType(workstationType, kind) {
 		return false

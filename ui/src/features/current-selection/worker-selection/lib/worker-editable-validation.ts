@@ -4,6 +4,11 @@ import {
   normalizeFactoryDefinition,
 } from "../../../../api/factory-definition";
 import type { EditableWorkerDraft } from "../../../current-factory-definition/lib/worker-editable-values";
+import {
+  isModelProviderWorkerType,
+  isPollerWorkerType,
+  isScriptWorkerType,
+} from "../../../current-factory-definition/public";
 import { goDurationFromWorkerTimeoutPicker } from "../../../current-factory-definition/lib/worker-timeout-duration";
 import type { WorkerDetailMessages } from "../messages/worker-detail-types";
 
@@ -72,12 +77,12 @@ export function validateEditableWorkerDraft(
       messages.editableConfigurationNameDuplicate(trimmedName);
   }
 
-  if (draft.type === "MODEL_WORKER" && !draft.modelProvider) {
+  if (isModelProviderWorkerType(draft.type) && !draft.modelProvider) {
     validationErrors.modelProvider =
       messages.editableConfigurationModelProviderRequired;
   }
 
-  if (draft.type === "SCRIPT_WORKER") {
+  if (isScriptWorkerType(draft.type)) {
     const hasCommand = draft.command.trim().length > 0;
     const hasBody = draft.body.trim().length > 0;
     if (!hasCommand && !hasBody) {
@@ -88,11 +93,11 @@ export function validateEditableWorkerDraft(
     }
   }
 
-  if (draft.type === "HOSTED_WORKER" && !draft.provider) {
+  if (isPollerWorkerType(draft.type) && !draft.provider) {
     validationErrors.provider = messages.editableConfigurationProviderRequired;
   }
 
-  if (draft.type === "HOSTED_WORKER" && draft.provider === "LINEAR") {
+  if (isPollerWorkerType(draft.type) && draft.provider === "LINEAR") {
     if (draft.authSecretRef.trim().length === 0) {
       validationErrors.authSecretRef =
         messages.editableConfigurationAuthSecretRefRequired;
@@ -107,7 +112,7 @@ export function validateEditableWorkerDraft(
     }
   }
 
-  if (draft.type === "SCRIPT_WORKER" && draft.argsText.includes("\0")) {
+  if (isScriptWorkerType(draft.type) && draft.argsText.includes("\0")) {
     validationErrors.args = messages.editableConfigurationArgsInvalid;
   }
 

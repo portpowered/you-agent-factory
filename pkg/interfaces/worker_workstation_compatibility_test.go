@@ -112,6 +112,13 @@ func compatibleWorkerWorkstationBehaviorCases() []struct {
 			kind:            WorkstationKindStandard,
 			wantCompatible:  true,
 		},
+		{
+			name:            "legacy default workstation with script worker",
+			workerType:      WorkerTypeScript,
+			workstationType: "",
+			kind:            WorkstationKindStandard,
+			wantCompatible:  true,
+		},
 	}
 }
 

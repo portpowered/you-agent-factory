@@ -130,7 +130,8 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         modelProvider: "",
         name: "writer",
         operations: [],
-        workerType: "MODEL_WORKER",
+        provider: "",
+        workerType: "INFERENCE_WORKER",
       },
       errors: {
         modelProvider: "Select a model provider for the new worker.",
@@ -159,7 +160,8 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       modelProvider: "CURSOR",
       name: "writer",
       operations: [],
-      workerType: "MODEL_WORKER",
+      provider: "",
+      workerType: "INFERENCE_WORKER",
     });
     expect(workerChange).toHaveBeenNthCalledWith(2, {
       argsText: "",
@@ -169,7 +171,8 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       modelProvider: "",
       name: "writer",
       operations: [],
-      workerType: "MODEL_WORKER",
+      provider: "",
+      workerType: "INFERENCE_WORKER",
     });
     expect(
       screen.getByText("Select a model provider for the new worker."),
@@ -191,7 +194,8 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         modelProvider: "CURSOR",
         name: "runner",
         operations: [],
-        workerType: "MODEL_WORKER",
+        provider: "",
+        workerType: "INFERENCE_WORKER",
       },
       errors: {
         modelProvider: "Select a model provider for the new worker.",
@@ -209,6 +213,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       modelProvider: "",
       name: "runner",
       operations: [],
+      provider: "",
       workerType: "SCRIPT_WORKER",
     });
 
@@ -223,6 +228,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
           modelProvider: "",
           name: "runner",
           operations: [],
+          provider: "",
           workerType: "SCRIPT_WORKER",
         }}
         errors={{}}
@@ -255,6 +261,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       modelProvider: "",
       name: "runner",
       operations: [],
+      provider: "",
       workerType: "SCRIPT_WORKER",
     });
     expect(workerChange).toHaveBeenNthCalledWith(3, {
@@ -265,10 +272,11 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       modelProvider: "",
       name: "runner",
       operations: [],
+      provider: "",
       workerType: "SCRIPT_WORKER",
     });
 
-    await selectLabeledComboboxOption(user, "Worker type", "Model worker");
+    await selectLabeledComboboxOption(user, "Worker type", "Inference worker");
 
     expect(workerChange).toHaveBeenCalledWith({
       argsText: "",
@@ -278,7 +286,8 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       modelProvider: "",
       name: "runner",
       operations: [],
-      workerType: "MODEL_WORKER",
+      provider: "",
+      workerType: "INFERENCE_WORKER",
     });
   });
 
@@ -294,7 +303,8 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         modelProvider: "CURSOR",
         name: "tts-worker",
         operations: [operation],
-        workerType: "MODEL_WORKER",
+        provider: "",
+        workerType: "INFERENCE_WORKER",
       },
       errors: {
         modelOperations: {
@@ -355,7 +365,8 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
           name: "TTS",
         },
       ],
-      workerType: "MODEL_WORKER",
+      provider: "",
+      workerType: "INFERENCE_WORKER",
     });
     expect(workerChange).toHaveBeenNthCalledWith(2, {
       argsText: "",
@@ -375,7 +386,8 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
           ],
         },
       ],
-      workerType: "MODEL_WORKER",
+      provider: "",
+      workerType: "INFERENCE_WORKER",
     });
     expect(workerChange).toHaveBeenNthCalledWith(3, {
       argsText: "",
@@ -397,8 +409,70 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
           ],
         },
       ],
-      workerType: "MODEL_WORKER",
+      provider: "",
+      workerType: "INFERENCE_WORKER",
     });
+  });
+
+  it("exposes the full worker and workstation taxonomy in add creation controls", async () => {
+    const user = userEvent.setup();
+
+    renderDialog({
+      draft: {
+        argsText: "",
+        command: "",
+        kind: "worker",
+        model: "",
+        modelProvider: "",
+        name: "writer",
+        operations: [],
+        provider: "",
+        workerType: "INFERENCE_WORKER",
+      },
+    });
+
+    await user.click(screen.getByRole("combobox", { name: "Worker type" }));
+    const workerListbox = await screen.findByRole("listbox");
+    for (const label of [
+      "Inference worker",
+      "Agent worker",
+      "Script worker",
+      "Poller worker",
+    ]) {
+      expect(
+        within(workerListbox).getByRole("option", { name: label }),
+      ).toBeTruthy();
+    }
+
+    cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = installDashboardBrowserTestShims();
+
+    renderDialog({
+      draft: {
+        behavior: "STANDARD",
+        body: "",
+        cron: null,
+        kind: "workstation",
+        name: "review",
+        workerName: "writer",
+        workstationType: "INFERENCE_RUN",
+      },
+    });
+
+    await user.click(screen.getByRole("combobox", { name: "Workstation type" }));
+    const workstationListbox = await screen.findByRole("listbox");
+    for (const label of [
+      "Inference run",
+      "Agent run",
+      "Script run",
+      "Poller run",
+      "Logical move",
+    ]) {
+      expect(
+        within(workstationListbox).getByRole("option", { name: label }),
+      ).toBeTruthy();
+    }
   });
 
   it("renders work-type specific fields", () => {
@@ -472,7 +546,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         kind: "workstation",
         name: "scheduler",
         workerName: "writer",
-        workstationType: "MODEL_WORKSTATION",
+        workstationType: "AGENT_RUN",
       },
       errors: {
         cronSchedule: "Enter a cron schedule before adding this workstation.",
@@ -521,7 +595,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
     await selectLabeledComboboxOption(
       user,
       "Workstation type",
-      "Model workstation",
+      "Agent run",
     );
 
     expect(onChange).toHaveBeenCalledWith({
@@ -531,7 +605,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       kind: "workstation",
       name: "route",
       workerName: "writer",
-      workstationType: "MODEL_WORKSTATION",
+      workstationType: "AGENT_RUN",
     });
   });
 
@@ -546,7 +620,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         kind: "workstation",
         name: "route",
         workerName: "writer",
-        workstationType: "MODEL_WORKSTATION",
+        workstationType: "AGENT_RUN",
       },
       onChange,
     });
@@ -574,7 +648,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         kind: "workstation",
         name: "scheduler",
         workerName: "writer",
-        workstationType: "MODEL_WORKSTATION",
+        workstationType: "AGENT_RUN",
       },
       onChange,
     });
@@ -605,7 +679,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       kind: "workstation",
       name: "scheduler",
       workerName: "writer",
-      workstationType: "MODEL_WORKSTATION",
+      workstationType: "AGENT_RUN",
     });
     expect(onChange).toHaveBeenNthCalledWith(2, {
       behavior: "CRON",
@@ -619,7 +693,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       kind: "workstation",
       name: "scheduler",
       workerName: "writer",
-      workstationType: "MODEL_WORKSTATION",
+      workstationType: "AGENT_RUN",
     });
     expect(onChange).toHaveBeenNthCalledWith(3, {
       behavior: "CRON",
@@ -633,7 +707,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       kind: "workstation",
       name: "scheduler",
       workerName: "writer",
-      workstationType: "MODEL_WORKSTATION",
+      workstationType: "AGENT_RUN",
     });
     expect(onChange).toHaveBeenNthCalledWith(4, {
       behavior: "CRON",
@@ -647,7 +721,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       kind: "workstation",
       name: "scheduler",
       workerName: "writer",
-      workstationType: "MODEL_WORKSTATION",
+      workstationType: "AGENT_RUN",
     });
   });
 
@@ -662,7 +736,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         kind: "workstation",
         name: "review",
         workerName: "writer",
-        workstationType: "MODEL_WORKSTATION",
+        workstationType: "AGENT_RUN",
       },
       onChange,
     });
@@ -676,7 +750,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       kind: "workstation",
       name: "review",
       workerName: "writer",
-      workstationType: "MODEL_WORKSTATION",
+      workstationType: "AGENT_RUN",
     });
   });
 
@@ -692,7 +766,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         kind: "workstation",
         name: "review",
         workerName: "",
-        workstationType: "MODEL_WORKSTATION",
+        workstationType: "AGENT_RUN",
       },
       errors: {
         behavior: "Poller workstations must use a script or hosted worker.",
@@ -716,7 +790,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       kind: "workstation",
       name: "review",
       workerName: "",
-      workstationType: "MODEL_WORKSTATION",
+      workstationType: "AGENT_RUN",
     });
     expect(onChange).toHaveBeenNthCalledWith(2, {
       behavior: "STANDARD",
@@ -725,7 +799,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       kind: "workstation",
       name: "review",
       workerName: "writer",
-      workstationType: "MODEL_WORKSTATION",
+      workstationType: "AGENT_RUN",
     });
     expect(onChange).toHaveBeenNthCalledWith(3, {
       behavior: "STANDARD",
@@ -734,7 +808,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       kind: "workstation",
       name: "review",
       workerName: "",
-      workstationType: "MODEL_WORKSTATION",
+      workstationType: "AGENT_RUN",
     });
     expect(
       screen.getByText(

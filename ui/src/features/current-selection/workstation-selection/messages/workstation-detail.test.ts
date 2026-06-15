@@ -167,7 +167,7 @@ describe("getWorkstationDetailMessages", () => {
       getWorkstationDetailMessages("en").localizeWorkstationType(
         "MODEL_WORKSTATION",
       ),
-    ).toBe("Model workstation");
+    ).toBe("Model workstation (legacy)");
     expect(
       getWorkstationDetailMessages("zh-CN").localizeWorkstationType(
         "FUTURE_TYPE",

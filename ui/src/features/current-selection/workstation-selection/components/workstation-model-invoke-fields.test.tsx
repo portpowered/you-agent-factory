@@ -49,7 +49,7 @@ describe("EditableConfigurationModelInvokeFields", () => {
     expandEditableConfigurationSection();
 
     expect(screen.getByRole("combobox", { name: "Workstation type" })).toHaveTextContent(
-      "Model invoke",
+      "Model invoke (legacy)",
     );
     expect(screen.getByLabelText("Worker")).toBeInTheDocument();
     expect(screen.getByLabelText("Operation")).toBeInTheDocument();

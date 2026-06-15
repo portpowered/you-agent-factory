@@ -7,6 +7,7 @@
  * import adapters delegate there after normalizing documents through this module.
  */
 import type { components } from "../generated/openapi";
+import { WorkerType, WorkstationType } from "../generated/openapi";
 import {
   expectObject,
   FactoryDefinitionAPIError,
@@ -216,9 +217,12 @@ const WORK_STATE_TYPE_VALUES = new Set<FactoryWorkState["type"]>([
   "TERMINAL",
 ]);
 const WORKER_TYPE_VALUES = new Set<NonNullable<FactoryWorker["type"]>>([
-  "HOSTED_WORKER",
-  "MODEL_WORKER",
-  "SCRIPT_WORKER",
+  WorkerType.WorkerTypeInferenceWorker,
+  WorkerType.WorkerTypeAgentWorker,
+  WorkerType.WorkerTypeScriptWorker,
+  WorkerType.WorkerTypePollerWorker,
+  WorkerType.WorkerTypeModelWorker,
+  WorkerType.WorkerTypeHostedWorker,
 ]);
 const WORKER_MODEL_PROVIDER_VALUES = new Set<
   NonNullable<FactoryWorker["modelProvider"]>
@@ -245,10 +249,14 @@ const WORKSTATION_BEHAVIOR_VALUES = new Set<
 const WORKSTATION_TYPE_VALUES = new Set<
   NonNullable<FactoryWorkstation["type"]>
 >([
-  "CLASSIFIER_WORKSTATION",
-  "LOGICAL_MOVE",
-  "MODEL_INVOKE",
-  "MODEL_WORKSTATION",
+  WorkstationType.WorkstationTypeInferenceRun,
+  WorkstationType.WorkstationTypeAgentRun,
+  WorkstationType.WorkstationTypeScriptRun,
+  WorkstationType.WorkstationTypePollerRun,
+  WorkstationType.WorkstationTypeClassifierWorkstation,
+  WorkstationType.WorkstationTypeLogicalMove,
+  WorkstationType.WorkstationTypeModelInvoke,
+  WorkstationType.WorkstationTypeModelWorkstation,
 ]);
 const FACTORY_ROOT_GUARD_TYPE_VALUES = new Set<FactoryRootGuard["type"]>([
   "INFERENCE_THROTTLE_GUARD",

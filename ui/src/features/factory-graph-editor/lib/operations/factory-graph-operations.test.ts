@@ -46,7 +46,7 @@ describe("factory graph operations", () => {
             outputs: [{ name: "result", contentTypes: ["TEXT"] }],
           },
         ],
-        workerType: "MODEL_WORKER",
+        workerType: "INFERENCE_WORKER",
       },
     });
     const withWorkType = addFactoryGraphNode({
@@ -92,7 +92,7 @@ describe("factory graph operations", () => {
           model: "gpt-5-mini",
           modelProvider: "CURSOR",
           name: "reviewer",
-          type: "MODEL_WORKER",
+          type: "INFERENCE_WORKER",
         },
       ],
       workStates: [
@@ -131,7 +131,7 @@ describe("factory graph operations", () => {
         modelProvider: "CURSOR",
         name: "writer",
         operations: [],
-        workerType: "MODEL_WORKER",
+        workerType: "INFERENCE_WORKER",
       },
     });
     expect(duplicateWorker).toMatchObject({

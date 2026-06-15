@@ -14,7 +14,7 @@ export const allowlistedOversizedFeatureFolders = [
     relativeDirectoryPath: "src/features/workflow-activity/hooks",
   },
   {
-    maxFileCount: 40,
+    maxFileCount: 41,
     relativeDirectoryPath: "src/features/current-factory-definition/lib",
   },
   {

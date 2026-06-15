@@ -1,5 +1,6 @@
 // biome-ignore lint/nursery/noExcessiveLinesPerFile: projection contract scenarios stay together around one adapter.
 import { describe, expect, it, vi } from "vitest";
+import { WorkerType, WorkstationType } from "../../../../api/generated/openapi";
 import { baseFactoryDefinition } from "../draft/factory-graph-draft.test-helpers";
 import { buildFactoryGraphTopologyFromDefinition } from "../draft/factory-graph-draft-graph";
 import type {
@@ -1168,5 +1169,76 @@ describe("factory graph React Flow projection waypoint semantics", () => {
     ).entries()) {
       expect(saveInput.value.workstations?.[index]).toMatchObject(workstation);
     }
+  });
+
+  it("preserves graph node identity for legacy and new taxonomy factories", () => {
+    const legacyFactory: CanonicalFactoryDefinition = {
+      name: "Legacy Factory",
+      workers: [
+        {
+          model: "gpt-5",
+          name: "writer",
+          type: "MODEL_WORKER",
+        },
+      ],
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "queued", type: "INITIAL" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          body: "Draft the story.",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "draft",
+          outputs: [{ state: "done", workType: "story" }],
+          type: "MODEL_WORKSTATION",
+          worker: "writer",
+        },
+      ],
+    };
+    const legacyWorkstation = legacyFactory.workstations?.[0];
+    if (!legacyWorkstation) {
+      throw new Error("expected legacy workstation fixture");
+    }
+
+    const taxonomyFactory: CanonicalFactoryDefinition = {
+      ...legacyFactory,
+      workers: [
+        {
+          model: "gpt-5",
+          name: "writer",
+          type: WorkerType.WorkerTypeInferenceWorker,
+        },
+      ],
+      workstations: [
+        {
+          ...legacyWorkstation,
+          type: WorkstationType.WorkstationTypeAgentRun,
+        },
+      ],
+    };
+
+    const projectNodeIds = (factory: CanonicalFactoryDefinition) => {
+      const topology = buildFactoryGraphTopologyFromDefinition(factory);
+      return projectFactoryGraphToReactFlow({ topology }).nodes.map(
+        (node) => node.id,
+      );
+    };
+
+    expect(projectNodeIds(legacyFactory)).toEqual(
+      projectNodeIds(taxonomyFactory),
+    );
+    expect(projectNodeIds(legacyFactory)).toEqual([
+      "worker:writer",
+      "workstation:draft",
+      "work-type:story",
+      "work-state:story:done",
+      "work-state:story:queued",
+    ]);
   });
 });

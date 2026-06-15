@@ -1,6 +1,7 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import {
   areEditableWorkerDraftsEqual,
+  EDITABLE_EXECUTOR_PROVIDERS,
   EMPTY_HOSTED_LINEAR_EDITABLE_VALUES,
   editableWorkerDraftFromValues,
   parseWorkerArgsText,
@@ -260,5 +261,11 @@ describe("parseWorkerArgsText", () => {
       "--verbose",
       "--dry-run",
     ]);
+  });
+});
+
+describe("editable worker provider catalogs", () => {
+  it("exposes script-wrap as the executor provider option", () => {
+    expect(EDITABLE_EXECUTOR_PROVIDERS).toEqual(["SCRIPT_WRAP"]);
   });
 });
