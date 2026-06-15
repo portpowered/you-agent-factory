@@ -1,4 +1,4 @@
-package api
+package apiserver_test
 
 import (
 	"context"
@@ -21,7 +21,7 @@ func TestListFactorySessions_RuntimeBackedIncludesLiveAndPersistedScopes(t *test
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{
+	srv := newAPITestServer(&testutil.MockFactory{
 		DurableExecutionService: service,
 		FactorySessions: factoryapi.ListFactorySessionsResponse{
 			Sessions: []factoryapi.FactorySessionSummary{
@@ -60,7 +60,7 @@ func TestGetFactorySession_RuntimeBackedReturnsTerminalReadModel(t *testing.T) {
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -110,7 +110,7 @@ func TestGetFactorySession_RuntimeBackedMissingSessionReturnsNotFound(t *testing
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -132,7 +132,7 @@ func TestGetFactorySession_RuntimeBackedMissingSessionReturnsNotFound(t *testing
 }
 
 func TestGetFactorySession_LivePetriSessionRemainsCompatible(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{
+	srv := newAPITestServer(&testutil.MockFactory{
 		FactorySession: factoryapi.FactorySession{
 			Id:         "session-beta",
 			FactoryDir: "/workspace/root/beta",

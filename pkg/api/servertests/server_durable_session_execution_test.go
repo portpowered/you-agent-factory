@@ -1,4 +1,4 @@
-package api
+package apiserver_test
 
 import (
 	"bytes"
@@ -22,7 +22,7 @@ func TestStartDurableFactorySessionAsync_RuntimeBackedSimpleFinalReturnsStableSe
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -61,7 +61,7 @@ func TestStartDurableFactorySessionAsync_RequestIDConflictReturnsTypedError(t *t
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -90,7 +90,7 @@ func TestStartDurableFactorySessionAsync_InvalidSourceDoesNotCreateSession(t *te
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -116,7 +116,7 @@ func TestStartDurableFactorySessionAsync_MissingRequestIDReturnsValidationError(
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -217,7 +217,7 @@ func setupAPIRuntimeWorkflowFixture(t *testing.T, fixtureName, workflowName stri
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}
-	raw, err := os.ReadFile(filepath.Join("..", "orchestrators", "javascript", "runtime", "testdata", fixtureName))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "orchestrators", "javascript", "runtime", "testdata", fixtureName))
 	if err != nil {
 		t.Fatalf("read fixture %s: %v", fixtureName, err)
 	}

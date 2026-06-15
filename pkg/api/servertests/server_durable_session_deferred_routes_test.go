@@ -1,4 +1,4 @@
-package api
+package apiserver_test
 
 import (
 	"net/http"
@@ -15,7 +15,7 @@ func TestDeferredFactorySessionRoutes_RemainNotImplementedForRuntimeBackedSessio
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 

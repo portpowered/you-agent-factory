@@ -1,4 +1,4 @@
-package api
+package apiserver_test
 
 import (
 	"bufio"
@@ -21,7 +21,7 @@ func TestGetFactorySessionEvents_RuntimeBackedReturnsCanonicalEvents(t *testing.
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -59,7 +59,7 @@ func TestGetFactorySessionEvents_RuntimeBackedReconnectCursorReturnsLaterEvents(
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -106,7 +106,7 @@ func TestGetFactorySessionEvents_RuntimeBackedUnknownCursorReturnsBadRequest(t *
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -152,7 +152,7 @@ func TestGetFactorySessionEvents_RuntimeBackedMissingSessionReturnsNotFound(t *t
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -171,7 +171,7 @@ func TestGetFactorySessionEvents_RuntimeBackedAPIShapingMatchesServiceProjection
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -209,7 +209,7 @@ func TestGetFactorySessionEvents_RuntimeBackedReplayMatchesReadAndResultAPIs(t *
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -264,7 +264,7 @@ func TestGetFactorySessionEvents_RuntimeBackedReplayMatchesReadAndResultAPIs(t *
 func TestGetFactorySessionEvents_LivePetriSessionRemainsCompatible(t *testing.T) {
 	closed := make(chan factoryapi.FactoryEvent)
 	close(closed)
-	srv := newTestServer(&testutil.MockFactory{
+	srv := newAPITestServer(&testutil.MockFactory{
 		SessionFactories: map[string]*testutil.MockFactory{
 			"session-beta": {
 				FactoryEventStream: &interfaces.FactoryEventStream{
@@ -280,7 +280,7 @@ func TestGetFactorySessionEvents_LivePetriSessionRemainsCompatible(t *testing.T)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
-	streamed := readSSEFactoryEvent(t, bufio.NewReader(rec.Body))
+	streamed := readAPISSEFactoryEvent(t, bufio.NewReader(rec.Body))
 	if streamed.Id != "event-1" {
 		t.Fatalf("streamed event id = %q, want event-1", streamed.Id)
 	}

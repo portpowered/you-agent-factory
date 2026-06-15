@@ -1,4 +1,4 @@
-package api
+package apiserver_test
 
 import (
 	"context"
@@ -19,7 +19,7 @@ func TestGetFactorySessionResults_RuntimeBackedCompletedReturnsFinalResult(t *te
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -71,7 +71,7 @@ func TestGetFactorySessionResults_RuntimeBackedAPIShapingMatchesServiceProjectio
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -112,7 +112,7 @@ func TestGetFactorySessionResults_RuntimeBackedRunningReturnsNotReady(t *testing
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -138,7 +138,7 @@ func TestGetFactorySessionResults_RuntimeBackedSyncTimeoutReturnsAvailability(t 
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -180,7 +180,7 @@ func TestGetFactorySessionResults_RuntimeBackedMissingSessionReturnsNotFound(t *
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
 		ProjectRoot: projectRoot,
 	})
-	srv := newTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -202,7 +202,7 @@ func TestGetFactorySessionResults_RuntimeBackedMissingSessionReturnsNotFound(t *
 }
 
 func TestGetFactorySessionResults_LivePetriSessionReturnsNotFound(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{
+	srv := newAPITestServer(&testutil.MockFactory{
 		FactorySession: factoryapi.FactorySession{
 			Id:         "session-beta",
 			FactoryDir: "/workspace/root/beta",
