@@ -254,7 +254,11 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 		go s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt)
 	}
 
-	return s.asyncStartFromState(reserved.state), nil
+	snapshot, err := s.snapshotSessionState(reserved.state.session.SessionID)
+	if err != nil {
+		return AsyncStartResult{}, err
+	}
+	return s.asyncStartFromState(snapshot), nil
 }
 
 func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartRequest) (SyncStartResult, error) {
@@ -278,11 +282,13 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 	}
 	defer reserved.release()
 
-	if IsTerminalLifecycleStatus(reserved.state.session.Status) {
-		return s.syncStartFromState(reserved.state), nil
-	}
-	if reserved.state.result.Availability != nil && reserved.state.result.Availability.Reason == "SYNC_WAIT_TIMED_OUT" {
-		return s.syncStartFromState(reserved.state), nil
+	if snapshot, snapErr := s.snapshotSessionState(reserved.state.session.SessionID); snapErr == nil {
+		if IsTerminalLifecycleStatus(snapshot.session.Status) {
+			return s.syncStartFromState(snapshot), nil
+		}
+		if snapshot.result.Availability != nil && snapshot.result.Availability.Reason == "SYNC_WAIT_TIMED_OUT" {
+			return s.syncStartFromState(snapshot), nil
+		}
 	}
 
 	if hasSyncWait {
@@ -321,7 +327,11 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 		s.mu.Unlock()
 	}
 
-	return s.syncStartFromState(reserved.state), nil
+	snapshot, err := s.snapshotSessionState(reserved.state.session.SessionID)
+	if err != nil {
+		return SyncStartResult{}, err
+	}
+	return s.syncStartFromState(snapshot), nil
 }
 
 func (s *JavaScriptRuntimeService) GetSession(ctx context.Context, sessionID string) (SessionReadResult, error) {
@@ -332,11 +342,11 @@ func (s *JavaScriptRuntimeService) GetSession(ctx context.Context, sessionID str
 	if err != nil {
 		return SessionReadResult{}, err
 	}
-	state, err := s.sessionState(id)
+	state, err := s.snapshotSessionState(id)
 	if err != nil {
 		return SessionReadResult{}, err
 	}
-	return cloneSessionRead(state.session), nil
+	return state.session, nil
 }
 
 func (s *JavaScriptRuntimeService) Pause(ctx context.Context, _ string, _ ControlRequest) (LifecycleControlResult, error) {
@@ -375,7 +385,7 @@ func (s *JavaScriptRuntimeService) GetResult(ctx context.Context, sessionID stri
 	if err != nil {
 		return ResultReadResult{}, err
 	}
-	state, err := s.sessionState(id)
+	state, err := s.snapshotSessionState(id)
 	if err != nil {
 		return ResultReadResult{}, err
 	}
@@ -390,7 +400,7 @@ func (s *JavaScriptRuntimeService) ListDispatches(ctx context.Context, sessionID
 	if err != nil {
 		return ListDispatchesResult{}, err
 	}
-	if _, err := s.sessionState(id); err != nil {
+	if _, err := s.snapshotSessionState(id); err != nil {
 		return ListDispatchesResult{}, err
 	}
 	return ListDispatchesResult{SessionID: id, Dispatches: nil}, nil
@@ -404,7 +414,7 @@ func (s *JavaScriptRuntimeService) GetDispatch(ctx context.Context, sessionID, _
 	if err != nil {
 		return DispatchDetail{}, err
 	}
-	if _, err := s.sessionState(id); err != nil {
+	if _, err := s.snapshotSessionState(id); err != nil {
 		return DispatchDetail{}, err
 	}
 	return DispatchDetail{}, ErrDispatchNotFound
@@ -418,7 +428,7 @@ func (s *JavaScriptRuntimeService) ListArtifacts(ctx context.Context, sessionID 
 	if err != nil {
 		return ListArtifactsResult{}, err
 	}
-	if _, err := s.sessionState(id); err != nil {
+	if _, err := s.snapshotSessionState(id); err != nil {
 		return ListArtifactsResult{}, err
 	}
 	return ListArtifactsResult{SessionID: id, Artifacts: nil}, nil
@@ -432,7 +442,7 @@ func (s *JavaScriptRuntimeService) GetArtifact(ctx context.Context, sessionID, _
 	if err != nil {
 		return ArtifactDetail{}, err
 	}
-	if _, err := s.sessionState(id); err != nil {
+	if _, err := s.snapshotSessionState(id); err != nil {
 		return ArtifactDetail{}, err
 	}
 	return ArtifactDetail{}, ErrArtifactNotFound
@@ -449,7 +459,7 @@ func (s *JavaScriptRuntimeService) ReadEvents(ctx context.Context, sessionID str
 	if _, err := NormalizeEventReconnectRequest(req); err != nil {
 		return EventReadResult{}, err
 	}
-	state, err := s.sessionState(id)
+	state, err := s.snapshotSessionState(id)
 	if err != nil {
 		return EventReadResult{}, err
 	}
@@ -627,14 +637,12 @@ func (s *JavaScriptRuntimeService) waitSyncCompletion(
 				return s.projectSyncWaitTimeout(sessionID, cancelOnTimeout)
 			}
 
-			s.mu.RLock()
-			state, ok := s.sessions[sessionID]
-			s.mu.RUnlock()
-			if !ok {
-				return SyncStartResult{}, ErrSessionNotFound
+			snapshot, err := s.snapshotSessionState(sessionID)
+			if err != nil {
+				return SyncStartResult{}, err
 			}
-			if IsTerminalLifecycleStatus(state.session.Status) {
-				return s.syncStartFromState(state), nil
+			if IsTerminalLifecycleStatus(snapshot.session.Status) {
+				return s.syncStartFromState(snapshot), nil
 			}
 		}
 	}
@@ -656,14 +664,12 @@ func (s *JavaScriptRuntimeService) projectSyncWaitTimeout(sessionID string, canc
 	if cancelOnTimeout {
 		deadline := time.Now().Add(5 * time.Second)
 		for time.Now().Before(deadline) {
-			s.mu.RLock()
-			state, ok = s.sessions[sessionID]
-			s.mu.RUnlock()
-			if !ok {
-				return SyncStartResult{}, ErrSessionNotFound
+			snapshot, err := s.snapshotSessionState(sessionID)
+			if err != nil {
+				return SyncStartResult{}, err
 			}
-			if IsTerminalLifecycleStatus(state.session.Status) {
-				result := s.syncStartFromState(state)
+			if IsTerminalLifecycleStatus(snapshot.session.Status) {
+				result := s.syncStartFromState(snapshot)
 				result.SyncOutcome = SyncOutcomeTimedOut
 				result.TimedOut = true
 				result.SessionCanceledByTimeout = true
@@ -696,9 +702,10 @@ func (s *JavaScriptRuntimeService) projectSyncWaitTimeout(sessionID string, canc
 		state.session.ResultSummary.ResultStatus = string(ResultStatusNotReady)
 	}
 	state.events = deriveProjectionEvents(state.session, state.result)
+	snapshot := cloneRuntimeSessionState(state)
 	s.mu.Unlock()
 
-	result := s.syncStartFromState(state)
+	result := s.syncStartFromState(snapshot)
 	result.SyncOutcome = SyncOutcomeTimedOut
 	result.TimedOut = true
 	return result, nil
@@ -870,17 +877,34 @@ func workflowRunContext(parent context.Context, policy workflowpolicy.EffectiveP
 	}
 }
 
-func (s *JavaScriptRuntimeService) sessionState(sessionID string) (*runtimeSessionState, error) {
+func (s *JavaScriptRuntimeService) snapshotSessionState(sessionID string) (runtimeSessionState, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	state, ok := s.sessions[sessionID]
 	if !ok {
-		return nil, ErrSessionNotFound
+		return runtimeSessionState{}, ErrSessionNotFound
 	}
-	return state, nil
+	return cloneRuntimeSessionState(state), nil
 }
 
-func (s *JavaScriptRuntimeService) syncStartFromState(state *runtimeSessionState) SyncStartResult {
+func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
+	if state == nil {
+		return runtimeSessionState{}
+	}
+	cloned := runtimeSessionState{
+		session: cloneSessionRead(state.session),
+		result:  cloneResultRead(state.result),
+	}
+	if len(state.events) > 0 {
+		cloned.events = make([]json.RawMessage, len(state.events))
+		for i, event := range state.events {
+			cloned.events[i] = append(json.RawMessage(nil), event...)
+		}
+	}
+	return cloned
+}
+
+func (s *JavaScriptRuntimeService) syncStartFromState(state runtimeSessionState) SyncStartResult {
 	async := s.asyncStartFromState(state)
 	result := SyncStartResult{AsyncStartResult: async}
 	if state.result.Availability != nil && state.result.Availability.Reason == "SYNC_WAIT_TIMED_OUT" {
@@ -897,7 +921,7 @@ func (s *JavaScriptRuntimeService) syncStartFromState(state *runtimeSessionState
 	return result
 }
 
-func (s *JavaScriptRuntimeService) asyncStartFromState(state *runtimeSessionState) AsyncStartResult {
+func (s *JavaScriptRuntimeService) asyncStartFromState(state runtimeSessionState) AsyncStartResult {
 	return AsyncStartResult{
 		SessionID:        state.session.SessionID,
 		Status:           string(state.session.Status),
