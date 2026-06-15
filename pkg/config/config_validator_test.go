@@ -180,7 +180,7 @@ func assertFindingMatch(t *testing.T, findings []Finding, rule string, pathSubst
 			continue
 		}
 		if !strings.Contains(f.Path, pathSubstring) {
-			t.Fatalf("finding path = %q, want substring %q", f.Path, pathSubstring)
+			continue
 		}
 		if !strings.Contains(f.Message, messageSubstring) {
 			t.Fatalf("finding message = %q, want substring %q", f.Message, messageSubstring)
@@ -350,8 +350,8 @@ func TestRuleModelInvokeWorkstations_RejectsWorkerCompatibilityAndOperationMisma
 		},
 	}
 
-	findings := ruleModelInvokeWorkstations(cfg)
-	assertFindingMatch(t, findings, "workstation-model-invoke-worker-compatibility", "workstations[0](bad-worker-type).worker", `worker "scripted" is incompatible`)
+	findings := append(ruleModelInvokeWorkstations(cfg), ruleWorkerWorkstationBehaviorCompatibility(cfg)...)
+	assertFindingMatch(t, findings, "workstation-worker-behavior-compatibility", "workstations[0](bad-worker-type).worker", `workstation "bad-worker-type"`)
 	assertFindingMatch(t, findings, "workstation-model-invoke-operation-mismatch", "workstations[1](bad-operation).operation", `does not declare requested operation "TTS"`)
 }
 

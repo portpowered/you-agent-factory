@@ -139,6 +139,7 @@ func NewConfigValidator(opts ...ConfigValidatorOption) *ConfigValidator {
 		ruleHostedWorkers,
 		ruleWorkerModelOperations,
 		ruleModelInvokeWorkstations,
+		ruleWorkerWorkstationBehaviorCompatibility,
 		rulePerInputGuards,
 		ruleResourceDefinitions,
 		ruleResourceUsage,
@@ -871,12 +872,7 @@ func requiredInferenceRunWorkstationFindings(workstation interfaces.FactoryWorks
 
 func validateModelInvokeWorker(workstation interfaces.FactoryWorkstationConfig, worker interfaces.WorkerConfig, basePath string, operationName string) ([]Finding, interfaces.ModelOperation, bool) {
 	if strings.TrimSpace(worker.Type) != "" && !interfaces.IsInferenceWorkerType(worker.Type) {
-		return []Finding{{
-			Severity: SeverityError,
-			Path:     basePath + ".worker",
-			Message:  fmt.Sprintf("worker %q is incompatible with inference-run workstations; declare type INFERENCE_WORKER or legacy MODEL_WORKER with model operations", workstation.WorkerTypeName),
-			Rule:     "workstation-model-invoke-worker-compatibility",
-		}}, interfaces.ModelOperation{}, false
+		return nil, interfaces.ModelOperation{}, false
 	}
 	if operationName == "" {
 		return nil, interfaces.ModelOperation{}, false

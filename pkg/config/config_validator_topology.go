@@ -303,6 +303,53 @@ func isClassifierWorkstation(ws interfaces.FactoryWorkstationConfig) bool {
 	return strings.TrimSpace(ws.Type) == interfaces.WorkstationTypeClassify
 }
 
+// --- Rule: worker/workstation behavior compatibility ---
+
+func ruleWorkerWorkstationBehaviorCompatibility(cfg *interfaces.FactoryConfig) []Finding {
+	if cfg == nil || len(cfg.Workstations) == 0 {
+		return nil
+	}
+
+	workersByName := make(map[string]interfaces.WorkerConfig, len(cfg.Workers))
+	for _, worker := range cfg.Workers {
+		workersByName[worker.Name] = worker
+	}
+
+	var findings []Finding
+	for wi, ws := range cfg.Workstations {
+		if ws.Kind == interfaces.WorkstationKindPoller {
+			continue
+		}
+		if !interfaces.RequiresWorkerWorkstationBehaviorCompatibility(ws.Type, ws.Kind, ws.WorkerTypeName) {
+			continue
+		}
+
+		worker, ok := workersByName[ws.WorkerTypeName]
+		if !ok {
+			continue
+		}
+		if interfaces.CompatibleWorkerWorkstationBehavior(worker.Type, ws.Type, ws.Kind) {
+			continue
+		}
+
+		basePath := fmt.Sprintf("workstations[%d](%s)", wi, ws.Name)
+		findings = append(findings, Finding{
+			Severity: SeverityError,
+			Path:     basePath + ".worker",
+			Message: interfaces.WorkerWorkstationBehaviorMismatchMessage(
+				ws.Name,
+				ws.Type,
+				ws.Kind,
+				worker.Name,
+				worker.Type,
+			),
+			Rule: "workstation-worker-behavior-compatibility",
+		})
+	}
+
+	return findings
+}
+
 // --- Rule: poller workstation validation ---
 
 func rulePollerWorkstations(cfg *interfaces.FactoryConfig) []Finding {
