@@ -12,10 +12,10 @@ workflow recovery lanes or reconciling same-trace task and review residue.
 - `tests/functional/guards_batch/executor_review_state_lane_classification.go`
   classifies live queue snapshots into mismatch causes and planner dispositions
   without introducing new customer-facing vocabulary.
-- `tests/functional/guards_batch/executor_review_state_lane_evidence_test.go`
-  embeds durable queue evidence from `you work list --json` for the three PRD
-  recovery lanes and reproduces failed-task residue and duplicate `review:init`
-  shapes in a focused harness.
+- `tests/functional/guards_batch/executor_review_state_reconcile_test.go`
+  proves duplicate `review:init` collapse through the review workstation after
+  executor/review reconcile wiring; stale `task:init`/`task:failed` cleanup is
+  covered in `pkg/factory/subsystems/executor_review_reconcile_test.go`.
 - `tests/functional/workflow/process_review_contract_long_test.go` proves the
   owning `process`/`review` workstation contract for continue, rejection, and
   loop-breaker paths.
@@ -62,7 +62,9 @@ not missing worktree delivery.
 ## Follow-up ownership
 
 - Story 002 owns runtime/projection reconciliation for duplicate `review:init`
-  cleanup and stale task residue on the spawned trace.
+  cleanup and stale task residue on the spawned trace via
+  `executorReviewReconcileMutations` in `pkg/factory/subsystems/executor_review_reconcile.go`,
+  wired from `subsystem_transitioner.go` after process/review accepted outputs.
 - Story 003 owns bounded manual-repair preconditions when investigation proves
   runtime behavior is already correct for a lane shape.
 - Story 004 owns focused replay and lifecycle verification across executor
