@@ -14,9 +14,9 @@ import (
 )
 
 func TestListFactorySessionArtifacts_RuntimeBackedReturnsTypedEmptyList(t *testing.T) {
-	projectRoot := setupAPIDispatchRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
-		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
 	})
 	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-runtime-artifact-list-001",
@@ -33,9 +33,9 @@ func TestListFactorySessionArtifacts_RuntimeBackedReturnsTypedEmptyList(t *testi
 	if err != nil {
 		t.Fatalf("StartAsync: %v", err)
 	}
-	waitForAPIDispatchRuntimeSessionTerminal(t, service, started.SessionID)
+	waitForRuntimeSessionTerminal(t, service, started.SessionID)
 
-	srv := newAPIDispatchTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -45,7 +45,7 @@ func TestListFactorySessionArtifacts_RuntimeBackedReturnsTypedEmptyList(t *testi
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, readAPIDispatchBody(t, resp))
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, readBody(t, resp))
 	}
 
 	var response factoryapi.ListFactorySessionArtifactsResponse
@@ -64,9 +64,9 @@ func TestListFactorySessionArtifacts_RuntimeBackedReturnsTypedEmptyList(t *testi
 }
 
 func TestListFactorySessionArtifacts_RuntimeBackedReturnsTypedArtifactList(t *testing.T) {
-	projectRoot := setupAPIDispatchRuntimeWorkflowFixture(t, "progress-primitives.workflow.js", "progress-primitives")
-	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
-		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	projectRoot := setupAPIRuntimeWorkflowFixture(t, "progress-primitives.workflow.js", "progress-primitives")
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
 	})
 	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-runtime-artifact-list-002",
@@ -79,7 +79,7 @@ func TestListFactorySessionArtifacts_RuntimeBackedReturnsTypedArtifactList(t *te
 		t.Fatalf("StartSync: %v", err)
 	}
 
-	srv := newAPIDispatchTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -89,7 +89,7 @@ func TestListFactorySessionArtifacts_RuntimeBackedReturnsTypedArtifactList(t *te
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, readAPIDispatchBody(t, resp))
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, readBody(t, resp))
 	}
 
 	var response factoryapi.ListFactorySessionArtifactsResponse
@@ -113,11 +113,11 @@ func TestListFactorySessionArtifacts_RuntimeBackedReturnsTypedArtifactList(t *te
 }
 
 func TestListFactorySessionArtifacts_RuntimeBackedMissingSessionReturnsNotFound(t *testing.T) {
-	projectRoot := setupAPIDispatchRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
-		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
 	})
-	srv := newAPIDispatchTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -127,7 +127,7 @@ func TestListFactorySessionArtifacts_RuntimeBackedMissingSessionReturnsNotFound(
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404: %s", resp.StatusCode, readAPIDispatchBody(t, resp))
+		t.Fatalf("status = %d, want 404: %s", resp.StatusCode, readBody(t, resp))
 	}
 	var errResp factoryapi.ErrorResponse
 	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
@@ -139,7 +139,7 @@ func TestListFactorySessionArtifacts_RuntimeBackedMissingSessionReturnsNotFound(
 }
 
 func TestListFactorySessionArtifacts_LivePetriSessionReturnsNotFound(t *testing.T) {
-	srv := newAPIDispatchTestServer(&testutil.MockFactory{
+	srv := newAPITestServer(&testutil.MockFactory{
 		FactorySession: factoryapi.FactorySession{
 			Id:         "session-beta",
 			FactoryDir: "/workspace/root/beta",
@@ -156,14 +156,14 @@ func TestListFactorySessionArtifacts_LivePetriSessionReturnsNotFound(t *testing.
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404: %s", resp.StatusCode, readAPIDispatchBody(t, resp))
+		t.Fatalf("status = %d, want 404: %s", resp.StatusCode, readBody(t, resp))
 	}
 }
 
 func TestGetFactorySessionArtifact_RuntimeBackedReturnsTypedDetail(t *testing.T) {
-	projectRoot := setupAPIDispatchRuntimeWorkflowFixture(t, "progress-primitives.workflow.js", "progress-primitives")
-	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
-		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	projectRoot := setupAPIRuntimeWorkflowFixture(t, "progress-primitives.workflow.js", "progress-primitives")
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
 	})
 	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-runtime-artifact-detail-001",
@@ -176,7 +176,7 @@ func TestGetFactorySessionArtifact_RuntimeBackedReturnsTypedDetail(t *testing.T)
 		t.Fatalf("StartSync: %v", err)
 	}
 
-	srv := newAPIDispatchTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -186,7 +186,7 @@ func TestGetFactorySessionArtifact_RuntimeBackedReturnsTypedDetail(t *testing.T)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, readAPIDispatchBody(t, resp))
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, readBody(t, resp))
 	}
 
 	var response factoryapi.FactorySessionArtifactDetail
@@ -209,9 +209,9 @@ func TestGetFactorySessionArtifact_RuntimeBackedReturnsTypedDetail(t *testing.T)
 }
 
 func TestGetFactorySessionArtifact_RuntimeBackedUnknownArtifactReturnsNotFound(t *testing.T) {
-	projectRoot := setupAPIDispatchRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
-		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
 	})
 	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
 		RequestID: "req-api-runtime-artifact-detail-missing-001",
@@ -228,9 +228,9 @@ func TestGetFactorySessionArtifact_RuntimeBackedUnknownArtifactReturnsNotFound(t
 	if err != nil {
 		t.Fatalf("StartAsync: %v", err)
 	}
-	waitForAPIDispatchRuntimeSessionTerminal(t, service, started.SessionID)
+	waitForRuntimeSessionTerminal(t, service, started.SessionID)
 
-	srv := newAPIDispatchTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -240,7 +240,7 @@ func TestGetFactorySessionArtifact_RuntimeBackedUnknownArtifactReturnsNotFound(t
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404: %s", resp.StatusCode, readAPIDispatchBody(t, resp))
+		t.Fatalf("status = %d, want 404: %s", resp.StatusCode, readBody(t, resp))
 	}
 	var errResp factoryapi.ErrorResponse
 	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
@@ -252,11 +252,11 @@ func TestGetFactorySessionArtifact_RuntimeBackedUnknownArtifactReturnsNotFound(t
 }
 
 func TestGetFactorySessionArtifact_RuntimeBackedMissingSessionReturnsNotFound(t *testing.T) {
-	projectRoot := setupAPIDispatchRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
-	service := factorysessionexecution.NewRuntimeService(factorysessionexecution.StartPrepareContext{
-		StartSourceContext: factorysessionexecution.StartSourceContext{ProjectRoot: projectRoot},
+	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
 	})
-	srv := newAPIDispatchTestServer(&testutil.MockFactory{DurableExecutionService: service})
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
 	server := httptest.NewServer(srv.Handler())
 	defer server.Close()
 
@@ -266,7 +266,7 @@ func TestGetFactorySessionArtifact_RuntimeBackedMissingSessionReturnsNotFound(t 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404: %s", resp.StatusCode, readAPIDispatchBody(t, resp))
+		t.Fatalf("status = %d, want 404: %s", resp.StatusCode, readBody(t, resp))
 	}
 	var errResp factoryapi.ErrorResponse
 	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
@@ -278,7 +278,7 @@ func TestGetFactorySessionArtifact_RuntimeBackedMissingSessionReturnsNotFound(t 
 }
 
 func TestGetFactorySessionArtifact_LivePetriSessionReturnsNotFound(t *testing.T) {
-	srv := newAPIDispatchTestServer(&testutil.MockFactory{
+	srv := newAPITestServer(&testutil.MockFactory{
 		FactorySession: factoryapi.FactorySession{
 			Id:         "session-beta",
 			FactoryDir: "/workspace/root/beta",
@@ -295,6 +295,6 @@ func TestGetFactorySessionArtifact_LivePetriSessionReturnsNotFound(t *testing.T)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want 404: %s", resp.StatusCode, readAPIDispatchBody(t, resp))
+		t.Fatalf("status = %d, want 404: %s", resp.StatusCode, readBody(t, resp))
 	}
 }

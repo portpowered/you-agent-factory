@@ -111,6 +111,7 @@ type SessionAPISurface interface {
 	FactorySaveAPI
 	WorkAPI
 	InvocationAPI
+	DurableSessionExecutionAPI
 }
 
 // FactoryInvocationResult carries the runtime-owned outcome of one session
