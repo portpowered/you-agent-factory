@@ -11,7 +11,10 @@ workflow recovery lanes or reconciling same-trace task and review residue.
   tokens.
 - `tests/functional/guards_batch/executor_review_state_lane_classification.go`
   classifies live queue snapshots into mismatch causes and planner dispositions
-  without introducing new customer-facing vocabulary.
+  and evaluates bounded manual-repair preconditions for failed-post-processing lanes.
+- `tests/functional/guards_batch/executor_review_state_manual_repair_test.go`
+  proves allowed and blocked manual-repair shapes plus `task:failed` -> `task:init`
+  operator moves for the bounded repair path.
 - `tests/functional/guards_batch/executor_review_state_reconcile_test.go`
   proves duplicate `review:init` collapse through the review workstation after
   executor/review reconcile wiring; stale `task:init`/`task:failed` cleanup is
@@ -58,6 +61,60 @@ Worktree `progress.txt` files for the three lanes show completed implementation
 and verification, which is why the classifier sets `worktreeComplete=true` for
 live queue snapshots. The divergence is queue residue and duplicate review state,
 not missing worktree delivery.
+
+## Bounded Historical Manual Repair (Story 003)
+
+Use `you work move` only when `evaluateExecutorReviewManualRepairPreconditions`
+in `executor_review_state_lane_classification.go` returns true for the target
+lane's live queue evidence. The helper is proven in
+`executor_review_state_manual_repair_test.go`.
+
+### Preconditions (all must be true)
+
+1. Planner disposition is `safe_manual_repair` with mismatch cause
+   `failed_post_processing`.
+2. Worktree delivery for the lane is already complete (`worktreeComplete=true`
+   in the classifier).
+3. The authoritative trace (spawned trace when present, otherwise the recovery
+   trace) shows exactly one `task:failed` token and a `plan:complete` token.
+4. The authoritative trace has zero active `review:init` tokens (no duplicate
+   review shape on the trace being repaired).
+5. Recovery-trace `idea:to-complete` plus `plan:failed` rows on split-trace
+   lanes are `superseded_queue_noise` and must not be moved.
+
+### Allowed bounded move
+
+When all preconditions hold, move only the authoritative failed task back to
+`task:init` so the existing `process` workstation can re-enter the lane:
+
+```sh
+you work move --session '~default' <authoritative-task-work-id> init
+```
+
+Expected post-repair observable state:
+
+- The failed task token moves from `task:failed` to `task:init`.
+- No manual move touches recovery-trace idea or plan rows.
+- Other lanes continue through the normal `process` / `review` path without
+  bypassing review or deleting duplicate review tokens by hand.
+
+### Unsafe counterexamples (do not manual move)
+
+| Condition | Why manual move is unsafe |
+| --- | --- |
+| `duplicate_review_creation` / more than one active `review:init` on the authoritative trace | Story 002 `executorReviewReconcileMutations` owns duplicate collapse on process/review completion; manual deletion would bypass reconcile ownership. |
+| `worktreeComplete=false` | Work may still be in flight; moving failed tasks would skip real executor or review work. |
+| Recovery-trace `plan:failed` rows while spawned trace is authoritative | Those rows are superseded queue noise relative to the spawned trace outcome. |
+| Multiple `task:failed` tokens on the authoritative trace | Ambiguous ownership; classify further before any operator move. |
+| Lane disposition `needs_runtime_reconcile` | Runtime reconcile must run first; no manual shortcut replaces it. |
+
+### Per-lane manual-repair outcome
+
+| Lane | Manual move required? | Notes |
+| --- | --- | --- |
+| `dynamic-workflows-recovery-session-backend-runtime` | Yes, when live preconditions still hold | Move `work-task-24` from `failed` to `init` on recovery trace `trace-dynamic-workflows-session-backend-recovery-20260614`. |
+| `dynamic-workflows-recovery-mcp-install-plan-scope` | Yes, when live preconditions still hold | Move spawned `work-task-58` from `failed` to `init` on trace `trace-385de5ce7824a0a692250026d9388463`; ignore recovery-trace rows. |
+| `dynamic-workflows-recovery-setup-workspace-git-pull-hygiene` | **No** | Duplicate `review:init` on spawned trace `trace-e3bfbf2efbff251737c0df2a5433efb3` is owned by story 002 runtime reconcile; completing review (or a forward process output) collapses residue without `you work move`. |
 
 ## Follow-up ownership
 

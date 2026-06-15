@@ -244,3 +244,57 @@ func completedPlanOnTrace(items []queueWorkSnapshot) bool {
 	}
 	return false
 }
+
+// executorReviewManualRepairPreconditions records observable evidence required
+// before a bounded `you work move` repair is allowed for executor/review lanes
+// with failed-post-processing residue. This is not a generic completion shortcut:
+// it applies only when worktree delivery is already complete, the authoritative
+// trace still shows exactly one task:failed, and duplicate review:init defects
+// are absent so runtime reconcile—not manual token deletion—owns review cleanup.
+type executorReviewManualRepairPreconditions struct {
+	SafeManualRepairDisposition bool
+	FailedPostProcessingCause   bool
+	WorktreeComplete            bool
+	AuthoritativeFailedTaskOnly bool
+	AuthoritativePlanComplete   bool
+	NoDuplicateReviewInit       bool
+}
+
+func (p executorReviewManualRepairPreconditions) AllowsBoundedExecutorReviewManualRepair() bool {
+	return p.SafeManualRepairDisposition &&
+		p.FailedPostProcessingCause &&
+		p.WorktreeComplete &&
+		p.AuthoritativeFailedTaskOnly &&
+		p.AuthoritativePlanComplete &&
+		p.NoDuplicateReviewInit
+}
+
+func evaluateExecutorReviewManualRepairPreconditions(
+	classification executorReviewLaneClassification,
+	items []queueWorkSnapshot,
+) executorReviewManualRepairPreconditions {
+	authoritativeTrace := classification.SpawnedTraceID
+	if authoritativeTrace == "" {
+		authoritativeTrace = classification.RecoveryTraceID
+	}
+	traceItems := workItemsByTrace(items, authoritativeTrace)
+
+	return executorReviewManualRepairPreconditions{
+		SafeManualRepairDisposition: classification.PlannerDisposition == executorReviewDispositionSafeManualRepair,
+		FailedPostProcessingCause:   classification.MismatchCause == executorReviewCauseFailedPostProcessing,
+		WorktreeComplete:            classification.WorktreeComplete,
+		AuthoritativeFailedTaskOnly: failedTaskCountOnTrace(traceItems) == 1 && classification.TaskWorkID != "",
+		AuthoritativePlanComplete:   completedPlanOnTrace(traceItems),
+		NoDuplicateReviewInit:       activeReviewInitCount(traceItems) == 0,
+	}
+}
+
+func failedTaskCountOnTrace(items []queueWorkSnapshot) int {
+	count := 0
+	for _, item := range workItemsByType(items, "task") {
+		if item.StateName == "failed" {
+			count++
+		}
+	}
+	return count
+}
