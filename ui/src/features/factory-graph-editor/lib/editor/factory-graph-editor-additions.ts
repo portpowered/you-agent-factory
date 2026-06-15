@@ -24,7 +24,9 @@ import {
   type EditableWorkstationCronDraft,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
 import {
-  DEFAULT_WORKSTATION_TYPE,
+  DEFAULT_FACTORY_GRAPH_ADD_WORKSTATION_TYPE,
+} from "../../../current-factory-definition/public";
+import {
   type EditableWorkstationType,
 } from "../../../current-factory-definition/lib/workstation/workstation-type";
 import {
@@ -68,6 +70,7 @@ export type FactoryGraphAddEntityDraft =
       modelProvider: string;
       name: string;
       operations: FactoryGraphAddModelOperationDraft[];
+      provider: string;
       workerType: FactoryGraphAddWorkerType;
     }
   | {
@@ -102,6 +105,7 @@ export type FactoryGraphAddEntityFieldErrors = Partial<
     | "model"
     | "modelProvider"
     | "name"
+    | "provider"
     | "stateType"
     | "behavior"
     | "cronExpiryWindow"
@@ -153,6 +157,7 @@ export function createFactoryGraphAddEntityDraft(
       modelProvider: "",
       name: "",
       operations: [],
+      provider: "",
       workerType: DEFAULT_WORKER_TYPE as FactoryGraphAddWorkerType,
     };
   }
@@ -181,7 +186,7 @@ export function createFactoryGraphAddEntityDraft(
     kind,
     name: "",
     workerName: factoryDefinition?.workers?.[0]?.name ?? "",
-    workstationType: DEFAULT_WORKSTATION_TYPE,
+    workstationType: DEFAULT_FACTORY_GRAPH_ADD_WORKSTATION_TYPE,
   };
 }
 

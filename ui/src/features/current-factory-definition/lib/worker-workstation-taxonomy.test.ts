@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import { WorkerType, WorkstationType } from "../../../api/generated/openapi";
 import {
+  DEFAULT_FACTORY_GRAPH_ADD_WORKSTATION_TYPE,
   DEFAULT_WORKER_TYPE,
   DEFAULT_WORKSTATION_TYPE,
   EDITABLE_WORKER_TYPES,
   EDITABLE_WORKSTATION_TYPE_CONVERSION_OPTIONS,
+  FACTORY_GRAPH_ADD_WORKER_TYPES,
+  FACTORY_GRAPH_ADD_WORKSTATION_TYPES,
   isAgentRunWorkstationType,
   isInferenceRunWorkstationType,
   isInferenceWorkerType,
@@ -20,6 +23,17 @@ describe("worker-workstation taxonomy helpers", () => {
   it("prefers new taxonomy defaults for factory creation", () => {
     expect(DEFAULT_WORKER_TYPE).toBe(WorkerType.WorkerTypeInferenceWorker);
     expect(DEFAULT_WORKSTATION_TYPE).toBe(WorkstationType.WorkstationTypeAgentRun);
+    expect(DEFAULT_FACTORY_GRAPH_ADD_WORKSTATION_TYPE).toBe(
+      WorkstationType.WorkstationTypeInferenceRun,
+    );
+    expect(FACTORY_GRAPH_ADD_WORKER_TYPES).toEqual(EDITABLE_WORKER_TYPES);
+    expect(FACTORY_GRAPH_ADD_WORKSTATION_TYPES).toEqual([
+      WorkstationType.WorkstationTypeInferenceRun,
+      WorkstationType.WorkstationTypeAgentRun,
+      WorkstationType.WorkstationTypeScriptRun,
+      WorkstationType.WorkstationTypePollerRun,
+      WorkstationType.WorkstationTypeLogicalMove,
+    ]);
     expect(EDITABLE_WORKER_TYPES).toEqual([
       WorkerType.WorkerTypeInferenceWorker,
       WorkerType.WorkerTypeAgentWorker,

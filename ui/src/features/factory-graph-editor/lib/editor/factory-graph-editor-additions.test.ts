@@ -53,7 +53,7 @@ describe("factory graph editor additions", () => {
       cron: null,
       kind: "workstation",
       workerName: "writer",
-      workstationType: "AGENT_RUN",
+      workstationType: "INFERENCE_RUN",
     });
     expect(
       createFactoryGraphAddEntityDraft("work-state", baseFactoryDefinition),
@@ -72,6 +72,7 @@ describe("factory graph editor additions", () => {
       modelProvider: "",
       name: "",
       operations: [],
+      provider: "",
       workerType: "INFERENCE_WORKER",
     });
   });
@@ -87,6 +88,7 @@ describe("factory graph editor additions", () => {
           modelProvider: "CURSOR",
           name: "reviewer",
           operations: [],
+          provider: "",
           workerType: "INFERENCE_WORKER",
         },
         baseFactoryDefinition,
@@ -103,6 +105,7 @@ describe("factory graph editor additions", () => {
           modelProvider: "",
           name: "reviewer",
           operations: [],
+          provider: "",
           workerType: "INFERENCE_WORKER",
         },
         baseFactoryDefinition,
@@ -123,6 +126,7 @@ describe("factory graph editor additions", () => {
           modelProvider: "",
           name: "runner",
           operations: [],
+          provider: "",
           workerType: "SCRIPT_WORKER",
         },
         baseFactoryDefinition,
@@ -139,6 +143,7 @@ describe("factory graph editor additions", () => {
           modelProvider: "",
           name: "runner",
           operations: [],
+          provider: "",
           workerType: "SCRIPT_WORKER",
         },
         baseFactoryDefinition,
@@ -157,6 +162,7 @@ describe("factory graph editor additions", () => {
           modelProvider: "",
           name: "runner",
           operations: [],
+          provider: "",
           workerType: "SCRIPT_WORKER",
         },
         baseFactoryDefinition,
@@ -175,6 +181,7 @@ describe("factory graph editor additions", () => {
           modelProvider: "CURSOR",
           name: "runner",
           operations: [],
+          provider: "",
           workerType: "SCRIPT_WORKER",
         },
         baseFactoryDefinition,
@@ -193,6 +200,7 @@ describe("factory graph editor additions", () => {
           modelProvider: "CURSOR",
           name: "writer",
           operations: [minimalModelWorkerOperation],
+          provider: "",
           workerType: "INFERENCE_WORKER",
         },
         baseFactoryDefinition,
@@ -295,6 +303,7 @@ describe("factory graph editor additions", () => {
         modelProvider: "CURSOR",
         name: "reviewer",
         operations: [],
+        provider: "",
         workerType: "INFERENCE_WORKER",
       },
     );
@@ -316,6 +325,7 @@ describe("factory graph editor additions", () => {
         modelProvider: "CODEX",
         name: "writer",
         operations: [],
+        provider: "",
         workerType: "INFERENCE_WORKER",
       },
     );
@@ -329,6 +339,73 @@ describe("factory graph editor additions", () => {
     ]);
   });
 
+  it("persists agent workers and poller workers with their public taxonomy types", () => {
+    const agentDraft = applyFactoryGraphAddEntityDraft(
+      createEmptyFactoryGraphDraft(),
+      {
+        argsText: "",
+        command: "",
+        kind: "worker",
+        model: "",
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        operations: [],
+        provider: "",
+        workerType: "AGENT_WORKER",
+      },
+    );
+    expect(agentDraft.additions.workers).toEqual([
+      {
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        type: "AGENT_WORKER",
+      },
+    ]);
+
+    const pollerDraft = applyFactoryGraphAddEntityDraft(
+      createEmptyFactoryGraphDraft(),
+      {
+        argsText: "",
+        command: "",
+        kind: "worker",
+        model: "",
+        modelProvider: "",
+        name: "linear-poller",
+        operations: [],
+        provider: "LINEAR",
+        workerType: "POLLER_WORKER",
+      },
+    );
+    expect(pollerDraft.additions.workers).toEqual([
+      {
+        name: "linear-poller",
+        provider: "LINEAR",
+        type: "POLLER_WORKER",
+      },
+    ]);
+  });
+
+  it("rejects poller workers without a hosted provider", () => {
+    expect(
+      validateFactoryGraphAddEntityDraft(
+        {
+          argsText: "",
+          command: "",
+          kind: "worker",
+          model: "",
+          modelProvider: "",
+          name: "linear-poller",
+          operations: [],
+          provider: "",
+          workerType: "POLLER_WORKER",
+        },
+        baseFactoryDefinition,
+      ),
+    ).toEqual({
+      provider: "Select a hosted provider for the new poller worker.",
+    });
+  });
+
   it("persists script workers with command and parsed args", () => {
     const commandOnlyDraft = applyFactoryGraphAddEntityDraft(
       createEmptyFactoryGraphDraft(),
@@ -340,6 +417,7 @@ describe("factory graph editor additions", () => {
         modelProvider: "",
         name: "runner",
         operations: [],
+        provider: "",
         workerType: "SCRIPT_WORKER",
       },
     );
@@ -361,6 +439,7 @@ describe("factory graph editor additions", () => {
         modelProvider: "",
         name: "packager",
         operations: [],
+        provider: "",
         workerType: "SCRIPT_WORKER",
       },
     );

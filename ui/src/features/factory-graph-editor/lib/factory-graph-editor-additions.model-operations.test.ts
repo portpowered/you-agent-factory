@@ -50,6 +50,7 @@ describe("factory graph editor additions model operations", () => {
           modelProvider: "CURSOR",
           name: "tts-worker",
           operations: [],
+          provider: "",
           workerType: "INFERENCE_WORKER",
         },
         baseFactoryDefinition,
@@ -71,6 +72,7 @@ describe("factory graph editor additions model operations", () => {
           modelProvider: "CURSOR",
           name: "tts-worker",
           operations: [invalidOperation],
+          provider: "",
           workerType: "INFERENCE_WORKER",
         },
         baseFactoryDefinition,
@@ -110,7 +112,8 @@ describe("factory graph editor additions model operations", () => {
         modelProvider: "CURSOR",
         name: "tts-worker",
         operations: [operation],
-        workerType: "MODEL_WORKER",
+        provider: "",
+        workerType: "INFERENCE_WORKER",
       },
     );
 

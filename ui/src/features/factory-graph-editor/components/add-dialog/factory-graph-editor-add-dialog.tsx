@@ -7,10 +7,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../../components/ui";
-import { EDITABLE_MODEL_PROVIDERS } from "../../../current-factory-definition/lib/worker-editable-values";
+import {
+  EDITABLE_HOSTED_PROVIDERS,
+  EDITABLE_MODEL_PROVIDERS,
+} from "../../../current-factory-definition/lib/worker-editable-values";
 import {
   FACTORY_GRAPH_ADD_WORKER_TYPES,
   isModelProviderWorkerType,
+  isPollerWorkerType,
   isScriptWorkerType,
 } from "../../../current-factory-definition/public";
 import { getWorkerDetailMessages } from "../../../current-selection/worker-selection/messages/worker-detail";
@@ -198,6 +202,7 @@ function renderEntitySpecificFields({
     const workerMessages = getWorkerDetailMessages(locale);
     const isModelProviderWorker = isModelProviderWorkerType(draft.workerType);
     const isScriptWorker = isScriptWorkerType(draft.workerType);
+    const isPollerWorker = isPollerWorkerType(draft.workerType);
 
     return (
       <>
@@ -216,6 +221,20 @@ function renderEntitySpecificFields({
                 argsText: "",
                 command: "",
                 operations: [],
+                provider: "",
+                workerType,
+              });
+              return;
+            }
+
+            if (isPollerWorkerType(workerType)) {
+              onChange({
+                ...draft,
+                argsText: "",
+                command: "",
+                model: "",
+                modelProvider: "",
+                operations: [],
                 workerType,
               });
               return;
@@ -226,6 +245,7 @@ function renderEntitySpecificFields({
               model: "",
               modelProvider: "",
               operations: [],
+              provider: "",
               workerType,
             });
           }}
@@ -298,6 +318,27 @@ function renderEntitySpecificFields({
               value={draft.argsText}
             />
           </>
+        ) : null}
+        {isPollerWorker ? (
+          <FactoryGraphEditorSelectField
+            error={errors.provider}
+            inputId="factory-graph-add-hosted-provider"
+            label={workerMessages.providerFieldLabel}
+            onChange={(value) => {
+              onChange({ ...draft, provider: value });
+            }}
+            options={[
+              {
+                label: workerMessages.notConfiguredOptionLabel,
+                value: "",
+              },
+              ...EDITABLE_HOSTED_PROVIDERS.map((provider) => ({
+                label: provider,
+                value: provider,
+              })),
+            ]}
+            value={draft.provider}
+          />
         ) : null}
       </>
     );

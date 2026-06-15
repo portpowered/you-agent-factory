@@ -668,7 +668,7 @@ describe.sequential("factory graph editor node placement browser integration", (
             expect.objectContaining({
               body: "Review the drafted story.",
               name: "review",
-              type: "AGENT_RUN",
+              type: "INFERENCE_RUN",
             }),
           ]),
         );

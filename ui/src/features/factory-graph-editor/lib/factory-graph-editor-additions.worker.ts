@@ -1,7 +1,7 @@
 import { parseWorkerArgsText } from "../../current-factory-definition/lib/worker-editable-values";
 import {
-  DEFAULT_WORKER_TYPE,
   isModelProviderWorkerType,
+  isPollerWorkerType,
   isScriptWorkerType,
 } from "../../current-factory-definition/public";
 import {
@@ -23,11 +23,11 @@ export function validateFactoryGraphAddWorkerDraft(
   draft: Extract<FactoryGraphAddEntityDraft, { kind: "worker" }>,
 ): Pick<
   FactoryGraphAddEntityFieldErrors,
-  "args" | "command" | "modelOperations" | "modelProvider"
+  "args" | "command" | "modelOperations" | "modelProvider" | "provider"
 > {
   const errors: Pick<
     FactoryGraphAddEntityFieldErrors,
-    "args" | "command" | "modelOperations" | "modelProvider"
+    "args" | "command" | "modelOperations" | "modelProvider" | "provider"
   > = {};
 
   if (
@@ -42,6 +42,13 @@ export function validateFactoryGraphAddWorkerDraft(
     draft.command.trim().length === 0
   ) {
     errors.command = "Enter a command for the new script worker.";
+  }
+
+  if (
+    isPollerWorkerType(draft.workerType) &&
+    draft.provider.trim().length === 0
+  ) {
+    errors.provider = "Select a hosted provider for the new poller worker.";
   }
 
   if (isScriptWorkerType(draft.workerType) && draft.argsText.includes("\0")) {
@@ -75,6 +82,17 @@ export function applyFactoryGraphAddWorkerDraft(
     return nextDraft;
   }
 
+  if (isPollerWorkerType(entityDraft.workerType)) {
+    nextDraft.additions.workers.push({
+      name: entityDraft.name.trim(),
+      provider: entityDraft.provider.trim() as NonNullable<
+        CanonicalWorker["provider"]
+      >,
+      type: "POLLER_WORKER",
+    });
+    return nextDraft;
+  }
+
   const modelProvider = entityDraft.modelProvider.trim() as ModelProvider;
   const operations = buildCanonicalModelOperationsFromDraft(
     entityDraft.operations,
@@ -86,7 +104,7 @@ export function applyFactoryGraphAddWorkerDraft(
       : {}),
     ...(operations ? { operations } : {}),
     name: entityDraft.name.trim(),
-    type: DEFAULT_WORKER_TYPE,
+    type: entityDraft.workerType,
   });
   return nextDraft;
 }

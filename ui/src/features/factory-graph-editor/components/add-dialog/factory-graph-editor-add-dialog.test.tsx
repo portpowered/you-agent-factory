@@ -130,6 +130,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         modelProvider: "",
         name: "writer",
         operations: [],
+        provider: "",
         workerType: "INFERENCE_WORKER",
       },
       errors: {
@@ -159,6 +160,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       modelProvider: "CURSOR",
       name: "writer",
       operations: [],
+      provider: "",
       workerType: "INFERENCE_WORKER",
     });
     expect(workerChange).toHaveBeenNthCalledWith(2, {
@@ -169,6 +171,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       modelProvider: "",
       name: "writer",
       operations: [],
+      provider: "",
       workerType: "INFERENCE_WORKER",
     });
     expect(
@@ -191,6 +194,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         modelProvider: "CURSOR",
         name: "runner",
         operations: [],
+        provider: "",
         workerType: "INFERENCE_WORKER",
       },
       errors: {
@@ -209,6 +213,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       modelProvider: "",
       name: "runner",
       operations: [],
+      provider: "",
       workerType: "SCRIPT_WORKER",
     });
 
@@ -223,6 +228,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
           modelProvider: "",
           name: "runner",
           operations: [],
+          provider: "",
           workerType: "SCRIPT_WORKER",
         }}
         errors={{}}
@@ -255,6 +261,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       modelProvider: "",
       name: "runner",
       operations: [],
+      provider: "",
       workerType: "SCRIPT_WORKER",
     });
     expect(workerChange).toHaveBeenNthCalledWith(3, {
@@ -265,6 +272,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       modelProvider: "",
       name: "runner",
       operations: [],
+      provider: "",
       workerType: "SCRIPT_WORKER",
     });
 
@@ -278,6 +286,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
       modelProvider: "",
       name: "runner",
       operations: [],
+      provider: "",
       workerType: "INFERENCE_WORKER",
     });
   });
@@ -294,6 +303,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
         modelProvider: "CURSOR",
         name: "tts-worker",
         operations: [operation],
+        provider: "",
         workerType: "INFERENCE_WORKER",
       },
       errors: {
@@ -355,6 +365,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
           name: "TTS",
         },
       ],
+      provider: "",
       workerType: "INFERENCE_WORKER",
     });
     expect(workerChange).toHaveBeenNthCalledWith(2, {
@@ -375,6 +386,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
           ],
         },
       ],
+      provider: "",
       workerType: "INFERENCE_WORKER",
     });
     expect(workerChange).toHaveBeenNthCalledWith(3, {
@@ -397,8 +409,70 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
           ],
         },
       ],
+      provider: "",
       workerType: "INFERENCE_WORKER",
     });
+  });
+
+  it("exposes the full worker and workstation taxonomy in add creation controls", async () => {
+    const user = userEvent.setup();
+
+    renderDialog({
+      draft: {
+        argsText: "",
+        command: "",
+        kind: "worker",
+        model: "",
+        modelProvider: "",
+        name: "writer",
+        operations: [],
+        provider: "",
+        workerType: "INFERENCE_WORKER",
+      },
+    });
+
+    await user.click(screen.getByRole("combobox", { name: "Worker type" }));
+    const workerListbox = await screen.findByRole("listbox");
+    for (const label of [
+      "Inference worker",
+      "Agent worker",
+      "Script worker",
+      "Poller worker",
+    ]) {
+      expect(
+        within(workerListbox).getByRole("option", { name: label }),
+      ).toBeTruthy();
+    }
+
+    cleanup();
+    restoreBrowserShims?.();
+    restoreBrowserShims = installDashboardBrowserTestShims();
+
+    renderDialog({
+      draft: {
+        behavior: "STANDARD",
+        body: "",
+        cron: null,
+        kind: "workstation",
+        name: "review",
+        workerName: "writer",
+        workstationType: "INFERENCE_RUN",
+      },
+    });
+
+    await user.click(screen.getByRole("combobox", { name: "Workstation type" }));
+    const workstationListbox = await screen.findByRole("listbox");
+    for (const label of [
+      "Inference run",
+      "Agent run",
+      "Script run",
+      "Poller run",
+      "Logical move",
+    ]) {
+      expect(
+        within(workstationListbox).getByRole("option", { name: label }),
+      ).toBeTruthy();
+    }
   });
 
   it("renders work-type specific fields", () => {

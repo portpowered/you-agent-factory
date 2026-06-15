@@ -10,6 +10,10 @@ export const DEFAULT_WORKER_TYPE: ApiWorkerType =
 export const DEFAULT_WORKSTATION_TYPE: ApiWorkstationType =
   WorkstationType.WorkstationTypeAgentRun;
 
+/** Compatible with `DEFAULT_WORKER_TYPE` for graph add-workstation drafts. */
+export const DEFAULT_FACTORY_GRAPH_ADD_WORKSTATION_TYPE: ApiWorkstationType =
+  WorkstationType.WorkstationTypeInferenceRun;
+
 export const EDITABLE_WORKER_TYPES = [
   WorkerType.WorkerTypeInferenceWorker,
   WorkerType.WorkerTypeAgentWorker,
@@ -22,16 +26,16 @@ export const EDITABLE_WORKSTATION_TYPE_CONVERSION_OPTIONS = [
   WorkstationType.WorkstationTypeInferenceRun,
 ] as const satisfies readonly ApiWorkstationType[];
 
-export const FACTORY_GRAPH_ADD_WORKER_TYPES = [
-  WorkerType.WorkerTypeInferenceWorker,
-  WorkerType.WorkerTypeScriptWorker,
-] as const satisfies readonly ApiWorkerType[];
+export const FACTORY_GRAPH_ADD_WORKER_TYPES = EDITABLE_WORKER_TYPES;
 
 export type FactoryGraphAddWorkerType =
   (typeof FACTORY_GRAPH_ADD_WORKER_TYPES)[number];
 
 export const FACTORY_GRAPH_ADD_WORKSTATION_TYPES = [
+  WorkstationType.WorkstationTypeInferenceRun,
   WorkstationType.WorkstationTypeAgentRun,
+  WorkstationType.WorkstationTypeScriptRun,
+  WorkstationType.WorkstationTypePollerRun,
   WorkstationType.WorkstationTypeLogicalMove,
 ] as const satisfies readonly ApiWorkstationType[];
 
