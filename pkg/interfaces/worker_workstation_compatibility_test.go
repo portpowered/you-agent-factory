@@ -17,20 +17,22 @@ func TestCompatibleWorkerWorkstationBehavior(t *testing.T) {
 	}
 }
 
-func compatibleWorkerWorkstationBehaviorCases() []struct {
+type workerWorkstationBehaviorCase struct {
 	name            string
 	workerType      string
 	workstationType string
 	kind            WorkstationKind
 	wantCompatible  bool
-} {
-	return []struct {
-		name            string
-		workerType      string
-		workstationType string
-		kind            WorkstationKind
-		wantCompatible  bool
-	}{
+}
+
+func compatibleWorkerWorkstationBehaviorCases() []workerWorkstationBehaviorCase {
+	cases := compatibleWorkerWorkstationBehaviorCompatibleCases()
+	cases = append(cases, compatibleWorkerWorkstationBehaviorMismatchCases()...)
+	return cases
+}
+
+func compatibleWorkerWorkstationBehaviorCompatibleCases() []workerWorkstationBehaviorCase {
+	return []workerWorkstationBehaviorCase{
 		{
 			name:            "inference run with inference worker",
 			workerType:      WorkerTypeInference,
@@ -88,6 +90,25 @@ func compatibleWorkerWorkstationBehaviorCases() []struct {
 			wantCompatible:  true,
 		},
 		{
+			name:            "legacy default workstation with inference worker",
+			workerType:      WorkerTypeInference,
+			workstationType: "",
+			kind:            WorkstationKindStandard,
+			wantCompatible:  true,
+		},
+		{
+			name:            "legacy default workstation with script worker",
+			workerType:      WorkerTypeScript,
+			workstationType: "",
+			kind:            WorkstationKindStandard,
+			wantCompatible:  true,
+		},
+	}
+}
+
+func compatibleWorkerWorkstationBehaviorMismatchCases() []workerWorkstationBehaviorCase {
+	return []workerWorkstationBehaviorCase{
+		{
 			name:            "agent run with inference worker",
 			workerType:      WorkerTypeInference,
 			workstationType: WorkstationTypeAgent,
@@ -104,20 +125,6 @@ func compatibleWorkerWorkstationBehaviorCases() []struct {
 			workerType:      WorkerTypeInference,
 			workstationType: WorkstationTypePoller,
 			wantCompatible:  false,
-		},
-		{
-			name:            "legacy default workstation with inference worker",
-			workerType:      WorkerTypeInference,
-			workstationType: "",
-			kind:            WorkstationKindStandard,
-			wantCompatible:  true,
-		},
-		{
-			name:            "legacy default workstation with script worker",
-			workerType:      WorkerTypeScript,
-			workstationType: "",
-			kind:            WorkstationKindStandard,
-			wantCompatible:  true,
 		},
 	}
 }
