@@ -29,6 +29,23 @@ func TestPublicWorkerTypeForFactoryUsage(t *testing.T) {
 	if got := interfaces.PublicWorkerTypeForFactoryUsage(inferenceWorker, inferenceWorkstations); got != interfaces.WorkerTypeInference {
 		t.Fatalf("inference factory usage = %q, want %q", got, interfaces.WorkerTypeInference)
 	}
+
+	mixedWorker := interfaces.WorkerConfig{Name: "executor", Type: interfaces.WorkerTypeModel}
+	mixedWorkstations := []interfaces.FactoryWorkstationConfig{
+		{
+			Name:           "execute-story",
+			Type:           interfaces.WorkstationTypeModel,
+			WorkerTypeName: "executor",
+		},
+		{
+			Name:           "invoke-story",
+			Type:           interfaces.WorkstationTypeInvoke,
+			WorkerTypeName: "executor",
+		},
+	}
+	if got := interfaces.PublicWorkerTypeForFactoryUsage(mixedWorker, mixedWorkstations); got != interfaces.WorkerTypeModel {
+		t.Fatalf("mixed legacy factory usage = %q, want %q", got, interfaces.WorkerTypeModel)
+	}
 }
 
 type workerWorkstationBehaviorCase struct {

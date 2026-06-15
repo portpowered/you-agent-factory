@@ -164,6 +164,51 @@ func TestValidateFactoryAPI_WorkerWorkstationCompatibilityRoundTrip(t *testing.T
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkerWorkstationIncompatibleBehavior)
 }
 
+func TestValidateFactoryAPI_PreservesMixedLegacyModelWorkerAcrossAgentAndInferenceWorkstations(t *testing.T) {
+	t.Parallel()
+
+	generated, err := config.GeneratedFactoryFromOpenAPIJSON([]byte(`{
+		"name":"mixed-legacy-model-worker",
+		"workTypes":[{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers":[{"name":"executor","type":"MODEL_WORKER","model":"claude-sonnet","modelProvider":"CLAUDE"}],
+		"workstations":[
+			{"name":"execute-story","type":"MODEL_WORKSTATION","worker":"executor","inputs":[{"workType":"story","state":"init"}],"outputs":[{"workType":"story","state":"complete"}],"onFailure":[{"workType":"story","state":"failed"}]},
+			{"name":"invoke-story","type":"MODEL_INVOKE","worker":"executor","inputs":[{"workType":"story","state":"init"}],"outputs":[{"workType":"story","state":"complete"}],"onFailure":[{"workType":"story","state":"failed"}]}
+		]
+	}`))
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+	if generated.Workers == nil || len(*generated.Workers) != 1 {
+		t.Fatalf("generated workers = %#v, want one worker", generated.Workers)
+	}
+	worker := (*generated.Workers)[0]
+	if worker.Type == nil || string(*worker.Type) != interfaces.WorkerTypeModel {
+		t.Fatalf("generated worker type = %#v, want %s", worker.Type, interfaces.WorkerTypeModel)
+	}
+
+	result, err := validationentry.ValidateFactoryAPI(t.Context(), generated, factoryvalidation.Options{})
+	if err != nil {
+		t.Fatalf("ValidateFactoryAPI: %v", err)
+	}
+	for _, target := range result.Targets {
+		if target.Code == factoryvalidation.CodeWorkerWorkstationIncompatibleBehavior {
+			t.Fatalf("unexpected incompatible behavior target: %#v", target)
+		}
+	}
+
+	runtimeCfg, err := config.FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+	structuralResult := factoryvalidation.Validate(&runtimeCfg)
+	for _, target := range structuralResult.Targets {
+		if target.Code == factoryvalidation.CodeWorkerWorkstationIncompatibleBehavior {
+			t.Fatalf("unexpected structural incompatible behavior target: %#v", target)
+		}
+	}
+}
+
 func findTargetByCode(t *testing.T, targets []factoryvalidation.Target, code string) factoryvalidation.Target {
 	t.Helper()
 	for _, target := range targets {

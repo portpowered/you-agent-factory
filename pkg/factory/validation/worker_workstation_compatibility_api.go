@@ -183,6 +183,12 @@ func workerMatchesWorkstationPublicAPI(workerType string, workstation factoryapi
 		(workerType == string(factoryapi.WorkerTypeModelWorker) || workerType == string(factoryapi.WorkerTypeInferenceWorker)) {
 		return true
 	}
+	if workerType == string(factoryapi.WorkerTypeModelWorker) {
+		switch workstationType {
+		case string(factoryapi.WorkstationTypeAgentRun), string(factoryapi.WorkstationTypeInferenceRun):
+			return true
+		}
+	}
 
 	return interfaces.WorkerMatchesWorkstationBehavior(workerType, cfg)
 }

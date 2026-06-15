@@ -119,20 +119,36 @@ func PublicWorkerTypeForFactoryUsage(worker WorkerConfig, workstations []Factory
 	if len(usageClasses) == 0 {
 		return PublicWorkerTypeFromInternalRuntime(worker.Type)
 	}
-	if containsWorkerWorkstationBehaviorClass(usageClasses, WorkerWorkstationBehaviorInference) {
-		return WorkerTypeInference
+
+	publicTypes := make(map[string]struct{}, len(usageClasses))
+	for _, class := range usageClasses {
+		publicTypes[publicWorkerTypeForBehaviorClass(class)] = struct{}{}
 	}
-	if containsWorkerWorkstationBehaviorClass(usageClasses, WorkerWorkstationBehaviorPoller) {
-		return WorkerTypePoller
+	if len(publicTypes) > 1 {
+		// Legacy MODEL_WORKER factories may share one worker across agent and
+		// inference workstations; preserve the alias instead of projecting to a
+		// single taxonomy name that would invalidate the other pairing.
+		return WorkerTypeModel
 	}
-	if containsWorkerWorkstationBehaviorClass(usageClasses, WorkerWorkstationBehaviorScript) &&
-		!containsWorkerWorkstationBehaviorClass(usageClasses, WorkerWorkstationBehaviorAgent) {
-		return WorkerTypeScript
-	}
-	if containsWorkerWorkstationBehaviorClass(usageClasses, WorkerWorkstationBehaviorAgent) {
-		return WorkerTypeAgent
+	for publicType := range publicTypes {
+		return publicType
 	}
 	return PublicWorkerTypeFromInternalRuntime(worker.Type)
+}
+
+func publicWorkerTypeForBehaviorClass(class WorkerWorkstationBehaviorClass) string {
+	switch class {
+	case WorkerWorkstationBehaviorInference:
+		return WorkerTypeInference
+	case WorkerWorkstationBehaviorPoller:
+		return WorkerTypePoller
+	case WorkerWorkstationBehaviorScript:
+		return WorkerTypeScript
+	case WorkerWorkstationBehaviorAgent:
+		return WorkerTypeAgent
+	default:
+		return WorkerTypeModel
+	}
 }
 
 func modelWorkerUsageBehaviorClasses(workerName string, workstations []FactoryWorkstationConfig) []WorkerWorkstationBehaviorClass {
@@ -163,17 +179,6 @@ func modelWorkerUsageBehaviorClasses(workerName string, workstations []FactoryWo
 	return classes
 }
 
-func containsWorkerWorkstationBehaviorClass(classes []WorkerWorkstationBehaviorClass, target WorkerWorkstationBehaviorClass) bool {
-	for _, class := range classes {
-		if class == target {
-			return true
-		}
-	}
-	return false
-}
-
-// DisplayWorkstationTypeForCompatibility returns the workstation type label to
-// use in validation messages, preserving legacy authored values.
 func DisplayWorkstationTypeForCompatibility(workstation FactoryWorkstationConfig) string {
 	if trimmed := strings.TrimSpace(workstation.Type); trimmed != "" {
 		return trimmed

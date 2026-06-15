@@ -140,6 +140,53 @@ func TestMarshalCanonicalFactoryConfig_PrefersNewWorkerTaxonomyOnRoundTrip(t *te
 	}
 }
 
+func TestGeneratedFactoryFromOpenAPIJSON_PreservesMixedLegacyModelWorkerOnSaveRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	cfgJSON := []byte(`{
+		"name":"mixed-legacy-model-worker",
+		"workTypes":[{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers":[{"name":"executor","type":"MODEL_WORKER","model":"claude-sonnet","modelProvider":"CLAUDE"}],
+		"workstations":[
+			{"name":"execute-story","type":"MODEL_WORKSTATION","worker":"executor","inputs":[{"workType":"story","state":"init"}],"outputs":[{"workType":"story","state":"complete"}],"onFailure":[{"workType":"story","state":"failed"}]},
+			{"name":"invoke-story","type":"MODEL_INVOKE","worker":"executor","inputs":[{"workType":"story","state":"init"}],"outputs":[{"workType":"story","state":"complete"}],"onFailure":[{"workType":"story","state":"failed"}]}
+		]
+	}`)
+
+	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+	if generated.Workers == nil || len(*generated.Workers) != 1 {
+		t.Fatalf("generated workers = %#v, want one worker", generated.Workers)
+	}
+	worker := (*generated.Workers)[0]
+	if worker.Type == nil || string(*worker.Type) != interfaces.WorkerTypeModel {
+		t.Fatalf("generated worker type = %#v, want %s", worker.Type, interfaces.WorkerTypeModel)
+	}
+
+	runtimeCfg, err := FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+	canonical, err := MarshalCanonicalFactoryConfig(&runtimeCfg)
+	if err != nil {
+		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
+	}
+	if !strings.Contains(string(canonical), `"type":"MODEL_WORKER"`) {
+		t.Fatalf("canonical save output downgraded mixed legacy worker, got %s", string(canonical))
+	}
+
+	regenerated, err := GeneratedFactoryFromOpenAPIJSON(canonical)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON round trip: %v", err)
+	}
+	regeneratedWorker := (*regenerated.Workers)[0]
+	if regeneratedWorker.Type == nil || string(*regeneratedWorker.Type) != interfaces.WorkerTypeModel {
+		t.Fatalf("round-tripped worker type = %#v, want %s", regeneratedWorker.Type, interfaces.WorkerTypeModel)
+	}
+}
+
 func workerTaxonomyFactoryJSON(workerType, workstationType string) []byte {
 	workstation := map[string]any{
 		"name":   "execute-story",
