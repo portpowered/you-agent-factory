@@ -10,6 +10,88 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+func TestFactoryEventHistory_RecordDispatchQueued_EmitsModelProviderFromCanonicalProvider(t *testing.T) {
+	t0 := time.Date(2026, 6, 15, 6, 0, 0, 0, time.UTC)
+	history := NewFactoryEventHistory(nil, func() time.Time { return t0 })
+	kind := factoryapi.JAVASCRIPT
+
+	history.RecordDispatchQueued(DispatchQueuedInput{
+		SessionID:        "session-claude",
+		OrchestratorKind: kind,
+		DispatchID:       "dispatch-claude-1",
+		Source:           "runtime",
+		Tick:             1,
+		DispatchKind:     factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
+		ModelProvider:    string(interfaces.ModelProviderClaude),
+	}, t0)
+
+	events := history.Events()
+	if len(events) != 1 {
+		t.Fatalf("events = %d, want 1 queued dispatch", len(events))
+	}
+	payload, err := events[0].Payload.AsDispatchQueuedEventPayload()
+	if err != nil {
+		t.Fatalf("dispatch queued payload: %v", err)
+	}
+	if payload.ModelProvider == nil || *payload.ModelProvider != factoryapi.WorkerModelProviderClaude {
+		t.Fatalf("modelProvider = %#v, want CLAUDE", payload.ModelProvider)
+	}
+}
+
+func TestFactoryEventHistory_RecordDispatchQueued_EmitsModelProviderFromLegacyRunnerID(t *testing.T) {
+	t0 := time.Date(2026, 6, 15, 6, 1, 0, 0, time.UTC)
+	history := NewFactoryEventHistory(nil, func() time.Time { return t0 })
+	kind := factoryapi.JAVASCRIPT
+
+	history.RecordDispatchQueued(DispatchQueuedInput{
+		SessionID:        "session-cursor",
+		OrchestratorKind: kind,
+		DispatchID:       "dispatch-cursor-1",
+		Source:           "runtime",
+		Tick:             1,
+		DispatchKind:     factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
+		RunnerID:         interfaces.RunnerIDCursorCLI,
+	}, t0)
+
+	events := history.Events()
+	if len(events) != 1 {
+		t.Fatalf("events = %d, want 1 queued dispatch", len(events))
+	}
+	payload, err := events[0].Payload.AsDispatchQueuedEventPayload()
+	if err != nil {
+		t.Fatalf("dispatch queued payload: %v", err)
+	}
+	if payload.ModelProvider == nil || *payload.ModelProvider != factoryapi.WorkerModelProviderCursor {
+		t.Fatalf("modelProvider = %#v, want CURSOR", payload.ModelProvider)
+	}
+}
+
+func TestFactoryEventHistory_RecordDispatchQueued_PrefersCanonicalProviderOverLegacyRunnerID(t *testing.T) {
+	t0 := time.Date(2026, 6, 15, 6, 2, 0, 0, time.UTC)
+	history := NewFactoryEventHistory(nil, func() time.Time { return t0 })
+	kind := factoryapi.JAVASCRIPT
+
+	history.RecordDispatchQueued(DispatchQueuedInput{
+		SessionID:        "session-prefer-provider",
+		OrchestratorKind: kind,
+		DispatchID:       "dispatch-prefer-provider-1",
+		Source:           "runtime",
+		Tick:             1,
+		DispatchKind:     factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
+		ModelProvider:    string(interfaces.ModelProviderClaude),
+		RunnerID:         interfaces.RunnerIDCursorCLI,
+	}, t0)
+
+	events := history.Events()
+	payload, err := events[0].Payload.AsDispatchQueuedEventPayload()
+	if err != nil {
+		t.Fatalf("dispatch queued payload: %v", err)
+	}
+	if payload.ModelProvider == nil || *payload.ModelProvider != factoryapi.WorkerModelProviderClaude {
+		t.Fatalf("modelProvider = %#v, want canonical CLAUDE over legacy runner", payload.ModelProvider)
+	}
+}
+
 func TestFactoryEventHistory_RecordDispatchLifecycle_EmitsReconstructableQueueInterruptReconcileAndArtifactSequence(t *testing.T) {
 	t0 := time.Date(2026, 6, 9, 14, 0, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(nil, func() time.Time { return t0 })
@@ -58,7 +140,7 @@ func recordDispatchLifecycleSequence(
 		Tick:             2,
 		DispatchKind:     factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
 		Label:            "summarize findings",
-		RunnerID:         "cursor",
+		RunnerID:         interfaces.RunnerIDCursorCLI,
 		Model:            "gpt-4.1",
 		Provider:         "openai",
 		QueuePosition:    &queuePosition,

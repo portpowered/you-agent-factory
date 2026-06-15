@@ -30,6 +30,7 @@ type DispatchQueuedInput struct {
 	DispatchKind        factoryapi.FactoryDispatchKind
 	Label               string
 	CoordinationRef     string
+	ModelProvider       string
 	RunnerID            string
 	Model               string
 	Provider            string
@@ -121,7 +122,7 @@ func (h *FactoryEventHistory) RecordDispatchQueued(input DispatchQueuedInput, ev
 	if coordinationRef := strings.TrimSpace(input.CoordinationRef); coordinationRef != "" {
 		payload.CoordinationRef = &coordinationRef
 	}
-	if modelProvider := interfaces.GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProviderPtr(input.RunnerID); modelProvider != nil {
+	if modelProvider := dispatchQueuedEventModelProvider(input); modelProvider != nil {
 		payload.ModelProvider = modelProvider
 	}
 	if model := strings.TrimSpace(input.Model); model != "" {
@@ -307,6 +308,13 @@ func (h *FactoryEventHistory) dispatchLifecycleContext(
 		context.DispatchId = &dispatchID
 	}
 	return context
+}
+
+func dispatchQueuedEventModelProvider(input DispatchQueuedInput) *factoryapi.WorkerModelProvider {
+	if provider := strings.TrimSpace(input.ModelProvider); provider != "" {
+		return interfaces.GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProviderPtr(provider)
+	}
+	return interfaces.GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProviderPtr(input.RunnerID)
 }
 
 func canonicalDispatchLifecycleEventTime(eventTime time.Time) time.Time {
