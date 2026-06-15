@@ -249,14 +249,6 @@ func (s *Server) RetryFactorySessionDispatch(w http.ResponseWriter, r *http.Requ
 	s.writeError(w, http.StatusNotImplemented, "durable factory session retry-dispatch is not implemented", "INTERNAL_ERROR")
 }
 
-func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request) {
-	s.writeError(w, http.StatusNotImplemented, "durable factory session execution is not implemented", "INTERNAL_ERROR")
-}
-
-func (s *Server) StartDurableFactorySessionSync(w http.ResponseWriter, r *http.Request) {
-	s.writeError(w, http.StatusNotImplemented, "durable factory session execution is not implemented", "INTERNAL_ERROR")
-}
-
 func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {

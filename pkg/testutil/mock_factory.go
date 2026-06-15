@@ -8,11 +8,13 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/engine"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
@@ -71,6 +73,7 @@ type MockFactory struct {
 	CloseFactorySessionErr      error
 	MoveWorkErr                 error
 	AppliedOperatorMoveRequests map[string]interfaces.OperatorMoveResult
+	DurableExecutionService     factorysessionexecution.Service
 }
 
 var _ factory.APIFactory = (*MockFactory)(nil)
@@ -82,6 +85,53 @@ var _ apisurface.WorkAPI = (*MockFactory)(nil)
 var _ apisurface.InvocationAPI = (*MockFactory)(nil)
 var _ apisurface.APISurface = (*MockFactory)(nil)
 var _ apisurface.SessionAPISurface = (*MockFactory)(nil)
+
+var _ apisurface.DurableSessionExecutionAPI = (*MockFactory)(nil)
+
+func (m *MockFactory) StartDurableFactorySessionAsync(
+	ctx context.Context,
+	request factoryapi.FactorySessionExecutionRequest,
+) (factoryapi.FactorySessionExecutionResponse, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionExecutionResponse{}, err
+	}
+	startReq, err := factorysession.StartRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionExecutionResponse{}, err
+	}
+	result, err := service.StartAsync(ctx, startReq)
+	if err != nil {
+		return factoryapi.FactorySessionExecutionResponse{}, err
+	}
+	return factorysession.AsyncStartResponseToAPI(result), nil
+}
+
+func (m *MockFactory) StartDurableFactorySessionSync(
+	ctx context.Context,
+	request factoryapi.FactorySessionExecutionRequest,
+) (factoryapi.FactorySessionSyncExecutionResponse, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionSyncExecutionResponse{}, err
+	}
+	startReq, err := factorysession.StartRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionSyncExecutionResponse{}, err
+	}
+	result, err := service.StartSync(ctx, startReq)
+	if err != nil {
+		return factoryapi.FactorySessionSyncExecutionResponse{}, err
+	}
+	return factorysession.SyncStartResponseToAPI(result), nil
+}
+
+func (m *MockFactory) requireDurableExecutionService() (factorysessionexecution.Service, error) {
+	if m == nil || m.DurableExecutionService == nil {
+		return nil, errors.New("durable execution service is unavailable")
+	}
+	return m.DurableExecutionService, nil
+}
 
 func (m *MockFactory) Run(_ context.Context) error   { return nil }
 func (m *MockFactory) Pause(_ context.Context) error { return nil }
