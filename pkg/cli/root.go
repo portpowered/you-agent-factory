@@ -123,7 +123,7 @@ func NewRootCommand() *cobra.Command {
 		newDocsCommand(diagnostics),
 		newFactoryCommand(globals, diagnostics),
 		newInitCommand(globals, diagnostics),
-		mcpcli.NewCommand(),
+		newMCPCommand(),
 		newModelsCommand(globals, diagnostics),
 		newRunCommand(globals, diagnostics, operatorDefaults),
 		newSubmitCommand(globals, diagnostics),
@@ -477,6 +477,10 @@ func newModelsPullCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostics
 	}
 	registerDeprecatedPortFlag(cmd)
 	return cmd
+}
+
+func newMCPCommand() *cobra.Command {
+	return mcpcli.NewCommand()
 }
 
 func newDocsCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {

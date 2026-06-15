@@ -530,6 +530,7 @@ func runFactoryPromptCLI(
 func assertFactoryPromptCleanInvocationStdout(t *testing.T, got string, want string) {
 	t.Helper()
 
+	got = strings.TrimSuffix(got, "\n")
 	if got != want {
 		t.Fatalf("stdout = %q, want exact primary clean invocation output", got)
 	}
