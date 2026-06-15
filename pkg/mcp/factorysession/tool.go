@@ -8,6 +8,7 @@ import "encoding/json"
 const (
 	ToolListSessions   = "you.factory_session.list"
 	ToolValidateSource = "you.factory_session.validate_source"
+	ToolStartPreview   = "you.factory_session.start_preview"
 	ToolStartSync      = "you.factory_session.start_sync"
 	ToolStartAsync     = "you.factory_session.start_async"
 	ToolGetSession     = "you.factory_session.get"

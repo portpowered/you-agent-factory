@@ -122,6 +122,7 @@ func NewRootCommand() *cobra.Command {
 		newDocsCommand(diagnostics),
 		newFactoryCommand(globals, diagnostics),
 		newInitCommand(globals, diagnostics),
+		newMCPCommand(diagnostics),
 		newModelsCommand(globals, diagnostics),
 		newRunCommand(globals, diagnostics, operatorDefaults),
 		newSubmitCommand(globals, diagnostics),
