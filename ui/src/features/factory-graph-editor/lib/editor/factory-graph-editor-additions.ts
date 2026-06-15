@@ -26,9 +26,7 @@ import {
 import {
   DEFAULT_FACTORY_GRAPH_ADD_WORKSTATION_TYPE,
 } from "../../../current-factory-definition/public";
-import {
-  type EditableWorkstationType,
-} from "../../../current-factory-definition/lib/workstation/workstation-type";
+import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation/workstation-type";
 import {
   DEFAULT_WORKER_TYPE,
   type FactoryGraphAddWorkerType,
