@@ -18,8 +18,8 @@ func TestJavaScriptRuntimeService_StartAsync_IdempotentReplay(t *testing.T) {
 	service := newJavaScriptRuntimeService(t)
 	req := inlineWorkflowStartRequest(
 		"req-runtime-async-idempotent-001",
-		simpleFinalWorkflowSource,
-		map[string]any{"subject": "workflows", "count": 1, "prefix": "you"},
+		busyLoopWorkflowSource,
+		nil,
 		nil,
 	)
 
