@@ -12,13 +12,4 @@ pkg/factorysessionexecution/prepare_start.go: unreachable func: validateStartWai
 pkg/factorysessionexecution/prepare_start.go: unreachable func: validationErrorFromPolicyIssues
 pkg/factorysessionexecution/prepare_start.go: unreachable func: validationErrorFromSourceIssues
 pkg/factorysessionexecution/prepare_start.go: unreachable func: wrapWorkflowSourceForValidation
-pkg/factorysessionexecution/projection_consistency.go: unreachable func: ProjectRuntimeExecutionRecords
-pkg/factorysessionexecution/projection_consistency.go: unreachable func: artifactIDFromRef
-pkg/factorysessionexecution/projection_consistency.go: unreachable func: artifactRetrievalRefForSession
-pkg/factorysessionexecution/projection_consistency.go: unreachable func: artifactSummaryFromRuntimeRecord
-pkg/factorysessionexecution/projection_consistency.go: unreachable func: childArtifactFromDispatch
-pkg/factorysessionexecution/projection_consistency.go: unreachable func: dispatchSummaryFromChildRecord
-pkg/factorysessionexecution/projection_consistency.go: unreachable func: indexOfString
-pkg/factorysessionexecution/projection_consistency.go: unreachable func: orderedArtifactSummaries
-pkg/factorysessionexecution/projection_consistency.go: unreachable func: progressCountsFromDispatches
 pkg/interfaces/factory_config.go: unreachable func: PermissivePublicFactoryOrchestratorKind
