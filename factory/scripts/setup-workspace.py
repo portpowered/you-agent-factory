@@ -130,7 +130,11 @@ def sync_main(repo_root):
     Returns a human-readable outcome string for logging.
     """
     if not has_origin_remote(repo_root):
-        return "skipped (no origin remote)"
+        if local_main_ref_exists(repo_root):
+            return "skipped (no origin remote)"
+        raise RuntimeError(
+            "no origin remote and refs/heads/main is missing"
+        )
 
     fetch_result = run_git("fetch", "origin", cwd=repo_root, check=False)
     fetch_succeeded = fetch_result.returncode == 0

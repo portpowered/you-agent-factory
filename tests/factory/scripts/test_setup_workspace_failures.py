@@ -114,6 +114,35 @@ class SetupWorkspaceFailureTest(unittest.TestCase):
         self.assertNotIn("Worktree preparation failed", stderr)
         self.assertNotIn("PRD copy failed", stderr)
 
+    def test_reports_root_sync_failure_when_no_origin_and_local_main_missing(self):
+        init_local_repo(self.repo_path)
+        subprocess.run(
+            ["git", "checkout", "-b", "feature-branch"],
+            cwd=self.repo_path,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "update-ref", "-d", "refs/heads/main"],
+            cwd=self.repo_path,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "remote", "remove", "origin"],
+            cwd=self.repo_path,
+            check=False,
+        )
+
+        prd_name = "no-origin-missing-main-prd"
+        write_prd(self.repo_path, prd_name)
+
+        result = run_setup_workspace(self.repo_path, prd_name)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("Root sync failed:", result.stderr)
+        self.assertIn("no origin remote", result.stderr.lower())
+        self.assertIn("refs/heads/main is missing", result.stderr)
+        self.assertNotIn("Worktree preparation failed", result.stderr)
+        self.assertNotIn("PRD copy failed", result.stderr)
+
     def test_reports_root_sync_failure_when_fetch_fails_without_local_main(self):
         bare_remote = self.repo_path / "remote.git"
         bare_remote.mkdir()
