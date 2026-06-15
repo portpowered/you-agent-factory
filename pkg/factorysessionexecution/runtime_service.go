@@ -285,11 +285,11 @@ func (s *RuntimeService) GetSession(ctx context.Context, sessionID string) (Sess
 }
 
 func (s *RuntimeService) Pause(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
-	return s.unsupportedLifecycleControl(ctx, sessionID, LifecycleControlPause)
+	return s.applyRuntimeLifecycleControl(ctx, sessionID, LifecycleControlPause, req)
 }
 
 func (s *RuntimeService) Resume(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
-	return s.unsupportedLifecycleControl(ctx, sessionID, LifecycleControlResume)
+	return s.applyRuntimeLifecycleControl(ctx, sessionID, LifecycleControlResume, req)
 }
 
 func (s *RuntimeService) Cancel(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
@@ -843,10 +843,30 @@ func (s *RuntimeService) applyRuntimeLifecycleControl(
 	}
 
 	if outcome == LifecycleControlOutcomeAccepted {
+		interruptRuntime := false
 		switch operation {
+		case LifecycleControlPause:
+			if state.session.Status == LifecycleStatusRunning || state.session.Status == LifecycleStatusResuming {
+				pausedAt := s.now().UTC()
+				state.session.Status = LifecycleStatusPaused
+				state.result.SessionStatus = LifecycleStatusPaused
+				if state.session.Lifecycle != nil {
+					state.session.Lifecycle.PausedAt = &pausedAt
+				}
+			}
+		case LifecycleControlResume:
+			if state.session.Status == LifecycleStatusPaused {
+				resumedAt := s.now().UTC()
+				state.session.Status = LifecycleStatusRunning
+				state.result.SessionStatus = LifecycleStatusRunning
+				if state.session.Lifecycle != nil {
+					state.session.Lifecycle.ResumedAt = &resumedAt
+				}
+			}
 		case LifecycleControlCancel:
 			state.session.Status = LifecycleStatusCanceling
 			state.result.SessionStatus = LifecycleStatusCanceling
+			interruptRuntime = true
 		case LifecycleControlTerminate:
 			finishedAt := s.now().UTC()
 			state.session.Status = LifecycleStatusTerminated
@@ -860,8 +880,9 @@ func (s *RuntimeService) applyRuntimeLifecycleControl(
 			state.session.ResultSummary = &ResultSummary{
 				ResultStatus: string(ResultStatusUnavailable),
 			}
+			interruptRuntime = true
 		}
-		if state.runCancel != nil {
+		if interruptRuntime && state.runCancel != nil {
 			state.runCancel()
 		}
 		state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)

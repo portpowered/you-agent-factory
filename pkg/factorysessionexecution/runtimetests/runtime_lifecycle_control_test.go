@@ -109,3 +109,96 @@ func TestRuntimeService_CancelMissingSessionReturnsNotFound(t *testing.T) {
 		t.Fatalf("cancel missing = %v, want ErrSessionNotFound", err)
 	}
 }
+
+func TestRuntimeService_PauseRunningSessionReturnsPaused(t *testing.T) {
+	_, service := newRuntimeServiceWithFixture(t, "busy-loop.workflow.js", "busy-loop")
+
+	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-runtime-pause-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "busy-loop",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	paused, err := service.Pause(context.Background(), started.SessionID, factorysessionexecution.ControlRequest{})
+	if err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+	if paused.Outcome != factorysessionexecution.LifecycleControlOutcomeAccepted ||
+		paused.Status != factorysessionexecution.LifecycleStatusPaused {
+		t.Fatalf("pause = %#v, want ACCEPTED/PAUSED", paused)
+	}
+	if paused.Operation != factorysessionexecution.LifecycleControlPause {
+		t.Fatalf("operation = %q, want PAUSE", paused.Operation)
+	}
+}
+
+func TestRuntimeService_ResumePausedSessionReturnsRunning(t *testing.T) {
+	_, service := newRuntimeServiceWithFixture(t, "busy-loop.workflow.js", "busy-loop")
+
+	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-runtime-resume-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "busy-loop",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	if _, err := service.Pause(context.Background(), started.SessionID, factorysessionexecution.ControlRequest{}); err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+
+	resumed, err := service.Resume(context.Background(), started.SessionID, factorysessionexecution.ControlRequest{})
+	if err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+	if resumed.Outcome != factorysessionexecution.LifecycleControlOutcomeAccepted ||
+		resumed.Status != factorysessionexecution.LifecycleStatusRunning {
+		t.Fatalf("resume = %#v, want ACCEPTED/RUNNING", resumed)
+	}
+}
+
+func TestRuntimeService_PauseTerminalSessionReturnsTypedControlError(t *testing.T) {
+	_, service := newRuntimeServiceWithFixture(t, "simple-final.workflow.js", "simple-final")
+
+	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-runtime-pause-terminal-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "simple-final",
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+			"count":   2,
+			"prefix":  "you",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		read, readErr := service.GetSession(context.Background(), started.SessionID)
+		if readErr != nil {
+			t.Fatalf("GetSession: %v", readErr)
+		}
+		if read.Status == factorysessionexecution.LifecycleStatusSucceeded {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+
+	_, err = service.Pause(context.Background(), started.SessionID, factorysessionexecution.ControlRequest{})
+	var controlErr *factorysessionexecution.ControlError
+	if !errors.As(err, &controlErr) || controlErr.Outcome != factorysessionexecution.LifecycleControlOutcomeTerminalSession {
+		t.Fatalf("pause on terminal = %v, want TERMINAL_SESSION ControlError", err)
+	}
+}

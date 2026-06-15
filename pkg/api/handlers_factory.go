@@ -225,13 +225,21 @@ func (s *Server) ApproveFactorySession(w http.ResponseWriter, r *http.Request, s
 }
 
 func (s *Server) PauseFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	_ = sessionID
-	s.writeError(w, http.StatusNotImplemented, "durable factory session pause is not implemented", "INTERNAL_ERROR")
+	s.handleDurableLifecycleControl(w, r, sessionID, "pause", func(
+		lifecycle apisurface.DurableSessionLifecycleAPI,
+		req factoryapi.FactorySessionLifecycleControlRequest,
+	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+		return lifecycle.PauseDurableFactorySession(r.Context(), string(sessionID), req)
+	})
 }
 
 func (s *Server) ResumeFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	_ = sessionID
-	s.writeError(w, http.StatusNotImplemented, "durable factory session resume is not implemented", "INTERNAL_ERROR")
+	s.handleDurableLifecycleControl(w, r, sessionID, "resume", func(
+		lifecycle apisurface.DurableSessionLifecycleAPI,
+		req factoryapi.FactorySessionLifecycleControlRequest,
+	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+		return lifecycle.ResumeDurableFactorySession(r.Context(), string(sessionID), req)
+	})
 }
 
 func (s *Server) CancelFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {

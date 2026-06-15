@@ -152,7 +152,19 @@ func (m *MockFactory) PauseDurableFactorySession(
 	sessionID string,
 	request factoryapi.FactorySessionLifecycleControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	return factoryapi.FactorySessionLifecycleControlResponse{}, errors.New("pause durable factory session is not implemented")
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	control, err := factorysession.ControlRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := service.Pause(ctx, sessionID, control)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
 }
 
 func (m *MockFactory) ResumeDurableFactorySession(
@@ -160,7 +172,19 @@ func (m *MockFactory) ResumeDurableFactorySession(
 	sessionID string,
 	request factoryapi.FactorySessionLifecycleControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	return factoryapi.FactorySessionLifecycleControlResponse{}, errors.New("resume durable factory session is not implemented")
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	control, err := factorysession.ControlRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := service.Resume(ctx, sessionID, control)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
 }
 
 func (m *MockFactory) ApproveDurableFactorySession(

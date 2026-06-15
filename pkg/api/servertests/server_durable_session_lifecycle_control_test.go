@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
@@ -98,6 +99,120 @@ func TestCancelFactorySession_NonDurableSessionPreservesLiveStub(t *testing.T) {
 		server.URL,
 		"live-session-001",
 		"cancel",
+		nil,
+	)
+	if status != http.StatusNotImplemented {
+		t.Fatalf("status = %d, want 501", status)
+	}
+	if errResp.Code != factoryapi.INTERNALERROR {
+		t.Fatalf("code = %q, want INTERNAL_ERROR", errResp.Code)
+	}
+}
+
+func TestPauseFactorySession_RuntimeBackedDurableSessionReturnsTypedLifecycleControl(t *testing.T) {
+	service := newAPILifecycleRuntimeService(t, "busy-loop.workflow.js", "busy-loop")
+	started := startRuntimeBackedDurableSession(t, service)
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	response, status := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "pause", nil)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindPause {
+		t.Fatalf("operation = %q, want PAUSE", response.Operation)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("status = %q, want PAUSED", response.Status)
+	}
+}
+
+func TestResumeFactorySession_RuntimeBackedDurableSessionReturnsTypedLifecycleControl(t *testing.T) {
+	service := newAPILifecycleRuntimeService(t, "busy-loop.workflow.js", "busy-loop")
+	started := startRuntimeBackedDurableSession(t, service)
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	if _, status := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "pause", nil); status != http.StatusOK {
+		t.Fatalf("pause status = %d, want 200", status)
+	}
+
+	response, status := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "resume", nil)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindResume {
+		t.Fatalf("operation = %q, want RESUME", response.Operation)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", response.Status)
+	}
+}
+
+func TestPauseFactorySession_TerminalSessionReturnsTypedConflict(t *testing.T) {
+	service := newAPILifecycleRuntimeService(t, "simple-final.workflow.js", "simple-final")
+	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-api-pause-terminal-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "simple-final",
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+			"count":   2,
+			"prefix":  "you",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		read, readErr := service.GetSession(context.Background(), started.SessionID)
+		if readErr != nil {
+			t.Fatalf("GetSession: %v", readErr)
+		}
+		if read.Status == factorysessionexecution.LifecycleStatusSucceeded {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	response, status := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "pause", nil)
+	if status != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", status)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeTerminalSession {
+		t.Fatalf("outcome = %q, want TERMINAL_SESSION", response.Outcome)
+	}
+}
+
+func TestPauseFactorySession_NonDurableSessionPreservesLiveStub(t *testing.T) {
+	service := newAPILifecycleRuntimeService(t, "simple-final.workflow.js", "simple-final")
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	status, errResp := postFactorySessionLifecycleControlExpectError(
+		t,
+		server.URL,
+		"live-session-001",
+		"pause",
 		nil,
 	)
 	if status != http.StatusNotImplemented {
