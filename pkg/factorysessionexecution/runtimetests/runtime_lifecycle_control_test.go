@@ -202,3 +202,46 @@ func TestRuntimeService_PauseTerminalSessionReturnsTypedControlError(t *testing.
 		t.Fatalf("pause on terminal = %v, want TERMINAL_SESSION ControlError", err)
 	}
 }
+
+func TestRuntimeService_ApproveRunningSessionReturnsTypedControlError(t *testing.T) {
+	_, service := newRuntimeServiceWithFixture(t, "busy-loop.workflow.js", "busy-loop")
+
+	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-runtime-approve-invalid-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "busy-loop",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	_, err = service.Approve(context.Background(), started.SessionID, factorysessionexecution.ApproveRequest{})
+	var controlErr *factorysessionexecution.ControlError
+	if !errors.As(err, &controlErr) || controlErr.Outcome != factorysessionexecution.LifecycleControlOutcomeInvalidState {
+		t.Fatalf("approve on running = %v, want INVALID_STATE ControlError", err)
+	}
+}
+
+func TestRuntimeService_RetryDispatchMissingDispatchReturnsNotFound(t *testing.T) {
+	_, service := newRuntimeServiceWithFixture(t, "busy-loop.workflow.js", "busy-loop")
+
+	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-runtime-retry-missing-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "busy-loop",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	_, err = service.RetryDispatch(context.Background(), started.SessionID, factorysessionexecution.RetryDispatchRequest{
+		DispatchID: "disp-missing-001",
+	})
+	if !errors.Is(err, factorysessionexecution.ErrDispatchNotFound) {
+		t.Fatalf("retry missing dispatch = %v, want ErrDispatchNotFound", err)
+	}
+}

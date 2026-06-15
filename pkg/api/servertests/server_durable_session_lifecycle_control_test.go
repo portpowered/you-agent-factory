@@ -223,6 +223,120 @@ func TestPauseFactorySession_NonDurableSessionPreservesLiveStub(t *testing.T) {
 	}
 }
 
+func TestApproveFactorySession_FixtureBackedAwaitingApprovalReturnsTypedLifecycleControl(t *testing.T) {
+	service := newAPILifecycleFakeService(t)
+	startAPIAwaitingApprovalSession(t, service)
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	response, status := postFactorySessionApprove(t, server.URL, "dur-sess-js-awaiting-001", nil)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindApprove {
+		t.Fatalf("operation = %q, want APPROVE", response.Operation)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", response.Status)
+	}
+	if response.Links == nil || response.Links.Results == nil || *response.Links.Results == "" {
+		t.Fatalf("links = %#v, want results inspection link", response.Links)
+	}
+}
+
+func TestRetryFactorySessionDispatch_FixtureBackedFailedSessionReturnsTypedLifecycleControl(t *testing.T) {
+	service := newAPILifecycleFakeService(t)
+	startAPIFailedPartialSession(t, service)
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	response, status := postFactorySessionRetryDispatch(t, server.URL, "dur-sess-js-failed-partial-001", factoryapi.FactorySessionRetryDispatchRequest{
+		DispatchId: "disp-js-fail-002",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindRetryDispatch {
+		t.Fatalf("operation = %q, want RETRY_DISPATCH", response.Operation)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", response.Status)
+	}
+	if response.RetryDispatchId == nil || *response.RetryDispatchId != "disp-js-fail-002" {
+		t.Fatalf("retryDispatchId = %#v, want disp-js-fail-002", response.RetryDispatchId)
+	}
+}
+
+func TestRetryFactorySessionDispatch_TerminalSessionReturnsTypedConflict(t *testing.T) {
+	service := newAPILifecycleFakeService(t)
+	_, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-petri-success-001",
+		Source:    factorysessionexecution.Source{Kind: workflowsource.KindFactoryID, FactoryID: "customer-support-triage"},
+	})
+	if err != nil {
+		t.Fatalf("StartSync terminal session: %v", err)
+	}
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	response, status := postFactorySessionRetryDispatch(t, server.URL, "dur-sess-petri-success-001", factoryapi.FactorySessionRetryDispatchRequest{
+		DispatchId: "disp-petri-success-001",
+	})
+	if status != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", status)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeTerminalSession {
+		t.Fatalf("outcome = %q, want TERMINAL_SESSION", response.Outcome)
+	}
+}
+
+func TestApproveFactorySession_NonDurableSessionPreservesLiveStub(t *testing.T) {
+	service := newAPILifecycleFakeService(t)
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	status, errResp := postFactorySessionApproveExpectError(t, server.URL, "live-session-001", nil)
+	if status != http.StatusNotImplemented {
+		t.Fatalf("status = %d, want 501", status)
+	}
+	if errResp.Code != factoryapi.INTERNALERROR {
+		t.Fatalf("code = %q, want INTERNAL_ERROR", errResp.Code)
+	}
+}
+
+func TestRetryFactorySessionDispatch_NonDurableSessionPreservesLiveStub(t *testing.T) {
+	service := newAPILifecycleFakeService(t)
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	status, errResp := postFactorySessionRetryDispatchExpectError(
+		t,
+		server.URL,
+		"live-session-001",
+		factoryapi.FactorySessionRetryDispatchRequest{DispatchId: "disp-live-001"},
+	)
+	if status != http.StatusNotImplemented {
+		t.Fatalf("status = %d, want 501", status)
+	}
+	if errResp.Code != factoryapi.INTERNALERROR {
+		t.Fatalf("code = %q, want INTERNAL_ERROR", errResp.Code)
+	}
+}
+
 func newAPILifecycleRuntimeService(t *testing.T, fixtureName, workflowName string) *factorysessionexecution.RuntimeService {
 	t.Helper()
 	projectRoot := setupAPILifecycleWorkflowFixture(t, fixtureName, workflowName)
@@ -336,4 +450,176 @@ func setupAPILifecycleWorkflowFixture(t *testing.T, fixtureName, workflowName st
 		t.Fatalf("write workflow: %v", err)
 	}
 	return projectRoot
+}
+
+func newAPILifecycleFakeService(t *testing.T) *factorysessionexecution.FakeService {
+	t.Helper()
+	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(
+		filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json"),
+	)
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+	}
+	return service
+}
+
+func startAPIAwaitingApprovalSession(t *testing.T, service *factorysessionexecution.FakeService) {
+	t.Helper()
+	_, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-js-awaiting-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowFile,
+			WorkflowFile: ".claude/workflows/approval-gate.yaml",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync awaiting approval: %v", err)
+	}
+}
+
+func startAPIFailedPartialSession(t *testing.T, service *factorysessionexecution.FakeService) {
+	t.Helper()
+	_, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-js-failed-partial-001",
+		Source:    factorysessionexecution.Source{Kind: workflowsource.KindFactoryID, FactoryID: "customer-support-triage"},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync failed partial: %v", err)
+	}
+}
+
+func postFactorySessionApprove(
+	t *testing.T,
+	serverURL, sessionID string,
+	request *factoryapi.FactorySessionApproveRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, int) {
+	t.Helper()
+	resp, err := postFactorySessionApproveRaw(t, serverURL, sessionID, request)
+	if err != nil {
+		t.Fatalf("POST /factory-sessions/%s/approve: %v", sessionID, err)
+	}
+	defer resp.Body.Close()
+	var response factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		t.Fatalf("decode approve response: %v", err)
+	}
+	return response, resp.StatusCode
+}
+
+func postFactorySessionApproveExpectError(
+	t *testing.T,
+	serverURL, sessionID string,
+	request *factoryapi.FactorySessionApproveRequest,
+) (int, factoryapi.ErrorResponse) {
+	t.Helper()
+	var body []byte
+	if request != nil {
+		encoded, err := json.Marshal(request)
+		if err != nil {
+			t.Fatalf("marshal request: %v", err)
+		}
+		body = encoded
+	}
+	url := serverURL + "/factory-sessions/" + sessionID + "/approve"
+	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+	var errResp factoryapi.ErrorResponse
+	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	return resp.StatusCode, errResp
+}
+
+func postFactorySessionApproveRaw(
+	t *testing.T,
+	serverURL, sessionID string,
+	request *factoryapi.FactorySessionApproveRequest,
+) (*http.Response, error) {
+	t.Helper()
+	var body []byte
+	if request != nil {
+		encoded, err := json.Marshal(request)
+		if err != nil {
+			t.Fatalf("marshal request: %v", err)
+		}
+		body = encoded
+	}
+	url := serverURL + "/factory-sessions/" + sessionID + "/approve"
+	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 500 {
+		var errResp factoryapi.ErrorResponse
+		_ = json.NewDecoder(resp.Body).Decode(&errResp)
+		return nil, errors.New(errResp.Message)
+	}
+	return resp, nil
+}
+
+func postFactorySessionRetryDispatch(
+	t *testing.T,
+	serverURL, sessionID string,
+	request factoryapi.FactorySessionRetryDispatchRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, int) {
+	t.Helper()
+	resp, err := postFactorySessionRetryDispatchRaw(t, serverURL, sessionID, request)
+	if err != nil {
+		t.Fatalf("POST /factory-sessions/%s/retry-dispatch: %v", sessionID, err)
+	}
+	defer resp.Body.Close()
+	var response factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		t.Fatalf("decode retry-dispatch response: %v", err)
+	}
+	return response, resp.StatusCode
+}
+
+func postFactorySessionRetryDispatchExpectError(
+	t *testing.T,
+	serverURL, sessionID string,
+	request factoryapi.FactorySessionRetryDispatchRequest,
+) (int, factoryapi.ErrorResponse) {
+	t.Helper()
+	encoded, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	url := serverURL + "/factory-sessions/" + sessionID + "/retry-dispatch"
+	resp, err := http.Post(url, "application/json", bytes.NewReader(encoded))
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+	var errResp factoryapi.ErrorResponse
+	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	return resp.StatusCode, errResp
+}
+
+func postFactorySessionRetryDispatchRaw(
+	t *testing.T,
+	serverURL, sessionID string,
+	request factoryapi.FactorySessionRetryDispatchRequest,
+) (*http.Response, error) {
+	t.Helper()
+	encoded, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	url := serverURL + "/factory-sessions/" + sessionID + "/retry-dispatch"
+	resp, err := http.Post(url, "application/json", bytes.NewReader(encoded))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 500 {
+		var errResp factoryapi.ErrorResponse
+		_ = json.NewDecoder(resp.Body).Decode(&errResp)
+		return nil, errors.New(errResp.Message)
+	}
+	return resp, nil
 }

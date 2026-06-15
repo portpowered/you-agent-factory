@@ -45,6 +45,14 @@ func LifecycleControlErrorResponse(sessionID string, err error) (int, any, bool)
 		}, true
 	}
 
+	if errors.Is(err, factorysessionexecution.ErrDispatchNotFound) {
+		return http.StatusNotFound, factoryapi.ErrorResponse{
+			Message: "dispatch not found",
+			Family:  factoryapi.ErrorFamilyNotFound,
+			Code:    factoryapi.NOTFOUND,
+		}, true
+	}
+
 	var validationErr *factorysessionexecution.ValidationError
 	if errors.As(err, &validationErr) {
 		return http.StatusBadRequest, factoryapi.ErrorResponse{

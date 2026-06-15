@@ -220,8 +220,12 @@ func (s *Server) GetFactorySessionPartialResult(w http.ResponseWriter, r *http.R
 }
 
 func (s *Server) ApproveFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	_ = sessionID
-	s.writeError(w, http.StatusNotImplemented, "durable factory session approval is not implemented", "INTERNAL_ERROR")
+	s.handleDurableApproveControl(w, r, sessionID, func(
+		lifecycle apisurface.DurableSessionLifecycleAPI,
+		req factoryapi.FactorySessionApproveRequest,
+	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+		return lifecycle.ApproveDurableFactorySession(r.Context(), string(sessionID), req)
+	})
 }
 
 func (s *Server) PauseFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
@@ -261,8 +265,12 @@ func (s *Server) TerminateFactorySession(w http.ResponseWriter, r *http.Request,
 }
 
 func (s *Server) RetryFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	_ = sessionID
-	s.writeError(w, http.StatusNotImplemented, "durable factory session retry-dispatch is not implemented", "INTERNAL_ERROR")
+	s.handleDurableRetryDispatchControl(w, r, sessionID, func(
+		lifecycle apisurface.DurableSessionLifecycleAPI,
+		req factoryapi.FactorySessionRetryDispatchRequest,
+	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+		return lifecycle.RetryDurableFactorySessionDispatch(r.Context(), string(sessionID), req)
+	})
 }
 
 func (s *Server) StartDurableFactorySessionAsync(w http.ResponseWriter, r *http.Request) {

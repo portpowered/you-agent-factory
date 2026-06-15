@@ -192,7 +192,19 @@ func (m *MockFactory) ApproveDurableFactorySession(
 	sessionID string,
 	request factoryapi.FactorySessionApproveRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	return factoryapi.FactorySessionLifecycleControlResponse{}, errors.New("approve durable factory session is not implemented")
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	approve, err := factorysession.ApproveRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := service.Approve(ctx, sessionID, approve)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
 }
 
 func (m *MockFactory) RetryDurableFactorySessionDispatch(
@@ -200,7 +212,19 @@ func (m *MockFactory) RetryDurableFactorySessionDispatch(
 	sessionID string,
 	request factoryapi.FactorySessionRetryDispatchRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	return factoryapi.FactorySessionLifecycleControlResponse{}, errors.New("retry durable factory session dispatch is not implemented")
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	retry, err := factorysession.RetryDispatchRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := service.RetryDispatch(ctx, sessionID, retry)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
 }
 
 func (m *MockFactory) GetDurableFactorySession(
