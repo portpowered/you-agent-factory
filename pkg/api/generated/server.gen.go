@@ -701,9 +701,12 @@ const (
 
 // Defines values for WorkerType.
 const (
-	WorkerTypeHostedWorker WorkerType = "HOSTED_WORKER"
-	WorkerTypeModelWorker  WorkerType = "MODEL_WORKER"
-	WorkerTypeScriptWorker WorkerType = "SCRIPT_WORKER"
+	WorkerTypeAgentWorker     WorkerType = "AGENT_WORKER"
+	WorkerTypeHostedWorker    WorkerType = "HOSTED_WORKER"
+	WorkerTypeInferenceWorker WorkerType = "INFERENCE_WORKER"
+	WorkerTypeModelWorker     WorkerType = "MODEL_WORKER"
+	WorkerTypePollerWorker    WorkerType = "POLLER_WORKER"
+	WorkerTypeScriptWorker    WorkerType = "SCRIPT_WORKER"
 )
 
 // Defines values for WorkstationKind.

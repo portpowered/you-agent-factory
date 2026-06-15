@@ -109,9 +109,12 @@ const (
 
 // WorkerType constants for worker AGENTS.md frontmatter.
 const (
-	WorkerTypeModel  = "MODEL_WORKER"
-	WorkerTypeScript = "SCRIPT_WORKER"
-	WorkerTypeHosted = "HOSTED_WORKER"
+	WorkerTypeInference = "INFERENCE_WORKER"
+	WorkerTypeAgent     = "AGENT_WORKER"
+	WorkerTypeScript    = "SCRIPT_WORKER"
+	WorkerTypePoller    = "POLLER_WORKER"
+	WorkerTypeModel     = "MODEL_WORKER"
+	WorkerTypeHosted    = "HOSTED_WORKER"
 )
 
 // Hosted worker provider constants for public hosted worker config.

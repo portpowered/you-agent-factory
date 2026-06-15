@@ -67,9 +67,61 @@ func InternalModelProviderFromPublicWorkerModelProvider(value factoryapi.WorkerM
 }
 
 var publicFactoryWorkerTypeAliases = map[string]string{
-	WorkerTypeModel:  WorkerTypeModel,
-	WorkerTypeScript: WorkerTypeScript,
-	WorkerTypeHosted: WorkerTypeHosted,
+	WorkerTypeInference: WorkerTypeInference,
+	WorkerTypeAgent:     WorkerTypeAgent,
+	WorkerTypeScript:    WorkerTypeScript,
+	WorkerTypePoller:    WorkerTypePoller,
+	WorkerTypeModel:     WorkerTypeModel,
+	WorkerTypeHosted:    WorkerTypeHosted,
+}
+
+// IsInferenceWorkerType reports whether workerType is an accepted inference-worker
+// taxonomy value, including the legacy MODEL_WORKER compatibility alias.
+func IsInferenceWorkerType(workerType string) bool {
+	switch StrictPublicFactoryWorkerType(workerType) {
+	case WorkerTypeInference, WorkerTypeModel:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsAgentWorkerType reports whether workerType is an accepted agent-worker taxonomy value.
+func IsAgentWorkerType(workerType string) bool {
+	return StrictPublicFactoryWorkerType(workerType) == WorkerTypeAgent
+}
+
+// IsScriptWorkerType reports whether workerType is an accepted script-worker taxonomy value.
+func IsScriptWorkerType(workerType string) bool {
+	return StrictPublicFactoryWorkerType(workerType) == WorkerTypeScript
+}
+
+// IsPollerWorkerType reports whether workerType is an accepted poller-worker taxonomy
+// value, including the legacy HOSTED_WORKER compatibility alias.
+func IsPollerWorkerType(workerType string) bool {
+	switch StrictPublicFactoryWorkerType(workerType) {
+	case WorkerTypePoller, WorkerTypeHosted:
+		return true
+	default:
+		return false
+	}
+}
+
+// ProjectWorkerBehaviorClass maps accepted worker taxonomy values to the runtime
+// behavior class used for compatibility projection during the migration window.
+func ProjectWorkerBehaviorClass(workerType string) string {
+	switch StrictPublicFactoryWorkerType(workerType) {
+	case WorkerTypeInference, WorkerTypeModel:
+		return WorkerTypeInference
+	case WorkerTypeAgent:
+		return WorkerTypeAgent
+	case WorkerTypeScript:
+		return WorkerTypeScript
+	case WorkerTypePoller, WorkerTypeHosted:
+		return WorkerTypePoller
+	default:
+		return ""
+	}
 }
 
 var publicFactoryWorkerModelProviderAliases = map[string]string{

@@ -717,11 +717,11 @@ func ruleWorkerModelOperations(cfg *interfaces.FactoryConfig) []Finding {
 		if len(worker.Operations) == 0 && strings.TrimSpace(worker.ModelLocality) == "" {
 			continue
 		}
-		if strings.TrimSpace(worker.Type) != "" && worker.Type != interfaces.WorkerTypeModel {
+		if strings.TrimSpace(worker.Type) != "" && !interfaces.IsInferenceWorkerType(worker.Type) {
 			findings = append(findings, Finding{
 				Severity: SeverityError,
 				Path:     basePath,
-				Message:  "model capability declarations require worker type MODEL_WORKER",
+				Message:  "model capability declarations require worker type INFERENCE_WORKER or legacy MODEL_WORKER",
 				Rule:     "worker-model-operation-worker-type",
 			})
 		}
@@ -870,11 +870,11 @@ func requiredModelInvokeWorkstationFindings(workstation interfaces.FactoryWorkst
 }
 
 func validateModelInvokeWorker(workstation interfaces.FactoryWorkstationConfig, worker interfaces.WorkerConfig, basePath string, operationName string) ([]Finding, interfaces.ModelOperation, bool) {
-	if strings.TrimSpace(worker.Type) != "" && worker.Type != interfaces.WorkerTypeModel {
+	if strings.TrimSpace(worker.Type) != "" && !interfaces.IsInferenceWorkerType(worker.Type) {
 		return []Finding{{
 			Severity: SeverityError,
 			Path:     basePath + ".worker",
-			Message:  fmt.Sprintf("worker %q is incompatible with MODEL_INVOKE; declare type MODEL_WORKER and model operations", workstation.WorkerTypeName),
+			Message:  fmt.Sprintf("worker %q is incompatible with MODEL_INVOKE; declare type INFERENCE_WORKER or legacy MODEL_WORKER with model operations", workstation.WorkerTypeName),
 			Rule:     "workstation-model-invoke-worker-compatibility",
 		}}, interfaces.ModelOperation{}, false
 	}

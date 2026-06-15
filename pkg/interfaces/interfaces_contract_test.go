@@ -124,10 +124,42 @@ type publicFactoryEnumNormalizerCase struct {
 func publicFactoryEnumNormalizerCases() []publicFactoryEnumNormalizerCase {
 	return []publicFactoryEnumNormalizerCase{
 		{
-			name:       "worker type",
+			name:       "worker type legacy model",
 			alias:      "MODEL_WORKER",
 			unknown:    "CUSTOM_WORKER",
 			want:       WorkerTypeModel,
+			permissive: PermissivePublicFactoryWorkerType,
+			strict:     StrictPublicFactoryWorkerType,
+		},
+		{
+			name:       "worker type inference",
+			alias:      "INFERENCE_WORKER",
+			unknown:    "CUSTOM_WORKER",
+			want:       WorkerTypeInference,
+			permissive: PermissivePublicFactoryWorkerType,
+			strict:     StrictPublicFactoryWorkerType,
+		},
+		{
+			name:       "worker type agent",
+			alias:      "AGENT_WORKER",
+			unknown:    "CUSTOM_WORKER",
+			want:       WorkerTypeAgent,
+			permissive: PermissivePublicFactoryWorkerType,
+			strict:     StrictPublicFactoryWorkerType,
+		},
+		{
+			name:       "worker type poller",
+			alias:      "POLLER_WORKER",
+			unknown:    "CUSTOM_WORKER",
+			want:       WorkerTypePoller,
+			permissive: PermissivePublicFactoryWorkerType,
+			strict:     StrictPublicFactoryWorkerType,
+		},
+		{
+			name:       "worker type legacy hosted",
+			alias:      "HOSTED_WORKER",
+			unknown:    "CUSTOM_WORKER",
+			want:       WorkerTypeHosted,
 			permissive: PermissivePublicFactoryWorkerType,
 			strict:     StrictPublicFactoryWorkerType,
 		},

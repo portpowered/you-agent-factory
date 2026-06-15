@@ -452,7 +452,7 @@ func TestRuleWorkerModelOperations_RejectsCapabilityDeclarationsOnScriptWorkers(
 
 	findings := ruleWorkerModelOperations(cfg)
 
-	assertFindingMatch(t, findings, "worker-model-operation-worker-type", "workers[0](scripted)", "require worker type MODEL_WORKER")
+	assertFindingMatch(t, findings, "worker-model-operation-worker-type", "workers[0](scripted)", "require worker type INFERENCE_WORKER or legacy MODEL_WORKER")
 }
 
 func TestRuleWorkerModelOperations_RejectsMissingSlotContentTypes(t *testing.T) {

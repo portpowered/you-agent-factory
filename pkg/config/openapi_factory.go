@@ -821,7 +821,7 @@ func rejectRetiredHostedProviderAlias(worker map[string]any, path string) error 
 	}
 	provider, _ := rawProvider.(string)
 	workerType, _ := worker["type"].(string)
-	if interfaces.StrictPublicFactoryWorkerType(workerType) == interfaces.WorkerTypeHosted &&
+	if interfaces.IsPollerWorkerType(workerType) &&
 		interfaces.StrictPublicFactoryHostedWorkerProvider(provider) != "" {
 		return nil
 	}

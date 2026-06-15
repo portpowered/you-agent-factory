@@ -334,14 +334,14 @@ func rulePollerWorkstations(cfg *interfaces.FactoryConfig) []Finding {
 			continue
 		}
 		switch strings.TrimSpace(worker.Type) {
-		case interfaces.WorkerTypeScript, interfaces.WorkerTypeHosted:
+		case interfaces.WorkerTypeScript, interfaces.WorkerTypeHosted, interfaces.WorkerTypePoller:
 			continue
 		default:
 			findings = append(findings, Finding{
 				Severity: SeverityError,
 				Path:     basePath + ".worker",
 				Message: fmt.Sprintf(
-					"poller workstation %q cannot bind worker %q of type %q; v1 pollers support only SCRIPT_WORKER or HOSTED_WORKER",
+					"poller workstation %q cannot bind worker %q of type %q; v1 pollers support only SCRIPT_WORKER, POLLER_WORKER, or legacy HOSTED_WORKER",
 					ws.Name,
 					worker.Name,
 					worker.Type,
@@ -480,7 +480,7 @@ func ruleHostedWorkers(cfg *interfaces.FactoryConfig) []Finding {
 	var findings []Finding
 	for wi, worker := range cfg.Workers {
 		basePath := fmt.Sprintf("workers[%d](%s)", wi, worker.Name)
-		if worker.Type == interfaces.WorkerTypeHosted {
+		if interfaces.IsPollerWorkerType(worker.Type) {
 			findings = append(findings, validateHostedWorker(basePath, worker)...)
 			continue
 		}
