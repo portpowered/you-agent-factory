@@ -135,18 +135,19 @@ The repository already proves the following without manual host UI smoke:
 | CLI registration for `you mcp serve` | `pkg/cli/root_mcp_test.go` |
 | Preview tool catalog wiring | `pkg/mcp/workflow/registry_test.go` |
 | Stdio discovery and `you.factory_session.validate_source` invocation | `pkg/mcp/server/server_test.go` |
+| End-to-end smoke that spawns `you mcp serve` through the documented install path | `tests/functional/smoke/cli_mcp_serve_smoke_test.go` |
 
 Run focused verification locally:
 
 ```bash
 go test ./pkg/cli/... ./pkg/mcp/...
+go test ./tests/functional/smoke -run TestMCPServe_RealCLI
 ```
 
 ## Follow-Up Work Outside This Doc
 
 | Behavior | Status |
 |----------|--------|
-| End-to-end smoke that spawns `you mcp serve` through the documented install path (not only package-level MCP helpers) | Planned follow-up in this recovery lane |
 | Async run, status, or result install smoke through MCP | Deferred until the serve catalog exposes the needed Factory Session session tools |
 | Multi-host parity matrices across every MCP client UI | Out of scope for this recovery lane |
 
