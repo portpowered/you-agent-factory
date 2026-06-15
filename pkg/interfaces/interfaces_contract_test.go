@@ -619,30 +619,6 @@ func TestGeneratedPublicWorkstationKindPtr(t *testing.T) {
 	}
 }
 
-type runtimeLookupDefinitionStub struct {
-	workers      map[string]*WorkerConfig
-	workstations map[string]*FactoryWorkstationConfig
-}
-
-func (s *runtimeLookupDefinitionStub) Worker(name string) (*WorkerConfig, bool) {
-	worker, ok := s.workers[name]
-	return worker, ok
-}
-
-func (s *runtimeLookupDefinitionStub) Workstation(name string) (*FactoryWorkstationConfig, bool) {
-	workstation, ok := s.workstations[name]
-	return workstation, ok
-}
-
-type runtimeLookupWorkstationStub struct {
-	workstations map[string]*FactoryWorkstationConfig
-}
-
-func (s *runtimeLookupWorkstationStub) Workstation(name string) (*FactoryWorkstationConfig, bool) {
-	workstation, ok := s.workstations[name]
-	return workstation, ok
-}
-
 func TestV1RunnerBaselineCapabilities_AreExplicitAndLimited(t *testing.T) {
 	t.Parallel()
 
