@@ -154,7 +154,7 @@ for the manifest fields and validation rules.
 
 ```yaml
 ---
-type: MODEL_WORKER
+type: AGENT_WORKER
 model: gpt-5-codex
 modelProvider: CODEX
 executorProvider: SCRIPT_WRAP
@@ -170,7 +170,7 @@ verification before finishing.
 
 ```yaml
 ---
-type: MODEL_WORKER
+type: AGENT_WORKER
 model: gpt-5-codex
 modelProvider: CODEX
 executorProvider: SCRIPT_WRAP
@@ -186,7 +186,7 @@ ready.
 
 ```yaml
 ---
-type: MODEL_WORKSTATION
+type: AGENT_RUN
 limits:
   maxExecutionTime: 1h
 ---
@@ -205,7 +205,7 @@ Return COMPLETE only when the story is ready to advance into review.
 
 ```yaml
 ---
-type: MODEL_WORKSTATION
+type: AGENT_RUN
 limits:
   maxExecutionTime: 30m
 ---
@@ -344,7 +344,7 @@ factory.
 
 ## Author A Model-Operation TTS Factory
 
-Use `MODEL_INVOKE` when the workstation should request a generic operation such
+Use `INFERENCE_RUN` when the workstation should request a generic operation such
 as `TTS` and let worker capability plus typed resources decide whether the
 execution is local or cloud-backed.
 
@@ -355,7 +355,7 @@ This workstation stays the same for both local and cloud TTS:
 ```json
 {
   "name": "speak",
-  "type": "MODEL_INVOKE",
+  "type": "INFERENCE_RUN",
   "operation": "TTS",
   "worker": "tts-worker",
   "operationBindings": [
@@ -413,7 +413,7 @@ This workstation stays the same for both local and cloud TTS:
   "workstations": [
     {
       "name": "speak",
-      "type": "MODEL_INVOKE",
+      "type": "INFERENCE_RUN",
       "operation": "TTS",
       "worker": "tts-worker",
       "operationBindings": [
@@ -434,7 +434,7 @@ This workstation stays the same for both local and cloud TTS:
 
 ```yaml
 ---
-type: MODEL_WORKER
+type: AGENT_WORKER
 model: OMNIVOICE_Q4_K_M
 modelProvider: CODEX
 modelLocality: LOCAL
@@ -484,7 +484,7 @@ Reuse the same workstation and change the resources plus worker:
 
 ```yaml
 ---
-type: MODEL_WORKER
+type: AGENT_WORKER
 model: gpt-4o-mini-tts
 modelProvider: CODEX
 modelLocality: CLOUD
@@ -574,8 +574,9 @@ Choose the poller worker type this way:
 
 - Use a `SCRIPT_WORKER` poller when you already have custom integration logic
   in a script.
-- Use a `HOSTED_WORKER` poller when the repository already ships the provider
-  integration, such as the built-in `LINEAR` poller.
+- Use a `POLLER_WORKER` poller when the repository already ships the provider
+  integration, such as the built-in `LINEAR` poller. `HOSTED_WORKER` remains an
+  accepted compatibility alias.
 
 Keep the exact contracts on the canonical owner pages:
 
@@ -641,7 +642,7 @@ full hosted-worker secret contract.
 
 ```yaml
 ---
-type: HOSTED_WORKER
+type: POLLER_WORKER
 provider: LINEAR
 auth:
   secretRef: secrets/linear-api-key

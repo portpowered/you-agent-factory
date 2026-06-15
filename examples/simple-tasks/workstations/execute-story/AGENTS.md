@@ -1,5 +1,5 @@
 ---
-type: MODEL_WORKSTATION
+type: AGENT_RUN
 worker: executor
 limits:
   maxExecutionTime: 1h

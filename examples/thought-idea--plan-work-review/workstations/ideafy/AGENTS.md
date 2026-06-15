@@ -1,5 +1,5 @@
 ---
-type: MODEL_WORKSTATION
+type: AGENT_RUN
 limits:
   maxExecutionTime: 20m
 ---

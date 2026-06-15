@@ -1,5 +1,5 @@
 ---
-type: MODEL_WORKER
+type: AGENT_WORKER
 model: claude-opus-4-6
 modelProvider: CLAUDE
 executorProvider: SCRIPT_WRAP

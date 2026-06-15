@@ -1,5 +1,5 @@
 ---
-type: MODEL_WORKSTATION
+type: SCRIPT_RUN
 limits:
   maxExecutionTime: 10m
 ---

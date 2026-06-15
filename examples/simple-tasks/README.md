@@ -24,8 +24,8 @@ story:init → [execute-story] → story:in-review → [review-story] → story:
 examples/simple-tasks/
 ├── factory.json                    # Workflow: execute → review loop with guarded loop breaker
 ├── workers/
-│   ├── executor/AGENTS.md          # MODEL_WORKER: implements stories
-│   └── reviewer/AGENTS.md         # MODEL_WORKER: reviews against criteria
+│   ├── executor/AGENTS.md          # AGENT_WORKER: implements stories
+│   └── reviewer/AGENTS.md         # AGENT_WORKER: reviews against criteria
 ├── workstations/
 │   ├── execute-story/AGENTS.md    # Prompt template with rejection feedback
 │   └── review-story/AGENTS.md    # Prompt template for code review
