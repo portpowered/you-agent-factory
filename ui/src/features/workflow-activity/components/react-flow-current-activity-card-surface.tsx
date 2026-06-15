@@ -16,6 +16,7 @@ import type { CurrentActivityImportController } from "../hooks/current-activity-
 import type { CurrentActivityGraphCardViewModel } from "../hooks/use-current-activity-graph-card-view-model";
 import type { CurrentActivitySelection } from "../lib/react-flow-current-activity-card-types";
 import {
+  layoutValidationWarningMessages,
   mergeFactoryValidationTargets,
   saveErrorNoticeMessages,
   validationMessagesForGraphSelection,
@@ -85,6 +86,7 @@ function CurrentActivityGraphSurfaceContent({
   const saveError = model.status.saveError;
   const editorControls = model.editorControls;
   const removalControls = model.removalControls;
+  const visualGroupControls = model.visualGroupControls;
   const editorValidationProjection = useMemo(() => {
     if (!editorControls.isEditing) {
       return model.validationControls.projection;
@@ -123,6 +125,9 @@ function CurrentActivityGraphSurfaceContent({
   const validationNoticeMessages = [
     ...new Set([...draftValidationMessages, ...validationSelectionMessages]),
   ];
+  const layoutWarningMessages = editorControls.isEditing
+    ? layoutValidationWarningMessages(model.validationControls.targets)
+    : [];
   const saveFailureMessages = editorControls.isEditing
     ? saveErrorNoticeMessages(saveError)
     : [];
@@ -141,6 +146,14 @@ function CurrentActivityGraphSurfaceContent({
       messages: validationNoticeMessages,
       title: messages.noticeValidationFailureTitle,
       tone: "danger",
+    });
+  }
+  if (layoutWarningMessages.length > 0) {
+    editorNoticeSections.push({
+      id: "layout-warning",
+      messages: layoutWarningMessages,
+      title: messages.noticeLayoutWarningTitle,
+      tone: "warning",
     });
   }
   if (removalControls.blockedReason) {
@@ -217,7 +230,22 @@ function CurrentActivityGraphSurfaceContent({
         selectedWaypointEdgeId={edgeWaypointControls.selectedWaypointEdgeId}
         waypointAriaLabel={edgeWaypointControls.waypointAriaLabel}
         waypointControls={edgeWaypointControls.waypointControls}
-        onEditorNodeClick={removalControls.deleteNode}
+        onCreateVisualGroup={visualGroupControls.handleCreateVisualGroup}
+        onEditorNodeClick={(nodeId) => {
+          visualGroupControls.clearSelectedVisualGroup();
+          removalControls.deleteNode(nodeId);
+        }}
+        onMoveVisualGroup={visualGroupControls.handleMoveVisualGroup}
+        onResizeVisualGroup={visualGroupControls.handleResizeVisualGroup}
+        onSelectVisualGroup={visualGroupControls.handleSelectVisualGroup}
+        selectedVisualGroupId={visualGroupControls.selectedGroupId}
+        visualGroupCanEdit={visualGroupControls.canEditVisualGroups}
+        visualGroupResizeHandleAriaLabel={
+          visualGroupControls.resizeHandleAriaLabel
+        }
+        visualGroupControls={visualGroupControls.visualGroupControls}
+        visualGroupAriaLabel={visualGroupControls.groupAriaLabel}
+        visualGroups={visualGroupControls.groups}
         saveControls={model.saveControls}
         saveDisabledReason={model.status.saveBlockedReason}
       />

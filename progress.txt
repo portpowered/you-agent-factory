@@ -7,6 +7,14 @@
 - Pass factory-level selection through `effectiveFactoryModelProvider` / `WorkstationExecutor.DefaultFactoryModelProvider`; populate `WorkstationExecutionRequest.ModelProvider` before dispatch and keep legacy `RunnerID` only for event compatibility until API story 004/005.
 - Built-in prerequisite and capability checks key off canonical provider commands via `workers.BuiltInModelProviderStatus` and `workers.ValidateBuiltInModelProviderPrerequisites`.
 - After OpenAPI schema changes, run `go generate -tags=interfaces ./pkg/api ./pkg/generatedclient` even when UI `openapi-typescript` deps are unavailable in the worktree.
+- Public dispatch and world-view contracts expose `modelProvider` / `modelProviderSelectionSource` (`WorkerModelProvider` + `ModelProviderSelectionSource`); map internal runner IDs through `GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProviderPtr` and `GeneratedPublicFactoryModelProviderSelectionSourcePtr` at API boundaries.
+- Add `x-enum-varnames` to small OpenAPI enums like `FactorySessionTargetRef.kind` so regenerated Go constants keep stable names such as `FactorySessionTargetRefKindDefault`.
+- Dispatch request replay metadata maps through `RunnerMetadataFromDispatchRequestMetadata`; legacy replay artifacts normalize `runnerId`/`runnerSelectionSource` to `modelProvider`/`modelProviderSelectionSource` via `replay.normalizeDispatchProviderEvents` during artifact hydration.
+- Retired `runner` config fields are rejected before strict OpenAPI decode via `ValidateRetiredFactoryFieldAliasesJSON`; API handlers map boundary errors with `GeneratedFactoryBoundaryValidationMessage` so CLI and API share field-path migration guidance.
+- Packaged reference docs under `docs/reference/` embed into `you docs <topic>`; update `tests/functional/smoke/cli_docs_smoke_test.go` and `pkg/cli/docs/docs_test.go` markers when changing customer-facing doc phrases.
+- `decodeSaveCurrentFactoryBody` must include every top-level `SaveFactoryForSessionRequest` field on the partial struct used before retired-field validation; otherwise `DisallowUnknownFields()` rejects valid `mode: UPSERT_NAMED_AND_ACTIVATE` payloads.
+- World-state dispatch projections should store canonical public `ModelProvider` on `FactoryWorldDispatch` / completions and build `FactoryWorldSelectedModelProviderView` from provider metadata first; legacy `RunnerID` round-trips lose providers like `CLAUDE` that have no runner alias.
+- When a PR adds files under `pkg/interfaces` or `pkg/replay`, run `make pkg-file-count` early; consolidate new compat helpers into existing dispatch/artifact files and relocate tests instead of adding standalone `*_compat.go` files.
 
 ## 2026-06-11T11:23:14Z - prd-model-provider-runner-convergence-001
 - Implemented factory-level `modelProvider` support: new `ModelProviderSelection` OpenAPI schema, `Factory.yaml` migration from `runner`, config expand/flatten mapping, retired `factory.runner` rejection, runtime selection/validation via `ResolveRunnerSelection` + `ValidateFactoryModelProviderSelection`, and focused openapitests/contract tests.
@@ -33,4 +41,107 @@
   - Patterns discovered: active runtime paths should resolve and validate concrete `ModelProvider` commands; only event emission still maps through `ResolveRunnerSelection` until stories 004/005 retire runner metadata.
   - Gotchas encountered: worker-level `claude` now resolves as a concrete provider (not operator-default codex); tests that assumed legacy runner fallback needed updating to assert `ModelProvider` instead of `RunnerID`.
   - Useful context: provider diagnostics surface selection source via `ProviderInferenceRequest.ModelProviderSelectionSource` → `requestMetadata["model_provider_selection_source"]`.
+---
+
+## 2026-06-11T12:20:00Z - prd-model-provider-runner-convergence-004
+- Published provider terminology across authored OpenAPI dispatch/world-view schemas: replaced `runnerId`/`runnerSelectionSource`/`RunnerID` with `modelProvider`/`modelProviderSelectionSource`, added `ModelProviderSelectionSource` and `FactoryWorldSelectedModelProviderView`, regenerated Go/TS clients, and updated API mappers, contract fixtures, dashboard adapters, and focused UI tests.
+- Files changed: `api/components/schemas/**`, `api/openapi-main.yaml`, `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, `pkg/interfaces/public_factory_enums.go`, `pkg/factory/events/*`, `pkg/apisurface/factorysession/*`, `pkg/api/workstationprojection/projection.go`, `ui/src/api/**`, focused UI feature adapters/tests.
+- **Learnings for future iterations:**
+  - Patterns discovered: API boundary code should convert internal `RunnerID` strings to public `WorkerModelProvider` via `GeneratedPublicFactoryWorkerModelProviderFromRunnerOrProviderPtr`; selection sources map `legacy_provider`/`default` to `worker`/`operator_default`.
+  - Gotchas encountered: removing `RunnerID` from OpenAPI breaks UI modules that imported `components["schemas"]["RunnerID"]`; dashboard adapters and workstation editing enums need `ModelProviderSelection` updates in the same story.
+  - Useful context: durable-session contract fixtures must use valid `WorkerModelProvider` enum values (e.g. `CLAUDE`, `CODEX`) rather than legacy free-form runner strings like `planner`.
+---
+
+## 2026-06-11T12:35:00Z - prd-model-provider-runner-convergence-005
+- Implemented provider-based dispatch metadata replay: dispatch-request projections read `modelProvider`/`modelProviderSelectionSource` metadata, replay artifact hydration normalizes legacy `runnerId` fields to provider metadata with unknown-value failures, and focused replay/projection/UI tests cover new and legacy metadata paths.
+- Files changed: `pkg/interfaces/dispatch_provider_replay_compat.go`, `pkg/replay/dispatch_provider_event_compat.go`, `pkg/factory/projections/world_state_dispatch.go`, `pkg/replay/event_artifact.go`, focused tests in interfaces/replay/projections.
+- **Learnings for future iterations:**
+  - Patterns discovered: world-state dispatch replay should populate `RunnerID`/`RunnerSelectionSource` from dispatch-request metadata, not only worker topology defaults; legacy replay normalization belongs in `hydrateArtifactFromEvents` before projection.
+  - Gotchas encountered: generated OpenAPI structs drop legacy `runnerId` JSON fields on unmarshal, so replay compatibility must rewrite raw payload maps before re-encoding event payloads.
+  - Useful context: dashboard dispatch detail already reads `request.modelProvider` from world-view projections once backend dispatch metadata is populated.
+---
+
+## 2026-06-11T15:45:00Z - prd-model-provider-runner-convergence-006
+- Implemented deterministic migration guidance: API factory decode now pre-checks retired `runner` aliases via `ValidateRetiredFactoryFieldAliasesJSON`, packaged docs document manual config migration and replay `runnerId` compatibility, and cross-path tests lock CLI/API field-path error language.
+- Files changed: `pkg/config/openapi_factory.go`, `pkg/config/factory_config_mapping.go`, `pkg/api/handlers_factory.go`, `pkg/api/handlers_common.go`, `pkg/factory/validationentry/retired_runner_migration_test.go`, `pkg/api/servertests/server_factory_retired_runner_test.go`, `docs/reference/config.md`, `docs/reference/record-replay.md`, `tests/functional/smoke/cli_docs_smoke_test.go`.
+- **Learnings for future iterations:**
+  - Patterns discovered: use `ValidateRetiredFactoryFieldAliasesJSON` before strict API JSON decode when retired fields were removed from OpenAPI but need migration messages; full `GeneratedFactoryFromOpenAPIJSON` changes generic malformed-JSON errors.
+  - Gotchas encountered: docs smoke markers must not span markdown line wraps because `you docs` output preserves newlines and breaks `strings.Contains` substring checks.
+  - Useful context: migration guidance lives in `docs/reference/config.md` (authored config) and `docs/reference/record-replay.md` (legacy event metadata); there is no automatic config migration command.
+---
+
+## 2026-06-11T12:46:05Z - prd-model-provider-runner-convergence-007
+- Updated shipped docs, examples, and CLI help to teach `modelProvider` as the execution-family selector: workers/workstations/models/sessions reference docs, architecture data-model note, authoring-factories and `examples/simple-tasks` factory-level default plus workstation override, CLI `--runner` help text, and docs smoke marker alignment.
+- Files changed: `docs/reference/workers.md`, `docs/reference/workstations.md`, `docs/reference/models.md`, `docs/reference/sessions.md`, `docs/reference/authoring-factories.md`, `docs/reference/mock-workers.md`, `docs/architecture/data-model.md`, `examples/simple-tasks/factory.json`, `pkg/cli/root.go`, `pkg/cli/docs/docs_test.go`, `tests/functional/smoke/cli_docs_smoke_test.go`.
+- **Learnings for future iterations:**
+  - Patterns discovered: keep `runner` mentions only in migration sections (`config.md`, `record-replay.md`, `sessions.md` cross-links); execution-family docs should use public enum values such as `OPENCODE` rather than legacy CLI ids like `opencode`.
+  - Gotchas encountered: `mock-workers.md` "command-runner" and `batch-inputs.md` "script poller runner" are unrelated to execution-family vocabulary and do not need renaming.
+  - Useful context: invocation guidance lives in `docs/reference/sessions.md`; `make docs-reference-smoke` may fail in worktrees missing the sibling `markdown-linter` module—`go test ./tests/functional/smoke/... -run DocsCommandSmoke` is the reliable packaged-doc verification lane here.
+---
+
+## 2026-06-11T13:08:00Z - mergeability follow-up (PR #801 blocking feedback)
+- Addressed review blockers after all PRD stories passed: fixed UPSERT factory save decode (`mode` partial struct), carried canonical `ModelProvider` through world-state/API projections with Claude metadata, updated dashboard user-facing copy from runner to model provider, merged `origin/main`, and verified `make test` green.
+- Files changed: `pkg/api/handlers_factory.go`, `pkg/interfaces/{factory_world_state.go,dispatch_provider_replay_compat.go,model_provider_selection.go}`, `pkg/factory/projections/world_state_dispatch.go`, `pkg/api/workstationprojection/projection.go`, projection/UI tests, `ui/src/features/current-selection/**`.
+- **Learnings for future iterations:**
+  - Patterns discovered: mergeability-only iterations should still map each blocking PR comment to a concrete fix commit and PR conversation reply before marking review-ready.
+  - Gotchas encountered: main merge can revert local-only `prd.json`/`progress.txt` edits—restore from stash before appending progress.
+  - Useful context: PR merge state `MERGEABLE` can still show `mergeStateStatus: BLOCKED` while required reviews/checks are pending.
+---
+
+## 2026-06-11T16:01:33Z - mergeability follow-up (PR #801 CI pkg-file-count)
+- Fixed **Build, Lint, and API** CI failure: consolidated provider replay compat code/tests to bring `pkg/interfaces` and `pkg/replay` back under the 15-file `make pkg-file-count` limit without changing runtime behavior.
+- Files changed: `pkg/interfaces/{work_dispatch.go,factory_world_state.go,model_provider_selection_test.go}`, `pkg/replay/{artifact.go,event_artifact_test.go}`; removed six standalone compat/clone/guard files after merge.
+- **Learnings for future iterations:**
+  - Patterns discovered: keep provider replay compat beside dispatch metadata (`work_dispatch.go`) and artifact hydration (`artifact.go`); move contract-guard tests into smaller existing `*_test.go` files to avoid `backend-size` file-limit violations on `interfaces_contract_test.go`.
+  - Gotchas encountered: merging many tests into `interfaces_contract_test.go` can pass file-count but fail the 1000-line `backend-size` gate.
+  - Useful context: local `go clean -cache` can corrupt the default macOS build cache; use `GOCACHE=/tmp/... make test` if standard imports start failing with missing cache shard files.
+---
+
+## 2026-06-11T16:15:00Z - mergeability follow-up (PR #801 main merge)
+- Merged `origin/main` after head became `CONFLICTING`; resolved docs/CLI/enum conflicts by keeping `modelProvider` migration guidance while adopting main's operator default flags and removed legacy `you run --runner` CLI override.
+- Files changed: merge resolution across `docs/reference/{config,workers}.md`, `pkg/cli/{root.go,docs/*}`, `pkg/interfaces/public_factory_enums.go`, `tests/functional/smoke/cli_docs_smoke_test.go`, plus upstream main payloads.
+- **Learnings for future iterations:**
+  - Patterns discovered: when main retires a CLI flag (`--runner`), drop the flag rather than renaming help text; document removal in `config.md` and keep smoke markers on the removal sentence.
+  - Gotchas encountered: operator-default docs substrings must stay on one markdown line for `you docs` smoke `strings.Contains` checks.
+  - Useful context: merge commits should keep both `StrictPublicFactoryModelProviderSelection` and new `CanonicalizeOperatorWorkerModelProviderInput` helpers in `public_factory_enums.go`.
+---
+
+## 2026-06-11T16:28:00Z - mergeability follow-up (PR #801 api-smoke + locale)
+- Fixed **Build, Lint, and API** api-smoke failure by regenerating `ui/src/api/generated/openapi.ts` after the main merge (openapi-typescript + biome formatting drift). Replaced the last Chinese-locale user-facing `Runner 来源` label with `Model provider 来源`.
+- Files changed: `ui/src/api/generated/openapi.ts`, `ui/src/features/current-selection/base/messages/shell/current-selection-detail.ts`.
+- **Learnings for future iterations:**
+  - Patterns discovered: after merging `origin/main`, run `make generate-api` twice and `node scripts/check-api-generated-drift.js` before pushing—main can change openapi-typescript/biome output without touching authored OpenAPI.
+  - Gotchas encountered: local `make api-smoke` can fail on `ui/dist_embed_generated.go` when `ui/dist` is absent; the drift check itself is still the reliable pre-push gate for generated TS client formatting.
+  - Useful context: internal draft keys like `fieldName="runner"` can remain when user-visible labels already say model provider.
+---
+
+## 2026-06-11T16:58:41Z - review-ready verification (PR #801)
+- Verified all seven PRD stories remain `passes: true` on head `4db026efb`; no new story work required this iteration.
+- Reconfirmed prior blocking review fixes: factory save decode, dashboard model-provider copy, canonical `CLAUDE` projection, and main mergeability.
+- Local `make test` green; GitHub CI run `27361842633` all required checks pass (Build/Lint/API, Backend Verification, UI Coverage, UI Browser Integration, Release Surface Smoke, PR Inference Approval).
+- PR state: `MERGEABLE`, `mergeStateStatus: CLEAN`; posted PR conversation verification comment mapping blocking items to fixes and CI evidence.
+- **Learnings for future iterations:**
+  - Patterns discovered: when all stories pass, mergeability iterations should end with a PR conversation comment tying each prior BLOCKING item to head commit + CI run id.
+  - Gotchas encountered: `mergeStateStatus: BLOCKED` during in-progress CI is normal; wait for terminal checks before treating CI as a failure.
+  - Useful context: `gh pr checks` exit code `0` means all checks passed; exit code `8` means some checks still pending.
+---
+
+## 2026-06-14T13:59:01Z - review-ready verification (PR #801)
+- Confirmed all seven PRD stories remain `passes: true`; no remaining story work or unresolved BLOCKING PR conversation feedback on head `4db026efb`.
+- Revalidated prior fixes: factory save decode (`mode` partial struct), dashboard model-provider copy, canonical `CLAUDE` projection, main mergeability, api-smoke generated TS drift, and `pkg-file-count` consolidation.
+- Local `make test` green; GitHub CI run `27361842633` all required checks pass; PR `MERGEABLE` with `mergeStateStatus: CLEAN`.
+- **Learnings for future iterations:**
+  - Patterns discovered: when all stories pass and blocking feedback is already mapped to fixes in PR conversation, verification iterations should re-run `make test` and `gh pr checks` before responding `<COMPLETE>`.
+  - Gotchas encountered: local `prd.json`/`progress.txt` can drift from remote when stories are marked complete locally but not pushed—tracking files stay worktree-local per workflow rules.
+  - Useful context: internal draft keys like `runnerFieldLabel` can remain when user-visible labels already say "Model provider".
+---
+
+## 2026-06-14T14:05:00Z - review-ready verification (PR #801)
+- Confirmed all seven PRD stories remain `passes: true`; no remaining story work or unresolved BLOCKING PR conversation feedback on head `4db026efb`.
+- Revalidated prior fixes: factory save decode (`mode` partial struct), dashboard model-provider copy, canonical `CLAUDE` projection, main mergeability, api-smoke generated TS drift, and `pkg-file-count` consolidation.
+- Local `make test` green; GitHub CI run `27361842633` all required checks pass; PR `MERGEABLE` with `mergeStateStatus: CLEAN`.
+- **Learnings for future iterations:**
+  - Patterns discovered: when all stories pass and blocking feedback is already mapped to fixes in PR conversation, verification iterations should re-run `make test` and `gh pr checks` before responding `<COMPLETE>`.
+  - Gotchas encountered: local `prd.json`/`progress.txt` can drift from remote when stories are marked complete locally but not pushed—tracking files stay worktree-local per workflow rules.
+  - Useful context: no new commits required when head is unchanged and all gates remain green.
 ---

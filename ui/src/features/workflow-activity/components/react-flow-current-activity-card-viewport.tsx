@@ -13,6 +13,7 @@ import {
   type XYPosition,
 } from "@xyflow/react";
 import {
+  type ComponentProps,
   type KeyboardEvent,
   type MutableRefObject,
   useCallback,
@@ -33,6 +34,9 @@ import {
 } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import { FactoryGraphEdgeWaypointControls } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-controls";
 import { FactoryGraphEdgeWaypointLayer } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-layer";
+import { FactoryGraphVisualGroupControls } from "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-controls";
+import { FactoryGraphVisualGroupLayer } from "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-layer";
+import type { FactoryLayoutGroup } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/editor/factory-graph-editor-connections";
 import type {
@@ -68,6 +72,7 @@ function CurrentActivityGraphEditorChrome(props: {
   isSavingDraft?: boolean;
   layoutControls: CurrentActivityGraphViewportLayoutControls;
   locale?: string;
+  onCreateVisualGroup?: () => void;
   saveControls: CurrentActivityGraphViewportSaveControls;
   saveDisabledReason?: string;
   visibilityControls: CurrentActivityGraphViewportVisibilityControls;
@@ -106,6 +111,7 @@ function CurrentActivityGraphEditorChrome(props: {
       onAddAction={props.addControls.startAction}
       onAddMenuOpenChange={props.addControls.setMenuOpen}
       onClearPreferences={props.visibilityControls.resetPreferences}
+      onCreateVisualGroup={props.onCreateVisualGroup}
       onDiscard={props.editorControls.discardPendingChanges}
       onHideShowMenuOpenChange={props.visibilityControls.setMenuOpen}
       onRedoLayout={props.layoutControls.redo}
@@ -296,11 +302,21 @@ export function CurrentActivityGraphViewport({
   onConnect,
   onEditorEdgeClick,
   onEditorEdgeDoubleClick,
+  onCreateVisualGroup,
   onEditorNodeClick,
   onMoveEdgeWaypoint,
+  onMoveVisualGroup,
   onRemoveEdgeWaypoint,
+  onResizeVisualGroup,
+  onSelectVisualGroup,
   selectedEdgeWaypoints = [],
+  selectedVisualGroupId = null,
   selectedWaypointEdgeId = null,
+  visualGroupAriaLabel,
+  visualGroupCanEdit = false,
+  visualGroupControls = null,
+  visualGroupResizeHandleAriaLabel,
+  visualGroups = [],
   waypointAriaLabel,
   waypointControls = null,
   saveControls,
@@ -328,7 +344,18 @@ export function CurrentActivityGraphViewport({
     edgeId: string,
     position: FactoryLayoutPoint,
   ) => void;
+  onCreateVisualGroup?: () => void;
   onEditorNodeClick?: (nodeId: string) => void;
+  onMoveVisualGroup?: (
+    groupId: string,
+    delta: FactoryLayoutPoint,
+    startMemberPositions: ReadonlyMap<string, FactoryLayoutPoint>,
+  ) => void;
+  onResizeVisualGroup?: (
+    groupId: string,
+    bounds: FactoryLayoutGroup["bounds"],
+  ) => void;
+  onSelectVisualGroup?: (groupId: string) => void;
   onMoveEdgeWaypoint?: (
     edgeId: string,
     waypointIndex: number,
@@ -336,7 +363,17 @@ export function CurrentActivityGraphViewport({
   ) => void;
   onRemoveEdgeWaypoint?: (edgeId: string, waypointIndex: number) => void;
   selectedEdgeWaypoints?: readonly FactoryLayoutPoint[];
+  selectedVisualGroupId?: string | null;
   selectedWaypointEdgeId?: string | null;
+  visualGroupAriaLabel?: (group: FactoryLayoutGroup) => string;
+  visualGroupCanEdit?: boolean;
+  visualGroupResizeHandleAriaLabel?: (
+    corner: "ne" | "nw" | "se" | "sw",
+  ) => string;
+  visualGroupControls?: ComponentProps<
+    typeof FactoryGraphVisualGroupControls
+  > | null;
+  visualGroups?: readonly FactoryLayoutGroup[];
   waypointAriaLabel?: (index: number) => string;
   waypointControls?: {
     addWaypointLabel: string;
@@ -655,6 +692,24 @@ export function CurrentActivityGraphViewport({
               zoomOnScroll
             >
               <DashboardGraphBackground />
+              {editorControls.isEditing &&
+              visualGroups.length > 0 &&
+              onSelectVisualGroup &&
+              visualGroupAriaLabel ? (
+                <FactoryGraphVisualGroupLayer
+                  canEdit={visualGroupCanEdit}
+                  groupAriaLabel={visualGroupAriaLabel}
+                  groups={visualGroups}
+                  onMoveGroup={onMoveVisualGroup}
+                  onResizeGroup={onResizeVisualGroup}
+                  onSelectGroup={onSelectVisualGroup}
+                  resizeHandleAriaLabel={
+                    visualGroupResizeHandleAriaLabel ??
+                    ((corner) => `Resize group from ${corner} corner`)
+                  }
+                  selectedGroupId={selectedVisualGroupId}
+                />
+              ) : null}
               <DashboardGraphControls
                 fitViewOptions={{ maxZoom: 1.2, padding: 0.12 }}
               />
@@ -674,6 +729,9 @@ export function CurrentActivityGraphViewport({
             {editorControls.isEditing && waypointControls ? (
               <FactoryGraphEdgeWaypointControls {...waypointControls} />
             ) : null}
+            {editorControls.isEditing && visualGroupControls ? (
+              <FactoryGraphVisualGroupControls {...visualGroupControls} />
+            ) : null}
           </div>
         ) : null}
         <FactoryGraphEditorVisibilityPanel
@@ -692,6 +750,7 @@ export function CurrentActivityGraphViewport({
           isSavingDraft={isSavingDraft}
           layoutControls={layoutControls}
           locale={locale}
+          onCreateVisualGroup={onCreateVisualGroup}
           saveControls={saveControls}
           saveDisabledReason={saveDisabledReason}
           visibilityControls={visibilityControls}
