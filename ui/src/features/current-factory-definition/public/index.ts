@@ -25,6 +25,7 @@ export {
   isLegacyWorkerType,
   isModelProviderWorkerType,
   isPollerWorkerType,
+  isPollerRunWorkstationType,
   isScriptWorkerType,
   preferredInferenceRunWorkstationType,
   resolveEditableWorkerTypeOptions,

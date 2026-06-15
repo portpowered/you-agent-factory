@@ -9,6 +9,31 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 )
 
+func TestPollerRunWorkstationKindTargets_RejectsConflictingBehavior(t *testing.T) {
+	t.Parallel()
+
+	cfg := taxonomyCompatibilityBaseConfig()
+	cfg.Workers = []interfaces.WorkerConfig{{
+		Name:    "script-poller",
+		Type:    interfaces.WorkerTypeScript,
+		Command: "factory/scripts/poll.sh",
+	}}
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:           "poll-tasks",
+		Type:           interfaces.WorkstationTypePoller,
+		Kind:           interfaces.WorkstationKindCron,
+		WorkerTypeName: "script-poller",
+		Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+	}}
+
+	targets := factoryvalidation.PollerRunWorkstationKindTargets(cfg)
+	validationassert.HasDomainTargetCode(t, targets, factoryvalidation.CodePollerRunWorkstationKindMismatch)
+	if !strings.Contains(targets[0].Message, "POLLER_RUN") || !strings.Contains(targets[0].Message, "poller") {
+		t.Fatalf("target message = %q, want POLLER_RUN and poller terminology", targets[0].Message)
+	}
+}
+
 func TestWorkerWorkstationBehaviorCompatibilityTargets_RejectsIncompatiblePairings(t *testing.T) {
 	t.Parallel()
 

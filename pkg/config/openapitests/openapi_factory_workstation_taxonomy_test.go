@@ -283,6 +283,27 @@ func TestGeneratedFactoryFromOpenAPIJSON_AcceptsLegacyPollerWorkstationWithoutEx
 	}
 }
 
+func TestGeneratedFactoryFromOpenAPIJSON_DerivesPollerKindForPollerRunWithoutExplicitBehavior(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"poller-run-without-behavior-factory",
+		"workTypes":[{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"queued","type":"PROCESSING"}]}],
+		"workers":[{"name":"script-poller","type":"SCRIPT_WORKER","command":"factory/scripts/poll.sh"}],
+		"workstations":[{"name":"poll-tasks","type":"POLLER_RUN","worker":"script-poller","inputs":[{"workType":"story","state":"init"}],"outputs":[{"workType":"story","state":"queued"}]}]
+	}`)
+
+	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+	cfg, err := FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+	if cfg.Workstations[0].Kind != interfaces.WorkstationKindPoller {
+		t.Fatalf("runtime workstation kind = %q, want %q", cfg.Workstations[0].Kind, interfaces.WorkstationKindPoller)
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_AcceptsInferenceRunWithGeneratedEnum(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"generated-inference-run-factory",

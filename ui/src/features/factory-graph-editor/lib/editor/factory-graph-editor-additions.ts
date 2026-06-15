@@ -25,6 +25,7 @@ import {
 } from "../../../current-factory-definition/lib/workstation-editable-values";
 import {
   DEFAULT_FACTORY_GRAPH_ADD_WORKSTATION_TYPE,
+  isPollerRunWorkstationType,
 } from "../../../current-factory-definition/public";
 import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation/workstation-type";
 import {
@@ -335,11 +336,12 @@ export function applyFactoryGraphAddEntityDraft(
     type: entityDraft.workstationType,
   });
   const trimmedBody = entityDraft.body.trim();
+  const behavior = isPollerRunWorkstationType(entityDraft.workstationType)
+    ? "POLLER"
+    : entityDraft.behavior;
 
   nextDraft.additions.workstations.push({
-    ...(entityDraft.behavior === DEFAULT_WORKSTATION_BEHAVIOR
-      ? {}
-      : { behavior: entityDraft.behavior }),
+    ...(behavior === DEFAULT_WORKSTATION_BEHAVIOR ? {} : { behavior }),
     ...(trimmedBody.length > 0 ? { body: trimmedBody } : {}),
     ...(entityDraft.behavior === "CRON" && entityDraft.cron
       ? { cron: buildCanonicalWorkstationCronFromDraft(entityDraft.cron) }
@@ -353,6 +355,37 @@ export function applyFactoryGraphAddEntityDraft(
       : { worker: "" }),
   });
   return nextDraft;
+}
+
+export function resolveFactoryGraphAddWorkstationDraftForTypeChange(
+  draft: Extract<FactoryGraphAddEntityDraft, { kind: "workstation" }>,
+  workstationType: EditableWorkstationType,
+  options?: { defaultWorkerName?: string },
+): Extract<FactoryGraphAddEntityDraft, { kind: "workstation" }> {
+  if (workstationType === draft.workstationType) {
+    return draft;
+  }
+
+  const nextRequiresWorker = workstationRequiresWorkerAssignment({
+    type: workstationType,
+  });
+  let behavior = draft.behavior;
+  if (isPollerRunWorkstationType(workstationType)) {
+    behavior = "POLLER";
+  } else if (draft.behavior === "POLLER") {
+    behavior = DEFAULT_WORKSTATION_BEHAVIOR;
+  }
+
+  return {
+    ...draft,
+    behavior,
+    body: nextRequiresWorker ? draft.body : "",
+    cron: behavior === "CRON" ? draft.cron : null,
+    workerName: nextRequiresWorker
+      ? draft.workerName || options?.defaultWorkerName || ""
+      : "",
+    workstationType,
+  };
 }
 
 export function resolveFactoryGraphAddWorkstationDraftForBehaviorChange(

@@ -61,3 +61,41 @@ func WorkerWorkstationBehaviorCompatibilityTargets(cfg *interfaces.FactoryConfig
 
 	return targets
 }
+
+// PollerRunWorkstationKindTargets returns validation targets when an explicit
+// POLLER_RUN workstation type conflicts with a non-poller workstation kind.
+func PollerRunWorkstationKindTargets(cfg *interfaces.FactoryConfig) []Target {
+	if cfg == nil || len(cfg.Workstations) == 0 {
+		return nil
+	}
+
+	var targets []Target
+	for workstationIndex, workstation := range cfg.Workstations {
+		if interfaces.StrictPublicFactoryWorkstationType(workstation.Type) != interfaces.WorkstationTypePoller {
+			continue
+		}
+		if workstation.Kind == "" || workstation.Kind == interfaces.WorkstationKindPoller {
+			continue
+		}
+
+		behaviorLabel := interfaces.GeneratedPublicWorkstationKind(workstation.Kind)
+		basePath := fmt.Sprintf("%s.workstations[%d](%s)", validationRoot, workstationIndex, workstation.Name)
+		targets = append(targets, Target{
+			Code:     CodePollerRunWorkstationKindMismatch,
+			Severity: SeverityError,
+			Message: fmt.Sprintf(
+				"workstation %q uses POLLER_RUN but behavior %q is not poller; set behavior to POLLER or choose a different workstation type",
+				workstation.Name,
+				behaviorLabel,
+			),
+			Subject: Subject{
+				Type:     SubjectTypeWorkstation,
+				ID:       workstation.Name,
+				Location: SubjectLocationReference,
+			},
+			Path: basePath + ".behavior",
+		})
+	}
+
+	return targets
+}

@@ -19,6 +19,7 @@ import type {
 import {
   editableWorkstationBehaviorOptions,
   resolveFactoryGraphAddWorkstationDraftForBehaviorChange,
+  resolveFactoryGraphAddWorkstationDraftForTypeChange,
 } from "../../lib/editor/factory-graph-editor-additions";
 import type { getFactoryGraphEditorMessages } from "../../messages/editor";
 import {
@@ -61,23 +62,16 @@ export function FactoryGraphEditorAddWorkstationFields({
         label={workstationMessages.workstationTypeLabel}
         onChange={(value) => {
           const workstationType = value as EditableWorkstationType;
-          if (workstationType === draft.workstationType) {
-            return;
-          }
-
-          const nextRequiresWorker = workstationRequiresWorkerAssignment({
-            type: workstationType,
-          });
-          onChange({
-            ...draft,
-            body: nextRequiresWorker ? draft.body : "",
-            workerName: nextRequiresWorker
-              ? draft.workerName ||
-                currentFactoryDefinition?.workers?.[0]?.name ||
-                ""
-              : "",
-            workstationType,
-          });
+          onChange(
+            resolveFactoryGraphAddWorkstationDraftForTypeChange(
+              draft,
+              workstationType,
+              {
+                defaultWorkerName:
+                  currentFactoryDefinition?.workers?.[0]?.name,
+              },
+            ),
+          );
         }}
         options={FACTORY_GRAPH_ADD_WORKSTATION_TYPE_OPTIONS.map((workstationType) => ({
           label: workstationMessages.localizeWorkstationType(workstationType),
