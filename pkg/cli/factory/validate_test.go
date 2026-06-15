@@ -55,6 +55,25 @@ func TestValidate_HumanOutputPreservesLegacyTaxonomyValues(t *testing.T) {
 	}
 }
 
+func TestValidate_HumanOutputLabelsLegacyPollerBehaviorWithoutType(t *testing.T) {
+	path := writeValidateFixture(t, legacyPollerTaxonomyFactoryJSON())
+
+	var out strings.Builder
+	if err := Validate(ValidateConfig{Path: path, Output: &out}); err != nil {
+		t.Fatalf("Validate legacy poller factory: %v", err)
+	}
+
+	text := out.String()
+	for _, want := range []string{
+		"Factory validation passed.",
+		"workstation poll-tasks: legacy poller kind (worker=script-poller)",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("output = %q, want substring %q", text, want)
+		}
+	}
+}
+
 func TestValidate_JSONIncludesTaxonomySummary(t *testing.T) {
 	path := writeValidateFixture(t, newTaxonomyFactoryJSON())
 
@@ -104,6 +123,33 @@ func writeValidateFixture(t *testing.T, body string) string {
 
 func newTaxonomyFactoryJSON() string {
 	return taxonomyMismatchFactoryJSON
+}
+
+func legacyPollerTaxonomyFactoryJSON() string {
+	return `{
+  "name": "legacy-poller-taxonomy",
+  "workTypes": [{
+    "name": "story",
+    "states": [
+      {"name": "init", "type": "INITIAL"},
+      {"name": "queued", "type": "TERMINAL"},
+      {"name": "failed", "type": "FAILED"}
+    ]
+  }],
+  "workers": [{
+    "name": "script-poller",
+    "type": "SCRIPT_WORKER",
+    "command": "factory/scripts/poll.sh"
+  }],
+  "workstations": [{
+    "name": "poll-tasks",
+    "behavior": "POLLER",
+    "worker": "script-poller",
+    "inputs": [{"workType": "story", "state": "init"}],
+    "outputs": [{"workType": "story", "state": "queued"}],
+    "onFailure": [{"workType": "story", "state": "failed"}]
+  }]
+}`
 }
 
 func legacyTaxonomyFactoryJSON() string {

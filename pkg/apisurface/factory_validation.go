@@ -137,8 +137,13 @@ func displayWorkstationRuntimeType(workstation factoryapi.Workstation) string {
 			return trimmed
 		}
 	}
-	if workstation.Behavior != nil && strings.TrimSpace(string(*workstation.Behavior)) == string(interfaces.WorkstationKindPoller) {
-		return "legacy poller kind"
+	if workstation.Behavior != nil {
+		normalized := interfaces.CanonicalPublicWorkstationKind(
+			interfaces.WorkstationKind(strings.TrimSpace(string(*workstation.Behavior))),
+		)
+		if normalized == string(factoryapi.WorkstationKindPoller) {
+			return "legacy poller kind"
+		}
 	}
 	return "legacy agent-run default"
 }

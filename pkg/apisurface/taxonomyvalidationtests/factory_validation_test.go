@@ -38,6 +38,46 @@ func TestFactoryRuntimeTaxonomySummary_PreservesAuthoredAndLegacyValues(t *testi
 	}
 }
 
+func TestFactoryRuntimeTaxonomySummary_LegacyPollerBehaviorWithoutType(t *testing.T) {
+	pollerBehavior := factoryapi.WorkstationKindPoller
+	factory := factoryapi.Factory{
+		Workstations: &[]factoryapi.Workstation{{
+			Name:     "poll-tasks",
+			Behavior: &pollerBehavior,
+			Worker:   "script-poller",
+		}},
+	}
+
+	entries := apisurface.FactoryRuntimeTaxonomySummary(factory)
+	if len(entries) != 1 {
+		t.Fatalf("entries = %#v, want one workstation taxonomy line", entries)
+	}
+	if entries[0].Type != "legacy poller kind" {
+		t.Fatalf("workstation entry = %#v, want legacy poller kind summary", entries[0])
+	}
+}
+
+func TestRenderFactoryValidationHuman_LegacyPollerBehaviorWithoutType(t *testing.T) {
+	pollerBehavior := factoryapi.WorkstationKindPoller
+	factory := factoryapi.Factory{
+		Workstations: &[]factoryapi.Workstation{{
+			Name:     "poll-tasks",
+			Behavior: &pollerBehavior,
+			Worker:   "script-poller",
+		}},
+	}
+
+	var out bytes.Buffer
+	if err := apisurface.RenderFactoryValidationHuman(factory, factoryapi.FactoryValidationResult{}, &out); err != nil {
+		t.Fatalf("RenderFactoryValidationHuman: %v", err)
+	}
+
+	text := out.String()
+	if !strings.Contains(text, "workstation poll-tasks: legacy poller kind (worker=script-poller)") {
+		t.Fatalf("output = %q, want legacy poller taxonomy summary line", text)
+	}
+}
+
 func TestRenderFactoryValidationHuman_IncludesTaxonomyAndBlockingTargets(t *testing.T) {
 	inference := factoryapi.WorkerTypeInferenceWorker
 	inferenceRun := factoryapi.WorkstationTypeInferenceRun
