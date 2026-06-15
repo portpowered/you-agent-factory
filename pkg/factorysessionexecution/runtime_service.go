@@ -569,6 +569,13 @@ func (s *RuntimeService) applyRuntimeSuccess(sessionID string, outcome workflowr
 	if state.session.Lifecycle != nil {
 		state.session.Lifecycle.FinishedAt = &finishedAt
 	}
+	recordProjection := ProjectRuntimeExecutionRecords(sessionID, outcome.Records, finishedAt)
+	if recordProjection.Phase != "" {
+		state.session.Phase = recordProjection.Phase
+	}
+	state.dispatches = cloneDispatchSummaries(recordProjection.Dispatches)
+	state.artifacts = cloneArtifactSummaries(recordProjection.Artifacts)
+	state.session.Progress = &recordProjection.Progress
 	projected, resultSummary, err := projectRuntimeSuccessResult(sessionID, outcome.Value, state.artifacts)
 	if err != nil {
 		state.session.Status = LifecycleStatusFailed
