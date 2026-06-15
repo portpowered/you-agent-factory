@@ -697,6 +697,17 @@ func TestGeneratedDispatchArtifactContracts_RuntimeTypesAgreeWithOpenAPI(t *test
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactoryArtifact{}), "AuditMode", reflect.TypeOf((*factoryapi.FactoryArtifactAuditMode)(nil)))
 }
 
+func TestGeneratedDispatchArtifactContracts_SessionReadListDetailTypesAgreeWithOpenAPI(t *testing.T) {
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.ListFactorySessionDispatchesResponse{}), "Dispatches", reflect.TypeOf([]factoryapi.FactorySessionDispatchSummary{}))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.ListFactorySessionArtifactsResponse{}), "Artifacts", reflect.TypeOf([]factoryapi.FactorySessionArtifactSummary{}))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionDispatchSummary{}), "Status", reflect.TypeOf(factoryapi.FactoryDispatchStatus("")))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionDispatchSummary{}), "DispatchKind", reflect.TypeOf(factoryapi.FactoryDispatchKind("")))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionArtifactSummary{}), "Kind", reflect.TypeOf(factoryapi.FactoryArtifactKind("")))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionArtifactSummary{}), "Visibility", reflect.TypeOf(factoryapi.FactoryArtifactVisibility("")))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionArtifactDetail{}), "ContentRef", reflect.TypeOf((*factoryapi.FactorySessionArtifactRetrievalRef)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionArtifactDetail{}), "Content", reflect.TypeOf((*factoryapi.WorkContent)(nil)))
+}
+
 func TestGeneratedDispatchArtifactContracts_PetriAndJavaScriptRoundTrip(t *testing.T) {
 	label := "process"
 	phase := "review"

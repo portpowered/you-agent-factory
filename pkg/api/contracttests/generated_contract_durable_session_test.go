@@ -46,6 +46,28 @@ type durableSessionIdempotentReplayFixture struct {
 	ReplayAsyncResponse map[string]any `json:"replayAsyncResponse"`
 }
 
+func TestGeneratedDurableSessionDispatchArtifactContracts_NotFoundJSON(t *testing.T) {
+	notFound := factoryapi.ErrorResponse{
+		Code:    factoryapi.NOTFOUND,
+		Family:  factoryapi.ErrorFamilyNotFound,
+		Message: "factory session not found",
+	}
+	if notFound.Code != factoryapi.NOTFOUND || notFound.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("generated not-found contract = %#v, want code %q and family %q", notFound, factoryapi.NOTFOUND, factoryapi.ErrorFamilyNotFound)
+	}
+
+	encoded, err := json.Marshal(notFound)
+	if err != nil {
+		t.Fatalf("marshal generated ErrorResponse: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"code":"NOT_FOUND"`) {
+		t.Fatalf("generated ErrorResponse JSON missing NOT_FOUND code: %s", encoded)
+	}
+	if !strings.Contains(string(encoded), `"family":"NOT_FOUND"`) {
+		t.Fatalf("generated ErrorResponse JSON missing NOT_FOUND family: %s", encoded)
+	}
+}
+
 func TestOpenAPIContract_DurableSessionFixturesValidateAndRoundTrip(t *testing.T) {
 	doc := loadValidatedOpenAPIContract(t)
 	catalog := loadDurableSessionContractFixtureCatalog(t)
@@ -136,17 +158,15 @@ func assertDurableSessionScenarioFixture(t *testing.T, doc *openapi3.T, scenario
 func assertDurableSessionScenarioDispatchArtifactFixtures(t *testing.T, doc *openapi3.T, scenario durableSessionContractScenario) {
 	t.Helper()
 
-	if len(scenario.Dispatches) > 0 {
-		listResponse := map[string]any{
-			"sessionId":  scenario.Session["sessionId"],
-			"dispatches": scenario.Dispatches,
-		}
-		assertOpenAPIFixtureValidates(t, doc, "ListFactorySessionDispatchesResponse", listResponse)
-		assertGeneratedFixtureRoundTrip(t, listResponse, "ListFactorySessionDispatchesResponse", func(raw []byte) {
-			var value factoryapi.ListFactorySessionDispatchesResponse
-			decodeRoundTripJSON(t, raw, &value, scenario.ID+" dispatch list")
-		})
+	dispatchListResponse := map[string]any{
+		"sessionId":  scenario.Session["sessionId"],
+		"dispatches": scenario.Dispatches,
 	}
+	assertOpenAPIFixtureValidates(t, doc, "ListFactorySessionDispatchesResponse", dispatchListResponse)
+	assertGeneratedFixtureRoundTrip(t, dispatchListResponse, "ListFactorySessionDispatchesResponse", func(raw []byte) {
+		var value factoryapi.ListFactorySessionDispatchesResponse
+		decodeRoundTripJSON(t, raw, &value, scenario.ID+" dispatch list")
+	})
 
 	if scenario.DispatchDetail != nil {
 		assertOpenAPIFixtureValidates(t, doc, "FactoryDispatch", scenario.DispatchDetail)
@@ -156,17 +176,15 @@ func assertDurableSessionScenarioDispatchArtifactFixtures(t *testing.T, doc *ope
 		})
 	}
 
-	if len(scenario.Artifacts) > 0 {
-		listResponse := map[string]any{
-			"sessionId": scenario.Session["sessionId"],
-			"artifacts": scenario.Artifacts,
-		}
-		assertOpenAPIFixtureValidates(t, doc, "ListFactorySessionArtifactsResponse", listResponse)
-		assertGeneratedFixtureRoundTrip(t, listResponse, "ListFactorySessionArtifactsResponse", func(raw []byte) {
-			var value factoryapi.ListFactorySessionArtifactsResponse
-			decodeRoundTripJSON(t, raw, &value, scenario.ID+" artifact list")
-		})
+	artifactListResponse := map[string]any{
+		"sessionId": scenario.Session["sessionId"],
+		"artifacts": scenario.Artifacts,
 	}
+	assertOpenAPIFixtureValidates(t, doc, "ListFactorySessionArtifactsResponse", artifactListResponse)
+	assertGeneratedFixtureRoundTrip(t, artifactListResponse, "ListFactorySessionArtifactsResponse", func(raw []byte) {
+		var value factoryapi.ListFactorySessionArtifactsResponse
+		decodeRoundTripJSON(t, raw, &value, scenario.ID+" artifact list")
+	})
 
 	if scenario.ArtifactDetail != nil {
 		assertOpenAPIFixtureValidates(t, doc, "FactorySessionArtifactDetail", scenario.ArtifactDetail)
