@@ -246,6 +246,7 @@ func TestSameNameConsumePathRegression_StaggeredArrivalCompletesWithoutStranding
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 			errCh := h.RunInBackground(ctx)
+			support.WaitForHarnessRuntimeAvailability(t, h, 3*time.Second)
 
 			for _, req := range tc.order {
 				h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
