@@ -13,10 +13,12 @@ func DiscoverTools() []ToolDefinition {
 		getResultTool(),
 		listDispatchesTool(),
 		listArtifactsTool(),
+		controlTool(),
+		readEventsTool(),
 	}
 }
 
-// ToolNames returns stable tool names in discovery order.
+// ToolNames returns stable canonical tool names in discovery order.
 func ToolNames() []string {
 	tools := DiscoverTools()
 	names := make([]string, len(tools))
@@ -24,6 +26,16 @@ func ToolNames() []string {
 		names[i] = tool.Name
 	}
 	return names
+}
+
+// ToolByName returns one canonical tool definition by stable name.
+func ToolByName(name string) (ToolDefinition, bool) {
+	for _, tool := range DiscoverTools() {
+		if tool.Name == name {
+			return tool, true
+		}
+	}
+	return ToolDefinition{}, false
 }
 
 func listSessionsTool() ToolDefinition {
@@ -61,7 +73,7 @@ func validateSourceTool() ToolDefinition {
 			"result.valid",
 			"result.sourceResolution.sourceHash",
 			"result.sourceResolution.sourceRef",
-			"result.policyPreview.effectivePolicyHash",
+			"result.policyPreview.policyHash",
 			"result.sourceValidationIssues",
 		},
 		ErrorStableFields: sharedErrorStableFields,
@@ -151,7 +163,8 @@ func getResultTool() ToolDefinition {
 			"result.sessionStatus",
 			"result.primaryResult",
 			"result.artifactIds",
-			"result.availability",
+			"result.availability.reason",
+			"result.availability.retryable",
 		},
 		ErrorStableFields: sharedErrorStableFields,
 	}
@@ -194,6 +207,44 @@ func listArtifactsTool() ToolDefinition {
 			"result.artifacts[].kind",
 			"result.artifacts[].visibility",
 			"result.artifacts[].dispatchId",
+		},
+		ErrorStableFields: sharedErrorStableFields,
+	}
+}
+
+func controlTool() ToolDefinition {
+	return ToolDefinition{
+		Name: ToolControl,
+		Description: "Apply one durable Factory Session lifecycle control such as approve, pause, resume, cancel, " +
+			"terminate, or retry-dispatch. Maps to POST /factory-sessions/{session_id}/{control}.",
+		InputSchema:  factorySessionLifecycleControlRequestSchema(),
+		OutputSchema: toolResponseSchema(factorySessionLifecycleControlResponseSchema()),
+		SuccessStableFields: []string{
+			"result.sessionId",
+			"result.operation",
+			"result.outcome",
+			"result.status",
+			"result.links.session",
+		},
+		ErrorStableFields: sharedErrorStableFields,
+	}
+}
+
+func readEventsTool() ToolDefinition {
+	return ToolDefinition{
+		Name: ToolReadEvents,
+		Description: "Read ordered Factory Session event facts for reconnect and inspection without exposing " +
+			"internal Petri-net terminology as the primary public vocabulary. Maps to GET /factory-sessions/{session_id}/events.",
+		InputSchema:  factorySessionEventReadRequestSchema(),
+		OutputSchema: toolResponseSchema(factorySessionEventReadResponseSchema()),
+		SuccessStableFields: []string{
+			"result.sessionId",
+			"result.events",
+			"result.events[].id",
+			"result.events[].type",
+			"result.events[].context.eventTime",
+			"result.events[].context.sequence",
+			"result.events[].context.sessionId",
 		},
 		ErrorStableFields: sharedErrorStableFields,
 	}

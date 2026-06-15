@@ -1,31 +1,31 @@
 {
-  "project": "Dynamic Workflows CLI Validate And Durable Session List",
-  "branchName": "dynamic-workflows-cell-cli-validate-list",
-  "description": "Add CLI loopback behavior for dynamic JavaScript workflows so customers can validate workflow source and list durable Factory Sessions with stable human-readable and JSON output before the full runtime or HTTP parity path is complete.",
+  "project": "infinite-you",
+  "branchName": "dynamic-workflows-recovery-mcp-tools",
+  "description": "Recover the canonical MCP tool discovery, validation, run, status, and result loopback for dynamic workflows by exposing Factory Session-oriented tools backed by deterministic mock session-provider fixtures, with focused tests proving discovery and invocation without host packaging.",
   "context": {
-    "customerAsk": "Add CLI validation and durable session list loopback for dynamic workflows. CLI validation must succeed for a valid simple JavaScript workflow fixture and return blocking diagnostics for syntax errors, unsupported globals, invalid args schema, and policy-denied host access. CLI list output must show durable JavaScript Factory Session rows with status, source identity, result availability, phase/progress summary, and action availability when present. JSON output must be stable enough for tests and use generated or shared API/domain shapes where appropriate. Focused CLI tests must cover human output, JSON output, invalid input, and provider/service failure.",
-    "problem": "Dynamic workflow work needs a fast, customer-testable CLI path. Users currently cannot rely on the CLI to validate JavaScript workflow source with stable diagnostics or list durable Factory Sessions with live, persisted, and all-session views that expose session status and result availability.",
-    "solution": "Add command behavior for workflow source validation using existing source-kind, source-ref, and inline-source inputs, and extend CLI session listing to surface durable Factory Session summaries from deterministic provider data. Use the mock session-provider path first, or an equivalent direct factorysessionexecution.Service implementation, while keeping the command output contract stable for a later real service or HTTP API swap."
+    "customerAsk": "Recover canonical MCP tool discovery, validation, run, status, and result behavior so an MCP client can discover Factory Session-oriented tools, validate a JavaScript workflow fixture, start a mock-backed session, poll status, and read final or partial results.",
+    "problem": "The earlier dynamic-workflows-cell-mcp-tools work is blocked by failed paired plan-token recovery, and downstream MCP install or real-runtime swap-in work has no narrow, verified canonical tool contract to depend on.",
+    "solution": "Define or repair canonical Factory Session MCP tools for list, validate, run simple, run async, status, result, dispatches, artifacts, controls, and events; keep workflow-named tools as compatibility aliases; wire behavior to deterministic mock session-provider fixtures or shared session execution interfaces; and add focused MCP registry or mock-client tests for discovery and invocation."
   },
   "acceptanceCriteria": [
-    "CLI validation succeeds for a valid simple JavaScript workflow fixture and exits successfully for both human-readable and JSON output.",
-    "CLI validation returns blocking diagnostics for syntax errors, unsupported globals or host access, invalid args schema, and policy-denied host access with stable machine-readable fields.",
-    "CLI session list output shows durable JavaScript Factory Session rows with lifecycle status, source identity, result availability, phase or progress summary, and action availability when present.",
-    "CLI session listing supports durable session scopes for live, persisted, and all sessions when the current command structure supports scoped listing.",
-    "JSON output for validation and listing is stable enough for tests and uses generated or shared API/domain shapes where appropriate rather than duplicating ad hoc response models.",
-    "Provider or service failure is reported as a clear CLI error with a non-zero exit and without partial misleading success output.",
-    "Quality gate: typecheck, lint, and focused CLI tests pass, including go test ./pkg/cli/workflow ./pkg/cli/session ./pkg/cli."
+    "MCP tool discovery exposes canonical Factory Session-oriented tools with stable request and response schemas for list, validate, run simple, run async, status, result, dispatches, artifacts, controls, and events.",
+    "Workflow-named MCP aliases remain compatibility-only and invoke the same Factory Session implementations and response shapes as the canonical tools.",
+    "MCP validate and run simple tools return deterministic fixture success responses and typed validation failure responses.",
+    "MCP run async, status, and result tools cover completed, running/not-ready, failed-with-partial-result, missing-session, and request-conflict cases with deterministic typed responses.",
+    "Tool implementation uses deterministic mock session-provider fixtures or shared session execution interfaces and does not add dependencies on API handlers or host packaging.",
+    "Focused MCP registry or mock-client tests prove tool discovery and invocation without requiring Cursor, OpenCode, Codex, Kiro, Gemini, Claude Code, or other host packaging.",
+    "Typecheck, lint, and targeted tests including go test ./pkg/mcp/... ./pkg/factorysessionexecution pass."
   ],
   "userStories": [
     {
-      "id": "dynamic-workflows-cell-cli-validate-list-001",
-      "title": "Validate a simple JavaScript workflow from CLI inputs",
-      "description": "As a workflow author, I want to validate a simple JavaScript workflow source from the CLI so I can confirm the source is acceptable before starting a Factory Session.",
+      "id": "dynamic-workflows-recovery-mcp-tools-001",
+      "title": "Discover canonical Factory Session MCP tools",
+      "description": "As an MCP client, I want to discover stable Factory Session-oriented tool names and schemas so I can integrate with dynamic workflow sessions without relying on transitional workflow terminology.",
       "acceptanceCriteria": [
-        "A valid simple JavaScript workflow fixture validates successfully from a supported source input path such as source kind plus source ref or inline source.",
-        "Human output clearly reports that validation passed and includes safe source identity details when available.",
-        "JSON output reports a successful validation result with stable source identity, source hash when available, and an empty blocking diagnostics collection.",
-        "The validation command uses shared source normalization and validation behavior where available, not a separate CLI-only parser contract.",
+        "MCP discovery includes canonical Factory Session tools for session list, validate, run simple, run async, status, result, dispatches, artifacts, controls, and events.",
+        "Each canonical tool exposes a deterministic input schema and response schema with Factory Session vocabulary such as session_id, status, diagnostics, dispatches, artifacts, events, and typed errors where applicable.",
+        "Workflow-named tool aliases, if present, are marked or documented as compatibility-only and resolve to the same behavior and response shape as their canonical Factory Session tool.",
+        "A focused MCP registry or mock-client test asserts discovery of the canonical tools and verifies one compatibility alias maps to the same implementation behavior without asserting unrelated package or route inventories.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -34,15 +34,14 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-cli-validate-list-002",
-      "title": "Report blocking JavaScript validation diagnostics",
-      "description": "As a workflow author, I want CLI validation to reject invalid JavaScript workflow sources with clear blocking diagnostics so I can fix source, schema, and policy issues before execution.",
+      "id": "dynamic-workflows-recovery-mcp-tools-002",
+      "title": "Validate JavaScript workflow fixtures through MCP",
+      "description": "As an MCP client, I want validation to return deterministic success and typed failure responses so I can check workflow source before starting a Factory Session.",
       "acceptanceCriteria": [
-        "Syntax errors return a non-zero exit and at least one blocking diagnostic with stable code, severity, message, and source location when available.",
-        "Unsupported globals or forbidden host access return blocking diagnostics without executing workflow source.",
-        "Invalid args schema returns a blocking diagnostic that identifies the args schema problem rather than a generic command failure.",
-        "Policy-denied host access returns a blocking diagnostic that distinguishes policy denial from syntax or schema failure.",
-        "Human output groups or labels blocking diagnostics in a readable way; JSON output preserves the same cases in stable machine-readable fields.",
+        "Invoking the canonical validate tool with the simple valid JavaScript workflow fixture returns a deterministic success response that includes validation status and any expected normalized metadata.",
+        "Invoking the canonical validate tool with an invalid fixture returns a typed validation failure response with stable diagnostic fields and no unstructured panic or transport-level failure for expected validation errors.",
+        "Workflow-named validate alias invocation returns the same success and typed validation failure semantics as the canonical validate tool.",
+        "Validation invocation uses deterministic fixtures or shared session execution interfaces and does not depend on API handlers or external provider credentials.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -51,15 +50,14 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-cli-validate-list-003",
-      "title": "List durable JavaScript Factory Sessions in human output",
-      "description": "As an operator, I want the supported session-listing CLI path to show durable JavaScript Factory Sessions in human-readable output so I can inspect current and historical workflow sessions from the terminal.",
+      "id": "dynamic-workflows-recovery-mcp-tools-003",
+      "title": "Run a simple mock-backed Factory Session through MCP",
+      "description": "As an MCP client, I want to start a simple mock-backed Factory Session and read its completed result so I can prove the MCP loopback works before real runtime swap-in.",
       "acceptanceCriteria": [
-        "Human list output includes durable JavaScript Factory Session rows from deterministic provider data.",
-        "Each durable row shows session id, lifecycle status, safe source identity, result availability, phase or progress summary, and action availability when present.",
-        "Live, persisted, and all-session scopes are supported when the current command structure exposes scoped listing options.",
-        "Empty durable result sets produce a clear empty state that distinguishes a reachable provider with no matching sessions from a provider failure.",
-        "Legacy live-session list behavior remains compatible for existing live session rows.",
+        "Invoking the canonical run simple tool with the deterministic simple workflow fixture returns a success response containing a stable Factory Session identifier, completed status, and final result payload or result reference.",
+        "The result tool can read the same completed session and returns the expected deterministic final result without requiring a separate host installation step.",
+        "Repeating the same deterministic fixture invocation produces stable reviewer-verifiable values for session identity policy, status, and result content where the fixture contract defines stability.",
+        "The run simple path uses the mock session-provider fixture or shared session execution interface and avoids direct API-handler dependencies.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -68,14 +66,14 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-cli-validate-list-004",
-      "title": "Provide stable JSON list output for durable sessions",
-      "description": "As an automation user, I want durable Factory Session list JSON to use stable shared shapes so scripts and future HTTP parity tests can consume list output without scraping human tables.",
+      "id": "dynamic-workflows-recovery-mcp-tools-004",
+      "title": "Support async status and not-ready result polling",
+      "description": "As an MCP client, I want async run, status, and result tools to represent running and not-ready states consistently so host agents can poll without treating in-progress work as a failure.",
       "acceptanceCriteria": [
-        "JSON list output includes durable JavaScript Factory Session summaries with status, source identity, result availability, phase or progress summary, and action availability when present.",
-        "JSON list output preserves live, persisted, and all-session scope behavior and deterministic ordering from the provider or shared normalizer.",
-        "JSON fields use generated API types, shared apisurface, or factorysessionexecution shapes where appropriate instead of a divergent CLI-only schema.",
-        "JSON output omits unrestricted host paths, raw workflow source, and secret-bearing provider internals.",
+        "Invoking the canonical run async tool with a running fixture returns a Factory Session identifier and an in-progress status rather than a completed final result.",
+        "The status tool returns a deterministic running or not-ready response for the in-progress mock session.",
+        "The result tool returns a typed not-ready response for the in-progress session without losing the session identifier or returning an untyped error.",
+        "A later completed fixture state for the same session can be observed through status and result with completed status and the expected final result.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -84,15 +82,14 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-cli-validate-list-005",
-      "title": "Handle invalid input and provider failures consistently",
-      "description": "As a CLI user, I want invalid command input and provider or service failures to return clear errors and non-zero exits so automation can distinguish bad requests from unavailable execution infrastructure.",
+      "id": "dynamic-workflows-recovery-mcp-tools-005",
+      "title": "Return typed responses for failure, missing session, and conflict cases",
+      "description": "As an MCP client, I want predictable status and result errors for failed, missing, and conflicting requests so agent hosts can recover or report the right failure reason.",
       "acceptanceCriteria": [
-        "Missing or conflicting validation source inputs fail before provider invocation with a clear command error and non-zero exit.",
-        "Unsupported session-list scope values fail with a clear command error and non-zero exit.",
-        "Provider or service validation failures return a clear CLI error without emitting a successful validation result.",
-        "Provider or service session-list failures return a clear CLI error without emitting partial success rows.",
-        "JSON error output, when requested by the existing command structure, is stable enough for focused CLI tests.",
+        "Status and result tools return deterministic typed responses for a failed session that includes a partial result or partial artifact reference when the fixture defines one.",
+        "Status and result tools return a typed missing-session response for an unknown Factory Session identifier.",
+        "Run or result requests that conflict with an existing request/session fixture return a typed request-conflict response with stable machine-readable fields.",
+        "Failure-path tests assert observable MCP response semantics and do not require scanning source-file structure, command inventories, or host package configuration.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -101,19 +98,19 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-cli-validate-list-006",
-      "title": "Preserve compatibility wording while steering users to Factory Sessions",
-      "description": "As a user migrating from workflow preview commands, I want compatibility paths to keep working while new validation and listing behavior uses Factory Session execution terminology.",
+      "id": "dynamic-workflows-recovery-mcp-tools-006",
+      "title": "Inspect dispatches, artifacts, controls, and events through MCP fixtures",
+      "description": "As an MCP client, I want inspection and control tools to expose deterministic session-owned dispatches, artifacts, controls, and events so host agents can inspect mock-backed Factory Sessions through the same vocabulary later used by the real runtime.",
       "acceptanceCriteria": [
-        "Legacy workflow preview command behavior remains compatibility-only and does not become the primary wording for durable execution list behavior.",
-        "New or changed CLI human output refers to Factory Sessions, session status, source identity, results, and actions rather than introducing a canonical dynamic workflow run noun.",
-        "Existing compatibility command tests continue to pass or are updated only for intentional terminology changes that preserve behavior.",
-        "Focused CLI tests cover human output, JSON output, invalid input, and provider/service failure for the new behavior.",
+        "Dispatch inspection returns deterministic session-owned dispatch records for the mock fixture using Factory Session and Dispatch vocabulary.",
+        "Artifact inspection returns deterministic session-owned artifact records or content references for the mock fixture using FactoryArtifact vocabulary.",
+        "Event inspection returns ordered Factory Session event facts for the mock fixture without exposing internal Petri-net terminology as the primary public vocabulary.",
+        "Control tool invocation returns deterministic accepted, rejected, or unsupported responses for the fixture-defined control cases without mutating unrelated sessions.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 6,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]

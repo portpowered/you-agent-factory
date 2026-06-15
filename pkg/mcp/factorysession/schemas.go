@@ -26,6 +26,13 @@ func booleanProperty(description string) map[string]any {
 	}
 }
 
+func integerProperty(description string) map[string]any {
+	return map[string]any{
+		"type":        "integer",
+		"description": description,
+	}
+}
+
 func enumStringProperty(description string, values ...string) map[string]any {
 	return map[string]any{
 		"type":        "string",
@@ -97,7 +104,7 @@ func factoryPreviewResultSchema() map[string]any {
 			"sourceRef":  stringProperty("Resolved public source reference."),
 		}),
 		"policyPreview": objectSchema(map[string]any{
-			"effectivePolicyHash": stringProperty("Stable hash of the effective approved orchestrator policy preview."),
+			"policyHash": stringProperty("Stable hash of the effective approved orchestrator policy preview."),
 		}),
 		"sourceValidationIssues": map[string]any{
 			"type": "array",
@@ -137,7 +144,7 @@ func factorySessionExecutionRequestSchema() map[string]any {
 			"description": "Caller-requested orchestrator policy before approval, if required.",
 		},
 		"wait": objectSchema(map[string]any{
-			"timeoutMillis":   map[string]any{"type": "integer", "description": "Sync wait timeout in milliseconds."},
+			"timeoutMillis":   integerProperty("Sync wait timeout in milliseconds."),
 			"cancelOnTimeout": booleanProperty("Whether to cancel the session when sync wait times out."),
 		}),
 	}, "requestId", "source")
@@ -145,17 +152,18 @@ func factorySessionExecutionRequestSchema() map[string]any {
 
 func factorySessionExecutionResponseSchema() map[string]any {
 	return objectSchema(map[string]any{
-		"sessionId":        stringProperty("Stable durable Factory Session identifier."),
-		"status":           durableLifecycleStatusSchema(),
-		"orchestratorKind": orchestratorKindSchema(),
-		"resolvedSource":   resolvedSourceIdentitySchema(),
-		"sourceHash":       stringProperty("Stable hash of the resolved workflow or factory source."),
+		"sessionId":           stringProperty("Stable durable Factory Session identifier."),
+		"status":              durableLifecycleStatusSchema(),
+		"orchestratorKind":    orchestratorKindSchema(),
+		"resolvedSource":      resolvedSourceIdentitySchema(),
+		"sourceHash":          stringProperty("Stable hash of the resolved workflow or factory source."),
 		"effectivePolicyHash": stringProperty("Stable hash of the effective approved orchestrator policy."),
 		"links": objectSchema(map[string]any{
 			"session":    stringProperty("Relative URL for GET /factory-sessions/{session_id}."),
 			"results":    stringProperty("Relative URL for GET /factory-sessions/{session_id}/results."),
 			"dispatches": stringProperty("Relative URL for GET /factory-sessions/{session_id}/dispatches."),
 			"artifacts":  stringProperty("Relative URL for GET /factory-sessions/{session_id}/artifacts."),
+			"events":     stringProperty("Relative URL for GET /factory-sessions/{session_id}/events."),
 		}),
 	}, "sessionId", "status", "orchestratorKind", "resolvedSource")
 }
@@ -164,7 +172,7 @@ func factorySessionSyncExecutionResponseSchema() map[string]any {
 	props := factorySessionExecutionResponseSchema()["properties"].(map[string]any)
 	props["syncOutcome"] = enumStringProperty(
 		"Sync wait outcome for POST /factory-sessions/sync.",
-		"COMPLETED", "STILL_RUNNING", "TIMED_OUT",
+		"COMPLETED", "TIMED_OUT", "FAILED",
 	)
 	props["timedOut"] = booleanProperty("Whether sync wait timed out before terminal completion.")
 	props["result"] = factorySessionResultSchema()
@@ -186,10 +194,11 @@ func factorySessionDurableReadModelSchema() map[string]any {
 		"effectivePolicyHash": stringProperty("Stable hash of the effective approved orchestrator policy."),
 		"phase":               stringProperty("Current JavaScript orchestrator phase when available."),
 		"progress": objectSchema(map[string]any{
-			"queued":    map[string]any{"type": "integer"},
-			"running":   map[string]any{"type": "integer"},
-			"succeeded": map[string]any{"type": "integer"},
-			"failed":    map[string]any{"type": "integer"},
+			"totalDispatches":      map[string]any{"type": "integer"},
+			"completedDispatches":  map[string]any{"type": "integer"},
+			"failedDispatches":     map[string]any{"type": "integer"},
+			"inFlightDispatches":   map[string]any{"type": "integer"},
+			"phaseCount":           map[string]any{"type": "integer"},
 		}),
 		"resultSummary": objectSchema(map[string]any{
 			"resultStatus": enumStringProperty(
@@ -243,11 +252,12 @@ func factorySessionResultSchema() map[string]any {
 			"description": "Artifact identifiers for materialized outputs.",
 		},
 		"availability": objectSchema(map[string]any{
-			"code":    stringProperty("Availability code when resultStatus is NOT_READY or UNAVAILABLE."),
-			"message": stringProperty("Availability message for polling clients."),
+			"reason":    stringProperty("Stable availability reason when resultStatus is NOT_READY or UNAVAILABLE."),
+			"message":   stringProperty("Availability message for polling clients."),
+			"retryable": booleanProperty("Whether polling or a later retry may return a ready result."),
 		}),
 		"failure": objectSchema(map[string]any{
-			"code":    stringProperty("Failure code when resultStatus is FAILED_WITH_PARTIAL."),
+			"reason":  stringProperty("Stable failure reason when resultStatus is FAILED_WITH_PARTIAL."),
 			"message": stringProperty("Failure message when resultStatus is FAILED_WITH_PARTIAL."),
 		}),
 	}, "sessionId", "resultStatus")
@@ -260,11 +270,11 @@ func listFactorySessionDispatchesResponseSchema() map[string]any {
 			"type": "array",
 			"items": objectSchema(map[string]any{
 				"id":           stringProperty("Stable dispatch identifier."),
-				"status":       stringProperty("Dispatch lifecycle status."),
 				"dispatchKind": stringProperty("Canonical dispatch kind shared across orchestrators."),
+				"status":       stringProperty("Dispatch lifecycle status."),
 				"phase":        stringProperty("JavaScript phase when available."),
 				"label":        stringProperty("Customer-visible dispatch label when available."),
-			}, "id", "status", "dispatchKind"),
+			}, "id", "dispatchKind", "status"),
 		},
 	}, "sessionId", "dispatches")
 }
@@ -278,12 +288,91 @@ func listFactorySessionArtifactsResponseSchema() map[string]any {
 				"id":          stringProperty("Stable FactoryArtifact identifier."),
 				"kind":        stringProperty("FactoryArtifact kind."),
 				"visibility":  stringProperty("Artifact visibility classification."),
-				"sizeBytes":   map[string]any{"type": "integer", "description": "Artifact size in bytes when known."},
+				"sizeBytes":   integerProperty("Artifact size in bytes when known."),
 				"contentHash": stringProperty("Stable content hash when available."),
 				"dispatchId":  stringProperty("Linked dispatch identifier when available."),
 			}, "id", "kind"),
 		},
 	}, "sessionId", "artifacts")
+}
+
+func factorySessionLifecycleControlRequestSchema() map[string]any {
+	return objectSchema(map[string]any{
+		"sessionId": stringProperty("Stable durable Factory Session identifier."),
+		"operation": enumStringProperty(
+			"Lifecycle control operation for one Factory Session.",
+			"APPROVE", "PAUSE", "RESUME", "CANCEL", "TERMINATE", "RETRY_DISPATCH",
+		),
+		"requestId": stringProperty("Optional idempotency key for one lifecycle control request."),
+		"reason":    stringProperty("Optional operator-provided reason for audit and diagnostics."),
+		"dispatchId": stringProperty(
+			"Target dispatch identifier when operation is RETRY_DISPATCH.",
+		),
+		"approvalPreviewId": stringProperty("Approval preview identity when operation is APPROVE."),
+		"approvedPolicy": map[string]any{
+			"type":        "object",
+			"description": "Approved orchestrator policy when operation is APPROVE.",
+		},
+	}, "sessionId", "operation")
+}
+
+func factorySessionLifecycleControlResponseSchema() map[string]any {
+	return objectSchema(map[string]any{
+		"sessionId": stringProperty("Stable durable Factory Session identifier."),
+		"operation": enumStringProperty(
+			"Lifecycle control operation evaluated for the Factory Session.",
+			"APPROVE", "PAUSE", "RESUME", "CANCEL", "TERMINATE", "RETRY_DISPATCH",
+		),
+		"outcome": enumStringProperty(
+			"Typed lifecycle-control outcome.",
+			"ACCEPTED", "NO_OP", "INVALID_STATE", "TERMINAL_SESSION", "CONFLICT",
+		),
+		"status": durableLifecycleStatusSchema(),
+		"detail": stringProperty("Optional human-readable detail explaining NO_OP or rejected outcomes."),
+		"links": objectSchema(map[string]any{
+			"session":    stringProperty("Relative URL for GET /factory-sessions/{session_id}."),
+			"results":    stringProperty("Relative URL for GET /factory-sessions/{session_id}/results."),
+			"dispatches": stringProperty("Relative URL for GET /factory-sessions/{session_id}/dispatches."),
+			"artifacts":  stringProperty("Relative URL for GET /factory-sessions/{session_id}/artifacts."),
+			"events":     stringProperty("Relative URL for GET /factory-sessions/{session_id}/events."),
+		}),
+	}, "sessionId", "operation", "outcome", "status")
+}
+
+func factorySessionEventReadResponseSchema() map[string]any {
+	return objectSchema(map[string]any{
+		"sessionId": stringProperty("Stable durable Factory Session identifier."),
+		"events": map[string]any{
+			"type": "array",
+			"items": objectSchema(map[string]any{
+				"id":            stringProperty("Canonical FactoryEvent identifier."),
+				"type":          stringProperty("Canonical FactoryEvent type."),
+				"schemaVersion": stringProperty("FactoryEvent envelope schema version."),
+				"context": objectSchema(map[string]any{
+					"eventTime":       stringProperty("RFC3339 event timestamp."),
+					"sequence":        integerProperty("Append-only event-log sequence number."),
+					"sessionId":       stringProperty("Owning Factory Session identifier."),
+					"sessionSequence": integerProperty("Monotonic session-scoped event sequence when available."),
+				}),
+				"payload": map[string]any{
+					"type":        "object",
+					"description": "Typed FactoryEvent payload for session lifecycle, dispatches, and artifacts.",
+				},
+			}, "id", "type", "schemaVersion", "context"),
+		},
+	}, "sessionId", "events")
+}
+
+func factorySessionEventReadRequestSchema() map[string]any {
+	return objectSchema(map[string]any{
+		"sessionId": stringProperty("Stable durable Factory Session identifier."),
+		"afterEventId": stringProperty(
+			"Reconnect cursor: return events after this FactoryEvent identifier.",
+		),
+		"afterSequence": integerProperty(
+			"Reconnect cursor: return events after this sessionSequence value.",
+		),
+	}, "sessionId")
 }
 
 func durableLifecycleStatusSchema() map[string]any {
