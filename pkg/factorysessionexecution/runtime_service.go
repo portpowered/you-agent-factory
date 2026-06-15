@@ -214,10 +214,13 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 		return AsyncStartResult{}, err
 	}
 
-	resolved, sourceContent, policyResolution, err := s.prepareStartExecution(normalized)
+	prepared, err := s.prepareStart(normalized)
 	if err != nil {
 		return AsyncStartResult{}, err
 	}
+	resolved := prepared.ResolvedSource
+	sourceContent := prepared.SourceContent
+	policyResolution := policyResolutionFromPrepared(prepared)
 
 	reserved, err := s.reserveStartSession(ctx, normalized, tupleHash, true)
 	if err != nil {
@@ -275,10 +278,13 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 		return SyncStartResult{}, err
 	}
 
-	resolved, sourceContent, policyResolution, err := s.prepareStartExecution(normalized)
+	prepared, err := s.prepareStart(normalized)
 	if err != nil {
 		return SyncStartResult{}, err
 	}
+	resolved := prepared.ResolvedSource
+	sourceContent := prepared.SourceContent
+	policyResolution := policyResolutionFromPrepared(prepared)
 
 	waitTimeout, hasSyncWait := syncWaitTimeout(normalized)
 	reserved, err := s.reserveStartSession(ctx, normalized, tupleHash, !hasSyncWait)
@@ -561,19 +567,17 @@ func normalizeStartTuple(req StartRequest) (StartRequest, string, error) {
 	return normalized, tupleHash, nil
 }
 
-func (s *JavaScriptRuntimeService) prepareStartExecution(
-	normalized StartRequest,
-) (ResolvedSource, string, workflowpolicy.Resolution, error) {
-	resolved, err := ResolveStartSource(normalized, StartSourceContext{ProjectRoot: s.projectRoot})
-	if err != nil {
-		return ResolvedSource{}, "", workflowpolicy.Resolution{}, err
+func (s *JavaScriptRuntimeService) prepareStart(normalized StartRequest) (PreparedStart, error) {
+	return PrepareStart(normalized, StartPrepareContext{
+		StartSourceContext: StartSourceContext{ProjectRoot: s.projectRoot},
+	})
+}
+
+func policyResolutionFromPrepared(prepared PreparedStart) workflowpolicy.Resolution {
+	return workflowpolicy.Resolution{
+		Policy: prepared.EffectivePolicy,
+		Hash:   prepared.Policy.EffectiveHash,
 	}
-	sourceContent, err := LoadStartSourceContent(normalized, resolved, StartSourceContext{ProjectRoot: s.projectRoot})
-	if err != nil {
-		return ResolvedSource{}, "", workflowpolicy.Resolution{}, err
-	}
-	policyResolution := workflowpolicy.Resolve(workflowpolicy.Request{Requested: normalized.RequestedPolicy})
-	return resolved, sourceContent, policyResolution, nil
 }
 
 func (s *JavaScriptRuntimeService) runAsyncSession(

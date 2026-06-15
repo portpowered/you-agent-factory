@@ -5,11 +5,6 @@ pkg/apisurface/factorysession/helpers.go: unreachable func: deref
 pkg/factorysessionexecution/fake_service.go: unreachable func: WithPersistedSessionSeeds
 pkg/factorysessionexecution/lifecycle.go: unreachable func: AllowsPostTerminalInspection
 pkg/factorysessionexecution/lifecycle.go: unreachable func: NormalizeLifecycleStatus
-pkg/factorysessionexecution/prepare_start.go: unreachable func: PrepareStart
-pkg/factorysessionexecution/prepare_start.go: unreachable func: validateResolvedSourceContent
-pkg/factorysessionexecution/prepare_start.go: unreachable func: validateStartArgs
-pkg/factorysessionexecution/prepare_start.go: unreachable func: validateStartWait
-pkg/factorysessionexecution/prepare_start.go: unreachable func: validationErrorFromPolicyIssues
-pkg/factorysessionexecution/prepare_start.go: unreachable func: validationErrorFromSourceIssues
-pkg/factorysessionexecution/prepare_start.go: unreachable func: wrapWorkflowSourceForValidation
+pkg/factorysessionexecution/service.go: unreachable func: LoadStartSourceContent
+pkg/factorysessionexecution/service.go: unreachable func: ResolveStartSource
 pkg/interfaces/factory_config.go: unreachable func: PermissivePublicFactoryOrchestratorKind

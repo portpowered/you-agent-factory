@@ -285,6 +285,36 @@ func TestJavaScriptRuntimeService_Start_CrossModeRequestIDConflict(t *testing.T)
 	})
 }
 
+func TestJavaScriptRuntimeService_Start_RejectsInvalidWaitAndPolicy(t *testing.T) {
+	t.Run("negative sync wait timeout", func(t *testing.T) {
+		service := newJavaScriptRuntimeService(t)
+		negative := int64(-1)
+		req := inlineWorkflowStartRequest(
+			"req-runtime-invalid-wait-001",
+			simpleFinalWorkflowSource,
+			nil,
+			nil,
+		)
+		req.Wait = &fse.WaitOptions{TimeoutMillis: &negative}
+
+		_, err := service.StartSync(context.Background(), req)
+		assertRuntimeTypedFailure(t, err, fixtures.TypedFailureMalformedRequest, "wait.timeoutMillis")
+	})
+
+	t.Run("invalid requested policy", func(t *testing.T) {
+		service := newJavaScriptRuntimeService(t)
+		req := inlineWorkflowStartRequest(
+			"req-runtime-invalid-policy-001",
+			simpleFinalWorkflowSource,
+			nil,
+			map[string]any{"allowNetwork": true},
+		)
+
+		_, err := service.StartAsync(context.Background(), req)
+		assertRuntimeTypedFailure(t, err, fixtures.TypedFailureMalformedRequest, "requestedPolicy")
+	})
+}
+
 func TestJavaScriptRuntimeService_TypedFailures_MissingSessionMissingSourceBadSource(t *testing.T) {
 	service := newJavaScriptRuntimeService(t)
 
