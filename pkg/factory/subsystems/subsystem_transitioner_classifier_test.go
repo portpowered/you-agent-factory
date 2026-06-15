@@ -210,3 +210,302 @@ func newClassifierSnapshot(now time.Time, output string) *interfaces.EngineState
 		}},
 	}
 }
+func TestExecutorReviewReconcile_ProcessAcceptPreservesSiblingLaneReviewInit(t *testing.T) {
+	const traceID = "trace-process-sibling"
+	now := time.Date(2026, 6, 15, 15, 0, 0, 0, time.UTC)
+	marking := buildExecutorReviewReconcileMarking(t, []*interfaces.Token{
+		{
+			ID: "review-lane-a-old", PlaceID: "review:init",
+			Color: interfaces.TokenColor{
+				WorkID: "work-review-a-old", WorkTypeID: "review", Name: "lane-a",
+				CurrentChainingTraceID: traceID,
+			},
+		},
+		{
+			ID: "review-lane-b-sibling", PlaceID: "review:init",
+			Color: interfaces.TokenColor{
+				WorkID: "work-review-b", WorkTypeID: "review", Name: "lane-b",
+				CurrentChainingTraceID: traceID,
+			},
+		},
+	})
+
+	consumed := []interfaces.Token{{
+		ID: "task-input", PlaceID: "task:init",
+		Color: interfaces.TokenColor{
+			WorkID: "work-task-a", WorkTypeID: "task", Name: "lane-a",
+			CurrentChainingTraceID: traceID,
+		},
+	}}
+
+	mutations := executorReviewReconcileMutations(
+		marking,
+		executorReviewWorkstationProcess,
+		interfaces.OutcomeAccepted,
+		consumed,
+		[]petri.Arc{
+			{PlaceID: state.PlaceID("task", "in-review")},
+			{PlaceID: state.PlaceID("review", "init")},
+		},
+		now,
+	)
+	got := mutationTokenIDs(mutations)
+	if !got["review-lane-a-old"] {
+		t.Fatalf("expected consume for same-lane duplicate review:init, got %#v", got)
+	}
+	if got["review-lane-b-sibling"] {
+		t.Fatalf("consumed sibling lane review:init on same trace: %#v", got)
+	}
+}
+
+func TestExecutorReviewReconcile_ReviewAcceptPreservesSiblingLaneReviewInit(t *testing.T) {
+	const (
+		traceID  = "trace-review-sibling"
+		laneName = "lane-a"
+	)
+	now := time.Date(2026, 6, 15, 15, 5, 0, 0, time.UTC)
+	marking := buildExecutorReviewReconcileMarking(t, []*interfaces.Token{
+		{
+			ID: "review-lane-a-extra", PlaceID: "review:init",
+			Color: interfaces.TokenColor{
+				WorkID: "work-review-a-extra", WorkTypeID: "review", Name: laneName,
+				CurrentChainingTraceID: traceID,
+			},
+		},
+		{
+			ID: "review-lane-b-sibling", PlaceID: "review:init",
+			Color: interfaces.TokenColor{
+				WorkID: "work-review-b", WorkTypeID: "review", Name: "lane-b",
+				CurrentChainingTraceID: traceID,
+			},
+		},
+	})
+	consumed := buildReviewReconcileActiveDispatchTokens(traceID, laneName)
+
+	mutations := executorReviewReconcileMutations(
+		marking,
+		executorReviewWorkstationReview,
+		interfaces.OutcomeAccepted,
+		consumed,
+		[]petri.Arc{
+			{PlaceID: state.PlaceID("task", "to-complete")},
+			{PlaceID: state.PlaceID("review", "complete")},
+		},
+		now,
+	)
+	got := mutationTokenIDs(mutations)
+	if !got["review-lane-a-extra"] {
+		t.Fatalf("expected consume for same-lane duplicate review:init, got %#v", got)
+	}
+	if got["review-lane-b-sibling"] {
+		t.Fatalf("consumed sibling lane review:init on same trace: %#v", got)
+	}
+	if got["review-active"] || got["task-in-review"] {
+		t.Fatalf("consumed active dispatch tokens: %#v", got)
+	}
+}
+
+func TestExecutorReviewReconcile_ProcessAcceptConsumesExistingReviewInitForTrace(t *testing.T) {
+	const traceID = "trace-process-review"
+	now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+	marking := buildExecutorReviewReconcileMarking(t, []*interfaces.Token{{
+		ID:      "review-old",
+		PlaceID: "review:init",
+		Color: interfaces.TokenColor{
+			WorkID:                 "work-review-old",
+			WorkTypeID:             "review",
+			Name:                   "lane-a",
+			CurrentChainingTraceID: traceID,
+		},
+	}})
+
+	consumed := []interfaces.Token{{
+		ID:      "task-input",
+		PlaceID: "task:init",
+		Color: interfaces.TokenColor{
+			WorkID:                 "work-task-1",
+			WorkTypeID:             "task",
+			Name:                   "lane-a",
+			CurrentChainingTraceID: traceID,
+		},
+	}}
+
+	mutations := executorReviewReconcileMutations(
+		marking,
+		executorReviewWorkstationProcess,
+		interfaces.OutcomeAccepted,
+		consumed,
+		[]petri.Arc{
+			{PlaceID: state.PlaceID("task", "in-review")},
+			{PlaceID: state.PlaceID("review", "init")},
+		},
+		now,
+	)
+	if len(mutations) != 1 {
+		t.Fatalf("mutations = %d, want 1 consume for existing review:init", len(mutations))
+	}
+	if mutations[0].Type != interfaces.MutationConsume || mutations[0].TokenID != "review-old" {
+		t.Fatalf("mutation = %#v, want consume review-old", mutations[0])
+	}
+}
+
+func TestExecutorReviewReconcile_ReviewAcceptConsumesDuplicateReviewsAndStaleTaskResidue(t *testing.T) {
+	const (
+		traceID  = "trace-review-complete"
+		laneName = "lane-b"
+	)
+	now := time.Date(2026, 6, 15, 12, 5, 0, 0, time.UTC)
+	marking := buildReviewReconcileResidueMarking(t, traceID, laneName)
+	consumed := buildReviewReconcileActiveDispatchTokens(traceID, laneName)
+
+	mutations := executorReviewReconcileMutations(
+		marking,
+		executorReviewWorkstationReview,
+		interfaces.OutcomeAccepted,
+		consumed,
+		[]petri.Arc{
+			{PlaceID: state.PlaceID("task", "to-complete")},
+			{PlaceID: state.PlaceID("review", "complete")},
+		},
+		now,
+	)
+	assertReviewReconcileResidueConsumes(t, mutations)
+}
+
+func buildReviewReconcileResidueMarking(t *testing.T, traceID, laneName string) *petri.MarkingSnapshot {
+	t.Helper()
+
+	return buildExecutorReviewReconcileMarking(t, []*interfaces.Token{
+		{
+			ID: "review-extra-1", PlaceID: "review:init",
+			Color: interfaces.TokenColor{
+				WorkID: "work-review-extra-1", WorkTypeID: "review", Name: laneName,
+				CurrentChainingTraceID: traceID,
+			},
+		},
+		{
+			ID: "review-extra-2", PlaceID: "review:init",
+			Color: interfaces.TokenColor{
+				WorkID: "work-review-extra-2", WorkTypeID: "review", Name: laneName,
+				CurrentChainingTraceID: traceID,
+			},
+		},
+		{
+			ID: "task-stale-init", PlaceID: "task:init",
+			Color: interfaces.TokenColor{
+				WorkID: "work-task-stale-init", WorkTypeID: "task", Name: laneName,
+				CurrentChainingTraceID: traceID,
+			},
+		},
+		{
+			ID: "task-stale-failed", PlaceID: "task:failed",
+			Color: interfaces.TokenColor{
+				WorkID: "work-task-stale-failed", WorkTypeID: "task", Name: laneName,
+				CurrentChainingTraceID: traceID,
+			},
+		},
+		{
+			ID: "task-other-lane", PlaceID: "task:failed",
+			Color: interfaces.TokenColor{
+				WorkID: "work-task-other", WorkTypeID: "task", Name: "other-lane",
+				CurrentChainingTraceID: traceID,
+			},
+		},
+	})
+}
+
+func buildReviewReconcileActiveDispatchTokens(traceID, laneName string) []interfaces.Token {
+	return []interfaces.Token{
+		{
+			ID: "task-in-review", PlaceID: "task:in-review",
+			Color: interfaces.TokenColor{
+				WorkID: "work-task-1", WorkTypeID: "task", Name: laneName,
+				CurrentChainingTraceID: traceID,
+			},
+		},
+		{
+			ID: "review-active", PlaceID: "review:init",
+			Color: interfaces.TokenColor{
+				WorkID: "work-review-active", WorkTypeID: "review", Name: laneName,
+				CurrentChainingTraceID: traceID,
+			},
+		},
+	}
+}
+
+func assertReviewReconcileResidueConsumes(t *testing.T, mutations []interfaces.MarkingMutation) {
+	t.Helper()
+
+	if len(mutations) != 4 {
+		t.Fatalf("mutations = %d, want 4 consumes (2 review + init + failed)", len(mutations))
+	}
+
+	got := mutationTokenIDs(mutations)
+	want := map[string]bool{
+		"review-extra-1":    true,
+		"review-extra-2":    true,
+		"task-stale-init":   true,
+		"task-stale-failed": true,
+	}
+	for id := range want {
+		if !got[id] {
+			t.Fatalf("missing consume for %q in %#v", id, got)
+		}
+	}
+	if got["task-other-lane"] {
+		t.Fatalf("unexpected consume for unrelated lane token: %#v", got)
+	}
+	if got["review-active"] || got["task-in-review"] {
+		t.Fatalf("consumed active dispatch tokens: %#v", got)
+	}
+}
+
+func TestExecutorReviewReconcile_SkipsNonAcceptedOutcomes(t *testing.T) {
+	marking := buildExecutorReviewReconcileMarking(t, []*interfaces.Token{{
+		ID:      "review-old",
+		PlaceID: "review:init",
+		Color: interfaces.TokenColor{
+			WorkTypeID:             "review",
+			CurrentChainingTraceID: "trace-skip",
+		},
+	}})
+	consumed := []interfaces.Token{{
+		Color: interfaces.TokenColor{
+			WorkTypeID:             "task",
+			CurrentChainingTraceID: "trace-skip",
+		},
+	}}
+
+	mutations := executorReviewReconcileMutations(
+		marking,
+		executorReviewWorkstationProcess,
+		interfaces.OutcomeRejected,
+		consumed,
+		[]petri.Arc{{PlaceID: state.PlaceID("review", "init")}},
+		time.Now(),
+	)
+	if len(mutations) != 0 {
+		t.Fatalf("mutations = %#v, want none for rejected outcome", mutations)
+	}
+}
+
+func mutationTokenIDs(mutations []interfaces.MarkingMutation) map[string]bool {
+	out := make(map[string]bool, len(mutations))
+	for i := range mutations {
+		if mutations[i].TokenID != "" {
+			out[mutations[i].TokenID] = true
+		}
+	}
+	return out
+}
+
+func buildExecutorReviewReconcileMarking(t *testing.T, tokens []*interfaces.Token) *petri.MarkingSnapshot {
+	t.Helper()
+
+	marking := petri.NewMarking("executor-review-reconcile")
+	for _, token := range tokens {
+		marking.AddToken(token)
+	}
+	snapshot := marking.Snapshot()
+	return &snapshot
+}
