@@ -433,11 +433,24 @@ func writeSimpleFinalWorkflowProject(t *testing.T) string {
 
 func decodePrimaryResultMap(t *testing.T, raw json.RawMessage) map[string]any {
 	t.Helper()
-	var projected map[string]any
-	if err := json.Unmarshal(raw, &projected); err != nil {
-		t.Fatalf("unmarshal primary result: %v", err)
+	var content []struct {
+		Type string          `json:"type"`
+		JSON json.RawMessage `json:"json,omitempty"`
 	}
-	return projected
+	if err := json.Unmarshal(raw, &content); err != nil {
+		t.Fatalf("unmarshal primary result content: %v", err)
+	}
+	for _, part := range content {
+		if part.Type == "JSON" && len(part.JSON) > 0 {
+			var projected map[string]any
+			if err := json.Unmarshal(part.JSON, &projected); err != nil {
+				t.Fatalf("unmarshal primary result json part: %v", err)
+			}
+			return projected
+		}
+	}
+	t.Fatalf("primary result content = %#v, want JSON part", content)
+	return nil
 }
 
 func newJavaScriptRuntimeService(t *testing.T) fse.Service {

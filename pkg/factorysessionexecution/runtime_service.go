@@ -20,10 +20,12 @@ func NewDurableSessionID() string {
 }
 
 type runtimeSessionState struct {
-	session   SessionReadResult
-	result    ResultReadResult
-	events    []json.RawMessage
-	runCancel context.CancelFunc
+	session    SessionReadResult
+	result     ResultReadResult
+	dispatches []DispatchSummary
+	artifacts  []ArtifactSummary
+	events     []json.RawMessage
+	runCancel  context.CancelFunc
 }
 
 type startInflightFlight struct {
@@ -62,19 +64,14 @@ func projectRuntimeSessionState(
 		Mode:      ResultModeFinal,
 	}
 
-	if outcome.OK {
-		session.Status = LifecycleStatusSucceeded
-		result.SessionStatus = LifecycleStatusSucceeded
-		result.ResultStatus = ResultStatusFinal
-		result.PrimaryResult = cloneRawJSON(outcome.Value.JSON)
-		session.ResultSummary = &ResultSummary{ResultStatus: string(ResultStatusFinal)}
-	} else {
-		projectRuntimeFailure(&session, &result, outcome)
-	}
-
 	state := runtimeSessionState{
 		session: session,
 		result:  result,
+	}
+	if outcome.OK {
+		applyRuntimeSuccessProjection(&state, sessionID, outcome, finishedAt)
+	} else {
+		projectRuntimeFailure(&state.session, &state.result, outcome)
 	}
 	state.events = deriveProjectionEvents(state.session, state.result)
 	return state
@@ -308,9 +305,7 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 			return SyncStartResult{}, err
 		}
 		s.mu.Lock()
-		reserved.state.session = terminal.session
-		reserved.state.result = terminal.result
-		reserved.state.events = terminal.events
+		applyRuntimeSessionFields(reserved.state, terminal)
 		reserved.state.runCancel = nil
 		s.mu.Unlock()
 	}
@@ -377,7 +372,7 @@ func (s *JavaScriptRuntimeService) GetResult(ctx context.Context, sessionID stri
 	if err != nil {
 		return ResultReadResult{}, err
 	}
-	return ProjectResultRead(state.result, state.session, nil, normalized)
+	return ProjectResultRead(state.result, state.session, state.artifacts, normalized)
 }
 
 func (s *JavaScriptRuntimeService) ListDispatches(ctx context.Context, sessionID string) (ListDispatchesResult, error) {
@@ -388,13 +383,17 @@ func (s *JavaScriptRuntimeService) ListDispatches(ctx context.Context, sessionID
 	if err != nil {
 		return ListDispatchesResult{}, err
 	}
-	if _, err := s.snapshotSessionState(id); err != nil {
+	state, err := s.snapshotSessionState(id)
+	if err != nil {
 		return ListDispatchesResult{}, err
 	}
-	return ListDispatchesResult{SessionID: id, Dispatches: nil}, nil
+	return ListDispatchesResult{
+		SessionID:  id,
+		Dispatches: cloneDispatchSummaries(state.dispatches),
+	}, nil
 }
 
-func (s *JavaScriptRuntimeService) GetDispatch(ctx context.Context, sessionID, _ string) (DispatchDetail, error) {
+func (s *JavaScriptRuntimeService) GetDispatch(ctx context.Context, sessionID, dispatchID string) (DispatchDetail, error) {
 	if err := ctx.Err(); err != nil {
 		return DispatchDetail{}, err
 	}
@@ -402,8 +401,18 @@ func (s *JavaScriptRuntimeService) GetDispatch(ctx context.Context, sessionID, _
 	if err != nil {
 		return DispatchDetail{}, err
 	}
-	if _, err := s.snapshotSessionState(id); err != nil {
+	state, err := s.snapshotSessionState(id)
+	if err != nil {
 		return DispatchDetail{}, err
+	}
+	for _, summary := range state.dispatches {
+		if summary.ID == dispatchID {
+			return DispatchDetail{
+				DispatchSummary:  summary,
+				SessionID:        id,
+				OrchestratorKind: state.session.OrchestratorKind,
+			}, nil
+		}
 	}
 	return DispatchDetail{}, ErrDispatchNotFound
 }
@@ -416,13 +425,17 @@ func (s *JavaScriptRuntimeService) ListArtifacts(ctx context.Context, sessionID 
 	if err != nil {
 		return ListArtifactsResult{}, err
 	}
-	if _, err := s.snapshotSessionState(id); err != nil {
+	state, err := s.snapshotSessionState(id)
+	if err != nil {
 		return ListArtifactsResult{}, err
 	}
-	return ListArtifactsResult{SessionID: id, Artifacts: nil}, nil
+	return ListArtifactsResult{
+		SessionID: id,
+		Artifacts: cloneArtifactSummaries(state.artifacts),
+	}, nil
 }
 
-func (s *JavaScriptRuntimeService) GetArtifact(ctx context.Context, sessionID, _ string) (ArtifactDetail, error) {
+func (s *JavaScriptRuntimeService) GetArtifact(ctx context.Context, sessionID, artifactID string) (ArtifactDetail, error) {
 	if err := ctx.Err(); err != nil {
 		return ArtifactDetail{}, err
 	}
@@ -430,8 +443,14 @@ func (s *JavaScriptRuntimeService) GetArtifact(ctx context.Context, sessionID, _
 	if err != nil {
 		return ArtifactDetail{}, err
 	}
-	if _, err := s.snapshotSessionState(id); err != nil {
+	state, err := s.snapshotSessionState(id)
+	if err != nil {
 		return ArtifactDetail{}, err
+	}
+	for _, summary := range state.artifacts {
+		if summary.ID == artifactID {
+			return ArtifactDetail{ArtifactSummary: summary, SessionID: id}, nil
+		}
 	}
 	return ArtifactDetail{}, ErrArtifactNotFound
 }
@@ -744,9 +763,7 @@ func (s *JavaScriptRuntimeService) runAsyncSession(
 
 func (s *JavaScriptRuntimeService) applyTerminalRuntimeState(state *runtimeSessionState, terminal runtimeSessionState, startedAt time.Time) {
 	finishedAt := time.Now().UTC()
-	state.session = terminal.session
-	state.result = terminal.result
-	state.events = terminal.events
+	applyRuntimeSessionFields(state, terminal)
 	if state.session.Lifecycle == nil {
 		state.session.Lifecycle = &LifecycleTimestamps{}
 	}
@@ -880,8 +897,10 @@ func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
 		return runtimeSessionState{}
 	}
 	cloned := runtimeSessionState{
-		session: cloneSessionRead(state.session),
-		result:  cloneResultRead(state.result),
+		session:    cloneSessionRead(state.session),
+		result:     cloneResultRead(state.result),
+		dispatches: cloneDispatchSummaries(state.dispatches),
+		artifacts:  cloneArtifactSummaries(state.artifacts),
 	}
 	if len(state.events) > 0 {
 		cloned.events = make([]json.RawMessage, len(state.events))
@@ -902,8 +921,13 @@ func (s *JavaScriptRuntimeService) syncStartFromState(state runtimeSessionState)
 	}
 	if IsTerminalLifecycleStatus(state.session.Status) {
 		result.SyncOutcome = SyncOutcomeCompleted
-		if encoded, err := json.Marshal(state.result); err == nil {
-			result.Result = encoded
+		projected, err := ProjectResultRead(state.result, state.session, state.artifacts, ResultRequest{
+			Mode: ResultModeFinal,
+		})
+		if err == nil {
+			if encoded, err := json.Marshal(projected); err == nil {
+				result.Result = encoded
+			}
 		}
 	}
 	return result
