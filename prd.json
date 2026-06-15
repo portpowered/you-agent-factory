@@ -1,31 +1,32 @@
 {
-  "project": "Factory Session Backend Runtime for Simple JavaScript Workflows",
-  "branchName": "dynamic-workflows-cell-session-backend-runtime",
-  "description": "Wire the shared Factory Session execution service to the real simple JavaScript runtime path so simple JavaScript workflows can be started, inspected, replayed, and retrieved through stable backend session read models while preserving request-id idempotency and keeping FakeService available for mock-provider transports.",
+  "project": "Real-Backend Factory Session API Parity Slice",
+  "branchName": "dynamic-workflows-cell-real-backend-api-session-parity",
+  "description": "Wire the smallest real-backend Factory Session API parity slice so HTTP clients can start a simple final-only JavaScript Factory Session through the recovered real session backend, then list it, fetch it, read its result, and reconnect its canonical event stream with the same stable session identity, terminal status, and final-result semantics exposed by the recovered backend/CLI/MCP service path.",
   "context": {
-    "customerAsk": "The shared Factory Session execution service can start a simple JavaScript workflow against the real runtime path, expose status/result/progress/read models, and preserve idempotent request behavior.",
-    "problem": "The durable Factory Session contract and fake service paths exist, but the backend service path still needs a real simple JavaScript runtime implementation for session start and inspection. Transports can prove fixture shapes today, but they cannot yet run a real simple JavaScript workflow through lifecycle, result projection, replay, and request-id semantics.",
-    "solution": "Add a real runtime-backed implementation or mode behind the existing factorysessionexecution.Service contract. Normalize starts through orchestrator-owned source, validation, policy, args, wait, and result packages; execute simple JavaScript sessions through the runtime boundary; maintain explicit in-memory session projections and canonical events; preserve request-id replay/conflict behavior; and keep FakeService available for mock-provider paths."
+    "customerAsk": "Start a simple final-only JavaScript Factory Session through the API-backed real session backend and prove start, list, get, result, and canonical event reconnect parity without adding website inspection, MCP host installation, broad dispatch/artifact/control parity, or new workflow-run nouns.",
+    "problem": "The recovered real JavaScript session backend can execute simple durable sessions, but the public API path needs focused parity proof. API clients need stable session identifiers, terminal status, result availability, final result payloads, and canonical event replay through the shared Factory Session vocabulary without relying on log parsing or separate workflow-run projections.",
+    "solution": "Use the existing /factory-sessions vocabulary and generated FactorySession/FactoryEvent contracts to wire or correct the smallest route family needed for a simple JavaScript final-only session: start, list, get, result, and event replay/reconnect. Normalize transport-independent request, response, and error shaping through pkg/apisurface, update OpenAPI and generated clients only if the authored contract requires correction, preserve live Petri compatibility, and prove behavior with focused OpenAPI contract, mapper, API server, and real-backend loopback tests."
   },
   "acceptanceCriteria": [
-    "Service tests prove async start, sync completed start, sync timeout, get session, and get result using a real simple JavaScript fixture through the runtime-backed service path",
-    "Service tests prove exact request-id replay returns the same session/result response and conflicting request-id reuse is rejected",
-    "Projection tests show session lifecycle, result summary, source hash, policy hash, and inspection links remain consistent with existing API-shaped read models",
-    "Canonical lifecycle and result update events can be replayed idempotently to reconstruct the same session projection",
-    "FakeService tests continue to pass and remain usable for CLI, MCP, API, and mock-provider paths",
-    "No provider dispatch bridge, website UI, MCP install packaging, or broad persistent database storage is introduced in this cell",
-    "Quality gate: Go typecheck/compile, lint where applicable, and focused tests pass, including go test ./pkg/factorysessionexecution ./pkg/orchestrators/javascript/..."
+    "A test or smoke path starts a simple final-only JavaScript Factory Session through the API-backed real session backend and receives a stable FactorySession identifier without parsing logs.",
+    "List/get/result API responses for that session expose the same terminal lifecycle status, result status, and final-result semantics as the recovered backend/CLI/MCP service path.",
+    "GET /factory-sessions/{session_id}/events or the equivalent generated handler path returns canonical FactoryEvent envelopes for that session and supports at least one reconnect cursor case.",
+    "API responses keep JavaScript orchestrator state inside shared Factory Session and Factory Event vocabulary; no standalone workflow-run API noun or /workflow-previews expansion is introduced.",
+    "Existing live Petri session compatibility and existing factory-session behavior continue to pass focused regression tests.",
+    "OpenAPI contract tests, mapper tests, and focused API server tests cover the changed behavior; generated files are updated if authored OpenAPI changes.",
+    "Repository quality gate passes: make generate-api when needed, typecheck, lint, focused Go tests, and make api-smoke when feasible are green."
   ],
   "userStories": [
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-001",
-      "title": "Normalize real session start inputs",
-      "description": "As a backend maintainer, I want real JavaScript session starts to use the shared start contract and orchestrator-owned normalization so the runtime path behaves like API, CLI, and MCP callers expect.",
+      "id": "dynamic-workflows-cell-real-backend-api-session-parity-001",
+      "title": "Start a simple real-backend JavaScript session through the API",
+      "description": "As an API client, I want to start a simple final-only JavaScript Factory Session through the real session backend so that I receive a stable session identifier from the API itself.",
       "acceptanceCriteria": [
-        "A start request resolves JavaScript source using the existing Factory Session start source flow and records the resolved source identity and source hash on the session read model",
-        "A start request validates source, args, requested policy, and wait options before runtime execution begins",
-        "Policy projection records the effective policy hash used for the session",
-        "Invalid source, invalid args, or denied policy returns the existing service error shape without creating a completed session",
+        "Starting a simple final-only JavaScript session through the generated API-backed start path returns a stable FactorySession identifier and request identifier in the response body.",
+        "The test path proves the real session backend is used for at least one successful simple JavaScript session start; mock or fixture services are used only to isolate contract expectations in separate tests.",
+        "Reusing an idempotent start request returns the same stable session identity according to the recovered service semantics.",
+        "Invalid or unsupported start input returns a typed API error without creating a visible session.",
+        "Existing live Petri session start behavior remains compatible.",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -34,99 +35,84 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-002",
-      "title": "Start simple JavaScript sessions asynchronously",
-      "description": "As a transport caller, I want to start a simple JavaScript workflow asynchronously so I can receive a session identifier immediately and inspect progress through the shared service.",
+      "id": "dynamic-workflows-cell-real-backend-api-session-parity-002",
+      "title": "Expose the real session in list and get APIs",
+      "description": "As an API client, I want the real JavaScript Factory Session I started to appear in list and get responses so that API polling sees the same session identity and lifecycle status as the backend service.",
       "acceptanceCriteria": [
-        "StartAsync against a real simple JavaScript fixture returns a session id, accepted/running lifecycle state, orchestrator identity, source hash, policy hash, and inspection links",
-        "The runtime-backed service records enough in-memory session state for a later GetSession call to report lifecycle status, progress, result availability, dispatch stubs, artifact stubs, and links",
-        "The service emits or models canonical session-started and lifecycle/progress facts for the async session",
-        "Async service tests use a real simple JavaScript fixture rather than a fake scenario fixture",
+        "GET /factory-sessions with the relevant supported scope includes the real JavaScript session with the same session identifier returned by start.",
+        "GET /factory-sessions/{session_id} returns the same terminal lifecycle status, source identity summary, phase/progress summary, and result availability semantics as the recovered backend service read model.",
+        "Missing session reads return the existing typed not-found API error shape.",
+        "Live Petri session rows remain visible through their existing list/get compatibility behavior.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 2,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-003",
-      "title": "Complete or time out synchronous starts",
-      "description": "As a transport caller, I want synchronous JavaScript session starts to either return the completed result within the wait budget or return a live session that can be inspected later.",
+      "id": "dynamic-workflows-cell-real-backend-api-session-parity-003",
+      "title": "Read the final result with backend/API semantic parity",
+      "description": "As an API client, I want to read the final result for the completed JavaScript Factory Session so that API consumers receive the same terminal result semantics as CLI and MCP clients.",
       "acceptanceCriteria": [
-        "StartSync with a sufficient wait budget runs the real simple JavaScript fixture and returns a completed session result with the expected primary result summary",
-        "StartSync with an exhausted or too-small wait budget returns the existing timeout/pending result shape with session id, lifecycle status, result availability, and inspection links",
-        "Sync completion and timeout paths both persist the same session state that GetSession and GetResult later read",
-        "Timeout behavior does not duplicate sessions or lose the eventual runtime result",
+        "GET /factory-sessions/{session_id}/results or the current generated result handler returns the final result for the completed simple session without requiring log parsing.",
+        "The API result response exposes the expected terminal result status and either the structured final value or stable result hash used by the recovered backend/CLI/MCP path.",
+        "Result reads before terminal availability return the existing typed not-ready or unavailable response while retaining the requested session identity.",
+        "Mapper tests prove API result response shaping uses the shared apisurface projection rather than a handler-local result struct.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 3,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-004",
-      "title": "Read session and result projections",
-      "description": "As a caller inspecting a Factory Session, I want status and result reads to match the established durable session API shapes so later API, CLI, and MCP work can consume one shared backend projection.",
+      "id": "dynamic-workflows-cell-real-backend-api-session-parity-004",
+      "title": "Replay canonical Factory Session events with reconnect cursor support",
+      "description": "As an API client, I want to read canonical events for the JavaScript Factory Session and reconnect from a cursor so that event consumers can recover session state without special workflow-run logic.",
       "acceptanceCriteria": [
-        "GetSession returns a durable session read model with lifecycle status, phase/progress summary, result summary, source hash, policy hash, dispatch/artifact counts or stubs, recoverability/action availability, and inspection links",
-        "GetResult returns final result data for a completed simple JavaScript session and an availability response for sessions that are still running or timed out",
-        "Result projection uses the existing JavaScript result normalization rules for primary result, artifacts, and summary fields",
-        "Projection tests compare the runtime-backed read models to the existing API-shaped expectations without changing public schema names",
+        "GET /factory-sessions/{session_id}/events or the equivalent generated handler returns canonical FactoryEvent envelopes for the session, including lifecycle and result-update events expected for a final-only JavaScript run.",
+        "Event envelopes include stable session context such as session identifier, sequence or event identifier, orchestrator identity where applicable, and event type names from the shared factory event contract.",
+        "At least one reconnect cursor case returns only events after the cursor and preserves deterministic event ordering.",
+        "An unknown or expired reconnect cursor returns the existing typed reconnect-cursor error without changing session state.",
+        "Event replay tests prove the API event sequence can reconstruct the same terminal session status and result availability as the read/result APIs.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 4,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-005",
-      "title": "Preserve request-id idempotency",
-      "description": "As a caller retrying a start request, I want exact request-id replays to be safe and conflicting request-id reuse to fail so retries do not create duplicate or ambiguous sessions.",
+      "id": "dynamic-workflows-cell-real-backend-api-session-parity-005",
+      "title": "Keep public contract and generated clients aligned for the narrow API slice",
+      "description": "As an API maintainer, I want any required OpenAPI corrections for this slice to be authored and generated consistently so that backend handlers, generated clients, and tests share one contract.",
       "acceptanceCriteria": [
-        "Replaying the same normalized async start request with the same request id returns the original async start response and session id",
-        "Replaying the same normalized sync start request with the same request id returns the original sync response shape, including completed or timeout status as originally observed",
-        "Reusing a request id with a different normalized tuple returns the existing request-id conflict error and does not create a new runtime session",
-        "Idempotency tests cover async start, sync completed start, sync timeout, and conflict using the real simple JavaScript fixture",
+        "If route, schema, parameter, or response corrections are required, they are authored in api/openapi-main.yaml or component fragments under api/components/ and then regenerated into bundled Go and TypeScript artifacts.",
+        "OpenAPI contract tests cover the start/list/get/result/events response shapes and reconnect cursor parameter or error shape used by this slice.",
+        "API mapper tests cover request normalization, response projection, and typed error mapping for the changed start/read/result/event behavior.",
+        "Generated files remain synchronized with authored OpenAPI; if no authored contract change is required, the implementation documents that no regeneration diff is expected.",
+        "No standalone workflow-run API resource, route family, or generated type is introduced.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 5,
-      "passes": true,
+      "passes": false,
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-session-backend-runtime-006",
-      "title": "Replay lifecycle and result events consistently",
-      "description": "As a maintainer, I want canonical session lifecycle and result update events from real JavaScript sessions to replay into the same projection so API/event parity has a stable source.",
+      "id": "dynamic-workflows-cell-real-backend-api-session-parity-006",
+      "title": "Record deferred route families as follow-up cells",
+      "description": "As a maintainer, I want this API parity lane to explicitly defer unrelated route families so that the implementation stays focused on the simple real-backend session path.",
       "acceptanceCriteria": [
-        "Runtime-backed sessions model or emit canonical start, result-updated, completed, and timeout/recoverable lifecycle events where applicable",
-        "Replaying the event sequence reconstructs the same lifecycle status, result summary, source hash, policy hash, and links as the live service projection",
-        "Replaying the same event sequence more than once does not duplicate result summaries, links, dispatch stubs, or artifact stubs",
-        "Projection tests use the real simple JavaScript fixture event sequence and existing durable session API-shaped projection expectations",
+        "The implementation notes or task follow-up record dispatch reads, artifact reads, lifecycle controls, website inspection, MCP host installation, resume behavior, and live-provider bridge parity as deferred follow-up cells when they are encountered.",
+        "No dispatch/artifact/lifecycle-control route behavior is added or changed except where an existing contract must remain compiling and compatible.",
+        "Public documentation or API descriptions changed by this lane use Factory Session and Factory Event vocabulary, not new workflow-run nouns.",
         "Typecheck passes",
         "Tests pass"
       ],
       "priority": 6,
-      "passes": true,
-      "notes": ""
-    },
-    {
-      "id": "dynamic-workflows-cell-session-backend-runtime-007",
-      "title": "Keep FakeService mock paths intact",
-      "description": "As a maintainer of CLI, MCP, and API mock paths, I want the fake session service to keep working while real runtime support is added so parallel transport work stays unblocked.",
-      "acceptanceCriteria": [
-        "Existing FakeService behavior and fixture-backed scenarios continue to pass without requiring real JavaScript runtime setup",
-        "Fake async, sync, get session, get result, event replay, and idempotency behaviors remain compatible with the shared factorysessionexecution.Service contract",
-        "Runtime-backed service wiring does not remove or rename fake-service constructors or scenario-loading APIs used by mock-provider tests",
-        "Focused fake service tests pass alongside the new runtime-backed service tests",
-        "Typecheck passes",
-        "Tests pass"
-      ],
-      "priority": 7,
-      "passes": true,
+      "passes": false,
       "notes": ""
     }
   ]

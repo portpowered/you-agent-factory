@@ -1,186 +1,175 @@
-# PRD: UI CI Acceleration and Test Rationalization
+# PRD: Real-Backend Factory Session API Parity Slice
 
 ## Introduction
 
-The current required CI path spends too much wall clock time in UI verification, especially covered Vitest runs and browser integration tests. Because the required lanes run serially today, browser integration failures can arrive only after a long covered UI pass completes. This slows merge feedback, makes flaky failures more expensive, and makes it harder for maintainers to tell whether a failing test is proving a unique product contract or repeating assertions already covered elsewhere.
+Wire the smallest real-backend Factory Session API parity slice for simple JavaScript-orchestrated sessions. HTTP clients should be able to start a final-only JavaScript Factory Session through the recovered real session backend, then list it, fetch it, read its result, and reconnect its canonical event stream with the same stable session identity, terminal status, and final-result semantics exposed by the recovered backend/CLI/MCP service path.
 
-This project will make browser failures surface earlier, reduce required UI CI wall clock time, use the existing sharded coverage runner, add stable timing visibility, and rationalize redundant UI tests while preserving defect detection. The intended outcome is a faster, more trustworthy PR verification path where each test lane has a clear purpose, clear rerun command, and clear failure output.
+This project is intentionally narrow. It proves the real runtime-backed API lane for a simple session without expanding into website inspection, MCP host installation, dispatch/artifact reads, lifecycle controls, resume behavior, live-provider bridge parity, or standalone workflow-run resources.
 
 ## Context
 
 ### Customer Ask
 
-Accelerate the UI-heavy portions of CI and rationalize redundant tests so browser integration regressions fail faster, covered UI runs complete sooner, and maintainers have enough timing evidence to keep the suite from regressing.
+The backend recovery lane is complete, and the next useful cell is a narrow API parity slice for the real JavaScript session backend. A test or smoke path must start a simple final-only JavaScript Factory Session through the API-backed real session backend and return a stable `FactorySession` identifier without requiring clients to parse logs. The same session must be visible through list/get/result APIs and canonical `FactoryEvent` event reads, including at least one reconnect cursor case.
 
-### Concrete Problem
+### Problem
 
-The current `make ci` flow waits for long covered UI verification before browser integration can report failures. The covered UI runner already has sharding support, but the canonical PR path does not use it. Several slow tests are broad app-shell or React Flow-heavy suites that repeatedly mount expensive dashboard state for narrower behaviors. Browser, jsdom integration, and unit-style tests also overlap in places, increasing runtime without adding proportional confidence.
+The real JavaScript session backend can now execute simple durable sessions, but the API-backed path needs focused parity proof. API clients need stable session identifiers, terminal status, result availability, final result payloads, and event replay through the shared Factory Session vocabulary. Without this slice, API consumers cannot rely on the recovered runtime through generated contracts, and maintainers lack focused contract, mapper, and server tests proving the real backend path rather than only fixtures or CLI/MCP paths.
 
-### High-Level Solution
+### Solution
 
-Introduce a canonical PR verification flow that either runs browser integration before UI coverage or runs both through a repo-owned orchestrator with fast-fail semantics. Use sharded UI coverage in CI with deterministic merged coverage output. Add stable slow-test reporting for covered UI and browser lanes. Define lane boundaries and split the highest-cost redundant suites into lower-cost feature-scoped tests where that preserves the same observable confidence.
-
-## Project-Level Acceptance Criteria
-
-- [ ] Browser integration no longer waits for the full covered UI lane to finish before starting in the canonical PR verification flow.
-- [ ] The required UI-related CI wall clock time is reduced by at least 30% from the current measured baseline, or the closeout artifact explains the measured blocker and next tuning step.
-- [ ] Sharded UI coverage preserves merged coverage reports, threshold enforcement, replay coverage checking, and clear failure output when a shard fails.
-- [ ] Covered UI and browser integration lanes emit stable slow-file summaries that maintainers can compare across runs.
-- [ ] Lane boundaries explain what belongs in unit/jsdom coverage, covered feature integration, and browser integration, with duplicate assertion patterns removed from at least one high-cost area.
-- [ ] Browser integration remains deterministic: failures identify the lane and rerun command, and concurrent execution avoids port, preview server, and shared download conflicts.
-- [ ] Typecheck, lint, and relevant tests pass for CI orchestration, coverage sharding, reporting, and changed UI test behavior.
+Use the existing `/factory-sessions` vocabulary and generated `FactorySession`/`FactoryEvent` contracts to wire or correct the smallest route family needed for a simple JavaScript final-only session: start, list, get, result, and event replay/reconnect. Normalize request, response, and error shaping through `pkg/apisurface`, keep JavaScript orchestrator state represented as shared Factory Session and Factory Event data, update OpenAPI fragments and generated clients only if the authored contract requires correction, and prove behavior with focused contract, mapper, API server, and real-backend loopback tests.
 
 ## Goals
 
-- Reduce required UI-related CI wall clock time by at least 30%.
-- Surface browser integration failures before or alongside covered UI failures.
-- Cut median time-to-first-actionable browser regression failure to under 10 minutes.
-- Use existing UI coverage sharding and merge behavior instead of weakening coverage thresholds.
-- Establish stable timing visibility for the slowest covered UI and browser integration files.
-- Reduce redundant UI coverage across app-shell, replay, React Flow, and import/export scenarios.
-- Preserve or improve defect detection quality while decreasing runtime and flake exposure.
+- Start a simple final-only JavaScript Factory Session through the API-backed real session backend and return a stable `FactorySession` identifier.
+- Make list, get, and result API responses agree with the recovered backend/CLI/MCP service semantics for terminal status and final result data.
+- Expose canonical `FactoryEvent` envelopes for the session through the session events API and honor at least one reconnect cursor case.
+- Keep request/response/error mapping transport-independent through `pkg/apisurface` rather than handler-local ad hoc shapes.
+- Preserve existing live Petri session compatibility and current factory-session behavior.
+- Keep generated OpenAPI, Go, and TypeScript clients synchronized if authored API fragments change.
+- Prove the changed behavior with focused OpenAPI contract, mapper, and API server tests that exercise at least one real backend simple session path.
+
+## Project-Level Acceptance Criteria
+
+- [ ] A test or smoke path starts a simple final-only JavaScript Factory Session through the API-backed real session backend and receives a stable `FactorySession` identifier without parsing logs.
+- [ ] List/get/result API responses for that session expose the same terminal lifecycle status, result status, and final-result semantics as the recovered backend/CLI/MCP service path.
+- [ ] `GET /factory-sessions/{session_id}/events` or the equivalent generated handler path returns canonical `FactoryEvent` envelopes for that session and supports at least one reconnect cursor case.
+- [ ] API responses keep JavaScript orchestrator state inside shared Factory Session and Factory Event vocabulary; no standalone workflow-run API noun or `/workflow-previews` expansion is introduced.
+- [ ] Existing live Petri session compatibility and existing factory-session behavior continue to pass focused regression tests.
+- [ ] OpenAPI contract tests, mapper tests, and focused API server tests cover the changed behavior; generated files are updated if authored OpenAPI changes.
+- [ ] Repository quality gate passes: `make generate-api` when needed, focused Go tests, typecheck, lint, and `make api-smoke` when feasible are green.
 
 ## User Stories
 
-### prd-ui-ci-acceleration-and-test-rationalization-001: Fast-Fail Required UI CI Flow
+### dynamic-workflows-cell-real-backend-api-session-parity-001: Start a simple real-backend JavaScript session through the API
 
-**Description:** As an engineer merging a UI change, I want browser integration to start before or alongside covered UI verification so that browser regressions become actionable sooner.
-
-**Acceptance Criteria:**
-
-- [ ] The canonical PR verification flow starts browser integration before covered UI completion, either by ordering browser first or by running browser and coverage through one orchestrated concurrent flow.
-- [ ] Failure output names the failed lane and includes the target or command an engineer should rerun locally.
-- [ ] Concurrent lanes, if used, keep lane logs attributable and avoid shared-state conflicts between browser-oriented processes.
-- [ ] The chosen ordering or concurrency behavior is documented in the developer-facing CI target help or adjacent CI documentation.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
-
-### prd-ui-ci-acceleration-and-test-rationalization-002: Sharded Covered UI Verification
-
-**Description:** As an engineer waiting on CI, I want covered UI tests to run in shards and merge coverage afterward so that wall clock time drops without weakening coverage enforcement.
+**Description:** As an API client, I want to start a simple final-only JavaScript Factory Session through the real session backend so that I receive a stable session identifier from the API itself.
 
 **Acceptance Criteria:**
 
-- [ ] The canonical PR verification flow uses the repo-owned UI coverage shard and merge behavior with a documented default shard count.
-- [ ] The merged coverage report preserves threshold enforcement and replay coverage checking after all expected shards finish.
-- [ ] A missing or failed shard produces a clear failure that identifies the shard and does not silently produce partial coverage.
-- [ ] Shard count can be tuned through a documented environment variable or CI setting without changing test semantics.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
+- [ ] Starting a simple final-only JavaScript session through the generated API-backed start path returns a stable `FactorySession` identifier and request identifier in the response body.
+- [ ] The test path proves the real session backend is used for at least one successful simple JavaScript session start; mock or fixture services are used only to isolate contract expectations in separate tests.
+- [ ] Reusing an idempotent start request returns the same stable session identity according to the recovered service semantics.
+- [ ] Invalid or unsupported start input returns a typed API error without creating a visible session.
+- [ ] Existing live Petri session start behavior remains compatible.
+- [ ] Typecheck passes
+- [ ] Tests pass
 
-### prd-ui-ci-acceleration-and-test-rationalization-003: Stable UI Test Cost Reporting
+### dynamic-workflows-cell-real-backend-api-session-parity-002: Expose the real session in list and get APIs
 
-**Description:** As a maintainer, I want CI to report the slowest covered UI and browser integration files with cost categories so that runtime regressions are visible and actionable.
-
-**Acceptance Criteria:**
-
-- [ ] Covered UI verification emits a stable top-slowest file summary after the run or after shard merge.
-- [ ] Browser integration emits per-file timing or an equivalent top-slowest summary after the run.
-- [ ] The report categorizes slow files into app-shell integration, React Flow graph tests, replay/timeline tests, import/export tests, script-style tests, or uncategorized.
-- [ ] The report format is suitable for closeout notes and can be compared across CI runs without requiring source topology assertions.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
-
-### prd-ui-ci-acceleration-and-test-rationalization-004: Lane Boundary and Redundancy Policy
-
-**Description:** As a maintainer, I want explicit test-lane boundaries so that unit, covered jsdom, and browser tests each verify distinct behavior.
+**Description:** As an API client, I want the real JavaScript Factory Session I started to appear in list and get responses so that API polling sees the same session identity and lifecycle status as the backend service.
 
 **Acceptance Criteria:**
 
-- [ ] The test strategy defines what observable contracts belong in unit tests, covered feature/jsdom integration tests, and browser integration tests.
-- [ ] Browser integration guidance prioritizes durable behavior such as saved payloads, network effects, downloads, imports, and final visible state over repeated copy-only assertions.
-- [ ] Export/import and graph-editing flows have a documented minimum browser contract that avoids repeating every jsdom UI assertion.
-- [ ] At least one existing duplicate assertion pattern is removed or moved to the cheaper lane while preserving the durable behavior check.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
+- [ ] `GET /factory-sessions` with the relevant supported scope includes the real JavaScript session with the same session identifier returned by start.
+- [ ] `GET /factory-sessions/{session_id}` returns the same terminal lifecycle status, source identity summary, phase/progress summary, and result availability semantics as the recovered backend service read model.
+- [ ] Missing session reads return the existing typed not-found API error shape.
+- [ ] Live Petri session rows remain visible through their existing list/get compatibility behavior.
+- [ ] Typecheck passes
+- [ ] Tests pass
 
-### prd-ui-ci-acceleration-and-test-rationalization-005: Split One High-Cost App-Shell Suite
+### dynamic-workflows-cell-real-backend-api-session-parity-003: Read the final result with backend/API semantic parity
 
-**Description:** As a maintainer, I want at least one oversized app-shell test suite replaced with smaller feature-focused coverage so that the same behavior is proven with less setup cost.
-
-**Acceptance Criteria:**
-
-- [ ] One high-cost app-shell suite is selected from the current slow-file inventory and its unique observable behaviors are listed before changes.
-- [ ] Equivalent behavior is covered by smaller feature-owned tests where whole-dashboard mounting is not required.
-- [ ] Any remaining app-shell coverage is limited to cross-feature behavior that cannot be proven reliably at a lower layer.
-- [ ] Before/after timing for the selected suite or replacement tests is captured in the closeout artifact.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
-
-### prd-ui-ci-acceleration-and-test-rationalization-006: Browser Integration Stability and Runtime Boundaries
-
-**Description:** As an engineer debugging browser failures, I want browser integration tests to be isolated and deterministic so that failures are attributable and retries remain rare.
+**Description:** As an API client, I want to read the final result for the completed JavaScript Factory Session so that API consumers receive the same terminal result semantics as CLI and MCP clients.
 
 **Acceptance Criteria:**
 
-- [ ] Browser integration documentation states which suites must remain sequential because of shared preview servers, ports, downloads, or global browser state.
-- [ ] Any browser test concurrency introduced by this project uses isolated ports, preview state, and download locations per worker or file.
-- [ ] Shared browser helpers expose or document a recommended wait pattern for durable network and UI checkpoints.
-- [ ] At least one flaky or over-constrained browser assertion is simplified to assert durable behavior rather than transient copy, animation, or timing state.
-- [ ] Direct browser verification confirms changed browser-visible test flows still exercise the intended final UI state.
-- [ ] Tests pass.
-- [ ] Typecheck passes.
+- [ ] `GET /factory-sessions/{session_id}/results` or the current generated result handler returns the final result for the completed simple session without requiring log parsing.
+- [ ] The API result response exposes the expected terminal result status and either the structured final value or stable result hash used by the recovered backend/CLI/MCP path.
+- [ ] Result reads before terminal availability return the existing typed not-ready or unavailable response while retaining the requested session identity.
+- [ ] Mapper tests prove API result response shaping uses the shared apisurface projection rather than a handler-local result struct.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### dynamic-workflows-cell-real-backend-api-session-parity-004: Replay canonical Factory Session events with reconnect cursor support
+
+**Description:** As an API client, I want to read canonical events for the JavaScript Factory Session and reconnect from a cursor so that event consumers can recover session state without special workflow-run logic.
+
+**Acceptance Criteria:**
+
+- [ ] `GET /factory-sessions/{session_id}/events` or the equivalent generated handler returns canonical `FactoryEvent` envelopes for the session, including lifecycle and result-update events expected for a final-only JavaScript run.
+- [ ] Event envelopes include stable session context such as session identifier, sequence or event identifier, orchestrator identity where applicable, and event type names from the shared factory event contract.
+- [ ] At least one reconnect cursor case returns only events after the cursor and preserves deterministic event ordering.
+- [ ] An unknown or expired reconnect cursor returns the existing typed reconnect-cursor error without changing session state.
+- [ ] Event replay tests prove the API event sequence can reconstruct the same terminal session status and result availability as the read/result APIs.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### dynamic-workflows-cell-real-backend-api-session-parity-005: Keep public contract and generated clients aligned for the narrow API slice
+
+**Description:** As an API maintainer, I want any required OpenAPI corrections for this slice to be authored and generated consistently so that backend handlers, generated clients, and tests share one contract.
+
+**Acceptance Criteria:**
+
+- [ ] If route, schema, parameter, or response corrections are required, they are authored in `api/openapi-main.yaml` or component fragments under `api/components/` and then regenerated into bundled Go and TypeScript artifacts.
+- [ ] OpenAPI contract tests cover the start/list/get/result/events response shapes and reconnect cursor parameter or error shape used by this slice.
+- [ ] API mapper tests cover request normalization, response projection, and typed error mapping for the changed start/read/result/event behavior.
+- [ ] Generated files remain synchronized with authored OpenAPI; if no authored contract change is required, the implementation documents that no regeneration diff is expected.
+- [ ] No standalone workflow-run API resource, route family, or generated type is introduced.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### dynamic-workflows-cell-real-backend-api-session-parity-006: Record deferred route families as follow-up cells
+
+**Description:** As a maintainer, I want this API parity lane to explicitly defer unrelated route families so that the implementation stays focused on the simple real-backend session path.
+
+**Acceptance Criteria:**
+
+- [ ] The implementation notes or task follow-up record dispatch reads, artifact reads, lifecycle controls, website inspection, MCP host installation, resume behavior, and live-provider bridge parity as deferred follow-up cells when they are encountered.
+- [ ] No dispatch/artifact/lifecycle-control route behavior is added or changed except where an existing contract must remain compiling and compatible.
+- [ ] Public documentation or API descriptions changed by this lane use Factory Session and Factory Event vocabulary, not new workflow-run nouns.
+- [ ] Typecheck passes
+- [ ] Tests pass
 
 ## High-Level Technical Design
 
-The canonical PR verification path should remain easy to run by target name. If the implementation chooses concurrency, use a repo-owned orchestration target or script that prefixes or buffers lane output so failures remain attributable. If the implementation chooses ordering, run browser integration as an earlier fast-fail lane and keep covered UI as the authoritative coverage lane.
-
-Covered UI verification should use the existing shard and merge model. Each shard must produce an identifiable artifact, and merge must fail when an expected shard result is missing. The merged report remains the only source for coverage threshold enforcement and replay coverage checking.
-
-Slow-test observability should be generated by the test lanes themselves or by repo-owned wrappers, not by a one-time spreadsheet. Reports should include top slow files, elapsed time, lane name, and a likely cost category. Categories are for maintainer triage and should not become a brittle source-inventory test.
-
-Test rationalization should start with the slowest app-shell and React Flow-heavy suites. Implementers should preserve user-visible or maintainer-visible behavior while moving repeated setup-heavy assertions into feature-scoped tests where possible. Browser tests should keep durable end-to-end contracts and avoid duplicating copy-only assertions already covered in jsdom.
+1. **Canonical API vocabulary:** Use existing `/factory-sessions` route family and generated `FactorySession`, `FactorySessionResult`, and `FactoryEvent` shapes. Do not add workflow-run resources or expand `/workflow-previews`.
+2. **Real backend proof:** At least one focused API server or smoke test must run a simple final-only JavaScript session through the real `factorysessionexecution` runtime-backed service path. Fixture or fake services may still be used for mapper and contract expectation tests.
+3. **Transport-independent mapping:** Normalize API start, list, get, result, event, and error shapes through `pkg/apisurface` factory-session mappers. Handlers should delegate shaping rather than embedding one-off response structs.
+4. **State ownership:** Per-session runtime state remains in the session execution/runtime layer. `FactoryService` coordinates dependencies and service access but does not become the owner of durable per-session state.
+5. **Event consistency:** The event API reads canonical session lifecycle/result events from the same source used by recovered service projections. Reconnect cursor filtering must be deterministic and must not mutate session state.
+6. **Contract generation:** If authored OpenAPI needs correction, update fragments under `api/components/` or `api/openapi-main.yaml`, run `make generate-api`, and keep `api/openapi.yaml`, generated Go server/client code, and generated TypeScript client code synchronized.
+7. **Compatibility:** Preserve existing live Petri session APIs and factory-session behavior. JavaScript orchestrator state should appear as shared Factory Session data, not a separate projection family.
 
 ## Functional Requirements
 
-- FR-1: The canonical PR verification flow must start browser integration before the covered UI lane completes.
-- FR-2: If test lanes run concurrently, lane logs must remain attributable, buffered or prefixed, and rerunnable by target name.
-- FR-3: Browser integration failures must provide a fast-fail signal without waiting for the full covered UI lane to complete.
-- FR-4: The covered UI lane must support shard-based execution in CI using the repo-owned shard and merge behavior.
-- FR-5: The default coverage shard count and tuning mechanism must be documented.
-- FR-6: Coverage merge must fail clearly when expected shard artifacts are missing.
-- FR-7: The covered UI lane must preserve merged coverage reports, coverage thresholds, and replay coverage checks.
-- FR-8: Covered UI and browser integration lanes must emit stable slow-file summaries.
-- FR-9: Slow-file summaries must include top N files, lane name, elapsed time, and a likely optimization category.
-- FR-10: The maintained slow-test inventory must include current-selection app shell, layout/graph app shell, replay stream, React Flow edit integration, import/export browser flows, and layout performance tests when present in the measured run.
-- FR-11: The test strategy must define lane boundaries for unit tests, covered jsdom integration tests, and browser integration tests.
-- FR-12: Browser integration tests must prioritize durable assertions such as saved payloads, network requests, downloaded or imported artifacts, and final visible state.
-- FR-13: Repeated whole-dashboard setup patterns must be replaced with lower-cost feature harnesses where the behavior under test is feature-local.
-- FR-14: At least one broad app-shell suite must be split or reduced without removing coverage of its unique observable behavior.
-- FR-15: Browser integration sequencing and any safe concurrency rules must be documented with port, preview server, and download-state constraints.
-- FR-16: The project must produce a closeout artifact or note with before/after timing for CI wall clock time, covered UI time, browser lane time, and top slow files.
+- FR-1: The API must support starting a simple final-only JavaScript Factory Session through the real recovered session backend.
+- FR-2: Start responses must include a stable `FactorySession` identifier that clients can use for list, get, result, and event reads.
+- FR-3: List and get APIs must expose the started session with lifecycle status and result availability semantics matching the backend service read model.
+- FR-4: Result reads must expose the terminal final result status and final value or stable result hash without log parsing.
+- FR-5: Event reads must return canonical `FactoryEvent` envelopes for the session.
+- FR-6: Event reconnect must support at least one cursor path that filters already-seen events and one typed failure path for an invalid cursor.
+- FR-7: API request, response, and error shaping must flow through shared apisurface mappers.
+- FR-8: Authored OpenAPI and generated artifacts must stay synchronized when contract changes are required.
+- FR-9: Existing live Petri session compatibility must not regress.
 
 ## Non-Goals
 
-- Rewriting the entire UI test stack.
-- Eliminating browser integration tests.
-- Lowering coverage thresholds as the primary speed strategy.
-- Parallelizing browser tests in a way that knowingly increases flakiness or port conflicts.
-- Replacing targeted end-to-end coverage with only unit tests.
-- Fixing every historical React `act(...)` warning or unrelated console warning.
-- Performing broad unrelated cleanup while changing CI and test strategy.
+- No website or dashboard inspection parity.
+- No MCP host installation or install-smoke changes.
+- No full dispatch read, artifact read, lifecycle-control, resume, or live-provider bridge parity.
+- No standalone workflow-run API resources or workflow-run nouns.
+- No `/workflow-previews` expansion.
+- No broad handler decomposition, unrelated refactors, or generated-file churn outside the narrow API slice.
 
 ## Supporting Technical and UX Considerations
 
-- CI operator experience matters: required lanes should remain easy to run locally and failures should identify the exact rerun command.
-- Faster CI is only valuable if failures remain deterministic and attributable.
-- Browser integration logs must stay readable when run near other long-running lanes.
-- Sharding should respect CI executor capacity; too many shards may add overhead without improving wall clock time.
-- Browser tests that use preview servers, downloads, ports, or global browser state need explicit isolation before any file-level concurrency.
-- Frontend-visible changes to test fixtures or browser flows should still be verified in a browser, including loading, success, empty, and failure states when those states are affected.
-- Test reports should measure runtime behavior and outcomes, not enforce brittle source-file inventories unless the report itself is the product behavior under test.
+- Relevant references include `docs/temp/customer-ask.md`, `docs/temp/dynamic-workflow-plan.md`, `docs/internal/development/plans/dynamic-workflows/dynamic-workflow-design.md`, `docs/internal/processes/api-relevant-files.md`, `docs/architecture/architecture.md`, and `docs/architecture/data-model.md`.
+- The hard dependency is the completed `dynamic-workflows-recovery-session-backend-runtime` lane with recovered real JavaScript session backend behavior for simple final-only runs.
+- Use existing Factory Session and Factory Event schemas where possible. Contract edits should correct missing or inconsistent existing surfaces, not create parallel concepts.
+- Frontend-visible behavior is not part of this lane, but generated TypeScript types must remain synchronized if OpenAPI changes.
+- Error responses should keep existing typed error vocabulary for missing sessions, not-ready results, request conflicts, invalid starts, and reconnect cursor failures.
+- Focused verification commands expected for implementation include `make generate-api` when needed, `go test ./pkg/api/contracttests ./pkg/api/servertests ./pkg/apisurface/... ./pkg/factorysessionexecution/... ./pkg/orchestrators/javascript/...`, and `make api-smoke` when feasible.
 
 ## Success Metrics
 
-- Required UI-related `make ci` wall clock time drops by at least 30% from the current measured baseline.
-- Browser integration failures surface before full UI coverage completion in at least 90% of failing browser-regression cases.
-- Main covered UI wall clock time drops by at least 25%.
-- The top 10 slowest UI test files are remeasured after changes, and at least 5 improve materially or have documented blockers.
-- The number of broad app-shell tests above 10 seconds decreases release over release.
-- Browser integration retries due to flake do not increase after CI orchestration and sharding changes.
+- One real-backend API test starts a simple JavaScript session and observes the same session through start, list, get, result, and events.
+- API result semantics match recovered backend/CLI/MCP expectations for a completed final-only session.
+- Event reconnect returns deterministic canonical `FactoryEvent` envelopes after a cursor.
+- Contract, mapper, and focused server tests cover the changed behavior without requiring website, MCP install, dispatch, artifact, or lifecycle-control work.
+- No new public workflow-run API resource or noun appears in the changed contract.
 
 ## Open Questions
 
-- Should the canonical PR path run browser integration first, or run browser integration and UI coverage concurrently under a shared orchestrator?
-- Should the layout performance test remain in the required covered lane, or move to a separate performance verification lane with its own runtime budget?
-- What CI executor capacity is available for coverage sharding, and what default shard count gives the best wall clock improvement without overhead dominating?
+None. The lane is deliberately scoped to the existing Factory Session API vocabulary and the recovered real JavaScript session backend for simple final-only runs.

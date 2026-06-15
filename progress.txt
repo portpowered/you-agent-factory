@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Keep `FakeService` and `RuntimeService` as parallel `factorysessionexecution.Service` implementations: mock-provider transports inject `FakeService` via `NewFakeService`, `NewFakeServiceFromContractFixtures`, `WithFakeScenarios`, and `WithPersistedSessionSeeds` without JavaScript runtime setup; real simple-workflow execution uses `NewRuntimeService` behind the same contract. Prove coexistence in `fake_service_coexistence_test.go` alongside `fake_service_test.go` and runtime-backed tests.
+- Wire durable Factory Session API starts through `apisurface.DurableSessionExecutionAPI` (embedded on `SessionAPISurface`): `FactoryService` lazy-inits `RuntimeService` in `pkg/service/durable_session_execution.go` using `durableProjectRoot()`; HTTP handlers in `pkg/api/handlers_durable_execution.go` decode requests, call the seam, and map failures via `factorysession.ExecutionErrorResponse`; API loopback tests inject `RuntimeService` through `testutil.MockFactory.DurableExecutionService`.
 - Use `factorysessionexecution.PrepareStart` to normalize durable JavaScript session starts: it chains `NormalizeStartRequest`, `resolveStartSourceWithResolution`, wrapped-source validation (IIFE wrap matching `workflowruntime.Run`), args JSON checks, `workflowpolicy.Resolve`, and wait-option validation before runtime execution.
 - Runtime simple-workflow fixtures live in `pkg/orchestrators/javascript/runtime/testdata/`; factorysessionexecution tests can read them via `../orchestrators/javascript/runtime/testdata/<name>`.
 - Durable start source resolution is shared through `resolveStartSourceWithResolution`; `ResolveStartSource` is a thin wrapper returning only `ResolvedSource`.
@@ -105,4 +106,14 @@
 - **Learnings for future iterations:**
   - CI `Build, Lint, and API` runs `make backend-size` after `make vet`; large table-driven or assertion-heavy tests should use `t.Helper()` assertion helpers early to stay under the 100-line function cap.
   - `go vet` passing locally does not imply the full `Build, Lint, and API` job is green—run `make backend-size` when adding substantial test functions in owned backend packages.
+---
+
+## 2026-06-15T18:34:57Z - dynamic-workflows-cell-real-backend-api-session-parity-001
+- Wired `POST /factory-sessions/async` and `POST /factory-sessions/sync` through `DurableSessionExecutionAPI`: `FactoryService` delegates to lazy `RuntimeService`, handlers map typed validation/conflict errors, and `MockFactory` supports runtime injection for API loopback tests.
+- Added runtime-backed API tests proving stable `sessionId`, idempotent `requestId` replay, `EXECUTION_REQUEST_ID_CONFLICT` on tuple mismatch, and validation failures that do not create sessions.
+- Files changed: `pkg/service/durable_session_execution.go`, `pkg/service/factory.go`, `pkg/api/handlers_durable_execution.go`, `pkg/api/handlers_factory.go`, `pkg/api/server_durable_session_execution_test.go`, `pkg/apisurface/contract.go`, `pkg/apisurface/factorysession/factory_session_execution_errors.go`, `pkg/apisurface/factorysession/factory_session_execution_errors_test.go`, `pkg/testutil/mock_factory.go`, `docs/internal/processes/api-relevant-files.md`
+- **Learnings for future iterations:**
+  - Durable async/sync starts are not session-scoped routes—handlers type-assert `apisurface.DurableSessionExecutionAPI` on `s.runtime`, not `requireSessionRuntime`.
+  - `FactoryService.durableProjectRoot()` prefers `cfg.ExecutionBaseDir`, then `cfg.Dir`, then `factoryRootDir` for `StartPrepareContext.ProjectRoot`.
+  - API tests should inject `RuntimeService` via `MockFactory.DurableExecutionService` to prove real-backend loopback without standing up full `FactoryService`.
 ---
