@@ -40,9 +40,6 @@ func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowruntime
 	if err := ctx.Err(); err != nil {
 		return workflowruntime.ChildExecutionResult{}, err
 	}
-	if strings.HasPrefix(req.Prompt, "fail:") {
-		return e.executeFailed(ctx, req)
-	}
 
 	dispatchID, childIndex := e.childDispatchIdentity(req)
 	providerName, providerSessionRef := "", ""
@@ -96,30 +93,6 @@ func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowruntime
 		ProviderSessionRef: providerSessionRef,
 		Request:            req,
 	}, nil
-}
-
-func (e *ProviderChildExecutor) executeFailed(ctx context.Context, req workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
-	if err := ctx.Err(); err != nil {
-		return workflowruntime.ChildExecutionResult{}, err
-	}
-	dispatchID, childIndex := e.childDispatchIdentity(req)
-	base := workflowruntime.ChildDispatchRecord{
-		DispatchID:    dispatchID,
-		ChildIndex:    childIndex,
-		Label:         req.Label,
-		PromptDigest:  workflowruntime.TextDigest(req.Prompt),
-		Model:         req.Model,
-		ExecutionMode: workflowruntime.ChildExecutionModeLive,
-	}
-	e.records.AppendChildDispatch(base, workflowruntime.ChildDispatchStatusQueued)
-	e.records.AppendChildDispatch(base, workflowruntime.ChildDispatchStatusRunning)
-
-	inferReq := providerInferenceRequestFromChild(e.sessionID, dispatchID, req)
-	_, err := e.provider.Infer(ctx, inferReq)
-	if err == nil {
-		err = fmt.Errorf("live child failed: %s", strings.TrimPrefix(req.Prompt, "fail:"))
-	}
-	return e.failedChildResult(base, req, dispatchID, childIndex, "", "", err)
 }
 
 func (e *ProviderChildExecutor) failedChildResult(

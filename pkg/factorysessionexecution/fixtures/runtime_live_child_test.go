@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspection(t *testing.T) {
@@ -172,7 +173,7 @@ func (m *blockingFixtureProvider) inferContextsHonored() int {
 
 func TestJavaScriptRuntimeService_ParallelLiveChildFailure_ProjectsTypedFailureAndPreservesSiblings(t *testing.T) {
 	provider := newParallelLiveChildMockProvider()
-	projectRoot := setupRuntimeWorkflowFixture(t, "parallel-child-failure.workflow.js", "parallel-child-failure")
+	projectRoot := setupRuntimeWorkflowFixture(t, "parallel-live-child-failure.workflow.js", "parallel-live-child-failure")
 	service := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
 		ProjectRoot:       projectRoot,
 		ChildExecutorMode: fse.ChildExecutorModeLive,
@@ -183,7 +184,7 @@ func TestJavaScriptRuntimeService_ParallelLiveChildFailure_ProjectsTypedFailureA
 		RequestID: "req-runtime-parallel-live-child-failure",
 		Source: fse.Source{
 			Kind:         workflowsource.KindWorkflowName,
-			WorkflowName: "parallel-child-failure",
+			WorkflowName: "parallel-live-child-failure",
 		},
 		Args: map[string]any{
 			"subject": "workflows",
@@ -200,7 +201,11 @@ func TestJavaScriptRuntimeService_ParallelLiveChildFailure_ProjectsTypedFailureA
 }
 
 func TestJavaScriptRuntimeService_AgentRunLiveChildFailure_ProjectsFailedDispatchOnWorkflowFailure(t *testing.T) {
-	provider := newFixtureMockProvider(interfaces.InferenceResponse{Content: `{"text":"unused"}`})
+	provider := newFailingFixtureMockProvider(provider.NewProviderError(
+		interfaces.WorkFailureTypePermanentBadRequest,
+		"simulated live child error",
+		nil,
+	))
 	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-live-child-failure.workflow.js", "agent-run-live-child-failure")
 	service := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
 		ProjectRoot:       projectRoot,
@@ -246,12 +251,29 @@ func TestJavaScriptRuntimeService_AgentRunLiveChildFailure_ProjectsFailedDispatc
 	if dispatchDetail.Status != fse.DispatchStatusFailed {
 		t.Fatalf("dispatch status = %q, want FAILED", dispatchDetail.Status)
 	}
-	if dispatchDetail.FailureDetail == nil || dispatchDetail.FailureDetail.Reason != workflowruntime.ChildExecutionFailureReason {
+	if dispatchDetail.FailureDetail == nil || dispatchDetail.FailureDetail.Reason != string(interfaces.WorkFailureTypePermanentBadRequest) {
 		t.Fatalf("dispatch failureDetail = %#v", dispatchDetail.FailureDetail)
 	}
-	if !strings.Contains(dispatchDetail.FailureDetail.Message, "simulated live child error") {
+	if dispatchDetail.FailureDetail.Message != "simulated live child error" {
 		t.Fatalf("dispatch failure message = %q", dispatchDetail.FailureDetail.Message)
 	}
+	if provider.inferCallCount != 1 {
+		t.Fatalf("provider infer call count = %d, want 1", provider.inferCallCount)
+	}
+}
+
+type failingFixtureMockProvider struct {
+	err            error
+	inferCallCount int
+}
+
+func newFailingFixtureMockProvider(err error) *failingFixtureMockProvider {
+	return &failingFixtureMockProvider{err: err}
+}
+
+func (m *failingFixtureMockProvider) Infer(_ context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+	m.inferCallCount++
+	return interfaces.InferenceResponse{}, m.err
 }
 
 type parallelLiveChildMockProvider struct {
@@ -264,6 +286,13 @@ func newParallelLiveChildMockProvider() *parallelLiveChildMockProvider {
 
 func (m *parallelLiveChildMockProvider) Infer(_ context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
 	m.callCount++
+	if strings.Contains(req.UserMessage, "force provider failure") {
+		return interfaces.InferenceResponse{}, provider.NewProviderError(
+			interfaces.WorkFailureTypePermanentBadRequest,
+			"simulated child error",
+			nil,
+		)
+	}
 	return interfaces.InferenceResponse{
 		Content: `{"text":"live:` + req.Dispatch.DispatchID + `:` + req.UserMessage + `"}`,
 		ProviderSession: &interfaces.ProviderSessionMetadata{
@@ -503,10 +532,10 @@ func assertParallelFailureFailedDispatch(
 	if failed.FailureDetail == nil {
 		t.Fatal("failed dispatch missing failureDetail")
 	}
-	if failed.FailureDetail.Reason != workflowruntime.ChildExecutionFailureReason {
-		t.Fatalf("failure reason = %q, want %q", failed.FailureDetail.Reason, workflowruntime.ChildExecutionFailureReason)
+	if failed.FailureDetail.Reason != string(interfaces.WorkFailureTypePermanentBadRequest) {
+		t.Fatalf("failure reason = %q, want %q", failed.FailureDetail.Reason, interfaces.WorkFailureTypePermanentBadRequest)
 	}
-	if !strings.Contains(failed.FailureDetail.Message, "simulated child error") {
+	if failed.FailureDetail.Message != "simulated child error" {
 		t.Fatalf("failure message = %q, want simulated child error detail", failed.FailureDetail.Message)
 	}
 	if len(failed.OutputArtifactIDs) != 0 {
@@ -525,7 +554,7 @@ func assertParallelFailureFailedDispatch(
 		fse.DispatchStatusRunning,
 		fse.DispatchStatusFailed,
 	})
-	if failedDetail.FailureDetail == nil || failedDetail.FailureDetail.Reason != workflowruntime.ChildExecutionFailureReason {
+	if failedDetail.FailureDetail == nil || failedDetail.FailureDetail.Reason != string(interfaces.WorkFailureTypePermanentBadRequest) {
 		t.Fatalf("failed dispatch detail failure = %#v", failedDetail.FailureDetail)
 	}
 

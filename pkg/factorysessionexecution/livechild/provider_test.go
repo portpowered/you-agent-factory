@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 func TestProviderChildExecutor_Execute_RecordsLiveProviderDispatch(t *testing.T) {
@@ -77,7 +78,25 @@ func (m *unitMockProvider) Infer(_ context.Context, _ interfaces.ProviderInferen
 	return m.response, nil
 }
 
+type failingUnitMockProvider struct {
+	err       error
+	callCount int
+	mu        sync.Mutex
+}
+
+func newFailingUnitMockProvider(err error) *failingUnitMockProvider {
+	return &failingUnitMockProvider{err: err}
+}
+
+func (m *failingUnitMockProvider) Infer(_ context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.callCount++
+	return interfaces.InferenceResponse{}, m.err
+}
+
 var _ workers.Provider = (*unitMockProvider)(nil)
+var _ workers.Provider = (*failingUnitMockProvider)(nil)
 
 type testChildRecordSink struct {
 	records []workflowruntime.RuntimeRecord
@@ -153,17 +172,24 @@ func (s *testChildRecordSink) failedDispatchRecords(dispatchID string) []workflo
 }
 
 func TestProviderChildExecutor_Execute_FailedChild_RecordsTypedFailureDetail(t *testing.T) {
-	provider := newUnitMockProvider(interfaces.InferenceResponse{Content: `{"text":"unused"}`})
+	provider := newFailingUnitMockProvider(provider.NewProviderError(
+		interfaces.WorkFailureTypePermanentBadRequest,
+		"simulated provider child error",
+		nil,
+	))
 	collectorSink := newTestChildRecordSink()
 	executor := NewProviderChildExecutor("session-live-child-failure", provider, collectorSink)
 
 	_, err := executor.Execute(context.Background(), workflowruntime.ChildExecutionRequest{
-		Prompt:       "fail:simulated provider child error",
+		Prompt:       "summarize workflows",
 		Label:        "summarize-findings",
 		WorkflowName: "parallel-child-failure",
 	})
 	if err == nil {
 		t.Fatal("Execute: error = nil, want child failure")
+	}
+	if provider.callCount != 1 {
+		t.Fatalf("provider call count = %d, want 1", provider.callCount)
 	}
 
 	failedRecords := collectorSink.failedDispatchRecords("dispatch-1")
@@ -174,11 +200,14 @@ func TestProviderChildExecutor_Execute_FailedChild_RecordsTypedFailureDetail(t *
 	if failed.Status != workflowruntime.ChildDispatchStatusFailed {
 		t.Fatalf("dispatch status = %q, want FAILED", failed.Status)
 	}
-	if failed.FailureReason != workflowruntime.ChildExecutionFailureReason {
-		t.Fatalf("failureReason = %q", failed.FailureReason)
+	if failed.FailureReason != string(interfaces.WorkFailureTypePermanentBadRequest) {
+		t.Fatalf("failureReason = %q, want %q", failed.FailureReason, interfaces.WorkFailureTypePermanentBadRequest)
 	}
-	if failed.FailureMessage == "" {
-		t.Fatal("failureMessage is empty")
+	if failed.FailureMessage != "simulated provider child error" {
+		t.Fatalf("failureMessage = %q", failed.FailureMessage)
+	}
+	if failed.FailureErrorClass != string(interfaces.WorkFailureFamilyTerminal) {
+		t.Fatalf("failureErrorClass = %q, want %q", failed.FailureErrorClass, interfaces.WorkFailureFamilyTerminal)
 	}
 }
 

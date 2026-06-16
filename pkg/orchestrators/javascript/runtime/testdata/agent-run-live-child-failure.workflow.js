@@ -1,7 +1,7 @@
 // Live child agent.run failure fixture for durable dispatch bridge tests.
 return (async function () {
   const child = await agent.run({
-    prompt: "fail:simulated live child error",
+    prompt: "summarize workflows and force provider failure",
     label: "summarize-findings",
     model: "gpt-test",
   });
