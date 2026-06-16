@@ -206,6 +206,7 @@ function CurrentActivityGraphSurfaceContent({
         clearGraphSelection={model.clearGraphSelection}
         deleteGraphSelection={model.deleteGraphSelection}
         editorControls={editorControls}
+        graphSelectionToolbarState={model.graphSelectionToolbarState}
         edgeTypes={FACTORY_GRAPH_EDGE_TYPES}
         edges={model.edges}
         flowContainerRef={flowContainerRef}

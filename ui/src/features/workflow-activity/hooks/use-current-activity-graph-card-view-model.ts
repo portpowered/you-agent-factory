@@ -5,6 +5,10 @@ import {
   pruneFactoryGraphEditorSelectionAfterRemoval,
 } from "../../factory-graph-editor/lib/selection/factory-graph-editor-selection-batch-delete";
 import {
+  resolveFactoryGraphEditorToolbarSelectionState,
+  type FactoryGraphEditorToolbarSelectionState,
+} from "../../factory-graph-editor/lib/selection/factory-graph-editor-toolbar-selection";
+import {
   factoryGraphNodeIdForAddEntityDraft,
   type GraphEditorAddNodePlacementViewport,
   resolveInitialPlacementTopLeftForViewport,
@@ -25,6 +29,7 @@ type CurrentActivityGraphCardViewModelInput = Omit<
   graphController: CurrentActivityGraphState;
 };
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: card view model composes graph, editor, and selection controllers.
 export function useCurrentActivityGraphCardViewModel(
   input: CurrentActivityGraphCardViewModelInput,
 ): CurrentActivityGraphCardViewModel {
@@ -94,6 +99,8 @@ export function useCurrentActivityGraphCardViewModel(
   const confirmRemoval = publicEditor.removalControls.confirm;
   const pendingRemovalIntent = publicEditor.removalControls.pendingIntent;
   const selectionState = graph.graphSelection.state;
+  const graphSelectionToolbarState =
+    resolveFactoryGraphEditorToolbarSelectionState(selectionState);
   const canDeleteGraphSelection = canDeleteSelectionFn({
     edgeIds: [...selectionState.selectedEdgeIds],
     nodeIds: [...selectionState.selectedNodeIds],
@@ -157,6 +164,7 @@ export function useCurrentActivityGraphCardViewModel(
     canDeleteGraphSelection,
     deleteGraphSelection,
     edgeWaypointControls,
+    graphSelectionToolbarState,
     removalControls: {
       ...publicEditor.removalControls,
       confirm: confirmSelectionRemoval,
@@ -204,6 +212,7 @@ export interface CurrentActivityGraphCardViewModel
   addControls: CurrentActivityGraphCardAddControls;
   canDeleteGraphSelection: boolean;
   deleteGraphSelection: () => void;
+  graphSelectionToolbarState: FactoryGraphEditorToolbarSelectionState;
   layoutControls: CurrentActivityGraphCardLayoutControls;
   removalControls: CurrentActivityGraphState["removalControls"];
   visualGroupControls: ReturnType<typeof useFactoryGraphVisualGroupEditor>;

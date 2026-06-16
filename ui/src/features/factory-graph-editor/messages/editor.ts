@@ -190,8 +190,14 @@ export interface FactoryGraphEditorMessages {
   toolbarConnectDescription: string;
   toolbarConnectLabel: string;
   toolbarDeleteDescription: string;
+  toolbarDeleteDisabledNonDeletableDescription: string;
+  toolbarDeleteDisabledNonDeletableLabel: string;
   toolbarDeleteLabel: string;
+  toolbarDeleteMultiSelectionDescription: (count: number) => string;
+  toolbarDeleteMultiSelectionLabel: (count: number) => string;
   toolbarDeleteSelectionDescription: string;
+  toolbarDeleteSingleSelectionDescription: string;
+  toolbarDeleteSingleSelectionLabel: string;
   toolbarRedoDescription: string;
   toolbarRedoLabel: string;
   toolbarResetLayoutDescription: string;
@@ -793,8 +799,18 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarConnectDescription: "Connect",
       toolbarConnectLabel: "Connect",
       toolbarDeleteDescription: "Remove",
+      toolbarDeleteDisabledNonDeletableDescription:
+        "Selected graph items cannot be removed",
+      toolbarDeleteDisabledNonDeletableLabel:
+        "Delete, selected items cannot be removed",
       toolbarDeleteLabel: "Delete",
+      toolbarDeleteMultiSelectionDescription: (count) =>
+        `Delete ${count} selected graph items`,
+      toolbarDeleteMultiSelectionLabel: (count) =>
+        `Delete ${count} selected graph items`,
       toolbarDeleteSelectionDescription: "Delete selected graph items",
+      toolbarDeleteSingleSelectionDescription: "Delete selected graph item",
+      toolbarDeleteSingleSelectionLabel: "Delete selected graph item",
       toolbarRedoDescription: "Redo the last undone layout change",
       toolbarRedoLabel: "Redo",
       toolbarResetLayoutDescription:
@@ -1327,8 +1343,14 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarConnectDescription: "在图上连接节点",
       toolbarConnectLabel: "连接",
       toolbarDeleteDescription: "从图中删除节点或边",
+      toolbarDeleteDisabledNonDeletableDescription: "所选图项无法删除",
+      toolbarDeleteDisabledNonDeletableLabel: "删除，所选图项无法删除",
       toolbarDeleteLabel: "删除",
+      toolbarDeleteMultiSelectionDescription: (count) => `删除 ${count} 个所选图项`,
+      toolbarDeleteMultiSelectionLabel: (count) => `删除 ${count} 个所选图项`,
       toolbarDeleteSelectionDescription: "删除所选图项",
+      toolbarDeleteSingleSelectionDescription: "删除所选图项",
+      toolbarDeleteSingleSelectionLabel: "删除所选图项",
       toolbarRedoDescription: "重做上一条已撤销的布局更改",
       toolbarRedoLabel: "重做",
       toolbarResetLayoutDescription: "将节点位置重置为已保存的共享布局基线",

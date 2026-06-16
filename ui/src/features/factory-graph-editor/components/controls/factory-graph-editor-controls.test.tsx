@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 
 import type { FactoryGraphNodeKind } from "../../lib/draft/factory-graph-draft-types";
+import type { FactoryGraphEditorToolbarSelectionState } from "../../lib/selection/factory-graph-editor-toolbar-selection";
 import {
   FactoryGraphEditorActionPopover,
   FactoryGraphEditorConfirmationDialog,
@@ -76,6 +77,39 @@ function renderToolbar({
   }
 
   render(<ToolbarHarness />);
+}
+
+function renderSelectionToolbar({
+  canDeleteSelection = false,
+  graphSelectionToolbarState = {
+    mode: "none",
+    selectedItemCount: 0,
+  } satisfies FactoryGraphEditorToolbarSelectionState,
+  onDeleteSelection = vi.fn(),
+  onSelectTool = vi.fn(),
+}: {
+  canDeleteSelection?: boolean;
+  graphSelectionToolbarState?: FactoryGraphEditorToolbarSelectionState;
+  onDeleteSelection?: () => void;
+  onSelectTool?: (tool: FactoryGraphEditorTool) => void;
+} = {}) {
+  render(
+    <div className="relative min-h-48">
+      <FactoryGraphEditorToolbar
+        activeTool={null}
+        canDeleteSelection={canDeleteSelection}
+        canDiscard={false}
+        canInteract={true}
+        canSave={false}
+        graphSelectionToolbarState={graphSelectionToolbarState}
+        onDeleteSelection={onDeleteSelection}
+        onDiscard={() => {}}
+        onSelectTool={onSelectTool}
+        onSave={() => {}}
+        visible={true}
+      />
+    </div>,
+  );
 }
 
 describe("factory graph editor toolbar controls", () => {
@@ -533,6 +567,110 @@ describe("factory graph editor hide/show controls", () => {
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Add" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
+  });
+});
+
+describe("factory graph editor toolbar selection states", () => {
+  it("marks the toolbar row as having no graph selection by default", () => {
+    renderSelectionToolbar();
+
+    const toolbar = screen.getByRole("region", {
+      name: "Factory graph editor tools",
+    });
+
+    expect(
+      toolbar.querySelector("[data-toolbar-graph-selection='none']"),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Delete" }).getAttribute("disabled"),
+    ).toBeNull();
+  });
+
+  it("enables batch delete for a single deletable selection", async () => {
+    const user = userEvent.setup();
+    const onDeleteSelection = vi.fn();
+
+    renderSelectionToolbar({
+      canDeleteSelection: true,
+      graphSelectionToolbarState: {
+        mode: "single",
+        selectedItemCount: 1,
+      },
+      onDeleteSelection,
+    });
+
+    const toolbar = screen.getByRole("region", {
+      name: "Factory graph editor tools",
+    });
+    const deleteButton = screen.getByRole("button", {
+      name: "Delete selected graph item",
+    });
+
+    expect(
+      toolbar.querySelector("[data-toolbar-graph-selection='single']"),
+    ).toBeTruthy();
+    expect(deleteButton.getAttribute("disabled")).toBeNull();
+
+    await user.click(deleteButton);
+    expect(onDeleteSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it("enables batch delete for multi-selection with count-specific copy", async () => {
+    const user = userEvent.setup();
+    const onDeleteSelection = vi.fn();
+
+    renderSelectionToolbar({
+      canDeleteSelection: true,
+      graphSelectionToolbarState: {
+        mode: "multi",
+        selectedItemCount: 3,
+      },
+      onDeleteSelection,
+    });
+
+    const deleteButton = screen.getByRole("button", {
+      name: "Delete 3 selected graph items",
+    });
+
+    expect(
+      screen
+        .getByRole("region", { name: "Factory graph editor tools" })
+        .querySelector("[data-toolbar-graph-selection='multi']"),
+    ).toBeTruthy();
+
+    await user.hover(deleteButton);
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "Delete 3 selected graph items",
+      }),
+    ).toBeTruthy();
+
+    await user.click(deleteButton);
+    expect(onDeleteSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables delete with explicit semantics for non-deletable selections", async () => {
+    const user = userEvent.setup();
+    const onSelectTool = vi.fn();
+
+    renderSelectionToolbar({
+      graphSelectionToolbarState: {
+        mode: "single",
+        selectedItemCount: 1,
+      },
+      onSelectTool,
+    });
+
+    const deleteButton = screen.getByRole("button", {
+      name: "Delete, selected items cannot be removed",
+    });
+
+    expect(deleteButton.getAttribute("disabled")).not.toBeNull();
+    expect(deleteButton.getAttribute("aria-pressed")).toBe("false");
+
+    await user.click(deleteButton);
+    expect(onSelectTool).not.toHaveBeenCalled();
   });
 });
 

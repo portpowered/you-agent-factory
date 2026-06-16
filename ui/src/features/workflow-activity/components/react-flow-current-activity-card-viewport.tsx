@@ -31,6 +31,7 @@ import type { WorkstationProgressOutcomeRouteContext } from "../../current-facto
 import {
   type FactoryGraphEditorMenuAction,
   FactoryGraphEditorToolbar,
+  type FactoryGraphEditorToolbarSelectionState,
   FactoryGraphEditorVisibilityPanel,
   type FactoryGraphEditorVisibilityPreset,
 } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
@@ -74,6 +75,7 @@ function CurrentActivityGraphEditorChrome(props: {
   canDeleteGraphSelection?: boolean;
   deleteGraphSelection?: () => void;
   editorControls: CurrentActivityGraphViewportEditorControls;
+  graphSelectionToolbarState?: FactoryGraphEditorToolbarSelectionState;
   hasPendingChanges: boolean;
   isSavingDraft?: boolean;
   layoutControls: CurrentActivityGraphViewportLayoutControls;
@@ -110,6 +112,7 @@ function CurrentActivityGraphEditorChrome(props: {
         onToggle: props.editorControls.toggleMode,
         tooltipOverride: editorUnavailableReason,
       }}
+      graphSelectionToolbarState={props.graphSelectionToolbarState}
       hiddenNodeClasses={props.visibilityControls.hiddenNodeClasses}
       hideShowMenuOpen={props.visibilityControls.isMenuOpen}
       hideShowVisible={true}
@@ -299,6 +302,7 @@ export function CurrentActivityGraphViewport({
   clearGraphSelection,
   deleteGraphSelection,
   editorControls,
+  graphSelectionToolbarState,
   edges,
   handleEdgesChange,
   handleGraphSelectionChange,
@@ -344,6 +348,7 @@ export function CurrentActivityGraphViewport({
   clearGraphSelection?: () => void;
   deleteGraphSelection?: () => void;
   editorControls: CurrentActivityGraphViewportEditorControls;
+  graphSelectionToolbarState?: FactoryGraphEditorToolbarSelectionState;
   edges: Edge[];
   handleEdgesChange?: (changes: EdgeChange[]) => void;
   handleGraphSelectionChange?: OnSelectionChangeFunc;
@@ -807,6 +812,7 @@ export function CurrentActivityGraphViewport({
           canDeleteGraphSelection={canDeleteGraphSelection}
           deleteGraphSelection={deleteGraphSelection}
           editorControls={editorControls}
+          graphSelectionToolbarState={graphSelectionToolbarState}
           hasPendingChanges={hasPendingChanges}
           isSavingDraft={isSavingDraft}
           layoutControls={layoutControls}

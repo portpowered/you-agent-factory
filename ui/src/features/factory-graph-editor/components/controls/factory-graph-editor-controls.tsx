@@ -9,6 +9,12 @@ import {
 } from "../../../../components/ui";
 import { cn } from "../../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../../lib/draft/factory-graph-draft-types";
+import {
+  EMPTY_FACTORY_GRAPH_EDITOR_TOOLBAR_SELECTION_STATE,
+  type FactoryGraphEditorToolbarSelectionState,
+  resolveFactoryGraphEditorToolbarDeleteAction,
+  resolveFactoryGraphEditorToolbarDeleteButtonState,
+} from "../../lib/selection/factory-graph-editor-toolbar-selection";
 import { getFactoryGraphEditorMessages } from "../../messages/editor";
 
 export {
@@ -38,6 +44,8 @@ export {
   FactoryGraphEditorActionPopover,
   FactoryGraphEditorConfirmationDialog,
 } from "../factory-graph-editor-dialogs";
+
+export type { FactoryGraphEditorToolbarSelectionState } from "../../lib/selection/factory-graph-editor-toolbar-selection";
 
 export type FactoryGraphEditorTool = "add" | "connect" | "delete" | null;
 export type FactoryGraphEditorVisibilityPreset =
@@ -70,6 +78,7 @@ export function FactoryGraphEditorToolbar({
   canDeleteSelection = false,
   canUndoLayout = false,
   editModeToggle,
+  graphSelectionToolbarState = EMPTY_FACTORY_GRAPH_EDITOR_TOOLBAR_SELECTION_STATE,
   hiddenNodeClasses = new Set<FactoryGraphNodeKind>(),
   hideShowMenuOpen = false,
   hideShowVisible = true,
@@ -108,6 +117,7 @@ export function FactoryGraphEditorToolbar({
     onToggle: () => void;
     tooltipOverride?: string;
   };
+  graphSelectionToolbarState?: FactoryGraphEditorToolbarSelectionState;
   hiddenNodeClasses?: ReadonlySet<FactoryGraphNodeKind>;
   hideShowMenuOpen?: boolean;
   hideShowVisible?: boolean;
@@ -141,6 +151,17 @@ export function FactoryGraphEditorToolbar({
   const toolbarButtonsDisabled = !showEditorControls || !canInteract;
   const discardDisabled = !canDiscard;
   const saveDisabled = !canSave;
+  const deleteAction = resolveFactoryGraphEditorToolbarDeleteAction({
+    canDeleteSelection,
+    deleteToolActive: activeTool === "delete",
+    selectionState: graphSelectionToolbarState,
+  });
+  const deleteButtonState = resolveFactoryGraphEditorToolbarDeleteButtonState({
+    deleteAction,
+    messages,
+  });
+  const deleteDisabled =
+    toolbarButtonsDisabled || deleteAction.kind === "disabled";
 
   return (
     <FactoryGraphEditorFloatingSurface
@@ -176,6 +197,7 @@ export function FactoryGraphEditorToolbar({
         <div
           className="flex min-h-10 max-h-11 min-w-max flex-nowrap items-center gap-2 overflow-hidden"
           data-toolbar-editor-controls-row=""
+          data-toolbar-graph-selection={graphSelectionToolbarState.mode}
         >
           <FactoryGraphEditorAddMenu
             actions={addMenuActions}
@@ -195,28 +217,22 @@ export function FactoryGraphEditorToolbar({
             tone="outline"
           />
           <FactoryGraphEditorToolbarButton
-            active={!canDeleteSelection && activeTool === "delete"}
-            description={
-              canDeleteSelection
-                ? messages.toolbarDeleteSelectionDescription
-                : messages.toolbarDeleteDescription
-            }
-            disabled={toolbarButtonsDisabled}
+            active={deleteButtonState.active}
+            description={deleteButtonState.description}
+            disabled={deleteDisabled}
             icon={<TrashIcon />}
-            label={messages.toolbarDeleteLabel}
+            label={deleteButtonState.label}
             onClick={() => {
-              if (canDeleteSelection && onDeleteSelection) {
+              if (deleteAction.kind === "batch-delete" && onDeleteSelection) {
                 onDeleteSelection();
                 return;
               }
 
-              onSelectTool(activeTool === "delete" ? null : "delete");
+              if (deleteAction.kind === "delete-tool") {
+                onSelectTool(deleteAction.active ? null : "delete");
+              }
             }}
-            tone={
-              !canDeleteSelection && activeTool === "delete"
-                ? "secondary"
-                : "outline"
-            }
+            tone={deleteButtonState.tone}
           />
           <FactoryGraphEditorToolbarButton
             active={false}
