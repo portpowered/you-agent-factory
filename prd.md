@@ -154,17 +154,17 @@ redesign.
 
 **Acceptance Criteria:**
 
-- [ ] Focused UI tests cover at least one durable JavaScript success case with
+- [x] Focused UI tests cover at least one durable JavaScript success case with
       runtime metadata plus dispatch or artifact-backed detail rendering.
-- [ ] Focused UI tests cover at least one loading, not-found, or error state
+- [x] Focused UI tests cover at least one loading, not-found, or error state
       for the same bounded inspection surface.
-- [ ] Browser verification confirms the local app or deterministic story is
+- [x] Browser verification confirms the local app or deterministic story is
       usable for the targeted durable JavaScript inspection state.
-- [ ] Any richer drilldown, replay-specific website work, or broader dashboard
+- [x] Any richer drilldown, replay-specific website work, or broader dashboard
       refinement is recorded as deferred follow-up rather than implemented in
       this lane.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
+- [x] Typecheck passes.
+- [x] Tests pass.
 
 ## High-Level Technical Design
 

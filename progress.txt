@@ -16,6 +16,18 @@
 - Durable JavaScript inspection detail loads dispatch summaries through `ui/src/api/factory-sessions/api-durable-inspection.ts` (`listFactorySessionDispatches`) and merges them into `FactorySession.runtime.dispatches` in `use-factory-session-detail.ts`; map durable result reads with `getFactorySessionDurableResults` plus `normalize-durable-inspection.ts` when session GET lacks `resultSummary` artifact refs.
 - Customer-facing runtime/orchestrator/script status labels for factory-session detail live in `ui/src/features/factory-session-detail/messages/factory-session-detail.ts` and format through `messages/factory-session-runtime-display.ts` to satisfy `check:localized-copy`.
 - Factory session detail loading, missing, and error states use the same `StatusNotice` pattern as provider session detail: `AlertPanel` with `role="status"` for loading/not-found and `role="alert"` with `tone="danger"` for API failures.
+- Durable JavaScript website inspection deferred follow-ups (dispatch drilldown, artifact drilldown, lifecycle controls UI, event replay, live-provider fields, real-backend E2E) belong in `docs/internal/development/plans/dynamic-workflows/follow-up-cell-website-session-inspection-deferred.md`.
+- Storybook browser verification for factory-session detail uses `tags: ["test"]` on success and non-success stories; not-found play functions must `findByText` for the final message because loading and missing both use `role="status"`.
+
+## 2026-06-17T05:38:00Z - dynamic-workflows-cell-website-session-inspection-004
+- Recorded deferred website inspection follow-ups (dispatch drilldown, artifact drilldown, lifecycle controls UI, event replay, live-provider fields, real-backend E2E) in `follow-up-cell-website-session-inspection-deferred.md`; tagged durable JavaScript success and not-found Storybook stories for browser verification and fixed not-found play to await final copy.
+- Verified focused UI tests (`factory-session-detail-panel.test.tsx`), typecheck, lint, and Storybook browser tests for `factory-session-detail-panel` stories.
+- Files changed: `ui/src/features/factory-session-detail/components/factory-session-detail-panel.stories.tsx`, `docs/internal/development/plans/dynamic-workflows/follow-up-cell-website-session-inspection-deferred.md`, `docs/internal/processes/api-relevant-files.md`.
+- **Learnings for future iterations:**
+  - Patterns discovered: story 004 closes the lane with deferred-scope documentation plus Storybook `tags: ["test"]` rather than new UI surface area when stories 001–003 already cover unit tests.
+  - Gotchas encountered: Storybook not-found play functions cannot assert `role="status"` text immediately because loading and missing share that role; wait for the missing copy with `findByText`.
+  - Useful context: canonical durable success browser fixture remains `dur-sess-js-success-002`; deferred drilldown work should extend `use-factory-session-detail.ts` rather than a new feature path.
+---
 
 ## 2026-06-16T14:30:00Z - mergeability: PR #822 pkg-file-count
 - Fixed required CI `Build, Lint, and API` failure from `pkg-file-count` by moving `ProviderChildExecutor` to `pkg/factorysessionexecution/livechild`, merging live-child fixture tests into `fixtures/runtime_live_child_test.go`, folding `session_event_projection_test.go` into `projection_test.go`, merging `typed_failure_cases_test.go` into `typed_failures_test.go`, and inlining `child_record_sink.go` into `child_execution.go`.
