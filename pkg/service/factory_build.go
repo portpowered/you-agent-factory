@@ -30,6 +30,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/internal/metrics"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
+	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
@@ -461,6 +462,7 @@ func assembleRuntimeBundle(
 		modelResources: localModels.resources,
 		modelAssets:    localModels.assets,
 		localModels:    localModels.manager,
+		modelHost:      localModels.host,
 		logger:         logger,
 		logSink:        logSink,
 		metricsSink:    metricsSink,
@@ -769,6 +771,7 @@ type localModelDomain struct {
 	resources *localModelResourceLimiter
 	assets    modelAssetPuller
 	manager   *managedLocalModelManager
+	host      modelhost.Host
 }
 
 func newRuntimeLocalModelDependencies(cfg *FactoryServiceConfig) localModelDomain {
@@ -778,10 +781,14 @@ func newRuntimeLocalModelDependencies(cfg *FactoryServiceConfig) localModelDomai
 	if localModelRuntime == nil {
 		localModelRuntime = newOmniVoiceLocalRuntime(nil)
 	}
+	host := modelhost.NewCatalogHost(modelhost.NewLocalAssetGateway(modelAssets), modelhost.Options{
+		SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
+	})
 	return localModelDomain{
 		resources: modelResources,
 		assets:    modelAssets,
 		manager:   newManagedLocalModelManager(modelAssets, localModelRuntime),
+		host:      host,
 	}
 }
 
