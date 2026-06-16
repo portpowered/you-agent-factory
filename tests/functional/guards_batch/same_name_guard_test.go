@@ -88,11 +88,6 @@ func TestSameNameGuard_MatchingNamesCompletesJoin(t *testing.T) {
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	errCh := h.RunInBackground(ctx)
-	support.WaitForHarnessRuntimeAvailability(t, h, 3*time.Second)
-
 	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
 		Name:       "alpha",
 		WorkTypeID: "plan",
@@ -103,6 +98,10 @@ func TestSameNameGuard_MatchingNamesCompletesJoin(t *testing.T) {
 		WorkTypeID: "task",
 		TraceID:    "trace-same-name-task",
 	}})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	errCh := h.RunInBackground(ctx)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:matched", 1, 3*time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "plan:ready", 0, time.Second)
@@ -176,12 +175,11 @@ func TestSameNameGuard_LaterMatchingTokenStillCompletesJoin(t *testing.T) {
 	h := testutil.NewServiceTestHarness(t, dir)
 	matcher := h.MockWorker("matcher", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
 
+	submitLaterMatchingSameNameGuardWork(h)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
-	support.WaitForHarnessRuntimeAvailability(t, h, 3*time.Second)
-
-	submitLaterMatchingSameNameGuardWork(h)
 
 	assertLaterMatchingSameNameGuardOutcome(t, h, matcher.CallCount)
 
