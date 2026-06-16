@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"go.uber.org/zap"
@@ -58,6 +59,34 @@ func (s *Server) GetEvents(w http.ResponseWriter, r *http.Request, params factor
 }
 
 func (s *Server) GetEventsBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, params factoryapi.GetEventsBySessionIdParams) {
+	if isDurableExecutionSessionID(string(sessionID)) {
+		reader, ok := s.requireDurableSessionEventsReader(w)
+		if !ok {
+			return
+		}
+		stream, err := reader.ReadDurableFactorySessionEvents(r.Context(), string(sessionID), params)
+		if err != nil {
+			if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+				s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+				return
+			}
+			if errors.Is(err, apisurface.ErrInvalidEventReconnectCursor) || errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
+				s.writeError(w, http.StatusBadRequest, "invalid event reconnect cursor", "BAD_REQUEST")
+				return
+			}
+			if s.writeDurableSessionReadError(w, err) {
+				return
+			}
+			s.logger.Error("read durable factory session events failed", zap.Error(err))
+			s.writeError(w, http.StatusInternalServerError, "failed to subscribe to factory events", "INTERNAL_ERROR")
+			return
+		}
+		s.getEvents(w, r, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
+			return stream, nil
+		})
+		return
+	}
+
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
 		return

@@ -14,6 +14,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
@@ -21,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -1032,4 +1034,183 @@ func sortFactorySessionSummaries(summaries []factoryapi.FactorySessionSummary) {
 		}
 		return summaries[i].Id < summaries[j].Id
 	})
+}
+
+var _ apisurface.DurableSessionExecutionAPI = (*FactoryService)(nil)
+var _ apisurface.DurableSessionListingAPI = (*FactoryService)(nil)
+
+func (fs *FactoryService) StartDurableFactorySessionAsync(
+	ctx context.Context,
+	request factoryapi.FactorySessionExecutionRequest,
+) (factoryapi.FactorySessionExecutionResponse, error) {
+	startReq, err := factorysession.StartRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionExecutionResponse{}, err
+	}
+	result, err := fs.durableExecutionService().StartAsync(ctx, startReq)
+	if err != nil {
+		return factoryapi.FactorySessionExecutionResponse{}, err
+	}
+	return factorysession.AsyncStartResponseToAPI(result), nil
+}
+
+func (fs *FactoryService) StartDurableFactorySessionSync(
+	ctx context.Context,
+	request factoryapi.FactorySessionExecutionRequest,
+) (factoryapi.FactorySessionSyncExecutionResponse, error) {
+	startReq, err := factorysession.StartRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionSyncExecutionResponse{}, err
+	}
+	result, err := fs.durableExecutionService().StartSync(ctx, startReq)
+	if err != nil {
+		return factoryapi.FactorySessionSyncExecutionResponse{}, err
+	}
+	return factorysession.SyncStartResponseToAPI(result), nil
+}
+
+func (fs *FactoryService) durableExecutionService() factorysessionexecution.Service {
+	if fs == nil {
+		return factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{})
+	}
+	fs.durableExecutionMu.Lock()
+	defer fs.durableExecutionMu.Unlock()
+	if fs.durableExecution == nil {
+		fs.durableExecution = factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+			ProjectRoot: fs.durableProjectRoot(),
+		})
+	}
+	return fs.durableExecution
+}
+
+func (fs *FactoryService) durableProjectRoot() string {
+	if fs == nil {
+		return ""
+	}
+	if fs.cfg != nil {
+		if root := strings.TrimSpace(fs.cfg.ExecutionBaseDir); root != "" {
+			return root
+		}
+		if root := strings.TrimSpace(fs.cfg.Dir); root != "" {
+			return root
+		}
+	}
+	return strings.TrimSpace(fs.factoryRootDir)
+}
+
+func (fs *FactoryService) ListDurableFactorySessions(
+	ctx context.Context,
+	params factoryapi.ListFactorySessionsParams,
+) (factoryapi.ListFactorySessionsResponse, error) {
+	req, err := factorysession.ListSessionsRequestFromAPI(params)
+	if err != nil {
+		return factoryapi.ListFactorySessionsResponse{}, err
+	}
+	result, err := fs.ListDurableExecutionSessions(ctx, req)
+	if err != nil {
+		return factoryapi.ListFactorySessionsResponse{}, err
+	}
+	return factorysession.ListSessionsResponseToAPI(result), nil
+}
+
+// ListDurableExecutionSessions returns the shared durable session listing projection
+// used by API merge logic before workspace rows are combined.
+func (fs *FactoryService) ListDurableExecutionSessions(
+	ctx context.Context,
+	req factorysessionexecution.ListSessionsRequest,
+) (factorysessionexecution.ListSessionsResult, error) {
+	return fs.durableExecutionService().ListSessions(ctx, req)
+}
+
+func (fs *FactoryService) GetDurableFactorySession(
+	ctx context.Context,
+	sessionID string,
+) (factoryapi.FactorySessionDurableReadModel, error) {
+	result, err := fs.durableExecutionService().GetSession(ctx, sessionID)
+	if err != nil {
+		return factoryapi.FactorySessionDurableReadModel{}, err
+	}
+	return factorysession.SessionReadResponseToAPI(result), nil
+}
+
+func (fs *FactoryService) GetDurableFactorySessionResult(
+	ctx context.Context,
+	sessionID string,
+	params factoryapi.GetFactorySessionResultsParams,
+) (factoryapi.FactorySessionResult, error) {
+	req, err := factorysession.ResultRequestFromAPI(params)
+	if err != nil {
+		return factoryapi.FactorySessionResult{}, err
+	}
+	result, err := fs.durableExecutionService().GetResult(ctx, sessionID, req)
+	if err != nil {
+		return factoryapi.FactorySessionResult{}, err
+	}
+	return factorysession.ResultResponseToAPI(result), nil
+}
+
+func (fs *FactoryService) ReadDurableFactorySessionEvents(
+	ctx context.Context,
+	sessionID string,
+	params factoryapi.GetEventsBySessionIdParams,
+) (*interfaces.FactoryEventStream, error) {
+	reconnect, err := factorysession.EventReconnectRequestFromAPI(params)
+	if err != nil {
+		return nil, err
+	}
+	result, err := fs.durableExecutionService().ReadEvents(ctx, sessionID, reconnect)
+	if err != nil {
+		if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+			return nil, apisurface.ErrFactorySessionNotFound
+		}
+		if errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
+			return nil, fmt.Errorf("%w: %v", apisurface.ErrInvalidEventReconnectCursor, err)
+		}
+		return nil, err
+	}
+	return factorysession.FactoryEventStreamFromReadResult(result), nil
+}
+
+func (fs *FactoryService) ListDurableFactorySessionDispatches(
+	ctx context.Context,
+	sessionID string,
+) (factoryapi.ListFactorySessionDispatchesResponse, error) {
+	result, err := fs.durableExecutionService().ListDispatches(ctx, sessionID)
+	if err != nil {
+		return factoryapi.ListFactorySessionDispatchesResponse{}, err
+	}
+	return factorysession.ListDispatchesResponseToAPI(result), nil
+}
+
+func (fs *FactoryService) GetDurableFactorySessionDispatch(
+	ctx context.Context,
+	sessionID, dispatchID string,
+) (factoryapi.FactoryDispatch, error) {
+	result, err := fs.durableExecutionService().GetDispatch(ctx, sessionID, dispatchID)
+	if err != nil {
+		return factoryapi.FactoryDispatch{}, err
+	}
+	return factorysession.DispatchDetailResponseToAPI(result), nil
+}
+
+func (fs *FactoryService) ListDurableFactorySessionArtifacts(
+	ctx context.Context,
+	sessionID string,
+) (factoryapi.ListFactorySessionArtifactsResponse, error) {
+	result, err := fs.durableExecutionService().ListArtifacts(ctx, sessionID)
+	if err != nil {
+		return factoryapi.ListFactorySessionArtifactsResponse{}, err
+	}
+	return factorysession.ListArtifactsResponseToAPI(result), nil
+}
+
+func (fs *FactoryService) GetDurableFactorySessionArtifact(
+	ctx context.Context,
+	sessionID, artifactID string,
+) (factoryapi.FactorySessionArtifactDetail, error) {
+	result, err := fs.durableExecutionService().GetArtifact(ctx, sessionID, artifactID)
+	if err != nil {
+		return factoryapi.FactorySessionArtifactDetail{}, err
+	}
+	return factorysession.ArtifactDetailResponseToAPI(result), nil
 }

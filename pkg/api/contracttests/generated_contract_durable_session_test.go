@@ -46,6 +46,28 @@ type durableSessionIdempotentReplayFixture struct {
 	ReplayAsyncResponse map[string]any `json:"replayAsyncResponse"`
 }
 
+func TestGeneratedDurableSessionDispatchArtifactContracts_NotFoundJSON(t *testing.T) {
+	notFound := factoryapi.ErrorResponse{
+		Code:    factoryapi.NOTFOUND,
+		Family:  factoryapi.ErrorFamilyNotFound,
+		Message: "factory session not found",
+	}
+	if notFound.Code != factoryapi.NOTFOUND || notFound.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("generated not-found contract = %#v, want code %q and family %q", notFound, factoryapi.NOTFOUND, factoryapi.ErrorFamilyNotFound)
+	}
+
+	encoded, err := json.Marshal(notFound)
+	if err != nil {
+		t.Fatalf("marshal generated ErrorResponse: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"code":"NOT_FOUND"`) {
+		t.Fatalf("generated ErrorResponse JSON missing NOT_FOUND code: %s", encoded)
+	}
+	if !strings.Contains(string(encoded), `"family":"NOT_FOUND"`) {
+		t.Fatalf("generated ErrorResponse JSON missing NOT_FOUND family: %s", encoded)
+	}
+}
+
 func TestOpenAPIContract_DurableSessionFixturesValidateAndRoundTrip(t *testing.T) {
 	doc := loadValidatedOpenAPIContract(t)
 	catalog := loadDurableSessionContractFixtureCatalog(t)
@@ -136,17 +158,15 @@ func assertDurableSessionScenarioFixture(t *testing.T, doc *openapi3.T, scenario
 func assertDurableSessionScenarioDispatchArtifactFixtures(t *testing.T, doc *openapi3.T, scenario durableSessionContractScenario) {
 	t.Helper()
 
-	if len(scenario.Dispatches) > 0 {
-		listResponse := map[string]any{
-			"sessionId":  scenario.Session["sessionId"],
-			"dispatches": scenario.Dispatches,
-		}
-		assertOpenAPIFixtureValidates(t, doc, "ListFactorySessionDispatchesResponse", listResponse)
-		assertGeneratedFixtureRoundTrip(t, listResponse, "ListFactorySessionDispatchesResponse", func(raw []byte) {
-			var value factoryapi.ListFactorySessionDispatchesResponse
-			decodeRoundTripJSON(t, raw, &value, scenario.ID+" dispatch list")
-		})
+	dispatchListResponse := map[string]any{
+		"sessionId":  scenario.Session["sessionId"],
+		"dispatches": scenario.Dispatches,
 	}
+	assertOpenAPIFixtureValidates(t, doc, "ListFactorySessionDispatchesResponse", dispatchListResponse)
+	assertGeneratedFixtureRoundTrip(t, dispatchListResponse, "ListFactorySessionDispatchesResponse", func(raw []byte) {
+		var value factoryapi.ListFactorySessionDispatchesResponse
+		decodeRoundTripJSON(t, raw, &value, scenario.ID+" dispatch list")
+	})
 
 	if scenario.DispatchDetail != nil {
 		assertOpenAPIFixtureValidates(t, doc, "FactoryDispatch", scenario.DispatchDetail)
@@ -156,17 +176,15 @@ func assertDurableSessionScenarioDispatchArtifactFixtures(t *testing.T, doc *ope
 		})
 	}
 
-	if len(scenario.Artifacts) > 0 {
-		listResponse := map[string]any{
-			"sessionId": scenario.Session["sessionId"],
-			"artifacts": scenario.Artifacts,
-		}
-		assertOpenAPIFixtureValidates(t, doc, "ListFactorySessionArtifactsResponse", listResponse)
-		assertGeneratedFixtureRoundTrip(t, listResponse, "ListFactorySessionArtifactsResponse", func(raw []byte) {
-			var value factoryapi.ListFactorySessionArtifactsResponse
-			decodeRoundTripJSON(t, raw, &value, scenario.ID+" artifact list")
-		})
+	artifactListResponse := map[string]any{
+		"sessionId": scenario.Session["sessionId"],
+		"artifacts": scenario.Artifacts,
 	}
+	assertOpenAPIFixtureValidates(t, doc, "ListFactorySessionArtifactsResponse", artifactListResponse)
+	assertGeneratedFixtureRoundTrip(t, artifactListResponse, "ListFactorySessionArtifactsResponse", func(raw []byte) {
+		var value factoryapi.ListFactorySessionArtifactsResponse
+		decodeRoundTripJSON(t, raw, &value, scenario.ID+" artifact list")
+	})
 
 	if scenario.ArtifactDetail != nil {
 		assertOpenAPIFixtureValidates(t, doc, "FactorySessionArtifactDetail", scenario.ArtifactDetail)
@@ -794,4 +812,121 @@ func assertDurableSessionLifecycleControlSurfaceSchemas(t *testing.T, schemas ma
 	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionLifecycleControlOutcome"), "FactorySessionLifecycleControlOutcome", []string{
 		"ACCEPTED", "NO_OP", "INVALID_STATE", "TERMINAL_SESSION", "CONFLICT",
 	})
+}
+
+func assertDurableSessionEventSurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {
+	t.Helper()
+
+	eventsOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/events", "get")
+	if got, _ := eventsOperation["operationId"].(string); got != "getEventsBySessionId" {
+		t.Fatalf("paths./factory-sessions/{session_id}/events.get.operationId = %q, want getEventsBySessionId", got)
+	}
+	assertEventStreamSchemaRef(t, eventsOperation, "#/components/schemas/FactoryEvent")
+	assertResponseRef(t, eventsOperation, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, eventsOperation, "404", "#/components/responses/NotFound")
+	parameters, ok := eventsOperation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("paths./factory-sessions/{session_id}/events.get.parameters is missing")
+	}
+	assertParameterRef(t, parameters, "#/components/parameters/SessionID")
+	assertParameterRef(t, parameters, "#/components/parameters/AfterEventId")
+	assertParameterRef(t, parameters, "#/components/parameters/AfterSequence")
+
+	description, _ := eventsOperation["description"].(string)
+	for _, fragment := range []string{"after_event_id", "after_sequence", "sessionSequence"} {
+		if !strings.Contains(description, fragment) {
+			t.Fatalf("paths./factory-sessions/{session_id}/events.get.description must document %q, got %q", fragment, description)
+		}
+	}
+
+	globalEventsOperation := pathOperation(t, paths, "/events", "get")
+	assertEventStreamSchemaRef(t, globalEventsOperation, "#/components/schemas/FactoryEvent")
+	assertResponseRef(t, globalEventsOperation, "400", "#/components/responses/BadRequest")
+	globalParameters, ok := globalEventsOperation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("paths./events.get.parameters is missing")
+	}
+	assertParameterRef(t, globalParameters, "#/components/parameters/AfterEventId")
+	assertParameterRef(t, globalParameters, "#/components/parameters/AfterSequence")
+
+	factoryEvent := schemaObject(t, schemas, "FactoryEvent")
+	assertRequiredFields(t, factoryEvent, "schemaVersion", "id", "type", "context", "payload")
+	factoryEventProperties := schemaProperties(t, factoryEvent, "FactoryEvent")
+	assertPropertyRef(t, factoryEventProperties, "type", "#/components/schemas/FactoryEventType")
+	assertPropertyRef(t, factoryEventProperties, "context", "#/components/schemas/FactoryEventContext")
+
+	eventContext := schemaObject(t, schemas, "FactoryEventContext")
+	eventContextProperties := schemaProperties(t, eventContext, "FactoryEventContext")
+	assertSchemaPropertiesPresent(t, eventContextProperties, "FactoryEventContext", "sessionId", "sessionSequence", "orchestratorKind")
+}
+
+func assertRealBackendSessionAPISliceRoutes(t *testing.T, paths map[string]any) {
+	t.Helper()
+
+	requiredRoutes := map[string][]string{
+		"/factory-sessions/async":                {"post"},
+		"/factory-sessions/sync":                 {"post"},
+		"/factory-sessions":                      {"get"},
+		"/factory-sessions/{session_id}":         {"get"},
+		"/factory-sessions/{session_id}/results": {"get"},
+		"/factory-sessions/{session_id}/events":  {"get"},
+	}
+	for path, methods := range requiredRoutes {
+		pathItem, ok := paths[path].(map[string]any)
+		if !ok {
+			t.Fatalf("paths.%s is missing for real-backend session API slice", path)
+		}
+		for _, method := range methods {
+			if _, ok := pathItem[method].(map[string]any); !ok {
+				t.Fatalf("paths.%s.%s is missing for real-backend session API slice", path, method)
+			}
+		}
+	}
+
+	for path := range paths {
+		lower := strings.ToLower(path)
+		if strings.Contains(lower, "workflow-run") || strings.Contains(lower, "workflow-runs") {
+			t.Fatalf("paths.%s must not introduce standalone workflow-run API routes", path)
+		}
+	}
+}
+
+func assertDeferredRealBackendSessionRouteFamilies(t *testing.T, paths map[string]any) {
+	t.Helper()
+
+	deferredRoutes := map[string][]string{
+		"/factory-sessions/{session_id}/approve":        {"post"},
+		"/factory-sessions/{session_id}/pause":          {"post"},
+		"/factory-sessions/{session_id}/resume":         {"post"},
+		"/factory-sessions/{session_id}/cancel":         {"post"},
+		"/factory-sessions/{session_id}/terminate":      {"post"},
+		"/factory-sessions/{session_id}/retry-dispatch": {"post"},
+	}
+	inScopeRoutes := map[string]struct{}{
+		"/factory-sessions/async":                               {},
+		"/factory-sessions/sync":                                  {},
+		"/factory-sessions":                                       {},
+		"/factory-sessions/{session_id}":                          {},
+		"/factory-sessions/{session_id}/results":                  {},
+		"/factory-sessions/{session_id}/events":                   {},
+		"/factory-sessions/{session_id}/dispatches":               {},
+		"/factory-sessions/{session_id}/dispatches/{dispatch_id}": {},
+		"/factory-sessions/{session_id}/artifacts":                {},
+		"/factory-sessions/{session_id}/artifacts/{artifact_id}":  {},
+	}
+
+	for path, methods := range deferredRoutes {
+		if _, inScope := inScopeRoutes[path]; inScope {
+			t.Fatalf("paths.%s is both in-scope and deferred for the real-backend API slice", path)
+		}
+		pathItem, ok := paths[path].(map[string]any)
+		if !ok {
+			t.Fatalf("paths.%s is missing for deferred real-backend session route family", path)
+		}
+		for _, method := range methods {
+			if _, ok := pathItem[method].(map[string]any); !ok {
+				t.Fatalf("paths.%s.%s is missing for deferred real-backend session route family", path, method)
+			}
+		}
+	}
 }

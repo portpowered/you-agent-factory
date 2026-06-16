@@ -57,6 +57,57 @@ func TestResultResponseToAPI_MapsProjectionFixtures(t *testing.T) {
 	}
 }
 
+func TestListDispatchesResponseToAPI_EmitsEmptyTypedList(t *testing.T) {
+	mapped := factorysession.ListDispatchesResponseToAPI(factorysessionexecution.ListDispatchesResult{
+		SessionID: "dur-sess-js-awaiting-001",
+	})
+	if mapped.SessionId != "dur-sess-js-awaiting-001" {
+		t.Fatalf("sessionId = %q, want dur-sess-js-awaiting-001", mapped.SessionId)
+	}
+	if mapped.Dispatches == nil {
+		t.Fatal("dispatches = nil, want typed empty slice")
+	}
+	if len(mapped.Dispatches) != 0 {
+		t.Fatalf("dispatches = %#v, want empty slice", mapped.Dispatches)
+	}
+}
+
+func TestListArtifactsResponseToAPI_EmitsEmptyTypedList(t *testing.T) {
+	mapped := factorysession.ListArtifactsResponseToAPI(factorysessionexecution.ListArtifactsResult{
+		SessionID: "dur-sess-js-awaiting-001",
+	})
+	if mapped.SessionId != "dur-sess-js-awaiting-001" {
+		t.Fatalf("sessionId = %q, want dur-sess-js-awaiting-001", mapped.SessionId)
+	}
+	if mapped.Artifacts == nil {
+		t.Fatal("artifacts = nil, want typed empty slice")
+	}
+	if len(mapped.Artifacts) != 0 {
+		t.Fatalf("artifacts = %#v, want empty slice", mapped.Artifacts)
+	}
+}
+
+func TestArtifactDetailResponseToAPI_FallsBackToRetrievalRefAsContentRef(t *testing.T) {
+	mapped := factorysession.ArtifactDetailResponseToAPI(factorysessionexecution.ArtifactDetail{
+		ArtifactSummary: factorysessionexecution.ArtifactSummary{
+			ID:         "artifact-1",
+			Kind:       "LOG",
+			Visibility: "PUBLIC",
+			RetrievalRef: &factorysessionexecution.ArtifactRetrievalRef{
+				Href:   "/factory-sessions/dur-sess-runtime-001/artifacts/artifact-1",
+				Method: "GET",
+			},
+		},
+		SessionID: "dur-sess-runtime-001",
+	})
+	if mapped.ContentRef == nil {
+		t.Fatal("contentRef = nil, want summary retrievalRef fallback")
+	}
+	if mapped.ContentRef.Href != "/factory-sessions/dur-sess-runtime-001/artifacts/artifact-1" {
+		t.Fatalf("contentRef.href = %q, want API-relative retrieval ref", mapped.ContentRef.Href)
+	}
+}
+
 func TestListDispatchesResponseToAPI_MapsQueuedRunningAndFailedFixtures(t *testing.T) {
 	catalog := loadDurableFixtureCatalog(t)
 

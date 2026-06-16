@@ -345,6 +345,24 @@ func TestDurableSessionMapperBoundaryValidation(t *testing.T) {
 		}
 	})
 
+	t.Run("event reconnect cursor maps after event id and sequence", func(t *testing.T) {
+		eventID := factoryapi.AfterEventId("evt-session-started-001")
+		sequence := factoryapi.AfterSequence(2)
+		mapped, err := factorysession.EventReconnectRequestFromAPI(factoryapi.GetEventsBySessionIdParams{
+			AfterEventId:  &eventID,
+			AfterSequence: &sequence,
+		})
+		if err != nil {
+			t.Fatalf("EventReconnectRequestFromAPI: %v", err)
+		}
+		if mapped.AfterEventID != "evt-session-started-001" {
+			t.Fatalf("AfterEventID = %q, want evt-session-started-001", mapped.AfterEventID)
+		}
+		if mapped.AfterSequence == nil || *mapped.AfterSequence != 2 {
+			t.Fatalf("AfterSequence = %#v, want 2", mapped.AfterSequence)
+		}
+	})
+
 	t.Run("malformed artifact retrieval ref", func(t *testing.T) {
 		_, err := factorysession.ArtifactSummaryFromAPI(factoryapi.FactorySessionArtifactSummary{
 			Id:         "art-001",

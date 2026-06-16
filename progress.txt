@@ -15,6 +15,9 @@
 - `decodeSaveCurrentFactoryBody` must include every top-level `SaveFactoryForSessionRequest` field on the partial struct used before retired-field validation; otherwise `DisallowUnknownFields()` rejects valid `mode: UPSERT_NAMED_AND_ACTIVATE` payloads.
 - World-state dispatch projections should store canonical public `ModelProvider` on `FactoryWorldDispatch` / completions and build `FactoryWorldSelectedModelProviderView` from provider metadata first; legacy `RunnerID` round-trips lose providers like `CLAUDE` that have no runner alias.
 - When a PR adds files under `pkg/interfaces` or `pkg/replay`, run `make pkg-file-count` early; consolidate new compat helpers into existing dispatch/artifact files and relocate tests instead of adding standalone `*_compat.go` files.
+- `RecordDispatchQueued` must populate `DispatchQueuedEventPayload.modelProvider` from `DispatchQueuedInput.ModelProvider` first, then fall back to legacy `RunnerID` mapping; providers without runner aliases (e.g. `CLAUDE`) require the canonical field.
+- Guards-batch harness tests that call `RunInBackground` on an empty factory must pre-queue at least one `SubmitFull` before the engine loop starts; otherwise an empty initial tick can terminate submission ingress under CI load.
+- Durable session dispatch summary/detail must store canonical `ModelProvider` on `DispatchSummary` / `FactorySessionDispatchState`; API mappers should use `GeneratedPublicFactoryWorkerModelProviderFromStoredSelection(modelProvider, runnerID)` so providers without legacy runner aliases (e.g. `CLAUDE`) round-trip through `ListDispatches` / `GetDispatch`.
 
 ## 2026-06-11T11:23:14Z - prd-model-provider-runner-convergence-001
 - Implemented factory-level `modelProvider` support: new `ModelProviderSelection` OpenAPI schema, `Factory.yaml` migration from `runner`, config expand/flatten mapping, retired `factory.runner` rejection, runtime selection/validation via `ResolveRunnerSelection` + `ValidateFactoryModelProviderSelection`, and focused openapitests/contract tests.
@@ -144,4 +147,84 @@
   - Patterns discovered: when all stories pass and blocking feedback is already mapped to fixes in PR conversation, verification iterations should re-run `make test` and `gh pr checks` before responding `<COMPLETE>`.
   - Gotchas encountered: local `prd.json`/`progress.txt` can drift from remote when stories are marked complete locally but not pushed—tracking files stay worktree-local per workflow rules.
   - Useful context: no new commits required when head is unchanged and all gates remain green.
+---
+
+## 2026-06-15T05:30:34Z - mergeability follow-up (PR #801 main merge)
+- Merged `origin/main` after GitHub reported `mergeable: CONFLICTING` / `mergeStateStatus: DIRTY` on head `4db026efb`; resolved tracking-file conflicts only (`prd.json`, `progress.txt`) and pushed merge commit `a95eb91b0`.
+- Local verification: `make test`, `make pkg-file-count`, `make backend-size`, `make pkg-maint`, and `make generate-api` + drift check all pass on the merged head.
+- **Learnings for future iterations:**
+  - Patterns discovered: when all stories pass but PR becomes DIRTY again, a fresh `origin/main` merge is mergeability work even without new story scope; stash local `prd.json`/`progress.txt` before merging.
+  - Gotchas encountered: `mergeStateStatus: BLOCKED` after a clean merge usually means CI is pending, not a conflict regression.
+  - Useful context: main can advance by large unrelated surface areas (MCP session tools, visual-group editor) without conflicting with modelProvider changes.
+---
+
+## 2026-06-15T05:45:00Z - mergeability follow-up (PR #801 second main merge)
+- Merged `origin/main` again after PR #808 landed during CI on `a95eb91b0`, returning the PR to `CONFLICTING`/`DIRTY`; pushed `c73b88552` with tracking-file-only conflict resolution.
+- Local `make test` passes on `c73b88552`.
+- **Learnings for future iterations:**
+  - Patterns discovered: long CI windows on an open PR can require multiple sequential main merges when main keeps landing; re-fetch `origin/main` before declaring review-ready.
+  - Gotchas encountered: GitHub can report `mergeStateStatus: DIRTY` immediately after a green CI run if main advanced in the interim.
+  - Useful context: MCP factory-session tool additions from main merged cleanly with modelProvider changes.
+---
+
+## 2026-06-15T06:30:00Z - mergeability follow-up (PR #801 queued dispatch modelProvider)
+- Addressed **BLOCKING** review on head `c73b88552`: `RecordDispatchQueued` now carries canonical `ModelProvider` on `DispatchQueuedInput` and prefers it over legacy `RunnerID` mapping when emitting `DISPATCH_QUEUED` events.
+- Added behavioral tests for `CLAUDE` (no legacy runner alias), `cursor-cli` legacy runner mapping, and canonical-over-runner precedence.
+- Files changed: `pkg/factory/events/event_history_dispatch_lifecycle.go`, `pkg/factory/events/event_history_dispatch_lifecycle_test.go`.
+- **Learnings for future iterations:**
+  - Patterns discovered: queued dispatch emission should mirror dispatch-request metadata—pass resolved canonical provider, not only legacy runner IDs.
+  - Gotchas encountered: bare `"cursor"` is not a legacy runner ID; `cursor-cli` (`RunnerIDCursorCLI`) is the mappable legacy value.
+  - Useful context: existing lifecycle sequence test did not assert `modelProvider` on queued payload, so CLAUDE omission was not caught until explicit provider emission tests were added.
+---
+
+## 2026-06-15T07:15:00Z - mergeability follow-up (PR #801 Backend Verification flake)
+- Fixed **Backend Verification** CI failure on head `d40812861`: `TestSameNameConsumePathRegression_StaggeredArrivalCompletesWithoutStranding` intermittently hit `engine has terminated` when both submissions raced an empty `RunInBackground` startup.
+- Fix: `RunInBackground` now waits for runtime availability (matching `RunUntilComplete`), and the staggered consume-path test queues the first arrival before starting the engine loop.
+- Files changed: `pkg/testutil/service_harness.go`, `tests/functional/guards_batch/same_name_consume_path_regression_test.go`.
+- **Learnings for future iterations:**
+  - Patterns discovered: harness tests that call `RunInBackground` then `SubmitFull` must either pre-queue work or wait for runtime; an empty initial tick can close submission ingress before the first submit lands.
+  - Gotchas encountered: the flake reproduced under `-count=50` locally even after adding only the runtime wait—pre-submitting the first staggered arrival was required for stability.
+  - Useful context: mergeability-only follow-up on head `8fc6b98b1`; all PRD stories remain `passes: true`.
+---
+
+## 2026-06-15T08:40:00Z - mergeability follow-up (PR #801 Backend Verification flake)
+- Fixed **Backend Verification** CI failure on head `8fc6b98b1`: `TestSameNameConsumePathRegression_MismatchedNamesStayAtToComplete` hit `engine has terminated` when `RunInBackground` started before any submissions were queued.
+- Fix: pre-queue the first arrival before `RunInBackground` in mismatched-name and concurrent-pair consume-path regression tests (same pattern as the staggered-arrival fix).
+- Files changed: `tests/functional/guards_batch/same_name_consume_path_regression_test.go`.
+- **Learnings for future iterations:**
+  - Patterns discovered: any guards-batch test that calls `RunInBackground` before `SubmitFull` on an empty factory should pre-queue at least one submission.
+  - Gotchas encountered: the staggered-arrival fix did not cover sibling tests in the same file that still used the old ordering.
+  - Useful context: mergeability-only follow-up on head `bb2bbb6f9`; all PRD stories remain `passes: true`.
+---
+
+## 2026-06-15T08:55:00Z - review-ready verification (PR #801)
+- Verified all seven PRD stories remain `passes: true` on head `bb2bbb6f9`; no remaining story work.
+- Addressed Backend Verification flake from run `27533723231` by pre-queuing consume-path submissions before engine start; fresh CI run `27534454175` all required checks pass.
+- Prior BLOCKING queued-dispatch `modelProvider` feedback remains addressed on `f73ff5722`.
+- PR state: `MERGEABLE`, `mergeStateStatus: CLEAN`; posted PR conversation verification comment mapping blocking items to fixes and CI evidence.
+- **Learnings for future iterations:**
+  - Patterns discovered: when fixing one harness flake in a file, scan sibling tests for the same `RunInBackground`-before-submit ordering.
+  - Gotchas encountered: Backend Verification can fail on a different subtest than the one fixed in the prior iteration.
+  - Useful context: `gh pr checks` exit code `0` with run `27534454175` confirms all gates green on `bb2bbb6f9`.
+---
+
+## 2026-06-15T09:07:57Z - mergeability follow-up (PR #801 durable dispatch modelProvider)
+- Addressed **BLOCKING** review on head `bb2bbb6f9`: durable session dispatch summary/detail now stores canonical `ModelProvider` and API mappers prefer it over legacy `RunnerID` derivation.
+- Added `GeneratedPublicFactoryWorkerModelProviderFromStoredSelection`, carried `ModelProvider` through `DispatchSummary` / `FactorySessionDispatchState`, and added behavioral tests for `CLAUDE` fixture round-trip via fake service and projection mappers.
+- Files changed: `pkg/factorysessionexecution/{projection_consistency.go,fake_fixture.go}`, `pkg/interfaces/{work_dispatch.go,public_factory_enums.go}`, `pkg/apisurface/factorysession/{factory_session_projection.go,*_test.go}`, `pkg/factorysessions/dispatch_projection.go`, `pkg/factory/projections/world_state_dispatch.go`.
+- **Learnings for future iterations:**
+  - Patterns discovered: durable dispatch projections should mirror queued-event/world-view behavior—store canonical public provider values directly, not only mappable legacy runner IDs.
+  - Gotchas encountered: contract fixtures already expose `modelProvider: CLAUDE`, but `dispatchRunnerIDFromFixture` intentionally leaves `RunnerID` empty when no alias exists; API mapping must not rely on runner-only derivation.
+  - Useful context: mergeability-only follow-up on head `dd9f7bf5d`; all PRD stories remain `passes: true`.
+---
+
+## 2026-06-15T09:21:49Z - review-ready verification (PR #801)
+- Verified all seven PRD stories remain `passes: true` on head `dd9f7bf5d`; no remaining story work.
+- Prior BLOCKING durable-dispatch `modelProvider` feedback addressed on `dd9f7bf5d` with canonical provider storage and CLAUDE fixture round-trip tests.
+- Local `make test` green; GitHub CI run `27535813145` all required checks pass; PR `MERGEABLE` with `mergeStateStatus: CLEAN`.
+- Posted PR conversation verification comment mapping all blocking items to fixes and CI evidence.
+- **Learnings for future iterations:**
+  - Patterns discovered: after addressing BLOCKING durable-dispatch feedback, wait for fresh CI before declaring review-ready; `mergeStateStatus: BLOCKED` during in-progress CI is expected.
+  - Gotchas encountered: the durable-dispatch fix commit may already be on head when the verification iteration starts—confirm CI terminal state rather than re-implementing.
+  - Useful context: `gh pr checks` exit code `0` with run `27535813145` confirms all gates green on `dd9f7bf5d`.
 ---

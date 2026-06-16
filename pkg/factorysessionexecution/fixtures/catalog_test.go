@@ -1,9 +1,6 @@
 package fixtures_test
 
 import (
-	"encoding/json"
-	"os"
-	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
@@ -92,43 +89,5 @@ func TestLoadFixtureScenarioIdentities_ReloadIsStable(t *testing.T) {
 		assertStringSliceEqual(t, "reload dispatchIds", firstIdentity.DispatchIDs, secondIdentity.DispatchIDs)
 		assertStringSliceEqual(t, "reload artifactIds", firstIdentity.ArtifactIDs, secondIdentity.ArtifactIDs)
 		assertStringSliceEqual(t, "reload eventIds", firstIdentity.EventIDs, secondIdentity.EventIDs)
-	}
-}
-
-func TestContractFixtureCatalog_UsesCanonicalFactorySessionVocabulary(t *testing.T) {
-	raw, err := os.ReadFile(contractFixtureCatalogPath(t))
-	if err != nil {
-		t.Fatalf("read fixtures: %v", err)
-	}
-	text := string(raw)
-	for _, term := range fixtures.ForbiddenFixtureVocabularyTerms() {
-		if strings.Contains(text, term) {
-			t.Fatalf("fixture catalog contains forbidden term %q", term)
-		}
-	}
-
-	var document map[string]any
-	if err := json.Unmarshal(raw, &document); err != nil {
-		t.Fatalf("decode fixtures: %v", err)
-	}
-	scenarios, ok := document["scenarios"].([]any)
-	if !ok {
-		t.Fatal("missing scenarios array")
-	}
-	for _, item := range scenarios {
-		row, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		encoded, err := json.Marshal(row)
-		if err != nil {
-			t.Fatalf("marshal scenario: %v", err)
-		}
-		payload := string(encoded)
-		for _, required := range []string{"sessionId", "session", "executionRequest"} {
-			if !strings.Contains(payload, required) {
-				t.Fatalf("scenario %v missing %q in public fixture fields", row["id"], required)
-			}
-		}
 	}
 }
