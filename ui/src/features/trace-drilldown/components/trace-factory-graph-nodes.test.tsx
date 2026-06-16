@@ -162,7 +162,7 @@ describe("Trace relation factory graph node", () => {
     cleanup();
   });
 
-  it("renders only the work label while preserving neutral relation chrome", () => {
+  it("renders only the work label with workstation-aligned relation chrome", () => {
     render(
       <RelationNode
         {...relationNodeProps({
@@ -170,6 +170,7 @@ describe("Trace relation factory graph node", () => {
           displayLabel: "Story A",
           endpointKey: "work-a",
           factoryNodeId: "work-type:story-a:work-a",
+          isSelectedWork: false,
           kind: "work-type",
           kindLabel: "Work type",
           locale: "en",
@@ -187,8 +188,9 @@ describe("Trace relation factory graph node", () => {
     if (!node) {
       throw new Error("Expected relation node shell to render.");
     }
-    expect(node.className).toContain("border-outline");
-    expect(node.className).toContain("bg-surface");
+    expect(node.className).toContain("border-outline-variant");
+    expect(node.className).toContain("bg-surface-container-highest");
+    expect(node.className).toContain("border-info-border");
     expect(node.className).toContain("shadow-none");
     expect(node.className).not.toContain("shadow-af-card");
     expect(node.className).not.toContain("shadow-af-panel");
@@ -247,6 +249,7 @@ describe("Trace relation factory graph node", () => {
           displayLabel: "Story B",
           endpointKey: "work-b",
           factoryNodeId: "work-state:story:done",
+          isSelectedWork: false,
           kind: "work-state",
           kindLabel: "Work state",
           locale: "en",
