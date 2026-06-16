@@ -14,6 +14,7 @@ export interface FactorySessionDetailMessages {
   artifactsHeading: string;
   checkpointRefsHeading: string;
   childDispatchCountsLabel: string;
+  dispatchesHeading: string;
   durableLifecycleStatusLabels: Record<
     components["schemas"]["FactorySessionDurableLifecycleStatus"],
     string
@@ -160,6 +161,7 @@ const factorySessionDetailMessagesByLocale = {
     artifactsHeading: "Artifacts",
     checkpointRefsHeading: "Checkpoint refs",
     childDispatchCountsLabel: "Child dispatches",
+    dispatchesHeading: "Child dispatch activity",
     durableLifecycleStatusLabels: englishDurableLifecycleStatusLabels,
     dynamicWorkflowShorthand: "Dynamic workflow (JavaScript factory session)",
     enabledTransitionsHeading: "Enabled transitions",
@@ -189,6 +191,7 @@ const factorySessionDetailMessagesByLocale = {
     artifactsHeading: "工件",
     checkpointRefsHeading: "检查点引用",
     childDispatchCountsLabel: "子调度",
+    dispatchesHeading: "子调度活动",
     durableLifecycleStatusLabels: chineseDurableLifecycleStatusLabels,
     dynamicWorkflowShorthand: "动态工作流（JavaScript 工厂会话）",
     enabledTransitionsHeading: "已启用变迁",

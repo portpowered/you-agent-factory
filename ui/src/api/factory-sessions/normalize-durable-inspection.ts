@@ -1,0 +1,191 @@
+import type { components } from "../generated/openapi";
+import {
+  FactoryOrchestratorKind,
+  FactorySessionResultStatus,
+  FactorySessionStatus,
+} from "../generated/openapi";
+
+type FactoryArtifactRef = components["schemas"]["FactoryArtifactRef"];
+type FactoryDispatch = components["schemas"]["FactoryDispatch"];
+type FactorySessionDispatchSummary =
+  components["schemas"]["FactorySessionDispatchSummary"];
+type FactorySessionDurableReadModel =
+  components["schemas"]["FactorySessionDurableReadModel"];
+type FactorySessionLiveResult =
+  components["schemas"]["FactorySessionLiveResult"];
+type FactorySessionPartialResult =
+  components["schemas"]["FactorySessionPartialResult"];
+type FactorySessionResult = components["schemas"]["FactorySessionResult"];
+
+export interface DurableResultSurfaces {
+  partialResult?: FactorySessionPartialResult;
+  result?: FactorySessionLiveResult;
+}
+
+export function resultSurfacesFromDurableReadModel(
+  durable: FactorySessionDurableReadModel,
+): DurableResultSurfaces {
+  const artifactRefs = collectDurableArtifactRefs(durable);
+  if (artifactRefs.length === 0) {
+    return {};
+  }
+
+  const resultStatus = durable.resultSummary?.resultStatus;
+  if (resultStatus === FactorySessionResultStatus.FactorySessionResultStatusFinal) {
+    const resultArtifactRef = pickFinalArtifactRef(artifactRefs);
+    if (!resultArtifactRef) {
+      return {};
+    }
+    return {
+      result: {
+        resultArtifactRef,
+        sessionId: durable.sessionId,
+        status: FactorySessionStatus.FINISHED,
+      },
+    };
+  }
+
+  if (
+    resultStatus === FactorySessionResultStatus.FactorySessionResultStatusPartial ||
+    resultStatus ===
+      FactorySessionResultStatus.FactorySessionResultStatusFailedWithPartial
+  ) {
+    const partialResultArtifactRef = artifactRefs[0];
+    if (!partialResultArtifactRef) {
+      return {};
+    }
+    return {
+      partialResult: {
+        partialResultArtifactRef,
+        phase: durable.phase ?? "",
+        sessionId: durable.sessionId,
+      },
+    };
+  }
+
+  return {};
+}
+
+export function resultSurfacesFromDurableResult(
+  durableResult: FactorySessionResult,
+  fallbackPhase?: string,
+): DurableResultSurfaces {
+  const artifactRefs = durableResult.artifactRefs ?? [];
+  if (artifactRefs.length === 0) {
+    return {};
+  }
+
+  if (
+    durableResult.resultStatus ===
+    FactorySessionResultStatus.FactorySessionResultStatusFinal
+  ) {
+    const resultArtifactRef = pickFinalArtifactRef(artifactRefs);
+    if (!resultArtifactRef) {
+      return {};
+    }
+    return {
+      result: {
+        resultArtifactRef,
+        sessionId: durableResult.sessionId,
+        status: FactorySessionStatus.FINISHED,
+      },
+    };
+  }
+
+  if (
+    durableResult.resultStatus ===
+      FactorySessionResultStatus.FactorySessionResultStatusPartial ||
+    durableResult.resultStatus ===
+      FactorySessionResultStatus.FactorySessionResultStatusFailedWithPartial
+  ) {
+    return {
+      partialResult: {
+        partialResultArtifactRef: artifactRefs[0],
+        phase: readPhaseFromDurableResult(durableResult) ?? fallbackPhase ?? "",
+        sessionId: durableResult.sessionId,
+      },
+    };
+  }
+
+  return {};
+}
+
+export function dispatchSummariesToFactoryDispatches(
+  sessionId: string,
+  orchestratorKind: components["schemas"]["FactoryOrchestratorKind"],
+  summaries: FactorySessionDispatchSummary[],
+): FactoryDispatch[] {
+  return summaries.map((summary) => ({
+    artifactIds: summary.outputArtifactIds,
+    attempt: summary.attempt,
+    dispatchKind: summary.dispatchKind,
+    failureDetail: summary.failureDetail,
+    id: summary.id,
+    label: summary.label,
+    model: summary.model,
+    orchestratorKind,
+    phase: summary.phase,
+    provider: summary.provider,
+    providerSessionRefs: summary.providerSessionRefs,
+    runnerId: summary.runnerId,
+    sessionId,
+    status: summary.status,
+    usage: summary.usage,
+    warnings: summary.warnings,
+  }));
+}
+
+function collectDurableArtifactRefs(
+  durable: FactorySessionDurableReadModel,
+): FactoryArtifactRef[] {
+  if (durable.artifactRefs && durable.artifactRefs.length > 0) {
+    return durable.artifactRefs;
+  }
+  return durable.resultSummary?.artifactRefs ?? [];
+}
+
+function pickFinalArtifactRef(
+  artifactRefs: FactoryArtifactRef[],
+): FactoryArtifactRef | undefined {
+  return (
+    artifactRefs.find((artifactRef) => artifactRef.kind === "FINAL_RESULT") ??
+    artifactRefs[0]
+  );
+}
+
+function readPhaseFromDurableResult(
+  durableResult: FactorySessionResult,
+): string | undefined {
+  const primaryResult = durableResult.primaryResult;
+  if (!Array.isArray(primaryResult)) {
+    return undefined;
+  }
+
+  for (const part of primaryResult) {
+    if (
+      typeof part === "object" &&
+      part !== null &&
+      "json" in part &&
+      typeof part.json === "object" &&
+      part.json !== null &&
+      "phase" in part.json &&
+      typeof part.json.phase === "string"
+    ) {
+      return part.json.phase;
+    }
+  }
+
+  return undefined;
+}
+
+export function isDurableJavaScriptSession(
+  sessionId: string,
+  orchestratorKind: components["schemas"]["FactoryOrchestratorKind"],
+  durableLifecycleStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"],
+): boolean {
+  return (
+    durableLifecycleStatus !== undefined &&
+    orchestratorKind === FactoryOrchestratorKind.JAVASCRIPT &&
+    sessionId.startsWith("dur-sess-")
+  );
+}

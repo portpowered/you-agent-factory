@@ -156,6 +156,10 @@ function JavaScriptSessionProjection({
         <Metric label={messages.phasesLabel} value={javascript.phases.join(", ")} />
       ) : null}
 
+      {dispatches && dispatches.length > 0 ? (
+        <DispatchList dispatches={dispatches} heading={messages.dispatchesHeading} />
+      ) : null}
+
       {javascript.checkpoints && javascript.checkpoints.length > 0 ? (
         <CheckpointRefList
           checkpoints={javascript.checkpoints}
@@ -220,6 +224,31 @@ function PetriSessionProjection({
           </ul>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function DispatchList({
+  dispatches,
+  heading,
+}: {
+  dispatches: FactoryDispatch[];
+  heading: string;
+}) {
+  return (
+    <div className="grid gap-2">
+      <DashboardLabel>{heading}</DashboardLabel>
+      <ul className="grid gap-1">
+        {dispatches.map((dispatch) => (
+          <li key={dispatch.id}>
+            <DashboardText>
+              {dispatch.label ? `${dispatch.id} (${dispatch.label})` : dispatch.id}
+              {dispatch.phase ? ` · ${dispatch.phase}` : ""}
+              {` · ${dispatch.status}`}
+            </DashboardText>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

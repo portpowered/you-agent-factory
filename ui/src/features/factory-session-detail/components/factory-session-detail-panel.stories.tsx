@@ -12,6 +12,121 @@ export default {
   component: FactorySessionDetailPanel,
 };
 
+export const DurableJavaScriptSessionInspectionDetails = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions/dur-sess-js-success-002",
+          response: {
+            body: {
+              artifactRefs: [
+                {
+                  id: "art-js-success-001",
+                  kind: "FINAL_RESULT",
+                  label: "Docs refresh output",
+                  visibility: "PUBLIC",
+                },
+              ],
+              dialect: "you-workflow-v1",
+              lifecycle: {
+                finishedAt: "2026-06-08T13:10:00Z",
+                startedAt: "2026-06-08T13:00:02Z",
+              },
+              orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+              progress: {
+                completedDispatches: 2,
+                failedDispatches: 0,
+                inFlightDispatches: 0,
+                totalDispatches: 2,
+              },
+              resolvedSource: {
+                dialect: "you-workflow-v1",
+                kind: "WORKFLOW_FILE",
+                sourceHash: "sha256:js-workflow-docs-refresh",
+                sourceRef: "workflow/.claude/workflows/docs-refresh.yaml",
+              },
+              resultSummary: {
+                resultStatus: "FINAL",
+                summary: "Documentation refresh complete.",
+              },
+              sessionId: "dur-sess-js-success-002",
+              sourceHash: "sha256:js-workflow-docs-refresh",
+              status: "SUCCEEDED",
+              usage: { resources: [] },
+            },
+          },
+        },
+        {
+          method: "GET",
+          path: "/factory-sessions/dur-sess-js-success-002/dispatches",
+          response: {
+            body: {
+              dispatches: [
+                {
+                  attempt: 1,
+                  dispatchKind: "JAVASCRIPT_AGENT",
+                  id: "disp-js-success-001",
+                  label: "draft-docs",
+                  status: "COMPLETED",
+                },
+                {
+                  attempt: 1,
+                  dispatchKind: "JAVASCRIPT_VERIFY",
+                  id: "disp-js-success-002",
+                  label: "verify-docs",
+                  outputArtifactIds: ["art-js-success-001"],
+                  status: "COMPLETED",
+                  warnings: [
+                    {
+                      code: "DISPATCH_WARNING",
+                      message: "child output truncated for display",
+                    },
+                  ],
+                },
+              ],
+              sessionId: "dur-sess-js-success-002",
+            },
+          },
+        },
+      ],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: Infinity,
+          retry: false,
+        },
+      },
+    });
+
+    return (
+      <QueryClientProvider client={queryClient}>
+        <FactorySessionDetailPanel sessionID="dur-sess-js-success-002" />
+      </QueryClientProvider>
+    );
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await expect(
+      await canvas.findByRole("heading", { name: "Factory session runtime" }),
+    ).toBeVisible();
+    await expect(canvas.findByText("Child dispatch activity")).resolves.toBeVisible();
+    await expect(
+      canvas.findByText("disp-js-success-002 (verify-docs) · COMPLETED"),
+    ).resolves.toBeVisible();
+    await expect(
+      canvas.findByText("child output truncated for display"),
+    ).resolves.toBeVisible();
+    await expect(canvas.findByText("art-js-success-001 · FINAL_RESULT")).resolves.toBeVisible();
+  },
+};
+
 export const DurableJavaScriptSessionSummary = {
   parameters: {
     dashboardApi: {

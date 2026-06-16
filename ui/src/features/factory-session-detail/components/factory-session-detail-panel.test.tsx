@@ -173,6 +173,93 @@ describe("FactorySessionDetailPanel", () => {
     expect(screen.queryAllByText("Idle")).toHaveLength(0);
   });
 
+  it("shows durable JavaScript dispatch, warning, artifact, and result inspection details", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/factory-sessions/dur-sess-js-success-002")) {
+        return jsonResponse({
+          artifactRefs: [
+            {
+              id: "art-js-success-001",
+              kind: "FINAL_RESULT",
+              label: "Docs refresh output",
+              visibility: "PUBLIC",
+            },
+          ],
+          dialect: "you-workflow-v1",
+          lifecycle: {
+            finishedAt: "2026-06-08T13:10:00Z",
+            startedAt: "2026-06-08T13:00:02Z",
+          },
+          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+          progress: {
+            completedDispatches: 2,
+            failedDispatches: 0,
+            inFlightDispatches: 0,
+            totalDispatches: 2,
+          },
+          resolvedSource: {
+            kind: "WORKFLOW_FILE",
+            sourceRef: "workflow/.claude/workflows/docs-refresh.yaml",
+            sourceHash: "sha256:js-workflow-docs-refresh",
+          },
+          resultSummary: {
+            resultStatus: "FINAL",
+            summary: "Documentation refresh complete.",
+          },
+          sessionId: "dur-sess-js-success-002",
+          status: "SUCCEEDED",
+          usage: { resources: [] },
+        });
+      }
+      if (url.endsWith("/factory-sessions/dur-sess-js-success-002/dispatches")) {
+        return jsonResponse({
+          dispatches: [
+            {
+              attempt: 1,
+              dispatchKind: "JAVASCRIPT_AGENT",
+              id: "disp-js-success-001",
+              label: "draft-docs",
+              status: "COMPLETED",
+            },
+            {
+              attempt: 1,
+              dispatchKind: "JAVASCRIPT_VERIFY",
+              id: "disp-js-success-002",
+              label: "verify-docs",
+              outputArtifactIds: ["art-js-success-001"],
+              status: "COMPLETED",
+              warnings: [
+                {
+                  code: "DISPATCH_WARNING",
+                  message: "child output truncated for display",
+                },
+              ],
+            },
+          ],
+          sessionId: "dur-sess-js-success-002",
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="dur-sess-js-success-002" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Child dispatch activity")).toBeTruthy();
+    });
+
+    expect(
+      screen.getByText("disp-js-success-002 (verify-docs) · COMPLETED"),
+    ).toBeTruthy();
+    expect(screen.getByText("child output truncated for display")).toBeTruthy();
+    expect(screen.getByText("FINAL_RESULT")).toBeTruthy();
+    expect(screen.getByText("art-js-success-001 · FINAL_RESULT")).toBeTruthy();
+    expect(screen.getByText("queued 0, running 0, completed 2")).toBeTruthy();
+  });
+
   it("shows Petri marking and enabled transitions without dynamic workflow shorthand", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
       jsonResponse({

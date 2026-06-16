@@ -7,10 +7,17 @@ import {
   type FactorySessionLiveResult,
   type FactorySessionPartialResult,
   type FactorySessionsAPIError,
+  durableResultSurfacesFromResultsResponse,
   getFactorySession,
+  getFactorySessionDurableResults,
   getFactorySessionPartialResult,
   getFactorySessionResult,
-} from "../../../api/factory-sessions/api";
+  listFactorySessionDispatches,
+} from "../../../api/factory-sessions";
+import {
+  dispatchSummariesToFactoryDispatches,
+  isDurableJavaScriptSession,
+} from "../../../api/factory-sessions/normalize-durable-inspection";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 
 export const FACTORY_SESSION_DETAIL_QUERY_KEY = [
@@ -41,15 +48,71 @@ export function useFactorySessionDetail(
         throw new Error("Factory session detail requires a selected session id.");
       }
 
-      const { durableLifecycleStatus, session } = await getFactorySession(sessionID);
+      const normalized = await getFactorySession(sessionID);
+      let { durableLifecycleStatus, partialResult, result, session } = normalized;
+
       if (session.runtime.orchestratorKind !== FactoryOrchestratorKind.JAVASCRIPT) {
         return { durableLifecycleStatus, session };
       }
 
-      const [result, partialResult] = await Promise.all([
-        getFactorySessionResult(sessionID).catch(() => undefined),
-        getFactorySessionPartialResult(sessionID).catch(() => undefined),
-      ]);
+      const durableJavaScript = isDurableJavaScriptSession(
+        session.id,
+        session.runtime.orchestratorKind,
+        durableLifecycleStatus,
+      );
+
+      const [dispatchList, liveResult, livePartialResult, durableFinalResult, durablePartialResult] =
+        await Promise.all([
+          durableJavaScript
+            ? listFactorySessionDispatches(sessionID).catch(() => undefined)
+            : Promise.resolve(undefined),
+          durableJavaScript
+            ? Promise.resolve(undefined)
+            : getFactorySessionResult(sessionID).catch(() => undefined),
+          durableJavaScript
+            ? Promise.resolve(undefined)
+            : getFactorySessionPartialResult(sessionID).catch(() => undefined),
+          durableJavaScript && !result
+            ? getFactorySessionDurableResults(sessionID, "final").catch(() => undefined)
+            : Promise.resolve(undefined),
+          durableJavaScript && !partialResult
+            ? getFactorySessionDurableResults(sessionID, "partial").catch(() => undefined)
+            : Promise.resolve(undefined),
+        ]);
+
+      if (dispatchList && dispatchList.dispatches.length > 0) {
+        session = {
+          ...session,
+          runtime: {
+            ...session.runtime,
+            dispatches: dispatchSummariesToFactoryDispatches(
+              session.id,
+              session.runtime.orchestratorKind,
+              dispatchList.dispatches,
+            ),
+          },
+        };
+      }
+
+      if (!result) {
+        result =
+          durableFinalResult === undefined
+            ? liveResult
+            : durableResultSurfacesFromResultsResponse(
+                durableFinalResult,
+                session.runtime.javascript?.phase,
+              ).result;
+      }
+
+      if (!partialResult) {
+        partialResult =
+          durablePartialResult === undefined
+            ? livePartialResult
+            : durableResultSurfacesFromResultsResponse(
+                durablePartialResult,
+                session.runtime.javascript?.phase,
+              ).partialResult;
+      }
 
       return {
         durableLifecycleStatus,

@@ -5,15 +5,22 @@ import {
   FactorySessionJavaScriptScriptStatus,
   FactorySessionStatus,
 } from "../generated/openapi";
+import { resultSurfacesFromDurableReadModel } from "./normalize-durable-inspection";
 
 export type FactorySession = components["schemas"]["FactorySession"];
 export type FactorySessionDurableReadModel =
   components["schemas"]["FactorySessionDurableReadModel"];
 export type FactorySessionGetResponse =
   components["schemas"]["FactorySessionGetResponse"];
+export type FactorySessionLiveResult =
+  components["schemas"]["FactorySessionLiveResult"];
+export type FactorySessionPartialResult =
+  components["schemas"]["FactorySessionPartialResult"];
 
 export interface NormalizedFactorySessionGet {
   durableLifecycleStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+  partialResult?: FactorySessionPartialResult;
+  result?: FactorySessionLiveResult;
   session: FactorySession;
 }
 
@@ -25,8 +32,11 @@ export function normalizeFactorySessionGetResponse(
   }
 
   if (isFactorySessionDurableReadModel(responseBody)) {
+    const resultSurfaces = resultSurfacesFromDurableReadModel(responseBody);
     return {
       durableLifecycleStatus: responseBody.status,
+      partialResult: resultSurfaces.partialResult,
+      result: resultSurfaces.result,
       session: factorySessionFromDurableReadModel(responseBody),
     };
   }

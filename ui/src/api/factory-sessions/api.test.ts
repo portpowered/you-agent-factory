@@ -8,6 +8,10 @@ import {
   listFactorySessions,
   openFactorySession,
 } from "./api";
+import {
+  getFactorySessionDurableResults,
+  listFactorySessionDispatches,
+} from "./api-durable-inspection";
 
 describe("factory sessions API", () => {
   afterEach(() => {
@@ -621,6 +625,98 @@ describe("factory sessions API", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       "/factory-sessions/session-beta/partial-result",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("lists durable factory session dispatches from the typed API surface", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          dispatches: [
+            {
+              attempt: 1,
+              dispatchKind: "JAVASCRIPT_VERIFY",
+              id: "disp-js-success-002",
+              label: "verify-docs",
+              status: "COMPLETED",
+            },
+          ],
+          sessionId: "dur-sess-js-success-002",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      listFactorySessionDispatches("dur-sess-js-success-002"),
+    ).resolves.toEqual({
+      dispatches: [
+        {
+          attempt: 1,
+          dispatchKind: "JAVASCRIPT_VERIFY",
+          id: "disp-js-success-002",
+          label: "verify-docs",
+          status: "COMPLETED",
+        },
+      ],
+      sessionId: "dur-sess-js-success-002",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions/dur-sess-js-success-002/dispatches",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("loads durable factory session results from the typed API surface", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          artifactRefs: [
+            {
+              id: "art-js-success-001",
+              kind: "FINAL_RESULT",
+              visibility: "PUBLIC",
+            },
+          ],
+          mode: "final",
+          resultStatus: "FINAL",
+          sessionId: "dur-sess-js-success-002",
+          sessionStatus: "SUCCEEDED",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getFactorySessionDurableResults("dur-sess-js-success-002", "final"),
+    ).resolves.toEqual({
+      artifactRefs: [
+        {
+          id: "art-js-success-001",
+          kind: "FINAL_RESULT",
+          visibility: "PUBLIC",
+        },
+      ],
+      mode: "final",
+      resultStatus: "FINAL",
+      sessionId: "dur-sess-js-success-002",
+      sessionStatus: "SUCCEEDED",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions/dur-sess-js-success-002/results?mode=final",
       expect.objectContaining({ method: "GET" }),
     );
   });

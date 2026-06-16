@@ -75,6 +75,8 @@ export interface GetFactorySessionPartialResultOptions {
 
 const FACTORY_SESSIONS_ENDPOINT = "/factory-sessions";
 
+export { FACTORY_SESSIONS_ENDPOINT };
+
 export class FactorySessionsAPIError extends Error {
   public readonly code: FactorySessionsAPIErrorCode;
   public readonly responseBody?: unknown;
@@ -279,11 +281,7 @@ export async function getFactorySessionResult(
   sessionID: string,
   options: GetFactorySessionResultOptions = {},
 ): Promise<FactorySessionLiveResult> {
-  return readFactorySessionResultSurface(
-    sessionID,
-    "result",
-    options.fetch,
-  );
+  return readFactorySessionResultSurface(sessionID, "result", options.fetch);
 }
 
 export async function getFactorySessionPartialResult(
@@ -341,7 +339,7 @@ export async function closeFactorySession(
   }
 }
 
-function buildFactorySessionsAPIError(
+export function buildFactorySessionsAPIError(
   response: Response,
   responseBody: unknown,
   fallbackMessage: string,
@@ -403,7 +401,9 @@ function isFactorySessionsAPIErrorTarget(
   return true;
 }
 
-async function readFactorySessionResultSurface<T extends FactorySessionLiveResult | FactorySessionPartialResult>(
+async function readFactorySessionResultSurface<
+  T extends FactorySessionLiveResult | FactorySessionPartialResult,
+>(
   sessionID: string,
   surface: "result" | "partial-result",
   fetchImplementation: typeof globalThis.fetch | undefined,
@@ -447,7 +447,10 @@ async function readFactorySessionResultSurface<T extends FactorySessionLiveResul
     );
   }
 
-  if (!isAPIRecord(responseBody) || typeof responseBody.sessionId !== "string") {
+  if (
+    !isAPIRecord(responseBody) ||
+    typeof responseBody.sessionId !== "string"
+  ) {
     throw new FactorySessionsAPIError(
       "The factory sessions API returned an invalid response.",
       {
