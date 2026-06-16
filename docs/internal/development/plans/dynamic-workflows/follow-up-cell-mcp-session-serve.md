@@ -25,7 +25,7 @@ required a documented shared serve configuration.
 | `docs/reference/mcp.md` | Serve mode boundaries and automation pointers |
 | `pkg/cli/mcp/serve_smoke_test.go` | Fixture-backed install smoke (unchanged default path) |
 | `pkg/cli/mcp/serve_runtime_smoke_test.go` | Runtime-backed async start/status/result smoke |
-| `pkg/mcp/factorysession/runtime_execution_test.go` | Runtime-backed tool handler proof |
+| `pkg/mcp/factorysession/execution_test.go` | Runtime-backed tool handler proof |
 
 ## Non-Goals (unchanged)
 
