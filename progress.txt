@@ -12,6 +12,8 @@
 - Select explicit fake child execution via `StartRequest.Runtime.ChildExecutorMode = "fake"` even when the service default is `live-provider`; request-level mode wins over `JavaScriptRuntimeServiceConfig.ChildExecutorMode`.
 - Record deferred CLI/MCP/website follow-ups in `docs/internal/development/plans/dynamic-workflows/follow-up-cell-live-provider-dispatch-bridge-deferred.md` instead of widening the bridge lane.
 - When `make pkg-file-count` fails after adding bridge files, move provider code to `pkg/factorysessionexecution/livechild` and consolidate fixture tests rather than adding root package files; avoid importing `factorysessionexecution` from `livechild` tests (import cycle).
+- CLI workflow execution defaults to fixture-backed fake service; select real backend with `--execution-provider javascript-runtime`, `--project-root`, and `--child-executor-mode live-provider`. `factorysessionexecution.SmokeLiveChildProvider()` supplies deterministic live-child smoke without MCP host startup. Pass `Runtime.ChildExecutorMode` through `CLIStartInput.Runtime` in `factory_session_execution_cli.go`. `RunDispatches` human output includes provider id, provider session refs, and output artifact ids; `RunArtifacts` human output includes dispatch linkage when present. JavaScript runtime terminal sessions persist under `{projectRoot}/.you-agent-factory/durable-sessions/` so separate CLI processes reload status/result/dispatch/artifact reads through `runtimepersist` without a shared in-memory `Service`.
+- When backend-size limits block oversized CLI test files, extract assertion helpers and consolidate live-provider tests into `live_provider_test.go`; merge `error_test.go` into `normalize_test.go` to stay within the 15-file `pkg/cli/sessionexecution` ceiling.
 
 ## 2026-06-16T14:30:00Z - mergeability: PR #822 pkg-file-count
 - Fixed required CI `Build, Lint, and API` failure from `pkg-file-count` by moving `ProviderChildExecutor` to `pkg/factorysessionexecution/livechild`, merging live-child fixture tests into `fixtures/runtime_live_child_test.go`, folding `session_event_projection_test.go` into `projection_test.go`, merging `typed_failure_cases_test.go` into `typed_failures_test.go`, and inlining `child_record_sink.go` into `child_execution.go`.
@@ -53,6 +55,44 @@
   - Useful context: parallel and pipeline fake children each emit multiple `dispatch-*` rows inspectable through shared `ListDispatches`/`GetDispatch` reads.
 ---
 
+
+## 2026-06-17T18:30:00Z - dynamic-workflows-cell-cli-live-dispatch-smoke-003
+- Added fixture-backed CLI inspection regression proving run/status/result/dispatches/artifacts still match golden fixture hashes and shared projections without live-provider markers.
+- Added javascript-runtime fake-child CLI regression tests (default fake mode and explicit fake override on live-configured service) asserting `executionMode: fake` and no live-provider session refs in dispatch output.
+- Documented focused verification commands in `docs/internal/processes/api-relevant-files.md`.
+- Files changed: `pkg/cli/sessionexecution/{run_test,loopback_test}.go`, `docs/internal/processes/api-relevant-files.md`.
+- **Learnings for future iterations:**
+  - Patterns discovered: inject one shared `factorysessionexecution.Service` across CLI run/status/result/dispatch reads when proving runtime-backed regression; resolver-only paths create fresh service instances and lose in-memory session state between commands.
+  - Gotchas encountered: live-provider human-output markers (`live-provider-session-1`) are a concise negative assertion for proving fake/fixture paths did not pick up live-bridge rendering.
+  - Useful context: `go test ./pkg/cli/sessionexecution/... -count=1` plus `make test` are the narrowed verification commands for this lane.
+---
+
+## 2026-06-17T20:00:00Z - dynamic-workflows-cell-cli-live-dispatch-smoke-004
+- Recorded explicit CLI live-dispatch smoke scope boundaries and deferred MCP live serve vs website inspection follow-up cells in `follow-up-cell-cli-live-dispatch-smoke-deferred.md`; marked the bridge deferred note's CLI smoke row completed.
+- Added scope-boundary comments on live-provider and fixture-backed CLI regression tests; documented transport-neutral projection boundary in `api-relevant-files.md` and `SmokeLiveChildProvider`.
+- Files changed: `docs/internal/development/plans/dynamic-workflows/{follow-up-cell-cli-live-dispatch-smoke-deferred,follow-up-cell-live-provider-dispatch-bridge-deferred}.md`, `docs/internal/processes/api-relevant-files.md`, `pkg/cli/sessionexecution/{run_test,loopback_test}.go`, `pkg/factorysessionexecution/service.go`.
+- **Learnings for future iterations:**
+  - Patterns discovered: scope-boundary stories can close with a deferred follow-up note plus test-name comments when observable CLI tests already prove transport-neutral projection parity.
+  - Gotchas encountered: update the parent bridge deferred table when a child lane completes so reviewers do not chase already-landed CLI smoke work.
+  - Useful context: deferred surfaces split cleanly into `dynamic-workflows-cell-mcp-session-serve` (MCP) and `dynamic-workflows-cell-real-backend-api-website-inspection` (dashboard).
+---
+- Extended `RunDispatches` human output to surface provider id, provider session refs, and output artifact ids; extended `RunArtifacts` human output to surface dispatch linkage for child output artifacts.
+- Added `TestLiveProviderJavaScriptSession_DispatchAndArtifactCLIInspection` proving live-provider CLI `workflow dispatches` and `workflow artifacts` expose bridged-child evidence (provider session correlation, output artifact ids, dispatch-linked artifact retrieval refs) with JSON parity against shared `ListDispatchesResponseToAPI` / `ListArtifactsResponseToAPI` projections.
+- Files changed: `pkg/cli/sessionexecution/{inspection,run_test,loopback_test}.go`, `docs/internal/processes/api-relevant-files.md`.
+- **Learnings for future iterations:**
+  - Patterns discovered: live-provider bridged-child proof is customer-testable through existing list inspection commands when dispatch summaries carry `ProviderSessionRefs` and `OutputArtifactIDs` plus artifact summaries carry `DispatchID`; no dispatch-detail CLI command is required when those list fields are rendered.
+  - Gotchas encountered: renaming human-output labels (e.g. `provider:` → `provider session:`) requires updating fixture-backed loopback assertions in the same package.
+  - Useful context: `ExecutionMode` remains on `GetDispatch` JavaScript projection only; list-level provider session refs are sufficient CLI proof markers for the smoke lane.
+---
+- Wired `you workflow` CLI execution to select `javascript-runtime` backend via `--execution-provider`, `--project-root`, and `--child-executor-mode live-provider`, routing through `factorysessionexecution.NewExecutionService` and `SmokeLiveChildProvider` for MCP-free live-child smoke.
+- Mapped CLI child executor mode into shared `StartRequest.Runtime` through `CLIStartInput.Runtime` and added focused tests proving run/status/result resolve to the same runtime-backed session ID with terminal SUCCEEDED outcome and live-provider dispatch execution mode.
+- Files changed: `pkg/factorysessionexecution/service.go`, `pkg/cli/sessionexecution/{types,normalize,run,status,result,inspection,run_test}.go`, `pkg/cli/root_work.go`, `pkg/apisurface/factorysession/factory_session_execution_cli.go`, `docs/internal/processes/api-relevant-files.md`.
+- **Learnings for future iterations:**
+  - Patterns discovered: inject the same `factorysessionexecution.Service` across CLI run/status/result tests to prove re-read correlation; resolver-only tests can omit `Service` when `--project-root` contains the workflow fixture.
+  - Gotchas encountered: `ExecutionBackendConfig` and `StartConfig` must not both define `ChildExecutorMode` when embedded in `RunConfig` (ambiguous field promotion).
+  - Useful context: both `pkg/cli/sessionexecution` and `pkg/factorysessionexecution` are at the 15-file pkg-file-count ceiling; merge new production code into existing files instead of adding package-root files.
+---
+
 ## 2026-06-16T00:00:00Z - dynamic-workflows-cell-live-provider-dispatch-bridge-001
 - Implemented `ProviderChildExecutor` and wired `JavaScriptRuntimeService` to route `agent.run` through `workflowruntime.Hooks.NewChildExecutor` when `Runtime.ChildExecutorMode` is `live-provider`.
 - Added `ChildRecordSink`, `ChildExecutionModeLive`, and dispatch JavaScript projection `ExecutionMode` so shared session/dispatch reads expose non-fake execution mode with stable `dispatch-1` identity.
@@ -82,4 +122,24 @@
   - Patterns discovered: use `ChildExecutionFailureReason` plus optional provider `WorkFailureType`/`WorkFailureFamily` when writing failed live child dispatch records.
   - Gotchas encountered: async `agent.run` failures surface as rejected workflow promises; `workflowruntime.Run` must attach `records.list()` on that terminal path or durable dispatch reads stay empty.
   - Useful context: parallel child failures keep the parent workflow successful while `parallel()` captures per-child FAILED results; sibling dispatch summaries remain intact for inspection.
+---
+
+## 2026-06-17T21:00:00Z - mergeability: PR #824 blocking feedback
+- Persisted terminal JavaScript runtime durable session snapshots to `{projectRoot}/.you-agent-factory/durable-sessions/{sessionId}.json` and reload them on inspection when a fresh `JavaScriptRuntimeService` is constructed, fixing `SESSION_NOT_FOUND` across separate `you workflow` CLI invocations.
+- Added `TestRunSync_LiveProviderJavaScriptSession_ReReadAcrossFreshServices` proving run/status/result/dispatches work without injecting one shared in-memory `Service`; manually verified the reviewer's `go run ./cmd/factory workflow run|status|result|dispatches` repro.
+- Files changed: `pkg/factorysessionexecution/{projection_consistency,runtime_service,service}.go`, `pkg/factorysessionexecution/runtimepersist/{store,store_test}.go`, `pkg/cli/sessionexecution/run_test.go`, `docs/internal/processes/api-relevant-files.md`.
+- **Learnings for future iterations:**
+  - Patterns discovered: keep filesystem persistence in `runtimepersist` as bytes-only helpers to avoid `factorysessionexecution` import cycles; marshal `PersistedRuntimeSessionState` in the parent package.
+  - Gotchas encountered: `runtimepersist` cannot import `factorysessionexecution` while `runtime_service.go` imports `runtimepersist`.
+  - Useful context: `PersistSessions` defaults on when `projectRoot` is set via `NewExecutionService`.
+---
+
+## 2026-06-17T22:30:00Z - mergeability: PR #824 backend-size and pkg-file-count
+- Fixed required CI `Build, Lint, and API` `backend-size` failures by extracting live-provider dispatch/artifact assertion helpers and moving live-provider plus fake-child regression tests out of `run_test.go` into `live_provider_test.go`.
+- Fixed `pkg-file-count` by consolidating three added test files back to the 15-file ceiling: merged `error_test.go` into `normalize_test.go` and folded helpers into `live_provider_test.go`; extracted fixture-backed loopback regression assertions into shared helpers.
+- Files changed: `pkg/cli/sessionexecution/{live_provider_test,loopback_test,normalize_test,run_test}.go` (deleted `error_test.go`).
+- **Learnings for future iterations:**
+  - Patterns discovered: `make backend-size` enforces both file line count (1000) and per-function line count (100) on test files; split long tests via `t.Helper()` assertion helpers before adding new `_test.go` files.
+  - Gotchas encountered: splitting tests across new files can pass `backend-size` but still fail `pkg-file-count` when the package was already at 15 files.
+  - Useful context: `live_provider_test.go` is the consolidation target for javascript-runtime CLI smoke and fake-child regression tests in this package.
 ---
