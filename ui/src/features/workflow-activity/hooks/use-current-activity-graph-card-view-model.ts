@@ -2,6 +2,9 @@ import { useCallback, useMemo, useState } from "react";
 
 import { useFactoryGraphVisualGroupEditor } from "../../factory-graph-editor/hooks/layout/factory-graph-visual-group-editor-hook";
 import {
+  pruneFactoryGraphEditorSelectionAfterRemoval,
+} from "../../factory-graph-editor/lib/selection/factory-graph-editor-selection-batch-delete";
+import {
   factoryGraphNodeIdForAddEntityDraft,
   type GraphEditorAddNodePlacementViewport,
   resolveInitialPlacementTopLeftForViewport,
@@ -85,6 +88,44 @@ export function useCurrentActivityGraphCardViewModel(
 
     return viewportCenterFromPlacementViewport(addNodePlacementViewport);
   }, [addNodePlacementViewport]);
+  const requestSelectionBatchRemoval =
+    publicEditor.removalControls.requestSelectionBatchRemoval;
+  const canDeleteSelectionFn = publicEditor.removalControls.canDeleteSelection;
+  const confirmRemoval = publicEditor.removalControls.confirm;
+  const pendingRemovalIntent = publicEditor.removalControls.pendingIntent;
+  const selectionState = graph.graphSelection.state;
+  const canDeleteGraphSelection = canDeleteSelectionFn({
+    edgeIds: [...selectionState.selectedEdgeIds],
+    nodeIds: [...selectionState.selectedNodeIds],
+  });
+  const deleteGraphSelection = useCallback(() => {
+    const currentSelection = graph.graphSelection.state;
+    const result = requestSelectionBatchRemoval({
+      edgeIds: [...currentSelection.selectedEdgeIds],
+      nodeIds: [...currentSelection.selectedNodeIds],
+    });
+    if (result.status === "applied") {
+      graph.graphSelection.replaceSelection(
+        pruneFactoryGraphEditorSelectionAfterRemoval(
+          currentSelection,
+          result.removed,
+        ),
+      );
+    }
+  }, [graph.graphSelection, requestSelectionBatchRemoval]);
+  const confirmSelectionRemoval = useCallback(() => {
+    const currentSelection = graph.graphSelection.state;
+    const hadPendingRemoval = Boolean(pendingRemovalIntent);
+    confirmRemoval();
+    if (hadPendingRemoval) {
+      graph.graphSelection.replaceSelection(
+        pruneFactoryGraphEditorSelectionAfterRemoval(currentSelection, {
+          edgeIds: [...currentSelection.selectedEdgeIds],
+          nodeIds: [...currentSelection.selectedNodeIds],
+        }),
+      );
+    }
+  }, [confirmRemoval, graph.graphSelection, pendingRemovalIntent]);
   const visualGroupControls = useFactoryGraphVisualGroupEditor({
     activeTool: publicEditor.editorControls.activeTool,
     addNodeToVisualGroup: publicEditor.layoutControls.addNodeToVisualGroup,
@@ -113,7 +154,13 @@ export function useCurrentActivityGraphCardViewModel(
     ...publicEditor,
     addControls,
     ...publicGraph,
+    canDeleteGraphSelection,
+    deleteGraphSelection,
     edgeWaypointControls,
+    removalControls: {
+      ...publicEditor.removalControls,
+      confirm: confirmSelectionRemoval,
+    },
     visualGroupControls,
     layoutControls: {
       ...publicEditor.layoutControls,
@@ -155,7 +202,10 @@ export interface CurrentActivityGraphCardViewModel
   extends CurrentActivityGraphPublicControllerModel,
     CurrentActivityReactFlowRenderModel {
   addControls: CurrentActivityGraphCardAddControls;
+  canDeleteGraphSelection: boolean;
+  deleteGraphSelection: () => void;
   layoutControls: CurrentActivityGraphCardLayoutControls;
+  removalControls: CurrentActivityGraphState["removalControls"];
   visualGroupControls: ReturnType<typeof useFactoryGraphVisualGroupEditor>;
 }
 

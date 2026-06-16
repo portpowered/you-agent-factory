@@ -39,3 +39,17 @@ export function isFactoryGraphEditorRedoKeyboardEvent(event: {
     (key === "y" && event.ctrlKey && !event.metaKey)
   );
 }
+
+export function isFactoryGraphEditorDeleteSelectionKeyboardEvent(event: {
+  key: string;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+}): boolean {
+  return (
+    (event.key === "Delete" || event.key === "Backspace") &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.altKey
+  );
+}

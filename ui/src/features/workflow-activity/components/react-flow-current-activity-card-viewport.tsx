@@ -46,6 +46,7 @@ import type {
 } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import {
   isFactoryGraphEditorRedoKeyboardEvent,
+  isFactoryGraphEditorDeleteSelectionKeyboardEvent,
   isFactoryGraphEditorUndoKeyboardEvent,
   shouldHandleFactoryGraphEditorKeyboardShortcut,
 } from "../../factory-graph-editor/lib/layout/history/factory-graph-layout-keyboard-shortcuts";
@@ -70,6 +71,8 @@ import {
 
 function CurrentActivityGraphEditorChrome(props: {
   addControls: CurrentActivityGraphViewportAddControls;
+  canDeleteGraphSelection?: boolean;
+  deleteGraphSelection?: () => void;
   editorControls: CurrentActivityGraphViewportEditorControls;
   hasPendingChanges: boolean;
   isSavingDraft?: boolean;
@@ -92,6 +95,7 @@ function CurrentActivityGraphEditorChrome(props: {
     <FactoryGraphEditorToolbar
       activeTool={props.editorControls.activeTool}
       addMenuActions={props.addControls.actions}
+      canDeleteSelection={props.canDeleteGraphSelection}
       canDiscard={props.hasPendingChanges}
       canInteract={props.editorControls.canInteract}
       canRedoLayout={props.layoutControls.canRedo}
@@ -116,6 +120,7 @@ function CurrentActivityGraphEditorChrome(props: {
       onClearPreferences={props.visibilityControls.resetPreferences}
       onCreateVisualGroup={props.onCreateVisualGroup}
       onDiscard={props.editorControls.discardPendingChanges}
+      onDeleteSelection={props.deleteGraphSelection}
       onHideShowMenuOpenChange={props.visibilityControls.setMenuOpen}
       onRedoLayout={props.layoutControls.redo}
       onResetLayout={props.layoutControls.reset}
@@ -290,7 +295,9 @@ type CurrentActivityGraphViewportVisibilityControls = {
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: composes React Flow canvas wiring with editor toolbar overlays.
 export function CurrentActivityGraphViewport({
   addControls,
+  canDeleteGraphSelection,
   clearGraphSelection,
+  deleteGraphSelection,
   editorControls,
   edges,
   handleEdgesChange,
@@ -333,7 +340,9 @@ export function CurrentActivityGraphViewport({
   flowInstanceRef,
 }: {
   addControls: CurrentActivityGraphViewportAddControls;
+  canDeleteGraphSelection?: boolean;
   clearGraphSelection?: () => void;
+  deleteGraphSelection?: () => void;
   editorControls: CurrentActivityGraphViewportEditorControls;
   edges: Edge[];
   handleEdgesChange?: (changes: EdgeChange[]) => void;
@@ -499,6 +508,16 @@ export function CurrentActivityGraphViewport({
       }
 
       if (
+        isFactoryGraphEditorDeleteSelectionKeyboardEvent(event) &&
+        canDeleteGraphSelection &&
+        deleteGraphSelection
+      ) {
+        event.preventDefault();
+        deleteGraphSelection();
+        return;
+      }
+
+      if (
         isFactoryGraphEditorUndoKeyboardEvent(event) &&
         layoutControls.canUndo
       ) {
@@ -515,7 +534,7 @@ export function CurrentActivityGraphViewport({
         layoutControls.redo?.();
       }
     },
-    [clearGraphSelection, editorControls.isEditing, layoutControls],
+    [canDeleteGraphSelection, clearGraphSelection, deleteGraphSelection, editorControls.isEditing, layoutControls],
   );
 
   return (
@@ -785,6 +804,8 @@ export function CurrentActivityGraphViewport({
         />
         <CurrentActivityGraphEditorChrome
           addControls={addControls}
+          canDeleteGraphSelection={canDeleteGraphSelection}
+          deleteGraphSelection={deleteGraphSelection}
           editorControls={editorControls}
           hasPendingChanges={hasPendingChanges}
           isSavingDraft={isSavingDraft}

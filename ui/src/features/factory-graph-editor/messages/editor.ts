@@ -191,6 +191,7 @@ export interface FactoryGraphEditorMessages {
   toolbarConnectLabel: string;
   toolbarDeleteDescription: string;
   toolbarDeleteLabel: string;
+  toolbarDeleteSelectionDescription: string;
   toolbarRedoDescription: string;
   toolbarRedoLabel: string;
   toolbarResetLayoutDescription: string;
@@ -260,6 +261,9 @@ export interface FactoryGraphEditorMessages {
   removalDocConfirmLabel: (displayLabel: string) => string;
   removalDocDescription: (targetPath: string) => string;
   removalDocTitle: (displayLabel: string) => string;
+  removalBatchConfirmLabel: (itemCount: number) => string;
+  removalBatchDescription: (itemCount: number) => string;
+  removalBatchTitle: (itemCount: number) => string;
   removalFallbackConfirmDescription: string;
   removalFallbackConfirmLabel: string;
   removalFallbackTitle: string;
@@ -790,6 +794,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarConnectLabel: "Connect",
       toolbarDeleteDescription: "Remove",
       toolbarDeleteLabel: "Delete",
+      toolbarDeleteSelectionDescription: "Delete selected graph items",
       toolbarRedoDescription: "Redo the last undone layout change",
       toolbarRedoLabel: "Redo",
       toolbarResetLayoutDescription:
@@ -914,6 +919,12 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       removalDocDescription: (targetPath) =>
         `This removes the bundled doc at ${targetPath} from the current factory draft.`,
       removalDocTitle: (displayLabel) => `Remove ${displayLabel} doc?`,
+      removalBatchConfirmLabel: (itemCount) =>
+        `Delete ${itemCount} selected graph items`,
+      removalBatchDescription: (itemCount) =>
+        `This removes ${itemCount} selected graph items from the current draft.`,
+      removalBatchTitle: (itemCount) =>
+        `Remove ${itemCount} selected graph items?`,
       removalFallbackConfirmDescription:
         "Remove this graph entity from the current draft.",
       removalFallbackConfirmLabel: "Delete entity",
@@ -1317,6 +1328,7 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarConnectLabel: "连接",
       toolbarDeleteDescription: "从图中删除节点或边",
       toolbarDeleteLabel: "删除",
+      toolbarDeleteSelectionDescription: "删除所选图项",
       toolbarRedoDescription: "重做上一条已撤销的布局更改",
       toolbarRedoLabel: "重做",
       toolbarResetLayoutDescription: "将节点位置重置为已保存的共享布局基线",
@@ -1443,6 +1455,10 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       removalDocTitle: (displayLabel) => `移除 ${displayLabel} 文档？`,
       removalFallbackConfirmDescription: "从当前草稿中移除此图实体。",
       removalFallbackConfirmLabel: "删除实体",
+      removalBatchConfirmLabel: (itemCount) => `删除 ${itemCount} 个所选图项`,
+      removalBatchDescription: (itemCount) =>
+        `这将从当前草稿中移除 ${itemCount} 个所选图项。`,
+      removalBatchTitle: (itemCount) => `移除 ${itemCount} 个所选图项？`,
       removalFallbackTitle: "移除图实体？",
       removalWorkerAssignedReason: (workstationCount, workerLabel) =>
         `此工作者仍分配给 ${workstationCount} 个工作站。删除 ${workerLabel} 前，请重新分配或移除这些工作站。`,

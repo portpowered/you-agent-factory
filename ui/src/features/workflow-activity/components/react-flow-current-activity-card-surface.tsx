@@ -202,7 +202,9 @@ function CurrentActivityGraphSurfaceContent({
     >
       <CurrentActivityGraphViewport
         addControls={model.addControls}
+        canDeleteGraphSelection={model.canDeleteGraphSelection}
         clearGraphSelection={model.clearGraphSelection}
+        deleteGraphSelection={model.deleteGraphSelection}
         editorControls={editorControls}
         edgeTypes={FACTORY_GRAPH_EDGE_TYPES}
         edges={model.edges}

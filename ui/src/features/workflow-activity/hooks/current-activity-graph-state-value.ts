@@ -49,6 +49,9 @@ type BuildCurrentActivityGraphStateValueArgs = {
   addEntityController: ReturnType<typeof useFactoryGraphAddEntityController>;
   addMenuActions: ReturnType<typeof buildFactoryGraphAddEntityMenuActions>;
   blockedRemovalReason: string | null;
+  canDeleteSelection: ReturnType<
+    typeof useFactoryGraphRemovalController
+  >["canDeleteSelection"];
   cancelSaveConfirmation: () => void;
   canInteractWithEditor: boolean;
   canSaveDraft: boolean;
@@ -119,6 +122,9 @@ type BuildCurrentActivityGraphStateValueArgs = {
   handleEditorEdgeDelete: (edgeId: string) => void;
   handleEditorModeToggle: () => void;
   handleEditorNodeDelete: (nodeId: string) => void;
+  handleSelectionBatchDelete: ReturnType<
+    typeof useFactoryGraphRemovalController
+  >["handleSelectionBatchDelete"];
   handleSelectionNodeDelete: (nodeId: string) => void;
   handleSaveDraft: () => Promise<boolean>;
   handleSaveBeforeLeavingEditor: () => Promise<boolean>;
@@ -290,11 +296,13 @@ function buildCurrentActivityGraphRemovalControls(
 ) {
   return {
     blockedReason: args.blockedRemovalReason,
+    canDeleteSelection: args.canDeleteSelection,
     pendingIntent: args.pendingRemovalIntent,
     cancel: args.handleCancelRemoval,
     confirm: args.handleConfirmRemoval,
     deleteEdge: args.handleEditorEdgeDelete,
     deleteNode: args.handleEditorNodeDelete,
+    requestSelectionBatchRemoval: args.handleSelectionBatchDelete,
     requestSelectionNodeRemoval: args.handleSelectionNodeDelete,
   };
 }

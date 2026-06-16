@@ -442,6 +442,23 @@ describe("CurrentActivityGraphViewport", () => {
     expect(clearGraphSelection).toHaveBeenCalledTimes(1);
   });
 
+  it("dispatches batch delete from Delete and Backspace when graph selection is deletable", async () => {
+    const deleteGraphSelection = vi.fn();
+
+    renderViewport({
+      canDeleteGraphSelection: true,
+      deleteGraphSelection,
+      editorMode: true,
+    });
+
+    const viewport = screen.getByRole("region", { name: "Work graph viewport" });
+
+    fireEvent.keyDown(viewport, { key: "Delete" });
+    fireEvent.keyDown(viewport, { key: "Backspace" });
+
+    expect(deleteGraphSelection).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps the current-activity graph shell and React Flow canvas flat", () => {
     renderViewport();
 
@@ -461,7 +478,9 @@ describe("CurrentActivityGraphViewport", () => {
 
 function renderViewport({
   activeTool = null,
+  canDeleteGraphSelection = false,
   clearGraphSelection = vi.fn(),
+  deleteGraphSelection = vi.fn(),
   edges = [],
   editorMode = false,
   handleGraphSelectionChange = vi.fn(),
@@ -470,7 +489,9 @@ function renderViewport({
   onEditorNodeClick = vi.fn(),
 }: {
   activeTool?: "add" | "connect" | "delete" | null;
+  canDeleteGraphSelection?: boolean;
   clearGraphSelection?: () => void;
+  deleteGraphSelection?: () => void;
   edges?: Edge[];
   editorMode?: boolean;
   handleGraphSelectionChange?: (params: {
@@ -486,7 +507,9 @@ function renderViewport({
   return render(
     <CurrentActivityGraphViewport
       addControls={{}}
+      canDeleteGraphSelection={canDeleteGraphSelection}
       clearGraphSelection={clearGraphSelection}
+      deleteGraphSelection={deleteGraphSelection}
       editorControls={{
         activeTool,
         canInteract: true,

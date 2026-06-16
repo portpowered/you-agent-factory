@@ -10,6 +10,18 @@ import {
   buildFactoryGraphEdgeRemovalIntent,
   buildFactoryGraphRemovalIntent,
 } from "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-removals";
+import {
+  buildFactoryGraphSelectionBatchRemovalPlan,
+  hasDeletableFactoryGraphSelection,
+  type FactoryGraphSelectionBatchRemovalPlan,
+  type FactoryGraphSelectionBatchRemovalSelection,
+} from "../../factory-graph-editor/lib/selection/factory-graph-editor-selection-batch-delete";
+
+export type FactoryGraphSelectionBatchRemovalResult =
+  | { status: "applied"; removed: FactoryGraphSelectionBatchRemovalSelection }
+  | { status: "blocked" }
+  | { status: "empty" }
+  | { status: "pending" };
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: removal controller keeps confirm, cancel, and graph/selection delete entry points aligned.
 export function useFactoryGraphRemovalController({
@@ -33,10 +45,12 @@ export function useFactoryGraphRemovalController({
 }) {
   const {
     blockedRemovalReason,
+    pendingBatchRemovalPlan,
     pendingRemovalEdgeId,
     pendingRemovalIntent,
     pendingRemovalNodeId,
     setBlockedRemovalReason,
+    setPendingBatchRemovalPlan,
     setPendingRemovalEdgeId,
     setPendingRemovalNodeId,
   } = usePendingRemovalIntentState(draftState, locale);
@@ -47,11 +61,13 @@ export function useFactoryGraphRemovalController({
     }
 
     setBlockedRemovalReason(null);
+    setPendingBatchRemovalPlan(null);
     setPendingRemovalEdgeId(null);
     setPendingRemovalNodeId(null);
   }, [
     activeTool,
     setBlockedRemovalReason,
+    setPendingBatchRemovalPlan,
     setPendingRemovalEdgeId,
     setPendingRemovalNodeId,
   ]);
@@ -62,32 +78,53 @@ export function useFactoryGraphRemovalController({
     },
     [onNodeRemovedFromDraft],
   );
-  const applyConfirmedNodeRemoval = useCallback(
-    (nodeId: string) => {
-      const result = editableGraph.actions.removeNode(nodeId);
+  const applyConfirmedBatchRemoval = useCallback(
+    (plan: Pick<FactoryGraphSelectionBatchRemovalPlan, "edgeIds" | "nodeIds">) => {
+      const result = editableGraph.actions.removeSelection({
+        edgeIds: plan.edgeIds,
+        nodeIds: plan.nodeIds,
+      });
       if (!result.ok) {
         setBlockedRemovalReason(result.message);
+        setPendingBatchRemovalPlan(null);
         setPendingRemovalEdgeId(null);
         setPendingRemovalNodeId(null);
         saveEditableDefinition.reset();
-        return false;
+        return null;
       }
 
       setBlockedRemovalReason(null);
+      setPendingBatchRemovalPlan(null);
       setPendingRemovalEdgeId(null);
       setPendingRemovalNodeId(null);
       saveEditableDefinition.reset();
-      notifyNodeRemovedFromDraft(nodeId);
-      return true;
+      for (const nodeId of plan.nodeIds) {
+        notifyNodeRemovedFromDraft(nodeId);
+      }
+      return {
+        edgeIds: plan.edgeIds,
+        nodeIds: plan.nodeIds,
+      };
     },
     [
       editableGraph.actions,
       notifyNodeRemovedFromDraft,
       saveEditableDefinition,
       setBlockedRemovalReason,
+      setPendingBatchRemovalPlan,
       setPendingRemovalEdgeId,
       setPendingRemovalNodeId,
     ],
+  );
+  const applyConfirmedNodeRemoval = useCallback(
+    (nodeId: string) => {
+      const removed = applyConfirmedBatchRemoval({
+        edgeIds: [],
+        nodeIds: [nodeId],
+      });
+      return removed !== null;
+    },
+    [applyConfirmedBatchRemoval],
   );
   const requestNodeRemoval = useFactoryGraphNodeRemovalRequest({
     applyConfirmedNodeRemoval,
@@ -97,6 +134,7 @@ export function useFactoryGraphRemovalController({
     locale,
     saveEditableDefinition,
     setBlockedRemovalReason,
+    setPendingBatchRemovalPlan,
     setPendingRemovalEdgeId,
     setPendingRemovalNodeId,
   });
@@ -113,24 +151,112 @@ export function useFactoryGraphRemovalController({
       setPendingRemovalEdgeId,
       setPendingRemovalNodeId,
     });
+  const handleSelectionBatchDelete = useCallback(
+    (selection: FactoryGraphSelectionBatchRemovalSelection) => {
+      if (!canInteractWithEditor || !draftState.latestDocument) {
+        return { status: "empty" } as const;
+      }
+
+      const plan = buildFactoryGraphSelectionBatchRemovalPlan({
+        baseFactoryDefinition: draftState.latestDocument,
+        draft: draftState.draft,
+        hiddenNodeClasses,
+        locale,
+        selection,
+      });
+      if (!plan || (plan.nodeIds.length === 0 && plan.edgeIds.length === 0)) {
+        return { status: "empty" } as const;
+      }
+      if (plan.ineligibleReason) {
+        setBlockedRemovalReason(plan.ineligibleReason);
+        setPendingBatchRemovalPlan(null);
+        setPendingRemovalEdgeId(null);
+        setPendingRemovalNodeId(null);
+        saveEditableDefinition.reset();
+        return { status: "blocked" } as const;
+      }
+
+      if (plan.confirmation) {
+        setBlockedRemovalReason(null);
+        setPendingBatchRemovalPlan(plan);
+        setPendingRemovalEdgeId(null);
+        setPendingRemovalNodeId(null);
+        return { status: "pending" } as const;
+      }
+
+      const removed = applyConfirmedBatchRemoval(plan);
+      if (!removed) {
+        return { status: "blocked" } as const;
+      }
+
+      return {
+        removed,
+        status: "applied",
+      } as const;
+    },
+    [
+      applyConfirmedBatchRemoval,
+      canInteractWithEditor,
+      draftState.draft,
+      draftState.latestDocument,
+      hiddenNodeClasses,
+      locale,
+      saveEditableDefinition,
+      setBlockedRemovalReason,
+      setPendingBatchRemovalPlan,
+      setPendingRemovalEdgeId,
+      setPendingRemovalNodeId,
+    ],
+  );
   const handleSelectionNodeDelete = useCallback(
     (nodeId: string) => {
-      requestNodeRemoval(nodeId);
+      handleSelectionBatchDelete({
+        edgeIds: [],
+        nodeIds: [nodeId],
+      });
     },
-    [requestNodeRemoval],
+    [handleSelectionBatchDelete],
+  );
+  const canDeleteSelection = useCallback(
+    (selection: FactoryGraphSelectionBatchRemovalSelection) =>
+      canInteractWithEditor &&
+      hasDeletableFactoryGraphSelection({
+        baseFactoryDefinition: draftState.latestDocument,
+        draft: draftState.draft,
+        hiddenNodeClasses,
+        locale,
+        selection: {
+          selectedEdgeIds: new Set(selection.edgeIds),
+          selectedNodeIds: new Set(selection.nodeIds),
+        },
+      }),
+    [
+      canInteractWithEditor,
+      draftState.draft,
+      draftState.latestDocument,
+      hiddenNodeClasses,
+      locale,
+    ],
   );
 
   const handleCancelRemoval = useCallback(() => {
     setBlockedRemovalReason(null);
+    setPendingBatchRemovalPlan(null);
     setPendingRemovalEdgeId(null);
     setPendingRemovalNodeId(null);
   }, [
     setBlockedRemovalReason,
+    setPendingBatchRemovalPlan,
     setPendingRemovalEdgeId,
     setPendingRemovalNodeId,
   ]);
 
   const handleConfirmRemoval = useCallback(() => {
+    if (pendingBatchRemovalPlan) {
+      applyConfirmedBatchRemoval(pendingBatchRemovalPlan);
+      return;
+    }
+
     if (!pendingRemovalIntent) {
       return;
     }
@@ -159,8 +285,10 @@ export function useFactoryGraphRemovalController({
       return;
     }
   }, [
+    applyConfirmedBatchRemoval,
     applyConfirmedNodeRemoval,
     editableGraph.actions,
+    pendingBatchRemovalPlan,
     pendingRemovalEdgeId,
     pendingRemovalIntent,
     pendingRemovalNodeId,
@@ -172,10 +300,12 @@ export function useFactoryGraphRemovalController({
 
   return {
     blockedRemovalReason,
+    canDeleteSelection,
     handleCancelRemoval,
     handleConfirmRemoval,
     handleEditorEdgeDelete,
     handleEditorNodeDelete,
+    handleSelectionBatchDelete,
     handleSelectionNodeDelete,
     pendingRemovalIntent,
     setBlockedRemovalReason,
@@ -192,6 +322,7 @@ function useFactoryGraphNodeRemovalRequest({
   locale,
   saveEditableDefinition,
   setBlockedRemovalReason,
+  setPendingBatchRemovalPlan,
   setPendingRemovalEdgeId,
   setPendingRemovalNodeId,
 }: {
@@ -202,6 +333,9 @@ function useFactoryGraphNodeRemovalRequest({
   locale?: string | null;
   saveEditableDefinition: EditableFactoryGraphSaveMutation;
   setBlockedRemovalReason: (reason: string | null) => void;
+  setPendingBatchRemovalPlan: (
+    plan: FactoryGraphSelectionBatchRemovalPlan | null,
+  ) => void;
   setPendingRemovalEdgeId: (edgeId: string | null) => void;
   setPendingRemovalNodeId: (nodeId: string | null) => void;
 }) {
@@ -241,6 +375,7 @@ function useFactoryGraphNodeRemovalRequest({
 
       if (intent.requiresConfirmation) {
         setBlockedRemovalReason(null);
+        setPendingBatchRemovalPlan(null);
         setPendingRemovalEdgeId(null);
         setPendingRemovalNodeId(nodeId);
         return;
@@ -258,6 +393,7 @@ function useFactoryGraphNodeRemovalRequest({
       locale,
       saveEditableDefinition,
       setBlockedRemovalReason,
+      setPendingBatchRemovalPlan,
       setPendingRemovalEdgeId,
       setPendingRemovalNodeId,
     ],
@@ -379,6 +515,8 @@ function usePendingRemovalIntentState(
   const [pendingRemovalEdgeId, setPendingRemovalEdgeId] = useState<
     string | null
   >(null);
+  const [pendingBatchRemovalPlan, setPendingBatchRemovalPlan] =
+    useState<FactoryGraphSelectionBatchRemovalPlan | null>(null);
   const [blockedRemovalReason, setBlockedRemovalReason] = useState<
     string | null
   >(null);
@@ -409,10 +547,15 @@ function usePendingRemovalIntentState(
 
   return {
     blockedRemovalReason,
+    pendingBatchRemovalPlan,
     pendingRemovalEdgeId,
-    pendingRemovalIntent: pendingNodeRemovalIntent ?? pendingEdgeRemovalIntent,
+    pendingRemovalIntent:
+      pendingBatchRemovalPlan?.confirmation ??
+      pendingNodeRemovalIntent ??
+      pendingEdgeRemovalIntent,
     pendingRemovalNodeId,
     setBlockedRemovalReason,
+    setPendingBatchRemovalPlan,
     setPendingRemovalEdgeId,
     setPendingRemovalNodeId,
   };

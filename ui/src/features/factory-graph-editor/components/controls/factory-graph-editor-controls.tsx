@@ -67,6 +67,7 @@ export function FactoryGraphEditorToolbar({
   canRedoLayout = false,
   canSave = false,
   canDiscard = false,
+  canDeleteSelection = false,
   canUndoLayout = false,
   editModeToggle,
   hiddenNodeClasses = new Set<FactoryGraphNodeKind>(),
@@ -76,6 +77,7 @@ export function FactoryGraphEditorToolbar({
   locale,
   onCreateVisualGroup,
   onDiscard,
+  onDeleteSelection,
   onAddAction,
   onAddMenuOpenChange,
   onClearPreferences,
@@ -97,6 +99,7 @@ export function FactoryGraphEditorToolbar({
   canRedoLayout?: boolean;
   canSave?: boolean;
   canDiscard?: boolean;
+  canDeleteSelection?: boolean;
   canUndoLayout?: boolean;
   editModeToggle?: {
     disabled?: boolean;
@@ -112,6 +115,7 @@ export function FactoryGraphEditorToolbar({
   locale?: string;
   onCreateVisualGroup?: () => void;
   onDiscard?: () => void;
+  onDeleteSelection?: () => void;
   onAddAction?: (actionID: string) => void;
   onAddMenuOpenChange?: (open: boolean) => void;
   onClearPreferences?: () => void;
@@ -191,15 +195,28 @@ export function FactoryGraphEditorToolbar({
             tone="outline"
           />
           <FactoryGraphEditorToolbarButton
-            active={activeTool === "delete"}
-            description={messages.toolbarDeleteDescription}
+            active={!canDeleteSelection && activeTool === "delete"}
+            description={
+              canDeleteSelection
+                ? messages.toolbarDeleteSelectionDescription
+                : messages.toolbarDeleteDescription
+            }
             disabled={toolbarButtonsDisabled}
             icon={<TrashIcon />}
             label={messages.toolbarDeleteLabel}
-            onClick={() =>
-              onSelectTool(activeTool === "delete" ? null : "delete")
+            onClick={() => {
+              if (canDeleteSelection && onDeleteSelection) {
+                onDeleteSelection();
+                return;
+              }
+
+              onSelectTool(activeTool === "delete" ? null : "delete");
+            }}
+            tone={
+              !canDeleteSelection && activeTool === "delete"
+                ? "secondary"
+                : "outline"
             }
-            tone={activeTool === "delete" ? "secondary" : "outline"}
           />
           <FactoryGraphEditorToolbarButton
             active={false}
