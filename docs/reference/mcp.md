@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-06-15
+last-modified: 2026-06-17
 doc-id: agent-factory/guides/mcp
 ---
 
@@ -106,15 +106,28 @@ execution.
 
 ### Fixture-backed Factory Session tools
 
-The default serve path also exposes async Factory Session tools through the
-fixture-backed service documented in `you docs mcp-hosts`. See that guide for
-the full catalog, host examples, and automated install smoke matrix.
+The default serve path also exposes async Factory Session tools such as
+`you.factory_session.start_async`, `you.factory_session.get`, and
+`you.factory_session.get_result` through the fixture-backed service documented
+in `you docs mcp-hosts`. See that guide for the full catalog, host examples,
+and automated install smoke matrix.
 
-### Out of scope for live-runtime install smoke
-Live factory HTTP runtime backing for `you mcp serve` remains out of scope for
-install smoke. Hosts can prove async Factory Session tools today through the
-default mock-backed fixture catalog, but not yet through a live runtime-backed
-serve configuration.
+### Runtime-backed Factory Session tools
+
+Use `you mcp serve --runtime` when the host should exercise live durable
+JavaScript Factory Session execution through the shared runtime service instead
+of the deterministic fixture catalog. Runtime mode keeps the same
+`you.factory_session.*` tool catalog and Factory Session vocabulary; only the
+backing execution service changes.
+
+| Mode | Command | Backing service | When to use |
+|------|---------|-----------------|-------------|
+| Fixture-backed (default) | `you mcp serve` | Durable session fixture catalog | Host install smoke, offline deterministic scenarios, and fixture-driven async polling |
+| Runtime-backed | `you mcp serve --runtime` | Shared durable JavaScript runtime service | Live workflow execution, real INLINE_WORKFLOW sources, and terminal result reads against the runtime path |
+
+Runtime mode accepts optional `--project-root` when workflow sources should
+resolve from a directory other than the MCP host working directory. Do not
+combine `--runtime` with `--fixture-catalog`.
 
 ## Automation-Backed In Repo
 
@@ -124,51 +137,34 @@ The repository already proves the following without manual host UI smoke:
 |-------|----------------|
 | CLI registration for `you mcp serve` | `pkg/cli/root.go` and `pkg/cli/mcp/serve.go` |
 | Factory Session MCP catalog | `pkg/mcp/factorysession/registry.go` (`DiscoverTools`) |
-| Shared stdio install smoke for validate plus async polling | `pkg/cli/mcp/serve_smoke_test.go` |
-| Packaged recovery scope and follow-up markers | `tests/functional/smoke/cli_docs_smoke_test.go` |
+| Shared fixture-backed stdio install smoke for validate plus async polling | `pkg/cli/mcp/serve_smoke_test.go` |
+| Runtime-backed stdio install smoke for async start, status, and result | `pkg/cli/mcp/serve_runtime_smoke_test.go` |
+| Packaged recovery scope and serve-mode boundaries | `tests/functional/smoke/cli_docs_smoke_test.go` |
 
 Run focused verification locally:
 
 ```bash
 go test ./pkg/cli/mcp/... ./pkg/mcp/...
-go test ./tests/functional/smoke -run 'TestDocsCommandSmoke|TestRunServe_InstallSmoke'
+go test ./tests/functional/smoke -run 'TestDocsCommandSmoke|TestRunServe_InstallSmoke|TestRunServe_RuntimeSmoke'
 ```
 
-## Follow-Up Cell For Async Install Smoke
+## Serve Mode Scope Boundaries
 
-Recovery lane `dynamic-workflows-recovery-mcp-install-plan-scope` completes
-with preview-only scope documentation plus the shared fixture-backed install
-smoke in `pkg/cli/mcp/serve_smoke_test.go`. Live runtime-backed MCP install
-smoke remains blocked by one explicit follow-up cell:
-
-**Cell:** `dynamic-workflows-cell-mcp-session-serve`
-
-**Missing shared MCP surface:** `you mcp serve` still defaults to the durable
-session fixture catalog (`factorysessionexecution.NewFakeServiceFromContractFixtures`).
-Factory Session execution tools are available through that mock-backed serve
-path, but a live runtime-backed serve configuration
-(`factorysessionexecution.RuntimeService`) is not yet selectable from the
-documented install path.
-
-**Blocked install behavior until that cell lands:**
-
-| Blocked behavior | Tool | Why hosts cannot prove it today |
-|------------------|------|----------------------------------|
-| Live-runtime async Factory Session start | `you.factory_session.start_async` | Serve path has no runtime-backed service mode |
-| Live-runtime Factory Session status polling | `you.factory_session.get` | Serve path has no runtime-backed service mode |
-| Live-runtime Factory Session result retrieval | `you.factory_session.get_result` | Serve path has no runtime-backed service mode |
-
-The full follow-up scope, non-goals, and evidence table live in
-`docs/internal/development/plans/dynamic-workflows/follow-up-cell-mcp-session-serve.md`.
-
-No additional follow-up blocker remains for preview-only discovery and
-validate install smoke covered by this doc.
-
-## Out Of Scope For Any Follow-Up Cell Named Here
+This lane proves live runtime-backed stdio MCP serve only. It does not widen
+into website inspection, HTTP/SSE transport, or a broader host-matrix expansion.
 
 | Behavior | Status |
 |----------|--------|
-| Multi-host parity matrices across every MCP client UI | Out of scope for the recovery lane and the session-serve follow-up cell |
+| Default fixture-backed `you mcp serve` install smoke | **Automated in-repo** via `serve_smoke_test.go` |
+| Runtime-backed `you mcp serve --runtime` async start/status/result smoke | **Automated in-repo** via `serve_runtime_smoke_test.go` |
+| Multi-host parity matrices across every MCP client UI | Out of scope for this lane |
+| HTTP or SSE MCP transport | Unsupported; `you mcp serve` is stdio-only |
+| Dashboard or website inspection of MCP sessions | Out of scope for this lane |
+| Live factory HTTP runtime backing | Distinct from runtime-backed MCP serve; not required for stdio host setup |
+
+The fixture-backed and runtime-backed serve paths are additive. Existing
+fixture-backed smoke continues to prove the default install path without
+depending on runtime mode.
 
 ## Related Topics
 
