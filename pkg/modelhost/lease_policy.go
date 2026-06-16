@@ -88,6 +88,11 @@ func (h *CatalogHost) runIdleUnload(
 	}
 	delete(h.idleUnloadTimers, slotKey)
 	h.mu.Unlock()
+	identity := Identity{Name: strings.TrimSpace(modelName)}
+	if entry, entryErr := h.catalogEntry(runtimeCfg, modelName); entryErr == nil {
+		identity = h.identityFromCatalog(runtimeCfg, entry)
+	}
+	h.diagnostics.logUnload(identity, "idle")
 	_ = h.unloadRuntime(ctxWithoutCancel(), runtimeCfg, modelName, slotKey)
 }
 
@@ -144,5 +149,14 @@ func (h *CatalogHost) evictIdleRuntimesForCapacity(
 	delete(h.runtimeSlots, evictKey)
 	h.cancelIdleUnloadLocked(evictKey)
 	h.mu.Unlock()
+	evictedModel := modelName
+	if parts := strings.SplitN(evictKey, "|", 2); len(parts) == 2 && strings.TrimSpace(parts[1]) != "" {
+		evictedModel = parts[1]
+	}
+	identity := Identity{Name: strings.TrimSpace(evictedModel)}
+	if entry, entryErr := h.catalogEntry(runtimeCfg, evictedModel); entryErr == nil {
+		identity = h.identityFromCatalog(runtimeCfg, entry)
+	}
+	h.diagnostics.logUnload(identity, "pressure_eviction")
 	return slot.stop(ctx)
 }

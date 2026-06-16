@@ -87,6 +87,9 @@ action. Pull results classify managed outcomes (`ALREADY_READY`,
 Source selection runs through the resolver layer before asset materialization.
 Post-pull cache inspection classifies readiness and lifecycle without contacting
 upstream sources again. Pull lifecycle transitions are logged and emitted as
-`managed_runtime.pull.*` counters when a metrics recorder is configured. They do
-not currently emit canonical `FactoryEvent` records; invocation and factory
-session surfaces remain the event-first runtime contract.
+`managed_runtime.pull.*` counters when a metrics recorder is configured at the
+service boundary. Model host pull/load/lease/unload/crash activity additionally
+emits `model_host.*` diagnostics from `pkg/modelhost`; see
+`docs/architecture/model-host.md`. They do not currently emit canonical
+`FactoryEvent` records; invocation and factory session surfaces remain the
+event-first runtime contract.

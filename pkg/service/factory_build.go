@@ -783,6 +783,7 @@ func newRuntimeLocalModelDependencies(cfg *FactoryServiceConfig) localModelDomai
 	}
 	host := modelhost.NewCatalogHost(modelhost.NewLocalAssetGateway(modelAssets), modelhost.Options{
 		SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
+		Diagnostics:    modelHostDiagnostics(cfg, cfg.Logger),
 	})
 	return localModelDomain{
 		resources: modelResources,

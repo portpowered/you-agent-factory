@@ -105,6 +105,7 @@ type Lease struct {
 type Options struct {
 	SourceResolver    SourceResolver
 	Supervisor        SupervisorConfig
+	Diagnostics       Diagnostics
 	IdleUnloadAfter   time.Duration
 	MaxLoadedRuntimes int
 }

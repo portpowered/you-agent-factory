@@ -20,6 +20,7 @@ type CatalogHost struct {
 	mu                sync.Mutex
 	assets            AssetGateway
 	opts              Options
+	diagnostics       Diagnostics
 	supervisor        SupervisorConfig
 	leases            map[string]*trackedLease
 	byModel           map[string]map[string]struct{}
@@ -48,10 +49,13 @@ func NewCatalogHost(assets AssetGateway, opts Options) *CatalogHost {
 		opts.SourceResolver = DefaultManagedRuntimeSourceResolverAdapter()
 	}
 	idleUnloadAfter, maxLoadedRuntimes := normalizeLeasePolicyOptions(opts)
+	supervisor := normalizeSupervisorConfig(opts.Supervisor)
+	supervisor.Diagnostics = opts.Diagnostics
 	return &CatalogHost{
 		assets:            assets,
 		opts:              opts,
-		supervisor:        normalizeSupervisorConfig(opts.Supervisor),
+		diagnostics:       opts.Diagnostics,
+		supervisor:        supervisor,
 		leases:            make(map[string]*trackedLease),
 		byModel:           make(map[string]map[string]struct{}),
 		runtimeSlots:      make(map[string]*supervisedRuntime),
@@ -133,10 +137,12 @@ func (h *CatalogHost) Pull(
 	if entry.Summary.ProviderLocality != factoryapi.WorkerModelLocalityLocal {
 		identity := h.identityFromCatalog(runtimeCfg, entry)
 		snapshot := ClassifyReadiness(identity, CacheInspection{}, true)
-		return PullSnapshot{
+		pullSnapshot := PullSnapshot{
 			ReadinessSnapshot: snapshot,
 			PullOutcome:       factoryapi.ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME,
-		}, &ReadinessError{Snapshot: snapshot, Cause: ErrUnsupportedRuntime}
+		}
+		h.diagnostics.logPullFailed(pullSnapshot, ErrUnsupportedRuntime)
+		return pullSnapshot, &ReadinessError{Snapshot: snapshot, Cause: ErrUnsupportedRuntime}
 	}
 	pullResult, err := h.assets.PullModel(ctx, runtimeCfg, modelName)
 	if err != nil {
@@ -148,7 +154,9 @@ func (h *CatalogHost) Pull(
 		if readiness.Identity.Name == "" {
 			readiness = ClassifyReadiness(h.identityFromCatalog(runtimeCfg, entry), CacheInspection{}, false)
 		}
-		return pullSnapshotFromAssetResult(pullResult, readiness), err
+		pullSnapshot := pullSnapshotFromAssetResult(pullResult, readiness)
+		h.diagnostics.logPullFailed(pullSnapshot, err)
+		return pullSnapshot, err
 	}
 	readiness := pullResult.Snapshot
 	if readiness.Identity.Name == "" {
@@ -158,7 +166,9 @@ func (h *CatalogHost) Pull(
 		}
 		readiness = ClassifyReadiness(h.identityFromCatalog(runtimeCfg, entry), inspected, false)
 	}
-	return pullSnapshotFromAssetResult(pullResult, readiness), nil
+	pullSnapshot := pullSnapshotFromAssetResult(pullResult, readiness)
+	h.diagnostics.logPullCompleted(pullSnapshot)
+	return pullSnapshot, nil
 }
 
 func pullSnapshotFromAssetResult(result AssetPullResult, readiness ReadinessSnapshot) PullSnapshot {
@@ -200,6 +210,7 @@ func (h *CatalogHost) AcquireLease(
 	h.mu.Lock()
 	if h.leaseCapacityExhausted(modelKey, leaseCapacity) {
 		h.mu.Unlock()
+		h.diagnostics.logLeaseExhausted(identity)
 		return Lease{}, leaseCapacityError(modelName)
 	}
 	h.mu.Unlock()
@@ -217,7 +228,7 @@ func (h *CatalogHost) AcquireLease(
 			return Lease{}, specErr
 		}
 		slot := h.runtimeSlot(runtimeCfg, modelName)
-		if err := slot.ensureReady(ctx, spec); err != nil {
+		if err := slot.ensureReady(ctx, snapshot.Identity, spec); err != nil {
 			return Lease{}, err
 		}
 		if !slot.isReady() {
@@ -233,6 +244,7 @@ func (h *CatalogHost) AcquireLease(
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if h.leaseCapacityExhausted(modelKey, leaseCapacity) {
+		h.diagnostics.logLeaseExhausted(snapshot.Identity)
 		return Lease{}, leaseCapacityError(modelName)
 	}
 	endpoint := ""
@@ -267,6 +279,7 @@ func (h *CatalogHost) AcquireLease(
 		h.byModel[modelKey] = make(map[string]struct{})
 	}
 	h.byModel[modelKey][leaseID] = struct{}{}
+	h.diagnostics.logLeaseAcquired(snapshot.Identity, leaseID)
 	return lease, nil
 }
 
@@ -279,6 +292,7 @@ func (h *CatalogHost) ReleaseLease(_ context.Context, leaseID string) error {
 	}
 	delete(h.leases, leaseID)
 	modelKey := tracked.modelKey
+	identity := tracked.lease.Identity
 	if leases, ok := h.byModel[modelKey]; ok {
 		delete(leases, leaseID)
 		if len(leases) == 0 {
@@ -289,6 +303,8 @@ func (h *CatalogHost) ReleaseLease(_ context.Context, leaseID string) error {
 	runtimeCfg := tracked.runtimeCfg
 	modelName := tracked.modelName
 	h.mu.Unlock()
+
+	h.diagnostics.logLeaseReleased(identity, leaseID)
 
 	if slotKey != "" && runtimeCfg != nil {
 		h.mu.Lock()
@@ -333,6 +349,11 @@ func (h *CatalogHost) Unload(
 	}
 	h.cancelIdleUnloadLocked(slotKey)
 	h.mu.Unlock()
+	identity := Identity{Name: strings.TrimSpace(modelName)}
+	if entry, entryErr := h.catalogEntry(runtimeCfg, modelName); entryErr == nil {
+		identity = h.identityFromCatalog(runtimeCfg, entry)
+	}
+	h.diagnostics.logUnload(identity, "explicit")
 	return h.unloadRuntime(ctx, runtimeCfg, modelName, slotKey)
 }
 

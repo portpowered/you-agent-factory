@@ -56,6 +56,7 @@ type SupervisorConfig struct {
 	ProcessLauncher      ProcessLauncher
 	HealthChecker        HealthChecker
 	ServerStartBuilder   ServerStartBuilder
+	Diagnostics          Diagnostics
 }
 
 type supervisedState string
@@ -76,6 +77,7 @@ type supervisedRuntime struct {
 	process      ManagedProcess
 	loadDone     chan struct{}
 	cfg          SupervisorConfig
+	identity     Identity
 }
 
 func defaultSupervisorConfig() SupervisorConfig {
@@ -173,7 +175,7 @@ func (r *supervisedRuntime) readinessOverlay(identity Identity, base ReadinessSn
 	}
 }
 
-func (r *supervisedRuntime) ensureReady(ctx context.Context, spec ProcessStartSpec) error {
+func (r *supervisedRuntime) ensureReady(ctx context.Context, identity Identity, spec ProcessStartSpec) error {
 	if err := ctx.Err(); err != nil {
 		return cancelError(err)
 	}
@@ -195,6 +197,7 @@ func (r *supervisedRuntime) ensureReady(ctx context.Context, spec ProcessStartSp
 		r.mu.Unlock()
 		return err
 	}
+	r.identity = identity
 	r.state = supervisedStateLoading
 	r.failureClass = FailureClassNone
 	r.failureErr = nil
@@ -203,16 +206,18 @@ func (r *supervisedRuntime) ensureReady(ctx context.Context, spec ProcessStartSp
 	r.mu.Unlock()
 	defer close(loadDone)
 
+	r.cfg.Diagnostics.logLoadStarted(identity)
+
 	process, err := r.cfg.ProcessLauncher.Start(ctx, spec)
 	if err != nil {
-		return r.markFailed(FailureClassProcessCrash, fmt.Errorf("%w: %v", ErrProcessCrash, err))
+		return r.markFailed(identity, FailureClassProcessCrash, fmt.Errorf("%w: %v", ErrProcessCrash, err))
 	}
 
 	deadline := time.Now().Add(r.cfg.ReadinessTimeout)
 	for {
 		if err := ctx.Err(); err != nil {
 			_ = process.Stop(context.Background())
-			return r.markFailed(FailureClassCancelled, cancelError(err))
+			return r.markFailed(identity, FailureClassCancelled, cancelError(err))
 		}
 		if checkErr := r.cfg.HealthChecker.Check(ctx, process.HealthEndpoint()); checkErr == nil {
 			r.mu.Lock()
@@ -222,19 +227,20 @@ func (r *supervisedRuntime) ensureReady(ctx context.Context, spec ProcessStartSp
 			r.failureClass = FailureClassNone
 			r.failureErr = nil
 			r.mu.Unlock()
-			go r.watchProcessExit(process)
+			r.cfg.Diagnostics.logLoadReady(identity)
+			go r.watchProcessExit(identity, process)
 			return nil
 		}
 		if time.Now().After(deadline) {
 			_ = process.Stop(context.Background())
-			return r.markFailed(FailureClassLoadingTimeout, ErrLoadingTimeout)
+			return r.markFailed(identity, FailureClassLoadingTimeout, ErrLoadingTimeout)
 		}
 		timer := time.NewTimer(r.cfg.HealthCheckInterval)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
 			_ = process.Stop(context.Background())
-			return r.markFailed(FailureClassCancelled, cancelError(ctx.Err()))
+			return r.markFailed(identity, FailureClassCancelled, cancelError(ctx.Err()))
 		case <-timer.C:
 		}
 	}
@@ -280,7 +286,7 @@ func (r *supervisedRuntime) waitForLoad(ctx context.Context, loadDone chan struc
 	}
 }
 
-func (r *supervisedRuntime) markFailed(class FailureClass, err error) error {
+func (r *supervisedRuntime) markFailed(identity Identity, class FailureClass, err error) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.state = supervisedStateFailed
@@ -288,6 +294,7 @@ func (r *supervisedRuntime) markFailed(class FailureClass, err error) error {
 	r.failureErr = err
 	r.endpoint = ""
 	r.process = nil
+	r.cfg.Diagnostics.logLoadFailed(identity, class, err)
 	return r.failureOutcomeLocked()
 }
 
@@ -312,7 +319,7 @@ func (r *supervisedRuntime) failureOutcomeLocked() error {
 	}
 }
 
-func (r *supervisedRuntime) watchProcessExit(process ManagedProcess) {
+func (r *supervisedRuntime) watchProcessExit(identity Identity, process ManagedProcess) {
 	waitErr := process.Wait()
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -328,6 +335,7 @@ func (r *supervisedRuntime) watchProcessExit(process ManagedProcess) {
 	}
 	r.endpoint = ""
 	r.process = nil
+	r.cfg.Diagnostics.logProcessCrash(identity, r.failureErr)
 }
 
 func (r *supervisedRuntime) stop(ctx context.Context) error {
