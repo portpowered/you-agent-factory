@@ -710,6 +710,9 @@ func TestRunDispatches_MissingSessionReturnsDeterministicError(t *testing.T) {
 	}
 }
 
+// TestFixtureBackedCLIInspectionRegression_FullLoopWithoutLiveProviderFlags guards
+// the default fixture-backed CLI inspection path while the additive live-provider
+// smoke lane stays opt-in via --execution-provider and --child-executor-mode.
 func TestFixtureBackedCLIInspectionRegression_FullLoopWithoutLiveProviderFlags(t *testing.T) {
 	service := newContractFakeService(t)
 	sessionID := "dur-sess-petri-success-001"

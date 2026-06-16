@@ -552,6 +552,10 @@ func TestRunSync_UsesSharedServicePrimaryResultProjection(t *testing.T) {
 	}
 }
 
+// TestRunSync_LiveProviderJavaScriptSession_ReReadStatusAndResult proves CLI
+// live-dispatch smoke through the shared execution-service path only. MCP host
+// setup and website inspection are deferred follow-up cells (see
+// follow-up-cell-cli-live-dispatch-smoke-deferred.md).
 func TestRunSync_LiveProviderJavaScriptSession_ReReadStatusAndResult(t *testing.T) {
 	service, projectRoot := newLiveChildCLIJavaScriptRuntimeService(t)
 
@@ -651,6 +655,9 @@ func TestRunSync_LiveProviderJavaScriptSession_ReReadStatusAndResult(t *testing.
 	}
 }
 
+// TestLiveProviderJavaScriptSession_DispatchAndArtifactCLIInspection proves
+// bridged-child dispatch and artifact linkage through direct CLI reads backed by
+// shared ListDispatchesResponseToAPI / ListArtifactsResponseToAPI projections.
 func TestLiveProviderJavaScriptSession_DispatchAndArtifactCLIInspection(t *testing.T) {
 	service, projectRoot := newLiveChildCLIJavaScriptRuntimeService(t)
 	backend := sessionexecution.ExecutionBackendConfig{

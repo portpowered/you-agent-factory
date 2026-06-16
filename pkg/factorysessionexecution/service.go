@@ -169,7 +169,9 @@ func NewExecutionService(provider ExecutionProvider, config ServiceConfig) (Serv
 }
 
 // SmokeLiveChildProvider returns a deterministic mock provider for CLI and
-// fixture-backed live-provider child smoke without MCP host startup.
+// fixture-backed live-provider child smoke without MCP host startup. Scope for
+// this provider is the completed CLI live-dispatch smoke lane; MCP live serve and
+// website inspection remain deferred follow-up cells.
 func SmokeLiveChildProvider() workers.Provider {
 	return smokeLiveChildProvider{}
 }
