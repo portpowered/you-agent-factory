@@ -561,7 +561,9 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
       within(toolbar).getAllByRole("button", { name: "Add" }),
     ).toHaveLength(1);
     expect(
-      within(toolbar).getByRole("button", { name: "Delete" }),
+      within(toolbar).getByRole("button", {
+        name: "Delete, no graph items selected",
+      }),
     ).toBeTruthy();
   });
 

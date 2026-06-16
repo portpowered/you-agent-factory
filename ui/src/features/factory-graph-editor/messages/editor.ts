@@ -190,6 +190,8 @@ export interface FactoryGraphEditorMessages {
   toolbarConnectDescription: string;
   toolbarConnectLabel: string;
   toolbarDeleteDescription: string;
+  toolbarDeleteDisabledNoSelectionDescription: string;
+  toolbarDeleteDisabledNoSelectionLabel: string;
   toolbarDeleteDisabledNonDeletableDescription: string;
   toolbarDeleteDisabledNonDeletableLabel: string;
   toolbarDeleteLabel: string;
@@ -799,6 +801,9 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarConnectDescription: "Connect",
       toolbarConnectLabel: "Connect",
       toolbarDeleteDescription: "Remove",
+      toolbarDeleteDisabledNoSelectionDescription:
+        "Select graph items to delete",
+      toolbarDeleteDisabledNoSelectionLabel: "Delete, no graph items selected",
       toolbarDeleteDisabledNonDeletableDescription:
         "Selected graph items cannot be removed",
       toolbarDeleteDisabledNonDeletableLabel:
@@ -1343,6 +1348,8 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarConnectDescription: "在图上连接节点",
       toolbarConnectLabel: "连接",
       toolbarDeleteDescription: "从图中删除节点或边",
+      toolbarDeleteDisabledNoSelectionDescription: "选择要删除的图项",
+      toolbarDeleteDisabledNoSelectionLabel: "删除，未选择图项",
       toolbarDeleteDisabledNonDeletableDescription: "所选图项无法删除",
       toolbarDeleteDisabledNonDeletableLabel: "删除，所选图项无法删除",
       toolbarDeleteLabel: "删除",

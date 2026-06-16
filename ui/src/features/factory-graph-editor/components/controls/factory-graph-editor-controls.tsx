@@ -69,7 +69,7 @@ export interface FactoryGraphEditorVisibilityPresetOption {
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: toolbar composes edit-mode toggle, hide/show, and layout history controls.
 export function FactoryGraphEditorToolbar({
-  activeTool,
+  activeTool: _activeTool,
   addMenuActions = [],
   canInteract,
   canRedoLayout = false,
@@ -153,7 +153,6 @@ export function FactoryGraphEditorToolbar({
   const saveDisabled = !canSave;
   const deleteAction = resolveFactoryGraphEditorToolbarDeleteAction({
     canDeleteSelection,
-    deleteToolActive: activeTool === "delete",
     selectionState: graphSelectionToolbarState,
   });
   const deleteButtonState = resolveFactoryGraphEditorToolbarDeleteButtonState({
@@ -225,11 +224,6 @@ export function FactoryGraphEditorToolbar({
             onClick={() => {
               if (deleteAction.kind === "batch-delete" && onDeleteSelection) {
                 onDeleteSelection();
-                return;
-              }
-
-              if (deleteAction.kind === "delete-tool") {
-                onSelectTool(deleteAction.active ? null : "delete");
               }
             }}
             tone={deleteButtonState.tone}

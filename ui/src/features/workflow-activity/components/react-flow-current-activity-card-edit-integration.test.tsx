@@ -47,6 +47,7 @@ vi.mock("@xyflow/react", async () => {
       onConnect,
       onEdgeClick,
       onNodeClick,
+      onSelectionChange,
     }: {
       children: React.ReactNode;
       defaultViewport?: { x: number; y: number; zoom: number };
@@ -77,6 +78,10 @@ vi.mock("@xyflow/react", async () => {
       }) => void;
       onEdgeClick?: (_event: unknown, edge: { id: string }) => void;
       onNodeClick?: (_event: unknown, node: { id: string }) => void;
+      onSelectionChange?: (selection: {
+        edges: Array<{ id: string }>;
+        nodes: Array<{ id: string }>;
+      }) => void;
     }) => {
       const workstationNodeId =
         nodes?.find((node) => node.id.startsWith("workstation:"))?.id ??
@@ -96,7 +101,13 @@ vi.mock("@xyflow/react", async () => {
                   data-factory-graph-node-id={String(
                     node.data?.factoryGraphNodeId ?? "",
                   )}
-                  onClick={() => onNodeClick?.(null, { id: node.id })}
+                  onClick={() => {
+                    onSelectionChange?.({
+                      edges: [],
+                      nodes: [{ id: node.id }],
+                    });
+                    onNodeClick?.(null, { id: node.id });
+                  }}
                   type="button"
                 >
                   {node.id}
@@ -512,8 +523,10 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
       await screen.findByRole("button", { name: "workstation:review" }),
     ).toBeTruthy();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
     fireEvent.click(screen.getByRole("button", { name: "workstation:review" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Delete selected graph item" }),
+    );
 
     const dialog = await screen.findByRole("dialog", {
       name: "Remove review workstation?",
@@ -549,9 +562,11 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
       await screen.findByRole("button", { name: "work-state:story:qa" }),
     ).toBeTruthy();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
     fireEvent.click(
       screen.getByRole("button", { name: "work-state:story:qa" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Delete selected graph item" }),
     );
 
     const dialog = await screen.findByRole("dialog", {
@@ -586,9 +601,11 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
       await screen.findByRole("button", { name: "work-state:story:queued" }),
     ).toBeTruthy();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
     fireEvent.click(
       screen.getByRole("button", { name: "work-state:story:queued" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Delete selected graph item" }),
     );
 
     const dialog = await screen.findByRole("dialog", {
@@ -623,8 +640,10 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
       await screen.findByRole("button", { name: "work-type:story" }),
     ).toBeTruthy();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
     fireEvent.click(screen.getByRole("button", { name: "work-type:story" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Delete selected graph item" }),
+    );
 
     const dialog = await screen.findByRole("dialog", {
       name: "Remove story work-type?",
@@ -734,8 +753,10 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
       await screen.findByRole("button", { name: "worker:spare" }),
     ).toBeTruthy();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
     fireEvent.click(screen.getByRole("button", { name: "worker:spare" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Delete selected graph item" }),
+    );
 
     const toolbar = await screen.findByRole("region", {
       name: "Factory graph editor tools",
@@ -829,9 +850,11 @@ describe("ReactFlowCurrentActivityCard edit integration", () => {
       await screen.findByRole("button", { name: "doc:factory/docs/guide.md" }),
     ).toBeTruthy();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
     fireEvent.click(
       screen.getByRole("button", { name: "doc:factory/docs/guide.md" }),
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Delete selected graph item" }),
     );
 
     const dialog = await screen.findByRole("dialog", {

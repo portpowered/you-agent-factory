@@ -1025,7 +1025,9 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     });
     expect(within(toolbar).getByRole("button", { name: "Add" })).toBeTruthy();
     expect(
-      within(toolbar).getByRole("button", { name: "Delete" }),
+      within(toolbar).getByRole("button", {
+        name: "Delete, no graph items selected",
+      }),
     ).toBeTruthy();
     expect(screen.queryByText("Editor mode active")).toBeNull();
   });
@@ -1723,7 +1725,7 @@ function registerCurrentActivityCardEditorLeaveAndSaveTests(): void {
     ).not.toBeNull();
     expect(
       within(toolbar)
-        .getByRole("button", { name: "Delete" })
+        .getByRole("button", { name: "Delete, no graph items selected" })
         .getAttribute("disabled"),
     ).not.toBeNull();
   });

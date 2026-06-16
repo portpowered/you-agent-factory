@@ -58,7 +58,6 @@ describe("resolveFactoryGraphEditorToolbarDeleteAction", () => {
     expect(
       resolveFactoryGraphEditorToolbarDeleteAction({
         canDeleteSelection: true,
-        deleteToolActive: false,
         selectionState: {
           mode: "single",
           selectedItemCount: 1,
@@ -73,7 +72,6 @@ describe("resolveFactoryGraphEditorToolbarDeleteAction", () => {
     expect(
       resolveFactoryGraphEditorToolbarDeleteAction({
         canDeleteSelection: true,
-        deleteToolActive: false,
         selectionState: {
           mode: "multi",
           selectedItemCount: 4,
@@ -90,7 +88,6 @@ describe("resolveFactoryGraphEditorToolbarDeleteAction", () => {
     expect(
       resolveFactoryGraphEditorToolbarDeleteAction({
         canDeleteSelection: false,
-        deleteToolActive: false,
         selectionState: {
           mode: "single",
           selectedItemCount: 1,
@@ -104,16 +101,15 @@ describe("resolveFactoryGraphEditorToolbarDeleteAction", () => {
     });
   });
 
-  it("falls back to delete-tool mode when nothing is selected", () => {
+  it("disables delete when nothing is selected", () => {
     expect(
       resolveFactoryGraphEditorToolbarDeleteAction({
         canDeleteSelection: false,
-        deleteToolActive: true,
         selectionState: EMPTY_FACTORY_GRAPH_EDITOR_TOOLBAR_SELECTION_STATE,
       }),
     ).toEqual({
-      kind: "delete-tool",
-      active: true,
+      kind: "disabled",
+      reason: "no-selection",
     });
   });
 });

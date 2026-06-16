@@ -14,14 +14,10 @@ export type FactoryGraphEditorToolbarDeleteAction =
       selectedItemCount: number;
     }
   | {
-      kind: "delete-tool";
-      active: boolean;
-    }
-  | {
       kind: "disabled";
-      reason: "non-deletable-selection";
-      selectionMode: "single" | "multi";
-      selectedItemCount: number;
+      reason: "no-selection" | "non-deletable-selection";
+      selectionMode?: "single" | "multi";
+      selectedItemCount?: number;
     };
 
 export const EMPTY_FACTORY_GRAPH_EDITOR_TOOLBAR_SELECTION_STATE: FactoryGraphEditorToolbarSelectionState =
@@ -58,7 +54,6 @@ export function resolveFactoryGraphEditorToolbarSelectionState(
 
 export function resolveFactoryGraphEditorToolbarDeleteAction(options: {
   canDeleteSelection: boolean;
-  deleteToolActive: boolean;
   selectionState: FactoryGraphEditorToolbarSelectionState;
 }): FactoryGraphEditorToolbarDeleteAction {
   if (options.canDeleteSelection) {
@@ -70,27 +65,27 @@ export function resolveFactoryGraphEditorToolbarDeleteAction(options: {
     };
   }
 
-  if (options.selectionState.mode !== "none") {
+  if (options.selectionState.mode === "none") {
     return {
       kind: "disabled",
-      reason: "non-deletable-selection",
-      selectionMode:
-        options.selectionState.mode === "multi" ? "multi" : "single",
-      selectedItemCount: options.selectionState.selectedItemCount,
+      reason: "no-selection",
     };
   }
 
   return {
-    kind: "delete-tool",
-    active: options.deleteToolActive,
+    kind: "disabled",
+    reason: "non-deletable-selection",
+    selectionMode:
+      options.selectionState.mode === "multi" ? "multi" : "single",
+    selectedItemCount: options.selectionState.selectedItemCount,
   };
 }
 
 export type FactoryGraphEditorToolbarDeleteButtonMessages = {
-  toolbarDeleteDescription: string;
+  toolbarDeleteDisabledNoSelectionDescription: string;
+  toolbarDeleteDisabledNoSelectionLabel: string;
   toolbarDeleteDisabledNonDeletableDescription: string;
   toolbarDeleteDisabledNonDeletableLabel: string;
-  toolbarDeleteLabel: string;
   toolbarDeleteMultiSelectionDescription: (count: number) => string;
   toolbarDeleteMultiSelectionLabel: (count: number) => string;
   toolbarDeleteSingleSelectionDescription: string;
@@ -128,18 +123,19 @@ export function resolveFactoryGraphEditorToolbarDeleteButtonState({
         tone: "secondary",
       };
     case "disabled":
+      if (deleteAction.reason === "no-selection") {
+        return {
+          active: false,
+          description: messages.toolbarDeleteDisabledNoSelectionDescription,
+          label: messages.toolbarDeleteDisabledNoSelectionLabel,
+          tone: "outline",
+        };
+      }
       return {
         active: false,
         description: messages.toolbarDeleteDisabledNonDeletableDescription,
         label: messages.toolbarDeleteDisabledNonDeletableLabel,
         tone: "outline",
-      };
-    case "delete-tool":
-      return {
-        active: deleteAction.active,
-        description: messages.toolbarDeleteDescription,
-        label: messages.toolbarDeleteLabel,
-        tone: deleteAction.active ? "secondary" : "outline",
       };
   }
 }
