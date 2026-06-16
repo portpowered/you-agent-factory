@@ -24,6 +24,7 @@
 
 ## 2026-06-16T14:40:00Z - mergeability: PR #822 Backend Verification
 - Fixed flaky `tests/functional/guards_batch` failures (`engine has terminated`) by waiting for harness runtime availability before post-run submits in `same_name_guard_test.go` and queueing staggered consume-path work before `RunInBackground` in `same_name_consume_path_regression_test.go`.
+- Follow-up on CI: switched `TestSameNameGuard_MatchingNamesCompletesJoin` and `TestSameNameGuard_LaterMatchingTokenStillCompletesJoin` to submit-before-run ordering (head `90f3a2a53`).
 - Files changed: `tests/functional/guards_batch/{same_name_guard_test,same_name_consume_path_regression_test}.go`.
 - **Learnings for future iterations:**
   - Patterns discovered: when `SubmitFull` immediately after `RunInBackground` fails with `engine has terminated`, either call `support.WaitForHarnessRuntimeAvailability` or submit work before starting the background run (see `ConcurrentPairsCompleteIndependently`).
