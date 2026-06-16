@@ -94,50 +94,16 @@ func assertRuntimeSmokePollObservesRunningOrTerminal(t *testing.T, client *stdio
 	observedTerminal := false
 
 	for time.Now().Before(deadline) {
-		statusResponse := decodeToolResponse[factoryapi.FactorySessionDurableReadModel](
-			t,
-			client.callTool(mcpfactorysession.ToolGetSession, map[string]any{"sessionId": sessionID}),
-		)
-		if statusResponse.Error != nil || statusResponse.Result == nil {
-			t.Fatalf("get = %#v, want success", statusResponse)
-		}
-
-		switch statusResponse.Result.Status {
+		status := runtimeSmokeSessionStatus(t, client, sessionID)
+		switch status {
 		case factoryapi.FactorySessionDurableLifecycleStatusRunning:
-			notReady := decodeToolResponse[factoryapi.FactorySessionResult](
-				t,
-				client.callTool(mcpfactorysession.ToolGetResult, map[string]any{
-					"sessionId": sessionID,
-					"mode":      mode,
-				}),
-			)
-			if notReady.Result != nil {
-				t.Fatalf("get_result running = %#v, want not-ready envelope", notReady.Result)
-			}
-			if notReady.Error == nil || notReady.Error.Code != "factory_session.result.not_ready" {
-				t.Fatalf("get_result error = %#v, want factory_session.result.not_ready", notReady.Error)
-			}
+			assertRuntimeSmokeRunningNotReady(t, client, sessionID, mode)
 			observedRunningNotReady = true
 		case factoryapi.FactorySessionDurableLifecycleStatusSucceeded:
-			completedResult := decodeToolResponse[factoryapi.FactorySessionResult](
-				t,
-				client.callTool(mcpfactorysession.ToolGetResult, map[string]any{
-					"sessionId": sessionID,
-					"mode":      mode,
-				}),
-			)
-			if completedResult.Error != nil || completedResult.Result == nil {
-				t.Fatalf("get_result terminal = %#v, want terminal result", completedResult)
-			}
-			if completedResult.Result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
-				t.Fatalf("resultStatus = %q, want FINAL", completedResult.Result.ResultStatus)
-			}
-			if completedResult.Result.PrimaryResult == nil {
-				t.Fatal("primaryResult missing from terminal result")
-			}
+			assertRuntimeSmokeTerminalResult(t, client, sessionID, mode)
 			observedTerminal = true
 		default:
-			t.Fatalf("get status = %q, want RUNNING or SUCCEEDED", statusResponse.Result.Status)
+			t.Fatalf("get status = %q, want RUNNING or SUCCEEDED", status)
 		}
 
 		if observedRunningNotReady || observedTerminal {
@@ -148,6 +114,65 @@ func assertRuntimeSmokePollObservesRunningOrTerminal(t *testing.T, client *stdio
 
 	if !observedRunningNotReady && !observedTerminal {
 		t.Fatalf("session %s did not reach RUNNING+not-ready or SUCCEEDED+terminal result within 5s", sessionID)
+	}
+}
+
+func runtimeSmokeSessionStatus(t *testing.T, client *stdioMCPClient, sessionID string) factoryapi.FactorySessionDurableLifecycleStatus {
+	t.Helper()
+	statusResponse := decodeToolResponse[factoryapi.FactorySessionDurableReadModel](
+		t,
+		client.callTool(mcpfactorysession.ToolGetSession, map[string]any{"sessionId": sessionID}),
+	)
+	if statusResponse.Error != nil || statusResponse.Result == nil {
+		t.Fatalf("get = %#v, want success", statusResponse)
+	}
+	return statusResponse.Result.Status
+}
+
+func assertRuntimeSmokeRunningNotReady(
+	t *testing.T,
+	client *stdioMCPClient,
+	sessionID string,
+	mode factoryapi.FactorySessionResultMode,
+) {
+	t.Helper()
+	notReady := decodeToolResponse[factoryapi.FactorySessionResult](
+		t,
+		client.callTool(mcpfactorysession.ToolGetResult, map[string]any{
+			"sessionId": sessionID,
+			"mode":      mode,
+		}),
+	)
+	if notReady.Result != nil {
+		t.Fatalf("get_result running = %#v, want not-ready envelope", notReady.Result)
+	}
+	if notReady.Error == nil || notReady.Error.Code != "factory_session.result.not_ready" {
+		t.Fatalf("get_result error = %#v, want factory_session.result.not_ready", notReady.Error)
+	}
+}
+
+func assertRuntimeSmokeTerminalResult(
+	t *testing.T,
+	client *stdioMCPClient,
+	sessionID string,
+	mode factoryapi.FactorySessionResultMode,
+) {
+	t.Helper()
+	completedResult := decodeToolResponse[factoryapi.FactorySessionResult](
+		t,
+		client.callTool(mcpfactorysession.ToolGetResult, map[string]any{
+			"sessionId": sessionID,
+			"mode":      mode,
+		}),
+	)
+	if completedResult.Error != nil || completedResult.Result == nil {
+		t.Fatalf("get_result terminal = %#v, want terminal result", completedResult)
+	}
+	if completedResult.Result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("resultStatus = %q, want FINAL", completedResult.Result.ResultStatus)
+	}
+	if completedResult.Result.PrimaryResult == nil {
+		t.Fatal("primaryResult missing from terminal result")
 	}
 }
 

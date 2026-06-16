@@ -30,7 +30,36 @@ return {
 func TestMockClient_RuntimeService_StartAsyncRunningObservesStatusAndNotReadyResult(t *testing.T) {
 	client := newRuntimeMCPClient(t)
 
-	started, err := client.StartAsync(runtimeBusyLoopAsyncRequest("req-mcp-runtime-async-running-001"))
+	started := assertRuntimeAsyncStartRunning(t, client, runtimeBusyLoopAsyncRequest("req-mcp-runtime-async-running-001"))
+	assertRuntimeSessionStatus(t, client, started.Result.SessionId, factoryapi.FactorySessionDurableLifecycleStatusRunning)
+	assertRuntimeNotReadyResult(t, client, started.Result.SessionId)
+	cancelRuntimeSession(t, client, started.Result.SessionId)
+}
+
+func TestMockClient_RuntimeService_AsyncPollingObservesTerminalResult(t *testing.T) {
+	client := newRuntimeMCPClient(t)
+	request := runtimeSimpleFinalAsyncRequest("req-mcp-runtime-async-final-001")
+
+	started := assertRuntimeAsyncStartRunning(t, client, request)
+	service := runtimeServiceFromClient(t, client)
+	session := waitUntilRuntimeSessionStatus(
+		t,
+		service,
+		started.Result.SessionId,
+		factorysessionexecution.LifecycleStatusSucceeded,
+		5*time.Second,
+	)
+	assertRuntimeFinalResultSummary(t, session)
+	assertRuntimeTerminalSessionReads(t, client, started.Result.SessionId)
+}
+
+func assertRuntimeAsyncStartRunning(
+	t *testing.T,
+	client *runtimeMCPClient,
+	request factoryapi.FactorySessionExecutionRequest,
+) mcpfactorysession.ToolResponse[factoryapi.FactorySessionExecutionResponse] {
+	t.Helper()
+	started, err := client.StartAsync(request)
 	if err != nil {
 		t.Fatalf("StartAsync: %v", err)
 	}
@@ -43,23 +72,33 @@ func TestMockClient_RuntimeService_StartAsyncRunningObservesStatusAndNotReadyRes
 	if started.Result.SessionId == "" {
 		t.Fatal("sessionId missing from async start response")
 	}
+	return started
+}
 
-	runningStatus, err := client.GetSession(mcpfactorysession.GetSessionInput{
-		SessionID: started.Result.SessionId,
-	})
+func assertRuntimeSessionStatus(
+	t *testing.T,
+	client *runtimeMCPClient,
+	sessionID string,
+	want factoryapi.FactorySessionDurableLifecycleStatus,
+) {
+	t.Helper()
+	status, err := client.GetSession(mcpfactorysession.GetSessionInput{SessionID: sessionID})
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
-	if runningStatus.Error != nil || runningStatus.Result == nil {
-		t.Fatalf("running status = %#v, want success", runningStatus)
+	if status.Error != nil || status.Result == nil {
+		t.Fatalf("status = %#v, want success", status)
 	}
-	if runningStatus.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
-		t.Fatalf("running status = %q, want RUNNING", runningStatus.Result.Status)
+	if status.Result.Status != want {
+		t.Fatalf("status = %q, want %q", status.Result.Status, want)
 	}
+}
 
+func assertRuntimeNotReadyResult(t *testing.T, client *runtimeMCPClient, sessionID string) {
+	t.Helper()
 	mode := factoryapi.FactorySessionResultModeFinal
 	notReady, err := client.GetResult(mcpfactorysession.GetResultInput{
-		SessionID: started.Result.SessionId,
+		SessionID: sessionID,
 		Mode:      &mode,
 	})
 	if err != nil {
@@ -74,9 +113,12 @@ func TestMockClient_RuntimeService_StartAsyncRunningObservesStatusAndNotReadyRes
 	if !notReady.Error.Retryable {
 		t.Fatal("retryable = false, want true for running session")
 	}
+}
 
+func cancelRuntimeSession(t *testing.T, client *runtimeMCPClient, sessionID string) {
+	t.Helper()
 	service := runtimeServiceFromClient(t, client)
-	cancelled, err := service.Cancel(context.Background(), started.Result.SessionId, factorysessionexecution.ControlRequest{})
+	cancelled, err := service.Cancel(context.Background(), sessionID, factorysessionexecution.ControlRequest{})
 	if err != nil {
 		t.Fatalf("Cancel: %v", err)
 	}
@@ -85,50 +127,21 @@ func TestMockClient_RuntimeService_StartAsyncRunningObservesStatusAndNotReadyRes
 	}
 }
 
-func TestMockClient_RuntimeService_AsyncPollingObservesTerminalResult(t *testing.T) {
-	client := newRuntimeMCPClient(t)
-	request := runtimeSimpleFinalAsyncRequest("req-mcp-runtime-async-final-001")
-
-	started, err := client.StartAsync(request)
-	if err != nil {
-		t.Fatalf("StartAsync: %v", err)
-	}
-	if started.Error != nil || started.Result == nil {
-		t.Fatalf("start = %#v, want success", started)
-	}
-	if started.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
-		t.Fatalf("start status = %q, want RUNNING", started.Result.Status)
-	}
-
-	service := runtimeServiceFromClient(t, client)
-	session := waitUntilRuntimeSessionStatus(
-		t,
-		service,
-		started.Result.SessionId,
-		factorysessionexecution.LifecycleStatusSucceeded,
-		5*time.Second,
-	)
+func assertRuntimeFinalResultSummary(t *testing.T, session factorysessionexecution.SessionReadResult) {
+	t.Helper()
 	if session.ResultSummary == nil ||
 		session.ResultSummary.ResultStatus != string(factorysessionexecution.ResultStatusFinal) {
 		t.Fatalf("resultSummary = %#v, want FINAL", session.ResultSummary)
 	}
+}
 
-	completedStatus, err := client.GetSession(mcpfactorysession.GetSessionInput{
-		SessionID: started.Result.SessionId,
-	})
-	if err != nil {
-		t.Fatalf("GetSession completed: %v", err)
-	}
-	if completedStatus.Error != nil || completedStatus.Result == nil {
-		t.Fatalf("completed status = %#v, want success", completedStatus)
-	}
-	if completedStatus.Result.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
-		t.Fatalf("completed status = %q, want SUCCEEDED", completedStatus.Result.Status)
-	}
+func assertRuntimeTerminalSessionReads(t *testing.T, client *runtimeMCPClient, sessionID string) {
+	t.Helper()
+	assertRuntimeSessionStatus(t, client, sessionID, factoryapi.FactorySessionDurableLifecycleStatusSucceeded)
 
 	mode := factoryapi.FactorySessionResultModeFinal
 	completedResult, err := client.GetResult(mcpfactorysession.GetResultInput{
-		SessionID: started.Result.SessionId,
+		SessionID: sessionID,
 		Mode:      &mode,
 	})
 	if err != nil {
