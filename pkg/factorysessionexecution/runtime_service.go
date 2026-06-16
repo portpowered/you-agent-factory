@@ -3,7 +3,6 @@ package factorysessionexecution
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -181,10 +180,11 @@ type JavaScriptRuntimeServiceConfig struct {
 type JavaScriptRuntimeService struct {
 	projectRoot string
 
-	mu           sync.RWMutex
-	sessions     map[string]*runtimeSessionState
-	startReplay  map[string]startReplayRecord
+	mu            sync.RWMutex
+	sessions      map[string]*runtimeSessionState
+	startReplay   map[string]startReplayRecord
 	startInflight map[string]*startInflightFlight
+	controlReplay map[string]controlReplayRecord
 }
 
 var _ Service = (*JavaScriptRuntimeService)(nil)
@@ -196,6 +196,7 @@ func NewJavaScriptRuntimeService(config JavaScriptRuntimeServiceConfig) *JavaScr
 		sessions:      make(map[string]*runtimeSessionState),
 		startReplay:   make(map[string]startReplayRecord),
 		startInflight: make(map[string]*startInflightFlight),
+		controlReplay: make(map[string]controlReplayRecord),
 	}
 }
 
@@ -359,30 +360,6 @@ func (s *JavaScriptRuntimeService) GetSession(ctx context.Context, sessionID str
 		return SessionReadResult{}, err
 	}
 	return state.session, nil
-}
-
-func (s *JavaScriptRuntimeService) Pause(ctx context.Context, _ string, _ ControlRequest) (LifecycleControlResult, error) {
-	return s.unsupportedLifecycleControl(ctx)
-}
-
-func (s *JavaScriptRuntimeService) Resume(ctx context.Context, _ string, _ ControlRequest) (LifecycleControlResult, error) {
-	return s.unsupportedLifecycleControl(ctx)
-}
-
-func (s *JavaScriptRuntimeService) Cancel(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
-	return s.applyRuntimeLifecycleControl(ctx, sessionID, LifecycleControlCancel, req, ApproveRequest{}, RetryDispatchRequest{})
-}
-
-func (s *JavaScriptRuntimeService) Terminate(ctx context.Context, _ string, _ ControlRequest) (LifecycleControlResult, error) {
-	return s.unsupportedLifecycleControl(ctx)
-}
-
-func (s *JavaScriptRuntimeService) Approve(ctx context.Context, _ string, _ ApproveRequest) (LifecycleControlResult, error) {
-	return s.unsupportedLifecycleControl(ctx)
-}
-
-func (s *JavaScriptRuntimeService) RetryDispatch(ctx context.Context, _ string, _ RetryDispatchRequest) (LifecycleControlResult, error) {
-	return s.unsupportedLifecycleControl(ctx)
 }
 
 func (s *JavaScriptRuntimeService) GetResult(ctx context.Context, sessionID string, req ResultRequest) (ResultReadResult, error) {
@@ -658,80 +635,6 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
 	}, workflowruntime.Hooks{})
 }
 
-func (s *JavaScriptRuntimeService) applyRuntimeLifecycleControl(
-	ctx context.Context,
-	sessionID string,
-	operation LifecycleControlKind,
-	control ControlRequest,
-	approve ApproveRequest,
-	retry RetryDispatchRequest,
-) (LifecycleControlResult, error) {
-	if err := ctx.Err(); err != nil {
-		return LifecycleControlResult{}, err
-	}
-	id, err := NormalizeSessionID(sessionID)
-	if err != nil {
-		return LifecycleControlResult{}, err
-	}
-	if _, err := NormalizeControlRequest(control); err != nil {
-		return LifecycleControlResult{}, err
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	state, ok := s.sessions[id]
-	if !ok {
-		return LifecycleControlResult{}, ErrSessionNotFound
-	}
-
-	currentStatus := state.session.Status
-	outcome := EvaluateLifecycleControl(operation, currentStatus)
-	if outcome == LifecycleControlOutcomeInvalidState || outcome == LifecycleControlOutcomeTerminalSession {
-		return LifecycleControlResult{}, &ControlError{
-			Operation: operation,
-			Outcome:   outcome,
-			Status:    currentStatus,
-			Message:   fmt.Sprintf("%s rejected for session %s in status %s", operation, id, currentStatus),
-		}
-	}
-
-	if outcome == LifecycleControlOutcomeAccepted && operation == LifecycleControlCancel {
-		state.session.Status = LifecycleStatusCanceling
-		state.result.SessionStatus = LifecycleStatusCanceling
-		if state.runCancel != nil {
-			state.runCancel()
-		}
-		state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
-	}
-
-	return runtimeLifecycleControlResultFromState(state, id, operation, outcome, retry), nil
-}
-
-func runtimeLifecycleControlResultFromState(
-	state *runtimeSessionState,
-	id string,
-	operation LifecycleControlKind,
-	outcome LifecycleControlOutcome,
-	retry RetryDispatchRequest,
-) LifecycleControlResult {
-	result := LifecycleControlResult{
-		SessionID: id,
-		Operation: operation,
-		Outcome:   outcome,
-		Status:    state.session.Status,
-		Links:     LifecycleControlLinksForSession(id, true),
-	}
-	if operation == LifecycleControlRetryDispatch {
-		result.DispatchID = retry.DispatchID
-	}
-	if outcome == LifecycleControlOutcomeAccepted || outcome == LifecycleControlOutcomeNoOp {
-		session := cloneSessionRead(state.session)
-		result.Session = &session
-	}
-	return result
-}
-
 func workflowRunContext(parent context.Context, policy workflowpolicy.EffectivePolicy) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(parent)
 	if policy.MaxRunDurationMs == nil || *policy.MaxRunDurationMs <= 0 {
@@ -806,13 +709,6 @@ func (s *JavaScriptRuntimeService) asyncStartFromState(state runtimeSessionState
 		Policy:           state.session.Policy,
 		Links:            state.session.Links,
 	}
-}
-
-func (s *JavaScriptRuntimeService) unsupportedLifecycleControl(ctx context.Context) (LifecycleControlResult, error) {
-	if err := ctx.Err(); err != nil {
-		return LifecycleControlResult{}, err
-	}
-	return LifecycleControlResult{}, ErrUnsupportedControl
 }
 
 func defaultUnavailableAvailability() *ResultAvailabilityDetail {

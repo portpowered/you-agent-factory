@@ -1,0 +1,122 @@
+{
+  "project": "Wire Real-Backend Factory Session Lifecycle-Control APIs",
+  "branchName": "dynamic-workflows-cell-real-backend-api-lifecycle-control",
+  "description": "Replace durable Factory Session lifecycle-control stubs with typed real-backend API behavior for durable JavaScript sessions, covering cancel, terminate, pause, resume, approve, and retry-dispatch while preserving existing live session compatibility and prior durable read parity.",
+  "context": {
+    "customerAsk": "Wire real-backend Factory Session lifecycle-control APIs so HTTP clients can pause, resume, cancel, terminate, approve, and retry durable JavaScript Factory Sessions through the shared Factory Session API instead of receiving 501 stubs.",
+    "problem": "The real-backend start/list/get/result/events slice and dispatch/artifact read slice are complete, but durable lifecycle-control endpoints remain stubbed or incomplete. API consumers and generated clients cannot reliably control durable JavaScript Factory Sessions or handle typed lifecycle-control errors through the public Factory Session API.",
+    "solution": "Route durable lifecycle-control requests under `/factory-sessions/{session_id}` through `FactoryService`, `factorysessionexecution.Service`, and shared `pkg/apisurface/factorysession` mappers; use real runtime-backed cancel or terminate coverage, fixture-backed scenarios for lifecycle states not yet produced by the runtime, typed error mapping, idempotent request handling, and focused regression tests for prior parity slices."
+  },
+  "acceptanceCriteria": [
+    "`POST /factory-sessions/{session_id}/cancel` or `/terminate` for a runtime-backed durable JavaScript session returns a typed lifecycle-control response through the durable backend path and no longer returns a 501 stub.",
+    "`POST /factory-sessions/{session_id}/pause` and `/resume` return typed lifecycle-control responses or typed invalid-state/conflict responses through shared service and mapper code.",
+    "`POST /factory-sessions/{session_id}/approve` and `/retry-dispatch` are wired through the same durable lifecycle-control API boundary, with fixture-backed coverage acceptable where real runtime scenarios are not yet available.",
+    "Typed control errors preserve generated response vocabulary, include operation/outcome/status when available, and map missing sessions to the existing not-found API shape.",
+    "Focused tests prove lifecycle controls do not break prior start/list/get/result/events or dispatch/artifact read parity.",
+    "The lane does not implement website inspection, MCP install work, live-provider bridge behavior, standalone workflow-run resources, `/workflow-previews` expansion, or another broad API/event batch.",
+    "Quality gate passes: generated artifacts are synchronized when OpenAPI changes are made, typecheck passes, lint passes where applicable, and focused backend/API tests pass."
+  ],
+  "userStories": [
+    {
+      "id": "dynamic-workflows-cell-real-backend-api-lifecycle-control-001",
+      "title": "Cancel or Terminate Runtime-Backed Durable Sessions",
+      "description": "As an HTTP client controlling a durable JavaScript Factory Session, I want cancel or terminate to return a typed lifecycle-control response from the real backend so that I can stop durable work without receiving a stub response.",
+      "acceptanceCriteria": [
+        "`POST /factory-sessions/{session_id}/cancel` or `POST /factory-sessions/{session_id}/terminate` routes `dur-sess-*` session IDs to the durable execution service instead of returning `501 NotImplemented`.",
+        "At least one focused API server test starts or uses a runtime-backed durable JavaScript session and proves cancel or terminate returns a typed lifecycle-control response.",
+        "The response includes generated lifecycle-control fields such as operation, outcome, lifecycle status, request identifier, and inspection links when available.",
+        "Missing durable sessions return the existing typed not-found API response.",
+        "Non-durable live session IDs preserve existing live Petri-compatible lifecycle behavior.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "dynamic-workflows-cell-real-backend-api-lifecycle-control-002",
+      "title": "Pause and Resume Durable Sessions with Typed Outcomes",
+      "description": "As an HTTP client managing a durable JavaScript Factory Session, I want pause and resume to return typed success or invalid-state responses so that generated clients can react without parsing strings.",
+      "acceptanceCriteria": [
+        "`POST /factory-sessions/{session_id}/pause` routes durable session IDs through the durable lifecycle service boundary and returns a typed lifecycle-control response or typed invalid-state/conflict response.",
+        "`POST /factory-sessions/{session_id}/resume` routes durable session IDs through the durable lifecycle service boundary and returns a typed lifecycle-control response or typed invalid-state/conflict response.",
+        "Terminal sessions produce the generated terminal-session or invalid-state lifecycle-control vocabulary rather than an untyped server error.",
+        "Fixture-backed fake service coverage is acceptable for pause/resume states that cannot yet be produced by the real runtime, but HTTP behavior must still be proven at the API boundary.",
+        "Non-durable live session IDs continue to use the existing live Petri-compatible pause/resume behavior.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "dynamic-workflows-cell-real-backend-api-lifecycle-control-003",
+      "title": "Approve and Retry Dispatch Through the Durable Boundary",
+      "description": "As an HTTP client resolving gated or failed durable work, I want approve and retry-dispatch to use the same typed lifecycle-control API boundary so that all lifecycle operations behave consistently.",
+      "acceptanceCriteria": [
+        "`POST /factory-sessions/{session_id}/approve` normalizes the request through shared API surface code and delegates durable session IDs to the durable lifecycle service.",
+        "`POST /factory-sessions/{session_id}/retry-dispatch` normalizes the request through shared API surface code and delegates durable session IDs to the durable lifecycle service.",
+        "Approve and retry-dispatch responses use generated lifecycle-control success, no-op, invalid-state, terminal-session, or conflict shapes as appropriate for the scenario.",
+        "Fixture-backed fake service scenarios cover approve and retry-dispatch when real runtime scenarios for guarded approvals or retryable provider dispatches are not yet available.",
+        "The API does not introduce standalone workflow-run route families or `/workflow-previews` expansion for these controls.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "dynamic-workflows-cell-real-backend-api-lifecycle-control-004",
+      "title": "Preserve Typed Control Errors and Request-Id Semantics",
+      "description": "As a generated-client consumer, I want lifecycle-control failures and request-id replays to use stable typed API shapes so that client error handling is deterministic.",
+      "acceptanceCriteria": [
+        "Validation failures, missing durable sessions, terminal-session controls, invalid-state controls, and request-id conflicts map to generated typed API response shapes with existing HTTP status semantics.",
+        "Missing durable sessions use the existing not-found API shape rather than a lifecycle-specific ad hoc error.",
+        "Idempotent request-id replay returns the same typed lifecycle-control result for the same control tuple where the service supports replay.",
+        "Conflicting request-id reuse returns the generated conflict response vocabulary without mutating session state.",
+        "Error responses preserve operation, outcome, status, and inspection-link fields when the service result provides them.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "dynamic-workflows-cell-real-backend-api-lifecycle-control-005",
+      "title": "Keep Lifecycle Contract and Mappers Synchronized",
+      "description": "As a maintainer of the public Factory Session API, I want lifecycle-control route contracts and mappers to stay aligned so that generated Go and TypeScript clients receive stable typed responses.",
+      "acceptanceCriteria": [
+        "If lifecycle-control route, schema, response, or error refs need correction, the authored OpenAPI fragments are updated and `make generate-api` synchronizes generated Go and TypeScript clients.",
+        "API surface mapper tests cover lifecycle-control request normalization and response/error shaping for success, no-op or terminal-session, conflict, and not-found cases.",
+        "Contract tests cover the existing lifecycle-control route family under `/factory-sessions/{session_id}` and the generated lifecycle-control response vocabulary.",
+        "The deferred-route regression no longer treats lifecycle-control routes as unsupported future routes; only genuinely unsupported future routes remain deferred.",
+        "Public vocabulary remains Factory Session lifecycle-control vocabulary and does not expose internal Petri-net terms or standalone workflow-run nouns.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 5,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "dynamic-workflows-cell-real-backend-api-lifecycle-control-006",
+      "title": "Protect Prior Durable Read and Inspection Parity",
+      "description": "As a maintainer extending durable Factory Session parity, I want lifecycle-control wiring to preserve start, read, result, event, dispatch, and artifact behavior so that the new controls do not regress completed slices.",
+      "acceptanceCriteria": [
+        "Focused regression coverage proves durable JavaScript start, list, get, result, and event read/reconnect behavior still passes after lifecycle-control wiring.",
+        "Focused regression coverage proves durable dispatch and artifact list/detail reads still pass after lifecycle-control wiring.",
+        "Tests demonstrate lifecycle-control calls do not remove stable inspection links for session, result, dispatch, artifact, or event reads when those links are available.",
+        "Website inspection parity and live-provider bridge parity are recorded as named follow-up cells if encountered rather than implemented in this lane.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 6,
+      "passes": true,
+      "notes": ""
+    }
+  ]
+}
