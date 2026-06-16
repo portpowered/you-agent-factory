@@ -6,6 +6,25 @@ import { semanticWorkflowDashboardSnapshot } from "../../../components/dashboard
 import { FactorySessionDetailPanel } from "./factory-session-detail-panel";
 
 const durableJavaScriptSessionID = "dur-sess-js-run-n-001";
+const durableJavaScriptMissingSessionID = "dur-sess-js-missing-001";
+const durableJavaScriptErrorSessionID = "dur-sess-js-error-001";
+
+function renderFactorySessionDetailPanel(sessionID: string) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        gcTime: Infinity,
+        retry: false,
+      },
+    },
+  });
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <FactorySessionDetailPanel sessionID={sessionID} />
+    </QueryClientProvider>
+  );
+}
 
 export default {
   title: "you-agent-factory/Current Selection/Factory Session Detail Panel",
@@ -94,22 +113,7 @@ export const DurableJavaScriptSessionInspectionDetails = {
       snapshot: semanticWorkflowDashboardSnapshot,
     },
   },
-  render: () => {
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: {
-          gcTime: Infinity,
-          retry: false,
-        },
-      },
-    });
-
-    return (
-      <QueryClientProvider client={queryClient}>
-        <FactorySessionDetailPanel sessionID="dur-sess-js-success-002" />
-      </QueryClientProvider>
-    );
-  },
+  render: () => renderFactorySessionDetailPanel("dur-sess-js-success-002"),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
@@ -170,22 +174,7 @@ export const DurableJavaScriptSessionSummary = {
       snapshot: semanticWorkflowDashboardSnapshot,
     },
   },
-  render: () => {
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: {
-          gcTime: Infinity,
-          retry: false,
-        },
-      },
-    });
-
-    return (
-      <QueryClientProvider client={queryClient}>
-        <FactorySessionDetailPanel sessionID={durableJavaScriptSessionID} />
-      </QueryClientProvider>
-    );
-  },
+  render: () => renderFactorySessionDetailPanel(durableJavaScriptSessionID),
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
 
@@ -196,5 +185,99 @@ export const DurableJavaScriptSessionSummary = {
     await expect(canvas.findAllByText("Running")).resolves.toHaveLength(2);
     await expect(canvas.findByText("verify")).resolves.toBeVisible();
     await expect(canvas.findByText("plan, verify")).resolves.toBeVisible();
+  },
+};
+
+export const DurableJavaScriptSessionLoading = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: `/factory-sessions/${durableJavaScriptSessionID}`,
+          response: () => new Promise<never>(() => undefined),
+        },
+      ],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => renderFactorySessionDetailPanel(durableJavaScriptSessionID),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await expect(
+      await canvas.findByRole("heading", { name: "Factory session runtime" }),
+    ).toBeVisible();
+    await expect(canvas.getByRole("status")).toHaveTextContent(
+      "Loading factory session runtime…",
+    );
+    await expect(canvas.getByText(durableJavaScriptSessionID)).toBeVisible();
+  },
+};
+
+export const DurableJavaScriptSessionNotFound = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: `/factory-sessions/${durableJavaScriptMissingSessionID}`,
+          response: {
+            body: {
+              code: "NOT_FOUND",
+              message: "Factory session not found.",
+            },
+            status: 404,
+            statusText: "Not Found",
+          },
+        },
+      ],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => renderFactorySessionDetailPanel(durableJavaScriptMissingSessionID),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await expect(
+      await canvas.findByRole("heading", { name: "Factory session runtime" }),
+    ).toBeVisible();
+    await expect(canvas.findByRole("status")).resolves.toHaveTextContent(
+      "This factory session is no longer available.",
+    );
+    await expect(canvas.queryByText("Runtime")).toBeNull();
+  },
+};
+
+export const DurableJavaScriptSessionError = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: `/factory-sessions/${durableJavaScriptErrorSessionID}`,
+          response: {
+            body: {
+              code: "INTERNAL_ERROR",
+              message: "Factory session runtime unavailable.",
+            },
+            status: 500,
+            statusText: "Internal Server Error",
+          },
+        },
+      ],
+      snapshot: semanticWorkflowDashboardSnapshot,
+    },
+  },
+  render: () => renderFactorySessionDetailPanel(durableJavaScriptErrorSessionID),
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+
+    await expect(
+      await canvas.findByRole("heading", { name: "Factory session runtime" }),
+    ).toBeVisible();
+    await expect(canvas.findByRole("alert")).resolves.toHaveTextContent(
+      "Factory session runtime unavailable.",
+    );
   },
 };

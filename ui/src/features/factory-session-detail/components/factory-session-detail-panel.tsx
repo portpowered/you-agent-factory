@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type { components } from "../../../api/generated/openapi";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 import {
@@ -43,15 +45,15 @@ export function FactorySessionDetailPanel({
       </div>
 
       {detailState.status === "loading" ? (
-        <DetailCopy>{messages.loadingState}</DetailCopy>
+        <StatusNotice>{messages.loadingState}</StatusNotice>
       ) : null}
       {detailState.status === "not-found" ? (
-        <DetailCopy>{messages.missingState}</DetailCopy>
+        <StatusNotice>{messages.missingState}</StatusNotice>
       ) : null}
       {detailState.status === "error" ? (
-        <AlertPanel tone="danger">
+        <StatusNotice tone="error">
           {detailState.message ?? messages.errorState}
-        </AlertPanel>
+        </StatusNotice>
       ) : null}
       {detailState.status === "success" ? (
         <FactorySessionRuntimeSections
@@ -328,6 +330,24 @@ function Metric({ label, value }: { label: string; value: string }) {
       <DashboardLabel>{label}</DashboardLabel>
       <DashboardText>{value}</DashboardText>
     </div>
+  );
+}
+
+function StatusNotice({
+  children,
+  tone = "default",
+}: {
+  children: ReactNode;
+  tone?: "default" | "error";
+}) {
+  return (
+    <AlertPanel
+      radius="lg"
+      role={tone === "error" ? "alert" : "status"}
+      tone={tone === "error" ? "danger" : "info"}
+    >
+      {children}
+    </AlertPanel>
   );
 }
 

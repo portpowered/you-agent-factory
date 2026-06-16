@@ -112,7 +112,9 @@ describe("FactorySessionDetailPanel", () => {
       <FactorySessionDetailPanel sessionID="session-beta" />,
     );
 
-    expect(screen.getByText("Loading factory session runtime…")).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain(
+      "Loading factory session runtime…",
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Runtime")).toBeTruthy();
@@ -323,7 +325,73 @@ describe("FactorySessionDetailPanel", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("boom")).toBeTruthy();
+      expect(screen.getByRole("alert").textContent).toContain("boom");
+    });
+    expect(screen.getByText("session-beta")).toBeTruthy();
+  });
+
+  it("shows a not-found state when the durable JavaScript session is missing", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "NOT_FOUND",
+          message: "Factory session not found.",
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 404,
+          statusText: "Not Found",
+        },
+      ),
+    );
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="dur-sess-js-missing-001" />,
+    );
+
+    expect(screen.getByRole("status").textContent).toContain(
+      "Loading factory session runtime…",
+    );
+    expect(screen.getByText("dur-sess-js-missing-001")).toBeTruthy();
+
+    await waitFor(() => {
+      expect(screen.getByRole("status").textContent).toContain(
+        "This factory session is no longer available.",
+      );
+    });
+    expect(screen.queryByText("Runtime")).toBeNull();
+  });
+
+  it("renders zh-CN durable JavaScript loading and missing states", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "NOT_FOUND",
+          message: "Factory session not found.",
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 404,
+          statusText: "Not Found",
+        },
+      ),
+    );
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel
+        locale="zh-CN"
+        sessionID="dur-sess-js-missing-001"
+      />,
+    );
+
+    expect(screen.getByRole("status").textContent).toContain(
+      "正在加载工厂会话运行时…",
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("status").textContent).toContain(
+        "此工厂会话已不可用。",
+      );
     });
   });
 });
