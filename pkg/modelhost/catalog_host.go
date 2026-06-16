@@ -16,12 +16,14 @@ import (
 
 // CatalogHost is the catalog-backed model host implementation for process-level wiring.
 type CatalogHost struct {
-	mu      sync.Mutex
-	assets  AssetGateway
-	opts    Options
-	leases  map[string]*trackedLease
-	byModel map[string]map[string]struct{}
-	seq     uint64
+	mu            sync.Mutex
+	assets        AssetGateway
+	opts          Options
+	supervisor    SupervisorConfig
+	leases        map[string]*trackedLease
+	byModel       map[string]map[string]struct{}
+	runtimeSlots  map[string]*supervisedRuntime
+	seq           uint64
 }
 
 type trackedLease struct {
@@ -39,10 +41,12 @@ func NewCatalogHost(assets AssetGateway, opts Options) *CatalogHost {
 		opts.SourceResolver = DefaultManagedRuntimeSourceResolverAdapter()
 	}
 	return &CatalogHost{
-		assets:  assets,
-		opts:    opts,
-		leases:  make(map[string]*trackedLease),
-		byModel: make(map[string]map[string]struct{}),
+		assets:       assets,
+		opts:         opts,
+		supervisor:   normalizeSupervisorConfig(opts.Supervisor),
+		leases:       make(map[string]*trackedLease),
+		byModel:      make(map[string]map[string]struct{}),
+		runtimeSlots: make(map[string]*supervisedRuntime),
 	}
 }
 
@@ -78,7 +82,8 @@ func (h *CatalogHost) InspectReadiness(
 	if err != nil {
 		return ReadinessSnapshot{}, err
 	}
-	return ClassifyReadiness(identity, inspection, false), nil
+	snapshot := ClassifyReadiness(identity, inspection, false)
+	return h.overlaySupervisedReadiness(snapshot, inspection, runtimeCfg, modelName), nil
 }
 
 func (h *CatalogHost) Pull(
@@ -137,13 +142,38 @@ func (h *CatalogHost) AcquireLease(
 	if err := ctx.Err(); err != nil {
 		return Lease{}, cancelError(err)
 	}
-	snapshot, err := h.InspectReadiness(ctx, runtimeCfg, modelName)
+	entry, err := h.catalogEntry(runtimeCfg, modelName)
 	if err != nil {
 		return Lease{}, err
+	}
+	identity := h.identityFromCatalog(runtimeCfg, entry)
+	inspection, err := h.assets.InspectRuntimeCache(ctx, runtimeCfg, modelName)
+	if err != nil {
+		return Lease{}, err
+	}
+	snapshot := h.overlaySupervisedReadiness(ClassifyReadiness(identity, inspection, false), inspection, runtimeCfg, modelName)
+	if requiresSupervisedBackend(snapshot.Identity) && inspection.Installed {
+		worker, workerErr := h.localWorkerForModel(runtimeCfg, modelName)
+		if workerErr != nil {
+			return Lease{}, workerErr
+		}
+		spec, specErr := h.supervisor.ServerStartBuilder(snapshot.Identity, inspection, worker)
+		if specErr != nil {
+			return Lease{}, specErr
+		}
+		slot := h.runtimeSlot(runtimeCfg, modelName)
+		if err := slot.ensureReady(ctx, spec); err != nil {
+			return Lease{}, err
+		}
+		snapshot = slot.readinessOverlay(snapshot.Identity, snapshot)
 	}
 	if snapshot.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
 		cause := readinessCause(snapshot)
 		return Lease{}, &ReadinessError{Snapshot: snapshot, Cause: cause}
+	}
+	endpoint := ""
+	if requiresSupervisedBackend(snapshot.Identity) {
+		endpoint = h.runtimeSlot(runtimeCfg, modelName).endpointValue()
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -153,6 +183,7 @@ func (h *CatalogHost) AcquireLease(
 	lease := Lease{
 		ID:       leaseID,
 		Identity: snapshot.Identity,
+		Endpoint: endpoint,
 		Holder:   strings.TrimSpace(opts.Holder),
 	}
 	h.leases[leaseID] = &trackedLease{
@@ -185,14 +216,14 @@ func (h *CatalogHost) ReleaseLease(_ context.Context, leaseID string) error {
 }
 
 func (h *CatalogHost) Unload(
-	_ context.Context,
+	ctx context.Context,
 	runtimeCfg *factoryconfig.LoadedFactoryConfig,
 	modelName string,
 ) error {
 	modelKey := canonicalModelKey(modelName)
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	if leases := h.byModel[modelKey]; len(leases) > 0 {
+		h.mu.Unlock()
 		return &ReadinessError{
 			Snapshot: ReadinessSnapshot{
 				Identity:       Identity{Name: strings.TrimSpace(modelName)},
@@ -203,8 +234,87 @@ func (h *CatalogHost) Unload(
 			Cause: ErrCapacityExhausted,
 		}
 	}
-	_ = runtimeCfg
+	slotKey := h.runtimeSlotKey(runtimeCfg, modelName)
+	slot := h.runtimeSlots[slotKey]
+	delete(h.runtimeSlots, slotKey)
+	h.mu.Unlock()
+	if slot != nil {
+		return slot.stop(ctx)
+	}
 	return nil
+}
+
+// Shutdown stops all supervised runtimes owned by the host.
+func (h *CatalogHost) Shutdown(ctx context.Context) error {
+	if h == nil {
+		return nil
+	}
+	h.mu.Lock()
+	slots := make([]*supervisedRuntime, 0, len(h.runtimeSlots))
+	for _, slot := range h.runtimeSlots {
+		slots = append(slots, slot)
+	}
+	h.runtimeSlots = make(map[string]*supervisedRuntime)
+	h.mu.Unlock()
+
+	var firstErr error
+	for _, slot := range slots {
+		if err := slot.stop(ctx); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+func (h *CatalogHost) overlaySupervisedReadiness(
+	snapshot ReadinessSnapshot,
+	inspection CacheInspection,
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	modelName string,
+) ReadinessSnapshot {
+	if !requiresSupervisedBackend(snapshot.Identity) || !inspection.Installed {
+		return snapshot
+	}
+	slot := h.runtimeSlot(runtimeCfg, modelName)
+	return slot.readinessOverlay(snapshot.Identity, snapshot)
+}
+
+func (h *CatalogHost) runtimeSlot(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) *supervisedRuntime {
+	key := h.runtimeSlotKey(runtimeCfg, modelName)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	slot, ok := h.runtimeSlots[key]
+	if ok {
+		return slot
+	}
+	slot = &supervisedRuntime{cfg: h.supervisor}
+	h.runtimeSlots[key] = slot
+	return slot
+}
+
+func (h *CatalogHost) runtimeSlotKey(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) string {
+	return runtimeIdentityKey(runtimeCfg) + "|" + canonicalModelKey(modelName)
+}
+
+func (h *CatalogHost) localWorkerForModel(
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	modelName string,
+) (*interfaces.WorkerConfig, error) {
+	if runtimeCfg == nil || runtimeCfg.FactoryConfig() == nil {
+		return nil, fmt.Errorf("runtime config is not available")
+	}
+	target := canonicalModelKey(modelName)
+	for _, worker := range runtimeCfg.FactoryConfig().Workers {
+		if canonicalModelKey(worker.Model) != target {
+			continue
+		}
+		if strings.TrimSpace(worker.ModelLocality) != interfaces.ModelLocalityLocal {
+			continue
+		}
+		copied := worker
+		return &copied, nil
+	}
+	return nil, fmt.Errorf("local model worker not found for %q", modelName)
 }
 
 func (h *CatalogHost) catalogEntry(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (localmodels.CatalogEntry, error) {

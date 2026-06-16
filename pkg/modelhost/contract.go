@@ -92,6 +92,7 @@ type Lease struct {
 // Options configures catalog-backed host construction.
 type Options struct {
 	SourceResolver SourceResolver
+	Supervisor     SupervisorConfig
 }
 
 // SourceResolution classifies which backend source satisfies one managed runtime.
