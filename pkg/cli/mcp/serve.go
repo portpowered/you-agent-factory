@@ -19,6 +19,8 @@ import (
 // ServeConfig holds CLI inputs for the stdio MCP server.
 type ServeConfig struct {
 	FixtureCatalogPath string
+	RuntimeBacked      bool
+	ProjectRoot        string
 	Service            factorysessionexecution.Service
 	Stdin              *os.File
 	Stdout             *os.File
@@ -55,6 +57,20 @@ func resolveServeService(cfg ServeConfig) (factorysessionexecution.Service, erro
 	if cfg.Service != nil {
 		return cfg.Service, nil
 	}
+	if cfg.RuntimeBacked {
+		projectRoot, err := resolveProjectRoot(cfg.ProjectRoot)
+		if err != nil {
+			return nil, err
+		}
+		service, err := factorysessionexecution.NewExecutionService(
+			factorysessionexecution.ExecutionProviderJavaScriptRuntime,
+			factorysessionexecution.ServiceConfig{ProjectRoot: projectRoot},
+		)
+		if err != nil {
+			return nil, fmt.Errorf("initialize runtime-backed execution service: %w", err)
+		}
+		return service, nil
+	}
 	catalogPath, err := resolveFixtureCatalogPath(cfg.FixtureCatalogPath)
 	if err != nil {
 		return nil, err
@@ -64,6 +80,17 @@ func resolveServeService(cfg ServeConfig) (factorysessionexecution.Service, erro
 		return nil, fmt.Errorf("load durable session fixture catalog: %w", err)
 	}
 	return service, nil
+}
+
+func resolveProjectRoot(explicit string) (string, error) {
+	if trimmed := strings.TrimSpace(explicit); trimmed != "" {
+		return trimmed, nil
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("resolve current working directory: %w", err)
+	}
+	return cwd, nil
 }
 
 func resolveFixtureCatalogPath(explicit string) (string, error) {
@@ -96,6 +123,8 @@ func resolveFixtureCatalogPath(explicit string) (string, error) {
 // NewServeCommand constructs `you mcp serve`.
 func NewServeCommand() *cobra.Command {
 	var fixtureCatalogPath string
+	var runtimeBacked bool
+	var projectRoot string
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Start the Factory Session MCP stdio server",
@@ -103,14 +132,26 @@ func NewServeCommand() *cobra.Command {
 			"Hosts launch this command as a child process and communicate through newline-delimited " +
 			"JSON-RPC on stdin and stdout. The default backing service is the deterministic durable " +
 			"session fixture catalog used by workflow CLI commands.\n\n" +
+			"Use --runtime to select the shared durable JavaScript runtime execution service instead " +
+			"of the fixture catalog. Runtime mode requires workflow sources to resolve from the MCP " +
+			"host working directory or an explicit --project-root.\n\n" +
 			"Set the MCP host working directory to the project root where workflow sources and the " +
 			"fixture catalog resolve. See `you docs mcp-hosts` for host-specific configuration examples.",
 		Example: "  # Typical MCP host child-process launch.\n" +
 			"  you mcp serve\n\n" +
 			"  # Explicit fixture catalog for offline smoke outside the repository root.\n" +
-			"  you mcp serve --fixture-catalog ./pkg/factorysessionexecution/fixtures/durable-session-contract-fixtures.json",
+			"  you mcp serve --fixture-catalog ./pkg/factorysessionexecution/fixtures/durable-session-contract-fixtures.json\n\n" +
+			"  # Runtime-backed serve against live durable JavaScript execution.\n" +
+			"  you mcp serve --runtime",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return RunServe(cmd.Context(), ServeConfig{FixtureCatalogPath: fixtureCatalogPath})
+			if runtimeBacked && strings.TrimSpace(fixtureCatalogPath) != "" {
+				return fmt.Errorf("cannot combine --runtime with --fixture-catalog")
+			}
+			return RunServe(cmd.Context(), ServeConfig{
+				FixtureCatalogPath: fixtureCatalogPath,
+				RuntimeBacked:      runtimeBacked,
+				ProjectRoot:        projectRoot,
+			})
 		},
 	}
 	cmd.Flags().StringVar(
@@ -118,6 +159,18 @@ func NewServeCommand() *cobra.Command {
 		"fixture-catalog",
 		"",
 		"optional path to durable-session contract fixtures; defaults to the catalog discovered from the current working directory",
+	)
+	cmd.Flags().BoolVar(
+		&runtimeBacked,
+		"runtime",
+		false,
+		"select the shared durable JavaScript runtime execution service instead of the fixture catalog",
+	)
+	cmd.Flags().StringVar(
+		&projectRoot,
+		"project-root",
+		"",
+		"project root for workflow source resolution in --runtime mode; defaults to the current working directory",
 	)
 	return cmd
 }

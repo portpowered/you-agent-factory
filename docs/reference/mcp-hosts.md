@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-06-15
+last-modified: 2026-06-17
 doc-id: agent-factory/guides/mcp-hosts
 ---
 
@@ -42,6 +42,45 @@ Factory Session fixture catalog used by `you workflow run`, `you workflow
 status`, and `you workflow result`. Hosts therefore exercise the current MCP
 tool surface without requiring a live factory HTTP server for the first install
 smoke path.
+
+## Serve Mode Selection
+
+`you mcp serve` supports two documented backing modes. Both expose the same
+`you.factory_session.*` tool catalog and Factory Session vocabulary; only the
+execution service behind the MCP client changes.
+
+| Mode | Launch args | Backing service | Typical use |
+|------|-------------|-----------------|-------------|
+| Fixture-backed (default) | `["mcp", "serve"]` | Durable session fixture catalog | Deterministic install smoke, fixture-driven async polling, and offline host validation |
+| Runtime-backed | `["mcp", "serve", "--runtime"]` | Shared durable JavaScript runtime service | Live INLINE_WORKFLOW execution with real async start, status polling, and terminal or not-ready result reads |
+
+Fixture-backed mode discovers the contract fixture catalog from the MCP host
+working directory or accepts `--fixture-catalog <path>` when the catalog is
+outside the project root.
+
+Runtime-backed mode resolves workflow sources from the host working directory or
+from an explicit `--project-root`. Do not combine `--runtime` with
+`--fixture-catalog`.
+
+### Runtime-backed host JSON
+
+Use this shape when the host should call live Factory Session tools through the
+shared durable runtime service:
+
+```json
+{
+  "mcpServers": {
+    "you-agent-factory": {
+      "command": "/absolute/path/to/you",
+      "args": ["mcp", "serve", "--runtime"],
+      "cwd": "/absolute/path/to/project"
+    }
+  }
+}
+```
+
+Keep the default fixture-backed configuration from the generic host pattern
+above when deterministic fixture scenarios are sufficient.
 
 ## Canonical Factory Session MCP Tools
 
@@ -222,7 +261,8 @@ It does not claim API parity, dashboard parity, or real-runtime execution parity
 
 | Host / path | Coverage | What this batch proves |
 |-------------|----------|------------------------|
-| Shared `you mcp serve` stdio server (all host examples depend on this) | **Automated in-repo** | Stdio JSON-RPC install path: `initialize`, `tools/list`, `you.factory_session.validate_source`, `you.factory_session.start_async`, `you.factory_session.get`, and not-ready `you.factory_session.get_result` through `pkg/cli/mcp/serve_smoke_test.go` |
+| Shared `you mcp serve` stdio server (fixture-backed default; all host examples depend on this) | **Automated in-repo** | Stdio JSON-RPC install path: `initialize`, `tools/list`, `you.factory_session.validate_source`, `you.factory_session.start_async`, `you.factory_session.get`, and not-ready `you.factory_session.get_result` through `pkg/cli/mcp/serve_smoke_test.go` |
+| Runtime-backed `you mcp serve --runtime` stdio server | **Automated in-repo** | Same tool catalog with live durable JavaScript execution: async start, status polling, and not-ready or terminal `you.factory_session.get_result` through `pkg/cli/mcp/serve_runtime_smoke_test.go` |
 | Generic stdio MCP client config pattern | **Documented manual** | Host respawn, config reload, and tool discovery through a real MCP client UI; shared server/tool behavior is automated above |
 | Cursor (`.cursor/mcp.json` or `~/.cursor/mcp.json`) | **Documented manual** | Same command/args/cwd as the generic pattern plus Cursor-specific config path and reload behavior |
 | Codex | **Documented manual** | Same stdio child-process launch through Codex MCP settings; no Codex-specific in-repo automation in this batch |
@@ -230,13 +270,14 @@ It does not claim API parity, dashboard parity, or real-runtime execution parity
 | Kiro | **Documented manual** | Same stdio child-process launch through Kiro MCP settings; no Kiro-specific in-repo automation in this batch |
 | Gemini | **Documented manual** | Same stdio child-process launch through Gemini MCP settings; no Gemini-specific in-repo automation in this batch |
 | HTTP or SSE MCP transport | **Unsupported this batch** | `you mcp serve` is stdio-only for this install lane |
-| Live factory HTTP runtime backing | **Out of scope for install smoke** | Default `you mcp serve` uses the durable session fixture catalog; real-runtime swap-in is not part of this proof matrix |
+| Live factory HTTP runtime backing | **Out of scope for MCP install smoke** | Distinct from runtime-backed MCP serve; stdio hosts do not need a factory HTTP server for either documented serve mode |
+| Dashboard or website MCP session inspection | **Out of scope for this lane** | Proves stdio host setup only; no website assertions in install smoke |
 
 ### Automated In-Repo Proof
 
-`pkg/cli/mcp/serve_smoke_test.go` exercises the documented install path through
-`mcpcli.RunServe` with injected `ServeConfig.Service` and piped stdio (an
-equivalent MCP-client harness, not a host-specific config file):
+`pkg/cli/mcp/serve_smoke_test.go` exercises the documented fixture-backed install
+path through `mcpcli.RunServe` with injected `ServeConfig.Service` and piped
+stdio (an equivalent MCP-client harness, not a host-specific config file):
 
 | Step | MCP method / tool | Behavior proved |
 |------|-------------------|-----------------|
@@ -250,9 +291,23 @@ equivalent MCP-client harness, not a host-specific config file):
 The same file also proves missing `--fixture-catalog` startup failure when no
 service is injected.
 
+`pkg/cli/mcp/serve_runtime_smoke_test.go` exercises runtime-backed serve through
+`mcpcli.RunServe` with `ServeConfig.RuntimeBacked: true` and no injected service
+so the smoke path uses the same wiring as `you mcp serve --runtime`:
+
+| Step | MCP method / tool | Behavior proved |
+|------|-------------------|-----------------|
+| Handshake | `initialize` | Protocol version `2024-11-05` |
+| Discovery | `tools/list` | Canonical Factory Session tools present |
+| Async start | `tools/call` → `you.factory_session.start_async` | INLINE_WORKFLOW async session start through the shared runtime service |
+| Status poll | `tools/call` → `you.factory_session.get` | Non-terminal `RUNNING` or terminal `SUCCEEDED` status for the started session id |
+| Result poll | `tools/call` → `you.factory_session.get_result` | Typed `factory_session.result.not_ready` while running or terminal result after completion |
+
 This automation proves the shared MCP server and tool invocation surface that
-every host example above depends on. It does **not** prove host UI discovery,
-host config file parsing, or live factory HTTP runtime execution.
+every host example above depends on. Fixture-backed smoke does **not** depend on
+runtime mode. Runtime-backed smoke does **not** prove host UI discovery, host
+config file parsing, dashboard inspection, or live factory HTTP runtime
+execution.
 
 ### Manual Host Smoke Sequence
 
@@ -302,7 +357,8 @@ The following gaps are **not** shared MCP blockers for this batch:
 |-----|----------------------------|
 | Host UI config reload and tool discovery (Cursor, Codex, OpenCode, Kiro, Gemini) | Host-only wrapper behavior; shared server/tool invocation is automated above |
 | HTTP or SSE MCP transport | Unsupported transport choice for `you mcp serve` in this batch, not a startup failure on the documented stdio path |
-| Live factory HTTP runtime backing for `you mcp serve` | Deliberate fixture-catalog default for install smoke; swapping in real runtime is a separate bounded batch, not a blocker discovered while proving the documented install path |
+| Live factory HTTP runtime backing for MCP hosts | Distinct from runtime-backed MCP serve; neither documented serve mode requires a factory HTTP server |
+| Dashboard or website MCP session inspection | Website and dashboard surfaces are outside this stdio install lane |
 
 No additional shared MCP startup, registration, or invocation follow-up batch is
 required before customers can configure hosts against the current `you mcp serve`

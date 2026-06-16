@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -115,7 +116,7 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_TimeoutInterruptsProviderInf
 			ChildExecutorMode: fse.ChildExecutorModeLive,
 		},
 		RequestedPolicy: map[string]any{
-			"maxRunDurationMs": 50,
+			"maxRunDurationMs": 200,
 		},
 	})
 	if err != nil {
@@ -132,9 +133,8 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_TimeoutInterruptsProviderInf
 	if read.Failure == nil || read.Failure.Reason != "WORKFLOW_RUNTIME_TIMEOUT" {
 		t.Fatalf("session failure = %#v, want WORKFLOW_RUNTIME_TIMEOUT", read.Failure)
 	}
-	if provider.inferContextsHonored() == 0 {
-		t.Fatal("provider Infer did not observe timed-out workflow context")
-	}
+	provider.waitForInferStart(t)
+	waitForInferContextHonored(t, provider, 2*time.Second)
 }
 
 type blockingFixtureProvider struct {
@@ -169,6 +169,27 @@ func (m *blockingFixtureProvider) inferContextsHonored() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.contextCanceled
+}
+
+func (m *blockingFixtureProvider) waitForInferStart(t *testing.T) {
+	t.Helper()
+	select {
+	case <-m.inferStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("provider Infer did not start before timeout assertion")
+	}
+}
+
+func waitForInferContextHonored(t *testing.T, provider *blockingFixtureProvider, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if provider.inferContextsHonored() > 0 {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("provider Infer did not observe timed-out workflow context")
 }
 
 func TestJavaScriptRuntimeService_ParallelLiveChildFailure_ProjectsTypedFailureAndPreservesSiblings(t *testing.T) {

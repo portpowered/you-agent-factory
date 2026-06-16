@@ -1,32 +1,31 @@
 {
-  "project": "Prove Live-Provider-Backed JavaScript Session Inspection Through the CLI",
-  "branchName": "dynamic-workflows-cell-cli-live-dispatch-smoke",
-  "description": "Add one focused CLI smoke lane that starts a durable JavaScript FactorySession through the real backend using a live-provider child-execution scenario, then proves stable session status, result, dispatch/provider-session correlation, and artifact linkage through existing `you workflow` inspection commands without widening into MCP host setup or website work.",
+  "project": "Prove Live Runtime-Backed Factory Session Status and Result Through `you mcp serve`",
+  "branchName": "dynamic-workflows-cell-mcp-session-serve",
+  "description": "Add one documented runtime-backed `you mcp serve` mode that reuses the existing Factory Session MCP tools against the shared durable JavaScript runtime service, prove one focused async start/status/result smoke path through stdio MCP serve, and keep the existing fixture-backed serve smoke as the default additive path.",
   "context": {
-    "customerAsk": "Prove live-provider-backed JavaScript session inspection through the CLI by adding a focused smoke path that starts a real-backend durable JavaScript session, reads stable status and terminal result through existing `you workflow` commands, proves bridged child dispatch/provider-session/artifact inspection, preserves fake-child coverage, and avoids widening into MCP host setup or website inspection.",
-    "problem": "Current dynamic-workflows coverage proves fake-child and fixture-backed CLI inspection paths, but it does not yet prove that the shared execution-service CLI path can start and inspect one live-provider-backed JavaScript session against the real backend. Without that smoke proof, maintainers cannot verify that CLI dispatch inspection exposes real bridged-child evidence such as provider-session correlation and artifact linkage rather than only fake-path projections.",
-    "solution": "Use the existing `you workflow` CLI and shared execution-service backend path to add one additive live-provider smoke scenario. Keep the public model on FactorySession, Dispatch, Provider Session, and artifacts, expose only the minimal extra CLI inspection fields needed for reviewer-verifiable proof, preserve existing fake-backed regression coverage, and record MCP live smoke or website inspection as the deferred next follow-up instead of broadening this batch."
+    "customerAsk": "Document and prove a runtime-backed `you mcp serve` mode that exposes the existing Factory Session MCP tools against the shared durable JavaScript backend, with focused smoke coverage for async start, status polling, and result retrieval.",
+    "problem": "The current stdio MCP serve path is tied to the deterministic durable session fixture catalog. Hosts can discover tools and exercise fixture-backed async behavior, but they cannot yet prove that the same MCP surface works against the shared live durable runtime service without widening into HTTP/SSE transport, dashboard inspection, or a broader MCP redesign.",
+    "solution": "Add one explicit serve-mode selection for `you mcp serve` so operators can opt into the shared runtime-backed durable execution service while preserving the existing default fixture-backed mode. Reuse the existing Factory Session MCP catalog and shared runtime service, document the runtime mode in the MCP docs, and add one smoke path that starts an async JavaScript Factory Session, polls status, and reads a not-ready or terminal result through the runtime mode."
   },
   "acceptanceCriteria": [
-    "A focused CLI smoke path can start a durable JavaScript FactorySession through existing `you workflow` commands using one live-provider child-execution scenario backed by the real backend.",
-    "The same session ID and terminal outcome are observable across CLI run, status, and result reads for that smoke path.",
-    "CLI dispatch inspection proves the execution used the non-fake bridged child path by exposing stable evidence such as execution mode, provider-session correlation, and artifact linkage when the runtime produces those records.",
-    "If current CLI output hides needed shared dispatch or artifact fields, the implementation exposes only the smallest existing CLI rendering or JSON-backed assertion surface required for customer-testable inspection.",
-    "Existing fake-child or fixture-backed CLI inspection coverage continues to pass, proving the live-provider smoke path is additive and does not regress prior run, dispatch, result, or artifact behavior.",
-    "The lane explicitly defers MCP host setup and website inspection and does not widen into a broader multi-surface parity sweep.",
-    "Quality gate: typecheck, lint, and focused CLI/backend tests pass, including the provided verification commands or their equivalent narrowed replacements."
+    "`you mcp serve` offers one documented runtime-backed mode that selects the shared durable JavaScript runtime service while preserving the existing default fixture-backed mode",
+    "In runtime-backed mode, the existing `you.factory_session.*` MCP tools can start one async Factory Session, poll session status, and read a not-ready or terminal result through the shared durable runtime path",
+    "The Factory Session MCP catalog, public vocabulary, and tool ownership remain under the existing `pkg/mcp/factorysession` registry with no MCP-only session model or duplicate session logic",
+    "Focused smoke coverage proves one runtime-backed stdio host path for async start, status polling, and result retrieval without requiring unrelated API or website changes",
+    "Existing fixture-backed `you mcp serve` smoke continues to pass, proving the runtime-backed serve path is additive rather than a replacement",
+    "Scope remains explicitly bounded to live runtime-backed stdio MCP serve and does not widen into website inspection, HTTP/SSE transport, or a broad CLI/API/event parity sweep",
+    "Typecheck, lint, and focused tests pass for the changed CLI, MCP, runtime, and documentation surfaces"
   ],
   "userStories": [
     {
-      "id": "dynamic-workflows-cell-cli-live-dispatch-smoke-001",
-      "title": "Start and re-read a live-provider JavaScript session through the CLI",
-      "description": "As a maintainer validating dynamic workflows from the command line, I want one focused CLI smoke path that starts a durable JavaScript FactorySession against the real backend and then re-reads its status and result so that I can prove the existing `you workflow` commands work end to end for a live-provider child-execution scenario.",
+      "id": "dynamic-workflows-cell-mcp-session-serve-001",
+      "title": "Select runtime-backed MCP serve mode",
+      "description": "As an operator configuring an MCP host, I want one explicit way to start `you mcp serve` against the shared runtime-backed execution service so that I can use the existing Factory Session MCP tools with live durable JavaScript execution.",
       "acceptanceCriteria": [
-        "A focused smoke scenario starts a durable JavaScript FactorySession through the existing shared execution-service CLI path instead of a fake-only path.",
-        "The smoke scenario uses one live-provider child-execution fixture or focused mock provider that exercises the live-provider child bridge without requiring MCP host startup.",
-        "CLI reads for run, status, and result all resolve to the same session ID.",
-        "CLI status and result output show a stable terminal outcome for the started session.",
-        "Focused tests prove the CLI path uses real backend session execution state rather than a fixture-only command stub.",
+        "`you mcp serve` supports one documented runtime-backed mode in addition to the existing default fixture-backed mode",
+        "The runtime-backed mode selects the shared `factorysessionexecution.RuntimeService` rather than a fixture catalog",
+        "The default `you mcp serve` behavior remains fixture-backed unless the runtime-backed mode is explicitly selected",
+        "Runtime mode selection does not rename or remove the existing `you.factory_session.*` tools",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -35,15 +34,15 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-cli-live-dispatch-smoke-002",
-      "title": "Expose bridged dispatch and artifact proof in CLI inspection",
-      "description": "As a maintainer inspecting a live-provider-backed session, I want CLI dispatch and artifact inspection to surface enough shared data to prove the dispatch came from the bridged child path so that provider-session correlation and output linkage are customer-testable.",
+      "id": "dynamic-workflows-cell-mcp-session-serve-002",
+      "title": "Expose live async Factory Session behavior through existing MCP tools",
+      "description": "As an MCP host using the Factory Session catalog, I want `you.factory_session.start_async`, `you.factory_session.get`, and `you.factory_session.get_result` to operate against the shared durable runtime service so that live session execution can be observed through the documented stdio MCP surface.",
       "acceptanceCriteria": [
-        "CLI dispatch inspection for the smoke session shows evidence of the non-fake bridged child path, such as live execution mode, provider-session references, or equivalent shared dispatch markers when produced by the runtime.",
-        "CLI inspection preserves FactorySession, Dispatch, Provider Session, and artifact vocabulary instead of inventing a live-smoke-specific model.",
-        "When the runtime produces output artifacts or linkage, CLI inspection exposes stable artifact linkage for the related dispatch without leaking transport-specific internals.",
-        "If existing human-readable output does not expose enough shared fields, the implementation extends only the smallest existing CLI rendering or JSON-backed assertion surface needed for reviewer-verifiable inspection.",
-        "Focused tests assert the shared dispatch/artifact proof path through existing CLI commands.",
+        "In runtime-backed mode, `you.factory_session.start_async` can start one durable JavaScript Factory Session through the shared runtime service",
+        "`you.factory_session.get` returns observable status updates for that live session, including a non-terminal status while work is still running when the scenario reaches that state",
+        "`you.factory_session.get_result` returns the existing not-ready behavior while the session is incomplete and returns the terminal result once the session finishes",
+        "The live MCP path reuses the existing Factory Session tool registry and shared durable execution service instead of duplicating session lifecycle logic inside the MCP layer",
+        "Public vocabulary remains Factory Session, Dispatch, Provider Session, and artifact oriented",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -52,14 +51,15 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-cli-live-dispatch-smoke-003",
-      "title": "Preserve existing CLI inspection coverage while adding the live smoke lane",
-      "description": "As a maintainer guarding the current CLI inspection contract, I want fake-child and fixture-backed coverage to stay green while the new live-provider smoke path is added so that the new lane proves additive behavior rather than replacing existing regression protection.",
+      "id": "dynamic-workflows-cell-mcp-session-serve-003",
+      "title": "Prove one focused runtime-backed MCP smoke path",
+      "description": "As a maintainer shipping MCP host support, I want one focused smoke test for runtime-backed `you mcp serve` so that the live stdio serve mode is proven without requiring a broader host or transport matrix.",
       "acceptanceCriteria": [
-        "Existing fake-child or fixture-backed CLI inspection scenarios for run, dispatch, result, and artifacts still pass after the live-provider smoke path lands.",
-        "The live-provider smoke path is additive and does not remove or weaken prior inspection assertions for fake-backed scenarios.",
-        "Focused regression coverage proves the new lane does not change prior CLI behavior for sessions that do not use the live-provider bridge.",
-        "The customer-provided focused verification commands are included in the implementation evidence or updated to equivalent narrower commands if package ownership changes during implementation.",
+        "Focused smoke coverage spawns `you mcp serve` in runtime-backed mode and discovers the existing Factory Session MCP catalog",
+        "The smoke flow starts one async JavaScript Factory Session through `you.factory_session.start_async`",
+        "The smoke flow polls the same session through `you.factory_session.get` until it observes either a non-terminal status plus not-ready result or terminal completion plus terminal result",
+        "The smoke flow reads the result through `you.factory_session.get_result` and proves the runtime-backed serve mode is using the shared durable backend rather than the fixture catalog",
+        "Smoke coverage stays focused on stdio MCP serve behavior and does not require unrelated API, SSE, or dashboard assertions",
         "Typecheck passes",
         "Tests pass"
       ],
@@ -68,15 +68,16 @@
       "notes": ""
     },
     {
-      "id": "dynamic-workflows-cell-cli-live-dispatch-smoke-004",
-      "title": "Record explicit scope boundaries and deferred follow-up",
-      "description": "As a reviewer approving a narrow dynamic-workflows cell, I want the implementation and verification scope to record what this lane proves and what it intentionally defers so that the batch does not silently widen into MCP or dashboard parity work.",
+      "id": "dynamic-workflows-cell-mcp-session-serve-004",
+      "title": "Preserve additive fixture coverage and document the scope boundary",
+      "description": "As a maintainer extending MCP install proof, I want the existing fixture-backed smoke path and customer documentation to remain valid so that the runtime-backed serve lane is additive and its scope stays explicit.",
       "acceptanceCriteria": [
-        "Implementation notes, test names, or nearby planning comments make clear that this lane proves CLI live-dispatch smoke through the shared execution-service path and does not add MCP host setup or website inspection.",
-        "Deferred follow-up is recorded explicitly as either MCP live smoke on `you mcp serve` or website inspection, rather than broadening this batch into both.",
-        "Any projection or mapper changes remain transport-neutral in shared session/dispatch/artifact boundaries instead of forking CLI-only dispatch semantics.",
-        "Reviewable evidence shows the lane stayed on direct CLI-observable behavior and avoided unrelated cleanup or broader parity sweeps.",
-        "Typecheck passes"
+        "Existing fixture-backed `you mcp serve` smoke continues to pass without being rewritten to depend on the live runtime-backed mode",
+        "Customer-facing MCP documentation describes when to use the default fixture-backed mode versus the runtime-backed mode and how the runtime mode fits the stdio host setup",
+        "Documentation keeps Factory Session vocabulary and does not introduce a separate MCP-only session concept",
+        "Documentation explicitly records that this lane proves live runtime-backed stdio MCP serve only and defers website inspection, HTTP/SSE transport, and broader host-matrix expansion",
+        "Typecheck passes",
+        "Tests pass"
       ],
       "priority": 4,
       "passes": true,
