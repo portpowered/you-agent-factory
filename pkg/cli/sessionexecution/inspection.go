@@ -83,8 +83,14 @@ func renderDispatchesHuman(output io.Writer, result factoryapi.ListFactorySessio
 			dispatch.Status,
 			dispatch.DispatchKind,
 		)
+		if provider := optionalString(dispatch.Provider); provider != "" {
+			line += " provider=" + provider
+		}
 		if refs := formatProviderSessionRefs(dispatch.ProviderSessionRefs); refs != "" {
-			line += " (provider: " + refs + ")"
+			line += " (provider session: " + refs + ")"
+		}
+		if ids := formatStringSlice(dispatch.OutputArtifactIds); ids != "" {
+			line += " artifacts=" + ids
 		}
 		if _, err := fmt.Fprintf(output, "%s\n", line); err != nil {
 			return err
@@ -100,6 +106,26 @@ func formatProviderSessionRefs(refs *[]factoryapi.LoadableProviderSessionRef) st
 	parts := make([]string, 0, len(*refs))
 	for _, ref := range *refs {
 		if trimmed := strings.TrimSpace(ref.Id); trimmed != "" {
+			parts = append(parts, trimmed)
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
+func optionalString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
+}
+
+func formatStringSlice(values *[]string) string {
+	if values == nil || len(*values) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(*values))
+	for _, value := range *values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
 			parts = append(parts, trimmed)
 		}
 	}
@@ -176,6 +202,9 @@ func renderArtifactsHuman(output io.Writer, result factoryapi.ListFactorySession
 			name = strings.TrimSpace(*artifact.Label)
 		}
 		line := fmt.Sprintf("- %s %s %s", artifact.Id, name, artifact.Kind)
+		if dispatchID := optionalString(artifact.DispatchId); dispatchID != "" {
+			line += " dispatch=" + dispatchID
+		}
 		if artifact.RetrievalRef != nil && strings.TrimSpace(artifact.RetrievalRef.Href) != "" {
 			line += " (" + strings.TrimSpace(artifact.RetrievalRef.Href) + ")"
 		}

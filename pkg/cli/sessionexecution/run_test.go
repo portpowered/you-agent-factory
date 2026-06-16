@@ -651,6 +651,174 @@ func TestRunSync_LiveProviderJavaScriptSession_ReReadStatusAndResult(t *testing.
 	}
 }
 
+func TestLiveProviderJavaScriptSession_DispatchAndArtifactCLIInspection(t *testing.T) {
+	service, projectRoot := newLiveChildCLIJavaScriptRuntimeService(t)
+	backend := sessionexecution.ExecutionBackendConfig{
+		Provider:    string(fse.ExecutionProviderJavaScriptRuntime),
+		ProjectRoot: projectRoot,
+	}
+
+	var runOutput bytes.Buffer
+	if err := sessionexecution.RunSync(context.Background(), sessionexecution.RunConfig{
+		StartConfig: sessionexecution.StartConfig{
+			Mode:              sessionexecution.ExecutionModeSync,
+			RequestID:         "req-cli-live-child-dispatch-smoke-001",
+			WorkflowName:      "agent-run-fake-child",
+			ArgsJSON:          `{"subject":"workflows"}`,
+			ChildExecutorMode: fse.ChildExecutorModeLive,
+		},
+		ExecutionBackendConfig: backend,
+		JSON:                   true,
+		Output:                 &runOutput,
+		Service:                service,
+	}); err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+
+	var runResponse factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.Unmarshal(bytes.TrimSpace(runOutput.Bytes()), &runResponse); err != nil {
+		t.Fatalf("decode run output: %v", err)
+	}
+	sessionID := runResponse.SessionId
+	if sessionID == "" {
+		t.Fatal("sessionId = empty, want durable session id")
+	}
+
+	var dispatchesHuman bytes.Buffer
+	if err := sessionexecution.RunDispatches(context.Background(), sessionexecution.DispatchesConfig{
+		SessionID:              sessionID,
+		ExecutionBackendConfig: backend,
+		Output:                 &dispatchesHuman,
+		Service:                service,
+	}); err != nil {
+		t.Fatalf("RunDispatches human: %v", err)
+	}
+	dispatchText := dispatchesHuman.String()
+	for _, want := range []string{
+		"dispatches (1):",
+		"- dispatch-1 COMPLETED",
+		"provider=mock",
+		"provider session: live-provider-session-1",
+		"artifacts=child-artifact-1",
+	} {
+		if !strings.Contains(dispatchText, want) {
+			t.Fatalf("dispatch human output missing %q:\n%s", want, dispatchText)
+		}
+	}
+
+	var dispatchesJSON bytes.Buffer
+	if err := sessionexecution.RunDispatches(context.Background(), sessionexecution.DispatchesConfig{
+		SessionID:              sessionID,
+		ExecutionBackendConfig: backend,
+		JSON:                   true,
+		Output:                 &dispatchesJSON,
+		Service:                service,
+	}); err != nil {
+		t.Fatalf("RunDispatches json: %v", err)
+	}
+
+	var dispatchList factoryapi.ListFactorySessionDispatchesResponse
+	if err := json.Unmarshal(bytes.TrimSpace(dispatchesJSON.Bytes()), &dispatchList); err != nil {
+		t.Fatalf("decode dispatches json: %v", err)
+	}
+	if dispatchList.SessionId != sessionID {
+		t.Fatalf("dispatch sessionId = %q, want %q", dispatchList.SessionId, sessionID)
+	}
+	if dispatchList.Dispatches == nil || len(dispatchList.Dispatches) != 1 {
+		t.Fatalf("dispatches = %#v, want one dispatch", dispatchList.Dispatches)
+	}
+	dispatch := dispatchList.Dispatches[0]
+	if dispatch.Id != "dispatch-1" {
+		t.Fatalf("dispatch id = %q, want dispatch-1", dispatch.Id)
+	}
+	if dispatch.Provider == nil || *dispatch.Provider != "mock" {
+		t.Fatalf("dispatch provider = %#v, want mock", dispatch.Provider)
+	}
+	if dispatch.ProviderSessionRefs == nil || len(*dispatch.ProviderSessionRefs) != 1 ||
+		(*dispatch.ProviderSessionRefs)[0].Id != "live-provider-session-1" {
+		t.Fatalf("providerSessionRefs = %#v", dispatch.ProviderSessionRefs)
+	}
+	if dispatch.OutputArtifactIds == nil || len(*dispatch.OutputArtifactIds) != 1 ||
+		(*dispatch.OutputArtifactIds)[0] != "child-artifact-1" {
+		t.Fatalf("outputArtifactIds = %#v, want [child-artifact-1]", dispatch.OutputArtifactIds)
+	}
+
+	listed, err := service.ListDispatches(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches: %v", err)
+	}
+	wantDispatchJSON, err := json.Marshal(factorysession.ListDispatchesResponseToAPI(listed))
+	if err != nil {
+		t.Fatalf("marshal shared projection: %v", err)
+	}
+	if !bytes.Equal(bytes.TrimSpace(dispatchesJSON.Bytes()), wantDispatchJSON) {
+		t.Fatalf("CLI dispatches JSON diverged from shared ListDispatchesResponseToAPI projection")
+	}
+
+	var artifactsHuman bytes.Buffer
+	if err := sessionexecution.RunArtifacts(context.Background(), sessionexecution.ArtifactsConfig{
+		SessionID:              sessionID,
+		ExecutionBackendConfig: backend,
+		Output:                 &artifactsHuman,
+		Service:                service,
+	}); err != nil {
+		t.Fatalf("RunArtifacts human: %v", err)
+	}
+	artifactText := artifactsHuman.String()
+	wantArtifactHref := "/factory-sessions/" + sessionID + "/artifacts/child-artifact-1"
+	for _, want := range []string{
+		"artifacts (1):",
+		"- child-artifact-1",
+		"dispatch=dispatch-1",
+		wantArtifactHref,
+	} {
+		if !strings.Contains(artifactText, want) {
+			t.Fatalf("artifact human output missing %q:\n%s", want, artifactText)
+		}
+	}
+
+	var artifactsJSON bytes.Buffer
+	if err := sessionexecution.RunArtifacts(context.Background(), sessionexecution.ArtifactsConfig{
+		SessionID:              sessionID,
+		ExecutionBackendConfig: backend,
+		JSON:                   true,
+		Output:                 &artifactsJSON,
+		Service:                service,
+	}); err != nil {
+		t.Fatalf("RunArtifacts json: %v", err)
+	}
+
+	var artifactList factoryapi.ListFactorySessionArtifactsResponse
+	if err := json.Unmarshal(bytes.TrimSpace(artifactsJSON.Bytes()), &artifactList); err != nil {
+		t.Fatalf("decode artifacts json: %v", err)
+	}
+	if artifactList.SessionId != sessionID {
+		t.Fatalf("artifact sessionId = %q, want %q", artifactList.SessionId, sessionID)
+	}
+	if artifactList.Artifacts == nil || len(artifactList.Artifacts) != 1 {
+		t.Fatalf("artifacts = %#v, want one artifact", artifactList.Artifacts)
+	}
+	artifact := artifactList.Artifacts[0]
+	if artifact.Id != "child-artifact-1" {
+		t.Fatalf("artifact id = %q, want child-artifact-1", artifact.Id)
+	}
+	if artifact.DispatchId == nil || *artifact.DispatchId != "dispatch-1" {
+		t.Fatalf("artifact dispatchId = %#v, want dispatch-1", artifact.DispatchId)
+	}
+
+	listedArtifacts, err := service.ListArtifacts(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListArtifacts: %v", err)
+	}
+	wantArtifactJSON, err := json.Marshal(factorysession.ListArtifactsResponseToAPI(listedArtifacts))
+	if err != nil {
+		t.Fatalf("marshal shared artifact projection: %v", err)
+	}
+	if !bytes.Equal(bytes.TrimSpace(artifactsJSON.Bytes()), wantArtifactJSON) {
+		t.Fatalf("CLI artifacts JSON diverged from shared ListArtifactsResponseToAPI projection")
+	}
+}
+
 func TestRunSync_JavaScriptRuntimeBackend_UsesRealExecutionServiceWithoutFixtureStub(t *testing.T) {
 	projectRoot := setupCLIAgentRunWorkflowFixture(t)
 

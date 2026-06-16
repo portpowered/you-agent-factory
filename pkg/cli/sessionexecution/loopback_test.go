@@ -445,7 +445,7 @@ func TestRunDispatches_AsyncPetriRunFixtureIncludesProviderSessionRefs(t *testin
 	if !strings.Contains(text, "dispatches (1):") {
 		t.Fatalf("output = %q, want one dispatch", text)
 	}
-	if !strings.Contains(text, "provider: prov-sess-disp-petri-001") {
+	if !strings.Contains(text, "provider session: prov-sess-disp-petri-001") {
 		t.Fatalf("output missing provider session ref:\n%s", text)
 	}
 }
