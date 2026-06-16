@@ -13,8 +13,19 @@
 - Record deferred CLI/MCP/website follow-ups in `docs/internal/development/plans/dynamic-workflows/follow-up-cell-live-provider-dispatch-bridge-deferred.md` instead of widening the bridge lane.
 - When `make pkg-file-count` fails after adding bridge files, move provider code to `pkg/factorysessionexecution/livechild` and consolidate fixture tests rather than adding root package files; avoid importing `factorysessionexecution` from `livechild` tests (import cycle).
 - Select runtime-backed MCP serve via `you mcp serve --runtime`, which wires `factorysessionexecution.NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{ProjectRoot})` in `pkg/cli/mcp/serve.go`; default serve remains fixture-backed and rejects combining `--runtime` with `--fixture-catalog`.
+- Runtime-backed MCP async start/status/result tests live in `pkg/mcp/factorysession/runtime_execution_test.go` via `NewClientWithService(NewExecutionService(ExecutionProviderJavaScriptRuntime, ...))` and INLINE_WORKFLOW fixtures; cancel busy-loop sessions through direct service `Cancel` for cleanup.
 
-## 2026-06-17T00:00:00Z - dynamic-workflows-cell-mcp-session-serve-001
+---
+
+## 2026-06-17T19:50:00Z - dynamic-workflows-cell-mcp-session-serve-002
+- Proved runtime-backed `you.factory_session.start_async`, `you.factory_session.get`, and `you.factory_session.get_result` through the existing MCP tool handlers wired to `factorysessionexecution.NewExecutionService(ExecutionProviderJavaScriptRuntime, ...)`.
+- Added focused mock-client tests covering busy-loop RUNNING status with typed `factory_session.result.not_ready` envelopes and simple-final async completion through terminal status/result reads.
+- Files changed: `pkg/mcp/factorysession/runtime_execution_test.go`, `docs/internal/processes/api-relevant-files.md`.
+- **Learnings for future iterations:**
+  - Patterns discovered: story 002 needed no new MCP handler code because `session_start.go` / `session_read.go` already delegate to `factorysessionexecution.Service`; proving runtime mode belongs in MCP-layer tests with INLINE_WORKFLOW sources that fixtures cannot satisfy.
+  - Gotchas encountered: `make verify-fast` fails in this worktree when `tsc` is not on PATH; `go test ./pkg/mcp/factorysession/` is the focused verification path for MCP runtime behavior.
+  - Useful context: busy-loop runtime async sessions must be cancelled in tests to avoid leaking goroutines; reuse `runtime_execution_test.go` inline workflow fixture patterns from `pkg/factorysessionexecution/fixtures/`.
+---
 - Added `you mcp serve --runtime` to select the shared durable JavaScript runtime service via `factorysessionexecution.NewExecutionService(ExecutionProviderJavaScriptRuntime, ...)`, with optional `--project-root` and rejection when combined with `--fixture-catalog`.
 - Default serve behavior remains fixture-backed; existing Factory Session MCP tool registration is unchanged.
 - Files changed: `pkg/cli/mcp/{serve,serve_test}.go`, `docs/internal/processes/api-relevant-files.md`.
