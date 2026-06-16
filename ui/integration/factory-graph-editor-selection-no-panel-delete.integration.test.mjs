@@ -190,6 +190,35 @@ async function assertNoPanelTopologyDeleteInCurrentSelection(page) {
   }
 }
 
+async function marqueeSelectGraphNode(page, nodeLocator) {
+  const nodeBox = await nodeLocator.boundingBox();
+  if (!nodeBox) {
+    throw new Error("Expected graph node to have a bounding box for marquee selection.");
+  }
+
+  const viewport = page.getByRole("region", { name: "Work graph viewport" });
+  const viewportBox = await viewport.boundingBox();
+  if (!viewportBox) {
+    throw new Error("Expected graph viewport to have a bounding box for marquee selection.");
+  }
+
+  const startX = Math.max(viewportBox.x + 4, nodeBox.x - 12);
+  const startY = Math.max(viewportBox.y + 4, nodeBox.y - 12);
+  const endX = Math.min(
+    viewportBox.x + viewportBox.width - 4,
+    nodeBox.x + nodeBox.width + 12,
+  );
+  const endY = Math.min(
+    viewportBox.y + viewportBox.height - 4,
+    nodeBox.y + nodeBox.height + 12,
+  );
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(endX, endY);
+  await page.mouse.up();
+}
+
 async function enterGraphEditor(page) {
   await page.getByRole("button", { name: "Edit mode" }).click();
   const toolbar = page.getByRole("region", {
@@ -289,7 +318,7 @@ describe.sequential("factory graph editor selection panel delete browser integra
   );
 
   it(
-    "stages topology removal via graph delete tool and keeps worker configuration editable",
+    "stages topology removal via graph selection batch delete and keeps worker configuration editable",
     async () => {
       const server = await startFactoryApiServer({
         apiPort: preview.apiPort,
@@ -326,32 +355,32 @@ describe.sequential("factory graph editor selection panel delete browser integra
           .getByTestId("rf__node-worker:spare")
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
-        const deleteToolButton = browserPage.page
-          .getByRole("article", { name: "Factory graph" })
-          .getByRole("button", { name: "Delete" });
-        await deleteToolButton.scrollIntoViewIfNeeded();
-        await deleteToolButton.click();
-        expect(await deleteToolButton.getAttribute("aria-pressed")).toBe(
-          "true",
-        );
-
-        await browserPage.page
-          .getByRole("region", { name: "Work graph viewport" })
-          .click({ position: { x: 8, y: 8 } });
-
-        const spareGraphNode = browserPage.page.locator(
-          '[data-id="worker:spare"]',
-        );
-        await spareGraphNode.waitFor({
-          state: "visible",
-          timeout: uiInteractionTimeoutMs,
+        const deleteButton = toolbar.getByRole("button", {
+          name: "Delete, no graph items selected",
         });
-        await spareGraphNode.click();
+        await deleteButton.scrollIntoViewIfNeeded();
+        expect(await deleteButton.isDisabled()).toBe(true);
+
+        const spareGraphNode = browserPage.page.getByTestId(
+          "rf__node-worker:spare",
+        );
+        await marqueeSelectGraphNode(browserPage.page, spareGraphNode);
+
+        const batchDeleteButton = toolbar.getByRole("button", {
+          name: "Delete selected graph item",
+        });
+        await batchDeleteButton.scrollIntoViewIfNeeded();
+        expect(await batchDeleteButton.isDisabled()).toBe(false);
+        await batchDeleteButton.click();
 
         await expect
-          .poll(async () => await spareGraphNode.count(), {
-            timeout: uiInteractionTimeoutMs,
-          })
+          .poll(
+            async () =>
+              await browserPage.page.locator('[data-id="worker:spare"]').count(),
+            {
+              timeout: uiInteractionTimeoutMs,
+            },
+          )
           .toBe(0);
 
         expectNoBrowserErrors(

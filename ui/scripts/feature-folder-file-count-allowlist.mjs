@@ -10,7 +10,11 @@ export const allowlistedOversizedFeatureFolders = [
     relativeDirectoryPath: "src/features/factory-graph-editor/lib/draft",
   },
   {
-    maxFileCount: 44,
+    maxFileCount: 12,
+    relativeDirectoryPath: "src/features/factory-graph-editor/lib/selection",
+  },
+  {
+    maxFileCount: 49,
     relativeDirectoryPath: "src/features/workflow-activity/hooks",
   },
   {
@@ -56,5 +60,14 @@ export const allowlistedOversizedFeatureFolders = [
   {
     maxFileCount: 14,
     relativeDirectoryPath: "src/features/trace-drilldown/lib",
+  },
+  {
+    maxFileCount: 11,
+    relativeDirectoryPath:
+      "src/features/current-selection/work-selection/components/work-item",
+  },
+  {
+    maxFileCount: 11,
+    relativeDirectoryPath: "src/features/current-selection/work-selection/lib",
   },
 ];

@@ -190,7 +190,16 @@ export interface FactoryGraphEditorMessages {
   toolbarConnectDescription: string;
   toolbarConnectLabel: string;
   toolbarDeleteDescription: string;
+  toolbarDeleteDisabledNoSelectionDescription: string;
+  toolbarDeleteDisabledNoSelectionLabel: string;
+  toolbarDeleteDisabledNonDeletableDescription: string;
+  toolbarDeleteDisabledNonDeletableLabel: string;
   toolbarDeleteLabel: string;
+  toolbarDeleteMultiSelectionDescription: (count: number) => string;
+  toolbarDeleteMultiSelectionLabel: (count: number) => string;
+  toolbarDeleteSelectionDescription: string;
+  toolbarDeleteSingleSelectionDescription: string;
+  toolbarDeleteSingleSelectionLabel: string;
   toolbarRedoDescription: string;
   toolbarRedoLabel: string;
   toolbarResetLayoutDescription: string;
@@ -260,6 +269,9 @@ export interface FactoryGraphEditorMessages {
   removalDocConfirmLabel: (displayLabel: string) => string;
   removalDocDescription: (targetPath: string) => string;
   removalDocTitle: (displayLabel: string) => string;
+  removalBatchConfirmLabel: (itemCount: number) => string;
+  removalBatchDescription: (itemCount: number) => string;
+  removalBatchTitle: (itemCount: number) => string;
   removalFallbackConfirmDescription: string;
   removalFallbackConfirmLabel: string;
   removalFallbackTitle: string;
@@ -789,7 +801,21 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarConnectDescription: "Connect",
       toolbarConnectLabel: "Connect",
       toolbarDeleteDescription: "Remove",
+      toolbarDeleteDisabledNoSelectionDescription:
+        "Select graph items to delete",
+      toolbarDeleteDisabledNoSelectionLabel: "Delete, no graph items selected",
+      toolbarDeleteDisabledNonDeletableDescription:
+        "Selected graph items cannot be removed",
+      toolbarDeleteDisabledNonDeletableLabel:
+        "Delete, selected items cannot be removed",
       toolbarDeleteLabel: "Delete",
+      toolbarDeleteMultiSelectionDescription: (count) =>
+        `Delete ${count} selected graph items`,
+      toolbarDeleteMultiSelectionLabel: (count) =>
+        `Delete ${count} selected graph items`,
+      toolbarDeleteSelectionDescription: "Delete selected graph items",
+      toolbarDeleteSingleSelectionDescription: "Delete selected graph item",
+      toolbarDeleteSingleSelectionLabel: "Delete selected graph item",
       toolbarRedoDescription: "Redo the last undone layout change",
       toolbarRedoLabel: "Redo",
       toolbarResetLayoutDescription:
@@ -914,6 +940,12 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       removalDocDescription: (targetPath) =>
         `This removes the bundled doc at ${targetPath} from the current factory draft.`,
       removalDocTitle: (displayLabel) => `Remove ${displayLabel} doc?`,
+      removalBatchConfirmLabel: (itemCount) =>
+        `Delete ${itemCount} selected graph items`,
+      removalBatchDescription: (itemCount) =>
+        `This removes ${itemCount} selected graph items from the current draft.`,
+      removalBatchTitle: (itemCount) =>
+        `Remove ${itemCount} selected graph items?`,
       removalFallbackConfirmDescription:
         "Remove this graph entity from the current draft.",
       removalFallbackConfirmLabel: "Delete entity",
@@ -1316,7 +1348,16 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       toolbarConnectDescription: "在图上连接节点",
       toolbarConnectLabel: "连接",
       toolbarDeleteDescription: "从图中删除节点或边",
+      toolbarDeleteDisabledNoSelectionDescription: "选择要删除的图项",
+      toolbarDeleteDisabledNoSelectionLabel: "删除，未选择图项",
+      toolbarDeleteDisabledNonDeletableDescription: "所选图项无法删除",
+      toolbarDeleteDisabledNonDeletableLabel: "删除，所选图项无法删除",
       toolbarDeleteLabel: "删除",
+      toolbarDeleteMultiSelectionDescription: (count) => `删除 ${count} 个所选图项`,
+      toolbarDeleteMultiSelectionLabel: (count) => `删除 ${count} 个所选图项`,
+      toolbarDeleteSelectionDescription: "删除所选图项",
+      toolbarDeleteSingleSelectionDescription: "删除所选图项",
+      toolbarDeleteSingleSelectionLabel: "删除所选图项",
       toolbarRedoDescription: "重做上一条已撤销的布局更改",
       toolbarRedoLabel: "重做",
       toolbarResetLayoutDescription: "将节点位置重置为已保存的共享布局基线",
@@ -1443,6 +1484,10 @@ const factoryGraphEditorMessagesByLocale: LocalizedMessageCatalog<FactoryGraphEd
       removalDocTitle: (displayLabel) => `移除 ${displayLabel} 文档？`,
       removalFallbackConfirmDescription: "从当前草稿中移除此图实体。",
       removalFallbackConfirmLabel: "删除实体",
+      removalBatchConfirmLabel: (itemCount) => `删除 ${itemCount} 个所选图项`,
+      removalBatchDescription: (itemCount) =>
+        `这将从当前草稿中移除 ${itemCount} 个所选图项。`,
+      removalBatchTitle: (itemCount) => `移除 ${itemCount} 个所选图项？`,
       removalFallbackTitle: "移除图实体？",
       removalWorkerAssignedReason: (workstationCount, workerLabel) =>
         `此工作者仍分配给 ${workstationCount} 个工作站。删除 ${workerLabel} 前，请重新分配或移除这些工作站。`,

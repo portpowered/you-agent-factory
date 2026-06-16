@@ -14,6 +14,17 @@ vi.mock("./react-flow-current-activity-card-graph-view-model", () => ({
     graphViewModelMock.useCurrentActivityGraphViewModel,
 }));
 
+function graphSelectionFixture() {
+  return {
+    state: {
+      primaryTarget: null,
+      selectedEdgeIds: new Set<string>(),
+      selectedNodeIds: new Set<string>(),
+    },
+    replaceSelection: vi.fn(),
+  };
+}
+
 function graphControllerFixture() {
   const layoutEdgeId =
     "workstation-output:workstation:review->work-state:story:done";
@@ -86,7 +97,11 @@ function graphControllerFixture() {
     },
     leaveControls: {},
     removalControls: {
+      canDeleteSelection: vi.fn(() => false),
+      confirm: vi.fn(),
       deleteEdge: vi.fn(),
+      pendingIntent: null,
+      requestSelectionBatchRemoval: vi.fn(() => ({ status: "empty" })),
     },
     saveControls: {},
     status: {},
@@ -132,6 +147,7 @@ describe("useCurrentActivityGraphCardViewModel waypoint state", () => {
       canonicalLayoutViewport: null,
       edges: [edge],
       graphKey: "graph-key",
+      graphSelection: graphSelectionFixture(),
       handleNodesChange: vi.fn(),
       initialFitViewKey: "graph-key",
       initialFitViewOptions: { padding: 0.18 },
@@ -177,6 +193,7 @@ describe("useCurrentActivityGraphCardViewModel visual groups", () => {
       canonicalLayoutViewport: null,
       edges: [],
       graphKey: "graph-key",
+      graphSelection: graphSelectionFixture(),
       handleNodesChange: vi.fn(),
       initialFitViewKey: "graph-key",
       initialFitViewOptions: { padding: 0.18 },
@@ -255,6 +272,7 @@ describe("useCurrentActivityGraphCardViewModel add placement", () => {
       canonicalLayoutViewport: null,
       edges: [],
       graphKey: "graph-key",
+      graphSelection: graphSelectionFixture(),
       handleNodesChange: vi.fn(),
       initialFitViewKey: "graph-key",
       initialFitViewOptions: { padding: 0.18 },

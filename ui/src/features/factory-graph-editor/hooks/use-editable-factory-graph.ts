@@ -18,6 +18,7 @@ import {
   type FactoryGraphOperationResult,
   projectFactoryGraphToReactFlow,
   removeFactoryGraphNode,
+  removeFactoryGraphSelection,
 } from "../lib/operations/factory-graph-operations";
 import { useFactoryGraphDraftState } from "./factory-graph-draft-hook";
 import { useFactoryGraphLayoutDraftState } from "./layout/factory-graph-layout-draft-hook";
@@ -122,6 +123,7 @@ export function useEditableFactoryGraph(
       moveLayoutNode: layoutDraftState.moveNode,
       moveLayoutNodesByDelta: layoutDraftState.moveNodesByDelta,
       removeNode: mutationActions.removeNode,
+      removeSelection: mutationActions.removeSelection,
       resetLayout: layoutDraftState.resetLayout,
       redoLayout: layoutDraftState.redoLayout,
       save: saveController.save,
@@ -192,6 +194,7 @@ function useEditableFactoryGraphState({
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: groups editable graph draft mutation actions behind one controller seam.
 function useEditableFactoryGraphMutationActions({
   baseFactoryDefinition,
   draftState,
@@ -282,6 +285,39 @@ function useEditableFactoryGraphMutationActions({
     draft: draftState.draft,
     locale,
   });
+  const removeSelection = useCallback(
+    (selection: { edgeIds: readonly string[]; nodeIds: readonly string[] }) => {
+      const result = applyDraftOperation(() =>
+        baseFactoryDefinition
+          ? removeFactoryGraphSelection({
+              baseFactoryDefinition,
+              draft: draftState.draft,
+              edgeIds: selection.edgeIds,
+              nodeIds: selection.nodeIds,
+              locale,
+            })
+          : missingFactoryResult(
+              "Load the current factory before removing graph selection.",
+            ),
+      );
+      if (result.ok) {
+        layoutDraftState.pruneLayoutHistoryForNodeIds(
+          draftState.graph.nodes
+            .filter((node) => !selection.nodeIds.includes(node.id))
+            .map((node) => node.id),
+        );
+      }
+      return result;
+    },
+    [
+      applyDraftOperation,
+      baseFactoryDefinition,
+      draftState.draft,
+      draftState.graph.nodes,
+      layoutDraftState,
+      locale,
+    ],
+  );
   const updateNodeField = useUpdateNodeFieldAction({
     baseFactoryDefinition,
     setBlockedOperation,
@@ -292,6 +328,7 @@ function useEditableFactoryGraphMutationActions({
     connectNodes,
     disconnectEdge,
     removeNode,
+    removeSelection,
     updateNodeField,
   };
 }

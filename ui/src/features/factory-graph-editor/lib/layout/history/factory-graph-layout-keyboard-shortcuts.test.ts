@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isFactoryGraphEditorDeleteSelectionKeyboardEvent,
   isFactoryGraphEditorRedoKeyboardEvent,
   isFactoryGraphEditorUndoKeyboardEvent,
   shouldHandleFactoryGraphEditorKeyboardShortcut,
@@ -32,13 +33,16 @@ describe("factory graph layout keyboard shortcuts", () => {
     const editable = document.createElement("div");
     editable.contentEditable = "true";
     const select = document.createElement("select");
-    document.body.append(editable, select);
+    const textarea = document.createElement("textarea");
+    document.body.append(editable, select, textarea);
 
     expect(shouldHandleFactoryGraphEditorKeyboardShortcut(editable)).toBe(false);
     expect(shouldHandleFactoryGraphEditorKeyboardShortcut(select)).toBe(false);
+    expect(shouldHandleFactoryGraphEditorKeyboardShortcut(textarea)).toBe(false);
 
     editable.remove();
     select.remove();
+    textarea.remove();
   });
 
   it("ignores non-element event targets", () => {
@@ -85,6 +89,33 @@ describe("factory graph layout keyboard shortcuts", () => {
         key: "y",
         metaKey: true,
         shiftKey: false,
+      }),
+    ).toBe(false);
+  });
+
+  it("detects delete and backspace keyboard events without modifier keys", () => {
+    expect(
+      isFactoryGraphEditorDeleteSelectionKeyboardEvent({
+        altKey: false,
+        ctrlKey: false,
+        key: "Delete",
+        metaKey: false,
+      }),
+    ).toBe(true);
+    expect(
+      isFactoryGraphEditorDeleteSelectionKeyboardEvent({
+        altKey: false,
+        ctrlKey: false,
+        key: "Backspace",
+        metaKey: false,
+      }),
+    ).toBe(true);
+    expect(
+      isFactoryGraphEditorDeleteSelectionKeyboardEvent({
+        altKey: false,
+        ctrlKey: true,
+        key: "Backspace",
+        metaKey: false,
       }),
     ).toBe(false);
   });

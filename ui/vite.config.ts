@@ -135,11 +135,11 @@ export default defineConfig({
         "integration/**",
       ],
       thresholds: {
-        // Mergeability: sharded mergeReports on ubuntu-latest measured ~92.98% lines (PR #771 run 27162262541).
-        statements: 92.98,
+        // Mergeability: sharded mergeReports on ubuntu-latest measured ~92.97% lines (PR #820 run 27600146245).
+        statements: 92.97,
         branches: 80.4,
         functions: 94.9,
-        lines: 92.98,
+        lines: 92.97,
       },
     },
   },

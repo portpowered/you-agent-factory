@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: viewport coverage keeps related mocked React Flow click paths together.
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { Edge, Node } from "@xyflow/react";
 import { type ReactNode, useEffect } from "react";
@@ -16,16 +17,25 @@ vi.mock("@xyflow/react", async () => {
       className,
       children,
       defaultViewport,
+      deleteKeyCode,
       edges,
       fitView,
       nodes,
       onEdgeClick,
       onInit,
       onNodeClick,
+      onPaneClick: _onPaneClick,
+      onSelectionChange: _onSelectionChange,
+      onSelectionStart: _onSelectionStart,
+      panOnDrag,
+      panOnScroll,
+      selectionOnDrag,
+      zoomOnScroll,
     }: {
       className?: string;
       children: ReactNode;
       defaultViewport?: { x: number; y: number; zoom: number };
+      deleteKeyCode?: string | null;
       edges?: Edge[];
       fitView?: boolean;
       nodes?: Node[];
@@ -35,7 +45,18 @@ vi.mock("@xyflow/react", async () => {
         getViewport: () => { x: number; y: number; zoom: number };
         setViewport: () => Promise<boolean>;
       }) => void;
+      onKeyDown?: (event: KeyboardEvent) => void;
       onNodeClick?: (_event: unknown, node: { id: string }) => void;
+      onPaneClick?: () => void;
+      onSelectionChange?: (params: {
+        edges: Edge[];
+        nodes: Node[];
+      }) => void;
+      onSelectionStart?: (event: { shiftKey: boolean }) => void;
+      panOnDrag?: boolean | number[];
+      panOnScroll?: boolean;
+      selectionOnDrag?: boolean;
+      zoomOnScroll?: boolean;
     }) => {
       useEffect(() => {
         onInit?.({
@@ -49,8 +70,19 @@ vi.mock("@xyflow/react", async () => {
         <div
           className={className}
           data-default-viewport={JSON.stringify(defaultViewport ?? null)}
+          data-delete-key-code={
+            deleteKeyCode === null
+              ? "null"
+              : deleteKeyCode === undefined
+                ? "unset"
+                : String(deleteKeyCode)
+          }
           data-fit-view={String(fitView ?? false)}
+          data-pan-on-drag={String(panOnDrag ?? "unset")}
+          data-pan-on-scroll={String(panOnScroll ?? "unset")}
+          data-selection-on-drag={String(selectionOnDrag ?? "unset")}
           data-testid="mock-react-flow"
+          data-zoom-on-scroll={String(zoomOnScroll ?? "unset")}
         >
           {(nodes ?? []).map((node) => (
             <button
@@ -387,6 +419,46 @@ describe("CurrentActivityGraphViewport", () => {
     expect(handleEditorEdgeClick).not.toHaveBeenCalled();
   });
 
+  it("uses selection-first React Flow gesture defaults and clears selection on Escape", async () => {
+    const clearGraphSelection = vi.fn();
+    const handleGraphSelectionChange = vi.fn();
+
+    renderViewport({
+      clearGraphSelection,
+      handleGraphSelectionChange,
+    });
+
+    const reactFlow = await screen.findByTestId("mock-react-flow");
+    expect(reactFlow.getAttribute("data-selection-on-drag")).toBe("true");
+    expect(reactFlow.getAttribute("data-pan-on-drag")).toBe("false");
+    expect(reactFlow.getAttribute("data-pan-on-scroll")).toBe("true");
+    expect(reactFlow.getAttribute("data-zoom-on-scroll")).toBe("false");
+    expect(reactFlow.getAttribute("data-delete-key-code")).toBe("null");
+
+    fireEvent.keyDown(
+      screen.getByRole("region", { name: "Work graph viewport" }),
+      { key: "Escape" },
+    );
+    expect(clearGraphSelection).toHaveBeenCalledTimes(1);
+  });
+
+  it("dispatches batch delete from Delete and Backspace when graph selection is deletable", async () => {
+    const deleteGraphSelection = vi.fn();
+
+    renderViewport({
+      canDeleteGraphSelection: true,
+      deleteGraphSelection,
+      editorMode: true,
+    });
+
+    const viewport = screen.getByRole("region", { name: "Work graph viewport" });
+
+    fireEvent.keyDown(viewport, { key: "Delete" });
+    fireEvent.keyDown(viewport, { key: "Backspace" });
+
+    expect(deleteGraphSelection).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps the current-activity graph shell and React Flow canvas flat", () => {
     renderViewport();
 
@@ -406,15 +478,26 @@ describe("CurrentActivityGraphViewport", () => {
 
 function renderViewport({
   activeTool = null,
+  canDeleteGraphSelection = false,
+  clearGraphSelection = vi.fn(),
+  deleteGraphSelection = vi.fn(),
   edges = [],
   editorMode = false,
+  handleGraphSelectionChange = vi.fn(),
   nodes = [],
   onEditorEdgeClick = vi.fn(),
   onEditorNodeClick = vi.fn(),
 }: {
   activeTool?: "add" | "connect" | "delete" | null;
+  canDeleteGraphSelection?: boolean;
+  clearGraphSelection?: () => void;
+  deleteGraphSelection?: () => void;
   edges?: Edge[];
   editorMode?: boolean;
+  handleGraphSelectionChange?: (params: {
+    edges: Edge[];
+    nodes: Node[];
+  }) => void;
   nodes?: Node[];
   onEditorEdgeClick?: (edgeId: string) => void;
   onEditorNodeClick?: (nodeId: string) => void;
@@ -424,6 +507,9 @@ function renderViewport({
   return render(
     <CurrentActivityGraphViewport
       addControls={{}}
+      canDeleteGraphSelection={canDeleteGraphSelection}
+      clearGraphSelection={clearGraphSelection}
+      deleteGraphSelection={deleteGraphSelection}
       editorControls={{
         activeTool,
         canInteract: true,
@@ -435,6 +521,7 @@ function renderViewport({
       }}
       edges={edges}
       flowContainerRef={flowContainerRef}
+      handleGraphSelectionChange={handleGraphSelectionChange}
       handleNodesChange={vi.fn()}
       hasPendingChanges={false}
       layoutControls={{

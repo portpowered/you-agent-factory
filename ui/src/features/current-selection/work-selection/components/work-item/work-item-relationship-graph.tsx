@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { AlertPanel, AlertPanelText } from "../../../../../components/ui";
 import { TraceRelationFlow } from "../../../../trace-drilldown/public";
 import type { useCurrentSelectionDispatchHistoryMessages } from "../../../base/components/presentation/current-selection-locale";
@@ -8,6 +9,27 @@ import {
 import type { SelectedWorkRelationshipGraph } from "../../lib/selected-work-relationship-graph";
 import { projectSelectedWorkRelationshipGraphToDashboardRelations } from "../../lib/selected-work-relationship-relations";
 import { FocusedRelationshipSummary } from "./work-item-relationship-summary";
+
+function workItemsByWorkIdFromRelationshipGraph(
+  relationshipGraph: SelectedWorkRelationshipGraph,
+) {
+  if (relationshipGraph.status !== "ready") {
+    return undefined;
+  }
+
+  const workItems = [
+    relationshipGraph.selectedWork,
+    ...relationshipGraph.relatedWork,
+  ].map((node) => ({
+    display_name: node.label,
+    state: node.state,
+    trace_id: node.traceID,
+    work_id: node.workID,
+    work_type_id: node.workTypeID,
+  }));
+
+  return new Map(workItems.map((workItem) => [workItem.work_id, workItem]));
+}
 
 export function WorkRelationshipsSection({
   activeTraceID,
@@ -32,6 +54,13 @@ export function WorkRelationshipsSection({
     projectSelectedWorkRelationshipGraphToDashboardRelations(
       readyRelationshipGraph,
     );
+  const workItemsByWorkId = useMemo(
+    () =>
+      relationshipGraph
+        ? workItemsByWorkIdFromRelationshipGraph(relationshipGraph)
+        : undefined,
+    [relationshipGraph],
+  );
   const graphStatus = relationshipGraph?.status ?? "loading";
 
   return (
@@ -64,6 +93,7 @@ export function WorkRelationshipsSection({
             onSelectWorkID={onSelectWorkID}
             relations={relationships}
             selectedWorkID={readyRelationshipGraph.selectedWork.workID}
+            workItemsByWorkId={workItemsByWorkId}
           />
           <FocusedRelationshipSummary
             activeTraceID={activeTraceID}

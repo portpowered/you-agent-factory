@@ -54,6 +54,10 @@ export interface EditableFactoryGraphViewModel {
     removeNode: (
       nodeId: string,
     ) => FactoryGraphOperationResult<FactoryGraphDraft>;
+    removeSelection: (selection: {
+      edgeIds: readonly string[];
+      nodeIds: readonly string[];
+    }) => FactoryGraphOperationResult<FactoryGraphDraft>;
     addEdgeWaypoint: (
       edgeId: string,
       position: { x: number; y: number },

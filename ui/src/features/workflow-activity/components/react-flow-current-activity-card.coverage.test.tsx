@@ -561,7 +561,9 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
       within(toolbar).getAllByRole("button", { name: "Add" }),
     ).toHaveLength(1);
     expect(
-      within(toolbar).getByRole("button", { name: "Delete" }),
+      within(toolbar).getByRole("button", {
+        name: "Delete, no graph items selected",
+      }),
     ).toBeTruthy();
   });
 
@@ -593,7 +595,6 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
   it("routes editor-mode graph viewport connection and selection callbacks", () => {
     const onConnect = vi.fn();
     const onEditorEdgeClick = vi.fn();
-    const onEditorNodeClick = vi.fn();
 
     renderViewport({
       editorMode: true,
@@ -613,7 +614,6 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
       ],
       onConnect,
       onEditorEdgeClick,
-      onEditorNodeClick,
     });
 
     expect(screen.getByTestId("valid-workstation-output").textContent).toBe(
@@ -625,7 +625,6 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Trigger connect" }));
     fireEvent.click(screen.getByRole("button", { name: "Trigger edge click" }));
-    fireEvent.click(screen.getByRole("button", { name: "Trigger node click" }));
 
     expect(onConnect).toHaveBeenCalledWith({
       source: "workstation:review",
@@ -634,6 +633,27 @@ describe("ReactFlowCurrentActivityCard coverage", () => {
       targetHandle: "work-state-input-target",
     });
     expect(onEditorEdgeClick).toHaveBeenCalledWith("edge-review-done");
+  });
+
+  it("routes delete-tool node clicks through the editor node callback", () => {
+    const onEditorNodeClick = vi.fn();
+
+    renderViewport({
+      activeTool: "delete",
+      editorMode: true,
+      nodes: [
+        {
+          data: { kind: "workstation" },
+          id: "workstation:review",
+          position: { x: 0, y: 0 },
+          type: "workstation",
+        },
+      ],
+      onEditorNodeClick,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Trigger node click" }));
+
     expect(onEditorNodeClick).toHaveBeenCalledWith("workstation:review");
   });
 
