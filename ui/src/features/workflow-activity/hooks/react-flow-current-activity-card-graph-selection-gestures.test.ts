@@ -29,10 +29,10 @@ function createGraphSelectionMock(): FactoryGraphEditorSelectionController {
 }
 
 describe("useCurrentActivityGraphEdgePresentation", () => {
-  it("routes edge selection changes through the graph selection controller", () => {
+  it("routes edge selection changes through the graph selection controller when gestures are disabled", () => {
     const graphSelection = createGraphSelectionMock();
     const { result } = renderHook(() =>
-      useCurrentActivityGraphEdgePresentation(graphSelection),
+      useCurrentActivityGraphEdgePresentation(graphSelection, false),
     );
 
     act(() => {
@@ -44,6 +44,24 @@ describe("useCurrentActivityGraphEdgePresentation", () => {
 
     expect(graphSelection.applyEdgeSelectChanges).toHaveBeenCalledWith([
       { type: "select", id: "edge-review-done", selected: true },
+    ]);
+  });
+
+  it("ignores edge select changes when React Flow selection gestures are enabled", () => {
+    const graphSelection = createGraphSelectionMock();
+    const { result } = renderHook(() =>
+      useCurrentActivityGraphEdgePresentation(graphSelection, true),
+    );
+
+    act(() => {
+      result.current.handleEdgesChange([
+        { type: "select", id: "edge-review-done", selected: true },
+        { type: "remove", id: "edge-review-done" },
+      ]);
+    });
+
+    expect(graphSelection.applyEdgeSelectChanges).toHaveBeenCalledWith([
+      { type: "remove", id: "edge-review-done" },
     ]);
   });
 });
@@ -112,6 +130,30 @@ describe("useCurrentActivityGraphSelectionGestures", () => {
       result.current.handleGraphSelectionChange(
         {
           nodes: [{ id: "workstation:review" }],
+          edges: [],
+        },
+        "react-flow-id",
+      );
+    });
+
+    expect(graphSelection.applyReactFlowSelection).not.toHaveBeenCalled();
+  });
+
+  it("skips duplicate React Flow selection callbacks that match editor-local state", () => {
+    const graphSelection = createGraphSelectionMock();
+    graphSelection.state = {
+      primaryTarget: { kind: "node", id: "workstation:plan" },
+      selectedEdgeIds: new Set(),
+      selectedNodeIds: new Set(["workstation:plan"]),
+    };
+    const { result } = renderHook(() =>
+      useCurrentActivityGraphSelectionGestures(graphSelection, true),
+    );
+
+    act(() => {
+      result.current.handleGraphSelectionChange(
+        {
+          nodes: [{ id: "workstation:plan" }],
           edges: [],
         },
         "react-flow-id",

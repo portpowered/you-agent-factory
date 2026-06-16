@@ -182,7 +182,7 @@ describe("current-activity-graph-selection-bridge-publisher", () => {
     expect(onSelectWorkstation).not.toHaveBeenCalled();
   });
 
-  it("publishes and syncs through the bridge publisher factory", () => {
+  it("publishes and syncs through the bridge publisher factory", async () => {
     const onSelectWorker = vi.fn();
     const publish = createCurrentActivityGraphSelectionBridgePublisher({
       onSelectDoc: vi.fn(),
@@ -198,6 +198,8 @@ describe("current-activity-graph-selection-bridge-publisher", () => {
       selectedNodeIds: new Set(["worker:writer"]),
       primaryTarget: { kind: "node", id: "worker:writer" },
     });
+
+    await Promise.resolve();
 
     expect(onSelectWorker).toHaveBeenCalledWith("writer");
     expect(

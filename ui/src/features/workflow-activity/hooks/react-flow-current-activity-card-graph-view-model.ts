@@ -445,8 +445,10 @@ export function useCurrentActivityGraphViewModel({
   });
   const { displayNodes, handleNodesChange } =
     useCurrentActivityGraphNodePresentation(baseNodes, graphSelection);
-  const { handleEdgesChange } =
-    useCurrentActivityGraphEdgePresentation(graphSelection);
+  const { handleEdgesChange } = useCurrentActivityGraphEdgePresentation(
+    graphSelection,
+    graphSelectionEnabled,
+  );
   const graphSelectionGestures = useCurrentActivityGraphSelectionGestures(
     graphSelection,
     graphSelectionEnabled,

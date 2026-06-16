@@ -2,6 +2,7 @@ import type { Edge, Node } from "@xyflow/react";
 
 import {
   addToFactoryGraphEditorSelection,
+  areFactoryGraphEditorSelectionStatesEqual,
   type FactoryGraphEditorSelectionItems,
   type FactoryGraphEditorSelectionState,
   type FactoryGraphEditorSelectionTarget,
@@ -95,4 +96,13 @@ export function applyFactoryGraphEditorReactFlowSelection(
   return mode === "add"
     ? addToFactoryGraphEditorSelection(state, items)
     : replaceFactoryGraphEditorSelection(state, items);
+}
+
+export function isFactoryGraphEditorReactFlowSelectionNoOp(
+  state: FactoryGraphEditorSelectionState,
+  items: FactoryGraphEditorSelectionItems,
+  mode: "add" | "replace",
+): boolean {
+  const nextState = applyFactoryGraphEditorReactFlowSelection(state, items, mode);
+  return areFactoryGraphEditorSelectionStatesEqual(state, nextState);
 }

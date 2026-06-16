@@ -136,10 +136,12 @@ export function createCurrentActivityGraphSelectionBridgePublisher(
 
   return (state: FactoryGraphEditorSelectionState) => {
     publishCurrentActivityGraphSelectionBridgeState(state);
-    syncCurrentActivityGraphSelectionToDashboard(
-      state,
-      handlers,
-      lastSyncedSignatureRef,
-    );
+    queueMicrotask(() => {
+      syncCurrentActivityGraphSelectionToDashboard(
+        state,
+        handlers,
+        lastSyncedSignatureRef,
+      );
+    });
   };
 }

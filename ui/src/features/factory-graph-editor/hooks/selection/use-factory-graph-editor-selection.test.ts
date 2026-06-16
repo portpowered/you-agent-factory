@@ -1,7 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { useFactoryGraphEditorSelection } from "./use-factory-graph-editor-selection";
+
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+}
 
 describe("useFactoryGraphEditorSelection", () => {
   it("exposes replace, add, remove, clear, and primary-target resolution", () => {
@@ -86,5 +90,42 @@ describe("useFactoryGraphEditorSelection", () => {
     });
 
     expect(result.current.isNodeSelected("workstation:done")).toBe(true);
+  });
+
+  it("defers onStateChange until after the selection commit and skips no-op updates", async () => {
+    const onStateChange = vi.fn();
+    const { result } = renderHook(() =>
+      useFactoryGraphEditorSelection({ onStateChange }),
+    );
+
+    act(() => {
+      result.current.replaceSelection({
+        nodeIds: ["workstation:plan"],
+      });
+    });
+
+    expect(onStateChange).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(onStateChange).toHaveBeenCalledTimes(1);
+    expect(onStateChange.mock.calls[0]?.[0].selectedNodeIds).toEqual(
+      new Set(["workstation:plan"]),
+    );
+
+    act(() => {
+      result.current.replaceSelection({
+        nodeIds: ["workstation:plan"],
+        primaryTarget: { kind: "node", id: "workstation:plan" },
+      });
+    });
+
+    await act(async () => {
+      await flushMicrotasks();
+    });
+
+    expect(onStateChange).toHaveBeenCalledTimes(1);
   });
 });

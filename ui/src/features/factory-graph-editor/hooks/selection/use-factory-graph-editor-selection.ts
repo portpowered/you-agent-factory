@@ -1,5 +1,5 @@
 import type { EdgeChange, NodeChange } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   addToFactoryGraphEditorSelection,
   applyFactoryGraphEditorEdgeSelectChanges,
@@ -53,36 +53,55 @@ export function useFactoryGraphEditorSelection(
   const onStateChangeRef = useRef(options.onStateChange);
   onStateChangeRef.current = options.onStateChange;
 
-  useEffect(() => {
-    onStateChangeRef.current?.(state);
-  }, [state]);
+  const commitSelectionState = useCallback(
+    (
+      updater: (
+        current: FactoryGraphEditorSelectionState,
+      ) => FactoryGraphEditorSelectionState,
+    ) => {
+      setState((current) => {
+        const nextState = updater(current);
+        if (nextState !== current) {
+          queueMicrotask(() => {
+            onStateChangeRef.current?.(nextState);
+          });
+        }
+        return nextState;
+      });
+    },
+    [],
+  );
 
   const replaceSelection = useCallback(
     (items: FactoryGraphEditorSelectionItems) => {
-      setState((current) => replaceFactoryGraphEditorSelection(current, items));
+      commitSelectionState((current) =>
+        replaceFactoryGraphEditorSelection(current, items),
+      );
     },
-    [],
+    [commitSelectionState],
   );
 
   const addToSelection = useCallback(
     (items: FactoryGraphEditorSelectionItems) => {
-      setState((current) => addToFactoryGraphEditorSelection(current, items));
+      commitSelectionState((current) =>
+        addToFactoryGraphEditorSelection(current, items),
+      );
     },
-    [],
+    [commitSelectionState],
   );
 
   const removeFromSelection = useCallback(
     (items: FactoryGraphEditorSelectionItems) => {
-      setState((current) =>
+      commitSelectionState((current) =>
         removeFromFactoryGraphEditorSelection(current, items),
       );
     },
-    [],
+    [commitSelectionState],
   );
 
   const clearSelection = useCallback(() => {
-    setState((current) => clearFactoryGraphEditorSelection(current));
-  }, []);
+    commitSelectionState((current) => clearFactoryGraphEditorSelection(current));
+  }, [commitSelectionState]);
 
   const resolvePrimaryTarget = useCallback(
     () => resolveFactoryGraphEditorPrimaryTarget(state),
@@ -91,29 +110,29 @@ export function useFactoryGraphEditorSelection(
 
   const applyNodeSelectChanges = useCallback(
     (changes: readonly NodeChange[]) => {
-      setState((current) =>
+      commitSelectionState((current) =>
         applyFactoryGraphEditorNodeSelectChanges(current, changes),
       );
     },
-    [],
+    [commitSelectionState],
   );
 
   const applyEdgeSelectChanges = useCallback(
     (changes: readonly EdgeChange[]) => {
-      setState((current) =>
+      commitSelectionState((current) =>
         applyFactoryGraphEditorEdgeSelectChanges(current, changes),
       );
     },
-    [],
+    [commitSelectionState],
   );
 
   const applyReactFlowSelection = useCallback(
     (items: FactoryGraphEditorSelectionItems, mode: "add" | "replace") => {
-      setState((current) =>
+      commitSelectionState((current) =>
         applyFactoryGraphEditorReactFlowSelection(current, items, mode),
       );
     },
-    [],
+    [commitSelectionState],
   );
 
   const handleGraphItemClick = useCallback(
@@ -121,11 +140,11 @@ export function useFactoryGraphEditorSelection(
       item: FactoryGraphEditorSelectionTarget,
       modifiers: FactoryGraphEditorSelectionPointerModifiers,
     ) => {
-      setState((current) =>
+      commitSelectionState((current) =>
         applyGraphItemClickSelection(current, item, modifiers),
       );
     },
-    [],
+    [commitSelectionState],
   );
 
   const isNodeSelected = useCallback(

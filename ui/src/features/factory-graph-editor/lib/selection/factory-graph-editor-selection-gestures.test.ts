@@ -6,6 +6,7 @@ import {
   applyFactoryGraphEditorReactFlowSelection,
   applyGraphItemClickSelection,
   collectFactoryGraphSelectionItemsFromReactFlow,
+  isFactoryGraphEditorReactFlowSelectionNoOp,
   isToggleSelectionModifier,
   resolveFactoryGraphEdgeIdFromRenderedEdge,
   toggleFactoryGraphEditorSelectionItem,
@@ -111,5 +112,34 @@ describe("factory-graph-editor-selection-gestures", () => {
       new Set(["workstation:review", "workstation:done"]),
     );
     expect(additive.selectedEdgeIds).toEqual(new Set(["edge-review-done"]));
+  });
+
+  it("detects when React Flow selection callbacks would be no-ops", () => {
+    const state = applyFactoryGraphEditorReactFlowSelection(
+      createEmptyFactoryGraphEditorSelection(),
+      {
+        nodeIds: ["workstation:plan"],
+        primaryTarget: { kind: "node", id: "workstation:plan" },
+      },
+      "replace",
+    );
+
+    expect(
+      isFactoryGraphEditorReactFlowSelectionNoOp(
+        state,
+        {
+          nodeIds: ["workstation:plan"],
+          primaryTarget: { kind: "node", id: "workstation:plan" },
+        },
+        "replace",
+      ),
+    ).toBe(true);
+    expect(
+      isFactoryGraphEditorReactFlowSelectionNoOp(
+        state,
+        { nodeIds: ["workstation:review"] },
+        "replace",
+      ),
+    ).toBe(false);
   });
 });
