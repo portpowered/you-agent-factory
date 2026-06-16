@@ -15,10 +15,20 @@
 - Select runtime-backed MCP serve via `you mcp serve --runtime`, which wires `factorysessionexecution.NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{ProjectRoot})` in `pkg/cli/mcp/serve.go`; default serve remains fixture-backed and rejects combining `--runtime` with `--fixture-catalog`.
 - Runtime-backed MCP serve stdio smoke lives in `pkg/cli/mcp/serve_runtime_smoke_test.go` via `RunServe` with `ServeConfig{RuntimeBacked: true, ProjectRoot}` (no injected service), reusing the stdio client harness from `serve_smoke_test.go` and INLINE_WORKFLOW fixtures to prove live durable execution instead of the fixture catalog.
 - Runtime-backed MCP async start/status/result tests live in `pkg/mcp/factorysession/runtime_execution_test.go` via `NewClientWithService(NewExecutionService(ExecutionProviderJavaScriptRuntime, ...))` and INLINE_WORKFLOW fixtures; cancel busy-loop sessions through direct service `Cancel` for cleanup.
+- Customer MCP docs in `docs/reference/mcp.md` and `docs/reference/mcp-hosts.md` document fixture-backed default vs `you mcp serve --runtime`, keep Factory Session vocabulary, and record stdio-only scope boundaries (no website inspection, HTTP/SSE, or broader host-matrix expansion); update `cli_docs_smoke_test.go` markers when changing packaged doc sections.
 
 ---
 
-## 2026-06-17T20:15:00Z - dynamic-workflows-cell-mcp-session-serve-003
+## 2026-06-17T21:00:00Z - dynamic-workflows-cell-mcp-session-serve-004
+- Updated customer-facing MCP docs to describe fixture-backed default vs `you mcp serve --runtime`, added runtime-backed host JSON example, expanded smoke proof boundaries with `serve_runtime_smoke_test.go`, and recorded stdio-only scope limits (no website inspection, HTTP/SSE, or broader host-matrix expansion).
+- Marked follow-up cell `follow-up-cell-mcp-session-serve.md` as completed; refreshed `cli_docs_smoke_test.go` markers and `api-relevant-files.md` recovery-lane pointer.
+- Verified fixture-backed `serve_smoke_test.go` and runtime-backed `serve_runtime_smoke_test.go` both pass unchanged.
+- Files changed: `docs/reference/mcp.md`, `docs/reference/mcp-hosts.md`, `docs/internal/development/plans/dynamic-workflows/follow-up-cell-mcp-session-serve.md`, `docs/internal/processes/api-relevant-files.md`, `tests/functional/smoke/cli_docs_smoke_test.go`.
+- **Learnings for future iterations:**
+  - Patterns discovered: packaged docs smoke markers in `cli_docs_smoke_test.go` must stay aligned with section headings and retained tool-name mentions when removing follow-up sections from `mcp.md`.
+  - Gotchas encountered: removing the follow-up cell section dropped `you.factory_session.start_async` from `mcp.md` until reintroduced in the fixture-backed tools paragraph.
+  - Useful context: distinguish runtime-backed MCP serve (`--runtime`) from live factory HTTP runtime backing in coverage matrices to avoid implying hosts need a factory HTTP server.
+---
 - Added runtime-backed stdio MCP serve smoke in `serve_runtime_smoke_test.go` that spawns `RunServe` with `RuntimeBacked: true` (no injected service), discovers Factory Session tools, starts an INLINE_WORKFLOW async session, polls `get`/`get_result` until RUNNING+not-ready or SUCCEEDED+terminal result.
 - Reused the existing stdio JSON-RPC harness from `serve_smoke_test.go`; INLINE_WORKFLOW source proves the live durable JavaScript runtime path rather than the fixture catalog.
 - Files changed: `pkg/cli/mcp/serve_runtime_smoke_test.go`, `docs/internal/processes/api-relevant-files.md`.
