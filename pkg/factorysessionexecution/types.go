@@ -54,6 +54,7 @@ type StartRequest struct {
 	Args            map[string]any
 	Orchestrator    *OrchestratorOverride
 	RequestedPolicy map[string]any
+	Runtime         *RuntimeOptions
 	Wait            *WaitOptions
 }
 

@@ -126,9 +126,9 @@ func wrapWorkflowSource(source string) string {
 
 func childExecutorForRun(sessionID string, records *recordCollector, hooks Hooks) ChildExecutor {
 	if hooks.NewChildExecutor != nil {
-		return hooks.NewChildExecutor(sessionID, records.append)
+		return hooks.NewChildExecutor(sessionID, childRecordSinkFromCollector(records))
 	}
-	return NewFakeChildExecutor(sessionID, records)
+	return NewFakeChildExecutor(sessionID, childRecordSinkFromCollector(records))
 }
 
 func watchContext(ctx context.Context, vm *goja.Runtime, done <-chan struct{}) {

@@ -204,8 +204,9 @@ type DispatchPetriProjection struct {
 
 // DispatchJavaScriptProjection carries JavaScript-specific dispatch metadata.
 type DispatchJavaScriptProjection struct {
-	TaskKind  string
-	TaskLabel string
+	TaskKind      string
+	TaskLabel     string
+	ExecutionMode string
 }
 
 // ProviderSessionRef correlates one dispatch with a provider session identity.
@@ -621,11 +622,12 @@ func timePtr(value time.Time) *time.Time {
 // RuntimeExecutionProjection carries durable dispatch, artifact, phase, and progress
 // state projected from ordered workflow runtime records.
 type RuntimeExecutionProjection struct {
-	Phase      string
-	PhaseCount int
-	Dispatches []DispatchSummary
-	Artifacts  []ArtifactSummary
-	Progress   ProgressCounts
+	Phase              string
+	PhaseCount         int
+	Dispatches         []DispatchSummary
+	DispatchJavaScript map[string]DispatchJavaScriptProjection
+	Artifacts          []ArtifactSummary
+	Progress           ProgressCounts
 }
 
 // ProjectRuntimeExecutionRecords maps ordered runtime host-effect records into
@@ -643,6 +645,7 @@ func ProjectRuntimeExecutionRecords(
 	currentPhase := ""
 	dispatchOrder := make([]string, 0)
 	dispatchByID := make(map[string]DispatchSummary)
+	dispatchJavaScript := make(map[string]DispatchJavaScriptProjection)
 	artifactByID := make(map[string]ArtifactSummary)
 
 	for _, record := range records {
@@ -670,6 +673,7 @@ func ProjectRuntimeExecutionRecords(
 			}
 			summary := dispatchSummaryFromChildRecord(currentPhase, *record.ChildDispatch)
 			dispatchByID[summary.ID] = summary
+			dispatchJavaScript[summary.ID] = dispatchJavaScriptFromChildRecord(*record.ChildDispatch)
 			if _, seen := indexOfString(dispatchOrder, summary.ID); !seen {
 				dispatchOrder = append(dispatchOrder, summary.ID)
 			}
@@ -683,6 +687,7 @@ func ProjectRuntimeExecutionRecords(
 	for _, dispatchID := range dispatchOrder {
 		projection.Dispatches = append(projection.Dispatches, dispatchByID[dispatchID])
 	}
+	projection.DispatchJavaScript = dispatchJavaScript
 	projection.Artifacts = orderedArtifactSummaries(artifactByID)
 	projection.Progress = progressCountsFromDispatches(projection.Dispatches, projection.PhaseCount)
 	return projection
@@ -740,9 +745,13 @@ func dispatchSummaryFromChildRecord(currentPhase string, child workflowruntime.C
 		Model:        strings.TrimSpace(child.Model),
 	}
 	if ref := strings.TrimSpace(child.ProviderSessionRef); ref != "" {
-		summary.Provider = "fake"
+		provider := strings.TrimSpace(child.Provider)
+		if provider == "" && strings.TrimSpace(child.ExecutionMode) == workflowruntime.ChildExecutionModeFake {
+			provider = "fake"
+		}
+		summary.Provider = provider
 		summary.ProviderSessionRefs = []ProviderSessionRef{{
-			Provider: "fake",
+			Provider: provider,
 			Kind:     "AGENT",
 			ID:       ref,
 		}}
@@ -752,6 +761,27 @@ func dispatchSummaryFromChildRecord(currentPhase string, child workflowruntime.C
 		summary.OutputArtifactIDs = []string{artifactID}
 	}
 	return summary
+}
+
+func dispatchJavaScriptFromChildRecord(child workflowruntime.ChildDispatchRecord) DispatchJavaScriptProjection {
+	return DispatchJavaScriptProjection{
+		TaskKind:      "AGENT",
+		TaskLabel:     child.Label,
+		ExecutionMode: strings.TrimSpace(child.ExecutionMode),
+	}
+}
+
+func cloneDispatchJavaScriptProjections(
+	source map[string]DispatchJavaScriptProjection,
+) map[string]DispatchJavaScriptProjection {
+	if len(source) == 0 {
+		return nil
+	}
+	cloned := make(map[string]DispatchJavaScriptProjection, len(source))
+	for id, projection := range source {
+		cloned[id] = projection
+	}
+	return cloned
 }
 
 func artifactIDFromRef(raw string) string {
@@ -817,6 +847,7 @@ func applyRuntimeSessionFields(target *runtimeSessionState, source runtimeSessio
 	target.session = source.session
 	target.result = source.result
 	target.dispatches = cloneDispatchSummaries(source.dispatches)
+	target.dispatchJavaScript = cloneDispatchJavaScriptProjections(source.dispatchJavaScript)
 	target.artifacts = cloneArtifactSummaries(source.artifacts)
 	target.events = source.events
 }
@@ -832,6 +863,7 @@ func applyRuntimeSuccessProjection(
 		state.session.Phase = recordProjection.Phase
 	}
 	state.dispatches = cloneDispatchSummaries(recordProjection.Dispatches)
+	state.dispatchJavaScript = cloneDispatchJavaScriptProjections(recordProjection.DispatchJavaScript)
 	state.artifacts = cloneArtifactSummaries(recordProjection.Artifacts)
 	state.session.Progress = &recordProjection.Progress
 	state.session.ArtifactRefs = artifactRefsFromSummaries(state.artifacts)

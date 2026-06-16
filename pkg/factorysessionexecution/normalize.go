@@ -26,6 +26,11 @@ func NormalizeStartRequest(req StartRequest) (StartRequest, error) {
 		Args:            cloneArgs(req.Args),
 		RequestedPolicy: cloneArgs(req.RequestedPolicy),
 	}
+	if req.Runtime != nil {
+		runtime := *req.Runtime
+		runtime.ChildExecutorMode = normalizeChildExecutorMode(runtime.ChildExecutorMode)
+		normalized.Runtime = &runtime
+	}
 	if req.Orchestrator != nil {
 		override := *req.Orchestrator
 		override.Kind = strings.TrimSpace(override.Kind)

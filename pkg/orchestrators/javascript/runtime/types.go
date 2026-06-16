@@ -17,9 +17,16 @@ type Request struct {
 	Policy    workflowpolicy.EffectivePolicy
 }
 
-// ChildExecutorFactory builds the child executor for one workflow run. The
-// appendRecord callback appends typed runtime records in execution order.
-type ChildExecutorFactory func(sessionID string, appendRecord func(RuntimeRecord)) ChildExecutor
+// ChildRecordSink reserves child dispatch identity and appends typed runtime records.
+type ChildRecordSink interface {
+	Append(record RuntimeRecord)
+	AppendChildDispatch(base ChildDispatchRecord, status string)
+	NextChildDispatchIdentity() (dispatchID string, childIndex int)
+	NextChildArtifactID() string
+}
+
+// ChildExecutorFactory builds the child executor for one workflow run.
+type ChildExecutorFactory func(sessionID string, records ChildRecordSink) ChildExecutor
 
 // Hooks supplies optional terminal result, artifact, and child-execution callbacks.
 type Hooks struct {

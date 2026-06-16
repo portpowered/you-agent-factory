@@ -28,6 +28,10 @@ const (
 // real provider dispatch is available.
 const ChildExecutionModeFake = "fake"
 
+// ChildExecutionModeLive marks provider-backed child execution routed through the
+// durable dispatch bridge.
+const ChildExecutionModeLive = "live-provider"
+
 // RuntimeRecord is one ordered host-effect record emitted during workflow execution.
 // Records are typed so they can later map into factory session events, dispatches,
 // and artifacts without changing workflow source syntax.
@@ -88,6 +92,7 @@ type ChildDispatchRecord struct {
 	SchemaDigest       string `json:"schemaDigest,omitempty"`
 	RunnerID           string `json:"runnerId,omitempty"`
 	ExecutionMode      string `json:"executionMode,omitempty"`
+	Provider           string `json:"provider,omitempty"`
 	ProviderSessionRef string `json:"providerSessionRef,omitempty"`
 	ArtifactRef        string `json:"artifactRef,omitempty"`
 }

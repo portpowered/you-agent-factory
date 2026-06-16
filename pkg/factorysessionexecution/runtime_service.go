@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 // NewDurableSessionID allocates one durable Factory Session identifier.
@@ -19,12 +20,13 @@ func NewDurableSessionID() string {
 }
 
 type runtimeSessionState struct {
-	session    SessionReadResult
-	result     ResultReadResult
-	dispatches []DispatchSummary
-	artifacts  []ArtifactSummary
-	events     []json.RawMessage
-	runCancel  context.CancelFunc
+	session            SessionReadResult
+	result             ResultReadResult
+	dispatches         []DispatchSummary
+	dispatchJavaScript map[string]DispatchJavaScriptProjection
+	artifacts          []ArtifactSummary
+	events             []json.RawMessage
+	runCancel          context.CancelFunc
 }
 
 type startInflightFlight struct {
@@ -172,13 +174,17 @@ func resolvedDialect(resolved ResolvedSource) string {
 // JavaScriptRuntimeServiceConfig carries dependencies for the real JavaScript runtime
 // durable session execution path.
 type JavaScriptRuntimeServiceConfig struct {
-	ProjectRoot string
+	ProjectRoot       string
+	ChildExecutorMode string
+	Provider          workers.Provider
 }
 
 // JavaScriptRuntimeService executes simple JavaScript workflows through the real
 // workflow runtime and projects outcomes through shared durable session read models.
 type JavaScriptRuntimeService struct {
-	projectRoot string
+	projectRoot       string
+	childExecutorMode string
+	provider          workers.Provider
 
 	mu            sync.RWMutex
 	sessions      map[string]*runtimeSessionState
@@ -192,8 +198,10 @@ var _ Service = (*JavaScriptRuntimeService)(nil)
 // NewJavaScriptRuntimeService constructs one JavaScript runtime-backed durable session service.
 func NewJavaScriptRuntimeService(config JavaScriptRuntimeServiceConfig) *JavaScriptRuntimeService {
 	return &JavaScriptRuntimeService{
-		projectRoot:   strings.TrimSpace(config.ProjectRoot),
-		sessions:      make(map[string]*runtimeSessionState),
+		projectRoot:       strings.TrimSpace(config.ProjectRoot),
+		childExecutorMode: normalizeChildExecutorMode(config.ChildExecutorMode),
+		provider:          config.Provider,
+		sessions:          make(map[string]*runtimeSessionState),
 		startReplay:   make(map[string]startReplayRecord),
 		startInflight: make(map[string]*startInflightFlight),
 		controlReplay: make(map[string]controlReplayRecord),
@@ -217,6 +225,9 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 
 	prepared, err := s.prepareStart(normalized)
 	if err != nil {
+		return AsyncStartResult{}, err
+	}
+	if err := validateLiveChildExecutorConfig(resolveChildExecutorMode(s.childExecutorMode, normalized), s.provider); err != nil {
 		return AsyncStartResult{}, err
 	}
 	resolved := prepared.ResolvedSource
@@ -281,6 +292,9 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 
 	prepared, err := s.prepareStart(normalized)
 	if err != nil {
+		return SyncStartResult{}, err
+	}
+	if err := validateLiveChildExecutorConfig(resolveChildExecutorMode(s.childExecutorMode, normalized), s.provider); err != nil {
 		return SyncStartResult{}, err
 	}
 	resolved := prepared.ResolvedSource
@@ -413,11 +427,16 @@ func (s *JavaScriptRuntimeService) GetDispatch(ctx context.Context, sessionID, d
 	}
 	for _, summary := range state.dispatches {
 		if summary.ID == dispatchID {
-			return DispatchDetail{
+			detail := DispatchDetail{
 				DispatchSummary:  summary,
 				SessionID:        id,
 				OrchestratorKind: state.session.OrchestratorKind,
-			}, nil
+			}
+			if js, ok := state.dispatchJavaScript[dispatchID]; ok {
+				projection := js
+				detail.JavaScript = &projection
+			}
+			return detail, nil
 		}
 	}
 	return DispatchDetail{}, ErrDispatchNotFound
@@ -632,7 +651,7 @@ func (s *JavaScriptRuntimeService) invokeWorkflowRuntime(
 		Args:      argsJSON,
 		Metadata:  workflowMetadataFromResolved(resolved, normalized),
 		Policy:    policyResolution.Policy,
-	}, workflowruntime.Hooks{})
+	}, s.childExecutorHooks(resolveChildExecutorMode(s.childExecutorMode, normalized)))
 }
 
 func workflowRunContext(parent context.Context, policy workflowpolicy.EffectivePolicy) (context.Context, context.CancelFunc) {
@@ -662,10 +681,11 @@ func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
 		return runtimeSessionState{}
 	}
 	cloned := runtimeSessionState{
-		session:    cloneSessionRead(state.session),
-		result:     cloneResultRead(state.result),
-		dispatches: cloneDispatchSummaries(state.dispatches),
-		artifacts:  cloneArtifactSummaries(state.artifacts),
+		session:            cloneSessionRead(state.session),
+		result:             cloneResultRead(state.result),
+		dispatches:         cloneDispatchSummaries(state.dispatches),
+		dispatchJavaScript: cloneDispatchJavaScriptProjections(state.dispatchJavaScript),
+		artifacts:          cloneArtifactSummaries(state.artifacts),
 	}
 	if len(state.events) > 0 {
 		cloned.events = make([]json.RawMessage, len(state.events))
