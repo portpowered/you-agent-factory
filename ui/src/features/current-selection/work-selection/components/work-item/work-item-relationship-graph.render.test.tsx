@@ -13,6 +13,8 @@ import { installDashboardBrowserTestShims } from "../../../../../components/dash
 import { useCurrentSelectionDispatchHistoryMessages } from "../../../base/components/presentation/current-selection-locale";
 import { buildSelectedWorkRelationshipGraph } from "../../lib/selected-work-relationship-graph";
 import {
+  localAgentCliRuntimeBatchSnapshot,
+  localAgentCliRuntimeLoopbackWorkItem,
   selectedWorkItem,
   snapshotFixture,
 } from "../../lib/selected-work-relationship-graph.fixture";
@@ -115,6 +117,21 @@ function getTraceGraphNodeButton(
   }
 
   return button;
+}
+
+function LocalAgentCliRuntimeBatchHarness() {
+  const messages = useCurrentSelectionDispatchHistoryMessages();
+  const relationshipGraph = buildSelectedWorkRelationshipGraph({
+    selectedWorkItem: localAgentCliRuntimeLoopbackWorkItem(),
+    snapshot: localAgentCliRuntimeBatchSnapshot(),
+  });
+
+  return (
+    <WorkRelationshipsSection
+      messages={messages}
+      relationshipGraph={relationshipGraph}
+    />
+  );
 }
 
 function WorkRelationshipsSectionHarness({
@@ -224,5 +241,47 @@ describe("WorkRelationshipsSection repeated DEPENDS_ON rendering", () => {
       2,
       "work-second-dependency-story",
     );
+  });
+
+  it("renders every loopback dependency from the checked-in local agent CLI runtime batch example", async () => {
+    const loopbackWorkItem = localAgentCliRuntimeLoopbackWorkItem();
+    const relationshipGraph = buildSelectedWorkRelationshipGraph({
+      selectedWorkItem: loopbackWorkItem,
+      snapshot: localAgentCliRuntimeBatchSnapshot(),
+    });
+    if (relationshipGraph.status !== "ready") {
+      throw new Error(`expected ready graph, got ${relationshipGraph.status}`);
+    }
+
+    render(<LocalAgentCliRuntimeBatchHarness />);
+
+    const relationshipSection = screen.getByRole("region", {
+      name: "Work relationships",
+    });
+    const traceGraph = await within(relationshipSection).findByRole("region", {
+      name: "Batch relation graph",
+    });
+
+    await waitFor(() => {
+      expect(renderedEdgeCount(traceGraph)).toBe(relationshipGraph.relations.length);
+    });
+
+    const edgePayload = traceGraph
+      .querySelector("[data-testid='trace-relation-react-flow']")
+      ?.getAttribute("data-edge-payload");
+    if (!edgePayload) {
+      throw new Error("Expected rendered edge payload.");
+    }
+    const loopbackEdges = (JSON.parse(edgePayload) as Array<{ id: string }>).filter(
+      (edge) => edge.id.includes("work-local-agent-cli-runtime-loopback"),
+    );
+    expect(loopbackEdges).toHaveLength(5);
+    expect(
+      relationshipGraph.relations.filter(
+        (relation) =>
+          relation.type === "DEPENDS_ON" &&
+          relation.source_work_id === loopbackWorkItem.work_id,
+      ),
+    ).toHaveLength(5);
   });
 });
