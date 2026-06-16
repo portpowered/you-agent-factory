@@ -54,7 +54,7 @@ export function buildTraceRelationFactoryGraphFlow(
     mode: "observer",
     topology: traceProjection.topology,
   });
-  const nodes: TraceRelationFlowNode[] = [];
+  const nodesByEndpointKey = new Map<string, TraceRelationFlowNode>();
 
   for (const node of factoryProjection.nodes) {
     const overlay = traceProjection.overlaysByNodeId.get(node.id);
@@ -66,7 +66,7 @@ export function buildTraceRelationFactoryGraphFlow(
     const isSelectedWork = Boolean(
       selectedWorkID && overlay.workID === selectedWorkID,
     );
-    nodes.push({
+    const nextNode: TraceRelationFlowNode = {
       ...node,
       data: {
         ...node.data,
@@ -86,8 +86,20 @@ export function buildTraceRelationFactoryGraphFlow(
       sourcePosition: Position.Right,
       targetPosition: Position.Left,
       type: "workRelation",
-    });
+    };
+    const existingNode = nodesByEndpointKey.get(endpointKey);
+    if (existingNode) {
+      nodesByEndpointKey.set(
+        endpointKey,
+        mergeTraceRelationFlowNodes(existingNode, nextNode),
+      );
+      continue;
+    }
+
+    nodesByEndpointKey.set(endpointKey, nextNode);
   }
+
+  const nodes = [...nodesByEndpointKey.values()];
 
   const edges = factoryProjection.edges.map((edge) => {
     const overlay = traceProjection.edgeOverlaysByEdgeId.get(edge.id);
@@ -124,6 +136,30 @@ export function buildTraceRelationFactoryGraphFlow(
     endpointKeyByNodeId: traceProjection.endpointKeyByNodeId,
     nodes,
     topology: traceProjection.topology,
+  };
+}
+
+function mergeTraceRelationFlowNodes(
+  left: TraceRelationFlowNode,
+  right: TraceRelationFlowNode,
+): TraceRelationFlowNode {
+  return {
+    ...left,
+    data: {
+      ...left.data,
+      ...right.data,
+      relationStates: [
+        ...new Set([
+          ...left.data.relationStates,
+          ...right.data.relationStates,
+        ]),
+      ].sort(),
+      relationTypes: [
+        ...new Set([...left.data.relationTypes, ...right.data.relationTypes]),
+      ].sort(),
+      isSelectedWork: left.data.isSelectedWork || right.data.isSelectedWork,
+      selectable: left.data.selectable || right.data.selectable,
+    },
   };
 }
 
