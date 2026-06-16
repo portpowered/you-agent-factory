@@ -30,9 +30,10 @@ func TestExecutorReviewStateLifecycle_ProcessCompletionLeavesSingleReviewInit(t 
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
 
 	submitExecutorReviewProcessResiduePattern(t, h, laneName, traceID)
+
+	errCh := h.RunInBackground(ctx)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:in-review", 1, 3*time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "review:init", 1, 3*time.Second)
@@ -73,9 +74,10 @@ func TestExecutorReviewStateLifecycle_CompletedReviewClearsResidueAndReplayMatch
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
 
 	submitExecutorReviewDuplicateAndStalePattern(t, h, laneName, traceID)
+
+	errCh := h.RunInBackground(ctx)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, 3*time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "review:complete", 1, 3*time.Second)
@@ -113,7 +115,6 @@ func TestExecutorReviewStateLifecycle_CompletedExecutorAndReviewConvergeToTermin
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
 
 	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
 		Name:                   laneName,
@@ -123,6 +124,8 @@ func TestExecutorReviewStateLifecycle_CompletedExecutorAndReviewConvergeToTermin
 		CurrentChainingTraceID: traceID,
 		ChainingTraceDepth:     2,
 	}})
+
+	errCh := h.RunInBackground(ctx)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, 5*time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "review:complete", 1, 5*time.Second)
@@ -170,7 +173,6 @@ func TestExecutorReviewStateLifecycle_DuplicateReviewRegressionMatchesLaneThreeS
 	const traceID = "trace-e3bfbf2efbff251737c0df2a5433efb3"
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
 
 	submitExecutorReviewDuplicateAndStalePattern(
 		t,
@@ -178,6 +180,8 @@ func TestExecutorReviewStateLifecycle_DuplicateReviewRegressionMatchesLaneThreeS
 		"dynamic-workflows-recovery-setup-workspace-git-pull-hygiene",
 		traceID,
 	)
+
+	errCh := h.RunInBackground(ctx)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, 3*time.Second)
 
