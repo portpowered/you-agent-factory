@@ -77,7 +77,7 @@ func TestSameNameConsumePathHistoricalRecovery_HiddenIdeaTwinAtComplete_Classifi
 	const cellName = "dynamic-workflows-cell-cli-validate-list"
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	submitSameNameOrphanAfterConsumePattern(t, h, cellName, "trace-orphan-"+cellName)
 
@@ -109,7 +109,7 @@ func TestSameNameConsumePathHistoricalRecovery_LivePairWaitingForConsume_IsNotHi
 	const cellName = "dynamic-workflows-cell-cli-run-status-result"
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
 		Name:        cellName,
@@ -151,7 +151,7 @@ func TestSameNameConsumePathHistoricalRecovery_BoundedManualMoveCompletesOrphanT
 	const cellName = "dynamic-workflows-cell-mcp-tools"
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	submitSameNameOrphanAfterConsumePattern(t, h, cellName, "trace-manual-repair-"+cellName)
 
@@ -201,7 +201,7 @@ func TestSameNameConsumePathHistoricalRecovery_UnrelatedLanesCompleteWithOrphanP
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	submitSameNameOrphanAfterConsumePattern(t, h, orphanCell, "trace-orphan-unrelated")
 	submitConsumePathPair(t, h, liveCell)
@@ -232,7 +232,7 @@ func TestSameNameConsumePathHistoricalRecovery_TaskOnlyWithoutIdeaTwin_BlocksBou
 	const cellName = "dynamic-workflows-cell-cli-run-status-result"
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
 		Name:        cellName,

@@ -316,7 +316,7 @@ func TestExecutorReviewLaneEvidence_DuplicateReviewShapeClassifiesForRuntimeReco
 
 func TestExecutorReviewLaneEvidence_SubmitFullPlacesDuplicateReviewInitTokens(t *testing.T) {
 	dir := scaffoldExecutorReviewLaneFactory(t)
-	h := testutil.NewServiceTestHarness(t, dir)
+	h := support.NewGuardsBatchHarness(t, dir)
 
 	const (
 		laneName = "lane-duplicate-review"
@@ -325,7 +325,7 @@ func TestExecutorReviewLaneEvidence_SubmitFullPlacesDuplicateReviewInitTokens(t 
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	injectDuplicateReviewInitPattern(t, h, laneName, traceID)
 	support.WaitForHarnessPlaceTokenCount(t, h, "review:init", 2, time.Second)

@@ -1,6 +1,7 @@
 package support
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -9,21 +10,39 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
+// NewGuardsBatchHarness builds a service-mode harness for guards_batch tests
+// that submit work after RunInBackground. Batch mode can terminate before the
+// first post-run submit on slower CI runners.
+func NewGuardsBatchHarness(t *testing.T, dir string, opts ...testutil.ServiceTestHarnessOption) *testutil.ServiceTestHarness {
+	t.Helper()
+
+	all := append([]testutil.ServiceTestHarnessOption{
+		testutil.WithRuntimeMode(interfaces.RuntimeModeService),
+	}, opts...)
+	return testutil.NewServiceTestHarness(t, dir, all...)
+}
+
 func WaitForHarnessRuntimeAvailability(
 	t *testing.T,
 	h *testutil.ServiceTestHarness,
+	runErrCh <-chan error,
 	timeout time.Duration,
 ) {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if _, err := h.GetEngineStateSnapshot(); err == nil {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := h.WaitForRuntimeAvailability(ctx, runErrCh); err != nil {
+		t.Fatal(err)
 	}
-	t.Fatal("timed out waiting for harness runtime availability")
+}
+
+func RunGuardsBatchHarness(t *testing.T, h *testutil.ServiceTestHarness, ctx context.Context) <-chan error {
+	t.Helper()
+
+	errCh := h.RunInBackground(ctx)
+	WaitForHarnessRuntimeAvailability(t, h, errCh, 3*time.Second)
+	return errCh
 }
 
 func WaitForHarnessPlaceTokenCount(

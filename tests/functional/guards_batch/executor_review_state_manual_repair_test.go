@@ -85,7 +85,7 @@ func TestExecutorReviewManualRepair_IncompleteWorktreeBlocksBoundedMove(t *testi
 
 func TestExecutorReviewManualRepair_BoundedMoveFailedTaskBackToInit(t *testing.T) {
 	dir := scaffoldExecutorReviewManualRepairFactory(t)
-	h := testutil.NewServiceTestHarness(t, dir)
+	h := support.NewGuardsBatchHarness(t, dir)
 
 	const (
 		laneName = "lane-failed-post-processing"
@@ -95,7 +95,7 @@ func TestExecutorReviewManualRepair_BoundedMoveFailedTaskBackToInit(t *testing.T
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	injectFailedPostProcessingPattern(t, h, laneName, traceID, taskID)
 	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{

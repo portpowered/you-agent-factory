@@ -9,7 +9,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -133,11 +132,11 @@ func TestSameNameConsumePathRegression_ReviewedPairCompletesWithoutStrandedTask(
 	for _, cellName := range cellNames {
 		t.Run(cellName, func(t *testing.T) {
 			dir := scaffoldConsumePathFactoryBuiltInOrder(t)
-			h := testutil.NewServiceTestHarness(t, dir)
+			h := support.NewGuardsBatchHarness(t, dir)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			errCh := h.RunInBackground(ctx)
+			errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 			submitConsumePathPair(t, h, cellName)
 
@@ -158,11 +157,11 @@ func TestSameNameConsumePathRegression_ReviewedPairCompletesWithoutStrandedTask(
 
 func TestSameNameConsumePathRegression_MismatchedNamesStayAtToComplete(t *testing.T) {
 	dir := scaffoldConsumePathFactoryBuiltInOrder(t)
-	h := testutil.NewServiceTestHarness(t, dir)
+	h := support.NewGuardsBatchHarness(t, dir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	for _, req := range []interfaces.SubmitRequest{
 		{Name: "idea-alpha", WorkTypeID: "idea", TargetState: "to-complete", TraceID: "trace-idea-alpha"},
@@ -189,7 +188,7 @@ func TestSameNameConsumePathRegression_MismatchedNamesStayAtToComplete(t *testin
 
 func TestSameNameConsumePathRegression_ConcurrentPairsCompleteIndependently(t *testing.T) {
 	dir := scaffoldConsumePathFactoryBuiltInOrder(t)
-	h := testutil.NewServiceTestHarness(t, dir)
+	h := support.NewGuardsBatchHarness(t, dir)
 
 	pairs := [][2]string{
 		{"dynamic-workflows-cell-cli-validate-list", "dynamic-workflows-cell-cli-run-status-result"},
@@ -202,7 +201,7 @@ func TestSameNameConsumePathRegression_ConcurrentPairsCompleteIndependently(t *t
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 4, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 4, time.Second)
@@ -241,12 +240,11 @@ func TestSameNameConsumePathRegression_StaggeredArrivalCompletesWithoutStranding
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := scaffoldConsumePathFactoryBuiltInOrder(t)
-			h := testutil.NewServiceTestHarness(t, dir)
+			h := support.NewGuardsBatchHarness(t, dir)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
-			errCh := h.RunInBackground(ctx)
-			support.WaitForHarnessRuntimeAvailability(t, h, 3*time.Second)
+			errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 			for _, req := range tc.order {
 				h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})

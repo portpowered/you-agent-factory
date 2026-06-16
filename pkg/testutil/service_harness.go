@@ -248,7 +248,55 @@ func (h *ServiceTestHarness) waitToComplete() <-chan struct{} {
 	return h.svc.WaitToComplete()
 }
 
+func harnessRuntimeIsAvailable(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
+	if snapshot == nil {
+		return false
+	}
+	if snapshot.RuntimeStatus == interfaces.RuntimeStatusFinished {
+		return false
+	}
+	switch interfaces.FactoryState(snapshot.FactoryState) {
+	case interfaces.FactoryStateRunning, interfaces.FactoryStatePaused:
+		return true
+	default:
+		return false
+	}
+}
+
+// WaitForRuntimeAvailability blocks until the factory run loop is actively
+// accepting submissions or the run exits / the context times out.
+func (h *ServiceTestHarness) WaitForRuntimeAvailability(ctx context.Context, runErrCh <-chan error) error {
+	if h == nil || h.svc == nil {
+		return fmt.Errorf("factory service runtime is not available")
+	}
+
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		if snap, err := h.svc.GetEngineStateSnapshot(context.Background()); err == nil && harnessRuntimeIsAvailable(snap) {
+			h.storeEngineStateSnapshot(snap)
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timed out waiting for harness runtime availability: %w", ctx.Err())
+		case err := <-runErrCh:
+			if err == nil || errors.Is(err, context.Canceled) {
+				return fmt.Errorf("factory run exited before runtime became available")
+			}
+			return fmt.Errorf("factory run error: %w", err)
+		case <-ticker.C:
+		}
+	}
+}
+
 func (h *ServiceTestHarness) waitForRuntimeAvailability(ctx context.Context, runErrCh <-chan error) error {
+	if h == nil || h.svc == nil {
+		return fmt.Errorf("factory service runtime is not available")
+	}
+
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 
