@@ -3,6 +3,7 @@ import { useMemo } from "react";
 
 import {
   type FactorySession,
+  type FactorySessionDurableReadModel,
   type FactorySessionLiveResult,
   type FactorySessionPartialResult,
   type FactorySessionsAPIError,
@@ -17,6 +18,7 @@ export const FACTORY_SESSION_DETAIL_QUERY_KEY = [
 ] as const;
 
 export interface FactorySessionDetailData {
+  durableLifecycleStatus?: FactorySessionDurableReadModel["status"];
   partialResult?: FactorySessionPartialResult;
   result?: FactorySessionLiveResult;
   session: FactorySession;
@@ -39,9 +41,9 @@ export function useFactorySessionDetail(
         throw new Error("Factory session detail requires a selected session id.");
       }
 
-      const session = await getFactorySession(sessionID);
+      const { durableLifecycleStatus, session } = await getFactorySession(sessionID);
       if (session.runtime.orchestratorKind !== FactoryOrchestratorKind.JAVASCRIPT) {
-        return { session };
+        return { durableLifecycleStatus, session };
       }
 
       const [result, partialResult] = await Promise.all([
@@ -50,6 +52,7 @@ export function useFactorySessionDetail(
       ]);
 
       return {
+        durableLifecycleStatus,
         partialResult,
         result,
         session,

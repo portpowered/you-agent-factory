@@ -8,6 +8,11 @@ import {
 } from "../../../components/ui";
 import { DetailCopy } from "../../../components/ui/widget-frame";
 import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
+import {
+  formatFactoryOrchestratorKind,
+  formatFactorySessionRuntimeStatus,
+  formatFactorySessionScriptStatus,
+} from "../messages/factory-session-runtime-display";
 import { getFactorySessionDetailMessages } from "../messages/factory-session-detail";
 
 type FactoryArtifact = components["schemas"]["FactoryArtifact"];
@@ -63,6 +68,7 @@ function FactorySessionRuntimeSections({
   locale,
 }: {
   data: {
+    durableLifecycleStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
     partialResult?: components["schemas"]["FactorySessionPartialResult"];
     result?: components["schemas"]["FactorySessionLiveResult"];
     session: components["schemas"]["FactorySession"];
@@ -74,9 +80,20 @@ function FactorySessionRuntimeSections({
 
   return (
     <div className="grid gap-4">
+      <DashboardHeading>{messages.runtimeHeading}</DashboardHeading>
       <div className="grid gap-2 sm:grid-cols-2">
-        <Metric label={messages.orchestratorKindLabel} value={runtime.orchestratorKind} />
-        <Metric label={messages.statusLabel} value={runtime.status} />
+        <Metric
+          label={messages.orchestratorKindLabel}
+          value={formatFactoryOrchestratorKind(runtime.orchestratorKind, locale)}
+        />
+        <Metric
+          label={messages.statusLabel}
+          value={formatFactorySessionRuntimeStatus(
+            runtime.status,
+            data.durableLifecycleStatus,
+            locale,
+          )}
+        />
       </div>
 
       {runtime.orchestratorKind === FactoryOrchestratorKind.JAVASCRIPT ? (
@@ -113,7 +130,7 @@ function JavaScriptSessionProjection({
   const messages = getFactorySessionDetailMessages(locale);
 
   if (!javascript) {
-    return <DetailCopy>{messages.dynamicWorkflowShorthand}</DetailCopy>;
+    return <DetailCopy>{messages.javascriptProjectionMissingState}</DetailCopy>;
   }
 
   const warnings = (dispatches ?? []).flatMap(
@@ -122,14 +139,13 @@ function JavaScriptSessionProjection({
 
   return (
     <div className="grid gap-4">
-      <DetailCopy>{messages.dynamicWorkflowShorthand}</DetailCopy>
       <div className="grid gap-2 sm:grid-cols-2">
         {javascript.phase ? (
           <Metric label={messages.phaseLabel} value={javascript.phase} />
         ) : null}
         <Metric
           label={messages.scriptStatusLabel}
-          value={javascript.scriptStatus}
+          value={formatFactorySessionScriptStatus(javascript.scriptStatus, locale)}
         />
         <Metric
           label={messages.childDispatchCountsLabel}

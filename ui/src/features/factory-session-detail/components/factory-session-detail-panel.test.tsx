@@ -115,17 +115,62 @@ describe("FactorySessionDetailPanel", () => {
     expect(screen.getByText("Loading factory session runtime…")).toBeTruthy();
 
     await waitFor(() => {
-      expect(
-        screen.getByText("Dynamic workflow (JavaScript factory session)"),
-      ).toBeTruthy();
+      expect(screen.getByText("Runtime")).toBeTruthy();
     });
 
+    expect(screen.getByText("JavaScript workflow")).toBeTruthy();
+    expect(screen.getAllByText("Idle").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("review")).toBeTruthy();
     expect(screen.getByText("cp-1 (plan) — saved plan checkpoint")).toBeTruthy();
     expect(screen.getByText("child agent retry scheduled")).toBeTruthy();
     expect(screen.getByText("artifact-final · FINAL_RESULT")).toBeTruthy();
     expect(screen.getByText("artifact-partial · CHILD_RESULT")).toBeTruthy();
     expect(screen.queryByText("rawCheckpointBody")).toBeNull();
+  });
+
+  it("shows durable JavaScript session summary from shared typed session data", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/factory-sessions/dur-sess-js-run-n-001")) {
+        return jsonResponse({
+          dialect: "you-workflow-v1",
+          lifecycle: {
+            startedAt: "2026-06-08T14:00:00Z",
+            updatedAt: "2026-06-08T14:05:00Z",
+          },
+          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+          phase: "verify",
+          phaseSummaries: [{ dispatchCount: 1, phase: "plan" }],
+          progress: {
+            completedDispatches: 1,
+            failedDispatches: 0,
+            inFlightDispatches: 1,
+            totalDispatches: 3,
+          },
+          resolvedSource: {
+            kind: "WORKFLOW_NAME",
+            sourceRef: "workflow/release-train",
+            sourceHash: "sha256:js-workflow-release-train",
+          },
+          sessionId: "dur-sess-js-run-n-001",
+          status: "RUNNING",
+          usage: { resources: [] },
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="dur-sess-js-run-n-001" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("JavaScript workflow")).toBeTruthy();
+    });
+
+    expect(screen.getAllByText("Running").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("verify")).toBeTruthy();
+    expect(screen.queryAllByText("Idle")).toHaveLength(0);
   });
 
   it("shows Petri marking and enabled transitions without dynamic workflow shorthand", async () => {

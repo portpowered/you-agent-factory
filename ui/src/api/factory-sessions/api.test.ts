@@ -503,15 +503,69 @@ describe("factory sessions API", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(getFactorySession("session-beta")).resolves.toEqual({
-      id: "session-beta",
-      runtime: {
-        orchestratorKind: "JAVASCRIPT",
+      session: {
+        id: "session-beta",
+        runtime: {
+          orchestratorKind: "JAVASCRIPT",
+        },
       },
     });
     expect(fetchMock).toHaveBeenCalledWith(
       "/factory-sessions/session-beta",
       expect.objectContaining({ method: "GET" }),
     );
+  });
+
+  it("normalizes durable factory session reads into shared FactorySession runtime shape", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          dialect: "you-workflow-v1",
+          lifecycle: {
+            startedAt: "2026-06-08T14:00:00Z",
+            updatedAt: "2026-06-08T14:05:00Z",
+          },
+          orchestratorKind: "JAVASCRIPT",
+          phase: "verify",
+          progress: {
+            completedDispatches: 1,
+            failedDispatches: 0,
+            inFlightDispatches: 1,
+            totalDispatches: 3,
+          },
+          resolvedSource: {
+            kind: "WORKFLOW_NAME",
+            sourceRef: "workflow/release-train",
+            sourceHash: "sha256:js-workflow-release-train",
+          },
+          sessionId: "dur-sess-js-run-n-001",
+          status: "RUNNING",
+          usage: { resources: [] },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getFactorySession("dur-sess-js-run-n-001")).resolves.toEqual({
+      durableLifecycleStatus: "RUNNING",
+      session: expect.objectContaining({
+        id: "dur-sess-js-run-n-001",
+        runtime: expect.objectContaining({
+          javascript: expect.objectContaining({
+            phase: "verify",
+            scriptStatus: "RUNNING",
+          }),
+          orchestratorKind: "JAVASCRIPT",
+          status: "ACTIVE",
+        }),
+      }),
+    });
   });
 
   it("loads live terminal and partial result surfaces from the typed API", async () => {
