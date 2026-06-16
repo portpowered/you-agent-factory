@@ -1,147 +1,250 @@
-# PRD: Wire real child execution into the JavaScript durable session runtime
-
----
-author: Codex
-last modified: 2026, june, 16
-status: draft
----
+# PRD: Expose Durable JavaScript Factory Session Inspection In The Website
 
 ## Introduction
 
-Wire one bounded real child-execution path into durable JavaScript `FactorySession` execution so `agent.run`, `parallel`, and `pipeline` can record real child dispatch behavior through the shared session-backend inspection model instead of always reporting fake execution. The change should preserve the existing fake child path for deterministic tests and for lanes that do not need provider-backed execution, while proving that one live bridge can expose real execution mode, stable dispatch identity, provider-session references when present, artifact references when produced, and typed failure detail.
+Customers can now run durable JavaScript `FactorySession` executions through the
+shared backend, but the website still falls back to incomplete or generic
+inspection when that session is viewed in the existing Factory Session detail
+surface. This leaves customers dependent on CLI or MCP output to understand
+live status, phase progress, child dispatch activity, warnings, results, and
+artifacts.
 
-This project is the `LIVE-DISPATCH_BRIDGE` deliverable cell. It depends on the completed real backend API session-parity, dispatch-artifact, and lifecycle-control cells plus the existing `workflowruntime.Hooks.NewChildExecutor` seam and durable dispatch or artifact projection in `pkg/factorysessionexecution`.
+This lane adds bounded website parity by extending the existing Factory Session
+detail experience to render durable JavaScript session inspection through shared
+typed session data, shared dashboard/detail adapters, and shared UI state
+treatments. The scope stays narrow: inspect an existing session well, prove the
+visible states, and defer broader dashboard, replay, and graph-editor work.
 
 ## Context
 
-### Customer ask
+### Customer Ask
 
-Use the real JavaScript runtime path with one bounded live child-execution adapter so durable JavaScript sessions that call `agent.run`, `parallel`, or `pipeline` no longer report `executionMode: fake` for the bridged child path, and instead expose real execution details through shared session-backend inspection.
+Expose durable JavaScript `FactorySession` inspection in the website so
+customers can see shared session status, orchestrator kind, script phase or
+status, child dispatch counts, warnings, and available artifact or result
+references without needing CLI or MCP output.
 
 ### Problem
 
-The JavaScript host API currently has a fake child execution path that is useful for deterministic fanout tests, but it cannot prove provider-backed child execution or durable dispatch detail parity. That leaves a customer-visible gap in shared session inspection: the durable session can show child records, but the bridged path still looks fake even when the backend stack is ready to route one child through a real execution path. Without a bounded live bridge, downstream CLI, MCP, and inspection parity work cannot trust session dispatch reads to represent real execution mode, provider-session correlation, artifact production, or typed child failure behavior.
+The durable backend projection and supporting API/session work are available,
+but the current website detail surface does not yet provide customer-usable
+inspection parity for durable JavaScript sessions. The result is either missing
+runtime metadata or fallback states that are too generic, while loading,
+not-found, and error handling can leave visible gaps in this inspection lane.
 
-### High-level solution
+### High-Level Solution
 
-Replace the empty `workflowruntime.Hooks{}` child-executor usage inside the JavaScript durable session runtime service with a narrow adapter that maps `workflowruntime.ChildExecutionRequest` onto an existing real executor path and writes the resulting child lifecycle back into the shared durable dispatch and artifact projection model. Keep stable dispatch identity reservation, execution ordering, provider-session correlation, artifact references, and typed failure projection inside the existing `FactorySession`, `Dispatch`, `ProviderSession`, and `FactoryArtifact` vocabulary. Preserve the deterministic fake child path as a selectable coexistence mode, and prove the bridge with focused backend tests for one successful real child and one failed real child.
-
-## Project-Level Acceptance Criteria
-
-- [x] A real-runtime durable JavaScript session using an `agent.run` fixture no longer reports `executionMode: fake` for the bridged child path and instead records a distinct real execution mode through shared dispatch inspection.
-- [x] At least one bridged child execution produces durable dispatch detail with stable dispatch ID, status transitions, provider-session refs when present, and artifact refs or output artifacts when produced by the underlying execution path.
-- [x] A failed bridged child execution returns typed failure detail through shared session-backend reads without corrupting unrelated child records or final session inspection.
-- [x] Existing fake-child runtime tests remain stable, proving the real bridge is an incremental swap-in path rather than a breaking replacement.
-- [x] The lane does not implement website inspection, graph editor work, MCP install packaging, or another broad API surface.
-- [x] **Quality gate:** typecheck, lint, and focused tests pass, including `go test ./pkg/orchestrators/javascript/... ./pkg/factorysessionexecution/...` and `go test ./pkg/workers/executor/... ./pkg/workers/provider/...`.
+Reuse the existing `FactorySession` detail widget, generated OpenAPI types, and
+shared dashboard/session adapters as the canonical UI path. Add only the
+smallest missing projection and rendering behavior needed for durable
+JavaScript sessions so the detail surface can show status, orchestrator kind,
+phase, warnings, child dispatch summaries, and artifact or result references,
+while using existing shared UI treatments for loading, missing, and error
+states.
 
 ## Goals
 
-- Record one real child execution path through durable JavaScript session inspection.
-- Preserve canonical `FactorySession`, `Dispatch`, `ProviderSession`, and `FactoryArtifact` vocabulary.
-- Keep fake child execution available for deterministic tests and non-live lanes.
-- Surface stable real-child dispatch identity, status progression, provider-session references, artifact references, and typed failure details through shared backend reads.
-- Keep the bridge narrow enough that later CLI, MCP, and website parity work can consume it without redefining session inspection semantics.
+- Make durable JavaScript `FactorySession` inspection usable in the existing
+  website detail surface.
+- Keep the customer-facing model aligned to `FactorySession`, `Dispatch`,
+  `ProviderSession`, and `FactoryArtifact`.
+- Reuse shared typed data, hooks, adapters, and message treatments instead of
+  introducing a website-only workflow inspection model.
+- Prove both runtime-detail rendering and state handling with focused UI tests
+  and one browser verification path.
+- Keep the lane bounded away from graph editor, transport redesign, replay
+  expansion, or broad dashboard restyling.
+
+## Project-Level Acceptance Criteria
+
+- [ ] A durable JavaScript `FactorySession` shown through the existing website
+      detail surface renders shared session status, orchestrator kind, script
+      phase or runtime status, warning summaries, child dispatch counts, and
+      available artifact or result references without requiring CLI or MCP
+      output.
+- [ ] The inspection surface uses shared typed `FactorySession` data and shared
+      dashboard/detail adapters rather than a website-only dynamic workflow run
+      model or feature-local synthetic runtime semantics.
+- [ ] Dispatch-backed or artifact-backed runtime details are visible in at least
+      one durable JavaScript session success case so customers can understand
+      child activity and available outputs from the website alone.
+- [ ] Loading, not-found, and error states render through existing shared UI
+      treatments with no blank or workflow-specific fallback gaps.
+- [ ] Focused UI tests prove durable JavaScript inspection behavior from shared
+      typed data, including one runtime-detail case and one non-success state
+      case.
+- [ ] A browser verification path confirms the bounded inspection UI is usable
+      in the local app or a deterministic story for the targeted durable
+      JavaScript session state.
+- [ ] Typecheck, lint, and focused UI tests pass for the changed website
+      surfaces.
 
 ## User Stories
 
-### dynamic-workflows-cell-live-provider-dispatch-bridge-001: Run one real `agent.run` child through the durable dispatch bridge
+### dynamic-workflows-cell-website-session-inspection-001: Render Durable JavaScript Session Summary In The Existing Detail Surface
 
-**Description:** As a maintainer validating live JavaScript session execution, I want one `agent.run` child to route through a real child executor so shared session inspection shows real dispatch behavior instead of a fake execution mode.
-
-**Acceptance Criteria:**
-
-- [ ] A durable JavaScript session fixture that calls `agent.run` can select the real child-executor path without changing workflow source syntax.
-- [ ] The resulting child dispatch read shows a non-fake execution mode that is distinct from the deterministic fake-child path.
-- [ ] The bridged child preserves a stable reserved dispatch ID from queueing through terminal completion.
-- [ ] Shared session inspection continues to expose the child under existing `FactorySession` and `Dispatch` reads rather than a workflow-run-specific surface.
-- [ ] Typecheck passes
-- [ ] Tests pass
-
-### dynamic-workflows-cell-live-provider-dispatch-bridge-002: Persist real-child dispatch lifecycle, provider-session refs, and artifact refs
-
-**Description:** As a caller inspecting durable session dispatches, I want successful bridged child executions to expose stable lifecycle detail, provider-session correlation, and produced artifacts so real child work can be inspected through the shared backend model.
+**Description:** As a customer inspecting a durable JavaScript factory session
+in the website, I want the existing session detail surface to show the core
+runtime summary so that I can understand what the session is doing without
+leaving the dashboard.
 
 **Acceptance Criteria:**
 
-- [ ] At least one successful bridged child execution records ordered dispatch status transitions that are visible through shared session-backend reads.
-- [ ] When the underlying execution path creates or correlates a provider session, the durable dispatch detail includes the related `ProviderSession` reference without introducing new child-execution nouns.
-- [ ] When the underlying execution path produces artifacts or output artifacts, the durable dispatch detail exposes stable artifact refs or artifact summaries through the existing session and artifact inspection surfaces.
-- [ ] Successful bridged child inspection remains compatible with `agent.run`, `parallel`, and `pipeline` semantics by reusing one shared child-executor bridge rather than separate one-off projection paths.
-- [ ] Typecheck passes
-- [ ] Tests pass
+- [ ] A durable JavaScript `FactorySession` detail view renders shared session
+      status, orchestrator kind, and current script phase or runtime status in
+      the existing detail surface.
+- [ ] The success-state summary uses shared `FactorySession` typed data and the
+      existing detail hook or adapter path rather than a website-only workflow
+      detail model.
+- [ ] The rendered summary remains aligned with customer-facing terminology from
+      the shared data model.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+- [ ] Verify in browser using the Browser plugin.
 
-### dynamic-workflows-cell-live-provider-dispatch-bridge-003: Return typed failed-child detail without corrupting sibling or final session inspection
+### dynamic-workflows-cell-website-session-inspection-002: Show Dispatch, Warning, Result, And Artifact Inspection Details
 
-**Description:** As a caller inspecting failed child work, I want a bridged child failure to surface typed durable failure detail so I can diagnose the failure without losing unrelated child records or the parent session inspection state.
-
-**Acceptance Criteria:**
-
-- [ ] A fixture that forces a real bridged child failure returns typed failure detail through shared session-backend dispatch reads.
-- [ ] The failed child keeps its own dispatch ID, lifecycle history, and terminal failed status without overwriting successful sibling child records.
-- [ ] Parent session inspection remains readable after the failed child path, including final session result or failure inspection according to existing session semantics.
-- [ ] Failure projection does not corrupt unrelated artifact refs, provider-session refs, or dispatch summaries that belong to other children.
-- [ ] Typecheck passes
-- [ ] Tests pass
-
-### dynamic-workflows-cell-live-provider-dispatch-bridge-004: Keep fake-child execution available as a stable coexistence path
-
-**Description:** As a maintainer supporting parallel dynamic-workflow lanes, I want fake-child execution to remain available so the real bridge can land as an incremental swap-in path without breaking deterministic tests or non-live scenarios.
+**Description:** As a customer reviewing a durable JavaScript session, I want
+to see child dispatch activity, warnings, and available outputs so that I can
+inspect what happened from the website alone.
 
 **Acceptance Criteria:**
 
-- [x] Existing fake-child fixtures and runtime tests continue to pass without requiring provider-backed execution.
-- [x] Selecting the fake child path still reports fake execution mode and preserves existing deterministic dispatch semantics.
-- [x] The live bridge and fake path can coexist behind the shared child-executor seam without changing workflow source syntax for `agent.run`, `parallel`, or `pipeline`.
-- [x] The lane records deferred follow-ups such as CLI or MCP live smoke and website inspection as later cells instead of widening this implementation batch.
-- [x] Typecheck passes
-- [x] Tests pass
+- [ ] The detail surface renders child dispatch counts for a durable JavaScript
+      session using shared session or dashboard projection data.
+- [ ] The detail surface renders available warnings and result or artifact
+      references when the durable session includes them.
+- [ ] At least one durable JavaScript success scenario shows a dispatch-backed
+      or artifact-backed runtime detail case in the website inspection UI.
+- [ ] Result, artifact, and dispatch presentation stays within the shared
+      `FactorySession`, `Dispatch`, `ProviderSession`, and `FactoryArtifact`
+      vocabulary.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+- [ ] Verify in browser using the Browser plugin.
+
+### dynamic-workflows-cell-website-session-inspection-003: Handle Loading, Missing, And Error States With Shared Treatments
+
+**Description:** As a customer opening a durable JavaScript session from the
+website, I want clear loading, missing, and failure states so that inspection
+does not collapse into blank space or ambiguous fallback copy.
+
+**Acceptance Criteria:**
+
+- [ ] The bounded inspection surface renders an explicit loading state using
+      existing shared UI treatments.
+- [ ] When the requested session is not found, the detail surface renders an
+      existing shared missing-state treatment instead of a blank panel or
+      workflow-specific fallback.
+- [ ] When session loading fails, the detail surface renders an existing shared
+      error treatment with recoverable or diagnosable messaging consistent with
+      current dashboard patterns.
+- [ ] Non-success states stay inside the existing Factory Session detail surface
+      rather than redirecting to a new workflow-specific page.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+- [ ] Verify in browser using the Browser plugin.
+
+### dynamic-workflows-cell-website-session-inspection-004: Prove Bounded Website Parity Without Widening Scope
+
+**Description:** As a maintainer landing durable JavaScript website inspection,
+I want focused verification and explicit scope boundaries so that this lane
+proves customer-visible parity without turning into a broader dashboard
+redesign.
+
+**Acceptance Criteria:**
+
+- [ ] Focused UI tests cover at least one durable JavaScript success case with
+      runtime metadata plus dispatch or artifact-backed detail rendering.
+- [ ] Focused UI tests cover at least one loading, not-found, or error state
+      for the same bounded inspection surface.
+- [ ] Browser verification confirms the local app or deterministic story is
+      usable for the targeted durable JavaScript inspection state.
+- [ ] Any richer drilldown, replay-specific website work, or broader dashboard
+      refinement is recorded as deferred follow-up rather than implemented in
+      this lane.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
 ## High-Level Technical Design
 
-The implementation should keep JavaScript session orchestration inside the existing runtime and session-backend boundaries. The runtime already exposes `workflowruntime.Hooks.NewChildExecutor`; this cell should supply a real child-executor factory from `factorysessionexecution.JavaScriptRuntimeService` instead of leaving the hook empty. That executor should accept the existing `workflowruntime.ChildExecutionRequest`, reserve or reuse the canonical dispatch identity early, and route the request into the smallest existing real executor or provider path that can already produce durable dispatch, provider-session, and artifact outcomes.
+The canonical state for this lane remains the shared typed `FactorySession`
+payload and associated dashboard/session projections already produced by the
+backend and consumed by the website. The website should extend the existing
+Factory Session detail widget and its current hooks or adapters first, using the
+smallest adapter or mapper change needed to expose durable JavaScript runtime
+fields already present in the shared contract.
 
-The bridge should not invent workflow-specific child payloads. The runtime may keep internal adapter types, but durable reads must remain expressed as `FactorySession`, `Dispatch`, `ProviderSession`, and `FactoryArtifact` data. The session-backend projection layer should remain the shared owner of durable inspection shape, with any required field extensions made there rather than in one-off runtime records or UI-only adapters.
+UI rendering should remain inside the established session-detail composition
+instead of creating a new top-level workflow page or feature-local runtime
+shape. Runtime-detail display should project from shared session data into a
+customer-usable summary of status, phase, warnings, child dispatch counts, and
+artifact or result references. Loading, missing, and error handling should
+reuse existing message and shell primitives so the state model remains explicit
+and consistent with current dashboard behavior.
 
-Fake-child execution must remain a first-class alternate dependency path. Tests should prove both modes without changing fixture source syntax, which keeps the live bridge a bounded swap-in behind the existing host API primitives.
+If a required parity field is still missing at the projection boundary, the fix
+should happen in the shared mapper or session projection path rather than by
+inventing UI-only derived semantics.
 
 ## Functional Requirements
 
-1. FR-1: The JavaScript durable session runtime must provide a non-empty child-executor hook that can route at least one `agent.run` child through a real execution path.
-2. FR-2: A bridged real child must record a distinct non-fake execution mode in shared durable dispatch inspection.
-3. FR-3: The durable dispatch record for a bridged child must preserve one stable dispatch ID across queued, running, and terminal states.
-4. FR-4: The bridge must project provider-session references when the underlying execution path creates or exposes them.
-5. FR-5: The bridge must project artifact refs or output artifacts when the underlying child execution path produces them.
-6. FR-6: Failed bridged children must surface typed durable failure detail through shared session-backend reads.
-7. FR-7: A failed bridged child must not corrupt sibling child records, unrelated artifact refs, or final session inspection for the parent session.
-8. FR-8: `agent.run`, `parallel`, and `pipeline` must continue to use one shared child-executor seam so live and fake paths can be swapped without changing workflow source syntax.
-9. FR-9: Existing fake-child runtime coverage must remain valid and keep reporting fake execution mode when the fake path is selected.
-10. FR-10: If durable dispatch or artifact read models need additional fields for real-child parity, the owning shared contract must be updated in place and generated artifacts synchronized only if the public schema actually changes.
+- FR-1: The website must render durable JavaScript `FactorySession` inspection
+  through the existing Factory Session detail surface.
+- FR-2: The detail surface must show shared session status, orchestrator kind,
+  and script phase or runtime status for durable JavaScript sessions.
+- FR-3: The detail surface must show child dispatch counts for durable
+  JavaScript sessions when that data exists in the shared typed session or
+  dashboard projection.
+- FR-4: The detail surface must show available warnings and result or artifact
+  references when present.
+- FR-5: The website must use shared `FactorySession` typed data and shared
+  adapters rather than a website-only dynamic workflow inspection model.
+- FR-6: The detail surface must explicitly handle loading, not-found, and error
+  states with existing shared UI treatments.
+- FR-7: Focused UI tests must prove one durable JavaScript success case and at
+  least one non-success state for the bounded inspection surface.
+- FR-8: One browser verification path must confirm the layout-sensitive
+  inspection state in the local app or a deterministic story.
 
 ## Non-Goals
 
-- No website or dashboard inspection work.
-- No graph editor or current-selection UI work.
-- No MCP host install or packaging changes.
-- No broad API or event-stream parity sweep beyond the shared session-backend inspection shape already owned by this lane.
-- No renaming of public resource vocabulary away from `FactorySession`, `Dispatch`, `ProviderSession`, or `FactoryArtifact`.
+- No factory graph editor changes.
+- No current-selection cleanup unrelated to durable JavaScript session
+  inspection.
+- No replay, resume, or persistence-specific website surfaces.
+- No transport redesign, new top-level workflow page, or another broad
+  dashboard parity sweep.
+- No website-only dynamic workflow run model.
 
-## Supporting Technical Considerations
+## Supporting Technical And UX Considerations
 
-- Follow `docs/architecture/data-model.md` and keep public naming on shared factory-session resources.
-- Preserve the service or session boundary described in `docs/architecture/architecture.md`: `FactoryService` coordinates, while per-session runtime state belongs to the session runtime.
-- Use the existing `workflowruntime.Hooks.NewChildExecutor` seam rather than adding a second child-dispatch integration path.
-- Prefer extending shared `factorysessionexecution` projection types over adding bridge-only payloads in API or UI layers.
-- Verification should stay focused on behavioral backend evidence: successful real child execution, failed real child execution, dispatch inspection reads, artifact reads, and fake-path non-regression.
-- Deferred follow-ups such as CLI or MCP live smoke and website inspection should be recorded as later cells, not absorbed into this batch.
+- Prefer the existing `ui/src/features/factory-session-detail/*` surface and
+  shared dashboard/session projections before creating any new feature path.
+- Keep state handling explicit for loading, empty or missing, error, and
+  success states in line with the website standards.
+- Preserve accessible semantics and keyboard usability for any links, buttons,
+  disclosure controls, or result-reference affordances shown in the detail
+  surface.
+- Keep copy concise and aligned with the public `FactorySession` vocabulary from
+  the architecture docs.
+- If browser verification uses a deterministic story instead of the local app,
+  the story should model the same durable JavaScript session state the focused
+  tests cover.
 
 ## Success Metrics
 
-- A real-runtime `agent.run` fixture produces durable child dispatch inspection with non-fake execution mode.
-- At least one successful real child exposes stable dispatch identity, lifecycle detail, provider-session correlation when present, and artifact references when produced.
-- At least one failed real child exposes typed failure detail without damaging sibling dispatches or parent session inspection.
-- Existing fake-child runtime tests remain green, proving the bridge is additive.
+- A customer can inspect a durable JavaScript session from the website without
+  needing CLI or MCP output to understand its state and outputs.
+- The session detail surface shows enough runtime summary to explain status,
+  phase, dispatch activity, and available result or artifact references.
+- Non-success states are explicit and visually consistent with existing website
+  behavior.
+- The lane lands with focused verification and without widening into unrelated
+  dashboard work.
 
 ## Open Questions
 
-None. The customer ask fixes the scope on one bounded live provider-dispatch bridge and explicitly defers broader CLI, MCP, website, and graph-editor follow-up work.
+No unresolved product questions are required for this lane. If implementation
+finds that a shared projection field is still missing, it should be repaired in
+the shared mapper boundary without broadening scope.

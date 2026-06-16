@@ -12,6 +12,10 @@
 - Select explicit fake child execution via `StartRequest.Runtime.ChildExecutorMode = "fake"` even when the service default is `live-provider`; request-level mode wins over `JavaScriptRuntimeServiceConfig.ChildExecutorMode`.
 - Record deferred CLI/MCP/website follow-ups in `docs/internal/development/plans/dynamic-workflows/follow-up-cell-live-provider-dispatch-bridge-deferred.md` instead of widening the bridge lane.
 - When `make pkg-file-count` fails after adding bridge files, move provider code to `pkg/factorysessionexecution/livechild` and consolidate fixture tests rather than adding root package files; avoid importing `factorysessionexecution` from `livechild` tests (import cycle).
+- Durable `GET /factory-sessions/{session_id}` returns `FactorySessionDurableReadModel`; normalize into shared `FactorySession` runtime shape in `ui/src/api/factory-sessions/normalize-session-get.ts` before the factory-session detail hook renders summary fields.
+- Durable JavaScript inspection detail loads dispatch summaries through `ui/src/api/factory-sessions/api-durable-inspection.ts` (`listFactorySessionDispatches`) and merges them into `FactorySession.runtime.dispatches` in `use-factory-session-detail.ts`; map durable result reads with `getFactorySessionDurableResults` plus `normalize-durable-inspection.ts` when session GET lacks `resultSummary` artifact refs.
+- Customer-facing runtime/orchestrator/script status labels for factory-session detail live in `ui/src/features/factory-session-detail/messages/factory-session-detail.ts` and format through `messages/factory-session-runtime-display.ts` to satisfy `check:localized-copy`.
+- Factory session detail loading, missing, and error states use the same `StatusNotice` pattern as provider session detail: `AlertPanel` with `role="status"` for loading/not-found and `role="alert"` with `tone="danger"` for API failures.
 
 ## 2026-06-16T14:30:00Z - mergeability: PR #822 pkg-file-count
 - Fixed required CI `Build, Lint, and API` failure from `pkg-file-count` by moving `ProviderChildExecutor` to `pkg/factorysessionexecution/livechild`, merging live-child fixture tests into `fixtures/runtime_live_child_test.go`, folding `session_event_projection_test.go` into `projection_test.go`, merging `typed_failure_cases_test.go` into `typed_failures_test.go`, and inlining `child_record_sink.go` into `child_execution.go`.
@@ -51,6 +55,36 @@
   - Patterns discovered: `childExecutorForRun` falls back to `FakeChildExecutor` when `Hooks.NewChildExecutor` is nil; live mode only installs the hook when resolved mode is `live-provider`.
   - Gotchas encountered: coexistence proof belongs in durable-session fixtures, not only `workflowruntime.Run` host tests, to cover `GetDispatch` execution-mode projection.
   - Useful context: parallel and pipeline fake children each emit multiple `dispatch-*` rows inspectable through shared `ListDispatches`/`GetDispatch` reads.
+---
+
+## 2026-06-17T05:32:00Z - dynamic-workflows-cell-website-session-inspection-003
+- Aligned factory session detail loading, not-found, and error rendering with the shared `StatusNotice` treatment used by provider session detail (`AlertPanel` with `role="status"` for loading/missing and `role="alert"` for failures) while keeping non-success states inside the existing detail surface.
+- Added focused UI tests for durable JavaScript 404/missing, API error, and zh-CN localized loading/missing copy, plus Storybook browser-verification stories for loading, not-found, and error states.
+- Files changed: `ui/src/features/factory-session-detail/components/{factory-session-detail-panel,factory-session-detail-panel.test,factory-session-detail-panel.stories}.tsx`.
+- **Learnings for future iterations:**
+  - Patterns discovered: mirror provider-session `StatusNotice` for dashboard detail panels instead of plain `DetailCopy` when surfacing fetch lifecycle states.
+  - Gotchas encountered: `useFactorySessionDetail` maps HTTP 404 to `not-found` via `query.error?.status`, independent of normalized API error codes.
+  - Useful context: Storybook non-success stories can hang loading with `response: () => new Promise<never>(() => undefined)` and assert `role="status"`/`role="alert"` in play functions.
+---
+
+## 2026-06-17T05:12:00Z - dynamic-workflows-cell-website-session-inspection-001
+- Normalized durable `FactorySessionDurableReadModel` GET responses into shared `FactorySession` runtime shape via `normalize-session-get.ts`, preserving durable lifecycle status for summary rendering while projecting JavaScript phase, script status, and child dispatch counts from durable progress fields.
+- Updated `FactorySessionDetailPanel` to show a runtime summary section with customer-facing orchestrator, runtime, phase, and script status labels through localized message catalogs; added durable and live UI/API tests plus a Storybook verification story.
+- Files changed: `ui/src/api/factory-sessions/{api,normalize-session-get}.ts`, `ui/src/features/factory-session-detail/{components,hooks,messages}/*`, `docs/internal/processes/api-relevant-files.md`.
+- **Learnings for future iterations:**
+  - Patterns discovered: `getFactorySession` must accept the `FactorySessionGetResponse` oneOf and map durable reads before `useFactorySessionDetail` can render JavaScript summaries.
+  - Gotchas encountered: runtime display strings belong under `messages/` to pass `check:localized-copy`; `StatusCategories` requires zeroed `initial/processing/terminal/failed` fields in normalized progress.
+  - Useful context: durable running fixture `dur-sess-js-run-n-001` is a good panel/story mock for phase `verify` with `RUNNING` lifecycle status.
+---
+
+## 2026-06-17T05:24:00Z - dynamic-workflows-cell-website-session-inspection-002
+- Added durable dispatch and result inspection adapters (`api-durable-inspection.ts`, `normalize-durable-inspection.ts`) and enriched `useFactorySessionDetail` to merge `listFactorySessionDispatches` rows plus durable result surfaces into the shared `FactorySession` detail panel.
+- Rendered child dispatch activity, dispatch warnings, artifact refs, and final/partial result refs for durable JavaScript sessions, with focused UI/API tests and a Storybook verification story using fixture `dur-sess-js-success-002`.
+- Files changed: `ui/src/api/factory-sessions/{api-durable-inspection,normalize-durable-inspection,index}.ts`, `ui/src/features/factory-session-detail/{hooks,components,messages}/*`, `docs/internal/processes/api-relevant-files.md`.
+- **Learnings for future iterations:**
+  - Patterns discovered: keep `api.ts` under Biome `noExcessiveLinesPerFile` by placing durable list/result reads in `api-durable-inspection.ts` while sharing `buildFactorySessionsAPIError` from `api.ts`.
+  - Gotchas encountered: `FactoryArtifactRef` omits `label`; artifact list labels must come from list/detail artifact endpoints, not durable session `artifactRefs` alone.
+  - Useful context: `dur-sess-js-success-002` is the canonical succeeded JavaScript durable fixture for dispatch-backed (`disp-js-success-002`) and artifact-backed (`art-js-success-001`) website inspection cases.
 ---
 
 ## 2026-06-16T00:00:00Z - dynamic-workflows-cell-live-provider-dispatch-bridge-001
