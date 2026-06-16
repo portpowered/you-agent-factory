@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workask"
 )
 
 const batchErrorBodyPreviewLimit = 200
@@ -75,6 +76,11 @@ func validateBatchRequest(req interfaces.WorkRequest) error {
 	}
 	if len(req.Works) == 0 {
 		return fmt.Errorf("batch works must contain at least one item")
+	}
+	for i, work := range req.Works {
+		if err := workask.ValidateIdeaWorkInBatch(i, work); err != nil {
+			return err
+		}
 	}
 	return nil
 }

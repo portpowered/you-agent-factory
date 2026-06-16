@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workask"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
@@ -46,6 +47,11 @@ func NormalizeWorkRequest(req interfaces.WorkRequest, opts interfaces.WorkReques
 		content, payload, err := normalizeWorkContent(work.Content, work.Payload)
 		if err != nil {
 			return nil, fmt.Errorf("work_request: works[%d] (%q) has invalid content/payload: %w", i, work.Name, err)
+		}
+		if workTypeID == workask.WorkTypeIdea {
+			if err := workask.ValidateIdeaCustomerAsk(i, work.Name, content, payload); err != nil {
+				return nil, err
+			}
 		}
 
 		itemCurrentChainingTraceID := ResolveWorkRequestCurrentChainingTraceID(work.CurrentChainingTraceID, work.TraceID)

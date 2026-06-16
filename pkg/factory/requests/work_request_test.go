@@ -789,6 +789,104 @@ func TestNormalizeWorkRequest_NormalizesLegacyFileOnlyImageContent(t *testing.T)
 	}
 }
 
+func TestNormalizeWorkRequest_RejectsEmptyIdeaCustomerAsk(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		work    interfaces.Work
+		wantErr string
+	}{
+		{
+			name: "blank payload",
+			work: interfaces.Work{Name: "fd", WorkTypeID: "idea"},
+			wantErr: "requires a customer ask for idea work",
+		},
+		{
+			name:    "whitespace payload",
+			work:    interfaces.Work{Name: "fd", WorkTypeID: "idea", Payload: "  \t\n"},
+			wantErr: "requires a customer ask for idea work",
+		},
+		{
+			name: "whitespace text content",
+			work: interfaces.Work{
+				Name:       "fd",
+				WorkTypeID: "idea",
+				Content: []interfaces.WorkContentPart{{
+					Type: interfaces.WorkContentPartTypeText,
+					Text: "  \n",
+				}},
+			},
+			wantErr: "requires a customer ask for idea work",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := NormalizeWorkRequest(interfaces.WorkRequest{
+				RequestID: "request-empty-idea",
+				Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+				Works:     []interfaces.Work{tc.work},
+			}, interfaces.WorkRequestNormalizeOptions{})
+			if err == nil {
+				t.Fatal("expected validation error")
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("error = %v, want %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestNormalizeWorkRequest_AllowsNonEmptyIdeaCustomerAsk(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		work interfaces.Work
+	}{
+		{
+			name: "text payload",
+			work: interfaces.Work{Name: "fd", WorkTypeID: "idea", Payload: "Add search to docs"},
+		},
+		{
+			name: "structured payload",
+			work: interfaces.Work{Name: "fd", WorkTypeID: "idea", Payload: map[string]any{"title": "search bar"}},
+		},
+		{
+			name: "text content",
+			work: interfaces.Work{
+				Name:       "fd",
+				WorkTypeID: "idea",
+				Content: []interfaces.WorkContentPart{{
+					Type: interfaces.WorkContentPartTypeText,
+					Text: "Improve onboarding",
+				}},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			normalized, err := NormalizeWorkRequest(interfaces.WorkRequest{
+				RequestID: "request-idea",
+				Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+				Works:     []interfaces.Work{tc.work},
+			}, interfaces.WorkRequestNormalizeOptions{})
+			if err != nil {
+				t.Fatalf("NormalizeWorkRequest: %v", err)
+			}
+			if len(normalized) != 1 || normalized[0].WorkTypeID != "idea" {
+				t.Fatalf("normalized = %#v, want one idea work item", normalized)
+			}
+		})
+	}
+}
+
 func findSubmitRequest(t *testing.T, requests []interfaces.SubmitRequest, name string) interfaces.SubmitRequest {
 	t.Helper()
 	for _, request := range requests {

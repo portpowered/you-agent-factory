@@ -408,6 +408,30 @@ func TestSubmitBatch_DefaultSessionUsesCompatibilitySession(t *testing.T) {
 	}
 }
 
+func TestSubmitBatch_RejectsEmptyIdeaAskBeforeHTTP(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+	defer srv.Close()
+
+	path := writeBatchFile(t, `{"requestId":"batch-empty-idea","type":"FACTORY_REQUEST_BATCH","works":[{"name":"fd","workTypeName":"idea","payload":"   "}]}`)
+	err := SubmitBatch(BatchConfig{
+		Args:   []string{path},
+		Server: mustServerBase(t, srv.URL),
+		Output: io.Discard,
+	})
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if !strings.Contains(err.Error(), "requires a customer ask for idea work") {
+		t.Fatalf("error = %v, want empty idea ask validation", err)
+	}
+	if called {
+		t.Fatal("expected no HTTP call for invalid idea ask")
+	}
+}
+
 func TestSubmitBatch_ValidationFailsBeforeHTTP(t *testing.T) {
 	called := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -645,6 +645,17 @@ func TestListWork_NextTokenContinuesPublicRoutePagination(t *testing.T) {
 	}
 }
 
+func TestUpsertWorkRequest_RejectsEmptyIdeaCustomerAsk(t *testing.T) {
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	srv := newTestServer(mf)
+
+	rec := upsertWorkRequest(t, srv, "/factory-sessions/~default/work-requests/request-empty-idea", `{"requestId":"request-empty-idea","type":"FACTORY_REQUEST_BATCH","works":[{"name":"fd","workTypeName":"idea","payload":"   "}]}`)
+	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", `work_request: works[0] ("fd") requires a customer ask for idea work`)
+	if len(mf.Submitted) != 0 {
+		t.Fatalf("submitted count = %d, want 0 before queueing", len(mf.Submitted))
+	}
+}
+
 func TestUpsertWorkRequest_NormalizesLegacyStringPayloadIntoCanonicalContent(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
 	srv := newTestServer(mf)
