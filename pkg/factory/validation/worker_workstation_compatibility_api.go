@@ -8,56 +8,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
-// WorkerWorkstationCompatibilityTargets validates that each workstation references
-// a worker with a compatible inference, agent, script, or poller behavior class.
-func WorkerWorkstationCompatibilityTargets(cfg *interfaces.FactoryConfig) []Target {
-	if cfg == nil {
-		return nil
-	}
-
-	workersByName := make(map[string]interfaces.WorkerConfig, len(cfg.Workers))
-	for _, worker := range cfg.Workers {
-		if strings.TrimSpace(worker.Name) == "" {
-			continue
-		}
-		workersByName[worker.Name] = worker
-	}
-
-	var targets []Target
-	for workstationIndex, workstation := range cfg.Workstations {
-		workerName := strings.TrimSpace(workstation.WorkerTypeName)
-		if workerName == "" {
-			continue
-		}
-		worker, ok := workersByName[workerName]
-		if !ok {
-			continue
-		}
-		if interfaces.WorkerMatchesWorkstationBehavior(worker.Type, workstation) {
-			continue
-		}
-
-		targets = append(targets, Target{
-			Code:     CodeWorkerWorkstationBehaviorCompatibility,
-			Severity: SeverityError,
-			Message: interfaces.WorkerWorkstationBehaviorMismatchMessage(
-				workstation.Name,
-				workstation.Type,
-				workstation.Kind,
-				worker.Name,
-				strings.TrimSpace(worker.Type),
-			),
-			Subject: Subject{
-				Type:     SubjectTypeWorkstation,
-				ID:       interfaces.CanonicalFactoryGraphWorkstationID(workstation),
-				Location: SubjectLocationReference,
-			},
-			Path: fmt.Sprintf("%s.workstations[%d].worker", validationRoot, workstationIndex),
-		})
-	}
-	return targets
-}
-
 // WorkerWorkstationCompatibilityTargetsFromAPI validates worker/workstation behavior
 // pairings on the public OpenAPI factory payload before internal runtime projection
 // collapses new taxonomy names onto legacy runtime identifiers.

@@ -182,16 +182,6 @@ func modelWorkerUsageBehaviorClasses(workerName string, workstations []FactoryWo
 	return classes
 }
 
-func DisplayWorkstationTypeForCompatibility(workstation FactoryWorkstationConfig) string {
-	if trimmed := strings.TrimSpace(workstation.Type); trimmed != "" {
-		return trimmed
-	}
-	if workstation.Kind == WorkstationKindPoller {
-		return WorkstationTypePoller
-	}
-	return WorkstationTypeModel
-}
-
 // EffectiveWorkstationBehaviorClass resolves the runtime behavior class for a
 // workstation, including legacy defaulting for standard agent workstations that
 // omit an explicit type while binding a worker.
