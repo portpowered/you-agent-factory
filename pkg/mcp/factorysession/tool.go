@@ -2,7 +2,9 @@
 // operations backed by the shared factorysessionexecution service contract.
 package factorysession
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
 // Tool names use Factory Session vocabulary and align with durable REST routes.
 const (
@@ -77,3 +79,4 @@ func (t ToolDefinition) MarshalJSON() ([]byte, error) {
 	type alias ToolDefinition
 	return json.Marshal(alias(t))
 }
+

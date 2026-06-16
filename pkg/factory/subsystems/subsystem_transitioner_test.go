@@ -597,3 +597,304 @@ func workerBatchSnapshot(output string) *interfaces.EngineStateSnapshot[petri.Ma
 		}},
 	}
 }
+func TestHistoryTransitionerPipeline_ProcessAcceptPreservesSiblingLaneReviewInit(t *testing.T) {
+	const traceID = "trace-process-pipeline-sibling"
+	now := time.Date(2026, 6, 15, 14, 30, 0, 0, time.UTC)
+
+	marking := petri.NewMarking("process-reconcile-pipeline-sibling")
+	marking.AddToken(&interfaces.Token{
+		ID: "review-lane-a-old", PlaceID: "review:init", CreatedAt: now, EnteredAt: now,
+		Color: interfaces.TokenColor{
+			WorkID: "work-review-a-old", WorkTypeID: "review", Name: "lane-a",
+			CurrentChainingTraceID: traceID,
+		},
+	})
+	marking.AddToken(&interfaces.Token{
+		ID: "review-lane-b-sibling", PlaceID: "review:init", CreatedAt: now, EnteredAt: now,
+		Color: interfaces.TokenColor{
+			WorkID: "work-review-b", WorkTypeID: "review", Name: "lane-b",
+			CurrentChainingTraceID: traceID,
+		},
+	})
+
+	taskToken := interfaces.Token{
+		ID: "task-init", PlaceID: "task:init", CreatedAt: now, EnteredAt: now,
+		Color: interfaces.TokenColor{
+			WorkID: "work-task-a", WorkTypeID: "task", Name: "lane-a",
+			CurrentChainingTraceID: traceID,
+		},
+	}
+
+	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: marking.Snapshot(),
+		Dispatches: map[string]*interfaces.DispatchEntry{
+			"d-process": {
+				DispatchID:     "d-process",
+				TransitionID:   "process",
+				ConsumedTokens: []interfaces.Token{taskToken},
+			},
+		},
+		Results: []interfaces.WorkResult{{
+			DispatchID:   "d-process",
+			TransitionID: "process",
+			Outcome:      interfaces.OutcomeAccepted,
+		}},
+	}
+
+	tp := newTestPipeline(buildProcessReconcilePipelineNet())
+	tp.transitioner.now = func() time.Time { return now }
+
+	result, err := tp.Execute(context.Background(), &snapshot)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected tick result")
+	}
+
+	consumed := mutationTokenIDs(result.Mutations)
+	if !consumed["review-lane-a-old"] {
+		t.Fatalf("missing reconcile consume for same-lane review in %#v", result.Mutations)
+	}
+	if consumed["review-lane-b-sibling"] {
+		t.Fatalf("consumed sibling lane review:init on same trace: %#v", consumed)
+	}
+}
+
+func TestHistoryTransitionerPipeline_ProcessAcceptReconcilesDuplicateReviewInit(t *testing.T) {
+	const (
+		traceID  = "trace-process-pipeline"
+		laneName = "lane-process-reconcile"
+	)
+	now := time.Date(2026, 6, 15, 14, 0, 0, 0, time.UTC)
+
+	marking := petri.NewMarking("process-reconcile-pipeline")
+	marking.AddToken(&interfaces.Token{
+		ID: "review-old-1", PlaceID: "review:init", CreatedAt: now, EnteredAt: now,
+		Color: interfaces.TokenColor{
+			WorkID: "work-review-old-1", WorkTypeID: "review", Name: laneName,
+			CurrentChainingTraceID: traceID,
+		},
+	})
+	marking.AddToken(&interfaces.Token{
+		ID: "review-old-2", PlaceID: "review:init", CreatedAt: now, EnteredAt: now,
+		Color: interfaces.TokenColor{
+			WorkID: "work-review-old-2", WorkTypeID: "review", Name: laneName,
+			CurrentChainingTraceID: traceID,
+		},
+	})
+
+	taskToken := interfaces.Token{
+		ID: "task-init", PlaceID: "task:init", CreatedAt: now, EnteredAt: now,
+		Color: interfaces.TokenColor{
+			WorkID: "work-task-1", WorkTypeID: "task", Name: laneName,
+			CurrentChainingTraceID: traceID,
+		},
+	}
+
+	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: marking.Snapshot(),
+		Dispatches: map[string]*interfaces.DispatchEntry{
+			"d-process": {
+				DispatchID:     "d-process",
+				TransitionID:   "process",
+				ConsumedTokens: []interfaces.Token{taskToken},
+			},
+		},
+		Results: []interfaces.WorkResult{{
+			DispatchID:   "d-process",
+			TransitionID: "process",
+			Outcome:      interfaces.OutcomeAccepted,
+		}},
+	}
+
+	tp := newTestPipeline(buildProcessReconcilePipelineNet())
+	tp.transitioner.now = func() time.Time { return now }
+
+	result, err := tp.Execute(context.Background(), &snapshot)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected tick result")
+	}
+
+	consumed := mutationTokenIDs(result.Mutations)
+	for _, id := range []string{"review-old-1", "review-old-2"} {
+		if !consumed[id] {
+			t.Fatalf("missing reconcile consume for %q in %#v", id, result.Mutations)
+		}
+	}
+}
+
+func TestHistoryTransitionerPipeline_ReviewAcceptReconcilesDuplicateReviewAndStaleTask(t *testing.T) {
+	const (
+		traceID  = "trace-review-pipeline"
+		laneName = "lane-reconcile"
+	)
+	now := time.Date(2026, 6, 15, 13, 0, 0, 0, time.UTC)
+
+	marking := petri.NewMarking("review-reconcile-pipeline")
+	marking.AddToken(&interfaces.Token{
+		ID: "review-extra", PlaceID: "review:init", CreatedAt: now, EnteredAt: now,
+		Color: interfaces.TokenColor{
+			WorkID: "work-review-extra", WorkTypeID: "review", Name: laneName,
+			CurrentChainingTraceID: traceID,
+		},
+	})
+	marking.AddToken(&interfaces.Token{
+		ID: "task-stale-init", PlaceID: "task:init", CreatedAt: now, EnteredAt: now,
+		Color: interfaces.TokenColor{
+			WorkID: "work-task-stale-init", WorkTypeID: "task", Name: laneName,
+			CurrentChainingTraceID: traceID,
+		},
+	})
+	marking.AddToken(&interfaces.Token{
+		ID: "task-stale-failed", PlaceID: "task:failed", CreatedAt: now, EnteredAt: now,
+		Color: interfaces.TokenColor{
+			WorkID: "work-task-stale-failed", WorkTypeID: "task", Name: laneName,
+			CurrentChainingTraceID: traceID,
+		},
+	})
+
+	taskToken := interfaces.Token{
+		ID: "task-in-review", PlaceID: "task:in-review", CreatedAt: now, EnteredAt: now,
+		Color: interfaces.TokenColor{
+			WorkID: "work-task-1", WorkTypeID: "task", Name: laneName,
+			CurrentChainingTraceID: traceID,
+		},
+	}
+	reviewToken := interfaces.Token{
+		ID: "review-active", PlaceID: "review:init", CreatedAt: now, EnteredAt: now,
+		Color: interfaces.TokenColor{
+			WorkID: "work-review-active", WorkTypeID: "review", Name: laneName,
+			CurrentChainingTraceID: traceID,
+		},
+	}
+
+	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking: marking.Snapshot(),
+		Dispatches: map[string]*interfaces.DispatchEntry{
+			"d-review": {
+				DispatchID:     "d-review",
+				TransitionID:   "review",
+				ConsumedTokens: []interfaces.Token{taskToken, reviewToken},
+			},
+		},
+		Results: []interfaces.WorkResult{{
+			DispatchID:   "d-review",
+			TransitionID: "review",
+			Outcome:      interfaces.OutcomeAccepted,
+		}},
+	}
+
+	tp := newTestPipeline(buildReviewReconcilePipelineNet())
+	tp.transitioner.now = func() time.Time { return now }
+
+	result, err := tp.Execute(context.Background(), &snapshot)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected tick result")
+	}
+
+	consumed := mutationTokenIDs(result.Mutations)
+	for _, id := range []string{"review-extra", "task-stale-init", "task-stale-failed"} {
+		if !consumed[id] {
+			t.Fatalf("missing reconcile consume for %q in %#v", id, result.Mutations)
+		}
+	}
+	if consumed["review-active"] || consumed["task-in-review"] {
+		t.Fatalf("consumed active dispatch tokens: %#v", consumed)
+	}
+}
+
+func buildProcessReconcilePipelineNet() *state.Net {
+	return &state.Net{
+		Places: map[string]*petri.Place{
+			"task:init":       {ID: "task:init", TypeID: "task", State: "init"},
+			"task:in-review":  {ID: "task:in-review", TypeID: "task", State: "in-review"},
+			"task:failed":     {ID: "task:failed", TypeID: "task", State: "failed"},
+			"review:init":     {ID: "review:init", TypeID: "review", State: "init"},
+			"review:complete": {ID: "review:complete", TypeID: "review", State: "complete"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"process": {
+				ID:         "process",
+				Name:       "process",
+				WorkerType: "processor",
+				InputArcs: []petri.Arc{
+					{ID: "task-in", Name: "task", PlaceID: "task:init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
+				},
+				OutputArcs: []petri.Arc{
+					{ID: "task-out", Name: "task", PlaceID: "task:in-review", Direction: petri.ArcOutput},
+					{ID: "review-out", Name: "review", PlaceID: "review:init", Direction: petri.ArcOutput},
+				},
+			},
+		},
+		WorkTypes: map[string]*state.WorkType{
+			"task": {
+				ID: "task",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+					{Value: "in-review", Category: state.StateCategoryProcessing},
+					{Value: "failed", Category: state.StateCategoryFailed},
+				},
+			},
+			"review": {
+				ID: "review",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+					{Value: "complete", Category: state.StateCategoryTerminal},
+				},
+			},
+		},
+	}
+}
+
+func buildReviewReconcilePipelineNet() *state.Net {
+	return &state.Net{
+		Places: map[string]*petri.Place{
+			"task:init":        {ID: "task:init", TypeID: "task", State: "init"},
+			"task:in-review":   {ID: "task:in-review", TypeID: "task", State: "in-review"},
+			"task:to-complete": {ID: "task:to-complete", TypeID: "task", State: "to-complete"},
+			"task:failed":      {ID: "task:failed", TypeID: "task", State: "failed"},
+			"review:init":      {ID: "review:init", TypeID: "review", State: "init"},
+			"review:complete":  {ID: "review:complete", TypeID: "review", State: "complete"},
+		},
+		Transitions: map[string]*petri.Transition{
+			"review": {
+				ID:         "review",
+				Name:       "review",
+				WorkerType: "processor",
+				InputArcs: []petri.Arc{
+					{ID: "task-in", Name: "task", PlaceID: "task:in-review", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
+					{ID: "review-in", Name: "review", PlaceID: "review:init", Direction: petri.ArcInput, Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne}},
+				},
+				OutputArcs: []petri.Arc{
+					{ID: "task-out", Name: "task", PlaceID: "task:to-complete", Direction: petri.ArcOutput},
+					{ID: "review-out", Name: "review", PlaceID: "review:complete", Direction: petri.ArcOutput},
+				},
+			},
+		},
+		WorkTypes: map[string]*state.WorkType{
+			"task": {
+				ID: "task",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+					{Value: "in-review", Category: state.StateCategoryProcessing},
+					{Value: "to-complete", Category: state.StateCategoryProcessing},
+					{Value: "failed", Category: state.StateCategoryFailed},
+				},
+			},
+			"review": {
+				ID: "review",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+					{Value: "complete", Category: state.StateCategoryTerminal},
+				},
+			},
+		},
+	}
+}

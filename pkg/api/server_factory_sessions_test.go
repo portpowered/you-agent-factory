@@ -285,8 +285,15 @@ func TestFactorySessionsAPI_ListFactorySessions(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
 		t.Fatalf("decode list factory sessions response: %v", err)
 	}
-	if len(response.Sessions) != 2 || response.Sessions[1].Id != "session-beta" {
+	if len(response.Sessions) != 2 {
 		t.Fatalf("factory sessions = %#v, want default and beta sessions", response.Sessions)
+	}
+	ids := map[string]bool{}
+	for _, session := range response.Sessions {
+		ids[session.Id] = true
+	}
+	if !ids["~default"] || !ids["session-beta"] {
+		t.Fatalf("factory session ids = %#v, want ~default and session-beta", ids)
 	}
 }
 

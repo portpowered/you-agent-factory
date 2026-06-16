@@ -258,6 +258,8 @@ paths:
                 type: string
                 description: Server-Sent Events where each data frame is serialized JSON matching FactoryEvent.
               x-event-schema: '#/components/schemas/FactoryEvent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '500':
           $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/events:
@@ -280,6 +282,8 @@ paths:
                 type: string
                 description: Server-Sent Events where each data frame is serialized JSON matching FactoryEvent.
               x-event-schema: '#/components/schemas/FactoryEvent'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
         '500':

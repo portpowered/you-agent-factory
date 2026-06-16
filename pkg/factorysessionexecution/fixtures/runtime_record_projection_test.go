@@ -1,23 +1,25 @@
-package factorysessionexecution_test
+package fixtures_test
 
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
-func TestRuntimeService_ProgressPrimitives_ProjectsArtifactsPhaseAndProgress(t *testing.T) {
-	_, service := newRuntimeServiceWithFixture(t, "progress-primitives.workflow.js", "progress-primitives")
+func TestJavaScriptRuntimeService_ProgressPrimitives_ProjectsArtifactsPhaseAndProgress(t *testing.T) {
+	service := newJavaScriptRuntimeServiceWithFixture(t, "progress-primitives.workflow.js", "progress-primitives")
 
-	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
+	completed, err := service.StartSync(context.Background(), fse.StartRequest{
 		RequestID: "req-runtime-progress-primitives",
-		Source: factorysessionexecution.Source{
+		Source: fse.Source{
 			Kind:         workflowsource.KindWorkflowName,
 			WorkflowName: "progress-primitives",
 		},
@@ -34,12 +36,12 @@ func TestRuntimeService_ProgressPrimitives_ProjectsArtifactsPhaseAndProgress(t *
 	assertProgressPrimitivesArtifacts(t, service, completed.SessionID)
 }
 
-func TestRuntimeService_AgentRunFakeChild_ProjectsDispatchAndChildArtifact(t *testing.T) {
-	_, service := newRuntimeServiceWithFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
+func TestJavaScriptRuntimeService_AgentRunFakeChild_ProjectsDispatchAndChildArtifact(t *testing.T) {
+	service := newJavaScriptRuntimeServiceWithFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
 
-	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
+	completed, err := service.StartSync(context.Background(), fse.StartRequest{
 		RequestID: "req-runtime-agent-run-fake-child",
-		Source: factorysessionexecution.Source{
+		Source: fse.Source{
 			Kind:         workflowsource.KindWorkflowName,
 			WorkflowName: "agent-run-fake-child",
 		},
@@ -83,7 +85,7 @@ func TestProjectRuntimeExecutionRecords_ProgressPrimitivesFixture(t *testing.T) 
 	}
 
 	observedAt := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
-	projection := factorysessionexecution.ProjectRuntimeExecutionRecords(
+	projection := fse.ProjectRuntimeExecutionRecords(
 		"session-progress-primitives",
 		outcome.Records,
 		observedAt,
@@ -99,7 +101,44 @@ func TestProjectRuntimeExecutionRecords_ProgressPrimitivesFixture(t *testing.T) 
 	}
 }
 
-func assertProgressPrimitivesSessionRead(t *testing.T, read factorysessionexecution.SessionReadResult) {
+func newJavaScriptRuntimeServiceWithFixture(t *testing.T, fixtureName, workflowName string) fse.Service {
+	t.Helper()
+	projectRoot := setupRuntimeWorkflowFixture(t, fixtureName, workflowName)
+	service, err := fse.NewExecutionService(
+		fse.ExecutionProviderJavaScriptRuntime,
+		fse.ServiceConfig{ProjectRoot: projectRoot},
+	)
+	if err != nil {
+		t.Fatalf("NewExecutionService: %v", err)
+	}
+	return service
+}
+
+func setupRuntimeWorkflowFixture(t *testing.T, fixtureName, workflowName string) string {
+	t.Helper()
+	projectRoot := t.TempDir()
+	workflowDir := filepath.Join(projectRoot, workflowsource.ProjectClaudeWorkflowsDir)
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	source := readRuntimeFixture(t, fixtureName)
+	if err := os.WriteFile(filepath.Join(workflowDir, workflowName+".js"), []byte(source), 0o600); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+	return projectRoot
+}
+
+func readRuntimeFixture(t *testing.T, name string) string {
+	t.Helper()
+	path := filepath.Join("..", "..", "orchestrators", "javascript", "runtime", "testdata", name)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture %s: %v", name, err)
+	}
+	return string(raw)
+}
+
+func assertProgressPrimitivesSessionRead(t *testing.T, read fse.SessionReadResult) {
 	t.Helper()
 	if read.Phase != "execute" {
 		t.Fatalf("phase = %q, want execute", read.Phase)
@@ -115,11 +154,7 @@ func assertProgressPrimitivesSessionRead(t *testing.T, read factorysessionexecut
 	}
 }
 
-func assertProgressPrimitivesArtifacts(
-	t *testing.T,
-	service factorysessionexecution.Service,
-	sessionID string,
-) {
+func assertProgressPrimitivesArtifacts(t *testing.T, service fse.Service, sessionID string) {
 	t.Helper()
 	artifact := assertListedProgressPrimitiveArtifact(t, service, sessionID)
 	assertProgressPrimitiveArtifactDetail(t, service, sessionID, artifact)
@@ -128,9 +163,9 @@ func assertProgressPrimitivesArtifacts(
 
 func assertListedProgressPrimitiveArtifact(
 	t *testing.T,
-	service factorysessionexecution.Service,
+	service fse.Service,
 	sessionID string,
-) factorysessionexecution.ArtifactSummary {
+) fse.ArtifactSummary {
 	t.Helper()
 	artifacts, err := service.ListArtifacts(context.Background(), sessionID)
 	if err != nil {
@@ -155,9 +190,9 @@ func assertListedProgressPrimitiveArtifact(
 
 func assertProgressPrimitiveArtifactDetail(
 	t *testing.T,
-	service factorysessionexecution.Service,
+	service fse.Service,
 	sessionID string,
-	artifact factorysessionexecution.ArtifactSummary,
+	artifact fse.ArtifactSummary,
 ) {
 	t.Helper()
 	detail, err := service.GetArtifact(context.Background(), sessionID, "artifact-1")
@@ -169,10 +204,10 @@ func assertProgressPrimitiveArtifactDetail(
 	}
 }
 
-func assertProgressPrimitiveResultArtifactIDs(t *testing.T, service factorysessionexecution.Service, sessionID string) {
+func assertProgressPrimitiveResultArtifactIDs(t *testing.T, service fse.Service, sessionID string) {
 	t.Helper()
-	result, err := service.GetResult(context.Background(), sessionID, factorysessionexecution.ResultRequest{
-		Mode: factorysessionexecution.ResultModeFinal,
+	result, err := service.GetResult(context.Background(), sessionID, fse.ResultRequest{
+		Mode: fse.ResultModeFinal,
 	})
 	if err != nil {
 		t.Fatalf("GetResult: %v", err)
@@ -184,26 +219,26 @@ func assertProgressPrimitiveResultArtifactIDs(t *testing.T, service factorysessi
 
 func assertAgentRunFakeChildSessionRead(
 	t *testing.T,
-	read factorysessionexecution.SessionReadResult,
-) factorysessionexecution.DispatchSummary {
+	read fse.SessionReadResult,
+) fse.DispatchSummary {
 	t.Helper()
 	if read.Progress == nil || read.Progress.TotalDispatches != 1 || read.Progress.CompletedDispatches != 1 {
 		t.Fatalf("progress = %#v, want one completed dispatch", read.Progress)
 	}
-	return factorysessionexecution.DispatchSummary{
-		ID:           "dispatch-1",
-		Label:        "summarize-findings",
-		Model:        "gpt-test",
-		Provider:     "fake",
+	return fse.DispatchSummary{
+		ID:                "dispatch-1",
+		Label:             "summarize-findings",
+		Model:             "gpt-test",
+		Provider:          "fake",
 		OutputArtifactIDs: []string{"child-artifact-1"},
 	}
 }
 
 func assertAgentRunFakeChildDispatch(
 	t *testing.T,
-	service factorysessionexecution.Service,
+	service fse.Service,
 	sessionID string,
-	want factorysessionexecution.DispatchSummary,
+	want fse.DispatchSummary,
 ) {
 	t.Helper()
 	dispatch := assertListedAgentRunFakeChildDispatch(t, service, sessionID, want)
@@ -212,10 +247,10 @@ func assertAgentRunFakeChildDispatch(
 
 func assertListedAgentRunFakeChildDispatch(
 	t *testing.T,
-	service factorysessionexecution.Service,
+	service fse.Service,
 	sessionID string,
-	want factorysessionexecution.DispatchSummary,
-) factorysessionexecution.DispatchSummary {
+	want fse.DispatchSummary,
+) fse.DispatchSummary {
 	t.Helper()
 	dispatches, err := service.ListDispatches(context.Background(), sessionID)
 	if err != nil {
@@ -228,7 +263,7 @@ func assertListedAgentRunFakeChildDispatch(
 	if dispatch.ID != want.ID {
 		t.Fatalf("dispatch id = %q, want %q", dispatch.ID, want.ID)
 	}
-	if dispatch.Status != factorysessionexecution.DispatchStatusCompleted {
+	if dispatch.Status != fse.DispatchStatusCompleted {
 		t.Fatalf("dispatch status = %q, want COMPLETED", dispatch.Status)
 	}
 	if dispatch.DispatchKind != "JAVASCRIPT_AGENT" || dispatch.Label != want.Label {
@@ -248,9 +283,9 @@ func assertListedAgentRunFakeChildDispatch(
 
 func assertAgentRunFakeChildDispatchDetail(
 	t *testing.T,
-	service factorysessionexecution.Service,
+	service fse.Service,
 	sessionID string,
-	dispatch factorysessionexecution.DispatchSummary,
+	dispatch fse.DispatchSummary,
 ) {
 	t.Helper()
 	dispatchDetail, err := service.GetDispatch(context.Background(), sessionID, dispatch.ID)
@@ -262,7 +297,7 @@ func assertAgentRunFakeChildDispatchDetail(
 	}
 }
 
-func assertAgentRunFakeChildArtifact(t *testing.T, service factorysessionexecution.Service, sessionID string) {
+func assertAgentRunFakeChildArtifact(t *testing.T, service fse.Service, sessionID string) {
 	t.Helper()
 	artifacts, err := service.ListArtifacts(context.Background(), sessionID)
 	if err != nil {

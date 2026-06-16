@@ -4777,6 +4777,7 @@ export interface operations {
           "text/event-stream": string;
         };
       };
+      400: components["responses"]["BadRequest"];
       500: components["responses"]["InternalError"];
     };
   };
@@ -4806,6 +4807,7 @@ export interface operations {
           "text/event-stream": string;
         };
       };
+      400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
       500: components["responses"]["InternalError"];
     };

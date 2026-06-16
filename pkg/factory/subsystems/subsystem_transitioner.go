@@ -228,6 +228,16 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 	if err != nil {
 		return nil, interfaces.CompletedDispatch{}, nil, err
 	}
+	if reconcileMutations := executorReviewReconcileMutations(
+		&snapshot.Marking,
+		currentTransition.Name,
+		resolved.outcome,
+		consumedTokens,
+		arcs,
+		now,
+	); len(reconcileMutations) > 0 {
+		mutations = append(reconcileMutations, mutations...)
+	}
 	mutations = append(mutations, t.releaseResourceTokensOnFailureMutations(resolved.outcome, result.TransitionID, consumedTokens, arcs, now)...)
 	mutations = append(mutations, t.getSpawnedWorkMutations(resolved, now)...)
 	mutations = append(mutations, t.createFanoutGuardToken(inputColors, resolved, now)...)

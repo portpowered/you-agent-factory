@@ -160,16 +160,16 @@ func TestSameNameConsumePathRegression_MismatchedNamesStayAtToComplete(t *testin
 	dir := scaffoldConsumePathFactoryBuiltInOrder(t)
 	h := testutil.NewServiceTestHarness(t, dir)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	errCh := h.RunInBackground(ctx)
-
 	for _, req := range []interfaces.SubmitRequest{
 		{Name: "idea-alpha", WorkTypeID: "idea", TargetState: "to-complete", TraceID: "trace-idea-alpha"},
 		{Name: "task-beta", WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-task-beta"},
 	} {
 		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	errCh := h.RunInBackground(ctx)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "idea:to-complete", 1, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, time.Second)
