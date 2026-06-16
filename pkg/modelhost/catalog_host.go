@@ -192,54 +192,90 @@ func (h *CatalogHost) AcquireLease(
 	modelName string,
 	opts LeaseOptions,
 ) (Lease, error) {
-	if err := ctx.Err(); err != nil {
-		return Lease{}, cancelError(err)
-	}
-	entry, err := h.catalogEntry(runtimeCfg, modelName)
+	snapshot, inspection, modelKey, leaseCapacity, err := h.prepareAcquireLease(ctx, runtimeCfg, modelName)
 	if err != nil {
 		return Lease{}, err
 	}
-	identity := h.identityFromCatalog(runtimeCfg, entry)
-	inspection, err := h.assets.InspectRuntimeCache(ctx, runtimeCfg, modelName)
-	if err != nil {
+	if err := h.ensureSupervisedReadyForLease(ctx, runtimeCfg, modelName, inspection, &snapshot); err != nil {
 		return Lease{}, err
-	}
-	snapshot := h.overlaySupervisedReadiness(ClassifyReadiness(identity, inspection, false), inspection, runtimeCfg, modelName)
-	modelKey := canonicalModelKey(modelName)
-	leaseCapacity := h.leaseCapacityForModel(runtimeCfg, modelName)
-	h.mu.Lock()
-	if h.leaseCapacityExhausted(modelKey, leaseCapacity) {
-		h.mu.Unlock()
-		h.diagnostics.logLeaseExhausted(identity)
-		return Lease{}, leaseCapacityError(modelName)
-	}
-	h.mu.Unlock()
-
-	if requiresSupervisedBackend(snapshot.Identity) && inspection.Installed {
-		if err := h.evictIdleRuntimesForCapacity(ctx, runtimeCfg, modelName); err != nil {
-			return Lease{}, err
-		}
-		worker, workerErr := h.localWorkerForModel(runtimeCfg, modelName)
-		if workerErr != nil {
-			return Lease{}, workerErr
-		}
-		spec, specErr := h.supervisor.ServerStartBuilder(snapshot.Identity, inspection, worker)
-		if specErr != nil {
-			return Lease{}, specErr
-		}
-		slot := h.runtimeSlot(runtimeCfg, modelName)
-		if err := slot.ensureReady(ctx, snapshot.Identity, spec); err != nil {
-			return Lease{}, err
-		}
-		if !slot.isReady() {
-			return Lease{}, slot.failureOutcome()
-		}
-		snapshot = slot.readinessOverlay(snapshot.Identity, snapshot)
 	}
 	if snapshot.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
 		cause := readinessCause(snapshot)
 		return Lease{}, &ReadinessError{Snapshot: snapshot, Cause: cause}
 	}
+	return h.issueLease(runtimeCfg, modelName, modelKey, leaseCapacity, snapshot, opts)
+}
+
+func (h *CatalogHost) prepareAcquireLease(
+	ctx context.Context,
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	modelName string,
+) (ReadinessSnapshot, CacheInspection, string, int, error) {
+	if err := ctx.Err(); err != nil {
+		return ReadinessSnapshot{}, CacheInspection{}, "", 0, cancelError(err)
+	}
+	entry, err := h.catalogEntry(runtimeCfg, modelName)
+	if err != nil {
+		return ReadinessSnapshot{}, CacheInspection{}, "", 0, err
+	}
+	identity := h.identityFromCatalog(runtimeCfg, entry)
+	inspection, err := h.assets.InspectRuntimeCache(ctx, runtimeCfg, modelName)
+	if err != nil {
+		return ReadinessSnapshot{}, CacheInspection{}, "", 0, err
+	}
+	snapshot := h.overlaySupervisedReadiness(ClassifyReadiness(identity, inspection, false), inspection, runtimeCfg, modelName)
+	modelKey := canonicalModelKey(modelName)
+	leaseCapacity := h.leaseCapacityForModel(runtimeCfg, modelName)
+	h.mu.Lock()
+	exhausted := h.leaseCapacityExhausted(modelKey, leaseCapacity)
+	h.mu.Unlock()
+	if exhausted {
+		h.diagnostics.logLeaseExhausted(identity)
+		return ReadinessSnapshot{}, CacheInspection{}, "", 0, leaseCapacityError(modelName)
+	}
+	return snapshot, inspection, modelKey, leaseCapacity, nil
+}
+
+func (h *CatalogHost) ensureSupervisedReadyForLease(
+	ctx context.Context,
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	modelName string,
+	inspection CacheInspection,
+	snapshot *ReadinessSnapshot,
+) error {
+	if !requiresSupervisedBackend(snapshot.Identity) || !inspection.Installed {
+		return nil
+	}
+	if err := h.evictIdleRuntimesForCapacity(ctx, runtimeCfg, modelName); err != nil {
+		return err
+	}
+	worker, err := h.localWorkerForModel(runtimeCfg, modelName)
+	if err != nil {
+		return err
+	}
+	spec, err := h.supervisor.ServerStartBuilder(snapshot.Identity, inspection, worker)
+	if err != nil {
+		return err
+	}
+	slot := h.runtimeSlot(runtimeCfg, modelName)
+	if err := slot.ensureReady(ctx, snapshot.Identity, spec); err != nil {
+		return err
+	}
+	if !slot.isReady() {
+		return slot.failureOutcome()
+	}
+	*snapshot = slot.readinessOverlay(snapshot.Identity, *snapshot)
+	return nil
+}
+
+func (h *CatalogHost) issueLease(
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	modelName string,
+	modelKey string,
+	leaseCapacity int,
+	snapshot ReadinessSnapshot,
+	opts LeaseOptions,
+) (Lease, error) {
 	slotKey := h.runtimeSlotKey(runtimeCfg, modelName)
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -247,16 +283,9 @@ func (h *CatalogHost) AcquireLease(
 		h.diagnostics.logLeaseExhausted(snapshot.Identity)
 		return Lease{}, leaseCapacityError(modelName)
 	}
-	endpoint := ""
-	if requiresSupervisedBackend(snapshot.Identity) {
-		slot := h.runtimeSlots[slotKey]
-		if slot == nil || !slot.isReady() {
-			return Lease{}, ErrRuntimeNotReady
-		}
-		endpoint = slot.endpointValue()
-		if endpoint == "" {
-			return Lease{}, ErrRuntimeNotReady
-		}
+	endpoint, err := h.supervisedLeaseEndpoint(slotKey, snapshot.Identity)
+	if err != nil {
+		return Lease{}, err
 	}
 	h.cancelIdleUnloadLocked(slotKey)
 	h.seq++
@@ -281,6 +310,21 @@ func (h *CatalogHost) AcquireLease(
 	h.byModel[modelKey][leaseID] = struct{}{}
 	h.diagnostics.logLeaseAcquired(snapshot.Identity, leaseID)
 	return lease, nil
+}
+
+func (h *CatalogHost) supervisedLeaseEndpoint(slotKey string, identity Identity) (string, error) {
+	if !requiresSupervisedBackend(identity) {
+		return "", nil
+	}
+	slot := h.runtimeSlots[slotKey]
+	if slot == nil || !slot.isReady() {
+		return "", ErrRuntimeNotReady
+	}
+	endpoint := slot.endpointValue()
+	if endpoint == "" {
+		return "", ErrRuntimeNotReady
+	}
+	return endpoint, nil
 }
 
 func (h *CatalogHost) ReleaseLease(_ context.Context, leaseID string) error {
