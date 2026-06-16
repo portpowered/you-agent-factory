@@ -13,8 +13,19 @@
 - Record deferred CLI/MCP/website follow-ups in `docs/internal/development/plans/dynamic-workflows/follow-up-cell-live-provider-dispatch-bridge-deferred.md` instead of widening the bridge lane.
 - When `make pkg-file-count` fails after adding bridge files, move provider code to `pkg/factorysessionexecution/livechild` and consolidate fixture tests rather than adding root package files; avoid importing `factorysessionexecution` from `livechild` tests (import cycle).
 - Select runtime-backed MCP serve via `you mcp serve --runtime`, which wires `factorysessionexecution.NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{ProjectRoot})` in `pkg/cli/mcp/serve.go`; default serve remains fixture-backed and rejects combining `--runtime` with `--fixture-catalog`.
+- Runtime-backed MCP serve stdio smoke lives in `pkg/cli/mcp/serve_runtime_smoke_test.go` via `RunServe` with `ServeConfig{RuntimeBacked: true, ProjectRoot}` (no injected service), reusing the stdio client harness from `serve_smoke_test.go` and INLINE_WORKFLOW fixtures to prove live durable execution instead of the fixture catalog.
 - Runtime-backed MCP async start/status/result tests live in `pkg/mcp/factorysession/runtime_execution_test.go` via `NewClientWithService(NewExecutionService(ExecutionProviderJavaScriptRuntime, ...))` and INLINE_WORKFLOW fixtures; cancel busy-loop sessions through direct service `Cancel` for cleanup.
 
+---
+
+## 2026-06-17T20:15:00Z - dynamic-workflows-cell-mcp-session-serve-003
+- Added runtime-backed stdio MCP serve smoke in `serve_runtime_smoke_test.go` that spawns `RunServe` with `RuntimeBacked: true` (no injected service), discovers Factory Session tools, starts an INLINE_WORKFLOW async session, polls `get`/`get_result` until RUNNING+not-ready or SUCCEEDED+terminal result.
+- Reused the existing stdio JSON-RPC harness from `serve_smoke_test.go`; INLINE_WORKFLOW source proves the live durable JavaScript runtime path rather than the fixture catalog.
+- Files changed: `pkg/cli/mcp/serve_runtime_smoke_test.go`, `docs/internal/processes/api-relevant-files.md`.
+- **Learnings for future iterations:**
+  - Patterns discovered: runtime serve smoke belongs beside fixture serve smoke in `pkg/cli/mcp/` with shared helpers in the same `mcpcli_test` package; omit `ServeConfig.Service` so `resolveServeService` exercises the real `--runtime` wiring.
+  - Gotchas encountered: fast-completing INLINE workflows may reach SUCCEEDED on the first poll without an intermediate RUNNING+not-ready observation; acceptance allows either terminal or non-terminal path.
+  - Useful context: `TestRunServe_InstallSmoke_DiscoveryValidateAsyncPoll` remains the fixture-backed default; runtime smoke is additive in `serve_runtime_smoke_test.go`.
 ---
 
 ## 2026-06-17T19:50:00Z - dynamic-workflows-cell-mcp-session-serve-002
