@@ -137,6 +137,7 @@ type ServiceConfig struct {
 	ChildExecutorMode string
 	Provider          workers.Provider
 	FakeOptions       []FakeServiceOption
+	PersistSessions   bool
 }
 
 // NewExecutionService constructs one shared Factory Session execution service for
@@ -162,6 +163,7 @@ func NewExecutionService(provider ExecutionProvider, config ServiceConfig) (Serv
 			ProjectRoot:       projectRoot,
 			ChildExecutorMode: childExecutorMode,
 			Provider:          provider,
+			PersistSessions:   config.PersistSessions || projectRoot != "",
 		}), nil
 	default:
 		return nil, NewValidationError("provider", "unsupported execution provider")

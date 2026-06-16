@@ -655,6 +655,95 @@ func TestRunSync_LiveProviderJavaScriptSession_ReReadStatusAndResult(t *testing.
 	}
 }
 
+// TestRunSync_LiveProviderJavaScriptSession_ReReadAcrossFreshServices proves
+// runtime-backed CLI inspection survives separate service construction, matching
+// separate `you workflow` CLI invocations without an injected in-memory Service.
+func TestRunSync_LiveProviderJavaScriptSession_ReReadAcrossFreshServices(t *testing.T) {
+	projectRoot := setupCLIAgentRunWorkflowFixture(t)
+	backend := sessionexecution.ExecutionBackendConfig{
+		Provider:    string(fse.ExecutionProviderJavaScriptRuntime),
+		ProjectRoot: projectRoot,
+	}
+
+	var runOutput bytes.Buffer
+	if err := sessionexecution.RunSync(context.Background(), sessionexecution.RunConfig{
+		StartConfig: sessionexecution.StartConfig{
+			Mode:              sessionexecution.ExecutionModeSync,
+			RequestID:         "req-cli-live-child-fresh-service-001",
+			WorkflowName:      "agent-run-fake-child",
+			ArgsJSON:          `{"subject":"workflows"}`,
+			ChildExecutorMode: fse.ChildExecutorModeLive,
+		},
+		ExecutionBackendConfig: backend,
+		JSON:                   true,
+		Output:                 &runOutput,
+	}); err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+
+	var runResponse factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.Unmarshal(bytes.TrimSpace(runOutput.Bytes()), &runResponse); err != nil {
+		t.Fatalf("decode run output: %v", err)
+	}
+	sessionID := runResponse.SessionId
+	if sessionID == "" {
+		t.Fatal("sessionId = empty, want durable session id")
+	}
+
+	var statusOutput bytes.Buffer
+	if err := sessionexecution.RunStatus(context.Background(), sessionexecution.StatusConfig{
+		SessionID:              sessionID,
+		ExecutionBackendConfig: backend,
+		JSON:                   true,
+		Output:                 &statusOutput,
+	}); err != nil {
+		t.Fatalf("RunStatus: %v", err)
+	}
+	var statusResponse factoryapi.FactorySessionDurableReadModel
+	if err := json.Unmarshal(bytes.TrimSpace(statusOutput.Bytes()), &statusResponse); err != nil {
+		t.Fatalf("decode status output: %v", err)
+	}
+	if statusResponse.SessionId != sessionID {
+		t.Fatalf("status sessionId = %q, want %q", statusResponse.SessionId, sessionID)
+	}
+	if statusResponse.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("status = %q, want SUCCEEDED", statusResponse.Status)
+	}
+
+	var resultOutput bytes.Buffer
+	if err := sessionexecution.RunResult(context.Background(), sessionexecution.ResultConfig{
+		SessionID:              sessionID,
+		ExecutionBackendConfig: backend,
+		JSON:                   true,
+		Output:                 &resultOutput,
+	}); err != nil {
+		t.Fatalf("RunResult: %v", err)
+	}
+	var resultResponse factoryapi.FactorySessionResult
+	if err := json.Unmarshal(bytes.TrimSpace(resultOutput.Bytes()), &resultResponse); err != nil {
+		t.Fatalf("decode result output: %v", err)
+	}
+	if resultResponse.SessionId != sessionID {
+		t.Fatalf("result sessionId = %q, want %q", resultResponse.SessionId, sessionID)
+	}
+	if resultResponse.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("resultStatus = %q, want FINAL", resultResponse.ResultStatus)
+	}
+
+	var dispatchesOutput bytes.Buffer
+	if err := sessionexecution.RunDispatches(context.Background(), sessionexecution.DispatchesConfig{
+		SessionID:              sessionID,
+		ExecutionBackendConfig: backend,
+		JSON:                   true,
+		Output:                 &dispatchesOutput,
+	}); err != nil {
+		t.Fatalf("RunDispatches: %v", err)
+	}
+	if !strings.Contains(dispatchesOutput.String(), "live-provider-session-1") {
+		t.Fatalf("dispatches output = %q, want live-provider session ref", dispatchesOutput.String())
+	}
+}
+
 // TestLiveProviderJavaScriptSession_DispatchAndArtifactCLIInspection proves
 // bridged-child dispatch and artifact linkage through direct CLI reads backed by
 // shared ListDispatchesResponseToAPI / ListArtifactsResponseToAPI projections.
