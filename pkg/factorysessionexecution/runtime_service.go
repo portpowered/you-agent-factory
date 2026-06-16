@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/livechild"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -780,4 +781,26 @@ func workflowMetadataFromResolved(resolved ResolvedSource, req StartRequest) map
 		}
 	}
 	return metadata
+}
+
+func (s *JavaScriptRuntimeService) childExecutorHooks(mode string) workflowruntime.Hooks {
+	if mode != ChildExecutorModeLive {
+		return workflowruntime.Hooks{}
+	}
+	provider := s.provider
+	return workflowruntime.Hooks{
+		NewChildExecutor: func(sessionID string, records workflowruntime.ChildRecordSink) workflowruntime.ChildExecutor {
+			return livechild.NewProviderChildExecutor(sessionID, provider, records)
+		},
+	}
+}
+
+func validateLiveChildExecutorConfig(mode string, provider workers.Provider) error {
+	if mode != ChildExecutorModeLive {
+		return nil
+	}
+	if provider == nil {
+		return NewValidationError("runtime.childExecutorMode", "provider is required for live-provider child execution")
+	}
+	return nil
 }

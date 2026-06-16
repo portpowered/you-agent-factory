@@ -1,4 +1,4 @@
-package factorysessionexecution
+package livechild
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workers"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 func TestProviderChildExecutor_Execute_RecordsLiveProviderDispatch(t *testing.T) {
@@ -40,8 +40,8 @@ func TestProviderChildExecutor_Execute_RecordsLiveProviderDispatch(t *testing.T)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.ExecutionMode != ChildExecutorModeLive {
-		t.Fatalf("executionMode = %q, want %q", result.ExecutionMode, ChildExecutorModeLive)
+	if result.ExecutionMode != workflowruntime.ChildExecutionModeLive {
+		t.Fatalf("executionMode = %q, want %q", result.ExecutionMode, workflowruntime.ChildExecutionModeLive)
 	}
 	if result.DispatchID != "dispatch-1" {
 		t.Fatalf("dispatchId = %q, want dispatch-1", result.DispatchID)
@@ -49,7 +49,7 @@ func TestProviderChildExecutor_Execute_RecordsLiveProviderDispatch(t *testing.T)
 	if result.ProviderSessionRef != "provider-session-42" {
 		t.Fatalf("providerSessionRef = %q, want provider-session-42", result.ProviderSessionRef)
 	}
-	if got := collectorSink.executionModes(); len(got) == 0 || got[len(got)-1] != ChildExecutorModeLive {
+	if got := collectorSink.executionModes(); len(got) == 0 || got[len(got)-1] != workflowruntime.ChildExecutionModeLive {
 		t.Fatalf("recorded execution modes = %#v, want terminal live-provider", got)
 	}
 	if provider.callCount != 1 {
@@ -139,6 +139,19 @@ func (s *testChildRecordSink) statusTransitions(dispatchID string) []string {
 	return transitions
 }
 
+func (s *testChildRecordSink) failedDispatchRecords(dispatchID string) []workflowruntime.ChildDispatchRecord {
+	records := make([]workflowruntime.ChildDispatchRecord, 0)
+	for _, record := range s.records {
+		if record.ChildDispatch == nil || record.ChildDispatch.DispatchID != dispatchID {
+			continue
+		}
+		if record.ChildDispatch.Status == workflowruntime.ChildDispatchStatusFailed {
+			records = append(records, *record.ChildDispatch)
+		}
+	}
+	return records
+}
+
 func TestProviderChildExecutor_Execute_FailedChild_RecordsTypedFailureDetail(t *testing.T) {
 	provider := newUnitMockProvider(interfaces.InferenceResponse{Content: `{"text":"unused"}`})
 	collectorSink := newTestChildRecordSink()
@@ -153,19 +166,19 @@ func TestProviderChildExecutor_Execute_FailedChild_RecordsTypedFailureDetail(t *
 		t.Fatal("Execute: error = nil, want child failure")
 	}
 
-	projection := ProjectRuntimeExecutionRecords("session-live-child-failure", collectorSink.records, time.Now().UTC())
-	if len(projection.Dispatches) != 1 {
-		t.Fatalf("dispatches = %#v, want one failed dispatch", projection.Dispatches)
+	failedRecords := collectorSink.failedDispatchRecords("dispatch-1")
+	if len(failedRecords) != 1 {
+		t.Fatalf("failed dispatch records = %d, want 1", len(failedRecords))
 	}
-	dispatch := projection.Dispatches[0]
-	if dispatch.Status != DispatchStatusFailed {
-		t.Fatalf("dispatch status = %q, want FAILED", dispatch.Status)
+	failed := failedRecords[0]
+	if failed.Status != workflowruntime.ChildDispatchStatusFailed {
+		t.Fatalf("dispatch status = %q, want FAILED", failed.Status)
 	}
-	if dispatch.FailureDetail == nil || dispatch.FailureDetail.Reason != workflowruntime.ChildExecutionFailureReason {
-		t.Fatalf("failureDetail = %#v", dispatch.FailureDetail)
+	if failed.FailureReason != workflowruntime.ChildExecutionFailureReason {
+		t.Fatalf("failureReason = %q", failed.FailureReason)
 	}
-	if dispatch.FailureDetail.Message == "" {
-		t.Fatal("failureDetail message is empty")
+	if failed.FailureMessage == "" {
+		t.Fatal("failureMessage is empty")
 	}
 }
 

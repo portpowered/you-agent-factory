@@ -27,7 +27,7 @@ another broad API surface.
 
 | Surface | Backend wiring | Proof |
 |---------|----------------|-------|
-| Live child executor bridge | `pkg/factorysessionexecution/child_executor_provider.go` (`ProviderChildExecutor`, `childExecutorHooks`) | `child_executor_provider_test.go`, `fixtures/runtime_live_child_dispatch_test.go` |
+| Live child executor bridge | `pkg/factorysessionexecution/livechild/provider.go` (`ProviderChildExecutor`, `childExecutorHooks`) | `livechild/provider_test.go`, `fixtures/runtime_live_child_test.go` |
 | Fake/live coexistence seam | `workflowruntime.Hooks.NewChildExecutor` with default `FakeChildExecutor` fallback in `pkg/orchestrators/javascript/runtime/runtime.go` | `fixtures/runtime_child_executor_coexistence_test.go`, `runtime/host_children_test.go`, `runtime/host_pipeline_policy_test.go` |
 | Durable dispatch inspection | `pkg/factorysessionexecution/projection_consistency.go` | `fixtures/runtime_record_projection_test.go`, `fixtures/runtime_live_child_failure_test.go` |
 | Runtime mode selection | `StartRequest.Runtime.ChildExecutorMode` via `pkg/factorysessionexecution/normalize.go` and `resolveChildExecutorMode` | `fixtures/runtime_live_child_dispatch_test.go`, `fixtures/runtime_child_executor_coexistence_test.go` |

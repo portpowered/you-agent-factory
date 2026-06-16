@@ -130,3 +130,21 @@ func cloneStringMap(values map[string]string) map[string]string {
 	}
 	return cloned
 }
+
+func normalizeChildExecutorMode(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case "", ChildExecutorModeFake:
+		return ChildExecutorModeFake
+	case ChildExecutorModeLive:
+		return ChildExecutorModeLive
+	default:
+		return strings.TrimSpace(mode)
+	}
+}
+
+func resolveChildExecutorMode(configMode string, req StartRequest) string {
+	if req.Runtime != nil && strings.TrimSpace(req.Runtime.ChildExecutorMode) != "" {
+		return normalizeChildExecutorMode(req.Runtime.ChildExecutorMode)
+	}
+	return normalizeChildExecutorMode(configMode)
+}

@@ -1,4 +1,4 @@
-package factorysessionexecution
+package livechild
 
 import (
 	"context"
@@ -13,19 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/pkg/workers/provider"
 )
-
-const (
-	// ChildExecutorModeFake selects deterministic in-process child execution.
-	ChildExecutorModeFake = workflowruntime.ChildExecutionModeFake
-	// ChildExecutorModeLive selects provider-backed child execution.
-	ChildExecutorModeLive = workflowruntime.ChildExecutionModeLive
-)
-
-// RuntimeOptions selects durable JavaScript runtime execution behavior without
-// changing workflow source syntax.
-type RuntimeOptions struct {
-	ChildExecutorMode string
-}
 
 // ProviderChildExecutor routes one child agent.run through a real provider inference call.
 type ProviderChildExecutor struct {
@@ -73,7 +60,7 @@ func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowruntime
 		Sandbox:         req.Sandbox,
 		SchemaDigest:    workflowruntime.SchemaDigest(req.OutputSchema),
 		RunnerID:        strings.TrimSpace(req.Command),
-		ExecutionMode:   ChildExecutorModeLive,
+		ExecutionMode:   workflowruntime.ChildExecutionModeLive,
 		ArtifactRef:     artifactRef,
 	}
 
@@ -103,7 +90,7 @@ func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowruntime
 		DispatchID:         dispatchID,
 		ChildIndex:         childIndex,
 		Status:             workflowruntime.ChildDispatchStatusCompleted,
-		ExecutionMode:      ChildExecutorModeLive,
+		ExecutionMode:      workflowruntime.ChildExecutionModeLive,
 		Output:             output,
 		ArtifactRef:        artifactRef,
 		ProviderSessionRef: providerSessionRef,
@@ -122,7 +109,7 @@ func (e *ProviderChildExecutor) executeFailed(ctx context.Context, req workflowr
 		Label:         req.Label,
 		PromptDigest:  workflowruntime.TextDigest(req.Prompt),
 		Model:         req.Model,
-		ExecutionMode: ChildExecutorModeLive,
+		ExecutionMode: workflowruntime.ChildExecutionModeLive,
 	}
 	e.records.AppendChildDispatch(base, workflowruntime.ChildDispatchStatusQueued)
 	e.records.AppendChildDispatch(base, workflowruntime.ChildDispatchStatusRunning)
@@ -161,7 +148,7 @@ func (e *ProviderChildExecutor) failedChildResult(
 		DispatchID:         dispatchID,
 		ChildIndex:         childIndex,
 		Status:             workflowruntime.ChildDispatchStatusFailed,
-		ExecutionMode:      ChildExecutorModeLive,
+		ExecutionMode:      workflowruntime.ChildExecutionModeLive,
 		Diagnostic:         diagnostic,
 		ProviderSessionRef: providerSessionRef,
 		Request:            req,
@@ -229,24 +216,6 @@ func providerSessionFields(session *interfaces.ProviderSessionMetadata) (provide
 	return providerName, sessionRef
 }
 
-func normalizeChildExecutorMode(mode string) string {
-	switch strings.TrimSpace(mode) {
-	case "", ChildExecutorModeFake:
-		return ChildExecutorModeFake
-	case ChildExecutorModeLive:
-		return ChildExecutorModeLive
-	default:
-		return strings.TrimSpace(mode)
-	}
-}
-
-func resolveChildExecutorMode(configMode string, req StartRequest) string {
-	if req.Runtime != nil && strings.TrimSpace(req.Runtime.ChildExecutorMode) != "" {
-		return normalizeChildExecutorMode(req.Runtime.ChildExecutorMode)
-	}
-	return normalizeChildExecutorMode(configMode)
-}
-
 func childExecutionFailureFields(err error) (reason, message, errorClass string) {
 	reason = workflowruntime.ChildExecutionFailureReason
 	message = err.Error()
@@ -263,26 +232,4 @@ func childExecutionFailureFields(err error) (reason, message, errorClass string)
 		}
 	}
 	return reason, message, errorClass
-}
-
-func (s *JavaScriptRuntimeService) childExecutorHooks(mode string) workflowruntime.Hooks {
-	if mode != ChildExecutorModeLive {
-		return workflowruntime.Hooks{}
-	}
-	provider := s.provider
-	return workflowruntime.Hooks{
-		NewChildExecutor: func(sessionID string, records workflowruntime.ChildRecordSink) workflowruntime.ChildExecutor {
-			return NewProviderChildExecutor(sessionID, provider, records)
-		},
-	}
-}
-
-func validateLiveChildExecutorConfig(mode string, provider workers.Provider) error {
-	if mode != ChildExecutorModeLive {
-		return nil
-	}
-	if provider == nil {
-		return NewValidationError("runtime.childExecutorMode", "provider is required for live-provider child execution")
-	}
-	return nil
 }
