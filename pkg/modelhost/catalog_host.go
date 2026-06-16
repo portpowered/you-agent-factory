@@ -246,11 +246,14 @@ func (h *CatalogHost) ensureSupervisedReadyForLease(
 	if !requiresSupervisedBackend(snapshot.Identity) || !inspection.Installed {
 		return nil
 	}
-	if err := h.evictIdleRuntimesForCapacity(ctx, runtimeCfg, modelName); err != nil {
-		return err
-	}
 	worker, err := h.localWorkerForModel(runtimeCfg, modelName)
 	if err != nil {
+		return err
+	}
+	if !workerDeclaresSupervisedHealthEndpoint(worker) {
+		return nil
+	}
+	if err := h.evictIdleRuntimesForCapacity(ctx, runtimeCfg, modelName); err != nil {
 		return err
 	}
 	spec, err := h.supervisor.ServerStartBuilder(snapshot.Identity, inspection, worker)
@@ -283,7 +286,7 @@ func (h *CatalogHost) issueLease(
 		h.diagnostics.logLeaseExhausted(snapshot.Identity)
 		return Lease{}, leaseCapacityError(modelName)
 	}
-	endpoint, err := h.supervisedLeaseEndpoint(slotKey, snapshot.Identity)
+	endpoint, err := h.supervisedLeaseEndpoint(slotKey, snapshot.Identity, runtimeCfg, modelName)
 	if err != nil {
 		return Lease{}, err
 	}
@@ -312,8 +315,15 @@ func (h *CatalogHost) issueLease(
 	return lease, nil
 }
 
-func (h *CatalogHost) supervisedLeaseEndpoint(slotKey string, identity Identity) (string, error) {
+func (h *CatalogHost) supervisedLeaseEndpoint(slotKey string, identity Identity, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (string, error) {
 	if !requiresSupervisedBackend(identity) {
+		return "", nil
+	}
+	worker, err := h.localWorkerForModel(runtimeCfg, modelName)
+	if err != nil {
+		return "", err
+	}
+	if !workerDeclaresSupervisedHealthEndpoint(worker) {
 		return "", nil
 	}
 	slot := h.runtimeSlots[slotKey]

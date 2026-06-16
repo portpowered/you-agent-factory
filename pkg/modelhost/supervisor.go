@@ -557,3 +557,11 @@ func supervisedHealthEndpointAndArgs(workerArgs []string) (string, []string, err
 	}
 	return "", args, fmt.Errorf("supervised llama.cpp runtime requires worker arg %q", supervisedHealthEndpointFlag)
 }
+
+func workerDeclaresSupervisedHealthEndpoint(worker *interfaces.WorkerConfig) bool {
+	if worker == nil {
+		return false
+	}
+	_, _, err := supervisedHealthEndpointAndArgs(worker.Args)
+	return err == nil
+}
