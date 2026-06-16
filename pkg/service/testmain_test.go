@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -83,10 +84,7 @@ func TestInvokeModelHTTP_UsesManagedLocalModelRuntimePath(t *testing.T) {
 		},
 	}
 
-	dir := scaffoldLocalModelLongTestFactoryDir(t, localModelLongTestFactoryConfig())
-	writeLocalModelLongTestWorkerConfig(t, dir)
-	writeLocalModelLongTestWorkstationConfig(t, dir)
-	server, shutdown := startLocalModelHTTPTestServer(t, dir, runtime)
+	server, shutdown := startLocalModelHTTPTestServer(t, runtime)
 	defer shutdown()
 	defer server.Close()
 
@@ -116,7 +114,7 @@ func TestInvokeModelHTTP_UsesManagedLocalModelRuntimePath(t *testing.T) {
 }
 
 func TestBuildFactoryService_InitializesManagedLocalModelFields(t *testing.T) {
-	dir := scaffoldLocalModelLongTestFactoryDir(t, localModelLongTestFactoryConfig())
+	dir := scaffoldLocalModelLongTestFactoryDir(t, localModelLongTestFactoryConfigWithHealthEndpoint("http://127.0.0.1:1"))
 	writeLocalModelLongTestWorkerConfig(t, dir)
 	writeLocalModelLongTestWorkstationConfig(t, dir)
 
@@ -180,8 +178,15 @@ func TestBuildHostedWorkersConfig_DelegatesServiceConfigFields(t *testing.T) {
 	}
 }
 
-func startLocalModelHTTPTestServer(t *testing.T, dir string, runtime *fakeLocalModelRuntime) (*httptest.Server, func()) {
+func startLocalModelHTTPTestServer(t *testing.T, runtime *fakeLocalModelRuntime) (*httptest.Server, func()) {
 	t.Helper()
+	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	launcher := &serviceTestFakeProcessLauncher{healthEndpoint: healthServer.URL}
+	dir := scaffoldLocalModelLongTestFactoryDir(t, localModelLongTestFactoryConfigWithHealthEndpoint(healthServer.URL))
+	writeLocalModelLongTestWorkerConfig(t, dir)
+	writeLocalModelLongTestWorkstationConfig(t, dir)
 	ctx, cancel := context.WithCancel(context.Background())
 	svc, err := BuildFactoryService(ctx, &FactoryServiceConfig{
 		Dir:                                     dir,
@@ -193,13 +198,23 @@ func startLocalModelHTTPTestServer(t *testing.T, dir string, runtime *fakeLocalM
 	})
 	if err != nil {
 		cancel()
+		healthServer.Close()
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 	puller := staticModelAssetPuller{cache: localModelTestCacheLayout(t)}
 	svc.modelAssets = puller
+	host := newServiceTestSupervisedModelHost(t, puller, launcher)
+	leaseExec := modelhost.NewLeaseExecution(host, puller, runtime, localModelHooks())
+	if svc.core != nil {
+		svc.core.collaborators.LocalModels.host = host
+		svc.core.collaborators.LocalModels.assets = puller
+	}
 	if bundle := liveSessionBundle(svc.defaultSession()); bundle != nil {
 		bundle.modelAssets = puller
+		bundle.localModelRuntime = runtime
 		bundle.localModels = newManagedLocalModelManager(puller, runtime)
+		bundle.modelHost = host
+		bundle.leaseExecution = leaseExec
 	}
 
 	runErrCh := make(chan error, 1)
@@ -212,6 +227,7 @@ func startLocalModelHTTPTestServer(t *testing.T, dir string, runtime *fakeLocalM
 		if err := <-runErrCh; err != nil && err != context.Canceled {
 			t.Fatalf("svc.Run: %v", err)
 		}
+		healthServer.Close()
 	}
 	return server, shutdown
 }
@@ -280,7 +296,11 @@ func scaffoldLocalModelLongTestFactoryDir(t *testing.T, cfg *interfaces.FactoryC
 }
 
 func localModelLongTestFactoryConfig() *interfaces.FactoryConfig {
-	return &interfaces.FactoryConfig{
+	return localModelLongTestFactoryConfigWithHealthEndpoint("")
+}
+
+func localModelLongTestFactoryConfigWithHealthEndpoint(healthEndpoint string) *interfaces.FactoryConfig {
+	cfg := &interfaces.FactoryConfig{
 		Name: "omnivoice-local-model-test",
 		WorkTypes: []interfaces.WorkTypeConfig{{
 			Name: "speech",
@@ -338,6 +358,10 @@ func localModelLongTestFactoryConfig() *interfaces.FactoryConfig {
 			OnFailure: []interfaces.IOConfig{{WorkTypeName: "speech", StateName: "failed"}},
 		}},
 	}
+	if strings.TrimSpace(healthEndpoint) != "" {
+		cfg.Workers[0].Args = []string{"--health-endpoint", healthEndpoint}
+	}
+	return cfg
 }
 
 func writeLocalModelLongTestWorkerConfig(t *testing.T, dir string) {
@@ -1359,8 +1383,12 @@ func modelInvokeWorkstationExecutorForLocalManagedRuntime(
 		nil,
 		nil,
 		nil,
-		newLocalModelResourceLimiter(),
-		newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+		localModelDomain{
+			resources: newLocalModelResourceLimiter(),
+			assets:    staticModelAssetPuller{cache: cache},
+			runtime:   runtime,
+			manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+		},
 	)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
@@ -2015,8 +2043,7 @@ func loadWorkersFromConfigForServiceTest(
 		inferenceRecorder,
 		nil,
 		nil,
-		nil,
-		nil,
+		localModelDomain{},
 	)
 }
 
@@ -2334,8 +2361,12 @@ func taxonomyOmniVoiceInferenceWorkstationExecutorWithEvents(
 		nil,
 		history.RecordModelEvent,
 		func() time.Time { return eventTime },
-		newLocalModelResourceLimiter(),
-		newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+		localModelDomain{
+			resources: newLocalModelResourceLimiter(),
+			assets:    staticModelAssetPuller{cache: cache},
+			runtime:   runtime,
+			manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+		},
 	)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)

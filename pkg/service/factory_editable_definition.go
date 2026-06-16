@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -588,6 +589,14 @@ func (core *FactoryCore) RuntimeBuild() *runtimebuild.Service {
 		return nil
 	}
 	return core.collaborators.RuntimeBuild
+}
+
+// ModelHost returns the process-wide model host collaborator.
+func (core *FactoryCore) ModelHost() modelhost.Host {
+	if core == nil {
+		return nil
+	}
+	return core.collaborators.LocalModels.host
 }
 
 // LocalModels returns the startup local-model collaborator group.

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -333,5 +335,68 @@ func assertLocalModelStringSlicesEqual(t *testing.T, want, got []string) {
 		if want[i] != got[i] {
 			t.Fatalf("expected arg %d to be %q, got %q; full args: %v", i, want[i], got[i], got)
 		}
+	}
+}
+
+func TestOmniVoiceLocalRuntime_LoadAndInvoke_UsesSupervisedServingEndpoint(t *testing.T) {
+	cachePath, files := writeOmniVoiceCacheFiles(t)
+	worker := cloneLocalModelRuntimeWorker()
+
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %s, want POST", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"type":"audio","slot":"audio","file":"/tmp/speech.wav","contentType":"audio/wav"}]`))
+	}))
+	t.Cleanup(server.Close)
+
+	runtime := NewOmniVoiceRuntime(localModelCommandRunnerFunc(func(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
+		t.Fatal("expected CLI runner not to be called for supervised serving endpoint")
+		return workers.CommandResult{}, nil
+	}))
+
+	handle, err := runtime.Load(context.Background(), LoadRequest{
+		Resource:        localModelFactoryConfig().Resources[0],
+		Worker:          worker,
+		ModelName:       "OMNIVOICE_Q4_K_M",
+		CachePath:       cachePath,
+		Revision:        "rev-test",
+		Files:           files,
+		ServingEndpoint: server.URL + "/health",
+	})
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	response, err := handle.Invoke(context.Background(), InvocationRequest{
+		Request: interfaces.RunnerExecutionRequest{
+			ModelOperation: "TTS",
+			ModelBindings: []interfaces.ResolvedModelOperationBinding{{
+				Slot:   "text",
+				Source: interfaces.ModelOperationBindingSourceInput,
+				Content: []interfaces.WorkContentPart{{
+					Type: interfaces.WorkContentPartTypeText,
+					Text: "hello supervised runtime",
+				}},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Invoke: %v", err)
+	}
+	if gotPath != "/invoke" {
+		t.Fatalf("invoke path = %q, want /invoke", gotPath)
+	}
+	if strings.TrimSpace(response.Content) == "" {
+		t.Fatalf("response content is empty, want supervised invoke payload")
+	}
+}
+
+func TestSupervisedInvokeURL_DerivesInvokePathFromHealthEndpoint(t *testing.T) {
+	if got := SupervisedInvokeURL("http://127.0.0.1:8080/health"); got != "http://127.0.0.1:8080/invoke" {
+		t.Fatalf("invoke URL = %q, want http://127.0.0.1:8080/invoke", got)
 	}
 }

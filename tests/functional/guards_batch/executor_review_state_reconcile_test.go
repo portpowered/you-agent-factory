@@ -18,7 +18,7 @@ func TestExecutorReviewStateReconcile_ReviewCompletionCollapsesDuplicateReviewIn
 	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
 		"processor": {{Content: "<COMPLETE>\n"}},
 	})
-	h := testutil.NewServiceTestHarness(t, dir,
+	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 		testutil.WithExecutionBaseDir(dir),
@@ -31,7 +31,7 @@ func TestExecutorReviewStateReconcile_ReviewCompletionCollapsesDuplicateReviewIn
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	submitExecutorReviewDuplicateAndStalePattern(t, h, laneName, traceID)
 

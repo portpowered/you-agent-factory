@@ -107,7 +107,7 @@ func TestMatchesFieldsGuard_SingleInputResolvedNameCompletes(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "matches_fields_single_input_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "single COMPLETE"})
 
-	h := testutil.NewServiceTestHarness(t, dir,
+	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
@@ -119,7 +119,7 @@ func TestMatchesFieldsGuard_SingleInputResolvedNameCompletes(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "asset:matched", 1, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "asset:ready", 0, time.Second)
@@ -143,7 +143,7 @@ func TestMatchesFieldsGuard_TwoInputMatchingTagsCompletesJoin(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "matches_fields_pair_guard_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "pair COMPLETE"})
 
-	h := testutil.NewServiceTestHarness(t, dir,
+	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
@@ -162,7 +162,7 @@ func TestMatchesFieldsGuard_TwoInputMatchingTagsCompletesJoin(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "pair:matched", 1, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "draft:ready", 0, time.Second)
@@ -188,7 +188,7 @@ func TestMatchesFieldsGuard_TwoInputMismatchedTagsStayBlocked(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "matches_fields_pair_guard_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "pair COMPLETE"})
 
-	h := testutil.NewServiceTestHarness(t, dir,
+	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
@@ -213,7 +213,7 @@ func TestMatchesFieldsGuard_ThreeInputNestedTagMismatchRejectsCandidateSet(t *te
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "matches_fields_triple_guard_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "triple COMPLETE"})
 
-	h := testutil.NewServiceTestHarness(t, dir,
+	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
@@ -247,7 +247,7 @@ func TestMatchesFieldsGuard_IntegrationSmoke_GroupedExecution(t *testing.T) {
 		assertMatchesFieldsPairFixtureContract(t, dir)
 
 		provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "pair COMPLETE"})
-		h := testutil.NewServiceTestHarness(t, dir,
+		h := support.NewGuardsBatchHarness(t, dir,
 			testutil.WithProvider(provider),
 			testutil.WithFullWorkerPoolAndScriptWrap(),
 		)
@@ -293,7 +293,7 @@ func TestMatchesFieldsGuard_IntegrationSmoke_GroupedExecution(t *testing.T) {
 		assertMatchesFieldsPairFixtureContract(t, dir)
 
 		provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "pair COMPLETE"})
-		h := testutil.NewServiceTestHarness(t, dir,
+		h := support.NewGuardsBatchHarness(t, dir,
 			testutil.WithProvider(provider),
 			testutil.WithFullWorkerPoolAndScriptWrap(),
 		)
@@ -379,7 +379,7 @@ func assertMatchesFieldsHarnessBlocked(
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	for _, placeID := range readyPlaces {
 		support.WaitForHarnessPlaceTokenCount(t, h, placeID, 1, time.Second)

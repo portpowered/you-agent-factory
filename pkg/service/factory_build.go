@@ -30,6 +30,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/internal/metrics"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
+	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
@@ -396,8 +397,7 @@ func loadRuntimeBundleWorkerOptions(
 		eventHistory.RecordInferenceEvent,
 		eventHistory.RecordModelEvent,
 		input.clock.Now,
-		localModels.resources,
-		localModels.manager,
+		localModels,
 	)
 	if err != nil {
 		logger.Error("failed to load workers from config", zap.Error(err))
@@ -458,9 +458,12 @@ func assembleRuntimeBundle(
 		eventHistory:   eventHistory,
 		net:            net,
 		runtimeCfg:     input.loadedFactoryCfg,
-		modelResources: localModels.resources,
-		modelAssets:    localModels.assets,
-		localModels:    localModels.manager,
+		modelResources:    localModels.resources,
+		modelAssets:       localModels.assets,
+		localModels:       localModels.manager,
+		localModelRuntime: localModels.runtime,
+		modelHost:         localModels.host,
+		leaseExecution:    localModels.leaseExecution,
 		logger:         logger,
 		logSink:        logSink,
 		metricsSink:    metricsSink,
@@ -766,9 +769,12 @@ func scriptMetricDurationMilliseconds(result interfaces.WorkResult) (float64, bo
 // localModelDomain wires pkg/localmodels runtime dependencies constructed at
 // service build time and copied onto each factoryRuntimeBundle.
 type localModelDomain struct {
-	resources *localModelResourceLimiter
-	assets    modelAssetPuller
-	manager   *managedLocalModelManager
+	resources      *localModelResourceLimiter
+	assets         modelAssetPuller
+	runtime        localModelRuntime
+	manager        *managedLocalModelManager
+	host           modelhost.Host
+	leaseExecution *modelhost.LeaseExecution
 }
 
 func newRuntimeLocalModelDependencies(cfg *FactoryServiceConfig) localModelDomain {
@@ -778,11 +784,19 @@ func newRuntimeLocalModelDependencies(cfg *FactoryServiceConfig) localModelDomai
 	if localModelRuntime == nil {
 		localModelRuntime = newOmniVoiceLocalRuntime(nil)
 	}
-	return localModelDomain{
+	host := modelhost.NewCatalogHost(modelhost.NewLocalAssetGateway(modelAssets), modelhost.Options{
+		SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
+		Diagnostics:    modelHostDiagnostics(cfg, cfg.Logger),
+	})
+	domain := localModelDomain{
 		resources: modelResources,
 		assets:    modelAssets,
+		runtime:   localModelRuntime,
 		manager:   newManagedLocalModelManager(modelAssets, localModelRuntime),
+		host:      host,
 	}
+	domain.leaseExecution = modelhost.NewLeaseExecution(host, modelAssets, localModelRuntime, localModelHooks())
+	return domain
 }
 
 func localModelHooks() localmodels.Hooks {
@@ -805,6 +819,32 @@ func newManagedLocalModelManager(assetPuller modelAssetPuller, runtime localMode
 
 func newOmniVoiceLocalRuntime(runner workers.CommandRunner) localModelRuntime {
 	return localmodels.NewOmniVoiceRuntime(runner)
+}
+
+func wrapLocalModelRunner(
+	inner workers.Runner,
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	factoryCfg *interfaces.FactoryConfig,
+	workerDef *interfaces.WorkerConfig,
+	modelDomain localModelDomain,
+) workers.Runner {
+	if modelDomain.leaseExecution != nil {
+		return modelDomain.leaseExecution.WrapRunner(inner, runtimeCfg, factoryCfg, workerDef)
+	}
+	if modelDomain.host != nil && modelDomain.runtime != nil && modelDomain.assets != nil {
+		if leaseExec := modelhost.NewLeaseExecution(
+			modelDomain.host,
+			modelDomain.assets,
+			modelDomain.runtime,
+			localModelHooks(),
+		); leaseExec != nil {
+			return leaseExec.WrapRunner(inner, runtimeCfg, factoryCfg, workerDef)
+		}
+	}
+	if modelDomain.manager != nil {
+		return modelDomain.manager.WrapRunner(inner, runtimeCfg, factoryCfg, workerDef)
+	}
+	return inner
 }
 
 func buildHostedWorkersConfig(cfg *FactoryServiceConfig, logger *zap.Logger, clock factory.Clock) hostedworkers.Config {
@@ -968,8 +1008,7 @@ func loadWorkersFromConfig(
 	inferenceRecorder workerprovider.InferenceEventRecorder,
 	modelRecorder modelEventRecorder,
 	now func() time.Time,
-	modelResources *localModelResourceLimiter,
-	localModels *managedLocalModelManager,
+	modelDomain localModelDomain,
 ) ([]factory.FactoryOption, error) {
 	var opts []factory.FactoryOption
 	logger.Info("loading workers from runtime config", "working-directory", factoryDir)
@@ -990,7 +1029,7 @@ func loadWorkersFromConfig(
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workerexecutor.NoopExecutor{}))
 			continue
 		}
-		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, workflowContext, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, now, modelResources, localModels)
+		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, workflowContext, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, now, modelDomain)
 		if executor != nil {
 			logger.Info("loaded worker", "worker", workerCfg.Name)
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, executor))
@@ -1052,8 +1091,7 @@ func buildWorkerExecutor(
 	inferenceRecorder workerprovider.InferenceEventRecorder,
 	modelRecorder modelEventRecorder,
 	now func() time.Time,
-	modelResources *localModelResourceLimiter,
-	localModels *managedLocalModelManager,
+	modelDomain localModelDomain,
 ) workers.WorkerExecutor {
 	def, ok := runtimeCfg.Worker(workerName)
 	if !ok {
@@ -1095,8 +1133,8 @@ func buildWorkerExecutor(
 		agentOpts := []workerexecutor.AgentExecutorOption{
 			workerexecutor.WithLogger(logger),
 		}
-		runner = localModels.WrapRunner(runner, runtimeCfg, factoryCfg, def)
-		runner = modelResources.WrapRunner(runner, factoryCfg, def)
+		runner = wrapLocalModelRunner(runner, runtimeCfg, factoryCfg, def, modelDomain)
+		runner = modelDomain.resources.WrapRunner(runner, factoryCfg, def)
 		runner = newRecordingModelRunner(runner, factoryCfg, def, modelRecorder, now)
 		agentExec := workerexecutor.NewAgentExecutorWithRunner(runtimeCfg, runner, agentOpts...)
 		return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, agentExec, logger)
@@ -1589,4 +1627,66 @@ func modelEventErrorClass(err error) string {
 		return ""
 	}
 	return "MODEL_EXECUTION_FAILED"
+}
+
+type zapModelHostLogger struct {
+	logger *zap.Logger
+}
+
+func newZapModelHostLogger(logger *zap.Logger) modelhost.Logger {
+	if logger == nil {
+		return nil
+	}
+	return zapModelHostLogger{logger: logger}
+}
+
+func (l zapModelHostLogger) Info(msg string, fields map[string]string) {
+	l.logger.Info(msg, modelHostZapFields(fields)...)
+}
+
+func (l zapModelHostLogger) Warn(msg string, fields map[string]string) {
+	l.logger.Warn(msg, modelHostZapFields(fields)...)
+}
+
+func modelHostZapFields(fields map[string]string) []zap.Field {
+	if len(fields) == 0 {
+		return nil
+	}
+	out := make([]zap.Field, 0, len(fields))
+	for key, value := range fields {
+		out = append(out, zap.String(key, value))
+	}
+	return out
+}
+
+type invocationMetricsRecorderAdapter struct {
+	recorder InvocationMetricsRecorder
+}
+
+func newModelHostMetricsRecorder(recorder InvocationMetricsRecorder) modelhost.MetricsRecorder {
+	if recorder == nil {
+		return nil
+	}
+	return invocationMetricsRecorderAdapter{recorder: recorder}
+}
+
+func (a invocationMetricsRecorderAdapter) RecordMetric(name string, labels map[string]string) {
+	if a.recorder == nil || strings.TrimSpace(name) == "" {
+		return
+	}
+	a.recorder.RecordInvocationMetric(InvocationMetric{
+		Name:   name,
+		Labels: cloneMetricLabels(labels),
+	})
+}
+
+func modelHostDiagnostics(cfg *FactoryServiceConfig, logger *zap.Logger) modelhost.Diagnostics {
+	diagnostics := modelhost.Diagnostics{}
+	if logger != nil {
+		diagnostics.Logger = newZapModelHostLogger(logger.Named("modelhost"))
+	}
+	if cfg != nil {
+		diagnostics.Metrics = newModelHostMetricsRecorder(cfg.InvocationMetricsRecorder)
+	}
+	return diagnostics
 }
