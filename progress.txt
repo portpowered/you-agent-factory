@@ -1,0 +1,41 @@
+## Codebase Patterns
+- Use `workflowruntime.Hooks.NewChildExecutor` with `ChildRecordSink` to swap fake vs `live-provider` child execution without changing workflow JS source.
+- Select live child execution via `StartRequest.Runtime.ChildExecutorMode = "live-provider"` and configure `JavaScriptRuntimeServiceConfig.Provider`.
+- Durable dispatch inspection for JavaScript children flows through `ProjectRuntimeExecutionRecords` into `DispatchSummary` plus `DispatchJavaScriptProjection.ExecutionMode`.
+- `ProjectRuntimeExecutionRecords` also projects ordered `DispatchStatusTransitions` per dispatch ID and child output artifacts from completed `ChildDispatchRecord.ArtifactRef`.
+- Failed child dispatches persist `FailureReason`, `FailureMessage`, and optional `FailureErrorClass` on terminal `ChildDispatchRecord` rows; `dispatchFailureDetailFromChildRecord` maps them to `DispatchFailureDetail`.
+- `projectRuntimeSessionState` applies `applyRuntimeExecutionRecordProjection` on workflow failure when `outcome.Records` is non-empty so failed child dispatches remain inspectable.
+- `workflowruntime.Run` attaches emitted runtime records to terminal promise-rejection and invalid-result failures, not only synchronous script errors.
+- `GetDispatch` on the JavaScript runtime service exposes `StatusTransitions` and `ArtifactIDs` from the runtime projection state.
+- Default JavaScript runtime durable sessions keep fake child execution when no runtime override is provided.
+
+## 2026-06-16T00:00:00Z - dynamic-workflows-cell-live-provider-dispatch-bridge-001
+- Implemented `ProviderChildExecutor` and wired `JavaScriptRuntimeService` to route `agent.run` through `workflowruntime.Hooks.NewChildExecutor` when `Runtime.ChildExecutorMode` is `live-provider`.
+- Added `ChildRecordSink`, `ChildExecutionModeLive`, and dispatch JavaScript projection `ExecutionMode` so shared session/dispatch reads expose non-fake execution mode with stable `dispatch-1` identity.
+- Files changed: `pkg/orchestrators/javascript/runtime/{records,types,runtime,child_execution,child_record_sink}.go`, `pkg/factorysessionexecution/{child_executor_provider,runtime_service,types,normalize,idempotency,projection_consistency}.go`, plus focused tests in `pkg/factorysessionexecution/` and `pkg/factorysessionexecution/fixtures/`.
+- **Learnings for future iterations:**
+  - Patterns discovered: `ChildExecutorFactory` now receives `ChildRecordSink` so provider bridges can reserve dispatch IDs the same way as `FakeChildExecutor`.
+  - Gotchas encountered: `pkg/factorysessionexecution` tests cannot import `pkg/testutil` because of an import cycle through `mock_factory.go`; use local mock providers in package tests.
+  - Useful context: live child mode validation happens at start time and requires `JavaScriptRuntimeServiceConfig.Provider`; fake mode remains the default for existing fixtures.
+---
+
+## 2026-06-16T12:30:00Z - dynamic-workflows-cell-live-provider-dispatch-bridge-002
+- Extended `ProjectRuntimeExecutionRecords` to accumulate ordered `DispatchStatusTransitions` per dispatch ID from child dispatch runtime records.
+- Exposed `StatusTransitions` and `ArtifactIDs` on `DispatchDetail` via `JavaScriptRuntimeService.GetDispatch`, and verified live child provider-session refs, output artifacts, and lifecycle transitions through fixture and unit tests.
+- Files changed: `pkg/factorysessionexecution/{projection_consistency,runtime_service,projection_test,child_executor_provider_test}.go`, `pkg/factorysessionexecution/fixtures/runtime_live_child_dispatch_test.go`.
+- **Learnings for future iterations:**
+  - Patterns discovered: child output artifacts are projected from completed dispatch `ArtifactRef` URIs via `childArtifactFromDispatch`; use `workflowresult.FormatArtifactURI` in tests.
+  - Gotchas encountered: `DispatchDetail` previously omitted `ArtifactIDs` and lifecycle history even when list/summary projections had artifact and status data.
+  - Useful context: status transitions are deduplicated consecutive statuses from ordered runtime records, matching queued/running/completed child executor writes.
+---
+
+## 2026-06-16T14:00:00Z - dynamic-workflows-cell-live-provider-dispatch-bridge-003
+- Projected typed bridged-child failure detail through shared dispatch reads by persisting failure fields on terminal `ChildDispatchRecord` rows and mapping them to `DispatchFailureDetail` in `ProjectRuntimeExecutionRecords`.
+- Applied runtime record projection on workflow failure paths and preserved emitted child records for async promise-rejection failures so failed live children stay inspectable without corrupting sibling dispatches.
+- Added live parallel and agent.run failure fixtures/tests covering failed dispatch lifecycle, typed failure detail, sibling preservation, and readable parent session inspection after failure.
+- Files changed: `pkg/orchestrators/javascript/runtime/{records,child_execution,runtime}.go`, `pkg/factorysessionexecution/{child_executor_provider,projection_consistency,runtime_service,projection_test,child_executor_provider_test}.go`, `pkg/factorysessionexecution/fixtures/runtime_live_child_failure_test.go`, `pkg/orchestrators/javascript/runtime/testdata/agent-run-live-child-failure.workflow.js`.
+- **Learnings for future iterations:**
+  - Patterns discovered: use `ChildExecutionFailureReason` plus optional provider `WorkFailureType`/`WorkFailureFamily` when writing failed live child dispatch records.
+  - Gotchas encountered: async `agent.run` failures surface as rejected workflow promises; `workflowruntime.Run` must attach `records.list()` on that terminal path or durable dispatch reads stay empty.
+  - Useful context: parallel child failures keep the parent workflow successful while `parallel()` captures per-child FAILED results; sibling dispatch summaries remain intact for inspection.
+---
