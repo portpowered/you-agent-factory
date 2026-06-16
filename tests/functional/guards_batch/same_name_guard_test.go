@@ -91,6 +91,7 @@ func TestSameNameGuard_MatchingNamesCompletesJoin(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
+	support.WaitForHarnessRuntimeAvailability(t, h, 3*time.Second)
 
 	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
 		Name:       "alpha",
@@ -178,6 +179,7 @@ func TestSameNameGuard_LaterMatchingTokenStillCompletesJoin(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
+	support.WaitForHarnessRuntimeAvailability(t, h, 3*time.Second)
 
 	submitLaterMatchingSameNameGuardWork(h)
 

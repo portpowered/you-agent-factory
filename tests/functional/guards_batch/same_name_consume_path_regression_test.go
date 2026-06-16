@@ -243,14 +243,13 @@ func TestSameNameConsumePathRegression_StaggeredArrivalCompletesWithoutStranding
 			dir := scaffoldConsumePathFactoryBuiltInOrder(t)
 			h := testutil.NewServiceTestHarness(t, dir)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			defer cancel()
-			errCh := h.RunInBackground(ctx)
-			support.WaitForHarnessRuntimeAvailability(t, h, 3*time.Second)
-
 			for _, req := range tc.order {
 				h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
 			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			errCh := h.RunInBackground(ctx)
 
 			support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, 3*time.Second)
 			support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, 3*time.Second)
