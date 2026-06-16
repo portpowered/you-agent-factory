@@ -1,5 +1,6 @@
 ## Codebase Patterns
 - Use `workflowruntime.Hooks.NewChildExecutor` with `ChildRecordSink` to swap fake vs `live-provider` child execution without changing workflow JS source.
+- `ChildExecutor.Execute` accepts the bounded workflow `context.Context` from `workflowruntime.Run`; live provider bridges must pass it through to `Provider.Infer` instead of `context.Background()`.
 - Select live child execution via `StartRequest.Runtime.ChildExecutorMode = "live-provider"` and configure `JavaScriptRuntimeServiceConfig.Provider`.
 - Durable dispatch inspection for JavaScript children flows through `ProjectRuntimeExecutionRecords` into `DispatchSummary` plus `DispatchJavaScriptProjection.ExecutionMode`.
 - `ProjectRuntimeExecutionRecords` also projects ordered `DispatchStatusTransitions` per dispatch ID and child output artifacts from completed `ChildDispatchRecord.ArtifactRef`.
@@ -10,6 +11,17 @@
 - Default JavaScript runtime durable sessions keep fake child execution when no runtime override is provided.
 - Select explicit fake child execution via `StartRequest.Runtime.ChildExecutorMode = "fake"` even when the service default is `live-provider`; request-level mode wins over `JavaScriptRuntimeServiceConfig.ChildExecutorMode`.
 - Record deferred CLI/MCP/website follow-ups in `docs/internal/development/plans/dynamic-workflows/follow-up-cell-live-provider-dispatch-bridge-deferred.md` instead of widening the bridge lane.
+
+## 2026-06-16T18:00:00Z - mergeability: PR #822 blocking feedback
+- Threaded workflow run context through `ChildExecutor.Execute` from `workflowruntime.Run` into `ProviderChildExecutor` provider `Infer` calls, with parallel child goroutines checking `ctx.Err()` before and during execution.
+- Added cancellation/timeout behavioral tests in `child_executor_provider_test.go` and durable-session timeout fixture `runtime_live_child_cancellation_test.go`.
+- Resolved backend-size CI failures by extracting `runtime_execution_projection.go` and splitting long fixture assertion helpers into `runtime_live_child_helpers_test.go`.
+- Files changed: `pkg/orchestrators/javascript/runtime/{child_execution,globals,runtime,host_children,host_children_test}.go`, `pkg/factorysessionexecution/{child_executor_provider,child_executor_provider_test,projection_consistency,runtime_execution_projection}.go`, `pkg/factorysessionexecution/fixtures/runtime_live_child_{cancellation,dispatch,failure,helpers}_test.go`.
+- **Learnings for future iterations:**
+  - Patterns discovered: `failedChildResult` wraps provider errors as plain strings, so cancellation tests should assert message/context observation rather than `errors.Is` on the returned Execute error.
+  - Gotchas encountered: backend-size limits apply to helper functions in fixture tests, not only production files.
+  - Useful context: `make test` including `tests/functional/guards_batch` passes on current head after the context fix; prior `engine has terminated` report appears flaky rather than branch-specific.
+---
 
 ## 2026-06-16T16:30:00Z - dynamic-workflows-cell-live-provider-dispatch-bridge-004
 - Added durable-session coexistence fixtures proving the same workflow source runs through fake (default) and live-provider child executors without syntax changes, including explicit fake override on live-configured services and fake-mode `parallel`/`pipeline` fanout without provider calls.
