@@ -9,23 +9,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
-func WaitForHarnessRuntimeAvailability(
-	t *testing.T,
-	h *testutil.ServiceTestHarness,
-	timeout time.Duration,
-) {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if _, err := h.GetEngineStateSnapshot(); err == nil {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("timed out waiting for harness runtime availability")
-}
-
 func WaitForHarnessPlaceTokenCount(
 	t *testing.T,
 	h *testutil.ServiceTestHarness,
