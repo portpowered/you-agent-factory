@@ -30,6 +30,10 @@ import {
   groupActiveExecutionsByWorkstationNodeID,
   useActiveExecutions,
 } from "./react-flow-current-activity-card-active-executions";
+import {
+  useCurrentActivityGraphEdgePresentation,
+  useCurrentActivityGraphSelectionGestures,
+} from "./react-flow-current-activity-card-graph-selection-gestures";
 
 const EMPTY_TRANSIENT_NODE_POSITIONS = new Map<
   string,
@@ -207,27 +211,16 @@ function useCurrentActivityGraphNodePresentation(
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      const selectionChanges: NodeChange[] = [];
       const positionChanges: NodeChange[] = [];
 
       for (const change of changes) {
         if (change.type === "position") {
           positionChanges.push(change);
-          continue;
-        }
-
-        if (
-          change.type === "select" ||
-          change.type === "remove" ||
-          change.type === "add" ||
-          change.type === "replace"
-        ) {
-          selectionChanges.push(change);
         }
       }
 
-      if (selectionChanges.length > 0) {
-        graphSelection.applyNodeSelectChanges(selectionChanges);
+      if (positionChanges.length === 0) {
+        return;
       }
 
       setTransientPositionState((currentPositionState) => {
@@ -263,7 +256,7 @@ function useCurrentActivityGraphNodePresentation(
           : currentPositionState;
       });
     },
-    [basePositionKey, graphSelection],
+    [basePositionKey],
   );
   const transientPositionsByNodeId =
     transientPositionState.basePositionKey === basePositionKey
@@ -405,6 +398,8 @@ export function useCurrentActivityGraphViewModel({
     [activeExecutions],
   );
   const graphSelection = useFactoryGraphEditorSelection();
+  const graphSelectionEnabled =
+    !editor.editorMode || editor.activeTool !== "delete";
   const baseNodes = useCurrentActivityBaseNodes({
     activeExecutionsByWorkstationNodeID,
     activeGraphHighlights,
@@ -426,6 +421,12 @@ export function useCurrentActivityGraphViewModel({
   });
   const { displayNodes, handleNodesChange } =
     useCurrentActivityGraphNodePresentation(baseNodes, graphSelection);
+  const { handleEdgesChange } =
+    useCurrentActivityGraphEdgePresentation(graphSelection);
+  const graphSelectionGestures = useCurrentActivityGraphSelectionGestures(
+    graphSelection,
+    graphSelectionEnabled,
+  );
   const edges = useCurrentActivityGraphEdges({
     activeGraphHighlights,
     displayNodes,
@@ -440,9 +441,14 @@ export function useCurrentActivityGraphViewModel({
 
   return {
     canonicalLayoutViewport,
+    clearGraphSelection: graphSelectionGestures.clearGraphSelection,
     edges,
     graphKey,
     graphSelection,
+    handleEdgesChange,
+    handleGraphSelectionChange:
+      graphSelectionGestures.handleGraphSelectionChange,
+    handleGraphSelectionStart: graphSelectionGestures.handleGraphSelectionStart,
     handleNodesChange,
     initialFitViewKey:
       initialFitViewOptions.nodes?.map((node) => node.id).join(":") ||

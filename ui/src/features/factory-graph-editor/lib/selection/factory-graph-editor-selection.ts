@@ -1,4 +1,4 @@
-import type { NodeChange } from "@xyflow/react";
+import type { EdgeChange, NodeChange } from "@xyflow/react";
 
 export type FactoryGraphEditorSelectionTarget =
   | { kind: "node"; id: string }
@@ -214,6 +214,61 @@ function applyNodeSelectionChange(
   return removeFromFactoryGraphEditorSelection(state, {
     nodeIds: [nodeId],
   });
+}
+
+function applyEdgeSelectionChange(
+  state: FactoryGraphEditorSelectionState,
+  edgeId: string,
+  selected: boolean,
+): FactoryGraphEditorSelectionState {
+  if (selected) {
+    return addToFactoryGraphEditorSelection(state, {
+      edgeIds: [edgeId],
+    });
+  }
+
+  return removeFromFactoryGraphEditorSelection(state, {
+    edgeIds: [edgeId],
+  });
+}
+
+export function applyFactoryGraphEditorEdgeSelectChanges(
+  state: FactoryGraphEditorSelectionState,
+  changes: readonly EdgeChange[],
+): FactoryGraphEditorSelectionState {
+  let nextState = state;
+
+  for (const change of changes) {
+    if (
+      change.type !== "select" &&
+      change.type !== "remove" &&
+      change.type !== "add" &&
+      change.type !== "replace"
+    ) {
+      continue;
+    }
+
+    if (change.type === "select") {
+      nextState = applyEdgeSelectionChange(
+        nextState,
+        change.id,
+        change.selected,
+      );
+      continue;
+    }
+
+    if (change.type === "remove") {
+      nextState = removeFromFactoryGraphEditorSelection(nextState, {
+        edgeIds: [change.id],
+      });
+      continue;
+    }
+
+    const selected = change.item.selected === true;
+    nextState = applyEdgeSelectionChange(nextState, change.item.id, selected);
+  }
+
+  return nextState;
 }
 
 export function applyFactoryGraphEditorNodeSelectChanges(

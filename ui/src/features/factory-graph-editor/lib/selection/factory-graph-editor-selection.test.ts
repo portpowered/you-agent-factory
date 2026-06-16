@@ -1,8 +1,9 @@
-import type { NodeChange } from "@xyflow/react";
+import type { EdgeChange, NodeChange } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 
 import {
   addToFactoryGraphEditorSelection,
+  applyFactoryGraphEditorEdgeSelectChanges,
   applyFactoryGraphEditorNodeSelectChanges,
   clearFactoryGraphEditorSelection,
   createEmptyFactoryGraphEditorSelection,
@@ -11,6 +12,7 @@ import {
   resolveFactoryGraphEditorPrimaryTarget,
 } from "./factory-graph-editor-selection";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: selection operation contract cases stay together.
 describe("factory-graph-editor-selection", () => {
   it("starts empty and clears all selected ids and primary target", () => {
     const state = replaceFactoryGraphEditorSelection(
@@ -158,6 +160,23 @@ describe("factory-graph-editor-selection", () => {
     expect(resolveFactoryGraphEditorPrimaryTarget(deselected)).toEqual({
       kind: "node",
       id: "workstation:done",
+    });
+  });
+
+  it("applies React Flow edge select changes through editor-local selection operations", () => {
+    const empty = createEmptyFactoryGraphEditorSelection();
+    const selected = applyFactoryGraphEditorEdgeSelectChanges(empty, [
+      {
+        id: "edge-review-done",
+        selected: true,
+        type: "select",
+      },
+    ] satisfies EdgeChange[]);
+
+    expect(selected.selectedEdgeIds).toEqual(new Set(["edge-review-done"]));
+    expect(resolveFactoryGraphEditorPrimaryTarget(selected)).toEqual({
+      kind: "edge",
+      id: "edge-review-done",
     });
   });
 });

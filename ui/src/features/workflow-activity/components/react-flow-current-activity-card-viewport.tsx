@@ -2,12 +2,14 @@
 import {
   type Connection,
   type Edge,
+  type EdgeChange,
   type EdgeTypes,
   type FitViewOptions,
   type IsValidConnection,
   type Node,
   type NodeChange,
   type NodeTypes,
+  type OnSelectionChangeFunc,
   ReactFlow,
   type ReactFlowInstance,
   type XYPosition,
@@ -36,7 +38,6 @@ import { FactoryGraphEdgeWaypointControls } from "../../factory-graph-editor/com
 import { FactoryGraphEdgeWaypointLayer } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-layer";
 import { FactoryGraphVisualGroupControls } from "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-controls";
 import { FactoryGraphVisualGroupLayer } from "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-layer";
-import type { FactoryLayoutGroup } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/editor/factory-graph-editor-connections";
 import type {
@@ -48,6 +49,8 @@ import {
   isFactoryGraphEditorUndoKeyboardEvent,
   shouldHandleFactoryGraphEditorKeyboardShortcut,
 } from "../../factory-graph-editor/lib/layout/history/factory-graph-layout-keyboard-shortcuts";
+import type { FactoryLayoutGroup } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
+import { FACTORY_GRAPH_EDITOR_REACT_FLOW_GESTURE_PROPS } from "../../factory-graph-editor/lib/selection/factory-graph-editor-react-flow-interaction";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { GraphViewportSurface } from "../../graphs/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
@@ -287,8 +290,12 @@ type CurrentActivityGraphViewportVisibilityControls = {
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: composes React Flow canvas wiring with editor toolbar overlays.
 export function CurrentActivityGraphViewport({
   addControls,
+  clearGraphSelection,
   editorControls,
   edges,
+  handleEdgesChange,
+  handleGraphSelectionChange,
+  handleGraphSelectionStart,
   handleNodesChange,
   hasPendingChanges,
   headingID,
@@ -326,8 +333,12 @@ export function CurrentActivityGraphViewport({
   flowInstanceRef,
 }: {
   addControls: CurrentActivityGraphViewportAddControls;
+  clearGraphSelection?: () => void;
   editorControls: CurrentActivityGraphViewportEditorControls;
   edges: Edge[];
+  handleEdgesChange?: (changes: EdgeChange[]) => void;
+  handleGraphSelectionChange?: OnSelectionChangeFunc;
+  handleGraphSelectionStart?: (event: { shiftKey: boolean }) => void;
   handleNodesChange: (changes: NodeChange[]) => void;
   hasPendingChanges: boolean;
   headingID: string;
@@ -475,6 +486,11 @@ export function CurrentActivityGraphViewport({
   );
   const handleEditorCanvasKeyDown = useCallback(
     (event: KeyboardEvent<HTMLElement>) => {
+      if (event.key === "Escape") {
+        clearGraphSelection?.();
+        return;
+      }
+
       if (
         !editorControls.isEditing ||
         !shouldHandleFactoryGraphEditorKeyboardShortcut(event.target)
@@ -499,7 +515,7 @@ export function CurrentActivityGraphViewport({
         layoutControls.redo?.();
       }
     },
-    [editorControls.isEditing, layoutControls],
+    [clearGraphSelection, editorControls.isEditing, layoutControls],
   );
 
   return (
@@ -536,7 +552,7 @@ export function CurrentActivityGraphViewport({
         }
         onKeyDown={handleEditorCanvasKeyDown}
         ref={flowContainerRef}
-        tabIndex={editorControls.isEditing ? 0 : undefined}
+        tabIndex={0}
         style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
         onDragEnter={imports.onDragEnter}
         onDragLeave={imports.onDragLeave}
@@ -553,6 +569,7 @@ export function CurrentActivityGraphViewport({
             }}
           >
             <ReactFlow
+              {...FACTORY_GRAPH_EDITOR_REACT_FLOW_GESTURE_PROPS}
               className="shadow-none"
               connectionLineStyle={{
                 stroke: "var(--color-primary)",
@@ -582,7 +599,17 @@ export function CurrentActivityGraphViewport({
                 reportPlacementViewport(instance.getViewport());
               }}
               onError={handleCurrentActivityReactFlowError}
-              onEdgeClick={(_, edge) => {
+              onEdgeClick={(_event, edge) => {
+                if (
+                  editorControls.isEditing &&
+                  editorControls.activeTool === "delete"
+                ) {
+                  onEditorEdgeClick?.(
+                    factoryGraphEdgeIdForRenderedEdge(nodes, edge),
+                  );
+                  return;
+                }
+
                 if (editorControls.isEditing) {
                   onEditorEdgeClick?.(
                     factoryGraphEdgeIdForRenderedEdge(nodes, edge),
@@ -609,7 +636,10 @@ export function CurrentActivityGraphViewport({
               }}
               nodesDraggable={true}
               onNodeClick={(_, node) => {
-                if (editorControls.isEditing) {
+                if (
+                  editorControls.isEditing &&
+                  editorControls.activeTool === "delete"
+                ) {
                   onEditorNodeClick?.(
                     factoryGraphNodeIdForRenderedNode(nodes, node.id),
                   );
@@ -686,10 +716,20 @@ export function CurrentActivityGraphViewport({
                   return;
                 }
               }}
+              onEdgesChange={handleEdgesChange}
               onNodesChange={handleNodesChange}
-              panOnDrag
+              onPaneClick={() => {
+                if (editorControls.activeTool !== "delete") {
+                  clearGraphSelection?.();
+                }
+              }}
+              onSelectionChange={handleGraphSelectionChange}
+              onSelectionStart={(event) => {
+                handleGraphSelectionStart?.({
+                  shiftKey: event.shiftKey,
+                });
+              }}
               proOptions={{ hideAttribution: true }}
-              zoomOnScroll
             >
               <DashboardGraphBackground />
               {editorControls.isEditing &&

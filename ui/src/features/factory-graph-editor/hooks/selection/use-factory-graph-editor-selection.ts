@@ -1,17 +1,23 @@
-import type { NodeChange } from "@xyflow/react";
+import type { EdgeChange, NodeChange } from "@xyflow/react";
 import { useCallback, useMemo, useState } from "react";
-
 import {
   addToFactoryGraphEditorSelection,
+  applyFactoryGraphEditorEdgeSelectChanges,
   applyFactoryGraphEditorNodeSelectChanges,
   clearFactoryGraphEditorSelection,
   createEmptyFactoryGraphEditorSelection,
   type FactoryGraphEditorSelectionItems,
   type FactoryGraphEditorSelectionState,
+  type FactoryGraphEditorSelectionTarget,
   removeFromFactoryGraphEditorSelection,
   replaceFactoryGraphEditorSelection,
   resolveFactoryGraphEditorPrimaryTarget,
 } from "../../lib/selection/factory-graph-editor-selection";
+import {
+  applyFactoryGraphEditorReactFlowSelection,
+  applyGraphItemClickSelection,
+  type FactoryGraphEditorSelectionPointerModifiers,
+} from "../../lib/selection/factory-graph-editor-selection-gestures";
 
 export type FactoryGraphEditorSelectionController = {
   state: FactoryGraphEditorSelectionState;
@@ -23,6 +29,15 @@ export type FactoryGraphEditorSelectionController = {
     typeof resolveFactoryGraphEditorPrimaryTarget
   >;
   applyNodeSelectChanges: (changes: readonly NodeChange[]) => void;
+  applyEdgeSelectChanges: (changes: readonly EdgeChange[]) => void;
+  applyReactFlowSelection: (
+    items: FactoryGraphEditorSelectionItems,
+    mode: "add" | "replace",
+  ) => void;
+  handleGraphItemClick: (
+    item: FactoryGraphEditorSelectionTarget,
+    modifiers: FactoryGraphEditorSelectionPointerModifiers,
+  ) => void;
   isNodeSelected: (nodeId: string) => boolean;
   isEdgeSelected: (edgeId: string) => boolean;
 };
@@ -71,6 +86,36 @@ export function useFactoryGraphEditorSelection(): FactoryGraphEditorSelectionCon
     [],
   );
 
+  const applyEdgeSelectChanges = useCallback(
+    (changes: readonly EdgeChange[]) => {
+      setState((current) =>
+        applyFactoryGraphEditorEdgeSelectChanges(current, changes),
+      );
+    },
+    [],
+  );
+
+  const applyReactFlowSelection = useCallback(
+    (items: FactoryGraphEditorSelectionItems, mode: "add" | "replace") => {
+      setState((current) =>
+        applyFactoryGraphEditorReactFlowSelection(current, items, mode),
+      );
+    },
+    [],
+  );
+
+  const handleGraphItemClick = useCallback(
+    (
+      item: FactoryGraphEditorSelectionTarget,
+      modifiers: FactoryGraphEditorSelectionPointerModifiers,
+    ) => {
+      setState((current) =>
+        applyGraphItemClickSelection(current, item, modifiers),
+      );
+    },
+    [],
+  );
+
   const isNodeSelected = useCallback(
     (nodeId: string) => state.selectedNodeIds.has(nodeId),
     [state.selectedNodeIds],
@@ -90,6 +135,9 @@ export function useFactoryGraphEditorSelection(): FactoryGraphEditorSelectionCon
       clearSelection,
       resolvePrimaryTarget,
       applyNodeSelectChanges,
+      applyEdgeSelectChanges,
+      applyReactFlowSelection,
+      handleGraphItemClick,
       isNodeSelected,
       isEdgeSelected,
     }),
@@ -101,6 +149,9 @@ export function useFactoryGraphEditorSelection(): FactoryGraphEditorSelectionCon
       clearSelection,
       resolvePrimaryTarget,
       applyNodeSelectChanges,
+      applyEdgeSelectChanges,
+      applyReactFlowSelection,
+      handleGraphItemClick,
       isNodeSelected,
       isEdgeSelected,
     ],

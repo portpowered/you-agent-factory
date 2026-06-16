@@ -56,4 +56,35 @@ describe("useFactoryGraphEditorSelection", () => {
     });
     expect(result.current.resolvePrimaryTarget()).toBeNull();
   });
+
+  it("exposes graph click, marquee, and react-flow selection helpers", () => {
+    const { result } = renderHook(() => useFactoryGraphEditorSelection());
+
+    act(() => {
+      result.current.handleGraphItemClick(
+        { kind: "node", id: "workstation:review" },
+        { ctrlKey: true, metaKey: false, shiftKey: false },
+      );
+    });
+
+    expect(result.current.isNodeSelected("workstation:review")).toBe(true);
+
+    act(() => {
+      result.current.handleGraphItemClick(
+        { kind: "node", id: "workstation:review" },
+        { ctrlKey: true, metaKey: false, shiftKey: false },
+      );
+    });
+
+    expect(result.current.isNodeSelected("workstation:review")).toBe(false);
+
+    act(() => {
+      result.current.applyReactFlowSelection(
+        { nodeIds: ["workstation:done"] },
+        "replace",
+      );
+    });
+
+    expect(result.current.isNodeSelected("workstation:done")).toBe(true);
+  });
 });

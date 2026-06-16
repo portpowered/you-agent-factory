@@ -1,5 +1,5 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: graph view-model selection contract cases stay together.
 import { act, renderHook } from "@testing-library/react";
-import type { NodeChange } from "@xyflow/react";
 import { describe, expect, it } from "vitest";
 
 import { singleNodeDashboardSnapshot } from "../../../components/dashboard/test-fixtures";
@@ -267,6 +267,12 @@ describe("currentActivityCardFactoryDefinition bundled docs", () => {
 function renderGraphViewModelWithLayout(
   graphLayout: GraphLayout,
   options: {
+    editor?: Partial<
+      Pick<
+        Parameters<typeof useCurrentActivityGraphViewModel>[0]["editor"],
+        "activeTool" | "canInteractWithEditor" | "editorMode"
+      >
+    >;
     renderedLayout?: FactoryLayout;
     selectedWaypointEdgeId?: string | null;
     visibleGraphEdges?: GraphLayout["edges"];
@@ -289,6 +295,7 @@ function renderGraphViewModelWithLayout(
     pendingConnectionSource: null,
     selectedWaypointEdgeId: options.selectedWaypointEdgeId,
     validationTargets: [],
+    ...options.editor,
   };
   const snapshot = {
     ...structuredClone(singleNodeDashboardSnapshot),
@@ -326,6 +333,7 @@ function renderGraphViewModelWithLayout(
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: node position and selection contract cases stay together.
 describe("useCurrentActivityGraphViewModel node positions", () => {
   it("applies transient React Flow positions while preserving graph projection as the reset boundary", () => {
     const graphLayout: GraphLayout = {
@@ -377,12 +385,11 @@ describe("useCurrentActivityGraphViewModel node positions", () => {
           position: { x: 999, y: 999 },
           type: "position",
         },
-        {
-          id: "work-state:story:queued",
-          selected: true,
-          type: "select",
-        },
-      ] satisfies NodeChange[]);
+      ]);
+      result.current.handleGraphSelectionChange?.({
+        edges: [],
+        nodes: [{ id: "work-state:story:queued" }],
+      });
     });
 
     expect(workStateNode()).toMatchObject({
@@ -479,6 +486,113 @@ describe("useCurrentActivityGraphViewModel node positions", () => {
       kind: "node",
       id: "workstation:review",
     });
+  });
+
+  it("syncs React Flow selection changes and clears with Esc handler", () => {
+    const graphLayout: GraphLayout = {
+      edges: [],
+      height: 360,
+      nodes: [
+        {
+          column: 0,
+          height: 120,
+          nodeId: "workstation:review",
+          nodeKind: "workstation",
+          row: 0,
+          width: 220,
+          workstationNodeId: "review",
+          x: 120,
+          y: 80,
+        },
+        {
+          column: 1,
+          height: 120,
+          nodeId: "workstation:done",
+          nodeKind: "workstation",
+          row: 0,
+          width: 220,
+          workstationNodeId: "done",
+          x: 420,
+          y: 100,
+        },
+      ],
+      width: 600,
+    };
+    const { result } = renderGraphViewModelWithLayout(graphLayout, {
+      visibleGraphEdges: graphLayout.edges,
+    });
+
+    act(() => {
+      result.current.handleGraphSelectionStart({ shiftKey: true });
+      result.current.handleGraphSelectionChange?.({
+        edges: [],
+        nodes: [{ id: "workstation:done" }],
+      });
+    });
+
+    expect(result.current.graphSelection.state.selectedNodeIds).toEqual(
+      new Set(["workstation:done"]),
+    );
+
+    act(() => {
+      result.current.handleGraphSelectionStart({ shiftKey: true });
+      result.current.handleGraphSelectionChange?.({
+        edges: [],
+        nodes: [{ id: "workstation:review" }, { id: "workstation:done" }],
+      });
+    });
+
+    expect(result.current.graphSelection.state.selectedNodeIds).toEqual(
+      new Set(["workstation:review", "workstation:done"]),
+    );
+
+    act(() => {
+      result.current.clearGraphSelection();
+    });
+
+    expect(result.current.graphSelection.state.selectedNodeIds).toEqual(
+      new Set(),
+    );
+  });
+
+  it("ignores graph selection changes while the delete tool is active", () => {
+    const graphLayout: GraphLayout = {
+      edges: [],
+      height: 360,
+      nodes: [
+        {
+          column: 0,
+          height: 120,
+          nodeId: "workstation:review",
+          nodeKind: "workstation",
+          row: 0,
+          width: 220,
+          workstationNodeId: "review",
+          x: 120,
+          y: 80,
+        },
+      ],
+      width: 600,
+    };
+    const { result } = renderGraphViewModelWithLayout(graphLayout, {
+      editor: {
+        activeTool: "delete",
+        canInteractWithEditor: true,
+        editorMode: true,
+      },
+      visibleGraphEdges: graphLayout.edges,
+    });
+
+    act(() => {
+      result.current.handleGraphSelectionChange?.({
+        edges: [],
+        nodes: [{ id: "workstation:review" }],
+      });
+    });
+
+    expect(result.current.graphSelection.state.selectedNodeIds).toEqual(
+      new Set(),
+    );
   });
 });
 
