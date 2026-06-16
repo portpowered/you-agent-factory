@@ -755,12 +755,13 @@ export function CurrentActivityGraphViewport({
               }}
               proOptions={{ hideAttribution: true }}
             >
-              <DashboardGraphBackground />
+              <DashboardGraphBackground key="factory-graph-background" />
               {editorControls.isEditing &&
               visualGroups.length > 0 &&
               onSelectVisualGroup &&
               visualGroupAriaLabel ? (
                 <FactoryGraphVisualGroupLayer
+                  key="factory-graph-visual-groups"
                   canEdit={visualGroupCanEdit}
                   groupAriaLabel={visualGroupAriaLabel}
                   groups={visualGroups}
@@ -775,6 +776,7 @@ export function CurrentActivityGraphViewport({
                 />
               ) : null}
               <DashboardGraphControls
+                key="factory-graph-controls"
                 fitViewOptions={{ maxZoom: 1.2, padding: 0.12 }}
               />
               {editorControls.isEditing &&
@@ -782,6 +784,7 @@ export function CurrentActivityGraphViewport({
               onMoveEdgeWaypoint &&
               waypointAriaLabel ? (
                 <FactoryGraphEdgeWaypointLayer
+                  key="factory-graph-edge-waypoints"
                   ariaLabel={waypointAriaLabel}
                   edgeId={selectedWaypointEdgeId}
                   onMoveWaypoint={onMoveEdgeWaypoint}

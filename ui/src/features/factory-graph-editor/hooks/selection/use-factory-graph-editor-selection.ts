@@ -81,7 +81,7 @@ export function useFactoryGraphEditorSelection(
   );
 
   const clearSelection = useCallback(() => {
-    setState(clearFactoryGraphEditorSelection());
+    setState((current) => clearFactoryGraphEditorSelection(current));
   }, []);
 
   const resolvePrimaryTarget = useCallback(

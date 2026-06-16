@@ -114,8 +114,60 @@ export function resolveFactoryGraphEditorPrimaryTarget(
   );
 }
 
+function arePrimaryTargetsEqual(
+  left: FactoryGraphEditorSelectionTarget | null,
+  right: FactoryGraphEditorSelectionTarget | null,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return false;
+  }
+
+  return left.kind === right.kind && left.id === right.id;
+}
+
+function areSelectionIdSetsEqual(
+  left: ReadonlySet<string>,
+  right: ReadonlySet<string>,
+): boolean {
+  if (left.size !== right.size) {
+    return false;
+  }
+
+  for (const id of left) {
+    if (!right.has(id)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export function areFactoryGraphEditorSelectionStatesEqual(
+  left: FactoryGraphEditorSelectionState,
+  right: FactoryGraphEditorSelectionState,
+): boolean {
+  return (
+    areSelectionIdSetsEqual(left.selectedNodeIds, right.selectedNodeIds) &&
+    areSelectionIdSetsEqual(left.selectedEdgeIds, right.selectedEdgeIds) &&
+    arePrimaryTargetsEqual(left.primaryTarget, right.primaryTarget)
+  );
+}
+
+function finalizeFactoryGraphEditorSelectionUpdate(
+  state: FactoryGraphEditorSelectionState,
+  nextState: FactoryGraphEditorSelectionState,
+): FactoryGraphEditorSelectionState {
+  return areFactoryGraphEditorSelectionStatesEqual(state, nextState)
+    ? state
+    : nextState;
+}
+
 export function replaceFactoryGraphEditorSelection(
-  _state: FactoryGraphEditorSelectionState,
+  state: FactoryGraphEditorSelectionState,
   items: FactoryGraphEditorSelectionItems,
 ): FactoryGraphEditorSelectionState {
   const selectedNodeIds = new Set(items.nodeIds ?? []);
@@ -130,11 +182,13 @@ export function replaceFactoryGraphEditorSelection(
           explicitPrimaryTarget,
         );
 
-  return {
+  const nextState = {
     selectedNodeIds,
     selectedEdgeIds,
     primaryTarget,
   };
+
+  return finalizeFactoryGraphEditorSelectionUpdate(state, nextState);
 }
 
 export function addToFactoryGraphEditorSelection(
@@ -165,11 +219,13 @@ export function addToFactoryGraphEditorSelection(
           explicitPrimaryTarget,
         );
 
-  return {
+  const nextState = {
     selectedNodeIds,
     selectedEdgeIds,
     primaryTarget,
   };
+
+  return finalizeFactoryGraphEditorSelectionUpdate(state, nextState);
 }
 
 export function removeFromFactoryGraphEditorSelection(
@@ -185,7 +241,7 @@ export function removeFromFactoryGraphEditorSelection(
     selectedEdgeIds.delete(edgeId);
   }
 
-  return {
+  const nextState = {
     selectedNodeIds,
     selectedEdgeIds,
     primaryTarget: resolvePrimaryTargetFromSelection(
@@ -194,10 +250,15 @@ export function removeFromFactoryGraphEditorSelection(
       state.primaryTarget,
     ),
   };
+
+  return finalizeFactoryGraphEditorSelectionUpdate(state, nextState);
 }
 
-export function clearFactoryGraphEditorSelection(): FactoryGraphEditorSelectionState {
-  return createEmptyFactoryGraphEditorSelection();
+export function clearFactoryGraphEditorSelection(
+  state: FactoryGraphEditorSelectionState = createEmptyFactoryGraphEditorSelection(),
+): FactoryGraphEditorSelectionState {
+  const nextState = createEmptyFactoryGraphEditorSelection();
+  return finalizeFactoryGraphEditorSelectionUpdate(state, nextState);
 }
 
 function applyNodeSelectionChange(

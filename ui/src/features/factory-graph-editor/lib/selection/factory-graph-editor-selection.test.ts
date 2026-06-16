@@ -14,6 +14,24 @@ import {
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: selection operation contract cases stay together.
 describe("factory-graph-editor-selection", () => {
+  it("returns the same state object when replace and clear are no-ops", () => {
+    const state = replaceFactoryGraphEditorSelection(
+      createEmptyFactoryGraphEditorSelection(),
+      {
+        nodeIds: ["workstation:review"],
+        primaryTarget: { kind: "node", id: "workstation:review" },
+      },
+    );
+
+    const next = replaceFactoryGraphEditorSelection(state, {
+      nodeIds: ["workstation:review"],
+      primaryTarget: { kind: "node", id: "workstation:review" },
+    });
+
+    expect(next).toBe(state);
+    expect(clearFactoryGraphEditorSelection(state)).toBe(state);
+  });
+
   it("starts empty and clears all selected ids and primary target", () => {
     const state = replaceFactoryGraphEditorSelection(
       createEmptyFactoryGraphEditorSelection(),
