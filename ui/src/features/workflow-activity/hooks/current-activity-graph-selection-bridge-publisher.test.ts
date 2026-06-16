@@ -8,6 +8,7 @@ import {
 } from "./current-activity-graph-selection-bridge-publisher";
 import { useFactoryGraphEditorSelectionBridge } from "../state/factory-graph-editor-selection-bridge";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: bridge publish and dashboard sync contract cases stay together.
 describe("current-activity-graph-selection-bridge-publisher", () => {
   beforeEach(() => {
     useFactoryGraphEditorSelectionBridge.setState({ selection: null });

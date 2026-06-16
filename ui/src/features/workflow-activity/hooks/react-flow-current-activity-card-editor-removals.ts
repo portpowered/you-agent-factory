@@ -18,12 +18,6 @@ import {
   type FactoryGraphSelectionBatchRemovalSelection,
 } from "../../factory-graph-editor/lib/selection/factory-graph-editor-selection-batch-delete";
 
-type FactoryGraphSelectionBatchRemovalResult =
-  | { status: "applied"; removed: FactoryGraphSelectionBatchRemovalSelection }
-  | { status: "blocked" }
-  | { status: "empty" }
-  | { status: "pending" };
-
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: removal controller keeps confirm, cancel, and graph/selection delete entry points aligned.
 export function useFactoryGraphRemovalController({
   activeTool,

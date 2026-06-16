@@ -1,4 +1,3 @@
-// biome-ignore lint/nursery/noExcessiveLinesPerFile: composes draft, layout, projection, and save controllers for the editable graph editor.
 import { useCallback, useMemo, useState } from "react";
 
 import { resolveFactoryGraphEditorDirtyState } from "../lib/editor-runtime/factory-graph-editor-dirty-state";
