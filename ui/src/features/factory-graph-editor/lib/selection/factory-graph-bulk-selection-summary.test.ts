@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createEmptyFactoryGraphEditorSelection } from "./factory-graph-editor-selection";
 import {
   buildFactoryGraphBulkSelectionSummary,
+  factoryGraphEditorSelectionSignature,
   resolveFactoryGraphNodeKindFromNodeId,
   resolveGraphSelectionDashboardSyncAction,
 } from "./factory-graph-bulk-selection-summary";
@@ -30,6 +31,9 @@ describe("factory-graph-bulk-selection-summary", () => {
     expect(
       resolveFactoryGraphNodeKindFromNodeId("doc:factory/docs/guide.md"),
     ).toBe("doc");
+    expect(resolveFactoryGraphNodeKindFromNodeId("legacy-node")).toBe(
+      "unknown",
+    );
   });
 
   it("returns null for single graph item selections", () => {
@@ -96,6 +100,41 @@ describe("factory-graph-bulk-selection-summary", () => {
     ).toEqual({
       kind: "doc",
       targetPath: "factory/docs/guide.md",
+    });
+    expect(resolveGraphSelectionDashboardSyncAction("doc:")).toBeNull();
+    expect(resolveGraphSelectionDashboardSyncAction("resource:")).toBeNull();
+    expect(resolveGraphSelectionDashboardSyncAction("worker:")).toBeNull();
+    expect(
+      resolveGraphSelectionDashboardSyncAction("place:story:queued"),
+    ).toEqual({
+      kind: "state-node",
+      placeId: "story:queued",
+    });
+    expect(resolveGraphSelectionDashboardSyncAction("unsupported")).toBeNull();
+  });
+
+  it("builds stable selection signatures for bridge dedupe", () => {
+    expect(
+      factoryGraphEditorSelectionSignature({
+        selectedEdgeIds: new Set(["edge-b", "edge-a"]),
+        selectedNodeIds: new Set(["node-b", "node-a"]),
+        primaryTarget: { kind: "edge", id: "edge-a" },
+      }),
+    ).toBe("node-a,node-b|edge-a,edge-b|edge:edge-a");
+  });
+
+  it("counts unknown node kinds in bulk summaries", () => {
+    const summary = buildFactoryGraphBulkSelectionSummary({
+      selectedEdgeIds: new Set(),
+      selectedNodeIds: new Set(["legacy-node", "workstation:review"]),
+    });
+
+    expect(summary).toEqual({
+      totalCount: 2,
+      kindCounts: [
+        { kind: "workstation", count: 1 },
+        { kind: "unknown", count: 1 },
+      ],
     });
   });
 

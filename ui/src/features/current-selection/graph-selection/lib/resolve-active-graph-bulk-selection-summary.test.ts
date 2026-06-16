@@ -59,6 +59,43 @@ describe("resolveActiveGraphBulkSelectionSummary", () => {
     ).toBeNull();
   });
 
+  it("keeps bulk summary when the dashboard worker still matches graph selection", () => {
+    const selection: DashboardSelection = {
+      kind: "worker",
+      workerName: "writer",
+    };
+    const bridgeSnapshot: FactoryGraphEditorSelectionBridgeSnapshot = {
+      ...bulkBridgeSnapshot,
+      selectedNodeIds: ["worker:writer", "workstation:review"],
+    };
+
+    expect(
+      resolveActiveGraphBulkSelectionSummary(selection, bridgeSnapshot),
+    ).toEqual(bridgeSnapshot.bulkSelectionSummary);
+  });
+
+  it("hides bulk summary for workstation-request selections", () => {
+    const selection: DashboardSelection = {
+      kind: "workstation-request",
+      nodeId: "review",
+      requestId: "request-1",
+    };
+
+    expect(
+      resolveActiveGraphBulkSelectionSummary(selection, bulkBridgeSnapshot),
+    ).toBeNull();
+  });
+
+  it("returns null when bridge or selection is missing", () => {
+    expect(resolveActiveGraphBulkSelectionSummary(null, bulkBridgeSnapshot)).toBeNull();
+    expect(
+      resolveActiveGraphBulkSelectionSummary(
+        { kind: "worker", workerName: "writer" },
+        null,
+      ),
+    ).toBeNull();
+  });
+
   it("maps dashboard selections to graph node id candidates", () => {
     expect(
       resolveGraphNodeIdCandidatesForDashboardSelection({
@@ -72,5 +109,29 @@ describe("resolveActiveGraphBulkSelectionSummary", () => {
         placeId: "story:queued",
       }),
     ).toEqual(["work-state:story:queued", "place:story:queued"]);
+    expect(
+      resolveGraphNodeIdCandidatesForDashboardSelection({
+        kind: "resource",
+        resourceName: "gpu",
+      }),
+    ).toEqual(["resource:gpu"]);
+    expect(
+      resolveGraphNodeIdCandidatesForDashboardSelection({
+        kind: "work-type",
+        workTypeName: "story",
+      }),
+    ).toEqual(["work-type:story"]);
+    expect(
+      resolveGraphNodeIdCandidatesForDashboardSelection({
+        kind: "doc",
+        targetPath: "factory/docs/guide.md",
+      }),
+    ).toEqual(["doc:factory/docs/guide.md"]);
+    expect(
+      resolveGraphNodeIdCandidatesForDashboardSelection({
+        kind: "node",
+        nodeId: "workstation:review",
+      }),
+    ).toEqual(["workstation:review"]);
   });
 });
