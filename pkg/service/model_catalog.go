@@ -221,10 +221,6 @@ func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string,
 	if readinessErr != nil {
 		return apisurface.ModelInvocationResult{}, readinessErr
 	}
-	if err := s.modelAssetPuller().EnsureModelAvailable(ctx, runtimeCfg, workerDef); err != nil {
-		s.recordManagedRuntimeInvocationFailure(modelName, managed, err)
-		return apisurface.ModelInvocationResult{}, err
-	}
 
 	inputContent := workcontent.PartsFromGenerated(request.Content)
 	inputTokens := []interfaces.Token{{
@@ -789,12 +785,17 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 	}
 	logger := logging.NewZapLogger(fs.logger, fs != nil && fs.coordinatorPolicy().verbose)
 	bundle := fs.currentRuntimeBundle()
-	var modelResources *localModelResourceLimiter
-	var localModels *managedLocalModelManager
+	var modelDomain localModelDomain
 	var workflowContext *factory_context.FactoryContext
 	if bundle != nil {
-		modelResources = bundle.modelResources
-		localModels = bundle.localModels
+		modelDomain = localModelDomain{
+			resources:      bundle.modelResources,
+			assets:         bundle.modelAssets,
+			runtime:        bundle.localModelRuntime,
+			host:           bundle.modelHost,
+			manager:        bundle.localModels,
+			leaseExecution: bundle.leaseExecution,
+		}
 		workflowContext = runtime.WorkflowContext(bundle.factory)
 	}
 	executor := buildWorkerExecutor(
@@ -811,8 +812,7 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 		nil,
 		nil,
 		time.Now,
-		modelResources,
-		localModels,
+		modelDomain,
 	)
 	workstationExecutor, ok := executor.(*workerexecutor.WorkstationExecutor)
 	if !ok || workstationExecutor.Executor == nil {

@@ -15,7 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
-func TestCatalogHost_SupervisedBackend_InspectShowsLoadingUntilProcessReady(t *testing.T) {
+func TestCatalogHost_SupervisedBackend_InspectPreservesInstalledAssetReadinessWithoutLiveSlot(t *testing.T) {
 	loaded := mustLoadedCatalogConfig(t, supervisedCatalogFactoryConfig())
 	host := newSupervisedTestHost(t, nil)
 
@@ -23,11 +23,11 @@ func TestCatalogHost_SupervisedBackend_InspectShowsLoadingUntilProcessReady(t *t
 	if err != nil {
 		t.Fatalf("InspectReadiness: %v", err)
 	}
-	if ready.ReadinessState != factoryapi.ManagedRuntimeReadinessStateLOADING {
-		t.Fatalf("readiness = %s, want LOADING", ready.ReadinessState)
+	if ready.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("readiness = %s, want READY for installed assets without a live supervised slot", ready.ReadinessState)
 	}
-	if ready.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateLOADING {
-		t.Fatalf("lifecycle = %s, want LOADING", ready.LifecycleState)
+	if ready.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
+		t.Fatalf("lifecycle = %s, want INSTALLED", ready.LifecycleState)
 	}
 }
 

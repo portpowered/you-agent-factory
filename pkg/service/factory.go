@@ -91,7 +91,9 @@ type factoryRuntimeBundle struct {
 	modelResources       *localModelResourceLimiter
 	modelAssets          modelAssetPuller
 	localModels          *managedLocalModelManager
+	localModelRuntime    localModelRuntime
 	modelHost            modelhost.Host
+	leaseExecution       *modelhost.LeaseExecution
 	logger               *zap.Logger
 	logSink              *logging.RuntimeLogSink
 	metricsSink          *logging.RuntimeMetricsSink

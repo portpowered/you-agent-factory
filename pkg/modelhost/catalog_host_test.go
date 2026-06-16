@@ -240,12 +240,14 @@ func catalogFactoryConfig(includeResource bool) *interfaces.FactoryConfig {
 			Name: "TTS",
 		}},
 	}
+	if includeResource {
+		worker.Resources = []interfaces.ResourceConfig{{Name: "omnivoice-cache", Capacity: 1}}
+	}
 	cfg := &interfaces.FactoryConfig{
 		Name:    "factory",
 		Workers: []interfaces.WorkerConfig{worker},
 	}
 	if includeResource {
-		worker.Resources = []interfaces.ResourceConfig{{Name: "omnivoice-cache", Capacity: 1}}
 		cfg.Resources = []interfaces.ResourceConfig{{
 			Name:       "omnivoice-cache",
 			Type:       interfaces.ResourceTypeModel,

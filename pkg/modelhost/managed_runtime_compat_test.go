@@ -34,7 +34,7 @@ func TestListModelsWithHost_ProjectsMissingManagedRuntimeFromHost(t *testing.T) 
 	}
 }
 
-func TestGetModelWithHost_ProjectsSupervisedLoadingWhenAssetsInstalled(t *testing.T) {
+func TestGetModelWithHost_PreservesInstalledAssetReadinessWithoutLiveSlot(t *testing.T) {
 	factoryCfg := catalogFactoryConfig(true)
 	factoryCfg.Resources[0].Backend = "LLAMACPP"
 	loaded := mustLoadedCatalogConfig(t, factoryCfg)
@@ -52,8 +52,11 @@ func TestGetModelWithHost_ProjectsSupervisedLoadingWhenAssetsInstalled(t *testin
 	if err != nil {
 		t.Fatalf("GetModelWithHost: %v", err)
 	}
-	if model.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateLOADING {
-		t.Fatalf("readiness = %s, want LOADING", model.ManagedRuntime.ReadinessState)
+	if model.ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+		t.Fatalf("readiness = %s, want READY", model.ManagedRuntime.ReadinessState)
+	}
+	if model.ManagedRuntime.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
+		t.Fatalf("lifecycle = %s, want INSTALLED", model.ManagedRuntime.LifecycleState)
 	}
 }
 

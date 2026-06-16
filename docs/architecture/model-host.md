@@ -25,6 +25,12 @@ sessions.
 Factory sessions and workers **borrow** local model capacity through host leases.
 They do not own subprocesses, asset caches, or unload policy.
 
+Direct invocation and local inference/agent worker execution route through
+`pkg/modelhost/execution.go` (`LeaseExecution.WrapRunner`) when the process-wide
+host is configured. `CatalogHost.InspectReadiness` preserves installed asset
+`READY`/`INSTALLED` projection until a supervised runtime slot exists; live slot
+state overlays loading, ready, and failed outcomes.
+
 ## Service Wiring
 
 `FactoryService` constructs one process-wide host during runtime dependency

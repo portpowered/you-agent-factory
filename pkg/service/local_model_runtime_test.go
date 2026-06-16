@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -17,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -104,24 +107,42 @@ func (h fakeLocalModelHandle) Invoke(_ context.Context, request localModelInvoca
 	return h.runtime.response, nil
 }
 
-func TestInvokeModel_UsesManagedLocalModelRuntimeAndReusesLoadedHandle(t *testing.T) {
+func TestInvokeModel_UsesModelHostLeasesAndReusesLoadedRuntime(t *testing.T) {
+	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(healthServer.Close)
+
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtime := &fakeLocalModelRuntime{
 		response: interfaces.InferenceResponse{
 			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
-	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", localModelFactoryConfig(), localModelRuntimeWorkers(), nil)
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+		t,
+		"",
+		localModelFactoryConfig(),
+		localModelRuntimeWorkersWithHealthEndpoint(healthServer.URL),
+		nil,
+	)
 	cache := localModelTestCacheLayout(t)
 	puller := staticModelAssetPuller{cache: cache}
+	launcher := &serviceTestFakeProcessLauncher{healthEndpoint: healthServer.URL}
+	host := newServiceTestSupervisedModelHost(t, puller, launcher)
+	leaseExec := modelhost.NewLeaseExecution(host, puller, runtime, localModelHooks())
 	svc := &FactoryService{
 		policy:      serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{}),
 		modelAssets: puller,
 	}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-		runtimeCfg:  runtimeCfg,
-		modelAssets: puller,
-		localModels: newManagedLocalModelManager(puller, runtime),
+		runtimeCfg:        runtimeCfg,
+		modelAssets:       puller,
+		localModelRuntime: runtime,
+		modelHost:         host,
+		leaseExecution:    leaseExec,
+		modelResources:    newLocalModelResourceLimiter(),
+		localModels:       newManagedLocalModelManager(puller, runtime),
 	})
 
 	mode := factoryapi.AUDIOSTREAM
@@ -141,8 +162,11 @@ func TestInvokeModel_UsesManagedLocalModelRuntimeAndReusesLoadedHandle(t *testin
 	if err != nil {
 		t.Fatalf("second InvokeModel: %v", err)
 	}
+	if launcher.startCount() != 1 {
+		t.Fatalf("supervised process start count = %d, want 1 shared host runtime", launcher.startCount())
+	}
 	if runtime.loadCount() != 1 {
-		t.Fatalf("load count = %d, want 1", runtime.loadCount())
+		t.Fatalf("runtime load count = %d, want 1 reused handle across host leases", runtime.loadCount())
 	}
 	if runtime.invocationCount() != 2 {
 		t.Fatalf("invocation count = %d, want 2", runtime.invocationCount())
@@ -196,10 +220,16 @@ func TestLoadWorkersFromConfig_LocalModelWorkerUsesManagedRuntimePath(t *testing
 		nil,
 		nil,
 		nil,
-		newLocalModelResourceLimiter(),
-		newManagedLocalModelManager(staticModelAssetPuller{
-			cache: cache,
-		}, runtime),
+		localModelDomain{
+			resources: newLocalModelResourceLimiter(),
+			assets: staticModelAssetPuller{
+				cache: cache,
+			},
+			runtime: runtime,
+			manager: newManagedLocalModelManager(staticModelAssetPuller{
+				cache: cache,
+			}, runtime),
+		},
 	)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
@@ -324,8 +354,12 @@ func TestLoadWorkersFromConfig_LocalModelWorkerDetachesClonedWorkerRequestsFromL
 		nil,
 		nil,
 		nil,
-		newLocalModelResourceLimiter(),
-		newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+		localModelDomain{
+			resources: newLocalModelResourceLimiter(),
+			assets:    staticModelAssetPuller{cache: cache},
+			runtime:   runtime,
+			manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+		},
 	)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
@@ -464,7 +498,12 @@ func localModelExecutionRecorderFixture(t *testing.T, eventTime time.Time) (*wor
 		},
 	})
 	history := factoryevents.NewFactoryEventHistory(nil, func() time.Time { return eventTime }, runtimeCfg)
-	opts, err := loadWorkersFromConfig("", factoryCfg, "", runtimeCfg, nil, logging.NoopLogger{}, true, nil, nil, nil, nil, nil, history.RecordModelEvent, func() time.Time { return eventTime }, newLocalModelResourceLimiter(), newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime))
+	opts, err := loadWorkersFromConfig("", factoryCfg, "", runtimeCfg, nil, logging.NoopLogger{}, true, nil, nil, nil, nil, nil, history.RecordModelEvent, func() time.Time { return eventTime }, localModelDomain{
+		resources: newLocalModelResourceLimiter(),
+		assets:    staticModelAssetPuller{cache: cache},
+		runtime:   runtime,
+		manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+	})
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -579,30 +618,38 @@ func localModelFactoryConfig() *interfaces.FactoryConfig {
 }
 
 func localModelRuntimeWorkers() map[string]*interfaces.WorkerConfig {
+	return localModelRuntimeWorkersWithHealthEndpoint("")
+}
+
+func localModelRuntimeWorkersWithHealthEndpoint(healthEndpoint string) map[string]*interfaces.WorkerConfig {
+	worker := &interfaces.WorkerConfig{
+		Name:          "tts-worker",
+		Type:          interfaces.WorkerTypeModel,
+		Model:         "OMNIVOICE_Q4_K_M",
+		ModelProvider: interfaces.RunnerIDCodex,
+		ModelLocality: interfaces.ModelLocalityLocal,
+		Resources: []interfaces.ResourceConfig{{
+			Name:     "omnivoice-cache",
+			Capacity: 1,
+		}},
+		Operations: []interfaces.ModelOperation{{
+			Name: "TTS",
+			Inputs: []interfaces.ModelOperationSlot{{
+				Name:         "text",
+				ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+				Required:     true,
+			}},
+			Outputs: []interfaces.ModelOperationSlot{{
+				Name:         "audio",
+				ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+			}},
+		}},
+	}
+	if strings.TrimSpace(healthEndpoint) != "" {
+		worker.Args = []string{"--health-endpoint", healthEndpoint}
+	}
 	return map[string]*interfaces.WorkerConfig{
-		"tts-worker": {
-			Name:          "tts-worker",
-			Type:          interfaces.WorkerTypeModel,
-			Model:         "OMNIVOICE_Q4_K_M",
-			ModelProvider: interfaces.RunnerIDCodex,
-			ModelLocality: interfaces.ModelLocalityLocal,
-			Resources: []interfaces.ResourceConfig{{
-				Name:     "omnivoice-cache",
-				Capacity: 1,
-			}},
-			Operations: []interfaces.ModelOperation{{
-				Name: "TTS",
-				Inputs: []interfaces.ModelOperationSlot{{
-					Name:         "text",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeText},
-					Required:     true,
-				}},
-				Outputs: []interfaces.ModelOperationSlot{{
-					Name:         "audio",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
-				}},
-			}},
-		},
+		"tts-worker": worker,
 	}
 }
 
@@ -890,4 +937,62 @@ func TestLocalModelResourceLimiter_BoundsSharedLocalModelConcurrencyAcrossSessio
 	if got := inner.MaxObserved(); got != 1 {
 		t.Fatalf("max observed local-model concurrency = %d, want 1", got)
 	}
+}
+
+func newServiceTestSupervisedModelHost(t *testing.T, puller modelAssetPuller, launcher modelhost.ProcessLauncher) modelhost.Host {
+	t.Helper()
+	host := modelhost.NewCatalogHost(modelhost.NewLocalAssetGateway(puller), modelhost.Options{
+		SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
+		Supervisor: modelhost.SupervisorConfig{
+			ReadinessTimeout:    500 * time.Millisecond,
+			HealthCheckInterval: 10 * time.Millisecond,
+			ProcessLauncher:     launcher,
+			HealthChecker:       modelhost.HTTPHealthChecker{Path: "/health"},
+		},
+	})
+	if host == nil {
+		t.Fatal("model host = nil")
+	}
+	return host
+}
+
+type serviceTestFakeProcessLauncher struct {
+	mu              sync.Mutex
+	healthEndpoint  string
+	supervisedStart int
+}
+
+func (f *serviceTestFakeProcessLauncher) Start(_ context.Context, _ modelhost.ProcessStartSpec) (modelhost.ManagedProcess, error) {
+	f.mu.Lock()
+	f.supervisedStart++
+	f.mu.Unlock()
+	return &serviceTestFakeManagedProcess{
+		endpoint: f.healthEndpoint,
+		stopCh:   make(chan struct{}),
+	}, nil
+}
+
+func (f *serviceTestFakeProcessLauncher) startCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.supervisedStart
+}
+
+type serviceTestFakeManagedProcess struct {
+	endpoint string
+	stopCh   chan struct{}
+}
+
+func (p *serviceTestFakeManagedProcess) HealthEndpoint() string {
+	return p.endpoint
+}
+
+func (p *serviceTestFakeManagedProcess) Wait() error {
+	<-p.stopCh
+	return nil
+}
+
+func (p *serviceTestFakeManagedProcess) Stop(context.Context) error {
+	close(p.stopCh)
+	return nil
 }

@@ -414,15 +414,6 @@ func (h *CatalogHost) overlaySupervisedReadiness(
 	}
 	slot := h.peekRuntimeSlot(runtimeCfg, modelName)
 	if slot == nil {
-		if snapshot.ReadinessState == factoryapi.ManagedRuntimeReadinessStateREADY {
-			return ReadinessSnapshot{
-				Identity:       snapshot.Identity,
-				ReadinessState: factoryapi.ManagedRuntimeReadinessStateLOADING,
-				LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADING,
-				FailureClass:   FailureClassLoadingTimeout,
-				Diagnostics:    managedDiagnostics(snapshot.Identity, factoryapi.ManagedRuntimeReadinessStateLOADING, factoryapi.ManagedRuntimeLifecycleStateLOADING),
-			}
-		}
 		return snapshot
 	}
 	return slot.readinessOverlay(snapshot.Identity, snapshot)

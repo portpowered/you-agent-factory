@@ -335,7 +335,7 @@ Review.
 		},
 	)
 
-	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil, nil, localModelDomain{})
 	if err == nil || !strings.Contains(err.Error(), `unknown runner "mystery-runner"`) {
 		t.Fatalf("loadWorkersFromConfig error = %v, want unknown runner", err)
 	}
@@ -359,7 +359,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableGeminiFactoryRunner(t *testing.T)
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDGemini, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, nil); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDGemini, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available gemini runner", err)
 	}
 }
@@ -382,7 +382,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableKiroFactoryRunner(t *testing.T) {
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDKiro, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, nil); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDKiro, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available kiro runner", err)
 	}
 }
@@ -405,7 +405,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableCursorFactoryRunner(t *testing.T)
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDCursorCLI, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, nil); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDCursorCLI, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available cursor runner", err)
 	}
 }
@@ -428,7 +428,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableOpenCodeFactoryRunner(t *testing.
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDOpenCode, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, nil); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDOpenCode, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available opencode runner", err)
 	}
 }
@@ -457,7 +457,7 @@ You are a helpful assistant.
 		},
 	)
 
-	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "mystery-runner", cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "mystery-runner", cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil, nil, localModelDomain{})
 	if err == nil || !strings.Contains(err.Error(), `unknown runner "mystery-runner"`) {
 		t.Fatalf("loadWorkersFromConfig error = %v, want unknown runner", err)
 	}
