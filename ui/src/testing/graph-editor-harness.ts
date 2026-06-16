@@ -48,6 +48,7 @@ import {
   connectFactoryGraphNodes,
   disconnectFactoryGraphEdge,
   removeFactoryGraphNode,
+  removeFactoryGraphSelection,
 } from "../features/factory-graph-editor/lib/operations/factory-graph-operations";
 
 export const baseFactoryDefinition: CanonicalFactoryDefinition = {
@@ -579,6 +580,24 @@ function createMockEditableFactoryGraphActions(
           })
         : {
             message: "Load the current factory before removing graph nodes.",
+            ok: false as const,
+            reason: "NODE_NOT_FOUND" as const,
+          };
+      if (result.ok) {
+        draftState.replaceDraft(result.value);
+      }
+      return result;
+    },
+    removeSelection: (selection) => {
+      const result = baseDefinition
+        ? removeFactoryGraphSelection({
+            baseFactoryDefinition: baseDefinition,
+            draft: draftState.draft,
+            edgeIds: selection.edgeIds,
+            nodeIds: selection.nodeIds,
+          })
+        : {
+            message: "Load the current factory before removing graph selection.",
             ok: false as const,
             reason: "NODE_NOT_FOUND" as const,
           };

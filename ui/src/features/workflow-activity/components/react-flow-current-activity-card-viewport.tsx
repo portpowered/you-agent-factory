@@ -2,12 +2,14 @@
 import {
   type Connection,
   type Edge,
+  type EdgeChange,
   type EdgeTypes,
   type FitViewOptions,
   type IsValidConnection,
   type Node,
   type NodeChange,
   type NodeTypes,
+  type OnSelectionChangeFunc,
   ReactFlow,
   type ReactFlowInstance,
   type XYPosition,
@@ -29,6 +31,7 @@ import type { WorkstationProgressOutcomeRouteContext } from "../../current-facto
 import {
   type FactoryGraphEditorMenuAction,
   FactoryGraphEditorToolbar,
+  type FactoryGraphEditorToolbarSelectionState,
   FactoryGraphEditorVisibilityPanel,
   type FactoryGraphEditorVisibilityPreset,
 } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
@@ -36,7 +39,6 @@ import { FactoryGraphEdgeWaypointControls } from "../../factory-graph-editor/com
 import { FactoryGraphEdgeWaypointLayer } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-layer";
 import { FactoryGraphVisualGroupControls } from "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-controls";
 import { FactoryGraphVisualGroupLayer } from "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-layer";
-import type { FactoryLayoutGroup } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/editor/factory-graph-editor-connections";
 import type {
@@ -45,9 +47,12 @@ import type {
 } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import {
   isFactoryGraphEditorRedoKeyboardEvent,
+  isFactoryGraphEditorDeleteSelectionKeyboardEvent,
   isFactoryGraphEditorUndoKeyboardEvent,
   shouldHandleFactoryGraphEditorKeyboardShortcut,
 } from "../../factory-graph-editor/lib/layout/history/factory-graph-layout-keyboard-shortcuts";
+import type { FactoryLayoutGroup } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
+import { FACTORY_GRAPH_EDITOR_REACT_FLOW_GESTURE_PROPS } from "../../factory-graph-editor/lib/selection/factory-graph-editor-react-flow-interaction";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
 import { GraphViewportSurface } from "../../graphs/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
@@ -67,7 +72,10 @@ import {
 
 function CurrentActivityGraphEditorChrome(props: {
   addControls: CurrentActivityGraphViewportAddControls;
+  canDeleteGraphSelection?: boolean;
+  deleteGraphSelection?: () => void;
   editorControls: CurrentActivityGraphViewportEditorControls;
+  graphSelectionToolbarState?: FactoryGraphEditorToolbarSelectionState;
   hasPendingChanges: boolean;
   isSavingDraft?: boolean;
   layoutControls: CurrentActivityGraphViewportLayoutControls;
@@ -89,6 +97,7 @@ function CurrentActivityGraphEditorChrome(props: {
     <FactoryGraphEditorToolbar
       activeTool={props.editorControls.activeTool}
       addMenuActions={props.addControls.actions}
+      canDeleteSelection={props.canDeleteGraphSelection}
       canDiscard={props.hasPendingChanges}
       canInteract={props.editorControls.canInteract}
       canRedoLayout={props.layoutControls.canRedo}
@@ -103,6 +112,7 @@ function CurrentActivityGraphEditorChrome(props: {
         onToggle: props.editorControls.toggleMode,
         tooltipOverride: editorUnavailableReason,
       }}
+      graphSelectionToolbarState={props.graphSelectionToolbarState}
       hiddenNodeClasses={props.visibilityControls.hiddenNodeClasses}
       hideShowMenuOpen={props.visibilityControls.isMenuOpen}
       hideShowVisible={true}
@@ -113,6 +123,7 @@ function CurrentActivityGraphEditorChrome(props: {
       onClearPreferences={props.visibilityControls.resetPreferences}
       onCreateVisualGroup={props.onCreateVisualGroup}
       onDiscard={props.editorControls.discardPendingChanges}
+      onDeleteSelection={props.deleteGraphSelection}
       onHideShowMenuOpenChange={props.visibilityControls.setMenuOpen}
       onRedoLayout={props.layoutControls.redo}
       onResetLayout={props.layoutControls.reset}
@@ -287,8 +298,15 @@ type CurrentActivityGraphViewportVisibilityControls = {
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: composes React Flow canvas wiring with editor toolbar overlays.
 export function CurrentActivityGraphViewport({
   addControls,
+  canDeleteGraphSelection,
+  clearGraphSelection,
+  deleteGraphSelection,
   editorControls,
+  graphSelectionToolbarState,
   edges,
+  handleEdgesChange,
+  handleGraphSelectionChange,
+  handleGraphSelectionStart,
   handleNodesChange,
   hasPendingChanges,
   headingID,
@@ -326,8 +344,15 @@ export function CurrentActivityGraphViewport({
   flowInstanceRef,
 }: {
   addControls: CurrentActivityGraphViewportAddControls;
+  canDeleteGraphSelection?: boolean;
+  clearGraphSelection?: () => void;
+  deleteGraphSelection?: () => void;
   editorControls: CurrentActivityGraphViewportEditorControls;
+  graphSelectionToolbarState?: FactoryGraphEditorToolbarSelectionState;
   edges: Edge[];
+  handleEdgesChange?: (changes: EdgeChange[]) => void;
+  handleGraphSelectionChange?: OnSelectionChangeFunc;
+  handleGraphSelectionStart?: (event: { shiftKey: boolean }) => void;
   handleNodesChange: (changes: NodeChange[]) => void;
   hasPendingChanges: boolean;
   headingID: string;
@@ -475,10 +500,25 @@ export function CurrentActivityGraphViewport({
   );
   const handleEditorCanvasKeyDown = useCallback(
     (event: KeyboardEvent<HTMLElement>) => {
+      if (event.key === "Escape") {
+        clearGraphSelection?.();
+        return;
+      }
+
       if (
         !editorControls.isEditing ||
         !shouldHandleFactoryGraphEditorKeyboardShortcut(event.target)
       ) {
+        return;
+      }
+
+      if (
+        isFactoryGraphEditorDeleteSelectionKeyboardEvent(event) &&
+        canDeleteGraphSelection &&
+        deleteGraphSelection
+      ) {
+        event.preventDefault();
+        deleteGraphSelection();
         return;
       }
 
@@ -499,7 +539,7 @@ export function CurrentActivityGraphViewport({
         layoutControls.redo?.();
       }
     },
-    [editorControls.isEditing, layoutControls],
+    [canDeleteGraphSelection, clearGraphSelection, deleteGraphSelection, editorControls.isEditing, layoutControls],
   );
 
   return (
@@ -536,7 +576,7 @@ export function CurrentActivityGraphViewport({
         }
         onKeyDown={handleEditorCanvasKeyDown}
         ref={flowContainerRef}
-        tabIndex={editorControls.isEditing ? 0 : undefined}
+        tabIndex={0}
         style={{ height: "100%", maxHeight: "100%", overflow: "hidden" }}
         onDragEnter={imports.onDragEnter}
         onDragLeave={imports.onDragLeave}
@@ -553,6 +593,7 @@ export function CurrentActivityGraphViewport({
             }}
           >
             <ReactFlow
+              {...FACTORY_GRAPH_EDITOR_REACT_FLOW_GESTURE_PROPS}
               className="shadow-none"
               connectionLineStyle={{
                 stroke: "var(--color-primary)",
@@ -582,7 +623,17 @@ export function CurrentActivityGraphViewport({
                 reportPlacementViewport(instance.getViewport());
               }}
               onError={handleCurrentActivityReactFlowError}
-              onEdgeClick={(_, edge) => {
+              onEdgeClick={(_event, edge) => {
+                if (
+                  editorControls.isEditing &&
+                  editorControls.activeTool === "delete"
+                ) {
+                  onEditorEdgeClick?.(
+                    factoryGraphEdgeIdForRenderedEdge(nodes, edge),
+                  );
+                  return;
+                }
+
                 if (editorControls.isEditing) {
                   onEditorEdgeClick?.(
                     factoryGraphEdgeIdForRenderedEdge(nodes, edge),
@@ -609,7 +660,10 @@ export function CurrentActivityGraphViewport({
               }}
               nodesDraggable={true}
               onNodeClick={(_, node) => {
-                if (editorControls.isEditing) {
+                if (
+                  editorControls.isEditing &&
+                  editorControls.activeTool === "delete"
+                ) {
                   onEditorNodeClick?.(
                     factoryGraphNodeIdForRenderedNode(nodes, node.id),
                   );
@@ -686,17 +740,28 @@ export function CurrentActivityGraphViewport({
                   return;
                 }
               }}
+              onEdgesChange={handleEdgesChange}
               onNodesChange={handleNodesChange}
-              panOnDrag
+              onPaneClick={() => {
+                if (editorControls.activeTool !== "delete") {
+                  clearGraphSelection?.();
+                }
+              }}
+              onSelectionChange={handleGraphSelectionChange}
+              onSelectionStart={(event) => {
+                handleGraphSelectionStart?.({
+                  shiftKey: event.shiftKey,
+                });
+              }}
               proOptions={{ hideAttribution: true }}
-              zoomOnScroll
             >
-              <DashboardGraphBackground />
+              <DashboardGraphBackground key="factory-graph-background" />
               {editorControls.isEditing &&
               visualGroups.length > 0 &&
               onSelectVisualGroup &&
               visualGroupAriaLabel ? (
                 <FactoryGraphVisualGroupLayer
+                  key="factory-graph-visual-groups"
                   canEdit={visualGroupCanEdit}
                   groupAriaLabel={visualGroupAriaLabel}
                   groups={visualGroups}
@@ -711,6 +776,7 @@ export function CurrentActivityGraphViewport({
                 />
               ) : null}
               <DashboardGraphControls
+                key="factory-graph-controls"
                 fitViewOptions={{ maxZoom: 1.2, padding: 0.12 }}
               />
               {editorControls.isEditing &&
@@ -718,6 +784,7 @@ export function CurrentActivityGraphViewport({
               onMoveEdgeWaypoint &&
               waypointAriaLabel ? (
                 <FactoryGraphEdgeWaypointLayer
+                  key="factory-graph-edge-waypoints"
                   ariaLabel={waypointAriaLabel}
                   edgeId={selectedWaypointEdgeId}
                   onMoveWaypoint={onMoveEdgeWaypoint}
@@ -745,7 +812,10 @@ export function CurrentActivityGraphViewport({
         />
         <CurrentActivityGraphEditorChrome
           addControls={addControls}
+          canDeleteGraphSelection={canDeleteGraphSelection}
+          deleteGraphSelection={deleteGraphSelection}
           editorControls={editorControls}
+          graphSelectionToolbarState={graphSelectionToolbarState}
           hasPendingChanges={hasPendingChanges}
           isSavingDraft={isSavingDraft}
           layoutControls={layoutControls}

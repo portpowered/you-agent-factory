@@ -43,18 +43,24 @@ export function projectSelectedWorkRelationshipGraphToDashboardRelations(
 
   for (const edge of relationshipGraph.edges) {
     const relation = toDashboardRelation(edge, workNodesByID);
-    const key = [
-      relation.type,
-      relation.source_work_id ?? "",
-      relation.target_work_id,
-      relation.required_state ?? "",
-    ].join("|");
+    const key = relationInstanceKey(relation);
     if (!relationsByKey.has(key)) {
       relationsByKey.set(key, relation);
     }
   }
 
   return [...relationsByKey.values()];
+}
+
+function relationInstanceKey(relation: DashboardWorkRelation): string {
+  return [
+    relation.type,
+    relation.source_work_id ?? "",
+    relation.target_work_id,
+    relation.required_state ?? "",
+    relation.request_id ?? "",
+    relation.trace_id ?? "",
+  ].join("|");
 }
 
 function toDashboardRelation(

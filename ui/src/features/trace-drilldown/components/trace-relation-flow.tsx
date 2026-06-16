@@ -7,7 +7,10 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { DashboardWorkRelation } from "../../../api/dashboard/types";
+import type {
+  DashboardWorkItemRef,
+  DashboardWorkRelation,
+} from "../../../api/dashboard/types";
 import {
   DashboardGraphBackground,
   DashboardGraphControls,
@@ -36,6 +39,7 @@ export interface TraceRelationFlowProps {
   onSelectWorkID?: (workID: string) => void;
   relations: DashboardWorkRelation[];
   selectedWorkID?: string | null;
+  workItemsByWorkId?: ReadonlyMap<string, DashboardWorkItemRef>;
 }
 
 export function TraceRelationFlow({
@@ -43,6 +47,7 @@ export function TraceRelationFlow({
   onSelectWorkID,
   relations,
   selectedWorkID,
+  workItemsByWorkId,
 }: TraceRelationFlowProps) {
   const graph = useMemo(
     () =>
@@ -50,8 +55,9 @@ export function TraceRelationFlow({
         locale,
         onSelectWorkID,
         selectedWorkID,
+        workItemsByWorkId,
       }),
-    [locale, onSelectWorkID, relations, selectedWorkID],
+    [locale, onSelectWorkID, relations, selectedWorkID, workItemsByWorkId],
   );
   const topologyKey = useMemo(
     () => traceRelationTopologyLayoutKey(graph.topology),

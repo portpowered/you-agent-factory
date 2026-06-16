@@ -5,7 +5,6 @@ import { cn } from "../../../lib/cn";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import {
   activityGraphNodeSurfaceClassName,
-  activityGraphNodeTitleClassName,
 } from "../../flowchart/components/current-activity-node-chrome";
 import { GraphNodeButton } from "./graph-node-button";
 import {
@@ -27,19 +26,28 @@ export interface WorkRelationNodeData extends Record<string, unknown> {
 
 export type WorkRelationNode = Node<WorkRelationNodeData, "workRelation">;
 
+const RELATION_LABEL_COMPACT_LENGTH = 24;
+const RELATION_LABEL_DENSE_LENGTH = 40;
 const RELATION_NODE_ACTIVE_CLASS =
   "hover:border-primary hover:bg-primary-container";
 const RELATION_NODE_SELECTED_CLASS =
   "border-primary bg-primary-container shadow-af-accent-selected";
 const RELATION_NODE_CLASS =
-  "min-w-0 w-full justify-start overflow-hidden text-left shadow-none";
+  "min-w-0 w-full justify-start text-left shadow-none";
+const RELATION_WORKSTATION_SURFACE_CLASS = cn(
+  activityGraphNodeSurfaceClassName("workstation"),
+  "border-info-border",
+);
 
 export function WorkRelationNodeView({ data }: NodeProps<WorkRelationNode>) {
   const shellClassName = cn(
     RELATION_NODE_CLASS,
+    "border-2",
     data.isSelectedWork
       ? RELATION_NODE_SELECTED_CLASS
-      : relationNodeToneClassName(data.kind, data.relationStates),
+      : data.selectable
+        ? cn(RELATION_WORKSTATION_SURFACE_CLASS, "bg-info-container")
+        : relationNodeToneClassName(data.kind, data.relationStates),
     data.selectable ? RELATION_NODE_ACTIVE_CLASS : undefined,
   );
   const content = (
@@ -51,12 +59,9 @@ export function WorkRelationNodeView({ data }: NodeProps<WorkRelationNode>) {
       }))}
       nodeType={relationShellNodeType(data.kind)}
     >
-      <div className="grid h-full min-w-0 content-center">
+      <div className="grid h-full min-h-0 min-w-0 content-center">
         <DashboardText
-          className={cn(
-            "m-0 [overflow-wrap:anywhere]",
-            activityGraphNodeTitleClassName("text-sm"),
-          )}
+          className={relationNodeLabelClassName(data.displayLabel)}
           data-factory-entity-title
           title={data.workID ?? data.displayLabel}
         >
@@ -129,6 +134,20 @@ function relationStateToneClassName(
   return "warning";
 }
 
+function relationNodeLabelClassName(label: string): string {
+  const textSizeClassName =
+    label.length > RELATION_LABEL_DENSE_LENGTH
+      ? "text-[0.72rem]"
+      : label.length > RELATION_LABEL_COMPACT_LENGTH
+        ? "text-[0.78rem]"
+        : "text-sm";
+
+  return cn(
+    "m-0 block min-w-0 break-words font-bold leading-tight text-on-surface [overflow-wrap:anywhere]",
+    textSizeClassName,
+  );
+}
+
 function relationNodeToneClassName(
   kind: FactoryGraphNodeKind,
   relationStates: string[],
@@ -141,15 +160,16 @@ function relationNodeToneClassName(
     case "work-state":
       return activityGraphNodeSurfaceClassName("workState");
     case "workstation":
-      return activityGraphNodeSurfaceClassName("workstation");
-    case "worker":
+      return RELATION_WORKSTATION_SURFACE_CLASS;
     case "work-type":
+      return RELATION_WORKSTATION_SURFACE_CLASS;
+    case "worker":
       break;
   }
 
   const primaryState = relationStates[0];
   if (!primaryState) {
-    return activityGraphNodeSurfaceClassName("neutral");
+    return RELATION_WORKSTATION_SURFACE_CLASS;
   }
 
   const tone = relationStateToneClassName(primaryState);

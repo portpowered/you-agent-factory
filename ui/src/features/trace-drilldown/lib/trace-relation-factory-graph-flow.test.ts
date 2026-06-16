@@ -157,6 +157,44 @@ describe("buildTraceRelationFactoryGraphFlow relation styling", () => {
   });
 });
 
+describe("buildTraceRelationFactoryGraphFlow repeated DEPENDS_ON", () => {
+  it("renders distinct dependency edges and nodes for each relation instance", () => {
+    const flow = buildTraceRelationFactoryGraphFlow([
+      {
+        request_id: "request-dependency-a",
+        required_state: "ready",
+        source_work_id: "work-active-story",
+        source_work_name: "Active Story",
+        target_work_id: "work-dependency-story",
+        target_work_name: "Dependency Story",
+        type: "DEPENDS_ON",
+      },
+      {
+        request_id: "request-dependency-b",
+        required_state: "ready",
+        source_work_id: "work-active-story",
+        source_work_name: "Active Story",
+        target_work_id: "work-second-dependency-story",
+        target_work_name: "Second Dependency Story",
+        type: "DEPENDS_ON",
+      },
+    ]);
+
+    expect(flow.nodes.map((node) => node.id).sort()).toEqual([
+      "work-active-story",
+      "work-dependency-story",
+      "work-second-dependency-story",
+    ]);
+    expect(flow.edges).toHaveLength(2);
+    expect(
+      flow.edges.map((edge) => `${edge.source}->${edge.target}`).sort(),
+    ).toEqual([
+      "work-active-story->work-dependency-story",
+      "work-active-story->work-second-dependency-story",
+    ]);
+  });
+});
+
 describe("buildTraceRelationFactoryGraphFlow selection", () => {
   it("marks relation nodes selectable when onSelectWorkID is provided", () => {
     const onSelectWorkID = vi.fn();

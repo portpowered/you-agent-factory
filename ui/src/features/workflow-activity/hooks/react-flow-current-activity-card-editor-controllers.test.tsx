@@ -447,7 +447,7 @@ describe("current activity graph editor controllers", () => {
     });
 
     expect(reset).toHaveBeenCalledTimes(1);
-    expect(editableGraph.actions.removeNode).not.toHaveBeenCalled();
+    expect(editableGraph.actions.removeSelection).not.toHaveBeenCalled();
     expect(draftState.replaceDraft).not.toHaveBeenCalled();
     expect(draftState.draft).toBe(initialDraft);
     expect(result.current.blockedRemovalReason).toBe(
@@ -475,7 +475,7 @@ describe("current activity graph editor controllers", () => {
       draft: initialDraft,
     });
     const editableGraph = createEditableGraph({
-      removeNode: vi.fn(() => ({
+      removeSelection: vi.fn(() => ({
         message: "Removal blocked by graph operation layer.",
         ok: false,
         reason: "BLOCKED_REMOVAL",
@@ -499,9 +499,10 @@ describe("current activity graph editor controllers", () => {
       result.current.handleEditorNodeDelete("worker:editor");
     });
 
-    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith(
-      "worker:editor",
-    );
+    expect(editableGraph.actions.removeSelection).toHaveBeenCalledWith({
+      edgeIds: [],
+      nodeIds: ["worker:editor"],
+    });
     expect(draftState.replaceDraft).not.toHaveBeenCalled();
     expect(draftState.draft).toBe(initialDraft);
     expect(result.current.blockedRemovalReason).toBe(
@@ -531,7 +532,7 @@ describe("current activity graph editor controllers", () => {
       result.current.handleEditorNodeDelete("work-type:story");
     });
 
-    expect(editableGraph.actions.removeNode).not.toHaveBeenCalled();
+    expect(editableGraph.actions.removeSelection).not.toHaveBeenCalled();
     expect(result.current.pendingRemovalIntent).toMatchObject({
       confirmDescription: expect.stringContaining("2 work states"),
       requiresConfirmation: true,
@@ -542,7 +543,7 @@ describe("current activity graph editor controllers", () => {
       result.current.handleCancelRemoval();
     });
 
-    expect(editableGraph.actions.removeNode).not.toHaveBeenCalled();
+    expect(editableGraph.actions.removeSelection).not.toHaveBeenCalled();
     expect(draftState.replaceDraft).not.toHaveBeenCalled();
     expect(result.current.pendingRemovalIntent).toBeNull();
   });
@@ -571,7 +572,7 @@ describe("current activity graph editor controllers", () => {
       result.current.handleEditorNodeDelete("workstation:review");
     });
 
-    expect(editableGraph.actions.removeNode).not.toHaveBeenCalled();
+    expect(editableGraph.actions.removeSelection).not.toHaveBeenCalled();
     expect(result.current.pendingRemovalIntent).toMatchObject({
       confirmDescription: expect.stringContaining("graph edge"),
       requiresConfirmation: true,
@@ -583,9 +584,10 @@ describe("current activity graph editor controllers", () => {
     });
 
     expect(reset).toHaveBeenCalledTimes(1);
-    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith(
-      "workstation:review",
-    );
+    expect(editableGraph.actions.removeSelection).toHaveBeenCalledWith({
+      edgeIds: [],
+      nodeIds: ["workstation:review"],
+    });
     expect(onNodeRemovedFromDraft).toHaveBeenCalledWith("workstation:review");
     expect(result.current.pendingRemovalIntent).toBeNull();
     expect(result.current.blockedRemovalReason).toBeNull();
@@ -629,7 +631,7 @@ describe("current activity graph editor controllers", () => {
       result.current.handleEditorNodeDelete("doc:factory/docs/guide.md");
     });
 
-    expect(editableGraph.actions.removeNode).not.toHaveBeenCalled();
+    expect(editableGraph.actions.removeSelection).not.toHaveBeenCalled();
     expect(result.current.pendingRemovalIntent).toMatchObject({
       requiresConfirmation: true,
       targetPath: "factory/docs/guide.md",
@@ -640,9 +642,10 @@ describe("current activity graph editor controllers", () => {
       result.current.handleConfirmRemoval();
     });
 
-    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith(
-      "doc:factory/docs/guide.md",
-    );
+    expect(editableGraph.actions.removeSelection).toHaveBeenCalledWith({
+      edgeIds: [],
+      nodeIds: ["doc:factory/docs/guide.md"],
+    });
     expect(onNodeRemovedFromDraft).toHaveBeenCalledWith(
       "doc:factory/docs/guide.md",
     );
@@ -676,9 +679,10 @@ describe("current activity graph editor controllers", () => {
     });
 
     expect(reset).toHaveBeenCalledTimes(1);
-    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith(
-      "work-type:story",
-    );
+    expect(editableGraph.actions.removeSelection).toHaveBeenCalledWith({
+      edgeIds: [],
+      nodeIds: ["work-type:story"],
+    });
     expect(result.current.pendingRemovalIntent).toBeNull();
   });
 
@@ -804,7 +808,7 @@ describe("current activity graph editor controllers", () => {
       result.current.handleEditorNodeDelete("worker:editor");
     });
 
-    expect(editableGraph.actions.removeNode).not.toHaveBeenCalled();
+    expect(editableGraph.actions.removeSelection).not.toHaveBeenCalled();
     expect(reset).not.toHaveBeenCalled();
     expect(result.current.pendingRemovalIntent).toBeNull();
   });
@@ -847,9 +851,10 @@ describe("current activity graph editor controllers", () => {
     });
 
     expect(reset).toHaveBeenCalledTimes(1);
-    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith(
-      "worker:editor",
-    );
+    expect(editableGraph.actions.removeSelection).toHaveBeenCalledWith({
+      edgeIds: [],
+      nodeIds: ["worker:editor"],
+    });
     expect(onNodeRemovedFromDraft).toHaveBeenCalledWith("worker:editor");
     expect(result.current.pendingRemovalIntent).toBeNull();
   });
@@ -903,7 +908,48 @@ describe("current activity graph editor controllers", () => {
     });
 
     expect(reset).toHaveBeenCalledTimes(1);
-    expect(editableGraph.actions.removeNode).toHaveBeenCalledWith(nodeId);
+    expect(editableGraph.actions.removeSelection).toHaveBeenCalledWith({
+      edgeIds: [],
+      nodeIds: [nodeId],
+    });
+    expect(result.current.pendingRemovalIntent).toBeNull();
+  });
+
+  it("applies batch selection delete for multiple draft-only resources", () => {
+    const reset = vi.fn();
+    const draft = createEmptyFactoryGraphDraft();
+    draft.additions.resources.push(
+      { capacity: 1, name: "cache" },
+      { capacity: 1, name: "queue" },
+    );
+    const draftState = createDraftState({ draft });
+    const editableGraph = createEditableGraph();
+
+    const { result } = renderHook(() =>
+      useFactoryGraphRemovalController({
+        activeTool: null,
+        canInteractWithEditor: true,
+        draftState,
+        editableGraph,
+        hiddenNodeClasses: new Set(),
+        saveEditableDefinition: {
+          reset,
+        } as never,
+      }),
+    );
+
+    act(() => {
+      result.current.handleSelectionBatchDelete({
+        edgeIds: [],
+        nodeIds: ["resource:cache", "resource:queue"],
+      });
+    });
+
+    expect(editableGraph.actions.removeSelection).toHaveBeenCalledWith({
+      edgeIds: [],
+      nodeIds: ["resource:cache", "resource:queue"],
+    });
+    expect(reset).toHaveBeenCalledTimes(1);
     expect(result.current.pendingRemovalIntent).toBeNull();
   });
 });
@@ -951,6 +997,7 @@ function createEditableGraph(
       discard: vi.fn(),
       disconnectEdge: vi.fn(() => ({ ok: true, value: emptyDraft })),
       removeNode: vi.fn(() => ({ ok: true, value: emptyDraft })),
+      removeSelection: vi.fn(() => ({ ok: true, value: emptyDraft })),
       save: vi.fn(async () => true),
       updateNodeField: vi.fn(() => ({
         ok: true,

@@ -92,7 +92,9 @@ export function buildSelectedWorkRelationshipGraph({
     selectedWork,
   );
   const relatedWorkByID = new Map<string, SelectedWorkRelationshipNode>();
-  const edges = relations.map(edgeForRelation).sort(compareEdges);
+  const edges = relations
+    .map((relation) => edgeForRelation(relation, selectedWork.workID))
+    .sort(compareEdges);
 
   for (const relation of relations) {
     if (relation.source_work_id !== selectedWork.workID) {
@@ -162,22 +164,6 @@ function nodeForWorkItem(
     workID: workItem.work_id,
     workTypeID: workItem.work_type_id || workItem.workTypeId,
   };
-}
-
-function _dedupeEdges(
-  edges: SelectedWorkRelationshipEdge[],
-): SelectedWorkRelationshipEdge[] {
-  const deduped = new Map<string, SelectedWorkRelationshipEdge>();
-  for (const edge of edges) {
-    const key = [
-      edge.relationship,
-      edge.sourceWorkID,
-      edge.targetWorkID,
-      edge.requiredState ?? "",
-    ].join("|");
-    deduped.set(key, edge);
-  }
-  return [...deduped.values()];
 }
 
 function connectedSupportedRelations(
@@ -259,40 +245,77 @@ function normalizeSupportedRelation(
     return null;
   }
 
+  const requestID =
+    trimString("requestId" in relation ? relation.requestId : undefined) ||
+    trimString("request_id" in relation ? relation.request_id : undefined);
+  const requiredState =
+    trimString(
+      "requiredState" in relation ? relation.requiredState : undefined,
+    ) ||
+    trimString(
+      "required_state" in relation ? relation.required_state : undefined,
+    );
+  const sourceWorkName =
+    trimString(
+      "sourceWorkName" in relation ? relation.sourceWorkName : undefined,
+    ) ||
+    trimString(
+      "source_work_name" in relation ? relation.source_work_name : undefined,
+    );
+  const targetWorkName =
+    trimString(
+      "targetWorkName" in relation ? relation.targetWorkName : undefined,
+    ) ||
+    trimString(
+      "target_work_name" in relation ? relation.target_work_name : undefined,
+    );
+  const traceID =
+    trimString("traceId" in relation ? relation.traceId : undefined) ||
+    trimString("trace_id" in relation ? relation.trace_id : undefined);
+
   return {
-    required_state:
-      trimString(
-        "requiredState" in relation ? relation.requiredState : undefined,
-      ) ||
-      trimString(
-        "required_state" in relation ? relation.required_state : undefined,
-      ),
+    ...(requestID ? { request_id: requestID } : {}),
+    ...(requiredState ? { required_state: requiredState } : {}),
     source_work_id: sourceWorkID,
-    source_work_name:
-      trimString(
-        "sourceWorkName" in relation ? relation.sourceWorkName : undefined,
-      ) ||
-      trimString(
-        "source_work_name" in relation ? relation.source_work_name : undefined,
-      ),
+    source_work_name: sourceWorkName,
+    ...(traceID ? { trace_id: traceID } : {}),
     target_work_id: targetWorkID,
-    target_work_name:
-      trimString(
-        "targetWorkName" in relation ? relation.targetWorkName : undefined,
-      ) ||
-      trimString(
-        "target_work_name" in relation ? relation.target_work_name : undefined,
-      ),
+    target_work_name: targetWorkName,
     type: type === "PARENT" ? "PARENT_CHILD" : type,
   };
 }
 
 function edgeForRelation(
   relation: ConnectedDashboardWorkRelation,
+  selectedWorkID: string,
 ): SelectedWorkRelationshipEdge {
+  if (relation.source_work_id === selectedWorkID) {
+    return {
+      relationship: relation.type === "PARENT_CHILD" ? "PARENT" : "DEPENDS_ON",
+      ...(relation.required_state
+        ? { requiredState: relation.required_state }
+        : {}),
+      sourceWorkID: relation.source_work_id,
+      targetWorkID: relation.target_work_id,
+    };
+  }
+
+  if (relation.target_work_id === selectedWorkID) {
+    return {
+      relationship: relation.type === "PARENT_CHILD" ? "CHILD" : "REQUIRED_BY",
+      ...(relation.required_state
+        ? { requiredState: relation.required_state }
+        : {}),
+      sourceWorkID: relation.target_work_id,
+      targetWorkID: relation.source_work_id,
+    };
+  }
+
   return {
     relationship: relation.type === "PARENT_CHILD" ? "PARENT" : "DEPENDS_ON",
-    requiredState: relation.required_state,
+    ...(relation.required_state
+      ? { requiredState: relation.required_state }
+      : {}),
     sourceWorkID: relation.source_work_id,
     targetWorkID: relation.target_work_id,
   };
@@ -303,12 +326,7 @@ function dedupeDashboardRelations(
 ): ConnectedDashboardWorkRelation[] {
   const deduped = new Map<string, ConnectedDashboardWorkRelation>();
   for (const relation of relations) {
-    const key = [
-      relation.type,
-      relation.source_work_id,
-      relation.target_work_id,
-      relation.required_state ?? "",
-    ].join("|");
+    const key = relationInstanceKey(relation);
     if (!deduped.has(key)) {
       deduped.set(key, relation);
     }
@@ -316,16 +334,22 @@ function dedupeDashboardRelations(
   return [...deduped.values()];
 }
 
+function relationInstanceKey(relation: ConnectedDashboardWorkRelation): string {
+  return [
+    relation.type,
+    relation.source_work_id,
+    relation.target_work_id,
+    relation.required_state ?? "",
+    relation.request_id ?? "",
+    relation.trace_id ?? "",
+  ].join("|");
+}
+
 function compareRelations(
   left: ConnectedDashboardWorkRelation,
   right: ConnectedDashboardWorkRelation,
 ): number {
-  return (
-    left.source_work_id.localeCompare(right.source_work_id) ||
-    left.target_work_id.localeCompare(right.target_work_id) ||
-    left.type.localeCompare(right.type) ||
-    (left.required_state ?? "").localeCompare(right.required_state ?? "")
-  );
+  return relationInstanceKey(left).localeCompare(relationInstanceKey(right));
 }
 
 function trimString(value: unknown): string | undefined {
@@ -338,6 +362,7 @@ function compareEdges(
 ): number {
   return (
     left.relationship.localeCompare(right.relationship) ||
+    left.sourceWorkID.localeCompare(right.sourceWorkID) ||
     left.targetWorkID.localeCompare(right.targetWorkID) ||
     (left.requiredState ?? "").localeCompare(right.requiredState ?? "")
   );
