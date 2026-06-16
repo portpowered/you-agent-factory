@@ -61,4 +61,13 @@ export const allowlistedOversizedFeatureFolders = [
     maxFileCount: 14,
     relativeDirectoryPath: "src/features/trace-drilldown/lib",
   },
+  {
+    maxFileCount: 11,
+    relativeDirectoryPath:
+      "src/features/current-selection/work-selection/components/work-item",
+  },
+  {
+    maxFileCount: 11,
+    relativeDirectoryPath: "src/features/current-selection/work-selection/lib",
+  },
 ];

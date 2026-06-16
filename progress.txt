@@ -1,0 +1,15 @@
+## Codebase Patterns
+- `buildSelectedWorkRelationshipGraph` in `ui/src/features/current-selection/work-selection/lib/selected-work-relationship-graph.ts` is the canonical selected-work relationship model; preserve relation instances with `relationInstanceKey` (type, source, target, required_state, request_id, trace_id).
+- Ready relationship graphs expose both `relations` and oriented `edges`; `projectSelectedWorkRelationshipGraphToDashboardRelations` prefers `relations` when present for rendering.
+- Timeline replay dedupes relations in `replayGraphState.ts` with `request_id` in the key; graph-model dedupe should stay aligned.
+- Split large UI test files under `work-selection/lib/` when Biome `noExcessiveLinesPerFile` or `noExcessiveLinesPerFunction` triggers; shared fixtures belong in `*.fixture.ts` siblings.
+
+## 2026-06-16T20:39:00Z - work-relationships-current-selection-graph-repair-001
+- Preserved every supported relationship instance in the selected-work relationship graph model by aligning dedupe keys with timeline replay (`request_id`, `trace_id`), orienting edges relative to the selected work item, and keeping transitive connected-component relations in canonical direction.
+- Added regression coverage for repeated `DEPENDS_ON`, mixed dependency-plus-parent snapshots, and duplicate instances that share endpoints.
+- Files changed: `selected-work-relationship-graph.ts`, `selected-work-relationship-graph.fixture.ts`, `selected-work-relationship-graph.test.ts`, `selected-work-relationship-graph.instances.test.ts`, `selected-work-relationship-graph.determinism.test.ts`
+- **Learnings for future iterations:**
+  - Repeated `DEPENDS_ON` to different targets already flowed through `connectedSupportedRelations`; the real collapse risk was `dedupeDashboardRelations` omitting `request_id`.
+  - `edgeForRelation` must only remap inbound/outbound roles when the selected work is an endpoint; transitive component edges should keep canonical source/target direction.
+  - Biome line-count rules require splitting relationship-graph tests across `*.test.ts`, `*.instances.test.ts`, and `*.determinism.test.ts` with a shared `*.fixture.ts`.
+---

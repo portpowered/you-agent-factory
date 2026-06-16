@@ -136,4 +136,36 @@ describe("projectSelectedWorkRelationshipGraphToDashboardRelations", () => {
       }),
     ).toBeUndefined();
   });
+
+  it("projects repeated dependency edges when direct relations are unavailable", () => {
+    const graph = readyGraph();
+    const edgeOnlyGraph: SelectedWorkRelationshipGraph = {
+      ...graph,
+      relations: [],
+    };
+
+    expect(
+      projectSelectedWorkRelationshipGraphToDashboardRelations(edgeOnlyGraph),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          required_state: "ready",
+          source_work_id: "work-active-story",
+          target_work_id: "work-dependency-story",
+          type: "DEPENDS_ON",
+        }),
+        expect.objectContaining({
+          required_state: "approved",
+          source_work_id: "work-blocked-story",
+          target_work_id: "work-active-story",
+          type: "DEPENDS_ON",
+        }),
+        expect.objectContaining({
+          source_work_id: "work-active-story",
+          target_work_id: "work-parent-story",
+          type: "PARENT_CHILD",
+        }),
+      ]),
+    );
+  });
 });

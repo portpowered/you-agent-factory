@@ -1,0 +1,75 @@
+{
+  "project": "Current Selection Work Relationships Graph Repair",
+  "branchName": "work-relationships-current-selection-graph-repair",
+  "description": "Repair the current-selection work relationships graph so it shows every supported relationship instance for the selected work item, including repeated DEPENDS_ON relationships, and improve node readability with clearer colors and non-clipping labels.",
+  "context": {
+    "customerAsk": "Currently, on the work relationships graph of a current selection, only a single relationship is presented when multiple can be presented. For example, if you have two DEPENDS_ON relationships, only the first is presented on the graph. Fix this so all relationships are present. Also make the work selection's nodes less inscrutable by using a different color similar to workstation nodes in the factory graph, and prevent text from getting cut off by using a smaller font or wrapping onto the next line.",
+    "problem": "The current-selection work-item detail graph does not fully represent repeated relationship instances, so customers can miss real dependencies when a selected work item has more than one relation of the same type. The graph is also hard to read because relationship nodes use an unclear visual treatment and long labels clip inside the node shell.",
+    "solution": "Preserve every supported relationship instance through the selected-work relationship graph model and rendered current-selection graph, then update relationship-node styling to use a clearer palette and readable label layout so operators can see all related work and understand the graph at a glance."
+  },
+  "acceptanceCriteria": [
+    "The current-selection work relationships graph shows every supported relationship instance for the selected work item instead of collapsing repeated relationships of the same type.",
+    "A selected work item with two distinct DEPENDS_ON relationships renders both dependency nodes and both dependency edges on the graph.",
+    "The concrete batch example in factory/inputs/BATCH/default/factory-batch-local-agent-cli-runtime.json can be used to reproduce and verify that multiple relationships now appear together.",
+    "Related-work node selection from the graph remains keyboard-accessible and continues to switch current selection to the clicked or activated related work item.",
+    "Relationship graph nodes use a more distinctive non-neutral palette aligned with workstation-node readability in the factory graph while preserving clear emphasis for the currently selected work item.",
+    "Long relationship-node labels remain readable at common current-selection card widths without clipping outside the node shell.",
+    "Quality gate: UI typecheck, lint, relevant automated tests, and browser verification pass."
+  ],
+  "userStories": [
+    {
+      "id": "work-relationships-current-selection-graph-repair-001",
+      "title": "Preserve all relationship instances for selected work",
+      "description": "As a maintainer, I want the selected-work relationship graph model to retain every supported relationship instance so the current-selection graph can represent multiple dependencies and parent relations accurately.",
+      "acceptanceCriteria": [
+        "Building the current-selection selected-work relationship graph keeps every supported relationship instance connected to the selected work item instead of collapsing repeated relationships by relationship type alone.",
+        "When one selected work item has two distinct DEPENDS_ON relations to two different target work items, the ready graph contains two dependency edges and both related work nodes.",
+        "Existing supported relationship kinds for this graph (DEPENDS_ON and PARENT_CHILD as rendered parent relationships) continue to project correctly alongside repeated dependency relationships.",
+        "The projected graph remains deterministic for the same input snapshot so reviewers can compare outputs reliably in tests.",
+        "Focused regression tests cover the repeated-DEPENDS_ON case and a mixed dependency-plus-parent case.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "work-relationships-current-selection-graph-repair-002",
+      "title": "Render every relationship on the current-selection work graph",
+      "description": "As a dashboard operator, I want the work relationships graph in current selection to show every related work item and edge so I can understand all of the selected work's dependencies and lineage from one place.",
+      "acceptanceCriteria": [
+        "In the current-selection work-item detail card, the Work relationships region renders all related nodes and all relationship edges present in the ready selected-work relationship graph.",
+        "Repeated DEPENDS_ON relations do not disappear simply because they share the same relationship label; each distinct related work item is visible and selectable from the graph.",
+        "Activating each related-work node by click or keyboard still calls the existing current-selection work-switch action for that related work item.",
+        "Loading, empty, and error states for the Work relationships region remain explicit and unchanged in meaning.",
+        "Browser-visible verification covers the concrete batch example and confirms that multiple dependency relationships appear at the same time in current selection.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 2,
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "work-relationships-current-selection-graph-repair-003",
+      "title": "Make relationship nodes readable and scannable",
+      "description": "As a dashboard operator, I want relationship nodes in the current-selection graph to have clearer colors and readable labels so I can identify the selected work and related work items without fighting the layout.",
+      "acceptanceCriteria": [
+        "Relationship nodes in current selection use a more distinctive palette aligned with the workstation-node readability standard in the factory graph rather than the current inscrutable neutral treatment.",
+        "The currently selected work item still has a clearly stronger emphasis than surrounding related-work nodes after the palette update.",
+        "Long node labels no longer truncate awkwardly; labels wrap to additional lines, use a smaller readable font, or both, while staying inside the node shell.",
+        "Readability improvements hold at common current-selection card widths, including narrower dashboard layouts, without text overlapping adjacent chrome.",
+        "Accessible contrast, focus styling, and keyboard activation remain intact after the node styling update.",
+        "Focused component or integration coverage proves the new node classes and non-clipping text behavior for long labels.",
+        "Typecheck passes",
+        "Tests pass",
+        "Verify in browser using dev-browser skill"
+      ],
+      "priority": 3,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
