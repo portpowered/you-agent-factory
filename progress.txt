@@ -12,17 +12,19 @@
 - Select explicit fake child execution via `StartRequest.Runtime.ChildExecutorMode = "fake"` even when the service default is `live-provider`; request-level mode wins over `JavaScriptRuntimeServiceConfig.ChildExecutorMode`.
 - Record deferred CLI/MCP/website follow-ups in `docs/internal/development/plans/dynamic-workflows/follow-up-cell-live-provider-dispatch-bridge-deferred.md` instead of widening the bridge lane.
 - When `make pkg-file-count` fails after adding bridge files, move provider code to `pkg/factorysessionexecution/livechild` and consolidate fixture tests rather than adding root package files; avoid importing `factorysessionexecution` from `livechild` tests (import cycle).
+- Select runtime-backed MCP serve via `you mcp serve --runtime`, which wires `factorysessionexecution.NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{ProjectRoot})` in `pkg/cli/mcp/serve.go`; default serve remains fixture-backed and rejects combining `--runtime` with `--fixture-catalog`.
 
-## 2026-06-16T14:30:00Z - mergeability: PR #822 pkg-file-count
-- Fixed required CI `Build, Lint, and API` failure from `pkg-file-count` by moving `ProviderChildExecutor` to `pkg/factorysessionexecution/livechild`, merging live-child fixture tests into `fixtures/runtime_live_child_test.go`, folding `session_event_projection_test.go` into `projection_test.go`, merging `typed_failure_cases_test.go` into `typed_failures_test.go`, and inlining `child_record_sink.go` into `child_execution.go`.
-- Files changed: `pkg/factorysessionexecution/{livechild,types,normalize,runtime_service,projection_test}`, `pkg/factorysessionexecution/fixtures/{runtime_live_child_test,typed_failures_test}.go`, `pkg/orchestrators/javascript/runtime/child_execution.go`, docs path updates.
+## 2026-06-17T00:00:00Z - dynamic-workflows-cell-mcp-session-serve-001
+- Added `you mcp serve --runtime` to select the shared durable JavaScript runtime service via `factorysessionexecution.NewExecutionService(ExecutionProviderJavaScriptRuntime, ...)`, with optional `--project-root` and rejection when combined with `--fixture-catalog`.
+- Default serve behavior remains fixture-backed; existing Factory Session MCP tool registration is unchanged.
+- Files changed: `pkg/cli/mcp/{serve,serve_test}.go`, `docs/internal/processes/api-relevant-files.md`.
 - **Learnings for future iterations:**
-  - Patterns discovered: `livechild` tests must not import `factorysessionexecution` because `runtime_service.go` imports `livechild` (cycle); assert on sink records directly in package tests.
-  - Gotchas encountered: naïvely concatenating test files duplicates `package`/`import` blocks; strip duplicates after merge.
-  - Useful context: `make pkg-file-count` is separate from `backendsizecheck`; both can block CI independently.
+  - Patterns discovered: reuse `NewExecutionService` at the CLI boundary instead of calling `NewJavaScriptRuntimeService` directly so provider selection stays centralized in `pkg/factorysessionexecution/service.go`.
+  - Gotchas encountered: `NewServeCommand` tests that hit `RunE` with conflicting flags are safe because validation returns before `RunServe` blocks on stdio.
+  - Useful context: injected `ServeConfig.Service` still takes precedence over `--runtime` for smoke tests.
 ---
 
-## 2026-06-16T14:40:00Z - mergeability: PR #822 Backend Verification
+## 2026-06-16T14:30:00Z - mergeability: PR #822 pkg-file-count
 - Fixed flaky `tests/functional/guards_batch` failures (`engine has terminated`) by waiting for harness runtime availability before post-run submits in `same_name_guard_test.go` and queueing staggered consume-path work before `RunInBackground` in `same_name_consume_path_regression_test.go`.
 - Follow-up on CI: switched `TestSameNameGuard_MatchingNamesCompletesJoin` and `TestSameNameGuard_LaterMatchingTokenStillCompletesJoin` to submit-before-run ordering (head `90f3a2a53`).
 - Files changed: `tests/functional/guards_batch/{same_name_guard_test,same_name_consume_path_regression_test}.go`.
