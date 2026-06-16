@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 // Service is the shared durable factory-session execution contract consumed by
@@ -131,8 +133,10 @@ const (
 
 // ServiceConfig carries dependencies required by production execution providers.
 type ServiceConfig struct {
-	ProjectRoot string
-	FakeOptions []FakeServiceOption
+	ProjectRoot       string
+	ChildExecutorMode string
+	Provider          workers.Provider
+	FakeOptions       []FakeServiceOption
 }
 
 // NewExecutionService constructs one shared Factory Session execution service for
@@ -146,10 +150,39 @@ func NewExecutionService(provider ExecutionProvider, config ServiceConfig) (Serv
 		if projectRoot == "" {
 			return nil, NewValidationError("projectRoot", "projectRoot is required")
 		}
+		childExecutorMode := normalizeChildExecutorMode(config.ChildExecutorMode)
+		provider := config.Provider
+		if childExecutorMode == ChildExecutorModeLive && provider == nil {
+			provider = SmokeLiveChildProvider()
+		}
+		if err := validateLiveChildExecutorConfig(childExecutorMode, provider); err != nil {
+			return nil, err
+		}
 		return NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
-			ProjectRoot: projectRoot,
+			ProjectRoot:       projectRoot,
+			ChildExecutorMode: childExecutorMode,
+			Provider:          provider,
 		}), nil
 	default:
 		return nil, NewValidationError("provider", "unsupported execution provider")
 	}
+}
+
+// SmokeLiveChildProvider returns a deterministic mock provider for CLI and
+// fixture-backed live-provider child smoke without MCP host startup.
+func SmokeLiveChildProvider() workers.Provider {
+	return smokeLiveChildProvider{}
+}
+
+type smokeLiveChildProvider struct{}
+
+func (smokeLiveChildProvider) Infer(_ context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+	return interfaces.InferenceResponse{
+		Content: `{"text":"live:agent-run-fake-child:summarize-findings:summarize workflows:workflows"}`,
+		ProviderSession: &interfaces.ProviderSessionMetadata{
+			Provider: "mock",
+			Kind:     "session_id",
+			ID:       "live-provider-session-1",
+		},
+	}, nil
 }

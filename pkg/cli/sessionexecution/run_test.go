@@ -551,3 +551,171 @@ func TestRunSync_UsesSharedServicePrimaryResultProjection(t *testing.T) {
 		t.Fatalf("CLI output diverged from shared SyncStartResponseToAPI projection")
 	}
 }
+
+func TestRunSync_LiveProviderJavaScriptSession_ReReadStatusAndResult(t *testing.T) {
+	service, projectRoot := newLiveChildCLIJavaScriptRuntimeService(t)
+
+	var runOutput bytes.Buffer
+	if err := sessionexecution.RunSync(context.Background(), sessionexecution.RunConfig{
+		StartConfig: sessionexecution.StartConfig{
+			Mode:              sessionexecution.ExecutionModeSync,
+			RequestID:         "req-cli-live-child-smoke-001",
+			WorkflowName:      "agent-run-fake-child",
+			ArgsJSON:          `{"subject":"workflows"}`,
+			ChildExecutorMode: fse.ChildExecutorModeLive,
+		},
+		ExecutionBackendConfig: sessionexecution.ExecutionBackendConfig{
+			Provider:    string(fse.ExecutionProviderJavaScriptRuntime),
+			ProjectRoot: projectRoot,
+		},
+		JSON:    true,
+		Output:  &runOutput,
+		Service: service,
+	}); err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+
+	var runResponse factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.Unmarshal(bytes.TrimSpace(runOutput.Bytes()), &runResponse); err != nil {
+		t.Fatalf("decode run output: %v", err)
+	}
+	if runResponse.SessionId == "" {
+		t.Fatalf("sessionId = %q, want non-empty durable session id", runResponse.SessionId)
+	}
+	if runResponse.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("status = %q, want SUCCEEDED", runResponse.Status)
+	}
+	if runResponse.SyncOutcome != factoryapi.FactorySessionSyncExecutionOutcomeCompleted {
+		t.Fatalf("syncOutcome = %q, want COMPLETED", runResponse.SyncOutcome)
+	}
+
+	var statusOutput bytes.Buffer
+	if err := sessionexecution.RunStatus(context.Background(), sessionexecution.StatusConfig{
+		SessionID: runResponse.SessionId,
+		ExecutionBackendConfig: sessionexecution.ExecutionBackendConfig{
+			Provider:    string(fse.ExecutionProviderJavaScriptRuntime),
+			ProjectRoot: projectRoot,
+		},
+		JSON:    true,
+		Output:  &statusOutput,
+		Service: service,
+	}); err != nil {
+		t.Fatalf("RunStatus: %v", err)
+	}
+
+	var statusResponse factoryapi.FactorySessionDurableReadModel
+	if err := json.Unmarshal(bytes.TrimSpace(statusOutput.Bytes()), &statusResponse); err != nil {
+		t.Fatalf("decode status output: %v", err)
+	}
+	if statusResponse.SessionId != runResponse.SessionId {
+		t.Fatalf("status sessionId = %q, want %q", statusResponse.SessionId, runResponse.SessionId)
+	}
+	if statusResponse.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("status read = %q, want SUCCEEDED", statusResponse.Status)
+	}
+
+	var resultOutput bytes.Buffer
+	if err := sessionexecution.RunResult(context.Background(), sessionexecution.ResultConfig{
+		SessionID: runResponse.SessionId,
+		ExecutionBackendConfig: sessionexecution.ExecutionBackendConfig{
+			Provider:    string(fse.ExecutionProviderJavaScriptRuntime),
+			ProjectRoot: projectRoot,
+		},
+		JSON:    true,
+		Output:  &resultOutput,
+		Service: service,
+	}); err != nil {
+		t.Fatalf("RunResult: %v", err)
+	}
+
+	var resultResponse factoryapi.FactorySessionResult
+	if err := json.Unmarshal(bytes.TrimSpace(resultOutput.Bytes()), &resultResponse); err != nil {
+		t.Fatalf("decode result output: %v", err)
+	}
+	if resultResponse.SessionId != runResponse.SessionId {
+		t.Fatalf("result sessionId = %q, want %q", resultResponse.SessionId, runResponse.SessionId)
+	}
+	if resultResponse.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("resultStatus = %q, want FINAL", resultResponse.ResultStatus)
+	}
+	if resultResponse.SessionStatus == nil || *resultResponse.SessionStatus != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("sessionStatus = %#v, want SUCCEEDED", resultResponse.SessionStatus)
+	}
+
+	dispatchDetail, err := service.GetDispatch(context.Background(), runResponse.SessionId, "dispatch-1")
+	if err != nil {
+		t.Fatalf("GetDispatch: %v", err)
+	}
+	if dispatchDetail.JavaScript == nil || dispatchDetail.JavaScript.ExecutionMode != "live-provider" {
+		t.Fatalf("dispatch javascript = %#v, want live-provider execution mode", dispatchDetail.JavaScript)
+	}
+}
+
+func TestRunSync_JavaScriptRuntimeBackend_UsesRealExecutionServiceWithoutFixtureStub(t *testing.T) {
+	projectRoot := setupCLIAgentRunWorkflowFixture(t)
+
+	var runOutput bytes.Buffer
+	if err := sessionexecution.RunSync(context.Background(), sessionexecution.RunConfig{
+		StartConfig: sessionexecution.StartConfig{
+			Mode:              sessionexecution.ExecutionModeSync,
+			RequestID:         "req-cli-live-child-resolver-smoke-001",
+			WorkflowName:      "agent-run-fake-child",
+			ArgsJSON:          `{"subject":"workflows"}`,
+			ChildExecutorMode: fse.ChildExecutorModeLive,
+		},
+		ExecutionBackendConfig: sessionexecution.ExecutionBackendConfig{
+			Provider:    string(fse.ExecutionProviderJavaScriptRuntime),
+			ProjectRoot: projectRoot,
+		},
+		JSON:   true,
+		Output: &runOutput,
+	}); err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+
+	var runResponse factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.Unmarshal(bytes.TrimSpace(runOutput.Bytes()), &runResponse); err != nil {
+		t.Fatalf("decode run output: %v", err)
+	}
+	if !strings.HasPrefix(runResponse.SessionId, "dur-sess-") {
+		t.Fatalf("sessionId = %q, want runtime-backed durable session id", runResponse.SessionId)
+	}
+	if runResponse.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("status = %q, want SUCCEEDED", runResponse.Status)
+	}
+}
+
+func newLiveChildCLIJavaScriptRuntimeService(t *testing.T) (fse.Service, string) {
+	t.Helper()
+	projectRoot := setupCLIAgentRunWorkflowFixture(t)
+	service, err := fse.NewExecutionService(
+		fse.ExecutionProviderJavaScriptRuntime,
+		fse.ServiceConfig{
+			ProjectRoot:       projectRoot,
+			ChildExecutorMode: fse.ChildExecutorModeLive,
+			Provider:          fse.SmokeLiveChildProvider(),
+		},
+	)
+	if err != nil {
+		t.Fatalf("NewExecutionService: %v", err)
+	}
+	return service, projectRoot
+}
+
+func setupCLIAgentRunWorkflowFixture(t *testing.T) string {
+	t.Helper()
+	projectRoot := t.TempDir()
+	workflowDir := filepath.Join(projectRoot, ".claude", "workflows")
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	sourcePath := filepath.Join("..", "..", "orchestrators", "javascript", "runtime", "testdata", "agent-run-fake-child.workflow.js")
+	source, err := os.ReadFile(sourcePath)
+	if err != nil {
+		t.Fatalf("read workflow fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, "agent-run-fake-child.js"), source, 0o600); err != nil {
+		t.Fatalf("write workflow fixture: %v", err)
+	}
+	return projectRoot
+}

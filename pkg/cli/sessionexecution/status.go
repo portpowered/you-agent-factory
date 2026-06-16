@@ -16,6 +16,7 @@ import (
 // StatusConfig holds CLI inputs for one durable Factory Session status read.
 type StatusConfig struct {
 	SessionID          string
+	ExecutionBackendConfig
 	JSON               bool
 	Output             io.Writer
 	Service            factorysessionexecution.Service
@@ -62,8 +63,9 @@ func RunStatus(ctx context.Context, cfg StatusConfig) error {
 
 func resolveStatusService(cfg StatusConfig) (factorysessionexecution.Service, error) {
 	runCfg := RunConfig{
-		Service:            cfg.Service,
-		FixtureCatalogPath: cfg.FixtureCatalogPath,
+		ExecutionBackendConfig: cfg.ExecutionBackendConfig,
+		Service:                cfg.Service,
+		FixtureCatalogPath:     cfg.FixtureCatalogPath,
 	}
 	return resolveExecutionService(runCfg)
 }

@@ -15,6 +15,7 @@ import (
 // DispatchesConfig holds CLI inputs for one durable Factory Session dispatch list read.
 type DispatchesConfig struct {
 	SessionID          string
+	ExecutionBackendConfig
 	JSON               bool
 	Output             io.Writer
 	Service            factorysessionexecution.Service
@@ -37,7 +38,7 @@ func RunDispatches(ctx context.Context, cfg DispatchesConfig) error {
 		))
 	}
 
-	service, err := resolveInspectionService(cfg.Service, cfg.FixtureCatalogPath)
+	service, err := resolveInspectionService(cfg.Service, cfg.ExecutionBackendConfig, cfg.FixtureCatalogPath)
 	if err != nil {
 		return err
 	}
@@ -108,6 +109,7 @@ func formatProviderSessionRefs(refs *[]factoryapi.LoadableProviderSessionRef) st
 // ArtifactsConfig holds CLI inputs for one durable Factory Session artifact list read.
 type ArtifactsConfig struct {
 	SessionID          string
+	ExecutionBackendConfig
 	JSON               bool
 	Output             io.Writer
 	Service            factorysessionexecution.Service
@@ -130,7 +132,7 @@ func RunArtifacts(ctx context.Context, cfg ArtifactsConfig) error {
 		))
 	}
 
-	service, err := resolveInspectionService(cfg.Service, cfg.FixtureCatalogPath)
+	service, err := resolveInspectionService(cfg.Service, cfg.ExecutionBackendConfig, cfg.FixtureCatalogPath)
 	if err != nil {
 		return err
 	}
@@ -189,6 +191,7 @@ type EventsConfig struct {
 	SessionID          string
 	AfterEventID       string
 	AfterSequence      *int
+	ExecutionBackendConfig
 	JSON               bool
 	Output             io.Writer
 	Service            factorysessionexecution.Service
@@ -219,7 +222,7 @@ func RunEvents(ctx context.Context, cfg EventsConfig) error {
 		return writeRunError(cfg.Output, cfg.JSON, err)
 	}
 
-	service, err := resolveInspectionService(cfg.Service, cfg.FixtureCatalogPath)
+	service, err := resolveInspectionService(cfg.Service, cfg.ExecutionBackendConfig, cfg.FixtureCatalogPath)
 	if err != nil {
 		return err
 	}
@@ -267,10 +270,12 @@ func renderEventsHuman(output io.Writer, sessionID string, events []factoryapi.F
 
 func resolveInspectionService(
 	service factorysessionexecution.Service,
+	backend ExecutionBackendConfig,
 	fixtureCatalogPath string,
 ) (factorysessionexecution.Service, error) {
 	return resolveExecutionService(RunConfig{
-		Service:            service,
-		FixtureCatalogPath: fixtureCatalogPath,
+		ExecutionBackendConfig: backend,
+		Service:                service,
+		FixtureCatalogPath:     fixtureCatalogPath,
 	})
 }
