@@ -29,7 +29,10 @@ describe("factory-graph-editor-selection", () => {
     });
 
     expect(next).toBe(state);
-    expect(clearFactoryGraphEditorSelection(state)).toBe(state);
+
+    const cleared = clearFactoryGraphEditorSelection(state);
+    expect(cleared.selectedNodeIds.size).toBe(0);
+    expect(clearFactoryGraphEditorSelection(cleared)).toBe(cleared);
   });
 
   it("starts empty and clears all selected ids and primary target", () => {
