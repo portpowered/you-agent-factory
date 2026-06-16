@@ -47,6 +47,7 @@ var createSession = sessioncli.Create
 var deleteSession = sessioncli.Delete
 var queryFactory = factorycli.Query
 var listFactories = factorycli.List
+var validateFactory = factorycli.Validate
 var saveFactoryFromFile = factorycli.SaveFromFile
 var saveFactoryCurrent = factorycli.SaveCurrent
 var updateFactoryFromFile = factorycli.UpdateFromFile
@@ -172,16 +173,19 @@ func newFactoryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 		Short: "Inspect and manage factory definitions",
 		Long: "Inspect live factory runtime state and manage persisted named factories.\n\n" +
 			"Subcommands:\n" +
-			"  query   show the current active factory from a running service\n" +
-			"  list    list persisted named factories under a factory root\n" +
-			"  save    create a named factory from factory.json or persist the live current factory\n" +
-			"  update  replace an existing named factory from factory.json\n" +
-			"  delete  remove an unused named factory from disk\n\n" +
+			"  query    show the current active factory from a running service\n" +
+			"  list     list persisted named factories under a factory root\n" +
+			"  validate validate a factory.json payload or factory directory\n" +
+			"  save     create a named factory from factory.json or persist the live current factory\n" +
+			"  update   replace an existing named factory from factory.json\n" +
+			"  delete   remove an unused named factory from disk\n\n" +
 			"Use query against a running service. Use list, save, update, and delete for on-disk " +
 			"named factories under --dir (default factory/). Live save with no name argument uses " +
 			"global --server and --session like query.",
 		Example: "  # Show the active factory from the running service.\n" +
 			"  " + cliBinaryName + " factory query\n\n" +
+			"  # Validate a factory config before saving it.\n" +
+			"  " + cliBinaryName + " factory validate ./factory.json\n\n" +
 			"  # List persisted named factories and which one is current.\n" +
 			"  " + cliBinaryName + " factory list\n\n" +
 			"  # Save a new named factory from a config file.\n" +
@@ -196,6 +200,7 @@ func newFactoryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 	factoryCmd.AddCommand(
 		newFactoryQueryCommand(globals, diagnostics),
 		newFactoryListCommand(globals, diagnostics),
+		newFactoryValidateCommand(globals, diagnostics),
 		newFactorySaveCommand(globals, diagnostics),
 		newFactoryUpdateFromFileCommand(globals, diagnostics),
 		newFactoryDeleteCommand(globals, diagnostics),
@@ -335,6 +340,36 @@ func newFactoryListCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) 
 	}
 
 	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory root directory containing named factories")
+	return cmd
+}
+
+func newFactoryValidateCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *cobra.Command {
+	cfg := factorycli.ValidateConfig{}
+
+	cmd := &cobra.Command{
+		Use:   "validate <factory-path>",
+		Short: "Validate a factory config without persisting it",
+		Long: "Validate a factory.json payload or factory directory through the shared " +
+			"validate-only factory contract used by POST /factory-validations.\n\n" +
+			"Human output lists authored worker and workstation runtime taxonomy values and " +
+			"prints blocking validation targets with inference, agent, script, or poller terminology " +
+			"when worker/workstation pairings are incompatible.",
+		Example: "  # Validate a single-file factory config.\n" +
+			"  " + cliBinaryName + " factory validate ./factory.json\n\n" +
+			"  # Validate a split-layout factory directory.\n" +
+			"  " + cliBinaryName + " factory validate ./factory\n\n" +
+			"  # Emit structured validation output for automation.\n" +
+			"  " + cliBinaryName + " --json factory validate ./factory.json",
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.Path = args[0]
+			cfg.JSON = globals.json
+			cfg.Output = cmd.OutOrStdout()
+			return validateFactory(cfg)
+		},
+	}
+
 	return cmd
 }
 

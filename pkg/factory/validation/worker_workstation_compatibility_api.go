@@ -37,26 +37,15 @@ func WorkerWorkstationCompatibilityTargets(cfg *interfaces.FactoryConfig) []Targ
 			continue
 		}
 
-		expected, ok := interfaces.ExpectedWorkerBehaviorClassForWorkstation(workstation, worker.Type)
-		if !ok {
-			continue
-		}
-		actual, ok := interfaces.WorkerBehaviorClass(worker.Type)
-		if !ok {
-			continue
-		}
-
 		targets = append(targets, Target{
-			Code:     CodeWorkerWorkstationIncompatibleBehavior,
+			Code:     CodeWorkerWorkstationBehaviorCompatibility,
 			Severity: SeverityError,
-			Message: fmt.Sprintf(
-				`workstation %q type %s requires a %s worker, but worker %q type %s is a %s worker`,
+			Message: interfaces.WorkerWorkstationBehaviorMismatchMessage(
 				workstation.Name,
-				interfaces.DisplayWorkstationTypeForCompatibility(workstation),
-				expected,
+				workstation.Type,
+				workstation.Kind,
 				worker.Name,
 				strings.TrimSpace(worker.Type),
-				actual,
 			),
 			Subject: Subject{
 				Type:     SubjectTypeWorkstation,
@@ -100,26 +89,19 @@ func WorkerWorkstationCompatibilityTargetsFromAPI(factory factoryapi.Factory) []
 		}
 
 		workstationType := displayWorkstationTypeFromAPI(workstation)
-		expected, ok := expectedWorkerBehaviorClassFromAPI(workstation, string(*worker.Type))
-		if !ok {
-			continue
-		}
-		actual, ok := interfaces.WorkerBehaviorClass(string(*worker.Type))
-		if !ok {
+		if _, hasExpected := expectedWorkerBehaviorClassFromAPI(workstation, string(*worker.Type)); !hasExpected {
 			continue
 		}
 
 		targets = append(targets, Target{
-			Code:     CodeWorkerWorkstationIncompatibleBehavior,
+			Code:     CodeWorkerWorkstationBehaviorCompatibility,
 			Severity: SeverityError,
-			Message: fmt.Sprintf(
-				`workstation %q type %s requires a %s worker, but worker %q type %s is a %s worker`,
+			Message: interfaces.WorkerWorkstationBehaviorMismatchMessage(
 				workstation.Name,
 				workstationType,
-				expected,
+				workstationConfigFromAPI(workstation).Kind,
 				worker.Name,
 				string(*worker.Type),
-				actual,
 			),
 			Subject: Subject{
 				Type:     SubjectTypeWorkstation,
@@ -190,5 +172,9 @@ func workerMatchesWorkstationPublicAPI(workerType string, workstation factoryapi
 		}
 	}
 
-	return interfaces.WorkerMatchesWorkstationBehavior(workerType, cfg)
+	return interfaces.CompatibleWorkerWorkstationBehavior(
+		workerType,
+		workstationType,
+		cfg.Kind,
+	)
 }

@@ -102,6 +102,12 @@ export function isLegacyRunnableWorkstationType(
   );
 }
 
+export function isPollerRunWorkstationType(
+  workstationType: ApiWorkstationType | string | null | undefined,
+): boolean {
+  return workstationType === WorkstationType.WorkstationTypePollerRun;
+}
+
 export function isLegacyWorkerType(
   workerType: ApiWorkerType | string | null | undefined,
 ): boolean {

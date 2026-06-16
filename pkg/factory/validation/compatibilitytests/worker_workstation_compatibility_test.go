@@ -61,7 +61,7 @@ func TestValidate_WorkerWorkstationCompatibility_AcceptsCompatiblePairings(t *te
 
 			result := factoryvalidation.Validate(cfg)
 			for _, target := range result.Targets {
-				if target.Code == factoryvalidation.CodeWorkerWorkstationIncompatibleBehavior {
+				if target.Code == factoryvalidation.CodeWorkerWorkstationBehaviorCompatibility {
 					t.Fatalf("unexpected incompatible behavior target: %#v", target)
 				}
 			}
@@ -129,8 +129,8 @@ func TestValidate_WorkerWorkstationCompatibility_RejectsIncompatiblePairings(t *
 			}}
 
 			result := factoryvalidation.Validate(cfg)
-			validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkerWorkstationIncompatibleBehavior)
-			target := findTargetByCode(t, result.Targets, factoryvalidation.CodeWorkerWorkstationIncompatibleBehavior)
+			validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkerWorkstationBehaviorCompatibility)
+			target := findTargetByCode(t, result.Targets, factoryvalidation.CodeWorkerWorkstationBehaviorCompatibility)
 			if !strings.Contains(target.Message, tt.wantRunLabel) {
 				t.Fatalf("message %q missing workstation type %q", target.Message, tt.wantRunLabel)
 			}
@@ -161,7 +161,7 @@ func TestValidateFactoryAPI_WorkerWorkstationCompatibilityRoundTrip(t *testing.T
 	if err != nil {
 		t.Fatalf("ValidateFactoryAPI: %v", err)
 	}
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkerWorkstationIncompatibleBehavior)
+	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkerWorkstationBehaviorCompatibility)
 }
 
 func TestValidateFactoryAPI_PreservesMixedLegacyModelWorkerAcrossAgentAndInferenceWorkstations(t *testing.T) {
@@ -192,7 +192,7 @@ func TestValidateFactoryAPI_PreservesMixedLegacyModelWorkerAcrossAgentAndInferen
 		t.Fatalf("ValidateFactoryAPI: %v", err)
 	}
 	for _, target := range result.Targets {
-		if target.Code == factoryvalidation.CodeWorkerWorkstationIncompatibleBehavior {
+		if target.Code == factoryvalidation.CodeWorkerWorkstationBehaviorCompatibility {
 			t.Fatalf("unexpected incompatible behavior target: %#v", target)
 		}
 	}
@@ -203,7 +203,7 @@ func TestValidateFactoryAPI_PreservesMixedLegacyModelWorkerAcrossAgentAndInferen
 	}
 	structuralResult := factoryvalidation.Validate(&runtimeCfg)
 	for _, target := range structuralResult.Targets {
-		if target.Code == factoryvalidation.CodeWorkerWorkstationIncompatibleBehavior {
+		if target.Code == factoryvalidation.CodeWorkerWorkstationBehaviorCompatibility {
 			t.Fatalf("unexpected structural incompatible behavior target: %#v", target)
 		}
 	}

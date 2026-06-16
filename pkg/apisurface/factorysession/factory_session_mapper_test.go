@@ -342,6 +342,30 @@ func TestControlErrorToAPI_MapsTerminalSessionOutcome(t *testing.T) {
 	if mapped.Detail == nil || *mapped.Detail != "session is terminal" {
 		t.Fatalf("detail = %#v", mapped.Detail)
 	}
+	if mapped.Links == nil || mapped.Links.Results == nil || *mapped.Links.Results == "" {
+		t.Fatalf("links = %#v, want inspection links", mapped.Links)
+	}
+}
+
+func TestControlErrorToAPI_MapsConflictOutcome(t *testing.T) {
+	mapped := factorysession.ControlErrorToAPI("dur-sess-js-run-n-001", &factorysessionexecution.ControlError{
+		Operation: factorysessionexecution.LifecycleControlResume,
+		Outcome:   factorysessionexecution.LifecycleControlOutcomeConflict,
+		Status:    factorysessionexecution.LifecycleStatusPaused,
+		Message:   "control requestId was reused with a different operation or target",
+	})
+	if mapped.Operation != factoryapi.FactorySessionLifecycleControlKindResume {
+		t.Fatalf("operation = %q, want RESUME", mapped.Operation)
+	}
+	if mapped.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeConflict {
+		t.Fatalf("outcome = %q, want CONFLICT", mapped.Outcome)
+	}
+	if mapped.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("status = %q, want PAUSED", mapped.Status)
+	}
+	if mapped.Links == nil || mapped.Links.Session == nil || *mapped.Links.Session == "" {
+		t.Fatalf("links = %#v, want session inspection link", mapped.Links)
+	}
 }
 
 func TestOrchestratorOverrideFromAPI_PreservesKindAndPayload(t *testing.T) {

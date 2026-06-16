@@ -83,6 +83,12 @@ you factory list --dir ~/.you-agent-factory/factories
 The directory contains `factory.json`, split `workers/` and `workstations/`
 files, and any supporting assets needed for the default TTS runtime.
 
+The default `@you/tts` factory uses an `INFERENCE_WORKER` with a `TTS`
+operation and an `INFERENCE_RUN` workstation. The materialized on-disk factory
+may still show legacy `MODEL_WORKER` / `MODEL_INVOKE` values from earlier
+catalog versions; both names execute as inference behavior during the migration
+window.
+
 ## Customer edits affect the next run
 
 Packaged factories stay editable after materialization. The CLI reuses the

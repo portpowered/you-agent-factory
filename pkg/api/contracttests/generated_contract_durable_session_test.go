@@ -864,12 +864,22 @@ func assertRealBackendSessionAPISliceRoutes(t *testing.T, paths map[string]any) 
 	t.Helper()
 
 	requiredRoutes := map[string][]string{
-		"/factory-sessions/async":                {"post"},
-		"/factory-sessions/sync":                 {"post"},
-		"/factory-sessions":                      {"get"},
-		"/factory-sessions/{session_id}":         {"get"},
-		"/factory-sessions/{session_id}/results": {"get"},
-		"/factory-sessions/{session_id}/events":  {"get"},
+		"/factory-sessions/async":                                 {"post"},
+		"/factory-sessions/sync":                                  {"post"},
+		"/factory-sessions":                                         {"get"},
+		"/factory-sessions/{session_id}":                            {"get"},
+		"/factory-sessions/{session_id}/results":                    {"get"},
+		"/factory-sessions/{session_id}/events":                     {"get"},
+		"/factory-sessions/{session_id}/dispatches":                 {"get"},
+		"/factory-sessions/{session_id}/dispatches/{dispatch_id}":   {"get"},
+		"/factory-sessions/{session_id}/artifacts":                  {"get"},
+		"/factory-sessions/{session_id}/artifacts/{artifact_id}":    {"get"},
+		"/factory-sessions/{session_id}/approve":                    {"post"},
+		"/factory-sessions/{session_id}/pause":                      {"post"},
+		"/factory-sessions/{session_id}/resume":                     {"post"},
+		"/factory-sessions/{session_id}/cancel":                     {"post"},
+		"/factory-sessions/{session_id}/terminate":                  {"post"},
+		"/factory-sessions/{session_id}/retry-dispatch":             {"post"},
 	}
 	for path, methods := range requiredRoutes {
 		pathItem, ok := paths[path].(map[string]any)
@@ -894,25 +904,24 @@ func assertRealBackendSessionAPISliceRoutes(t *testing.T, paths map[string]any) 
 func assertDeferredRealBackendSessionRouteFamilies(t *testing.T, paths map[string]any) {
 	t.Helper()
 
-	deferredRoutes := map[string][]string{
-		"/factory-sessions/{session_id}/approve":        {"post"},
-		"/factory-sessions/{session_id}/pause":          {"post"},
-		"/factory-sessions/{session_id}/resume":         {"post"},
-		"/factory-sessions/{session_id}/cancel":         {"post"},
-		"/factory-sessions/{session_id}/terminate":      {"post"},
-		"/factory-sessions/{session_id}/retry-dispatch": {"post"},
-	}
+	deferredRoutes := map[string][]string{}
 	inScopeRoutes := map[string]struct{}{
-		"/factory-sessions/async":                               {},
-		"/factory-sessions/sync":                                  {},
-		"/factory-sessions":                                       {},
-		"/factory-sessions/{session_id}":                          {},
-		"/factory-sessions/{session_id}/results":                  {},
-		"/factory-sessions/{session_id}/events":                   {},
-		"/factory-sessions/{session_id}/dispatches":               {},
-		"/factory-sessions/{session_id}/dispatches/{dispatch_id}": {},
-		"/factory-sessions/{session_id}/artifacts":                {},
-		"/factory-sessions/{session_id}/artifacts/{artifact_id}":  {},
+		"/factory-sessions/async":                                   {},
+		"/factory-sessions/sync":                                    {},
+		"/factory-sessions":                                         {},
+		"/factory-sessions/{session_id}":                            {},
+		"/factory-sessions/{session_id}/results":                    {},
+		"/factory-sessions/{session_id}/events":                     {},
+		"/factory-sessions/{session_id}/dispatches":                 {},
+		"/factory-sessions/{session_id}/dispatches/{dispatch_id}":   {},
+		"/factory-sessions/{session_id}/artifacts":                  {},
+		"/factory-sessions/{session_id}/artifacts/{artifact_id}":    {},
+		"/factory-sessions/{session_id}/approve":                    {},
+		"/factory-sessions/{session_id}/pause":                      {},
+		"/factory-sessions/{session_id}/resume":                     {},
+		"/factory-sessions/{session_id}/cancel":                     {},
+		"/factory-sessions/{session_id}/terminate":                  {},
+		"/factory-sessions/{session_id}/retry-dispatch":             {},
 	}
 
 	for path, methods := range deferredRoutes {

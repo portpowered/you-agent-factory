@@ -26,7 +26,6 @@ func ValidateStructural(cfg *interfaces.FactoryConfig) Result {
 	targets = append(targets, duplicateIdentifierTargets(cfg)...)
 	targets = append(targets, duplicateWorkStateTargets(cfg)...)
 	targets = append(targets, danglingReferenceTargets(cfg)...)
-	targets = append(targets, WorkerWorkstationCompatibilityTargets(cfg)...)
 	targets = append(targets, invalidPlaceReferenceTargets(cfg)...)
 	targets = append(targets, conflictingWorkstationOutputTargets(cfg)...)
 	targets = append(targets, missingOutcomeRouteTargets(cfg)...)
@@ -46,6 +45,8 @@ func Validate(cfg *interfaces.FactoryConfig) Result {
 		return result
 	}
 	result.Targets = append(result.Targets, WorkTypeHandlingBehaviorTargets(cfg, WorkTypeHandlingBehaviorOptions{})...)
+	result.Targets = append(result.Targets, PollerRunWorkstationKindTargets(cfg)...)
+	result.Targets = append(result.Targets, WorkerWorkstationBehaviorCompatibilityTargets(cfg)...)
 	result.Targets = append(result.Targets, InvocationReturnTargets(cfg)...)
 	result.Targets = append(result.Targets, missingWorkTypeOutcomeStateTargets(cfg)...)
 	result.Targets = append(result.Targets, missingTerminalCompletionPathTargets(cfg)...)

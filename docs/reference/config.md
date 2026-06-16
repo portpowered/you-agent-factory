@@ -23,10 +23,10 @@ you repeat `modelProvider` or `model` on every model worker.
 
 Use operator defaults when you want one preferred model provider and model for
 runs without editing each factory worker. Operator defaults apply only to
-`MODEL_WORKER` definitions that omit `modelProvider` or `model`. Authored worker
-values, script workers, and hosted workers are never overwritten. Operator
-defaults are applied in memory at runtime and are not persisted into
-`factory.json`.
+`INFERENCE_WORKER` and `AGENT_WORKER` definitions that omit `modelProvider` or
+`model`. Authored worker values, script workers, and poller workers are never
+overwritten. Operator defaults are applied in memory at runtime and are not
+persisted into `factory.json`.
 
 This is distinct from factory-level `runner` in `factory.json`. Public
 `factory.json` and OpenAPI `runner` fields are unchanged by operator defaults;

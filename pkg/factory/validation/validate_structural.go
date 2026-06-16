@@ -882,7 +882,7 @@ func managedRuntimeWorkerTargets(
 	worker interfaces.WorkerConfig,
 	resourceByName map[string]interfaces.ResourceConfig,
 ) []Target {
-	if strings.TrimSpace(worker.Type) != interfaces.WorkerTypeModel {
+	if !interfaces.IsInferenceWorkerType(worker.Type) {
 		return nil
 	}
 	if strings.TrimSpace(worker.ModelLocality) != interfaces.ModelLocalityLocal {

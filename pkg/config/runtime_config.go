@@ -509,10 +509,30 @@ func normalizeCanonicalWorkstationRuntime(workstation *interfaces.FactoryWorksta
 	if workstation == nil {
 		return
 	}
+	normalizeWorkstationTaxonomyKind(workstation)
 	if workstation.PromptTemplate == "" {
 		workstation.PromptTemplate = workstation.Body
 	}
 	NormalizeWorkstationExecutionLimit(workstation)
+}
+
+// NormalizeCanonicalWorkstationRuntime applies shared workstation runtime normalization,
+// including taxonomy kind derivation for explicit POLLER_RUN workstation types.
+func NormalizeCanonicalWorkstationRuntime(workstation *interfaces.FactoryWorkstationConfig) {
+	normalizeCanonicalWorkstationRuntime(workstation)
+}
+
+func normalizeWorkstationTaxonomyKind(workstation *interfaces.FactoryWorkstationConfig) {
+	if workstation == nil {
+		return
+	}
+	if interfaces.StrictPublicFactoryWorkstationType(workstation.Type) != interfaces.WorkstationTypePoller {
+		return
+	}
+	switch workstation.Kind {
+	case "", interfaces.WorkstationKindStandard:
+		workstation.Kind = interfaces.WorkstationKindPoller
+	}
 }
 
 func defaultWorkstationRuntimeType(workerName string) string {

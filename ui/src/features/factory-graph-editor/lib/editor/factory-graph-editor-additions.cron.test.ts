@@ -6,6 +6,7 @@ import {
   createFactoryGraphAddEntityDraft,
   editableWorkstationBehaviorOptions,
   resolveFactoryGraphAddWorkstationDraftForBehaviorChange,
+  resolveFactoryGraphAddWorkstationDraftForTypeChange,
   validateFactoryGraphAddEntityDraft,
 } from "../editor/factory-graph-editor-additions";
 
@@ -19,6 +20,51 @@ describe("factory graph editor additions cron and runtime type", () => {
       "CRON",
     ]);
     expect(editableWorkstationBehaviorOptions()).toContain("CRON");
+  });
+
+  it("derives POLLER behavior when add-workstation type changes to POLLER_RUN", () => {
+    const workstationDraft = createFactoryGraphAddEntityDraft(
+      "workstation",
+      baseFactoryDefinition,
+    );
+
+    expect(
+      resolveFactoryGraphAddWorkstationDraftForTypeChange(
+        workstationDraft,
+        "POLLER_RUN",
+        { defaultWorkerName: "writer" },
+      ),
+    ).toMatchObject({
+      behavior: "POLLER",
+      workerName: "writer",
+      workstationType: "POLLER_RUN",
+    });
+  });
+
+  it("emits POLLER behavior when saving POLLER_RUN workstations", () => {
+    const nextDraft = applyFactoryGraphAddEntityDraft(
+      createEmptyFactoryGraphDraft(),
+      {
+        behavior: "STANDARD",
+        body: "",
+        cron: null,
+        kind: "workstation",
+        name: "poll-tasks",
+        workerName: "writer",
+        workstationType: "POLLER_RUN",
+      },
+    );
+
+    expect(nextDraft.additions.workstations).toEqual([
+      {
+        behavior: "POLLER",
+        inputs: [],
+        name: "poll-tasks",
+        outputs: [],
+        type: "POLLER_RUN",
+        worker: "writer",
+      },
+    ]);
   });
 
   it("preserves existing cron draft when behavior stays CRON", () => {

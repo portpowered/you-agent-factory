@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -278,6 +279,21 @@ func formatCanonicalFactoryJSON(data []byte, sourcePath string) ([]byte, error) 
 	}
 	formatted.WriteByte('\n')
 	return formatted.Bytes(), nil
+}
+
+// LoadAuthoredFactoryAPIFromPath reads the authored factory.json payload without
+// flattening or usage-aware taxonomy projection so validate-only inspection
+// preserves legacy aliases and explicit incompatible pairings.
+func LoadAuthoredFactoryAPIFromPath(path string) (factoryapi.Factory, error) {
+	data, _, err := readFactoryConfigSource(path)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	var factory factoryapi.Factory
+	if err := json.Unmarshal(data, &factory); err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("parse factory config: %w", err)
+	}
+	return factory, nil
 }
 
 func readFactoryConfigSource(path string) ([]byte, string, error) {

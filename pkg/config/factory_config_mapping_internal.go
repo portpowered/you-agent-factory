@@ -748,6 +748,10 @@ const (
 	publicFactoryWorkstationKindRepeater         = "REPEATER"
 	publicFactoryWorkstationKindCron             = "CRON"
 	publicFactoryWorkstationKindPoller           = "POLLER"
+	publicFactoryWorkstationTypeInference        = "INFERENCE_RUN"
+	publicFactoryWorkstationTypeAgent            = "AGENT_RUN"
+	publicFactoryWorkstationTypeScript           = "SCRIPT_RUN"
+	publicFactoryWorkstationTypePoller           = "POLLER_RUN"
 	publicFactoryWorkstationTypeModel            = "MODEL_WORKSTATION"
 	publicFactoryWorkstationTypeInvoke           = "MODEL_INVOKE"
 	publicFactoryWorkstationTypeLogical          = "LOGICAL_MOVE"
@@ -973,6 +977,8 @@ func internalFactoryWorkstationKindFromPublic(kind *factoryapi.WorkstationKind) 
 		return interfaces.WorkstationKindRepeater
 	case publicFactoryWorkstationKindCron:
 		return interfaces.WorkstationKindCron
+	case publicFactoryWorkstationKindPoller:
+		return interfaces.WorkstationKindPoller
 	default:
 		return interfaces.WorkstationKind(strings.TrimSpace(string(*kind)))
 	}

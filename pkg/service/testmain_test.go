@@ -2215,8 +2215,8 @@ func TestWorkerWorkstationTaxonomyRuntime_AgentRunWithInferenceWorkerFailsValida
 	if err != nil {
 		t.Fatalf("ValidateFactoryAPI: %v", err)
 	}
-	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkerWorkstationIncompatibleBehavior)
-	target := taxonomyRuntimeFindTargetByCode(t, result.Targets, factoryvalidation.CodeWorkerWorkstationIncompatibleBehavior)
+	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkerWorkstationBehaviorCompatibility)
+	target := taxonomyRuntimeFindTargetByCode(t, result.Targets, factoryvalidation.CodeWorkerWorkstationBehaviorCompatibility)
 	if !strings.Contains(target.Message, interfaces.WorkstationTypeAgent) {
 		t.Fatalf("message %q missing workstation type %q", target.Message, interfaces.WorkstationTypeAgent)
 	}
