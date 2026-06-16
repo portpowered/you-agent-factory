@@ -17,7 +17,7 @@ func TestExecutorReviewStateLifecycle_ProcessCompletionLeavesSingleReviewInit(t 
 	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
 		"processor": {{Content: "<COMPLETE>\n"}},
 	})
-	h := testutil.NewServiceTestHarness(t, dir,
+	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 		testutil.WithExecutionBaseDir(dir),
@@ -30,7 +30,6 @@ func TestExecutorReviewStateLifecycle_ProcessCompletionLeavesSingleReviewInit(t 
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
 	submitExecutorReviewProcessResiduePattern(t, h, laneName, traceID)
 
 	errCh := h.RunInBackground(ctx)
@@ -61,7 +60,7 @@ func TestExecutorReviewStateLifecycle_CompletedReviewClearsResidueAndReplayMatch
 	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
 		"processor": {{Content: "<COMPLETE>\n"}},
 	})
-	h := testutil.NewServiceTestHarness(t, dir,
+	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 		testutil.WithExecutionBaseDir(dir),
@@ -74,7 +73,6 @@ func TestExecutorReviewStateLifecycle_CompletedReviewClearsResidueAndReplayMatch
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
 	submitExecutorReviewDuplicateAndStalePattern(t, h, laneName, traceID)
 
 	errCh := h.RunInBackground(ctx)
@@ -102,7 +100,7 @@ func TestExecutorReviewStateLifecycle_CompletedExecutorAndReviewConvergeToTermin
 			{Content: "<COMPLETE>\n"},
 		},
 	})
-	h := testutil.NewServiceTestHarness(t, dir,
+	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 		testutil.WithExecutionBaseDir(dir),
@@ -115,7 +113,6 @@ func TestExecutorReviewStateLifecycle_CompletedExecutorAndReviewConvergeToTermin
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-
 	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
 		Name:                   laneName,
 		WorkTypeID:             "task",
@@ -164,7 +161,7 @@ func TestExecutorReviewStateLifecycle_DuplicateReviewRegressionMatchesLaneThreeS
 	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
 		"processor": {{Content: "<COMPLETE>\n"}},
 	})
-	h := testutil.NewServiceTestHarness(t, dir,
+	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 		testutil.WithExecutionBaseDir(dir),
@@ -173,7 +170,6 @@ func TestExecutorReviewStateLifecycle_DuplicateReviewRegressionMatchesLaneThreeS
 	const traceID = "trace-e3bfbf2efbff251737c0df2a5433efb3"
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
 	submitExecutorReviewDuplicateAndStalePattern(
 		t,
 		h,

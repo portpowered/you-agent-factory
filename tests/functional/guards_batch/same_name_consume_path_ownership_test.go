@@ -77,12 +77,12 @@ func scaffoldConsumePathFactory(t *testing.T) string {
 
 func TestSameNameConsumePathOwnership_MatchingPairCompletesThroughLogicalMove(t *testing.T) {
 	dir := scaffoldConsumePathFactory(t)
-	h := testutil.NewServiceTestHarness(t, dir)
+	h := support.NewGuardsBatchHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-cli-validate-list"
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	submitConsumePathPair(t, h, cellName)
 
@@ -106,12 +106,12 @@ func TestSameNameConsumePathOwnership_MatchingPairCompletesThroughLogicalMove(t 
 
 func TestSameNameConsumePathOwnership_TaskOnlyWithoutIdeaTwin_StrandedAsHistoricalArtifact(t *testing.T) {
 	dir := scaffoldConsumePathFactory(t)
-	h := testutil.NewServiceTestHarness(t, dir)
+	h := support.NewGuardsBatchHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-cli-run-status-result"
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
 		Name:        cellName,
@@ -146,7 +146,7 @@ func TestSameNameConsumePathOwnership_OrphanTaskAfterPriorConsume_MatchesLiveQue
 	const cellName = "dynamic-workflows-cell-mcp-tools"
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	submitSameNameOrphanAfterConsumePattern(t, h, cellName, "trace-task-b-"+cellName)
 
@@ -173,11 +173,11 @@ func TestSameNameConsumePathOwnership_OrphanTaskAfterPriorConsume_MatchesLiveQue
 
 func TestSameNameConsumePathOwnership_ProjectionMatchesRuntimeBeforeConsume(t *testing.T) {
 	dir := scaffoldConsumePathFactory(t)
-	h := testutil.NewServiceTestHarness(t, dir)
+	h := support.NewGuardsBatchHarness(t, dir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{
 		{
@@ -278,12 +278,7 @@ func submitSameNameOrphanAfterConsumePattern(
 
 func newSameNameConsumePathServiceHarness(t *testing.T, dir string) *testutil.ServiceTestHarness {
 	t.Helper()
-
-	return testutil.NewServiceTestHarness(
-		t,
-		dir,
-		testutil.WithRuntimeMode(interfaces.RuntimeModeService),
-	)
+	return support.NewGuardsBatchHarness(t, dir)
 }
 
 func classifyConsumePathOutcome(

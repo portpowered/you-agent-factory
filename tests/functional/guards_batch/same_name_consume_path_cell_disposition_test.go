@@ -107,7 +107,7 @@ func TestSameNameConsumePathCellDisposition_ReviewedCLIAndMCPCells(t *testing.T)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
-			errCh := h.RunInBackground(ctx)
+			errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 			reproduceLiveQueueOrphanPattern(t, h, tc.cellName)
 
@@ -144,7 +144,7 @@ func TestSameNameConsumePathCellDisposition_ManualMoveReachesExpectedPostRepairS
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	reproduceLiveQueueOrphanPattern(t, h, cellName)
 
@@ -198,7 +198,7 @@ func TestSameNameConsumePathCellDisposition_FreshReviewedPairIsCompleteWithoutMa
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)

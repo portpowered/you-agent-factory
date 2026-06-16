@@ -3,7 +3,10 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -16,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -40,7 +44,16 @@ func (s staticModelAssetPuller) ResolveModelCache(_ context.Context, _ *factoryc
 }
 
 func (s staticModelAssetPuller) InspectRuntimeCache(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ string) (localmodels.RuntimeCacheInspection, error) {
-	return localmodels.RuntimeCacheInspection{}, nil
+	if strings.TrimSpace(s.cache.ModelName) == "" {
+		return localmodels.RuntimeCacheInspection{}, nil
+	}
+	return localmodels.RuntimeCacheInspection{
+		Supported:          true,
+		Installed:          true,
+		CachePath:          s.cache.CachePath,
+		Revision:           s.cache.Revision,
+		InstalledFileCount: len(s.cache.Files),
+	}, nil
 }
 
 type fakeLocalModelRuntime struct {
@@ -94,24 +107,42 @@ func (h fakeLocalModelHandle) Invoke(_ context.Context, request localModelInvoca
 	return h.runtime.response, nil
 }
 
-func TestInvokeModel_UsesManagedLocalModelRuntimeAndReusesLoadedHandle(t *testing.T) {
+func TestInvokeModel_UsesModelHostLeasesAndReusesLoadedRuntime(t *testing.T) {
+	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(healthServer.Close)
+
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtime := &fakeLocalModelRuntime{
 		response: interfaces.InferenceResponse{
 			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
-	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", localModelFactoryConfig(), localModelRuntimeWorkers(), nil)
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+		t,
+		"",
+		localModelFactoryConfig(),
+		localModelRuntimeWorkersWithHealthEndpoint(healthServer.URL),
+		nil,
+	)
 	cache := localModelTestCacheLayout(t)
 	puller := staticModelAssetPuller{cache: cache}
+	launcher := &serviceTestFakeProcessLauncher{healthEndpoint: healthServer.URL}
+	host := newServiceTestSupervisedModelHost(t, puller, launcher)
+	leaseExec := modelhost.NewLeaseExecution(host, puller, runtime, localModelHooks())
 	svc := &FactoryService{
 		policy:      serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{}),
 		modelAssets: puller,
 	}
 	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
-		runtimeCfg:  runtimeCfg,
-		modelAssets: puller,
-		localModels: newManagedLocalModelManager(puller, runtime),
+		runtimeCfg:        runtimeCfg,
+		modelAssets:       puller,
+		localModelRuntime: runtime,
+		modelHost:         host,
+		leaseExecution:    leaseExec,
+		modelResources:    newLocalModelResourceLimiter(),
+		localModels:       newManagedLocalModelManager(puller, runtime),
 	})
 
 	mode := factoryapi.AUDIOSTREAM
@@ -131,8 +162,20 @@ func TestInvokeModel_UsesManagedLocalModelRuntimeAndReusesLoadedHandle(t *testin
 	if err != nil {
 		t.Fatalf("second InvokeModel: %v", err)
 	}
+	if launcher.startCount() != 1 {
+		t.Fatalf("supervised process start count = %d, want 1 shared host runtime", launcher.startCount())
+	}
 	if runtime.loadCount() != 1 {
-		t.Fatalf("load count = %d, want 1", runtime.loadCount())
+		t.Fatalf("runtime load count = %d, want 1 reused handle across host leases", runtime.loadCount())
+	}
+	runtime.mu.Lock()
+	servingEndpoint := ""
+	if len(runtime.loads) > 0 {
+		servingEndpoint = strings.TrimSpace(runtime.loads[0].ServingEndpoint)
+	}
+	runtime.mu.Unlock()
+	if servingEndpoint != healthServer.URL {
+		t.Fatalf("serving endpoint = %q, want supervised lease endpoint %q", servingEndpoint, healthServer.URL)
 	}
 	if runtime.invocationCount() != 2 {
 		t.Fatalf("invocation count = %d, want 2", runtime.invocationCount())
@@ -186,10 +229,16 @@ func TestLoadWorkersFromConfig_LocalModelWorkerUsesManagedRuntimePath(t *testing
 		nil,
 		nil,
 		nil,
-		newLocalModelResourceLimiter(),
-		newManagedLocalModelManager(staticModelAssetPuller{
-			cache: cache,
-		}, runtime),
+		localModelDomain{
+			resources: newLocalModelResourceLimiter(),
+			assets: staticModelAssetPuller{
+				cache: cache,
+			},
+			runtime: runtime,
+			manager: newManagedLocalModelManager(staticModelAssetPuller{
+				cache: cache,
+			}, runtime),
+		},
 	)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
@@ -314,8 +363,12 @@ func TestLoadWorkersFromConfig_LocalModelWorkerDetachesClonedWorkerRequestsFromL
 		nil,
 		nil,
 		nil,
-		newLocalModelResourceLimiter(),
-		newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+		localModelDomain{
+			resources: newLocalModelResourceLimiter(),
+			assets:    staticModelAssetPuller{cache: cache},
+			runtime:   runtime,
+			manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+		},
 	)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
@@ -454,7 +507,12 @@ func localModelExecutionRecorderFixture(t *testing.T, eventTime time.Time) (*wor
 		},
 	})
 	history := factoryevents.NewFactoryEventHistory(nil, func() time.Time { return eventTime }, runtimeCfg)
-	opts, err := loadWorkersFromConfig("", factoryCfg, "", runtimeCfg, nil, logging.NoopLogger{}, true, nil, nil, nil, nil, nil, history.RecordModelEvent, func() time.Time { return eventTime }, newLocalModelResourceLimiter(), newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime))
+	opts, err := loadWorkersFromConfig("", factoryCfg, "", runtimeCfg, nil, logging.NoopLogger{}, true, nil, nil, nil, nil, nil, history.RecordModelEvent, func() time.Time { return eventTime }, localModelDomain{
+		resources: newLocalModelResourceLimiter(),
+		assets:    staticModelAssetPuller{cache: cache},
+		runtime:   runtime,
+		manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+	})
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -569,30 +627,38 @@ func localModelFactoryConfig() *interfaces.FactoryConfig {
 }
 
 func localModelRuntimeWorkers() map[string]*interfaces.WorkerConfig {
+	return localModelRuntimeWorkersWithHealthEndpoint("")
+}
+
+func localModelRuntimeWorkersWithHealthEndpoint(healthEndpoint string) map[string]*interfaces.WorkerConfig {
+	worker := &interfaces.WorkerConfig{
+		Name:          "tts-worker",
+		Type:          interfaces.WorkerTypeModel,
+		Model:         "OMNIVOICE_Q4_K_M",
+		ModelProvider: interfaces.RunnerIDCodex,
+		ModelLocality: interfaces.ModelLocalityLocal,
+		Resources: []interfaces.ResourceConfig{{
+			Name:     "omnivoice-cache",
+			Capacity: 1,
+		}},
+		Operations: []interfaces.ModelOperation{{
+			Name: "TTS",
+			Inputs: []interfaces.ModelOperationSlot{{
+				Name:         "text",
+				ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+				Required:     true,
+			}},
+			Outputs: []interfaces.ModelOperationSlot{{
+				Name:         "audio",
+				ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+			}},
+		}},
+	}
+	if strings.TrimSpace(healthEndpoint) != "" {
+		worker.Args = []string{"--health-endpoint", healthEndpoint}
+	}
 	return map[string]*interfaces.WorkerConfig{
-		"tts-worker": {
-			Name:          "tts-worker",
-			Type:          interfaces.WorkerTypeModel,
-			Model:         "OMNIVOICE_Q4_K_M",
-			ModelProvider: interfaces.RunnerIDCodex,
-			ModelLocality: interfaces.ModelLocalityLocal,
-			Resources: []interfaces.ResourceConfig{{
-				Name:     "omnivoice-cache",
-				Capacity: 1,
-			}},
-			Operations: []interfaces.ModelOperation{{
-				Name: "TTS",
-				Inputs: []interfaces.ModelOperationSlot{{
-					Name:         "text",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeText},
-					Required:     true,
-				}},
-				Outputs: []interfaces.ModelOperationSlot{{
-					Name:         "audio",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
-				}},
-			}},
-		},
+		"tts-worker": worker,
 	}
 }
 

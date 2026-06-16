@@ -84,7 +84,7 @@ func TestSameNameGuard_MatchingNamesCompletesJoin(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_name_guard_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
 
-	h := testutil.NewServiceTestHarness(t, dir,
+	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
@@ -126,7 +126,7 @@ func TestSameNameGuard_NonMatchingNamesStayBlocked(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_name_guard_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
 
-	h := testutil.NewServiceTestHarness(t, dir,
+	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
@@ -143,7 +143,7 @@ func TestSameNameGuard_NonMatchingNamesStayBlocked(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "plan:ready", 1, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:ready", 1, time.Second)
@@ -172,14 +172,14 @@ func TestSameNameGuard_NonMatchingNamesStayBlocked(t *testing.T) {
 func TestSameNameGuard_LaterMatchingTokenStillCompletesJoin(t *testing.T) {
 	dir := scaffoldLaterMatchingSameNameGuardFactory(t)
 
-	h := testutil.NewServiceTestHarness(t, dir)
+	h := support.NewGuardsBatchHarness(t, dir)
 	matcher := h.MockWorker("matcher", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
 
 	submitLaterMatchingSameNameGuardWork(h)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	assertLaterMatchingSameNameGuardOutcome(t, h, matcher.CallCount)
 

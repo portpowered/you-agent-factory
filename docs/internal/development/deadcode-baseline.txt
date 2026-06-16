@@ -11,3 +11,7 @@ pkg/factorysessionexecution/lifecycle.go: unreachable func: NormalizeLifecycleSt
 pkg/interfaces/factory_config.go: unreachable func: PermissivePublicFactoryOrchestratorKind
 pkg/interfaces/public_factory_enums.go: unreachable func: IsInferenceRunPublicWorkstationType
 pkg/interfaces/public_factory_enums.go: unreachable func: IsInferenceWorkerPublicType
+pkg/service/factory_build.go: unreachable func: runtimeModelService.recordManagedRuntimeInvocationFailure
+pkg/service/factory_test_helpers_test.go: unreachable func: rewireProcessModelHost
+pkg/service/model_catalog.go: unreachable func: runtimeModelService.catalogOptions
+pkg/service/testmain_test.go: unreachable func: localModelLongTestFactoryConfig

@@ -22,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
+	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
@@ -90,6 +91,9 @@ type factoryRuntimeBundle struct {
 	modelResources       *localModelResourceLimiter
 	modelAssets          modelAssetPuller
 	localModels          *managedLocalModelManager
+	localModelRuntime    localModelRuntime
+	modelHost            modelhost.Host
+	leaseExecution       *modelhost.LeaseExecution
 	logger               *zap.Logger
 	logSink              *logging.RuntimeLogSink
 	metricsSink          *logging.RuntimeMetricsSink

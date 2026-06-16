@@ -83,7 +83,7 @@ func TestSameTraceIDGuard_MatchingCurrentChainingTraceCompletesJoin(t *testing.T
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_trace_id_guard_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
 
-	h := testutil.NewServiceTestHarness(t, dir,
+	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
@@ -102,7 +102,7 @@ func TestSameTraceIDGuard_MatchingCurrentChainingTraceCompletesJoin(t *testing.T
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:matched", 1, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "plan:ready", 0, time.Second)
@@ -127,7 +127,7 @@ func TestSameTraceIDGuard_FallsBackToLegacyTraceIDWhenCurrentChainingTraceIsMiss
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_trace_id_guard_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
 
-	h := testutil.NewServiceTestHarness(t, dir,
+	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
@@ -144,7 +144,7 @@ func TestSameTraceIDGuard_FallsBackToLegacyTraceIDWhenCurrentChainingTraceIsMiss
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:matched", 1, time.Second)
 
@@ -162,7 +162,7 @@ func TestSameTraceIDGuard_DifferentTraceIdentityStaysBlocked(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_trace_id_guard_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
 
-	h := testutil.NewServiceTestHarness(t, dir,
+	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
@@ -181,7 +181,7 @@ func TestSameTraceIDGuard_DifferentTraceIdentityStaysBlocked(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "plan:ready", 1, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:ready", 1, time.Second)
@@ -211,7 +211,7 @@ func TestSameTraceIDGuard_MissingTraceIdentityFailsClosed(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_trace_id_guard_dir"))
 	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
 
-	h := testutil.NewServiceTestHarness(t, dir,
+	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
@@ -227,7 +227,7 @@ func TestSameTraceIDGuard_MissingTraceIdentityFailsClosed(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	errCh := h.RunInBackground(ctx)
+	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	support.WaitForHarnessPlaceTokenCount(t, h, "plan:ready", 1, time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:ready", 1, time.Second)

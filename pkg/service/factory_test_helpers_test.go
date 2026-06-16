@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -44,6 +46,20 @@ func bindServiceStartupRuntime(svc *FactoryService, bundle *factoryRuntimeBundle
 		Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
 	}, true)
 	svc.setRunState(context.Background(), defaultFactorySessionID, handle)
+}
+
+func rewireProcessModelHost(svc *FactoryService, puller modelAssetPuller) modelhost.Host {
+	if puller == nil {
+		return nil
+	}
+	host := modelhost.NewCatalogHost(modelhost.NewLocalAssetGateway(puller), modelhost.Options{
+		SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
+	})
+	if svc != nil && svc.core != nil {
+		svc.core.collaborators.LocalModels.host = host
+		svc.core.collaborators.LocalModels.assets = puller
+	}
+	return host
 }
 
 type recordingDiagnosticsProvider struct{}
@@ -320,7 +336,7 @@ Review.
 		},
 	)
 
-	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil, nil, localModelDomain{})
 	if err == nil || !strings.Contains(err.Error(), `unknown runner "mystery-runner"`) {
 		t.Fatalf("loadWorkersFromConfig error = %v, want unknown runner", err)
 	}
@@ -344,7 +360,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableGeminiFactoryRunner(t *testing.T)
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDGemini, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, nil); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDGemini, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available gemini runner", err)
 	}
 }
@@ -367,7 +383,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableKiroFactoryRunner(t *testing.T) {
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDKiro, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, nil); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDKiro, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available kiro runner", err)
 	}
 }
@@ -390,7 +406,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableCursorFactoryRunner(t *testing.T)
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDCursorCLI, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, nil); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDCursorCLI, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available cursor runner", err)
 	}
 }
@@ -413,7 +429,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableOpenCodeFactoryRunner(t *testing.
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDOpenCode, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, nil); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDOpenCode, cfg, nil, logging.NoopLogger{}, false, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available opencode runner", err)
 	}
 }
@@ -442,7 +458,7 @@ You are a helpful assistant.
 		},
 	)
 
-	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "mystery-runner", cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "mystery-runner", cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil, nil, localModelDomain{})
 	if err == nil || !strings.Contains(err.Error(), `unknown runner "mystery-runner"`) {
 		t.Fatalf("loadWorkersFromConfig error = %v, want unknown runner", err)
 	}
@@ -1069,4 +1085,62 @@ func cleanResolvedPath(path string) string {
 		return cleaned
 	}
 	return filepath.Clean(resolved)
+}
+
+func newServiceTestSupervisedModelHost(t *testing.T, puller modelAssetPuller, launcher modelhost.ProcessLauncher) modelhost.Host {
+	t.Helper()
+	host := modelhost.NewCatalogHost(modelhost.NewLocalAssetGateway(puller), modelhost.Options{
+		SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
+		Supervisor: modelhost.SupervisorConfig{
+			ReadinessTimeout:    500 * time.Millisecond,
+			HealthCheckInterval: 10 * time.Millisecond,
+			ProcessLauncher:     launcher,
+			HealthChecker:       modelhost.HTTPHealthChecker{Path: "/health"},
+		},
+	})
+	if host == nil {
+		t.Fatal("model host = nil")
+	}
+	return host
+}
+
+type serviceTestFakeProcessLauncher struct {
+	mu              sync.Mutex
+	healthEndpoint  string
+	supervisedStart int
+}
+
+func (f *serviceTestFakeProcessLauncher) Start(_ context.Context, _ modelhost.ProcessStartSpec) (modelhost.ManagedProcess, error) {
+	f.mu.Lock()
+	f.supervisedStart++
+	f.mu.Unlock()
+	return &serviceTestFakeManagedProcess{
+		endpoint: f.healthEndpoint,
+		stopCh:   make(chan struct{}),
+	}, nil
+}
+
+func (f *serviceTestFakeProcessLauncher) startCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.supervisedStart
+}
+
+type serviceTestFakeManagedProcess struct {
+	endpoint string
+	stopCh   chan struct{}
+}
+
+func (p *serviceTestFakeManagedProcess) HealthEndpoint() string {
+	return p.endpoint
+}
+
+func (p *serviceTestFakeManagedProcess) Wait() error {
+	<-p.stopCh
+	return nil
+}
+
+func (p *serviceTestFakeManagedProcess) Stop(context.Context) error {
+	close(p.stopCh)
+	return nil
 }
