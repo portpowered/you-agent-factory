@@ -713,6 +713,63 @@ func TestRunDispatches_MissingSessionReturnsDeterministicError(t *testing.T) {
 // TestFixtureBackedCLIInspectionRegression_FullLoopWithoutLiveProviderFlags guards
 // the default fixture-backed CLI inspection path while the additive live-provider
 // smoke lane stays opt-in via --execution-provider and --child-executor-mode.
+func assertFixtureBackedDispatchesRegression(
+	t *testing.T,
+	service fse.Service,
+	sessionID string,
+	dispatchesOutput []byte,
+) {
+	t.Helper()
+	listedDispatches, err := service.ListDispatches(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches: %v", err)
+	}
+	wantDispatchHash, err := fixtures.ListDispatchesResultHash(listedDispatches)
+	if err != nil {
+		t.Fatalf("ListDispatchesResultHash: %v", err)
+	}
+	if wantDispatchHash != "sha256:a32d5d0f136dcfef8061746c8f270702163c92a04e3c9f75eb9248e19bebd34a" {
+		t.Fatalf("fixture dispatch hash drifted to %q", wantDispatchHash)
+	}
+	wantDispatchJSON, err := json.Marshal(factorysession.ListDispatchesResponseToAPI(listedDispatches))
+	if err != nil {
+		t.Fatalf("marshal dispatch projection: %v", err)
+	}
+	if !bytes.Equal(bytes.TrimSpace(dispatchesOutput), wantDispatchJSON) {
+		t.Fatalf("CLI dispatches JSON diverged from shared projection")
+	}
+	if strings.Contains(string(dispatchesOutput), "live-provider-session-1") {
+		t.Fatalf("fixture-backed dispatches leaked live-provider markers:\n%s", dispatchesOutput)
+	}
+}
+
+func assertFixtureBackedArtifactsRegression(
+	t *testing.T,
+	service fse.Service,
+	sessionID string,
+	artifactsOutput []byte,
+) {
+	t.Helper()
+	listedArtifacts, err := service.ListArtifacts(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListArtifacts: %v", err)
+	}
+	wantArtifactHash, err := fixtures.ListArtifactsResultHash(listedArtifacts)
+	if err != nil {
+		t.Fatalf("ListArtifactsResultHash: %v", err)
+	}
+	if wantArtifactHash != "sha256:c42d891189b507df18e127e6cf10deeacf3d56a97c48786491d0ddfd3ed65fce" {
+		t.Fatalf("fixture artifact hash drifted to %q", wantArtifactHash)
+	}
+	wantArtifactJSON, err := json.Marshal(factorysession.ListArtifactsResponseToAPI(listedArtifacts))
+	if err != nil {
+		t.Fatalf("marshal artifact projection: %v", err)
+	}
+	if !bytes.Equal(bytes.TrimSpace(artifactsOutput), wantArtifactJSON) {
+		t.Fatalf("CLI artifacts JSON diverged from shared projection")
+	}
+}
+
 func TestFixtureBackedCLIInspectionRegression_FullLoopWithoutLiveProviderFlags(t *testing.T) {
 	service := newContractFakeService(t)
 	sessionID := "dur-sess-petri-success-001"
@@ -782,27 +839,7 @@ func TestFixtureBackedCLIInspectionRegression_FullLoopWithoutLiveProviderFlags(t
 	}); err != nil {
 		t.Fatalf("RunDispatches: %v", err)
 	}
-	listedDispatches, err := service.ListDispatches(context.Background(), sessionID)
-	if err != nil {
-		t.Fatalf("ListDispatches: %v", err)
-	}
-	wantDispatchHash, err := fixtures.ListDispatchesResultHash(listedDispatches)
-	if err != nil {
-		t.Fatalf("ListDispatchesResultHash: %v", err)
-	}
-	if wantDispatchHash != "sha256:a32d5d0f136dcfef8061746c8f270702163c92a04e3c9f75eb9248e19bebd34a" {
-		t.Fatalf("fixture dispatch hash drifted to %q", wantDispatchHash)
-	}
-	wantDispatchJSON, err := json.Marshal(factorysession.ListDispatchesResponseToAPI(listedDispatches))
-	if err != nil {
-		t.Fatalf("marshal dispatch projection: %v", err)
-	}
-	if !bytes.Equal(bytes.TrimSpace(dispatchesOutput.Bytes()), wantDispatchJSON) {
-		t.Fatalf("CLI dispatches JSON diverged from shared projection")
-	}
-	if strings.Contains(dispatchesOutput.String(), "live-provider-session-1") {
-		t.Fatalf("fixture-backed dispatches leaked live-provider markers:\n%s", dispatchesOutput.String())
-	}
+	assertFixtureBackedDispatchesRegression(t, service, sessionID, dispatchesOutput.Bytes())
 
 	var artifactsOutput bytes.Buffer
 	if err := sessionexecution.RunArtifacts(context.Background(), sessionexecution.ArtifactsConfig{
@@ -813,22 +850,5 @@ func TestFixtureBackedCLIInspectionRegression_FullLoopWithoutLiveProviderFlags(t
 	}); err != nil {
 		t.Fatalf("RunArtifacts: %v", err)
 	}
-	listedArtifacts, err := service.ListArtifacts(context.Background(), sessionID)
-	if err != nil {
-		t.Fatalf("ListArtifacts: %v", err)
-	}
-	wantArtifactHash, err := fixtures.ListArtifactsResultHash(listedArtifacts)
-	if err != nil {
-		t.Fatalf("ListArtifactsResultHash: %v", err)
-	}
-	if wantArtifactHash != "sha256:c42d891189b507df18e127e6cf10deeacf3d56a97c48786491d0ddfd3ed65fce" {
-		t.Fatalf("fixture artifact hash drifted to %q", wantArtifactHash)
-	}
-	wantArtifactJSON, err := json.Marshal(factorysession.ListArtifactsResponseToAPI(listedArtifacts))
-	if err != nil {
-		t.Fatalf("marshal artifact projection: %v", err)
-	}
-	if !bytes.Equal(bytes.TrimSpace(artifactsOutput.Bytes()), wantArtifactJSON) {
-		t.Fatalf("CLI artifacts JSON diverged from shared projection")
-	}
+	assertFixtureBackedArtifactsRegression(t, service, sessionID, artifactsOutput.Bytes())
 }
