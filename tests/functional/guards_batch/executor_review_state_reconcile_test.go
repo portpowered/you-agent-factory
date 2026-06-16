@@ -32,6 +32,7 @@ func TestExecutorReviewStateReconcile_ReviewCompletionCollapsesDuplicateReviewIn
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
+	support.WaitForHarnessRuntimeAvailability(t, h, 3*time.Second)
 
 	submitExecutorReviewDuplicateAndStalePattern(t, h, laneName, traceID)
 

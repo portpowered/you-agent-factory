@@ -31,6 +31,7 @@ func TestExecutorReviewStateLifecycle_ProcessCompletionLeavesSingleReviewInit(t 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
+	support.WaitForHarnessRuntimeAvailability(t, h, 3*time.Second)
 
 	submitExecutorReviewProcessResiduePattern(t, h, laneName, traceID)
 
@@ -74,6 +75,7 @@ func TestExecutorReviewStateLifecycle_CompletedReviewClearsResidueAndReplayMatch
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
+	support.WaitForHarnessRuntimeAvailability(t, h, 3*time.Second)
 
 	submitExecutorReviewDuplicateAndStalePattern(t, h, laneName, traceID)
 
@@ -114,6 +116,7 @@ func TestExecutorReviewStateLifecycle_CompletedExecutorAndReviewConvergeToTermin
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
+	support.WaitForHarnessRuntimeAvailability(t, h, 3*time.Second)
 
 	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
 		Name:                   laneName,
@@ -171,6 +174,7 @@ func TestExecutorReviewStateLifecycle_DuplicateReviewRegressionMatchesLaneThreeS
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
+	support.WaitForHarnessRuntimeAvailability(t, h, 3*time.Second)
 
 	submitExecutorReviewDuplicateAndStalePattern(
 		t,
