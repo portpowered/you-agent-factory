@@ -870,6 +870,145 @@ func newLiveChildCLIJavaScriptRuntimeService(t *testing.T) (fse.Service, string)
 	return service, projectRoot
 }
 
+func TestRunSync_JavaScriptRuntimeFakeChildCLIInspectionRegression(t *testing.T) {
+	projectRoot := setupCLIAgentRunWorkflowFixture(t)
+	service, err := fse.NewExecutionService(
+		fse.ExecutionProviderJavaScriptRuntime,
+		fse.ServiceConfig{ProjectRoot: projectRoot},
+	)
+	if err != nil {
+		t.Fatalf("NewExecutionService: %v", err)
+	}
+	backend := sessionexecution.ExecutionBackendConfig{
+		Provider:    string(fse.ExecutionProviderJavaScriptRuntime),
+		ProjectRoot: projectRoot,
+	}
+
+	var runOutput bytes.Buffer
+	if err := sessionexecution.RunSync(context.Background(), sessionexecution.RunConfig{
+		StartConfig: sessionexecution.StartConfig{
+			Mode:         sessionexecution.ExecutionModeSync,
+			RequestID:    "req-cli-fake-child-regression-001",
+			WorkflowName: "agent-run-fake-child",
+			ArgsJSON:     `{"subject":"workflows"}`,
+		},
+		ExecutionBackendConfig: backend,
+		JSON:                   true,
+		Output:                 &runOutput,
+		Service:                service,
+	}); err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+
+	var runResponse factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.Unmarshal(bytes.TrimSpace(runOutput.Bytes()), &runResponse); err != nil {
+		t.Fatalf("decode run output: %v", err)
+	}
+	sessionID := runResponse.SessionId
+	if sessionID == "" {
+		t.Fatal("sessionId = empty, want runtime-backed durable session id")
+	}
+
+	dispatchDetail, err := service.GetDispatch(context.Background(), sessionID, "dispatch-1")
+	if err != nil {
+		t.Fatalf("GetDispatch: %v", err)
+	}
+	if dispatchDetail.JavaScript == nil || dispatchDetail.JavaScript.ExecutionMode != fse.ChildExecutorModeFake {
+		t.Fatalf("dispatch javascript = %#v, want fake execution mode", dispatchDetail.JavaScript)
+	}
+
+	var dispatchesHuman bytes.Buffer
+	if err := sessionexecution.RunDispatches(context.Background(), sessionexecution.DispatchesConfig{
+		SessionID:              sessionID,
+		ExecutionBackendConfig: backend,
+		Output:                 &dispatchesHuman,
+		Service:                service,
+	}); err != nil {
+		t.Fatalf("RunDispatches: %v", err)
+	}
+	dispatchText := dispatchesHuman.String()
+	if strings.Contains(dispatchText, "live-provider-session-1") {
+		t.Fatalf("fake-child dispatches leaked live-provider markers:\n%s", dispatchText)
+	}
+	for _, want := range []string{
+		"dispatches (1):",
+		"- dispatch-1 COMPLETED",
+	} {
+		if !strings.Contains(dispatchText, want) {
+			t.Fatalf("dispatch human output missing %q:\n%s", want, dispatchText)
+		}
+	}
+
+	var resultOutput bytes.Buffer
+	if err := sessionexecution.RunResult(context.Background(), sessionexecution.ResultConfig{
+		SessionID:              sessionID,
+		ExecutionBackendConfig: backend,
+		JSON:                   true,
+		Output:                 &resultOutput,
+		Service:                service,
+	}); err != nil {
+		t.Fatalf("RunResult: %v", err)
+	}
+	var resultResponse factoryapi.FactorySessionResult
+	if err := json.Unmarshal(bytes.TrimSpace(resultOutput.Bytes()), &resultResponse); err != nil {
+		t.Fatalf("decode result output: %v", err)
+	}
+	if resultResponse.SessionId != sessionID {
+		t.Fatalf("result sessionId = %q, want %q", resultResponse.SessionId, sessionID)
+	}
+}
+
+func TestRunSync_ExplicitFakeChildMode_OverridesLiveConfiguredServiceCLI(t *testing.T) {
+	service, projectRoot := newLiveChildCLIJavaScriptRuntimeService(t)
+	backend := sessionexecution.ExecutionBackendConfig{
+		Provider:    string(fse.ExecutionProviderJavaScriptRuntime),
+		ProjectRoot: projectRoot,
+	}
+
+	var runOutput bytes.Buffer
+	if err := sessionexecution.RunSync(context.Background(), sessionexecution.RunConfig{
+		StartConfig: sessionexecution.StartConfig{
+			Mode:              sessionexecution.ExecutionModeSync,
+			RequestID:         "req-cli-explicit-fake-child-override-001",
+			WorkflowName:      "agent-run-fake-child",
+			ArgsJSON:          `{"subject":"workflows"}`,
+			ChildExecutorMode: fse.ChildExecutorModeFake,
+		},
+		ExecutionBackendConfig: backend,
+		JSON:                   true,
+		Output:                 &runOutput,
+		Service:                service,
+	}); err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+
+	var runResponse factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.Unmarshal(bytes.TrimSpace(runOutput.Bytes()), &runResponse); err != nil {
+		t.Fatalf("decode run output: %v", err)
+	}
+
+	dispatchDetail, err := service.GetDispatch(context.Background(), runResponse.SessionId, "dispatch-1")
+	if err != nil {
+		t.Fatalf("GetDispatch: %v", err)
+	}
+	if dispatchDetail.JavaScript == nil || dispatchDetail.JavaScript.ExecutionMode != fse.ChildExecutorModeFake {
+		t.Fatalf("dispatch javascript = %#v, want fake execution mode override", dispatchDetail.JavaScript)
+	}
+
+	var dispatchesHuman bytes.Buffer
+	if err := sessionexecution.RunDispatches(context.Background(), sessionexecution.DispatchesConfig{
+		SessionID:              runResponse.SessionId,
+		ExecutionBackendConfig: backend,
+		Output:                 &dispatchesHuman,
+		Service:                service,
+	}); err != nil {
+		t.Fatalf("RunDispatches: %v", err)
+	}
+	if strings.Contains(dispatchesHuman.String(), "live-provider-session-1") {
+		t.Fatalf("explicit fake override leaked live-provider markers:\n%s", dispatchesHuman.String())
+	}
+}
+
 func setupCLIAgentRunWorkflowFixture(t *testing.T) string {
 	t.Helper()
 	projectRoot := t.TempDir()
