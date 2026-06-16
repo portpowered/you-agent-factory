@@ -5,6 +5,8 @@ import type {
   DashboardActiveExecution,
   DashboardSnapshot,
 } from "../../../api/dashboard/types";
+import type { FactoryGraphEditorSelectionController } from "../../factory-graph-editor/hooks/selection/use-factory-graph-editor-selection";
+import { useFactoryGraphEditorSelection } from "../../factory-graph-editor/hooks/selection/use-factory-graph-editor-selection";
 import type { CanonicalFactoryDefinition } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import type { FactoryLayout } from "../../factory-graph-editor/lib/layout/factory-graph-layout-operations";
 import { decorateProjectedEdgesWithWaypoints } from "../../factory-graph-editor/lib/projection/factory-graph-react-flow-edge-waypoint-projection";
@@ -186,10 +188,8 @@ function useActiveGraphHighlights({
 
 function useCurrentActivityGraphNodePresentation(
   baseNodes: CurrentActivityNode[],
+  graphSelection: FactoryGraphEditorSelectionController,
 ) {
-  const [selectedNodeIds, setSelectedNodeIds] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
   const basePositionKey = useMemo(
     () =>
       baseNodes
@@ -207,45 +207,28 @@ function useCurrentActivityGraphNodePresentation(
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      setSelectedNodeIds((currentSelectedNodeIds) => {
-        let nextSelectedNodeIds: Set<string> | null = null;
+      const selectionChanges: NodeChange[] = [];
+      const positionChanges: NodeChange[] = [];
 
-        for (const change of changes) {
-          if (
-            change.type !== "select" &&
-            change.type !== "remove" &&
-            change.type !== "add" &&
-            change.type !== "replace"
-          ) {
-            continue;
-          }
-
-          nextSelectedNodeIds ??= new Set(currentSelectedNodeIds);
-
-          if (change.type === "select") {
-            if (change.selected) {
-              nextSelectedNodeIds.add(change.id);
-            } else {
-              nextSelectedNodeIds.delete(change.id);
-            }
-            continue;
-          }
-
-          if (change.type === "remove") {
-            nextSelectedNodeIds.delete(change.id);
-            continue;
-          }
-
-          const selected = change.item.selected === true;
-          if (selected) {
-            nextSelectedNodeIds.add(change.item.id);
-          } else {
-            nextSelectedNodeIds.delete(change.item.id);
-          }
+      for (const change of changes) {
+        if (change.type === "position") {
+          positionChanges.push(change);
+          continue;
         }
 
-        return nextSelectedNodeIds ?? currentSelectedNodeIds;
-      });
+        if (
+          change.type === "select" ||
+          change.type === "remove" ||
+          change.type === "add" ||
+          change.type === "replace"
+        ) {
+          selectionChanges.push(change);
+        }
+      }
+
+      if (selectionChanges.length > 0) {
+        graphSelection.applyNodeSelectChanges(selectionChanges);
+      }
 
       setTransientPositionState((currentPositionState) => {
         const currentPositionsByNodeId =
@@ -257,7 +240,7 @@ function useCurrentActivityGraphNodePresentation(
           { x: number; y: number }
         > | null = null;
 
-        for (const change of changes) {
+        for (const change of positionChanges) {
           if (change.type !== "position") {
             continue;
           }
@@ -280,7 +263,7 @@ function useCurrentActivityGraphNodePresentation(
           : currentPositionState;
       });
     },
-    [basePositionKey],
+    [basePositionKey, graphSelection],
   );
   const transientPositionsByNodeId =
     transientPositionState.basePositionKey === basePositionKey
@@ -292,9 +275,9 @@ function useCurrentActivityGraphNodePresentation(
       baseNodes.map((node) => ({
         ...node,
         position: transientPositionsByNodeId.get(node.id) ?? node.position,
-        selected: selectedNodeIds.has(node.id),
+        selected: graphSelection.isNodeSelected(node.id),
       })),
-    [baseNodes, selectedNodeIds, transientPositionsByNodeId],
+    [baseNodes, graphSelection, transientPositionsByNodeId],
   );
 
   return { displayNodes, handleNodesChange };
@@ -303,6 +286,7 @@ function useCurrentActivityGraphNodePresentation(
 function useCurrentActivityGraphEdges({
   activeGraphHighlights,
   displayNodes,
+  graphSelection,
   handleAssignments,
   layout,
   pendingAdditionEdgeIds,
@@ -311,38 +295,55 @@ function useCurrentActivityGraphEdges({
 }: {
   activeGraphHighlights: ReturnType<typeof buildActiveGraphHighlights>;
   displayNodes: CurrentActivityNode[];
+  graphSelection: FactoryGraphEditorSelectionController;
   handleAssignments: ReturnType<typeof buildHandleAssignments>;
   layout: FactoryLayout;
   pendingAdditionEdgeIds: ReadonlySet<string>;
   selectedWaypointEdgeId?: string | null;
   visibleGraphEdges: GraphLayout["edges"];
 }) {
-  return useMemo(
-    () => {
-      const edges = buildGraphEdges(
-        activeGraphHighlights,
-        handleAssignments,
-        pendingAdditionEdgeIds,
-        visibleGraphEdges,
-        displayNodes,
-      );
-
-      return decorateProjectedEdgesWithWaypoints({
-        edges: edges as FactoryGraphReactFlowEdge[],
-        layout,
-        selectedWaypointEdgeId: selectedWaypointEdgeId ?? null,
-      });
-    },
-    [
+  return useMemo(() => {
+    const edges = buildGraphEdges(
       activeGraphHighlights,
-      displayNodes,
       handleAssignments,
-      layout,
       pendingAdditionEdgeIds,
-      selectedWaypointEdgeId,
       visibleGraphEdges,
-    ],
-  );
+      displayNodes,
+    );
+
+    return decorateProjectedEdgesWithWaypoints({
+      edges: edges as FactoryGraphReactFlowEdge[],
+      layout,
+      selectedWaypointEdgeId: selectedWaypointEdgeId ?? null,
+    }).map((edge) => {
+      const layoutEdgeId =
+        (edge.data as { factoryGraphEdgeId?: string } | undefined)
+          ?.factoryGraphEdgeId ?? edge.id;
+      const selected =
+        edge.selected === true ||
+        graphSelection.isEdgeSelected(edge.id) ||
+        graphSelection.isEdgeSelected(layoutEdgeId);
+
+      if (!selected) {
+        return edge;
+      }
+
+      return {
+        ...edge,
+        selected: true,
+        type: edge.type ?? "factoryEditorEdge",
+      };
+    });
+  }, [
+    activeGraphHighlights,
+    displayNodes,
+    graphSelection,
+    handleAssignments,
+    layout,
+    pendingAdditionEdgeIds,
+    selectedWaypointEdgeId,
+    visibleGraphEdges,
+  ]);
 }
 
 function useInitialFitViewOptions(graphLayout: GraphLayout) {
@@ -403,6 +404,7 @@ export function useCurrentActivityGraphViewModel({
     () => buildActiveItemLabelsByPlaceId(activeExecutions),
     [activeExecutions],
   );
+  const graphSelection = useFactoryGraphEditorSelection();
   const baseNodes = useCurrentActivityBaseNodes({
     activeExecutionsByWorkstationNodeID,
     activeGraphHighlights,
@@ -423,10 +425,11 @@ export function useCurrentActivityGraphViewModel({
     snapshot,
   });
   const { displayNodes, handleNodesChange } =
-    useCurrentActivityGraphNodePresentation(baseNodes);
+    useCurrentActivityGraphNodePresentation(baseNodes, graphSelection);
   const edges = useCurrentActivityGraphEdges({
     activeGraphHighlights,
     displayNodes,
+    graphSelection,
     handleAssignments,
     layout: renderedLayout,
     pendingAdditionEdgeIds,
@@ -439,6 +442,7 @@ export function useCurrentActivityGraphViewModel({
     canonicalLayoutViewport,
     edges,
     graphKey,
+    graphSelection,
     handleNodesChange,
     initialFitViewKey:
       initialFitViewOptions.nodes?.map((node) => node.id).join(":") ||

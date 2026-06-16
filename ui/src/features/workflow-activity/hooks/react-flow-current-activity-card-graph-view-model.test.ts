@@ -406,6 +406,80 @@ describe("useCurrentActivityGraphViewModel node positions", () => {
       selected: true,
     });
   });
+
+  it("derives node and edge selected flags from editor-local graph selection", () => {
+    const edgeId = "workstation-output:workstation:review->work-state:story:done";
+    const graphLayout: GraphLayout = {
+      edges: [
+        {
+          canonicalEdgeId: edgeId,
+          edgeId,
+          fromNodeId: "workstation:review",
+          label: "done",
+          labelX: 0,
+          labelY: 0,
+          outcomeKind: "success",
+          path: "",
+          sourcePlaceKind: undefined,
+          stateCategory: "TERMINAL",
+          targetPlaceKind: "work_state",
+          toNodeId: "work-state:story:done",
+        },
+      ],
+      height: 360,
+      nodes: [
+        {
+          column: 0,
+          height: 120,
+          nodeId: "workstation:review",
+          nodeKind: "workstation",
+          row: 0,
+          width: 220,
+          workstationNodeId: "review",
+          x: 120,
+          y: 80,
+        },
+        {
+          column: 1,
+          height: 120,
+          nodeId: "work-state:story:done",
+          nodeKind: "state_position",
+          place: {
+            kind: "work_state",
+            place_id: "story:done",
+            state_category: "TERMINAL",
+            state_value: "done",
+            type_id: "story",
+          },
+          row: 0,
+          width: 140,
+          x: 420,
+          y: 100,
+        },
+      ],
+      width: 600,
+    };
+    const { result } = renderGraphViewModelWithLayout(graphLayout, {
+      visibleGraphEdges: graphLayout.edges,
+    });
+
+    act(() => {
+      result.current.graphSelection.replaceSelection({
+        edgeIds: [edgeId],
+        nodeIds: ["workstation:review"],
+        primaryTarget: { kind: "node", id: "workstation:review" },
+      });
+    });
+
+    expect(
+      result.current.nodes.find((node) => node.id === "workstation:review"),
+    ).toMatchObject({ selected: true });
+    expect(result.current.edges[0]?.selected).toBe(true);
+    expect(result.current.graphSelection.resolvePrimaryTarget()).toEqual({
+      kind: "node",
+      id: "workstation:review",
+    });
+  });
 });
 
 describe("useCurrentActivityGraphViewModel edge waypoints", () => {
