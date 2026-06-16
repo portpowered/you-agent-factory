@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -166,4 +168,238 @@ func (e *ReadinessError) Unwrap() error {
 		return nil
 	}
 	return e.Cause
+}
+
+// FailureClass is a provider-neutral outcome for model host operations.
+type FailureClass string
+
+const (
+	FailureClassNone               FailureClass = ""
+	FailureClassMissingAssets      FailureClass = "missing_assets"
+	FailureClassLoadingTimeout     FailureClass = "loading_timeout"
+	FailureClassProcessCrash       FailureClass = "process_crash"
+	FailureClassUnsupportedRuntime FailureClass = "unsupported_runtime"
+	FailureClassCancelled          FailureClass = "cancelled"
+	FailureClassCapacityExhausted  FailureClass = "capacity_exhausted"
+)
+
+// ReadinessStateForFailureClass maps a failure class to managed-runtime readiness.
+func ReadinessStateForFailureClass(class FailureClass) factoryapi.ManagedRuntimeReadinessState {
+	switch class {
+	case FailureClassMissingAssets:
+		return factoryapi.ManagedRuntimeReadinessStateMISSING
+	case FailureClassLoadingTimeout:
+		return factoryapi.ManagedRuntimeReadinessStateLOADING
+	case FailureClassProcessCrash:
+		return factoryapi.ManagedRuntimeReadinessStateFAILED
+	case FailureClassCancelled:
+		return factoryapi.ManagedRuntimeReadinessStateFAILED
+	case FailureClassCapacityExhausted:
+		return factoryapi.ManagedRuntimeReadinessStateFAILED
+	case FailureClassUnsupportedRuntime:
+		return factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED
+	default:
+		return factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED
+	}
+}
+
+// FailureClassForReadinessState derives the primary failure class for a readiness state.
+func FailureClassForReadinessState(readiness factoryapi.ManagedRuntimeReadinessState) FailureClass {
+	switch readiness {
+	case factoryapi.ManagedRuntimeReadinessStateREADY:
+		return FailureClassNone
+	case factoryapi.ManagedRuntimeReadinessStateMISSING:
+		return FailureClassMissingAssets
+	case factoryapi.ManagedRuntimeReadinessStateLOADING:
+		return FailureClassLoadingTimeout
+	case factoryapi.ManagedRuntimeReadinessStateFAILED:
+		return FailureClassProcessCrash
+	case factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED:
+		return FailureClassUnsupportedRuntime
+	default:
+		return FailureClassUnsupportedRuntime
+	}
+}
+
+// FailureClassFromError classifies operational errors into provider-neutral classes.
+func FailureClassFromError(err error) FailureClass {
+	if err == nil {
+		return FailureClassNone
+	}
+	if errors.Is(err, ErrCancelled) {
+		return FailureClassCancelled
+	}
+	if errors.Is(err, ErrUnsupportedRuntime) {
+		return FailureClassUnsupportedRuntime
+	}
+	if errors.Is(err, ErrCapacityExhausted) {
+		return FailureClassCapacityExhausted
+	}
+	if errors.Is(err, ErrMissingAssets) {
+		return FailureClassMissingAssets
+	}
+	if errors.Is(err, ErrLoadingTimeout) {
+		return FailureClassLoadingTimeout
+	}
+	if errors.Is(err, ErrProcessCrash) {
+		return FailureClassProcessCrash
+	}
+	return FailureClassUnsupportedRuntime
+}
+
+// ManagedRuntimeFromSnapshot projects one host readiness snapshot into the public contract.
+func ManagedRuntimeFromSnapshot(snapshot ReadinessSnapshot) factoryapi.ManagedRuntime {
+	diagnostics := factoryapi.StringMap{}
+	for key, value := range snapshot.Diagnostics {
+		diagnostics[key] = value
+	}
+	if snapshot.FailureClass != FailureClassNone {
+		diagnostics["failureClass"] = string(snapshot.FailureClass)
+	}
+	return factoryapi.ManagedRuntime{
+		Identity:            snapshot.Identity.Name,
+		ReadinessState:      snapshot.ReadinessState,
+		LifecycleState:      snapshot.LifecycleState,
+		Locality:            snapshot.Identity.Locality,
+		SupportedOperations: append([]factoryapi.ModelOperation(nil), snapshot.Identity.SupportedOperations...),
+		Diagnostics:         &diagnostics,
+	}
+}
+
+// ClassifyReadiness maps cache inspection and catalog identity into host readiness.
+func ClassifyReadiness(identity Identity, inspection CacheInspection, unsupported bool) ReadinessSnapshot {
+	if unsupported {
+		return ReadinessSnapshot{
+			Identity:       identity,
+			ReadinessState: factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED,
+			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateNOTAPPLICABLE,
+			FailureClass:   FailureClassUnsupportedRuntime,
+			Diagnostics:    managedDiagnostics(identity, factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED, factoryapi.ManagedRuntimeLifecycleStateNOTAPPLICABLE),
+		}
+	}
+	if inspection.Supported {
+		readiness, lifecycle, failureClass := readinessFromCacheInspection(inspection)
+		return ReadinessSnapshot{
+			Identity:       identity,
+			ReadinessState: readiness,
+			LifecycleState: lifecycle,
+			FailureClass:   failureClass,
+			Diagnostics:    mergeDiagnostics(identity, readiness, lifecycle, cacheDiagnostics(inspection)),
+		}
+	}
+	readiness := readinessFromLocality(identity.Locality)
+	lifecycle := lifecycleFromLocality(identity.Locality)
+	return ReadinessSnapshot{
+		Identity:       identity,
+		ReadinessState: readiness,
+		LifecycleState: lifecycle,
+		FailureClass:   FailureClassForReadinessState(readiness),
+		Diagnostics:    managedDiagnostics(identity, readiness, lifecycle),
+	}
+}
+
+func readinessFromCacheInspection(inspection CacheInspection) (
+	factoryapi.ManagedRuntimeReadinessState,
+	factoryapi.ManagedRuntimeLifecycleState,
+	FailureClass,
+) {
+	if inspection.Installed {
+		return factoryapi.ManagedRuntimeReadinessStateREADY,
+			factoryapi.ManagedRuntimeLifecycleStateINSTALLED,
+			FailureClassNone
+	}
+	if inspection.PartialArtifacts && inspection.InstalledFileCount == 0 {
+		return factoryapi.ManagedRuntimeReadinessStateFAILED,
+			factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+			FailureClassMissingAssets
+	}
+	if inspection.InstalledFileCount > 0 || inspection.PartialArtifacts {
+		return factoryapi.ManagedRuntimeReadinessStateLOADING,
+			factoryapi.ManagedRuntimeLifecycleStateINSTALLING,
+			FailureClassLoadingTimeout
+	}
+	return factoryapi.ManagedRuntimeReadinessStateMISSING,
+		factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+		FailureClassMissingAssets
+}
+
+func readinessFromLocality(locality factoryapi.WorkerModelLocality) factoryapi.ManagedRuntimeReadinessState {
+	switch locality {
+	case factoryapi.WorkerModelLocalityLocal:
+		return factoryapi.ManagedRuntimeReadinessStateMISSING
+	default:
+		return factoryapi.ManagedRuntimeReadinessStateREADY
+	}
+}
+
+func lifecycleFromLocality(locality factoryapi.WorkerModelLocality) factoryapi.ManagedRuntimeLifecycleState {
+	switch locality {
+	case factoryapi.WorkerModelLocalityLocal:
+		return factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED
+	default:
+		return factoryapi.ManagedRuntimeLifecycleStateNOTAPPLICABLE
+	}
+}
+
+func managedDiagnostics(
+	identity Identity,
+	readiness factoryapi.ManagedRuntimeReadinessState,
+	lifecycle factoryapi.ManagedRuntimeLifecycleState,
+) map[string]string {
+	diagnostics := map[string]string{
+		"readinessState": string(readiness),
+		"lifecycleState": string(lifecycle),
+		"locality":       string(identity.Locality),
+	}
+	for key, value := range sourceDiagnostics(identity) {
+		diagnostics[key] = value
+	}
+	if identity.Name != "" {
+		diagnostics["identity"] = identity.Name
+	}
+	return diagnostics
+}
+
+func mergeDiagnostics(
+	identity Identity,
+	readiness factoryapi.ManagedRuntimeReadinessState,
+	lifecycle factoryapi.ManagedRuntimeLifecycleState,
+	extra map[string]string,
+) map[string]string {
+	diagnostics := managedDiagnostics(identity, readiness, lifecycle)
+	for key, value := range extra {
+		diagnostics[key] = value
+	}
+	return diagnostics
+}
+
+func sourceDiagnostics(identity Identity) map[string]string {
+	if identity.SourceKind == "" {
+		return nil
+	}
+	return map[string]string{
+		"sourceKind":    identity.SourceKind,
+		"sourceId":      identity.SourceID,
+		"resolverNotes": identity.ResolverNotes,
+	}
+}
+
+func cacheDiagnostics(inspection CacheInspection) map[string]string {
+	if !inspection.Supported {
+		return nil
+	}
+	diagnostics := make(map[string]string)
+	if len(inspection.MissingAssets) > 0 {
+		diagnostics["missingAssets"] = strings.Join(inspection.MissingAssets, ",")
+	}
+	if inspection.Revision != "" {
+		diagnostics["revision"] = inspection.Revision
+	}
+	if inspection.CachePath != "" {
+		diagnostics["cachePath"] = inspection.CachePath
+	}
+	if inspection.Installed {
+		diagnostics["installedFileCount"] = strconv.Itoa(inspection.InstalledFileCount)
+	}
+	return diagnostics
 }

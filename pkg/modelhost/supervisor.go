@@ -4,12 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/localmodels"
 )
 
 const (
@@ -381,4 +385,175 @@ func (r *supervisedRuntime) isLoading() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.state == supervisedStateLoading
+}
+
+// HTTPHealthChecker probes readiness through HTTP GET on a health endpoint.
+type HTTPHealthChecker struct {
+	Client *http.Client
+	Path   string
+}
+
+func (h HTTPHealthChecker) Check(ctx context.Context, healthEndpoint string) error {
+	url := healthEndpointURL(healthEndpoint, h.Path)
+	client := h.Client
+	if client == nil {
+		client = &http.Client{Timeout: 2 * time.Second}
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("health check returned status %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func healthEndpointURL(endpoint string, path string) string {
+	trimmed := strings.TrimSpace(endpoint)
+	if strings.Contains(trimmed, "://") && (strings.HasSuffix(trimmed, "/health") || strings.Contains(trimmed, "/health?")) {
+		return trimmed
+	}
+	base := strings.TrimRight(trimmed, "/")
+	healthPath := strings.TrimSpace(path)
+	if healthPath == "" {
+		healthPath = defaultHealthCheckPath
+	}
+	if !strings.HasPrefix(healthPath, "/") {
+		healthPath = "/" + healthPath
+	}
+	return base + healthPath
+}
+
+type execProcessLauncher struct{}
+
+func (execProcessLauncher) Start(ctx context.Context, spec ProcessStartSpec) (ManagedProcess, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	command := strings.TrimSpace(spec.Command)
+	if command == "" {
+		return nil, fmt.Errorf("supervised process command is required")
+	}
+	endpoint := strings.TrimSpace(spec.HealthEndpoint)
+	if endpoint == "" {
+		return nil, fmt.Errorf("supervised process health endpoint is required")
+	}
+
+	cmd := exec.Command(command, spec.Args...)
+	if len(spec.Env) > 0 {
+		cmd.Env = spec.Env
+	}
+	if spec.WorkDir != "" {
+		cmd.Dir = spec.WorkDir
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	return &execManagedProcess{
+		cmd:            cmd,
+		healthEndpoint: endpoint,
+		done:           done,
+	}, nil
+}
+
+type execManagedProcess struct {
+	mu             sync.Mutex
+	cmd            *exec.Cmd
+	healthEndpoint string
+	done           chan error
+	stopped        bool
+}
+
+func (p *execManagedProcess) HealthEndpoint() string {
+	return p.healthEndpoint
+}
+
+func (p *execManagedProcess) Wait() error {
+	if p == nil || p.done == nil {
+		return nil
+	}
+	return <-p.done
+}
+
+func (p *execManagedProcess) Stop(ctx context.Context) error {
+	if p == nil {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.stopped || p.cmd == nil || p.cmd.Process == nil {
+		return nil
+	}
+	p.stopped = true
+	if err := p.cmd.Process.Kill(); err != nil {
+		return err
+	}
+	select {
+	case <-p.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func defaultLlamaCppServerStartBuilder(
+	identity Identity,
+	inspection CacheInspection,
+	worker *interfaces.WorkerConfig,
+) (ProcessStartSpec, error) {
+	if worker == nil {
+		return ProcessStartSpec{}, fmt.Errorf("local model worker is required for supervised backend %q", identity.Backend)
+	}
+	command := strings.TrimSpace(worker.Command)
+	if command == "" {
+		command = localmodels.DefaultOmniVoiceCommand
+	}
+	healthEndpoint, args, err := supervisedHealthEndpointAndArgs(worker.Args)
+	if err != nil {
+		return ProcessStartSpec{}, err
+	}
+	if strings.TrimSpace(inspection.CachePath) == "" {
+		return ProcessStartSpec{}, fmt.Errorf("%w: cache path is required for supervised runtime %q", ErrMissingAssets, identity.Name)
+	}
+	args = append([]string{"serve"}, args...)
+	args = append(args, "--cache-path", inspection.CachePath)
+	return ProcessStartSpec{
+		Command:        command,
+		Args:           args,
+		HealthEndpoint: healthEndpoint,
+	}, nil
+}
+
+func supervisedHealthEndpointAndArgs(workerArgs []string) (string, []string, error) {
+	args := append([]string(nil), workerArgs...)
+	for i := 0; i < len(args); i++ {
+		if args[i] != supervisedHealthEndpointFlag {
+			continue
+		}
+		if i+1 >= len(args) {
+			return "", nil, fmt.Errorf("flag %q requires a value", supervisedHealthEndpointFlag)
+		}
+		endpoint := strings.TrimSpace(args[i+1])
+		remaining := append(append([]string(nil), args[:i]...), args[i+2:]...)
+		if endpoint == "" {
+			return "", nil, fmt.Errorf("flag %q requires a non-empty value", supervisedHealthEndpointFlag)
+		}
+		return endpoint, remaining, nil
+	}
+	return "", args, fmt.Errorf("supervised llama.cpp runtime requires worker arg %q", supervisedHealthEndpointFlag)
 }
