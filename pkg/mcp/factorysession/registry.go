@@ -83,7 +83,7 @@ func validateSourceTool() ToolDefinition {
 func startSyncTool() ToolDefinition {
 	return ToolDefinition{
 		Name: ToolStartSync,
-		Description: "Start one mock-backed sync Factory Session and wait for terminal completion or timeout. " +
+		Description: "Start one sync Factory Session and wait for terminal completion or timeout. " +
 			"Maps to POST /factory-sessions/sync.",
 		InputSchema:  factorySessionExecutionRequestSchema(),
 		OutputSchema: toolResponseSchema(factorySessionSyncExecutionResponseSchema()),
@@ -103,7 +103,7 @@ func startSyncTool() ToolDefinition {
 func startAsyncTool() ToolDefinition {
 	return ToolDefinition{
 		Name: ToolStartAsync,
-		Description: "Start one mock-backed async Factory Session and return an accepted or running summary for polling. " +
+		Description: "Start one async Factory Session and return an accepted or running summary for polling. " +
 			"Maps to POST /factory-sessions/async.",
 		InputSchema:  factorySessionExecutionRequestSchema(),
 		OutputSchema: toolResponseSchema(factorySessionExecutionResponseSchema()),
