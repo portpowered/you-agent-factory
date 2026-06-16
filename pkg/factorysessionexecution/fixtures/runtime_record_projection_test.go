@@ -104,14 +104,10 @@ func TestProjectRuntimeExecutionRecords_ProgressPrimitivesFixture(t *testing.T) 
 func newJavaScriptRuntimeServiceWithFixture(t *testing.T, fixtureName, workflowName string) fse.Service {
 	t.Helper()
 	projectRoot := setupRuntimeWorkflowFixture(t, fixtureName, workflowName)
-	service, err := fse.NewExecutionService(
-		fse.ExecutionProviderJavaScriptRuntime,
-		fse.ServiceConfig{ProjectRoot: projectRoot},
-	)
-	if err != nil {
-		t.Fatalf("NewExecutionService: %v", err)
-	}
-	return service
+	return fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
+		ProjectRoot:     projectRoot,
+		PersistSessions: false,
+	})
 }
 
 func setupRuntimeWorkflowFixture(t *testing.T, fixtureName, workflowName string) string {

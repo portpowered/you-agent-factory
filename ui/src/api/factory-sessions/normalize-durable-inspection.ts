@@ -1,6 +1,7 @@
 import type { components } from "../generated/openapi";
 import {
   FactoryOrchestratorKind,
+  FactorySessionDurableLifecycleStatus,
   FactorySessionResultStatus,
   FactorySessionStatus,
 } from "../generated/openapi";
@@ -190,6 +191,63 @@ export function isDurableJavaScriptSession(
   );
 }
 
+export interface DurableSupplementalReadPlan {
+  fetchDispatches: boolean;
+  fetchFinalResults: boolean;
+  fetchPartialResults: boolean;
+}
+
+export function durableSupplementalReadPlan(input: {
+  durableLifecycleStatus?: FactorySessionDurableReadModel["status"];
+  partialResult?: FactorySessionPartialResult;
+  progress?: FactorySessionDurableReadModel["progress"];
+  result?: FactorySessionLiveResult;
+  resultSummary?: FactorySessionDurableReadModel["resultSummary"];
+}): DurableSupplementalReadPlan {
+  return {
+    fetchDispatches: shouldFetchDurableDispatches(input),
+    fetchFinalResults: shouldFetchDurableFinalResults(input),
+    fetchPartialResults: shouldFetchDurablePartialResults(input),
+  };
+}
+
+export function shouldFetchDurableDispatches(input: {
+  durableLifecycleStatus?: FactorySessionDurableReadModel["status"];
+  progress?: FactorySessionDurableReadModel["progress"];
+}): boolean {
+  const totalDispatches = input.progress?.totalDispatches ?? 0;
+  if (totalDispatches === 0) {
+    return false;
+  }
+
+  return isInspectableDurableLifecycle(input.durableLifecycleStatus);
+}
+
+export function shouldFetchDurableFinalResults(input: {
+  durableLifecycleStatus?: FactorySessionDurableReadModel["status"];
+  result?: FactorySessionLiveResult;
+  resultSummary?: FactorySessionDurableReadModel["resultSummary"];
+}): boolean {
+  if (input.result) {
+    return false;
+  }
+
+  if (!isInspectableDurableLifecycle(input.durableLifecycleStatus)) {
+    return false;
+  }
+
+  const resultStatus = input.resultSummary?.resultStatus;
+  if (
+    resultStatus === FactorySessionResultStatus.FactorySessionResultStatusPartial ||
+    resultStatus ===
+      FactorySessionResultStatus.FactorySessionResultStatusFailedWithPartial
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 export function shouldFetchDurablePartialResults(input: {
   partialResult?: FactorySessionPartialResult;
   result?: FactorySessionLiveResult;
@@ -204,5 +262,29 @@ export function shouldFetchDurablePartialResults(input: {
     return false;
   }
 
-  return true;
+  return (
+    resultStatus === FactorySessionResultStatus.FactorySessionResultStatusPartial ||
+    resultStatus ===
+      FactorySessionResultStatus.FactorySessionResultStatusFailedWithPartial
+  );
+}
+
+function isInspectableDurableLifecycle(
+  status?: FactorySessionDurableReadModel["status"],
+): boolean {
+  if (!status) {
+    return false;
+  }
+
+  switch (status) {
+    case FactorySessionDurableLifecycleStatus.FactorySessionDurableLifecycleStatusSucceeded:
+    case FactorySessionDurableLifecycleStatus.FactorySessionDurableLifecycleStatusFailed:
+    case FactorySessionDurableLifecycleStatus.FactorySessionDurableLifecycleStatusCanceled:
+    case FactorySessionDurableLifecycleStatus.FactorySessionDurableLifecycleStatusTimedOut:
+    case FactorySessionDurableLifecycleStatus.FactorySessionDurableLifecycleStatusInterrupted:
+    case FactorySessionDurableLifecycleStatus.FactorySessionDurableLifecycleStatusTerminated:
+      return true;
+    default:
+      return false;
+  }
 }

@@ -7,19 +7,8 @@ import {
   type FactorySessionLiveResult,
   type FactorySessionPartialResult,
   type FactorySessionsAPIError,
-  durableResultSurfacesFromResultsResponse,
-  getFactorySession,
-  getFactorySessionDurableResults,
-  getFactorySessionPartialResult,
-  getFactorySessionResult,
-  listFactorySessionDispatches,
 } from "../../../api/factory-sessions";
-import {
-  dispatchSummariesToFactoryDispatches,
-  isDurableJavaScriptSession,
-  shouldFetchDurablePartialResults,
-} from "../../../api/factory-sessions/normalize-durable-inspection";
-import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
+import { loadFactorySessionDetailData } from "./load-factory-session-detail-data";
 
 export const FACTORY_SESSION_DETAIL_QUERY_KEY = [
   "factory-session-detail",
@@ -49,86 +38,7 @@ export function useFactorySessionDetail(
         throw new Error("Factory session detail requires a selected session id.");
       }
 
-      const normalized = await getFactorySession(sessionID);
-      let { durableLifecycleStatus, partialResult, result, resultSummary, session } =
-        normalized;
-
-      if (session.runtime.orchestratorKind !== FactoryOrchestratorKind.JAVASCRIPT) {
-        return { durableLifecycleStatus, session };
-      }
-
-      const durableJavaScript = isDurableJavaScriptSession(
-        session.id,
-        session.runtime.orchestratorKind,
-        durableLifecycleStatus,
-      );
-      const fetchDurablePartialResults =
-        durableJavaScript &&
-        shouldFetchDurablePartialResults({
-          partialResult,
-          result,
-          resultSummary,
-        });
-
-      const [dispatchList, liveResult, livePartialResult, durableFinalResult, durablePartialResult] =
-        await Promise.all([
-          durableJavaScript
-            ? listFactorySessionDispatches(sessionID).catch(() => undefined)
-            : Promise.resolve(undefined),
-          durableJavaScript
-            ? Promise.resolve(undefined)
-            : getFactorySessionResult(sessionID).catch(() => undefined),
-          durableJavaScript
-            ? Promise.resolve(undefined)
-            : getFactorySessionPartialResult(sessionID).catch(() => undefined),
-          durableJavaScript && !result
-            ? getFactorySessionDurableResults(sessionID, "final").catch(() => undefined)
-            : Promise.resolve(undefined),
-          fetchDurablePartialResults
-            ? getFactorySessionDurableResults(sessionID, "partial").catch(() => undefined)
-            : Promise.resolve(undefined),
-        ]);
-
-      if (dispatchList && dispatchList.dispatches.length > 0) {
-        session = {
-          ...session,
-          runtime: {
-            ...session.runtime,
-            dispatches: dispatchSummariesToFactoryDispatches(
-              session.id,
-              session.runtime.orchestratorKind,
-              dispatchList.dispatches,
-            ),
-          },
-        };
-      }
-
-      if (!result) {
-        result =
-          durableFinalResult === undefined
-            ? liveResult
-            : durableResultSurfacesFromResultsResponse(
-                durableFinalResult,
-                session.runtime.javascript?.phase,
-              ).result;
-      }
-
-      if (!partialResult) {
-        partialResult =
-          durablePartialResult === undefined
-            ? livePartialResult
-            : durableResultSurfacesFromResultsResponse(
-                durablePartialResult,
-                session.runtime.javascript?.phase,
-              ).partialResult;
-      }
-
-      return {
-        durableLifecycleStatus,
-        partialResult,
-        result,
-        session,
-      };
+      return loadFactorySessionDetailData(sessionID);
     },
     enabled: sessionID !== null && sessionID.trim() !== "",
     gcTime: 0,

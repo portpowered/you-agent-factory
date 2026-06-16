@@ -551,3 +551,4 @@ func TestRunSync_UsesSharedServicePrimaryResultProjection(t *testing.T) {
 		t.Fatalf("CLI output diverged from shared SyncStartResponseToAPI projection")
 	}
 }
+

@@ -133,6 +133,7 @@ export const DurableJavaScriptSessionInspectionDetails = {
 };
 
 export const DurableJavaScriptSessionSummary = {
+  tags: ["test"],
   parameters: {
     dashboardApi: {
       fetchMocks: [

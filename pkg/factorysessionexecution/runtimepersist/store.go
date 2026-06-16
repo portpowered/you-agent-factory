@@ -1,0 +1,69 @@
+package runtimepersist
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+)
+
+const (
+	durableSessionsHomeDir = ".you-agent-factory"
+	durableSessionsSubdir  = "durable-sessions"
+)
+
+var durableSessionIDPattern = regexp.MustCompile(`^dur-sess-[a-f0-9]{32}$`)
+
+// DirForProjectRoot returns the project-local durable session persistence directory.
+func DirForProjectRoot(projectRoot string) string {
+	return filepath.Join(strings.TrimSpace(projectRoot), durableSessionsHomeDir, durableSessionsSubdir)
+}
+
+// SaveBytes writes one terminal runtime session snapshot payload for later CLI inspection.
+func SaveBytes(dir, sessionID string, encoded []byte) error {
+	if err := validateSessionID(sessionID); err != nil {
+		return err
+	}
+	trimmedDir := strings.TrimSpace(dir)
+	if trimmedDir == "" {
+		return errors.New("durable session persistence directory is required")
+	}
+	if err := os.MkdirAll(trimmedDir, 0o700); err != nil {
+		return fmt.Errorf("create durable session persistence directory: %w", err)
+	}
+	path := filepath.Join(trimmedDir, sessionID+".json")
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+		return fmt.Errorf("write durable session snapshot: %w", err)
+	}
+	return nil
+}
+
+// LoadBytes reads one persisted runtime session snapshot payload.
+func LoadBytes(dir, sessionID string) ([]byte, error) {
+	if err := validateSessionID(sessionID); err != nil {
+		return nil, err
+	}
+	trimmedDir := strings.TrimSpace(dir)
+	if trimmedDir == "" {
+		return nil, errors.New("durable session persistence directory is required")
+	}
+	path := filepath.Join(trimmedDir, sessionID+".json")
+	encoded, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("read durable session snapshot: %w", err)
+	}
+	return encoded, nil
+}
+
+func validateSessionID(sessionID string) error {
+	trimmed := strings.TrimSpace(sessionID)
+	if !durableSessionIDPattern.MatchString(trimmed) {
+		return fmt.Errorf("invalid durable session id %q", sessionID)
+	}
+	return nil
+}

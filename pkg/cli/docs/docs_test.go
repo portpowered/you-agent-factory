@@ -817,8 +817,14 @@ func TestMarkdown_MCPReturnsRawAuthoredMarkdown(t *testing.T) {
 		`"args": ["mcp", "serve"]`,
 		"you.factory_session.validate_source",
 		"you.factory_session.start_async",
+		"you docs mcp-hosts",
+		"serve_smoke_test.go",
+		"serve_runtime_smoke_test.go",
 		"Automation-Backed In Repo",
-		"Follow-Up Cell For Async Install Smoke",
+		"## Serve Mode Scope Boundaries",
+		"you mcp serve --runtime",
+		"Fixture-backed (default)",
+		"Runtime-backed",
 		"`you docs orchestrators`",
 	} {
 		if !strings.Contains(got, want) {
@@ -827,6 +833,8 @@ func TestMarkdown_MCPReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 	for _, absent := range []string{
 		"[Orchestrators](orchestrators.md)",
+		"Follow-Up Cell For Async Install Smoke",
+		"follow-up-cell-mcp-session-serve.md",
 	} {
 		if strings.Contains(got, absent) {
 			t.Fatalf("Markdown(mcp) still contains packaged-topic markdown link %q:\n%s", absent, got)

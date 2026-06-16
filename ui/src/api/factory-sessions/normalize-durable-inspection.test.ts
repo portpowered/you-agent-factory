@@ -1,8 +1,11 @@
 import { FactoryOrchestratorKind } from "../generated/openapi";
 import {
   dispatchSummariesToFactoryDispatches,
+  durableSupplementalReadPlan,
   resultSurfacesFromDurableReadModel,
   resultSurfacesFromDurableResult,
+  shouldFetchDurableDispatches,
+  shouldFetchDurableFinalResults,
   shouldFetchDurablePartialResults,
 } from "./normalize-durable-inspection";
 
@@ -156,9 +159,73 @@ describe("shouldFetchDurablePartialResults", () => {
     ).toBe(false);
   });
 
-  it("allows durable partial-result fetch for in-flight sessions without partial surfaces", () => {
-    expect(shouldFetchDurablePartialResults({ resultSummary: undefined })).toBe(
-      true,
-    );
+  it("skips durable partial-result fetch for running sessions without partial result status", () => {
+    expect(
+      shouldFetchDurablePartialResults({
+        resultSummary: undefined,
+      }),
+    ).toBe(false);
+  });
+
+  it("allows durable partial-result fetch when result summary is partial", () => {
+    expect(
+      shouldFetchDurablePartialResults({
+        resultSummary: {
+          resultStatus: "PARTIAL",
+        },
+      }),
+    ).toBe(true);
+  });
+});
+
+describe("durable supplemental read plan", () => {
+  it("skips supplemental reads for in-flight durable JavaScript summary sessions", () => {
+    expect(
+      durableSupplementalReadPlan({
+        durableLifecycleStatus: "RUNNING",
+        progress: {
+          completedDispatches: 1,
+          failedDispatches: 0,
+          inFlightDispatches: 1,
+          totalDispatches: 3,
+        },
+        resultSummary: undefined,
+      }),
+    ).toEqual({
+      fetchDispatches: false,
+      fetchFinalResults: false,
+      fetchPartialResults: false,
+    });
+  });
+
+  it("fetches dispatch detail for terminal durable sessions with dispatch activity", () => {
+    expect(
+      shouldFetchDurableDispatches({
+        durableLifecycleStatus: "SUCCEEDED",
+        progress: {
+          completedDispatches: 2,
+          failedDispatches: 0,
+          inFlightDispatches: 0,
+          totalDispatches: 2,
+        },
+      }),
+    ).toBe(true);
+    expect(
+      shouldFetchDurableFinalResults({
+        durableLifecycleStatus: "SUCCEEDED",
+        result: {
+          resultArtifactRef: {
+            id: "art-js-success-001",
+            kind: "FINAL_RESULT",
+            visibility: "PUBLIC",
+          },
+          sessionId: "dur-sess-js-success-002",
+          status: "FINISHED",
+        },
+        resultSummary: {
+          resultStatus: "FINAL",
+        },
+      }),
+    ).toBe(false);
   });
 });

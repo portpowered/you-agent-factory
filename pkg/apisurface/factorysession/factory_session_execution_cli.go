@@ -14,6 +14,7 @@ type CLIStartInput struct {
 	Args            map[string]any
 	RequestedPolicy map[string]any
 	Wait            *factorysessionexecution.WaitOptions
+	Runtime         *factorysessionexecution.RuntimeOptions
 }
 
 // StartRequestFromCLI maps one CLI-resolved durable execution request into the
@@ -25,6 +26,7 @@ func StartRequestFromCLI(input CLIStartInput) (factorysessionexecution.StartRequ
 		Args:            input.Args,
 		RequestedPolicy: input.RequestedPolicy,
 		Wait:            input.Wait,
+		Runtime:         input.Runtime,
 	})
 }
 

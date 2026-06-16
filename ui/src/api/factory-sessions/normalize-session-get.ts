@@ -19,6 +19,7 @@ export type FactorySessionPartialResult =
 
 export interface NormalizedFactorySessionGet {
   durableLifecycleStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+  durableProgress?: components["schemas"]["FactorySessionDurableProgressCounts"];
   partialResult?: FactorySessionPartialResult;
   result?: FactorySessionLiveResult;
   resultSummary?: FactorySessionDurableReadModel["resultSummary"];
@@ -36,6 +37,7 @@ export function normalizeFactorySessionGetResponse(
     const resultSurfaces = resultSurfacesFromDurableReadModel(responseBody);
     return {
       durableLifecycleStatus: responseBody.status,
+      durableProgress: responseBody.progress,
       partialResult: resultSurfaces.partialResult,
       result: resultSurfaces.result,
       resultSummary: responseBody.resultSummary,

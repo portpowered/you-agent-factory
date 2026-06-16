@@ -173,6 +173,19 @@ describe("FactorySessionDetailPanel", () => {
     expect(screen.getAllByText("Running").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("verify")).toBeTruthy();
     expect(screen.queryAllByText("Idle")).toHaveLength(0);
+
+    const fetchUrls = vi.mocked(globalThis.fetch).mock.calls.map(([input]) =>
+      String(input),
+    );
+    expect(fetchUrls).toHaveLength(1);
+    expect(fetchUrls[0]).toContain("/factory-sessions/dur-sess-js-run-n-001");
+    expect(fetchUrls.some((url) => url.includes("/dispatches"))).toBe(false);
+    expect(fetchUrls.some((url) => url.includes("/results?mode=final"))).toBe(
+      false,
+    );
+    expect(fetchUrls.some((url) => url.includes("/results?mode=partial"))).toBe(
+      false,
+    );
   });
 
   it("shows durable JavaScript dispatch, warning, artifact, and result inspection details", async () => {
