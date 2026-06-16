@@ -1,6 +1,7 @@
 package workflowruntime
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -47,7 +48,7 @@ type ChildExecutionResult struct {
 
 // ChildExecutor executes one child-agent request and appends dispatch-like records.
 type ChildExecutor interface {
-	Execute(req ChildExecutionRequest) (ChildExecutionResult, error)
+	Execute(ctx context.Context, req ChildExecutionRequest) (ChildExecutionResult, error)
 }
 
 // FakeChildExecutor provides deterministic fake child execution for workflow tests.
@@ -66,9 +67,12 @@ func NewFakeChildExecutor(sessionID string, records ChildRecordSink) *FakeChildE
 
 // Execute records queued, running, and completed child dispatch transitions and
 // returns a deterministic fake child result derived from the request.
-func (e *FakeChildExecutor) Execute(req ChildExecutionRequest) (ChildExecutionResult, error) {
+func (e *FakeChildExecutor) Execute(ctx context.Context, req ChildExecutionRequest) (ChildExecutionResult, error) {
+	if err := ctx.Err(); err != nil {
+		return ChildExecutionResult{}, err
+	}
 	if strings.HasPrefix(req.Prompt, "fail:") {
-		return e.executeFailed(req)
+		return e.executeFailed(ctx, req)
 	}
 
 	dispatchID, childIndex := e.childDispatchIdentity(req)
@@ -113,7 +117,10 @@ func (e *FakeChildExecutor) Execute(req ChildExecutionRequest) (ChildExecutionRe
 	}, nil
 }
 
-func (e *FakeChildExecutor) executeFailed(req ChildExecutionRequest) (ChildExecutionResult, error) {
+func (e *FakeChildExecutor) executeFailed(ctx context.Context, req ChildExecutionRequest) (ChildExecutionResult, error) {
+	if err := ctx.Err(); err != nil {
+		return ChildExecutionResult{}, err
+	}
 	dispatchID, childIndex := e.childDispatchIdentity(req)
 	base := ChildDispatchRecord{
 		DispatchID:      dispatchID,

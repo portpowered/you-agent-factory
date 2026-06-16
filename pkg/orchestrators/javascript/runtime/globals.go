@@ -1,6 +1,7 @@
 package workflowruntime
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -16,6 +17,7 @@ type runtimeGlobals struct {
 	vm            *goja.Runtime
 	policy        workflowpolicy.EffectivePolicy
 	sessionID     string
+	ctx           context.Context
 	records       *recordCollector
 	childExecutor ChildExecutor
 	onArtifact    func(kind string, content json.RawMessage) error

@@ -195,7 +195,7 @@ type stubChildExecutor struct {
 	mode   string
 }
 
-func (s *stubChildExecutor) Execute(req workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+func (s *stubChildExecutor) Execute(_ context.Context, req workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

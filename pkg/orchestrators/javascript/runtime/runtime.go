@@ -43,6 +43,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 		vm:            vm,
 		policy:        policy,
 		sessionID:     sessionID,
+		ctx:           ctx,
 		records:       records,
 		childExecutor: childExecutorForRun(sessionID, records, hooks),
 		onArtifact:    hooks.OnArtifact,

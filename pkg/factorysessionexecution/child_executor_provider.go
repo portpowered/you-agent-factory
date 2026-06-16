@@ -49,9 +49,12 @@ func NewProviderChildExecutor(
 
 // Execute records queued and running dispatch transitions, calls the provider, and
 // appends terminal child dispatch records for shared session inspection.
-func (e *ProviderChildExecutor) Execute(req workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+	if err := ctx.Err(); err != nil {
+		return workflowruntime.ChildExecutionResult{}, err
+	}
 	if strings.HasPrefix(req.Prompt, "fail:") {
-		return e.executeFailed(req)
+		return e.executeFailed(ctx, req)
 	}
 
 	dispatchID, childIndex := e.childDispatchIdentity(req)
@@ -78,7 +81,7 @@ func (e *ProviderChildExecutor) Execute(req workflowruntime.ChildExecutionReques
 	e.records.AppendChildDispatch(base, workflowruntime.ChildDispatchStatusRunning)
 
 	inferReq := providerInferenceRequestFromChild(e.sessionID, dispatchID, req)
-	resp, err := e.provider.Infer(context.Background(), inferReq)
+	resp, err := e.provider.Infer(ctx, inferReq)
 	if err != nil {
 		return e.failedChildResult(base, req, dispatchID, childIndex, providerName, providerSessionRef, err)
 	}
@@ -108,7 +111,10 @@ func (e *ProviderChildExecutor) Execute(req workflowruntime.ChildExecutionReques
 	}, nil
 }
 
-func (e *ProviderChildExecutor) executeFailed(req workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+func (e *ProviderChildExecutor) executeFailed(ctx context.Context, req workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+	if err := ctx.Err(); err != nil {
+		return workflowruntime.ChildExecutionResult{}, err
+	}
 	dispatchID, childIndex := e.childDispatchIdentity(req)
 	base := workflowruntime.ChildDispatchRecord{
 		DispatchID:    dispatchID,
@@ -122,7 +128,7 @@ func (e *ProviderChildExecutor) executeFailed(req workflowruntime.ChildExecution
 	e.records.AppendChildDispatch(base, workflowruntime.ChildDispatchStatusRunning)
 
 	inferReq := providerInferenceRequestFromChild(e.sessionID, dispatchID, req)
-	_, err := e.provider.Infer(context.Background(), inferReq)
+	_, err := e.provider.Infer(ctx, inferReq)
 	if err == nil {
 		err = fmt.Errorf("live child failed: %s", strings.TrimPrefix(req.Prompt, "fail:"))
 	}

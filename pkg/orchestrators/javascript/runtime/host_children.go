@@ -33,7 +33,7 @@ func (g *runtimeGlobals) hostAgentRun(call goja.FunctionCall) goja.Value {
 	if err := g.denyChildRequest(req); err != nil {
 		panic(g.vm.NewTypeError(err.Error()))
 	}
-	result, err := g.childExecutor.Execute(req)
+	result, err := g.childExecutor.Execute(g.ctx, req)
 	if err != nil {
 		panic(g.vm.NewGoError(err))
 	}
@@ -264,8 +264,18 @@ func (g *runtimeGlobals) executeParallelAgentSpecs(items []parallelItem, concurr
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
+			if err := g.ctx.Err(); err != nil {
+				results[item.index] = failedChildResultValue("", "", err)
+				return
+			}
+
 			// Lower-index items wait longer so completion order can differ from input order.
 			time.Sleep(time.Duration(len(results)-item.index) * time.Millisecond)
+
+			if err := g.ctx.Err(); err != nil {
+				results[item.index] = failedChildResultValue("", "", err)
+				return
+			}
 
 			req, err := childExecutionRequestFromSpec(item.spec, g.workflowName(), g.argsSubject())
 			if err != nil {
@@ -277,7 +287,7 @@ func (g *runtimeGlobals) executeParallelAgentSpecs(items []parallelItem, concurr
 				return
 			}
 			req.ReservedIdentity = identityByIndex[item.index]
-			result, err := g.childExecutor.Execute(req)
+			result, err := g.childExecutor.Execute(g.ctx, req)
 			if err != nil {
 				results[item.index] = failedChildResultValue(req.Label, result.ExecutionMode, err)
 				return

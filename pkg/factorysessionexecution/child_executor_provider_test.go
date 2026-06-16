@@ -2,6 +2,7 @@ package factorysessionexecution
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -23,7 +24,7 @@ func TestProviderChildExecutor_Execute_RecordsLiveProviderDispatch(t *testing.T)
 	collectorSink := newTestChildRecordSink()
 	executor := NewProviderChildExecutor("session-live-child", provider, collectorSink)
 
-	result, err := executor.Execute(workflowruntime.ChildExecutionRequest{
+	result, err := executor.Execute(context.Background(), workflowruntime.ChildExecutionRequest{
 		Prompt:       "summarize workflows",
 		Label:        "summarize-findings",
 		Model:        "gpt-test",
@@ -143,7 +144,7 @@ func TestProviderChildExecutor_Execute_FailedChild_RecordsTypedFailureDetail(t *
 	collectorSink := newTestChildRecordSink()
 	executor := NewProviderChildExecutor("session-live-child-failure", provider, collectorSink)
 
-	_, err := executor.Execute(workflowruntime.ChildExecutionRequest{
+	_, err := executor.Execute(context.Background(), workflowruntime.ChildExecutionRequest{
 		Prompt:       "fail:simulated provider child error",
 		Label:        "summarize-findings",
 		WorkflowName: "parallel-child-failure",
@@ -166,4 +167,106 @@ func TestProviderChildExecutor_Execute_FailedChild_RecordsTypedFailureDetail(t *
 	if dispatch.FailureDetail.Message == "" {
 		t.Fatal("failureDetail message is empty")
 	}
+}
+
+func TestProviderChildExecutor_Execute_CanceledContext_InterruptsProviderInfer(t *testing.T) {
+	provider := newBlockingMockProvider()
+	collectorSink := newTestChildRecordSink()
+	executor := NewProviderChildExecutor("session-live-child-cancel", provider, collectorSink)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := executor.Execute(ctx, workflowruntime.ChildExecutionRequest{
+			Prompt:       "summarize workflows",
+			WorkflowName: "agent-run-fake-child",
+		})
+		done <- err
+	}()
+
+	provider.waitForInferStart(t)
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("Execute: error = nil, want context cancellation")
+		}
+		if !strings.Contains(err.Error(), "context canceled") {
+			t.Fatalf("Execute error = %v, want context canceled", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Execute did not return after context cancellation")
+	}
+	if provider.inferContextsHonored() == 0 {
+		t.Fatal("provider Infer did not observe canceled context")
+	}
+}
+
+func TestProviderChildExecutor_Execute_TimedOutContext_InterruptsProviderInfer(t *testing.T) {
+	provider := newBlockingMockProvider()
+	collectorSink := newTestChildRecordSink()
+	executor := NewProviderChildExecutor("session-live-child-timeout", provider, collectorSink)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	_, err := executor.Execute(ctx, workflowruntime.ChildExecutionRequest{
+		Prompt:       "summarize workflows",
+		WorkflowName: "agent-run-fake-child",
+	})
+	if err == nil {
+		t.Fatal("Execute: error = nil, want context deadline exceeded")
+	}
+	if !strings.Contains(err.Error(), "deadline exceeded") {
+		t.Fatalf("Execute error = %v, want deadline exceeded", err)
+	}
+	if provider.inferContextsHonored() == 0 {
+		t.Fatal("provider Infer did not observe timed-out context")
+	}
+}
+
+type blockingMockProvider struct {
+	mu              sync.Mutex
+	inferStarted    chan struct{}
+	inferStartedSet bool
+	contextCanceled int
+}
+
+func newBlockingMockProvider() *blockingMockProvider {
+	return &blockingMockProvider{
+		inferStarted: make(chan struct{}),
+	}
+}
+
+func (m *blockingMockProvider) Infer(ctx context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+	m.mu.Lock()
+	if !m.inferStartedSet {
+		m.inferStartedSet = true
+		close(m.inferStarted)
+	}
+	m.mu.Unlock()
+
+	<-ctx.Done()
+	m.mu.Lock()
+	m.contextCanceled++
+	m.mu.Unlock()
+	return interfaces.InferenceResponse{}, ctx.Err()
+}
+
+func (m *blockingMockProvider) waitForInferStart(t *testing.T) {
+	t.Helper()
+	select {
+	case <-m.inferStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("provider Infer did not start")
+	}
+}
+
+func (m *blockingMockProvider) inferContextsHonored() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.contextCanceled
 }
