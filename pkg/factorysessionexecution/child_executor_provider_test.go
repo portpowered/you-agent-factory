@@ -53,6 +53,9 @@ func TestProviderChildExecutor_Execute_RecordsLiveProviderDispatch(t *testing.T)
 	if provider.callCount != 1 {
 		t.Fatalf("provider call count = %d, want 1", provider.callCount)
 	}
+	if got := collectorSink.statusTransitions("dispatch-1"); len(got) != 3 {
+		t.Fatalf("recorded status transitions = %#v, want queued/running/completed", got)
+	}
 }
 
 type unitMockProvider struct {
@@ -114,4 +117,22 @@ func (s *testChildRecordSink) executionModes() []string {
 		}
 	}
 	return modes
+}
+
+func (s *testChildRecordSink) statusTransitions(dispatchID string) []string {
+	transitions := make([]string, 0)
+	for _, record := range s.records {
+		if record.ChildDispatch == nil || record.ChildDispatch.DispatchID != dispatchID {
+			continue
+		}
+		status := record.ChildDispatch.Status
+		if status == "" {
+			continue
+		}
+		if len(transitions) > 0 && transitions[len(transitions)-1] == status {
+			continue
+		}
+		transitions = append(transitions, status)
+	}
+	return transitions
 }

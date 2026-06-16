@@ -104,6 +104,46 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_ProjectsRealDispatchInspecti
 	if provider.callCount != 1 {
 		t.Fatalf("provider call count = %d, want 1", provider.callCount)
 	}
+
+	if len(dispatch.OutputArtifactIDs) != 1 || dispatch.OutputArtifactIDs[0] != "child-artifact-1" {
+		t.Fatalf("outputArtifactIds = %#v, want [child-artifact-1]", dispatch.OutputArtifactIDs)
+	}
+	if len(dispatchDetail.StatusTransitions) != 3 {
+		t.Fatalf("statusTransitions = %#v, want queued/running/completed", dispatchDetail.StatusTransitions)
+	}
+	wantTransitions := []fse.DispatchStatus{
+		fse.DispatchStatusQueued,
+		fse.DispatchStatusRunning,
+		fse.DispatchStatusCompleted,
+	}
+	for index, got := range dispatchDetail.StatusTransitions {
+		if got != wantTransitions[index] {
+			t.Fatalf("statusTransitions[%d] = %q, want %q", index, got, wantTransitions[index])
+		}
+	}
+	if len(dispatchDetail.ArtifactIDs) != 1 || dispatchDetail.ArtifactIDs[0] != "child-artifact-1" {
+		t.Fatalf("dispatch artifactIds = %#v, want [child-artifact-1]", dispatchDetail.ArtifactIDs)
+	}
+
+	artifacts, err := service.ListArtifacts(context.Background(), completed.SessionID)
+	if err != nil {
+		t.Fatalf("ListArtifacts: %v", err)
+	}
+	if len(artifacts.Artifacts) != 1 {
+		t.Fatalf("artifacts = %#v, want one child artifact", artifacts.Artifacts)
+	}
+	childArtifact := artifacts.Artifacts[0]
+	if childArtifact.ID != "child-artifact-1" || childArtifact.DispatchID != "dispatch-1" {
+		t.Fatalf("child artifact = %#v", childArtifact)
+	}
+	wantHref := "/factory-sessions/" + completed.SessionID + "/artifacts/child-artifact-1"
+	if childArtifact.RetrievalRef == nil || childArtifact.RetrievalRef.Href != wantHref {
+		t.Fatalf("child artifact retrieval = %#v, want %q", childArtifact.RetrievalRef, wantHref)
+	}
+
+	if read.ArtifactCount != 1 || len(read.ArtifactRefs) != 1 || read.ArtifactRefs[0].ID != "child-artifact-1" {
+		t.Fatalf("session artifact refs = count %d refs %#v", read.ArtifactCount, read.ArtifactRefs)
+	}
 }
 
 type fixtureMockProvider struct {

@@ -6,6 +6,9 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 )
 
 func TestNormalizeResultRequest_DefaultsAndValidation(t *testing.T) {
@@ -167,6 +170,67 @@ func TestBuildCanonicalSessionEvents_RunningAndTerminalSessions(t *testing.T) {
 		t.Fatalf("terminal events = %d, want 3", len(terminalEvents))
 	}
 	assertCanonicalEventEnvelope(t, terminalEvents[2], "SESSION_COMPLETED", "session-completed/dur-sess-js-success-002")
+}
+
+func TestProjectRuntimeExecutionRecords_LiveChildDispatch_ProjectsLifecycleArtifactsAndProviderSession(t *testing.T) {
+	artifactRef := workflowresult.FormatArtifactURI("session-live-child", "child-artifact-1")
+	records := []workflowruntime.RuntimeRecord{
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:    "dispatch-1",
+				Status:        workflowruntime.ChildDispatchStatusQueued,
+				Label:         "summarize-findings",
+				ExecutionMode: ChildExecutorModeLive,
+				ArtifactRef:   artifactRef,
+			},
+		},
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:    "dispatch-1",
+				Status:        workflowruntime.ChildDispatchStatusRunning,
+				Label:         "summarize-findings",
+				ExecutionMode: ChildExecutorModeLive,
+				ArtifactRef:   artifactRef,
+			},
+		},
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:         "dispatch-1",
+				Status:             workflowruntime.ChildDispatchStatusCompleted,
+				Label:              "summarize-findings",
+				ExecutionMode:      ChildExecutorModeLive,
+				Provider:           "mock",
+				ProviderSessionRef: "provider-session-42",
+				ArtifactRef:        artifactRef,
+			},
+		},
+	}
+
+	observedAt := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+	projection := ProjectRuntimeExecutionRecords("session-live-child", records, observedAt)
+	if len(projection.Dispatches) != 1 {
+		t.Fatalf("dispatches = %#v, want one dispatch", projection.Dispatches)
+	}
+	dispatch := projection.Dispatches[0]
+	if dispatch.Status != DispatchStatusCompleted {
+		t.Fatalf("dispatch status = %q, want COMPLETED", dispatch.Status)
+	}
+	if len(dispatch.ProviderSessionRefs) != 1 || dispatch.ProviderSessionRefs[0].ID != "provider-session-42" {
+		t.Fatalf("providerSessionRefs = %#v", dispatch.ProviderSessionRefs)
+	}
+	if len(dispatch.OutputArtifactIDs) != 1 || dispatch.OutputArtifactIDs[0] != "child-artifact-1" {
+		t.Fatalf("outputArtifactIds = %#v", dispatch.OutputArtifactIDs)
+	}
+	transitions := projection.DispatchStatusTransitions["dispatch-1"]
+	if len(transitions) != 3 {
+		t.Fatalf("statusTransitions = %#v, want queued/running/completed", transitions)
+	}
+	if len(projection.Artifacts) != 1 || projection.Artifacts[0].ID != "child-artifact-1" {
+		t.Fatalf("artifacts = %#v", projection.Artifacts)
+	}
 }
 
 func TestFilterEventsAfterReconnect_AfterEventIDAndSequence(t *testing.T) {

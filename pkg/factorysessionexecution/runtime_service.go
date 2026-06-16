@@ -20,13 +20,14 @@ func NewDurableSessionID() string {
 }
 
 type runtimeSessionState struct {
-	session            SessionReadResult
-	result             ResultReadResult
-	dispatches         []DispatchSummary
-	dispatchJavaScript map[string]DispatchJavaScriptProjection
-	artifacts          []ArtifactSummary
-	events             []json.RawMessage
-	runCancel          context.CancelFunc
+	session                   SessionReadResult
+	result                    ResultReadResult
+	dispatches                []DispatchSummary
+	dispatchJavaScript        map[string]DispatchJavaScriptProjection
+	dispatchStatusTransitions map[string][]DispatchStatus
+	artifacts                 []ArtifactSummary
+	events                    []json.RawMessage
+	runCancel                 context.CancelFunc
 }
 
 type startInflightFlight struct {
@@ -432,6 +433,12 @@ func (s *JavaScriptRuntimeService) GetDispatch(ctx context.Context, sessionID, d
 				SessionID:        id,
 				OrchestratorKind: state.session.OrchestratorKind,
 			}
+			if len(summary.OutputArtifactIDs) > 0 {
+				detail.ArtifactIDs = append([]string(nil), summary.OutputArtifactIDs...)
+			}
+			if transitions := state.dispatchStatusTransitions[dispatchID]; len(transitions) > 0 {
+				detail.StatusTransitions = append([]DispatchStatus(nil), transitions...)
+			}
 			if js, ok := state.dispatchJavaScript[dispatchID]; ok {
 				projection := js
 				detail.JavaScript = &projection
@@ -681,11 +688,12 @@ func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
 		return runtimeSessionState{}
 	}
 	cloned := runtimeSessionState{
-		session:            cloneSessionRead(state.session),
-		result:             cloneResultRead(state.result),
-		dispatches:         cloneDispatchSummaries(state.dispatches),
-		dispatchJavaScript: cloneDispatchJavaScriptProjections(state.dispatchJavaScript),
-		artifacts:          cloneArtifactSummaries(state.artifacts),
+		session:                   cloneSessionRead(state.session),
+		result:                    cloneResultRead(state.result),
+		dispatches:                cloneDispatchSummaries(state.dispatches),
+		dispatchJavaScript:        cloneDispatchJavaScriptProjections(state.dispatchJavaScript),
+		dispatchStatusTransitions: cloneDispatchStatusTransitions(state.dispatchStatusTransitions),
+		artifacts:                 cloneArtifactSummaries(state.artifacts),
 	}
 	if len(state.events) > 0 {
 		cloned.events = make([]json.RawMessage, len(state.events))
