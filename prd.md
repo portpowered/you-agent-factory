@@ -1,147 +1,128 @@
-# PRD: Wire real child execution into the JavaScript durable session runtime
-
----
-author: Codex
-last modified: 2026, june, 16
-status: draft
----
-
-## Introduction
-
-Wire one bounded real child-execution path into durable JavaScript `FactorySession` execution so `agent.run`, `parallel`, and `pipeline` can record real child dispatch behavior through the shared session-backend inspection model instead of always reporting fake execution. The change should preserve the existing fake child path for deterministic tests and for lanes that do not need provider-backed execution, while proving that one live bridge can expose real execution mode, stable dispatch identity, provider-session references when present, artifact references when produced, and typed failure detail.
-
-This project is the `LIVE-DISPATCH_BRIDGE` deliverable cell. It depends on the completed real backend API session-parity, dispatch-artifact, and lifecycle-control cells plus the existing `workflowruntime.Hooks.NewChildExecutor` seam and durable dispatch or artifact projection in `pkg/factorysessionexecution`.
+# PRD: Prove Live-Provider-Backed JavaScript Session Inspection Through the CLI
 
 ## Context
 
-### Customer ask
+The durable JavaScript `FactorySession` backend, lifecycle control reads, and dispatch/artifact API inspection slices are now complete enough to prove one narrower customer outcome: a maintainer can use the existing `you workflow` CLI to start a real-backend JavaScript session that exercises the live-provider child bridge and then inspect the same session's terminal state through existing CLI commands.
 
-Use the real JavaScript runtime path with one bounded live child-execution adapter so durable JavaScript sessions that call `agent.run`, `parallel`, or `pipeline` no longer report `executionMode: fake` for the bridged child path, and instead expose real execution details through shared session-backend inspection.
+The concrete gap is that current coverage proves fake-child and fixture-backed inspection paths, but it does not yet prove that the shared execution-service CLI path can drive one real-provider child-execution scenario and expose stable runtime facts from that live bridge path. Without that smoke proof, maintainers cannot confidently claim that CLI inspection surfaces show real dispatch/provider-session/artifact evidence rather than only fake-path projections.
 
-### Problem
-
-The JavaScript host API currently has a fake child execution path that is useful for deterministic fanout tests, but it cannot prove provider-backed child execution or durable dispatch detail parity. That leaves a customer-visible gap in shared session inspection: the durable session can show child records, but the bridged path still looks fake even when the backend stack is ready to route one child through a real execution path. Without a bounded live bridge, downstream CLI, MCP, and inspection parity work cannot trust session dispatch reads to represent real execution mode, provider-session correlation, artifact production, or typed child failure behavior.
-
-### High-level solution
-
-Replace the empty `workflowruntime.Hooks{}` child-executor usage inside the JavaScript durable session runtime service with a narrow adapter that maps `workflowruntime.ChildExecutionRequest` onto an existing real executor path and writes the resulting child lifecycle back into the shared durable dispatch and artifact projection model. Keep stable dispatch identity reservation, execution ordering, provider-session correlation, artifact references, and typed failure projection inside the existing `FactorySession`, `Dispatch`, `ProviderSession`, and `FactoryArtifact` vocabulary. Preserve the deterministic fake child path as a selectable coexistence mode, and prove the bridge with focused backend tests for one successful real child and one failed real child.
+This work adds one focused CLI live-dispatch smoke lane. It must stay on the existing `FactorySession`, `Dispatch`, `Provider Session`, and artifact inspection vocabulary, use the direct shared execution-service CLI path instead of widening into HTTP-only smoke, and explicitly defer MCP host setup and website inspection to later follow-up work.
 
 ## Project-Level Acceptance Criteria
 
-- [x] A real-runtime durable JavaScript session using an `agent.run` fixture no longer reports `executionMode: fake` for the bridged child path and instead records a distinct real execution mode through shared dispatch inspection.
-- [x] At least one bridged child execution produces durable dispatch detail with stable dispatch ID, status transitions, provider-session refs when present, and artifact refs or output artifacts when produced by the underlying execution path.
-- [x] A failed bridged child execution returns typed failure detail through shared session-backend reads without corrupting unrelated child records or final session inspection.
-- [x] Existing fake-child runtime tests remain stable, proving the real bridge is an incremental swap-in path rather than a breaking replacement.
-- [x] The lane does not implement website inspection, graph editor work, MCP install packaging, or another broad API surface.
-- [x] **Quality gate:** typecheck, lint, and focused tests pass, including `go test ./pkg/orchestrators/javascript/... ./pkg/factorysessionexecution/...` and `go test ./pkg/workers/executor/... ./pkg/workers/provider/...`.
+- [ ] A focused CLI smoke path can start a durable JavaScript `FactorySession` through the existing `you workflow` commands using one live-provider child-execution scenario backed by the real backend.
+- [ ] The same session ID and terminal outcome are observable across CLI run, status, and result reads for that smoke path.
+- [ ] CLI dispatch inspection proves the execution used the non-fake bridged child path by exposing stable evidence such as execution mode, provider-session correlation, and artifact linkage when the runtime produced those records.
+- [ ] If current CLI output hides needed shared dispatch or artifact fields, the lane exposes only the smallest existing CLI rendering or JSON-backed assertion surface required for customer-testable inspection.
+- [x] Existing fake-child or fixture-backed CLI inspection coverage continues to pass, proving the live-provider smoke path is additive and does not regress prior run, dispatch, or artifact behavior.
+- [ ] The lane does not add MCP host setup work, website inspection, HTTP-only CLI smoke, or a broader multi-surface parity sweep; deferred next follow-up is recorded explicitly as either MCP live smoke or website inspection.
+- [ ] Typecheck, lint, and focused CLI/backend tests pass, including the customer-provided verification commands where applicable.
 
 ## Goals
 
-- Record one real child execution path through durable JavaScript session inspection.
-- Preserve canonical `FactorySession`, `Dispatch`, `ProviderSession`, and `FactoryArtifact` vocabulary.
-- Keep fake child execution available for deterministic tests and non-live lanes.
-- Surface stable real-child dispatch identity, status progression, provider-session references, artifact references, and typed failure details through shared backend reads.
-- Keep the bridge narrow enough that later CLI, MCP, and website parity work can consume it without redefining session inspection semantics.
+- Prove one real-backend CLI loopback path for a live-provider-backed JavaScript `FactorySession`.
+- Show stable session lifecycle inspection through existing `you workflow` run, status, and result commands.
+- Show dispatch inspection evidence that differentiates the bridged child path from fake-child coverage.
+- Preserve transport-neutral `FactorySession` and dispatch/artifact semantics across CLI and shared backend services.
+- Keep scope narrow enough to land as one additive smoke lane.
 
 ## User Stories
 
-### dynamic-workflows-cell-live-provider-dispatch-bridge-001: Run one real `agent.run` child through the durable dispatch bridge
+### dynamic-workflows-cell-cli-live-dispatch-smoke-001: Start and Re-read a Live-Provider JavaScript Session Through the CLI
 
-**Description:** As a maintainer validating live JavaScript session execution, I want one `agent.run` child to route through a real child executor so shared session inspection shows real dispatch behavior instead of a fake execution mode.
-
-**Acceptance Criteria:**
-
-- [ ] A durable JavaScript session fixture that calls `agent.run` can select the real child-executor path without changing workflow source syntax.
-- [ ] The resulting child dispatch read shows a non-fake execution mode that is distinct from the deterministic fake-child path.
-- [ ] The bridged child preserves a stable reserved dispatch ID from queueing through terminal completion.
-- [ ] Shared session inspection continues to expose the child under existing `FactorySession` and `Dispatch` reads rather than a workflow-run-specific surface.
-- [ ] Typecheck passes
-- [ ] Tests pass
-
-### dynamic-workflows-cell-live-provider-dispatch-bridge-002: Persist real-child dispatch lifecycle, provider-session refs, and artifact refs
-
-**Description:** As a caller inspecting durable session dispatches, I want successful bridged child executions to expose stable lifecycle detail, provider-session correlation, and produced artifacts so real child work can be inspected through the shared backend model.
+**Description:** As a maintainer validating dynamic workflows from the command line, I want one focused CLI smoke path that starts a durable JavaScript `FactorySession` against the real backend and then re-reads its status and result so that I can prove the existing `you workflow` commands work end to end for a live-provider child-execution scenario.
 
 **Acceptance Criteria:**
 
-- [ ] At least one successful bridged child execution records ordered dispatch status transitions that are visible through shared session-backend reads.
-- [ ] When the underlying execution path creates or correlates a provider session, the durable dispatch detail includes the related `ProviderSession` reference without introducing new child-execution nouns.
-- [ ] When the underlying execution path produces artifacts or output artifacts, the durable dispatch detail exposes stable artifact refs or artifact summaries through the existing session and artifact inspection surfaces.
-- [ ] Successful bridged child inspection remains compatible with `agent.run`, `parallel`, and `pipeline` semantics by reusing one shared child-executor bridge rather than separate one-off projection paths.
-- [ ] Typecheck passes
-- [ ] Tests pass
+- [ ] A focused smoke scenario starts a durable JavaScript `FactorySession` through the existing shared execution-service CLI path instead of a fake-only path.
+- [ ] The smoke scenario uses one live-provider child-execution fixture or focused mock provider that exercises the live-provider child bridge without requiring MCP host startup.
+- [ ] CLI reads for run, status, and result all resolve to the same session ID.
+- [ ] CLI status and result output show a stable terminal outcome for the started session.
+- [ ] Focused tests prove the CLI path uses real backend session execution state rather than a fixture-only command stub.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
 
-### dynamic-workflows-cell-live-provider-dispatch-bridge-003: Return typed failed-child detail without corrupting sibling or final session inspection
+### dynamic-workflows-cell-cli-live-dispatch-smoke-002: Expose Bridged Dispatch and Artifact Proof in CLI Inspection
 
-**Description:** As a caller inspecting failed child work, I want a bridged child failure to surface typed durable failure detail so I can diagnose the failure without losing unrelated child records or the parent session inspection state.
-
-**Acceptance Criteria:**
-
-- [ ] A fixture that forces a real bridged child failure returns typed failure detail through shared session-backend dispatch reads.
-- [ ] The failed child keeps its own dispatch ID, lifecycle history, and terminal failed status without overwriting successful sibling child records.
-- [ ] Parent session inspection remains readable after the failed child path, including final session result or failure inspection according to existing session semantics.
-- [ ] Failure projection does not corrupt unrelated artifact refs, provider-session refs, or dispatch summaries that belong to other children.
-- [ ] Typecheck passes
-- [ ] Tests pass
-
-### dynamic-workflows-cell-live-provider-dispatch-bridge-004: Keep fake-child execution available as a stable coexistence path
-
-**Description:** As a maintainer supporting parallel dynamic-workflow lanes, I want fake-child execution to remain available so the real bridge can land as an incremental swap-in path without breaking deterministic tests or non-live scenarios.
+**Description:** As a maintainer inspecting a live-provider-backed session, I want CLI dispatch and artifact inspection to surface enough shared data to prove the dispatch came from the bridged child path so that provider-session correlation and output linkage are customer-testable.
 
 **Acceptance Criteria:**
 
-- [x] Existing fake-child fixtures and runtime tests continue to pass without requiring provider-backed execution.
-- [x] Selecting the fake child path still reports fake execution mode and preserves existing deterministic dispatch semantics.
-- [x] The live bridge and fake path can coexist behind the shared child-executor seam without changing workflow source syntax for `agent.run`, `parallel`, or `pipeline`.
-- [x] The lane records deferred follow-ups such as CLI or MCP live smoke and website inspection as later cells instead of widening this implementation batch.
-- [x] Typecheck passes
-- [x] Tests pass
+- [ ] CLI dispatch inspection for the smoke session shows evidence of the non-fake bridged child path, such as live execution mode, provider-session references, or equivalent shared dispatch markers when produced by the runtime.
+- [ ] CLI inspection preserves `FactorySession`, `Dispatch`, `Provider Session`, and artifact vocabulary instead of inventing a live-smoke-specific model.
+- [ ] When the runtime produces output artifacts or linkage, CLI inspection exposes stable artifact linkage for the related dispatch without leaking transport-specific internals.
+- [ ] If existing human-readable output does not expose enough shared fields, the implementation extends only the smallest existing CLI rendering or JSON-backed assertion surface needed for reviewer-verifiable inspection.
+- [ ] Focused tests assert the shared dispatch/artifact proof path through existing CLI commands.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+
+### dynamic-workflows-cell-cli-live-dispatch-smoke-003: Preserve Existing CLI Inspection Coverage While Adding the Live Smoke Lane
+
+**Description:** As a maintainer guarding the current CLI inspection contract, I want fake-child and fixture-backed coverage to stay green while the new live-provider smoke path is added so that the new lane proves additive behavior rather than replacing existing regression protection.
+
+**Acceptance Criteria:**
+
+- [x] Existing fake-child or fixture-backed CLI inspection scenarios for run, dispatch, result, and artifacts still pass after the live-provider smoke path lands.
+- [x] The live-provider smoke path is additive and does not remove or weaken prior inspection assertions for fake-backed scenarios.
+- [x] Focused regression coverage proves the new lane does not change prior CLI behavior for sessions that do not use the live-provider bridge.
+- [x] The customer-provided focused verification commands are included in the implementation evidence or updated to equivalent narrower commands if package ownership changes during implementation.
+- [ ] Typecheck passes.
+- [ ] Tests pass.
+
+### dynamic-workflows-cell-cli-live-dispatch-smoke-004: Record Explicit Scope Boundaries and Deferred Follow-Up
+
+**Description:** As a reviewer approving a narrow dynamic-workflows cell, I want the implementation and verification scope to record what this lane proves and what it intentionally defers so that the batch does not silently widen into MCP or dashboard parity work.
+
+**Acceptance Criteria:**
+
+- [ ] Implementation notes, test names, or nearby planning comments make clear that this lane proves CLI live-dispatch smoke through the shared execution-service path and does not add MCP host setup or website inspection.
+- [ ] Deferred follow-up is recorded explicitly as either MCP live smoke on `you mcp serve` or website inspection, rather than broadening this batch into both.
+- [ ] Any projection or mapper changes remain transport-neutral in shared session/dispatch/artifact boundaries instead of forking CLI-only dispatch semantics.
+- [ ] Reviewable evidence shows the lane stayed on direct CLI-observable behavior and avoided unrelated cleanup or broader parity sweeps.
+- [ ] Typecheck passes.
 
 ## High-Level Technical Design
 
-The implementation should keep JavaScript session orchestration inside the existing runtime and session-backend boundaries. The runtime already exposes `workflowruntime.Hooks.NewChildExecutor`; this cell should supply a real child-executor factory from `factorysessionexecution.JavaScriptRuntimeService` instead of leaving the hook empty. That executor should accept the existing `workflowruntime.ChildExecutionRequest`, reserve or reuse the canonical dispatch identity early, and route the request into the smallest existing real executor or provider path that can already produce durable dispatch, provider-session, and artifact outcomes.
+The implementation should stay on the existing CLI-to-shared-service path. `you workflow` commands should continue to call the shared session execution path backed by `pkg/cli/sessionexecution` and the durable real backend. The smoke scenario should use one live-provider child-execution fixture or focused mock provider only to the extent needed to drive the live-provider child bridge and produce inspectable session, dispatch, and artifact state.
 
-The bridge should not invent workflow-specific child payloads. The runtime may keep internal adapter types, but durable reads must remain expressed as `FactorySession`, `Dispatch`, `ProviderSession`, and `FactoryArtifact` data. The session-backend projection layer should remain the shared owner of durable inspection shape, with any required field extensions made there rather than in one-off runtime records or UI-only adapters.
+Any needed output expansion belongs in the smallest existing CLI inspection surface, ideally through the existing JSON path or minimal human-readable rendering, so that the CLI exposes already-available shared dispatch or artifact fields rather than introducing a CLI-only transport model. If shared projections need adjustment, those changes should remain transport-neutral in the session execution or API-surface mapping layers so the CLI is consuming canonical session/dispatch/artifact semantics rather than a forked shape.
 
-Fake-child execution must remain a first-class alternate dependency path. Tests should prove both modes without changing fixture source syntax, which keeps the live bridge a bounded swap-in behind the existing host API primitives.
+Verification should sit where the behavior becomes observable: focused CLI smoke tests for run/status/result/dispatch/artifact reads, plus regression coverage for existing fake-child scenarios. The lane should use the direct shared execution-service CLI path first and should not expand into HTTP CLI smoke, MCP host startup, or dashboard/browser proof.
 
 ## Functional Requirements
 
-1. FR-1: The JavaScript durable session runtime must provide a non-empty child-executor hook that can route at least one `agent.run` child through a real execution path.
-2. FR-2: A bridged real child must record a distinct non-fake execution mode in shared durable dispatch inspection.
-3. FR-3: The durable dispatch record for a bridged child must preserve one stable dispatch ID across queued, running, and terminal states.
-4. FR-4: The bridge must project provider-session references when the underlying execution path creates or exposes them.
-5. FR-5: The bridge must project artifact refs or output artifacts when the underlying child execution path produces them.
-6. FR-6: Failed bridged children must surface typed durable failure detail through shared session-backend reads.
-7. FR-7: A failed bridged child must not corrupt sibling child records, unrelated artifact refs, or final session inspection for the parent session.
-8. FR-8: `agent.run`, `parallel`, and `pipeline` must continue to use one shared child-executor seam so live and fake paths can be swapped without changing workflow source syntax.
-9. FR-9: Existing fake-child runtime coverage must remain valid and keep reporting fake execution mode when the fake path is selected.
-10. FR-10: If durable dispatch or artifact read models need additional fields for real-child parity, the owning shared contract must be updated in place and generated artifacts synchronized only if the public schema actually changes.
+- FR-1: The existing `you workflow` CLI must be able to start one durable JavaScript `FactorySession` that exercises the live-provider child bridge through the real backend.
+- FR-2: The CLI must allow status and result inspection of that same session through existing commands without changing the session ID between reads.
+- FR-3: The CLI must expose a stable terminal outcome for the smoke session.
+- FR-4: The CLI must expose enough shared dispatch inspection data to prove the execution path used the bridged live-provider child path rather than a fake-child path.
+- FR-5: When the runtime produces provider-session references or dispatch-to-artifact linkage, the CLI must expose those shared fields through the minimal existing inspection surface needed for reviewer-verifiable proof.
+- FR-6: Existing fake-child and fixture-backed CLI inspection behavior must remain intact.
+- FR-7: Shared session, dispatch, and artifact semantics must remain transport-neutral; the lane must not introduce a separate live-smoke transport model or CLI-only dispatch semantics.
+- FR-8: The implementation must explicitly defer MCP host setup and website inspection follow-up rather than widening this lane.
 
 ## Non-Goals
 
-- No website or dashboard inspection work.
-- No graph editor or current-selection UI work.
-- No MCP host install or packaging changes.
-- No broad API or event-stream parity sweep beyond the shared session-backend inspection shape already owned by this lane.
-- No renaming of public resource vocabulary away from `FactorySession`, `Dispatch`, `ProviderSession`, or `FactoryArtifact`.
+- No MCP host install work or live MCP smoke in this batch.
+- No website or dashboard inspection parity.
+- No HTTP-only CLI smoke path or broad API/event parity sweep.
+- No new `DynamicWorkflowRun` or live-smoke-specific transport model.
+- No unrelated cleanup, refactors, or multi-surface expansion outside the focused CLI live-dispatch smoke behavior.
 
 ## Supporting Technical Considerations
 
-- Follow `docs/architecture/data-model.md` and keep public naming on shared factory-session resources.
-- Preserve the service or session boundary described in `docs/architecture/architecture.md`: `FactoryService` coordinates, while per-session runtime state belongs to the session runtime.
-- Use the existing `workflowruntime.Hooks.NewChildExecutor` seam rather than adding a second child-dispatch integration path.
-- Prefer extending shared `factorysessionexecution` projection types over adding bridge-only payloads in API or UI layers.
-- Verification should stay focused on behavioral backend evidence: successful real child execution, failed real child execution, dispatch inspection reads, artifact reads, and fake-path non-regression.
-- Deferred follow-ups such as CLI or MCP live smoke and website inspection should be recorded as later cells, not absorbed into this batch.
+- Use canonical public vocabulary from the data model: `FactorySession`, `Dispatch`, `Provider Session`, and artifacts.
+- Prefer the already-landed direct shared execution-service CLI path before any wider transport proof.
+- Stable proof should come from observable session IDs, terminal state, dispatch fields, provider-session correlation, and artifact linkage rather than from implementation-specific helper assertions.
+- If the underlying runtime path can legitimately omit artifacts for a given scenario, the smoke proof should still verify dispatch/provider-session evidence and only assert artifact linkage where the runtime produced it.
+- The lane touches backend and CLI behavior, so evidence should include direct focused tests rather than meta-tests or inventory assertions.
 
 ## Success Metrics
 
-- A real-runtime `agent.run` fixture produces durable child dispatch inspection with non-fake execution mode.
-- At least one successful real child exposes stable dispatch identity, lifecycle detail, provider-session correlation when present, and artifact references when produced.
-- At least one failed real child exposes typed failure detail without damaging sibling dispatches or parent session inspection.
-- Existing fake-child runtime tests remain green, proving the bridge is additive.
+- Maintainers can run one focused CLI smoke path that proves a live-provider-backed JavaScript session through the real backend.
+- Session ID and terminal outcome stay stable across CLI run, status, and result inspection.
+- Dispatch inspection visibly distinguishes the bridged child path from existing fake-child coverage.
+- Existing fake-backed CLI inspection regression coverage stays green.
 
 ## Open Questions
 
-None. The customer ask fixes the scope on one bounded live provider-dispatch bridge and explicitly defers broader CLI, MCP, website, and graph-editor follow-up work.
+No unresolved product questions. If implementation discovers that the current live-provider scenario cannot yet emit stable provider-session references or artifact linkage through shared projections, the lane should expose the smallest customer-testable proof available, document the missing shared field as a follow-up, and keep MCP or website work deferred.

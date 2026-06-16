@@ -15,6 +15,7 @@ import (
 // DispatchesConfig holds CLI inputs for one durable Factory Session dispatch list read.
 type DispatchesConfig struct {
 	SessionID          string
+	ExecutionBackendConfig
 	JSON               bool
 	Output             io.Writer
 	Service            factorysessionexecution.Service
@@ -37,7 +38,7 @@ func RunDispatches(ctx context.Context, cfg DispatchesConfig) error {
 		))
 	}
 
-	service, err := resolveInspectionService(cfg.Service, cfg.FixtureCatalogPath)
+	service, err := resolveInspectionService(cfg.Service, cfg.ExecutionBackendConfig, cfg.FixtureCatalogPath)
 	if err != nil {
 		return err
 	}
@@ -82,8 +83,14 @@ func renderDispatchesHuman(output io.Writer, result factoryapi.ListFactorySessio
 			dispatch.Status,
 			dispatch.DispatchKind,
 		)
+		if provider := optionalString(dispatch.Provider); provider != "" {
+			line += " provider=" + provider
+		}
 		if refs := formatProviderSessionRefs(dispatch.ProviderSessionRefs); refs != "" {
-			line += " (provider: " + refs + ")"
+			line += " (provider session: " + refs + ")"
+		}
+		if ids := formatStringSlice(dispatch.OutputArtifactIds); ids != "" {
+			line += " artifacts=" + ids
 		}
 		if _, err := fmt.Fprintf(output, "%s\n", line); err != nil {
 			return err
@@ -105,9 +112,30 @@ func formatProviderSessionRefs(refs *[]factoryapi.LoadableProviderSessionRef) st
 	return strings.Join(parts, ", ")
 }
 
+func optionalString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
+}
+
+func formatStringSlice(values *[]string) string {
+	if values == nil || len(*values) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(*values))
+	for _, value := range *values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			parts = append(parts, trimmed)
+		}
+	}
+	return strings.Join(parts, ", ")
+}
+
 // ArtifactsConfig holds CLI inputs for one durable Factory Session artifact list read.
 type ArtifactsConfig struct {
 	SessionID          string
+	ExecutionBackendConfig
 	JSON               bool
 	Output             io.Writer
 	Service            factorysessionexecution.Service
@@ -130,7 +158,7 @@ func RunArtifacts(ctx context.Context, cfg ArtifactsConfig) error {
 		))
 	}
 
-	service, err := resolveInspectionService(cfg.Service, cfg.FixtureCatalogPath)
+	service, err := resolveInspectionService(cfg.Service, cfg.ExecutionBackendConfig, cfg.FixtureCatalogPath)
 	if err != nil {
 		return err
 	}
@@ -174,6 +202,9 @@ func renderArtifactsHuman(output io.Writer, result factoryapi.ListFactorySession
 			name = strings.TrimSpace(*artifact.Label)
 		}
 		line := fmt.Sprintf("- %s %s %s", artifact.Id, name, artifact.Kind)
+		if dispatchID := optionalString(artifact.DispatchId); dispatchID != "" {
+			line += " dispatch=" + dispatchID
+		}
 		if artifact.RetrievalRef != nil && strings.TrimSpace(artifact.RetrievalRef.Href) != "" {
 			line += " (" + strings.TrimSpace(artifact.RetrievalRef.Href) + ")"
 		}
@@ -189,6 +220,7 @@ type EventsConfig struct {
 	SessionID          string
 	AfterEventID       string
 	AfterSequence      *int
+	ExecutionBackendConfig
 	JSON               bool
 	Output             io.Writer
 	Service            factorysessionexecution.Service
@@ -219,7 +251,7 @@ func RunEvents(ctx context.Context, cfg EventsConfig) error {
 		return writeRunError(cfg.Output, cfg.JSON, err)
 	}
 
-	service, err := resolveInspectionService(cfg.Service, cfg.FixtureCatalogPath)
+	service, err := resolveInspectionService(cfg.Service, cfg.ExecutionBackendConfig, cfg.FixtureCatalogPath)
 	if err != nil {
 		return err
 	}
@@ -267,10 +299,12 @@ func renderEventsHuman(output io.Writer, sessionID string, events []factoryapi.F
 
 func resolveInspectionService(
 	service factorysessionexecution.Service,
+	backend ExecutionBackendConfig,
 	fixtureCatalogPath string,
 ) (factorysessionexecution.Service, error) {
 	return resolveExecutionService(RunConfig{
-		Service:            service,
-		FixtureCatalogPath: fixtureCatalogPath,
+		ExecutionBackendConfig: backend,
+		Service:                service,
+		FixtureCatalogPath:     fixtureCatalogPath,
 	})
 }

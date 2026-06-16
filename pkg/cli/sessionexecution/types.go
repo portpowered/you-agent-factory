@@ -12,6 +12,13 @@ const (
 	ExecutionModeAsync ExecutionMode = "async"
 )
 
+// ExecutionBackendConfig selects which shared durable execution service backs
+// workflow CLI start and inspection commands.
+type ExecutionBackendConfig struct {
+	Provider    string
+	ProjectRoot string
+}
+
 // StartConfig holds CLI inputs for one durable Factory Session execution start.
 type StartConfig struct {
 	Mode              ExecutionMode
@@ -24,6 +31,7 @@ type StartConfig struct {
 	PolicyHash        string
 	WaitTimeoutMillis *int64
 	CancelOnTimeout   bool
+	ChildExecutorMode string
 	PositionalArgs    []string
 	Stdin             io.Reader
 	StdinIsTTY        func() bool

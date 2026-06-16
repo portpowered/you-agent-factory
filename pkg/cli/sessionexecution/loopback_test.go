@@ -445,7 +445,7 @@ func TestRunDispatches_AsyncPetriRunFixtureIncludesProviderSessionRefs(t *testin
 	if !strings.Contains(text, "dispatches (1):") {
 		t.Fatalf("output = %q, want one dispatch", text)
 	}
-	if !strings.Contains(text, "provider: prov-sess-disp-petri-001") {
+	if !strings.Contains(text, "provider session: prov-sess-disp-petri-001") {
 		t.Fatalf("output missing provider session ref:\n%s", text)
 	}
 }
@@ -708,4 +708,147 @@ func TestRunDispatches_MissingSessionReturnsDeterministicError(t *testing.T) {
 	if !strings.Contains(output.String(), sessionexecution.ErrorCodeSessionNotFound) {
 		t.Fatalf("output = %q, want session not found code", output.String())
 	}
+}
+
+// TestFixtureBackedCLIInspectionRegression_FullLoopWithoutLiveProviderFlags guards
+// the default fixture-backed CLI inspection path while the additive live-provider
+// smoke lane stays opt-in via --execution-provider and --child-executor-mode.
+func assertFixtureBackedDispatchesRegression(
+	t *testing.T,
+	service fse.Service,
+	sessionID string,
+	dispatchesOutput []byte,
+) {
+	t.Helper()
+	listedDispatches, err := service.ListDispatches(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches: %v", err)
+	}
+	wantDispatchHash, err := fixtures.ListDispatchesResultHash(listedDispatches)
+	if err != nil {
+		t.Fatalf("ListDispatchesResultHash: %v", err)
+	}
+	if wantDispatchHash != "sha256:a32d5d0f136dcfef8061746c8f270702163c92a04e3c9f75eb9248e19bebd34a" {
+		t.Fatalf("fixture dispatch hash drifted to %q", wantDispatchHash)
+	}
+	wantDispatchJSON, err := json.Marshal(factorysession.ListDispatchesResponseToAPI(listedDispatches))
+	if err != nil {
+		t.Fatalf("marshal dispatch projection: %v", err)
+	}
+	if !bytes.Equal(bytes.TrimSpace(dispatchesOutput), wantDispatchJSON) {
+		t.Fatalf("CLI dispatches JSON diverged from shared projection")
+	}
+	if strings.Contains(string(dispatchesOutput), "live-provider-session-1") {
+		t.Fatalf("fixture-backed dispatches leaked live-provider markers:\n%s", dispatchesOutput)
+	}
+}
+
+func assertFixtureBackedArtifactsRegression(
+	t *testing.T,
+	service fse.Service,
+	sessionID string,
+	artifactsOutput []byte,
+) {
+	t.Helper()
+	listedArtifacts, err := service.ListArtifacts(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListArtifacts: %v", err)
+	}
+	wantArtifactHash, err := fixtures.ListArtifactsResultHash(listedArtifacts)
+	if err != nil {
+		t.Fatalf("ListArtifactsResultHash: %v", err)
+	}
+	if wantArtifactHash != "sha256:c42d891189b507df18e127e6cf10deeacf3d56a97c48786491d0ddfd3ed65fce" {
+		t.Fatalf("fixture artifact hash drifted to %q", wantArtifactHash)
+	}
+	wantArtifactJSON, err := json.Marshal(factorysession.ListArtifactsResponseToAPI(listedArtifacts))
+	if err != nil {
+		t.Fatalf("marshal artifact projection: %v", err)
+	}
+	if !bytes.Equal(bytes.TrimSpace(artifactsOutput), wantArtifactJSON) {
+		t.Fatalf("CLI artifacts JSON diverged from shared projection")
+	}
+}
+
+func TestFixtureBackedCLIInspectionRegression_FullLoopWithoutLiveProviderFlags(t *testing.T) {
+	service := newContractFakeService(t)
+	sessionID := "dur-sess-petri-success-001"
+
+	var runOutput bytes.Buffer
+	if err := sessionexecution.RunSync(context.Background(), sessionexecution.RunConfig{
+		StartConfig: sessionexecution.StartConfig{
+			Mode:      sessionexecution.ExecutionModeSync,
+			RequestID: "req-petri-success-001",
+			FactoryID: "customer-support-triage",
+		},
+		JSON:    true,
+		Output:  &runOutput,
+		Service: service,
+	}); err != nil {
+		t.Fatalf("RunSync: %v", err)
+	}
+
+	var runResponse factoryapi.FactorySessionSyncExecutionResponse
+	if err := json.Unmarshal(bytes.TrimSpace(runOutput.Bytes()), &runResponse); err != nil {
+		t.Fatalf("decode run output: %v", err)
+	}
+	if runResponse.SessionId != sessionID {
+		t.Fatalf("sessionId = %q, want %q", runResponse.SessionId, sessionID)
+	}
+
+	var statusOutput bytes.Buffer
+	if err := sessionexecution.RunStatus(context.Background(), sessionexecution.StatusConfig{
+		SessionID: sessionID,
+		JSON:      true,
+		Output:    &statusOutput,
+		Service:   service,
+	}); err != nil {
+		t.Fatalf("RunStatus: %v", err)
+	}
+	var statusResponse factoryapi.FactorySessionDurableReadModel
+	if err := json.Unmarshal(bytes.TrimSpace(statusOutput.Bytes()), &statusResponse); err != nil {
+		t.Fatalf("decode status output: %v", err)
+	}
+	if statusResponse.SessionId != sessionID {
+		t.Fatalf("status sessionId = %q, want %q", statusResponse.SessionId, sessionID)
+	}
+
+	var resultOutput bytes.Buffer
+	if err := sessionexecution.RunResult(context.Background(), sessionexecution.ResultConfig{
+		SessionID: sessionID,
+		JSON:      true,
+		Output:    &resultOutput,
+		Service:   service,
+	}); err != nil {
+		t.Fatalf("RunResult: %v", err)
+	}
+	var resultResponse factoryapi.FactorySessionResult
+	if err := json.Unmarshal(bytes.TrimSpace(resultOutput.Bytes()), &resultResponse); err != nil {
+		t.Fatalf("decode result output: %v", err)
+	}
+	if resultResponse.SessionId != sessionID {
+		t.Fatalf("result sessionId = %q, want %q", resultResponse.SessionId, sessionID)
+	}
+
+	var dispatchesOutput bytes.Buffer
+	if err := sessionexecution.RunDispatches(context.Background(), sessionexecution.DispatchesConfig{
+		SessionID: sessionID,
+		JSON:      true,
+		Output:    &dispatchesOutput,
+		Service:   service,
+	}); err != nil {
+		t.Fatalf("RunDispatches: %v", err)
+	}
+	assertFixtureBackedDispatchesRegression(t, service, sessionID, dispatchesOutput.Bytes())
+
+	var artifactsOutput bytes.Buffer
+	if err := sessionexecution.RunArtifacts(context.Background(), sessionexecution.ArtifactsConfig{
+		SessionID: sessionID,
+		JSON:      true,
+		Output:    &artifactsOutput,
+		Service:   service,
+	}); err != nil {
+		t.Fatalf("RunArtifacts: %v", err)
+	}
+	assertFixtureBackedArtifactsRegression(t, service, sessionID, artifactsOutput.Bytes())
 }

@@ -17,6 +17,7 @@ type ResultConfig struct {
 	SessionID          string
 	Mode               string
 	IncludeArtifacts   bool
+	ExecutionBackendConfig
 	JSON               bool
 	Output             io.Writer
 	Service            factorysessionexecution.Service
@@ -87,8 +88,9 @@ func RunResult(ctx context.Context, cfg ResultConfig) error {
 
 func resolveResultService(cfg ResultConfig) (factorysessionexecution.Service, error) {
 	runCfg := RunConfig{
-		Service:            cfg.Service,
-		FixtureCatalogPath: cfg.FixtureCatalogPath,
+		ExecutionBackendConfig: cfg.ExecutionBackendConfig,
+		Service:                cfg.Service,
+		FixtureCatalogPath:     cfg.FixtureCatalogPath,
 	}
 	return resolveExecutionService(runCfg)
 }
