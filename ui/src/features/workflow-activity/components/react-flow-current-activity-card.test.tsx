@@ -2358,7 +2358,7 @@ describe("ReactFlowCurrentActivityCard import flows", () => {
       "error",
     );
     expect(
-      screen.getByRole("button", { name: "Select Review workstation" }),
+      await screen.findByRole("button", { name: "Select Review workstation" }),
     ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
