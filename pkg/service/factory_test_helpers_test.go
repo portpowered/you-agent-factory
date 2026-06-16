@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1084,4 +1085,62 @@ func cleanResolvedPath(path string) string {
 		return cleaned
 	}
 	return filepath.Clean(resolved)
+}
+
+func newServiceTestSupervisedModelHost(t *testing.T, puller modelAssetPuller, launcher modelhost.ProcessLauncher) modelhost.Host {
+	t.Helper()
+	host := modelhost.NewCatalogHost(modelhost.NewLocalAssetGateway(puller), modelhost.Options{
+		SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
+		Supervisor: modelhost.SupervisorConfig{
+			ReadinessTimeout:    500 * time.Millisecond,
+			HealthCheckInterval: 10 * time.Millisecond,
+			ProcessLauncher:     launcher,
+			HealthChecker:       modelhost.HTTPHealthChecker{Path: "/health"},
+		},
+	})
+	if host == nil {
+		t.Fatal("model host = nil")
+	}
+	return host
+}
+
+type serviceTestFakeProcessLauncher struct {
+	mu              sync.Mutex
+	healthEndpoint  string
+	supervisedStart int
+}
+
+func (f *serviceTestFakeProcessLauncher) Start(_ context.Context, _ modelhost.ProcessStartSpec) (modelhost.ManagedProcess, error) {
+	f.mu.Lock()
+	f.supervisedStart++
+	f.mu.Unlock()
+	return &serviceTestFakeManagedProcess{
+		endpoint: f.healthEndpoint,
+		stopCh:   make(chan struct{}),
+	}, nil
+}
+
+func (f *serviceTestFakeProcessLauncher) startCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.supervisedStart
+}
+
+type serviceTestFakeManagedProcess struct {
+	endpoint string
+	stopCh   chan struct{}
+}
+
+func (p *serviceTestFakeManagedProcess) HealthEndpoint() string {
+	return p.endpoint
+}
+
+func (p *serviceTestFakeManagedProcess) Wait() error {
+	<-p.stopCh
+	return nil
+}
+
+func (p *serviceTestFakeManagedProcess) Stop(context.Context) error {
+	close(p.stopCh)
+	return nil
 }

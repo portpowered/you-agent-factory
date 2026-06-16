@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,12 +25,13 @@ type CacheLayout struct {
 }
 
 type LoadRequest struct {
-	Resource  interfaces.ResourceConfig
-	Worker    *interfaces.WorkerConfig
-	ModelName string
-	CachePath string
-	Revision  string
-	Files     []string
+	Resource        interfaces.ResourceConfig
+	Worker          *interfaces.WorkerConfig
+	ModelName       string
+	CachePath       string
+	Revision        string
+	Files           []string
+	ServingEndpoint string
 }
 
 type InvocationRequest struct {
@@ -257,6 +260,7 @@ const (
 	omniVoiceModelSlotNameText    = "text"
 	omniVoiceModelSlotNameAudio   = "audio"
 	omniVoiceTokenizerNameSnippet = "tokenizer"
+	supervisedInvokePath          = "/invoke"
 )
 
 type omniVoiceLocalRuntime struct {
@@ -306,6 +310,17 @@ func (r *omniVoiceLocalRuntime) Load(_ context.Context, request LoadRequest) (Ha
 	modelPath, tokenizerPath, err := omniVoiceCacheFiles(request.Files)
 	if err != nil {
 		return nil, err
+	}
+	if endpoint := strings.TrimSpace(request.ServingEndpoint); endpoint != "" {
+		return &omniVoiceSupervisedHandle{
+			client:          &http.Client{Timeout: 5 * time.Minute},
+			servingEndpoint: endpoint,
+			modelName:       request.ModelName,
+			cachePath:       request.CachePath,
+			revision:        request.Revision,
+			modelPath:       modelPath,
+			tokenizerPath:   tokenizerPath,
+		}, nil
 	}
 	command, args := omniVoiceCommandForWorker(request.Worker)
 	return &omniVoiceLocalHandle{
@@ -367,6 +382,98 @@ func (h *omniVoiceLocalHandle) Invoke(ctx context.Context, request InvocationReq
 		return interfaces.InferenceResponse{}, fmt.Errorf("encode local OMNIVOICE response content: %w", err)
 	}
 	return interfaces.InferenceResponse{Content: string(encoded)}, nil
+}
+
+type omniVoiceSupervisedHandle struct {
+	client          *http.Client
+	servingEndpoint string
+	modelName       string
+	cachePath       string
+	revision        string
+	modelPath       string
+	tokenizerPath   string
+}
+
+func (h *omniVoiceSupervisedHandle) Invoke(ctx context.Context, request InvocationRequest) (interfaces.InferenceResponse, error) {
+	if h == nil {
+		return interfaces.InferenceResponse{}, fmt.Errorf("supervised local model handle is required")
+	}
+	operation := strings.TrimSpace(request.Request.ModelOperation)
+	if operation != "TTS" {
+		return interfaces.InferenceResponse{}, fmt.Errorf("local OMNIVOICE runtime only supports TTS, got %q", operation)
+	}
+	text, err := omniVoiceBoundText(request.Request.ModelBindings)
+	if err != nil {
+		return interfaces.InferenceResponse{}, err
+	}
+	outputFile, err := omniVoiceOutputPath(h.cachePath)
+	if err != nil {
+		return interfaces.InferenceResponse{}, err
+	}
+
+	payload := OmniVoiceInvocationPayload{
+		Operation:  operation,
+		ModelName:  h.modelName,
+		Revision:   h.revision,
+		OutputFile: outputFile,
+		Text:       text,
+		Bindings:   interfaces.CloneResolvedModelOperationBindings(request.Request.ModelBindings),
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return interfaces.InferenceResponse{}, fmt.Errorf("encode local OMNIVOICE invocation payload: %w", err)
+	}
+
+	invokeURL := SupervisedInvokeURL(h.servingEndpoint)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, invokeURL, strings.NewReader(string(body)))
+	if err != nil {
+		return interfaces.InferenceResponse{}, fmt.Errorf("build supervised OMNIVOICE invocation request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := h.client
+	if client == nil {
+		client = &http.Client{Timeout: 5 * time.Minute}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return interfaces.InferenceResponse{}, fmt.Errorf("invoke supervised OMNIVOICE runtime at %q: %w", invokeURL, err)
+	}
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		_ = resp.Body.Close()
+	}()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return interfaces.InferenceResponse{}, fmt.Errorf("supervised OMNIVOICE runtime at %q returned status %d", invokeURL, resp.StatusCode)
+	}
+	stdout, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return interfaces.InferenceResponse{}, fmt.Errorf("read supervised OMNIVOICE response: %w", err)
+	}
+	content, err := omniVoiceResponseContent(strings.TrimSpace(string(stdout)), outputFile)
+	if err != nil {
+		return interfaces.InferenceResponse{}, err
+	}
+	encoded, err := json.Marshal(content)
+	if err != nil {
+		return interfaces.InferenceResponse{}, fmt.Errorf("encode local OMNIVOICE response content: %w", err)
+	}
+	return interfaces.InferenceResponse{Content: string(encoded)}, nil
+}
+
+// SupervisedInvokeURL derives the supervised model-server invoke URL from a health or serving endpoint.
+func SupervisedInvokeURL(servingEndpoint string) string {
+	trimmed := strings.TrimSpace(servingEndpoint)
+	if trimmed == "" {
+		return ""
+	}
+	if strings.HasSuffix(strings.TrimRight(trimmed, "/"), supervisedInvokePath) {
+		return trimmed
+	}
+	if idx := strings.LastIndex(trimmed, "/health"); idx >= 0 {
+		return trimmed[:idx] + supervisedInvokePath
+	}
+	return strings.TrimRight(trimmed, "/") + supervisedInvokePath
 }
 
 func omniVoiceCacheFiles(files []string) (string, string, error) {

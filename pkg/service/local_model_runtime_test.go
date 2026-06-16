@@ -168,6 +168,15 @@ func TestInvokeModel_UsesModelHostLeasesAndReusesLoadedRuntime(t *testing.T) {
 	if runtime.loadCount() != 1 {
 		t.Fatalf("runtime load count = %d, want 1 reused handle across host leases", runtime.loadCount())
 	}
+	runtime.mu.Lock()
+	servingEndpoint := ""
+	if len(runtime.loads) > 0 {
+		servingEndpoint = strings.TrimSpace(runtime.loads[0].ServingEndpoint)
+	}
+	runtime.mu.Unlock()
+	if servingEndpoint != healthServer.URL {
+		t.Fatalf("serving endpoint = %q, want supervised lease endpoint %q", servingEndpoint, healthServer.URL)
+	}
 	if runtime.invocationCount() != 2 {
 		t.Fatalf("invocation count = %d, want 2", runtime.invocationCount())
 	}
@@ -937,62 +946,4 @@ func TestLocalModelResourceLimiter_BoundsSharedLocalModelConcurrencyAcrossSessio
 	if got := inner.MaxObserved(); got != 1 {
 		t.Fatalf("max observed local-model concurrency = %d, want 1", got)
 	}
-}
-
-func newServiceTestSupervisedModelHost(t *testing.T, puller modelAssetPuller, launcher modelhost.ProcessLauncher) modelhost.Host {
-	t.Helper()
-	host := modelhost.NewCatalogHost(modelhost.NewLocalAssetGateway(puller), modelhost.Options{
-		SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
-		Supervisor: modelhost.SupervisorConfig{
-			ReadinessTimeout:    500 * time.Millisecond,
-			HealthCheckInterval: 10 * time.Millisecond,
-			ProcessLauncher:     launcher,
-			HealthChecker:       modelhost.HTTPHealthChecker{Path: "/health"},
-		},
-	})
-	if host == nil {
-		t.Fatal("model host = nil")
-	}
-	return host
-}
-
-type serviceTestFakeProcessLauncher struct {
-	mu              sync.Mutex
-	healthEndpoint  string
-	supervisedStart int
-}
-
-func (f *serviceTestFakeProcessLauncher) Start(_ context.Context, _ modelhost.ProcessStartSpec) (modelhost.ManagedProcess, error) {
-	f.mu.Lock()
-	f.supervisedStart++
-	f.mu.Unlock()
-	return &serviceTestFakeManagedProcess{
-		endpoint: f.healthEndpoint,
-		stopCh:   make(chan struct{}),
-	}, nil
-}
-
-func (f *serviceTestFakeProcessLauncher) startCount() int {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	return f.supervisedStart
-}
-
-type serviceTestFakeManagedProcess struct {
-	endpoint string
-	stopCh   chan struct{}
-}
-
-func (p *serviceTestFakeManagedProcess) HealthEndpoint() string {
-	return p.endpoint
-}
-
-func (p *serviceTestFakeManagedProcess) Wait() error {
-	<-p.stopCh
-	return nil
-}
-
-func (p *serviceTestFakeManagedProcess) Stop(context.Context) error {
-	close(p.stopCh)
-	return nil
 }

@@ -27,9 +27,13 @@ They do not own subprocesses, asset caches, or unload policy.
 
 Direct invocation and local inference/agent worker execution route through
 `pkg/modelhost/execution.go` (`LeaseExecution.WrapRunner`) when the process-wide
-host is configured. `CatalogHost.InspectReadiness` preserves installed asset
-`READY`/`INSTALLED` projection until a supervised runtime slot exists; live slot
-state overlays loading, ready, and failed outcomes.
+host is configured. Supervised leases pass `ServingEndpoint` metadata from
+`lease.Endpoint` into runtime execution so inference uses the host-owned server
+boundary instead of bypassing it with a separate local runtime load path.
+`CatalogHost.InspectReadiness` preserves installed asset `READY`/`INSTALLED`
+projection until a supervised runtime slot exists; live slot state overlays
+loading, ready, and failed outcomes. Invocation readiness gating also consumes
+live host readiness through `EnsureInvocationReady`.
 
 ## Service Wiring
 

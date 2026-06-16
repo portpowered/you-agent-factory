@@ -146,9 +146,6 @@ func invocationReadinessSnapshot(
 	runtimeCfg *factoryconfig.LoadedFactoryConfig,
 	modelName string,
 ) (ReadinessSnapshot, error) {
-	if catalogHost, ok := host.(*CatalogHost); ok {
-		return catalogHost.InspectAssetReadiness(ctx, runtimeCfg, modelName)
-	}
 	return host.InspectReadiness(ctx, runtimeCfg, modelName)
 }
 

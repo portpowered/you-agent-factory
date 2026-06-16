@@ -95,7 +95,7 @@ func (r *leaseBoundRunner) Execute(ctx context.Context, request interfaces.Runne
 		_ = r.execution.Host.ReleaseLease(ctx, lease.ID)
 	}()
 
-	response, err := r.execution.executeWithLease(ctx, loaded, resource, resourceKey, r.workerDef, request)
+	response, err := r.execution.executeWithLease(ctx, loaded, resource, resourceKey, r.workerDef, request, lease)
 	if err != nil {
 		return interfaces.RunnerExecutionResult{}, err
 	}
@@ -109,6 +109,7 @@ func (l *LeaseExecution) executeWithLease(
 	resourceKey string,
 	workerDef *interfaces.WorkerConfig,
 	request interfaces.RunnerExecutionRequest,
+	lease Lease,
 ) (interfaces.InferenceResponse, error) {
 	if workerDef == nil {
 		return interfaces.InferenceResponse{}, fmt.Errorf("worker config is required for host-owned local model execution")
@@ -118,13 +119,14 @@ func (l *LeaseExecution) executeWithLease(
 		return interfaces.InferenceResponse{}, err
 	}
 	loadWorker := factoryconfig.CloneWorkerConfig(*workerDef)
-	handle, err := l.loadHandle(ctx, resourceKey, localmodels.LoadRequest{
-		Resource:  resource,
-		Worker:    &loadWorker,
-		ModelName: cacheLayout.ModelName,
-		CachePath: cacheLayout.CachePath,
-		Revision:  cacheLayout.Revision,
-		Files:     append([]string(nil), cacheLayout.Files...),
+	handle, err := l.loadHandle(ctx, leaseExecutionCacheKey(resourceKey, lease.Endpoint), localmodels.LoadRequest{
+		Resource:        resource,
+		Worker:          &loadWorker,
+		ModelName:       cacheLayout.ModelName,
+		CachePath:       cacheLayout.CachePath,
+		Revision:        cacheLayout.Revision,
+		Files:           append([]string(nil), cacheLayout.Files...),
+		ServingEndpoint: strings.TrimSpace(lease.Endpoint),
 	})
 	if err != nil {
 		return interfaces.InferenceResponse{}, err
@@ -192,4 +194,12 @@ func leaseHolderFromRequest(request interfaces.RunnerExecutionRequest) string {
 		return dispatchID
 	}
 	return strings.TrimSpace(request.Dispatch.WorkstationName)
+}
+
+func leaseExecutionCacheKey(resourceKey, endpoint string) string {
+	endpoint = strings.TrimSpace(endpoint)
+	if endpoint == "" {
+		return resourceKey
+	}
+	return resourceKey + "|" + endpoint
 }

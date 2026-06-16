@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -30,9 +31,10 @@ func (h *recordingLeaseHost) ReleaseLease(ctx context.Context, leaseID string) e
 }
 
 type executionTestRuntime struct {
-	mu          sync.Mutex
-	loads       int
-	invocations int
+	mu               sync.Mutex
+	loads            int
+	invocations      int
+	lastServingEndpoint string
 }
 
 func (r *executionTestRuntime) Supports(resource interfaces.ResourceConfig, worker *interfaces.WorkerConfig) bool {
@@ -40,10 +42,11 @@ func (r *executionTestRuntime) Supports(resource interfaces.ResourceConfig, work
 		localmodels.CanonicalModelName(worker.Model) == localmodels.CanonicalModelName("OMNIVOICE_Q4_K_M")
 }
 
-func (r *executionTestRuntime) Load(_ context.Context, _ localmodels.LoadRequest) (localmodels.Handle, error) {
+func (r *executionTestRuntime) Load(_ context.Context, request localmodels.LoadRequest) (localmodels.Handle, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.loads++
+	r.lastServingEndpoint = strings.TrimSpace(request.ServingEndpoint)
 	return executionTestHandle{runtime: r}, nil
 }
 
@@ -136,5 +139,11 @@ func TestLeaseExecution_AcquiresAndReleasesHostLeaseAroundInference(t *testing.T
 	}
 	if runtime.loads != 1 || runtime.invocations != 1 {
 		t.Fatalf("runtime load/invoke = %d/%d, want 1/1", runtime.loads, runtime.invocations)
+	}
+	runtime.mu.Lock()
+	servingEndpoint := runtime.lastServingEndpoint
+	runtime.mu.Unlock()
+	if servingEndpoint != healthServer.URL {
+		t.Fatalf("serving endpoint = %q, want supervised lease endpoint %q", servingEndpoint, healthServer.URL)
 	}
 }
