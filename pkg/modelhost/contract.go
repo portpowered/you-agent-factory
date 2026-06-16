@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -91,8 +92,10 @@ type Lease struct {
 
 // Options configures catalog-backed host construction.
 type Options struct {
-	SourceResolver SourceResolver
-	Supervisor     SupervisorConfig
+	SourceResolver    SourceResolver
+	Supervisor        SupervisorConfig
+	IdleUnloadAfter   time.Duration
+	MaxLoadedRuntimes int
 }
 
 // SourceResolution classifies which backend source satisfies one managed runtime.

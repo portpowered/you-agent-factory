@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
@@ -16,20 +17,26 @@ import (
 
 // CatalogHost is the catalog-backed model host implementation for process-level wiring.
 type CatalogHost struct {
-	mu            sync.Mutex
-	assets        AssetGateway
-	opts          Options
-	supervisor    SupervisorConfig
-	leases        map[string]*trackedLease
-	byModel       map[string]map[string]struct{}
-	runtimeSlots  map[string]*supervisedRuntime
-	seq           uint64
+	mu                sync.Mutex
+	assets            AssetGateway
+	opts              Options
+	supervisor        SupervisorConfig
+	leases            map[string]*trackedLease
+	byModel           map[string]map[string]struct{}
+	runtimeSlots      map[string]*supervisedRuntime
+	idleUnloadTimers  map[string]*time.Timer
+	idleUnloadAfter   time.Duration
+	maxLoadedRuntimes int
+	seq               uint64
 }
 
 type trackedLease struct {
-	lease     Lease
-	modelKey  string
-	runtimeID string
+	lease      Lease
+	modelKey   string
+	runtimeID  string
+	slotKey    string
+	runtimeCfg *factoryconfig.LoadedFactoryConfig
+	modelName  string
 }
 
 // NewCatalogHost constructs a process-wide model host backed by managed asset integration.
@@ -40,13 +47,17 @@ func NewCatalogHost(assets AssetGateway, opts Options) *CatalogHost {
 	if opts.SourceResolver == nil {
 		opts.SourceResolver = DefaultManagedRuntimeSourceResolverAdapter()
 	}
+	idleUnloadAfter, maxLoadedRuntimes := normalizeLeasePolicyOptions(opts)
 	return &CatalogHost{
-		assets:       assets,
-		opts:         opts,
-		supervisor:   normalizeSupervisorConfig(opts.Supervisor),
-		leases:       make(map[string]*trackedLease),
-		byModel:      make(map[string]map[string]struct{}),
-		runtimeSlots: make(map[string]*supervisedRuntime),
+		assets:            assets,
+		opts:              opts,
+		supervisor:        normalizeSupervisorConfig(opts.Supervisor),
+		leases:            make(map[string]*trackedLease),
+		byModel:           make(map[string]map[string]struct{}),
+		runtimeSlots:      make(map[string]*supervisedRuntime),
+		idleUnloadTimers:  make(map[string]*time.Timer),
+		idleUnloadAfter:   idleUnloadAfter,
+		maxLoadedRuntimes: maxLoadedRuntimes,
 	}
 }
 
@@ -152,7 +163,19 @@ func (h *CatalogHost) AcquireLease(
 		return Lease{}, err
 	}
 	snapshot := h.overlaySupervisedReadiness(ClassifyReadiness(identity, inspection, false), inspection, runtimeCfg, modelName)
+	modelKey := canonicalModelKey(modelName)
+	leaseCapacity := h.leaseCapacityForModel(runtimeCfg, modelName)
+	h.mu.Lock()
+	if h.leaseCapacityExhausted(modelKey, leaseCapacity) {
+		h.mu.Unlock()
+		return Lease{}, leaseCapacityError(modelName)
+	}
+	h.mu.Unlock()
+
 	if requiresSupervisedBackend(snapshot.Identity) && inspection.Installed {
+		if err := h.evictIdleRuntimesForCapacity(ctx, runtimeCfg, modelName); err != nil {
+			return Lease{}, err
+		}
 		worker, workerErr := h.localWorkerForModel(runtimeCfg, modelName)
 		if workerErr != nil {
 			return Lease{}, workerErr
@@ -165,21 +188,35 @@ func (h *CatalogHost) AcquireLease(
 		if err := slot.ensureReady(ctx, spec); err != nil {
 			return Lease{}, err
 		}
+		if !slot.isReady() {
+			return Lease{}, slot.failureOutcome()
+		}
 		snapshot = slot.readinessOverlay(snapshot.Identity, snapshot)
 	}
 	if snapshot.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
 		cause := readinessCause(snapshot)
 		return Lease{}, &ReadinessError{Snapshot: snapshot, Cause: cause}
 	}
-	endpoint := ""
-	if requiresSupervisedBackend(snapshot.Identity) {
-		endpoint = h.runtimeSlot(runtimeCfg, modelName).endpointValue()
-	}
+	slotKey := h.runtimeSlotKey(runtimeCfg, modelName)
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.leaseCapacityExhausted(modelKey, leaseCapacity) {
+		return Lease{}, leaseCapacityError(modelName)
+	}
+	endpoint := ""
+	if requiresSupervisedBackend(snapshot.Identity) {
+		slot := h.runtimeSlots[slotKey]
+		if slot == nil || !slot.isReady() {
+			return Lease{}, ErrRuntimeNotReady
+		}
+		endpoint = slot.endpointValue()
+		if endpoint == "" {
+			return Lease{}, ErrRuntimeNotReady
+		}
+	}
+	h.cancelIdleUnloadLocked(slotKey)
 	h.seq++
 	leaseID := fmt.Sprintf("model-lease-%d", h.seq)
-	modelKey := canonicalModelKey(modelName)
 	lease := Lease{
 		ID:       leaseID,
 		Identity: snapshot.Identity,
@@ -187,9 +224,12 @@ func (h *CatalogHost) AcquireLease(
 		Holder:   strings.TrimSpace(opts.Holder),
 	}
 	h.leases[leaseID] = &trackedLease{
-		lease:     lease,
-		modelKey:  modelKey,
-		runtimeID: runtimeIdentityKey(runtimeCfg),
+		lease:      lease,
+		modelKey:   modelKey,
+		runtimeID:  runtimeIdentityKey(runtimeCfg),
+		slotKey:    slotKey,
+		runtimeCfg: runtimeCfg,
+		modelName:  modelName,
 	}
 	if h.byModel[modelKey] == nil {
 		h.byModel[modelKey] = make(map[string]struct{})
@@ -200,17 +240,28 @@ func (h *CatalogHost) AcquireLease(
 
 func (h *CatalogHost) ReleaseLease(_ context.Context, leaseID string) error {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	tracked, ok := h.leases[leaseID]
 	if !ok {
+		h.mu.Unlock()
 		return ErrLeaseNotFound
 	}
 	delete(h.leases, leaseID)
-	if leases, ok := h.byModel[tracked.modelKey]; ok {
+	modelKey := tracked.modelKey
+	if leases, ok := h.byModel[modelKey]; ok {
 		delete(leases, leaseID)
 		if len(leases) == 0 {
-			delete(h.byModel, tracked.modelKey)
+			delete(h.byModel, modelKey)
 		}
+	}
+	slotKey := tracked.slotKey
+	runtimeCfg := tracked.runtimeCfg
+	modelName := tracked.modelName
+	h.mu.Unlock()
+
+	if slotKey != "" && runtimeCfg != nil {
+		h.mu.Lock()
+		h.scheduleIdleUnloadIfIdle(slotKey, runtimeCfg, modelName)
+		h.mu.Unlock()
 	}
 	return nil
 }
@@ -236,7 +287,36 @@ func (h *CatalogHost) Unload(
 	}
 	slotKey := h.runtimeSlotKey(runtimeCfg, modelName)
 	slot := h.runtimeSlots[slotKey]
+	if slot != nil && slot.isLoading() {
+		h.mu.Unlock()
+		return &ReadinessError{
+			Snapshot: ReadinessSnapshot{
+				Identity:       Identity{Name: strings.TrimSpace(modelName)},
+				ReadinessState: factoryapi.ManagedRuntimeReadinessStateLOADING,
+				LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADING,
+				FailureClass:   FailureClassCapacityExhausted,
+			},
+			Cause: ErrCapacityExhausted,
+		}
+	}
+	h.cancelIdleUnloadLocked(slotKey)
+	h.mu.Unlock()
+	return h.unloadRuntime(ctx, runtimeCfg, modelName, slotKey)
+}
+
+func (h *CatalogHost) unloadRuntime(
+	ctx context.Context,
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	modelName string,
+	slotKey string,
+) error {
+	if slotKey == "" {
+		slotKey = h.runtimeSlotKey(runtimeCfg, modelName)
+	}
+	h.mu.Lock()
+	slot := h.runtimeSlots[slotKey]
 	delete(h.runtimeSlots, slotKey)
+	h.cancelIdleUnloadLocked(slotKey)
 	h.mu.Unlock()
 	if slot != nil {
 		return slot.stop(ctx)
@@ -250,6 +330,10 @@ func (h *CatalogHost) Shutdown(ctx context.Context) error {
 		return nil
 	}
 	h.mu.Lock()
+	for _, timer := range h.idleUnloadTimers {
+		timer.Stop()
+	}
+	h.idleUnloadTimers = make(map[string]*time.Timer)
 	slots := make([]*supervisedRuntime, 0, len(h.runtimeSlots))
 	for _, slot := range h.runtimeSlots {
 		slots = append(slots, slot)
@@ -275,7 +359,19 @@ func (h *CatalogHost) overlaySupervisedReadiness(
 	if !requiresSupervisedBackend(snapshot.Identity) || !inspection.Installed {
 		return snapshot
 	}
-	slot := h.runtimeSlot(runtimeCfg, modelName)
+	slot := h.peekRuntimeSlot(runtimeCfg, modelName)
+	if slot == nil {
+		if snapshot.ReadinessState == factoryapi.ManagedRuntimeReadinessStateREADY {
+			return ReadinessSnapshot{
+				Identity:       snapshot.Identity,
+				ReadinessState: factoryapi.ManagedRuntimeReadinessStateLOADING,
+				LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADING,
+				FailureClass:   FailureClassLoadingTimeout,
+				Diagnostics:    managedDiagnostics(snapshot.Identity, factoryapi.ManagedRuntimeReadinessStateLOADING, factoryapi.ManagedRuntimeLifecycleStateLOADING),
+			}
+		}
+		return snapshot
+	}
 	return slot.readinessOverlay(snapshot.Identity, snapshot)
 }
 
@@ -290,6 +386,13 @@ func (h *CatalogHost) runtimeSlot(runtimeCfg *factoryconfig.LoadedFactoryConfig,
 	slot = &supervisedRuntime{cfg: h.supervisor}
 	h.runtimeSlots[key] = slot
 	return slot
+}
+
+func (h *CatalogHost) peekRuntimeSlot(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) *supervisedRuntime {
+	key := h.runtimeSlotKey(runtimeCfg, modelName)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.runtimeSlots[key]
 }
 
 func (h *CatalogHost) runtimeSlotKey(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) string {

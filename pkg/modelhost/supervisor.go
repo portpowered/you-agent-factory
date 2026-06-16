@@ -351,3 +351,26 @@ func (r *supervisedRuntime) endpointValue() string {
 	defer r.mu.Unlock()
 	return r.endpoint
 }
+
+func (r *supervisedRuntime) isResident() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	switch r.state {
+	case supervisedStateLoading, supervisedStateReady, supervisedStateFailed:
+		return true
+	default:
+		return false
+	}
+}
+
+func (r *supervisedRuntime) isReady() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.state == supervisedStateReady
+}
+
+func (r *supervisedRuntime) isLoading() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.state == supervisedStateLoading
+}
