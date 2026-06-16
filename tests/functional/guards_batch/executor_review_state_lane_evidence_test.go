@@ -323,11 +323,12 @@ func TestExecutorReviewLaneEvidence_SubmitFullPlacesDuplicateReviewInitTokens(t 
 		traceID  = "trace-duplicate-review"
 	)
 
+	injectDuplicateReviewInitPattern(t, h, laneName, traceID)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
-	injectDuplicateReviewInitPattern(t, h, laneName, traceID)
 	support.WaitForHarnessPlaceTokenCount(t, h, "review:init", 2, time.Second)
 
 	cancel()

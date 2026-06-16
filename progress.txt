@@ -1,0 +1,85 @@
+## Codebase Patterns
+- Use `workflowruntime.Hooks.NewChildExecutor` with `ChildRecordSink` to swap fake vs `live-provider` child execution without changing workflow JS source.
+- `ChildExecutor.Execute` accepts the bounded workflow `context.Context` from `workflowruntime.Run`; live provider bridges must pass it through to `Provider.Infer` instead of `context.Background()`.
+- Select live child execution via `StartRequest.Runtime.ChildExecutorMode = "live-provider"` and configure `JavaScriptRuntimeServiceConfig.Provider`.
+- Durable dispatch inspection for JavaScript children flows through `ProjectRuntimeExecutionRecords` into `DispatchSummary` plus `DispatchJavaScriptProjection.ExecutionMode`.
+- `ProjectRuntimeExecutionRecords` also projects ordered `DispatchStatusTransitions` per dispatch ID and child output artifacts from completed `ChildDispatchRecord.ArtifactRef`.
+- Failed child dispatches persist `FailureReason`, `FailureMessage`, and optional `FailureErrorClass` on terminal `ChildDispatchRecord` rows; `dispatchFailureDetailFromChildRecord` maps them to `DispatchFailureDetail`.
+- `projectRuntimeSessionState` applies `applyRuntimeExecutionRecordProjection` on workflow failure when `outcome.Records` is non-empty so failed child dispatches remain inspectable.
+- `workflowruntime.Run` attaches emitted runtime records to terminal promise-rejection and invalid-result failures, not only synchronous script errors.
+- `GetDispatch` on the JavaScript runtime service exposes `StatusTransitions` and `ArtifactIDs` from the runtime projection state.
+- Default JavaScript runtime durable sessions keep fake child execution when no runtime override is provided.
+- Select explicit fake child execution via `StartRequest.Runtime.ChildExecutorMode = "fake"` even when the service default is `live-provider`; request-level mode wins over `JavaScriptRuntimeServiceConfig.ChildExecutorMode`.
+- Record deferred CLI/MCP/website follow-ups in `docs/internal/development/plans/dynamic-workflows/follow-up-cell-live-provider-dispatch-bridge-deferred.md` instead of widening the bridge lane.
+- When `make pkg-file-count` fails after adding bridge files, move provider code to `pkg/factorysessionexecution/livechild` and consolidate fixture tests rather than adding root package files; avoid importing `factorysessionexecution` from `livechild` tests (import cycle).
+
+## 2026-06-16T14:30:00Z - mergeability: PR #822 pkg-file-count
+- Fixed required CI `Build, Lint, and API` failure from `pkg-file-count` by moving `ProviderChildExecutor` to `pkg/factorysessionexecution/livechild`, merging live-child fixture tests into `fixtures/runtime_live_child_test.go`, folding `session_event_projection_test.go` into `projection_test.go`, merging `typed_failure_cases_test.go` into `typed_failures_test.go`, and inlining `child_record_sink.go` into `child_execution.go`.
+- Files changed: `pkg/factorysessionexecution/{livechild,types,normalize,runtime_service,projection_test}`, `pkg/factorysessionexecution/fixtures/{runtime_live_child_test,typed_failures_test}.go`, `pkg/orchestrators/javascript/runtime/child_execution.go`, docs path updates.
+- **Learnings for future iterations:**
+  - Patterns discovered: `livechild` tests must not import `factorysessionexecution` because `runtime_service.go` imports `livechild` (cycle); assert on sink records directly in package tests.
+  - Gotchas encountered: naïvely concatenating test files duplicates `package`/`import` blocks; strip duplicates after merge.
+  - Useful context: `make pkg-file-count` is separate from `backendsizecheck`; both can block CI independently.
+---
+
+## 2026-06-16T14:40:00Z - mergeability: PR #822 Backend Verification
+- Fixed flaky `tests/functional/guards_batch` failures (`engine has terminated`) by waiting for harness runtime availability before post-run submits in `same_name_guard_test.go` and queueing staggered consume-path work before `RunInBackground` in `same_name_consume_path_regression_test.go`.
+- Follow-up on CI: switched `TestSameNameGuard_MatchingNamesCompletesJoin` and `TestSameNameGuard_LaterMatchingTokenStillCompletesJoin` to submit-before-run ordering (head `90f3a2a53`).
+- Files changed: `tests/functional/guards_batch/{same_name_guard_test,same_name_consume_path_regression_test}.go`.
+- **Learnings for future iterations:**
+  - Patterns discovered: when `SubmitFull` immediately after `RunInBackground` fails with `engine has terminated`, either call `support.WaitForHarnessRuntimeAvailability` or submit work before starting the background run (see `ConcurrentPairsCompleteIndependently`).
+  - Gotchas encountered: `go test -count=10` on `guards_batch` reproduces CI flakes that a single `make test` pass can miss.
+  - Useful context: Backend Verification runs coverage over the full backend graph and is more likely to surface timing-sensitive harness tests than short `make test`.
+---
+
+## 2026-06-16T18:00:00Z - mergeability: PR #822 blocking feedback
+- Threaded workflow run context through `ChildExecutor.Execute` from `workflowruntime.Run` into `ProviderChildExecutor` provider `Infer` calls, with parallel child goroutines checking `ctx.Err()` before and during execution.
+- Added cancellation/timeout behavioral tests in `child_executor_provider_test.go` and durable-session timeout fixture `runtime_live_child_cancellation_test.go`.
+- Resolved backend-size CI failures by extracting `runtime_execution_projection.go` and splitting long fixture assertion helpers into `runtime_live_child_helpers_test.go`.
+- Files changed: `pkg/orchestrators/javascript/runtime/{child_execution,globals,runtime,host_children,host_children_test}.go`, `pkg/factorysessionexecution/{child_executor_provider,child_executor_provider_test,projection_consistency,runtime_execution_projection}.go`, `pkg/factorysessionexecution/fixtures/runtime_live_child_{cancellation,dispatch,failure,helpers}_test.go`.
+- **Learnings for future iterations:**
+  - Patterns discovered: `failedChildResult` wraps provider errors as plain strings, so cancellation tests should assert message/context observation rather than `errors.Is` on the returned Execute error.
+  - Gotchas encountered: backend-size limits apply to helper functions in fixture tests, not only production files.
+  - Useful context: `make test` including `tests/functional/guards_batch` passes on current head after the context fix; prior `engine has terminated` report appears flaky rather than branch-specific.
+---
+
+## 2026-06-16T16:30:00Z - dynamic-workflows-cell-live-provider-dispatch-bridge-004
+- Added durable-session coexistence fixtures proving the same workflow source runs through fake (default) and live-provider child executors without syntax changes, including explicit fake override on live-configured services and fake-mode `parallel`/`pipeline` fanout without provider calls.
+- Recorded deferred CLI live smoke, MCP runtime serve, website inspection, and broader live-provider parity as follow-up cells in `follow-up-cell-live-provider-dispatch-bridge-deferred.md`.
+- Files changed: `pkg/factorysessionexecution/fixtures/runtime_child_executor_coexistence_test.go`, `docs/internal/development/plans/dynamic-workflows/follow-up-cell-live-provider-dispatch-bridge-deferred.md`, `docs/internal/processes/api-relevant-files.md`.
+- **Learnings for future iterations:**
+  - Patterns discovered: `childExecutorForRun` falls back to `FakeChildExecutor` when `Hooks.NewChildExecutor` is nil; live mode only installs the hook when resolved mode is `live-provider`.
+  - Gotchas encountered: coexistence proof belongs in durable-session fixtures, not only `workflowruntime.Run` host tests, to cover `GetDispatch` execution-mode projection.
+  - Useful context: parallel and pipeline fake children each emit multiple `dispatch-*` rows inspectable through shared `ListDispatches`/`GetDispatch` reads.
+---
+
+## 2026-06-16T00:00:00Z - dynamic-workflows-cell-live-provider-dispatch-bridge-001
+- Implemented `ProviderChildExecutor` and wired `JavaScriptRuntimeService` to route `agent.run` through `workflowruntime.Hooks.NewChildExecutor` when `Runtime.ChildExecutorMode` is `live-provider`.
+- Added `ChildRecordSink`, `ChildExecutionModeLive`, and dispatch JavaScript projection `ExecutionMode` so shared session/dispatch reads expose non-fake execution mode with stable `dispatch-1` identity.
+- Files changed: `pkg/orchestrators/javascript/runtime/{records,types,runtime,child_execution,child_record_sink}.go`, `pkg/factorysessionexecution/{child_executor_provider,runtime_service,types,normalize,idempotency,projection_consistency}.go`, plus focused tests in `pkg/factorysessionexecution/` and `pkg/factorysessionexecution/fixtures/`.
+- **Learnings for future iterations:**
+  - Patterns discovered: `ChildExecutorFactory` now receives `ChildRecordSink` so provider bridges can reserve dispatch IDs the same way as `FakeChildExecutor`.
+  - Gotchas encountered: `pkg/factorysessionexecution` tests cannot import `pkg/testutil` because of an import cycle through `mock_factory.go`; use local mock providers in package tests.
+  - Useful context: live child mode validation happens at start time and requires `JavaScriptRuntimeServiceConfig.Provider`; fake mode remains the default for existing fixtures.
+---
+
+## 2026-06-16T12:30:00Z - dynamic-workflows-cell-live-provider-dispatch-bridge-002
+- Extended `ProjectRuntimeExecutionRecords` to accumulate ordered `DispatchStatusTransitions` per dispatch ID from child dispatch runtime records.
+- Exposed `StatusTransitions` and `ArtifactIDs` on `DispatchDetail` via `JavaScriptRuntimeService.GetDispatch`, and verified live child provider-session refs, output artifacts, and lifecycle transitions through fixture and unit tests.
+- Files changed: `pkg/factorysessionexecution/{projection_consistency,runtime_service,projection_test,child_executor_provider_test}.go`, `pkg/factorysessionexecution/fixtures/runtime_live_child_dispatch_test.go`.
+- **Learnings for future iterations:**
+  - Patterns discovered: child output artifacts are projected from completed dispatch `ArtifactRef` URIs via `childArtifactFromDispatch`; use `workflowresult.FormatArtifactURI` in tests.
+  - Gotchas encountered: `DispatchDetail` previously omitted `ArtifactIDs` and lifecycle history even when list/summary projections had artifact and status data.
+  - Useful context: status transitions are deduplicated consecutive statuses from ordered runtime records, matching queued/running/completed child executor writes.
+---
+
+## 2026-06-16T14:00:00Z - dynamic-workflows-cell-live-provider-dispatch-bridge-003
+- Projected typed bridged-child failure detail through shared dispatch reads by persisting failure fields on terminal `ChildDispatchRecord` rows and mapping them to `DispatchFailureDetail` in `ProjectRuntimeExecutionRecords`.
+- Applied runtime record projection on workflow failure paths and preserved emitted child records for async promise-rejection failures so failed live children stay inspectable without corrupting sibling dispatches.
+- Added live parallel and agent.run failure fixtures/tests covering failed dispatch lifecycle, typed failure detail, sibling preservation, and readable parent session inspection after failure.
+- Files changed: `pkg/orchestrators/javascript/runtime/{records,child_execution,runtime}.go`, `pkg/factorysessionexecution/{child_executor_provider,projection_consistency,runtime_service,projection_test,child_executor_provider_test}.go`, `pkg/factorysessionexecution/fixtures/runtime_live_child_failure_test.go`, `pkg/orchestrators/javascript/runtime/testdata/agent-run-live-child-failure.workflow.js`.
+- **Learnings for future iterations:**
+  - Patterns discovered: use `ChildExecutionFailureReason` plus optional provider `WorkFailureType`/`WorkFailureFamily` when writing failed live child dispatch records.
+  - Gotchas encountered: async `agent.run` failures surface as rejected workflow promises; `workflowruntime.Run` must attach `records.list()` on that terminal path or durable dispatch reads stay empty.
+  - Useful context: parallel child failures keep the parent workflow successful while `parallel()` captures per-child FAILED results; sibling dispatch summaries remain intact for inspection.
+---

@@ -6,6 +6,9 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 )
 
 func TestNormalizeResultRequest_DefaultsAndValidation(t *testing.T) {
@@ -169,6 +172,128 @@ func TestBuildCanonicalSessionEvents_RunningAndTerminalSessions(t *testing.T) {
 	assertCanonicalEventEnvelope(t, terminalEvents[2], "SESSION_COMPLETED", "session-completed/dur-sess-js-success-002")
 }
 
+func TestProjectRuntimeExecutionRecords_LiveChildDispatch_ProjectsLifecycleArtifactsAndProviderSession(t *testing.T) {
+	artifactRef := workflowresult.FormatArtifactURI("session-live-child", "child-artifact-1")
+	records := []workflowruntime.RuntimeRecord{
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:    "dispatch-1",
+				Status:        workflowruntime.ChildDispatchStatusQueued,
+				Label:         "summarize-findings",
+				ExecutionMode: ChildExecutorModeLive,
+				ArtifactRef:   artifactRef,
+			},
+		},
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:    "dispatch-1",
+				Status:        workflowruntime.ChildDispatchStatusRunning,
+				Label:         "summarize-findings",
+				ExecutionMode: ChildExecutorModeLive,
+				ArtifactRef:   artifactRef,
+			},
+		},
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:         "dispatch-1",
+				Status:             workflowruntime.ChildDispatchStatusCompleted,
+				Label:              "summarize-findings",
+				ExecutionMode:      ChildExecutorModeLive,
+				Provider:           "mock",
+				ProviderSessionRef: "provider-session-42",
+				ArtifactRef:        artifactRef,
+			},
+		},
+	}
+
+	observedAt := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+	projection := ProjectRuntimeExecutionRecords("session-live-child", records, observedAt)
+	if len(projection.Dispatches) != 1 {
+		t.Fatalf("dispatches = %#v, want one dispatch", projection.Dispatches)
+	}
+	dispatch := projection.Dispatches[0]
+	if dispatch.Status != DispatchStatusCompleted {
+		t.Fatalf("dispatch status = %q, want COMPLETED", dispatch.Status)
+	}
+	if len(dispatch.ProviderSessionRefs) != 1 || dispatch.ProviderSessionRefs[0].ID != "provider-session-42" {
+		t.Fatalf("providerSessionRefs = %#v", dispatch.ProviderSessionRefs)
+	}
+	if len(dispatch.OutputArtifactIDs) != 1 || dispatch.OutputArtifactIDs[0] != "child-artifact-1" {
+		t.Fatalf("outputArtifactIds = %#v", dispatch.OutputArtifactIDs)
+	}
+	transitions := projection.DispatchStatusTransitions["dispatch-1"]
+	if len(transitions) != 3 {
+		t.Fatalf("statusTransitions = %#v, want queued/running/completed", transitions)
+	}
+	if len(projection.Artifacts) != 1 || projection.Artifacts[0].ID != "child-artifact-1" {
+		t.Fatalf("artifacts = %#v", projection.Artifacts)
+	}
+}
+
+func TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail(t *testing.T) {
+	records := []workflowruntime.RuntimeRecord{
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:    "dispatch-2",
+				Status:        workflowruntime.ChildDispatchStatusQueued,
+				Label:         "child-1",
+				ExecutionMode: ChildExecutorModeLive,
+			},
+		},
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:    "dispatch-2",
+				Status:        workflowruntime.ChildDispatchStatusRunning,
+				Label:         "child-1",
+				ExecutionMode: ChildExecutorModeLive,
+			},
+		},
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:        "dispatch-2",
+				Status:            workflowruntime.ChildDispatchStatusFailed,
+				Label:             "child-1",
+				ExecutionMode:     ChildExecutorModeLive,
+				FailureReason:     workflowruntime.ChildExecutionFailureReason,
+				FailureMessage:    "live child failed: simulated child error",
+				FailureErrorClass: "terminal",
+			},
+		},
+	}
+
+	observedAt := time.Date(2026, 6, 16, 14, 0, 0, 0, time.UTC)
+	projection := ProjectRuntimeExecutionRecords("session-live-child-failure", records, observedAt)
+	if len(projection.Dispatches) != 1 {
+		t.Fatalf("dispatches = %#v, want one failed dispatch", projection.Dispatches)
+	}
+	dispatch := projection.Dispatches[0]
+	if dispatch.Status != DispatchStatusFailed {
+		t.Fatalf("dispatch status = %q, want FAILED", dispatch.Status)
+	}
+	if dispatch.FailureDetail == nil || dispatch.FailureDetail.Reason != workflowruntime.ChildExecutionFailureReason {
+		t.Fatalf("failureDetail = %#v", dispatch.FailureDetail)
+	}
+	if dispatch.FailureDetail.Message != "live child failed: simulated child error" {
+		t.Fatalf("failure message = %q", dispatch.FailureDetail.Message)
+	}
+	if dispatch.FailureDetail.ErrorClass != "terminal" {
+		t.Fatalf("failure errorClass = %q, want terminal", dispatch.FailureDetail.ErrorClass)
+	}
+	if len(projection.Artifacts) != 0 {
+		t.Fatalf("artifacts = %#v, want none for failed child", projection.Artifacts)
+	}
+	transitions := projection.DispatchStatusTransitions["dispatch-2"]
+	if len(transitions) != 3 || transitions[2] != DispatchStatusFailed {
+		t.Fatalf("statusTransitions = %#v, want queued/running/failed", transitions)
+	}
+}
+
 func TestFilterEventsAfterReconnect_AfterEventIDAndSequence(t *testing.T) {
 	events := []json.RawMessage{
 		json.RawMessage(`{"id":"session-started/s1","context":{"sequence":1,"sessionSequence":0}}`),
@@ -241,5 +366,200 @@ func assertCanonicalEventEnvelope(t *testing.T, raw json.RawMessage, eventType, 
 	}
 	if len(envelope.Payload) == 0 {
 		t.Fatal("payload missing")
+	}
+}
+func TestReplaySessionProjection_TerminalSessionBracket(t *testing.T) {
+	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	finishedAt := time.Date(2026, 6, 11, 12, 0, 2, 0, time.UTC)
+	sessionID := "dur-sess-replay-001"
+	events := BuildCanonicalRuntimeSessionEvents(
+		SessionReadResult{
+			SessionID:        sessionID,
+			Status:           LifecycleStatusSucceeded,
+			OrchestratorKind: "JAVASCRIPT",
+			Dialect:          "you-workflow-v1",
+			SourceHash:       "sha256:fixture",
+			Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
+			ResolvedSource: ResolvedSource{
+				SourceRef:  "workflow/simple-final",
+				SourceHash: "sha256:fixture",
+			},
+			ResultSummary: &ResultSummary{
+				ResultStatus: string(ResultStatusFinal),
+				Summary:      "Completed simple workflow.",
+			},
+			Lifecycle: &LifecycleTimestamps{
+				StartedAt:  &startedAt,
+				FinishedAt: &finishedAt,
+			},
+		},
+		ResultReadResult{
+			SessionID:    sessionID,
+			ResultStatus: ResultStatusFinal,
+		},
+	)
+
+	session, result, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if session.Status != LifecycleStatusSucceeded {
+		t.Fatalf("status = %q, want SUCCEEDED", session.Status)
+	}
+	if session.SourceHash != "sha256:fixture" {
+		t.Fatalf("sourceHash = %q", session.SourceHash)
+	}
+	if session.Policy.EffectiveHash != "sha256:policy" {
+		t.Fatalf("policyHash = %q", session.Policy.EffectiveHash)
+	}
+	if session.ResultSummary == nil || session.ResultSummary.ResultStatus != string(ResultStatusFinal) {
+		t.Fatalf("resultSummary = %#v, want FINAL", session.ResultSummary)
+	}
+	if session.Links.Session == "" || session.Links.Events == "" {
+		t.Fatal("expected inspection links")
+	}
+	if result.ResultStatus != ResultStatusFinal {
+		t.Fatalf("resultStatus = %q, want FINAL", result.ResultStatus)
+	}
+}
+
+func TestReplaySessionProjection_IdempotentOnDuplicateSequence(t *testing.T) {
+	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	sessionID := "dur-sess-replay-002"
+	events := BuildCanonicalRuntimeSessionEvents(
+		SessionReadResult{
+			SessionID:        sessionID,
+			Status:           LifecycleStatusRunning,
+			OrchestratorKind: "JAVASCRIPT",
+			SourceHash:       "sha256:fixture",
+			Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
+			ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
+			Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+		},
+		ResultReadResult{
+			SessionID:    sessionID,
+			ResultStatus: ResultStatusNotReady,
+		},
+	)
+
+	firstSession, firstResult, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection first: %v", err)
+	}
+	secondSession, secondResult, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection second: %v", err)
+	}
+	if firstSession.SessionID != secondSession.SessionID ||
+		firstSession.Status != secondSession.Status ||
+		firstSession.SourceHash != secondSession.SourceHash ||
+		firstSession.Policy.EffectiveHash != secondSession.Policy.EffectiveHash ||
+		firstSession.Links.Session != secondSession.Links.Session {
+		t.Fatalf("session projection changed on replay: %#v vs %#v", firstSession, secondSession)
+	}
+	if firstResult.ResultStatus != secondResult.ResultStatus ||
+		firstResult.SessionStatus != secondResult.SessionStatus {
+		t.Fatalf("result projection changed on replay: %#v vs %#v", firstResult, secondResult)
+	}
+}
+
+func TestReplaySessionProjection_ReplacesArtifactStubsWithoutDuplication(t *testing.T) {
+	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	finishedAt := time.Date(2026, 6, 11, 12, 0, 2, 0, time.UTC)
+	sessionID := "dur-sess-replay-003"
+	events := BuildCanonicalRuntimeSessionEvents(
+		SessionReadResult{
+			SessionID:        sessionID,
+			Status:           LifecycleStatusSucceeded,
+			OrchestratorKind: "JAVASCRIPT",
+			SourceHash:       "sha256:fixture",
+			Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
+			ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
+			Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt, FinishedAt: &finishedAt},
+		},
+		ResultReadResult{
+			SessionID:    sessionID,
+			ResultStatus: ResultStatusFinal,
+			ArtifactIDs:  []string{"art-1", "art-2"},
+		},
+	)
+
+	session, _, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if len(session.ArtifactRefs) != 2 {
+		t.Fatalf("artifact refs = %d, want 2", len(session.ArtifactRefs))
+	}
+
+	// Replaying the same events again must not duplicate artifact stubs.
+	sessionAgain, _, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection again: %v", err)
+	}
+	if len(sessionAgain.ArtifactRefs) != 2 {
+		t.Fatalf("artifact refs after second replay = %d, want 2", len(sessionAgain.ArtifactRefs))
+	}
+}
+
+func TestReplaySessionProjection_PreservesSyncTimeoutAvailability(t *testing.T) {
+	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	sessionID := "dur-sess-replay-timeout-availability"
+	events := BuildCanonicalRuntimeSessionEvents(
+		SessionReadResult{
+			SessionID:        sessionID,
+			Status:           LifecycleStatusRunning,
+			OrchestratorKind: "JAVASCRIPT",
+			SourceHash:       "sha256:fixture",
+			Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
+			ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
+			Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+		},
+		ResultReadResult{
+			SessionID:    sessionID,
+			ResultStatus: ResultStatusNotReady,
+			Availability: &ResultAvailabilityDetail{
+				Reason:    "SYNC_WAIT_TIMED_OUT",
+				Message:   "Sync wait ended before a terminal result was available.",
+				Retryable: true,
+			},
+		},
+	)
+
+	_, result, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if result.Availability == nil || result.Availability.Reason != "SYNC_WAIT_TIMED_OUT" {
+		t.Fatalf("availability = %#v, want SYNC_WAIT_TIMED_OUT", result.Availability)
+	}
+}
+
+func TestReplaySessionProjection_IgnoresUnknownEventTypes(t *testing.T) {
+	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	sessionID := "dur-sess-replay-004"
+	base := BuildCanonicalRuntimeSessionEvents(
+		SessionReadResult{
+			SessionID:        sessionID,
+			Status:           LifecycleStatusRunning,
+			OrchestratorKind: "JAVASCRIPT",
+			SourceHash:       "sha256:fixture",
+			Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
+			ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
+			Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+		},
+		ResultReadResult{
+			SessionID:    sessionID,
+			ResultStatus: ResultStatusNotReady,
+		},
+	)
+	events := append(append([]json.RawMessage(nil), base...), json.RawMessage(`{"type":"DISPATCH_QUEUED","id":"dispatch-queued/1","context":{"sequence":99},"payload":{}}`))
+
+	session, _, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if session.SessionID != sessionID {
+		t.Fatalf("sessionId = %q, want %q", session.SessionID, sessionID)
 	}
 }

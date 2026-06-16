@@ -195,7 +195,7 @@ type stubChildExecutor struct {
 	mode   string
 }
 
-func (s *stubChildExecutor) Execute(req workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
+func (s *stubChildExecutor) Execute(_ context.Context, req workflowruntime.ChildExecutionRequest) (workflowruntime.ChildExecutionResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -234,7 +234,7 @@ func TestRun_ChildExecutionBoundary_RoutesAgentRunParallelAndPipelineThroughHook
 		Policy: workflowpolicy.DefaultEffectivePolicy(),
 	}
 	hooks := workflowruntime.Hooks{
-		NewChildExecutor: func(_ string, _ func(workflowruntime.RuntimeRecord)) workflowruntime.ChildExecutor {
+		NewChildExecutor: func(_ string, _ workflowruntime.ChildRecordSink) workflowruntime.ChildExecutor {
 			return stub
 		},
 	}

@@ -85,6 +85,11 @@ func normalizeIdempotencyDocument(req StartRequest) (map[string]any, error) {
 	if policy := normalizeRequestedPolicyForIdempotency(req.RequestedPolicy); policy != nil {
 		document["requestedPolicy"] = policy
 	}
+	if req.Runtime != nil {
+		document["runtime"] = map[string]any{
+			"childExecutorMode": normalizeChildExecutorMode(req.Runtime.ChildExecutorMode),
+		}
+	}
 	return document, nil
 }
 

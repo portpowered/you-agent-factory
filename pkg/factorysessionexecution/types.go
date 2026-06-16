@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
@@ -46,6 +47,19 @@ type WaitOptions struct {
 	CancelOnTimeout bool
 }
 
+const (
+	// ChildExecutorModeFake selects deterministic in-process child execution.
+	ChildExecutorModeFake = workflowruntime.ChildExecutionModeFake
+	// ChildExecutorModeLive selects provider-backed child execution.
+	ChildExecutorModeLive = workflowruntime.ChildExecutionModeLive
+)
+
+// RuntimeOptions selects durable JavaScript runtime execution behavior without
+// changing workflow source syntax.
+type RuntimeOptions struct {
+	ChildExecutorMode string
+}
+
 // StartRequest is the normalized durable session execution request shared by async
 // and sync start across API, CLI, MCP, and UI.
 type StartRequest struct {
@@ -54,6 +68,7 @@ type StartRequest struct {
 	Args            map[string]any
 	Orchestrator    *OrchestratorOverride
 	RequestedPolicy map[string]any
+	Runtime         *RuntimeOptions
 	Wait            *WaitOptions
 }
 

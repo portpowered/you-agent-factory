@@ -1,6 +1,7 @@
 package workflowruntime
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -47,17 +48,17 @@ type ChildExecutionResult struct {
 
 // ChildExecutor executes one child-agent request and appends dispatch-like records.
 type ChildExecutor interface {
-	Execute(req ChildExecutionRequest) (ChildExecutionResult, error)
+	Execute(ctx context.Context, req ChildExecutionRequest) (ChildExecutionResult, error)
 }
 
 // FakeChildExecutor provides deterministic fake child execution for workflow tests.
 type FakeChildExecutor struct {
 	sessionID string
-	records   *recordCollector
+	records   ChildRecordSink
 }
 
 // NewFakeChildExecutor constructs one fake child executor for a workflow session.
-func NewFakeChildExecutor(sessionID string, records *recordCollector) *FakeChildExecutor {
+func NewFakeChildExecutor(sessionID string, records ChildRecordSink) *FakeChildExecutor {
 	return &FakeChildExecutor{
 		sessionID: sessionID,
 		records:   records,
@@ -66,14 +67,17 @@ func NewFakeChildExecutor(sessionID string, records *recordCollector) *FakeChild
 
 // Execute records queued, running, and completed child dispatch transitions and
 // returns a deterministic fake child result derived from the request.
-func (e *FakeChildExecutor) Execute(req ChildExecutionRequest) (ChildExecutionResult, error) {
+func (e *FakeChildExecutor) Execute(ctx context.Context, req ChildExecutionRequest) (ChildExecutionResult, error) {
+	if err := ctx.Err(); err != nil {
+		return ChildExecutionResult{}, err
+	}
 	if strings.HasPrefix(req.Prompt, "fail:") {
-		return e.executeFailed(req)
+		return e.executeFailed(ctx, req)
 	}
 
 	dispatchID, childIndex := e.childDispatchIdentity(req)
 	providerSessionRef := fmt.Sprintf("fake-provider-session-%d", childIndex)
-	artifactID := e.records.nextChildArtifactID()
+	artifactID := e.records.NextChildArtifactID()
 	artifactRef := workflowresult.FormatArtifactURI(e.sessionID, artifactID)
 
 	base := ChildDispatchRecord{
@@ -91,11 +95,11 @@ func (e *FakeChildExecutor) Execute(req ChildExecutionRequest) (ChildExecutionRe
 		ArtifactRef:        artifactRef,
 	}
 
-	e.appendChildDispatch(base, ChildDispatchStatusQueued)
-	e.appendChildDispatch(base, ChildDispatchStatusRunning)
+	e.records.AppendChildDispatch(base, ChildDispatchStatusQueued)
+	e.records.AppendChildDispatch(base, ChildDispatchStatusRunning)
 	completed := base
 	completed.Status = ChildDispatchStatusCompleted
-	e.records.append(RuntimeRecord{
+	e.records.Append(RuntimeRecord{
 		Kind:          RecordKindChildDispatch,
 		ChildDispatch: &completed,
 	})
@@ -113,7 +117,10 @@ func (e *FakeChildExecutor) Execute(req ChildExecutionRequest) (ChildExecutionRe
 	}, nil
 }
 
-func (e *FakeChildExecutor) executeFailed(req ChildExecutionRequest) (ChildExecutionResult, error) {
+func (e *FakeChildExecutor) executeFailed(ctx context.Context, req ChildExecutionRequest) (ChildExecutionResult, error) {
+	if err := ctx.Err(); err != nil {
+		return ChildExecutionResult{}, err
+	}
 	dispatchID, childIndex := e.childDispatchIdentity(req)
 	base := ChildDispatchRecord{
 		DispatchID:      dispatchID,
@@ -127,15 +134,17 @@ func (e *FakeChildExecutor) executeFailed(req ChildExecutionRequest) (ChildExecu
 		SchemaDigest:    schemaDigest(req.OutputSchema),
 		ExecutionMode: ChildExecutionModeFake,
 	}
-	e.appendChildDispatch(base, ChildDispatchStatusQueued)
-	e.appendChildDispatch(base, ChildDispatchStatusRunning)
+	e.records.AppendChildDispatch(base, ChildDispatchStatusQueued)
+	e.records.AppendChildDispatch(base, ChildDispatchStatusRunning)
 	failed := base
 	failed.Status = ChildDispatchStatusFailed
-	e.records.append(RuntimeRecord{
+	diagnostic := fmt.Sprintf("fake child failed: %s", strings.TrimPrefix(req.Prompt, "fail:"))
+	failed.FailureReason = ChildExecutionFailureReason
+	failed.FailureMessage = diagnostic
+	e.records.Append(RuntimeRecord{
 		Kind:          RecordKindChildDispatch,
 		ChildDispatch: &failed,
 	})
-	diagnostic := fmt.Sprintf("fake child failed: %s", strings.TrimPrefix(req.Prompt, "fail:"))
 	return ChildExecutionResult{
 		DispatchID:    dispatchID,
 		ChildIndex:    childIndex,
@@ -150,16 +159,7 @@ func (e *FakeChildExecutor) childDispatchIdentity(req ChildExecutionRequest) (st
 	if req.ReservedIdentity != nil {
 		return req.ReservedIdentity.DispatchID, req.ReservedIdentity.ChildIndex
 	}
-	return e.records.nextChildDispatchIdentity()
-}
-
-func (e *FakeChildExecutor) appendChildDispatch(base ChildDispatchRecord, status string) {
-	record := base
-	record.Status = status
-	e.records.append(RuntimeRecord{
-		Kind:          RecordKindChildDispatch,
-		ChildDispatch: &record,
-	})
+	return e.records.NextChildDispatchIdentity()
 }
 
 func fakeChildOutput(req ChildExecutionRequest, dispatchID, providerSessionRef, artifactRef string) map[string]any {
@@ -301,6 +301,16 @@ func textDigest(text string) string {
 	return contentDigest([]byte(text))
 }
 
+// TextDigest returns a stable digest for one child prompt.
+func TextDigest(text string) string {
+	return textDigest(text)
+}
+
+// SchemaDigest returns a stable digest for one child output schema.
+func SchemaDigest(schema map[string]any) string {
+	return schemaDigest(schema)
+}
+
 func failedChildResultValue(label, executionMode string, err error) map[string]any {
 	if executionMode == "" {
 		executionMode = ChildExecutionModeFake
@@ -356,4 +366,36 @@ func childResultValueMap(result ChildExecutionResult) map[string]any {
 		value["artifactRef"] = result.ArtifactRef
 	}
 	return value
+}
+
+type childRecordSink struct {
+	records *recordCollector
+}
+
+func childRecordSinkFromCollector(records *recordCollector) ChildRecordSink {
+	if records == nil {
+		return childRecordSink{records: newRecordCollector()}
+	}
+	return childRecordSink{records: records}
+}
+
+func (s childRecordSink) Append(record RuntimeRecord) {
+	s.records.append(record)
+}
+
+func (s childRecordSink) AppendChildDispatch(base ChildDispatchRecord, status string) {
+	record := base
+	record.Status = status
+	s.Append(RuntimeRecord{
+		Kind:          RecordKindChildDispatch,
+		ChildDispatch: &record,
+	})
+}
+
+func (s childRecordSink) NextChildDispatchIdentity() (string, int) {
+	return s.records.nextChildDispatchIdentity()
+}
+
+func (s childRecordSink) NextChildArtifactID() string {
+	return s.records.nextChildArtifactID()
 }

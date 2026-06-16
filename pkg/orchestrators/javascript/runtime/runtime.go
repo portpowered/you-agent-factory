@@ -43,6 +43,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 		vm:            vm,
 		policy:        policy,
 		sessionID:     sessionID,
+		ctx:           ctx,
 		records:       records,
 		childExecutor: childExecutorForRun(sessionID, records, hooks),
 		onArtifact:    hooks.OnArtifact,
@@ -86,16 +87,20 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 
 	typed, err := typedValueFromGoja(vm, terminal)
 	if err != nil {
-		return Outcome{
+		outcome := Outcome{
 			OK: false,
 			Failure: Failure{
 				Code:    CodeScriptError,
 				Message: err.Error(),
 			},
-		}, nil
+		}
+		outcome.Records = records.list()
+		return outcome, nil
 	}
 	if validation := workflowresult.ValidateTypedValue(typed); validation.HasIssues() {
-		return invalidResultFailure(validation), nil
+		outcome := invalidResultFailure(validation)
+		outcome.Records = records.list()
+		return outcome, nil
 	}
 	if hooks.OnResult != nil {
 		if err := hooks.OnResult(typed); err != nil {
@@ -126,9 +131,9 @@ func wrapWorkflowSource(source string) string {
 
 func childExecutorForRun(sessionID string, records *recordCollector, hooks Hooks) ChildExecutor {
 	if hooks.NewChildExecutor != nil {
-		return hooks.NewChildExecutor(sessionID, records.append)
+		return hooks.NewChildExecutor(sessionID, childRecordSinkFromCollector(records))
 	}
-	return NewFakeChildExecutor(sessionID, records)
+	return NewFakeChildExecutor(sessionID, childRecordSinkFromCollector(records))
 }
 
 func watchContext(ctx context.Context, vm *goja.Runtime, done <-chan struct{}) {

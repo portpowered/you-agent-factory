@@ -26,6 +26,11 @@ func NormalizeStartRequest(req StartRequest) (StartRequest, error) {
 		Args:            cloneArgs(req.Args),
 		RequestedPolicy: cloneArgs(req.RequestedPolicy),
 	}
+	if req.Runtime != nil {
+		runtime := *req.Runtime
+		runtime.ChildExecutorMode = normalizeChildExecutorMode(runtime.ChildExecutorMode)
+		normalized.Runtime = &runtime
+	}
 	if req.Orchestrator != nil {
 		override := *req.Orchestrator
 		override.Kind = strings.TrimSpace(override.Kind)
@@ -124,4 +129,22 @@ func cloneStringMap(values map[string]string) map[string]string {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+func normalizeChildExecutorMode(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case "", ChildExecutorModeFake:
+		return ChildExecutorModeFake
+	case ChildExecutorModeLive:
+		return ChildExecutorModeLive
+	default:
+		return strings.TrimSpace(mode)
+	}
+}
+
+func resolveChildExecutorMode(configMode string, req StartRequest) string {
+	if req.Runtime != nil && strings.TrimSpace(req.Runtime.ChildExecutorMode) != "" {
+		return normalizeChildExecutorMode(req.Runtime.ChildExecutorMode)
+	}
+	return normalizeChildExecutorMode(configMode)
 }
