@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: removal controller keeps confirm, cancel, and graph/selection delete entry points aligned.
 import { useCallback, useEffect, useState } from "react";
 import type { FactoryGraphEditorTool } from "../../factory-graph-editor/components/controls/factory-graph-editor-controls";
 import type {
@@ -17,7 +18,7 @@ import {
   type FactoryGraphSelectionBatchRemovalSelection,
 } from "../../factory-graph-editor/lib/selection/factory-graph-editor-selection-batch-delete";
 
-export type FactoryGraphSelectionBatchRemovalResult =
+type FactoryGraphSelectionBatchRemovalResult =
   | { status: "applied"; removed: FactoryGraphSelectionBatchRemovalSelection }
   | { status: "blocked" }
   | { status: "empty" }

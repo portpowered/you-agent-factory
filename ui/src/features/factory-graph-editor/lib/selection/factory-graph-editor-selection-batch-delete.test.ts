@@ -46,7 +46,7 @@ const baseFactoryDefinition: CanonicalFactoryDefinition = {
   ],
 };
 
-describe("factory graph editor selection batch delete", () => {
+describe("factory graph editor selection batch delete planning", () => {
   it("builds a single-node removal plan without confirmation for unassigned workers", () => {
     const draft = createEmptyFactoryGraphDraft();
     draft.additions.workers.push({
@@ -106,7 +106,9 @@ describe("factory graph editor selection batch delete", () => {
 
     expect(plan?.ineligibleReason).toContain("still assigned");
   });
+});
 
+describe("factory graph editor selection batch delete apply", () => {
   it("removes workstation nodes and cascades incident edge removals", () => {
     const draft = createEmptyFactoryGraphDraft();
     const nextDraft = applyFactoryGraphSelectionBatchRemoval(

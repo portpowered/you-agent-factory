@@ -10,7 +10,11 @@ export const allowlistedOversizedFeatureFolders = [
     relativeDirectoryPath: "src/features/factory-graph-editor/lib/draft",
   },
   {
-    maxFileCount: 44,
+    maxFileCount: 12,
+    relativeDirectoryPath: "src/features/factory-graph-editor/lib/selection",
+  },
+  {
+    maxFileCount: 48,
     relativeDirectoryPath: "src/features/workflow-activity/hooks",
   },
   {

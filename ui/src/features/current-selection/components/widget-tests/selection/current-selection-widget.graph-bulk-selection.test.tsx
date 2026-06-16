@@ -4,6 +4,7 @@ import type { CanonicalFactoryDefinition } from "../../../../../api/current-fact
 import { semanticWorkflowDashboardSnapshot } from "../../../../../components/dashboard/test-fixtures";
 import { useCurrentFactoryDocument } from "../../../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import type { CurrentSelectionState } from "../../../hooks/core/useCurrentSelection";
+import { selectWorkItemExecutionDetails } from "../../../state/executionDetails";
 import { resetSelectionHistoryStore } from "../../../state/selectionHistoryStore";
 import { useSaveEditableWorkstationConfiguration } from "../../../workstation-selection/hooks/use-save-editable-workstation-configuration";
 import { useCurrentWorkstationPromptTemplateValidation } from "../../../workstation-selection/hooks/useCurrentWorkstationPromptTemplateValidation";
@@ -13,11 +14,16 @@ import {
   renderWithExistingQueryClient,
 } from "../../widget/current-selection-widget-test-utils";
 
-const graphBulkSelectionSummaryState = vi.hoisted(() => ({
+const graphBulkSelectionBridgeState = vi.hoisted(() => ({
   value: null as
     | {
-        totalCount: number;
-        kindCounts: Array<{ count: number; kind: string }>;
+        bulkSelectionSummary: {
+          totalCount: number;
+          kindCounts: Array<{ count: number; kind: string }>;
+        } | null;
+        primaryTarget: { kind: "node"; id: string } | null;
+        selectedEdgeIds: string[];
+        selectedNodeIds: string[];
       }
     | null,
 }));
@@ -27,13 +33,11 @@ vi.mock(
   () => ({
     useFactoryGraphEditorSelectionBridge: (
       selector: (state: {
-        selection: { bulkSelectionSummary: typeof graphBulkSelectionSummaryState.value };
+        selection: typeof graphBulkSelectionBridgeState.value;
       }) => unknown,
     ) =>
       selector({
-        selection: {
-          bulkSelectionSummary: graphBulkSelectionSummaryState.value,
-        },
+        selection: graphBulkSelectionBridgeState.value,
       }),
   }),
 );
@@ -68,10 +72,10 @@ vi.mock(
 
 const DETAIL_CARD_NOW = Date.parse("2026-04-08T12:00:04Z");
 
-describe("CurrentSelectionWidget graph bulk selection", () => {
+describe("CurrentSelectionWidget graph bulk selection summary", () => {
   beforeEach(() => {
     resetSelectionHistoryStore();
-    graphBulkSelectionSummaryState.value = null;
+    graphBulkSelectionBridgeState.value = null;
     vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
       data: {
         diagnostics: [],
@@ -95,7 +99,7 @@ describe("CurrentSelectionWidget graph bulk selection", () => {
 
   afterEach(() => {
     resetSelectionHistoryStore();
-    graphBulkSelectionSummaryState.value = null;
+    graphBulkSelectionBridgeState.value = null;
   });
 
   it("shows workstation detail for a single graph selection", () => {
@@ -123,18 +127,54 @@ describe("CurrentSelectionWidget graph bulk selection", () => {
       within(panel).queryByText("Multiple graph items selected"),
     ).toBeNull();
   });
+});
+
+describe("CurrentSelectionWidget graph bulk selection restoration", () => {
+  beforeEach(() => {
+    resetSelectionHistoryStore();
+    graphBulkSelectionBridgeState.value = null;
+    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
+      data: {
+        diagnostics: [],
+        valid: true,
+      },
+      error: null,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(semanticWorkflowDashboardSnapshot.factory),
+    );
+    vi.mocked(useSaveEditableWorkstationConfiguration).mockReturnValue({
+      canSave: false,
+      save: vi.fn(),
+      saveState: { status: "idle" },
+    });
+  });
+
+  afterEach(() => {
+    resetSelectionHistoryStore();
+    graphBulkSelectionBridgeState.value = null;
+  });
 
   it("shows bulk-selection summary for multi-selection and restores single detail when reduced", () => {
     const snapshot = semanticWorkflowDashboardSnapshot;
     const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
     const queryClient = createCurrentSelectionWidgetQueryClient();
 
-    graphBulkSelectionSummaryState.value = {
-      totalCount: 3,
-      kindCounts: [
-        { kind: "workstation", count: 2 },
-        { kind: "edge", count: 1 },
-      ],
+    graphBulkSelectionBridgeState.value = {
+      bulkSelectionSummary: {
+        totalCount: 3,
+        kindCounts: [
+          { kind: "workstation", count: 2 },
+          { kind: "edge", count: 1 },
+        ],
+      },
+      primaryTarget: { kind: "node", id: "workstation:review" },
+      selectedEdgeIds: ["edge-review-done"],
+      selectedNodeIds: ["workstation:review", "workstation:done"],
     };
 
     const { rerender } = renderWithExistingQueryClient(
@@ -160,7 +200,7 @@ describe("CurrentSelectionWidget graph bulk selection", () => {
       within(panel).queryByRole("heading", { name: "Configuration" }),
     ).toBeNull();
 
-    graphBulkSelectionSummaryState.value = null;
+    graphBulkSelectionBridgeState.value = null;
 
     rerender(
       <CurrentSelectionWidget
@@ -181,6 +221,98 @@ describe("CurrentSelectionWidget graph bulk selection", () => {
     expect(
       within(restoredPanel).getByRole("heading", { name: "Configuration" }),
     ).toBeTruthy();
+  });
+});
+
+describe("CurrentSelectionWidget graph bulk selection non-graph override", () => {
+  beforeEach(() => {
+    resetSelectionHistoryStore();
+    graphBulkSelectionBridgeState.value = null;
+    vi.mocked(useCurrentWorkstationPromptTemplateValidation).mockReturnValue({
+      data: {
+        diagnostics: [],
+        valid: true,
+      },
+      error: null,
+      isError: false,
+      isPending: false,
+      isSuccess: true,
+      status: "success",
+    } as never);
+    vi.mocked(useCurrentFactoryDocument).mockReturnValue(
+      buildEditableDefinitionResult(semanticWorkflowDashboardSnapshot.factory),
+    );
+    vi.mocked(useSaveEditableWorkstationConfiguration).mockReturnValue({
+      canSave: false,
+      save: vi.fn(),
+      saveState: { status: "idle" },
+    });
+  });
+
+  afterEach(() => {
+    resetSelectionHistoryStore();
+    graphBulkSelectionBridgeState.value = null;
+  });
+
+  it("shows work-item detail instead of stale graph bulk summary", () => {
+    const snapshot = semanticWorkflowDashboardSnapshot;
+    const dispatchId = snapshot.runtime.active_dispatch_ids?.[0] ?? "";
+    const execution =
+      snapshot.runtime.active_executions_by_dispatch_id?.[dispatchId];
+    const workItem = execution?.work_items?.[0];
+    const selectedNode = snapshot.topology.workstation_nodes_by_id.review;
+    const queryClient = createCurrentSelectionWidgetQueryClient();
+
+    if (!execution || !workItem || !selectedNode) {
+      throw new Error(
+        "expected semantic workflow fixture to include an active selected work item",
+      );
+    }
+
+    graphBulkSelectionBridgeState.value = {
+      bulkSelectionSummary: {
+        totalCount: 2,
+        kindCounts: [{ kind: "workstation", count: 2 }],
+      },
+      primaryTarget: { kind: "node", id: "workstation:review" },
+      selectedEdgeIds: [],
+      selectedNodeIds: ["workstation:review", "workstation:done"],
+    };
+
+    renderWithExistingQueryClient(
+      queryClient,
+      <CurrentSelectionWidget
+        currentSelection={buildCurrentSelection({
+          selectedNode,
+          selectedWorkID: workItem.work_id,
+          selection: {
+            dispatchId,
+            execution,
+            kind: "work-item",
+            nodeId: selectedNode.node_id,
+            workItem,
+          },
+        })}
+        now={DETAIL_CARD_NOW}
+        selectedWorkExecutionDetails={selectWorkItemExecutionDetails({
+          activeExecution: execution,
+          dispatchID: dispatchId,
+          inferenceAttemptsByDispatchID:
+            snapshot.runtime.inference_attempts_by_dispatch_id,
+          providerSessions: [],
+          selectedNode,
+          workItem,
+          workstationRequestsByDispatchID:
+            snapshot.runtime.workstation_requests_by_dispatch_id,
+        })}
+      />,
+    );
+
+    const panel = screen.getByRole("article", { name: "Current selection" });
+    expect(
+      within(panel).queryByText("Multiple graph items selected"),
+    ).toBeNull();
+    expect(within(panel).getByText(workItem.work_id)).toBeTruthy();
   });
 });
 

@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: graph view-model composes projection, selection bridge, and React Flow presentation in one hook module.
 import type { FitViewOptions, NodeChange } from "@xyflow/react";
 import { useCallback, useMemo, useState } from "react";
 
@@ -352,6 +353,7 @@ function useInitialFitViewOptions(graphLayout: GraphLayout) {
   );
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: composes graph projection, editor-local selection, and React Flow presentation wiring.
 export function useCurrentActivityGraphViewModel({
   editor,
   locale,

@@ -24,9 +24,3 @@ export const useFactoryGraphEditorSelectionBridge =
       set({ selection });
     },
   }));
-
-export function readFactoryGraphEditorSelectionBridgeSnapshot():
-  | FactoryGraphEditorSelectionBridgeSnapshot
-  | null {
-  return useFactoryGraphEditorSelectionBridge.getState().selection;
-}
