@@ -5,12 +5,16 @@ import type {
   DashboardFailedWorkDetail,
   DashboardTrace,
 } from "../../../../api/dashboard/types";
+import type { FactoryGraphBulkSelectionSummary } from "../../../factory-graph-editor/lib/selection/factory-graph-bulk-selection-summary";
 import type { LoadableProviderSessionRef } from "../../../provider-session-detail/lib/provider-session-ref";
+import { useFactoryGraphEditorSelectionBridge } from "../../../workflow-activity/state/factory-graph-editor-selection-bridge";
 import {
   CurrentSelectionHeaderActionProvider,
   CurrentSelectionLocaleProvider,
 } from "../../base/public";
 import { useEditableDocConfigurationState } from "../../doc-selection/hooks/use-editable-doc-configuration-state";
+import { GraphBulkSelectionDetailCard } from "../../graph-selection/components/graph-bulk-selection-detail-card";
+import { resolveActiveGraphBulkSelectionSummary } from "../../graph-selection/lib/resolve-active-graph-bulk-selection-summary";
 import type { CurrentSelectionState } from "../../hooks/core/useCurrentSelection";
 import { useEditableResourceConfigurationState } from "../../resource-selection/hooks/use-editable-resource-configuration-state";
 import { useSelectedProviderSessionState } from "../../work-selection/hooks/useSelectedProviderSessionState";
@@ -53,6 +57,28 @@ export interface CurrentSelectionWidgetProps {
   selectedWorkRelationshipGraph?: SelectedWorkRelationshipGraph;
   selectedWorkExecutionDetails: SelectedWorkItemExecutionDetails | null;
   widgetId?: string;
+}
+
+function renderGraphBulkSelectionDetailCard({
+  bulkSelectionSummary,
+  locale,
+  widgetId,
+}: {
+  bulkSelectionSummary: FactoryGraphBulkSelectionSummary | null;
+  locale?: string;
+  widgetId: string;
+}) {
+  if (!bulkSelectionSummary) {
+    return null;
+  }
+
+  return (
+    <GraphBulkSelectionDetailCard
+      locale={locale}
+      summary={bulkSelectionSummary}
+      widgetId={widgetId}
+    />
+  );
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: selection routing keeps each detail card branch explicit for review.
@@ -340,6 +366,13 @@ export function CurrentSelectionWidget({
   selectedWorkExecutionDetails,
   widgetId = "current-selection",
 }: CurrentSelectionWidgetProps) {
+  const graphSelectionBridge = useFactoryGraphEditorSelectionBridge(
+    (state) => state.selection,
+  );
+  const graphBulkSelectionSummary = resolveActiveGraphBulkSelectionSummary(
+    currentSelection.selection,
+    graphSelectionBridge,
+  );
   const {
     currentFactoryDefinition,
     selectedNode,
@@ -443,40 +476,47 @@ export function CurrentSelectionWidget({
     providerSessionState.selectedProviderSessionKey;
   const handleSelectProviderSession =
     onSelectProviderSession ?? providerSessionState.setSelectedProviderSession;
-  const detailCard = renderCurrentSelectionDetailCard({
-    activeTraceID,
-    currentSelection,
-    docHeaderAction,
-    docSaveState,
-    editableConfigurationState,
-    editableDocConfigurationState,
-    editableResourceConfigurationState,
-    editableWorkStateConfigurationState,
-    editableWorkerConfigurationState,
-    editableWorkTypeConfigurationState,
-    failedWorkDetailsByWorkID,
-    headerAction: workstationHeaderAction,
+  const graphBulkSelectionDetailCard = renderGraphBulkSelectionDetailCard({
+    bulkSelectionSummary: graphBulkSelectionSummary,
     locale: locale ?? undefined,
-    now,
-    onSelectTraceID,
-    resourceHeaderAction,
-    resourceSaveState,
-    workStateHeaderAction,
-    workStateSaveState,
-    onSaveWorkerConfiguration: saveWorkerConfiguration,
-    onSaveWorkStateConfiguration: saveWorkStateConfiguration,
-    workerHeaderAction,
-    workTypeHeaderAction,
-    saveState: workstationSaveState,
-    selectedProviderSessionKey,
-    workTypeSaveState,
-    workerSaveState,
-    selectedTrace,
-    selectedWorkRelationshipGraph,
-    selectedWorkExecutionDetails,
-    setSelectedProviderSession: handleSelectProviderSession,
     widgetId,
   });
+  const detailCard =
+    graphBulkSelectionDetailCard ??
+    renderCurrentSelectionDetailCard({
+      activeTraceID,
+      currentSelection,
+      docHeaderAction,
+      docSaveState,
+      editableConfigurationState,
+      editableDocConfigurationState,
+      editableResourceConfigurationState,
+      editableWorkStateConfigurationState,
+      editableWorkerConfigurationState,
+      editableWorkTypeConfigurationState,
+      failedWorkDetailsByWorkID,
+      headerAction: workstationHeaderAction,
+      locale: locale ?? undefined,
+      now,
+      onSelectTraceID,
+      resourceHeaderAction,
+      resourceSaveState,
+      workStateHeaderAction,
+      workStateSaveState,
+      onSaveWorkerConfiguration: saveWorkerConfiguration,
+      onSaveWorkStateConfiguration: saveWorkStateConfiguration,
+      workerHeaderAction,
+      workTypeHeaderAction,
+      saveState: workstationSaveState,
+      selectedProviderSessionKey,
+      workTypeSaveState,
+      workerSaveState,
+      selectedTrace,
+      selectedWorkRelationshipGraph,
+      selectedWorkExecutionDetails,
+      setSelectedProviderSession: handleSelectProviderSession,
+      widgetId,
+    });
 
   const resolvedLocale = locale ?? undefined;
 

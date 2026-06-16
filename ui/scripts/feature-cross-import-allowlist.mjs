@@ -211,10 +211,40 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/current-selection/components/widget/current-selection-widget.tsx",
     importSpecifiers: [
+      "../../../factory-graph-editor/lib/selection/factory-graph-bulk-selection-summary",
       "../../../provider-session-detail/lib/provider-session-ref",
+      "../../../workflow-activity/state/factory-graph-editor-selection-bridge",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/graph-selection/components/graph-bulk-selection-detail-card.tsx",
+    importSpecifiers: [
+      "../../../factory-graph-editor/lib/selection/factory-graph-bulk-selection-summary",
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/graph-selection/messages/graph-bulk-selection-detail.ts",
+    importSpecifiers: [
+      "../../../factory-graph-editor/lib/selection/factory-graph-bulk-selection-summary",
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/graph-selection/lib/resolve-active-graph-bulk-selection-summary.ts",
+    importSpecifiers: [
+      "../../../factory-graph-editor/lib/selection/factory-graph-bulk-selection-summary",
+      "../../../workflow-activity/state/factory-graph-editor-selection-bridge",
+    ],
+    reason:
+      "Graph bulk summary panel scoping reads editor-local bridge state and dashboard selection together.",
   },
   {
     relativeFilePath:
@@ -337,6 +367,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/workflow-activity/hooks/react-flow-current-activity-card-graph-view-model.ts",
     importSpecifiers: [
+      "../../factory-graph-editor/hooks/selection/use-factory-graph-editor-selection",
       "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
       "../../factory-graph-editor/lib/layout/factory-graph-layout-operations",
       "../../factory-graph-editor/lib/projection/factory-graph-react-flow-edge-waypoint-projection",
@@ -344,6 +375,36 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     ],
     reason:
       "Workflow-activity graph view-model currently reuses factory-graph-editor internals pending a public boundary split.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/hooks/current-activity-graph-selection-bridge-publisher.ts",
+    importSpecifiers: [
+      "../../factory-graph-editor/lib/selection/factory-graph-bulk-selection-summary",
+      "../../factory-graph-editor/lib/selection/factory-graph-editor-selection",
+    ],
+    reason:
+      "Graph selection bridge publishing reads editor-local selection helpers pending a public boundary split.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/hooks/react-flow-current-activity-card-graph-selection-gestures.ts",
+    importSpecifiers: [
+      "../../factory-graph-editor/hooks/selection/use-factory-graph-editor-selection",
+      "../../factory-graph-editor/lib/selection/factory-graph-editor-selection-gestures",
+    ],
+    reason:
+      "Workflow-activity graph selection gestures reuse editor-local selection helpers pending a public boundary split.",
+  },
+  {
+    relativeFilePath:
+      "src/features/workflow-activity/state/factory-graph-editor-selection-bridge.ts",
+    importSpecifiers: [
+      "../../factory-graph-editor/lib/selection/factory-graph-bulk-selection-summary",
+      "../../factory-graph-editor/lib/selection/factory-graph-editor-selection",
+    ],
+    reason:
+      "Graph selection bridge state stores editor-local selection snapshots pending a public boundary split.",
   },
   {
     relativeFilePath:
@@ -357,6 +418,8 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "src/features/workflow-activity/hooks/use-current-activity-graph-card-view-model.ts",
     importSpecifiers: [
       "../../factory-graph-editor/hooks/layout/factory-graph-visual-group-editor-hook",
+      "../../factory-graph-editor/lib/selection/factory-graph-editor-selection-batch-delete",
+      "../../factory-graph-editor/lib/selection/factory-graph-editor-toolbar-selection",
     ],
     reason:
       "Workflow-activity graph view-model currently reuses factory-graph-editor internals pending a public boundary split.",
@@ -1380,6 +1443,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "../../factory-graph-editor/lib/layout/factory-graph-layout-operations",
       "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups",
       "../../factory-graph-editor/lib/layout/history/factory-graph-layout-keyboard-shortcuts",
+      "../../factory-graph-editor/lib/selection/factory-graph-editor-react-flow-interaction",
       "../../factory-graph-editor/messages/editor",
     ],
     reason:
@@ -1465,6 +1529,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "../../factory-graph-editor/hooks/use-editable-factory-graph-types",
       "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
       "../../factory-graph-editor/lib/editor-runtime/factory-graph-editor-removals",
+      "../../factory-graph-editor/lib/selection/factory-graph-editor-selection-batch-delete",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",

@@ -202,11 +202,18 @@ function CurrentActivityGraphSurfaceContent({
     >
       <CurrentActivityGraphViewport
         addControls={model.addControls}
+        canDeleteGraphSelection={model.canDeleteGraphSelection}
+        clearGraphSelection={model.clearGraphSelection}
+        deleteGraphSelection={model.deleteGraphSelection}
         editorControls={editorControls}
+        graphSelectionToolbarState={model.graphSelectionToolbarState}
         edgeTypes={FACTORY_GRAPH_EDGE_TYPES}
         edges={model.edges}
         flowContainerRef={flowContainerRef}
         flowInstanceRef={flowInstanceRef}
+        handleEdgesChange={model.handleEdgesChange}
+        handleGraphSelectionChange={model.handleGraphSelectionChange}
+        handleGraphSelectionStart={model.handleGraphSelectionStart}
         handleNodesChange={model.handleNodesChange}
         hasPendingChanges={model.status.hasSharedGraphChanges}
         headingID={headingID}

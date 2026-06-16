@@ -10,6 +10,7 @@ import type {
   FactoryGraphDraft,
   FactoryGraphDraftEdgeChange,
   FactoryGraphDraftValidationError,
+  FactoryGraphNodeKind,
   FactoryGraphTopology,
 } from "../draft/factory-graph-draft-types";
 import {
@@ -39,6 +40,10 @@ import {
   buildFactoryGraphDocRemovalIntent,
   parseFactoryBundledDocNodeId,
 } from "../factory-graph-doc-editor";
+import {
+  applyFactoryGraphSelectionBatchRemoval,
+  buildFactoryGraphSelectionBatchRemovalPlan,
+} from "../selection/factory-graph-editor-selection-batch-delete";
 import {
   applyPendingFactoryLayout,
   type FactoryLayout,
@@ -211,6 +216,52 @@ export function removeFactoryGraphNode(options: {
       options.draft,
       options.baseFactoryDefinition,
       intent.key,
+    ),
+  };
+}
+
+export function removeFactoryGraphSelection(options: {
+  baseFactoryDefinition: CanonicalFactoryDefinition;
+  draft: FactoryGraphDraft;
+  edgeIds: readonly string[];
+  hiddenNodeClasses?: ReadonlySet<FactoryGraphNodeKind>;
+  locale?: string | null;
+  nodeIds: readonly string[];
+}): FactoryGraphOperationResult<FactoryGraphDraft> {
+  const plan = buildFactoryGraphSelectionBatchRemovalPlan({
+    baseFactoryDefinition: options.baseFactoryDefinition,
+    draft: options.draft,
+    hiddenNodeClasses: options.hiddenNodeClasses,
+    locale: options.locale,
+    selection: {
+      edgeIds: options.edgeIds,
+      nodeIds: options.nodeIds,
+    },
+  });
+
+  if (!plan) {
+    const messages = getFactoryGraphEditorMessages(options.locale);
+    return {
+      message: messages.operationNodeNotFound("selection"),
+      ok: false,
+      reason: "NODE_NOT_FOUND",
+    };
+  }
+
+  if (plan.ineligibleReason) {
+    return {
+      message: plan.ineligibleReason,
+      ok: false,
+      reason: "BLOCKED_REMOVAL",
+    };
+  }
+
+  return {
+    ok: true,
+    value: applyFactoryGraphSelectionBatchRemoval(
+      options.draft,
+      options.baseFactoryDefinition,
+      plan,
     ),
   };
 }
