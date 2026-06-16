@@ -24,9 +24,16 @@ import {
   type EditableWorkstationCronDraft,
 } from "../../../current-factory-definition/lib/workstation-editable-values";
 import {
-  DEFAULT_WORKSTATION_TYPE,
-  type EditableWorkstationType,
-} from "../../../current-factory-definition/lib/workstation/workstation-type";
+  DEFAULT_FACTORY_GRAPH_ADD_WORKSTATION_TYPE,
+  isPollerRunWorkstationType,
+} from "../../../current-factory-definition/public";
+import type { EditableWorkstationType } from "../../../current-factory-definition/lib/workstation/workstation-type";
+import {
+  DEFAULT_WORKER_TYPE,
+  type FactoryGraphAddWorkerType,
+} from "../../../current-factory-definition/public";
+
+export type { FactoryGraphAddWorkerType };
 import { workstationRequiresWorkerAssignment } from "../../../current-factory-definition/lib/workstation-worker-assignment";
 export { buildFactoryGraphAddEntityMenuActions } from "../factory-graph-editor-add-menu";
 import type {
@@ -34,15 +41,6 @@ import type {
   FactoryGraphDraft,
   FactoryWorkState,
 } from "../draft/factory-graph-draft-types";
-
-type CanonicalWorker = NonNullable<
-  CanonicalFactoryDefinition["workers"]
->[number];
-
-export type FactoryGraphAddWorkerType = Extract<
-  CanonicalWorker["type"],
-  "MODEL_WORKER" | "SCRIPT_WORKER"
->;
 
 export type FactoryGraphAddEntityKind =
   | "doc"
@@ -71,6 +69,7 @@ export type FactoryGraphAddEntityDraft =
       modelProvider: string;
       name: string;
       operations: FactoryGraphAddModelOperationDraft[];
+      provider: string;
       workerType: FactoryGraphAddWorkerType;
     }
   | {
@@ -105,6 +104,7 @@ export type FactoryGraphAddEntityFieldErrors = Partial<
     | "model"
     | "modelProvider"
     | "name"
+    | "provider"
     | "stateType"
     | "behavior"
     | "cronExpiryWindow"
@@ -156,7 +156,8 @@ export function createFactoryGraphAddEntityDraft(
       modelProvider: "",
       name: "",
       operations: [],
-      workerType: "MODEL_WORKER",
+      provider: "",
+      workerType: DEFAULT_WORKER_TYPE as FactoryGraphAddWorkerType,
     };
   }
 
@@ -184,7 +185,7 @@ export function createFactoryGraphAddEntityDraft(
     kind,
     name: "",
     workerName: factoryDefinition?.workers?.[0]?.name ?? "",
-    workstationType: DEFAULT_WORKSTATION_TYPE,
+    workstationType: DEFAULT_FACTORY_GRAPH_ADD_WORKSTATION_TYPE,
   };
 }
 
@@ -335,11 +336,12 @@ export function applyFactoryGraphAddEntityDraft(
     type: entityDraft.workstationType,
   });
   const trimmedBody = entityDraft.body.trim();
+  const behavior = isPollerRunWorkstationType(entityDraft.workstationType)
+    ? "POLLER"
+    : entityDraft.behavior;
 
   nextDraft.additions.workstations.push({
-    ...(entityDraft.behavior === DEFAULT_WORKSTATION_BEHAVIOR
-      ? {}
-      : { behavior: entityDraft.behavior }),
+    ...(behavior === DEFAULT_WORKSTATION_BEHAVIOR ? {} : { behavior }),
     ...(trimmedBody.length > 0 ? { body: trimmedBody } : {}),
     ...(entityDraft.behavior === "CRON" && entityDraft.cron
       ? { cron: buildCanonicalWorkstationCronFromDraft(entityDraft.cron) }
@@ -353,6 +355,37 @@ export function applyFactoryGraphAddEntityDraft(
       : { worker: "" }),
   });
   return nextDraft;
+}
+
+export function resolveFactoryGraphAddWorkstationDraftForTypeChange(
+  draft: Extract<FactoryGraphAddEntityDraft, { kind: "workstation" }>,
+  workstationType: EditableWorkstationType,
+  options?: { defaultWorkerName?: string },
+): Extract<FactoryGraphAddEntityDraft, { kind: "workstation" }> {
+  if (workstationType === draft.workstationType) {
+    return draft;
+  }
+
+  const nextRequiresWorker = workstationRequiresWorkerAssignment({
+    type: workstationType,
+  });
+  let behavior = draft.behavior;
+  if (isPollerRunWorkstationType(workstationType)) {
+    behavior = "POLLER";
+  } else if (draft.behavior === "POLLER") {
+    behavior = DEFAULT_WORKSTATION_BEHAVIOR;
+  }
+
+  return {
+    ...draft,
+    behavior,
+    body: nextRequiresWorker ? draft.body : "",
+    cron: behavior === "CRON" ? draft.cron : null,
+    workerName: nextRequiresWorker
+      ? draft.workerName || options?.defaultWorkerName || ""
+      : "",
+    workstationType,
+  };
 }
 
 export function resolveFactoryGraphAddWorkstationDraftForBehaviorChange(

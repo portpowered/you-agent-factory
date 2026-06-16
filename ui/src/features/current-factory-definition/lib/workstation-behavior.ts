@@ -1,4 +1,8 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
+import {
+  isPollerWorkerType,
+  isScriptWorkerType,
+} from "./worker-workstation-taxonomy";
 
 type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
@@ -42,7 +46,7 @@ export function resolveFactoryGraphAddWorkstationBehaviorOptions(): EditableWork
 export function workerSupportsPollerBehavior(
   worker: Pick<CanonicalWorker, "type"> | null | undefined,
 ): boolean {
-  return worker?.type === "HOSTED_WORKER" || worker?.type === "SCRIPT_WORKER";
+  return isPollerWorkerType(worker?.type) || isScriptWorkerType(worker?.type);
 }
 
 export function workstationBehaviorRequiresPrompt(

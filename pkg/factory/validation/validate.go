@@ -45,6 +45,8 @@ func Validate(cfg *interfaces.FactoryConfig) Result {
 		return result
 	}
 	result.Targets = append(result.Targets, WorkTypeHandlingBehaviorTargets(cfg, WorkTypeHandlingBehaviorOptions{})...)
+	result.Targets = append(result.Targets, PollerRunWorkstationKindTargets(cfg)...)
+	result.Targets = append(result.Targets, WorkerWorkstationBehaviorCompatibilityTargets(cfg)...)
 	result.Targets = append(result.Targets, InvocationReturnTargets(cfg)...)
 	result.Targets = append(result.Targets, missingWorkTypeOutcomeStateTargets(cfg)...)
 	result.Targets = append(result.Targets, missingTerminalCompletionPathTargets(cfg)...)

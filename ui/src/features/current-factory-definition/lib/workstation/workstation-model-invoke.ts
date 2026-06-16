@@ -1,6 +1,9 @@
 import type { CanonicalFactoryDefinition } from "../../../../api/current-factory-definition";
 import type { components } from "../../../../api/generated/openapi";
-import { WorkstationType } from "../../../../api/generated/openapi";
+import {
+  isInferenceRunWorkstationType,
+  isModelProviderWorkerType,
+} from "../worker-workstation-taxonomy";
 import type { EditableWorkstationType } from "./workstation-type";
 
 type ModelOperation = components["schemas"]["ModelOperation"];
@@ -34,7 +37,7 @@ export interface ModelInvokeBindingValidationMessages {
 export function isModelInvokeWorkstationType(
   workstationType: EditableWorkstationType,
 ): boolean {
-  return workstationType === WorkstationType.WorkstationTypeModelInvoke;
+  return isInferenceRunWorkstationType(workstationType);
 }
 
 export function workstationUsesPromptOrientedEditing(
@@ -57,7 +60,7 @@ export function resolveCompatibleModelWorkerNames(
   return (factory.workers ?? [])
     .filter(
       (worker) =>
-        worker.type === "MODEL_WORKER" &&
+        isModelProviderWorkerType(worker.type) &&
         resolveModelWorkerOperations(factory, worker.name).length > 0,
     )
     .map((worker) => worker.name)
@@ -71,7 +74,7 @@ export function resolveModelWorkerOperations(
   const worker = (factory.workers ?? []).find(
     (entry) => entry.name === workerName,
   );
-  if (!worker || worker.type !== "MODEL_WORKER") {
+  if (!worker || !isModelProviderWorkerType(worker.type)) {
     return [];
   }
 
@@ -83,7 +86,7 @@ export function resolveModelOperationsByWorkerName(
 ): Record<string, ModelOperation[]> {
   return Object.fromEntries(
     (factory.workers ?? [])
-      .filter((worker) => worker.type === "MODEL_WORKER")
+      .filter((worker) => isModelProviderWorkerType(worker.type))
       .map((worker) => [
         worker.name,
         resolveModelWorkerOperations(factory, worker.name),

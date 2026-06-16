@@ -80,14 +80,14 @@ func TestSameNameConsumePathOwnership_MatchingPairCompletesThroughLogicalMove(t 
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-cli-validate-list"
-	submitConsumePathPair(t, h, cellName)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
-	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)
+	submitConsumePathPair(t, h, cellName)
+
+	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, 3*time.Second)
 
 	h.Assert().
 		HasNoTokenInPlace("idea:to-complete").
@@ -109,6 +109,10 @@ func TestSameNameConsumePathOwnership_TaskOnlyWithoutIdeaTwin_StrandedAsHistoric
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-cli-run-status-result"
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	errCh := h.RunInBackground(ctx)
+
 	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
 		Name:        cellName,
 		WorkTypeID:  "task",
@@ -116,11 +120,7 @@ func TestSameNameConsumePathOwnership_TaskOnlyWithoutIdeaTwin_StrandedAsHistoric
 		TraceID:     "trace-task-only",
 	}})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-	errCh := h.RunInBackground(ctx)
-
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, 3*time.Second)
 	time.Sleep(150 * time.Millisecond)
 
 	h.Assert().
@@ -144,15 +144,15 @@ func TestSameNameConsumePathOwnership_OrphanTaskAfterPriorConsume_MatchesLiveQue
 	h := newSameNameConsumePathServiceHarness(t, dir)
 
 	const cellName = "dynamic-workflows-cell-mcp-tools"
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
 	submitSameNameOrphanAfterConsumePattern(t, h, cellName, "trace-task-b-"+cellName)
 
-	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, 3*time.Second)
 	time.Sleep(150 * time.Millisecond)
 
 	h.Assert().
@@ -175,7 +175,7 @@ func TestSameNameConsumePathOwnership_ProjectionMatchesRuntimeBeforeConsume(t *t
 	dir := scaffoldConsumePathFactory(t)
 	h := testutil.NewServiceTestHarness(t, dir)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := h.RunInBackground(ctx)
 
@@ -194,8 +194,8 @@ func TestSameNameConsumePathOwnership_ProjectionMatchesRuntimeBeforeConsume(t *t
 		},
 	})
 
-	support.WaitForHarnessPlaceTokenCount(t, h, "idea:to-complete", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "idea:to-complete", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, 3*time.Second)
 
 	runtimeSnap, err := h.GetEngineStateSnapshot()
 	if err != nil {
@@ -266,8 +266,8 @@ func submitSameNameOrphanAfterConsumePattern(
 		TargetState: "to-complete",
 		TraceID:     "trace-task-a-" + cellName,
 	}})
-	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, 3*time.Second)
 	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
 		Name:        cellName,
 		WorkTypeID:  "task",

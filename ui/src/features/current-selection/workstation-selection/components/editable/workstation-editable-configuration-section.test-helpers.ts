@@ -2,6 +2,7 @@ import { fireEvent, screen } from "@testing-library/react";
 import { vi } from "vitest";
 
 import type { CanonicalFactoryDefinition } from "../../../../../api/factory-definition/api";
+import { resolveEditableWorkstationTypeConversionOptions } from "../../../../current-factory-definition/public";
 import type { EditableWorkstationConfigurationState } from "../../lib/keys/detail-card-types";
 import { getWorkstationDetailMessages } from "../../messages/workstation-detail";
 
@@ -50,7 +51,12 @@ function buildEditableConfigurationSectionDraftDefaults(
     runnerName?: string;
     workerName?: string;
   }>,
-  workstationType: "MODEL_WORKSTATION" | "MODEL_INVOKE" | "LOGICAL_MOVE" = "MODEL_WORKSTATION",
+  workstationType:
+    | "AGENT_RUN"
+    | "INFERENCE_RUN"
+    | "MODEL_WORKSTATION"
+    | "MODEL_INVOKE"
+    | "LOGICAL_MOVE" = "AGENT_RUN",
 ) {
   const behavior = overrides?.behavior ?? ("STANDARD" as const);
   const cron =
@@ -91,7 +97,12 @@ function buildEditableConfigurationSectionInitialValues(
   overrides?: Partial<{
     sharedWorkerWorkstationNamesByWorkerName: Record<string, string[]>;
   }>,
-  workstationType: "MODEL_WORKSTATION" | "MODEL_INVOKE" | "LOGICAL_MOVE" = "MODEL_WORKSTATION",
+  workstationType:
+    | "AGENT_RUN"
+    | "INFERENCE_RUN"
+    | "MODEL_WORKSTATION"
+    | "MODEL_INVOKE"
+    | "LOGICAL_MOVE" = "AGENT_RUN",
 ) {
   return {
     behavior: "STANDARD" as const,
@@ -141,10 +152,9 @@ function buildEditableConfigurationSectionInitialValues(
     workstationName: "Review",
     workstationOptions: ["Plan", "Review"],
     workstationType,
-    workstationTypeOptions:
-      workstationType === "LOGICAL_MOVE"
-        ? (["LOGICAL_MOVE"] as const)
-        : (["MODEL_WORKSTATION", "MODEL_INVOKE"] as const),
+    workstationTypeOptions: resolveEditableWorkstationTypeConversionOptions(
+      workstationType,
+    ),
   };
 }
 
@@ -209,10 +219,15 @@ export function buildEditableConfigurationSectionReadyState(
     overwriteFieldNames: Array<
       "name" | "worker" | "prompt" | "behavior" | "runner"
     >;
-    workstationType: "MODEL_WORKSTATION" | "MODEL_INVOKE" | "LOGICAL_MOVE";
+    workstationType:
+      | "AGENT_RUN"
+      | "INFERENCE_RUN"
+      | "MODEL_WORKSTATION"
+      | "MODEL_INVOKE"
+      | "LOGICAL_MOVE";
   }>,
 ): EditableConfigurationSectionReadyState {
-  const workstationType = overrides?.workstationType ?? "MODEL_WORKSTATION";
+  const workstationType = overrides?.workstationType ?? "AGENT_RUN";
 
   return {
     draft: buildEditableConfigurationSectionDraftDefaults(

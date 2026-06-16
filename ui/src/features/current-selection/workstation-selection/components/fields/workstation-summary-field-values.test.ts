@@ -137,7 +137,7 @@ describe("resolveWorkstationSummaryTypeValue", () => {
         readyEditableConfigurationState,
         messages,
       ),
-    ).toBe("Model workstation");
+    ).toBe("Model workstation (legacy)");
   });
 
   it("returns loading and unavailable copy for non-ready editable configuration states", () => {

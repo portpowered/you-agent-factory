@@ -113,6 +113,20 @@ func TestSelectInvocationWorker_ResolvesModelWorkerAndOperation(t *testing.T) {
 	}
 }
 
+func TestSelectInvocationWorker_ResolvesInferenceWorkerTaxonomyAlias(t *testing.T) {
+	factoryCfg := catalogFactoryConfig(true)
+	factoryCfg.Workers[0].Type = interfaces.WorkerTypeInference
+	loaded := mustLoadedCatalogConfig(t, factoryCfg)
+
+	worker, operation, err := SelectInvocationWorker(loaded, "OMNIVOICE_Q4_K_M", "TTS")
+	if err != nil {
+		t.Fatalf("SelectInvocationWorker: %v", err)
+	}
+	if worker.Type != interfaces.WorkerTypeInference || operation.Name != "TTS" {
+		t.Fatalf("worker/operation = (%#v, %q), want inference worker with TTS", worker, operation.Name)
+	}
+}
+
 type recordingCatalogAssetPuller struct {
 	calls     int
 	modelName string

@@ -6506,11 +6506,17 @@ export const ResourceType = {
 } as const;
 export type ResourceType = (typeof ResourceType)[keyof typeof ResourceType];
 export const WorkerType = {
-  // Model-backed worker that renders prompts and dispatches through the configured model provider.
-  WorkerTypeModelWorker: "MODEL_WORKER",
+  // Inference worker that performs one bounded model operation such as chat, TTS, embeddings, transcription, or image generation.
+  WorkerTypeInferenceWorker: "INFERENCE_WORKER",
+  // Agent worker reserved for agent-loop execution that may plan, call tools, and decide completion.
+  WorkerTypeAgentWorker: "AGENT_WORKER",
   // Script-backed worker that executes a configured command instead of calling a model provider.
   WorkerTypeScriptWorker: "SCRIPT_WORKER",
-  // Repository-owned hosted worker implementation selected by type-specific runtime code instead of a subprocess.
+  // Poller worker that runs long-lived ingress polling work through repository-owned runtime code.
+  WorkerTypePollerWorker: "POLLER_WORKER",
+  // Legacy compatibility alias for inference-worker behavior during the runtime taxonomy migration window.
+  WorkerTypeModelWorker: "MODEL_WORKER",
+  // Legacy compatibility alias for poller-worker behavior during the runtime taxonomy migration window.
   WorkerTypeHostedWorker: "HOSTED_WORKER",
 } as const;
 export type WorkerType = (typeof WorkerType)[keyof typeof WorkerType];
@@ -6596,9 +6602,17 @@ export const WorkstationKind = {
 export type WorkstationKind =
   (typeof WorkstationKind)[keyof typeof WorkstationKind];
 export const WorkstationType = {
-  // Model-backed workstation that renders prompts and dispatches work through the configured worker.
+  // One-shot inference workstation that resolves operation bindings and dispatches through an inference worker.
+  WorkstationTypeInferenceRun: "INFERENCE_RUN",
+  // Agent-run workstation reserved for future agent-loop execution that renders prompts and dispatches through an agent worker.
+  WorkstationTypeAgentRun: "AGENT_RUN",
+  // Script-run workstation that executes deterministic command or script behavior through a script worker.
+  WorkstationTypeScriptRun: "SCRIPT_RUN",
+  // Poller-run workstation that supervises ingress polling through a poller worker.
+  WorkstationTypePollerRun: "POLLER_RUN",
+  // Legacy alias for agent-run behavior during the runtime taxonomy migration window.
   WorkstationTypeModelWorkstation: "MODEL_WORKSTATION",
-  // Provider-agnostic model-operation workstation that selects a worker by declared capability and uppercase operation contract.
+  // Legacy alias for inference-run behavior during the runtime taxonomy migration window.
   WorkstationTypeModelInvoke: "MODEL_INVOKE",
   // Logical pass-through workstation used for routing and guarded loop-breaker transitions without model execution.
   WorkstationTypeLogicalMove: "LOGICAL_MOVE",

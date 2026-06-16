@@ -41,12 +41,17 @@ func TestMetadataContentFromWorkerOutput_ReturnsTextMetadataWithoutRawAudio(t *t
 }
 
 func TestShouldFormatInvocationMetadata_MatchesPackagedInvokeWorkstation(t *testing.T) {
-	workstation := &interfaces.FactoryWorkstationConfig{
-		Name:      PackagedInvokeWorkstationName,
-		Type:      interfaces.WorkstationTypeInvoke,
-		Operation: "TTS",
-	}
-	if !ShouldFormatInvocationMetadata(workstation) {
-		t.Fatal("expected packaged invoke workstation to require metadata formatting")
+	for _, workstationType := range []string{
+		interfaces.WorkstationTypeInvoke,
+		interfaces.WorkstationTypeInference,
+	} {
+		workstation := &interfaces.FactoryWorkstationConfig{
+			Name:      PackagedInvokeWorkstationName,
+			Type:      workstationType,
+			Operation: "TTS",
+		}
+		if !ShouldFormatInvocationMetadata(workstation) {
+			t.Fatalf("expected packaged invoke workstation type %q to require metadata formatting", workstationType)
+		}
 	}
 }

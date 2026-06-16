@@ -50,7 +50,8 @@ describe("factory graph editor additions model operations", () => {
           modelProvider: "CURSOR",
           name: "tts-worker",
           operations: [],
-          workerType: "MODEL_WORKER",
+          provider: "",
+          workerType: "INFERENCE_WORKER",
         },
         baseFactoryDefinition,
       ),
@@ -71,7 +72,8 @@ describe("factory graph editor additions model operations", () => {
           modelProvider: "CURSOR",
           name: "tts-worker",
           operations: [invalidOperation],
-          workerType: "MODEL_WORKER",
+          provider: "",
+          workerType: "INFERENCE_WORKER",
         },
         baseFactoryDefinition,
       ),
@@ -110,7 +112,8 @@ describe("factory graph editor additions model operations", () => {
         modelProvider: "CURSOR",
         name: "tts-worker",
         operations: [operation],
-        workerType: "MODEL_WORKER",
+        provider: "",
+        workerType: "INFERENCE_WORKER",
       },
     );
 
@@ -136,8 +139,77 @@ describe("factory graph editor additions model operations", () => {
             ],
           },
         ],
-        type: "MODEL_WORKER",
+        type: "INFERENCE_WORKER",
       },
     ]);
+  });
+});
+
+describe("factory graph editor additions taxonomy", () => {
+  it("persists agent workers and poller workers with their public taxonomy types", () => {
+    const agentDraft = applyFactoryGraphAddEntityDraft(
+      createEmptyFactoryGraphDraft(),
+      {
+        argsText: "",
+        command: "",
+        kind: "worker",
+        model: "",
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        operations: [],
+        provider: "",
+        workerType: "AGENT_WORKER",
+      },
+    );
+    expect(agentDraft.additions.workers).toEqual([
+      {
+        modelProvider: "CURSOR",
+        name: "reviewer",
+        type: "AGENT_WORKER",
+      },
+    ]);
+
+    const pollerDraft = applyFactoryGraphAddEntityDraft(
+      createEmptyFactoryGraphDraft(),
+      {
+        argsText: "",
+        command: "",
+        kind: "worker",
+        model: "",
+        modelProvider: "",
+        name: "linear-poller",
+        operations: [],
+        provider: "LINEAR",
+        workerType: "POLLER_WORKER",
+      },
+    );
+    expect(pollerDraft.additions.workers).toEqual([
+      {
+        name: "linear-poller",
+        provider: "LINEAR",
+        type: "POLLER_WORKER",
+      },
+    ]);
+  });
+
+  it("rejects poller workers without a hosted provider", () => {
+    expect(
+      validateFactoryGraphAddEntityDraft(
+        {
+          argsText: "",
+          command: "",
+          kind: "worker",
+          model: "",
+          modelProvider: "",
+          name: "linear-poller",
+          operations: [],
+          provider: "",
+          workerType: "POLLER_WORKER",
+        },
+        baseFactoryDefinition,
+      ),
+    ).toEqual({
+      provider: "Select a hosted provider for the new poller worker.",
+    });
   });
 });

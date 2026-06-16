@@ -7,9 +7,12 @@ doc-id: agent-factory/models
 # Models And Model Operations
 
 Use this page when you need the current customer-facing contract for
-model-backed operations: `MODEL_INVOKE` workstations, `MODEL_WORKER`
+model-backed operations: `INFERENCE_RUN` workstations, `INFERENCE_WORKER`
 capabilities, typed model resources, multimodal `WorkContent`, and the
 runtime `/models` discovery, pull, and invocation surface.
+
+`MODEL_INVOKE` and `MODEL_WORKER` remain accepted compatibility aliases during
+the migration window.
 
 Keep the workflow topology and field-by-field `factory.json` contract in
 `you docs config`. Keep worker-only runtime fields
@@ -19,12 +22,13 @@ in `you docs workers`, workstation-only routing and prompt fields in
 
 ## Current Contract
 
-- Use `type: "MODEL_INVOKE"` on a workstation when the step should request one
+- Use `type: "INFERENCE_RUN"` on a workstation when the step should request one
   uppercase provider-agnostic operation such as `TTS`.
 - Keep operation names, model localities, resource types, slot content types,
   and other public enum-like values uppercase in authored config.
-- A `MODEL_INVOKE` workstation must reference a `MODEL_WORKER` that declares
+- An `INFERENCE_RUN` workstation must reference an `INFERENCE_WORKER` that declares
   the same operation and a compatible input and output contract.
+- `MODEL_INVOKE` and `MODEL_WORKER` remain accepted compatibility aliases.
 - Model invocation input and output use canonical ordered `WorkContent`.
   Existing lowercase `text` and `image` parts remain valid at the API
   boundary, while new multimodal parts should use uppercase public types such
@@ -70,10 +74,10 @@ payloads inline.
 
 Keep the compatibility chain explicit:
 
-1. The workstation `type` must be `MODEL_INVOKE`.
+1. The workstation `type` must be `INFERENCE_RUN` (or legacy `MODEL_INVOKE`).
 2. The workstation `operation` must be uppercase and must match one declared
    worker operation.
-3. The referenced worker must be `MODEL_WORKER`.
+3. The referenced worker must be `INFERENCE_WORKER` (or legacy `MODEL_WORKER`).
 4. That worker operation must declare at least one input slot and one output
    slot.
 5. Each authored binding slot must exist in the worker's declared input slots.
@@ -100,7 +104,7 @@ deterministic against the ordered runtime input content.
 
 ```json
 {
-  "type": "MODEL_INVOKE",
+  "type": "INFERENCE_RUN",
   "operation": "TTS",
   "worker": "tts-worker",
   "operationBindings": [
@@ -135,7 +139,7 @@ the bound worker and resource metadata change.
 ```json
 {
   "name": "speak",
-  "type": "MODEL_INVOKE",
+  "type": "INFERENCE_RUN",
   "operation": "TTS",
   "worker": "tts-worker",
   "operationBindings": [
@@ -189,7 +193,7 @@ the bound worker and resource metadata change.
 
 ```yaml
 ---
-type: MODEL_WORKER
+type: INFERENCE_WORKER
 model: OMNIVOICE_Q4_K_M
 modelProvider: CODEX
 modelLocality: LOCAL
@@ -246,7 +250,7 @@ Synthesize speech from the resolved text content.
 
 ```yaml
 ---
-type: MODEL_WORKER
+type: INFERENCE_WORKER
 model: gpt-4o-mini-tts
 modelProvider: CODEX
 modelLocality: CLOUD

@@ -109,9 +109,12 @@ const (
 
 // WorkerType constants for worker AGENTS.md frontmatter.
 const (
-	WorkerTypeModel  = "MODEL_WORKER"
-	WorkerTypeScript = "SCRIPT_WORKER"
-	WorkerTypeHosted = "HOSTED_WORKER"
+	WorkerTypeInference = "INFERENCE_WORKER"
+	WorkerTypeAgent     = "AGENT_WORKER"
+	WorkerTypeScript    = "SCRIPT_WORKER"
+	WorkerTypePoller    = "POLLER_WORKER"
+	WorkerTypeModel     = "MODEL_WORKER"
+	WorkerTypeHosted    = "HOSTED_WORKER"
 )
 
 // Hosted worker provider constants for public hosted worker config.
@@ -119,8 +122,13 @@ const (
 	HostedWorkerProviderLinear = "LINEAR"
 )
 
-// WorkstationType constants for workstation AGENTS.md frontmatter.
+// WorkstationType constants for workstation AGENTS.md frontmatter and runtime config.
 const (
+	WorkstationTypeInference = "INFERENCE_RUN"
+	WorkstationTypeAgent     = "AGENT_RUN"
+	WorkstationTypeScript    = "SCRIPT_RUN"
+	WorkstationTypePoller    = "POLLER_RUN"
+	// Legacy runtime identifiers retained during the migration window.
 	WorkstationTypeModel    = "MODEL_WORKSTATION"
 	WorkstationTypeInvoke   = "MODEL_INVOKE"
 	WorkstationTypeLogical  = "LOGICAL_MOVE"

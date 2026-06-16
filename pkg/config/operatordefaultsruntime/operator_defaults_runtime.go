@@ -61,7 +61,7 @@ func applyOperatorDefaultsToWorker(worker *interfaces.WorkerConfig, defaultProvi
 }
 
 func isModelWorkerType(workerType string) bool {
-	return interfaces.StrictPublicFactoryWorkerType(workerType) == interfaces.WorkerTypeModel
+	return interfaces.IsInferenceWorkerType(workerType)
 }
 
 func operatorDefaultProviderInternal(canonicalPublic string) (string, error) {

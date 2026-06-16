@@ -1,5 +1,5 @@
 ---
-type: MODEL_WORKER
+type: AGENT_WORKER
 modelProvider: CODEX
 executorProvider: SCRIPT_WRAP
 skipPermissions: true

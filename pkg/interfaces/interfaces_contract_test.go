@@ -122,12 +122,50 @@ type publicFactoryEnumNormalizerCase struct {
 }
 
 func publicFactoryEnumNormalizerCases() []publicFactoryEnumNormalizerCase {
+	cases := publicFactoryWorkerEnumNormalizerCases()
+	cases = append(cases, publicFactoryNonWorkerEnumNormalizerCases()...)
+	return cases
+}
+
+func publicFactoryWorkerEnumNormalizerCases() []publicFactoryEnumNormalizerCase {
 	return []publicFactoryEnumNormalizerCase{
 		{
-			name:       "worker type",
+			name:       "worker type legacy model",
 			alias:      "MODEL_WORKER",
 			unknown:    "CUSTOM_WORKER",
 			want:       WorkerTypeModel,
+			permissive: PermissivePublicFactoryWorkerType,
+			strict:     StrictPublicFactoryWorkerType,
+		},
+		{
+			name:       "worker type inference",
+			alias:      "INFERENCE_WORKER",
+			unknown:    "CUSTOM_WORKER",
+			want:       WorkerTypeInference,
+			permissive: PermissivePublicFactoryWorkerType,
+			strict:     StrictPublicFactoryWorkerType,
+		},
+		{
+			name:       "worker type agent",
+			alias:      "AGENT_WORKER",
+			unknown:    "CUSTOM_WORKER",
+			want:       WorkerTypeAgent,
+			permissive: PermissivePublicFactoryWorkerType,
+			strict:     StrictPublicFactoryWorkerType,
+		},
+		{
+			name:       "worker type poller",
+			alias:      "POLLER_WORKER",
+			unknown:    "CUSTOM_WORKER",
+			want:       WorkerTypePoller,
+			permissive: PermissivePublicFactoryWorkerType,
+			strict:     StrictPublicFactoryWorkerType,
+		},
+		{
+			name:       "worker type legacy hosted",
+			alias:      "HOSTED_WORKER",
+			unknown:    "CUSTOM_WORKER",
+			want:       WorkerTypeHosted,
 			permissive: PermissivePublicFactoryWorkerType,
 			strict:     StrictPublicFactoryWorkerType,
 		},
@@ -171,6 +209,11 @@ func publicFactoryEnumNormalizerCases() []publicFactoryEnumNormalizerCase {
 			permissive: PermissivePublicFactoryWorkerModelOperationContentType,
 			strict:     StrictPublicFactoryWorkerModelOperationContentType,
 		},
+	}
+}
+
+func publicFactoryNonWorkerEnumNormalizerCases() []publicFactoryEnumNormalizerCase {
+	return []publicFactoryEnumNormalizerCase{
 		{
 			name:       "resource type",
 			alias:      "MODEL",
@@ -180,7 +223,15 @@ func publicFactoryEnumNormalizerCases() []publicFactoryEnumNormalizerCase {
 			strict:     StrictPublicFactoryResourceType,
 		},
 		{
-			name:       "workstation type",
+			name:       "workstation type inference run",
+			alias:      "INFERENCE_RUN",
+			unknown:    "CUSTOM_WORKSTATION",
+			want:       WorkstationTypeInference,
+			permissive: PermissivePublicFactoryWorkstationType,
+			strict:     StrictPublicFactoryWorkstationType,
+		},
+		{
+			name:       "workstation type legacy model invoke",
 			alias:      "MODEL_INVOKE",
 			unknown:    "CUSTOM_WORKSTATION",
 			want:       WorkstationTypeInvoke,
@@ -566,30 +617,6 @@ func TestGeneratedPublicWorkstationKindPtr(t *testing.T) {
 			}
 		})
 	}
-}
-
-type runtimeLookupDefinitionStub struct {
-	workers      map[string]*WorkerConfig
-	workstations map[string]*FactoryWorkstationConfig
-}
-
-func (s *runtimeLookupDefinitionStub) Worker(name string) (*WorkerConfig, bool) {
-	worker, ok := s.workers[name]
-	return worker, ok
-}
-
-func (s *runtimeLookupDefinitionStub) Workstation(name string) (*FactoryWorkstationConfig, bool) {
-	workstation, ok := s.workstations[name]
-	return workstation, ok
-}
-
-type runtimeLookupWorkstationStub struct {
-	workstations map[string]*FactoryWorkstationConfig
-}
-
-func (s *runtimeLookupWorkstationStub) Workstation(name string) (*FactoryWorkstationConfig, bool) {
-	workstation, ok := s.workstations[name]
-	return workstation, ok
 }
 
 func TestV1RunnerBaselineCapabilities_AreExplicitAndLimited(t *testing.T) {

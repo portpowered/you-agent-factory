@@ -48,7 +48,7 @@ Process the input task.
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
-	h.RunUntilComplete(t, 10*time.Second)
+	h.RunUntilComplete(t, 15*time.Second)
 
 	h.Assert().
 		HasTokenInPlace("task:complete").

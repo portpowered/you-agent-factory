@@ -1,5 +1,11 @@
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import {
+  DEFAULT_WORKER_TYPE,
+  EDITABLE_WORKER_TYPES,
+  isModelProviderWorkerType,
+  isScriptWorkerType,
+} from "./worker-workstation-taxonomy";
+import {
   goDurationFromWorkerTimeoutPicker,
   type WorkerTimeoutUnit,
   workerTimeoutPickerFromGoDuration,
@@ -9,16 +15,12 @@ type CanonicalWorker = NonNullable<
   CanonicalFactoryDefinition["workers"]
 >[number];
 type WorkerType = NonNullable<CanonicalWorker["type"]>;
+
+export { EDITABLE_WORKER_TYPES };
 type ModelProvider = NonNullable<CanonicalWorker["modelProvider"]>;
 type ModelLocality = NonNullable<CanonicalWorker["modelLocality"]>;
 type ExecutorProvider = NonNullable<CanonicalWorker["executorProvider"]>;
 type HostedProvider = NonNullable<CanonicalWorker["provider"]>;
-
-export const EDITABLE_WORKER_TYPES: WorkerType[] = [
-  "MODEL_WORKER",
-  "SCRIPT_WORKER",
-  "HOSTED_WORKER",
-];
 
 export const EDITABLE_MODEL_PROVIDERS: ModelProvider[] = [
   "CLAUDE",
@@ -171,7 +173,7 @@ export function editableWorkerDraftFromValues(
     stopToken: values.stopToken ?? "",
     timeoutAmount: timeoutPicker.amount,
     timeoutUnit: timeoutPicker.unit,
-    type: values.type ?? "MODEL_WORKER",
+    type: values.type ?? DEFAULT_WORKER_TYPE,
   };
 }
 
@@ -261,7 +263,7 @@ function buildWorkerFromDraft(
     type: draft.type,
   };
 
-  if (draft.type === "MODEL_WORKER") {
+  if (isModelProviderWorkerType(draft.type)) {
     return {
       ...base,
       ...(draft.modelProvider ? { modelProvider: draft.modelProvider } : {}),
@@ -273,7 +275,7 @@ function buildWorkerFromDraft(
     };
   }
 
-  if (draft.type === "SCRIPT_WORKER") {
+  if (isScriptWorkerType(draft.type)) {
     const args = parseWorkerArgsText(draft.argsText);
     return {
       ...base,

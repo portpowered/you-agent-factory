@@ -1,6 +1,7 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction lint/nursery/noExcessiveLinesPerFile: existing workstation-editable-values coverage stayed intact during feature-root migration.
 import type { CanonicalFactoryDefinition } from "../../../api/current-factory-definition";
 import type { DashboardWorkstationNode } from "../../../api/dashboard/types";
+import { WorkerType, WorkstationType } from "../../../api/generated/openapi";
 import { resolveEditableWorkstationOverwriteFields } from "../../current-selection/workstation-selection/editing/editable-workstation-overwrite-fields";
 import {
   applyEditableWorkstationDraft,
@@ -75,8 +76,8 @@ describe("resolveEditableWorkstationValues", () => {
       inputs: [{ guards: [], state: "queued", workType: "story" }],
       workstationName: "Review",
       workstationOptions: ["Review"],
-      workstationType: "MODEL_WORKSTATION",
-      workstationTypeOptions: ["MODEL_WORKSTATION", "MODEL_INVOKE"],
+      workstationType: "AGENT_RUN",
+      workstationTypeOptions: ["AGENT_RUN", "INFERENCE_RUN"],
     });
   });
 
@@ -101,7 +102,7 @@ describe("resolveEditableWorkstationValues", () => {
       workstations: [
         {
           name: "speak-story",
-          type: "MODEL_INVOKE",
+          type: "INFERENCE_RUN",
           worker: "tts-worker",
           operation: "TTS",
           operationBindings: [
@@ -134,7 +135,7 @@ describe("resolveEditableWorkstationValues", () => {
           selector: { label: "utterance", role: "", slot: "", type: "TEXT" },
         },
       ],
-      workstationType: "MODEL_INVOKE",
+      workstationType: "INFERENCE_RUN",
     });
   });
 
@@ -165,7 +166,7 @@ describe("resolveEditableWorkstationValues", () => {
       workstations: [
         {
           name: "speak-story",
-          type: "MODEL_INVOKE",
+          type: "INFERENCE_RUN",
           worker: "tts-worker",
           operation: "TTS",
           operationBindings: [
@@ -220,13 +221,13 @@ describe("resolveEditableWorkstationValues", () => {
         prompt: "",
         runnerName: null,
         workerName: "tts-worker",
-        workstationType: "MODEL_INVOKE",
+        workstationType: "INFERENCE_RUN",
       },
     );
 
     expect(updatedFactory?.workstations?.[0]).toEqual({
       name: "speak-story",
-      type: "MODEL_INVOKE",
+      type: "INFERENCE_RUN",
       worker: "tts-worker",
       operation: "TTS",
       operationBindings: [
@@ -246,7 +247,7 @@ describe("resolveEditableWorkstationValues", () => {
     expect(updatedFactory?.workers).toEqual(factory.workers);
   });
 
-  it("converts a prompt-oriented workstation draft into MODEL_INVOKE on save", () => {
+  it("converts a prompt-oriented workstation draft into INFERENCE_RUN on save", () => {
     const factory: CanonicalFactoryDefinition = {
       name: "tts-factory",
       workers: [
@@ -302,13 +303,13 @@ describe("resolveEditableWorkstationValues", () => {
         prompt: "Narrate the story.",
         runnerName: null,
         workerName: "tts-worker",
-        workstationType: "MODEL_INVOKE",
+        workstationType: "INFERENCE_RUN",
       },
     );
 
     expect(updatedFactory?.workstations?.[0]).toEqual({
       name: "speak-story",
-      type: "MODEL_INVOKE",
+      type: "INFERENCE_RUN",
       worker: "tts-worker",
       operation: "TTS",
       operationBindings: [
@@ -324,7 +325,7 @@ describe("resolveEditableWorkstationValues", () => {
     expect(updatedFactory?.workstations?.[0]).not.toHaveProperty("runner");
   });
 
-  it("defaults omitted workstation type to MODEL_WORKSTATION", () => {
+  it("defaults omitted workstation type to AGENT_RUN", () => {
     const factory: CanonicalFactoryDefinition = {
       name: "Current Factory",
       workers: [
@@ -349,7 +350,7 @@ describe("resolveEditableWorkstationValues", () => {
 
     expect(
       resolveEditableWorkstationValues(factory, selectedNode)?.workstationType,
-    ).toBe("MODEL_WORKSTATION");
+    ).toBe("AGENT_RUN");
   });
 
   it("preserves explicit workstation implementation types", () => {
@@ -453,8 +454,8 @@ describe("resolveEditableWorkstationValues", () => {
       inputs: [{ guards: [], state: "queued", workType: "story" }],
       workstationName: "Review",
       workstationOptions: ["Review"],
-      workstationType: "MODEL_WORKSTATION",
-      workstationTypeOptions: ["MODEL_WORKSTATION", "MODEL_INVOKE"],
+      workstationType: "AGENT_RUN",
+      workstationTypeOptions: ["AGENT_RUN", "INFERENCE_RUN"],
     });
   });
 
@@ -635,8 +636,8 @@ describe("resolveEditableWorkstationValues", () => {
       inputs: [{ guards: [], state: "queued", workType: "story" }],
       workstationName: "Review",
       workstationOptions: ["Review", "Plan", "Code"],
-      workstationType: "MODEL_WORKSTATION",
-      workstationTypeOptions: ["MODEL_WORKSTATION", "MODEL_INVOKE"],
+      workstationType: "AGENT_RUN",
+      workstationTypeOptions: ["AGENT_RUN", "INFERENCE_RUN"],
     });
   });
 
@@ -2047,5 +2048,75 @@ describe("editable workstation name draft", () => {
         "worker",
       ]),
     );
+  });
+});
+
+describe("workstation taxonomy save projection", () => {
+  it("round-trips new taxonomy workstation saves without downgrading to legacy names", () => {
+    const taxonomyFactory: CanonicalFactoryDefinition = {
+      name: "Legacy Factory",
+      workers: [
+        {
+          model: "gpt-5",
+          name: "writer",
+          type: WorkerType.WorkerTypeInferenceWorker,
+        },
+      ],
+      workTypes: [
+        {
+          name: "story",
+          states: [
+            { name: "queued", type: "INITIAL" },
+            { name: "done", type: "TERMINAL" },
+          ],
+        },
+      ],
+      workstations: [
+        {
+          body: "Draft the story.",
+          inputs: [{ state: "queued", workType: "story" }],
+          name: "draft",
+          outputs: [{ state: "done", workType: "story" }],
+          type: WorkstationType.WorkstationTypeAgentRun,
+          worker: "writer",
+        },
+      ],
+    };
+
+    const values = resolveEditableWorkstationValues(taxonomyFactory, {
+      node_id: "draft",
+      transition_id: "draft",
+      workstation_kind: WorkstationType.WorkstationTypeAgentRun,
+      workstation_name: "draft",
+    });
+    if (!values) {
+      throw new Error("expected editable workstation values");
+    }
+
+    const draft = editableWorkstationDraftFromValues({
+      ...values,
+      workstationType: WorkstationType.WorkstationTypeInferenceRun,
+      operation: "TTS",
+      operationBindings: [],
+    });
+    const saved = applyEditableWorkstationDraft(
+      taxonomyFactory,
+      {
+        node_id: "draft",
+        transition_id: "draft",
+        workstation_kind: WorkstationType.WorkstationTypeAgentRun,
+        workstation_name: "draft",
+      },
+      {
+        ...draft,
+        workstationType: WorkstationType.WorkstationTypeInferenceRun,
+      },
+    );
+
+    expect(saved?.workstations?.[0]).toMatchObject({
+      name: "draft",
+      type: WorkstationType.WorkstationTypeInferenceRun,
+      worker: "writer",
+    });
   });
 });

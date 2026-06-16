@@ -64,14 +64,14 @@ func (fs *FactoryService) startPollerWatchersForRuntime(
 			)
 			continue
 		}
-		switch workerDef.Type {
-		case interfaces.WorkerTypeScript:
+		switch {
+		case interfaces.IsScriptWorkerType(workerDef.Type):
 			sidecars.Add(1)
 			go func() {
 				defer sidecars.Done()
 				fs.superviseScriptPoller(ctx, runtimeCfg, ws, workerDef, submitter)
 			}()
-		case interfaces.WorkerTypeHosted:
+		case interfaces.IsPollerWorkerType(workerDef.Type):
 			if workerDef.Provider != interfaces.HostedWorkerProviderLinear {
 				fs.logger.Warn("hosted poller disabled",
 					zap.String("workstation", ws.Name),

@@ -96,7 +96,7 @@ func (m *Manager) WrapRunner(
 	if inner == nil || m == nil || runtimeCfg == nil || factoryCfg == nil || workerDef == nil {
 		return inner
 	}
-	if workerDef.Type != interfaces.WorkerTypeModel || workerDef.ModelLocality != interfaces.ModelLocalityLocal {
+	if !interfaces.IsInferenceWorkerType(workerDef.Type) || workerDef.ModelLocality != interfaces.ModelLocalityLocal {
 		return inner
 	}
 	return &localModelRunner{

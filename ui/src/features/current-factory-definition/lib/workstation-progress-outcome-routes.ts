@@ -5,6 +5,10 @@ import {
 } from "../../../api/generated/openapi";
 import { resolveEditableWorkstationBehavior } from "./workstation-behavior";
 import { resolveEditableWorkstationType } from "./workstation/workstation-type";
+import {
+  isAgentRunWorkstationType,
+  isInferenceRunWorkstationType,
+} from "./worker-workstation-taxonomy";
 
 type CanonicalWorkstation = NonNullable<
   CanonicalFactoryDefinition["workstations"]
@@ -72,8 +76,8 @@ export function workstationSupportsProgressOutcomeRoutes(
 
   const workstationType = resolveEditableWorkstationType(workstation);
   if (
-    workstationType !== WorkstationType.WorkstationTypeModelWorkstation &&
-    workstationType !== WorkstationType.WorkstationTypeModelInvoke
+    !isAgentRunWorkstationType(workstationType) &&
+    !isInferenceRunWorkstationType(workstationType)
   ) {
     return true;
   }
@@ -106,8 +110,8 @@ export function workstationHasZAxisIncompleteForConnections(
 
   const workstationType = resolveEditableWorkstationType(workstation);
   if (
-    workstationType !== WorkstationType.WorkstationTypeModelWorkstation &&
-    workstationType !== WorkstationType.WorkstationTypeModelInvoke
+    !isAgentRunWorkstationType(workstationType) &&
+    !isInferenceRunWorkstationType(workstationType)
   ) {
     return false;
   }

@@ -62,7 +62,7 @@ func BuildCatalogWithOptions(runtimeCfg *factoryconfig.LoadedFactoryConfig, opts
 
 	aggregates := make(map[string]*catalogAggregate)
 	for _, worker := range factoryCfg.Workers {
-		if strings.TrimSpace(worker.Type) != interfaces.WorkerTypeModel {
+		if !interfaces.IsInferenceWorkerType(worker.Type) {
 			continue
 		}
 		key := canonicalModelName(worker.Model)
@@ -654,7 +654,7 @@ func SelectInvocationWorker(
 	var modelMatched bool
 	for _, worker := range runtimeCfg.FactoryConfig().Workers {
 		workerDef, ok := runtimeCfg.Worker(worker.Name)
-		if !ok || workerDef == nil || workerDef.Type != interfaces.WorkerTypeModel {
+		if !ok || workerDef == nil || !interfaces.IsInferenceWorkerType(workerDef.Type) {
 			continue
 		}
 		if CanonicalModelName(workerDef.Model) != modelKey {

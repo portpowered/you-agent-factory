@@ -12,7 +12,7 @@ func resolveModelOperationBindings(
 	workerDef *interfaces.WorkerConfig,
 	inputTokens []interfaces.Token,
 ) ([]interfaces.ResolvedModelOperationBinding, error) {
-	if workstationDef == nil || workerDef == nil || workstationDef.Type != interfaces.WorkstationTypeInvoke {
+	if workstationDef == nil || workerDef == nil || !interfaces.IsInferenceRunWorkstationType(workstationDef.Type) {
 		return nil, nil
 	}
 

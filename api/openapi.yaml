@@ -7104,17 +7104,26 @@ components:
       type: string
       description: Worker implementation families supported by the public factory-config contract.
       x-enum-varnames:
-        - WorkerTypeModelWorker
+        - WorkerTypeInferenceWorker
+        - WorkerTypeAgentWorker
         - WorkerTypeScriptWorker
+        - WorkerTypePollerWorker
+        - WorkerTypeModelWorker
         - WorkerTypeHostedWorker
       enum:
-        - MODEL_WORKER
+        - INFERENCE_WORKER
+        - AGENT_WORKER
         - SCRIPT_WORKER
+        - POLLER_WORKER
+        - MODEL_WORKER
         - HOSTED_WORKER
       x-enum-descriptions:
-        - Model-backed worker that renders prompts and dispatches through the configured model provider.
+        - Inference worker that performs one bounded model operation such as chat, TTS, embeddings, transcription, or image generation.
+        - Agent worker reserved for agent-loop execution that may plan, call tools, and decide completion.
         - Script-backed worker that executes a configured command instead of calling a model provider.
-        - Repository-owned hosted worker implementation selected by type-specific runtime code instead of a subprocess.
+        - Poller worker that runs long-lived ingress polling work through repository-owned runtime code.
+        - Legacy compatibility alias for inference-worker behavior during the runtime taxonomy migration window.
+        - Legacy compatibility alias for poller-worker behavior during the runtime taxonomy migration window.
     WorkerModelProvider:
       type: string
       description: Canonical model-provider identifiers supported by model workers in factory config.
@@ -7413,18 +7422,30 @@ components:
       type: string
       description: Runtime workstation implementation types supported by the public factory-config contract.
       x-enum-varnames:
+        - WorkstationTypeInferenceRun
+        - WorkstationTypeAgentRun
+        - WorkstationTypeScriptRun
+        - WorkstationTypePollerRun
         - WorkstationTypeModelWorkstation
         - WorkstationTypeModelInvoke
         - WorkstationTypeLogicalMove
         - WorkstationTypeClassifierWorkstation
       enum:
+        - INFERENCE_RUN
+        - AGENT_RUN
+        - SCRIPT_RUN
+        - POLLER_RUN
         - MODEL_WORKSTATION
         - MODEL_INVOKE
         - LOGICAL_MOVE
         - CLASSIFIER_WORKSTATION
       x-enum-descriptions:
-        - Model-backed workstation that renders prompts and dispatches work through the configured worker.
-        - Provider-agnostic model-operation workstation that selects a worker by declared capability and uppercase operation contract.
+        - One-shot inference workstation that resolves operation bindings and dispatches through an inference worker.
+        - Agent-run workstation reserved for future agent-loop execution that renders prompts and dispatches through an agent worker.
+        - Script-run workstation that executes deterministic command or script behavior through a script worker.
+        - Poller-run workstation that supervises ingress polling through a poller worker.
+        - Legacy alias for agent-run behavior during the runtime taxonomy migration window.
+        - Legacy alias for inference-run behavior during the runtime taxonomy migration window.
         - Logical pass-through workstation used for routing and guarded loop-breaker transitions without model execution.
         - Label-based classifier workstation that returns one plain string label and routes through classificationRoutes.
     WorkstationCron:

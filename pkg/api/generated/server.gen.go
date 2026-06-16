@@ -701,9 +701,12 @@ const (
 
 // Defines values for WorkerType.
 const (
-	WorkerTypeHostedWorker WorkerType = "HOSTED_WORKER"
-	WorkerTypeModelWorker  WorkerType = "MODEL_WORKER"
-	WorkerTypeScriptWorker WorkerType = "SCRIPT_WORKER"
+	WorkerTypeAgentWorker     WorkerType = "AGENT_WORKER"
+	WorkerTypeHostedWorker    WorkerType = "HOSTED_WORKER"
+	WorkerTypeInferenceWorker WorkerType = "INFERENCE_WORKER"
+	WorkerTypeModelWorker     WorkerType = "MODEL_WORKER"
+	WorkerTypePollerWorker    WorkerType = "POLLER_WORKER"
+	WorkerTypeScriptWorker    WorkerType = "SCRIPT_WORKER"
 )
 
 // Defines values for WorkstationKind.
@@ -716,10 +719,14 @@ const (
 
 // Defines values for WorkstationType.
 const (
+	WorkstationTypeAgentRun              WorkstationType = "AGENT_RUN"
 	WorkstationTypeClassifierWorkstation WorkstationType = "CLASSIFIER_WORKSTATION"
+	WorkstationTypeInferenceRun          WorkstationType = "INFERENCE_RUN"
 	WorkstationTypeLogicalMove           WorkstationType = "LOGICAL_MOVE"
 	WorkstationTypeModelInvoke           WorkstationType = "MODEL_INVOKE"
 	WorkstationTypeModelWorkstation      WorkstationType = "MODEL_WORKSTATION"
+	WorkstationTypePollerRun             WorkstationType = "POLLER_RUN"
+	WorkstationTypeScriptRun             WorkstationType = "SCRIPT_RUN"
 )
 
 // Defines values for SortBy.

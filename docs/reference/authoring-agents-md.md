@@ -54,7 +54,7 @@ Minimal model worker:
 
 ```yaml
 ---
-type: MODEL_WORKER
+type: AGENT_WORKER
 ---
 
 You are a helpful assistant.
@@ -87,7 +87,7 @@ Prompt-backed workstation:
 
 ```yaml
 ---
-type: MODEL_WORKSTATION
+type: AGENT_RUN
 worker: swe
 limits:
   maxExecutionTime: 30m
@@ -122,7 +122,7 @@ For large or shared prompts, use `promptFile` instead of inlining the template i
 
 ```yaml
 ---
-type: MODEL_WORKSTATION
+type: AGENT_RUN
 worker: swe
 promptFile: prompt.md
 ---
@@ -276,10 +276,10 @@ Branch: {{ index (index .Inputs 0).Tags "branch" }}
 
 | File | Type | Description |
 |------|------|-------------|
-| `examples/write-code-review/workers/executor/AGENTS.md` | MODEL_WORKER | Review-loop executor worker with structured output requirements |
-| `examples/basic/factory/workers/processor/AGENTS.md` | MODEL_WORKER | Minimal single-step example worker |
-| `factory/workstations/process/AGENTS.md` | MODEL_WORKSTATION | Checked-in repository-maintainer workstation prompt |
-| `examples/simple-tasks/workstations/execute-story/AGENTS.md` | MODEL_WORKSTATION | Review-loop workstation with rejection feedback |
+| `examples/write-code-review/workers/executor/AGENTS.md` | AGENT_WORKER | Review-loop executor worker with structured output requirements |
+| `examples/basic/factory/workers/processor/AGENTS.md` | AGENT_WORKER | Minimal single-step example worker |
+| `factory/workstations/process/AGENTS.md` | AGENT_RUN | Checked-in repository-maintainer workstation prompt |
+| `examples/simple-tasks/workstations/execute-story/AGENTS.md` | AGENT_RUN | Review-loop workstation with rejection feedback |
 
 For complete current examples that include workers and workstations, see:
 - `factory/` — checked-in repository-maintainer workflow with plan, process, and review stages

@@ -165,6 +165,54 @@ func TestScriptPollerCommandRequest_DefaultsEmptyWorkingDirectoryToRuntimeBaseDi
 	}
 }
 
+func TestFactoryService_StartLiveRuntimeSidecars_StartsScriptPollerForPollerRunWorkstationType(t *testing.T) {
+	start := time.Date(2026, time.June, 16, 9, 0, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	factoryDir := t.TempDir()
+	runner := &pollerSequenceCommandRunner{
+		outcomes: []pollerRunOutcome{{result: workers.CommandResult{}}},
+	}
+	logCore, _ := observer.New(zap.InfoLevel)
+	svc := &FactoryService{
+		policy: serviceCoordinatorPolicyFromConfig(&FactoryServiceConfig{RuntimeMode: interfaces.RuntimeModeService, CommandRunnerOverride: runner}),
+		logger: zap.New(logCore),
+		clock:  fakeClock,
+	}
+	poller := interfaces.FactoryWorkstationConfig{
+		Name:           canonicalScriptPollerWorkstationName,
+		Type:           interfaces.WorkstationTypePoller,
+		WorkerTypeName: canonicalScriptPollerWorkerName,
+	}
+	config.NormalizeCanonicalWorkstationRuntime(&poller)
+	if poller.Kind != interfaces.WorkstationKindPoller {
+		t.Fatalf("normalized poller kind = %q, want %q", poller.Kind, interfaces.WorkstationKindPoller)
+	}
+
+	runtimeCfg := newScriptPollerLoadedRuntimeConfigForServiceTest(
+		t,
+		factoryDir,
+		scriptPollerRuntimeConfigOptions{
+			poller:       poller,
+			pollerWorker: newCanonicalScriptPollerWorker("--mode", "watch"),
+		},
+	)
+	handle := &liveRuntimeHandle{
+		runtime: &factoryRuntimeBundle{
+			factory:    &aggregateSnapshotFactory{},
+			runtimeCfg: runtimeCfg,
+		},
+	}
+	sidecarCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := svc.startLiveRuntimeSidecars(sidecarCtx, handle); err != nil {
+		t.Fatalf("startLiveRuntimeSidecars: %v", err)
+	}
+	defer svc.stopLiveRuntimeSidecars(handle)
+
+	waitForPollerRunnerCalls(t, runner, 1, time.Second)
+}
+
 func TestFactoryService_StartLiveRuntimeSidecars_StartsOnlyScriptPollersAndRestartsUnexpectedExit(t *testing.T) {
 	start := time.Date(2026, time.May, 22, 9, 0, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)

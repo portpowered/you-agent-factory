@@ -31,7 +31,7 @@ dependencies the same way:
 
 1. Declare one top-level `MODEL` resource with the stable managed runtime
    identity in `model`, plus `backend` and `loadPolicy`.
-2. Reference that resource from any `MODEL_WORKER` with `modelLocality: LOCAL`
+2. Reference that resource from any `INFERENCE_WORKER` with `modelLocality: LOCAL`
    through `workers[].resources[]`.
 3. Keep the worker `model` value aligned with the managed runtime identity on
    the top-level `MODEL` resource.
@@ -85,7 +85,7 @@ Typed metadata rules:
   `loadPolicy`.
 - `MODEL` resources must use a supported managed runtime identity and the backend
   required for that identity.
-- LOCAL `MODEL_WORKER` entries must reference a top-level `MODEL` resource whose
+- LOCAL `INFERENCE_WORKER` entries must reference a top-level `MODEL` resource whose
   `model` value matches the worker `model` identity.
 - `PROVIDER_QUOTA` resources require `provider` and `model`.
 - `INVOCATION_SLOT` resources should carry the provider or model identity that
@@ -103,7 +103,7 @@ that point at the same local model still share that cross-factory limit.
     { "name": "agent-slot", "capacity": 2 }
   ],
   "workers": [
-    { "name": "executor", "type": "MODEL_WORKER" }
+    { "name": "executor", "type": "INFERENCE_WORKER" }
   ],
   "workstations": [
     {

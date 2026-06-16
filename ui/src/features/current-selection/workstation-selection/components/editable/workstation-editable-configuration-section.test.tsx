@@ -297,9 +297,9 @@ describe("EditableConfigurationSection model workstation fields", () => {
     await selectLabeledComboboxOption(
       user,
       "Workstation type",
-      "Model invoke",
+      "Inference run",
     );
-    expect(onWorkstationTypeChange).toHaveBeenCalledWith("MODEL_INVOKE");
+    expect(onWorkstationTypeChange).toHaveBeenCalledWith("INFERENCE_RUN");
   });
 
   it("renders kind, runner, and prompt fields and updates behavior", async () => {

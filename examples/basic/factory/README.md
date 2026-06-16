@@ -22,7 +22,7 @@ examples/basic/factory/
 ├── factory.json                    # Workflow: process task to completion
 ├── workers/
 │   ├── README.md
-│   └── processor/AGENTS.md         # MODEL_WORKER: processes tasks
+│   └── processor/AGENTS.md         # AGENT_WORKER: processes tasks
 ├── workstations/
 │   ├── README.md
 │   └── process/AGENTS.md           # Prompt template for processing work
