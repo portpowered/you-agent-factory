@@ -18,6 +18,7 @@ import (
 // RunConfig holds CLI inputs for one durable Factory Session synchronous execution.
 type RunConfig struct {
 	StartConfig
+	ExecutionBackendConfig
 	JSON               bool
 	Output             io.Writer
 	Service            factorysessionexecution.Service
@@ -89,6 +90,20 @@ func resolveExecutionService(cfg RunConfig) (factorysessionexecution.Service, er
 	if cfg.Service != nil {
 		return cfg.Service, nil
 	}
+	provider, err := normalizeExecutionProvider(cfg.Provider)
+	if err != nil {
+		return nil, err
+	}
+	if provider == factorysessionexecution.ExecutionProviderJavaScriptRuntime {
+		projectRoot, err := resolveProjectRoot(cfg.ProjectRoot)
+		if err != nil {
+			return nil, err
+		}
+		return factorysessionexecution.NewExecutionService(provider, factorysessionexecution.ServiceConfig{
+			ProjectRoot:       projectRoot,
+			ChildExecutorMode: cfg.StartConfig.ChildExecutorMode,
+		})
+	}
 	catalogPath, err := resolveFixtureCatalogPath(cfg.FixtureCatalogPath)
 	if err != nil {
 		return nil, err
@@ -98,6 +113,32 @@ func resolveExecutionService(cfg RunConfig) (factorysessionexecution.Service, er
 		return nil, fmt.Errorf("load durable session fixture catalog: %w", err)
 	}
 	return service, nil
+}
+
+func normalizeExecutionProvider(provider string) (factorysessionexecution.ExecutionProvider, error) {
+	switch strings.TrimSpace(provider) {
+	case "", string(factorysessionexecution.ExecutionProviderFake):
+		return factorysessionexecution.ExecutionProviderFake, nil
+	case string(factorysessionexecution.ExecutionProviderJavaScriptRuntime):
+		return factorysessionexecution.ExecutionProviderJavaScriptRuntime, nil
+	default:
+		return "", newExecutionError(
+			ErrorCodeValidation,
+			fmt.Sprintf("execution provider %q is unsupported: use fake or javascript-runtime", provider),
+			"executionProvider",
+		)
+	}
+}
+
+func resolveProjectRoot(explicit string) (string, error) {
+	if trimmed := strings.TrimSpace(explicit); trimmed != "" {
+		return trimmed, nil
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("resolve current working directory: %w", err)
+	}
+	return cwd, nil
 }
 
 func resolveFixtureCatalogPath(explicit string) (string, error) {

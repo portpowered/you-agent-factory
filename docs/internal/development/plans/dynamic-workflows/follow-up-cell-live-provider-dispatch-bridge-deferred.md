@@ -36,21 +36,18 @@ another broad API surface.
 
 | Follow-up cell | Deferred surface | Current posture |
 |----------------|------------------|-----------------|
-| `dynamic-workflows-cell-cli-live-child-smoke` | CLI loopback for runtime-backed `you workflow run` / `you workflow dispatches` with `live-provider` child execution and provider-session correlation | CLI workflow commands still default to fixture-backed or fake-runtime paths; no documented live child smoke |
+| `dynamic-workflows-cell-cli-live-dispatch-smoke` | CLI loopback for runtime-backed `you workflow run` / `you workflow dispatches` with `live-provider` child execution and provider-session correlation | **Completed** in `dynamic-workflows-cell-cli-live-dispatch-smoke`; scope and deferrals in `follow-up-cell-cli-live-dispatch-smoke-deferred.md` |
 | `dynamic-workflows-cell-mcp-session-serve` | Live runtime-backed MCP serve for async start/status/result against real child dispatches | Documented in `follow-up-cell-mcp-session-serve.md`; default `you mcp serve` stays fixture-backed |
 | `dynamic-workflows-cell-real-backend-api-website-inspection` | Dashboard durable Factory Session dispatch inspection for live child execution mode, provider-session refs, and artifact refs | Live-session oriented today; durable `dur-sess-*` dispatch detail UI is deferred |
 | `dynamic-workflows-cell-live-provider-bridge-parity` | Broader live-provider bridge parity across queued/running/reconciled Petri dispatches and external tool sessions | Bounded JavaScript durable runtime bridge only; Petri dispatch-request compatibility stays on the existing factory runtime path |
 
 ## Smallest Executor Lanes
 
-### `dynamic-workflows-cell-cli-live-child-smoke`
+### `dynamic-workflows-cell-cli-live-dispatch-smoke` (completed)
 
-1. Extend `you workflow run` / `you workflow dispatches` with one documented
-   runtime-backed child-executor mode that reuses `factorysessionexecution.RuntimeService`
-   and `Runtime.ChildExecutorMode = "live-provider"`.
-2. Prove one successful and one failed live child through CLI dispatch reads
-   without introducing workflow-run-specific nouns.
-3. Keep fake-child CLI fixtures stable as the default non-live path.
+Completed in lane `dynamic-workflows-cell-cli-live-dispatch-smoke`. See
+`follow-up-cell-cli-live-dispatch-smoke-deferred.md` for proof inventory and
+explicit MCP/website deferrals.
 
 ### `dynamic-workflows-cell-mcp-session-serve`
 

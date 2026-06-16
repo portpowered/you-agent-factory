@@ -746,3 +746,15 @@ func artifactStatesFromSummaries(artifacts []ArtifactSummary) []interfaces.Facto
 	}
 	return states
 }
+
+// PersistedRuntimeSessionState is a JSON-serializable durable runtime session snapshot
+// used to reload terminal JavaScript runtime sessions across CLI invocations.
+type PersistedRuntimeSessionState struct {
+	Session                   SessionReadResult
+	Result                    ResultReadResult
+	Dispatches                []DispatchSummary
+	DispatchJavaScript        map[string]DispatchJavaScriptProjection
+	DispatchStatusTransitions map[string][]DispatchStatus
+	Artifacts                 []ArtifactSummary
+	Events                    []json.RawMessage
+}

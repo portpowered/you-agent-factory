@@ -3,6 +3,7 @@ package factorysessionexecution
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/livechild"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -182,6 +184,7 @@ type JavaScriptRuntimeServiceConfig struct {
 	ProjectRoot       string
 	ChildExecutorMode string
 	Provider          workers.Provider
+	PersistSessions   bool
 }
 
 // JavaScriptRuntimeService executes simple JavaScript workflows through the real
@@ -190,6 +193,7 @@ type JavaScriptRuntimeService struct {
 	projectRoot       string
 	childExecutorMode string
 	provider          workers.Provider
+	sessionPersistDir string
 
 	mu            sync.RWMutex
 	sessions      map[string]*runtimeSessionState
@@ -202,15 +206,20 @@ var _ Service = (*JavaScriptRuntimeService)(nil)
 
 // NewJavaScriptRuntimeService constructs one JavaScript runtime-backed durable session service.
 func NewJavaScriptRuntimeService(config JavaScriptRuntimeServiceConfig) *JavaScriptRuntimeService {
-	return &JavaScriptRuntimeService{
-		projectRoot:       strings.TrimSpace(config.ProjectRoot),
+	projectRoot := strings.TrimSpace(config.ProjectRoot)
+	service := &JavaScriptRuntimeService{
+		projectRoot:       projectRoot,
 		childExecutorMode: normalizeChildExecutorMode(config.ChildExecutorMode),
 		provider:          config.Provider,
 		sessions:          make(map[string]*runtimeSessionState),
-		startReplay:   make(map[string]startReplayRecord),
-		startInflight: make(map[string]*startInflightFlight),
-		controlReplay: make(map[string]controlReplayRecord),
+		startReplay:       make(map[string]startReplayRecord),
+		startInflight:     make(map[string]*startInflightFlight),
+		controlReplay:     make(map[string]controlReplayRecord),
 	}
+	if config.PersistSessions && projectRoot != "" {
+		service.sessionPersistDir = runtimepersist.DirForProjectRoot(projectRoot)
+	}
+	return service
 }
 
 func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequest) (AsyncStartResult, error) {
@@ -355,7 +364,11 @@ func (s *JavaScriptRuntimeService) StartSync(ctx context.Context, req StartReque
 	s.mu.Lock()
 	applyRuntimeSessionFields(reserved.state, terminal)
 	reserved.state.runCancel = nil
+	persistState := cloneRuntimeSessionState(reserved.state)
 	s.mu.Unlock()
+	if err := s.persistTerminalSessionState(persistState); err != nil {
+		return SyncStartResult{}, err
+	}
 
 	snapshot, err := s.snapshotSessionState(reserved.state.session.SessionID)
 	if err != nil {
@@ -607,10 +620,9 @@ func (s *JavaScriptRuntimeService) runAsyncSession(
 	outcome, err := s.invokeWorkflowRuntime(runCtx, normalized, resolved, sourceContent, policyResolution, sessionID)
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	state, ok := s.sessions[sessionID]
 	if !ok {
+		s.mu.Unlock()
 		return
 	}
 	if err != nil {
@@ -623,11 +635,17 @@ func (s *JavaScriptRuntimeService) runAsyncSession(
 		}
 		terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, failureOutcome, startedAt)
 		s.applyTerminalRuntimeState(state, terminal, startedAt)
+		persistState := cloneRuntimeSessionState(state)
+		s.mu.Unlock()
+		_ = s.persistTerminalSessionState(persistState)
 		return
 	}
 
 	terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, outcome, startedAt)
 	s.applyTerminalRuntimeState(state, terminal, startedAt)
+	persistState := cloneRuntimeSessionState(state)
+	s.mu.Unlock()
+	_ = s.persistTerminalSessionState(persistState)
 }
 
 func (s *JavaScriptRuntimeService) applyTerminalRuntimeState(state *runtimeSessionState, terminal runtimeSessionState, startedAt time.Time) {
@@ -679,12 +697,37 @@ func workflowRunContext(parent context.Context, policy workflowpolicy.EffectiveP
 
 func (s *JavaScriptRuntimeService) snapshotSessionState(sessionID string) (runtimeSessionState, error) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
 	state, ok := s.sessions[sessionID]
-	if !ok {
+	if ok {
+		cloned := cloneRuntimeSessionState(state)
+		s.mu.RUnlock()
+		return cloned, nil
+	}
+	persistDir := s.sessionPersistDir
+	s.mu.RUnlock()
+
+	if persistDir == "" {
 		return runtimeSessionState{}, ErrSessionNotFound
 	}
-	return cloneRuntimeSessionState(state), nil
+
+	snapshot, err := runtimepersist.LoadBytes(persistDir, sessionID)
+	if err != nil {
+		return runtimeSessionState{}, ErrSessionNotFound
+	}
+	var persisted PersistedRuntimeSessionState
+	if err := json.Unmarshal(snapshot, &persisted); err != nil {
+		return runtimeSessionState{}, ErrSessionNotFound
+	}
+	loaded := runtimeStateFromPersistedSnapshot(persisted)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if existing, ok := s.sessions[sessionID]; ok {
+		return cloneRuntimeSessionState(existing), nil
+	}
+	cached := loaded
+	s.sessions[sessionID] = &cached
+	return cloneRuntimeSessionState(&cached), nil
 }
 
 func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
@@ -801,6 +844,72 @@ func validateLiveChildExecutorConfig(mode string, provider workers.Provider) err
 	}
 	if provider == nil {
 		return NewValidationError("runtime.childExecutorMode", "provider is required for live-provider child execution")
+	}
+	return nil
+}
+
+func persistedSnapshotFromRuntimeState(state runtimeSessionState) PersistedRuntimeSessionState {
+	snapshot := PersistedRuntimeSessionState{
+		Session:    cloneSessionRead(state.session),
+		Result:     cloneResultRead(state.result),
+		Dispatches: cloneDispatchSummaries(state.dispatches),
+		Artifacts:  cloneArtifactSummaries(state.artifacts),
+	}
+	if len(state.dispatchJavaScript) > 0 {
+		snapshot.DispatchJavaScript = cloneDispatchJavaScriptProjections(state.dispatchJavaScript)
+	}
+	if len(state.dispatchStatusTransitions) > 0 {
+		snapshot.DispatchStatusTransitions = cloneDispatchStatusTransitions(state.dispatchStatusTransitions)
+	}
+	if len(state.events) > 0 {
+		snapshot.Events = make([]json.RawMessage, len(state.events))
+		for i, event := range state.events {
+			snapshot.Events[i] = append(json.RawMessage(nil), event...)
+		}
+	}
+	return snapshot
+}
+
+func runtimeStateFromPersistedSnapshot(snapshot PersistedRuntimeSessionState) runtimeSessionState {
+	state := runtimeSessionState{
+		session:    cloneSessionRead(snapshot.Session),
+		result:     cloneResultRead(snapshot.Result),
+		dispatches: cloneDispatchSummaries(snapshot.Dispatches),
+		artifacts:  cloneArtifactSummaries(snapshot.Artifacts),
+	}
+	if len(snapshot.DispatchJavaScript) > 0 {
+		state.dispatchJavaScript = cloneDispatchJavaScriptProjections(snapshot.DispatchJavaScript)
+	}
+	if len(snapshot.DispatchStatusTransitions) > 0 {
+		state.dispatchStatusTransitions = cloneDispatchStatusTransitions(snapshot.DispatchStatusTransitions)
+	}
+	if len(snapshot.Events) > 0 {
+		state.events = make([]json.RawMessage, len(snapshot.Events))
+		for i, event := range snapshot.Events {
+			state.events[i] = append(json.RawMessage(nil), event...)
+		}
+	}
+	return state
+}
+
+func (s *JavaScriptRuntimeService) persistTerminalSessionState(state runtimeSessionState) error {
+	if s.sessionPersistDir == "" {
+		return nil
+	}
+	if !IsTerminalLifecycleStatus(state.session.Status) {
+		return nil
+	}
+	sessionID := strings.TrimSpace(state.session.SessionID)
+	if sessionID == "" {
+		return nil
+	}
+	snapshot := persistedSnapshotFromRuntimeState(state)
+	encoded, err := json.MarshalIndent(snapshot, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal durable session snapshot: %w", err)
+	}
+	if err := runtimepersist.SaveBytes(s.sessionPersistDir, sessionID, encoded); err != nil {
+		return fmt.Errorf("persist durable session state: %w", err)
 	}
 	return nil
 }

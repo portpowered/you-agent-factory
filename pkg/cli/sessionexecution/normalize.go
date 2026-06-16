@@ -37,6 +37,11 @@ func NormalizeStartRequest(cfg StartConfig) (factorysessionexecution.StartReques
 		Args:            args,
 		RequestedPolicy: policy,
 	}
+	if trimmed := strings.TrimSpace(cfg.ChildExecutorMode); trimmed != "" {
+		input.Runtime = &factorysessionexecution.RuntimeOptions{
+			ChildExecutorMode: trimmed,
+		}
+	}
 	if mode == ExecutionModeSync {
 		input.Wait = &factorysessionexecution.WaitOptions{
 			TimeoutMillis:   cfg.WaitTimeoutMillis,

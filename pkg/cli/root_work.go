@@ -6,6 +6,7 @@ import (
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/cli/sessionexecution"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
 	workflowcli "github.com/portpowered/infinite-you/pkg/cli/workflow"
+	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/spf13/cobra"
 )
@@ -412,6 +413,7 @@ func newWorkflowRunCommand(globals *cliGlobalOptions) *cobra.Command {
 	cmd.Flags().Int64Var(&waitTimeoutMillis, "wait-timeout-millis", 0, "sync wait timeout in milliseconds")
 	cmd.Flags().BoolVar(&runCfg.StartConfig.CancelOnTimeout, "cancel-on-timeout", false, "request session cancel when sync wait times out")
 	cmd.Flags().StringVar(&runCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed runs")
+	addWorkflowExecutionBackendFlags(cmd, &runCfg.ExecutionBackendConfig, &runCfg.StartConfig.ChildExecutorMode)
 	return cmd
 }
 
@@ -441,6 +443,7 @@ func newWorkflowStartCommand(globals *cliGlobalOptions) *cobra.Command {
 		},
 	}
 	addWorkflowStartFlags(cmd, &startCfg.StartConfig, &startCfg.FixtureCatalogPath)
+	addWorkflowExecutionBackendFlags(cmd, &startCfg.ExecutionBackendConfig, &startCfg.StartConfig.ChildExecutorMode)
 	return cmd
 }
 
@@ -464,6 +467,7 @@ func newWorkflowStatusCommand(globals *cliGlobalOptions) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&statusCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed status reads")
+	addWorkflowExecutionBackendFlags(cmd, &statusCfg.ExecutionBackendConfig, nil)
 	return cmd
 }
 
@@ -492,6 +496,7 @@ func newWorkflowResultCommand(globals *cliGlobalOptions) *cobra.Command {
 	cmd.Flags().StringVar(&resultCfg.Mode, "mode", "", "result read mode: final or partial")
 	cmd.Flags().BoolVar(&resultCfg.IncludeArtifacts, "include-artifacts", false, "include artifact refs in the result read")
 	cmd.Flags().StringVar(&resultCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed result reads")
+	addWorkflowExecutionBackendFlags(cmd, &resultCfg.ExecutionBackendConfig, nil)
 	return cmd
 }
 
@@ -515,6 +520,7 @@ func newWorkflowDispatchesCommand(globals *cliGlobalOptions) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&dispatchesCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed dispatch reads")
+	addWorkflowExecutionBackendFlags(cmd, &dispatchesCfg.ExecutionBackendConfig, nil)
 	return cmd
 }
 
@@ -538,6 +544,7 @@ func newWorkflowArtifactsCommand(globals *cliGlobalOptions) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&artifactsCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed artifact reads")
+	addWorkflowExecutionBackendFlags(cmd, &artifactsCfg.ExecutionBackendConfig, nil)
 	return cmd
 }
 
@@ -570,6 +577,7 @@ func newWorkflowEventsCommand(globals *cliGlobalOptions) *cobra.Command {
 	cmd.Flags().StringVar(&eventsCfg.AfterEventID, "after-event-id", "", "reconnect cursor event id")
 	cmd.Flags().IntVar(&afterSequence, "after-sequence", 0, "reconnect cursor session sequence")
 	cmd.Flags().StringVar(&eventsCfg.FixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed event reads")
+	addWorkflowExecutionBackendFlags(cmd, &eventsCfg.ExecutionBackendConfig, nil)
 	return cmd
 }
 
@@ -582,4 +590,16 @@ func addWorkflowStartFlags(cmd *cobra.Command, startCfg *sessionexecutioncli.Sta
 	cmd.Flags().StringVar(&startCfg.PolicyJSON, "policy", "", "requested policy JSON object")
 	cmd.Flags().StringVar(&startCfg.PolicyHash, "policy-hash", "", "requested policy hash selector")
 	cmd.Flags().StringVar(fixtureCatalogPath, "fixture-catalog", "", "path to durable session contract fixtures for mock-backed starts")
+}
+
+func addWorkflowExecutionBackendFlags(
+	cmd *cobra.Command,
+	backend *sessionexecutioncli.ExecutionBackendConfig,
+	childExecutorMode *string,
+) {
+	cmd.Flags().StringVar(&backend.Provider, "execution-provider", string(fse.ExecutionProviderFake), "durable execution backend: fake or javascript-runtime")
+	cmd.Flags().StringVar(&backend.ProjectRoot, "project-root", "", "project root for javascript-runtime workflow source lookup")
+	if childExecutorMode != nil {
+		cmd.Flags().StringVar(childExecutorMode, "child-executor-mode", "", "javascript child executor mode: fake or live-provider")
+	}
 }
