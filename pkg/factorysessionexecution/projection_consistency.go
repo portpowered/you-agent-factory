@@ -780,7 +780,27 @@ func dispatchSummaryFromChildRecord(currentPhase string, child workflowruntime.C
 		summary.Status == DispatchStatusCompleted {
 		summary.OutputArtifactIDs = []string{artifactID}
 	}
+	if summary.Status == DispatchStatusFailed {
+		summary.FailureDetail = dispatchFailureDetailFromChildRecord(child)
+	}
 	return summary
+}
+
+func dispatchFailureDetailFromChildRecord(child workflowruntime.ChildDispatchRecord) *DispatchFailureDetail {
+	message := strings.TrimSpace(child.FailureMessage)
+	if message == "" {
+		return nil
+	}
+	detail := &DispatchFailureDetail{Message: message}
+	if reason := strings.TrimSpace(child.FailureReason); reason != "" {
+		detail.Reason = reason
+	} else {
+		detail.Reason = workflowruntime.ChildExecutionFailureReason
+	}
+	if errorClass := strings.TrimSpace(child.FailureErrorClass); errorClass != "" {
+		detail.ErrorClass = errorClass
+	}
+	return detail
 }
 
 func dispatchJavaScriptFromChildRecord(child workflowruntime.ChildDispatchRecord) DispatchJavaScriptProjection {
@@ -886,13 +906,13 @@ func applyRuntimeSessionFields(target *runtimeSessionState, source runtimeSessio
 	target.events = source.events
 }
 
-func applyRuntimeSuccessProjection(
+func applyRuntimeExecutionRecordProjection(
 	state *runtimeSessionState,
 	sessionID string,
-	outcome workflowruntime.Outcome,
+	records []workflowruntime.RuntimeRecord,
 	finishedAt time.Time,
 ) {
-	recordProjection := ProjectRuntimeExecutionRecords(sessionID, outcome.Records, finishedAt)
+	recordProjection := ProjectRuntimeExecutionRecords(sessionID, records, finishedAt)
 	if recordProjection.Phase != "" {
 		state.session.Phase = recordProjection.Phase
 	}
@@ -903,6 +923,15 @@ func applyRuntimeSuccessProjection(
 	state.session.Progress = &recordProjection.Progress
 	state.session.ArtifactRefs = artifactRefsFromSummaries(state.artifacts)
 	state.session.ArtifactCount = len(state.session.ArtifactRefs)
+}
+
+func applyRuntimeSuccessProjection(
+	state *runtimeSessionState,
+	sessionID string,
+	outcome workflowruntime.Outcome,
+	finishedAt time.Time,
+) {
+	applyRuntimeExecutionRecordProjection(state, sessionID, outcome.Records, finishedAt)
 
 	projected, resultSummary, err := projectRuntimeSuccessResult(sessionID, outcome.Value, state.artifacts)
 	if err != nil {

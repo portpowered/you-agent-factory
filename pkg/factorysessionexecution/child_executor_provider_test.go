@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -135,4 +136,34 @@ func (s *testChildRecordSink) statusTransitions(dispatchID string) []string {
 		transitions = append(transitions, status)
 	}
 	return transitions
+}
+
+func TestProviderChildExecutor_Execute_FailedChild_RecordsTypedFailureDetail(t *testing.T) {
+	provider := newUnitMockProvider(interfaces.InferenceResponse{Content: `{"text":"unused"}`})
+	collectorSink := newTestChildRecordSink()
+	executor := NewProviderChildExecutor("session-live-child-failure", provider, collectorSink)
+
+	_, err := executor.Execute(workflowruntime.ChildExecutionRequest{
+		Prompt:       "fail:simulated provider child error",
+		Label:        "summarize-findings",
+		WorkflowName: "parallel-child-failure",
+	})
+	if err == nil {
+		t.Fatal("Execute: error = nil, want child failure")
+	}
+
+	projection := ProjectRuntimeExecutionRecords("session-live-child-failure", collectorSink.records, time.Now().UTC())
+	if len(projection.Dispatches) != 1 {
+		t.Fatalf("dispatches = %#v, want one failed dispatch", projection.Dispatches)
+	}
+	dispatch := projection.Dispatches[0]
+	if dispatch.Status != DispatchStatusFailed {
+		t.Fatalf("dispatch status = %q, want FAILED", dispatch.Status)
+	}
+	if dispatch.FailureDetail == nil || dispatch.FailureDetail.Reason != workflowruntime.ChildExecutionFailureReason {
+		t.Fatalf("failureDetail = %#v", dispatch.FailureDetail)
+	}
+	if dispatch.FailureDetail.Message == "" {
+		t.Fatal("failureDetail message is empty")
+	}
 }

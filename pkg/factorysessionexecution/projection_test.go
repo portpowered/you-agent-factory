@@ -233,6 +233,67 @@ func TestProjectRuntimeExecutionRecords_LiveChildDispatch_ProjectsLifecycleArtif
 	}
 }
 
+func TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail(t *testing.T) {
+	records := []workflowruntime.RuntimeRecord{
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:    "dispatch-2",
+				Status:        workflowruntime.ChildDispatchStatusQueued,
+				Label:         "child-1",
+				ExecutionMode: ChildExecutorModeLive,
+			},
+		},
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:    "dispatch-2",
+				Status:        workflowruntime.ChildDispatchStatusRunning,
+				Label:         "child-1",
+				ExecutionMode: ChildExecutorModeLive,
+			},
+		},
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:        "dispatch-2",
+				Status:            workflowruntime.ChildDispatchStatusFailed,
+				Label:             "child-1",
+				ExecutionMode:     ChildExecutorModeLive,
+				FailureReason:     workflowruntime.ChildExecutionFailureReason,
+				FailureMessage:    "live child failed: simulated child error",
+				FailureErrorClass: "terminal",
+			},
+		},
+	}
+
+	observedAt := time.Date(2026, 6, 16, 14, 0, 0, 0, time.UTC)
+	projection := ProjectRuntimeExecutionRecords("session-live-child-failure", records, observedAt)
+	if len(projection.Dispatches) != 1 {
+		t.Fatalf("dispatches = %#v, want one failed dispatch", projection.Dispatches)
+	}
+	dispatch := projection.Dispatches[0]
+	if dispatch.Status != DispatchStatusFailed {
+		t.Fatalf("dispatch status = %q, want FAILED", dispatch.Status)
+	}
+	if dispatch.FailureDetail == nil || dispatch.FailureDetail.Reason != workflowruntime.ChildExecutionFailureReason {
+		t.Fatalf("failureDetail = %#v", dispatch.FailureDetail)
+	}
+	if dispatch.FailureDetail.Message != "live child failed: simulated child error" {
+		t.Fatalf("failure message = %q", dispatch.FailureDetail.Message)
+	}
+	if dispatch.FailureDetail.ErrorClass != "terminal" {
+		t.Fatalf("failure errorClass = %q, want terminal", dispatch.FailureDetail.ErrorClass)
+	}
+	if len(projection.Artifacts) != 0 {
+		t.Fatalf("artifacts = %#v, want none for failed child", projection.Artifacts)
+	}
+	transitions := projection.DispatchStatusTransitions["dispatch-2"]
+	if len(transitions) != 3 || transitions[2] != DispatchStatusFailed {
+		t.Fatalf("statusTransitions = %#v, want queued/running/failed", transitions)
+	}
+}
+
 func TestFilterEventsAfterReconnect_AfterEventIDAndSequence(t *testing.T) {
 	events := []json.RawMessage{
 		json.RawMessage(`{"id":"session-started/s1","context":{"sequence":1,"sessionSequence":0}}`),

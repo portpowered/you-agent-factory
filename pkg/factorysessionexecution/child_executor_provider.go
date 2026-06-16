@@ -3,6 +3,7 @@ package factorysessionexecution
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 const (
@@ -140,6 +142,10 @@ func (e *ProviderChildExecutor) failedChildResult(
 	failed.Status = workflowruntime.ChildDispatchStatusFailed
 	failed.Provider = providerName
 	failed.ProviderSessionRef = providerSessionRef
+	reason, message, errorClass := childExecutionFailureFields(err)
+	failed.FailureReason = reason
+	failed.FailureMessage = message
+	failed.FailureErrorClass = errorClass
 	e.records.Append(workflowruntime.RuntimeRecord{
 		Kind:          workflowruntime.RecordKindChildDispatch,
 		ChildDispatch: &failed,
@@ -233,6 +239,24 @@ func resolveChildExecutorMode(configMode string, req StartRequest) string {
 		return normalizeChildExecutorMode(req.Runtime.ChildExecutorMode)
 	}
 	return normalizeChildExecutorMode(configMode)
+}
+
+func childExecutionFailureFields(err error) (reason, message, errorClass string) {
+	reason = workflowruntime.ChildExecutionFailureReason
+	message = err.Error()
+	var providerErr *provider.ProviderError
+	if errors.As(err, &providerErr) {
+		if providerErr.Type != "" {
+			reason = string(providerErr.Type)
+		}
+		if providerErr.Message != "" {
+			message = providerErr.Message
+		}
+		if providerErr.Family != "" {
+			errorClass = string(providerErr.Family)
+		}
+	}
+	return reason, message, errorClass
 }
 
 func (s *JavaScriptRuntimeService) childExecutorHooks(mode string) workflowruntime.Hooks {

@@ -32,6 +32,10 @@ const ChildExecutionModeFake = "fake"
 // durable dispatch bridge.
 const ChildExecutionModeLive = "live-provider"
 
+// ChildExecutionFailureReason is the default durable dispatch failure reason for
+// bridged child execution failures.
+const ChildExecutionFailureReason = "CHILD_EXECUTION_FAILED"
+
 // RuntimeRecord is one ordered host-effect record emitted during workflow execution.
 // Records are typed so they can later map into factory session events, dispatches,
 // and artifacts without changing workflow source syntax.
@@ -95,6 +99,9 @@ type ChildDispatchRecord struct {
 	Provider           string `json:"provider,omitempty"`
 	ProviderSessionRef string `json:"providerSessionRef,omitempty"`
 	ArtifactRef        string `json:"artifactRef,omitempty"`
+	FailureReason      string `json:"failureReason,omitempty"`
+	FailureMessage     string `json:"failureMessage,omitempty"`
+	FailureErrorClass  string `json:"failureErrorClass,omitempty"`
 }
 
 // BudgetRecord captures effective policy budget values observed by the runtime.

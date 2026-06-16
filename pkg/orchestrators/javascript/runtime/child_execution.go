@@ -131,11 +131,13 @@ func (e *FakeChildExecutor) executeFailed(req ChildExecutionRequest) (ChildExecu
 	e.records.AppendChildDispatch(base, ChildDispatchStatusRunning)
 	failed := base
 	failed.Status = ChildDispatchStatusFailed
+	diagnostic := fmt.Sprintf("fake child failed: %s", strings.TrimPrefix(req.Prompt, "fail:"))
+	failed.FailureReason = ChildExecutionFailureReason
+	failed.FailureMessage = diagnostic
 	e.records.Append(RuntimeRecord{
 		Kind:          RecordKindChildDispatch,
 		ChildDispatch: &failed,
 	})
-	diagnostic := fmt.Sprintf("fake child failed: %s", strings.TrimPrefix(req.Prompt, "fail:"))
 	return ChildExecutionResult{
 		DispatchID:    dispatchID,
 		ChildIndex:    childIndex,

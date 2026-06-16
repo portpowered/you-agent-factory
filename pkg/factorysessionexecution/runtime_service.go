@@ -73,6 +73,9 @@ func projectRuntimeSessionState(
 	if outcome.OK {
 		applyRuntimeSuccessProjection(&state, sessionID, outcome, finishedAt)
 	} else {
+		if len(outcome.Records) > 0 {
+			applyRuntimeExecutionRecordProjection(&state, sessionID, outcome.Records, finishedAt)
+		}
 		projectRuntimeFailure(&state.session, &state.result, outcome)
 	}
 	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
