@@ -11,6 +11,16 @@
 - Default JavaScript runtime durable sessions keep fake child execution when no runtime override is provided.
 - Select explicit fake child execution via `StartRequest.Runtime.ChildExecutorMode = "fake"` even when the service default is `live-provider`; request-level mode wins over `JavaScriptRuntimeServiceConfig.ChildExecutorMode`.
 - Record deferred CLI/MCP/website follow-ups in `docs/internal/development/plans/dynamic-workflows/follow-up-cell-live-provider-dispatch-bridge-deferred.md` instead of widening the bridge lane.
+- When `make pkg-file-count` fails after adding bridge files, move provider code to `pkg/factorysessionexecution/livechild` and consolidate fixture tests rather than adding root package files; avoid importing `factorysessionexecution` from `livechild` tests (import cycle).
+
+## 2026-06-16T14:30:00Z - mergeability: PR #822 pkg-file-count
+- Fixed required CI `Build, Lint, and API` failure from `pkg-file-count` by moving `ProviderChildExecutor` to `pkg/factorysessionexecution/livechild`, merging live-child fixture tests into `fixtures/runtime_live_child_test.go`, folding `session_event_projection_test.go` into `projection_test.go`, merging `typed_failure_cases_test.go` into `typed_failures_test.go`, and inlining `child_record_sink.go` into `child_execution.go`.
+- Files changed: `pkg/factorysessionexecution/{livechild,types,normalize,runtime_service,projection_test}`, `pkg/factorysessionexecution/fixtures/{runtime_live_child_test,typed_failures_test}.go`, `pkg/orchestrators/javascript/runtime/child_execution.go`, docs path updates.
+- **Learnings for future iterations:**
+  - Patterns discovered: `livechild` tests must not import `factorysessionexecution` because `runtime_service.go` imports `livechild` (cycle); assert on sink records directly in package tests.
+  - Gotchas encountered: naïvely concatenating test files duplicates `package`/`import` blocks; strip duplicates after merge.
+  - Useful context: `make pkg-file-count` is separate from `backendsizecheck`; both can block CI independently.
+---
 
 ## 2026-06-16T18:00:00Z - mergeability: PR #822 blocking feedback
 - Threaded workflow run context through `ChildExecutor.Execute` from `workflowruntime.Run` into `ProviderChildExecutor` provider `Infer` calls, with parallel child goroutines checking `ctx.Err()` before and during execution.
