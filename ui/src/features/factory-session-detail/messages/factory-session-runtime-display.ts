@@ -1,6 +1,5 @@
 import type { components } from "../../../api/generated/openapi";
 
-import type { FactorySessionDetailMessages } from "./factory-session-detail";
 import { getFactorySessionDetailMessages } from "./factory-session-detail";
 
 export function formatFactorySessionRuntimeStatus(
@@ -37,11 +36,3 @@ export function formatFactorySessionScriptStatus(
   const messages = getFactorySessionDetailMessages(locale);
   return messages.scriptStatusLabels[scriptStatus] ?? scriptStatus;
 }
-
-export type FactorySessionRuntimeDisplayMessages = Pick<
-  FactorySessionDetailMessages,
-  | "durableLifecycleStatusLabels"
-  | "orchestratorKindLabels"
-  | "runtimeStatusLabels"
-  | "scriptStatusLabels"
->;

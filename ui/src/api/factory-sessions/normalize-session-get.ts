@@ -10,8 +10,6 @@ import { resultSurfacesFromDurableReadModel } from "./normalize-durable-inspecti
 export type FactorySession = components["schemas"]["FactorySession"];
 export type FactorySessionDurableReadModel =
   components["schemas"]["FactorySessionDurableReadModel"];
-export type FactorySessionGetResponse =
-  components["schemas"]["FactorySessionGetResponse"];
 export type FactorySessionLiveResult =
   components["schemas"]["FactorySessionLiveResult"];
 export type FactorySessionPartialResult =

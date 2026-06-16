@@ -558,6 +558,15 @@ describe("factory sessions API", () => {
 
     await expect(getFactorySession("dur-sess-js-run-n-001")).resolves.toEqual({
       durableLifecycleStatus: "RUNNING",
+      durableProgress: {
+        completedDispatches: 1,
+        failedDispatches: 0,
+        inFlightDispatches: 1,
+        totalDispatches: 3,
+      },
+      partialResult: undefined,
+      result: undefined,
+      resultSummary: undefined,
       session: expect.objectContaining({
         id: "dur-sess-js-run-n-001",
         runtime: expect.objectContaining({
