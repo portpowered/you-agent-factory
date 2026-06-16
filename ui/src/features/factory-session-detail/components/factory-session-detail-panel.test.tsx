@@ -260,6 +260,13 @@ describe("FactorySessionDetailPanel", () => {
     expect(screen.getByText("FINAL_RESULT")).toBeTruthy();
     expect(screen.getByText("art-js-success-001 · FINAL_RESULT")).toBeTruthy();
     expect(screen.getByText("queued 0, running 0, completed 2")).toBeTruthy();
+
+    const fetchUrls = vi.mocked(globalThis.fetch).mock.calls.map(([input]) =>
+      String(input),
+    );
+    expect(
+      fetchUrls.some((url) => url.includes("/results?mode=partial")),
+    ).toBe(false);
   });
 
   it("shows Petri marking and enabled transitions without dynamic workflow shorthand", async () => {

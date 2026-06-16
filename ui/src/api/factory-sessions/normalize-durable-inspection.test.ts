@@ -3,6 +3,7 @@ import {
   dispatchSummariesToFactoryDispatches,
   resultSurfacesFromDurableReadModel,
   resultSurfacesFromDurableResult,
+  shouldFetchDurablePartialResults,
 } from "./normalize-durable-inspection";
 
 describe("normalize durable inspection helpers", () => {
@@ -117,5 +118,47 @@ describe("normalize durable inspection helpers", () => {
         sessionId: "dur-sess-js-paused-001",
       },
     });
+  });
+});
+
+describe("shouldFetchDurablePartialResults", () => {
+  it("skips durable partial-result fetch when final result is already projected", () => {
+    const surfaces = resultSurfacesFromDurableReadModel({
+      artifactRefs: [
+        {
+          id: "art-js-success-001",
+          kind: "FINAL_RESULT",
+          visibility: "PUBLIC",
+        },
+      ],
+      orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+      resolvedSource: {
+        kind: "WORKFLOW_FILE",
+        sourceRef: "workflow/.claude/workflows/docs-refresh.yaml",
+      },
+      resultSummary: {
+        resultStatus: "FINAL",
+        summary: "Documentation refresh complete.",
+      },
+      sessionId: "dur-sess-js-success-002",
+      status: "SUCCEEDED",
+    });
+
+    expect(
+      shouldFetchDurablePartialResults({
+        partialResult: surfaces.partialResult,
+        result: surfaces.result,
+        resultSummary: {
+          resultStatus: "FINAL",
+          summary: "Documentation refresh complete.",
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("allows durable partial-result fetch for in-flight sessions without partial surfaces", () => {
+    expect(shouldFetchDurablePartialResults({ resultSummary: undefined })).toBe(
+      true,
+    );
   });
 });

@@ -189,3 +189,20 @@ export function isDurableJavaScriptSession(
     sessionId.startsWith("dur-sess-")
   );
 }
+
+export function shouldFetchDurablePartialResults(input: {
+  partialResult?: FactorySessionPartialResult;
+  result?: FactorySessionLiveResult;
+  resultSummary?: FactorySessionDurableReadModel["resultSummary"];
+}): boolean {
+  if (input.partialResult || input.result) {
+    return false;
+  }
+
+  const resultStatus = input.resultSummary?.resultStatus;
+  if (resultStatus === FactorySessionResultStatus.FactorySessionResultStatusFinal) {
+    return false;
+  }
+
+  return true;
+}

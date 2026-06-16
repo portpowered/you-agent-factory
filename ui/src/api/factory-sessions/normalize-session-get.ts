@@ -21,6 +21,7 @@ export interface NormalizedFactorySessionGet {
   durableLifecycleStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
   partialResult?: FactorySessionPartialResult;
   result?: FactorySessionLiveResult;
+  resultSummary?: FactorySessionDurableReadModel["resultSummary"];
   session: FactorySession;
 }
 
@@ -37,6 +38,7 @@ export function normalizeFactorySessionGetResponse(
       durableLifecycleStatus: responseBody.status,
       partialResult: resultSurfaces.partialResult,
       result: resultSurfaces.result,
+      resultSummary: responseBody.resultSummary,
       session: factorySessionFromDurableReadModel(responseBody),
     };
   }

@@ -1,5 +1,4 @@
 import type { components } from "../../../api/generated/openapi";
-import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 
 import type { FactorySessionDetailMessages } from "./factory-session-detail";
 import { getFactorySessionDetailMessages } from "./factory-session-detail";

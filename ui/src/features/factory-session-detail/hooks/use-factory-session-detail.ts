@@ -17,6 +17,7 @@ import {
 import {
   dispatchSummariesToFactoryDispatches,
   isDurableJavaScriptSession,
+  shouldFetchDurablePartialResults,
 } from "../../../api/factory-sessions/normalize-durable-inspection";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 
@@ -49,7 +50,8 @@ export function useFactorySessionDetail(
       }
 
       const normalized = await getFactorySession(sessionID);
-      let { durableLifecycleStatus, partialResult, result, session } = normalized;
+      let { durableLifecycleStatus, partialResult, result, resultSummary, session } =
+        normalized;
 
       if (session.runtime.orchestratorKind !== FactoryOrchestratorKind.JAVASCRIPT) {
         return { durableLifecycleStatus, session };
@@ -60,6 +62,13 @@ export function useFactorySessionDetail(
         session.runtime.orchestratorKind,
         durableLifecycleStatus,
       );
+      const fetchDurablePartialResults =
+        durableJavaScript &&
+        shouldFetchDurablePartialResults({
+          partialResult,
+          result,
+          resultSummary,
+        });
 
       const [dispatchList, liveResult, livePartialResult, durableFinalResult, durablePartialResult] =
         await Promise.all([
@@ -75,7 +84,7 @@ export function useFactorySessionDetail(
           durableJavaScript && !result
             ? getFactorySessionDurableResults(sessionID, "final").catch(() => undefined)
             : Promise.resolve(undefined),
-          durableJavaScript && !partialResult
+          fetchDurablePartialResults
             ? getFactorySessionDurableResults(sessionID, "partial").catch(() => undefined)
             : Promise.resolve(undefined),
         ]);
