@@ -46,6 +46,7 @@ type UseFactoryGraphEditorSelectionOptions = {
   onStateChange?: (state: FactoryGraphEditorSelectionState) => void;
 };
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: selection controller wiring stays in one hook.
 export function useFactoryGraphEditorSelection(
   options: UseFactoryGraphEditorSelectionOptions = {},
 ): FactoryGraphEditorSelectionController {
