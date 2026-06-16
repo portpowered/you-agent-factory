@@ -24,6 +24,8 @@ import { useEditableWorkTypeConfigurationState } from "../../work-type-selection
 import { useEditableWorkerConfigurationState } from "../../worker-selection/hooks/use-editable-worker-configuration-state";
 import { useEditableWorkstationConfigurationState } from "../../workstation-selection/hooks/use-editable-workstation-configuration-state";
 import { WorkstationDetailCard } from "../../workstation-selection/public";
+import type { FactoryGraphBulkSelectionSummary } from "../../../factory-graph-editor/lib/selection/factory-graph-bulk-selection-summary";
+import { GraphBulkSelectionDetailCard } from "../../graph-selection/components/graph-bulk-selection-detail-card";
 import {
   DocDetailCard,
   NoSelectionDetailCard,
@@ -38,6 +40,7 @@ import {
   CurrentSelectionWorkTypeSaveDialog,
   useCurrentSelectionDetailSave,
 } from "./use-current-selection-detail-save";
+import { useFactoryGraphEditorSelectionBridge } from "../../../workflow-activity/state/factory-graph-editor-selection-bridge";
 
 export interface CurrentSelectionWidgetProps {
   activeTraceID?: string | null;
@@ -53,6 +56,28 @@ export interface CurrentSelectionWidgetProps {
   selectedWorkRelationshipGraph?: SelectedWorkRelationshipGraph;
   selectedWorkExecutionDetails: SelectedWorkItemExecutionDetails | null;
   widgetId?: string;
+}
+
+function renderGraphBulkSelectionDetailCard({
+  bulkSelectionSummary,
+  locale,
+  widgetId,
+}: {
+  bulkSelectionSummary: FactoryGraphBulkSelectionSummary | null;
+  locale?: string;
+  widgetId: string;
+}) {
+  if (!bulkSelectionSummary) {
+    return null;
+  }
+
+  return (
+    <GraphBulkSelectionDetailCard
+      locale={locale}
+      summary={bulkSelectionSummary}
+      widgetId={widgetId}
+    />
+  );
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: selection routing keeps each detail card branch explicit for review.
@@ -340,6 +365,9 @@ export function CurrentSelectionWidget({
   selectedWorkExecutionDetails,
   widgetId = "current-selection",
 }: CurrentSelectionWidgetProps) {
+  const graphBulkSelectionSummary = useFactoryGraphEditorSelectionBridge(
+    (state) => state.selection?.bulkSelectionSummary ?? null,
+  );
   const {
     currentFactoryDefinition,
     selectedNode,
@@ -443,7 +471,14 @@ export function CurrentSelectionWidget({
     providerSessionState.selectedProviderSessionKey;
   const handleSelectProviderSession =
     onSelectProviderSession ?? providerSessionState.setSelectedProviderSession;
-  const detailCard = renderCurrentSelectionDetailCard({
+  const graphBulkSelectionDetailCard = renderGraphBulkSelectionDetailCard({
+    bulkSelectionSummary: graphBulkSelectionSummary,
+    locale: locale ?? undefined,
+    widgetId,
+  });
+  const detailCard =
+    graphBulkSelectionDetailCard ??
+    renderCurrentSelectionDetailCard({
     activeTraceID,
     currentSelection,
     docHeaderAction,
@@ -476,7 +511,7 @@ export function CurrentSelectionWidget({
     selectedWorkExecutionDetails,
     setSelectedProviderSession: handleSelectProviderSession,
     widgetId,
-  });
+    });
 
   const resolvedLocale = locale ?? undefined;
 

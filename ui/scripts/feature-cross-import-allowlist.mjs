@@ -211,7 +211,36 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     relativeFilePath:
       "src/features/current-selection/components/widget/current-selection-widget.tsx",
     importSpecifiers: [
+      "../../../factory-graph-editor/lib/selection/factory-graph-bulk-selection-summary",
       "../../../provider-session-detail/lib/provider-session-ref",
+      "../../../workflow-activity/state/factory-graph-editor-selection-bridge",
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/components/widget-tests/selection/current-selection-widget.graph-bulk-selection.test.tsx",
+    importSpecifiers: [
+      "../../../workflow-activity/state/factory-graph-editor-selection-bridge",
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/graph-selection/components/graph-bulk-selection-detail-card.tsx",
+    importSpecifiers: [
+      "../../../factory-graph-editor/lib/selection/factory-graph-bulk-selection-summary",
+    ],
+    reason:
+      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
+  },
+  {
+    relativeFilePath:
+      "src/features/current-selection/graph-selection/messages/graph-bulk-selection-detail.ts",
+    importSpecifiers: [
+      "../../../factory-graph-editor/lib/selection/factory-graph-bulk-selection-summary",
     ],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",

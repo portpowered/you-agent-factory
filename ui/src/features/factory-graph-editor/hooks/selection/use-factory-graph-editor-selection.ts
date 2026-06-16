@@ -1,5 +1,5 @@
 import type { EdgeChange, NodeChange } from "@xyflow/react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addToFactoryGraphEditorSelection,
   applyFactoryGraphEditorEdgeSelectChanges,
@@ -42,8 +42,20 @@ export type FactoryGraphEditorSelectionController = {
   isEdgeSelected: (edgeId: string) => boolean;
 };
 
-export function useFactoryGraphEditorSelection(): FactoryGraphEditorSelectionController {
+type UseFactoryGraphEditorSelectionOptions = {
+  onStateChange?: (state: FactoryGraphEditorSelectionState) => void;
+};
+
+export function useFactoryGraphEditorSelection(
+  options: UseFactoryGraphEditorSelectionOptions = {},
+): FactoryGraphEditorSelectionController {
   const [state, setState] = useState(createEmptyFactoryGraphEditorSelection);
+  const onStateChangeRef = useRef(options.onStateChange);
+  onStateChangeRef.current = options.onStateChange;
+
+  useEffect(() => {
+    onStateChangeRef.current?.(state);
+  }, [state]);
 
   const replaceSelection = useCallback(
     (items: FactoryGraphEditorSelectionItems) => {

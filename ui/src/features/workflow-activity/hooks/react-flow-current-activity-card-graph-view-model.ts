@@ -34,6 +34,7 @@ import {
   useCurrentActivityGraphEdgePresentation,
   useCurrentActivityGraphSelectionGestures,
 } from "./react-flow-current-activity-card-graph-selection-gestures";
+import { createCurrentActivityGraphSelectionBridgePublisher } from "./current-activity-graph-selection-bridge-publisher";
 
 const EMPTY_TRANSIENT_NODE_POSITIONS = new Map<
   string,
@@ -397,7 +398,28 @@ export function useCurrentActivityGraphViewModel({
     () => buildActiveItemLabelsByPlaceId(activeExecutions),
     [activeExecutions],
   );
-  const graphSelection = useFactoryGraphEditorSelection();
+  const publishGraphSelectionBridgeState = useMemo(
+    () =>
+      createCurrentActivityGraphSelectionBridgePublisher({
+        onSelectDoc,
+        onSelectResource,
+        onSelectStateNode,
+        onSelectWorker,
+        onSelectWorkType,
+        onSelectWorkstation,
+      }),
+    [
+      onSelectDoc,
+      onSelectResource,
+      onSelectStateNode,
+      onSelectWorker,
+      onSelectWorkType,
+      onSelectWorkstation,
+    ],
+  );
+  const graphSelection = useFactoryGraphEditorSelection({
+    onStateChange: publishGraphSelectionBridgeState,
+  });
   const graphSelectionEnabled =
     !editor.editorMode || editor.activeTool !== "delete";
   const baseNodes = useCurrentActivityBaseNodes({
