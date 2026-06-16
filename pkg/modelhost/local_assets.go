@@ -27,7 +27,7 @@ func (g localAssetGateway) PullModel(
 	ctx context.Context,
 	runtimeCfg *factoryconfig.LoadedFactoryConfig,
 	modelName string,
-) (factoryapi.ManagedRuntimePullOutcome, ReadinessSnapshot, error) {
+) (AssetPullResult, error) {
 	result, err := localmodels.PullModelWithOptions(g.puller, ctx, runtimeCfg, modelName, localmodels.PullOptions{
 		RuntimeCacheInspector: g.puller,
 		SourceResolver:        localmodels.DefaultManagedRuntimeSourceResolver(),
@@ -40,9 +40,13 @@ func (g localAssetGateway) PullModel(
 		if outcome == "" {
 			outcome = factoryapi.ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME
 		}
-		return outcome, ReadinessSnapshot{}, err
+		pullResult := AssetPullResult{
+			PullOutcome: outcome,
+			Snapshot:    snapshotFromPullResult(result),
+		}
+		return pullResult, err
 	}
-	return outcome, snapshotFromPullResult(result), nil
+	return assetPullResultFromService(result, outcome), nil
 }
 
 func (g localAssetGateway) InspectRuntimeCache(
@@ -96,6 +100,25 @@ func snapshotFromPullResult(result apisurface.ModelPullResult) ReadinessSnapshot
 		LifecycleState: lifecycle,
 		FailureClass:   FailureClassForReadinessState(readiness),
 		Diagnostics:    diagnostics,
+	}
+}
+
+func assetPullResultFromService(result apisurface.ModelPullResult, outcome factoryapi.ManagedRuntimePullOutcome) AssetPullResult {
+	files := make([]PullDownloadedFile, 0, len(result.DownloadedFiles))
+	for _, file := range result.DownloadedFiles {
+		files = append(files, PullDownloadedFile{
+			Path:   file.Path,
+			Bytes:  file.Bytes,
+			SHA256: file.SHA256,
+		})
+	}
+	return AssetPullResult{
+		PullOutcome:     outcome,
+		Snapshot:        snapshotFromPullResult(result),
+		LegacyOutcome:   strings.TrimSpace(result.Outcome),
+		CachePath:       strings.TrimSpace(result.CachePath),
+		Revision:        strings.TrimSpace(result.Revision),
+		DownloadedFiles: files,
 	}
 }
 

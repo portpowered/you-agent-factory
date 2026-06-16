@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -40,7 +41,16 @@ func (s staticModelAssetPuller) ResolveModelCache(_ context.Context, _ *factoryc
 }
 
 func (s staticModelAssetPuller) InspectRuntimeCache(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ string) (localmodels.RuntimeCacheInspection, error) {
-	return localmodels.RuntimeCacheInspection{}, nil
+	if strings.TrimSpace(s.cache.ModelName) == "" {
+		return localmodels.RuntimeCacheInspection{}, nil
+	}
+	return localmodels.RuntimeCacheInspection{
+		Supported:          true,
+		Installed:          true,
+		CachePath:          s.cache.CachePath,
+		Revision:           s.cache.Revision,
+		InstalledFileCount: len(s.cache.Files),
+	}, nil
 }
 
 type fakeLocalModelRuntime struct {

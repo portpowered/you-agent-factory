@@ -71,10 +71,21 @@ type ReadinessSnapshot struct {
 	Diagnostics    map[string]string
 }
 
+// PullDownloadedFile carries one pulled asset entry for managed-runtime pull responses.
+type PullDownloadedFile struct {
+	Path   string
+	Bytes  int64
+	SHA256 string
+}
+
 // PullSnapshot carries managed-runtime-compatible pull outcomes.
 type PullSnapshot struct {
 	ReadinessSnapshot
-	PullOutcome factoryapi.ManagedRuntimePullOutcome
+	PullOutcome     factoryapi.ManagedRuntimePullOutcome
+	LegacyOutcome   string
+	CachePath       string
+	Revision        string
+	DownloadedFiles []PullDownloadedFile
 }
 
 // LeaseOptions configures lease acquisition.
@@ -110,9 +121,19 @@ type SourceResolver interface {
 	Resolve(modelName string, backend string, loadPolicy string, provider string) SourceResolution
 }
 
+// AssetPullResult carries pull metadata projected through the model host boundary.
+type AssetPullResult struct {
+	PullOutcome     factoryapi.ManagedRuntimePullOutcome
+	Snapshot        ReadinessSnapshot
+	LegacyOutcome   string
+	CachePath       string
+	Revision        string
+	DownloadedFiles []PullDownloadedFile
+}
+
 // AssetGateway integrates pull and cache inspection for the model host boundary.
 type AssetGateway interface {
-	PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (factoryapi.ManagedRuntimePullOutcome, ReadinessSnapshot, error)
+	PullModel(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (AssetPullResult, error)
 	InspectRuntimeCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) (CacheInspection, error)
 }
 

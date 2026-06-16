@@ -197,9 +197,11 @@ func startLocalModelHTTPTestServer(t *testing.T, dir string, runtime *fakeLocalM
 	}
 	puller := staticModelAssetPuller{cache: localModelTestCacheLayout(t)}
 	svc.modelAssets = puller
+	host := rewireProcessModelHost(svc, puller)
 	if bundle := liveSessionBundle(svc.defaultSession()); bundle != nil {
 		bundle.modelAssets = puller
 		bundle.localModels = newManagedLocalModelManager(puller, runtime)
+		bundle.modelHost = host
 	}
 
 	runErrCh := make(chan error, 1)

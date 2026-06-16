@@ -210,8 +210,8 @@ type stubAssetGateway struct {
 	byModel map[string]CacheInspection
 }
 
-func (s stubAssetGateway) PullModel(context.Context, *factoryconfig.LoadedFactoryConfig, string) (factoryapi.ManagedRuntimePullOutcome, ReadinessSnapshot, error) {
-	return "", ReadinessSnapshot{}, apisurface.ErrModelNotFound
+func (s stubAssetGateway) PullModel(context.Context, *factoryconfig.LoadedFactoryConfig, string) (AssetPullResult, error) {
+	return AssetPullResult{}, apisurface.ErrModelNotFound
 }
 
 func (s stubAssetGateway) InspectRuntimeCache(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, modelName string) (CacheInspection, error) {

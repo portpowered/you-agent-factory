@@ -23,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -62,6 +63,7 @@ type ModelService interface {
 type modelServiceDependencies struct {
 	runtimeConfig           func() *factoryconfig.LoadedFactoryConfig
 	modelAssetPuller        func() modelAssetPuller
+	modelHost               func() modelhost.Host
 	modelInvocationExecutor func(*factoryconfig.LoadedFactoryConfig, *interfaces.FactoryConfig, string) (workers.WorkstationRequestExecutor, error)
 	factoryRunnerID         func() string
 	logger                  *zap.Logger
@@ -86,6 +88,7 @@ func newFactoryModelService(fs *FactoryService) ModelService {
 	return newModelService(modelServiceDependencies{
 		runtimeConfig:           fs.currentRuntimeConfig,
 		modelAssetPuller:        fs.modelAssetPuller,
+		modelHost:               fs.modelHost,
 		modelInvocationExecutor: fs.modelInvocationExecutor,
 		factoryRunnerID:         fs.factoryRunnerID,
 		logger:                  fs.logger,
@@ -145,13 +148,33 @@ func (fs *FactoryService) InvokeModel(ctx context.Context, modelName string, req
 }
 
 func (s *runtimeModelService) ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error) {
-	_ = ctx
-	return localmodels.ListModelsWithOptions(s.currentRuntimeConfig(), s.catalogOptions())
+	return modelhost.ListModelsWithHost(ctx, s.modelHost(), s.currentRuntimeConfig())
 }
 
 func (s *runtimeModelService) GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error) {
-	_ = ctx
-	return localmodels.GetModelWithOptions(s.currentRuntimeConfig(), modelName, s.catalogOptions())
+	return modelhost.GetModelWithHost(ctx, s.modelHost(), s.currentRuntimeConfig(), modelName)
+}
+
+func (s *runtimeModelService) modelHost() modelhost.Host {
+	if s == nil || s.deps.modelHost == nil {
+		return nil
+	}
+	return s.deps.modelHost()
+}
+
+func (fs *FactoryService) modelHost() modelhost.Host {
+	if fs == nil {
+		return nil
+	}
+	if core := fs.core; core != nil {
+		if host := core.ModelHost(); host != nil {
+			return host
+		}
+	}
+	if bundle := fs.currentRuntimeBundle(); bundle != nil && bundle.modelHost != nil {
+		return bundle.modelHost
+	}
+	return nil
 }
 
 func (s *runtimeModelService) catalogOptions() localmodels.CatalogOptions {
@@ -163,12 +186,18 @@ func (s *runtimeModelService) catalogOptions() localmodels.CatalogOptions {
 
 func (s *runtimeModelService) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
 	started := time.Now()
-	puller := s.modelAssetPuller()
-	opts := localmodels.PullOptions{
-		RuntimeCacheInspector: puller,
-		SourceResolver:        localmodels.DefaultManagedRuntimeSourceResolver(),
+	host := s.modelHost()
+	if host == nil {
+		puller := s.modelAssetPuller()
+		opts := localmodels.PullOptions{
+			RuntimeCacheInspector: puller,
+			SourceResolver:        localmodels.DefaultManagedRuntimeSourceResolver(),
+		}
+		result, err := localmodels.PullModelWithOptions(puller, ctx, s.currentRuntimeConfig(), modelName, opts)
+		s.recordManagedRuntimePull(modelName, result, err, time.Since(started))
+		return result, err
 	}
-	result, err := localmodels.PullModelWithOptions(puller, ctx, s.currentRuntimeConfig(), modelName, opts)
+	result, err := modelhost.PullWithHost(ctx, host, s.currentRuntimeConfig(), modelName)
 	s.recordManagedRuntimePull(modelName, result, err, time.Since(started))
 	return result, err
 }
@@ -187,7 +216,7 @@ func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string,
 	if err != nil {
 		return apisurface.ModelInvocationResult{}, err
 	}
-	managed, readinessErr := localmodels.EnsureManagedRuntimeReadyForInvocation(runtimeCfg, workerDef.Model, s.catalogOptions())
+	managed, readinessErr := modelhost.EnsureInvocationReady(ctx, s.modelHost(), runtimeCfg, workerDef.Model)
 	s.recordManagedRuntimeInvocationReadiness(modelName, managed, readinessErr)
 	if readinessErr != nil {
 		return apisurface.ModelInvocationResult{}, readinessErr

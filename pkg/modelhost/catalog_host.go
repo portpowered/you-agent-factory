@@ -78,6 +78,24 @@ func (h *CatalogHost) InspectReadiness(
 	runtimeCfg *factoryconfig.LoadedFactoryConfig,
 	modelName string,
 ) (ReadinessSnapshot, error) {
+	return h.inspectReadiness(ctx, runtimeCfg, modelName, true)
+}
+
+// InspectAssetReadiness classifies readiness from installed assets without supervised-runtime overlay.
+func (h *CatalogHost) InspectAssetReadiness(
+	ctx context.Context,
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	modelName string,
+) (ReadinessSnapshot, error) {
+	return h.inspectReadiness(ctx, runtimeCfg, modelName, false)
+}
+
+func (h *CatalogHost) inspectReadiness(
+	ctx context.Context,
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	modelName string,
+	overlaySupervised bool,
+) (ReadinessSnapshot, error) {
 	if err := ctx.Err(); err != nil {
 		return ReadinessSnapshot{}, cancelError(err)
 	}
@@ -94,7 +112,10 @@ func (h *CatalogHost) InspectReadiness(
 		return ReadinessSnapshot{}, err
 	}
 	snapshot := ClassifyReadiness(identity, inspection, false)
-	return h.overlaySupervisedReadiness(snapshot, inspection, runtimeCfg, modelName), nil
+	if overlaySupervised {
+		snapshot = h.overlaySupervisedReadiness(snapshot, inspection, runtimeCfg, modelName)
+	}
+	return snapshot, nil
 }
 
 func (h *CatalogHost) Pull(
@@ -117,8 +138,9 @@ func (h *CatalogHost) Pull(
 			PullOutcome:       factoryapi.ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME,
 		}, &ReadinessError{Snapshot: snapshot, Cause: ErrUnsupportedRuntime}
 	}
-	pullOutcome, readiness, err := h.assets.PullModel(ctx, runtimeCfg, modelName)
+	pullResult, err := h.assets.PullModel(ctx, runtimeCfg, modelName)
 	if err != nil {
+		readiness := pullResult.Snapshot
 		var pullErr *apisurface.ManagedRuntimePullError
 		if errors.As(err, &pullErr) {
 			readiness = managedRuntimePullSnapshot(runtimeCfg, entry, pullErr.Result)
@@ -126,11 +148,9 @@ func (h *CatalogHost) Pull(
 		if readiness.Identity.Name == "" {
 			readiness = ClassifyReadiness(h.identityFromCatalog(runtimeCfg, entry), CacheInspection{}, false)
 		}
-		return PullSnapshot{
-			ReadinessSnapshot: readiness,
-			PullOutcome:       pullOutcome,
-		}, err
+		return pullSnapshotFromAssetResult(pullResult, readiness), err
 	}
+	readiness := pullResult.Snapshot
 	if readiness.Identity.Name == "" {
 		inspected, inspectErr := h.assets.InspectRuntimeCache(ctx, runtimeCfg, modelName)
 		if inspectErr != nil {
@@ -138,10 +158,22 @@ func (h *CatalogHost) Pull(
 		}
 		readiness = ClassifyReadiness(h.identityFromCatalog(runtimeCfg, entry), inspected, false)
 	}
+	return pullSnapshotFromAssetResult(pullResult, readiness), nil
+}
+
+func pullSnapshotFromAssetResult(result AssetPullResult, readiness ReadinessSnapshot) PullSnapshot {
+	outcome := result.PullOutcome
+	if outcome == "" {
+		outcome = factoryapi.ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME
+	}
 	return PullSnapshot{
 		ReadinessSnapshot: readiness,
-		PullOutcome:       pullOutcome,
-	}, nil
+		PullOutcome:       outcome,
+		LegacyOutcome:     result.LegacyOutcome,
+		CachePath:         result.CachePath,
+		Revision:          result.Revision,
+		DownloadedFiles:   append([]PullDownloadedFile(nil), result.DownloadedFiles...),
+	}
 }
 
 func (h *CatalogHost) AcquireLease(
