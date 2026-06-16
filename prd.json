@@ -1,0 +1,84 @@
+{
+  "project": "Wire real child execution into the JavaScript durable session runtime",
+  "branchName": "dynamic-workflows-cell-live-provider-dispatch-bridge",
+  "description": "Wire one bounded real child-execution path into durable JavaScript FactorySession execution so agent.run, parallel, and pipeline can record real child dispatch behavior through shared session-backend inspection instead of always reporting fake execution, while preserving the existing fake child path for deterministic tests and non-live lanes.",
+  "context": {
+    "customerAsk": "Use the real JavaScript runtime path with one bounded live child-execution adapter so durable JavaScript sessions that call agent.run, parallel, or pipeline no longer report executionMode: fake for the bridged child path, and instead expose real execution details through shared session-backend inspection.",
+    "problem": "The JavaScript host API currently has a fake child execution path that is useful for deterministic fanout tests, but it cannot prove provider-backed child execution or durable dispatch detail parity. That leaves a customer-visible gap in shared session inspection: the durable session can show child records, but the bridged path still looks fake even when the backend stack is ready to route one child through a real execution path. Without a bounded live bridge, downstream CLI, MCP, and inspection parity work cannot trust session dispatch reads to represent real execution mode, provider-session correlation, artifact production, or typed child failure behavior.",
+    "solution": "Replace the empty workflowruntime.Hooks child-executor usage inside the JavaScript durable session runtime service with a narrow adapter that maps workflowruntime.ChildExecutionRequest onto an existing real executor path and writes the resulting child lifecycle back into the shared durable dispatch and artifact projection model. Keep stable dispatch identity reservation, execution ordering, provider-session correlation, artifact references, and typed failure projection inside the existing FactorySession, Dispatch, ProviderSession, and FactoryArtifact vocabulary, while preserving the deterministic fake child path as a selectable coexistence mode."
+  },
+  "acceptanceCriteria": [
+    "A real-runtime durable JavaScript session using an agent.run fixture no longer reports executionMode: fake for the bridged child path and instead records a distinct real execution mode through shared dispatch inspection.",
+    "At least one bridged child execution produces durable dispatch detail with stable dispatch ID, status transitions, provider-session refs when present, and artifact refs or output artifacts when produced by the underlying execution path.",
+    "A failed bridged child execution returns typed failure detail through shared session-backend reads without corrupting unrelated child records or final session inspection.",
+    "Existing fake-child runtime tests remain stable, proving the real bridge is an incremental swap-in path rather than a breaking replacement.",
+    "The lane does not implement website inspection, graph editor work, MCP install packaging, or another broad API surface.",
+    "Quality gate: typecheck, lint, and focused tests pass, including go test ./pkg/orchestrators/javascript/... ./pkg/factorysessionexecution/... and go test ./pkg/workers/executor/... ./pkg/workers/provider/...."
+  ],
+  "userStories": [
+    {
+      "id": "dynamic-workflows-cell-live-provider-dispatch-bridge-001",
+      "title": "Run one real agent.run child through the durable dispatch bridge",
+      "description": "As a maintainer validating live JavaScript session execution, I want one agent.run child to route through a real child executor so shared session inspection shows real dispatch behavior instead of a fake execution mode.",
+      "acceptanceCriteria": [
+        "A durable JavaScript session fixture that calls agent.run can select the real child-executor path without changing workflow source syntax.",
+        "The resulting child dispatch read shows a non-fake execution mode that is distinct from the deterministic fake-child path.",
+        "The bridged child preserves a stable reserved dispatch ID from queueing through terminal completion.",
+        "Shared session inspection continues to expose the child under existing FactorySession and Dispatch reads rather than a workflow-run-specific surface.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 1,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "dynamic-workflows-cell-live-provider-dispatch-bridge-002",
+      "title": "Persist real-child dispatch lifecycle, provider-session refs, and artifact refs",
+      "description": "As a caller inspecting durable session dispatches, I want successful bridged child executions to expose stable lifecycle detail, provider-session correlation, and produced artifacts so real child work can be inspected through the shared backend model.",
+      "acceptanceCriteria": [
+        "At least one successful bridged child execution records ordered dispatch status transitions that are visible through shared session-backend reads.",
+        "When the underlying execution path creates or correlates a provider session, the durable dispatch detail includes the related ProviderSession reference without introducing new child-execution nouns.",
+        "When the underlying execution path produces artifacts or output artifacts, the durable dispatch detail exposes stable artifact refs or artifact summaries through the existing session and artifact inspection surfaces.",
+        "Successful bridged child inspection remains compatible with agent.run, parallel, and pipeline semantics by reusing one shared child-executor bridge rather than separate one-off projection paths.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 2,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "dynamic-workflows-cell-live-provider-dispatch-bridge-003",
+      "title": "Return typed failed-child detail without corrupting sibling or final session inspection",
+      "description": "As a caller inspecting failed child work, I want a bridged child failure to surface typed durable failure detail so I can diagnose the failure without losing unrelated child records or the parent session inspection state.",
+      "acceptanceCriteria": [
+        "A fixture that forces a real bridged child failure returns typed failure detail through shared session-backend dispatch reads.",
+        "The failed child keeps its own dispatch ID, lifecycle history, and terminal failed status without overwriting successful sibling child records.",
+        "Parent session inspection remains readable after the failed child path, including final session result or failure inspection according to existing session semantics.",
+        "Failure projection does not corrupt unrelated artifact refs, provider-session refs, or dispatch summaries that belong to other children.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 3,
+      "passes": true,
+      "notes": ""
+    },
+    {
+      "id": "dynamic-workflows-cell-live-provider-dispatch-bridge-004",
+      "title": "Keep fake-child execution available as a stable coexistence path",
+      "description": "As a maintainer supporting parallel dynamic-workflow lanes, I want fake-child execution to remain available so the real bridge can land as an incremental swap-in path without breaking deterministic tests or non-live scenarios.",
+      "acceptanceCriteria": [
+        "Existing fake-child fixtures and runtime tests continue to pass without requiring provider-backed execution.",
+        "Selecting the fake child path still reports fake execution mode and preserves existing deterministic dispatch semantics.",
+        "The live bridge and fake path can coexist behind the shared child-executor seam without changing workflow source syntax for agent.run, parallel, or pipeline.",
+        "The lane records deferred follow-ups such as CLI or MCP live smoke and website inspection as later cells instead of widening this implementation batch.",
+        "Typecheck passes",
+        "Tests pass"
+      ],
+      "priority": 4,
+      "passes": true,
+      "notes": ""
+    }
+  ]
+}

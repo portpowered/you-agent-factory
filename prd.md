@@ -1,175 +1,147 @@
-# PRD: Wire Real-Backend Factory Session Lifecycle-Control APIs
+# PRD: Wire real child execution into the JavaScript durable session runtime
+
+---
+author: Codex
+last modified: 2026, june, 16
+status: draft
+---
 
 ## Introduction
 
-Customers can already use the real durable JavaScript Factory Session backend for start, list, get, result, events, dispatch reads, and artifact reads. The remaining backend API parity gap is lifecycle control: durable session clients still receive `501` stubs or incomplete behavior when they try to pause, resume, cancel, terminate, approve, or retry dispatches through the public Factory Session API.
+Wire one bounded real child-execution path into durable JavaScript `FactorySession` execution so `agent.run`, `parallel`, and `pipeline` can record real child dispatch behavior through the shared session-backend inspection model instead of always reporting fake execution. The change should preserve the existing fake child path for deterministic tests and for lanes that do not need provider-backed execution, while proving that one live bridge can expose real execution mode, stable dispatch identity, provider-session references when present, artifact references when produced, and typed failure detail.
 
-This work routes the existing lifecycle-control routes under `/factory-sessions/{session_id}` through the durable backend service and shared API surface mappers. HTTP clients should receive typed lifecycle-control success, no-op, invalid-state, terminal-session, conflict, and not-found responses while existing live Petri session compatibility remains intact for non-durable session IDs.
+This project is the `LIVE-DISPATCH_BRIDGE` deliverable cell. It depends on the completed real backend API session-parity, dispatch-artifact, and lifecycle-control cells plus the existing `workflowruntime.Hooks.NewChildExecutor` seam and durable dispatch or artifact projection in `pkg/factorysessionexecution`.
 
 ## Context
 
-### Customer Ask
+### Customer ask
 
-Wire real-backend Factory Session lifecycle-control APIs so HTTP clients can pause, resume, cancel, terminate, approve, and retry durable JavaScript Factory Sessions through the shared Factory Session API instead of receiving `501` stubs.
+Use the real JavaScript runtime path with one bounded live child-execution adapter so durable JavaScript sessions that call `agent.run`, `parallel`, or `pipeline` no longer report `executionMode: fake` for the bridged child path, and instead expose real execution details through shared session-backend inspection.
 
 ### Problem
 
-The real-backend session parity and dispatch/artifact parity slices are complete, but lifecycle-control endpoints are still the route family explicitly left as deferred stubs. This blocks generated clients and API consumers from controlling durable JavaScript sessions through the same typed public API they use for reads and inspection. It also leaves typed control errors, idempotent request handling, and inspection-link behavior unproven at the HTTP boundary.
+The JavaScript host API currently has a fake child execution path that is useful for deterministic fanout tests, but it cannot prove provider-backed child execution or durable dispatch detail parity. That leaves a customer-visible gap in shared session inspection: the durable session can show child records, but the bridged path still looks fake even when the backend stack is ready to route one child through a real execution path. Without a bounded live bridge, downstream CLI, MCP, and inspection parity work cannot trust session dispatch reads to represent real execution mode, provider-session correlation, artifact production, or typed child failure behavior.
 
-### Solution
+### High-level solution
 
-Replace durable lifecycle-control stubs with handlers that route durable session IDs to the `factorysessionexecution.Service` lifecycle methods through `FactoryService` and shared `pkg/apisurface/factorysession` mappers. Use the real durable JavaScript runtime service for at least cancel or terminate loopback coverage, use fixture-backed fake service scenarios where real runtime support is not yet available, preserve existing live Petri behavior for non-durable IDs, and keep OpenAPI/generated clients synchronized if contract corrections are required.
-
-## Goals
-
-- Return typed lifecycle-control responses for durable cancel and terminate instead of `501` stubs.
-- Return typed pause and resume success or invalid-state/conflict responses through shared service and mapper code.
-- Wire approve and retry-dispatch through the same durable lifecycle-control API boundary, with fixture-backed coverage acceptable where runtime scenarios are not yet available.
-- Preserve generated response vocabulary for typed errors, including operation, outcome, status, and inspection links when available.
-- Map missing durable sessions to the existing typed not-found API shape.
-- Preserve prior start/list/get/result/events and dispatch/artifact read parity after lifecycle-control wiring.
-- Keep this lane scoped to lifecycle-control APIs and related regression checks.
+Replace the empty `workflowruntime.Hooks{}` child-executor usage inside the JavaScript durable session runtime service with a narrow adapter that maps `workflowruntime.ChildExecutionRequest` onto an existing real executor path and writes the resulting child lifecycle back into the shared durable dispatch and artifact projection model. Keep stable dispatch identity reservation, execution ordering, provider-session correlation, artifact references, and typed failure projection inside the existing `FactorySession`, `Dispatch`, `ProviderSession`, and `FactoryArtifact` vocabulary. Preserve the deterministic fake child path as a selectable coexistence mode, and prove the bridge with focused backend tests for one successful real child and one failed real child.
 
 ## Project-Level Acceptance Criteria
 
-- [ ] `POST /factory-sessions/{session_id}/cancel` or `POST /factory-sessions/{session_id}/terminate` for a runtime-backed durable JavaScript session returns a typed lifecycle-control response through the durable backend path and no longer returns a `501` stub.
-- [ ] `POST /factory-sessions/{session_id}/pause` and `POST /factory-sessions/{session_id}/resume` return typed lifecycle-control responses or typed invalid-state/conflict responses through shared service and mapper code.
-- [ ] `POST /factory-sessions/{session_id}/approve` and `POST /factory-sessions/{session_id}/retry-dispatch` are wired through the same durable lifecycle-control API boundary, with fixture-backed coverage acceptable where real runtime scenarios are not yet available.
-- [ ] Typed control errors preserve generated response vocabulary, include operation/outcome/status when available, and map missing sessions to the existing not-found API shape.
-- [ ] Focused tests prove lifecycle controls do not break prior start/list/get/result/events or dispatch/artifact read parity.
-- [ ] The lane does not implement website inspection, MCP install work, live-provider bridge behavior, standalone workflow-run resources, `/workflow-previews` expansion, or another broad API/event batch.
-- [ ] Quality gate passes: generated artifacts are synchronized when OpenAPI changes are made, typecheck passes, lint passes where applicable, and focused backend/API tests pass.
+- [x] A real-runtime durable JavaScript session using an `agent.run` fixture no longer reports `executionMode: fake` for the bridged child path and instead records a distinct real execution mode through shared dispatch inspection.
+- [x] At least one bridged child execution produces durable dispatch detail with stable dispatch ID, status transitions, provider-session refs when present, and artifact refs or output artifacts when produced by the underlying execution path.
+- [x] A failed bridged child execution returns typed failure detail through shared session-backend reads without corrupting unrelated child records or final session inspection.
+- [x] Existing fake-child runtime tests remain stable, proving the real bridge is an incremental swap-in path rather than a breaking replacement.
+- [x] The lane does not implement website inspection, graph editor work, MCP install packaging, or another broad API surface.
+- [x] **Quality gate:** typecheck, lint, and focused tests pass, including `go test ./pkg/orchestrators/javascript/... ./pkg/factorysessionexecution/...` and `go test ./pkg/workers/executor/... ./pkg/workers/provider/...`.
+
+## Goals
+
+- Record one real child execution path through durable JavaScript session inspection.
+- Preserve canonical `FactorySession`, `Dispatch`, `ProviderSession`, and `FactoryArtifact` vocabulary.
+- Keep fake child execution available for deterministic tests and non-live lanes.
+- Surface stable real-child dispatch identity, status progression, provider-session references, artifact references, and typed failure details through shared backend reads.
+- Keep the bridge narrow enough that later CLI, MCP, and website parity work can consume it without redefining session inspection semantics.
 
 ## User Stories
 
-### dynamic-workflows-cell-real-backend-api-lifecycle-control-001: Cancel or Terminate Runtime-Backed Durable Sessions
+### dynamic-workflows-cell-live-provider-dispatch-bridge-001: Run one real `agent.run` child through the durable dispatch bridge
 
-**Description:** As an HTTP client controlling a durable JavaScript Factory Session, I want cancel or terminate to return a typed lifecycle-control response from the real backend so that I can stop durable work without receiving a stub response.
-
-**Acceptance Criteria:**
-
-- [ ] `POST /factory-sessions/{session_id}/cancel` or `POST /factory-sessions/{session_id}/terminate` routes `dur-sess-*` session IDs to the durable execution service instead of returning `501 NotImplemented`.
-- [ ] At least one focused API server test starts or uses a runtime-backed durable JavaScript session and proves cancel or terminate returns a typed lifecycle-control response.
-- [ ] The response includes generated lifecycle-control fields such as operation, outcome, lifecycle status, request identifier, and inspection links when available.
-- [ ] Missing durable sessions return the existing typed not-found API response.
-- [ ] Non-durable live session IDs preserve existing live Petri-compatible lifecycle behavior.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
-
-### dynamic-workflows-cell-real-backend-api-lifecycle-control-002: Pause and Resume Durable Sessions with Typed Outcomes
-
-**Description:** As an HTTP client managing a durable JavaScript Factory Session, I want pause and resume to return typed success or invalid-state responses so that generated clients can react without parsing strings.
+**Description:** As a maintainer validating live JavaScript session execution, I want one `agent.run` child to route through a real child executor so shared session inspection shows real dispatch behavior instead of a fake execution mode.
 
 **Acceptance Criteria:**
 
-- [ ] `POST /factory-sessions/{session_id}/pause` routes durable session IDs through the durable lifecycle service boundary and returns a typed lifecycle-control response or typed invalid-state/conflict response.
-- [ ] `POST /factory-sessions/{session_id}/resume` routes durable session IDs through the durable lifecycle service boundary and returns a typed lifecycle-control response or typed invalid-state/conflict response.
-- [ ] Terminal sessions produce the generated terminal-session or invalid-state lifecycle-control vocabulary rather than an untyped server error.
-- [ ] Fixture-backed fake service coverage is acceptable for pause/resume states that cannot yet be produced by the real runtime, but HTTP behavior must still be proven at the API boundary.
-- [ ] Non-durable live session IDs continue to use the existing live Petri-compatible pause/resume behavior.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
+- [ ] A durable JavaScript session fixture that calls `agent.run` can select the real child-executor path without changing workflow source syntax.
+- [ ] The resulting child dispatch read shows a non-fake execution mode that is distinct from the deterministic fake-child path.
+- [ ] The bridged child preserves a stable reserved dispatch ID from queueing through terminal completion.
+- [ ] Shared session inspection continues to expose the child under existing `FactorySession` and `Dispatch` reads rather than a workflow-run-specific surface.
+- [ ] Typecheck passes
+- [ ] Tests pass
 
-### dynamic-workflows-cell-real-backend-api-lifecycle-control-003: Approve and Retry Dispatch Through the Durable Boundary
+### dynamic-workflows-cell-live-provider-dispatch-bridge-002: Persist real-child dispatch lifecycle, provider-session refs, and artifact refs
 
-**Description:** As an HTTP client resolving gated or failed durable work, I want approve and retry-dispatch to use the same typed lifecycle-control API boundary so that all lifecycle operations behave consistently.
-
-**Acceptance Criteria:**
-
-- [ ] `POST /factory-sessions/{session_id}/approve` normalizes the request through shared API surface code and delegates durable session IDs to the durable lifecycle service.
-- [ ] `POST /factory-sessions/{session_id}/retry-dispatch` normalizes the request through shared API surface code and delegates durable session IDs to the durable lifecycle service.
-- [ ] Approve and retry-dispatch responses use generated lifecycle-control success, no-op, invalid-state, terminal-session, or conflict shapes as appropriate for the scenario.
-- [ ] Fixture-backed fake service scenarios cover approve and retry-dispatch when real runtime scenarios for guarded approvals or retryable provider dispatches are not yet available.
-- [ ] The API does not introduce standalone workflow-run route families or `/workflow-previews` expansion for these controls.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
-
-### dynamic-workflows-cell-real-backend-api-lifecycle-control-004: Preserve Typed Control Errors and Request-Id Semantics
-
-**Description:** As a generated-client consumer, I want lifecycle-control failures and request-id replays to use stable typed API shapes so that client error handling is deterministic.
+**Description:** As a caller inspecting durable session dispatches, I want successful bridged child executions to expose stable lifecycle detail, provider-session correlation, and produced artifacts so real child work can be inspected through the shared backend model.
 
 **Acceptance Criteria:**
 
-- [ ] Validation failures, missing durable sessions, terminal-session controls, invalid-state controls, and request-id conflicts map to generated typed API response shapes with existing HTTP status semantics.
-- [ ] Missing durable sessions use the existing not-found API shape rather than a lifecycle-specific ad hoc error.
-- [ ] Idempotent request-id replay returns the same typed lifecycle-control result for the same control tuple where the service supports replay.
-- [ ] Conflicting request-id reuse returns the generated conflict response vocabulary without mutating session state.
-- [ ] Error responses preserve operation, outcome, status, and inspection-link fields when the service result provides them.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
+- [ ] At least one successful bridged child execution records ordered dispatch status transitions that are visible through shared session-backend reads.
+- [ ] When the underlying execution path creates or correlates a provider session, the durable dispatch detail includes the related `ProviderSession` reference without introducing new child-execution nouns.
+- [ ] When the underlying execution path produces artifacts or output artifacts, the durable dispatch detail exposes stable artifact refs or artifact summaries through the existing session and artifact inspection surfaces.
+- [ ] Successful bridged child inspection remains compatible with `agent.run`, `parallel`, and `pipeline` semantics by reusing one shared child-executor bridge rather than separate one-off projection paths.
+- [ ] Typecheck passes
+- [ ] Tests pass
 
-### dynamic-workflows-cell-real-backend-api-lifecycle-control-005: Keep Lifecycle Contract and Mappers Synchronized
+### dynamic-workflows-cell-live-provider-dispatch-bridge-003: Return typed failed-child detail without corrupting sibling or final session inspection
 
-**Description:** As a maintainer of the public Factory Session API, I want lifecycle-control route contracts and mappers to stay aligned so that generated Go and TypeScript clients receive stable typed responses.
-
-**Acceptance Criteria:**
-
-- [x] If lifecycle-control route, schema, response, or error refs need correction, the authored OpenAPI fragments are updated and `make generate-api` synchronizes generated Go and TypeScript clients.
-- [x] API surface mapper tests cover lifecycle-control request normalization and response/error shaping for success, no-op or terminal-session, conflict, and not-found cases.
-- [x] Contract tests cover the existing lifecycle-control route family under `/factory-sessions/{session_id}` and the generated lifecycle-control response vocabulary.
-- [x] The deferred-route regression no longer treats lifecycle-control routes as unsupported future routes; only genuinely unsupported future routes remain deferred.
-- [x] Public vocabulary remains Factory Session lifecycle-control vocabulary and does not expose internal Petri-net terms or standalone workflow-run nouns.
-- [x] Typecheck passes.
-- [x] Tests pass.
-
-### dynamic-workflows-cell-real-backend-api-lifecycle-control-006: Protect Prior Durable Read and Inspection Parity
-
-**Description:** As a maintainer extending durable Factory Session parity, I want lifecycle-control wiring to preserve start, read, result, event, dispatch, and artifact behavior so that the new controls do not regress completed slices.
+**Description:** As a caller inspecting failed child work, I want a bridged child failure to surface typed durable failure detail so I can diagnose the failure without losing unrelated child records or the parent session inspection state.
 
 **Acceptance Criteria:**
 
-- [ ] Focused regression coverage proves durable JavaScript start, list, get, result, and event read/reconnect behavior still passes after lifecycle-control wiring.
-- [ ] Focused regression coverage proves durable dispatch and artifact list/detail reads still pass after lifecycle-control wiring.
-- [ ] Tests demonstrate lifecycle-control calls do not remove stable inspection links for session, result, dispatch, artifact, or event reads when those links are available.
-- [ ] Website inspection parity and live-provider bridge parity are recorded as named follow-up cells if encountered rather than implemented in this lane.
-- [ ] Typecheck passes.
-- [ ] Tests pass.
+- [ ] A fixture that forces a real bridged child failure returns typed failure detail through shared session-backend dispatch reads.
+- [ ] The failed child keeps its own dispatch ID, lifecycle history, and terminal failed status without overwriting successful sibling child records.
+- [ ] Parent session inspection remains readable after the failed child path, including final session result or failure inspection according to existing session semantics.
+- [ ] Failure projection does not corrupt unrelated artifact refs, provider-session refs, or dispatch summaries that belong to other children.
+- [ ] Typecheck passes
+- [ ] Tests pass
+
+### dynamic-workflows-cell-live-provider-dispatch-bridge-004: Keep fake-child execution available as a stable coexistence path
+
+**Description:** As a maintainer supporting parallel dynamic-workflow lanes, I want fake-child execution to remain available so the real bridge can land as an incremental swap-in path without breaking deterministic tests or non-live scenarios.
+
+**Acceptance Criteria:**
+
+- [x] Existing fake-child fixtures and runtime tests continue to pass without requiring provider-backed execution.
+- [x] Selecting the fake child path still reports fake execution mode and preserves existing deterministic dispatch semantics.
+- [x] The live bridge and fake path can coexist behind the shared child-executor seam without changing workflow source syntax for `agent.run`, `parallel`, or `pipeline`.
+- [x] The lane records deferred follow-ups such as CLI or MCP live smoke and website inspection as later cells instead of widening this implementation batch.
+- [x] Typecheck passes
+- [x] Tests pass
 
 ## High-Level Technical Design
 
-Durable lifecycle-control requests should stay under the existing public Factory Session route family. API handlers identify durable session IDs and delegate approve, pause, resume, cancel, terminate, and retry-dispatch through `FactoryService` to `factorysessionexecution.Service`. Non-durable session IDs continue on the existing live Petri-compatible path.
+The implementation should keep JavaScript session orchestration inside the existing runtime and session-backend boundaries. The runtime already exposes `workflowruntime.Hooks.NewChildExecutor`; this cell should supply a real child-executor factory from `factorysessionexecution.JavaScriptRuntimeService` instead of leaving the hook empty. That executor should accept the existing `workflowruntime.ChildExecutionRequest`, reserve or reuse the canonical dispatch identity early, and route the request into the smallest existing real executor or provider path that can already produce durable dispatch, provider-session, and artifact outcomes.
 
-Request normalization and response shaping belong in `pkg/apisurface/factorysession`, especially the existing control request and lifecycle-control response/error mappers. Handlers should not build durable lifecycle projections locally. Per-session runtime state remains owned by the durable session runtime/service layer; `FactoryService` coordinates access and dependencies but does not become the state owner.
+The bridge should not invent workflow-specific child payloads. The runtime may keep internal adapter types, but durable reads must remain expressed as `FactorySession`, `Dispatch`, `ProviderSession`, and `FactoryArtifact` data. The session-backend projection layer should remain the shared owner of durable inspection shape, with any required field extensions made there rather than in one-off runtime records or UI-only adapters.
 
-Tests should prove behavior at the API boundary and mapper boundary. At least cancel or terminate must use the real durable JavaScript runtime service for loopback coverage. Pause/resume, approve, retry-dispatch, and typed conflict cases may use fixture-backed fake service scenarios when real runtime support is not yet available. If OpenAPI lifecycle-control schemas or refs need correction, update authored fragments first, then run `make generate-api`.
+Fake-child execution must remain a first-class alternate dependency path. Tests should prove both modes without changing fixture source syntax, which keeps the live bridge a bounded swap-in behind the existing host API primitives.
 
 ## Functional Requirements
 
-- FR-1: `POST /factory-sessions/{session_id}/cancel` must return a typed lifecycle-control response for durable JavaScript Factory Sessions through the durable execution service.
-- FR-2: `POST /factory-sessions/{session_id}/terminate` must return a typed lifecycle-control response for durable JavaScript Factory Sessions through the durable execution service.
-- FR-3: `POST /factory-sessions/{session_id}/pause` and `/resume` must return typed lifecycle-control responses or typed invalid-state/conflict responses for durable sessions.
-- FR-4: `POST /factory-sessions/{session_id}/approve` and `/retry-dispatch` must be wired through the same durable lifecycle-control service and mapper boundary.
-- FR-5: Missing durable sessions must map to the existing not-found API shape.
-- FR-6: Typed lifecycle-control errors must preserve generated response vocabulary, including operation, outcome, status, and inspection links when available.
-- FR-7: Request-id replay and conflict behavior must be deterministic and must not mutate unrelated session state.
-- FR-8: Existing live Petri session compatibility must remain intact for non-durable session IDs.
-- FR-9: Prior durable start/list/get/result/events and dispatch/artifact read parity must continue to pass focused regression coverage.
-- FR-10: Public route structure must remain under `/factory-sessions/{session_id}` lifecycle controls without introducing workflow-run resources.
+1. FR-1: The JavaScript durable session runtime must provide a non-empty child-executor hook that can route at least one `agent.run` child through a real execution path.
+2. FR-2: A bridged real child must record a distinct non-fake execution mode in shared durable dispatch inspection.
+3. FR-3: The durable dispatch record for a bridged child must preserve one stable dispatch ID across queued, running, and terminal states.
+4. FR-4: The bridge must project provider-session references when the underlying execution path creates or exposes them.
+5. FR-5: The bridge must project artifact refs or output artifacts when the underlying child execution path produces them.
+6. FR-6: Failed bridged children must surface typed durable failure detail through shared session-backend reads.
+7. FR-7: A failed bridged child must not corrupt sibling child records, unrelated artifact refs, or final session inspection for the parent session.
+8. FR-8: `agent.run`, `parallel`, and `pipeline` must continue to use one shared child-executor seam so live and fake paths can be swapped without changing workflow source syntax.
+9. FR-9: Existing fake-child runtime coverage must remain valid and keep reporting fake execution mode when the fake path is selected.
+10. FR-10: If durable dispatch or artifact read models need additional fields for real-child parity, the owning shared contract must be updated in place and generated artifacts synchronized only if the public schema actually changes.
 
 ## Non-Goals
 
-- No website or dashboard inspection parity.
-- No MCP host installation or install-smoke changes.
-- No live-provider bridge parity for JavaScript child-agent dispatch execution.
-- No standalone workflow-run API resources or `/workflow-previews` expansion.
-- No broad API/event route family beyond lifecycle controls and the regression checks needed to protect completed parity slices.
-- No broad handler refactor, package reshaping, or unrelated cleanup.
+- No website or dashboard inspection work.
+- No graph editor or current-selection UI work.
+- No MCP host install or packaging changes.
+- No broad API or event-stream parity sweep beyond the shared session-backend inspection shape already owned by this lane.
+- No renaming of public resource vocabulary away from `FactorySession`, `Dispatch`, `ProviderSession`, or `FactoryArtifact`.
 
-## Supporting Technical and UX Considerations
+## Supporting Technical Considerations
 
-- Relevant references include `docs/temp/customer-ask.md`, `docs/temp/dynamic-workflow-plan.md`, `docs/internal/development/plans/dynamic-workflows/dynamic-workflow-design.md`, `docs/internal/processes/api-relevant-files.md`, `docs/architecture/architecture.md`, and `docs/architecture/data-model.md`.
-- Hard dependencies are completed `dynamic-workflows-cell-real-backend-api-session-parity`, completed `dynamic-workflows-cell-real-backend-api-dispatch-artifact`, and existing lifecycle-control service methods plus `pkg/apisurface/factorysession` mappers.
-- Recommended verification commands are `make generate-api` when contract files change, `go test ./pkg/api/servertests ./pkg/api/contracttests ./pkg/apisurface/... ./pkg/factorysessionexecution/...`, and `make api-smoke` when feasible.
-- The change is backend/API-visible, not browser-visible. Direct browser verification is not required unless implementation expands into dashboard behavior, which is out of scope for this lane.
+- Follow `docs/architecture/data-model.md` and keep public naming on shared factory-session resources.
+- Preserve the service or session boundary described in `docs/architecture/architecture.md`: `FactoryService` coordinates, while per-session runtime state belongs to the session runtime.
+- Use the existing `workflowruntime.Hooks.NewChildExecutor` seam rather than adding a second child-dispatch integration path.
+- Prefer extending shared `factorysessionexecution` projection types over adding bridge-only payloads in API or UI layers.
+- Verification should stay focused on behavioral backend evidence: successful real child execution, failed real child execution, dispatch inspection reads, artifact reads, and fake-path non-regression.
+- Deferred follow-ups such as CLI or MCP live smoke and website inspection should be recorded as later cells, not absorbed into this batch.
 
 ## Success Metrics
 
-- Durable lifecycle-control routes return typed responses instead of `501` stubs.
-- At least one real runtime-backed cancel or terminate API test proves the durable backend path.
-- Generated clients can distinguish accepted, no-op, invalid-state, terminal-session, conflict, and not-found outcomes using typed response vocabulary.
-- Prior durable read and inspection parity tests remain green.
-- No new workflow-run API resource, website behavior, MCP install behavior, or live-provider bridge behavior is introduced.
+- A real-runtime `agent.run` fixture produces durable child dispatch inspection with non-fake execution mode.
+- At least one successful real child exposes stable dispatch identity, lifecycle detail, provider-session correlation when present, and artifact references when produced.
+- At least one failed real child exposes typed failure detail without damaging sibling dispatches or parent session inspection.
+- Existing fake-child runtime tests remain green, proving the bridge is additive.
 
 ## Open Questions
 
-None. Where real runtime scenarios are not yet available for a lifecycle operation, implementation should use fixture-backed coverage for this lane and record the missing real-provider/runtime scenario as follow-up work rather than expanding scope.
+None. The customer ask fixes the scope on one bounded live provider-dispatch bridge and explicitly defers broader CLI, MCP, website, and graph-editor follow-up work.
