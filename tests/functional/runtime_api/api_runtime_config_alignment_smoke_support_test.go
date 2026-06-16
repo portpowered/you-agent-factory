@@ -189,15 +189,15 @@ func assertRuntimeConfigAlignmentGeneratedBoundary(t *testing.T, generated facto
 		t.Fatalf("generated workers = %#v, want three workers", generated.Workers)
 	}
 	cronWorker := runtimeConfigAlignmentRequireGeneratedWorker(t, *generated.Workers, "cron-worker")
-	if stringValueFromFunctionalPtr(cronWorker.Type) != interfaces.WorkerTypeModel {
-		t.Fatalf("cron-worker type = %q, want %q", stringValueFromFunctionalPtr(cronWorker.Type), interfaces.WorkerTypeModel)
+	if stringValueFromFunctionalPtr(cronWorker.Type) != interfaces.WorkerTypeInference {
+		t.Fatalf("cron-worker type = %q, want %q", stringValueFromFunctionalPtr(cronWorker.Type), interfaces.WorkerTypeInference)
 	}
 	if stringValueFromFunctionalPtr(cronWorker.StopToken) != "COMPLETE" {
 		t.Fatalf("cron-worker stop token = %q, want COMPLETE", stringValueFromFunctionalPtr(cronWorker.StopToken))
 	}
 	reviewer := runtimeConfigAlignmentRequireGeneratedWorker(t, *generated.Workers, "reviewer")
-	if stringValueFromFunctionalPtr(reviewer.Type) != interfaces.WorkerTypeModel {
-		t.Fatalf("reviewer type = %q, want %q", stringValueFromFunctionalPtr(reviewer.Type), interfaces.WorkerTypeModel)
+	if stringValueFromFunctionalPtr(reviewer.Type) != interfaces.WorkerTypeInference {
+		t.Fatalf("reviewer type = %q, want %q", stringValueFromFunctionalPtr(reviewer.Type), interfaces.WorkerTypeInference)
 	}
 	if stringValueFromFunctionalPtr(reviewer.StopToken) != "COMPLETE" {
 		t.Fatalf("reviewer stop token = %q, want COMPLETE", stringValueFromFunctionalPtr(reviewer.StopToken))

@@ -8,6 +8,10 @@ factory on disk, and customize it like any other named factory.
 return-policy contract. This guide focuses on the `@you/tts` packaged factory
 workflow.
 
+The default `@you/tts` factory uses inference worker/run behavior:
+`INFERENCE_WORKER` plus `INFERENCE_RUN` for one bounded TTS operation through
+the local OmniVoice managed runtime. It does not use agent-loop fields.
+
 ## Quick start
 
 Generate speech from positional text:

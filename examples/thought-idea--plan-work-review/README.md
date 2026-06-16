@@ -27,7 +27,7 @@ examples/thought-idea--plan-work-review/
 ├── workers/
 │   ├── README.md
 │   ├── processor/AGENTS.md         # AGENT_WORKER: handles planning and task work
-│   └── workspace-setup/AGENTS.md   # SCRIPT_WORKER: prepares workspaces
+│   └── workspace-setup/AGENTS.md   # AGENT_WORKER: prepares workspaces
 ├── workstations/
 │   ├── README.md
 │   ├── ideafy/AGENTS.md            # Prompt template for idea generation

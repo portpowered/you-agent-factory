@@ -613,12 +613,12 @@ func (r *factoryRuntimeBundle) emitWorkerBoundaryStartMetrics(fields metrics.Fie
 	if !ok || workerDef == nil {
 		return
 	}
-	switch {
-	case interfaces.IsProviderBackedWorkerType(workerDef.Type):
+	switch workerDef.Type {
+	case interfaces.WorkerTypeModel, interfaces.WorkerTypeAgent, interfaces.WorkerTypeInference:
 		providerFields := fields
 		providerFields.Provider = normalizedRuntimeMetricProvider(workerDef.ModelProvider)
 		r.emitMetricCounter(runtimeMetricProviderRequest, 1, providerFields)
-	case interfaces.IsScriptWorkerType(workerDef.Type):
+	case interfaces.WorkerTypeScript:
 		r.emitMetricCounter(runtimeMetricScriptStarted, 1, fields)
 	}
 }
@@ -628,10 +628,10 @@ func (r *factoryRuntimeBundle) emitWorkerBoundaryCompletionMetrics(result interf
 	if !ok || workerDef == nil {
 		return
 	}
-	switch {
-	case interfaces.IsProviderBackedWorkerType(workerDef.Type):
+	switch workerDef.Type {
+	case interfaces.WorkerTypeModel, interfaces.WorkerTypeAgent, interfaces.WorkerTypeInference:
 		r.emitProviderCompletionMetrics(result, fields, workerDef)
-	case interfaces.IsScriptWorkerType(workerDef.Type):
+	case interfaces.WorkerTypeScript:
 		r.emitScriptCompletionMetrics(result, fields)
 	}
 }
@@ -1060,8 +1060,8 @@ func buildWorkerExecutor(
 		return nil
 	}
 
-	switch {
-	case interfaces.IsProviderBackedWorkerType(def.Type):
+	switch def.Type {
+	case interfaces.WorkerTypeModel, interfaces.WorkerTypeAgent:
 		var runner workers.Runner
 		if providerOverride != nil {
 			runner = workers.RunnerFromProvider(providerOverride)
@@ -1100,9 +1100,9 @@ func buildWorkerExecutor(
 		runner = newRecordingModelRunner(runner, factoryCfg, def, modelRecorder, now)
 		agentExec := workerexecutor.NewAgentExecutorWithRunner(runtimeCfg, runner, agentOpts...)
 		return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, agentExec, logger)
-	case def.Type == interfaces.WorkstationTypeLogical:
+	case interfaces.WorkstationTypeLogical:
 		return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, nil, logger)
-	case interfaces.IsScriptWorkerType(def.Type):
+	case interfaces.WorkerTypeScript:
 		var scriptOpts []workerexecutor.ScriptExecutorOption
 		if runtimeCfg != nil && runtimeCfg.FactoryDir() != "" {
 			scriptOpts = append(scriptOpts, workerexecutor.WithScriptFactoryDir(runtimeCfg.FactoryDir()))

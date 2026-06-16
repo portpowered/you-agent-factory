@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -152,10 +153,11 @@ func GeneratedFactoryFromRuntimeConfig(factoryDir string, factoryCfg *interfaces
 
 	workers := runtimeWorkersByName(factoryCfg, runtimeCfg)
 	workstations := runtimeWorkstationsByName(factoryCfg, runtimeCfg)
-	if err := mergeGeneratedWorkers(&generated, workers); err != nil {
+	workstationList := workstationConfigsFromMap(workstations)
+	if err := mergeGeneratedWorkers(&generated, workers, workstationList); err != nil {
 		return factoryapi.Factory{}, err
 	}
-	if err := mergeGeneratedWorkstations(&generated, workstations); err != nil {
+	if err := mergeGeneratedWorkstations(&generated, workstations, workers); err != nil {
 		return factoryapi.Factory{}, err
 	}
 
@@ -269,20 +271,36 @@ func generatedFactoryAPIFromConfig(cfg *interfaces.FactoryConfig) factoryapi.Fac
 	return config.FactoryConfigToOpenAPI(cfg)
 }
 
-func generatedWorkstationAPIFromConfig(name string, cfg interfaces.FactoryWorkstationConfig) factoryapi.Workstation {
-	workstation := config.WorkstationConfigToOpenAPI(cfg)
+func generatedWorkstationAPIFromConfig(name string, cfg interfaces.FactoryWorkstationConfig, workerType string) factoryapi.Workstation {
+	workstation := config.WorkstationConfigToOpenAPIWithWorkerType(cfg, workerType)
 	if workstation.Name == "" {
 		workstation.Name = name
 	}
 	return workstation
 }
 
-func generatedWorkerAPIFromConfig(name string, cfg interfaces.WorkerConfig) factoryapi.Worker {
-	worker := config.WorkerConfigToOpenAPI(cfg)
+func generatedWorkerAPIFromConfig(name string, cfg interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) factoryapi.Worker {
+	worker := config.WorkerConfigToOpenAPIWithFactoryUsage(cfg, workstations)
 	if worker.Name == "" {
 		worker.Name = name
 	}
 	return worker
+}
+
+func workstationConfigsFromMap(workstations map[string]interfaces.FactoryWorkstationConfig) []interfaces.FactoryWorkstationConfig {
+	if len(workstations) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(workstations))
+	for name := range workstations {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	configs := make([]interfaces.FactoryWorkstationConfig, 0, len(names))
+	for _, name := range names {
+		configs = append(configs, workstations[name])
+	}
+	return configs
 }
 
 func factoryConfigFromGeneratedAPI(generated factoryapi.Factory) (*interfaces.FactoryConfig, error) {

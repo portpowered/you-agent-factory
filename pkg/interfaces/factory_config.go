@@ -107,14 +107,15 @@ const (
 	ResourceStateAvailable = "available"
 )
 
-// WorkerType constants for worker AGENTS.md frontmatter.
+// WorkerType constants for worker AGENTS.md frontmatter and runtime config.
 const (
 	WorkerTypeInference = "INFERENCE_WORKER"
 	WorkerTypeAgent     = "AGENT_WORKER"
 	WorkerTypeScript    = "SCRIPT_WORKER"
 	WorkerTypePoller    = "POLLER_WORKER"
-	WorkerTypeModel     = "MODEL_WORKER"
-	WorkerTypeHosted    = "HOSTED_WORKER"
+	// Legacy runtime identifiers retained during the migration window.
+	WorkerTypeModel  = "MODEL_WORKER"
+	WorkerTypeHosted = "HOSTED_WORKER"
 )
 
 // Hosted worker provider constants for public hosted worker config.
@@ -122,7 +123,7 @@ const (
 	HostedWorkerProviderLinear = "LINEAR"
 )
 
-// WorkstationType constants for workstation AGENTS.md frontmatter and runtime config.
+// WorkstationType constants for workstation AGENTS.md frontmatter.
 const (
 	WorkstationTypeInference = "INFERENCE_RUN"
 	WorkstationTypeAgent     = "AGENT_RUN"

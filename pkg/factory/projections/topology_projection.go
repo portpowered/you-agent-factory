@@ -124,6 +124,10 @@ func factoryWorkers(transitions map[string]*petri.Transition, runtimeConfig inte
 	if runtimeConfig == nil {
 		return nil
 	}
+	var workstations []interfaces.FactoryWorkstationConfig
+	if reader, ok := runtimeConfig.(interfaces.RuntimeFactoryConfigLookup); ok && reader.FactoryConfig() != nil {
+		workstations = reader.FactoryConfig().Workstations
+	}
 	workerIDs := transitionWorkerIDs(transitions)
 	out := make([]interfaces.FactoryWorker, 0, len(workerIDs))
 	for _, workerID := range workerIDs {
@@ -131,7 +135,7 @@ func factoryWorkers(transitions map[string]*petri.Transition, runtimeConfig inte
 		if !ok || def == nil {
 			continue
 		}
-		out = append(out, factoryWorker(workerID, def))
+		out = append(out, factoryWorkerWithUsage(workerID, def, workstations))
 	}
 	return out
 }
@@ -151,23 +155,35 @@ func transitionWorkerIDs(transitions map[string]*petri.Transition) []string {
 }
 
 func factoryWorker(workerID string, def *interfaces.WorkerConfig) interfaces.FactoryWorker {
+	return factoryWorkerWithUsage(workerID, def, nil)
+}
+
+func factoryWorkerWithUsage(workerID string, def *interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) interfaces.FactoryWorker {
 	return interfaces.FactoryWorker{
 		ID:            workerID,
 		Name:          workerID,
 		Provider:      interfaces.PermissivePublicFactoryWorkerProvider(def.ExecutorProvider),
 		ModelProvider: interfaces.PermissivePublicFactoryWorkerModelProvider(def.ModelProvider),
 		Model:         def.Model,
-		Config:        workerConfig(def),
+		Config:        workerConfigWithUsage(def, workstations),
 	}
 }
 
 func workerConfig(def *interfaces.WorkerConfig) map[string]string {
+	return workerConfigWithUsage(def, nil)
+}
+
+func workerConfigWithUsage(def *interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) map[string]string {
 	if def == nil {
 		return nil
 	}
 	config := make(map[string]string)
 	if def.Type != "" {
-		config["type"] = def.Type
+		if len(workstations) > 0 {
+			config["type"] = interfaces.PublicWorkerTypeForFactoryUsage(*def, workstations)
+		} else {
+			config["type"] = def.Type
+		}
 	}
 	if len(config) == 0 {
 		return nil

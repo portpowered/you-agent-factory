@@ -31,7 +31,7 @@ func Validate(cfg ValidateConfig) error {
 		return fmt.Errorf("factory path is required")
 	}
 
-	factory, err := loadFactoryAPIFromPath(cfg.Path)
+	factory, err := factoryconfig.LoadAuthoredFactoryAPIFromPath(cfg.Path)
 	if err != nil {
 		return err
 	}
@@ -64,16 +64,4 @@ func Validate(cfg ValidateConfig) error {
 	}
 
 	return apisurface.RenderFactoryValidationHuman(factory, apiResult, cfg.Output)
-}
-
-func loadFactoryAPIFromPath(path string) (factoryapi.Factory, error) {
-	canonical, err := factoryconfig.FlattenFactoryConfig(path)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	var factory factoryapi.Factory
-	if err := json.Unmarshal(canonical, &factory); err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("parse factory config: %w", err)
-	}
-	return factory, nil
 }

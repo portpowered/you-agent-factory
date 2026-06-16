@@ -93,178 +93,6 @@ func TestCronConfigUnmarshalJSON_IgnoresRetiredAliases(t *testing.T) {
 	}
 }
 
-func TestPublicFactoryEnumNormalizers(t *testing.T) {
-	for _, tt := range publicFactoryEnumNormalizerCases() {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.permissive("  " + tt.alias + "  "); got != tt.want {
-				t.Fatalf("permissive(%q) = %q, want %q", tt.alias, got, tt.want)
-			}
-			if got := tt.strict("  " + tt.alias + "  "); got != tt.want {
-				t.Fatalf("strict(%q) = %q, want %q", tt.alias, got, tt.want)
-			}
-			if got := tt.permissive("  " + tt.unknown + "  "); got != tt.unknown {
-				t.Fatalf("permissive(%q) = %q, want trimmed unknown %q", tt.unknown, got, tt.unknown)
-			}
-			if got := tt.strict("  " + tt.unknown + "  "); got != "" {
-				t.Fatalf("strict(%q) = %q, want rejection", tt.unknown, got)
-			}
-		})
-	}
-}
-
-type publicFactoryEnumNormalizerCase struct {
-	name       string
-	alias      string
-	unknown    string
-	want       string
-	permissive func(string) string
-	strict     func(string) string
-}
-
-func publicFactoryEnumNormalizerCases() []publicFactoryEnumNormalizerCase {
-	cases := publicFactoryWorkerEnumNormalizerCases()
-	cases = append(cases, publicFactoryNonWorkerEnumNormalizerCases()...)
-	return cases
-}
-
-func publicFactoryWorkerEnumNormalizerCases() []publicFactoryEnumNormalizerCase {
-	return []publicFactoryEnumNormalizerCase{
-		{
-			name:       "worker type legacy model",
-			alias:      "MODEL_WORKER",
-			unknown:    "CUSTOM_WORKER",
-			want:       WorkerTypeModel,
-			permissive: PermissivePublicFactoryWorkerType,
-			strict:     StrictPublicFactoryWorkerType,
-		},
-		{
-			name:       "worker type inference",
-			alias:      "INFERENCE_WORKER",
-			unknown:    "CUSTOM_WORKER",
-			want:       WorkerTypeInference,
-			permissive: PermissivePublicFactoryWorkerType,
-			strict:     StrictPublicFactoryWorkerType,
-		},
-		{
-			name:       "worker type agent",
-			alias:      "AGENT_WORKER",
-			unknown:    "CUSTOM_WORKER",
-			want:       WorkerTypeAgent,
-			permissive: PermissivePublicFactoryWorkerType,
-			strict:     StrictPublicFactoryWorkerType,
-		},
-		{
-			name:       "worker type poller",
-			alias:      "POLLER_WORKER",
-			unknown:    "CUSTOM_WORKER",
-			want:       WorkerTypePoller,
-			permissive: PermissivePublicFactoryWorkerType,
-			strict:     StrictPublicFactoryWorkerType,
-		},
-		{
-			name:       "worker type legacy hosted",
-			alias:      "HOSTED_WORKER",
-			unknown:    "CUSTOM_WORKER",
-			want:       WorkerTypeHosted,
-			permissive: PermissivePublicFactoryWorkerType,
-			strict:     StrictPublicFactoryWorkerType,
-		},
-		{
-			name:       "worker model provider",
-			alias:      "CODEX",
-			unknown:    "mystery-provider",
-			want:       "CODEX",
-			permissive: PermissivePublicFactoryWorkerModelProvider,
-			strict:     StrictPublicFactoryWorkerModelProvider,
-		},
-		{
-			name:       "worker provider",
-			alias:      "SCRIPT_WRAP",
-			unknown:    "custom-executor",
-			want:       "SCRIPT_WRAP",
-			permissive: PermissivePublicFactoryWorkerProvider,
-			strict:     StrictPublicFactoryWorkerProvider,
-		},
-		{
-			name:       "hosted worker provider",
-			alias:      "LINEAR",
-			unknown:    "custom-hosted",
-			want:       HostedWorkerProviderLinear,
-			permissive: PermissivePublicFactoryHostedWorkerProvider,
-			strict:     StrictPublicFactoryHostedWorkerProvider,
-		},
-		{
-			name:       "worker model locality",
-			alias:      "LOCAL",
-			unknown:    "edge",
-			want:       ModelLocalityLocal,
-			permissive: PermissivePublicFactoryWorkerModelLocality,
-			strict:     StrictPublicFactoryWorkerModelLocality,
-		},
-		{
-			name:       "worker operation content type",
-			alias:      "AUDIO",
-			unknown:    "sound",
-			want:       ModelOperationContentTypeAudio,
-			permissive: PermissivePublicFactoryWorkerModelOperationContentType,
-			strict:     StrictPublicFactoryWorkerModelOperationContentType,
-		},
-	}
-}
-
-func publicFactoryNonWorkerEnumNormalizerCases() []publicFactoryEnumNormalizerCase {
-	return []publicFactoryEnumNormalizerCase{
-		{
-			name:       "resource type",
-			alias:      "MODEL",
-			unknown:    "custom-resource",
-			want:       ResourceTypeModel,
-			permissive: PermissivePublicFactoryResourceType,
-			strict:     StrictPublicFactoryResourceType,
-		},
-		{
-			name:       "workstation type inference run",
-			alias:      "INFERENCE_RUN",
-			unknown:    "CUSTOM_WORKSTATION",
-			want:       WorkstationTypeInference,
-			permissive: PermissivePublicFactoryWorkstationType,
-			strict:     StrictPublicFactoryWorkstationType,
-		},
-		{
-			name:       "workstation type legacy model invoke",
-			alias:      "MODEL_INVOKE",
-			unknown:    "CUSTOM_WORKSTATION",
-			want:       WorkstationTypeInvoke,
-			permissive: PermissivePublicFactoryWorkstationType,
-			strict:     StrictPublicFactoryWorkstationType,
-		},
-		{
-			name:       "runner id",
-			alias:      "cursor-cli",
-			unknown:    "custom-runner",
-			want:       RunnerIDCursorCLI,
-			permissive: PermissivePublicFactoryRunnerID,
-			strict:     StrictPublicFactoryRunnerID,
-		},
-		{
-			name:       "runner selection source",
-			alias:      "factory",
-			unknown:    "custom-source",
-			want:       string(RunnerSelectionSourceFactory),
-			permissive: PermissivePublicFactoryRunnerSelectionSource,
-			strict:     StrictPublicFactoryRunnerSelectionSource,
-		},
-		{
-			name:       "work type handling behavior",
-			alias:      WorkTypeHandlingBehaviorDefault,
-			unknown:    "PROMPT",
-			want:       WorkTypeHandlingBehaviorDefault,
-			permissive: PermissivePublicWorkTypeHandlingBehavior,
-			strict:     StrictPublicWorkTypeHandlingBehavior,
-		},
-	}
-}
-
 func TestGeneratedPublicFactoryEnumsPreserveUnknownValues(t *testing.T) {
 	for _, tt := range generatedPublicFactoryEnumPreservationCases() {
 		t.Run(tt.name, func(t *testing.T) {
@@ -374,7 +202,7 @@ func generatedPublicFactoryEnumPtrCases() []generatedPublicFactoryEnumPtrCase {
 		{
 			name:          "worker type",
 			supported:     "  MODEL_WORKER  ",
-			wantSupported: "MODEL_WORKER",
+			wantSupported: "INFERENCE_WORKER",
 			unknown:       "  CUSTOM_WORKER  ",
 			wantUnknown:   "CUSTOM_WORKER",
 			ptr:           generatedPublicFactoryWorkerTypeStringPtr,
@@ -420,9 +248,17 @@ func generatedPublicFactoryEnumPtrCases() []generatedPublicFactoryEnumPtrCase {
 			ptr:           generatedPublicFactoryWorkerModelOperationContentTypeStringPtr,
 		},
 		{
-			name:          "workstation type",
+			name:          "workstation type inference",
+			supported:     "  INFERENCE_RUN  ",
+			wantSupported: "INFERENCE_RUN",
+			unknown:       "  CUSTOM_WORKSTATION  ",
+			wantUnknown:   "CUSTOM_WORKSTATION",
+			ptr:           generatedPublicFactoryWorkstationTypeStringPtr,
+		},
+		{
+			name:          "workstation type legacy invoke alias",
 			supported:     "  MODEL_INVOKE  ",
-			wantSupported: "MODEL_INVOKE",
+			wantSupported: "INFERENCE_RUN",
 			unknown:       "  CUSTOM_WORKSTATION  ",
 			wantUnknown:   "CUSTOM_WORKSTATION",
 			ptr:           generatedPublicFactoryWorkstationTypeStringPtr,

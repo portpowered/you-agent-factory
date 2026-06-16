@@ -102,8 +102,7 @@ Use these canonical concept owners when you need the current contract.
   `{name, capacity}` requirements consumed by workers or workstations.
 - [Models and model operations](models.md) explains `INFERENCE_RUN`,
   `INFERENCE_WORKER` capabilities, typed model resources, `/models`, and local or
-  cloud TTS authoring patterns. `MODEL_INVOKE` and `MODEL_WORKER` remain
-  accepted compatibility aliases.
+  cloud TTS authoring patterns.
 - [Batch inputs](batch-inputs.md) explains the `FACTORY_REQUEST_BATCH` request
   shape, watched-file placement, and supported relation types.
 - [Templates](templates.md) explains the supported Go-template surfaces, the

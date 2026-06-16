@@ -246,8 +246,8 @@ func assertGeneratedSmokeTransportBoundary(t *testing.T, generated factoryapi.Fa
 		if worker.Name != "worker-a" && worker.Name != "worker-b" {
 			continue
 		}
-		if stringValueFromFunctionalPtr(worker.Type) != interfaces.WorkerTypeModel {
-			t.Fatalf("runtime boundary worker %q type = %q, want %q", worker.Name, stringValueFromFunctionalPtr(worker.Type), interfaces.WorkerTypeModel)
+		if stringValueFromFunctionalPtr(worker.Type) != interfaces.WorkerTypeInference {
+			t.Fatalf("runtime boundary worker %q type = %q, want %q", worker.Name, stringValueFromFunctionalPtr(worker.Type), interfaces.WorkerTypeInference)
 		}
 	}
 	if generated.Workstations == nil {

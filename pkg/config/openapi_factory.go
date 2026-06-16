@@ -9,6 +9,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config/mockworkers"
+	"github.com/portpowered/infinite-you/pkg/config/retiredboundary"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -204,6 +205,9 @@ func normalizeCanonicalFactoryInputFields(v any) (any, error) {
 	if err := normalizeFactoryWorkstationEntries(root); err != nil {
 		return nil, err
 	}
+	if err := normalizeFactoryWorkerTypesForFactoryUsage(root); err != nil {
+		return nil, err
+	}
 	if err := normalizeFactoryOrchestratorEntry(root); err != nil {
 		return nil, err
 	}
@@ -259,13 +263,13 @@ func normalizeFactoryGuardEntries(root map[string]any) error {
 }
 
 func rejectUnsupportedFactoryGuardBoundaryFields(guard map[string]any, path string) error {
-	return rejectRetiredBoundaryFields(guard, path, []retiredBoundaryField{
-		{key: "workstation", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
-		{key: "maxVisits", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
-		{key: "matchConfig", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
-		{key: "matchInput", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
-		{key: "parentInput", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
-		{key: "spawnedBy", replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+	return retiredboundary.RejectFields(guard, path, []retiredboundary.Field{
+		{Key: "workstation", Replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{Key: "maxVisits", Replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{Key: "matchConfig", Replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{Key: "matchInput", Replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{Key: "parentInput", Replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
+		{Key: "spawnedBy", Replacement: "factory guards support modelProvider, optional model, and refreshWindow"},
 	})
 }
 
@@ -358,20 +362,20 @@ func rejectUnsupportedHostedWorkerBoundaryFields(worker map[string]any, path str
 	if len(auth) == 0 {
 		return nil
 	}
-	return rejectRetiredBoundaryFields(auth, path+".auth", []retiredBoundaryField{
-		{key: "apiKey", replacement: "v1 hosted workers accept only auth.secretRef"},
-		{key: "api_key", replacement: "v1 hosted workers accept only auth.secretRef"},
-		{key: "token", replacement: "v1 hosted workers accept only auth.secretRef"},
-		{key: "accessToken", replacement: "v1 hosted workers accept only auth.secretRef"},
-		{key: "access_token", replacement: "v1 hosted workers accept only auth.secretRef"},
-		{key: "clientId", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
-		{key: "client_id", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
-		{key: "clientSecret", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
-		{key: "client_secret", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
-		{key: "refreshToken", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
-		{key: "refresh_token", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
-		{key: "tokenUrl", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
-		{key: "token_url", replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+	return retiredboundary.RejectFields(auth, path+".auth", []retiredboundary.Field{
+		{Key: "apiKey", Replacement: "v1 hosted workers accept only auth.secretRef"},
+		{Key: "api_key", Replacement: "v1 hosted workers accept only auth.secretRef"},
+		{Key: "token", Replacement: "v1 hosted workers accept only auth.secretRef"},
+		{Key: "accessToken", Replacement: "v1 hosted workers accept only auth.secretRef"},
+		{Key: "access_token", Replacement: "v1 hosted workers accept only auth.secretRef"},
+		{Key: "clientId", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "client_id", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "clientSecret", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "client_secret", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "refreshToken", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "refresh_token", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "tokenUrl", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
+		{Key: "token_url", Replacement: "v1 hosted workers do not support OAuth; use auth.secretRef"},
 	})
 }
 
@@ -463,6 +467,72 @@ func isUppercaseOperationIdentifier(value string) bool {
 		return false
 	}
 	return value != ""
+}
+
+func normalizeFactoryWorkerTypesForFactoryUsage(root map[string]any) error {
+	workstations := factoryWorkstationsFromInputMaps(root)
+	workers, ok := root["workers"].([]any)
+	if !ok {
+		return nil
+	}
+	for _, item := range workers {
+		worker, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		workerName, _ := worker["name"].(string)
+		workerType, _ := worker["type"].(string)
+		if strings.TrimSpace(workerName) == "" || strings.TrimSpace(workerType) == "" {
+			continue
+		}
+		if interfaces.InternalRuntimeWorkerTypeFromPublic(workerType) != interfaces.WorkerTypeModel {
+			continue
+		}
+		publicType := interfaces.PublicWorkerTypeForFactoryUsage(interfaces.WorkerConfig{
+			Name: workerName,
+			Type: interfaces.WorkerTypeModel,
+		}, workstations)
+		worker["type"] = publicType
+	}
+	return nil
+}
+
+func factoryWorkstationsFromInputMaps(root map[string]any) []interfaces.FactoryWorkstationConfig {
+	workstationsValue, ok := root["workstations"].([]any)
+	if !ok {
+		return nil
+	}
+	workstations := make([]interfaces.FactoryWorkstationConfig, 0, len(workstationsValue))
+	for _, item := range workstationsValue {
+		workstationMap, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		workstation := interfaces.FactoryWorkstationConfig{
+			Name:           stringValueFromFactoryInputMap(workstationMap, "name"),
+			WorkerTypeName: stringValueFromFactoryInputMap(workstationMap, "worker"),
+		}
+		if workstationType := stringValueFromFactoryInputMap(workstationMap, "type"); workstationType != "" {
+			workstation.Type = workstationType
+		}
+		if behavior := stringValueFromFactoryInputMap(workstationMap, "behavior"); behavior != "" {
+			workstation.Kind = interfaces.WorkstationKind(behavior)
+		}
+		workstations = append(workstations, workstation)
+	}
+	return workstations
+}
+
+func stringValueFromFactoryInputMap(values map[string]any, key string) string {
+	raw, ok := values[key]
+	if !ok {
+		return ""
+	}
+	value, ok := raw.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(value)
 }
 
 func normalizeFactoryWorkstationEntries(root map[string]any) error {
@@ -679,207 +749,6 @@ func toCamelCase(key string) string {
 		builder.WriteString(string(runes))
 	}
 	return builder.String()
-}
-
-type retiredBoundaryField struct {
-	key         string
-	replacement string
-}
-
-var retiredFactoryBoundaryFields = []retiredBoundaryField{
-	{key: "project", replacement: "use id"},
-	{key: "factoryDir", replacement: "use factoryDirectory"},
-	{key: "factory_dir", replacement: "use factoryDirectory"},
-	{key: "resourceManifest", replacement: "use supportingFiles"},
-	{key: "resource_manifest", replacement: "use supportingFiles"},
-	{key: "workflowId", replacement: "remove workflowId"},
-	{key: "workflow_id", replacement: "remove workflowId"},
-}
-
-var retiredWorkerBoundaryFields = []retiredBoundaryField{
-	{key: "model_provider", replacement: "use modelProvider"},
-	{key: "sessionId", replacement: "remove sessionId; provider sessions are runtime-owned"},
-	{key: "session_id", replacement: "remove sessionId; provider sessions are runtime-owned"},
-	{key: "concurrency", replacement: "remove concurrency; use resources to limit concurrent work"},
-}
-
-var retiredWorkstationBoundaryFields = []retiredBoundaryField{
-	{key: "kind", replacement: "use behavior"},
-	{key: "runtimeType", replacement: "use type"},
-	{key: "runtime_type", replacement: "use type"},
-	{key: "resourceUsage", replacement: "use resources"},
-	{key: "resource_usage", replacement: "use resources"},
-	{key: "resource-usage", replacement: "use resources"},
-	{key: "stopToken", replacement: "use stopWords"},
-	{key: "stop_token", replacement: "use stopWords"},
-	{key: "runtimeStopWords", replacement: "use stopWords"},
-	{key: "runtime_stop_words", replacement: "use stopWords"},
-	{key: "timeout", replacement: "use limits.maxExecutionTime"},
-}
-
-func rejectRetiredFanInField(data []byte) error {
-	var payload struct {
-		Workstations []map[string]json.RawMessage `json:"workstations"`
-	}
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return nil
-	}
-	for index, workstation := range payload.Workstations {
-		if _, ok := workstation["join"]; ok {
-			return fmt.Errorf("workstations[%d].join is not supported; use per-input guards", index)
-		}
-	}
-	return nil
-}
-
-func rejectRetiredExhaustionRulesField(data []byte) error {
-	var payload map[string]json.RawMessage
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return nil
-	}
-	if _, ok := payload["exhaustionRules"]; ok {
-		return fmt.Errorf("exhaustion_rules is retired; use a guarded LOGICAL_MOVE workstation with a visit_count guard instead")
-	}
-	if _, ok := payload["exhaustion_rules"]; ok {
-		return fmt.Errorf("exhaustion_rules is retired; use a guarded LOGICAL_MOVE workstation with a visit_count guard instead")
-	}
-	return nil
-}
-
-func rejectRetiredCronIntervalField(data []byte) error {
-	var payload struct {
-		Workstations []struct {
-			Cron *interfaces.CronConfig `json:"cron"`
-		} `json:"workstations"`
-	}
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return nil
-	}
-	for index, workstation := range payload.Workstations {
-		if workstation.Cron != nil && workstation.Cron.HasUnsupportedInterval() {
-			return fmt.Errorf("workstations[%d].cron.interval is not supported; use cron.schedule", index)
-		}
-	}
-	return nil
-}
-
-func rejectRetiredGeneratedBoundaryAliases(data []byte) error {
-	var payload map[string]any
-	if err := json.Unmarshal(data, &payload); err != nil {
-		return nil
-	}
-	if err := rejectRetiredBoundaryFields(payload, "factory", retiredFactoryBoundaryFields); err != nil {
-		return err
-	}
-	if err := rejectRetiredWorkerBoundaryAliases(payload); err != nil {
-		return err
-	}
-	if err := rejectRetiredWorkstationBoundaryAliases(payload); err != nil {
-		return err
-	}
-	return nil
-}
-
-func rejectRetiredWorkerBoundaryAliases(root map[string]any) error {
-	workers, ok := root["workers"].([]any)
-	if !ok {
-		return nil
-	}
-	for index, item := range workers {
-		worker, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		if err := rejectRetiredWorkerBoundaryObject(worker, fmt.Sprintf("workers[%d]", index), true); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func rejectRetiredWorkerBoundaryObject(worker map[string]any, path string, includeDefinition bool) error {
-	if err := rejectRetiredHostedProviderAlias(worker, path); err != nil {
-		return err
-	}
-	if err := rejectRetiredBoundaryFields(worker, path, retiredWorkerBoundaryFields); err != nil {
-		return err
-	}
-	if !includeDefinition {
-		return nil
-	}
-	definition, ok := worker["definition"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	return rejectRetiredWorkerBoundaryObject(definition, path+".definition", false)
-}
-
-func rejectRetiredHostedProviderAlias(worker map[string]any, path string) error {
-	rawProvider, hasProvider := worker["provider"]
-	if !hasProvider {
-		return nil
-	}
-	provider, _ := rawProvider.(string)
-	workerType, _ := worker["type"].(string)
-	if interfaces.IsPollerWorkerType(workerType) &&
-		interfaces.StrictPublicFactoryHostedWorkerProvider(provider) != "" {
-		return nil
-	}
-	return fmt.Errorf("%s.provider is not supported; use executorProvider", path)
-}
-
-func rejectRetiredWorkstationBoundaryAliases(root map[string]any) error {
-	workstations, ok := root["workstations"].([]any)
-	if !ok {
-		return nil
-	}
-	for index, item := range workstations {
-		workstation, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		if err := rejectRetiredWorkstationBoundaryObject(workstation, fmt.Sprintf("workstations[%d]", index), true); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func rejectRetiredWorkstationBoundaryObject(workstation map[string]any, path string, includeDefinition bool) error {
-	if err := rejectRetiredBoundaryFields(workstation, path, retiredWorkstationBoundaryFields); err != nil {
-		return err
-	}
-	if err := rejectRetiredCronBoundaryAliases(workstation["cron"], path+".cron"); err != nil {
-		return err
-	}
-	if !includeDefinition {
-		return nil
-	}
-	definition, ok := workstation["definition"].(map[string]any)
-	if !ok {
-		return nil
-	}
-	return rejectRetiredWorkstationBoundaryObject(definition, path+".definition", false)
-}
-
-func rejectRetiredCronBoundaryAliases(raw any, path string) error {
-	cron, ok := raw.(map[string]any)
-	if !ok {
-		return nil
-	}
-	return rejectRetiredBoundaryFields(cron, path, []retiredBoundaryField{
-		{key: "trigger_at_start", replacement: "use triggerAtStart"},
-		{key: "expiry_window", replacement: "use expiryWindow"},
-	})
-}
-
-func rejectRetiredBoundaryFields(container map[string]any, path string, fields []retiredBoundaryField) error {
-	for _, field := range fields {
-		if _, ok := container[field.key]; ok {
-			return fmt.Errorf("%s.%s is not supported; %s", path, field.key, field.replacement)
-		}
-	}
-	return nil
 }
 
 // LoadFromCanonicalJSON normalizes canonical factory JSON, expands it to a

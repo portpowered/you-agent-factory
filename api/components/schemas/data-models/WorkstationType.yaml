@@ -23,7 +23,7 @@ x-enum-descriptions:
   - Agent-run workstation reserved for future agent-loop execution that renders prompts and dispatches through an agent worker.
   - Script-run workstation that executes deterministic command or script behavior through a script worker.
   - Poller-run workstation that supervises ingress polling through a poller worker.
-  - Legacy alias for agent-run behavior during the runtime taxonomy migration window.
-  - Legacy alias for inference-run behavior during the runtime taxonomy migration window.
+  - Legacy alias for agent-run behavior during the migration window.
+  - Legacy alias for inference-run behavior during the migration window.
   - Logical pass-through workstation used for routing and guarded loop-breaker transitions without model execution.
   - Label-based classifier workstation that returns one plain string label and routes through classificationRoutes.

@@ -11,9 +11,6 @@ model-backed operations: `INFERENCE_RUN` workstations, `INFERENCE_WORKER`
 capabilities, typed model resources, multimodal `WorkContent`, and the
 runtime `/models` discovery, pull, and invocation surface.
 
-`MODEL_INVOKE` and `MODEL_WORKER` remain accepted compatibility aliases during
-the migration window.
-
 Keep the workflow topology and field-by-field `factory.json` contract in
 `you docs config`. Keep worker-only runtime fields
 in `you docs workers`, workstation-only routing and prompt fields in
@@ -22,13 +19,14 @@ in `you docs workers`, workstation-only routing and prompt fields in
 
 ## Current Contract
 
-- Use `type: "INFERENCE_RUN"` on a workstation when the step should request one
-  uppercase provider-agnostic operation such as `TTS`.
+- Use `type: "INFERENCE_RUN"` on a workstation when the step should request
+  one uppercase provider-agnostic operation such as `TTS`.
 - Keep operation names, model localities, resource types, slot content types,
   and other public enum-like values uppercase in authored config.
-- An `INFERENCE_RUN` workstation must reference an `INFERENCE_WORKER` that declares
-  the same operation and a compatible input and output contract.
-- `MODEL_INVOKE` and `MODEL_WORKER` remain accepted compatibility aliases.
+- An `INFERENCE_RUN` workstation must reference an `INFERENCE_WORKER` that
+  declares the same operation and a compatible input and output contract.
+- Legacy `MODEL_INVOKE` and `MODEL_WORKER` remain accepted during the
+  migration window and project to the same inference behavior.
 - Model invocation input and output use canonical ordered `WorkContent`.
   Existing lowercase `text` and `image` parts remain valid at the API
   boundary, while new multimodal parts should use uppercase public types such
@@ -77,7 +75,8 @@ Keep the compatibility chain explicit:
 1. The workstation `type` must be `INFERENCE_RUN` (or legacy `MODEL_INVOKE`).
 2. The workstation `operation` must be uppercase and must match one declared
    worker operation.
-3. The referenced worker must be `INFERENCE_WORKER` (or legacy `MODEL_WORKER`).
+3. The referenced worker must be `INFERENCE_WORKER` (or legacy `MODEL_WORKER`
+   projecting to inference behavior).
 4. That worker operation must declare at least one input slot and one output
    slot.
 5. Each authored binding slot must exist in the worker's declared input slots.

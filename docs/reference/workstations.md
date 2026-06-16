@@ -44,36 +44,38 @@ instructions. The workstation supplies the step-specific prompt template,
 execution limits, output schema, working directory, worktree path,
 environment, and routing.
 
-## Runtime Taxonomy
+## Workstation Taxonomy
 
-Workstations describe **run behavior**: how a bound worker is invoked for one
-workflow step. Prefer the behavior-specific workstation types below when authoring
-new factories. Legacy aliases remain accepted during the migration window.
+Public factory config names workstation runtime behavior with four run types:
 
-| Preferred workstation type | Behavior class | Legacy alias |
-|----------------------------|----------------|--------------|
-| `INFERENCE_RUN` | One bounded model operation with slot bindings | `MODEL_INVOKE` |
-| `AGENT_RUN` | Prompt-rendered worker dispatch | `MODEL_WORKSTATION` |
-| `SCRIPT_RUN` | Script/command execution | — |
-| `POLLER_RUN` | Hosted provider polling ingress | `behavior: "POLLER"` with poller worker |
-| `CLASSIFIER_WORKSTATION` | Single-label branch routing | — |
-| `LOGICAL_MOVE` | No-worker token routing | — |
+| Public type | Behavior | Use when |
+|-------------|----------|----------|
+| `INFERENCE_RUN` | One-shot model operation | Typed operations such as `TTS` with `operationBindings` |
+| `AGENT_RUN` | Prompt-rendered agent dispatch | Model-backed steps that render a workstation prompt and iterate through continue, rejection, or failure routes |
+| `SCRIPT_RUN` | Script dispatch | Steps bound to a `SCRIPT_WORKER` |
+| `POLLER_RUN` | Hosted poller ingress | Workstations with `behavior: "POLLER"` |
 
-`MODEL_INVOKE` projects to inference-run behavior. Use `INFERENCE_RUN` for typed
-model operations such as TTS. Use `AGENT_RUN` for prompt-rendered agent loops,
-including repeaters that continue until acceptance.
+`CLASSIFIER_WORKSTATION` and `LOGICAL_MOVE` remain separate runtime kinds for
+label routing and no-worker token moves.
 
-Existing factories that still use `MODEL_INVOKE` or `MODEL_WORKSTATION` load,
-validate, and execute without customer edits.
+### Legacy compatibility aliases
+
+During the migration window, existing factories may still use:
+
+- `MODEL_INVOKE` — loads, validates, and executes as `INFERENCE_RUN`
+  inference behavior.
+- `MODEL_WORKSTATION` — loads, validates, and executes as `AGENT_RUN` agent-loop
+  behavior when paired with a compatible agent worker.
+
+Prefer the new names in new docs and configs. See `you docs workers` for the
+matching worker taxonomy and compatibility rules.
 
 ## Current Contract
 
 - Use `behavior` for scheduling behavior: `STANDARD`, `REPEATER`, `CRON`, or
   `POLLER`.
-- Use `type` for the runtime implementation: `INFERENCE_RUN`, `AGENT_RUN`,
+- Use `type` for the runtime implementation: `AGENT_RUN`, `INFERENCE_RUN`,
   `SCRIPT_RUN`, `POLLER_RUN`, `CLASSIFIER_WORKSTATION`, or `LOGICAL_MOVE`.
-- `MODEL_INVOKE` and `MODEL_WORKSTATION` remain accepted compatibility aliases
-  for inference-run and agent-run behavior.
 - Use `worker` for the bound worker name. Omit it for logical routing
   workstations such as `LOGICAL_MOVE`, including `LOGICAL_MOVE` with
   `behavior: "CRON"`. Worker-backed cron workstations still require `worker`.
@@ -83,8 +85,7 @@ validate, and execute without customer edits.
 - Worker-backed workstations that omit `onFailure` still map an explicit
   failure lane to each emitted work type's `FAILED` state. This implicit
   expansion applies to `STANDARD`, `REPEATER`, `CRON`, `POLLER`,
-  `AGENT_RUN`, `INFERENCE_RUN`, `SCRIPT_RUN`, `POLLER_RUN`, and
-  `CLASSIFIER_WORKSTATION`.
+  `AGENT_RUN`, `INFERENCE_RUN`, and `CLASSIFIER_WORKSTATION`.
   `LOGICAL_MOVE` stays explicit.
 - `CLASSIFIER_WORKSTATION` returns one plain string label. Leading and trailing
   whitespace are trimmed before matching, matching stays exact and
@@ -98,9 +99,6 @@ validate, and execute without customer edits.
 Use `INFERENCE_RUN` when a workstation should describe the requested behavior in
 provider-agnostic terms such as `TTS`, `ASR`, `TRANSCRIBE`, `EMBED`, or
 `CLASSIFY`.
-
-`MODEL_INVOKE` remains an accepted compatibility alias with the same inference-run
-behavior.
 
 ```json
 {
@@ -136,12 +134,15 @@ behavior.
 Additional `INFERENCE_RUN` rules:
 
 - `operation` must be uppercase.
-- `worker` must reference an `INFERENCE_WORKER` (or legacy `MODEL_WORKER`).
+- `worker` must reference an `INFERENCE_WORKER`.
 - The worker must declare the same operation and a compatible input/output
   slot contract.
 - Each `operationBindings[].slot` must match one declared worker input slot.
 - Bindings resolve deterministically from matching runtime input, authored
   `config`, authored `defaultContent`, or omission for optional slots.
+
+Legacy `MODEL_INVOKE` remains accepted during the migration window and
+projects to the same inference-run behavior.
 
 ## Topology Fields
 
@@ -165,7 +166,7 @@ execute:
 |-------|----------|-------------|
 | `name` | Yes | Stable workstation name. This is also the transition ID in runtime events. |
 | `behavior` | No | Scheduling behavior. Use `STANDARD`, `REPEATER`, `CRON`, or `POLLER`. Defaults to `STANDARD`. |
-| `type` | Runtime config | Runtime implementation. Use `AGENT_RUN` for prompt-rendered worker dispatch, `INFERENCE_RUN` for typed model operations, `SCRIPT_RUN` for script dispatch, `POLLER_RUN` for poller ingress, `CLASSIFIER_WORKSTATION` for single-label branch selection, or `LOGICAL_MOVE` for no-worker routing. |
+| `type` | Runtime config | Runtime implementation. Use `AGENT_RUN` for prompt-rendered worker dispatch, `INFERENCE_RUN` for typed model operations, `CLASSIFIER_WORKSTATION` for single-label branch selection, or `LOGICAL_MOVE` for no-worker routing. |
 | `worker` | Usually | Worker name from `workers[].name`. Required for model/script dispatch, worker-backed cron workstations, and poller workstations. Omit for `LOGICAL_MOVE`, including `LOGICAL_MOVE` with `behavior: "CRON"`. |
 | `inputs` | Usually | IO places that enable the workstation. Cron workstations may omit customer inputs but still consume internal time work. |
 | `outputs` | Usually | IO places produced when the worker returns accepted. Cron workstations require at least one output. |
@@ -232,8 +233,6 @@ failure route equivalent to:
 - `AGENT_RUN` renders a prompt and dispatches to the bound worker.
 - `INFERENCE_RUN` resolves slot bindings and dispatches one typed model
   operation to the bound worker.
-- `SCRIPT_RUN` dispatches to a bound `SCRIPT_WORKER`.
-- `POLLER_RUN` keeps hosted provider polling active in service mode.
 - `CLASSIFIER_WORKSTATION` renders a prompt and expects one plain string label
   such as `approved`, `needs_review`, or `spam`.
 - `LOGICAL_MOVE` moves tokens without invoking a worker.
@@ -537,7 +536,7 @@ These fields can live inline on `workstations[]` or in the workstation
 
 | Field | Description |
 |-------|-------------|
-| `type` | Runtime implementation. Use `AGENT_RUN` for prompt-rendered worker dispatch, `INFERENCE_RUN` for typed model operations, `SCRIPT_RUN` for script dispatch, `POLLER_RUN` for poller ingress, `CLASSIFIER_WORKSTATION` for prompt-rendered single-label routing, or `LOGICAL_MOVE` for no-worker pass-through routing. |
+| `type` | Runtime implementation. Use `AGENT_RUN` for prompt-rendered worker dispatch, `INFERENCE_RUN` for typed model operations, `CLASSIFIER_WORKSTATION` for prompt-rendered single-label routing, or `LOGICAL_MOVE` for no-worker pass-through routing. |
 | `runner` | Stable runner override for this workstation. Supported built-in IDs are `codex`, `gemini`, `kiro`, `cursor-cli`, and `opencode`. |
 | `openCodeAgent` | Optional OpenCode agent profile override for this workstation. When set, replaces the bound worker's `openCodeAgent` for dispatches that resolve to runner `opencode`. Must be a non-empty string. |
 | `promptFile` | Path relative to the workstation directory. The file content becomes the prompt template. |
@@ -636,8 +635,8 @@ type: LOGICAL_MOVE
 No prompt is rendered for LOGICAL_MOVE.
 ```
 
-When a workstation has no `type`, the runtime defaults to
-`AGENT_RUN` if it has a worker and `LOGICAL_MOVE` if it has no worker.
+When a workstation has no `type`, the runtime defaults to `AGENT_RUN` if it has
+a worker and `LOGICAL_MOVE` if it has no worker.
 Author the `type` explicitly when the distinction matters.
 
 ## Script-Backed Portability

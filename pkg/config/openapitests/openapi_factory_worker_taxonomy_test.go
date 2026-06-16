@@ -1,76 +1,85 @@
 package openapitests
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	. "github.com/portpowered/infinite-you/pkg/config"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
-func TestGeneratedFactoryFromOpenAPIJSON_AcceptsRuntimeTaxonomyWorkerTypes(t *testing.T) {
+func TestFactoryConfigFromOpenAPIJSON_AcceptsNewWorkerTaxonomyAndProjectsLegacyRuntimeTypes(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
-		name       string
-		workerType string
-		wantType   string
-		extra      string
+		name              string
+		workerType        string
+		workstationType   string
+		wantRuntimeType   string
+		wantGeneratedType factoryapi.WorkerType
 	}{
 		{
-			name:       "inference worker",
-			workerType: "INFERENCE_WORKER",
-			wantType:   interfaces.WorkerTypeInference,
-			extra:      `"modelProvider":"CLAUDE","stopToken":"COMPLETE"`,
+			name:              "inference worker",
+			workerType:        interfaces.WorkerTypeInference,
+			workstationType:   interfaces.WorkstationTypeInference,
+			wantRuntimeType:   interfaces.WorkerTypeModel,
+			wantGeneratedType: factoryapi.WorkerTypeInferenceWorker,
 		},
 		{
-			name:       "agent worker",
-			workerType: "AGENT_WORKER",
-			wantType:   interfaces.WorkerTypeAgent,
-			extra:      `"modelProvider":"CLAUDE","stopToken":"COMPLETE"`,
+			name:              "legacy model worker alias",
+			workerType:        interfaces.WorkerTypeModel,
+			workstationType:   interfaces.WorkstationTypeModel,
+			wantRuntimeType:   interfaces.WorkerTypeAgent,
+			wantGeneratedType: factoryapi.WorkerTypeAgentWorker,
 		},
 		{
-			name:       "script worker",
-			workerType: "SCRIPT_WORKER",
-			wantType:   interfaces.WorkerTypeScript,
-			extra:      `"command":"go","args":["run","./worker"]`,
+			name:              "agent worker",
+			workerType:        interfaces.WorkerTypeAgent,
+			workstationType:   interfaces.WorkstationTypeAgent,
+			wantRuntimeType:   interfaces.WorkerTypeAgent,
+			wantGeneratedType: factoryapi.WorkerTypeAgentWorker,
 		},
 		{
-			name:       "poller worker",
-			workerType: "POLLER_WORKER",
-			wantType:   interfaces.WorkerTypePoller,
-			extra:      `"provider":"LINEAR","auth":{"secretRef":"secrets/linear-api-key"},"linear":{"pollInterval":"45s","teamIds":["team-a"],"stateIds":["state-b"],"mapping":{"workType":"story","state":"init"}}`,
+			name:              "script worker",
+			workerType:        interfaces.WorkerTypeScript,
+			workstationType:   interfaces.WorkstationTypeScript,
+			wantRuntimeType:   interfaces.WorkerTypeScript,
+			wantGeneratedType: factoryapi.WorkerTypeScriptWorker,
 		},
 		{
-			name:       "legacy model worker",
-			workerType: "MODEL_WORKER",
-			wantType:   interfaces.WorkerTypeModel,
-			extra:      `"modelProvider":"CLAUDE","stopToken":"COMPLETE"`,
+			name:              "poller worker",
+			workerType:        interfaces.WorkerTypePoller,
+			workstationType:   interfaces.WorkstationTypePoller,
+			wantRuntimeType:   interfaces.WorkerTypeHosted,
+			wantGeneratedType: factoryapi.WorkerTypePollerWorker,
 		},
 		{
-			name:       "legacy hosted worker",
-			workerType: "HOSTED_WORKER",
-			wantType:   interfaces.WorkerTypeHosted,
-			extra:      `"provider":"LINEAR","auth":{"secretRef":"secrets/linear-api-key"},"linear":{"pollInterval":"45s","teamIds":["team-a"],"stateIds":["state-b"],"mapping":{"workType":"story","state":"init"}}`,
+			name:              "legacy hosted worker alias",
+			workerType:        interfaces.WorkerTypeHosted,
+			workstationType:   interfaces.WorkstationTypePoller,
+			wantRuntimeType:   interfaces.WorkerTypeHosted,
+			wantGeneratedType: factoryapi.WorkerTypePollerWorker,
 		},
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			cfgJSON := []byte(`{
-				"name":"taxonomy-worker-factory",
-				"workTypes":[{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
-				"workers":[{"name":"worker-a","type":"` + tt.workerType + `",` + tt.extra + `}],
-				"workstations":[{"name":"execute-story","worker":"worker-a","inputs":[{"workType":"story","state":"init"}],"outputs":[{"workType":"story","state":"complete"}]}]
-			}`)
+			t.Parallel()
 
+			cfgJSON := workerTaxonomyFactoryJSON(tt.workerType, tt.workstationType)
 			generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
 			if err != nil {
 				t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
 			}
 			if generated.Workers == nil || len(*generated.Workers) != 1 {
-				t.Fatalf("generated workers = %#v", generated.Workers)
+				t.Fatalf("generated workers = %#v, want one worker", generated.Workers)
 			}
 			worker := (*generated.Workers)[0]
-			if worker.Type == nil || string(*worker.Type) != tt.workerType {
-				t.Fatalf("generated worker type = %#v, want %q", worker.Type, tt.workerType)
+			if worker.Type == nil || *worker.Type != tt.wantGeneratedType {
+				t.Fatalf("generated worker type = %#v, want %s", worker.Type, tt.wantGeneratedType)
 			}
 
 			cfg, err := FactoryConfigFromOpenAPI(generated)
@@ -78,76 +87,140 @@ func TestGeneratedFactoryFromOpenAPIJSON_AcceptsRuntimeTaxonomyWorkerTypes(t *te
 				t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
 			}
 			if len(cfg.Workers) != 1 {
-				t.Fatalf("runtime workers = %#v", cfg.Workers)
+				t.Fatalf("runtime workers = %#v, want one worker", cfg.Workers)
 			}
-			if cfg.Workers[0].Type != tt.wantType {
-				t.Fatalf("runtime worker type = %q, want %q", cfg.Workers[0].Type, tt.wantType)
+			if cfg.Workers[0].Type != tt.wantRuntimeType {
+				t.Fatalf("runtime worker type = %q, want %q", cfg.Workers[0].Type, tt.wantRuntimeType)
 			}
 		})
 	}
 }
 
-func TestGeneratedFactoryFromOpenAPIJSON_ProjectsLegacyModelWorkerToInferenceBehavior(t *testing.T) {
-	cfgJSON := []byte(`{
-		"name":"legacy-model-projection-factory",
-		"workTypes":[{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
-		"workers":[{"name":"executor","type":"MODEL_WORKER","modelProvider":"CLAUDE","operations":[{"name":"TTS","outputs":[{"name":"audio","contentTypes":["AUDIO"]}]}]}],
-		"workstations":[{"name":"tts","type":"MODEL_INVOKE","operation":"TTS","worker":"executor","inputs":[{"workType":"story","state":"init"}],"outputs":[{"workType":"story","state":"complete"}]}]
-	}`)
+func TestMarshalCanonicalFactoryConfig_PrefersNewWorkerTaxonomyOnRoundTrip(t *testing.T) {
+	t.Parallel()
 
-	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
-	if err != nil {
-		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	cfg := &interfaces.FactoryConfig{
+		Name: "taxonomy-round-trip",
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "story",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "complete", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{
+			Name:          "executor",
+			Type:          interfaces.WorkerTypeModel,
+			Model:         "omnivoice",
+			ModelProvider: string(interfaces.ModelProviderClaude),
+		}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "execute-story",
+			Type:           interfaces.WorkstationTypeInvoke,
+			WorkerTypeName: "executor",
+			Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
+			Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
+		}},
 	}
-	cfg, err := FactoryConfigFromOpenAPI(generated)
+
+	flattened, err := NewFactoryConfigMapper().Flatten(cfg)
 	if err != nil {
-		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+		t.Fatalf("Flatten: %v", err)
 	}
-	if got := interfaces.ProjectWorkerBehaviorClass(cfg.Workers[0].Type); got != interfaces.WorkerTypeInference {
-		t.Fatalf("legacy MODEL_WORKER behavior class = %q, want %q", got, interfaces.WorkerTypeInference)
+	if !strings.Contains(string(flattened), `"type":"INFERENCE_WORKER"`) {
+		t.Fatalf("expected flattened worker type INFERENCE_WORKER, got %s", string(flattened))
+	}
+
+	expanded, err := NewFactoryConfigMapper().Expand(flattened)
+	if err != nil {
+		t.Fatalf("Expand: %v", err)
+	}
+	if expanded.Workers[0].Type != interfaces.WorkerTypeModel {
+		t.Fatalf("expanded runtime worker type = %q, want %q", expanded.Workers[0].Type, interfaces.WorkerTypeModel)
 	}
 }
 
-func TestGeneratedFactoryFromOpenAPIJSON_AcceptsPollerWorkerWithHostedLinearConfig(t *testing.T) {
+func TestGeneratedFactoryFromOpenAPIJSON_PreservesMixedLegacyModelWorkerOnSaveRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	cfgJSON := []byte(`{
-		"name":"poller-worker-factory",
-		"workTypes":[{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"queued","type":"PROCESSING"}]}],
-		"workers":[{
-			"name":"linear-poller",
-			"type":"POLLER_WORKER",
-			"provider":"LINEAR",
-			"auth":{"secretRef":"secrets/linear-api-key"},
-			"linear":{
-				"pollInterval":"45s",
-				"teamIds":["team-a"],
-				"stateIds":["state-b"],
-				"mapping":{"workType":"story","state":"init"}
-			}
-		}],
-		"workstations":[{
-			"name":"poll-linear",
-			"behavior":"POLLER",
-			"worker":"linear-poller",
-			"inputs":[{"workType":"story","state":"init"}],
-			"outputs":[{"workType":"story","state":"queued"}]
-		}]
+		"name":"mixed-legacy-model-worker",
+		"workTypes":[{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers":[{"name":"executor","type":"MODEL_WORKER","model":"claude-sonnet","modelProvider":"CLAUDE"}],
+		"workstations":[
+			{"name":"execute-story","type":"MODEL_WORKSTATION","worker":"executor","inputs":[{"workType":"story","state":"init"}],"outputs":[{"workType":"story","state":"complete"}],"onFailure":[{"workType":"story","state":"failed"}]},
+			{"name":"invoke-story","type":"MODEL_INVOKE","worker":"executor","inputs":[{"workType":"story","state":"init"}],"outputs":[{"workType":"story","state":"complete"}],"onFailure":[{"workType":"story","state":"failed"}]}
+		]
 	}`)
 
 	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
 	}
-	cfg, err := FactoryConfigFromOpenAPI(generated)
+	if generated.Workers == nil || len(*generated.Workers) != 1 {
+		t.Fatalf("generated workers = %#v, want one worker", generated.Workers)
+	}
+	worker := (*generated.Workers)[0]
+	if worker.Type == nil || string(*worker.Type) != interfaces.WorkerTypeModel {
+		t.Fatalf("generated worker type = %#v, want %s", worker.Type, interfaces.WorkerTypeModel)
+	}
+
+	runtimeCfg, err := FactoryConfigFromOpenAPI(generated)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
 	}
-	if cfg.Workers[0].Type != interfaces.WorkerTypePoller {
-		t.Fatalf("runtime worker type = %q, want %q", cfg.Workers[0].Type, interfaces.WorkerTypePoller)
+	canonical, err := MarshalCanonicalFactoryConfig(&runtimeCfg)
+	if err != nil {
+		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
 	}
-	if got := interfaces.ProjectWorkerBehaviorClass(cfg.Workers[0].Type); got != interfaces.WorkerTypePoller {
-		t.Fatalf("poller worker behavior class = %q, want %q", got, interfaces.WorkerTypePoller)
+	if !strings.Contains(string(canonical), `"type":"MODEL_WORKER"`) {
+		t.Fatalf("canonical save output downgraded mixed legacy worker, got %s", string(canonical))
 	}
-	if got := interfaces.ProjectWorkerBehaviorClass(interfaces.WorkerTypeHosted); got != interfaces.WorkerTypePoller {
-		t.Fatalf("legacy HOSTED_WORKER behavior class = %q, want %q", got, interfaces.WorkerTypePoller)
+
+	regenerated, err := GeneratedFactoryFromOpenAPIJSON(canonical)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON round trip: %v", err)
 	}
+	regeneratedWorker := (*regenerated.Workers)[0]
+	if regeneratedWorker.Type == nil || string(*regeneratedWorker.Type) != interfaces.WorkerTypeModel {
+		t.Fatalf("round-tripped worker type = %#v, want %s", regeneratedWorker.Type, interfaces.WorkerTypeModel)
+	}
+}
+
+func workerTaxonomyFactoryJSON(workerType, workstationType string) []byte {
+	workstation := map[string]any{
+		"name":   "execute-story",
+		"worker": "executor",
+		"inputs": []map[string]string{{"workType": "story", "state": "init"}},
+		"outputs": []map[string]string{{
+			"workType": "story",
+			"state":    "complete",
+		}},
+	}
+	if strings.TrimSpace(workstationType) != "" {
+		workstation["type"] = workstationType
+		if workstationType == interfaces.WorkstationTypePoller {
+			workstation["behavior"] = "POLLER"
+		}
+	}
+	payload := map[string]any{
+		"name": "worker-taxonomy-factory",
+		"workTypes": []map[string]any{{
+			"name": "story",
+			"states": []map[string]any{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name": "executor",
+			"type": workerType,
+		}},
+		"workstations": []map[string]any{workstation},
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	return data
 }

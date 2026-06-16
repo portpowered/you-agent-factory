@@ -1,4 +1,4 @@
-package apiserver_test
+package taxonomyvalidationtests_test
 
 import (
 	"bytes"
@@ -8,8 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	api "github.com/portpowered/infinite-you/pkg/api"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"go.uber.org/zap"
 )
 
 func TestValidateFactory_ReturnsTaxonomyCompatibilityTargets(t *testing.T) {
@@ -43,6 +45,11 @@ func TestValidateFactory_ReturnsTaxonomyCompatibilityTargets(t *testing.T) {
 	if !strings.Contains(target.Message, "agent-run") || !strings.Contains(target.Message, "INFERENCE_WORKER") {
 		t.Fatalf("target message = %q, want agent-run and INFERENCE_WORKER terminology", target.Message)
 	}
+}
+
+func newAPITestServer(f *testutil.MockFactory) *api.Server {
+	logger, _ := zap.NewDevelopment()
+	return api.NewServer(f, 8080, logger)
 }
 
 const taxonomyMismatchFactoryValidationBody = `{

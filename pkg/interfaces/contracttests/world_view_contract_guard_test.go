@@ -1,4 +1,4 @@
-package worldviewtests
+package contracttests
 
 import (
 	"reflect"

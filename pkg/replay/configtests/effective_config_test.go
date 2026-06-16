@@ -311,7 +311,7 @@ func assertReplayInitialTopologyProjection(t *testing.T, replayProjection interf
 		Provider:      "script_wrap",
 		ModelProvider: "codex",
 		Model:         "gpt-5.4",
-		Config:        map[string]string{"type": interfaces.WorkerTypeModel},
+		Config:        map[string]string{"type": interfaces.WorkerTypeAgent},
 	})
 	assertProjectedConstraint(t, replayProjection, interfaces.FactoryConstraint{
 		ID:    "workstation/execute-story/limits",

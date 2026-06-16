@@ -50,7 +50,7 @@ func TestFactoryEventHistory_RecordInitialStructure_UsesRuntimeConfigProjection(
 	worker := (*payload.Factory.Workers)[0]
 	if worker.Name != "builder" || stringValueForEventHistoryTest(worker.ExecutorProvider) != "SCRIPT_WRAP" ||
 		stringValueForEventHistoryTest(worker.ModelProvider) != "CODEX" ||
-		stringValueForEventHistoryTest(worker.Type) != string(factoryapi.WorkerTypeModelWorker) ||
+		stringValueForEventHistoryTest(worker.Type) != string(factoryapi.WorkerTypeInferenceWorker) ||
 		stringValueForEventHistoryTest(worker.Model) != "gpt-5.4" {
 		t.Fatalf("worker metadata = %#v, want runtime-config provider/model metadata", worker)
 	}

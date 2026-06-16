@@ -11,12 +11,15 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
@@ -1183,73 +1186,6 @@ You are a helpful assistant.
 	}
 }
 
-func TestLoadWorkersFromConfig_AgentWorkerUsesAgentExecutorPath(t *testing.T) {
-	dir := t.TempDir()
-
-	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
-type: AGENT_WORKER
-model: gpt-5.4
-executorProvider: script_wrap
-modelProvider: codex
-stopToken: COMPLETE
----
-You are a helpful assistant.
-`)
-	writeWorkstationAgentsMD(t, dir, "review")
-
-	reviewWorkstation := mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review"))
-	reviewWorkstation.Type = interfaces.WorkstationTypeAgent
-
-	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
-		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review", Type: interfaces.WorkstationTypeAgent}},
-		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
-	},
-		map[string]*interfaces.WorkerConfig{
-			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
-		},
-		map[string]*interfaces.FactoryWorkstationConfig{
-			"review": reviewWorkstation,
-		},
-	)
-
-	opts, err := loadWorkersFromConfigForServiceTest(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, nil, nil, nil, nil, nil)
-	if err != nil {
-		t.Fatalf("loadWorkersFromConfig: %v", err)
-	}
-
-	fc := &factory.FactoryConfig{}
-	for _, opt := range opts {
-		opt(fc)
-	}
-
-	exec, ok := fc.WorkerExecutors["worker-a"]
-	if !ok {
-		t.Fatal("expected worker-a executor to be registered")
-	}
-	wsExec, ok := exec.(*workers.WorkstationExecutor)
-	if !ok {
-		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
-	}
-	if _, ok := wsExec.Executor.(*workers.AgentExecutor); !ok {
-		t.Fatalf("expected wrapped executor to be *workers.AgentExecutor, got %T", wsExec.Executor)
-	}
-
-	workerDef, ok := wsExec.RuntimeConfig.Worker("worker-a")
-	if !ok {
-		t.Fatal("expected worker-a in runtime config")
-	}
-	if workerDef.Type != interfaces.WorkerTypeAgent {
-		t.Fatalf("worker type = %q, want %q", workerDef.Type, interfaces.WorkerTypeAgent)
-	}
-	workstationDef, ok := wsExec.RuntimeConfig.Workstation("review")
-	if !ok {
-		t.Fatal("expected review workstation in runtime config")
-	}
-	if workstationDef.Type != interfaces.WorkstationTypeAgent {
-		t.Fatalf("workstation type = %q, want %q", workstationDef.Type, interfaces.WorkstationTypeAgent)
-	}
-}
-
 func TestLoadWorkersFromConfig_ModelWorkerUsesCanonicalProviderCommandRunnerAndRecordingProvider(t *testing.T) {
 	dir := t.TempDir()
 
@@ -2126,260 +2062,218 @@ func generatedAudioFileValue(file *factoryapi.WorkContentDeprecatedFileProperty)
 	}
 	return string(*file)
 }
-type inferenceRuntimeTaxonomyCase struct {
-	name            string
-	workerType      string
-	workstationType string
-}
-
-func inferenceRuntimeTaxonomyCases() []inferenceRuntimeTaxonomyCase {
-	return []inferenceRuntimeTaxonomyCase{
-		{
-			name:            "inference worker and run",
-			workerType:      interfaces.WorkerTypeInference,
-			workstationType: interfaces.WorkstationTypeInference,
-		},
-		{
-			name:            "legacy model worker and invoke",
-			workerType:      interfaces.WorkerTypeModel,
-			workstationType: interfaces.WorkstationTypeInvoke,
-		},
-	}
-}
-
-func TestInferenceRuntimeTaxonomy_ExecutesBoundedInferenceWithCanonicalEvents(t *testing.T) {
+func TestWorkerWorkstationTaxonomyRuntime_InferencePairingExecutesLikeLegacyModelInvoke(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range inferenceRuntimeTaxonomyCases() {
-		t.Run(tc.name, func(t *testing.T) {
+	tests := []struct {
+		name                   string
+		publicWorkerType       string
+		publicWorkstationType  string
+		wantRuntimeWorkerType  string
+		wantRuntimeWorkstation string
+	}{
+		{
+			name:                   "inference taxonomy",
+			publicWorkerType:       interfaces.WorkerTypeInference,
+			publicWorkstationType:    interfaces.WorkstationTypeInference,
+			wantRuntimeWorkerType:  interfaces.WorkerTypeModel,
+			wantRuntimeWorkstation: interfaces.WorkstationTypeInvoke,
+		},
+		{
+			name:                   "legacy model invoke",
+			publicWorkerType:       interfaces.WorkerTypeModel,
+			publicWorkstationType:  interfaces.WorkstationTypeInvoke,
+			wantRuntimeWorkerType:  interfaces.WorkerTypeModel,
+			wantRuntimeWorkstation: interfaces.WorkstationTypeInvoke,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			provider, wsExec := inferenceTaxonomyExecutionFixture(t, tc.workerType, tc.workstationType)
+
+			cfg := mustTaxonomyRuntimeFactoryConfigFromOpenAPI(
+				t,
+				tt.publicWorkerType,
+				tt.publicWorkstationType,
+				tt.wantRuntimeWorkerType,
+				tt.wantRuntimeWorkstation,
+			)
+			provider, wsExec := taxonomyModelInvokeExecutionFixtureFromRuntimeConfig(t, cfg)
+
 			result, err := wsExec.Execute(context.Background(), modelInvokeDispatch())
 			if err != nil {
 				t.Fatalf("Execute: %v", err)
 			}
-			assertInferenceRunExecutionResult(t, result, provider.Calls())
+			if result.Outcome != interfaces.OutcomeAccepted {
+				t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+			}
+			assertModelInvokeProviderCall(t, provider.Calls(), "gpt-4o-mini-tts", interfaces.ModelLocalityCloud)
 		})
 	}
 }
 
-func TestInferenceRuntimeTaxonomy_InferenceWorkerEmitsCanonicalInferenceEvents(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range inferenceRuntimeTaxonomyCases() {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			recorded := inferenceWorkerInferenceEventsFixture(t, tc.workerType)
-			assertRecordedInferenceEvents(t, recorded)
-		})
-	}
-}
-
-func TestInferenceRuntimeTaxonomy_ModernAndLegacyProduceEquivalentResultShape(t *testing.T) {
-	t.Parallel()
-
-	modernProvider, modernExec := inferenceTaxonomyExecutionFixture(
-		t,
-		interfaces.WorkerTypeInference,
-		interfaces.WorkstationTypeInference,
-	)
-	legacyProvider, legacyExec := inferenceTaxonomyExecutionFixture(
-		t,
-		interfaces.WorkerTypeModel,
-		interfaces.WorkstationTypeInvoke,
-	)
-
-	modernResult, err := modernExec.Execute(context.Background(), modelInvokeDispatch())
-	if err != nil {
-		t.Fatalf("modern Execute: %v", err)
-	}
-	legacyResult, err := legacyExec.Execute(context.Background(), modelInvokeDispatch())
-	if err != nil {
-		t.Fatalf("legacy Execute: %v", err)
-	}
-
-	assertInferenceRunResultShapeEqual(t, modernResult, legacyResult)
-	assertInferenceProviderCallShapeEqual(t, modernProvider.Calls(), legacyProvider.Calls())
-}
-
-func TestInferenceRuntimeTaxonomy_OmniVoicePackagedFactoryUsesInferenceBehavior(t *testing.T) {
-	t.Parallel()
-
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInTTSFactoryJSON)
-	if err != nil {
-		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
-	}
-	if len(cfg.Workers) != 1 || len(cfg.Workstations) != 1 {
-		t.Fatalf("workers/workstations = %d/%d, want 1/1", len(cfg.Workers), len(cfg.Workstations))
-	}
-
-	worker := cfg.Workers[0]
-	workstation := cfg.Workstations[0]
-	if !interfaces.IsInferenceWorkerType(worker.Type) {
-		t.Fatalf("worker type %q is not accepted inference-worker behavior", worker.Type)
-	}
-	if interfaces.ProjectWorkerBehaviorClass(worker.Type) != interfaces.WorkerTypeInference {
-		t.Fatalf("worker behavior class = %q, want %q", interfaces.ProjectWorkerBehaviorClass(worker.Type), interfaces.WorkerTypeInference)
-	}
-	if !interfaces.IsInferenceRunWorkstationType(workstation.Type) {
-		t.Fatalf("workstation type %q is not accepted inference-run behavior", workstation.Type)
-	}
-	if interfaces.ProjectWorkstationBehaviorClass(workstation.Type, workstation.Kind) != interfaces.WorkstationTypeInference {
-		t.Fatalf("workstation behavior class = %q, want %q", interfaces.ProjectWorkstationBehaviorClass(workstation.Type, workstation.Kind), interfaces.WorkstationTypeInference)
-	}
-	if strings.TrimSpace(worker.StopToken) != "" || strings.TrimSpace(worker.OpenCodeAgent) != "" {
-		t.Fatalf("omnivoice worker = %#v, want inference behavior without agent-loop fields", worker)
-	}
-	if !tts.ShouldFormatInvocationMetadata(&workstation) {
-		t.Fatal("packaged invoke workstation should format inference-run TTS metadata")
-	}
-
-	validation := factoryconfig.NewConfigValidator().Validate(cfg)
-	for _, finding := range validation.Findings {
-		if finding.Rule == "workstation-worker-behavior-compatibility" {
-			t.Fatalf("packaged omnivoice factory should validate, got %+v", finding)
-		}
-	}
-
-	provider, wsExec := inferenceTaxonomyExecutionFixture(
-		t,
-		worker.Type,
-		workstation.Type,
-	)
-	result, err := wsExec.Execute(context.Background(), modelInvokeDispatch())
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	assertInferenceRunExecutionResult(t, result, provider.Calls())
-}
-
-func TestInferenceRuntimeTaxonomy_InferenceWorkerRoutesOmniVoiceThroughManagedRuntime(t *testing.T) {
+func TestWorkerWorkstationTaxonomyRuntime_OmniVoiceInferenceExecutesWithoutAgentLoopFields(t *testing.T) {
 	t.Parallel()
 
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
-	provider := &providerCallRecorder{}
 	runtime := &fakeLocalModelRuntime{
 		response: interfaces.InferenceResponse{
 			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
-
-	worker := modelInvokeLocalManagedRuntimeWorker()
-	worker.Type = interfaces.WorkerTypeInference
-	workstation := modelInvokeWorkstationConfig()
-	workstation.Type = interfaces.WorkstationTypeInference
-
-	factoryCfg := localModelFactoryConfig()
-	cache := localModelTestCacheLayout(t)
-	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, map[string]*interfaces.WorkerConfig{
-		"tts-worker": worker,
-	}, map[string]*interfaces.FactoryWorkstationConfig{
-		"speak": workstation,
-	})
-
-	opts, err := loadWorkersFromConfig(
-		"",
-		factoryCfg,
-		"",
-		runtimeCfg,
-		nil,
-		logging.NoopLogger{},
-		true,
-		provider,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		newLocalModelResourceLimiter(),
-		newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+	cfg := mustTaxonomyRuntimeFactoryConfigFromOpenAPI(
+		t,
+		interfaces.WorkerTypeInference,
+		interfaces.WorkstationTypeInference,
+		interfaces.WorkerTypeModel,
+		interfaces.WorkstationTypeInvoke,
 	)
-	if err != nil {
-		t.Fatalf("loadWorkersFromConfig: %v", err)
-	}
-
-	fc := &factory.FactoryConfig{}
-	for _, opt := range opts {
-		opt(fc)
-	}
-	exec, ok := fc.WorkerExecutors["tts-worker"]
-	if !ok {
-		t.Fatal("expected tts-worker executor to be registered")
-	}
-	wsExec, ok := exec.(*workers.WorkstationExecutor)
-	if !ok {
-		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
-	}
+	wsExec := taxonomyOmniVoiceInferenceWorkstationExecutor(t, runtime, cfg)
 
 	result, err := wsExec.Execute(context.Background(), modelInvokeDispatch())
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("outcome = %s error = %q, want %s", result.Outcome, result.Error, interfaces.OutcomeAccepted)
+		t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
 	}
 	assertModelInvokeAcceptedAudioOutput(t, result.Output, audioPath)
 	if runtime.invocationCount() != 1 {
-		t.Fatalf("managed runtime invocation count = %d, want 1", runtime.invocationCount())
+		t.Fatalf("managed runtime invocation count = %d, want 1 bounded inference operation", runtime.invocationCount())
 	}
-	if calls := provider.Calls(); len(calls) != 0 {
-		t.Fatalf("provider calls = %#v, want inference worker to bypass cloud provider path", calls)
+	invocations := runtime.invocationRequests()
+	if len(invocations) != 1 {
+		t.Fatalf("invocation requests = %d, want 1", len(invocations))
 	}
-	assertManagedRuntimeModelInvokeInvocation(t, runtime.invocationRequests(), interfaces.ModelLocalityLocal)
+	request := invocations[0].Request
+	if request.ModelOperation != "TTS" {
+		t.Fatalf("model operation = %q, want TTS inference operation", request.ModelOperation)
+	}
+	if strings.TrimSpace(request.OpenCodeAgent) != "" {
+		t.Fatalf("open code agent = %q, want empty for inference-run execution", request.OpenCodeAgent)
+	}
+	if request.Model != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("model = %q, want OMNIVOICE_Q4_K_M inference model identity", request.Model)
+	}
+	if request.ModelLocality != interfaces.ModelLocalityLocal {
+		t.Fatalf("model locality = %q, want %q", request.ModelLocality, interfaces.ModelLocalityLocal)
+	}
+	if len(request.ModelBindings) != 1 || request.ModelBindings[0].Slot != "text" {
+		t.Fatalf("model bindings = %#v, want one resolved text input binding", request.ModelBindings)
+	}
 }
 
-func TestInferenceRuntimeTaxonomy_AgentRunRejectsInferenceWorkerBeforeDispatch(t *testing.T) {
+func TestWorkerWorkstationTaxonomyRuntime_InferenceTaxonomyRecordsModelExecutionEvents(t *testing.T) {
 	t.Parallel()
 
-	cfg := omnivoiceInferenceFactoryConfig()
-	cfg.Workstations[0].Type = interfaces.WorkstationTypeAgent
-
-	validation := factoryconfig.NewConfigValidator().Validate(cfg)
-	var matched bool
-	for _, finding := range validation.Findings {
-		if finding.Rule != "workstation-worker-behavior-compatibility" {
-			continue
-		}
-		if !strings.Contains(finding.Path, "workstations[0]") {
-			continue
-		}
-		if !strings.Contains(strings.ToLower(finding.Message), "agent-run") {
-			continue
-		}
-		if !strings.Contains(strings.ToLower(finding.Message), "inference") {
-			continue
-		}
-		matched = true
-		break
+	eventTime := taxonomyRuntimeEventTime()
+	audioPath := filepath.Join(t.TempDir(), "speech.wav")
+	runtime := &fakeLocalModelRuntime{
+		response: interfaces.InferenceResponse{
+			Content: mustMarshalAudioContentResponse(t, audioPath),
+		},
 	}
-	if !matched {
-		t.Fatalf("findings = %#v, want agent-run/inference compatibility finding before dispatch", validation.Findings)
+	cfg := mustTaxonomyRuntimeFactoryConfigFromOpenAPI(
+		t,
+		interfaces.WorkerTypeInference,
+		interfaces.WorkstationTypeInference,
+		interfaces.WorkerTypeModel,
+		interfaces.WorkstationTypeInvoke,
+	)
+	wsExec, history := taxonomyOmniVoiceInferenceWorkstationExecutorWithEvents(t, runtime, cfg, eventTime)
+
+	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "dispatch-taxonomy-inference",
+		TransitionID:    "transition-taxonomy-inference",
+		WorkerType:      "tts-worker",
+		WorkstationName: "speak",
+		Execution: interfaces.ExecutionMetadata{
+			CurrentTick: 2,
+			RequestID:   "request-taxonomy-inference",
+			TraceID:     "trace-taxonomy-inference",
+			WorkIDs:     []string{"work-taxonomy-inference"},
+		},
+		InputTokens: modelInvokeDispatch().InputTokens,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	assertRecordedLocalModelExecutionEvents(t, history.Events(), audioPath)
+}
+
+func TestWorkerWorkstationTaxonomyRuntime_AgentRunWithInferenceWorkerFailsValidationBeforeDispatch(t *testing.T) {
+	t.Parallel()
+
+	generated := taxonomyRuntimeIncompatibleInferenceWorkerAgentRunFactory()
+
+	result, err := validationentry.ValidateFactoryAPI(context.Background(), generated, factoryvalidation.Options{})
+	if err != nil {
+		t.Fatalf("ValidateFactoryAPI: %v", err)
+	}
+	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeWorkerWorkstationBehaviorCompatibility)
+	target := taxonomyRuntimeFindTargetByCode(t, result.Targets, factoryvalidation.CodeWorkerWorkstationBehaviorCompatibility)
+	if !strings.Contains(target.Message, interfaces.WorkstationTypeAgent) {
+		t.Fatalf("message %q missing workstation type %q", target.Message, interfaces.WorkstationTypeAgent)
+	}
+	if !strings.Contains(target.Message, interfaces.WorkerTypeInference) {
+		t.Fatalf("message %q missing worker type %q", target.Message, interfaces.WorkerTypeInference)
 	}
 }
 
-func inferenceTaxonomyExecutionFixture(
+func mustTaxonomyRuntimeFactoryConfigFromOpenAPI(
 	t *testing.T,
-	workerType string,
-	workstationType string,
+	publicWorkerType string,
+	publicWorkstationType string,
+	wantRuntimeWorkerType string,
+	wantRuntimeWorkstationType string,
+) *interfaces.FactoryConfig {
+	t.Helper()
+
+	generated, err := factoryconfig.GeneratedFactoryFromOpenAPIJSON(
+		taxonomyRuntimeModelInvokeFactoryJSON(publicWorkerType, publicWorkstationType),
+	)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+	if len(cfg.Workers) != 1 {
+		t.Fatalf("workers = %#v, want one worker", cfg.Workers)
+	}
+	if cfg.Workers[0].Type != wantRuntimeWorkerType {
+		t.Fatalf("runtime worker type = %q, want %q", cfg.Workers[0].Type, wantRuntimeWorkerType)
+	}
+	if len(cfg.Workstations) != 1 {
+		t.Fatalf("workstations = %#v, want one workstation", cfg.Workstations)
+	}
+	if cfg.Workstations[0].Type != wantRuntimeWorkstationType {
+		t.Fatalf("runtime workstation type = %q, want %q", cfg.Workstations[0].Type, wantRuntimeWorkstationType)
+	}
+	return &cfg
+}
+
+func taxonomyModelInvokeExecutionFixtureFromRuntimeConfig(
+	t *testing.T,
+	cfg *interfaces.FactoryConfig,
 ) (*providerCallRecorder, *workers.WorkstationExecutor) {
 	t.Helper()
 
 	provider := &providerCallRecorder{responses: []interfaces.InferenceResponse{{Content: "audio-ready"}}}
-
-	factoryCfg := &interfaces.FactoryConfig{
-		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "speak", WorkerTypeName: "tts-worker"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "tts-worker"}},
-	}
-	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg,
-		map[string]*interfaces.WorkerConfig{
-			"tts-worker": inferenceTaxonomyRuntimeWorker(workerType),
-		},
-		map[string]*interfaces.FactoryWorkstationConfig{
-			"speak": inferenceTaxonomyRuntimeWorkstation(workstationType),
-		},
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(
+		t,
+		"",
+		cfg,
+		map[string]*interfaces.WorkerConfig{"tts-worker": taxonomyRuntimeModelInvokeWorker(cfg.Workers[0].Type)},
+		map[string]*interfaces.FactoryWorkstationConfig{"speak": taxonomyRuntimeModelInvokeWorkstation(cfg.Workstations[0].Type)},
 	)
-	opts, err := loadWorkersFromConfigForServiceTest("", factoryCfg, "", runtimeCfg, provider, nil, nil, nil, nil)
+	opts, err := loadWorkersFromConfigForServiceTest("", cfg, "", runtimeCfg, provider, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -2399,46 +2293,50 @@ func inferenceTaxonomyExecutionFixture(
 	return provider, wsExec
 }
 
-func inferenceWorkerInferenceEventsFixture(t *testing.T, workerType string) []factoryapi.FactoryEvent {
+func taxonomyOmniVoiceInferenceWorkstationExecutor(
+	t *testing.T,
+	runtime *fakeLocalModelRuntime,
+	cfg *interfaces.FactoryConfig,
+) *workers.WorkstationExecutor {
 	t.Helper()
 
-	dir := t.TempDir()
-	writeWorkerAgentsMDWithContent(t, dir, "worker-a", strings.TrimSpace(`
----
-type: `+workerType+`
-model: gpt-5.4
-executorProvider: script_wrap
-modelProvider: codex
-stopToken: COMPLETE
----
-You are a helpful assistant.
-`))
-	writeWorkstationAgentsMD(t, dir, "review")
+	wsExec, _ := taxonomyOmniVoiceInferenceWorkstationExecutorWithEvents(t, runtime, cfg, taxonomyRuntimeEventTime())
+	return wsExec
+}
 
-	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
-		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
-	},
-		map[string]*interfaces.WorkerConfig{
-			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
-		},
-		map[string]*interfaces.FactoryWorkstationConfig{
-			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
-		},
+func taxonomyOmniVoiceInferenceWorkstationExecutorWithEvents(
+	t *testing.T,
+	runtime *fakeLocalModelRuntime,
+	cfg *interfaces.FactoryConfig,
+	eventTime time.Time,
+) (*workers.WorkstationExecutor, *factoryevents.FactoryEventHistory) {
+	t.Helper()
+
+	cache := localModelTestCacheLayout(t)
+	factoryCfg := localModelFactoryConfig()
+	runtimeWorkers := localModelRuntimeWorkers()
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, runtimeWorkers, map[string]*interfaces.FactoryWorkstationConfig{
+		"speak": taxonomyRuntimeModelInvokeWorkstation(cfg.Workstations[0].Type),
+	})
+	history := factoryevents.NewFactoryEventHistory(nil, func() time.Time { return eventTime }, runtimeCfg)
+	opts, err := loadWorkersFromConfig(
+		"",
+		factoryCfg,
+		"",
+		runtimeCfg,
+		nil,
+		logging.NoopLogger{},
+		true,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		history.RecordModelEvent,
+		func() time.Time { return eventTime },
+		newLocalModelResourceLimiter(),
+		newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
 	)
-
-	runner := &providerCommandRunnerRecorder{
-		result: workers.CommandResult{
-			Stdout: []byte("provider-output COMPLETE"),
-			Stderr: []byte(`{"event":"session.created","session_id":"sess_codex_123"}`),
-		},
-	}
-	recorded := make([]factoryapi.FactoryEvent, 0, 2)
-	recorder := func(event factoryapi.FactoryEvent) {
-		recorded = append(recorded, event)
-	}
-
-	opts, err := loadWorkersFromConfigForServiceTest(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, nil, runner, nil, nil, recorder)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
 	}
@@ -2447,98 +2345,150 @@ You are a helpful assistant.
 	for _, opt := range opts {
 		opt(fc)
 	}
-	exec, ok := fc.WorkerExecutors["worker-a"]
+	exec, ok := fc.WorkerExecutors["tts-worker"]
 	if !ok {
-		t.Fatal("expected worker-a executor to be registered")
+		t.Fatal("expected tts-worker executor to be registered")
 	}
 	wsExec, ok := exec.(*workers.WorkstationExecutor)
 	if !ok {
 		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
 	}
+	return wsExec, history
+}
 
-	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
-		DispatchID:      "dispatch-inference-taxonomy",
-		TransitionID:    "transition-inference-taxonomy",
-		WorkerType:      "worker-a",
-		WorkstationName: "review",
-		InputTokens: workers.InputTokens(interfaces.Token{
-			ID: "token-inference-taxonomy",
-			Color: interfaces.TokenColor{
-				WorkID:  "work-inference-taxonomy",
-				Payload: []byte("helpful input"),
+func taxonomyRuntimeModelInvokeFactoryJSON(workerType, workstationType string) []byte {
+	payload := map[string]any{
+		"name": "taxonomy-runtime-factory",
+		"workTypes": []map[string]any{{
+			"name": "speech",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
 			},
-		}),
-	})
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
+		}},
+		"workers": []map[string]any{{
+			"name":          "tts-worker",
+			"type":          workerType,
+			"model":         "gpt-4o-mini-tts",
+			"modelProvider": "CODEX",
+			"modelLocality": interfaces.ModelLocalityCloud,
+			"operations": []map[string]any{{
+				"name": "TTS",
+				"inputs": []map[string]any{
+					{
+						"name":         "text",
+						"contentTypes": []string{interfaces.ModelOperationContentTypeText},
+						"required":     true,
+					},
+					{
+						"name":         "voice",
+						"contentTypes": []string{interfaces.ModelOperationContentTypeJSON},
+					},
+				},
+				"outputs": []map[string]any{{
+					"name":         "audio",
+					"contentTypes": []string{interfaces.ModelOperationContentTypeAudio},
+				}},
+			}},
+		}},
+		"workstations": []map[string]any{{
+			"name":      "speak",
+			"type":      workstationType,
+			"worker":    "tts-worker",
+			"operation": "TTS",
+			"operationBindings": []map[string]any{
+				{
+					"slot": "text",
+					"selector": map[string]any{
+						"label": "utterance",
+						"type":  interfaces.ModelOperationContentTypeText,
+					},
+				},
+				{
+					"slot": "voice",
+					"config": []map[string]any{{
+						"type": interfaces.WorkContentPartTypeJSON,
+						"role": "voice",
+						"json": map[string]string{"name": "alloy"},
+					}},
+				},
+			},
+			"inputs":    []map[string]string{{"workType": "speech", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "speech", "state": "complete"}},
+			"onFailure": []map[string]string{{"workType": "speech", "state": "failed"}},
+		}},
 	}
-	assertCanonicalModelWorkerExecutionResult(t, result)
-	return recorded
-}
-
-func inferenceTaxonomyRuntimeWorker(workerType string) *interfaces.WorkerConfig {
-	worker := modelInvokeRuntimeWorker("OMNIVOICE_Q4_K_M", interfaces.ModelLocalityLocal)
-	worker.Type = workerType
-	return worker
-}
-
-func inferenceTaxonomyRuntimeWorkstation(workstationType string) *interfaces.FactoryWorkstationConfig {
-	workstation := modelInvokeWorkstationConfig()
-	workstation.Type = workstationType
-	return workstation
-}
-
-func omnivoiceInferenceFactoryConfig() *interfaces.FactoryConfig {
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInTTSFactoryJSON)
+	data, err := json.Marshal(payload)
 	if err != nil {
 		panic(err)
 	}
-	return cfg
+	return data
 }
 
-func assertInferenceRunExecutionResult(t *testing.T, result interfaces.WorkResult, calls []interfaces.ProviderInferenceRequest) {
-	t.Helper()
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
-	}
-	if len(calls) != 1 {
-		t.Fatalf("provider calls = %d, want one bounded inference operation", len(calls))
-	}
-	if calls[0].ModelOperation != "TTS" {
-		t.Fatalf("model operation = %q, want TTS", calls[0].ModelOperation)
+func taxonomyRuntimeModelInvokeWorker(runtimeWorkerType string) *interfaces.WorkerConfig {
+	worker := modelInvokeRuntimeWorker("gpt-4o-mini-tts", interfaces.ModelLocalityCloud)
+	worker.Type = runtimeWorkerType
+	return worker
+}
+
+func taxonomyRuntimeModelInvokeWorkstation(runtimeWorkstationType string) *interfaces.FactoryWorkstationConfig {
+	workstation := modelInvokeWorkstationConfig()
+	workstation.Type = runtimeWorkstationType
+	return workstation
+}
+
+func taxonomyRuntimeEventTime() time.Time {
+	return time.Date(2026, time.June, 11, 18, 0, 0, 0, time.UTC)
+}
+
+func taxonomyRuntimeIncompatibleInferenceWorkerAgentRunFactory() factoryapi.Factory {
+	workerType := factoryapi.WorkerTypeInferenceWorker
+	workstationType := factoryapi.WorkstationTypeAgentRun
+	modelProvider := factoryapi.WorkerModelProviderCodex
+	return factoryapi.Factory{
+		Name: "taxonomy-runtime-factory",
+		WorkTypes: &[]factoryapi.WorkType{{
+			Name: "speech",
+			States: []factoryapi.WorkState{
+				{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+				{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+				{Name: "failed", Type: factoryapi.WorkStateTypeFAILED},
+			},
+		}},
+		Workers: &[]factoryapi.Worker{{
+			Name:          "tts-worker",
+			Type:          &workerType,
+			Model:         stringPtr("gpt-4o-mini-tts"),
+			ModelProvider: &modelProvider,
+		}},
+		Workstations: &[]factoryapi.Workstation{{
+			Name:   "speak",
+			Type:   &workstationType,
+			Worker: "tts-worker",
+			Inputs: []factoryapi.WorkstationIO{{
+				WorkType: "speech",
+				State:    "init",
+			}},
+			Outputs: &[]factoryapi.WorkstationIO{{
+				WorkType: "speech",
+				State:    "complete",
+			}},
+			OnFailure: &[]factoryapi.WorkstationIO{{
+				WorkType: "speech",
+				State:    "failed",
+			}},
+		}},
 	}
 }
 
-func assertInferenceRunResultShapeEqual(t *testing.T, left, right interfaces.WorkResult) {
+func taxonomyRuntimeFindTargetByCode(t *testing.T, targets []factoryvalidation.Target, code string) factoryvalidation.Target {
 	t.Helper()
-	if left.Outcome != right.Outcome {
-		t.Fatalf("outcome mismatch: left=%s right=%s", left.Outcome, right.Outcome)
-	}
-	if left.Error != right.Error {
-		t.Fatalf("error mismatch: left=%q right=%q", left.Error, right.Error)
-	}
-	if left.Output != right.Output {
-		t.Fatalf("output mismatch: left=%q right=%q", left.Output, right.Output)
-	}
-}
-
-func assertInferenceProviderCallShapeEqual(t *testing.T, left, right []interfaces.ProviderInferenceRequest) {
-	t.Helper()
-	if len(left) != len(right) {
-		t.Fatalf("call count mismatch: left=%d right=%d", len(left), len(right))
-	}
-	for i := range left {
-		if left[i].Model != right[i].Model {
-			t.Fatalf("call[%d] model mismatch: left=%q right=%q", i, left[i].Model, right[i].Model)
-		}
-		if left[i].ModelLocality != right[i].ModelLocality {
-			t.Fatalf("call[%d] locality mismatch: left=%q right=%q", i, left[i].ModelLocality, right[i].ModelLocality)
-		}
-		if left[i].ModelOperation != right[i].ModelOperation {
-			t.Fatalf("call[%d] operation mismatch: left=%q right=%q", i, left[i].ModelOperation, right[i].ModelOperation)
-		}
-		if len(left[i].ModelBindings) != len(right[i].ModelBindings) {
-			t.Fatalf("call[%d] binding count mismatch: left=%d right=%d", i, len(left[i].ModelBindings), len(right[i].ModelBindings))
+	for _, target := range targets {
+		if target.Code == code {
+			return target
 		}
 	}
+	t.Fatalf("target with code %q not found in %#v", code, targets)
+	return factoryvalidation.Target{}
 }

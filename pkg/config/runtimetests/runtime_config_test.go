@@ -361,7 +361,7 @@ Execute {{ .WorkID }}.
 	if !ok {
 		t.Fatal("expected executor worker definition")
 	}
-	if workerDef.Type != interfaces.WorkerTypeModel || workerDef.Model != "claude-sonnet-4-20250514" {
+	if workerDef.Type != interfaces.WorkerTypeAgent || workerDef.Model != "claude-sonnet-4-20250514" {
 		t.Fatalf("worker type/model = %#v", workerDef)
 	}
 	if workerDef.ModelProvider != "claude" || workerDef.ExecutorProvider != "script_wrap" {

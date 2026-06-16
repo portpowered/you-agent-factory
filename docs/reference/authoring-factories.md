@@ -344,9 +344,10 @@ factory.
 
 ## Author A Model-Operation TTS Factory
 
-Use `INFERENCE_RUN` when the workstation should request a generic operation such
-as `TTS` and let worker capability plus typed resources decide whether the
-execution is local or cloud-backed.
+Use `INFERENCE_RUN` when the workstation should request a generic operation
+such as `TTS` and let worker capability plus typed resources decide whether the
+execution is local or cloud-backed. Legacy `MODEL_INVOKE` remains accepted
+during the migration window.
 
 ### Shared workstation contract
 
@@ -434,7 +435,7 @@ This workstation stays the same for both local and cloud TTS:
 
 ```yaml
 ---
-type: AGENT_WORKER
+type: INFERENCE_WORKER
 model: OMNIVOICE_Q4_K_M
 modelProvider: CODEX
 modelLocality: LOCAL
@@ -484,7 +485,7 @@ Reuse the same workstation and change the resources plus worker:
 
 ```yaml
 ---
-type: AGENT_WORKER
+type: INFERENCE_WORKER
 model: gpt-4o-mini-tts
 modelProvider: CODEX
 modelLocality: CLOUD
@@ -575,8 +576,8 @@ Choose the poller worker type this way:
 - Use a `SCRIPT_WORKER` poller when you already have custom integration logic
   in a script.
 - Use a `POLLER_WORKER` poller when the repository already ships the provider
-  integration, such as the built-in `LINEAR` poller. `HOSTED_WORKER` remains an
-  accepted compatibility alias.
+  integration, such as the built-in `LINEAR` poller. Legacy `HOSTED_WORKER`
+  remains accepted during the migration window.
 
 Keep the exact contracts on the canonical owner pages:
 

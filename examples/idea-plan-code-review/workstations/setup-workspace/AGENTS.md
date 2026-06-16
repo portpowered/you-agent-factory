@@ -1,5 +1,5 @@
 ---
-type: SCRIPT_RUN
+type: AGENT_RUN
 limits:
   maxExecutionTime: 10m
 ---

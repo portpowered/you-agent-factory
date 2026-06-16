@@ -7118,12 +7118,12 @@ components:
         - MODEL_WORKER
         - HOSTED_WORKER
       x-enum-descriptions:
-        - Inference worker that performs one bounded model operation such as chat, TTS, embeddings, transcription, or image generation.
-        - Agent worker reserved for agent-loop execution that may plan, call tools, and decide completion.
+        - Inference worker that performs one bounded model operation through the configured provider or managed runtime.
+        - Agent worker reserved for future agent-loop execution; not used for harnessless inference calls.
         - Script-backed worker that executes a configured command instead of calling a model provider.
-        - Poller worker that runs long-lived ingress polling work through repository-owned runtime code.
-        - Legacy compatibility alias for inference-worker behavior during the runtime taxonomy migration window.
-        - Legacy compatibility alias for poller-worker behavior during the runtime taxonomy migration window.
+        - Poller worker that watches an external source and emits work through repository-owned hosted runtime code.
+        - Legacy alias for inference-worker behavior during the migration window.
+        - Legacy alias for poller-worker behavior during the migration window.
     WorkerModelProvider:
       type: string
       description: Canonical model-provider identifiers supported by model workers in factory config.
@@ -7444,8 +7444,8 @@ components:
         - Agent-run workstation reserved for future agent-loop execution that renders prompts and dispatches through an agent worker.
         - Script-run workstation that executes deterministic command or script behavior through a script worker.
         - Poller-run workstation that supervises ingress polling through a poller worker.
-        - Legacy alias for agent-run behavior during the runtime taxonomy migration window.
-        - Legacy alias for inference-run behavior during the runtime taxonomy migration window.
+        - Legacy alias for agent-run behavior during the migration window.
+        - Legacy alias for inference-run behavior during the migration window.
         - Logical pass-through workstation used for routing and guarded loop-breaker transitions without model execution.
         - Label-based classifier workstation that returns one plain string label and routes through classificationRoutes.
     WorkstationCron:

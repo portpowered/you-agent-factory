@@ -6506,17 +6506,17 @@ export const ResourceType = {
 } as const;
 export type ResourceType = (typeof ResourceType)[keyof typeof ResourceType];
 export const WorkerType = {
-  // Inference worker that performs one bounded model operation such as chat, TTS, embeddings, transcription, or image generation.
+  // Inference worker that performs one bounded model operation through the configured provider or managed runtime.
   WorkerTypeInferenceWorker: "INFERENCE_WORKER",
-  // Agent worker reserved for agent-loop execution that may plan, call tools, and decide completion.
+  // Agent worker reserved for future agent-loop execution; not used for harnessless inference calls.
   WorkerTypeAgentWorker: "AGENT_WORKER",
   // Script-backed worker that executes a configured command instead of calling a model provider.
   WorkerTypeScriptWorker: "SCRIPT_WORKER",
-  // Poller worker that runs long-lived ingress polling work through repository-owned runtime code.
+  // Poller worker that watches an external source and emits work through repository-owned hosted runtime code.
   WorkerTypePollerWorker: "POLLER_WORKER",
-  // Legacy compatibility alias for inference-worker behavior during the runtime taxonomy migration window.
+  // Legacy alias for inference-worker behavior during the migration window.
   WorkerTypeModelWorker: "MODEL_WORKER",
-  // Legacy compatibility alias for poller-worker behavior during the runtime taxonomy migration window.
+  // Legacy alias for poller-worker behavior during the migration window.
   WorkerTypeHostedWorker: "HOSTED_WORKER",
 } as const;
 export type WorkerType = (typeof WorkerType)[keyof typeof WorkerType];
@@ -6610,9 +6610,9 @@ export const WorkstationType = {
   WorkstationTypeScriptRun: "SCRIPT_RUN",
   // Poller-run workstation that supervises ingress polling through a poller worker.
   WorkstationTypePollerRun: "POLLER_RUN",
-  // Legacy alias for agent-run behavior during the runtime taxonomy migration window.
+  // Legacy alias for agent-run behavior during the migration window.
   WorkstationTypeModelWorkstation: "MODEL_WORKSTATION",
-  // Legacy alias for inference-run behavior during the runtime taxonomy migration window.
+  // Legacy alias for inference-run behavior during the migration window.
   WorkstationTypeModelInvoke: "MODEL_INVOKE",
   // Logical pass-through workstation used for routing and guarded loop-breaker transitions without model execution.
   WorkstationTypeLogicalMove: "LOGICAL_MOVE",
