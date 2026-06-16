@@ -32,6 +32,7 @@ export default {
 };
 
 export const DurableJavaScriptSessionInspectionDetails = {
+  tags: ["test"],
   parameters: {
     dashboardApi: {
       fetchMocks: [
@@ -216,6 +217,7 @@ export const DurableJavaScriptSessionLoading = {
 };
 
 export const DurableJavaScriptSessionNotFound = {
+  tags: ["test"],
   parameters: {
     dashboardApi: {
       fetchMocks: [
@@ -242,9 +244,9 @@ export const DurableJavaScriptSessionNotFound = {
     await expect(
       await canvas.findByRole("heading", { name: "Factory session runtime" }),
     ).toBeVisible();
-    await expect(canvas.findByRole("status")).resolves.toHaveTextContent(
-      "This factory session is no longer available.",
-    );
+    await expect(
+      canvas.findByText("This factory session is no longer available."),
+    ).resolves.toBeVisible();
     await expect(canvas.queryByText("Runtime")).toBeNull();
   },
 };
