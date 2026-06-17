@@ -193,7 +193,8 @@ func TestEvaluateCoverageFlagsBackendPackagesMissingFromProfile(t *testing.T) {
 
 	result, totalLine, err := evaluateCoverage(
 		"total: (statements) 82.5%\n",
-		modulePath+"/pkg/config\t\tcoverage: 0.0% of statements\n",
+		modulePath+"/pkg/config\t\tcoverage: 0.0% of statements\n"+
+			modulePath+"/pkg/service\t\tcoverage: 100.0% of statements\n",
 		profilePath,
 		repoRoot,
 		[]string{
@@ -234,7 +235,8 @@ func TestEvaluateCoverageFlagsBackendPackagesMissingFromProfileWithOKSummary(t *
 
 	result, totalLine, err := evaluateCoverage(
 		"total: (statements) 82.5%\n",
-		"ok  "+modulePath+"/pkg/config\t0.123s\tcoverage: 0.0% of statements\n",
+		"ok  "+modulePath+"/pkg/config\t0.123s\tcoverage: 0.0% of statements\n"+
+			"ok  "+modulePath+"/pkg/service\t(cached)\tcoverage: 100.0% of statements\n",
 		profilePath,
 		repoRoot,
 		[]string{
@@ -275,7 +277,8 @@ func TestEvaluateCoverageFlagsBackendPackagesMissingFromProfileWithCoverpkgOKSum
 
 	result, totalLine, err := evaluateCoverage(
 		"total: (statements) 82.5%\n",
-		"ok  "+modulePath+"/pkg/config\t0.123s\tcoverage: 0.0% of statements in "+modulePath+"/pkg/config, "+modulePath+"/pkg/service, "+modulePath+"/pkg/generatedclient\n",
+		"ok  "+modulePath+"/pkg/config\t0.123s\tcoverage: 0.0% of statements in "+modulePath+"/pkg/config, "+modulePath+"/pkg/service, "+modulePath+"/pkg/generatedclient\n"+
+			"ok  "+modulePath+"/pkg/service\t(cached)\tcoverage: 100.0% of statements\n",
 		profilePath,
 		repoRoot,
 		[]string{
@@ -316,7 +319,8 @@ func TestEvaluateCoverageFlagsBackendPackagesPresentWithZeroCoverage(t *testing.
 
 	result, _, err := evaluateCoverage(
 		"total: (statements) 81.0%\n",
-		"",
+		modulePath+"/pkg/config\t\tcoverage: 0.0% of statements\n"+
+			modulePath+"/pkg/service\t\tcoverage: 100.0% of statements\n",
 		profilePath,
 		repoRoot,
 		[]string{
@@ -353,7 +357,8 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackages(t *testing.T) {
 
 	result, totalLine, err := evaluateCoverage(
 		"total: (statements) 81.0%\n",
-		modulePath+"/pkg/generatedclient\t\tcoverage: 0.0% of statements\n"+
+		modulePath+"/pkg/service\t\tcoverage: 100.0% of statements\n"+
+			modulePath+"/pkg/generatedclient\t\tcoverage: 0.0% of statements\n"+
 			modulePath+"/pkg/testutil/runtimefixtures\t\tcoverage: 0.0% of statements\n",
 		profilePath,
 		repoRoot,
@@ -394,7 +399,8 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackagesWithOKSummary(t *testi
 
 	result, totalLine, err := evaluateCoverage(
 		"total: (statements) 81.0%\n",
-		"ok  "+modulePath+"/pkg/generatedclient\t(cached)\tcoverage: 0.0% of statements\n"+
+		"ok  "+modulePath+"/pkg/service\t0.111s\tcoverage: 100.0% of statements\n"+
+			"ok  "+modulePath+"/pkg/generatedclient\t(cached)\tcoverage: 0.0% of statements\n"+
 			"ok  "+modulePath+"/pkg/testutil/runtimefixtures\t0.321s\tcoverage: 0.0% of statements\n",
 		profilePath,
 		repoRoot,
@@ -435,7 +441,8 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackagesWithCoverpkgOKSummary(
 
 	result, totalLine, err := evaluateCoverage(
 		"total: (statements) 81.0%\n",
-		"ok  "+modulePath+"/pkg/generatedclient\t(cached)\tcoverage: 0.0% of statements in "+modulePath+"/pkg/generatedclient, "+modulePath+"/pkg/service\n"+
+		"ok  "+modulePath+"/pkg/service\t0.111s\tcoverage: 100.0% of statements\n"+
+			"ok  "+modulePath+"/pkg/generatedclient\t(cached)\tcoverage: 0.0% of statements in "+modulePath+"/pkg/generatedclient, "+modulePath+"/pkg/service\n"+
 			"ok  "+modulePath+"/pkg/testutil/runtimefixtures\t0.321s\tcoverage: 0.0% of statements in "+modulePath+"/pkg/testutil/runtimefixtures, "+modulePath+"/pkg/service\n",
 		profilePath,
 		repoRoot,
@@ -475,7 +482,8 @@ func TestEvaluateCoverageSupportsRepositoryRelativeProfilePaths(t *testing.T) {
 
 	result, _, err := evaluateCoverage(
 		"total: (statements) 80.0%\n",
-		"",
+		modulePath+"/pkg/config\t\tcoverage: 0.0% of statements\n"+
+			modulePath+"/pkg/service\t\tcoverage: 100.0% of statements\n",
 		profilePath,
 		repoRoot,
 		[]string{

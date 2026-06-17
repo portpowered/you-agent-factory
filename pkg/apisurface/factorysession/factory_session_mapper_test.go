@@ -257,6 +257,109 @@ func TestArtifactDetailCaptureMetadataRoundTrip(t *testing.T) {
 	}
 }
 
+func TestDispatchAndArtifactMapperRoundTrip_MapsUsageWarningsAndRedactionCounts(t *testing.T) {
+	inputTokens := int64(11)
+	outputTokens := int64(7)
+	totalTokens := int64(18)
+	durationMillis := int64(250)
+	costUSD := 1.25
+	retryCount := int32(2)
+	failureReason := "TEMPORARY"
+	failureMessage := "provider unavailable"
+	failureClass := "transient"
+	dispatch := factoryapi.FactoryDispatch{
+		SessionId:        "dur-sess-1",
+		Id:               "disp-1",
+		Status:           factoryapi.FactoryDispatchStatusFAILED,
+		DispatchKind:     factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
+		OrchestratorKind: factoryapi.FactoryOrchestratorKind("JAVASCRIPT"),
+		Usage: &factoryapi.FactoryDispatchUsage{
+			InputTokens:    &inputTokens,
+			OutputTokens:   &outputTokens,
+			TotalTokens:    &totalTokens,
+			DurationMillis: &durationMillis,
+			CostUsd:        &costUSD,
+			RetryCount:     &retryCount,
+		},
+		Warnings: &[]factoryapi.FactoryDispatchWarning{
+			{Code: "RATE_LIMIT", Message: " retried once "},
+		},
+		FailureDetail: &factoryapi.FactoryDispatchFailureDetail{
+			Reason:     &failureReason,
+			Message:    &failureMessage,
+			ErrorClass: &failureClass,
+		},
+	}
+
+	domain := factorysession.DispatchDetailFromAPI(dispatch)
+	if domain.Usage == nil || domain.Usage.TotalTokens != 18 {
+		t.Fatalf("domain usage = %#v, want populated usage", domain.Usage)
+	}
+	if len(domain.Warnings) != 1 || domain.Warnings[0].Message != "retried once" {
+		t.Fatalf("domain warnings = %#v, want trimmed warning", domain.Warnings)
+	}
+	if domain.FailureDetail == nil || domain.FailureDetail.Reason != "TEMPORARY" {
+		t.Fatalf("domain failure = %#v, want trimmed failure", domain.FailureDetail)
+	}
+
+	mapped := factorysession.DispatchDetailResponseToAPI(domain)
+	if mapped.Usage == nil || mapped.Usage.TotalTokens == nil || *mapped.Usage.TotalTokens != 18 {
+		t.Fatalf("mapped usage = %#v, want populated usage", mapped.Usage)
+	}
+}
+
+func TestArtifactDetailMapperRoundTrip_MapsRedactionCountsAndSessionUsage(t *testing.T) {
+	paths := int32(1)
+	secrets := int32(2)
+	tokens := int32(3)
+	available := 4
+	total := 8
+	usageAPI := &factoryapi.FactorySessionUsage{
+		Resources: []factoryapi.ResourceUsage{
+			{Name: "tokens", Available: available, Total: total},
+		},
+	}
+	capturedAt := time.Date(2026, 6, 8, 10, 5, 0, 0, time.UTC)
+	dispatchID := "disp-1"
+	mimeType := "text/plain"
+	artifact := factoryapi.FactorySessionArtifactDetail{
+		SessionId:  "dur-sess-1",
+		Id:         "art-1",
+		Kind:       factoryapi.FactoryArtifactKindLOG,
+		Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC,
+		RedactionCounts: &factoryapi.FactoryArtifactRedactionCounts{
+			Paths:   &paths,
+			Secrets: &secrets,
+			Tokens:  &tokens,
+		},
+		CaptureMetadata: &factoryapi.FactoryArtifactCaptureMetadata{
+			CapturedAt:       &capturedAt,
+			SourceDispatchId: &dispatchID,
+			MimeType:         &mimeType,
+		},
+	}
+	domain, err := factorysession.ArtifactDetailFromAPI(artifact)
+	if err != nil {
+		t.Fatalf("ArtifactDetailFromAPI: %v", err)
+	}
+	if domain.RedactionCounts == nil || domain.RedactionCounts.Paths != 1 {
+		t.Fatalf("domain redaction counts = %#v, want populated counts", domain.RedactionCounts)
+	}
+	mapped := factorysession.ArtifactDetailResponseToAPI(domain)
+	if mapped.RedactionCounts == nil || mapped.RedactionCounts.Paths == nil || *mapped.RedactionCounts.Paths != 1 {
+		t.Fatalf("mapped redaction counts = %#v, want populated counts", mapped.RedactionCounts)
+	}
+
+	read := factorysession.SessionReadResultFromAPI(factoryapi.FactorySessionDurableReadModel{
+		SessionId: "dur-sess-usage-1",
+		Status:    factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		Usage:     usageAPI,
+	})
+	if len(read.Usage.Resources) != 1 || read.Usage.Resources[0].Available != available {
+		t.Fatalf("session usage = %#v, want mapped resources", read.Usage)
+	}
+}
+
 func TestDurableSessionMapperBoundaryValidation(t *testing.T) {
 	t.Run("unsupported source kind", func(t *testing.T) {
 		_, err := factorysession.StartRequestFromAPI(factoryapi.FactorySessionExecutionRequest{

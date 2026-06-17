@@ -20,10 +20,10 @@ type durableFixtureCatalog struct {
 }
 
 type durableFixtureScenario struct {
-	ID                string         `json:"id"`
-	ExecutionRequest  map[string]any `json:"executionRequest"`
-	AsyncResponse     map[string]any `json:"asyncResponse"`
-	SyncResponse      map[string]any `json:"syncResponse"`
+	ID               string         `json:"id"`
+	ExecutionRequest map[string]any `json:"executionRequest"`
+	AsyncResponse    map[string]any `json:"asyncResponse"`
+	SyncResponse     map[string]any `json:"syncResponse"`
 }
 
 type durableFixtureIdempotentReplay struct {
@@ -146,6 +146,78 @@ func TestStartRequestFromAPI_IdempotentReplayProducesStableTuple(t *testing.T) {
 	if firstHash != secondHash {
 		t.Fatalf("idempotent tuple hash mismatch: %q vs %q", firstHash, secondHash)
 	}
+}
+
+func TestStartRequestFromAPI_MapsAdditionalSourceKindsAndValidation(t *testing.T) {
+	t.Run("factory inline", func(t *testing.T) {
+		request, err := factorysession.StartRequestFromAPI(factoryapi.FactorySessionExecutionRequest{
+			RequestId: "req-inline-1",
+			Source: factoryapi.FactorySessionExecutionSource{
+				Kind: factoryapi.FactorySessionExecutionSourceKindFactoryInline,
+				FactoryInline: &factoryapi.Factory{
+					Name: "factory-inline",
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("StartRequestFromAPI(factory inline): %v", err)
+		}
+		if request.Source.Kind != workflowsource.KindFactoryInline || len(request.Source.FactoryInline) == 0 {
+			t.Fatalf("request source = %#v, want encoded factory inline source", request.Source)
+		}
+	})
+
+	t.Run("workflow file", func(t *testing.T) {
+		request, err := factorysession.StartRequestFromAPI(factoryapi.FactorySessionExecutionRequest{
+			RequestId: "req-file-1",
+			Source: factoryapi.FactorySessionExecutionSource{
+				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowFile,
+				WorkflowFile: strPtr(" workflows/simple.workflow.js "),
+			},
+		})
+		if err != nil {
+			t.Fatalf("StartRequestFromAPI(workflow file): %v", err)
+		}
+		if request.Source.WorkflowFile != "workflows/simple.workflow.js" {
+			t.Fatalf("workflowFile = %q, want trimmed path", request.Source.WorkflowFile)
+		}
+	})
+
+	t.Run("inline workflow", func(t *testing.T) {
+		dialect := " you-workflow-v1 "
+		entrypoint := " default "
+		metadata := factoryapi.StringMap{"team": "ops"}
+		request, err := factorysession.StartRequestFromAPI(factoryapi.FactorySessionExecutionRequest{
+			RequestId: "req-inline-workflow-1",
+			Source: factoryapi.FactorySessionExecutionSource{
+				Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
+				InlineWorkflow: &factoryapi.FactorySessionExecutionInlineWorkflow{
+					InlineSource: factoryapi.FactoryOrchestratorJavaScriptInlineSource{Inline: " return 1; "},
+					Dialect:      &dialect,
+					Entrypoint:   &entrypoint,
+					Metadata:     &metadata,
+				},
+			},
+		})
+		if err != nil {
+			t.Fatalf("StartRequestFromAPI(inline workflow): %v", err)
+		}
+		if request.Source.InlineWorkflow == nil || request.Source.InlineWorkflow.InlineSource != "return 1;" {
+			t.Fatalf("inline workflow = %#v, want trimmed inline source", request.Source.InlineWorkflow)
+		}
+	})
+
+	t.Run("missing inline workflow payload", func(t *testing.T) {
+		_, err := factorysession.StartRequestFromAPI(factoryapi.FactorySessionExecutionRequest{
+			RequestId: "req-bad-inline-1",
+			Source: factoryapi.FactorySessionExecutionSource{
+				Kind: factoryapi.FactorySessionExecutionSourceKindInlineWorkflow,
+			},
+		})
+		if err == nil {
+			t.Fatal("error = nil, want request validation error")
+		}
+	})
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this contract test keeps sync start terminal and timeout fixture assertions together on one seam.

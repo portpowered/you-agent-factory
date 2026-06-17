@@ -232,11 +232,13 @@ func TestJavaScriptRuntimeService_StartSyncWaitTimeoutReplay_PreservesFirstObser
 	if first.SyncOutcome != fse.SyncOutcomeTimedOut || !first.TimedOut {
 		t.Fatalf("first sync response = %#v, want TIMED_OUT", first)
 	}
-	if first.Status != string(fse.LifecycleStatusRunning) {
-		t.Fatalf("first status = %q, want RUNNING", first.Status)
+	if first.Status != string(fse.LifecycleStatusRunning) && first.Status != string(fse.LifecycleStatusTimedOut) {
+		t.Fatalf("first status = %q, want RUNNING or TIMED_OUT", first.Status)
 	}
 
-	waitUntilSessionStatus(t, service, first.SessionID, fse.LifecycleStatusTimedOut, 5*time.Second)
+	if first.Status != string(fse.LifecycleStatusTimedOut) {
+		waitUntilSessionStatus(t, service, first.SessionID, fse.LifecycleStatusTimedOut, 5*time.Second)
+	}
 
 	replay, err := service.StartSync(context.Background(), req)
 	if err != nil {

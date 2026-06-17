@@ -90,12 +90,13 @@ func execute(cfg config) error {
 	if len(result.insufficientCoveragePackages) > 0 {
 		failures = append(failures, formatInsufficientCoverageFailure(result.insufficientCoveragePackages, cfg.packageCoverageMin()))
 	}
-	if len(failures) > 0 {
-		return errors.New(strings.Join(failures, "\n"))
-	}
 
 	for _, summary := range result.packageSummaries {
 		fmt.Fprintf(stdoutWriter, "%s\tcoverage: %.1f%% of statements\n", summary.importPath, summary.coverage)
+	}
+
+	if len(failures) > 0 {
+		return errors.New(strings.Join(failures, "\n"))
 	}
 	fmt.Fprintf(stdoutWriter, "Go coverage %.1f%% meets minimum %.1f%%.\n", result.actual, cfg.min)
 	return nil
@@ -154,36 +155,41 @@ func run(cfg config) (coverageResult, error) {
 	if err != nil {
 		return coverageResult{}, err
 	}
+	selectedPackages := selectedCoveragePackages(coverPackages)
 
-	testArgs := []string{
+	mergedTestArgs := []string{
 		"test",
 		fmt.Sprintf("-coverpkg=%s", strings.Join(coverPackages, ",")),
 	}
 	if cfg.short {
-		testArgs = append(testArgs, "-short")
+		mergedTestArgs = append(mergedTestArgs, "-short")
 	}
-	testArgs = append(testArgs,
+	mergedTestArgs = append(mergedTestArgs,
 		fmt.Sprintf("-coverprofile=%s", profilePath),
 		fmt.Sprintf("-covermode=%s", cfg.covermode),
 		fmt.Sprintf("-timeout=%s", cfg.timeout),
 	)
-	testArgs = append(testArgs, testPackages...)
+	mergedTestArgs = append(mergedTestArgs, testPackages...)
 
-	testCmd := execCommand("go", testArgs...)
-	testCmd.Env = os.Environ()
-	var testStdout bytes.Buffer
-	var testStderr bytes.Buffer
-	testCmd.Stdout = &testStdout
-	testCmd.Stderr = &testStderr
-	if err := testCmd.Run(); err != nil {
-		detail := strings.TrimSpace(testStderr.String())
-		if detail == "" {
-			detail = strings.TrimSpace(testStdout.String())
-		}
-		if detail != "" {
-			return coverageResult{}, fmt.Errorf("run go test coverage lane: %w\n%s", err, detail)
-		}
-		return coverageResult{}, fmt.Errorf("run go test coverage lane: %w", err)
+	_, _, err = runGoTestCoverageLane(mergedTestArgs, "run go test coverage lane")
+	if err != nil {
+		return coverageResult{}, err
+	}
+
+	localPackageTestArgs := []string{
+		"test",
+		"-cover",
+		fmt.Sprintf("-covermode=%s", cfg.covermode),
+		fmt.Sprintf("-timeout=%s", cfg.timeout),
+	}
+	if cfg.short {
+		localPackageTestArgs = append(localPackageTestArgs, "-short")
+	}
+	localPackageTestArgs = append(localPackageTestArgs, selectedPackages...)
+
+	localPackageStdout, localPackageStderr, err := runGoTestCoverageLane(localPackageTestArgs, "run go test package coverage lane")
+	if err != nil {
+		return coverageResult{}, err
 	}
 
 	coverCmd := execCommand("go", "tool", "cover", "-func", profilePath)
@@ -207,10 +213,9 @@ func run(cfg config) (coverageResult, error) {
 	if err != nil {
 		return coverageResult{}, err
 	}
-
-	packageSummaryReport := testStdout.String()
-	if testStderr.Len() > 0 {
-		packageSummaryReport += "\n" + testStderr.String()
+	localPackageSummaryReport := localPackageStdout
+	if strings.TrimSpace(localPackageStderr) != "" {
+		localPackageSummaryReport += "\n" + localPackageStderr
 	}
 
 	baselinePackages, err := readPackageCoverageBaseline(filepath.Join(repoRoot, cfg.packageCoverageBaselinePath()))
@@ -218,12 +223,32 @@ func run(cfg config) (coverageResult, error) {
 		return coverageResult{}, err
 	}
 
-	result, totalLine, err := evaluateCoverage(stdout.String(), packageSummaryReport, profilePath, repoRoot, coverPackages, cfg.packageCoverageMin(), baselinePackages)
+	result, totalLine, err := evaluateCoverage(stdout.String(), localPackageSummaryReport, profilePath, repoRoot, coverPackages, cfg.packageCoverageMin(), baselinePackages)
 	if err != nil {
 		return coverageResult{}, err
 	}
 	fmt.Fprintln(stdoutWriter, totalLine)
 	return result, nil
+}
+
+func runGoTestCoverageLane(args []string, failurePrefix string) (string, string, error) {
+	testCmd := execCommand("go", args...)
+	testCmd.Env = os.Environ()
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	testCmd.Stdout = &stdout
+	testCmd.Stderr = &stderr
+	if err := testCmd.Run(); err != nil {
+		detail := strings.TrimSpace(stderr.String())
+		if detail == "" {
+			detail = strings.TrimSpace(stdout.String())
+		}
+		if detail != "" {
+			return "", "", fmt.Errorf("%s: %w\n%s", failurePrefix, err, detail)
+		}
+		return "", "", fmt.Errorf("%s: %w", failurePrefix, err)
+	}
+	return stdout.String(), stderr.String(), nil
 }
 
 func resolveCoverageLane(cfg config) ([]string, []string, error) {
@@ -391,12 +416,12 @@ func evaluateCoverage(_ string, packageSummaryReport string, profilePath string,
 		return coverageResult{}, "", err
 	}
 	actual, totalLine := calculateTotalCoverage(packageTotals, coverPackages)
-	packageSummaries := summarizePackageCoverage(packageTotals, coverPackages)
-	insufficientCoveragePackages := findInsufficientCoveragePackages(packageSummaries, minCoverage, baselinePackages)
-	zeroCoveragePackages, err := findZeroCoveragePackages(packageSummaryReport, packageTotals, coverPackages, baselinePackages)
+	packageSummaries, err := summarizePackageCoverageFromReport(packageSummaryReport, coverPackages)
 	if err != nil {
 		return coverageResult{}, "", err
 	}
+	insufficientCoveragePackages := findInsufficientCoveragePackages(packageSummaries, minCoverage, baselinePackages)
+	zeroCoveragePackages := findZeroCoveragePackagesFromSummaries(packageSummaries, baselinePackages)
 
 	return coverageResult{
 		actual:                       actual,
@@ -473,21 +498,21 @@ func selectedCoveragePackages(coverPackages []string) []string {
 	return selected
 }
 
-func summarizePackageCoverage(packageTotals map[string]packageCoverageTotals, coverPackages []string) []packageCoverageSummary {
+func summarizePackageCoverageFromReport(report string, coverPackages []string) ([]packageCoverageSummary, error) {
 	selectedPackages := selectedCoveragePackages(coverPackages)
+	reportCoverage, err := parsePackageCoverageSummariesFromReport(report)
+	if err != nil {
+		return nil, err
+	}
 	summaries := make([]packageCoverageSummary, 0, len(selectedPackages))
 	for _, coverPackage := range selectedPackages {
-		totals, ok := packageTotals[coverPackage]
-		if !ok || totals.totalStatements == 0 {
-			summaries = append(summaries, packageCoverageSummary{importPath: coverPackage, coverage: 0})
-			continue
-		}
+		coverage := reportCoverage[coverPackage]
 		summaries = append(summaries, packageCoverageSummary{
 			importPath: coverPackage,
-			coverage:   float64(totals.coveredStatements) * 100 / float64(totals.totalStatements),
+			coverage:   coverage,
 		})
 	}
-	return summaries
+	return summaries, nil
 }
 
 func findInsufficientCoveragePackages(summaries []packageCoverageSummary, minCoverage float64, baselinePackages map[string]struct{}) []packageCoverageSummary {
@@ -504,41 +529,8 @@ func findInsufficientCoveragePackages(summaries []packageCoverageSummary, minCov
 	return packages
 }
 
-func findZeroCoveragePackages(report string, packageTotals map[string]packageCoverageTotals, coverPackages []string, baselinePackages map[string]struct{}) ([]string, error) {
-	reportZeroCoveragePackages, err := parseZeroCoveragePackagesFromReport(report)
-	if err != nil {
-		return nil, err
-	}
-
-	seen := make(map[string]struct{}, len(coverPackages))
-	zeroCoveragePackages := make([]string, 0, len(coverPackages))
-	for _, coverPackage := range coverPackages {
-		if !isBackendCoveragePackage(coverPackage) {
-			continue
-		}
-		if _, ok := seen[coverPackage]; ok {
-			continue
-		}
-		seen[coverPackage] = struct{}{}
-		if _, ok := baselinePackages[coverPackage]; ok {
-			continue
-		}
-
-		totals, ok := packageTotals[coverPackage]
-		if ok && totals.totalStatements > 0 && totals.coveredStatements == 0 {
-			zeroCoveragePackages = append(zeroCoveragePackages, coverPackage)
-			continue
-		}
-		if !ok && reportZeroCoveragePackages[coverPackage] {
-			zeroCoveragePackages = append(zeroCoveragePackages, coverPackage)
-		}
-	}
-	slices.Sort(zeroCoveragePackages)
-	return zeroCoveragePackages, nil
-}
-
-func parseZeroCoveragePackagesFromReport(report string) (map[string]bool, error) {
-	packages := make(map[string]bool)
+func parsePackageCoverageSummariesFromReport(report string) (map[string]float64, error) {
+	packages := make(map[string]float64)
 	for _, rawLine := range strings.Split(report, "\n") {
 		line := strings.TrimSpace(rawLine)
 		if line == "" || strings.HasPrefix(line, "total:") {
@@ -553,10 +545,27 @@ func parseZeroCoveragePackagesFromReport(report string) (map[string]bool, error)
 			return nil, fmt.Errorf("parse go coverage package percentage %q: %w", matches[2], err)
 		}
 		if coveragePercent == 0 {
-			packages[matches[1]] = true
+			packages[matches[1]] = 0
+			continue
 		}
+		packages[matches[1]] = coveragePercent
 	}
 	return packages, nil
+}
+
+func findZeroCoveragePackagesFromSummaries(summaries []packageCoverageSummary, baselinePackages map[string]struct{}) []string {
+	zeroCoveragePackages := make([]string, 0, len(summaries))
+	for _, summary := range summaries {
+		if summary.coverage != 0 {
+			continue
+		}
+		if _, ok := baselinePackages[summary.importPath]; ok {
+			continue
+		}
+		zeroCoveragePackages = append(zeroCoveragePackages, summary.importPath)
+	}
+	slices.Sort(zeroCoveragePackages)
+	return zeroCoveragePackages
 }
 
 func parseCoverageProfile(profileData []byte, repoRoot string) (map[string]packageCoverageTotals, error) {

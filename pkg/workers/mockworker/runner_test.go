@@ -2,7 +2,14 @@ package mockworker
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -205,6 +212,300 @@ func TestMockWorkerCommandRunner_SelectsByWorkerWorkstationAndInput(t *testing.T
 	}
 }
 
+func TestMockWorkerCommandRunner_NilConfigPassthroughUsesNextRunner(t *testing.T) {
+	next := &recordingCommandRunner{}
+	runner := &MockWorkerCommandRunner{Next: next}
+
+	req := workerprocess.CommandRequest{WorkerType: "worker"}
+	result, err := runner.Run(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if len(next.requests) != 1 {
+		t.Fatalf("next runner call count = %d, want 1", len(next.requests))
+	}
+	if next.requests[0].WorkerType != req.WorkerType {
+		t.Fatalf("next runner request worker = %q, want %q", next.requests[0].WorkerType, req.WorkerType)
+	}
+	if string(result.Stdout) != "passthrough" {
+		t.Fatalf("Stdout = %q, want passthrough output", result.Stdout)
+	}
+}
+
+func TestMockWorkerCommandRunner_ScriptConfigTransformsRequest(t *testing.T) {
+	next := &inspectingCommandRunner{}
+	runner := &MockWorkerCommandRunner{
+		Config: &factoryconfig.MockWorkersConfig{MockWorkers: []factoryconfig.MockWorkerConfig{{
+			WorkerName: "worker",
+			RunType:    factoryconfig.MockWorkerRunTypeScript,
+			ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+				Command:          "mock-script",
+				Args:             []string{"--flag", "value"},
+				Env:              map[string]string{"EXTRA": "overlay", "BASE": "override"},
+				WorkingDirectory: "/tmp/mock-worker",
+				Stdin:            "script-stdin",
+				Timeout:          "50ms",
+			},
+		}}},
+		Next: next,
+	}
+
+	_, err := runner.Run(context.Background(), workerprocess.CommandRequest{
+		WorkerType: "worker",
+		Command:    "ignored",
+		Args:       []string{"ignored"},
+		Env:        []string{"BASE=original", "KEEP=value"},
+		Stdin:      []byte("upstream-stdin"),
+		WorkDir:    "/original",
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if next.req.Command != "mock-script" {
+		t.Fatalf("Command = %q, want mock-script", next.req.Command)
+	}
+	if !reflect.DeepEqual(next.req.Args, []string{"--flag", "value"}) {
+		t.Fatalf("Args = %#v, want script args", next.req.Args)
+	}
+	if !reflect.DeepEqual(next.req.Env, []string{"BASE=override", "KEEP=value", "EXTRA=overlay"}) {
+		t.Fatalf("Env = %#v, want merged env preserving order with overlays", next.req.Env)
+	}
+	if string(next.req.Stdin) != "script-stdin" {
+		t.Fatalf("Stdin = %q, want script stdin", next.req.Stdin)
+	}
+	if next.req.WorkDir != "/tmp/mock-worker" {
+		t.Fatalf("WorkDir = %q, want /tmp/mock-worker", next.req.WorkDir)
+	}
+	if !next.hasDeadline {
+		t.Fatal("context deadline missing, want timeout-derived deadline")
+	}
+}
+
+func TestMockWorkerCommandRunner_ScriptConfigWithoutOverridesKeepsOriginalWorkdir(t *testing.T) {
+	next := &inspectingCommandRunner{}
+	runner := &MockWorkerCommandRunner{
+		Config: &factoryconfig.MockWorkersConfig{MockWorkers: []factoryconfig.MockWorkerConfig{{
+			WorkerName: "worker",
+			RunType:    factoryconfig.MockWorkerRunTypeScript,
+			ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+				Command: "mock-script",
+				Timeout: "0s",
+			},
+		}}},
+		Next: next,
+	}
+
+	_, err := runner.Run(context.Background(), workerprocess.CommandRequest{
+		WorkerType: "worker",
+		WorkDir:    "/original",
+	})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if next.req.WorkDir != "/original" {
+		t.Fatalf("WorkDir = %q, want original workdir", next.req.WorkDir)
+	}
+	if next.hasDeadline {
+		t.Fatal("context deadline present, want none for zero timeout")
+	}
+}
+
+func TestMockWorkerCommandRunner_ScriptConfigMissingReturnsFailureResult(t *testing.T) {
+	result, err := (&MockWorkerCommandRunner{}).runScript(context.Background(), workerprocess.CommandRequest{}, nil)
+	if err != nil {
+		t.Fatalf("runScript returned error: %v", err)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+	}
+	if string(result.Stderr) != "mock scriptConfig is required" {
+		t.Fatalf("Stderr = %q, want missing config error", result.Stderr)
+	}
+}
+
+func TestMockWorkerCommandRunner_ScriptConfigInvalidTimeoutReturnsFailureResult(t *testing.T) {
+	result, err := (&MockWorkerCommandRunner{}).runScript(context.Background(), workerprocess.CommandRequest{}, &factoryconfig.MockWorkerScriptConfig{
+		Command: "mock-script",
+		Timeout: "definitely-not-a-duration",
+	})
+	if err != nil {
+		t.Fatalf("runScript returned error: %v", err)
+	}
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+	}
+	if got := string(result.Stderr); got == "" || got == "mock scriptConfig is required" {
+		t.Fatalf("Stderr = %q, want timeout validation error", got)
+	}
+}
+
+func TestMockWorkerCommandRunner_RunNextUsesExecRunnerWhenNextMissing(t *testing.T) {
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, "emit.sh")
+	script := "#!/bin/sh\nprintf 'cwd:%s stdin:%s env:%s' \"$PWD\" \"$(cat)\" \"$GREETING\""
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("WriteFile returned error: %v", err)
+	}
+
+	result, err := (&MockWorkerCommandRunner{}).runNext(context.Background(), workerprocess.CommandRequest{
+		Command: scriptPath,
+		Env:     []string{"GREETING=hello"},
+		Stdin:   []byte("world"),
+		WorkDir: dir,
+	})
+	if err != nil {
+		t.Fatalf("runNext returned error: %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("ExitCode = %d, want 0", result.ExitCode)
+	}
+	if got := string(result.Stdout); !strings.HasPrefix(got, "cwd:") || !strings.Contains(got, " stdin:world env:hello") {
+		t.Fatalf("Stdout = %q, want exec runner output", got)
+	}
+}
+
+func TestRejectResultNilConfigDefaultsToExitCodeOne(t *testing.T) {
+	result := rejectResult(nil)
+	if result.ExitCode != 1 {
+		t.Fatalf("ExitCode = %d, want 1", result.ExitCode)
+	}
+}
+
+func TestCommandRequestInputTokensDecodesStructuredAndSkipsInvalid(t *testing.T) {
+	timestamp := time.Unix(1700000000, 0).UTC()
+	tokens := commandRequestInputTokens(workerprocess.CommandRequest{
+		InputTokens: []any{
+			interfaces.Token{
+				ID:      "token-direct",
+				PlaceID: "task:init",
+				Color: interfaces.TokenColor{
+					DataType:   interfaces.DataTypeWork,
+					WorkID:     "work-1",
+					WorkTypeID: "task",
+				},
+			},
+			map[string]any{
+				"id":         "token-map",
+				"place_id":   "task:ready",
+				"created_at": timestamp.Format(time.RFC3339Nano),
+				"entered_at": timestamp.Format(time.RFC3339Nano),
+				"color": map[string]any{
+					"data_type":    string(interfaces.DataTypeWork),
+					"work_id":      "work-2",
+					"work_type_id": "task",
+				},
+				"history": map[string]any{},
+			},
+			make(chan int),
+		},
+	})
+
+	if len(tokens) != 2 {
+		t.Fatalf("decoded token count = %d, want 2", len(tokens))
+	}
+	if tokens[0].ID != "token-direct" || tokens[1].ID != "token-map" {
+		t.Fatalf("decoded tokens = %#v, want direct and JSON-decoded tokens", tokens)
+	}
+}
+
+func TestMockWorkInputSelectorMatchesSkipsResourcesAndChecksAllFields(t *testing.T) {
+	payload := []byte("payload")
+	sum := sha256.Sum256(payload)
+	selector := factoryconfig.MockWorkInputSelector{
+		WorkID:      "work-1",
+		WorkType:    "task",
+		State:       "ready",
+		InputName:   "work",
+		TraceID:     "trace-1",
+		Channel:     "chat",
+		PayloadHash: "sha256:" + hex.EncodeToString(sum[:]),
+	}
+	tokens := []interfaces.Token{
+		{
+			ID:      "resource-1",
+			PlaceID: "resource:ready",
+			Color:   interfaces.TokenColor{DataType: interfaces.DataTypeResource},
+		},
+		{
+			ID:      "token-1",
+			PlaceID: "task:ready",
+			Color: interfaces.TokenColor{
+				DataType:   interfaces.DataTypeWork,
+				WorkID:     "work-1",
+				WorkTypeID: "task",
+				TraceID:    "trace-1",
+				Tags:       map[string]string{"channel": "chat"},
+				Payload:    payload,
+			},
+		},
+	}
+
+	if !mockWorkInputSelectorMatches(selector, tokens, map[string][]string{"work": {"token-1"}}) {
+		t.Fatal("selector should match non-resource token")
+	}
+	if mockWorkInputSelectorMatches(selector, tokens[:1], map[string][]string{"work": {"token-1"}}) {
+		t.Fatal("selector matched resource token, want false")
+	}
+}
+
+func TestSelectorHelpersCoverMismatchBranches(t *testing.T) {
+	token := interfaces.Token{
+		ID:      "token-1",
+		PlaceID: "task:ready",
+		Color: interfaces.TokenColor{
+			DataType:   interfaces.DataTypeWork,
+			WorkID:     "work-1",
+			WorkTypeID: "task",
+			TraceID:    "trace-1",
+			Tags:       map[string]string{"channel": "chat"},
+			Payload:    []byte("payload"),
+		},
+	}
+
+	if selectorMatchesToken(factoryconfig.MockWorkInputSelector{WorkID: "other"}, token, nil) {
+		t.Fatal("selector unexpectedly matched wrong work id")
+	}
+	if selectorMatchesToken(factoryconfig.MockWorkInputSelector{WorkType: "other"}, token, nil) {
+		t.Fatal("selector unexpectedly matched wrong work type")
+	}
+	if selectorMatchesToken(factoryconfig.MockWorkInputSelector{State: "other"}, token, nil) {
+		t.Fatal("selector unexpectedly matched wrong state")
+	}
+	if selectorMatchesToken(factoryconfig.MockWorkInputSelector{InputName: "work"}, token, map[string][]string{"work": {"other-token"}}) {
+		t.Fatal("selector unexpectedly matched wrong input binding")
+	}
+	if selectorMatchesToken(factoryconfig.MockWorkInputSelector{TraceID: "other"}, token, nil) {
+		t.Fatal("selector unexpectedly matched wrong trace id")
+	}
+	if selectorMatchesToken(factoryconfig.MockWorkInputSelector{Channel: "other"}, token, nil) {
+		t.Fatal("selector unexpectedly matched wrong channel")
+	}
+	if selectorMatchesToken(factoryconfig.MockWorkInputSelector{PayloadHash: "sha256:other"}, token, nil) {
+		t.Fatal("selector unexpectedly matched wrong payload hash")
+	}
+}
+
+func TestHelperFunctions(t *testing.T) {
+	if bindingContainsToken(nil, "", "token-1") {
+		t.Fatal("bindingContainsToken matched empty name")
+	}
+	if bindingContainsToken(nil, "work", "") {
+		t.Fatal("bindingContainsToken matched empty token id")
+	}
+	if bindingContainsToken(map[string][]string{"work": {"other"}}, "work", "token-1") {
+		t.Fatal("bindingContainsToken matched missing token")
+	}
+	if tokenState(interfaces.Token{PlaceID: "no-prefix", Color: interfaces.TokenColor{WorkTypeID: "task"}}) != "" {
+		t.Fatal("tokenState returned non-empty state for unrelated place")
+	}
+	if payloadHash(nil) != "" {
+		t.Fatal("payloadHash returned non-empty hash for empty payload")
+	}
+	if got := payloadHash([]byte("payload")); got == "" || got == "payload" {
+		t.Fatalf("payloadHash = %q, want sha256-prefixed digest", got)
+	}
+}
+
 type failCommandRunner struct {
 	t *testing.T
 }
@@ -221,6 +522,17 @@ type recordingCommandRunner struct {
 func (r *recordingCommandRunner) Run(_ context.Context, req workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
 	r.requests = append(r.requests, req)
 	return workerprocess.CommandResult{Stdout: []byte("passthrough")}, nil
+}
+
+type inspectingCommandRunner struct {
+	req         workerprocess.CommandRequest
+	hasDeadline bool
+}
+
+func (r *inspectingCommandRunner) Run(ctx context.Context, req workerprocess.CommandRequest) (workerprocess.CommandResult, error) {
+	r.req = req
+	_, r.hasDeadline = ctx.Deadline()
+	return workerprocess.CommandResult{}, nil
 }
 
 func inputTokens(tokens ...interfaces.Token) []any {

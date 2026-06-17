@@ -93,6 +93,12 @@ func TestExecuteFailsWhenCoverageBelowMinimum(t *testing.T) {
 	if !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("execute() stdout = %q, want total coverage line", got)
 	}
+	if !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 100.0% of statements") {
+		t.Fatalf("execute() stdout = %q, want package summary for pkg/config", got)
+	}
+	if !strings.Contains(got, modulePath+"/pkg/service\tcoverage: 100.0% of statements") {
+		t.Fatalf("execute() stdout = %q, want package summary for pkg/service", got)
+	}
 	wantFailure := "go coverage 100.0% is below minimum 100.1%"
 	if err.Error() != wantFailure {
 		t.Fatalf("execute() error = %q, want %q", err.Error(), wantFailure)
@@ -137,6 +143,12 @@ func TestExecuteFailsWhenCoverageBelowMinimumAndZeroCoveragePackage(t *testing.T
 	got := stdout.String()
 	if !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("execute() stdout = %q, want total coverage line", got)
+	}
+	if !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 0.0% of statements") {
+		t.Fatalf("execute() stdout = %q, want package summary for pkg/config", got)
+	}
+	if !strings.Contains(got, modulePath+"/pkg/service\tcoverage: 100.0% of statements") {
+		t.Fatalf("execute() stdout = %q, want package summary for pkg/service", got)
 	}
 	wantFailure := strings.Join([]string{
 		"go coverage 100.0% is below minimum 100.1%",
@@ -185,6 +197,12 @@ func TestExecuteFailsWhenZeroCoveragePackageOnly(t *testing.T) {
 	got := stdout.String()
 	if !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("execute() stdout = %q, want total coverage line", got)
+	}
+	if !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 0.0% of statements") {
+		t.Fatalf("execute() stdout = %q, want package summary for pkg/config", got)
+	}
+	if !strings.Contains(got, modulePath+"/pkg/service\tcoverage: 100.0% of statements") {
+		t.Fatalf("execute() stdout = %q, want package summary for pkg/service", got)
 	}
 	wantFailure := "go coverage found non-baselined backend packages below 80.0% statement coverage: " + modulePath + "/pkg/config (0.0%)"
 	if err.Error() != wantFailure {
@@ -604,34 +622,19 @@ func TestRepoRootDirFailsWhenNoGoModExists(t *testing.T) {
 	}
 }
 
-func TestFindZeroCoveragePackagesSkipsPackagesWithZeroStatements(t *testing.T) {
+func TestFindZeroCoveragePackagesFromSummaries(t *testing.T) {
 	t.Parallel()
 
-	repoRoot := filepath.Clean(t.TempDir())
-	profilePath := writeCoverageProfile(t, strings.Join([]string{
-		"mode: count",
-		modulePath + "/pkg/config/config.go:1.1,2.1 0 0",
-		"",
-	}, "\n"))
-	packageTotals, err := readCoverageProfileTotals(profilePath, repoRoot)
-	if err != nil {
-		t.Fatalf("readCoverageProfileTotals() error = %v", err)
-	}
-
-	zeroCoveragePackages, err := findZeroCoveragePackages(
-		modulePath+"/pkg/config\t\tcoverage: 0.0% of statements\n",
-		packageTotals,
-		[]string{
-			modulePath + "/pkg/config",
-			modulePath + "/pkg/config",
-			modulePath + "/pkg/generatedclient",
+	zeroCoveragePackages := findZeroCoveragePackagesFromSummaries(
+		[]packageCoverageSummary{
+			{importPath: modulePath + "/pkg/config", coverage: 0},
+			{importPath: modulePath + "/pkg/service", coverage: 100},
 		},
-		emptyCoverageBaseline,
+		map[string]struct{}{
+			modulePath + "/pkg/config": {},
+		},
 	)
-	if err != nil {
-		t.Fatalf("findZeroCoveragePackages() error = %v", err)
-	}
 	if len(zeroCoveragePackages) != 0 {
-		t.Fatalf("findZeroCoveragePackages() = %v, want none", zeroCoveragePackages)
+		t.Fatalf("findZeroCoveragePackagesFromSummaries() = %v, want none", zeroCoveragePackages)
 	}
 }
