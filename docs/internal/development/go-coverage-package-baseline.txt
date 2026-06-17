@@ -1,0 +1,43 @@
+# Backend packages currently below the per-package coverage gate.
+# Keep this list temporary. New packages under the threshold should fail the
+# coverage lane instead of being added here by default.
+github.com/portpowered/infinite-you/pkg/api
+github.com/portpowered/infinite-you/pkg/api/apitypes
+github.com/portpowered/infinite-you/pkg/apisurface
+github.com/portpowered/infinite-you/pkg/cli/config
+github.com/portpowered/infinite-you/pkg/cli/mcp
+github.com/portpowered/infinite-you/pkg/cli/models
+github.com/portpowered/infinite-you/pkg/cli/run
+github.com/portpowered/infinite-you/pkg/cli/session
+github.com/portpowered/infinite-you/pkg/cli/sessionexecution
+github.com/portpowered/infinite-you/pkg/config/factoryrun
+github.com/portpowered/infinite-you/pkg/config/inboxgitkeep
+github.com/portpowered/infinite-you/pkg/factory/runtime/buffers
+github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist
+github.com/portpowered/infinite-you/pkg/factorysessions
+github.com/portpowered/infinite-you/pkg/hostedworkers
+github.com/portpowered/infinite-you/pkg/hostedworkers/linear
+github.com/portpowered/infinite-you/pkg/internal/cursorstorage
+github.com/portpowered/infinite-you/pkg/invocations
+github.com/portpowered/infinite-you/pkg/localmodels
+github.com/portpowered/infinite-you/pkg/localmodels/assets
+github.com/portpowered/infinite-you/pkg/mcp/factorysession
+github.com/portpowered/infinite-you/pkg/mcp/server
+github.com/portpowered/infinite-you/pkg/modelhost
+github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy
+github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result
+github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime
+github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source
+github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store
+github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation
+github.com/portpowered/infinite-you/pkg/packagedfactories/tts
+github.com/portpowered/infinite-you/pkg/replay
+github.com/portpowered/infinite-you/pkg/service
+github.com/portpowered/infinite-you/pkg/service/factorysave
+github.com/portpowered/infinite-you/pkg/workcontent/materialize
+github.com/portpowered/infinite-you/pkg/workers/mockworker
+github.com/portpowered/infinite-you/pkg/workflowpolicy
+github.com/portpowered/infinite-you/pkg/workflowpreview
+github.com/portpowered/infinite-you/pkg/workflowresult
+github.com/portpowered/infinite-you/pkg/workflowsource
+github.com/portpowered/infinite-you/pkg/workflowvalidation

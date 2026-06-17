@@ -40,10 +40,19 @@ func TestExecuteReportsPassingCoverage(t *testing.T) {
 	}
 
 	got := stdout.String()
-	if !strings.Contains(got, "total: (statements) 82.5%") {
+	if !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("execute() stdout = %q, want total coverage line", got)
 	}
-	wantSuccess := "Go coverage 82.5% meets minimum 80.0%."
+	if !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 100.0% of statements") {
+		t.Fatalf("execute() stdout = %q, want package summary for pkg/config", got)
+	}
+	if !strings.Contains(got, modulePath+"/pkg/service\tcoverage: 100.0% of statements") {
+		t.Fatalf("execute() stdout = %q, want package summary for pkg/service", got)
+	}
+	if strings.Contains(got, "\t\tcoverage: 75.0% of statements") {
+		t.Fatalf("execute() stdout = %q, did not expect raw go test coverage output", got)
+	}
+	wantSuccess := "Go coverage 100.0% meets minimum 80.0%."
 	if !strings.Contains(got, wantSuccess) {
 		t.Fatalf("execute() stdout = %q, want success message %q", got, wantSuccess)
 	}
@@ -69,7 +78,7 @@ func TestExecuteFailsWhenCoverageBelowMinimum(t *testing.T) {
 	stderrWriter = &stderr
 
 	err := execute(config{
-		min: 90,
+		min: 100.1,
 		coverpkg: strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
@@ -81,10 +90,10 @@ func TestExecuteFailsWhenCoverageBelowMinimum(t *testing.T) {
 	}
 
 	got := stdout.String()
-	if !strings.Contains(got, "total: (statements) 82.5%") {
+	if !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("execute() stdout = %q, want total coverage line", got)
 	}
-	wantFailure := "go coverage 82.5% is below minimum 90.0%"
+	wantFailure := "go coverage 100.0% is below minimum 100.1%"
 	if err.Error() != wantFailure {
 		t.Fatalf("execute() error = %q, want %q", err.Error(), wantFailure)
 	}
@@ -113,7 +122,7 @@ func TestExecuteFailsWhenCoverageBelowMinimumAndZeroCoveragePackage(t *testing.T
 	stderrWriter = &stderr
 
 	err := execute(config{
-		min: 90,
+		min: 100.1,
 		coverpkg: strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
@@ -126,12 +135,12 @@ func TestExecuteFailsWhenCoverageBelowMinimumAndZeroCoveragePackage(t *testing.T
 	}
 
 	got := stdout.String()
-	if !strings.Contains(got, "total: (statements) 82.5%") {
+	if !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("execute() stdout = %q, want total coverage line", got)
 	}
 	wantFailure := strings.Join([]string{
-		"go coverage 82.5% is below minimum 90.0%",
-		"go coverage found backend-owned packages with 0% statement coverage: " + modulePath + "/pkg/config",
+		"go coverage 100.0% is below minimum 100.1%",
+		"go coverage found non-baselined backend packages below 80.0% statement coverage: " + modulePath + "/pkg/config (0.0%)",
 	}, "\n")
 	if err.Error() != wantFailure {
 		t.Fatalf("execute() error = %q, want %q", err.Error(), wantFailure)
@@ -174,10 +183,10 @@ func TestExecuteFailsWhenZeroCoveragePackageOnly(t *testing.T) {
 	}
 
 	got := stdout.String()
-	if !strings.Contains(got, "total: (statements) 82.5%") {
+	if !strings.Contains(got, "total: (statements) 100.0%") {
 		t.Fatalf("execute() stdout = %q, want total coverage line", got)
 	}
-	wantFailure := "go coverage found backend-owned packages with 0% statement coverage: " + modulePath + "/pkg/config"
+	wantFailure := "go coverage found non-baselined backend packages below 80.0% statement coverage: " + modulePath + "/pkg/config (0.0%)"
 	if err.Error() != wantFailure {
 		t.Fatalf("execute() error = %q, want %q", err.Error(), wantFailure)
 	}
@@ -217,8 +226,8 @@ func TestRunCreatesAndRemovesTempCoverageProfile(t *testing.T) {
 		t.Fatalf("run() error = %v", err)
 	}
 
-	if result.actual != 82.5 {
-		t.Fatalf("actual coverage = %v, want 82.5", result.actual)
+	if result.actual != 100 {
+		t.Fatalf("actual coverage = %v, want 100", result.actual)
 	}
 	if len(result.zeroCoveragePackages) != 0 {
 		t.Fatalf("zero coverage packages = %v, want none", result.zeroCoveragePackages)
@@ -227,11 +236,19 @@ func TestRunCreatesAndRemovesTempCoverageProfile(t *testing.T) {
 		t.Fatalf("run() stderr = %q, want empty stderr", stderr.String())
 	}
 
-	profilePath := parseTempProfilePath(t, stdout.String())
+	markerPath := filepath.Join(os.TempDir(), tempProfileMarkerFilename)
+	t.Cleanup(func() {
+		_ = os.Remove(markerPath)
+	})
+	profileData, err := os.ReadFile(markerPath)
+	if err != nil {
+		t.Fatalf("read temp profile marker: %v", err)
+	}
+	profilePath := strings.TrimSpace(string(profileData))
 	if _, err := os.Stat(profilePath); !os.IsNotExist(err) {
 		t.Fatalf("temp profile %q still exists after run(), stat err = %v", profilePath, err)
 	}
-	if !strings.Contains(stdout.String(), "total: (statements) 82.5%") {
+	if !strings.Contains(stdout.String(), "total: (statements) 100.0%") {
 		t.Fatalf("run() stdout = %q, want total coverage line", stdout.String())
 	}
 }
@@ -334,8 +351,11 @@ func TestRunWrapsCoverageLaneFailure(t *testing.T) {
 	}
 
 	want := "run go test coverage lane: exit status 7"
-	if err.Error() != want {
-		t.Fatalf("run() error = %q, want %q", err.Error(), want)
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("run() error = %q, want prefix %q", err.Error(), want)
+	}
+	if !strings.Contains(err.Error(), "raw failure output from go test") {
+		t.Fatalf("run() error = %q, want raw go test output detail", err.Error())
 	}
 }
 
@@ -593,16 +613,20 @@ func TestFindZeroCoveragePackagesSkipsPackagesWithZeroStatements(t *testing.T) {
 		modulePath + "/pkg/config/config.go:1.1,2.1 0 0",
 		"",
 	}, "\n"))
+	packageTotals, err := readCoverageProfileTotals(profilePath, repoRoot)
+	if err != nil {
+		t.Fatalf("readCoverageProfileTotals() error = %v", err)
+	}
 
 	zeroCoveragePackages, err := findZeroCoveragePackages(
 		modulePath+"/pkg/config\t\tcoverage: 0.0% of statements\n",
-		profilePath,
-		repoRoot,
+		packageTotals,
 		[]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/generatedclient",
 		},
+		emptyCoverageBaseline,
 	)
 	if err != nil {
 		t.Fatalf("findZeroCoveragePackages() error = %v", err)

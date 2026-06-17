@@ -9,6 +9,8 @@ import (
 	"testing"
 )
 
+var emptyCoverageBaseline = map[string]struct{}{}
+
 func TestIsBackendCoveragePackage(t *testing.T) {
 	t.Parallel()
 
@@ -124,6 +126,60 @@ func TestResolveCoverageLaneOverrides(t *testing.T) {
 	}
 }
 
+func TestReadPackageCoverageBaselineSkipsCommentsAndBlankLines(t *testing.T) {
+	t.Parallel()
+
+	baselinePath := filepath.Join(t.TempDir(), "baseline.txt")
+	if err := os.WriteFile(baselinePath, []byte(strings.Join([]string{
+		"# legacy exceptions",
+		"",
+		modulePath + "/pkg/config",
+		"  " + modulePath + "/pkg/service  ",
+		"",
+	}, "\n")), 0o600); err != nil {
+		t.Fatalf("write baseline: %v", err)
+	}
+
+	got, err := readPackageCoverageBaseline(baselinePath)
+	if err != nil {
+		t.Fatalf("readPackageCoverageBaseline() error = %v", err)
+	}
+
+	want := map[string]struct{}{
+		modulePath + "/pkg/config":  {},
+		modulePath + "/pkg/service": {},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("readPackageCoverageBaseline() = %v, want %v", got, want)
+	}
+	for pkg := range want {
+		if _, ok := got[pkg]; !ok {
+			t.Fatalf("readPackageCoverageBaseline() missing %q in %v", pkg, got)
+		}
+	}
+}
+
+func TestFindInsufficientCoveragePackagesSkipsBaselinedPackages(t *testing.T) {
+	t.Parallel()
+
+	summaries := []packageCoverageSummary{
+		{importPath: modulePath + "/pkg/config", coverage: 74.4},
+		{importPath: modulePath + "/pkg/service", coverage: 82.1},
+		{importPath: modulePath + "/pkg/workflowpreview", coverage: 0},
+	}
+
+	got := findInsufficientCoveragePackages(summaries, 80, map[string]struct{}{
+		modulePath + "/pkg/config": {},
+	})
+
+	want := []packageCoverageSummary{
+		{importPath: modulePath + "/pkg/workflowpreview", coverage: 0},
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("findInsufficientCoveragePackages() = %v, want %v", got, want)
+	}
+}
+
 func TestEvaluateCoverageFlagsBackendPackagesMissingFromProfile(t *testing.T) {
 	t.Parallel()
 
@@ -145,16 +201,18 @@ func TestEvaluateCoverageFlagsBackendPackagesMissingFromProfile(t *testing.T) {
 			modulePath + "/pkg/service",
 			modulePath + "/pkg/generatedclient",
 		},
+		80,
+		emptyCoverageBaseline,
 	)
 	if err != nil {
 		t.Fatalf("evaluateCoverage() error = %v", err)
 	}
 
-	if result.actual != 82.5 {
-		t.Fatalf("actual coverage = %v, want 82.5", result.actual)
+	if result.actual != 100 {
+		t.Fatalf("actual coverage = %v, want 100", result.actual)
 	}
-	if totalLine != "total: (statements) 82.5%" {
-		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 82.5%")
+	if totalLine != "total: (statements) 100.0%" {
+		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 100.0%")
 	}
 
 	wantZeroCoverage := []string{modulePath + "/pkg/config"}
@@ -184,16 +242,18 @@ func TestEvaluateCoverageFlagsBackendPackagesMissingFromProfileWithOKSummary(t *
 			modulePath + "/pkg/service",
 			modulePath + "/pkg/generatedclient",
 		},
+		80,
+		emptyCoverageBaseline,
 	)
 	if err != nil {
 		t.Fatalf("evaluateCoverage() error = %v", err)
 	}
 
-	if result.actual != 82.5 {
-		t.Fatalf("actual coverage = %v, want 82.5", result.actual)
+	if result.actual != 100 {
+		t.Fatalf("actual coverage = %v, want 100", result.actual)
 	}
-	if totalLine != "total: (statements) 82.5%" {
-		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 82.5%")
+	if totalLine != "total: (statements) 100.0%" {
+		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 100.0%")
 	}
 
 	wantZeroCoverage := []string{modulePath + "/pkg/config"}
@@ -223,16 +283,18 @@ func TestEvaluateCoverageFlagsBackendPackagesMissingFromProfileWithCoverpkgOKSum
 			modulePath + "/pkg/service",
 			modulePath + "/pkg/generatedclient",
 		},
+		80,
+		emptyCoverageBaseline,
 	)
 	if err != nil {
 		t.Fatalf("evaluateCoverage() error = %v", err)
 	}
 
-	if result.actual != 82.5 {
-		t.Fatalf("actual coverage = %v, want 82.5", result.actual)
+	if result.actual != 100 {
+		t.Fatalf("actual coverage = %v, want 100", result.actual)
 	}
-	if totalLine != "total: (statements) 82.5%" {
-		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 82.5%")
+	if totalLine != "total: (statements) 100.0%" {
+		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 100.0%")
 	}
 
 	wantZeroCoverage := []string{modulePath + "/pkg/config"}
@@ -261,9 +323,14 @@ func TestEvaluateCoverageFlagsBackendPackagesPresentWithZeroCoverage(t *testing.
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
 		},
+		80,
+		emptyCoverageBaseline,
 	)
 	if err != nil {
 		t.Fatalf("evaluateCoverage() error = %v", err)
+	}
+	if result.actual != 62.5 {
+		t.Fatalf("actual coverage = %v, want 62.5", result.actual)
 	}
 
 	wantZeroCoverage := []string{modulePath + "/pkg/config"}
@@ -295,16 +362,18 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackages(t *testing.T) {
 			modulePath + "/pkg/generatedclient",
 			modulePath + "/pkg/testutil/runtimefixtures",
 		},
+		80,
+		emptyCoverageBaseline,
 	)
 	if err != nil {
 		t.Fatalf("evaluateCoverage() error = %v", err)
 	}
 
-	if result.actual != 81.0 {
-		t.Fatalf("actual coverage = %v, want 81.0", result.actual)
+	if result.actual != 100 {
+		t.Fatalf("actual coverage = %v, want 100", result.actual)
 	}
-	if totalLine != "total: (statements) 81.0%" {
-		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 81.0%")
+	if totalLine != "total: (statements) 100.0%" {
+		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 100.0%")
 	}
 	if len(result.zeroCoveragePackages) != 0 {
 		t.Fatalf("zero coverage packages = %v, want none", result.zeroCoveragePackages)
@@ -334,16 +403,18 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackagesWithOKSummary(t *testi
 			modulePath + "/pkg/generatedclient",
 			modulePath + "/pkg/testutil/runtimefixtures",
 		},
+		80,
+		emptyCoverageBaseline,
 	)
 	if err != nil {
 		t.Fatalf("evaluateCoverage() error = %v", err)
 	}
 
-	if result.actual != 81.0 {
-		t.Fatalf("actual coverage = %v, want 81.0", result.actual)
+	if result.actual != 100 {
+		t.Fatalf("actual coverage = %v, want 100", result.actual)
 	}
-	if totalLine != "total: (statements) 81.0%" {
-		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 81.0%")
+	if totalLine != "total: (statements) 100.0%" {
+		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 100.0%")
 	}
 	if len(result.zeroCoveragePackages) != 0 {
 		t.Fatalf("zero coverage packages = %v, want none", result.zeroCoveragePackages)
@@ -373,16 +444,18 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackagesWithCoverpkgOKSummary(
 			modulePath + "/pkg/generatedclient",
 			modulePath + "/pkg/testutil/runtimefixtures",
 		},
+		80,
+		emptyCoverageBaseline,
 	)
 	if err != nil {
 		t.Fatalf("evaluateCoverage() error = %v", err)
 	}
 
-	if result.actual != 81.0 {
-		t.Fatalf("actual coverage = %v, want 81.0", result.actual)
+	if result.actual != 100 {
+		t.Fatalf("actual coverage = %v, want 100", result.actual)
 	}
-	if totalLine != "total: (statements) 81.0%" {
-		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 81.0%")
+	if totalLine != "total: (statements) 100.0%" {
+		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 100.0%")
 	}
 	if len(result.zeroCoveragePackages) != 0 {
 		t.Fatalf("zero coverage packages = %v, want none", result.zeroCoveragePackages)
@@ -409,9 +482,14 @@ func TestEvaluateCoverageSupportsRepositoryRelativeProfilePaths(t *testing.T) {
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
 		},
+		80,
+		emptyCoverageBaseline,
 	)
 	if err != nil {
 		t.Fatalf("evaluateCoverage() error = %v", err)
+	}
+	if result.actual != 66.66666666666667 {
+		t.Fatalf("actual coverage = %v, want 66.66666666666667", result.actual)
 	}
 
 	wantZeroCoverage := []string{modulePath + "/pkg/config"}
@@ -420,23 +498,36 @@ func TestEvaluateCoverageSupportsRepositoryRelativeProfilePaths(t *testing.T) {
 	}
 }
 
-func TestEvaluateCoverageFailsWhenTotalCoverageCannotBeParsed(t *testing.T) {
+func TestEvaluateCoverageIgnoresExternalTotalReportAndUsesMergedProfileCoverage(t *testing.T) {
 	t.Parallel()
 
-	profilePath := writeCoverageProfile(t, "mode: count\n")
+	repoRoot := filepath.Clean(t.TempDir())
+	profilePath := writeCoverageProfile(t, strings.Join([]string{
+		"mode: count",
+		modulePath + "/pkg/config/config.go:1.1,2.1 3 0",
+		modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
+		modulePath + "/pkg/config/config.go:3.1,4.1 2 0",
+		modulePath + "/pkg/config/config.go:3.1,4.1 2 0",
+		"",
+	}, "\n"))
 
-	_, _, err := evaluateCoverage(
+	result, totalLine, err := evaluateCoverage(
 		"not a total report\n",
 		"",
 		profilePath,
-		filepath.Clean(t.TempDir()),
+		repoRoot,
 		[]string{modulePath + "/pkg/config"},
+		80,
+		emptyCoverageBaseline,
 	)
-	if err == nil {
-		t.Fatal("evaluateCoverage() unexpectedly succeeded")
+	if err != nil {
+		t.Fatalf("evaluateCoverage() error = %v", err)
 	}
-	if err.Error() != "parse go coverage total: missing total statements line" {
-		t.Fatalf("evaluateCoverage() error = %q, want parse total failure", err.Error())
+	if result.actual != 60 {
+		t.Fatalf("actual coverage = %v, want 60", result.actual)
+	}
+	if totalLine != "total: (statements) 60.0%" {
+		t.Fatalf("total line = %q, want %q", totalLine, "total: (statements) 60.0%")
 	}
 }
 
@@ -451,6 +542,8 @@ func TestEvaluateCoverageFailsWhenCoverageProfileCannotBeRead(t *testing.T) {
 		missingProfilePath,
 		filepath.Clean(t.TempDir()),
 		[]string{modulePath + "/pkg/config"},
+		80,
+		emptyCoverageBaseline,
 	)
 	if err == nil {
 		t.Fatal("evaluateCoverage() unexpectedly succeeded")

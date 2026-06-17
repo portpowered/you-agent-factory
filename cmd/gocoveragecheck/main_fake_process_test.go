@@ -10,6 +10,8 @@ import (
 	"testing"
 )
 
+const tempProfileMarkerFilename = "gocoveragecheck-last-temp-profile.txt"
+
 func TestGoCoverageCheckFakeGoProcess(t *testing.T) {
 	args, ok := helperCommandArgs(os.Args)
 	if !ok || len(args) == 0 || args[0] != "go" {
@@ -151,7 +153,7 @@ func TestGoCoverageCheckFakeGoProcessWithTempProfileReport(t *testing.T) {
 			modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
 			"",
 		}, "\n"))
-		fmt.Fprintf(os.Stdout, "TEMP_PROFILE=%s\n", profilePath)
+		writeTempProfileMarkerOrExit(profilePath)
 		fmt.Fprint(os.Stdout, modulePath+"/pkg/config\t\tcoverage: 75.0% of statements\n")
 		os.Exit(0)
 	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
@@ -224,6 +226,7 @@ func TestGoCoverageCheckFakeGoProcessTestFailsWithoutDetail(t *testing.T) {
 	}
 
 	if len(args) >= 2 && args[1] == "test" {
+		fmt.Fprint(os.Stdout, "raw failure output from go test")
 		os.Exit(7)
 	}
 
@@ -354,6 +357,14 @@ func parseTempProfilePath(t *testing.T, output string) string {
 	}
 	t.Fatalf("TEMP_PROFILE marker missing from output %q", output)
 	return ""
+}
+
+func writeTempProfileMarkerOrExit(profilePath string) {
+	markerPath := filepath.Join(os.TempDir(), tempProfileMarkerFilename)
+	if err := os.WriteFile(markerPath, []byte(profilePath), 0o600); err != nil {
+		fmt.Fprintf(os.Stderr, "write temp profile marker: %v", err)
+		os.Exit(2)
+	}
 }
 
 func helperCoverProfilePath(args []string) string {

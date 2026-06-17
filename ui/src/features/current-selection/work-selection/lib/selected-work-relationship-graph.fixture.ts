@@ -19,10 +19,10 @@ const repoRoot = path.resolve(uiRoot, "..");
 
 export const localAgentCliRuntimeBatchPath = path.join(
   repoRoot,
-  "factory",
-  "inputs",
-  "BATCH",
-  "default",
+  "tests",
+  "functional",
+  "smoke",
+  "testdata",
   "factory-batch-local-agent-cli-runtime.json",
 );
 
