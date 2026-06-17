@@ -12,10 +12,6 @@ func derefString(value *string) string {
 	return *value
 }
 
-func deref(value *string) string {
-	return derefString(value)
-}
-
 func sessionBudgetsToAPI(budgets *factorysessionexecution.SessionBudgets) *factoryapi.FactorySessionBudgets {
 	if budgets == nil || budgets.MaxAgents <= 0 {
 		return nil

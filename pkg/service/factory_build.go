@@ -30,8 +30,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/internal/metrics"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
@@ -453,22 +453,22 @@ func assembleRuntimeBundle(
 	}
 
 	bundle := &factoryRuntimeBundle{
-		dir:            input.dir,
-		folderPath:     input.folderPath,
-		eventHistory:   eventHistory,
-		net:            net,
-		runtimeCfg:     input.loadedFactoryCfg,
+		dir:               input.dir,
+		folderPath:        input.folderPath,
+		eventHistory:      eventHistory,
+		net:               net,
+		runtimeCfg:        input.loadedFactoryCfg,
 		modelResources:    localModels.resources,
 		modelAssets:       localModels.assets,
 		localModels:       localModels.manager,
 		localModelRuntime: localModels.runtime,
 		modelHost:         localModels.host,
 		leaseExecution:    localModels.leaseExecution,
-		logger:         logger,
-		logSink:        logSink,
-		metricsSink:    metricsSink,
-		recording:      recording,
-		recordPath:     input.recordPath,
+		logger:            logger,
+		logSink:           logSink,
+		metricsSink:       metricsSink,
+		recording:         recording,
+		recordPath:        input.recordPath,
 	}
 	opts := []factory.FactoryOption{
 		factory.WithNet(net),
@@ -1562,24 +1562,6 @@ func (s *runtimeModelService) recordManagedRuntimeInvocationReadiness(
 		return
 	}
 	s.deps.logger.Info("managed runtime invocation readiness satisfied", fields...)
-}
-
-func (s *runtimeModelService) recordManagedRuntimeInvocationFailure(
-	modelName string,
-	managed factoryapi.ManagedRuntime,
-	err error,
-) {
-	if s == nil || s.deps.logger == nil || err == nil {
-		return
-	}
-	s.deps.logger.Warn(
-		"managed runtime invocation asset check failed",
-		zap.String("model_name", modelName),
-		zap.String("managed_runtime_identity", managed.Identity),
-		zap.String("readiness_state", string(managed.ReadinessState)),
-		zap.String("lifecycle_state", string(managed.LifecycleState)),
-		zap.Error(err),
-	)
 }
 
 func (s *runtimeModelService) recordModelPullMetric(name string, labels map[string]string) {

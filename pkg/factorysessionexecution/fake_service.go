@@ -45,16 +45,6 @@ func WithFakeScenarios(scenarios ...FakeScenario) FakeServiceOption {
 	}
 }
 
-// WithPersistedSessionSeeds preloads persisted-scope listing rows without requiring
-// a start call in the current fake service instance.
-func WithPersistedSessionSeeds(summaries ...DurableSessionListSummary) FakeServiceOption {
-	return func(service *FakeService) {
-		for _, summary := range summaries {
-			service.persistedSeeds = appendPersistedSeed(service.persistedSeeds, summary)
-		}
-	}
-}
-
 // NewFakeService constructs one deterministic fake durable session service.
 func NewFakeService(options ...FakeServiceOption) *FakeService {
 	service := &FakeService{
@@ -655,6 +645,7 @@ func findDispatchSummary(dispatches []DispatchSummary, dispatchID string) (Dispa
 	}
 	return DispatchSummary{}, false
 }
+
 // mode and includeArtifacts parameters.
 func ProjectResultRead(canonical ResultReadResult, session SessionReadResult, artifacts []ArtifactSummary, req ResultRequest) (ResultReadResult, error) {
 	normalized, err := NormalizeResultRequest(req)

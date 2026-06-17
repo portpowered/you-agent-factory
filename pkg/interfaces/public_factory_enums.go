@@ -34,7 +34,7 @@ func SupportedModelProviders() []ModelProvider {
 var internalModelProviderToPublicWorkerModelProvider = map[ModelProvider]factoryapi.WorkerModelProvider{
 	ModelProviderClaude:   factoryapi.WorkerModelProviderClaude,
 	ModelProviderCodex:    factoryapi.WorkerModelProviderCodex,
-	ModelProviderCursor: factoryapi.WorkerModelProviderCursor,
+	ModelProviderCursor:   factoryapi.WorkerModelProviderCursor,
 	ModelProviderGemini:   factoryapi.WorkerModelProviderGemini,
 	ModelProviderKiro:     factoryapi.WorkerModelProviderKiro,
 	ModelProviderOpenCode: factoryapi.WorkerModelProviderOpenCode,
@@ -368,12 +368,6 @@ func PublicWorkerTypeFromInternalRuntime(value string) string {
 	}
 }
 
-// IsInferenceWorkerPublicType reports whether a public worker type value denotes
-// inference-worker behavior, including the legacy MODEL_WORKER alias.
-func IsInferenceWorkerPublicType(value string) bool {
-	return PermissivePublicFactoryWorkerType(value) == WorkerTypeInference
-}
-
 // IsPollerWorkerPublicType reports whether a public worker type value denotes
 // poller-worker behavior, including the legacy HOSTED_WORKER alias.
 func IsPollerWorkerPublicType(value string) bool {
@@ -521,12 +515,6 @@ func PublicWorkstationTypeFromInternalRuntime(workstationType, workerType string
 	default:
 		return PermissivePublicFactoryWorkstationType(workstationType)
 	}
-}
-
-// IsInferenceRunPublicWorkstationType reports whether a public workstation type value
-// denotes inference-run behavior, including the legacy MODEL_INVOKE alias.
-func IsInferenceRunPublicWorkstationType(value string) bool {
-	return PermissivePublicFactoryWorkstationType(value) == WorkstationTypeInference
 }
 
 // IsPollerRunPublicWorkstationType reports whether a public workstation type value

@@ -347,18 +347,6 @@ func helperCommandArgs(argv []string) ([]string, bool) {
 	return nil, false
 }
 
-func parseTempProfilePath(t *testing.T, output string) string {
-	t.Helper()
-
-	for _, line := range strings.Split(output, "\n") {
-		if strings.HasPrefix(line, "TEMP_PROFILE=") {
-			return strings.TrimPrefix(line, "TEMP_PROFILE=")
-		}
-	}
-	t.Fatalf("TEMP_PROFILE marker missing from output %q", output)
-	return ""
-}
-
 func writeTempProfileMarkerOrExit(profilePath string) {
 	markerPath := filepath.Join(os.TempDir(), tempProfileMarkerFilename)
 	if err := os.WriteFile(markerPath, []byte(profilePath), 0o600); err != nil {

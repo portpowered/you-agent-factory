@@ -912,10 +912,6 @@ func WorkstationConfigToOpenAPIWithWorkerType(workstation interfaces.FactoryWork
 	return workstationAPIFromInternal(workstation, workerType)
 }
 
-func workerDefinitionAPIFromInternal(def *interfaces.WorkerConfig) *factoryapi.Worker {
-	return workerDefinitionAPIFromInternalWithUsage(def, nil)
-}
-
 func workerDefinitionAPIFromInternalWithUsage(def *interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) *factoryapi.Worker {
 	if def == nil {
 		return nil
@@ -1190,14 +1186,6 @@ func guardMatchConfigAPIFromInternal(matchConfig *interfaces.GuardMatchConfig) *
 	return &factoryapi.GuardMatchConfig{
 		InputKey: matchConfig.InputKey,
 	}
-}
-
-func workerTypePtrIfNotEmpty(value string) *factoryapi.WorkerType {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	enumValue := publicFactoryWorkerTypeFromInternal(value)
-	return &enumValue
 }
 
 func workerTypePtrForFactoryUsage(def *interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) *factoryapi.WorkerType {

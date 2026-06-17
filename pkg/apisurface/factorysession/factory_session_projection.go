@@ -8,7 +8,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
 // ResultRequestFromAPI maps one public durable result read request into the shared
@@ -543,18 +542,4 @@ func stringSlicePtr(values []string) *[]string {
 		return nil
 	}
 	return &out
-}
-
-// WorkContentJSONFromParts encodes canonical work content parts for durable
-// projection service results.
-func WorkContentJSONFromParts(parts []interfaces.WorkContentPart) json.RawMessage {
-	content := workcontent.GeneratedPtrFromParts(parts)
-	if content == nil {
-		return nil
-	}
-	encoded, err := json.Marshal(content)
-	if err != nil {
-		return nil
-	}
-	return encoded
 }
