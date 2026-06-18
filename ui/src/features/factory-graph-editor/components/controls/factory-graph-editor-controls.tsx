@@ -99,7 +99,7 @@ export function FactoryGraphEditorToolbar({
   preferencesDirty = false,
   saveDisabledReason,
   visible,
-  onSelectTool,
+  onSelectTool: _onSelectTool,
   openAddMenu = false,
 }: {
   activeTool: FactoryGraphEditorTool;
