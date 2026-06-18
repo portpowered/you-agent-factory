@@ -165,6 +165,13 @@ func TestArtifactProjectionToAPI_MapsSummaryAndDetailFixtures(t *testing.T) {
 }
 
 func TestDispatchAndArtifactProjectionToAPI_MapsUsageWarningsAndRedactionCounts(t *testing.T) {
+	t.Run("dispatch detail", testDispatchProjectionMapsUsageWarningsAndFailure)
+	t.Run("artifact detail", testArtifactProjectionMapsRedactionCountsAndMetadata)
+}
+
+func testDispatchProjectionMapsUsageWarningsAndFailure(t *testing.T) {
+	t.Helper()
+
 	dispatchMapped := factorysession.DispatchDetailResponseToAPI(factorysessionexecution.DispatchDetail{
 		DispatchSummary: factorysessionexecution.DispatchSummary{
 			ID:           "disp-1",
@@ -200,6 +207,10 @@ func TestDispatchAndArtifactProjectionToAPI_MapsUsageWarningsAndRedactionCounts(
 	if dispatchMapped.FailureDetail == nil || dispatchMapped.FailureDetail.Reason == nil || *dispatchMapped.FailureDetail.Reason != "TEMPORARY" {
 		t.Fatalf("dispatch failure detail = %#v, want trimmed failure", dispatchMapped.FailureDetail)
 	}
+}
+
+func testArtifactProjectionMapsRedactionCountsAndMetadata(t *testing.T) {
+	t.Helper()
 
 	createdAt := mustParseTime(t, "2026-06-08T10:05:00Z")
 	artifactMapped := factorysession.ArtifactDetailResponseToAPI(factorysessionexecution.ArtifactDetail{
@@ -257,6 +268,14 @@ func TestResultRequestFromAPI_RejectsInvalidMode(t *testing.T) {
 }
 
 func TestEventAndProjectionResponses_HandleEmptyAndInvalidBranches(t *testing.T) {
+	t.Run("reconnect request", testEventReconnectRequestBranches)
+	t.Run("event read response", testEventReadResponseBranches)
+	t.Run("factory event stream", testFactoryEventStreamBranches)
+}
+
+func testEventReconnectRequestBranches(t *testing.T) {
+	t.Helper()
+
 	reconnect, err := factorysession.EventReconnectRequestFromAPI(factoryapi.GetEventsBySessionIdParams{})
 	if err != nil {
 		t.Fatalf("EventReconnectRequestFromAPI empty: %v", err)
@@ -277,6 +296,10 @@ func TestEventAndProjectionResponses_HandleEmptyAndInvalidBranches(t *testing.T)
 	if reconnect.AfterEventID != "event-2" || reconnect.AfterSequence == nil || *reconnect.AfterSequence != 3 {
 		t.Fatalf("reconnect populated = %#v", reconnect)
 	}
+}
+
+func testEventReadResponseBranches(t *testing.T) {
+	t.Helper()
 
 	if events := factorysession.EventReadResponseToAPI(factorysessionexecution.EventReadResult{}); events != nil {
 		t.Fatalf("empty events = %#v, want nil", events)
@@ -292,6 +315,12 @@ func TestEventAndProjectionResponses_HandleEmptyAndInvalidBranches(t *testing.T)
 	if len(events) != 1 || events[0].Id != "event-1" {
 		t.Fatalf("events = %#v", events)
 	}
+}
+
+func testFactoryEventStreamBranches(t *testing.T) {
+	t.Helper()
+
+	validEvent := []byte(`{"id":"event-1","type":"factory.session.started","sequence":1}`)
 
 	stream := factorysession.FactoryEventStreamFromReadResult(factorysessionexecution.EventReadResult{})
 	if stream == nil || len(stream.History) != 0 {

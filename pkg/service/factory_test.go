@@ -4006,6 +4006,15 @@ func TestFactoryService_RuntimeLogDiagnostics_ReportsRuntimeArtifacts(t *testing
 func TestModelEventHelpersAndModelHostAdapters(t *testing.T) {
 	t.Parallel()
 
+	t.Run("model event diagnostics", testModelEventDiagnosticsBranches)
+	t.Run("model event error classes", testModelEventErrorClassBranches)
+	t.Run("model host logger adapter", testModelHostLoggerAdapterBranches)
+	t.Run("model host metrics and diagnostics", testModelHostMetricsAndDiagnosticsBranches)
+}
+
+func testModelEventDiagnosticsBranches(t *testing.T) {
+	t.Helper()
+
 	successDiagnostics := &interfaces.WorkDiagnostics{
 		Provider: &interfaces.ProviderDiagnostic{
 			ResponseMetadata: map[string]string{"request_id": "req-1"},
@@ -4025,6 +4034,12 @@ func TestModelEventHelpersAndModelHostAdapters(t *testing.T) {
 	if got := modelEventDiagnostics(nil, providerErr); got == nil || got.Provider == nil || got.Provider.ResponseMetadata == nil || (*got.Provider.ResponseMetadata)["request_id"] != "req-2" {
 		t.Fatalf("provider diagnostics = %#v", got)
 	}
+}
+
+func testModelEventErrorClassBranches(t *testing.T) {
+	t.Helper()
+
+	providerErr := workerprovider.NewProviderError(interfaces.WorkFailureTypeTimeout, "timeout", errors.New("boom"))
 	readinessErr := &apisurface.ManagedRuntimeInvocationError{ReadinessState: factoryapi.ManagedRuntimeReadinessStateLOADING}
 	if got := modelEventErrorClass(readinessErr); got != "MANAGED_RUNTIME_LOADING" {
 		t.Fatalf("managed runtime error class = %q, want MANAGED_RUNTIME_LOADING", got)
@@ -4038,6 +4053,10 @@ func TestModelEventHelpersAndModelHostAdapters(t *testing.T) {
 	if got := modelEventErrorClass(nil); got != "" {
 		t.Fatalf("nil error class = %q, want empty string", got)
 	}
+}
+
+func testModelHostLoggerAdapterBranches(t *testing.T) {
+	t.Helper()
 
 	core, observed := observer.New(zap.InfoLevel)
 	hostLogger := newZapModelHostLogger(zap.New(core))
@@ -4059,6 +4078,10 @@ func TestModelEventHelpersAndModelHostAdapters(t *testing.T) {
 	if got := modelHostZapFields(nil); got != nil {
 		t.Fatalf("modelHostZapFields(nil) = %#v, want nil", got)
 	}
+}
+
+func testModelHostMetricsAndDiagnosticsBranches(t *testing.T) {
+	t.Helper()
 
 	recorder := &capturingInvocationMetricsRecorder{}
 	adapter := newModelHostMetricsRecorder(recorder)

@@ -1,0 +1,1830 @@
+// backendsizecheck:ignore-file consolidated JavaScript runtime execution tests remain together until dedicated execution test seams split.
+// pkgmaintcheck:ignore-file-lines consolidated JavaScript runtime execution tests remain together until dedicated execution test seams split.
+package factorysessionexecution
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
+)
+
+func int64Ptr(value int64) *int64 {
+	return &value
+}
+func TestProjectResultRead_ModePartialAndFinal(t *testing.T) {
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-js-run-n-001")
+
+	partial, err := service.GetResult(context.Background(), "dur-sess-js-run-n-001", ResultRequest{Mode: ResultModePartial})
+	if err != nil {
+		t.Fatalf("GetResult partial: %v", err)
+	}
+	if partial.ResultStatus != ResultStatusPartial {
+		t.Fatalf("partial status = %q, want PARTIAL", partial.ResultStatus)
+	}
+	if len(partial.PrimaryResult) == 0 {
+		t.Fatal("partial primaryResult missing")
+	}
+	if partial.Mode != ResultModePartial {
+		t.Fatalf("mode = %q, want partial", partial.Mode)
+	}
+
+	final, err := service.GetResult(context.Background(), "dur-sess-js-run-n-001", ResultRequest{Mode: ResultModeFinal})
+	if err != nil {
+		t.Fatalf("GetResult final: %v", err)
+	}
+	if final.ResultStatus != ResultStatusNotReady {
+		t.Fatalf("final status = %q, want NOT_READY", final.ResultStatus)
+	}
+	if len(final.PrimaryResult) != 0 {
+		t.Fatal("final primaryResult should be omitted for running session")
+	}
+	if final.Availability == nil || final.Availability.Reason != "RESULT_NOT_READY" {
+		t.Fatalf("availability = %#v, want RESULT_NOT_READY", final.Availability)
+	}
+}
+
+func TestProjectResultRead_TerminalFinalAndUnavailable(t *testing.T) {
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-petri-success-001")
+
+	final, err := service.GetResult(context.Background(), "dur-sess-petri-success-001", ResultRequest{Mode: ResultModeFinal})
+	if err != nil {
+		t.Fatalf("GetResult terminal final: %v", err)
+	}
+	if final.ResultStatus != ResultStatusFinal {
+		t.Fatalf("status = %q, want FINAL", final.ResultStatus)
+	}
+	if len(final.PrimaryResult) == 0 {
+		t.Fatal("final primaryResult missing")
+	}
+
+	startAsyncByRequestID(t, service, "req-petri-cancel-001")
+	unavailable, err := service.GetResult(context.Background(), "dur-sess-petri-cancel-001", ResultRequest{Mode: ResultModeFinal})
+	if err != nil {
+		t.Fatalf("GetResult unavailable: %v", err)
+	}
+	if unavailable.ResultStatus != ResultStatusUnavailable {
+		t.Fatalf("status = %q, want UNAVAILABLE", unavailable.ResultStatus)
+	}
+	if unavailable.Availability == nil || unavailable.Availability.Reason != "SESSION_CANCELED" {
+		t.Fatalf("availability = %#v", unavailable.Availability)
+	}
+}
+
+func TestProjectResultRead_FailedWithPartialHonorsPartialMode(t *testing.T) {
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-js-failed-partial-001")
+
+	result, err := service.GetResult(context.Background(), "dur-sess-js-failed-partial-001", ResultRequest{Mode: ResultModePartial})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.ResultStatus != ResultStatusFailedWithPartial {
+		t.Fatalf("status = %q, want FAILED_WITH_PARTIAL", result.ResultStatus)
+	}
+	if len(result.PrimaryResult) == 0 {
+		t.Fatal("partial primaryResult missing")
+	}
+	if result.Failure == nil || !result.Failure.PartialResultAvailable {
+		t.Fatal("failure detail missing")
+	}
+}
+
+func TestProjectResultRead_IncludeArtifactsShaping(t *testing.T) {
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-petri-success-001")
+
+	excluded, err := service.GetResult(context.Background(), "dur-sess-petri-success-001", ResultRequest{
+		Mode:             ResultModeFinal,
+		IncludeArtifacts: false,
+	})
+	if err != nil {
+		t.Fatalf("GetResult excluded: %v", err)
+	}
+	if excluded.IncludeArtifacts {
+		t.Fatal("includeArtifacts = true, want false")
+	}
+	if len(excluded.ArtifactRefs) != 0 {
+		t.Fatalf("artifactRefs = %#v, want omitted", excluded.ArtifactRefs)
+	}
+	if len(excluded.ArtifactIDs) != 1 || excluded.ArtifactIDs[0] != "art-petri-final-001" {
+		t.Fatalf("artifactIds = %#v", excluded.ArtifactIDs)
+	}
+
+	included, err := service.GetResult(context.Background(), "dur-sess-petri-success-001", ResultRequest{
+		Mode:             ResultModeFinal,
+		IncludeArtifacts: true,
+	})
+	if err != nil {
+		t.Fatalf("GetResult included: %v", err)
+	}
+	if !included.IncludeArtifacts {
+		t.Fatal("includeArtifacts = false, want true")
+	}
+	if len(included.ArtifactRefs) != 1 || included.ArtifactRefs[0].ID != "art-petri-final-001" {
+		t.Fatalf("artifactRefs = %#v", included.ArtifactRefs)
+	}
+	if len(included.ArtifactIDs) != 0 {
+		t.Fatalf("artifactIds = %#v, want omitted when refs included", included.ArtifactIDs)
+	}
+}
+
+func TestProjectResultRead_NotReadyRunningSession(t *testing.T) {
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-petri-run-001")
+
+	result, err := service.GetResult(context.Background(), "dur-sess-petri-run-001", ResultRequest{Mode: ResultModeFinal})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.ResultStatus != ResultStatusNotReady {
+		t.Fatalf("status = %q, want NOT_READY", result.ResultStatus)
+	}
+	if result.Availability == nil || result.Availability.Message == "" {
+		t.Fatal("availability missing")
+	}
+}
+
+func TestProjectResultRead_DefaultsToFinalMode(t *testing.T) {
+	canonical := ResultReadResult{
+		SessionID:     "dur-sess-001",
+		ResultStatus:  ResultStatusFinal,
+		SessionStatus: LifecycleStatusSucceeded,
+		PrimaryResult: json.RawMessage(`[{"type":"text","text":"done"}]`),
+	}
+	session := SessionReadResult{
+		SessionID: "dur-sess-001",
+		Status:    LifecycleStatusSucceeded,
+		ResultSummary: &ResultSummary{
+			ResultStatus: string(ResultStatusFinal),
+		},
+	}
+
+	projected, err := ProjectResultRead(canonical, session, nil, ResultRequest{})
+	if err != nil {
+		t.Fatalf("ProjectResultRead: %v", err)
+	}
+	if projected.Mode != ResultModeFinal {
+		t.Fatalf("mode = %q, want final", projected.Mode)
+	}
+	if projected.ResultStatus != ResultStatusFinal {
+		t.Fatalf("status = %q, want FINAL", projected.ResultStatus)
+	}
+}
+
+func TestFakeService_InternalLifecycleHelpers(t *testing.T) {
+	state := &fakeSessionState{
+		session: SessionReadResult{
+			SessionID: "dur-sess-1",
+			Status:    LifecycleStatusAwaitingApproval,
+		},
+		result: ResultReadResult{
+			SessionID:     "dur-sess-1",
+			SessionStatus: LifecycleStatusAwaitingApproval,
+			ResultStatus:  ResultStatusNotReady,
+		},
+		dispatches: []DispatchSummary{{ID: "disp-1", Status: DispatchStatusFailed, Attempt: 1}},
+		dispatchDetails: map[string]DispatchDetail{
+			"disp-1": {DispatchSummary: DispatchSummary{ID: "disp-1", Status: DispatchStatusFailed, Attempt: 1}},
+		},
+	}
+
+	if err := validateLifecycleControlRequest(LifecycleControlApprove, ControlRequest{}, ApproveRequest{}, RetryDispatchRequest{}); err != nil {
+		t.Fatalf("approve validation: %v", err)
+	}
+	if err := validateLifecycleControlRequest(LifecycleControlRetryDispatch, ControlRequest{}, ApproveRequest{}, RetryDispatchRequest{}); err == nil {
+		t.Fatal("retry without dispatch id should fail validation")
+	}
+	if err := validateLifecycleControlRequest(LifecycleControlPause, ControlRequest{}, ApproveRequest{}, RetryDispatchRequest{}); err != nil {
+		t.Fatalf("pause validation: %v", err)
+	}
+
+	accepted := lifecycleControlResultFromState(state, "dur-sess-1", LifecycleControlApprove, LifecycleControlOutcomeAccepted, RetryDispatchRequest{})
+	if accepted.Session == nil || accepted.Session.Status != LifecycleStatusAwaitingApproval {
+		t.Fatalf("accepted lifecycle control result = %#v", accepted)
+	}
+	noop := lifecycleControlResultFromState(state, "dur-sess-1", LifecycleControlPause, LifecycleControlOutcomeNoOp, RetryDispatchRequest{})
+	if noop.Session == nil {
+		t.Fatalf("noop lifecycle control result = %#v", noop)
+	}
+	retry := lifecycleControlResultFromState(state, "dur-sess-1", LifecycleControlRetryDispatch, LifecycleControlOutcomeAccepted, RetryDispatchRequest{DispatchID: "disp-1"})
+	if retry.DispatchID != "disp-1" || retry.RetryDispatchID != "disp-1" {
+		t.Fatalf("retry lifecycle control result = %#v", retry)
+	}
+
+	service := &FakeService{}
+	service.mutateSessionForControl(state, LifecycleControlApprove, "")
+	if state.session.Status != LifecycleStatusRunning {
+		t.Fatalf("approve mutate status = %q, want RUNNING", state.session.Status)
+	}
+	state.session.Status = LifecycleStatusFailed
+	state.result.SessionStatus = LifecycleStatusFailed
+	service.mutateSessionForControl(state, LifecycleControlRetryDispatch, "disp-1")
+	if state.session.Status != LifecycleStatusRunning || state.dispatches[0].Status != DispatchStatusQueued || state.dispatches[0].Attempt != 2 {
+		t.Fatalf("retry mutate state = %#v / %#v", state.session, state.dispatches[0])
+	}
+}
+
+func TestFakeService_InternalStartAndProjectionHelpers(t *testing.T) {
+	state := newFakeServiceInternalStartState()
+	service := &FakeService{}
+
+	t.Run("start projections", func(t *testing.T) {
+		async := service.asyncStartFromState(state)
+		if async.SessionID != "dur-sess-1" || async.Policy.EffectiveHash != "policy" {
+			t.Fatalf("asyncStartFromState = %#v", async)
+		}
+
+		sync := service.syncStartFromState(state)
+		if sync.SyncOutcome != SyncOutcomeCompleted || len(sync.Result) == 0 {
+			t.Fatalf("syncStartFromState = %#v", sync)
+		}
+		nonTerminal := *state
+		nonTerminal.session.Status = LifecycleStatusRunning
+		sync = service.syncStartFromState(&nonTerminal)
+		if sync.SyncOutcome != "" || len(sync.Result) != 0 {
+			t.Fatalf("non-terminal syncStartFromState = %#v", sync)
+		}
+
+		scenarioAsync := service.asyncStartFromScenario(FakeScenario{AsyncStart: &AsyncStartResult{SessionID: "override"}}, state)
+		if scenarioAsync.SessionID != "override" {
+			t.Fatalf("asyncStartFromScenario = %#v", scenarioAsync)
+		}
+		scenarioSync := service.syncStartFromScenario(FakeScenario{SyncStart: &SyncStartResult{AsyncStartResult: AsyncStartResult{SessionID: "override-sync"}}}, state)
+		if scenarioSync.SessionID != "override-sync" {
+			t.Fatalf("syncStartFromScenario = %#v", scenarioSync)
+		}
+	})
+
+	t.Run("result projections and clones", func(t *testing.T) {
+		testFakeServiceInternalResultProjectionHelpers(t, state, service)
+	})
+
+	t.Run("sync wait outcome", func(t *testing.T) {
+		testFakeServiceInternalSyncWaitHelpers(t, state)
+	})
+}
+
+func newFakeServiceInternalStartState() *fakeSessionState {
+	return &fakeSessionState{
+		session: SessionReadResult{
+			SessionID:        "dur-sess-1",
+			Status:           LifecycleStatusSucceeded,
+			OrchestratorKind: "JAVASCRIPT",
+			Dialect:          "v1",
+			ResolvedSource:   ResolvedSource{Kind: workflowsource.KindWorkflowName, SourceRef: "audit", SourceHash: "hash", Dialect: "v1"},
+			SourceHash:       "hash",
+			Policy:           PolicyProjection{EffectiveHash: "policy"},
+			Links:            InspectionLinks{Session: "/factory-sessions/dur-sess-1"},
+		},
+		result: ResultReadResult{
+			SessionID:        "dur-sess-1",
+			ResultStatus:     ResultStatusFinal,
+			SessionStatus:    LifecycleStatusSucceeded,
+			PrimaryResult:    json.RawMessage(`[{"type":"text","text":"done"}]`),
+			Availability:     &ResultAvailabilityDetail{Reason: "IGNORED"},
+			IncludeArtifacts: true,
+		},
+		artifacts: []ArtifactSummary{
+			{ID: "art-1", Kind: "LOG", Visibility: "PUBLIC", ContentHash: "hash-1", SizeBytes: 7},
+			{ID: " ", Kind: "LOG", Visibility: "PUBLIC"},
+		},
+		events: []json.RawMessage{json.RawMessage(`{"id":"event-1"}`)},
+	}
+}
+
+func testFakeServiceInternalResultProjectionHelpers(t *testing.T, state *fakeSessionState, service *FakeService) {
+	t.Helper()
+
+	async := service.asyncStartFromState(state)
+	sync := service.syncStartFromState(state)
+
+	t.Run("projection modes", func(t *testing.T) {
+		testFakeServiceInternalResultProjectionModes(t, state)
+	})
+	t.Run("helper branches and clones", func(t *testing.T) {
+		testFakeServiceInternalResultHelperBranches(t, state, async, sync)
+	})
+}
+
+func testFakeServiceInternalResultProjectionModes(t *testing.T, state *fakeSessionState) {
+	t.Helper()
+
+	canonical := ResultReadResult{
+		SessionID:     "dur-sess-1",
+		ResultStatus:  ResultStatusPartial,
+		PrimaryResult: json.RawMessage(`[{"type":"text","text":"partial"}]`),
+		Failure:       &FailureSummary{Reason: "warn", PartialResultAvailable: true},
+	}
+	session := SessionReadResult{
+		SessionID: "dur-sess-1",
+		Status:    LifecycleStatusRunning,
+		ResultSummary: &ResultSummary{
+			ResultStatus: string(ResultStatusPartial),
+		},
+	}
+	projected, err := ProjectResultRead(canonical, session, state.artifacts, ResultRequest{Mode: ResultModeFinal, IncludeArtifacts: true})
+	if err != nil {
+		t.Fatalf("ProjectResultRead final: %v", err)
+	}
+	if projected.ResultStatus != ResultStatusNotReady || projected.Availability == nil || len(projected.ArtifactRefs) != 2 {
+		t.Fatalf("projected final = %#v", projected)
+	}
+
+	projected, err = ProjectResultRead(canonical, session, state.artifacts, ResultRequest{Mode: ResultModePartial})
+	if err != nil {
+		t.Fatalf("ProjectResultRead partial: %v", err)
+	}
+	if projected.ResultStatus != ResultStatusPartial || len(projected.PrimaryResult) == 0 || projected.Availability != nil {
+		t.Fatalf("projected partial = %#v", projected)
+	}
+	if _, err := ProjectResultRead(canonical, session, nil, ResultRequest{Mode: ResultMode("bad")}); err == nil {
+		t.Fatal("invalid mode should fail normalization")
+	}
+}
+
+func testFakeServiceInternalResultHelperBranches(t *testing.T, state *fakeSessionState, async AsyncStartResult, sync SyncStartResult) {
+	t.Helper()
+
+	t.Run("status and artifact helpers", func(t *testing.T) {
+		testFakeServiceInternalResultStatusAndArtifactHelpers(t, state)
+	})
+	t.Run("clone helpers", func(t *testing.T) {
+		testFakeServiceInternalResultCloneHelpers(t, async, sync)
+	})
+}
+
+func testFakeServiceInternalResultStatusAndArtifactHelpers(t *testing.T, state *fakeSessionState) {
+	t.Helper()
+
+	if got := canonicalResultStatus(ResultReadResult{ResultStatus: ResultStatusUnavailable}, SessionReadResult{
+		ResultSummary: &ResultSummary{ResultStatus: " FINAL "},
+	}); got != ResultStatusFinal {
+		t.Fatalf("canonicalResultStatus = %q", got)
+	}
+	if got := defaultNotReadyAvailability(SessionReadResult{Status: LifecycleStatusRunning}); got == nil || !got.Retryable {
+		t.Fatalf("running default availability = %#v", got)
+	}
+	if got := defaultNotReadyAvailability(SessionReadResult{Status: LifecycleStatusSucceeded}); got == nil || got.Retryable {
+		t.Fatalf("terminal default availability = %#v", got)
+	}
+
+	if refs := artifactRefsFromSummaries(nil); refs != nil {
+		t.Fatalf("artifactRefsFromSummaries(nil) = %#v", refs)
+	}
+	refs := artifactRefsFromSummaries(state.artifacts)
+	if len(refs) != 2 || refs[0].ID != "art-1" {
+		t.Fatalf("artifactRefsFromSummaries = %#v", refs)
+	}
+	ids := artifactIDsFromSummaries(state.artifacts)
+	if len(ids) != 1 || ids[0] != "art-1" {
+		t.Fatalf("artifactIDsFromSummaries = %#v", ids)
+	}
+}
+
+func testFakeServiceInternalResultCloneHelpers(t *testing.T, async AsyncStartResult, sync SyncStartResult) {
+	t.Helper()
+
+	canonicalFailure := &FailureSummary{Reason: "warn", PartialResultAvailable: true}
+
+	if cloneFailureSummary(nil) != nil || cloneResultAvailability(nil) != nil || cloneRawJSON(nil) != nil {
+		t.Fatal("nil clones should stay nil")
+	}
+	if clone := cloneFailureSummary(canonicalFailure); clone == canonicalFailure || clone.Reason != "warn" {
+		t.Fatalf("cloneFailureSummary = %#v", clone)
+	}
+	if clone := cloneResultAvailability(&ResultAvailabilityDetail{Reason: "NOT_READY"}); clone == nil || clone.Reason != "NOT_READY" {
+		t.Fatalf("cloneResultAvailability = %#v", clone)
+	}
+	if clone := cloneAsyncStartResult(async); clone.SessionID != async.SessionID {
+		t.Fatalf("cloneAsyncStartResult = %#v", clone)
+	}
+	if clone := cloneSyncStartResult(sync); clone.SessionID != sync.SessionID {
+		t.Fatalf("cloneSyncStartResult = %#v", clone)
+	}
+	if clone := cloneRawJSON(json.RawMessage(`{"ok":true}`)); string(clone) != `{"ok":true}` {
+		t.Fatalf("cloneRawJSON = %s", clone)
+	}
+}
+
+func testFakeServiceInternalSyncWaitHelpers(t *testing.T, state *fakeSessionState) {
+	t.Helper()
+
+	applySyncWaitOutcome(nil, state, StartRequest{})
+	applySyncWaitOutcome(&SyncStartResult{}, nil, StartRequest{})
+	timeout := SyncStartResult{AsyncStartResult: AsyncStartResult{Status: string(LifecycleStatusRunning)}, SyncOutcome: SyncOutcomeTimedOut, TimedOut: true}
+	runningState := &fakeSessionState{
+		session: SessionReadResult{SessionID: "dur-sess-2", Status: LifecycleStatusRunning},
+		result:  ResultReadResult{SessionID: "dur-sess-2", SessionStatus: LifecycleStatusRunning, ResultStatus: ResultStatusNotReady},
+	}
+	applySyncWaitOutcome(&timeout, runningState, StartRequest{
+		Wait: &WaitOptions{CancelOnTimeout: true},
+	})
+	if !timeout.SessionCanceledByTimeout || timeout.Status != string(LifecycleStatusCanceling) || runningState.result.Availability == nil {
+		t.Fatalf("applySyncWaitOutcome timeout = %#v / %#v", timeout, runningState.result)
+	}
+}
+
+func TestIsTerminalLifecycleStatus(t *testing.T) {
+	terminal := []LifecycleStatus{
+		LifecycleStatusSucceeded,
+		LifecycleStatusFailed,
+		LifecycleStatusCanceled,
+		LifecycleStatusTimedOut,
+		LifecycleStatusInterrupted,
+		LifecycleStatusTerminated,
+	}
+	for _, status := range terminal {
+		if !IsTerminalLifecycleStatus(status) {
+			t.Fatalf("status %q should be terminal", status)
+		}
+		if status != LifecycleStatusFailed && AllowsRetryDispatchOnTerminal(status) {
+			t.Fatalf("retry-dispatch should be rejected on terminal status %q", status)
+		}
+	}
+	if !AllowsRetryDispatchOnTerminal(LifecycleStatusFailed) {
+		t.Fatal("retry-dispatch should remain allowed on FAILED terminal sessions")
+	}
+	active := []LifecycleStatus{
+		LifecycleStatusRunning,
+		LifecycleStatusPaused,
+		LifecycleStatusCanceling,
+	}
+	for _, status := range active {
+		if IsTerminalLifecycleStatus(status) {
+			t.Fatalf("status %q should be active", status)
+		}
+	}
+}
+
+func TestEvaluateLifecycleControl_ValidTransitions(t *testing.T) {
+	cases := []struct {
+		operation LifecycleControlKind
+		status    LifecycleStatus
+		want      LifecycleControlOutcome
+	}{
+		{LifecycleControlPause, LifecycleStatusRunning, LifecycleControlOutcomeAccepted},
+		{LifecycleControlPause, LifecycleStatusPaused, LifecycleControlOutcomeNoOp},
+		{LifecycleControlResume, LifecycleStatusPaused, LifecycleControlOutcomeAccepted},
+		{LifecycleControlCancel, LifecycleStatusRunning, LifecycleControlOutcomeAccepted},
+		{LifecycleControlCancel, LifecycleStatusCanceling, LifecycleControlOutcomeNoOp},
+		{LifecycleControlTerminate, LifecycleStatusRunning, LifecycleControlOutcomeAccepted},
+		{LifecycleControlApprove, LifecycleStatusAwaitingApproval, LifecycleControlOutcomeAccepted},
+		{LifecycleControlRetryDispatch, LifecycleStatusRunning, LifecycleControlOutcomeAccepted},
+		{LifecycleControlRetryDispatch, LifecycleStatusFailed, LifecycleControlOutcomeAccepted},
+	}
+	for _, tc := range cases {
+		got := EvaluateLifecycleControl(tc.operation, tc.status)
+		if got != tc.want {
+			t.Fatalf("%s on %s = %q, want %q", tc.operation, tc.status, got, tc.want)
+		}
+	}
+}
+
+func TestEvaluateLifecycleControl_InvalidAndTerminal(t *testing.T) {
+	if got := EvaluateLifecycleControl(LifecycleControlPause, LifecycleStatusAwaitingApproval); got != LifecycleControlOutcomeInvalidState {
+		t.Fatalf("pause on awaiting approval = %q, want INVALID_STATE", got)
+	}
+	if got := EvaluateLifecycleControl(LifecycleControlRetryDispatch, LifecycleStatusSucceeded); got != LifecycleControlOutcomeTerminalSession {
+		t.Fatalf("retry on succeeded = %q, want TERMINAL_SESSION", got)
+	}
+	if got := EvaluateLifecycleControl(LifecycleControlCancel, LifecycleStatusCanceled); got != LifecycleControlOutcomeNoOp {
+		t.Fatalf("cancel on canceled = %q, want NO_OP", got)
+	}
+}
+
+func TestNormalizeRetryDispatchRequest_RequiresDispatchID(t *testing.T) {
+	_, err := NormalizeRetryDispatchRequest(RetryDispatchRequest{})
+	if err == nil {
+		t.Fatal("error = nil, want validation error")
+	}
+	var validationErr *ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("error = %T, want ValidationError", err)
+	}
+}
+
+func TestControlIdempotencyTupleHash_IsStable(t *testing.T) {
+	retry := RetryDispatchRequest{
+		ControlRequest: ControlRequest{RequestID: "req-retry-001"},
+		DispatchID:     "disp-js-success-002",
+	}
+	first, err := ControlIdempotencyTupleHash(LifecycleControlRetryDispatch, "dur-sess-js-success-002", ApproveRequest{}, retry)
+	if err != nil {
+		t.Fatalf("first hash: %v", err)
+	}
+	second, err := ControlIdempotencyTupleHash(LifecycleControlRetryDispatch, "dur-sess-js-success-002", ApproveRequest{}, retry)
+	if err != nil {
+		t.Fatalf("second hash: %v", err)
+	}
+	if first != second {
+		t.Fatalf("hash mismatch: %q vs %q", first, second)
+	}
+}
+
+func TestCheckControlRequestIDReplay_Conflict(t *testing.T) {
+	err := CheckControlRequestIDReplay("req-1", "sha256:abc", "sha256:def")
+	if !errors.Is(err, ErrControlRequestIDConflict) {
+		t.Fatalf("error = %v, want ErrControlRequestIDConflict", err)
+	}
+}
+
+func TestServiceMethods_PropagateContextCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var service interface {
+		GetSession(context.Context, string) (SessionReadResult, error)
+	}
+	service = stubCancelAwareService{}
+	if _, err := service.GetSession(ctx, "dur-sess-001"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("GetSession error = %v, want context.Canceled", err)
+	}
+}
+
+type stubCancelAwareService struct{}
+
+func (stubCancelAwareService) GetSession(ctx context.Context, _ string) (SessionReadResult, error) {
+	if err := ctx.Err(); err != nil {
+		return SessionReadResult{}, err
+	}
+	return SessionReadResult{}, nil
+}
+
+func (stubCancelAwareService) StartAsync(context.Context, StartRequest) (AsyncStartResult, error) {
+	return AsyncStartResult{}, nil
+}
+func (stubCancelAwareService) StartSync(context.Context, StartRequest) (SyncStartResult, error) {
+	return SyncStartResult{}, nil
+}
+func (stubCancelAwareService) Pause(context.Context, string, ControlRequest) (LifecycleControlResult, error) {
+	return LifecycleControlResult{}, nil
+}
+func (stubCancelAwareService) Resume(context.Context, string, ControlRequest) (LifecycleControlResult, error) {
+	return LifecycleControlResult{}, nil
+}
+func (stubCancelAwareService) Cancel(context.Context, string, ControlRequest) (LifecycleControlResult, error) {
+	return LifecycleControlResult{}, nil
+}
+func (stubCancelAwareService) Terminate(context.Context, string, ControlRequest) (LifecycleControlResult, error) {
+	return LifecycleControlResult{}, nil
+}
+func (stubCancelAwareService) Approve(context.Context, string, ApproveRequest) (LifecycleControlResult, error) {
+	return LifecycleControlResult{}, nil
+}
+func (stubCancelAwareService) RetryDispatch(context.Context, string, RetryDispatchRequest) (LifecycleControlResult, error) {
+	return LifecycleControlResult{}, nil
+}
+func (stubCancelAwareService) GetResult(context.Context, string, ResultRequest) (ResultReadResult, error) {
+	return ResultReadResult{}, nil
+}
+func (stubCancelAwareService) ListDispatches(context.Context, string) (ListDispatchesResult, error) {
+	return ListDispatchesResult{}, nil
+}
+func (stubCancelAwareService) GetDispatch(context.Context, string, string) (DispatchDetail, error) {
+	return DispatchDetail{}, nil
+}
+func (stubCancelAwareService) ListArtifacts(context.Context, string) (ListArtifactsResult, error) {
+	return ListArtifactsResult{}, nil
+}
+func (stubCancelAwareService) GetArtifact(context.Context, string, string) (ArtifactDetail, error) {
+	return ArtifactDetail{}, nil
+}
+func (stubCancelAwareService) ReadEvents(context.Context, string, EventReconnectRequest) (EventReadResult, error) {
+	return EventReadResult{}, nil
+}
+
+func (stubCancelAwareService) ListSessions(context.Context, ListSessionsRequest) (ListSessionsResult, error) {
+	return ListSessionsResult{}, nil
+}
+
+const simpleFinalWorkflowSource = `return {
+  label: meta.name,
+  description: meta.description,
+  subject: args.subject,
+  repeat: args.count,
+  echo: args.prefix + ":" + args.subject,
+};
+`
+
+const busyLoopWorkflowSource = `while (true) {}`
+
+const throwErrorWorkflowSource = `throw new Error("workflow execution failed: " + args.subject);`
+
+func TestJavaScriptRuntimeService_StartSync_SimpleWorkflowCompletesWithPrimaryResult(t *testing.T) {
+	service := newJavaScriptRuntimeService(t)
+
+	started, err := service.StartSync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-sync-simple-final-001",
+		simpleFinalWorkflowSource,
+		map[string]any{
+			"subject": "workflows",
+			"count":   3,
+			"prefix":  "you",
+		},
+		nil,
+	))
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+	if started.SyncOutcome != SyncOutcomeCompleted {
+		t.Fatalf("syncOutcome = %q, want COMPLETED", started.SyncOutcome)
+	}
+	if started.Status != string(LifecycleStatusSucceeded) {
+		t.Fatalf("status = %q, want SUCCEEDED", started.Status)
+	}
+	if started.OrchestratorKind != interfaces.OrchestratorKindJavaScript {
+		t.Fatalf("orchestratorKind = %q, want JAVASCRIPT", started.OrchestratorKind)
+	}
+	if started.SessionID == "" || started.ResolvedSource.SourceRef == "" || started.SourceHash == "" {
+		t.Fatalf("start result missing resolved source metadata: %#v", started)
+	}
+
+	testJavaScriptRuntimeSyncCompletedSession(t, service, started.SessionID)
+	testJavaScriptRuntimeSyncCompletedResult(t, service, started.SessionID)
+	testJavaScriptRuntimeSyncCompletedEvents(t, service, started.SessionID)
+}
+
+func TestJavaScriptRuntimeService_StartAsync_RunningCancelAndReads(t *testing.T) {
+	service := newJavaScriptRuntimeService(t)
+
+	started, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
+		"req-runtime-async-running-001",
+		busyLoopWorkflowSource,
+		map[string]any{"subject": "workflows"},
+		nil,
+	))
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+	if started.Status != string(LifecycleStatusRunning) {
+		t.Fatalf("start status = %q, want RUNNING", started.Status)
+	}
+
+	session, err := service.GetSession(context.Background(), started.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if session.Status != LifecycleStatusRunning {
+		t.Fatalf("session status = %q, want RUNNING", session.Status)
+	}
+
+	result, err := service.GetResult(context.Background(), started.SessionID, ResultRequest{Mode: ResultModeFinal})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.ResultStatus != ResultStatusNotReady {
+		t.Fatalf("resultStatus = %q, want NOT_READY", result.ResultStatus)
+	}
+	if result.Availability == nil || result.Availability.Reason != "RESULT_NOT_READY" {
+		t.Fatalf("availability = %#v, want RESULT_NOT_READY", result.Availability)
+	}
+
+	dispatches, err := service.ListDispatches(context.Background(), started.SessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches: %v", err)
+	}
+	if len(dispatches.Dispatches) != 0 {
+		t.Fatalf("dispatches = %#v, want none for busy loop workflow", dispatches.Dispatches)
+	}
+
+	canceled, err := service.Cancel(context.Background(), started.SessionID, ControlRequest{})
+	if err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+	if canceled.Outcome != LifecycleControlOutcomeAccepted {
+		t.Fatalf("cancel outcome = %q, want ACCEPTED", canceled.Outcome)
+	}
+
+	finalSession := waitUntilSessionStatus(t, service, started.SessionID, LifecycleStatusCanceled, 5*time.Second)
+	if finalSession.Failure == nil || finalSession.Failure.Reason != "WORKFLOW_RUNTIME_CANCELED" {
+		t.Fatalf("failure = %#v, want WORKFLOW_RUNTIME_CANCELED", finalSession.Failure)
+	}
+}
+
+func TestJavaScriptRuntimeService_StartAsync_FailedAndTimedOut(t *testing.T) {
+	t.Run("failed", func(t *testing.T) {
+		service := newJavaScriptRuntimeService(t)
+		started, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
+			"req-runtime-async-failed-001",
+			throwErrorWorkflowSource,
+			map[string]any{"subject": "workflows"},
+			nil,
+		))
+		if err != nil {
+			t.Fatalf("StartAsync: %v", err)
+		}
+
+		session := waitUntilSessionStatus(t, service, started.SessionID, LifecycleStatusFailed, 5*time.Second)
+		if session.Failure == nil || session.Failure.Reason == "" {
+			t.Fatalf("failure = %#v, want runtime failure summary", session.Failure)
+		}
+
+		result, err := service.GetResult(context.Background(), started.SessionID, ResultRequest{Mode: ResultModeFinal})
+		if err != nil {
+			t.Fatalf("GetResult: %v", err)
+		}
+		if result.ResultStatus != ResultStatusUnavailable || result.SessionStatus != LifecycleStatusFailed {
+			t.Fatalf("result = %#v, want unavailable failed result", result)
+		}
+	})
+
+	t.Run("timed out", func(t *testing.T) {
+		service := newJavaScriptRuntimeService(t)
+		maxRunDurationMs := int64(50)
+		started, err := service.StartAsync(context.Background(), inlineWorkflowStartRequest(
+			"req-runtime-async-timeout-001",
+			busyLoopWorkflowSource,
+			map[string]any{"subject": "workflows"},
+			map[string]any{"maxRunDurationMs": maxRunDurationMs},
+		))
+		if err != nil {
+			t.Fatalf("StartAsync: %v", err)
+		}
+
+		session := waitUntilSessionStatus(t, service, started.SessionID, LifecycleStatusTimedOut, 5*time.Second)
+		if session.Failure == nil || session.Failure.Reason != "WORKFLOW_RUNTIME_TIMEOUT" {
+			t.Fatalf("failure = %#v, want WORKFLOW_RUNTIME_TIMEOUT", session.Failure)
+		}
+
+		result, err := service.GetResult(context.Background(), started.SessionID, ResultRequest{Mode: ResultModeFinal})
+		if err != nil {
+			t.Fatalf("GetResult: %v", err)
+		}
+		if result.ResultStatus != ResultStatusUnavailable || result.SessionStatus != LifecycleStatusTimedOut {
+			t.Fatalf("result = %#v, want unavailable timed out result", result)
+		}
+	})
+}
+
+func TestJavaScriptRuntimeService_StartSync_WaitTimeoutWithoutCancelKeepsSessionRunning(t *testing.T) {
+	service := newJavaScriptRuntimeService(t)
+	waitMillis := int64(50)
+
+	started, err := service.StartSync(context.Background(), StartRequest{
+		RequestID: "req-runtime-sync-wait-timeout-001",
+		Source: Source{
+			Kind: workflowsource.KindInlineWorkflow,
+			InlineWorkflow: &InlineWorkflowSource{
+				InlineSource: busyLoopWorkflowSource,
+				Dialect:      "you-workflow-v1",
+				Metadata:     map[string]string{"name": "runtime-sync-wait-fixture"},
+			},
+		},
+		Args: map[string]any{"subject": "workflows"},
+		Wait: &WaitOptions{TimeoutMillis: &waitMillis},
+	})
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+	if started.SyncOutcome != SyncOutcomeTimedOut || !started.TimedOut {
+		t.Fatalf("sync response = %#v, want TIMED_OUT", started)
+	}
+	if started.SessionCanceledByTimeout {
+		t.Fatal("sessionCanceledByTimeout = true, want false")
+	}
+	if started.Status != string(LifecycleStatusRunning) {
+		t.Fatalf("status = %q, want RUNNING", started.Status)
+	}
+
+	session, err := service.GetSession(context.Background(), started.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if session.Status != LifecycleStatusRunning {
+		t.Fatalf("session status = %q, want RUNNING after sync wait timeout", session.Status)
+	}
+
+	result, err := service.GetResult(context.Background(), started.SessionID, ResultRequest{Mode: ResultModeFinal})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.Availability == nil || result.Availability.Reason != "SYNC_WAIT_TIMED_OUT" {
+		t.Fatalf("availability = %#v, want SYNC_WAIT_TIMED_OUT", result.Availability)
+	}
+}
+
+func TestExecutionServiceAndHelperNormalization(t *testing.T) {
+	t.Run("execution service providers", testExecutionServiceProviders)
+	t.Run("child executor and smoke provider", testExecutionServiceChildExecutorHelpers)
+	t.Run("source request helpers", testExecutionServiceSourceRequestHelpers)
+}
+
+func testExecutionServiceProviders(t *testing.T) {
+	t.Helper()
+
+	fakeService, err := NewExecutionService(ExecutionProviderFake, ServiceConfig{})
+	if err != nil {
+		t.Fatalf("NewExecutionService(fake): %v", err)
+	}
+	if _, ok := fakeService.(*FakeService); !ok {
+		t.Fatalf("fake provider type = %T, want *FakeService", fakeService)
+	}
+
+	projectRoot := t.TempDir()
+	runtimeService, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{ProjectRoot: projectRoot})
+	if err != nil {
+		t.Fatalf("NewExecutionService(runtime): %v", err)
+	}
+	jsService, ok := runtimeService.(*JavaScriptRuntimeService)
+	if !ok {
+		t.Fatalf("runtime provider type = %T, want *JavaScriptRuntimeService", runtimeService)
+	}
+	if jsService.sessionPersistDir == "" {
+		t.Fatal("expected runtime service to enable persisted session dir when project root is set")
+	}
+
+	if _, err := NewExecutionService(ExecutionProviderJavaScriptRuntime, ServiceConfig{}); err == nil {
+		t.Fatal("NewExecutionService(runtime without projectRoot) error = nil, want validation error")
+	}
+	if _, err := NewExecutionService(ExecutionProvider("unknown"), ServiceConfig{}); err == nil {
+		t.Fatal("NewExecutionService(unknown) error = nil, want validation error")
+	}
+}
+
+func testExecutionServiceChildExecutorHelpers(t *testing.T) {
+	t.Helper()
+
+	if err := validateLiveChildExecutorConfig(ChildExecutorModeLive, nil); err == nil {
+		t.Fatal("validateLiveChildExecutorConfig(live,nil) error = nil, want validation error")
+	}
+	if err := validateLiveChildExecutorConfig(ChildExecutorModeFake, nil); err != nil {
+		t.Fatalf("validateLiveChildExecutorConfig(fake,nil) error = %v", err)
+	}
+
+	smoke := SmokeLiveChildProvider()
+	response, err := smoke.Infer(context.Background(), interfaces.ProviderInferenceRequest{})
+	if err != nil {
+		t.Fatalf("SmokeLiveChildProvider().Infer: %v", err)
+	}
+	if response.ProviderSession == nil || response.ProviderSession.ID == "" {
+		t.Fatalf("provider session = %#v, want stable session metadata", response.ProviderSession)
+	}
+}
+
+func testExecutionServiceSourceRequestHelpers(t *testing.T) {
+	t.Helper()
+
+	inlineReq := startSourceRequest(Source{
+		Kind: workflowsource.KindInlineWorkflow,
+		InlineWorkflow: &InlineWorkflowSource{
+			InlineSource: "return 1;",
+		},
+	})
+	if inlineReq.Value != "return 1;" || inlineReq.InlineSource != "return 1;" {
+		t.Fatalf("startSourceRequest(inline) = %#v", inlineReq)
+	}
+	if resolutionOrderForLookupStage(workflowsource.LookupStageProjectClaude) != "PROJECT_CLAUDE_WORKFLOWS" {
+		t.Fatal("unexpected lookup stage mapping for project claude")
+	}
+	if resolutionOrderForLookupStage(workflowsource.LookupStageNamedJavaScript) != "BUILTIN_GLOBAL_JAVASCRIPT_FACTORIES" {
+		t.Fatal("unexpected lookup stage mapping for named javascript")
+	}
+	if resolutionOrderForLookupStage("unknown") != "" {
+		t.Fatal("unexpected lookup stage mapping for unknown stage")
+	}
+}
+
+func TestNormalizationAndIdempotencyHelpers(t *testing.T) {
+	t.Run("approve and source normalization", testNormalizationApproveAndSourceBranches)
+	t.Run("canonical json and replay helpers", testNormalizationCanonicalAndReplayBranches)
+	t.Run("idempotency hash stability", testNormalizationIdempotencyHashBranches)
+}
+
+func testNormalizationApproveAndSourceBranches(t *testing.T) {
+	t.Helper()
+
+	approved, err := NormalizeApproveRequest(ApproveRequest{
+		ControlRequest:    ControlRequest{RequestID: "  ctrl-1  ", Reason: "  ok  "},
+		ApprovalPreviewID: "  preview-1  ",
+		ApprovedPolicy:    map[string]any{"policyHash": " hash-1 "},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeApproveRequest: %v", err)
+	}
+	if approved.RequestID != "ctrl-1" || approved.Reason != "ok" || approved.ApprovalPreviewID != "preview-1" {
+		t.Fatalf("normalized approve request = %#v", approved)
+	}
+
+	inlineSource, err := normalizeSourceForIdempotency(Source{
+		Kind: workflowsource.KindInlineWorkflow,
+		InlineWorkflow: &InlineWorkflowSource{
+			InlineSource: " return 1; ",
+			Dialect:      " you-workflow-v1 ",
+			Entrypoint:   " default ",
+			Metadata: map[string]string{
+				"b": "2",
+				"a": "1",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("normalizeSourceForIdempotency(inline): %v", err)
+	}
+	inlineWorkflow, ok := inlineSource["inlineWorkflow"].(map[string]any)
+	if !ok || inlineWorkflow["inlineSource"] != "return 1;" {
+		t.Fatalf("inline workflow projection = %#v", inlineSource["inlineWorkflow"])
+	}
+	metadata, ok := inlineWorkflow["metadata"].(map[string]string)
+	if !ok || len(metadata) != 2 || metadata["a"] != "1" || metadata["b"] != "2" {
+		t.Fatalf("inline workflow metadata = %#v", inlineWorkflow["metadata"])
+	}
+
+	if _, err := normalizeSourceForIdempotency(Source{Kind: workflowsource.KindInlineWorkflow}); err == nil {
+		t.Fatal("normalizeSourceForIdempotency(missing inline) error = nil, want validation error")
+	}
+}
+
+func testNormalizationCanonicalAndReplayBranches(t *testing.T) {
+	t.Helper()
+
+	if _, err := canonicalizeRawJSON(json.RawMessage("{")); err == nil {
+		t.Fatal("canonicalizeRawJSON(invalid) error = nil, want parse error")
+	}
+	canonical, err := canonicalizeRawJSON(json.RawMessage(`{"b":2,"a":[{"d":4,"c":3}]}`))
+	if err != nil {
+		t.Fatalf("canonicalizeRawJSON(valid): %v", err)
+	}
+	encoded, err := json.Marshal(canonical)
+	if err != nil {
+		t.Fatalf("json.Marshal(canonical): %v", err)
+	}
+	if string(encoded) != `{"a":[{"c":3,"d":4}],"b":2}` {
+		t.Fatalf("canonical json = %s, want sorted object keys", encoded)
+	}
+
+	if err := CheckSyncStartReplayMode(&AsyncStartResult{}, nil, false); !errors.Is(err, ErrExecutionRequestIDConflict) {
+		t.Fatalf("CheckSyncStartReplayMode(async replay mismatch) = %v, want ErrExecutionRequestIDConflict", err)
+	}
+	if err := CheckSyncStartReplayMode(nil, nil, false); err != nil {
+		t.Fatalf("CheckSyncStartReplayMode(empty replay) = %v, want nil", err)
+	}
+	if err := CheckAsyncStartReplayMode(nil); !errors.Is(err, ErrExecutionRequestIDConflict) {
+		t.Fatalf("CheckAsyncStartReplayMode(nil) = %v, want ErrExecutionRequestIDConflict", err)
+	}
+}
+
+func testNormalizationIdempotencyHashBranches(t *testing.T) {
+	t.Helper()
+
+	hashA, err := IdempotencyTupleHash(inlineWorkflowStartRequest("req-hash-1", simpleFinalWorkflowSource, map[string]any{"x": 1}, map[string]any{"policyHash": "same"}))
+	if err != nil {
+		t.Fatalf("IdempotencyTupleHash(first): %v", err)
+	}
+	hashB, err := IdempotencyTupleHash(inlineWorkflowStartRequest("req-hash-1", simpleFinalWorkflowSource, map[string]any{"x": 1}, map[string]any{"policyHash": "same"}))
+	if err != nil {
+		t.Fatalf("IdempotencyTupleHash(second): %v", err)
+	}
+	if hashA != hashB {
+		t.Fatalf("tuple hashes differ: %q vs %q", hashA, hashB)
+	}
+}
+
+func TestPrepareStartAndPersistenceHelpers(t *testing.T) {
+	projectRoot := writeSimpleFinalWorkflowProject(t)
+	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
+		ProjectRoot:     projectRoot,
+		PersistSessions: true,
+	})
+
+	prepared, err := service.prepareStart(StartRequest{
+		RequestID: "req-prepare-start-001",
+		Source: Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "simple-final",
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+			"count":   1,
+			"prefix":  "you",
+		},
+	})
+	if err != nil {
+		t.Fatalf("prepareStart: %v", err)
+	}
+	if prepared.SourceRef == "" || prepared.SourceContent == "" || prepared.TupleHash == "" {
+		t.Fatalf("prepared start = %#v, want resolved source fields", prepared)
+	}
+
+	terminal, err := service.executeImmediateSyncSession(context.Background(), prepared.Request, prepared.ResolvedSource, prepared.SourceContent, policyResolutionFromPrepared(prepared), "dur-sess-prepare-001")
+	if err != nil {
+		t.Fatalf("executeImmediateSyncSession: %v", err)
+	}
+	sessionID := NewDurableSessionID()
+	terminal.session.SessionID = sessionID
+	terminal.result.SessionID = sessionID
+	if terminal.session.Status != LifecycleStatusSucceeded {
+		t.Fatalf("terminal session status = %q, want SUCCEEDED", terminal.session.Status)
+	}
+
+	if err := service.persistTerminalSessionState(terminal); err != nil {
+		t.Fatalf("persistTerminalSessionState: %v", err)
+	}
+	loaded, err := service.snapshotSessionState(sessionID)
+	if err != nil {
+		t.Fatalf("snapshotSessionState(load persisted): %v", err)
+	}
+	if loaded.session.SessionID != sessionID {
+		t.Fatalf("loaded sessionID = %q, want %q", loaded.session.SessionID, sessionID)
+	}
+	if loaded.result.ResultStatus != ResultStatusFinal {
+		t.Fatalf("loaded result status = %q, want FINAL", loaded.result.ResultStatus)
+	}
+}
+
+func newJavaScriptRuntimeService(t *testing.T) *JavaScriptRuntimeService {
+	t.Helper()
+
+	service, err := NewExecutionService(
+		ExecutionProviderJavaScriptRuntime,
+		ServiceConfig{ProjectRoot: t.TempDir()},
+	)
+	if err != nil {
+		t.Fatalf("NewExecutionService: %v", err)
+	}
+	jsService, ok := service.(*JavaScriptRuntimeService)
+	if !ok {
+		t.Fatalf("service type = %T, want *JavaScriptRuntimeService", service)
+	}
+	return jsService
+}
+
+func inlineWorkflowStartRequest(
+	requestID string,
+	source string,
+	args map[string]any,
+	requestedPolicy map[string]any,
+) StartRequest {
+	return StartRequest{
+		RequestID: requestID,
+		Source: Source{
+			Kind: workflowsource.KindInlineWorkflow,
+			InlineWorkflow: &InlineWorkflowSource{
+				InlineSource: source,
+				Dialect:      "you-workflow-v1",
+				Metadata: map[string]string{
+					"name":        "runtime-async-fixture",
+					"description": "returns a structured final value",
+				},
+			},
+		},
+		Args:            args,
+		RequestedPolicy: requestedPolicy,
+	}
+}
+
+func waitUntilSessionStatus(
+	t *testing.T,
+	service Service,
+	sessionID string,
+	want LifecycleStatus,
+	timeout time.Duration,
+) SessionReadResult {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		session, err := service.GetSession(context.Background(), sessionID)
+		if err != nil {
+			t.Fatalf("GetSession: %v", err)
+		}
+		if session.Status == want {
+			return session
+		}
+		if IsTerminalLifecycleStatus(session.Status) && session.Status != want {
+			t.Fatalf("session %s reached terminal %q before %q", sessionID, session.Status, want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("session %s did not reach status %q within %s", sessionID, want, timeout)
+	return SessionReadResult{}
+}
+
+func decodePrimaryResultMap(t *testing.T, raw json.RawMessage) map[string]any {
+	t.Helper()
+
+	var content []struct {
+		Type string          `json:"type"`
+		JSON json.RawMessage `json:"json,omitempty"`
+	}
+	if err := json.Unmarshal(raw, &content); err != nil {
+		t.Fatalf("unmarshal primary result content: %v", err)
+	}
+	for _, part := range content {
+		if part.Type == "JSON" && len(part.JSON) > 0 {
+			var projected map[string]any
+			if err := json.Unmarshal(part.JSON, &projected); err != nil {
+				t.Fatalf("unmarshal primary result json part: %v", err)
+			}
+			return projected
+		}
+	}
+	t.Fatalf("primary result content = %#v, want JSON part", content)
+	return nil
+}
+
+func writeSimpleFinalWorkflowProject(t *testing.T) string {
+	t.Helper()
+
+	projectRoot := t.TempDir()
+	workflowDir := filepath.Join(projectRoot, workflowsource.ProjectClaudeWorkflowsDir)
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		t.Fatalf("mkdir workflows: %v", err)
+	}
+	workflowPath := filepath.Join(workflowDir, "simple-final.workflow.js")
+	if err := os.WriteFile(workflowPath, []byte(simpleFinalWorkflowSource), 0o600); err != nil {
+		t.Fatalf("write workflow: %v", err)
+	}
+	return projectRoot
+}
+
+func TestFakeService_DetailReadersAndRemainingControlWrappers(t *testing.T) {
+	service := newContractFakeService(t)
+
+	startAsyncByRequestID(t, service, "req-petri-success-001")
+	dispatch, err := service.GetDispatch(context.Background(), "dur-sess-petri-success-001", "disp-petri-success-001")
+	if err != nil {
+		t.Fatalf("GetDispatch: %v", err)
+	}
+	if dispatch.DispatchSummary.ID != "disp-petri-success-001" {
+		t.Fatalf("dispatch detail = %#v", dispatch)
+	}
+
+	artifact, err := service.GetArtifact(context.Background(), "dur-sess-petri-success-001", "art-petri-final-001")
+	if err != nil {
+		t.Fatalf("GetArtifact: %v", err)
+	}
+	if artifact.ArtifactSummary.ID != "art-petri-final-001" {
+		t.Fatalf("artifact detail = %#v", artifact)
+	}
+
+	startAsyncByRequestID(t, service, "req-js-run-n-001")
+	cancelled, err := service.Cancel(context.Background(), "dur-sess-js-run-n-001", ControlRequest{})
+	if err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+	if cancelled.Status != LifecycleStatusCanceling {
+		t.Fatalf("cancel status = %q, want CANCELING", cancelled.Status)
+	}
+
+	terminated, err := service.Terminate(context.Background(), "dur-sess-js-run-n-001", ControlRequest{})
+	if err != nil {
+		t.Fatalf("Terminate: %v", err)
+	}
+	if terminated.Status != LifecycleStatusTerminated {
+		t.Fatalf("terminate status = %q, want TERMINATED", terminated.Status)
+	}
+
+	startAsyncByRequestID(t, service, "req-js-awaiting-001")
+	approved, err := service.Approve(context.Background(), "dur-sess-js-awaiting-001", ApproveRequest{})
+	if err != nil {
+		t.Fatalf("Approve: %v", err)
+	}
+	if approved.Status != LifecycleStatusRunning {
+		t.Fatalf("approve status = %q, want RUNNING", approved.Status)
+	}
+}
+
+func TestJavaScriptRuntimeService_ControlWrappersAndDetailReaders(t *testing.T) {
+	now := time.Now().UTC()
+	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{ProjectRoot: t.TempDir()})
+	service.sessions["dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"] = newJavaScriptRuntimeRunningControlState(now)
+
+	t.Run("detail readers and running controls", func(t *testing.T) {
+		testJavaScriptRuntimeServiceRunningControlWrappers(t, service)
+	})
+	t.Run("approve awaiting session", func(t *testing.T) {
+		testJavaScriptRuntimeServiceApproveAwaitingSession(t, service)
+	})
+	t.Run("retry failed dispatch", func(t *testing.T) {
+		testJavaScriptRuntimeServiceRetryFailedDispatch(t, service)
+	})
+}
+
+func newJavaScriptRuntimeRunningControlState(now time.Time) *runtimeSessionState {
+	return &runtimeSessionState{
+		session: SessionReadResult{
+			SessionID:        "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Status:           LifecycleStatusRunning,
+			OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+			Lifecycle:        &LifecycleTimestamps{StartedAt: &now},
+			ResolvedSource: ResolvedSource{
+				SourceRef: "inline",
+			},
+			Links: InspectionLinksForSession("dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", true),
+		},
+		result: ResultReadResult{
+			SessionID:     "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			SessionStatus: LifecycleStatusRunning,
+			ResultStatus:  ResultStatusNotReady,
+		},
+		dispatches: []DispatchSummary{
+			{ID: "disp-1", Status: DispatchStatusFailed, Attempt: 1},
+		},
+		dispatchStatusTransitions: map[string][]DispatchStatus{
+			"disp-1": {DispatchStatusQueued, DispatchStatusFailed},
+		},
+		dispatchJavaScript: map[string]DispatchJavaScriptProjection{
+			"disp-1": {TaskLabel: "child"},
+		},
+		artifacts: []ArtifactSummary{
+			{ID: "art-1"},
+		},
+		events: BuildCanonicalRuntimeSessionEvents(
+			SessionReadResult{
+				SessionID:        "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				Status:           LifecycleStatusRunning,
+				OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+				Lifecycle:        &LifecycleTimestamps{StartedAt: &now},
+			},
+			ResultReadResult{
+				SessionID:     "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				SessionStatus: LifecycleStatusRunning,
+				ResultStatus:  ResultStatusNotReady,
+				Availability: &ResultAvailabilityDetail{
+					Reason:    "RESULT_NOT_READY",
+					Message:   "Session is still running.",
+					Retryable: true,
+				},
+			},
+		),
+	}
+}
+
+func testJavaScriptRuntimeServiceRunningControlWrappers(t *testing.T, service *JavaScriptRuntimeService) {
+	t.Helper()
+
+	if _, err := service.GetDispatch(context.Background(), "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "disp-1"); err != nil {
+		t.Fatalf("GetDispatch: %v", err)
+	}
+	if _, err := service.ListArtifacts(context.Background(), "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"); err != nil {
+		t.Fatalf("ListArtifacts: %v", err)
+	}
+	if _, err := service.GetArtifact(context.Background(), "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "art-1"); err != nil {
+		t.Fatalf("GetArtifact: %v", err)
+	}
+	listed, err := service.ListSessions(context.Background(), ListSessionsRequest{Scope: SessionListScopeAll})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(listed.LiveSessions) != 1 {
+		t.Fatalf("live sessions = %#v, want one session", listed.LiveSessions)
+	}
+
+	if _, err := service.Pause(context.Background(), "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ControlRequest{}); err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+	if _, err := service.Resume(context.Background(), "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ControlRequest{}); err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+	if _, err := service.Terminate(context.Background(), "dur-sess-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ControlRequest{}); err != nil {
+		t.Fatalf("Terminate: %v", err)
+	}
+}
+
+func testJavaScriptRuntimeServiceApproveAwaitingSession(t *testing.T, service *JavaScriptRuntimeService) {
+	t.Helper()
+
+	service.sessions["dur-sess-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"] = &runtimeSessionState{
+		session: SessionReadResult{
+			SessionID:        "dur-sess-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			Status:           LifecycleStatusAwaitingApproval,
+			OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+			Lifecycle:        &LifecycleTimestamps{},
+			Links:            InspectionLinksForSession("dur-sess-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", true),
+		},
+		result: ResultReadResult{
+			SessionID:     "dur-sess-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			SessionStatus: LifecycleStatusAwaitingApproval,
+			ResultStatus:  ResultStatusNotReady,
+		},
+	}
+	if _, err := service.Approve(context.Background(), "dur-sess-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", ApproveRequest{}); err != nil {
+		t.Fatalf("Approve: %v", err)
+	}
+}
+
+func testJavaScriptRuntimeServiceRetryFailedDispatch(t *testing.T, service *JavaScriptRuntimeService) {
+	t.Helper()
+
+	service.sessions["dur-sess-cccccccccccccccccccccccccccccccc"] = &runtimeSessionState{
+		session: SessionReadResult{
+			SessionID:        "dur-sess-cccccccccccccccccccccccccccccccc",
+			Status:           LifecycleStatusFailed,
+			OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+			Lifecycle:        &LifecycleTimestamps{},
+			Links:            InspectionLinksForSession("dur-sess-cccccccccccccccccccccccccccccccc", true),
+		},
+		result: ResultReadResult{
+			SessionID:     "dur-sess-cccccccccccccccccccccccccccccccc",
+			SessionStatus: LifecycleStatusFailed,
+			ResultStatus:  ResultStatusUnavailable,
+		},
+		dispatches: []DispatchSummary{
+			{ID: "disp-retry", Status: DispatchStatusFailed, Attempt: 2},
+		},
+	}
+	if _, err := service.RetryDispatch(context.Background(), "dur-sess-cccccccccccccccccccccccccccccccc", RetryDispatchRequest{DispatchID: "disp-retry"}); err != nil {
+		t.Fatalf("RetryDispatch: %v", err)
+	}
+}
+
+func TestNormalizeStartRequestAndErrorHelpers(t *testing.T) {
+	t.Run("normalize valid and invalid start requests", testNormalizeStartRequestBranches)
+	t.Run("normalize source and child executor mode", testNormalizeSourceAndExecutorModeBranches)
+	t.Run("error helper strings", testControlAndValidationErrorHelpers)
+}
+
+func testNormalizeStartRequestBranches(t *testing.T) {
+	t.Helper()
+
+	normalized, err := NormalizeStartRequest(StartRequest{
+		RequestID: " req-1 ",
+		Source: Source{
+			Kind:          workflowsource.KindFactoryInline,
+			FactoryInline: json.RawMessage(`{"b":2,"a":1}`),
+		},
+		Orchestrator: &OrchestratorOverride{
+			Kind: " custom ",
+			Raw:  json.RawMessage(`{"z":2,"a":1}`),
+		},
+		Runtime: &RuntimeOptions{ChildExecutorMode: " live-provider "},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeStartRequest(factory inline): %v", err)
+	}
+	if normalized.RequestID != "req-1" {
+		t.Fatalf("requestID = %q, want req-1", normalized.RequestID)
+	}
+	if string(normalized.Source.FactoryInline) == "" {
+		t.Fatalf("factory inline unexpectedly empty: %#v", normalized.Source)
+	}
+	if normalized.Runtime == nil || normalized.Runtime.ChildExecutorMode != ChildExecutorModeLive {
+		t.Fatalf("runtime = %#v, want live mode", normalized.Runtime)
+	}
+	if normalized.Orchestrator == nil || normalized.Orchestrator.Kind != "custom" {
+		t.Fatalf("orchestrator = %#v, want trimmed kind", normalized.Orchestrator)
+	}
+
+	if _, err := NormalizeStartRequest(StartRequest{}); err == nil {
+		t.Fatal("NormalizeStartRequest(missing requestID) error = nil, want validation error")
+	}
+	if _, err := NormalizeStartRequest(StartRequest{
+		RequestID: "req-2",
+		Source: Source{
+			Kind:         workflowsource.KindWorkflowFile,
+			WorkflowFile: " path/to/workflow.js ",
+		},
+		Orchestrator: &OrchestratorOverride{
+			Raw: json.RawMessage("{"),
+		},
+	}); err == nil {
+		t.Fatal("NormalizeStartRequest(invalid orchestrator) error = nil, want validation error")
+	}
+}
+
+func testNormalizeSourceAndExecutorModeBranches(t *testing.T) {
+	t.Helper()
+
+	if _, err := normalizeSource(Source{Kind: workflowsource.KindWorkflowName, WorkflowName: "  "}); err == nil {
+		t.Fatal("normalizeSource(empty workflow name) error = nil, want validation error")
+	}
+	if got := normalizeChildExecutorMode(" live-provider "); got != ChildExecutorModeLive {
+		t.Fatalf("normalizeChildExecutorMode = %q, want live", got)
+	}
+	if got := resolveChildExecutorMode("fake", StartRequest{Runtime: &RuntimeOptions{ChildExecutorMode: "live-provider"}}); got != ChildExecutorModeLive {
+		t.Fatalf("resolveChildExecutorMode = %q, want live override", got)
+	}
+}
+
+func testControlAndValidationErrorHelpers(t *testing.T) {
+	t.Helper()
+
+	var controlErr *ControlError
+	if controlErr.Error() != "" {
+		t.Fatalf("nil control error message = %q, want empty", controlErr.Error())
+	}
+	controlErr = &ControlError{Outcome: LifecycleControlOutcomeConflict}
+	if controlErr.Error() != string(LifecycleControlOutcomeConflict) {
+		t.Fatalf("control error message = %q, want outcome text", controlErr.Error())
+	}
+	var validationErr *ValidationError
+	if validationErr.Error() != "" {
+		t.Fatalf("nil validation error message = %q, want empty", validationErr.Error())
+	}
+}
+
+func TestRuntimeAndValidationHelperBranches(t *testing.T) {
+	t.Run("child executor hooks and marshal args", testRuntimeHookAndMarshalBranches)
+	t.Run("workflow metadata and source validation errors", testRuntimeMetadataAndSourceValidationBranches)
+	t.Run("policy validation errors", testRuntimePolicyValidationBranches)
+}
+
+func testRuntimeHookAndMarshalBranches(t *testing.T) {
+	t.Helper()
+
+	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{ProjectRoot: t.TempDir()})
+	if hooks := service.childExecutorHooks(ChildExecutorModeFake); hooks.NewChildExecutor != nil {
+		t.Fatalf("fake hooks = %#v, want no child executor override", hooks)
+	}
+	liveService := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
+		ProjectRoot: t.TempDir(),
+		Provider:    SmokeLiveChildProvider(),
+	})
+	if hooks := liveService.childExecutorHooks(ChildExecutorModeLive); hooks.NewChildExecutor == nil {
+		t.Fatal("expected live child executor hook")
+	}
+
+	if raw, err := marshalStartArgs(nil); err != nil || raw != nil {
+		t.Fatalf("marshalStartArgs(nil) = %q, %v, want nil,nil", raw, err)
+	}
+	if _, err := marshalStartArgs(map[string]any{"bad": func() {}}); err == nil {
+		t.Fatal("marshalStartArgs(non-json) error = nil, want validation error")
+	}
+}
+
+func testRuntimeMetadataAndSourceValidationBranches(t *testing.T) {
+	t.Helper()
+
+	metadata := workflowMetadataFromResolved(ResolvedSource{
+		SourceRef: "resolved-ref",
+		Metadata: map[string]string{
+			"project": "root",
+		},
+	}, StartRequest{
+		Source: Source{
+			WorkflowName: "named-workflow",
+			InlineWorkflow: &InlineWorkflowSource{
+				Metadata: map[string]string{"team": "ops"},
+			},
+		},
+	})
+	if metadata["name"] != "named-workflow" || metadata["team"] != "ops" || metadata["project"] != "root" {
+		t.Fatalf("workflow metadata = %#v", metadata)
+	}
+
+	if err := validationErrorFromSourceIssues(nil); err == nil || err.Error() == "" {
+		t.Fatalf("validationErrorFromSourceIssues(nil) = %v, want default validation error", err)
+	}
+	if err := validationErrorFromSourceIssues([]workflowvalidation.Issue{{Message: "bad source", Line: 3, Column: 5}}); err == nil || err.Error() != "bad source (line 3, column 5)" {
+		t.Fatalf("validationErrorFromSourceIssues(location) = %v", err)
+	}
+	if err := validationErrorFromSourceIssues([]workflowvalidation.Issue{{}}); err == nil || err.Error() != "workflow source validation failed" {
+		t.Fatalf("validationErrorFromSourceIssues(default message) = %v", err)
+	}
+}
+
+func testRuntimePolicyValidationBranches(t *testing.T) {
+	t.Helper()
+
+	if err := validationErrorFromPolicyIssues(nil); err != nil {
+		t.Fatalf("validationErrorFromPolicyIssues(nil) = %v, want nil", err)
+	}
+	if err := validationErrorFromPolicyIssues([]workflowpolicy.Issue{{Message: "blocked"}}); err == nil || err.Error() != "blocked" {
+		t.Fatalf("validationErrorFromPolicyIssues = %v, want blocked", err)
+	}
+	if err := validationErrorFromPolicyIssues([]workflowpolicy.Issue{{}}); err == nil || err.Error() != "requested policy is invalid" {
+		t.Fatalf("validationErrorFromPolicyIssues(default message) = %v", err)
+	}
+}
+
+func TestStartSourceRequestAndResolutionOrderBranches(t *testing.T) {
+	cases := []struct {
+		source Source
+		want   string
+	}{
+		{Source{Kind: workflowsource.KindFactoryID, FactoryID: "factory-1"}, "factory-1"},
+		{Source{Kind: workflowsource.KindFactoryInline, FactoryInline: json.RawMessage(`{"name":"factory"}`)}, `{"name":"factory"}`},
+		{Source{Kind: workflowsource.KindWorkflowFile, WorkflowFile: "wf.js"}, "wf.js"},
+		{Source{Kind: workflowsource.KindWorkflowName, WorkflowName: "name"}, "name"},
+	}
+	for _, tc := range cases {
+		if got := startSourceRequest(tc.source); got.Value != tc.want {
+			t.Fatalf("startSourceRequest(%s) value = %q, want %q", tc.source.Kind, got.Value, tc.want)
+		}
+	}
+	if got := startSourceRequest(Source{Kind: workflowsource.KindInlineWorkflow}); got.Value != "" || got.InlineSource != "" {
+		t.Fatalf("startSourceRequest(missing inline) = %#v, want empty inline request", got)
+	}
+
+	stages := []workflowsource.LookupStage{
+		workflowsource.LookupStageProjectClaude,
+		workflowsource.LookupStageExplicitSourceKind,
+		workflowsource.LookupStageGlobalUser,
+		workflowsource.LookupStagePackageRelative,
+		workflowsource.LookupStageNamedJavaScript,
+		workflowsource.LookupStageExplicitFactory,
+	}
+	for _, stage := range stages {
+		if resolutionOrderForLookupStage(stage) == "" {
+			t.Fatalf("resolutionOrderForLookupStage(%q) returned empty mapping", stage)
+		}
+	}
+}
+
+func TestJavaScriptRuntimeService_ReplayAndReadErrorBranches(t *testing.T) {
+	service := newJavaScriptRuntimeService(t)
+	req := inlineWorkflowStartRequest(
+		"req-runtime-replay-001",
+		simpleFinalWorkflowSource,
+		map[string]any{"subject": "workflows", "count": 1, "prefix": "you"},
+		nil,
+	)
+
+	first, err := service.StartAsync(context.Background(), req)
+	if err != nil {
+		t.Fatalf("StartAsync(first): %v", err)
+	}
+	second, err := service.StartAsync(context.Background(), req)
+	if err != nil {
+		t.Fatalf("StartAsync(replay): %v", err)
+	}
+	if second.SessionID != first.SessionID {
+		t.Fatalf("replay sessionID = %q, want %q", second.SessionID, first.SessionID)
+	}
+	waitUntilSessionStatus(t, service, first.SessionID, LifecycleStatusSucceeded, 5*time.Second)
+
+	syncReq := inlineWorkflowStartRequest(
+		"req-runtime-replay-sync-001",
+		simpleFinalWorkflowSource,
+		map[string]any{"subject": "workflows", "count": 1, "prefix": "you"},
+		nil,
+	)
+	syncFirst, err := service.StartSync(context.Background(), syncReq)
+	if err != nil {
+		t.Fatalf("StartSync(first): %v", err)
+	}
+	syncSecond, err := service.StartSync(context.Background(), syncReq)
+	if err != nil {
+		t.Fatalf("StartSync(replay): %v", err)
+	}
+	if syncSecond.SessionID != syncFirst.SessionID {
+		t.Fatalf("sync replay sessionID = %q, want %q", syncSecond.SessionID, syncFirst.SessionID)
+	}
+
+	if _, err := service.GetSession(context.Background(), ""); err == nil {
+		t.Fatal("GetSession(empty) error = nil, want validation error")
+	}
+	if _, err := service.GetSession(context.Background(), "dur-sess-dddddddddddddddddddddddddddddddd"); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("GetSession(missing) = %v, want ErrSessionNotFound", err)
+	}
+	if _, err := service.GetDispatch(context.Background(), syncFirst.SessionID, "missing-dispatch"); !errors.Is(err, ErrDispatchNotFound) {
+		t.Fatalf("GetDispatch(missing) = %v, want ErrDispatchNotFound", err)
+	}
+	if _, err := service.GetArtifact(context.Background(), syncFirst.SessionID, "missing-artifact"); !errors.Is(err, ErrArtifactNotFound) {
+		t.Fatalf("GetArtifact(missing) = %v, want ErrArtifactNotFound", err)
+	}
+	if _, err := service.ReadEvents(context.Background(), syncFirst.SessionID, EventReconnectRequest{AfterEventID: "missing"}); !errors.Is(err, ErrReconnectCursorNotFound) {
+		t.Fatalf("ReadEvents(missing cursor) = %v, want ErrReconnectCursorNotFound", err)
+	}
+}
+
+func TestPersistAndMetadataNoOpBranches(t *testing.T) {
+	if err := (&JavaScriptRuntimeService{}).persistTerminalSessionState(runtimeSessionState{}); err != nil {
+		t.Fatalf("persistTerminalSessionState(no dir) = %v, want nil", err)
+	}
+
+	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{
+		ProjectRoot:     t.TempDir(),
+		PersistSessions: true,
+	})
+	if err := service.persistTerminalSessionState(runtimeSessionState{
+		session: SessionReadResult{SessionID: "dur-sess-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", Status: LifecycleStatusRunning},
+	}); err != nil {
+		t.Fatalf("persistTerminalSessionState(non-terminal) = %v, want nil", err)
+	}
+	if err := service.persistTerminalSessionState(runtimeSessionState{
+		session: SessionReadResult{Status: LifecycleStatusSucceeded},
+	}); err != nil {
+		t.Fatalf("persistTerminalSessionState(empty session id) = %v, want nil", err)
+	}
+
+	metadata := workflowMetadataFromResolved(ResolvedSource{SourceRef: "fallback-ref"}, StartRequest{})
+	if metadata["name"] != "fallback-ref" {
+		t.Fatalf("fallback metadata name = %#v, want fallback-ref", metadata["name"])
+	}
+}
+
+func TestNormalizeStartRequestAdditionalSourceBranches(t *testing.T) {
+	cases := []StartRequest{
+		{
+			RequestID: "req-file",
+			Source: Source{
+				Kind:         workflowsource.KindWorkflowFile,
+				WorkflowFile: " workflow.js ",
+			},
+		},
+		{
+			RequestID: "req-name",
+			Source: Source{
+				Kind:         workflowsource.KindWorkflowName,
+				WorkflowName: " named-workflow ",
+			},
+		},
+		{
+			RequestID: "req-inline",
+			Source: Source{
+				Kind: workflowsource.KindInlineWorkflow,
+				InlineWorkflow: &InlineWorkflowSource{
+					InlineSource: " return 1; ",
+					Dialect:      " you-workflow-v1 ",
+					Entrypoint:   " default ",
+					Metadata:     map[string]string{"k": "v"},
+				},
+			},
+		},
+	}
+	for _, req := range cases {
+		normalized, err := NormalizeStartRequest(req)
+		if err != nil {
+			t.Fatalf("NormalizeStartRequest(%s): %v", req.RequestID, err)
+		}
+		if normalized.Source.Kind != req.Source.Kind {
+			t.Fatalf("normalized source kind = %q, want %q", normalized.Source.Kind, req.Source.Kind)
+		}
+	}
+	if _, err := normalizeSource(Source{}); err == nil {
+		t.Fatal("normalizeSource(unknown kind) error = nil, want validation error")
+	}
+}
+
+func TestListingFiltersAndNormalizationBranches(t *testing.T) {
+	now := time.Now().UTC()
+	later := now.Add(2 * time.Hour)
+	summary := DurableSessionListSummary{
+		SessionID:        "dur-sess-filter-1",
+		Status:           LifecycleStatusRunning,
+		OrchestratorKind: "JAVASCRIPT",
+		ResolvedSource: ResolvedSource{
+			Kind:      workflowsource.KindWorkflowName,
+			SourceRef: "customer/support",
+			Metadata:  map[string]string{"project": "/workspace/customer"},
+		},
+		Recoverable: true,
+		StaleLease:  true,
+		Lifecycle: &LifecycleTimestamps{
+			QueuedAt:   &now,
+			StartedAt:  &later,
+			UpdatedAt:  &later,
+			FinishedAt: &later,
+		},
+	}
+	yes := true
+	after := now.Add(-time.Minute)
+	before := later.Add(time.Minute)
+	if !MatchesDurableSessionListFilters(summary, SessionListFilters{
+		Statuses:          []LifecycleStatus{LifecycleStatusRunning},
+		OrchestratorKinds: []string{" javascript "},
+		SourceKind:        workflowsource.KindWorkflowName,
+		SourceRef:         "support",
+		ProjectBoundary:   "workspace",
+		Recoverable:       &yes,
+		StaleLease:        &yes,
+		CreatedAfter:      &after,
+		CreatedBefore:     &before,
+		UpdatedAfter:      &after,
+		UpdatedBefore:     &before,
+	}) {
+		t.Fatal("expected summary to match all listing filters")
+	}
+	no := false
+	if MatchesDurableSessionListFilters(summary, SessionListFilters{Recoverable: &no}) {
+		t.Fatal("recoverable mismatch unexpectedly matched")
+	}
+	if containsLifecycleStatus([]LifecycleStatus{LifecycleStatusPaused}, LifecycleStatusRunning) {
+		t.Fatal("containsLifecycleStatus mismatch unexpectedly matched")
+	}
+	if containsString([]string{"Alpha"}, "beta") {
+		t.Fatal("containsString mismatch unexpectedly matched")
+	}
+	if firstLifecycleTimestamp(nil, &later) != &later {
+		t.Fatal("firstLifecycleTimestamp did not return first non-nil value")
+	}
+	if latestLifecycleTimestamp(summary.Lifecycle) != &later {
+		t.Fatal("latestLifecycleTimestamp did not return latest time")
+	}
+
+	normalized, err := NormalizeListSessionsRequest(ListSessionsRequest{
+		Scope: SessionListScopeAll,
+		Filters: SessionListFilters{
+			Statuses:          []LifecycleStatus{LifecycleStatusRunning},
+			OrchestratorKinds: []string{" JAVASCRIPT ", ""},
+			SourceKind:        workflowsource.KindWorkflowName,
+			CreatedAfter:      &after,
+			CreatedBefore:     &before,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeListSessionsRequest: %v", err)
+	}
+	if normalized.Scope != SessionListScopeAll || len(normalized.Filters.OrchestratorKinds) != 1 {
+		t.Fatalf("normalized list request = %#v", normalized)
+	}
+	if _, err := NormalizeListSessionsRequest(ListSessionsRequest{Scope: SessionListScope("bad")}); err == nil {
+		t.Fatal("NormalizeListSessionsRequest(bad scope) error = nil, want validation error")
+	}
+	if _, err := NormalizeListSessionsRequest(ListSessionsRequest{
+		Filters: SessionListFilters{
+			SourceKind:    workflowsource.Kind("unknown"),
+			CreatedAfter:  &before,
+			CreatedBefore: &after,
+		},
+	}); err == nil {
+		t.Fatal("NormalizeListSessionsRequest(invalid filters) error = nil, want validation error")
+	}
+}
+
+func TestSmallHelperBranches(t *testing.T) {
+	if got := resolvedDialect(ResolvedSource{Dialect: "custom"}); got != "custom" {
+		t.Fatalf("resolvedDialect(custom) = %q, want custom", got)
+	}
+	if got := resolvedDialect(ResolvedSource{}); got != "you-workflow-v1" {
+		t.Fatalf("resolvedDialect(default) = %q, want you-workflow-v1", got)
+	}
+	if id, err := NormalizeSessionID(" session-1 "); err != nil || id != "session-1" {
+		t.Fatalf("NormalizeSessionID = %q, %v, want session-1,nil", id, err)
+	}
+	if _, err := NormalizeSessionID("   "); err == nil {
+		t.Fatal("NormalizeSessionID(empty) error = nil, want validation error")
+	}
+}
+
+func TestProjectionCloneHelpers(t *testing.T) {
+	observedAt := time.Now().UTC()
+	artifact := artifactSummaryFromRuntimeRecord("dur-sess-helper-1", workflowruntime.ArtifactRecord{
+		ID:         "art-helper-1",
+		Kind:       "RESULT",
+		Visibility: "PUBLIC",
+		Label:      "helper",
+	}, observedAt)
+	if artifact.ID != "art-helper-1" || artifact.RetrievalRef == nil || artifact.RetrievalRef.Href == "" {
+		t.Fatalf("artifact summary = %#v", artifact)
+	}
+
+	js := cloneDispatchJavaScriptProjections(map[string]DispatchJavaScriptProjection{
+		"disp-1": {TaskLabel: "child"},
+	})
+	if js["disp-1"].TaskLabel != "child" {
+		t.Fatalf("cloned javascript projections = %#v", js)
+	}
+	transitions := cloneDispatchStatusTransitions(map[string][]DispatchStatus{
+		"disp-1": {DispatchStatusQueued, DispatchStatusRunning},
+	})
+	if len(transitions["disp-1"]) != 2 {
+		t.Fatalf("cloned transitions = %#v", transitions)
+	}
+}
+
+func testJavaScriptRuntimeSyncCompletedSession(t *testing.T, service *JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+
+	session, err := service.GetSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if session.Status != LifecycleStatusSucceeded {
+		t.Fatalf("session status = %q, want SUCCEEDED", session.Status)
+	}
+	if session.ResultSummary == nil || session.ResultSummary.ResultStatus != string(ResultStatusFinal) {
+		t.Fatalf("resultSummary = %#v, want FINAL", session.ResultSummary)
+	}
+}
+
+func testJavaScriptRuntimeSyncCompletedResult(t *testing.T, service *JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+
+	result, err := service.GetResult(context.Background(), sessionID, ResultRequest{Mode: ResultModeFinal})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.ResultStatus != ResultStatusFinal {
+		t.Fatalf("resultStatus = %q, want FINAL", result.ResultStatus)
+	}
+	projected := decodePrimaryResultMap(t, result.PrimaryResult)
+	if projected["echo"] != "you:workflows" {
+		t.Fatalf("primaryResult echo = %#v, want you:workflows", projected["echo"])
+	}
+}
+
+func testJavaScriptRuntimeSyncCompletedEvents(t *testing.T, service *JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+
+	events, err := service.ReadEvents(context.Background(), sessionID, EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
+	}
+	if len(events.Events) != 3 {
+		t.Fatalf("events = %d, want 3 canonical lifecycle events", len(events.Events))
+	}
+}

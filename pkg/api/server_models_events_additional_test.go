@@ -166,16 +166,23 @@ func TestGetModel_ReturnsInternalErrorWhenRuntimeFails(t *testing.T) {
 }
 
 func TestInvokeModel_ErrorMappings(t *testing.T) {
-	validBody := `{"operation":"TTS","content":[{"type":"TEXT","text":"hello world"}]}`
+	t.Run("request_validation", testInvokeModelRequestValidation)
+	t.Run("runtime_and_fallback_errors", testInvokeModelRuntimeErrors)
+}
 
-	tests := []struct {
-		name       string
-		body       string
-		invokeErr  error
-		wantStatus int
-		wantCode   string
-		wantMsg    string
-	}{
+type invokeModelErrorCase struct {
+	name       string
+	body       string
+	invokeErr  error
+	wantStatus int
+	wantCode   string
+	wantMsg    string
+}
+
+func testInvokeModelRequestValidation(t *testing.T) {
+	t.Helper()
+
+	tests := []invokeModelErrorCase{
 		{
 			name:       "missing_body",
 			body:       "",
@@ -197,6 +204,17 @@ func TestInvokeModel_ErrorMappings(t *testing.T) {
 			wantCode:   "BAD_REQUEST",
 			wantMsg:    "operation is required",
 		},
+	}
+
+	assertInvokeModelErrors(t, tests)
+}
+
+func testInvokeModelRuntimeErrors(t *testing.T) {
+	t.Helper()
+
+	validBody := `{"operation":"TTS","content":[{"type":"TEXT","text":"hello world"}]}`
+
+	tests := []invokeModelErrorCase{
 		{
 			name:       "model_not_found",
 			body:       validBody,
@@ -254,6 +272,12 @@ func TestInvokeModel_ErrorMappings(t *testing.T) {
 			wantMsg:    "bad model input",
 		},
 	}
+
+	assertInvokeModelErrors(t, tests)
+}
+
+func assertInvokeModelErrors(t *testing.T, tests []invokeModelErrorCase) {
+	t.Helper()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

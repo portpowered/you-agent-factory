@@ -41,7 +41,14 @@ func (stubGuard) Evaluate(
 	return nil, false
 }
 
-func TestBuildFactoryWorldViewAndDashboardProjection_FilterCustomerFacingRuntimeData(t *testing.T) {
+type worldViewProjectionFixture struct {
+	factory   *factoryapi.Factory
+	state     interfaces.FactoryWorldState
+	dashboard SimpleDashboardProjection
+	view      interfaces.FactoryWorldView
+}
+
+func buildWorldViewProjectionState() (*factoryapi.Factory, interfaces.FactoryWorldState) {
 	t0 := time.Date(2026, 6, 17, 10, 0, 0, 0, time.UTC)
 	lineage := interfaces.WorkPayloadLineageProjection{}
 	lineage.RecordWorkRequestSnapshot(1, "request-queued", interfaces.FactoryWorkItem{
@@ -52,197 +59,190 @@ func TestBuildFactoryWorldViewAndDashboardProjection_FilterCustomerFacingRuntime
 		TraceID:     "trace-queued",
 	})
 	factory := &factoryapi.Factory{Name: "factory-canonical"}
-	state := interfaces.FactoryWorldState{
-		Factory: factory,
-		Topology: interfaces.InitialStructurePayload{
-			Resources: []interfaces.FactoryResource{{ID: "cpu", Name: "CPU", Capacity: 2}},
-			WorkTypes: []interfaces.FactoryWorkType{
-				{ID: "task", Name: "Task", States: []interfaces.FactoryStateDefinition{{Value: "init", Category: "INITIAL"}, {Value: "done", Category: "TERMINAL"}, {Value: "failed", Category: "FAILED"}}},
-				{ID: interfaces.SystemTimeWorkTypeID, States: []interfaces.FactoryStateDefinition{{Value: "pending", Category: "PROCESSING"}}},
-			},
-			Places: []interfaces.FactoryPlace{
-				{ID: "task:init", TypeID: "task", State: "init", Category: "INITIAL"},
-				{ID: "task:done", TypeID: "task", State: "done", Category: "TERMINAL"},
-				{ID: "task:failed", TypeID: "task", State: "failed", Category: "FAILED"},
-				{ID: "cpu:available", TypeID: "cpu", State: "available", Category: "PROCESSING"},
-				{ID: interfaces.SystemTimePendingPlaceID, TypeID: interfaces.SystemTimeWorkTypeID, State: "pending", Category: "PROCESSING"},
-			},
-			Workstations: []interfaces.FactoryWorkstation{
-				{
-					ID:                "t-review",
-					Name:              "Review",
-					WorkerID:          "worker-review",
-					Kind:              string(interfaces.WorkstationKindStandard),
-					InputPlaceIDs:     []string{"task:init", "cpu:available"},
-					OutputPlaceIDs:    []string{"task:done"},
-					ContinuePlaceIDs:  []string{"task:init"},
-					RejectionPlaceIDs: []string{"task:init"},
-					FailurePlaceIDs:   []string{"task:failed"},
-				},
-				{
-					ID:            interfaces.SystemTimeExpiryTransitionID,
-					Name:          "Expire time work",
-					WorkerID:      "worker-time",
-					InputPlaceIDs: []string{interfaces.SystemTimePendingPlaceID},
-				},
-			},
-		},
+	return factory, interfaces.FactoryWorldState{
+		Factory:        factory,
+		Topology:       buildWorldViewProjectionTopology(),
 		PayloadLineage: lineage,
-		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
-			"work-queued": {
-				ID:          "work-queued",
-				WorkTypeID:  "task",
-				DisplayName: "Queued task",
-				State:       "init",
-				TraceID:     "trace-queued",
-			},
-			"work-active": {
-				ID:                     "work-active",
-				WorkTypeID:             "task",
-				DisplayName:            "Active task",
-				State:                  "review",
-				TraceID:                "trace-active",
-				CurrentChainingTraceID: "chain-active",
-			},
-			"time-work": {
-				ID:          "time-work",
-				WorkTypeID:  interfaces.SystemTimeWorkTypeID,
-				DisplayName: "Clock tick",
-				State:       "pending",
-				TraceID:     "trace-time",
-			},
-		},
+		WorkItemsByID:  buildWorldViewWorkItems(),
 		ActiveWorkItemsByID: map[string]interfaces.FactoryWorkItem{
-			"work-queued": {
-				ID:          "work-queued",
-				WorkTypeID:  "task",
-				DisplayName: "Queued task",
-				State:       "init",
-				TraceID:     "trace-queued",
-			},
+			"work-queued": {ID: "work-queued", WorkTypeID: "task", DisplayName: "Queued task", State: "init", TraceID: "trace-queued"},
 		},
-		TerminalWorkByID: map[string]interfaces.FactoryTerminalWork{
-			"term-success": {
-				Status: "COMPLETED",
-				WorkItem: interfaces.FactoryWorkItem{
-					ID: "work-success", WorkTypeID: "task",
-				},
-			},
-			"term-failed": {
-				Status: "FAILED",
-				WorkItem: interfaces.FactoryWorkItem{
-					ID: "work-failed", WorkTypeID: "task",
-				},
-			},
-			"term-system": {
-				Status: "COMPLETED",
-				WorkItem: interfaces.FactoryWorkItem{
-					ID: "time-finished", WorkTypeID: interfaces.SystemTimeWorkTypeID,
-				},
-			},
-		},
-		FailedWorkItemsByID: map[string]interfaces.FactoryWorkItem{
-			"failed-customer": {ID: "failed-customer", WorkTypeID: "task"},
-			"failed-system":   {ID: "failed-system", WorkTypeID: interfaces.SystemTimeWorkTypeID},
-		},
-		PlaceOccupancyByID: map[string]interfaces.FactoryPlaceOccupancy{
-			"task:init":                         {PlaceID: "task:init", WorkItemIDs: []string{"work-queued"}, TokenCount: 1},
-			"cpu:available":                     {PlaceID: "cpu:available", ResourceTokenIDs: []string{"cpu:0"}, TokenCount: 1},
-			interfaces.SystemTimePendingPlaceID: {PlaceID: interfaces.SystemTimePendingPlaceID, WorkItemIDs: []string{"time-work"}, TokenCount: 1},
-		},
-		ActiveDispatches: map[string]interfaces.FactoryWorldDispatch{
-			"dispatch-customer": {
-				DispatchID:               "dispatch-customer",
-				TransitionID:             "t-review",
-				Workstation:              interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
-				StartedAt:                t0,
-				WorkItemIDs:              []string{"work-active"},
-				CurrentChainingTraceID:   "chain-active",
-				PreviousChainingTraceIDs: []string{"chain-parent"},
-				TraceIDs:                 []string{"trace-active", "trace-active", "trace-other"},
-				Inputs: []interfaces.WorkstationInput{{
-					TokenID: "tok-active",
-					PlaceID: "task:init",
-					WorkItem: &interfaces.FactoryWorkItem{
-						ID: "work-active", WorkTypeID: "task", TraceID: "trace-active",
-					},
-				}},
-			},
-			"dispatch-system": {
-				DispatchID:   "dispatch-system",
-				TransitionID: interfaces.SystemTimeExpiryTransitionID,
-				WorkItemIDs:  []string{"time-work"},
-			},
-		},
-		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{
-			{
-				DispatchID:   "dispatch-completed",
-				TransitionID: "t-review",
-				CompletedAt:  t0.Add(time.Minute),
-				Result:       interfaces.WorkstationResult{Outcome: "ACCEPTED"},
-				WorkItemIDs:  []string{"work-active"},
-			},
-			{
-				DispatchID:   "dispatch-expiry",
-				TransitionID: interfaces.SystemTimeExpiryTransitionID,
-				CompletedAt:  t0.Add(2 * time.Minute),
-				Result:       interfaces.WorkstationResult{Outcome: "ACCEPTED"},
-				WorkItemIDs:  []string{"time-work"},
-			},
-		},
-		ProviderSessions: []interfaces.FactoryWorldProviderSessionRecord{
-			{
-				DispatchID:      "dispatch-provider",
-				TransitionID:    "t-review",
-				WorkItemIDs:     []string{"work-active"},
-				ConsumedInputs:  []interfaces.WorkstationInput{{WorkItem: &interfaces.FactoryWorkItem{ID: "work-active", WorkTypeID: "task"}}},
-				ProviderSession: interfaces.ProviderSessionMetadata{ID: "provider-session"},
-			},
-			{
-				DispatchID:      "dispatch-provider-system",
-				TransitionID:    interfaces.SystemTimeExpiryTransitionID,
-				WorkItemIDs:     []string{"time-work"},
-				ProviderSession: interfaces.ProviderSessionMetadata{ID: "provider-system"},
-			},
-		},
+		TerminalWorkByID:    buildWorldViewTerminalWork(),
+		FailedWorkItemsByID: buildWorldViewFailedWorkItems(),
+		PlaceOccupancyByID:  buildWorldViewPlaceOccupancy(),
+		ActiveDispatches:    buildWorldViewActiveDispatches(t0),
+		CompletedDispatches: buildWorldViewCompletedDispatches(t0),
+		ProviderSessions:    buildWorldViewProviderSessions(),
 		InferenceAttemptsByDispatchID: map[string]map[string]interfaces.FactoryWorldInferenceAttempt{
-			"dispatch-customer": {
-				"attempt-1": {DispatchID: "dispatch-customer", InferenceRequestID: "attempt-1", Outcome: "SUCCESS"},
-			},
+			"dispatch-customer": {"attempt-1": {DispatchID: "dispatch-customer", InferenceRequestID: "attempt-1", Outcome: "SUCCESS"}},
 		},
 		WorkStateChangesByWorkID: map[string][]interfaces.FactoryWorldWorkStateChangeRecord{
-			"work-queued": {{
-				WorkID: "work-queued", FromState: "init", ToState: "review", FromPlaceID: "task:init", ToPlaceID: "task:done", Tick: 2,
-			}},
-			"empty": nil,
+			"work-queued": {{WorkID: "work-queued", FromState: "init", ToState: "review", FromPlaceID: "task:init", ToPlaceID: "task:done", Tick: 2}},
+			"empty":       nil,
 		},
-		JavaScriptRuntime: &interfaces.FactorySessionJavaScriptRuntimeState{
-			Phase:               "plan",
-			Phases:              []string{"bootstrap", "plan"},
-			ArgsDigest:          "digest-1",
-			ScriptStatus:        "RUNNING",
-			QueuedDispatches:    1,
-			RunningDispatches:   2,
-			CompletedDispatches: 3,
-		},
+		JavaScriptRuntime:     buildWorldViewJavaScriptRuntime(),
 		JavaScriptCheckpoints: []interfaces.FactorySessionJavaScriptCheckpointRef{{ID: "checkpoint-1", Label: "checkpoint"}},
 		Artifacts:             []interfaces.FactorySessionArtifactState{{ID: "artifact-1", Label: "artifact"}},
-		SessionBracket: &interfaces.FactoryWorldSessionBracketState{
-			SessionID:      "session-1",
-			StartedAt:      t0,
-			ResultStatus:   "running",
-			ResultSummary:  []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "summary"}},
-			ArtifactIDs:    []string{"artifact-1"},
-			Terminal:       true,
-			FinalStatus:    "SUCCESS",
-			CompletedAt:    t0.Add(3 * time.Minute),
-			FailureReason:  "none",
-			FailureMessage: "none",
+		SessionBracket:        buildWorldViewSessionBracket(t0),
+	}
+}
+
+func buildWorldViewProjectionTopology() interfaces.InitialStructurePayload {
+	return interfaces.InitialStructurePayload{
+		Resources: []interfaces.FactoryResource{{ID: "cpu", Name: "CPU", Capacity: 2}},
+		WorkTypes: []interfaces.FactoryWorkType{
+			{ID: "task", Name: "Task", States: []interfaces.FactoryStateDefinition{{Value: "init", Category: "INITIAL"}, {Value: "done", Category: "TERMINAL"}, {Value: "failed", Category: "FAILED"}}},
+			{ID: interfaces.SystemTimeWorkTypeID, States: []interfaces.FactoryStateDefinition{{Value: "pending", Category: "PROCESSING"}}},
+		},
+		Places: []interfaces.FactoryPlace{
+			{ID: "task:init", TypeID: "task", State: "init", Category: "INITIAL"},
+			{ID: "task:done", TypeID: "task", State: "done", Category: "TERMINAL"},
+			{ID: "task:failed", TypeID: "task", State: "failed", Category: "FAILED"},
+			{ID: "cpu:available", TypeID: "cpu", State: "available", Category: "PROCESSING"},
+			{ID: interfaces.SystemTimePendingPlaceID, TypeID: interfaces.SystemTimeWorkTypeID, State: "pending", Category: "PROCESSING"},
+		},
+		Workstations: []interfaces.FactoryWorkstation{
+			{ID: "t-review", Name: "Review", WorkerID: "worker-review", Kind: string(interfaces.WorkstationKindStandard), InputPlaceIDs: []string{"task:init", "cpu:available"}, OutputPlaceIDs: []string{"task:done"}, ContinuePlaceIDs: []string{"task:init"}, RejectionPlaceIDs: []string{"task:init"}, FailurePlaceIDs: []string{"task:failed"}},
+			{ID: interfaces.SystemTimeExpiryTransitionID, Name: "Expire time work", WorkerID: "worker-time", InputPlaceIDs: []string{interfaces.SystemTimePendingPlaceID}},
 		},
 	}
+}
 
-	dashboard := BuildSimpleDashboardProjection(state)
-	view := BuildFactoryWorldView(state)
+func buildWorldViewWorkItems() map[string]interfaces.FactoryWorkItem {
+	return map[string]interfaces.FactoryWorkItem{
+		"work-queued": {ID: "work-queued", WorkTypeID: "task", DisplayName: "Queued task", State: "init", TraceID: "trace-queued"},
+		"work-active": {ID: "work-active", WorkTypeID: "task", DisplayName: "Active task", State: "review", TraceID: "trace-active", CurrentChainingTraceID: "chain-active"},
+		"time-work":   {ID: "time-work", WorkTypeID: interfaces.SystemTimeWorkTypeID, DisplayName: "Clock tick", State: "pending", TraceID: "trace-time"},
+	}
+}
+
+func buildWorldViewTerminalWork() map[string]interfaces.FactoryTerminalWork {
+	return map[string]interfaces.FactoryTerminalWork{
+		"term-success": {Status: "COMPLETED", WorkItem: interfaces.FactoryWorkItem{ID: "work-success", WorkTypeID: "task"}},
+		"term-failed":  {Status: "FAILED", WorkItem: interfaces.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task"}},
+		"term-system":  {Status: "COMPLETED", WorkItem: interfaces.FactoryWorkItem{ID: "time-finished", WorkTypeID: interfaces.SystemTimeWorkTypeID}},
+	}
+}
+
+func buildWorldViewFailedWorkItems() map[string]interfaces.FactoryWorkItem {
+	return map[string]interfaces.FactoryWorkItem{
+		"failed-customer": {ID: "failed-customer", WorkTypeID: "task"},
+		"failed-system":   {ID: "failed-system", WorkTypeID: interfaces.SystemTimeWorkTypeID},
+	}
+}
+
+func buildWorldViewPlaceOccupancy() map[string]interfaces.FactoryPlaceOccupancy {
+	return map[string]interfaces.FactoryPlaceOccupancy{
+		"task:init":                         {PlaceID: "task:init", WorkItemIDs: []string{"work-queued"}, TokenCount: 1},
+		"cpu:available":                     {PlaceID: "cpu:available", ResourceTokenIDs: []string{"cpu:0"}, TokenCount: 1},
+		interfaces.SystemTimePendingPlaceID: {PlaceID: interfaces.SystemTimePendingPlaceID, WorkItemIDs: []string{"time-work"}, TokenCount: 1},
+	}
+}
+
+func buildWorldViewActiveDispatches(t0 time.Time) map[string]interfaces.FactoryWorldDispatch {
+	return map[string]interfaces.FactoryWorldDispatch{
+		"dispatch-customer": {
+			DispatchID:               "dispatch-customer",
+			TransitionID:             "t-review",
+			Workstation:              interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+			StartedAt:                t0,
+			WorkItemIDs:              []string{"work-active"},
+			CurrentChainingTraceID:   "chain-active",
+			PreviousChainingTraceIDs: []string{"chain-parent"},
+			TraceIDs:                 []string{"trace-active", "trace-active", "trace-other"},
+			Inputs: []interfaces.WorkstationInput{{
+				TokenID: "tok-active",
+				PlaceID: "task:init",
+				WorkItem: &interfaces.FactoryWorkItem{
+					ID: "work-active", WorkTypeID: "task", TraceID: "trace-active",
+				},
+			}},
+		},
+		"dispatch-system": {DispatchID: "dispatch-system", TransitionID: interfaces.SystemTimeExpiryTransitionID, WorkItemIDs: []string{"time-work"}},
+	}
+}
+
+func buildWorldViewCompletedDispatches(t0 time.Time) []interfaces.FactoryWorldDispatchCompletion {
+	return []interfaces.FactoryWorldDispatchCompletion{
+		{DispatchID: "dispatch-completed", TransitionID: "t-review", CompletedAt: t0.Add(time.Minute), Result: interfaces.WorkstationResult{Outcome: "ACCEPTED"}, WorkItemIDs: []string{"work-active"}},
+		{DispatchID: "dispatch-expiry", TransitionID: interfaces.SystemTimeExpiryTransitionID, CompletedAt: t0.Add(2 * time.Minute), Result: interfaces.WorkstationResult{Outcome: "ACCEPTED"}, WorkItemIDs: []string{"time-work"}},
+	}
+}
+
+func buildWorldViewProviderSessions() []interfaces.FactoryWorldProviderSessionRecord {
+	return []interfaces.FactoryWorldProviderSessionRecord{
+		{
+			DispatchID:      "dispatch-provider",
+			TransitionID:    "t-review",
+			WorkItemIDs:     []string{"work-active"},
+			ConsumedInputs:  []interfaces.WorkstationInput{{WorkItem: &interfaces.FactoryWorkItem{ID: "work-active", WorkTypeID: "task"}}},
+			ProviderSession: interfaces.ProviderSessionMetadata{ID: "provider-session"},
+		},
+		{
+			DispatchID:      "dispatch-provider-system",
+			TransitionID:    interfaces.SystemTimeExpiryTransitionID,
+			WorkItemIDs:     []string{"time-work"},
+			ProviderSession: interfaces.ProviderSessionMetadata{ID: "provider-system"},
+		},
+	}
+}
+
+func buildWorldViewJavaScriptRuntime() *interfaces.FactorySessionJavaScriptRuntimeState {
+	return &interfaces.FactorySessionJavaScriptRuntimeState{
+		Phase:               "plan",
+		Phases:              []string{"bootstrap", "plan"},
+		ArgsDigest:          "digest-1",
+		ScriptStatus:        "RUNNING",
+		QueuedDispatches:    1,
+		RunningDispatches:   2,
+		CompletedDispatches: 3,
+	}
+}
+
+func buildWorldViewSessionBracket(t0 time.Time) *interfaces.FactoryWorldSessionBracketState {
+	return &interfaces.FactoryWorldSessionBracketState{
+		SessionID:      "session-1",
+		StartedAt:      t0,
+		ResultStatus:   "running",
+		ResultSummary:  []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "summary"}},
+		ArtifactIDs:    []string{"artifact-1"},
+		Terminal:       true,
+		FinalStatus:    "SUCCESS",
+		CompletedAt:    t0.Add(3 * time.Minute),
+		FailureReason:  "none",
+		FailureMessage: "none",
+	}
+}
+
+func newWorldViewProjectionFixture() worldViewProjectionFixture {
+	factory, state := buildWorldViewProjectionState()
+	return worldViewProjectionFixture{
+		factory:   factory,
+		state:     state,
+		dashboard: BuildSimpleDashboardProjection(state),
+		view:      BuildFactoryWorldView(state),
+	}
+}
+
+func TestBuildFactoryWorldViewAndDashboardProjection_FilterCustomerFacingRuntimeData(t *testing.T) {
+	t.Run("dashboard projection", testDashboardProjectionFiltersCustomerFacingRuntimeData)
+	t.Run("world view projection", testWorldViewProjectionFiltersCustomerFacingRuntimeData)
+	t.Run("topology projection", testWorldViewTopologyProjectionFiltersCustomerFacingRuntimeData)
+}
+
+func testDashboardProjectionFiltersCustomerFacingRuntimeData(t *testing.T) {
+	t.Helper()
+
+	fixture := newWorldViewProjectionFixture()
+	dashboard := fixture.dashboard
+
+	assertDashboardProjectionRuntimeCounts(t, dashboard)
+	assertDashboardProjectionWorkstationState(t, dashboard)
+	assertDashboardProjectionSessionState(t, dashboard)
+}
+
+func assertDashboardProjectionRuntimeCounts(t *testing.T, dashboard SimpleDashboardProjection) {
+	t.Helper()
 
 	if dashboard.Runtime.InFlightDispatchCount != 1 {
 		t.Fatalf("InFlightDispatchCount = %d, want 1", dashboard.Runtime.InFlightDispatchCount)
@@ -262,9 +262,19 @@ func TestBuildFactoryWorldViewAndDashboardProjection_FilterCustomerFacingRuntime
 	if got := dashboard.Runtime.WorkMoveOperationsByWorkID["work-queued"]; len(got) != 1 || got[0].ToState != "review" {
 		t.Fatalf("work move operations = %#v, want cloned review move", got)
 	}
+}
+
+func assertDashboardProjectionWorkstationState(t *testing.T, dashboard SimpleDashboardProjection) {
+	t.Helper()
+
 	if got := dashboard.WorkstationNodesByID["t-review"]; got.WorkstationName != "Review" || len(got.OutputPlaces) != 3 {
 		t.Fatalf("dashboard workstation node = %#v, want review node with deduped merged outputs", got)
 	}
+}
+
+func assertDashboardProjectionSessionState(t *testing.T, dashboard SimpleDashboardProjection) {
+	t.Helper()
+
 	if dashboard.Runtime.Session.DispatchedCount != 2 || dashboard.Runtime.Session.CompletedCount != 1 || dashboard.Runtime.Session.FailedCount != 1 {
 		t.Fatalf("session counts = %#v, want dispatched=2 completed=1 failed=1", dashboard.Runtime.Session)
 	}
@@ -283,8 +293,15 @@ func TestBuildFactoryWorldViewAndDashboardProjection_FilterCustomerFacingRuntime
 	if dashboard.Runtime.Session.Bracket == nil || dashboard.Runtime.Session.Bracket.SessionID != "session-1" {
 		t.Fatalf("session bracket = %#v, want projected session bracket", dashboard.Runtime.Session.Bracket)
 	}
+}
 
-	if view.Factory == nil || view.Factory == factory || view.Factory.Name != "factory-canonical" {
+func testWorldViewProjectionFiltersCustomerFacingRuntimeData(t *testing.T) {
+	t.Helper()
+
+	fixture := newWorldViewProjectionFixture()
+	view := fixture.view
+
+	if view.Factory == nil || view.Factory == fixture.factory || view.Factory.Name != "factory-canonical" {
 		t.Fatalf("Factory = %#v, want cloned canonical factory", view.Factory)
 	}
 	if !reflect.DeepEqual(view.Runtime.ActiveDispatchIDs, []string{"dispatch-customer"}) {
@@ -299,6 +316,13 @@ func TestBuildFactoryWorldViewAndDashboardProjection_FilterCustomerFacingRuntime
 	if view.Runtime.JavaScript == nil || view.Runtime.JavaScript.Phase != "plan" || len(view.Runtime.JavaScript.Checkpoints) != 1 || len(view.Runtime.JavaScript.Artifacts) != 1 {
 		t.Fatalf("javascript projection = %#v, want merged runtime/checkpoint/artifact state", view.Runtime.JavaScript)
 	}
+}
+
+func testWorldViewTopologyProjectionFiltersCustomerFacingRuntimeData(t *testing.T) {
+	t.Helper()
+
+	view := newWorldViewProjectionFixture().view
+
 	if len(view.Topology.WorkstationNodeIDs) != 1 || view.Topology.WorkstationNodeIDs[0] != "t-review" {
 		t.Fatalf("WorkstationNodeIDs = %#v, want only customer workstation", view.Topology.WorkstationNodeIDs)
 	}
@@ -423,9 +447,15 @@ func TestProjectActiveThrottlePauses_UsesProviderFallbackAndFiltersAffectedTopol
 }
 
 func TestTopologyProjectionHelpers_ProjectRuntimeMetadataAndConstraints(t *testing.T) {
+	t.Run("runtime factory metadata helpers", testRuntimeFactoryMetadataHelpers)
+	t.Run("transition and worker metadata helpers", testTransitionAndWorkerMetadataHelpers)
+	t.Run("guard and constraint helpers", testGuardAndConstraintHelpers)
+}
+
+func newRuntimeLookupFixture() projectionRuntimeLookupFixture {
 	locked := true
 	parentID := "group-parent"
-	fixture := projectionRuntimeLookupFixture{
+	return projectionRuntimeLookupFixture{
 		factory: &interfaces.FactoryConfig{
 			Name: "factory-runtime",
 			Version: &interfaces.FactoryVersion{
@@ -464,7 +494,12 @@ func TestTopologyProjectionHelpers_ProjectRuntimeMetadataAndConstraints(t *testi
 			},
 		},
 	}
+}
 
+func testRuntimeFactoryMetadataHelpers(t *testing.T) {
+	t.Helper()
+
+	fixture := newRuntimeLookupFixture()
 	version := runtimeFactoryVersion(fixture)
 	manifest := runtimeFactoryResourceManifest(fixture)
 	layout := runtimeFactoryLayout(fixture)
@@ -477,6 +512,10 @@ func TestTopologyProjectionHelpers_ProjectRuntimeMetadataAndConstraints(t *testi
 	if fixture.factory.Version.Logical != 7 || fixture.factory.ResourceManifest.RequiredTools[0].Name != "go" || fixture.factory.Layout.Nodes[0].ID != "review" {
 		t.Fatalf("runtime factory helpers should clone config values: %#v", fixture.factory)
 	}
+}
+
+func testTransitionAndWorkerMetadataHelpers(t *testing.T) {
+	t.Helper()
 
 	if got := transitionWorkerIDs(map[string]*petri.Transition{
 		"b": {WorkerType: "worker-review"},
@@ -493,6 +532,12 @@ func TestTopologyProjectionHelpers_ProjectRuntimeMetadataAndConstraints(t *testi
 	if workerConfigWithUsage(nil, nil) != nil {
 		t.Fatal("workerConfigWithUsage(nil) should return nil")
 	}
+}
+
+func testGuardAndConstraintHelpers(t *testing.T) {
+	t.Helper()
+
+	fixture := newRuntimeLookupFixture()
 
 	if got := guardConstraintType(&petri.VisitCountGuard{}); got != "visit_count_guard" {
 		t.Fatalf("guardConstraintType(VisitCountGuard) = %q", got)
