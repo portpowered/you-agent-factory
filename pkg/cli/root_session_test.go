@@ -22,6 +22,8 @@ func TestSessionCommand_RegistersSubcommands(t *testing.T) {
 		{"session", "show"},
 		{"session", "create"},
 		{"session", "delete"},
+		{"session", "pause"},
+		{"session", "resume"},
 	} {
 		if _, _, err := root.Find(path); err != nil {
 			t.Fatalf("find %v: %v", path, err)
@@ -46,8 +48,12 @@ func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 		"show",
 		"create",
 		"delete",
+		"pause",
+		"resume",
 		"you session list",
 		"you session show",
+		"you session pause",
+		"you session resume",
 		"you session list --json",
 		"you session create --dir /workspace/fleet --port 9090",
 		"you session delete session-beta --port 9090 --json",
