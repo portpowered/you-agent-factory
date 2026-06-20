@@ -7307,6 +7307,9 @@ components:
         outputSchema:
           type: string
           description: JSON schema string used to validate or parse structured model output when configured.
+        outcomeFormat:
+          $ref: '#/components/schemas/WorkstationOutcomeFormat'
+          description: Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
         limits:
           $ref: '#/components/schemas/WorkstationLimits'
           description: Retry and execution ceilings applied to this workstation.
@@ -8658,3 +8661,12 @@ components:
         claim:
           $ref: '#/components/schemas/HostedLinearWorkerClaim'
           description: Optional claim-related configuration that v1 hosted Linear polling allows.
+    WorkstationOutcomeFormat:
+      type: string
+      description: Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+      x-enum-varnames:
+        - WorkstationOutcomeFormatDecisionEnvelope
+      enum:
+        - decision-envelope
+      x-enum-descriptions:
+        - Parse agent output as a reviewer/checker decision envelope instead of stop-token routing.

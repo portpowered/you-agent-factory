@@ -3713,6 +3713,8 @@ export interface components {
       promptFile?: string;
       /** @description JSON schema string used to validate or parse structured model output when configured. */
       outputSchema?: string;
+      /** @description Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing. */
+      outcomeFormat?: components["schemas"]["WorkstationOutcomeFormat"];
       /** @description Retry and execution ceilings applied to this workstation. */
       limits?: components["schemas"]["WorkstationLimits"];
       /** @description Optional policy for whether downstream work uses the workstation output payload or preserves the consumed input payload. */
@@ -4396,6 +4398,11 @@ export interface components {
       /** @description Optional claim-related configuration that v1 hosted Linear polling allows. */
       claim?: components["schemas"]["HostedLinearWorkerClaim"];
     };
+    /**
+     * @description Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+     * @enum {string}
+     */
+    WorkstationOutcomeFormat: WorkstationOutcomeFormat;
   };
   responses: {
     /** @description Request payload or parameter was invalid. */
@@ -6794,6 +6801,12 @@ export const HostedWorkerProvider = {
 } as const;
 export type HostedWorkerProvider =
   (typeof HostedWorkerProvider)[keyof typeof HostedWorkerProvider];
+export const WorkstationOutcomeFormat = {
+  // Parse agent output as a reviewer/checker decision envelope instead of stop-token routing.
+  WorkstationOutcomeFormatDecisionEnvelope: "decision-envelope",
+} as const;
+export type WorkstationOutcomeFormat =
+  (typeof WorkstationOutcomeFormat)[keyof typeof WorkstationOutcomeFormat];
 export const ComponentsParametersSortBy = {
   state_type: "state.type",
 } as const;

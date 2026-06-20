@@ -60,6 +60,13 @@ primary-result behavior.
   and must preserve carried summary content. `primary_result_test.go` covers both
   successful EXPLICIT selection and unresolved failure when `goal:complete` is
   absent from terminal work in scope.
+- `pkg/packagedfactories/goal/decision_envelope.go` owns the canonical
+  reviewer/checker JSON envelope and its mapping onto `interfaces.WorkResult`.
+- `pkg/workers/executor/agent.go` routes `review` workstation agent output through
+  `goal.WorkResultFromDecisionEnvelopeJSONOrFailed` instead of stop-token parsing.
+- `factory/docs/decision-envelope.md` is the packaged-authoring guide for the
+  reviewer/checker envelope shape, accepted decision values, and malformed-input
+  behavior used by `factory/workstations/review/AGENTS.md`.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged goal
   invocation summary shaping on `execute-goal` workstations alongside packaged
   TTS metadata shaping.
