@@ -42,14 +42,10 @@ func TestPauseResume_EmitCanonicalSessionLifecycleEvents(t *testing.T) {
 		switch event.Type {
 		case factoryapi.FactoryEventTypeSessionPaused:
 			paused = true
-			if event.Context.SessionId == nil || *event.Context.SessionId != "session-pause-resume" {
-				t.Fatalf("paused session id = %#v, want session-pause-resume", event.Context.SessionId)
-			}
+			assertLifecycleEventSessionID(t, event, "session-pause-resume")
 		case factoryapi.FactoryEventTypeSessionResumed:
 			resumed = true
-			if event.Context.SessionId == nil || *event.Context.SessionId != "session-pause-resume" {
-				t.Fatalf("resumed session id = %#v, want session-pause-resume", event.Context.SessionId)
-			}
+			assertLifecycleEventSessionID(t, event, "session-pause-resume")
 		}
 	}
 	if !paused || !resumed {
@@ -143,5 +139,12 @@ func TestPauseResume_ReplayPreservesFinalPausedStatus(t *testing.T) {
 	}
 	if worldState.SessionBracket == nil || worldState.SessionBracket.LifecycleControlStatus != string(factoryapi.FactorySessionDurableLifecycleStatusPaused) {
 		t.Fatalf("session bracket = %#v, want PAUSED lifecycle control status", worldState.SessionBracket)
+	}
+}
+
+func assertLifecycleEventSessionID(t *testing.T, event factoryapi.FactoryEvent, wantSessionID string) {
+	t.Helper()
+	if event.Context.SessionId == nil || *event.Context.SessionId != wantSessionID {
+		t.Fatalf("%s session id = %#v, want %s", event.Type, event.Context.SessionId, wantSessionID)
 	}
 }
