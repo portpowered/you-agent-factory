@@ -1,5 +1,5 @@
-// backendsizecheck:ignore-file built-in catalog layout and @you/tts factory JSON remain co-located until dedicated config seams split.
-// pkgmaintcheck:ignore-file-lines built-in catalog layout and @you/tts factory JSON remain co-located until dedicated config seams split.
+// backendsizecheck:ignore-file built-in catalog layout and packaged factory JSON remain co-located until dedicated config seams split.
+// pkgmaintcheck:ignore-file-lines built-in catalog layout and packaged factory JSON remain co-located until dedicated config seams split.
 package config
 
 import (
@@ -829,7 +829,8 @@ func restoreFactorySplitLayoutReplace(targetDir, backupDir string) {
 }
 
 var builtInNamedFactoryCatalog = map[string][]byte{
-	"@you/tts": BuiltInTTSFactoryJSON,
+	"@you/goal": BuiltInGoalFactoryJSON,
+	"@you/tts":  BuiltInTTSFactoryJSON,
 }
 
 // ResolveNamedFactoryDirAcrossRoots returns the runnable factory directory for
@@ -953,6 +954,47 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 	}
 	return factoryDir, true, nil
 }
+
+// BuiltInGoalFactoryJSON is the canonical runnable @you/goal packaged factory payload.
+var BuiltInGoalFactoryJSON = []byte(`{
+  "name": "@you/goal",
+  "id": "builtin-goal",
+  "workTypes": [
+    {
+      "name": "task",
+      "handlingBehavior": ["DEFAULT"],
+      "states": [
+        {"name": "init", "type": "INITIAL"},
+        {"name": "complete", "type": "TERMINAL"},
+        {"name": "failed", "type": "FAILED"}
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "name": "goal-executor",
+      "type": "MODEL_WORKER",
+      "body": "You are the @you/goal built-in factory worker."
+    }
+  ],
+  "workstations": [
+    {
+      "name": "execute-goal",
+      "type": "MODEL_WORKSTATION",
+      "worker": "goal-executor",
+      "inputs": [
+        {"workType": "task", "state": "init"}
+      ],
+      "outputs": [
+        {"workType": "task", "state": "complete"}
+      ],
+      "onFailure": [
+        {"workType": "task", "state": "failed"}
+      ],
+      "body": "Execute the requested goal work for {{ .WorkID }}."
+    }
+  ]
+}`)
 
 // BuiltInTTSFactoryJSON is the canonical runnable @you/tts packaged factory payload.
 var BuiltInTTSFactoryJSON = []byte(`{
