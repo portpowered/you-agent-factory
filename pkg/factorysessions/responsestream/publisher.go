@@ -31,13 +31,17 @@ func NewPublisher(stream *SessionResponseStream, observer DiagnosticsObserver) *
 	}
 }
 
-// Publish records one internal response-stream event.
+// Publish records one internal response-stream event and reports compaction
+// when bounded retention drops older progress.
 func (p *Publisher) Publish(event Event) Event {
 	if p == nil || p.stream == nil {
 		return event
 	}
-	stored := p.stream.Append(event)
+	stored, compaction := p.stream.Append(event)
 	atomic.AddInt64(&p.stats.PublishedCount, 1)
+	if compaction != nil {
+		p.recordCompaction(*compaction)
+	}
 	return stored
 }
 
@@ -46,7 +50,11 @@ func (p *Publisher) ReportCompaction(summary CompactionSummary) {
 	if p == nil || p.stream == nil {
 		return
 	}
-	p.stream.Append(Event{
+	p.recordCompaction(summary)
+}
+
+func (p *Publisher) recordCompaction(summary CompactionSummary) {
+	p.stream.appendCompactionSignal(Event{
 		Kind:       EventKindCompactionSignal,
 		Compaction: &summary,
 	})
@@ -55,6 +63,15 @@ func (p *Publisher) ReportCompaction(summary CompactionSummary) {
 	if p.observer != nil {
 		p.observer(summary)
 	}
+}
+
+func (s *SessionResponseStream) appendCompactionSignal(event Event) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.appendLocked(event, true)
 }
 
 // Diagnostics returns a snapshot of publication diagnostics for the stream.

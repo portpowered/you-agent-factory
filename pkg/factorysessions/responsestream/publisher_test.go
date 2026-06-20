@@ -2,6 +2,7 @@ package responsestream_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 )
@@ -53,5 +54,38 @@ func TestPublisher_ReportCompactionEmitsDiagnostics(t *testing.T) {
 	diagnostics := publisher.Diagnostics()
 	if diagnostics.CompactionCount != 1 {
 		t.Fatalf("compaction count = %d, want 1", diagnostics.CompactionCount)
+	}
+}
+
+func TestPublisher_PublishReportsRetentionCompaction(t *testing.T) {
+	var observed responsestream.CompactionSummary
+	stream := responsestream.NewSessionResponseStreamWithClock(
+		&fixedClock{now: time.Unix(0, 0).UTC()},
+		responsestream.RetentionLimits{MaxEvents: 1},
+	)
+	publisher := responsestream.NewPublisher(stream, func(summary responsestream.CompactionSummary) {
+		observed = summary
+	})
+
+	publisher.Publish(responsestream.Event{
+		Kind:       responsestream.EventKindProgressFragment,
+		DispatchID: "dispatch-1",
+		Payload:    "first",
+	})
+	publisher.Publish(responsestream.Event{
+		Kind:       responsestream.EventKindProgressFragment,
+		DispatchID: "dispatch-2",
+		Payload:    "second",
+	})
+
+	if observed.Reason != responsestream.CompactionReasonTruncated {
+		t.Fatalf("observed reason = %q, want truncated", observed.Reason)
+	}
+	events := stream.Events()
+	if len(events) != 2 {
+		t.Fatalf("event count = %d, want retained progress plus compaction signal", len(events))
+	}
+	if events[0].Payload != "second" || events[1].Kind != responsestream.EventKindCompactionSignal {
+		t.Fatalf("events = %#v, want truncated progress and compaction signal", events)
 	}
 }

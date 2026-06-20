@@ -62,6 +62,14 @@ type RetentionAccounting struct {
 	OldestRecordedAt time.Time
 }
 
+// ReadResult is the bounded catch-up view for one consumer resume point.
+type ReadResult struct {
+	Events              []Event
+	BehindRetainedWindow bool
+	Compaction          *CompactionSummary
+	FirstRetainedSequence int64
+}
+
 // CompactionSummary records fidelity loss for consumers that resume after
 // truncation, coalescing, or age eviction.
 type CompactionSummary struct {

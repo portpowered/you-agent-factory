@@ -73,9 +73,12 @@ func newInferenceProgressPublisherFactory(
 				}
 				return
 			}
+			publisher := responsestream.NewPublisher(stream, func(summary responsestream.CompactionSummary) {
+				emitSessionResponseStreamCompaction(session, sessionID, strings.TrimSpace(fragment.DispatchID), summary)
+			})
 			event := mapInferenceProgressFragment(fragment)
-			stream.Append(event)
-			emitSessionResponseStreamPublished(session, sessionID, event)
+			stored := publisher.Publish(event)
+			emitSessionResponseStreamPublished(session, sessionID, stored)
 		}
 	}
 }
