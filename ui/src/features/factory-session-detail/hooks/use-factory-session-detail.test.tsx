@@ -45,6 +45,18 @@ describe("useFactorySessionDetail", () => {
           sessionId: "dur-sess-petri-success-001",
         });
       }
+      if (url.endsWith("/dispatches")) {
+        return jsonResponse({
+          dispatches: [],
+          sessionId: "dur-sess-petri-success-001",
+        });
+      }
+      if (url.endsWith("/artifacts")) {
+        return jsonResponse({
+          artifacts: [],
+          sessionId: "dur-sess-petri-success-001",
+        });
+      }
       return new Response("not found", { status: 404 });
     });
 
@@ -66,6 +78,14 @@ describe("useFactorySessionDetail", () => {
     expect(result.current.data.durableResult?.resultStatus).toBe("FINAL");
     expect(result.current.data.durablePartialResult?.resultStatus).toBe(
       "PARTIAL",
+    );
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      "/factory-sessions/dur-sess-petri-success-001/dispatches",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalledWith(
+      "/factory-sessions/dur-sess-petri-success-001/artifacts",
+      expect.objectContaining({ method: "GET" }),
     );
     expect(vi.mocked(globalThis.fetch)).not.toHaveBeenCalledWith(
       "/factory-sessions/dur-sess-petri-success-001/result",

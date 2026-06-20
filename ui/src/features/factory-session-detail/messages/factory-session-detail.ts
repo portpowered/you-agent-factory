@@ -4,9 +4,15 @@ import {
 } from "../../../i18n";
 
 export interface FactorySessionDetailMessages {
+  artifactDispatchLabel: string;
+  artifactRetrievalLabel: string;
+  artifactsEmptyState: string;
   artifactsHeading: string;
   checkpointRefsHeading: string;
   childDispatchCountsLabel: string;
+  dispatchOutputArtifactsLabel: string;
+  dispatchesEmptyState: string;
+  dispatchesHeading: string;
   durableAvailabilityLabel: string;
   durableDetailRegionLabel: string;
   durableErrorState: string;
@@ -27,6 +33,8 @@ export interface FactorySessionDetailMessages {
   enabledTransitionsHeading: string;
   errorState: string;
   finalResultRefLabel: string;
+  inspectArtifactAction: string;
+  inspectProviderSessionAction: string;
   loadingState: string;
   markingEmptyState: string;
   markingHeading: string;
@@ -36,6 +44,7 @@ export interface FactorySessionDetailMessages {
   phaseLabel: string;
   phasesLabel: string;
   progressLabel: string;
+  providerSessionHeading: string;
   resolvedSourceLabel: string;
   resultSummaryLabel: string;
   runtimeHeading: string;
@@ -48,9 +57,15 @@ export interface FactorySessionDetailMessages {
 
 const factorySessionDetailMessagesByLocale = {
   en: {
+    artifactDispatchLabel: "Dispatch",
+    artifactRetrievalLabel: "Retrieval",
+    artifactsEmptyState: "This Factory Session has no Artifacts yet.",
     artifactsHeading: "Artifacts",
     checkpointRefsHeading: "Checkpoint refs",
     childDispatchCountsLabel: "Child dispatches",
+    dispatchOutputArtifactsLabel: "Output Artifacts",
+    dispatchesEmptyState: "This Factory Session has no Dispatches yet.",
+    dispatchesHeading: "Dispatches",
     durableAvailabilityLabel: "Result availability",
     durableDetailRegionLabel: "Factory Session detail",
     durableErrorState:
@@ -75,6 +90,8 @@ const factorySessionDetailMessagesByLocale = {
     enabledTransitionsHeading: "Enabled transitions",
     errorState: "The factory session runtime could not be loaded.",
     finalResultRefLabel: "Final result ref",
+    inspectArtifactAction: "Inspect Artifact",
+    inspectProviderSessionAction: "Inspect Provider Session",
     loadingState: "Loading factory session runtime…",
     markingEmptyState: "Petri marking: none",
     markingHeading: "Petri marking",
@@ -84,6 +101,7 @@ const factorySessionDetailMessagesByLocale = {
     phaseLabel: "Phase",
     phasesLabel: "Phases",
     progressLabel: "Progress",
+    providerSessionHeading: "Provider Session",
     resolvedSourceLabel: "Resolved source",
     resultSummaryLabel: "Result summary",
     runtimeHeading: "Runtime",
@@ -94,9 +112,15 @@ const factorySessionDetailMessagesByLocale = {
     warningsHeading: "Dispatch warnings",
   },
   "zh-CN": {
+    artifactDispatchLabel: "调度",
+    artifactRetrievalLabel: "检索",
+    artifactsEmptyState: "此工厂会话尚无工件。",
     artifactsHeading: "工件",
     checkpointRefsHeading: "检查点引用",
     childDispatchCountsLabel: "子调度",
+    dispatchOutputArtifactsLabel: "输出工件",
+    dispatchesEmptyState: "此工厂会话尚无调度。",
+    dispatchesHeading: "调度",
     durableAvailabilityLabel: "结果可用性",
     durableDetailRegionLabel: "工厂会话详情",
     durableErrorState:
@@ -105,22 +129,21 @@ const factorySessionDetailMessagesByLocale = {
     durableFailureLabel: "失败详情",
     durableLoadingState: "正在从持久化读取加载工厂会话详情…",
     durableLoadingTitle: "正在加载工厂会话详情",
-    durableMissingState:
-      "此工厂会话不可用。它可能已被移除，或标识符不正确。",
+    durableMissingState: "此工厂会话不可用。它可能已被移除，或标识符不正确。",
     durableMissingTitle: "未找到工厂会话",
     durablePartialArtifactRefsHeading: "部分结果工件引用",
-    durablePartialState:
-      "此工厂会话尚未产生最终结果。下方显示部分检查信息。",
+    durablePartialState: "此工厂会话尚未产生最终结果。下方显示部分检查信息。",
     durablePartialTitle: "工厂会话进行中",
     durableResultStatusLabel: "结果状态",
     durableTerminalArtifactRefsHeading: "最终结果工件引用",
-    durableTerminalState:
-      "此工厂会话已达到终止状态。下方显示最终检查信息。",
+    durableTerminalState: "此工厂会话已达到终止状态。下方显示最终检查信息。",
     durableTerminalTitle: "工厂会话已完成",
     dynamicWorkflowShorthand: "动态工作流（JavaScript 工厂会话）",
     enabledTransitionsHeading: "已启用变迁",
     errorState: "无法加载工厂会话运行时。",
     finalResultRefLabel: "最终结果引用",
+    inspectArtifactAction: "检查工件",
+    inspectProviderSessionAction: "检查提供商会话",
     loadingState: "正在加载工厂会话运行时…",
     markingEmptyState: "Petri 标识：无",
     markingHeading: "Petri 标识",
@@ -130,6 +153,7 @@ const factorySessionDetailMessagesByLocale = {
     phaseLabel: "阶段",
     phasesLabel: "阶段列表",
     progressLabel: "进度",
+    providerSessionHeading: "提供商会话",
     resolvedSourceLabel: "已解析来源",
     resultSummaryLabel: "结果摘要",
     runtimeHeading: "运行时",

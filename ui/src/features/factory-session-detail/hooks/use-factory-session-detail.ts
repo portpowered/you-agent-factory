@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-
 import {
   type FactorySession,
   type FactorySessionDurableReadModel,
@@ -14,7 +13,10 @@ import {
   getFactorySessionPartialResult,
   getFactorySessionResult,
   isDurableFactorySessionID,
+  listDurableFactorySessionArtifacts,
+  listDurableFactorySessionDispatches,
 } from "../../../api/factory-sessions";
+import type { components } from "../../../api/generated/openapi";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 
 export const FACTORY_SESSION_DETAIL_QUERY_KEY = [
@@ -23,6 +25,8 @@ export const FACTORY_SESSION_DETAIL_QUERY_KEY = [
 
 export type FactorySessionDetailData =
   | {
+      artifacts: components["schemas"]["FactorySessionArtifactSummary"][];
+      dispatches: components["schemas"]["FactorySessionDispatchSummary"][];
       durablePartialResult?: FactorySessionResult;
       durableResult?: FactorySessionResult;
       kind: "durable";
@@ -67,16 +71,21 @@ async function loadDurableFactorySessionDetail(
   sessionID: string,
 ): Promise<FactorySessionDetailData> {
   const session = await getDurableFactorySession(sessionID);
-  const [durableResult, durablePartialResult] = await Promise.all([
-    getDurableFactorySessionResult(sessionID, { mode: "final" }).catch(
-      () => undefined,
-    ),
-    getDurableFactorySessionResult(sessionID, { mode: "partial" }).catch(
-      () => undefined,
-    ),
-  ]);
+  const [durableResult, durablePartialResult, dispatches, artifacts] =
+    await Promise.all([
+      getDurableFactorySessionResult(sessionID, { mode: "final" }).catch(
+        () => undefined,
+      ),
+      getDurableFactorySessionResult(sessionID, { mode: "partial" }).catch(
+        () => undefined,
+      ),
+      listDurableFactorySessionDispatches(sessionID),
+      listDurableFactorySessionArtifacts(sessionID),
+    ]);
 
   return {
+    artifacts,
+    dispatches,
     durablePartialResult,
     durableResult,
     kind: "durable",
@@ -91,7 +100,9 @@ export function useFactorySessionDetail(
     queryKey: [...FACTORY_SESSION_DETAIL_QUERY_KEY, sessionID ?? ""],
     queryFn: async () => {
       if (sessionID === null || sessionID.trim() === "") {
-        throw new Error("Factory session detail requires a selected session id.");
+        throw new Error(
+          "Factory session detail requires a selected session id.",
+        );
       }
 
       if (isDurableFactorySessionID(sessionID)) {
@@ -128,11 +139,5 @@ export function useFactorySessionDetail(
     }
 
     return { data: query.data, status: "success" };
-  }, [
-    query.data,
-    query.error,
-    query.isFetching,
-    query.isPending,
-    sessionID,
-  ]);
+  }, [query.data, query.error, query.isFetching, query.isPending, sessionID]);
 }

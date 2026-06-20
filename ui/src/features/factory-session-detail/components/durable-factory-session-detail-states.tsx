@@ -15,6 +15,10 @@ import {
   resolveDurableResultStatus,
 } from "../lib/durable-inspection-state";
 import type { FactorySessionDetailMessages } from "../messages/factory-session-detail";
+import {
+  DurableArtifactInspectionSection,
+  DurableDispatchInspectionSection,
+} from "./durable-factory-session-inspection-sections";
 
 type DurableDetailData = Extract<FactorySessionDetailData, { kind: "durable" }>;
 
@@ -153,6 +157,15 @@ function DurableFactorySessionPartialSections({
           heading={messages.durablePartialArtifactRefsHeading}
         />
       ) : null}
+
+      <DurableDispatchInspectionSection
+        dispatches={data.dispatches}
+        messages={messages}
+      />
+      <DurableArtifactInspectionSection
+        artifacts={data.artifacts}
+        messages={messages}
+      />
     </div>
   );
 }
@@ -211,6 +224,15 @@ function DurableFactorySessionTerminalSections({
           heading={messages.durableTerminalArtifactRefsHeading}
         />
       ) : null}
+
+      <DurableDispatchInspectionSection
+        dispatches={data.dispatches}
+        messages={messages}
+      />
+      <DurableArtifactInspectionSection
+        artifacts={data.artifacts}
+        messages={messages}
+      />
     </div>
   );
 }
