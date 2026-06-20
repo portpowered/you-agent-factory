@@ -2,6 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { vi } from "vitest";
 
+import { STYLED_SCROLLBAR_CLASS } from "./styled-scrollbar";
 import { Textarea, textareaVariants } from "./textarea";
 
 describe("Textarea", () => {
@@ -14,6 +15,7 @@ describe("Textarea", () => {
     expect(textarea.className).toContain("overflow-y-auto");
     expect(textarea.className).toContain("resize-none");
     expect(textarea.className).toContain("border-outline");
+    expect(textarea.className).toContain(STYLED_SCROLLBAR_CLASS);
   });
 
   it("exposes variant class generation for sibling primitive composition", () => {
@@ -21,15 +23,17 @@ describe("Textarea", () => {
       "custom-textarea",
     );
     expect(textareaVariants()).toContain("overflow-y-auto");
+    expect(textareaVariants()).toContain(STYLED_SCROLLBAR_CLASS);
   });
 
-  it("keeps the plain variant free of field chrome and resize handles", () => {
+  it("keeps the plain variant free of field chrome and styled scrolling", () => {
     render(<Textarea aria-label="Inline notes" variant="plain" />);
 
     const textarea = screen.getByLabelText("Inline notes");
     expect(textarea.className).toContain("resize-none");
     expect(textarea.className).not.toContain("border-outline");
     expect(textarea.className).not.toContain("overflow-y-auto");
+    expect(textarea.className).not.toContain(STYLED_SCROLLBAR_CLASS);
   });
 
   it("allows long content to scroll inside the field surface", () => {

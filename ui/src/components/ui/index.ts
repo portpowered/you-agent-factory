@@ -30,6 +30,7 @@ export * from "./place-labels";
 export * from "./popover";
 export * from "./resizable";
 export * from "./scroll-area";
+export * from "./styled-scrollbar";
 export * from "./enum-select";
 export * from "./select";
 export * from "./selectable-card-button";

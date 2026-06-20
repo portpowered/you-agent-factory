@@ -2,12 +2,15 @@ import { forwardRef, type TextareaHTMLAttributes } from "react";
 
 import { cn } from "../../lib/cn";
 import { inputVariants } from "./input";
+import { STYLED_SCROLLBAR_CLASS } from "./styled-scrollbar";
 
 const TEXTAREA_PLAIN_CLASS =
   "m-0 w-full resize-none border-0 bg-transparent p-0 text-sm leading-6 text-on-surface outline-none";
 
-const TEXTAREA_FIELD_CLASS =
-  "min-h-28 max-h-52 resize-none overflow-y-auto py-3";
+const TEXTAREA_FIELD_CLASS = cn(
+  "min-h-28 max-h-52 resize-none overflow-y-auto py-3",
+  STYLED_SCROLLBAR_CLASS,
+);
 
 export interface TextareaProps
   extends TextareaHTMLAttributes<HTMLTextAreaElement> {

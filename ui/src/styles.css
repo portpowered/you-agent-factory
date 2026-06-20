@@ -389,6 +389,31 @@
   [data-chart-container] .recharts-legend-item-text {
     color: var(--color-af-text-muted);
   }
+
+  .af-styled-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-outline-variant) transparent;
+  }
+
+  .af-styled-scrollbar::-webkit-scrollbar {
+    height: 0.625rem;
+    width: 0.625rem;
+  }
+
+  .af-styled-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .af-styled-scrollbar::-webkit-scrollbar-thumb {
+    background-clip: padding-box;
+    background-color: var(--color-outline-variant);
+    border: 1px solid transparent;
+    border-radius: 9999px;
+  }
+
+  .af-styled-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-on-surface-subtle);
+  }
 }
 
 @keyframes agent-flow-dash {
