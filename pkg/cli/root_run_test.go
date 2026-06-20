@@ -20,6 +20,7 @@ import (
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/spf13/cobra"
 )
@@ -942,6 +943,29 @@ func TestRunCommand_NamedFactoryResolutionMetadataFlowsForBuiltInGoal(t *testing
 	}
 	if got.NamedFactoryResolution.PrecedenceDecision != factoryconfig.NamedFactoryPrecedenceDecisionNone {
 		t.Fatalf("resolution precedence = %q, want %q", got.NamedFactoryResolution.PrecedenceDecision, factoryconfig.NamedFactoryPrecedenceDecisionNone)
+	}
+
+	wantMaterializedDir := filepath.Join(homeDir, ".you-agent-factory", "factories", "@you%2Fgoal")
+	if got.NamedFactoryResolution.FactoryDir != wantMaterializedDir {
+		t.Fatalf("materialized factory dir = %q, want %q", got.NamedFactoryResolution.FactoryDir, wantMaterializedDir)
+	}
+	for _, path := range []string{
+		filepath.Join(wantMaterializedDir, interfaces.FactoryConfigFile),
+		filepath.Join(wantMaterializedDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName),
+		filepath.Join(wantMaterializedDir, interfaces.WorkstationsDir, "execute-goal", interfaces.FactoryAgentsFileName),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected first-use materialized goal path %s: %v", path, err)
+		}
+	}
+	for _, dirName := range []string{interfaces.WorkersDir, interfaces.WorkstationsDir} {
+		info, err := os.Stat(filepath.Join(wantMaterializedDir, dirName))
+		if err != nil {
+			t.Fatalf("stat materialized goal %s: %v", dirName, err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("materialized goal %s is not a directory", dirName)
+		}
 	}
 }
 

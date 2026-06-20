@@ -373,6 +373,15 @@ func namedFactoryEntryNames(entries []NamedFactoryListEntry) []string {
 func assertBuiltInGoalMaterializedLayout(t *testing.T, factoryDir string) {
 	t.Helper()
 
+	for _, dirName := range []string{interfaces.WorkersDir, interfaces.WorkstationsDir} {
+		info, err := os.Stat(filepath.Join(factoryDir, dirName))
+		if err != nil {
+			t.Fatalf("stat built-in goal materialized %s: %v", dirName, err)
+		}
+		if !info.IsDir() {
+			t.Fatalf("built-in goal materialized %s is not a directory", dirName)
+		}
+	}
 	for _, path := range []string{
 		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
 		filepath.Join(factoryDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName),
