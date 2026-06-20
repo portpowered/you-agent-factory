@@ -334,11 +334,33 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 	}
 
 	if outcome == LifecycleControlOutcomeAccepted {
+		previousStatus := state.session.Status
 		interruptRuntime := applyRuntimeAcceptedLifecycleControl(s, state, operation, retry)
 		if interruptRuntime && state.runCancel != nil {
 			state.runCancel()
 		}
-		state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+		switch operation {
+		case LifecycleControlPause, LifecycleControlResume:
+			occurredAt := time.Now().UTC()
+			if operation == LifecycleControlPause && state.session.Lifecycle != nil && state.session.Lifecycle.PausedAt != nil {
+				occurredAt = state.session.Lifecycle.PausedAt.UTC()
+			}
+			if operation == LifecycleControlResume && state.session.Lifecycle != nil && state.session.Lifecycle.ResumedAt != nil {
+				occurredAt = state.session.Lifecycle.ResumedAt.UTC()
+			}
+			state.events = AppendSessionLifecycleControlEvent(
+				state.events,
+				state.session,
+				previousStatus,
+				operation,
+				outcome,
+				occurredAt,
+				canonicalEventSourceRuntimeService,
+				control.Reason,
+			)
+		default:
+			state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+		}
 	}
 
 	result := runtimeExtendedLifecycleControlResultFromState(state, id, operation, outcome, retry)

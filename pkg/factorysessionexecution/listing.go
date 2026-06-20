@@ -571,6 +571,8 @@ func buildCanonicalSessionEvents(session SessionReadResult, result ResultReadRes
 		))
 	}
 
+	events = synthesizeLifecycleControlEventsFromState(session, events, source)
+
 	if IsTerminalLifecycleStatus(session.Status) {
 		completedAt := eventTime
 		if session.Lifecycle != nil {
@@ -593,7 +595,8 @@ func buildCanonicalSessionEvents(session SessionReadResult, result ResultReadRes
 		if len(result.ArtifactIDs) > 0 {
 			payload["artifactIds"] = append([]string(nil), result.ArtifactIDs...)
 		}
-		events = append(events, builder.event("SESSION_COMPLETED", "session-completed/"+sessionID, 2, mustMarshalPayload(payload)))
+		completedSequence := nextCanonicalSessionEventSequence(events)
+		events = append(events, builder.event("SESSION_COMPLETED", "session-completed/"+sessionID, completedSequence, mustMarshalPayload(payload)))
 	}
 
 	return events

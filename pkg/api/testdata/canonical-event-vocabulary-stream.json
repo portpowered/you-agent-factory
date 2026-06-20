@@ -427,6 +427,28 @@
   },
   {
     "schemaVersion": "agent-factory.event.v1",
+    "id": "event-session-lifecycle-control",
+    "type": "SESSION_LIFECYCLE_CONTROL",
+    "context": {
+      "sequence": 18,
+      "tick": 6,
+      "eventTime": "2026-04-21T12:00:10Z",
+      "sessionId": "session-alpha",
+      "sessionSequence": 2,
+      "orchestratorKind": "JAVASCRIPT",
+      "source": "api"
+    },
+    "payload": {
+      "operation": "PAUSE",
+      "outcome": "ACCEPTED",
+      "previousStatus": "RUNNING",
+      "newStatus": "PAUSED",
+      "occurredAt": "2026-04-21T12:00:10Z",
+      "reason": "operator requested pause"
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
     "id": "event-session-completed",
     "type": "SESSION_COMPLETED",
     "context": {

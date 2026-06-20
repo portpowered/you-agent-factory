@@ -23,6 +23,7 @@ x-enum-varnames:
   - FactoryEventTypeSessionStarted
   - FactoryEventTypeSessionResultUpdated
   - FactoryEventTypeSessionCompleted
+  - FactoryEventTypeSessionLifecycleControl
   - FactoryEventTypeOrchestratorPhaseChanged
   - FactoryEventTypeOrchestratorCheckpointWritten
   - FactoryEventTypeDispatchQueued
@@ -51,6 +52,7 @@ enum:
   - SESSION_STARTED
   - SESSION_RESULT_UPDATED
   - SESSION_COMPLETED
+  - SESSION_LIFECYCLE_CONTROL
   - ORCHESTRATOR_PHASE_CHANGED
   - ORCHESTRATOR_CHECKPOINT_WRITTEN
   - DISPATCH_QUEUED
@@ -79,6 +81,7 @@ x-enum-descriptions:
   - Durable factory session execution started and replay-safe session facts are available.
   - Partial or final customer-visible session result availability was recorded.
   - Durable factory session execution reached a terminal lifecycle state.
+  - Durable factory session lifecycle control was applied or recorded for replay.
   - An orchestrator workflow phase transition was recorded.
   - An orchestrator checkpoint reference was recorded without exposing raw VM state.
   - A child dispatch was queued for execution.

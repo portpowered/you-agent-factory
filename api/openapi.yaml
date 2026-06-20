@@ -5536,6 +5536,7 @@ components:
             - $ref: '#/components/schemas/SessionStartedEventPayload'
             - $ref: '#/components/schemas/SessionResultUpdatedEventPayload'
             - $ref: '#/components/schemas/SessionCompletedEventPayload'
+            - $ref: '#/components/schemas/SessionLifecycleControlEventPayload'
             - $ref: '#/components/schemas/OrchestratorPhaseChangedEventPayload'
             - $ref: '#/components/schemas/OrchestratorCheckpointWrittenEventPayload'
             - $ref: '#/components/schemas/DispatchQueuedEventPayload'
@@ -5567,6 +5568,7 @@ components:
         - FactoryEventTypeSessionStarted
         - FactoryEventTypeSessionResultUpdated
         - FactoryEventTypeSessionCompleted
+        - FactoryEventTypeSessionLifecycleControl
         - FactoryEventTypeOrchestratorPhaseChanged
         - FactoryEventTypeOrchestratorCheckpointWritten
         - FactoryEventTypeDispatchQueued
@@ -5595,6 +5597,7 @@ components:
         - SESSION_STARTED
         - SESSION_RESULT_UPDATED
         - SESSION_COMPLETED
+        - SESSION_LIFECYCLE_CONTROL
         - ORCHESTRATOR_PHASE_CHANGED
         - ORCHESTRATOR_CHECKPOINT_WRITTEN
         - DISPATCH_QUEUED
@@ -5623,6 +5626,7 @@ components:
         - Durable factory session execution started and replay-safe session facts are available.
         - Partial or final customer-visible session result availability was recorded.
         - Durable factory session execution reached a terminal lifecycle state.
+        - Durable factory session lifecycle control was applied or recorded for replay.
         - An orchestrator workflow phase transition was recorded.
         - An orchestrator checkpoint reference was recorded without exposing raw VM state.
         - A child dispatch was queued for execution.
@@ -8633,3 +8637,29 @@ components:
         claim:
           $ref: '#/components/schemas/HostedLinearWorkerClaim'
           description: Optional claim-related configuration that v1 hosted Linear polling allows.
+    SessionLifecycleControlEventPayload:
+      type: object
+      additionalProperties: false
+      description: Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only.
+      required:
+        - operation
+        - outcome
+        - previousStatus
+        - newStatus
+        - occurredAt
+      properties:
+        operation:
+          $ref: '#/components/schemas/FactorySessionLifecycleControlKind'
+        outcome:
+          $ref: '#/components/schemas/FactorySessionLifecycleControlOutcome'
+        previousStatus:
+          $ref: '#/components/schemas/FactorySessionDurableLifecycleStatus'
+        newStatus:
+          $ref: '#/components/schemas/FactorySessionDurableLifecycleStatus'
+        occurredAt:
+          type: string
+          format: date-time
+          description: When the lifecycle control took effect.
+        reason:
+          type: string
+          description: Optional operator-provided reason for the control request.

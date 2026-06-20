@@ -158,6 +158,7 @@ const (
 	FactoryEventTypeScriptRequest                 FactoryEventType = "SCRIPT_REQUEST"
 	FactoryEventTypeScriptResponse                FactoryEventType = "SCRIPT_RESPONSE"
 	FactoryEventTypeSessionCompleted              FactoryEventType = "SESSION_COMPLETED"
+	FactoryEventTypeSessionLifecycleControl       FactoryEventType = "SESSION_LIFECYCLE_CONTROL"
 	FactoryEventTypeSessionResultUpdated          FactoryEventType = "SESSION_RESULT_UPDATED"
 	FactoryEventTypeSessionStarted                FactoryEventType = "SESSION_STARTED"
 	FactoryEventTypeWorkRequest                   FactoryEventType = "WORK_REQUEST"
@@ -4063,6 +4064,27 @@ type SessionCompletedEventPayload struct {
 	ResultStatus *FactoryEventSessionResultStatus `json:"resultStatus,omitempty"`
 }
 
+// SessionLifecycleControlEventPayload Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only.
+type SessionLifecycleControlEventPayload struct {
+	// NewStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	NewStatus FactorySessionDurableLifecycleStatus `json:"newStatus"`
+
+	// OccurredAt When the lifecycle control took effect.
+	OccurredAt time.Time `json:"occurredAt"`
+
+	// Operation Durable factory-session lifecycle control operation requested by the client.
+	Operation FactorySessionLifecycleControlKind `json:"operation"`
+
+	// Outcome Typed lifecycle-control outcome. ACCEPTED means the control request was accepted and may complete asynchronously. NO_OP means the session was already in the requested end state. INVALID_STATE means the current session state does not allow the requested control. TERMINAL_SESSION means the session is already terminal and cannot accept the requested control. CONFLICT means another in-flight or incompatible control prevents the request.
+	Outcome FactorySessionLifecycleControlOutcome `json:"outcome"`
+
+	// PreviousStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	PreviousStatus FactorySessionDurableLifecycleStatus `json:"previousStatus"`
+
+	// Reason Optional operator-provided reason for the control request.
+	Reason *string `json:"reason,omitempty"`
+}
+
 // SessionResultUpdatedEventPayload Partial or final session result availability on the canonical factory event stream. Identity and ordering live in FactoryEvent.context.
 type SessionResultUpdatedEventPayload struct {
 	// ArtifactIds Artifact identifiers associated with this result update.
@@ -5888,6 +5910,32 @@ func (t *FactoryEvent_Payload) FromSessionCompletedEventPayload(v SessionComplet
 
 // MergeSessionCompletedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided SessionCompletedEventPayload
 func (t *FactoryEvent_Payload) MergeSessionCompletedEventPayload(v SessionCompletedEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionLifecycleControlEventPayload returns the union data inside the FactoryEvent_Payload as a SessionLifecycleControlEventPayload
+func (t FactoryEvent_Payload) AsSessionLifecycleControlEventPayload() (SessionLifecycleControlEventPayload, error) {
+	var body SessionLifecycleControlEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionLifecycleControlEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided SessionLifecycleControlEventPayload
+func (t *FactoryEvent_Payload) FromSessionLifecycleControlEventPayload(v SessionLifecycleControlEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionLifecycleControlEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided SessionLifecycleControlEventPayload
+func (t *FactoryEvent_Payload) MergeSessionLifecycleControlEventPayload(v SessionLifecycleControlEventPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

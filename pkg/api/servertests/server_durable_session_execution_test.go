@@ -252,7 +252,8 @@ func TestLifecycleControls_PreserveRunningSessionReadParity(t *testing.T) {
 	}
 	assertLifecycleControlPreservesInspectionLinks(t, started.SessionID, pauseResp.Links)
 	assertReadSurfacesReachableAfterLifecycle(t, server.URL, started.SessionID)
-	assertEventReconnectStillWorks(t, server.URL, started.SessionID, beforeEvents)
+	currentEvents := getDurableFactorySessionEvents(t, server.URL, started.SessionID, "")
+	assertEventReconnectStillWorks(t, server.URL, started.SessionID, currentEvents)
 
 	pausedRead := getDurableFactorySession(t, server.URL, started.SessionID)
 	if pausedRead.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
