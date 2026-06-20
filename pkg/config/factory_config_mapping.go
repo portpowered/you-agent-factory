@@ -1046,11 +1046,9 @@ func workPropagationAPIFromInternal(value *interfaces.WorkPropagationConfig) *fa
 	if value == nil {
 		return nil
 	}
-	if value.Mode == "" {
-		return &factoryapi.WorkPropagation{}
+	return &factoryapi.WorkPropagation{
+		Mode: factoryapi.WorkPropagationMode(value.Mode),
 	}
-	mode := factoryapi.WorkPropagationMode(value.Mode)
-	return &factoryapi.WorkPropagation{Mode: &mode}
 }
 
 func workstationOperationBindingsAPIFromInternal(bindings []interfaces.ModelOperationBinding) *[]factoryapi.WorkstationOperationBinding {

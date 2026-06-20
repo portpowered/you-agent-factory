@@ -62,7 +62,7 @@ func TestFactoryConfigToOpenAPI_PreservesWorkPropagation(t *testing.T) {
 	if workstation.WorkPropagation == nil {
 		t.Fatal("expected generated workstation workPropagation")
 	}
-	if workstation.WorkPropagation.Mode == nil || *workstation.WorkPropagation.Mode != factoryapi.WorkPropagationModePreserveInput {
+	if workstation.WorkPropagation.Mode != factoryapi.WorkPropagationModePreserveInput {
 		t.Fatalf("generated workPropagation.mode = %#v, want %q", workstation.WorkPropagation.Mode, factoryapi.WorkPropagationModePreserveInput)
 	}
 

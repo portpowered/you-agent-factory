@@ -4594,7 +4594,7 @@ type WorkOutcome string
 // WorkPropagation Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload.
 type WorkPropagation struct {
 	// Mode Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.
-	Mode *WorkPropagationMode `json:"mode,omitempty"`
+	Mode WorkPropagationMode `json:"mode"`
 }
 
 // WorkPropagationMode Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.

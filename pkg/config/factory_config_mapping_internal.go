@@ -563,11 +563,9 @@ func workPropagationInternalFromAPI(value *factoryapi.WorkPropagation) *interfac
 	if value == nil {
 		return nil
 	}
-	cfg := &interfaces.WorkPropagationConfig{}
-	if value.Mode != nil {
-		cfg.Mode = interfaces.WorkPropagationMode(*value.Mode)
+	return &interfaces.WorkPropagationConfig{
+		Mode: interfaces.WorkPropagationMode(value.Mode),
 	}
-	return cfg
 }
 
 func workstationOperationBindingsInternalFromAPI(bindings *[]factoryapi.WorkstationOperationBinding) []interfaces.ModelOperationBinding {

@@ -3789,7 +3789,7 @@ export interface components {
     /** @description Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload. */
     WorkPropagation: {
       /** @description Propagation mode for downstream work payload selection after this workstation succeeds. */
-      mode?: components["schemas"]["WorkPropagationMode"];
+      mode: components["schemas"]["WorkPropagationMode"];
     };
     /**
      * @description Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.

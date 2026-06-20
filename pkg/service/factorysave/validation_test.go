@@ -178,7 +178,7 @@ func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIForWorkPropaga
 	}
 	unsupportedMode := factoryapi.WorkPropagationMode("MERGE_PAYLOAD")
 	workstations := *factory.Workstations
-	workstations[0].WorkPropagation = &factoryapi.WorkPropagation{Mode: &unsupportedMode}
+	workstations[0].WorkPropagation = &factoryapi.WorkPropagation{Mode: unsupportedMode}
 	factory.Workstations = &workstations
 
 	apiResult, err := validationentry.ValidateFactoryAPI(context.Background(), factory, factoryvalidation.Options{
