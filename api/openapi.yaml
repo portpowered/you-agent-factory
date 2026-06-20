@@ -7474,6 +7474,8 @@ components:
     WorkPropagation:
       type: object
       additionalProperties: false
+      required:
+        - mode
       description: Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload.
       properties:
         mode:

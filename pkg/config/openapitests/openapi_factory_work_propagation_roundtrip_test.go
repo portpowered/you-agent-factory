@@ -156,6 +156,52 @@ func TestFactoryConfigMapper_FlattenRoundTripsWorkPropagation(t *testing.T) {
 	}
 }
 
+func TestFactoryConfigValidator_RejectsMalformedWorkPropagationObject(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"work-propagation-malformed-factory",
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers": [{"name":"executor"}],
+		"workstations": [{
+			"name":"execute-story",
+			"worker":"executor",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}],
+			"onFailure":[{"workType":"story","state":"failed"}],
+			"workPropagation": {}
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	if cfg.Workstations[0].WorkPropagation == nil {
+		t.Fatal("WorkPropagation = nil, want malformed authored object preserved for validation")
+	}
+	if cfg.Workstations[0].WorkPropagation.Mode != "" {
+		t.Fatalf("WorkPropagation.Mode = %q, want empty mode for malformed object", cfg.Workstations[0].WorkPropagation.Mode)
+	}
+
+	result := NewConfigValidator().Validate(cfg)
+	if !result.HasErrors() {
+		t.Fatal("expected malformed workPropagation object to fail validation")
+	}
+
+	var matched bool
+	for _, finding := range result.Errors() {
+		if finding.Rule != factoryvalidation.CodeWorkstationUnsupportedWorkPropagationMode {
+			continue
+		}
+		matched = true
+		if finding.Path != "factory.workstations[0](execute-story).workPropagation.mode" {
+			t.Fatalf("finding path = %q, want workstation workPropagation path", finding.Path)
+		}
+	}
+	if !matched {
+		t.Fatalf("expected %q finding, got %#v", factoryvalidation.CodeWorkstationUnsupportedWorkPropagationMode, result.Errors())
+	}
+}
+
 func TestFactoryConfigValidator_RejectsUnsupportedWorkPropagationMode(t *testing.T) {
 	cfgJSON := []byte(`{
 		"name":"work-propagation-validation-factory",

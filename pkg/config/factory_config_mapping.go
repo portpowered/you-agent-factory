@@ -1043,8 +1043,11 @@ func workstationLimitsAPIFromInternal(limits interfaces.WorkstationLimits) *fact
 }
 
 func workPropagationAPIFromInternal(value *interfaces.WorkPropagationConfig) *factoryapi.WorkPropagation {
-	if value == nil || value.Mode == "" {
+	if value == nil {
 		return nil
+	}
+	if value.Mode == "" {
+		return &factoryapi.WorkPropagation{}
 	}
 	mode := factoryapi.WorkPropagationMode(value.Mode)
 	return &factoryapi.WorkPropagation{Mode: &mode}

@@ -560,14 +560,14 @@ func workstationLimitsInternalFromAPI(limits *factoryapi.WorkstationLimits) inte
 }
 
 func workPropagationInternalFromAPI(value *factoryapi.WorkPropagation) *interfaces.WorkPropagationConfig {
-	if value == nil || value.Mode == nil {
+	if value == nil {
 		return nil
 	}
-	mode := interfaces.WorkPropagationMode(*value.Mode)
-	if mode == "" {
-		return nil
+	cfg := &interfaces.WorkPropagationConfig{}
+	if value.Mode != nil {
+		cfg.Mode = interfaces.WorkPropagationMode(*value.Mode)
 	}
-	return &interfaces.WorkPropagationConfig{Mode: mode}
+	return cfg
 }
 
 func workstationOperationBindingsInternalFromAPI(bindings *[]factoryapi.WorkstationOperationBinding) []interfaces.ModelOperationBinding {
