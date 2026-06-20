@@ -680,19 +680,21 @@ func (t *TransitionerSubsystem) createFanoutGuardToken(inputColors []interfaces.
 func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutation, error) {
 	mutations := make([]interfaces.MarkingMutation, 0)
 	workOutputIndex := 0
+	workPropagationMode := workstationconfig.WorkPropagationMode(in.workstation)
 	for arcIdx, arc := range in.arcs {
 		baseInput := token_transformer.OutputTokenInput{
-			ArcIndex:       arcIdx,
-			Arcs:           in.arcs,
-			ConsumedTokens: in.consumed,
-			InputColors:    in.inputColors,
-			Output:         in.result.output,
-			Outcome:        in.result.outcome,
-			TransitionID:   in.result.transitionID,
-			Error:          in.result.err,
-			Feedback:       in.result.feedback,
-			Now:            in.now,
-			History:        in.history,
+			ArcIndex:            arcIdx,
+			Arcs:                in.arcs,
+			ConsumedTokens:      in.consumed,
+			InputColors:         in.inputColors,
+			Output:              in.result.output,
+			WorkPropagationMode: workPropagationMode,
+			Outcome:             in.result.outcome,
+			TransitionID:        in.result.transitionID,
+			Error:               in.result.err,
+			Feedback:            in.result.feedback,
+			Now:                 in.now,
+			History:             in.history,
 		}
 		repeatCount := mutationRepeatCountForArc(arc, in.consumed)
 		for resourceTokenIndex := 0; resourceTokenIndex < repeatCount; resourceTokenIndex++ {
