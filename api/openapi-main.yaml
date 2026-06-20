@@ -1906,6 +1906,10 @@ components:
       $ref: './components/schemas/data-models/WorkstationType.yaml'
     WorkstationCron:
       $ref: './components/schemas/data-models/WorkstationCron.yaml'
+    WorkPropagation:
+      $ref: './components/schemas/data-models/WorkPropagation.yaml'
+    WorkPropagationMode:
+      $ref: './components/schemas/data-models/WorkPropagationMode.yaml'
     GuardType:
       $ref: './components/schemas/data-models/GuardType.yaml'
     Guard:

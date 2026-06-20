@@ -341,6 +341,21 @@ type WorkstationLimits struct {
 	MaxExecutionTime string `json:"max_execution_time,omitempty" yaml:"maxExecutionTime,omitempty"`
 }
 
+// WorkPropagationMode selects how downstream work receives payload content.
+type WorkPropagationMode string
+
+const (
+	// WorkPropagationModeOutputAsPayload uses workstation output as downstream payload.
+	WorkPropagationModeOutputAsPayload WorkPropagationMode = "OUTPUT_AS_PAYLOAD"
+	// WorkPropagationModePreserveInput keeps the consumed input payload for downstream work.
+	WorkPropagationModePreserveInput WorkPropagationMode = "PRESERVE_INPUT"
+)
+
+// WorkPropagationConfig declares workstation payload propagation policy.
+type WorkPropagationConfig struct {
+	Mode WorkPropagationMode `json:"mode,omitempty" yaml:"mode,omitempty"`
+}
+
 type WorkflowConfig struct {
 	Name  string             `json:"name"`
 	Paths []TransitionConfig `json:"transitions"`
@@ -364,6 +379,7 @@ type FactoryWorkstationConfig struct {
 	OutputSchema          string                      `json:"output_schema,omitempty" yaml:"outputSchema,omitempty"`
 	Timeout               string                      `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	Limits                WorkstationLimits           `json:"limits,omitempty" yaml:"limits,omitempty"`
+	WorkPropagation       *WorkPropagationConfig      `json:"workPropagation,omitempty" yaml:"workPropagation,omitempty"`
 	Cron                  *CronConfig                 `json:"cron,omitempty" yaml:"cron,omitempty"`
 	Inputs                []IOConfig                  `json:"inputs" yaml:"inputs,omitempty"`
 	Outputs               []IOConfig                  `json:"outputs" yaml:"outputs,omitempty"`

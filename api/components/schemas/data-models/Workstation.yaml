@@ -50,6 +50,11 @@ properties:
   limits:
     $ref: './WorkstationLimits.yaml'
     description: Retry and execution ceilings applied to this workstation.
+  workPropagation:
+    $ref: './WorkPropagation.yaml'
+    description: >-
+      Optional policy for whether downstream work uses the workstation output
+      payload or preserves the consumed input payload.
   body:
     type: string
     description: Inline workstation instructions or script body when authored directly in factory config.
