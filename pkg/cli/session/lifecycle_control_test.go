@@ -1,0 +1,345 @@
+package session
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+)
+
+func TestPause_DefaultSessionRoutesToCompatibilitySession(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		encodeLifecycleControlHTTPResponse(t, w, samplePauseAcceptedResponse("dur-sess-default"))
+	}))
+	defer srv.Close()
+
+	err := Pause(LifecycleControlConfig{
+		Server: srv.URL,
+		Output: &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+	if gotPath != "/factory-sessions/~default/pause" {
+		t.Fatalf("path = %q, want default compatibility pause path", gotPath)
+	}
+}
+
+func TestPause_SuccessReturnsAcceptedOutcome(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		encodeLifecycleControlHTTPResponse(t, w, samplePauseAcceptedResponse("dur-sess-pause-001"))
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := Pause(LifecycleControlConfig{
+		Server:    srv.URL,
+		SessionID: "dur-sess-pause-001",
+		JSON:      true,
+		Output:    &out,
+	})
+	if err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+
+	var response factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+		t.Fatalf("decode JSON: %v\n%s", err, out.String())
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindPause {
+		t.Fatalf("operation = %q, want PAUSE", response.Operation)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("status = %q, want PAUSED", response.Status)
+	}
+}
+
+func TestPause_NoOpReturnsNoOpOutcome(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		encodeLifecycleControlHTTPResponse(t, w, factoryapi.FactorySessionLifecycleControlResponse{
+			SessionId: "dur-sess-paused-001",
+			Operation: factoryapi.FactorySessionLifecycleControlKindPause,
+			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeNoOp,
+			Status:    factoryapi.FactorySessionDurableLifecycleStatusPaused,
+		})
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := Pause(LifecycleControlConfig{
+		Server:    srv.URL,
+		SessionID: "dur-sess-paused-001",
+		JSON:      true,
+		Output:    &out,
+	})
+	if err != nil {
+		t.Fatalf("Pause no-op: %v", err)
+	}
+
+	var response factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+		t.Fatalf("decode JSON: %v", err)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeNoOp {
+		t.Fatalf("outcome = %q, want NO_OP", response.Outcome)
+	}
+}
+
+func TestPause_InvalidStateReturnsTypedRejection(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		if err := json.NewEncoder(w).Encode(factoryapi.FactorySessionLifecycleControlResponse{
+			SessionId: "dur-sess-awaiting-001",
+			Operation: factoryapi.FactorySessionLifecycleControlKindPause,
+			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeInvalidState,
+			Status:    factoryapi.FactorySessionDurableLifecycleStatusAwaitingApproval,
+			Detail:    lifecycleControlStringPtr("pause is not allowed while awaiting approval"),
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := Pause(LifecycleControlConfig{
+		Server:    srv.URL,
+		SessionID: "dur-sess-awaiting-001",
+		JSON:      true,
+		Output:    &out,
+	})
+	var rejected *LifecycleControlRejectedError
+	if !errors.As(err, &rejected) {
+		t.Fatalf("error = %v, want LifecycleControlRejectedError", err)
+	}
+	if rejected.Response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeInvalidState {
+		t.Fatalf("outcome = %q, want INVALID_STATE", rejected.Response.Outcome)
+	}
+
+	var response factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+		t.Fatalf("decode JSON: %v", err)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeInvalidState {
+		t.Fatalf("stdout outcome = %q, want INVALID_STATE", response.Outcome)
+	}
+}
+
+func TestPause_NotFoundReturnsDistinctError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"code":"NOT_FOUND","message":"factory session not found"}`))
+	}))
+	defer srv.Close()
+
+	err := Pause(LifecycleControlConfig{
+		Server:    srv.URL,
+		SessionID: "dur-sess-missing-001",
+		Output:    &bytes.Buffer{},
+	})
+	if err == nil {
+		t.Fatal("expected not-found error")
+	}
+	if strings.Contains(err.Error(), "INVALID_STATE") || strings.Contains(err.Error(), "NO_OP") {
+		t.Fatalf("not-found error should not look like typed lifecycle outcome: %v", err)
+	}
+	if !strings.Contains(err.Error(), `factory session "dur-sess-missing-001" not found`) {
+		t.Fatalf("error = %q", err.Error())
+	}
+}
+
+func TestPause_UnreachableHostReturnsTransportError(t *testing.T) {
+	err := Pause(LifecycleControlConfig{
+		Server:    "http://127.0.0.1:1",
+		SessionID: "dur-sess-pause-001",
+		Output:    &bytes.Buffer{},
+	})
+	if err == nil {
+		t.Fatal("expected unreachable error")
+	}
+	if !strings.Contains(err.Error(), "not reachable") {
+		t.Fatalf("error = %q, want unreachable-host wording", err.Error())
+	}
+}
+
+func TestResume_SuccessReturnsAcceptedOutcome(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/resume") {
+			t.Fatalf("path = %q, want resume endpoint", r.URL.Path)
+		}
+		encodeLifecycleControlHTTPResponse(t, w, factoryapi.FactorySessionLifecycleControlResponse{
+			SessionId: "dur-sess-paused-001",
+			Operation: factoryapi.FactorySessionLifecycleControlKindResume,
+			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+			Status:    factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		})
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := Resume(LifecycleControlConfig{
+		Server:    srv.URL,
+		SessionID: "dur-sess-paused-001",
+		JSON:      true,
+		Output:    &out,
+	})
+	if err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+
+	var response factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+		t.Fatalf("decode JSON: %v", err)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", response.Status)
+	}
+}
+
+func TestResume_NoOpAlreadyRunningReturnsNoOpOutcome(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		encodeLifecycleControlHTTPResponse(t, w, factoryapi.FactorySessionLifecycleControlResponse{
+			SessionId: "dur-sess-running-001",
+			Operation: factoryapi.FactorySessionLifecycleControlKindResume,
+			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeNoOp,
+			Status:    factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		})
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := Resume(LifecycleControlConfig{
+		Server:    srv.URL,
+		SessionID: "dur-sess-running-001",
+		JSON:      true,
+		Output:    &out,
+	})
+	if err != nil {
+		t.Fatalf("Resume no-op: %v", err)
+	}
+
+	var response factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+		t.Fatalf("decode JSON: %v", err)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeNoOp {
+		t.Fatalf("outcome = %q, want NO_OP", response.Outcome)
+	}
+}
+
+func TestLifecycleControl_OutcomesDistinguishableWithoutHTTPStatusText(t *testing.T) {
+	cases := []struct {
+		name     string
+		status   int
+		response factoryapi.FactorySessionLifecycleControlResponse
+		wantErr  bool
+	}{
+		{
+			name:     "accepted",
+			status:   http.StatusOK,
+			response: samplePauseAcceptedResponse("dur-sess-001"),
+			wantErr:  false,
+		},
+		{
+			name:   "no-op",
+			status: http.StatusOK,
+			response: factoryapi.FactorySessionLifecycleControlResponse{
+				SessionId: "dur-sess-001",
+				Operation: factoryapi.FactorySessionLifecycleControlKindPause,
+				Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeNoOp,
+				Status:    factoryapi.FactorySessionDurableLifecycleStatusPaused,
+			},
+			wantErr: false,
+		},
+		{
+			name:   "invalid-state",
+			status: http.StatusConflict,
+			response: factoryapi.FactorySessionLifecycleControlResponse{
+				SessionId: "dur-sess-001",
+				Operation: factoryapi.FactorySessionLifecycleControlKindPause,
+				Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeInvalidState,
+				Status:    factoryapi.FactorySessionDurableLifecycleStatusAwaitingApproval,
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				if err := json.NewEncoder(w).Encode(tc.response); err != nil {
+					t.Fatalf("encode response: %v", err)
+				}
+			}))
+			defer srv.Close()
+
+			var out bytes.Buffer
+			err := Pause(LifecycleControlConfig{
+				Server:    srv.URL,
+				SessionID: "dur-sess-001",
+				JSON:      true,
+				Output:    &out,
+			})
+			if tc.wantErr {
+				var rejected *LifecycleControlRejectedError
+				if !errors.As(err, &rejected) {
+					t.Fatalf("error = %v, want LifecycleControlRejectedError", err)
+				}
+				if rejected.Response.Outcome != tc.response.Outcome {
+					t.Fatalf("rejected outcome = %q, want %q", rejected.Response.Outcome, tc.response.Outcome)
+				}
+			} else if err != nil {
+				t.Fatalf("Pause: %v", err)
+			}
+
+			var decoded factoryapi.FactorySessionLifecycleControlResponse
+			if err := json.Unmarshal(out.Bytes(), &decoded); err != nil {
+				t.Fatalf("decode JSON: %v", err)
+			}
+			if decoded.Outcome != tc.response.Outcome {
+				t.Fatalf("stdout outcome = %q, want %q", decoded.Outcome, tc.response.Outcome)
+			}
+		})
+	}
+}
+
+func samplePauseAcceptedResponse(sessionID string) factoryapi.FactorySessionLifecycleControlResponse {
+	return factoryapi.FactorySessionLifecycleControlResponse{
+		SessionId: sessionID,
+		Operation: factoryapi.FactorySessionLifecycleControlKindPause,
+		Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+		Status:    factoryapi.FactorySessionDurableLifecycleStatusPaused,
+	}
+}
+
+func encodeLifecycleControlHTTPResponse(
+	t *testing.T,
+	w http.ResponseWriter,
+	response factoryapi.FactorySessionLifecycleControlResponse,
+) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		t.Fatalf("encode response: %v", err)
+	}
+}
+
+func lifecycleControlStringPtr(value string) *string {
+	return &value
+}
