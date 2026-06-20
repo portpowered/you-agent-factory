@@ -20,6 +20,12 @@ import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
 } from "../state/dashboardStreamStore";
+import {
+  canonicalSessionLifecycleReplayEvents,
+  sessionLifecyclePausedEvent,
+  sessionLifecycleResumedEvent,
+  sessionLifecycleStartedEvent,
+} from "../../../testing/session-lifecycle-replay-fixtures";
 import { useDashboardSnapshot } from "./useDashboardSnapshot";
 
 const replayHarness = createReplayHarness();
@@ -210,6 +216,148 @@ describe("useDashboardSnapshot composer", () => {
     expect(
       window.localStorage.getItem(FACTORY_TIMELINE_DEBUG_STORAGE_KEY),
     ).toBeNull();
+  });
+});
+
+describe("useDashboardSnapshot session lifecycle replay", () => {
+  let queryClient: QueryClient;
+
+  beforeEach(() => {
+    replayHarness.install();
+    queryClient = new QueryClient({
+      defaultOptions: {
+        mutations: { retry: false },
+        queries: { retry: false },
+      },
+    });
+    useDashboardStreamStore.setState({
+      streamState: createDefaultDashboardStreamState(),
+    });
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: [],
+      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+    });
+    useFactoryTimelineStore.getState().reset();
+  });
+
+  afterEach(() => {
+    replayHarness.reset();
+    useDashboardStreamStore.setState({
+      streamState: createDefaultDashboardStreamState(),
+    });
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: [],
+      selectedSessionID: DEFAULT_FACTORY_SESSION_ID,
+    });
+    useFactoryTimelineStore.getState().reset();
+  });
+
+  async function emitStreamMessage(
+    stream: ReturnType<typeof replayHarness.getStreams>[number],
+    event: (typeof canonicalSessionLifecycleReplayEvents)[number],
+  ): Promise<void> {
+    await act(async () => {
+      stream.emit("message", event);
+      await new Promise<void>((resolve) => {
+        window.setTimeout(() => resolve(), 20);
+      });
+    });
+  }
+
+  it("projects paused and resumed Factory Session lifecycle from streamed canonical events", async () => {
+    const { result } = renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const stream = replayHarness.getStreams()[0];
+    if (!stream) {
+      throw new Error("expected dashboard stream to be opened");
+    }
+
+    await emitStreamMessage(stream, sessionLifecycleStartedEvent);
+    await emitStreamMessage(stream, sessionLifecyclePausedEvent);
+
+    await waitFor(() => {
+      expect(
+        result.current.snapshot?.runtime?.session?.bracket,
+      ).toMatchObject({
+        lifecycle_control_status: "PAUSED",
+        paused_at: "2026-06-09T12:00:02Z",
+        session_id: "session-alpha",
+      });
+    });
+
+    await emitStreamMessage(stream, sessionLifecycleResumedEvent);
+
+    await waitFor(() => {
+      expect(
+        result.current.snapshot?.runtime?.session?.bracket,
+      ).toMatchObject({
+        lifecycle_control_status: "RUNNING",
+        resumed_at: "2026-06-09T12:00:04Z",
+        session_id: "session-alpha",
+      });
+    });
+    expect(useFactoryTimelineStore.getState().events).toHaveLength(3);
+    expect(useFactoryTimelineStore.getState().selectedTick).toBe(3);
+  });
+
+  it("keeps paused and resumed lifecycle reflection after event-stream reconnect", async () => {
+    const { result } = renderHook(() => useDashboardSnapshot({ locale: "en" }), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    const stream = replayHarness.getStreams()[0];
+    if (!stream) {
+      throw new Error("expected dashboard stream to be opened");
+    }
+
+    await emitStreamMessage(stream, sessionLifecycleStartedEvent);
+    await emitStreamMessage(stream, sessionLifecyclePausedEvent);
+
+    await waitFor(() => {
+      expect(
+        result.current.snapshot?.runtime?.session?.bracket?.lifecycle_control_status,
+      ).toBe("PAUSED");
+    });
+
+    act(() => {
+      stream.onerror?.(new Event("error"));
+    });
+
+    expect(result.current.streamState).toMatchObject({
+      message: "Reconnecting event stream",
+      status: "reconnecting",
+    });
+
+    await waitFor(
+      () => {
+        expect(replayHarness.getStreams()).toHaveLength(2);
+      },
+      { timeout: 3000 },
+    );
+
+    const reconnectStream = replayHarness.getStreams()[1];
+    if (!reconnectStream) {
+      throw new Error("expected reconnect stream to be opened");
+    }
+
+    expect(reconnectStream.url).toContain("after_event_id=session-lifecycle-replay-paused");
+    expect(reconnectStream.url).toContain("after_sequence=2");
+
+    await emitStreamMessage(reconnectStream, sessionLifecycleResumedEvent);
+
+    await waitFor(() => {
+      expect(
+        result.current.snapshot?.runtime?.session?.bracket,
+      ).toMatchObject({
+        lifecycle_control_status: "RUNNING",
+        paused_at: "2026-06-09T12:00:02Z",
+        resumed_at: "2026-06-09T12:00:04Z",
+        session_id: "session-alpha",
+      });
+    });
+    expect(useFactoryTimelineStore.getState().events).toHaveLength(3);
   });
 });
 

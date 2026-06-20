@@ -1,5 +1,6 @@
 import type { FactoryEvent } from "../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
+import { canonicalSessionLifecycleReplayEvents } from "../../../testing/session-lifecycle-replay-fixtures";
 import {
   buildFactoryTimelineSnapshot,
   useFactoryTimelineStore,
@@ -192,5 +193,32 @@ describe("factory timeline store operations", () => {
     expect(state.mode).toBe("current");
     expect(state.selectedTick).toBe(2);
     expect(state.worldViewCache[2]).toBeDefined();
+  });
+
+  it("rebuilds paused and resumed session bracket lifecycle from canonical replay events", () => {
+    const store = useFactoryTimelineStore.getState();
+    store.replaceEvents([...canonicalSessionLifecycleReplayEvents]);
+
+    const pausedSnapshot = buildFactoryTimelineSnapshot(
+      useFactoryTimelineStore.getState().events,
+      2,
+    );
+    expect(pausedSnapshot.runtime.session.bracket).toMatchObject({
+      lifecycle_control_status: "PAUSED",
+      paused_at: "2026-06-09T12:00:02Z",
+      session_id: "session-alpha",
+    });
+
+    const runningSnapshot = buildFactoryTimelineSnapshot(
+      useFactoryTimelineStore.getState().events,
+      3,
+    );
+    expect(runningSnapshot.runtime.session.bracket).toMatchObject({
+      lifecycle_control_status: "RUNNING",
+      paused_at: "2026-06-09T12:00:02Z",
+      resumed_at: "2026-06-09T12:00:04Z",
+      session_id: "session-alpha",
+    });
+    expect(runningSnapshot.runtime.session.has_data).toBe(true);
   });
 });
