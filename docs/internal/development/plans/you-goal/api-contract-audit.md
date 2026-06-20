@@ -4,7 +4,8 @@ Implementation-ready contract boundary for the `@you/goal` slice. This audit
 maps each relevant surface to ownership, public vs internal scope, reuse vs
 change posture, and follow-on verification expectations.
 
-**Status:** in progress (story `you-goal-p11-api-contract-audit-001` complete)
+**Status:** in progress (stories `you-goal-p11-api-contract-audit-001` and
+`you-goal-p11-api-contract-audit-002` complete)
 
 **Last updated:** 2026-06-20 UTC
 
@@ -26,7 +27,7 @@ result). Invocation equivalence rules: `docs/architecture/invocation-contract.md
 | Section | Story | Status |
 |---------|-------|--------|
 | [Invocation and adapter reuse boundaries](#invocation-and-adapter-reuse-boundaries) | `you-goal-p11-api-contract-audit-001` | complete |
-| Response streams vs lifecycle contracts | `you-goal-p11-api-contract-audit-002` | pending |
+| [Response streams vs lifecycle contracts](#response-streams-vs-lifecycle-contracts) | `you-goal-p11-api-contract-audit-002` | complete |
 | Public OpenAPI delta and generated-client expectations | `you-goal-p11-api-contract-audit-003` | pending |
 
 ---
@@ -155,7 +156,175 @@ invocation reuse in this slice.
 
 ## Response streams vs lifecycle contracts
 
-*Pending story `you-goal-p11-api-contract-audit-002`.*
+`@you/goal` goal-mode progress must not widen the public OpenAPI surface through
+ephemeral provider output, partial token streams, or goal-specific control
+routes. This section separates **durable public history** (canonical
+`FactoryEvent` SSE streams and existing lifecycle routes) from **ephemeral
+internal progress** (response-stream plumbing inside the session runtime).
+
+### Durable public history vs ephemeral internal progress
+
+| Concern | Durable public history | Ephemeral internal progress |
+|---------|------------------------|-----------------------------|
+| Purpose | Replay-safe, customer-visible factory and session facts | Live provider/model output chunks, partial assistant text, and in-flight response assembly before terminal selection |
+| Transport | `GET /events`, `GET /factory-sessions/{session_id}/events` (SSE `FactoryEvent`) | In-process session/runtime subscribers only |
+| Persistence | Canonical event history (`pkg/factory/events/`, durable session replay in `pkg/factorysessionexecution/`) | Session-scoped runtime state; not a public REST resource |
+| `@you/goal` posture | **Reuse as-is** — observe progress through existing event types and lifecycle vocabulary | **Internal-only** — implement as `SessionResponseStream` / `SessionResponseStreamEvent`; never publish to OpenAPI |
+
+Existing public events such as `MODEL_RESPONSE`, `INFERENCE_RESPONSE`,
+`DISPATCH_RESPONSE`, and `WORK_STATE_CHANGE` already record terminal or
+checkpoint facts on the canonical stream. They are **not** substitutes for
+internal response streams and must not be extended with per-chunk streaming
+payloads for goal-mode partial output.
+
+### Boundary matrix
+
+| Surface | Ownership | Public / internal | @you/goal posture | Follow-on verification |
+|---------|-----------|-------------------|--------------------|------------------------|
+| `GET /events` | Runtime SSE (`getEvents`) | **Public** | **Reuse as-is** — process-wide canonical `FactoryEvent` history + live tail | `pkg/api/servertests/server_dashboard_events_test.go`; reconnect cursors in `pkg/factory/events/event_reconnect_test.go` |
+| `GET /factory-sessions/{session_id}/events` | Session-scoped SSE (`getEventsBySessionId`) | **Public** | **Reuse as-is** — same `FactoryEvent` vocabulary filtered to one live or durable session | `pkg/api/servertests/server_durable_session_events_test.go`; `FilterEventsAfterReconnect` in `pkg/factorysessionexecution/listing.go` |
+| `FactoryEventType` / event payloads | OpenAPI `api/components/schemas/events/` | **Public** | **Reuse as-is** — no new types for response-stream chunks | `pkg/api/contracttests/openapi_contract_common_test.go`; `ui/src/api/events/types.test.ts` |
+| `after_event_id` / `after_sequence` reconnect filters | OpenAPI parameters + `pkg/api/handlers_events.go` | **Public** | **Reuse as-is** — cursor filters apply only to canonical `FactoryEvent` replay | `pkg/factory/projections/projectiontests/session_reconnect_replay_test.go` |
+| `POST /factory-sessions/{session_id}/pause` / `/resume` | Durable lifecycle control API | **Public** | **Reuse routes** — behavioral repair may extend live `~default` sessions through the same routes; no `/goal/.../pause` family | `pkg/api/servertests/server_durable_session_lifecycle_control_test.go`; `pkg/factorysessionexecution/control.go` |
+| `POST /factory-sessions/{session_id}/cancel` / `/terminate` / `/retry-dispatch` | Durable lifecycle + dispatch recovery | **Public** | **Reuse as-is** — graceful cancel and forced terminate for control; `retry-dispatch` for recoverable interruptions | Same lifecycle servertests; `DISPATCH_RECONCILED` replay in dispatch projection tests |
+| Dispatch lifecycle events (`DISPATCH_QUEUED`, `DISPATCH_INTERRUPTED`, `DISPATCH_RECONCILED`) | `pkg/factory/events/event_history_dispatch_lifecycle.go` | **Public** (on canonical stream) | **Reuse vocabulary** — interrupt and recovery facts surface here; no parallel goal run/interrupt API | `pkg/factory/projections/projectiontests/dispatch_lifecycle_event_replay_test.go` |
+| `SessionResponseStream` | Session runtime read model (follow-on internal package) | **Internal** | **New internal model only** — aggregates ephemeral provider/model output for subscribers inside the runtime | Runtime/session unit tests near the implementing package; **no** OpenAPI or generated-client changes |
+| `SessionResponseStreamEvent` | Per-chunk or per-phase internal stream record | **Internal** | **New internal model only** — names follow-on partial-progress events; must not become `FactoryEventType` values | Same as above |
+| Public response-stream endpoint | — | — | **Out of scope** — no `GET .../response-stream`, SSE alias, or WebSocket surface | N/A — reject proposals that expose internal streams on REST |
+
+### Public factory event stream (durable history)
+
+The canonical factory event stream is the **only** public progress and lifecycle
+history transport for this slice:
+
+- **Process-wide:** `GET /events` streams historical then live `FactoryEvent`
+  records for the current runtime process.
+- **Session-scoped:** `GET /factory-sessions/{session_id}/events` streams the
+  same vocabulary for one session (`~default` live sessions and `dur-sess-*`
+  durable sessions).
+
+Reconnect clients use `after_event_id` or `after_sequence` (preferring
+`FactoryEvent.context.sessionSequence` for session-scoped lifecycle events) to
+resume after an acknowledged point. Durable session replays synthesize canonical
+events through `pkg/factorysessionexecution/listing.go`
+(`BuildCanonicalSessionEvents`, `BuildCanonicalRuntimeSessionEvents`).
+
+**Authoritative references:**
+
+- OpenAPI: `api/openapi-main.yaml` (`/events`,
+  `/factory-sessions/{session_id}/events`)
+- Handlers: `pkg/api/handlers_events.go`
+- Event vocabulary: `api/components/schemas/events/FactoryEventType.yaml`
+- UI consumer: `ui/src/features/dashboard/hooks/event-stream/useFactoryEventStream.ts`
+
+Dashboard and timeline features derive lifecycle banners and dispatch state from
+these public events (`replayDispatchLifecycle.ts`,
+`replaySessionLifecycle.ts`). Goal follow-on work must extend client projections
+from existing `FactoryEvent` types, not from internal response-stream models.
+
+### Response streams are internal-only
+
+For `@you/goal`, **response streams are internal runtime/session constructs** in
+this slice. They carry ephemeral partial output while work is in flight. They
+are **not** public OpenAPI resources.
+
+Follow-on internal implementation must use these stable names:
+
+| Internal name | Role |
+|---------------|------|
+| `SessionResponseStream` | Session-scoped aggregate of in-flight response output (subscribers, cursors, and flush-to-terminal behavior stay inside the runtime) |
+| `SessionResponseStreamEvent` | One internal stream record (chunk, phase marker, or provider-specific progress fact) |
+
+This slice **must not**:
+
+- Add `FactoryEventType` enum values (for example `RESPONSE_STREAM_CHUNK` or
+  goal-prefixed variants).
+- Add new public event payload schemas or variants under
+  `api/components/schemas/events/payloads/` for streaming chunks.
+- Extend `GET /events` or `GET /factory-sessions/{session_id}/events` with
+  response-stream filters, alternate SSE schemas, or secondary stream URLs.
+- Add public response-stream REST or SSE endpoints.
+- Regenerate Go or TypeScript public clients for internal response-stream model
+  changes (see story 003 for the public-contract generation rule).
+
+Internal streams may inform terminal facts that **later** appear on the canonical
+stream (`DISPATCH_RESPONSE`, `WORK_STATE_CHANGE`, invocation
+`primaryResult`), but partial chunks themselves stay out of public history.
+
+### Session pause/resume reuse
+
+Existing Factory Session lifecycle control routes are the public pause/resume
+surface for this slice:
+
+| Route | Current scope | @you/goal posture |
+|-------|---------------|-------------------|
+| `POST /factory-sessions/{session_id}/pause` | Durable `dur-sess-*` sessions (runtime-backed and fixture-backed) | **Reuse route** — goal-mode pause must target this route, not a goal-named variant |
+| `POST /factory-sessions/{session_id}/resume` | Durable sessions | **Reuse route** — same as pause |
+
+Responses use `FactorySessionLifecycleControlResponse` with typed outcomes
+(`ACCEPTED`, `NO_OP`, `INVALID_STATE`, `TERMINAL_SESSION`, `CONFLICT`) and
+`FactorySessionLifecycleControlLinks` for post-control inspection of results,
+dispatches, and artifacts.
+
+**Behavioral repair without new route families:** Live Factory Sessions opened
+through `POST /factory-sessions` or CLI `you run` (session `~default`) may
+receive pause/resume **behavior** on the existing `/pause` and `/resume` routes
+when follow-on work needs goal-mode control during an open live session. That
+repair extends handlers and runtime coordination (`pkg/api/handlers_factory.go`,
+`pkg/service/runtime_sessions.go`) — it does **not** justify
+`/factory-sessions/{session_id}/goal-pause`, MCP goal tools, or CLI-only pause
+commands.
+
+Today, non-durable session IDs may still return `501 NotImplemented` on pause
+(see `TestPauseFactorySession_NonDurableSessionPreservesLiveStub`). Treat that
+as a known behavioral gap repairable on the existing public routes, not as
+evidence that goal mode needs a separate control API.
+
+### Interrupt behavior and dispatch lifecycle vocabulary
+
+Goal-mode interrupt and recovery must reuse **existing dispatch lifecycle
+vocabulary** on the canonical event stream instead of inventing a parallel run
+or interrupt API:
+
+| Concept | Public vocabulary | Must not add |
+|---------|-------------------|--------------|
+| Dispatch interrupted | `DISPATCH_INTERRUPTED` (`DispatchInterruptedEventPayload`: `reason`, `observedStatus`, `interruptedAt`, `retryPlanned`, optional refs) | `POST /goal/interrupt`, per-goal cancel routes, or invocation-scoped interrupt endpoints |
+| Dispatch queued | `DISPATCH_QUEUED` | Goal-specific queue event types |
+| Dispatch reconciled | `DISPATCH_RECONCILED` | Separate recovery/rollback API families |
+| Session stop | `POST /factory-sessions/{session_id}/cancel` or `/terminate` (durable) | Goal-named terminate routes |
+
+Runtime emission lives in `pkg/factory/events/event_history_dispatch_lifecycle.go`;
+replay projection in `pkg/factory/projections/world_state_dispatch.go`. CLI and
+dashboard consumers already map `DISPATCH_INTERRUPTED` in
+`ui/src/api/events/types.ts`.
+
+For live `@you/goal` invocations, user-initiated interrupt during an in-flight
+`POST /factory-sessions/{session_id}/invocations` should be modeled through
+session/runtime cancellation that ultimately surfaces as dispatch lifecycle facts
+(`DISPATCH_INTERRUPTED` and related session bracket events), not through a new
+public "stop goal run" endpoint.
+
+### Reviewer evidence for this boundary
+
+Maintainers reviewing `@you/goal` streaming and control follow-on PRs should
+verify:
+
+| Evidence | What it proves |
+|----------|----------------|
+| This section + story 003 public OpenAPI delta | Response streams stay internal; only `Workstation.workPropagation` may change OpenAPI |
+| `api/components/schemas/events/FactoryEventType.yaml` | No new public event types for streaming chunks |
+| `pkg/api/handlers_events.go` | Public SSE exposes only `FactoryEvent`; no response-stream branch |
+| `pkg/factory/events/event_history_dispatch_lifecycle.go` | Interrupt facts use `DISPATCH_INTERRUPTED` emission path |
+| `pkg/factory/projections/projectiontests/dispatch_lifecycle_event_replay_test.go` | Dispatch lifecycle replay reconstructs interrupted/recovered state |
+| `pkg/api/servertests/server_durable_session_lifecycle_control_test.go` | Pause/resume/cancel/terminate reuse existing lifecycle routes |
+| `pkg/factorysessionexecution/control.go` | Lifecycle control semantics and idempotent replay for durable sessions |
+| `ui/src/api/events/types.ts` | Dashboard event mapping includes `DISPATCH_INTERRUPTED` without response-stream types |
+
+**Follow-on implementation PRs** for internal `SessionResponseStream` work
+should add runtime/session unit and integration tests near the implementing
+packages. They must **not** require `make generate-api`, OpenAPI fragment
+changes, or contract smoke updates unless story 003's public delta
+(`Workstation.workPropagation`) is also in scope.
 
 ## Public OpenAPI delta and generated-client expectations
 
