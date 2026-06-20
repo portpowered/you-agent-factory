@@ -189,11 +189,11 @@ func ruleClassifierWorkstations(cfg *interfaces.FactoryConfig) []Finding {
 
 	for wi, ws := range cfg.Workstations {
 		basePath := fmt.Sprintf("workstations[%d](%s)", wi, ws.Name)
-		if !isClassifierWorkstation(ws) {
-			findings = append(findings, validateNonClassifierRoutes(ws, basePath)...)
+		if isClassifierWorkstation(ws) || usesGoalRoutingDecisionEnvelope(ws) {
+			findings = append(findings, validateClassifierRoutes(ws, basePath)...)
 			continue
 		}
-		findings = append(findings, validateClassifierRoutes(ws, basePath)...)
+		findings = append(findings, validateNonClassifierRoutes(ws, basePath)...)
 	}
 
 	return findings
@@ -301,6 +301,11 @@ func routeLabelFinding(routePath string, message string) Finding {
 
 func isClassifierWorkstation(ws interfaces.FactoryWorkstationConfig) bool {
 	return strings.TrimSpace(ws.Type) == interfaces.WorkstationTypeClassify
+}
+
+func usesGoalRoutingDecisionEnvelope(ws interfaces.FactoryWorkstationConfig) bool {
+	return strings.TrimSpace(ws.OutcomeFormat) == interfaces.WorkstationOutcomeFormatDecisionEnvelope &&
+		len(ws.ClassificationRoutes) > 0
 }
 
 // --- Rule: worker/workstation behavior compatibility ---

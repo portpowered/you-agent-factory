@@ -62,8 +62,13 @@ primary-result behavior.
   absent from terminal work in scope.
 - `pkg/packagedfactories/goal/decision_envelope.go` owns the canonical
   reviewer/checker JSON envelope and its mapping onto `interfaces.WorkResult`.
+  Goal routing envelopes with authored `classificationRoutes` map parsed
+  `decision` labels onto `SelectedClassificationLabel` while preserving
+  `Feedback`, optional `Output`, and `RecordedOutputWork`.
 - `pkg/workers/executor/agent.go` routes `review` workstation agent output through
   `goal.WorkResultFromDecisionEnvelopeJSONOrFailed` instead of stop-token parsing.
+  Workstations with `outcomeFormat: decision-envelope` and authored
+  `classificationRoutes` use `goal.WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed`.
 - `factory/docs/decision-envelope.md` is the packaged-authoring guide for the
   reviewer/checker envelope shape, accepted decision values, and malformed-input
   behavior used by `factory/workstations/review/AGENTS.md`.
@@ -71,7 +76,9 @@ primary-result behavior.
   invocation summary shaping on `execute-goal` workstations alongside packaged
   TTS metadata shaping. `subsystem_transitioner_goal_classifier_test.go` proves
   each authored `review-goal` classifier label routes to the expected goal place
-  through the mapped runtime net.
+  through the mapped runtime net. `subsystem_transitioner_goal_envelope_test.go`
+  proves structured `structured-review-goal` envelopes route from parsed decision
+  labels while preserving mapped `WorkResult` fields.
 - `pkg/packagedfactories/tts/` owns packaged TTS invocation metadata shaping
   helpers used when `INFERENCE_RUN` (or legacy `MODEL_INVOKE`) work completes on the `execute-tts` workstation.
   `metadata.go` derives the `backend` metadata field from the loaded on-disk

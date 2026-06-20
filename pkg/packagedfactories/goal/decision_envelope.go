@@ -52,6 +52,61 @@ func UsesDecisionEnvelopeOutcome(workstation *interfaces.FactoryWorkstationConfi
 	return strings.TrimSpace(workstation.OutcomeFormat) == DecisionEnvelopeOutcomeFormat
 }
 
+// UsesGoalRoutingDecisionEnvelope reports whether the workstation parses reviewer or
+// checker output as a decision envelope and routes from the parsed goal decision label
+// through authored classificationRoutes instead of WorkOutcome arcs.
+func UsesGoalRoutingDecisionEnvelope(workstation *interfaces.FactoryWorkstationConfig) bool {
+	if workstation == nil {
+		return false
+	}
+	return UsesDecisionEnvelopeOutcome(workstation) && len(workstation.ClassificationRoutes) > 0
+}
+
+// Goal routing decisions use the same vocabulary as packaged goal classifier labels.
+const (
+	GoalRoutingDecisionAccepted     = "accepted"
+	GoalRoutingDecisionNeedsChanges = "needs_changes"
+	GoalRoutingDecisionTestsFailed  = "tests_failed"
+	GoalRoutingDecisionNeedsHuman   = "needs_human"
+	GoalRoutingDecisionBlocked      = "blocked"
+	GoalRoutingDecisionInterrupted  = "interrupted"
+	GoalRoutingDecisionFailed       = "failed"
+)
+
+// SupportedGoalRoutingDecisions returns the accepted packaged-goal routing vocabulary.
+func SupportedGoalRoutingDecisions() []string {
+	return []string{
+		GoalRoutingDecisionAccepted,
+		GoalRoutingDecisionNeedsChanges,
+		GoalRoutingDecisionTestsFailed,
+		GoalRoutingDecisionNeedsHuman,
+		GoalRoutingDecisionBlocked,
+		GoalRoutingDecisionInterrupted,
+		GoalRoutingDecisionFailed,
+	}
+}
+
+// NormalizeGoalRoutingDecision canonicalizes a packaged-goal envelope decision label.
+func NormalizeGoalRoutingDecision(decision string) (string, error) {
+	trimmed := strings.TrimSpace(decision)
+	if trimmed == "" {
+		return "", fmt.Errorf("decision envelope: decision is required")
+	}
+	normalized := strings.ToLower(strings.ReplaceAll(trimmed, "-", "_"))
+	switch normalized {
+	case GoalRoutingDecisionAccepted,
+		GoalRoutingDecisionNeedsChanges,
+		GoalRoutingDecisionTestsFailed,
+		GoalRoutingDecisionNeedsHuman,
+		GoalRoutingDecisionBlocked,
+		GoalRoutingDecisionInterrupted,
+		GoalRoutingDecisionFailed:
+		return normalized, nil
+	default:
+		return "", fmt.Errorf("decision envelope: unknown decision %q", trimmed)
+	}
+}
+
 // SupportedDecisions returns the accepted decision vocabulary in stable order.
 func SupportedDecisions() []string {
 	return []string{
@@ -146,6 +201,49 @@ func WorkResultFromDecisionEnvelopeJSONOrFailed(dispatchID, transitionID, raw st
 		return FailedWorkResultFromDecisionEnvelopeError(dispatchID, transitionID, err, DecisionEnvelope{})
 	}
 	result, err := WorkResultFromDecisionEnvelope(dispatchID, transitionID, envelope)
+	if err != nil {
+		return FailedWorkResultFromDecisionEnvelopeError(dispatchID, transitionID, err, envelope)
+	}
+	return result
+}
+
+// WorkResultFromGoalRoutingDecisionEnvelope maps a parsed envelope onto WorkResult using the
+// packaged goal routing vocabulary. Routing uses SelectedClassificationLabel so optional
+// envelope output text can remain in WorkResult.Output.
+func WorkResultFromGoalRoutingDecisionEnvelope(dispatchID, transitionID string, envelope DecisionEnvelope) (interfaces.WorkResult, error) {
+	label, err := NormalizeGoalRoutingDecision(envelope.Decision)
+	if err != nil {
+		return interfaces.WorkResult{}, err
+	}
+	return interfaces.WorkResult{
+		DispatchID:                  dispatchID,
+		TransitionID:                transitionID,
+		Outcome:                     interfaces.OutcomeAccepted,
+		SelectedClassificationLabel: label,
+		Feedback:                    envelope.Feedback,
+		Output:                      envelope.Output,
+		RecordedOutputWork:          envelope.RecordedOutputWork,
+	}, nil
+}
+
+// WorkResultFromGoalRoutingDecisionEnvelopeJSON parses reviewer/checker output and maps it
+// to the packaged goal routing WorkResult contract.
+func WorkResultFromGoalRoutingDecisionEnvelopeJSON(dispatchID, transitionID, raw string) (interfaces.WorkResult, error) {
+	envelope, err := ParseDecisionEnvelopeJSON(raw)
+	if err != nil {
+		return interfaces.WorkResult{}, err
+	}
+	return WorkResultFromGoalRoutingDecisionEnvelope(dispatchID, transitionID, envelope)
+}
+
+// WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed parses reviewer/checker output for
+// packaged goal routing workstations and always returns a WorkResult.
+func WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed(dispatchID, transitionID, raw string) interfaces.WorkResult {
+	envelope, err := ParseDecisionEnvelopeJSON(raw)
+	if err != nil {
+		return FailedWorkResultFromDecisionEnvelopeError(dispatchID, transitionID, err, DecisionEnvelope{})
+	}
+	result, err := WorkResultFromGoalRoutingDecisionEnvelope(dispatchID, transitionID, envelope)
 	if err != nil {
 		return FailedWorkResultFromDecisionEnvelopeError(dispatchID, transitionID, err, envelope)
 	}

@@ -974,6 +974,7 @@ var BuiltInGoalFactoryJSON = []byte(`{
         {"name": "execute", "type": "PROCESSING"},
         {"name": "check", "type": "PROCESSING"},
         {"name": "review", "type": "PROCESSING"},
+        {"name": "structured-review", "type": "PROCESSING"},
         {"name": "complete", "type": "TERMINAL"},
         {"name": "blocked", "type": "PROCESSING"},
         {"name": "needs-human", "type": "PROCESSING"},
@@ -1062,6 +1063,39 @@ var BuiltInGoalFactoryJSON = []byte(`{
         {"workType": "goal", "state": "review"}
       ],
       "worker": ""
+    },
+    {
+      "name": "advance-goal-structured-review",
+      "type": "LOGICAL_MOVE",
+      "inputs": [
+        {"workType": "goal", "state": "check"}
+      ],
+      "outputs": [
+        {"workType": "goal", "state": "structured-review"}
+      ],
+      "worker": ""
+    },
+    {
+      "name": "structured-review-goal",
+      "type": "AGENT_RUN",
+      "worker": "goal-reviewer",
+      "outcomeFormat": "decision-envelope",
+      "inputs": [
+        {"workType": "goal", "state": "structured-review"}
+      ],
+      "classificationRoutes": [
+        {"label": "accepted", "outputs": [{"workType": "goal", "state": "complete"}]},
+        {"label": "needs_changes", "outputs": [{"workType": "goal", "state": "plan"}]},
+        {"label": "tests_failed", "outputs": [{"workType": "goal", "state": "plan"}]},
+        {"label": "needs_human", "outputs": [{"workType": "goal", "state": "needs-human"}]},
+        {"label": "blocked", "outputs": [{"workType": "goal", "state": "blocked"}]},
+        {"label": "interrupted", "outputs": [{"workType": "goal", "state": "interrupted"}]},
+        {"label": "failed", "outputs": [{"workType": "goal", "state": "failed"}]}
+      ],
+      "onFailure": [
+        {"workType": "goal", "state": "failed"}
+      ],
+      "body": "Review goal progress with structured feedback for {{ .WorkID }}."
     },
     {
       "name": "review-goal",

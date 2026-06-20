@@ -14,6 +14,7 @@ var packagedGoalLifecycleStates = []string{
 	"execute",
 	"check",
 	"review",
+	"structured-review",
 	"complete",
 	"blocked",
 	"needs-human",
@@ -45,8 +46,10 @@ var packagedGoalWorkstationPublicTypes = map[string]string{
 	PackagedPlanWorkstationName:          interfaces.WorkstationTypeAgent,
 	PackagedExecuteWorkstationName:       interfaces.WorkstationTypeAgent,
 	PackagedCheckWorkstationName:         interfaces.WorkstationTypeScript,
-	"advance-goal-review":                interfaces.WorkstationTypeLogical,
-	PackagedReviewWorkstationName:        interfaces.WorkstationTypeClassify,
+	"advance-goal-review":                   interfaces.WorkstationTypeLogical,
+	PackagedAdvanceStructuredReviewWorkstationName: interfaces.WorkstationTypeLogical,
+	PackagedReviewWorkstationName:                   interfaces.WorkstationTypeClassify,
+	PackagedStructuredReviewWorkstationName: interfaces.WorkstationTypeAgent,
 	PackagedLoopBreakerWorkstationName:   interfaces.WorkstationTypeLogical,
 }
 
@@ -74,6 +77,7 @@ func TestBuiltInFactoryJSON_LoadsRunnablePackagedGoalFactory(t *testing.T) {
 	assertGoalLifecycleStates(t, workType.States)
 	assertGoalProgressionTopology(t, cfg.Workstations, cfg.Workers)
 	assertGoalReviewRoutes(t, cfg.Workstations)
+	assertGoalStructuredReviewRoutes(t, cfg.Workstations)
 	assertGoalLoopBreaker(t, cfg.Workstations)
 	assertGoalPublicPrimitiveVocabulary(t, cfg.Workers, cfg.Workstations)
 }
@@ -114,6 +118,7 @@ func TestMaterializedPackagedGoalFactory_ExposesCanonicalWorkTypeAndLifecycleSta
 	assertGoalLifecycleStates(t, workType.States)
 	assertGoalProgressionTopology(t, cfg.Workstations, cfg.Workers)
 	assertGoalReviewRoutes(t, cfg.Workstations)
+	assertGoalStructuredReviewRoutes(t, cfg.Workstations)
 	assertGoalLoopBreaker(t, cfg.Workstations)
 	assertGoalPublicPrimitiveVocabulary(t, cfg.Workers, cfg.Workstations)
 }
@@ -244,6 +249,59 @@ func assertGoalReviewRoutes(t *testing.T, workstations []interfaces.FactoryWorks
 		t.Fatal("missing execute workstation for retry path")
 	}
 	assertSingleGoalRoute(t, execute.Name, execute.Inputs, "plan")
+}
+
+func assertGoalStructuredReviewRoutes(t *testing.T, workstations []interfaces.FactoryWorkstationConfig) {
+	t.Helper()
+
+	byName := indexWorkstationsByName(workstations)
+	structuredReview, ok := byName[PackagedStructuredReviewWorkstationName]
+	if !ok {
+		t.Fatal("missing structured review workstation")
+	}
+	if structuredReview.Type != interfaces.WorkstationTypeAgent && structuredReview.Type != interfaces.WorkstationTypeModel {
+		t.Fatalf("structured review workstation type = %q, want agent runtime type", structuredReview.Type)
+	}
+	if structuredReview.OutcomeFormat != DecisionEnvelopeOutcomeFormat {
+		t.Fatalf("structured review outcomeFormat = %q, want %q", structuredReview.OutcomeFormat, DecisionEnvelopeOutcomeFormat)
+	}
+	if !UsesGoalRoutingDecisionEnvelope(&structuredReview) {
+		t.Fatal("structured review workstation should use goal routing decision envelope")
+	}
+	assertSingleGoalRoute(t, structuredReview.Name, structuredReview.Inputs, PackagedStructuredReviewStateName)
+
+	wantRoutes := map[string]string{
+		"accepted":      "complete",
+		"needs_changes": "plan",
+		"tests_failed":  "plan",
+		"needs_human":   "needs-human",
+		"blocked":       "blocked",
+		"interrupted":   "interrupted",
+		"failed":        "failed",
+	}
+	gotRoutes := make(map[string]string, len(structuredReview.ClassificationRoutes))
+	for _, route := range structuredReview.ClassificationRoutes {
+		if len(route.Outputs) != 1 {
+			t.Fatalf("structured review route %q outputs = %#v, want one goal output", route.Label, route.Outputs)
+		}
+		gotRoutes[route.Label] = route.Outputs[0].StateName
+	}
+	for label, wantState := range wantRoutes {
+		gotState, ok := gotRoutes[label]
+		if !ok {
+			t.Fatalf("structured review route missing label %q", label)
+		}
+		if gotState != wantState {
+			t.Fatalf("structured review route %q state = %q, want %q", label, gotState, wantState)
+		}
+	}
+
+	advance, ok := byName[PackagedAdvanceStructuredReviewWorkstationName]
+	if !ok {
+		t.Fatal("missing structured review advance workstation")
+	}
+	assertSingleGoalRoute(t, advance.Name, advance.Inputs, "check")
+	assertSingleGoalRoute(t, advance.Name, advance.Outputs, PackagedStructuredReviewStateName)
 }
 
 func assertGoalLoopBreaker(t *testing.T, workstations []interfaces.FactoryWorkstationConfig) {

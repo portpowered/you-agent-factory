@@ -22,6 +22,80 @@ func TestUsesDecisionEnvelopeOutcome_IdentifiesConfiguredWorkstation(t *testing.
 	}
 }
 
+func TestUsesGoalRoutingDecisionEnvelope_RequiresClassificationRoutes(t *testing.T) {
+	if !UsesGoalRoutingDecisionEnvelope(&interfaces.FactoryWorkstationConfig{
+		OutcomeFormat: DecisionEnvelopeOutcomeFormat,
+		ClassificationRoutes: []interfaces.ClassificationRouteConfig{
+			{Label: "accepted", Outputs: []interfaces.IOConfig{{WorkTypeName: "goal", StateName: "complete"}}},
+		},
+	}) {
+		t.Fatal("decision-envelope workstation with classificationRoutes should use goal routing")
+	}
+	if UsesGoalRoutingDecisionEnvelope(&interfaces.FactoryWorkstationConfig{
+		OutcomeFormat: DecisionEnvelopeOutcomeFormat,
+	}) {
+		t.Fatal("decision-envelope workstation without classificationRoutes should not use goal routing")
+	}
+}
+
+func TestNormalizeGoalRoutingDecision_AcceptsHyphenAndUnderscoreForms(t *testing.T) {
+	cases := []struct {
+		decision string
+		want     string
+	}{
+		{"accepted", GoalRoutingDecisionAccepted},
+		{"needs-changes", GoalRoutingDecisionNeedsChanges},
+		{"needs_changes", GoalRoutingDecisionNeedsChanges},
+		{"tests-failed", GoalRoutingDecisionTestsFailed},
+		{"needs-human", GoalRoutingDecisionNeedsHuman},
+	}
+	for _, tc := range cases {
+		got, err := NormalizeGoalRoutingDecision(tc.decision)
+		if err != nil {
+			t.Fatalf("NormalizeGoalRoutingDecision(%q): %v", tc.decision, err)
+		}
+		if got != tc.want {
+			t.Fatalf("NormalizeGoalRoutingDecision(%q) = %q, want %q", tc.decision, got, tc.want)
+		}
+	}
+}
+
+func TestWorkResultFromGoalRoutingDecisionEnvelopeJSON_PreservesMappedFields(t *testing.T) {
+	raw := `{
+		"decision": "needs-changes",
+		"feedback": "Tighten acceptance criteria.",
+		"output": "Rework summary.",
+		"recorded_output_work": [
+			{
+				"id": "work-rework-1",
+				"workTypeId": "goal",
+				"state": "plan",
+				"traceId": "trace-rework-1"
+			}
+		]
+	}`
+
+	result, err := WorkResultFromGoalRoutingDecisionEnvelopeJSON("dispatch-structured", "structured-review-goal", raw)
+	if err != nil {
+		t.Fatalf("WorkResultFromGoalRoutingDecisionEnvelopeJSON: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %q, want ACCEPTED for routing envelope", result.Outcome)
+	}
+	if result.SelectedClassificationLabel != GoalRoutingDecisionNeedsChanges {
+		t.Fatalf("SelectedClassificationLabel = %q, want %q", result.SelectedClassificationLabel, GoalRoutingDecisionNeedsChanges)
+	}
+	if result.Feedback != "Tighten acceptance criteria." {
+		t.Fatalf("Feedback = %q, want reviewer feedback preserved", result.Feedback)
+	}
+	if result.Output != "Rework summary." {
+		t.Fatalf("Output = %q, want optional envelope output preserved", result.Output)
+	}
+	if len(result.RecordedOutputWork) != 1 || result.RecordedOutputWork[0].ID != "work-rework-1" {
+		t.Fatalf("RecordedOutputWork = %#v, want mapped work item preserved", result.RecordedOutputWork)
+	}
+}
+
 func TestSupportedDecisions_MatchesWorkOutcomeVocabulary(t *testing.T) {
 	want := []interfaces.WorkOutcome{
 		interfaces.OutcomeAccepted,

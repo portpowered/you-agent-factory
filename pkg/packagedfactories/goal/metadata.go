@@ -15,6 +15,14 @@ const (
 	PackagedCheckWorkstationName = "check-goal"
 	// PackagedReviewWorkstationName is the workstation that classifies review outcomes.
 	PackagedReviewWorkstationName = "review-goal"
+	// PackagedStructuredReviewStateName is the goal state for structured envelope review.
+	PackagedStructuredReviewStateName = "structured-review"
+	// PackagedAdvanceStructuredReviewWorkstationName advances checked goal work into
+	// the structured envelope review lane.
+	PackagedAdvanceStructuredReviewWorkstationName = "advance-goal-structured-review"
+	// PackagedStructuredReviewWorkstationName routes richer reviewer envelopes through
+	// parsed goal decision labels.
+	PackagedStructuredReviewWorkstationName = "structured-review-goal"
 	// PackagedLoopBreakerWorkstationName is the guarded loop breaker for review retries.
 	PackagedLoopBreakerWorkstationName = "goal-loop-breaker"
 	// PackagedInvokeWorkstationName aliases the execute workstation for simplified
