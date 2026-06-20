@@ -197,6 +197,54 @@ var packagedGoalBoundedWorkerRolePromptExpectations = []struct {
 	},
 }
 
+func TestMaterializedPackagedGoalFactory_AuthorBoundedSummarizerPrompt(t *testing.T) {
+	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+
+	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
+	}
+
+	source, ok := packagedGoalRolePromptSourceByRole("summarizer")
+	if !ok {
+		t.Fatal("missing packaged role prompt source for summarizer")
+	}
+
+	workstation, ok := loaded.Workstation(source.WorkstationName)
+	if !ok {
+		t.Fatalf("missing workstation %q for summarizer role", source.WorkstationName)
+	}
+	prompt := strings.TrimSpace(workstation.PromptTemplate)
+	if prompt == "" {
+		t.Fatal("summarizer prompt is empty")
+	}
+
+	mustContain := []string{
+		"AGENT_RUN",
+		"AGENT_WORKER",
+		"SCRIPT_RUN",
+		"bounded final summary",
+		"## Outcome",
+		"## What was done",
+		"## Verification",
+		"## Follow-up",
+		"open-ended discussion",
+	}
+	for _, marker := range mustContain {
+		if !strings.Contains(prompt, marker) {
+			t.Fatalf("summarizer prompt missing %q:\n%s", marker, prompt)
+		}
+	}
+	for _, marker := range []string{"MODEL_WORKER", "MODEL_RUN"} {
+		if strings.Contains(prompt, marker) {
+			t.Fatalf("summarizer prompt must not contain legacy marker %q:\n%s", marker, prompt)
+		}
+	}
+}
+
 func TestMaterializedPackagedGoalFactory_AuthorBoundedWorkerRolePrompts(t *testing.T) {
 	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
 	if err != nil {

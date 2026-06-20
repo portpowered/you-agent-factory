@@ -1103,7 +1103,7 @@ var BuiltInGoalFactoryJSON = []byte(`{
         {"workType": "goal", "state": "failed"}
       ],
       "promptFile": "prompts/summarizer.md",
-      "body": "Summarize the completed goal for {{ .WorkID }}."
+      "body": "You are summarizing completed goal work {{ .WorkID }} at an AGENT_RUN workstation backed by an AGENT_WORKER.\n\nThe goal run may have passed through AGENT_RUN planning and execution steps and SCRIPT_RUN verification before review accepted the work. Produce a bounded final summary a customer can review quickly. Do not respond with open-ended discussion or unrestricted narrative.\n\nReturn exactly these sections:\n## Outcome\nOne sentence stating whether the goal succeeded and the primary deliverable.\n## What was done\nBullet list of the main completed work. Limit to at most 6 bullets.\n## Verification\nBrief pass/fail summary of SCRIPT_RUN checks and reviewer disposition.\n## Follow-up\nBullet list of open items, if any. Write \"None.\" if the goal is fully complete."
     },
     {
       "name": "goal-loop-breaker",
