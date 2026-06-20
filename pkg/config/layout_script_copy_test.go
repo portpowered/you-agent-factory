@@ -324,12 +324,15 @@ func TestFlattenFactoryConfig_CheckedInFactoryBundlesOverviewDoc(t *testing.T) {
 	}
 	for _, want := range []string{
 		"# Factory Overview",
-		"Awesome AI Agent Factories",
+		"you-agent-factory",
+		"ideafy",
 		"thoughts:init",
-		"factory/inputs/BATCH/default/",
+		"factory/docs/batch-input-example.json",
+		"docs/temp/progress.md",
 		"you docs agents",
-		"## Phase Control",
+		"## Planner Loop",
 		"## Batch Submission",
+		"## State Inspection",
 		"## Quality Gates",
 	} {
 		if !strings.Contains(overview.Content.Inline, want) {
