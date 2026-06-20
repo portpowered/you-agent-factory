@@ -717,6 +717,11 @@ const (
 	WorkstationKindStandard WorkstationKind = "STANDARD"
 )
 
+// Defines values for WorkstationOutcomeFormat.
+const (
+	WorkstationOutcomeFormatDecisionEnvelope WorkstationOutcomeFormat = "decision-envelope"
+)
+
 // Defines values for WorkstationType.
 const (
 	WorkstationTypeAgentRun              WorkstationType = "AGENT_RUN"
@@ -4951,7 +4956,7 @@ type Workstation struct {
 	OperationBindings *[]WorkstationOperationBinding `json:"operationBindings,omitempty"`
 
 	// OutcomeFormat Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
-	OutcomeFormat *string `json:"outcomeFormat,omitempty"`
+	OutcomeFormat *WorkstationOutcomeFormat `json:"outcomeFormat,omitempty"`
 
 	// OutputSchema JSON schema string used to validate or parse structured model output when configured.
 	OutputSchema *string `json:"outputSchema,omitempty"`
@@ -5052,6 +5057,9 @@ type WorkstationOperationBindingSelector struct {
 	// Type Uppercase content-part categories supported by worker model-operation capability slots.
 	Type *ModelOperationContentType `json:"type,omitempty"`
 }
+
+// WorkstationOutcomeFormat Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+type WorkstationOutcomeFormat string
 
 // WorkstationType Runtime workstation implementation types supported by the public factory-config contract.
 type WorkstationType string

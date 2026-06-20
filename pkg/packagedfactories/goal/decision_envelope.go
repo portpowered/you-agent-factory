@@ -41,7 +41,7 @@ const (
 
 // DecisionEnvelopeOutcomeFormat is the workstation outcomeFormat value that routes
 // agent output through the reviewer/checker JSON envelope contract.
-const DecisionEnvelopeOutcomeFormat = "decision-envelope"
+const DecisionEnvelopeOutcomeFormat = interfaces.WorkstationOutcomeFormatDecisionEnvelope
 
 // UsesDecisionEnvelopeOutcome reports whether the workstation routes agent output
 // through the reviewer/checker decision envelope instead of stop-token markers.
