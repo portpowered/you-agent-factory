@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -704,6 +705,9 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 			if err := applyPackagedTTSInvocationMetadata(newToken, in.workstation, in.result.output, in.inputColors, in.runtimeConfig); err != nil {
 				return nil, err
 			}
+			if err := applyPackagedGoalInvocationSummary(newToken, in.workstation, in.result.output, in.runtimeConfig); err != nil {
+				return nil, err
+			}
 			if newToken.Color.DataType != interfaces.DataTypeResource {
 				if workOutputIndex < len(in.result.recordedOutputWork) {
 					applyRecordedOutputWorkIdentity(newToken, in.result.recordedOutputWork[workOutputIndex])
@@ -931,6 +935,38 @@ func applyPackagedTTSInvocationMetadata(
 	}
 
 	token.Color.Content = metadataContent
+	token.Color.Payload = nil
+	return nil
+}
+
+func applyPackagedGoalInvocationSummary(
+	token *interfaces.Token,
+	workstation *interfaces.FactoryWorkstationConfig,
+	workerOutput string,
+	runtimeConfig interfaces.RuntimeWorkstationLookup,
+) error {
+	if token == nil || !goal.ShouldFormatInvocationSummary(workstation) {
+		return nil
+	}
+	if strings.TrimSpace(workerOutput) == "" {
+		return nil
+	}
+
+	stopToken := ""
+	if workstation != nil && runtimeConfig != nil {
+		if lookup, ok := runtimeConfig.(interfaces.RuntimeDefinitionLookup); ok {
+			if worker, ok := lookup.Worker(strings.TrimSpace(workstation.WorkerTypeName)); ok && worker != nil {
+				stopToken = strings.TrimSpace(worker.StopToken)
+			}
+		}
+	}
+
+	summaryContent, err := goal.SummaryContentFromWorkerOutput(workerOutput, stopToken)
+	if err != nil {
+		return fmt.Errorf("shape packaged goal invocation summary: %w", err)
+	}
+
+	token.Color.Content = summaryContent
 	token.Color.Payload = nil
 	return nil
 }
