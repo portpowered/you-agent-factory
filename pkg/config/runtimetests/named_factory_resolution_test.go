@@ -305,6 +305,123 @@ func TestResolveNamedFactoryAcrossRoots_ReportsCorruptGlobalEditableGoalTarget(t
 	}
 }
 
+func TestResolveNamedFactoryAcrossRoots_UpgradesLegacyMaterializedBuiltInGoalPromptTemplate(t *testing.T) {
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+
+	legacyDir, err := PersistNamedFactory(globalRoot, "@you/goal", legacyBuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory(legacy goal): %v", err)
+	}
+	legacyWorkstationPath := filepath.Join(legacyDir, interfaces.WorkstationsDir, "execute-goal", interfaces.FactoryAgentsFileName)
+	legacyWorkstationBody, err := os.ReadFile(legacyWorkstationPath)
+	if err != nil {
+		t.Fatalf("ReadFile(legacy workstation): %v", err)
+	}
+	if !strings.Contains(string(legacyWorkstationBody), "{{ .WorkID }}") {
+		t.Fatalf("legacy workstation body = %q, want legacy WorkID alias", string(legacyWorkstationBody))
+	}
+
+	resolution, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots(upgraded goal): %v", err)
+	}
+	if resolution.Source != NamedFactoryResolutionSourceGlobal {
+		t.Fatalf("resolution source = %q, want global reuse of upgraded materialized builtin", resolution.Source)
+	}
+
+	loaded, err := LoadRuntimeConfigFromFactoryDir(resolution.FactoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir(upgraded goal): %v", err)
+	}
+	workstation, ok := loaded.Workstation("execute-goal")
+	if !ok {
+		t.Fatal("expected execute-goal workstation after upgrade")
+	}
+	if strings.Contains(workstation.Body, "{{ .WorkID }}") {
+		t.Fatalf("upgraded workstation body = %q, want canonical PromptData payload template", workstation.Body)
+	}
+	if !strings.Contains(workstation.Body, "(index .Inputs 0).Payload") {
+		t.Fatalf("upgraded workstation body = %q, want payload template", workstation.Body)
+	}
+}
+
+func TestResolveNamedFactoryAcrossRoots_PreservesEditedMaterializedBuiltInGoalWorkstation(t *testing.T) {
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+
+	resolution, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots(initial goal): %v", err)
+	}
+
+	workstationPath := filepath.Join(resolution.FactoryDir, interfaces.WorkstationsDir, "execute-goal", interfaces.FactoryAgentsFileName)
+	editedBody := "Customer-edited goal workstation without legacy aliases.\n"
+	if err := os.WriteFile(workstationPath, []byte(editedBody), 0o644); err != nil {
+		t.Fatalf("WriteFile(edited goal workstation): %v", err)
+	}
+
+	resolvedDir, err := ResolveNamedFactoryDirAcrossRoots(projectRoot, globalRoot, "@you/goal")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryDirAcrossRoots(edited goal): %v", err)
+	}
+	if resolvedDir != resolution.FactoryDir {
+		t.Fatalf("resolved dir after edit = %q, want %q", resolvedDir, resolution.FactoryDir)
+	}
+
+	loaded, err := LoadRuntimeConfigFromFactoryDir(resolvedDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir(edited goal): %v", err)
+	}
+	workstation, ok := loaded.Workstation("execute-goal")
+	if !ok {
+		t.Fatal("expected execute-goal workstation")
+	}
+	if workstation.Body != strings.TrimSpace(editedBody) {
+		t.Fatalf("edited goal workstation body = %q, want preserved customer edit %q", workstation.Body, strings.TrimSpace(editedBody))
+	}
+}
+
+var legacyBuiltInGoalFactoryJSON = []byte(`{
+  "name": "@you/goal",
+  "id": "builtin-goal",
+  "workTypes": [
+    {
+      "name": "task",
+      "handlingBehavior": ["DEFAULT"],
+      "states": [
+        {"name": "init", "type": "INITIAL"},
+        {"name": "complete", "type": "TERMINAL"},
+        {"name": "failed", "type": "FAILED"}
+      ]
+    }
+  ],
+  "workers": [
+    {
+      "name": "goal-executor",
+      "type": "MODEL_WORKER",
+      "body": "You are the @you/goal built-in factory worker."
+    }
+  ],
+  "workstations": [
+    {
+      "name": "execute-goal",
+      "type": "MODEL_WORKSTATION",
+      "worker": "goal-executor",
+      "inputs": [
+        {"workType": "task", "state": "init"}
+      ],
+      "outputs": [
+        {"workType": "task", "state": "complete"}
+      ],
+      "onFailure": [
+        {"workType": "task", "state": "failed"}
+      ],
+      "body": "Execute the requested goal work for {{ .WorkID }}."
+    }
+  ]
+}`)
+
 func TestResolveNamedFactoryAcrossRoots_ReturnsNotFoundForUnknownBuiltInName(t *testing.T) {
 	projectRoot := t.TempDir()
 	globalRoot := t.TempDir()

@@ -917,15 +917,56 @@ func canonicalNamedFactoryName(name string) (string, error) {
 	return NamedFactoryLayoutSegmentToName(segment)
 }
 
+const legacyPromptWorkIDTemplateMarker = "{{ .WorkID }}"
+
 func resolveNamedFactoryCandidate(rootDir, name string) (string, bool, error) {
 	factoryDir, err := ResolveNamedFactoryDir(rootDir, name)
 	if err == nil {
-		return factoryDir, true, nil
+		upgradedDir, upgradeErr := upgradeMaterializedBuiltInNamedFactoryIfNeeded(rootDir, name, factoryDir)
+		if upgradeErr != nil {
+			return "", false, upgradeErr
+		}
+		return upgradedDir, true, nil
 	}
 	if errors.Is(err, ErrNamedFactoryNotFound) {
 		return "", false, nil
 	}
 	return "", false, err
+}
+
+func upgradeMaterializedBuiltInNamedFactoryIfNeeded(rootDir, canonicalName, factoryDir string) (string, error) {
+	payload, ok := builtInNamedFactoryCatalog[canonicalName]
+	if !ok || bytes.Contains(payload, []byte(legacyPromptWorkIDTemplateMarker)) {
+		return factoryDir, nil
+	}
+	needsUpgrade, err := materializedBuiltInUsesLegacyPromptWorkIDAlias(factoryDir)
+	if err != nil {
+		return "", fmt.Errorf("check materialized built-in named factory %q upgrade: %w", canonicalName, err)
+	}
+	if !needsUpgrade {
+		return factoryDir, nil
+	}
+	upgradedDir, err := ReplaceNamedFactory(rootDir, canonicalName, payload)
+	if err != nil {
+		return "", fmt.Errorf("upgrade materialized built-in named factory %q in %s: %w", canonicalName, rootDir, err)
+	}
+	return upgradedDir, nil
+}
+
+func materializedBuiltInUsesLegacyPromptWorkIDAlias(factoryDir string) (bool, error) {
+	loaded, err := LoadRuntimeConfigFromFactoryDir(factoryDir, nil)
+	if err != nil {
+		return false, err
+	}
+	for _, workstation := range loaded.WorkstationConfigs() {
+		if workstation == nil {
+			continue
+		}
+		if strings.Contains(workstation.Body, legacyPromptWorkIDTemplateMarker) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool, error) {
@@ -943,7 +984,11 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 		if err := requireFactoryConfig(targetDir); err != nil {
 			return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: existing target invalid: %w", canonicalName, globalRoot, err)
 		}
-		return targetDir, true, nil
+		upgradedDir, err := upgradeMaterializedBuiltInNamedFactoryIfNeeded(globalRoot, canonicalName, targetDir)
+		if err != nil {
+			return "", false, err
+		}
+		return upgradedDir, true, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: check existing target: %w", canonicalName, globalRoot, err)
 	}
