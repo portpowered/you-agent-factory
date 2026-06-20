@@ -7,7 +7,15 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/builtingoal"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
+
+var workstationRoleByName = map[string]string{
+	"plan-goal":    "planner",
+	"execute-goal": "executor",
+	"check-goal":   "checker",
+	"review-goal":  "reviewer",
+}
 
 func TestBuiltInGoalFactoryJSON_AssemblesFromAuthoredPromptFiles(t *testing.T) {
 	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(builtingoal.BuiltInGoalFactoryJSON)
@@ -15,31 +23,37 @@ func TestBuiltInGoalFactoryJSON_AssemblesFromAuthoredPromptFiles(t *testing.T) {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
 
+	assertAuthoredRolePromptsNonEmpty(t)
+	assertWorkstationBodiesMatchAuthoredPrompts(t, cfg)
+	assertSummarizerBundledPromptMatchesAuthoredSource(t, cfg)
+	assertFactoryJSONWorkstationsHaveNoInlineBodies(t)
+}
+
+func assertAuthoredRolePromptsNonEmpty(t *testing.T) {
+	t.Helper()
+	for role, authoredPrompt := range builtingoal.AuthoredRolePrompts {
+		if strings.TrimSpace(authoredPrompt) == "" {
+			t.Fatalf("authored prompt for role %q is empty", role)
+		}
+	}
+}
+
+func assertWorkstationBodiesMatchAuthoredPrompts(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
 	workstationBodies := map[string]string{}
 	for _, workstation := range cfg.Workstations {
 		workstationBodies[workstation.Name] = strings.TrimSpace(workstation.Body)
 	}
-
-	for role, authoredPrompt := range builtingoal.AuthoredRolePrompts {
-		authoredPrompt = strings.TrimSpace(authoredPrompt)
-		if authoredPrompt == "" {
-			t.Fatalf("authored prompt for role %q is empty", role)
+	for workstationName, role := range workstationRoleByName {
+		want := strings.TrimSpace(builtingoal.AuthoredRolePrompts[role])
+		if got := workstationBodies[workstationName]; got != want {
+			t.Fatalf("%s body does not match authored %s prompt", workstationName, role)
 		}
 	}
+}
 
-	if got := workstationBodies["plan-goal"]; got != strings.TrimSpace(builtingoal.AuthoredRolePrompts["planner"]) {
-		t.Fatalf("plan-goal body does not match authored planner prompt")
-	}
-	if got := workstationBodies["execute-goal"]; got != strings.TrimSpace(builtingoal.AuthoredRolePrompts["executor"]) {
-		t.Fatalf("execute-goal body does not match authored executor prompt")
-	}
-	if got := workstationBodies["check-goal"]; got != strings.TrimSpace(builtingoal.AuthoredRolePrompts["checker"]) {
-		t.Fatalf("check-goal body does not match authored checker prompt")
-	}
-	if got := workstationBodies["review-goal"]; got != strings.TrimSpace(builtingoal.AuthoredRolePrompts["reviewer"]) {
-		t.Fatalf("review-goal body does not match authored reviewer prompt")
-	}
-
+func assertSummarizerBundledPromptMatchesAuthoredSource(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
 	if cfg.ResourceManifest == nil || len(cfg.ResourceManifest.BundledFiles) != 1 {
 		t.Fatalf("resource manifest bundled files = %#v, want one summarizer doc", cfg.ResourceManifest)
 	}
@@ -47,10 +61,14 @@ func TestBuiltInGoalFactoryJSON_AssemblesFromAuthoredPromptFiles(t *testing.T) {
 	if bundled.TargetPath != builtingoal.SummarizerPromptTargetPath {
 		t.Fatalf("summarizer bundled targetPath = %q, want %q", bundled.TargetPath, builtingoal.SummarizerPromptTargetPath)
 	}
-	if strings.TrimSpace(bundled.Content.Inline) != strings.TrimSpace(builtingoal.AuthoredRolePrompts["summarizer"]) {
+	want := strings.TrimSpace(builtingoal.AuthoredRolePrompts["summarizer"])
+	if got := strings.TrimSpace(bundled.Content.Inline); got != want {
 		t.Fatalf("summarizer bundled inline content does not match authored summarizer prompt")
 	}
+}
 
+func assertFactoryJSONWorkstationsHaveNoInlineBodies(t *testing.T) {
+	t.Helper()
 	var raw map[string]any
 	if err := json.Unmarshal(builtingoal.FactoryJSON(), &raw); err != nil {
 		t.Fatalf("unmarshal authored factory.json: %v", err)
