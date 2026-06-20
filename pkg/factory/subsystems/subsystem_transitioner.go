@@ -239,7 +239,7 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 		mutations = append(reconcileMutations, mutations...)
 	}
 	mutations = append(mutations, t.releaseResourceTokensOnFailureMutations(resolved.outcome, result.TransitionID, consumedTokens, arcs, now)...)
-	mutations = append(mutations, t.getSpawnedWorkMutations(resolved, now)...)
+	mutations = append(mutations, t.getSpawnedWorkMutations(workstationDef, inputColors, resolved, now)...)
 	mutations = append(mutations, t.createFanoutGuardToken(inputColors, resolved, now)...)
 
 	t.logger.Info("releasing tokens", "transition", result.TransitionID, "outcome", resolved.outcome, "mutation_count", len(mutations))
@@ -627,11 +627,20 @@ func arcCoverageCount(arc petri.Arc) int {
 	return 1
 }
 
-func (t *TransitionerSubsystem) getSpawnedWorkMutations(result resolvedWorkResult, now time.Time) []interfaces.MarkingMutation {
-	// Implementation for getting spawned work mutations
+func (t *TransitionerSubsystem) getSpawnedWorkMutations(
+	workstation *interfaces.FactoryWorkstationConfig,
+	inputColors []interfaces.TokenColor,
+	result resolvedWorkResult,
+	now time.Time,
+) []interfaces.MarkingMutation {
 	mutations := []interfaces.MarkingMutation{}
+	workPropagationMode := workstationconfig.WorkPropagationMode(workstation)
 	for i := range result.spawnedWork {
-		spawnMuts := t.createSpawnedTokens(&result.spawnedWork[i], result.transitionID, now)
+		spawnColor := interfaces.CloneTokenColor(result.spawnedWork[i])
+		if workPropagationMode == interfaces.WorkPropagationModePreserveInput {
+			token_transformer.ApplyPreservedInputToColor(&spawnColor, inputColors, spawnColor.WorkTypeID)
+		}
+		spawnMuts := t.createSpawnedTokens(&spawnColor, result.transitionID, now)
 		mutations = append(mutations, spawnMuts...)
 	}
 	return mutations
@@ -786,6 +795,9 @@ func applyRecordedOutputWorkIdentity(token *interfaces.Token, recorded interface
 	}
 	if len(recorded.Tags) > 0 {
 		token.Color.Tags = cloneTags(recorded.Tags)
+	}
+	if len(recorded.Content) > 0 {
+		token.Color.Content = interfaces.CloneWorkContentParts(recorded.Content)
 	}
 }
 

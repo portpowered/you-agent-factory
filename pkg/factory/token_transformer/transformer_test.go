@@ -921,3 +921,63 @@ func TestOutputToken_PreserveInput_MultiInput_UsesPrimaryNonResourceInput(t *tes
 		t.Fatalf("tags = %#v, want primary input tags", token.Color.Tags)
 	}
 }
+
+func TestOutputToken_PreserveInput_MultiOutput_EachLaneKeepsConsumedWorkData(t *testing.T) {
+	now := time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC)
+	places := map[string]*petri.Place{
+		"review-a:init": {ID: "review-a:init", TypeID: "review-a", State: "init"},
+		"review-b:init": {ID: "review-b:init", TypeID: "review-b", State: "init"},
+		"review-c:init": {ID: "review-c:init", TypeID: "review-c", State: "init"},
+	}
+	workTypes := map[string]*state.WorkType{
+		"task":      {ID: "task"},
+		"review-a":  {ID: "review-a"},
+		"review-b":  {ID: "review-b"},
+		"review-c":  {ID: "review-c"},
+	}
+	transformer := New(places, workTypes, WithWorkIDGenerator(petri.NewWorkIDGenerator()))
+	inputColors := []interfaces.TokenColor{{
+		WorkTypeID: "task",
+		WorkID:     "work-task-1",
+		Payload:    []byte("input-payload"),
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "input-content",
+		}},
+		Tags: map[string]string{"objective": "goal-1"},
+	}}
+	arcs := []petri.Arc{
+		{PlaceID: "review-a:init", Direction: petri.ArcOutput},
+		{PlaceID: "review-b:init", Direction: petri.ArcOutput},
+		{PlaceID: "review-c:init", Direction: petri.ArcOutput},
+	}
+
+	for arcIdx := range arcs {
+		token, err := transformer.OutputToken(OutputTokenInput{
+			ArcIndex:            arcIdx,
+			Arcs:                arcs,
+			InputColors:         inputColors,
+			Output:              "worker-output",
+			WorkPropagationMode: interfaces.WorkPropagationModePreserveInput,
+			Outcome:             interfaces.OutcomeAccepted,
+			Now:                 now,
+			History: interfaces.TokenHistory{
+				TotalVisits:         map[string]int{},
+				ConsecutiveFailures: map[string]int{},
+				PlaceVisits:         map[string]int{},
+			},
+		})
+		if err != nil {
+			t.Fatalf("OutputToken(arc %d) error = %v", arcIdx, err)
+		}
+		if string(token.Color.Payload) != "input-payload" {
+			t.Fatalf("arc %d payload = %q, want input-payload", arcIdx, token.Color.Payload)
+		}
+		if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "input-content" {
+			t.Fatalf("arc %d content = %#v, want preserved input content", arcIdx, token.Color.Content)
+		}
+		if token.Color.Tags["objective"] != "goal-1" {
+			t.Fatalf("arc %d tags = %#v, want preserved input tags", arcIdx, token.Color.Tags)
+		}
+	}
+}

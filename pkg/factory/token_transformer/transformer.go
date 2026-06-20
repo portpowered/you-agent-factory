@@ -209,7 +209,7 @@ func applyOutputPayloadPropagation(color *interfaces.TokenColor, in OutputTokenI
 	}
 	switch mode {
 	case interfaces.WorkPropagationModePreserveInput:
-		applyPreservedInputPayload(color, in, targetTypeID)
+		ApplyPreservedInputToColor(color, in.InputColors, targetTypeID)
 	default:
 		if in.Output != "" {
 			color.Payload = []byte(in.Output)
@@ -217,13 +217,18 @@ func applyOutputPayloadPropagation(color *interfaces.TokenColor, in OutputTokenI
 	}
 }
 
-func applyPreservedInputPayload(color *interfaces.TokenColor, in OutputTokenInput, targetTypeID string) {
+// ApplyPreservedInputToColor copies payload, content, and tags from the selected
+// consumed input work onto a routed output color when they are not already set.
+func ApplyPreservedInputToColor(color *interfaces.TokenColor, inputColors []interfaces.TokenColor, targetTypeID string) {
+	if color == nil {
+		return
+	}
 	if len(color.Payload) > 0 {
 		return
 	}
-	source := findMatchingInput(in.InputColors, targetTypeID)
+	source := findMatchingInput(inputColors, targetTypeID)
 	if source == nil {
-		source = firstNonResourceInput(in.InputColors)
+		source = firstNonResourceInput(inputColors)
 	}
 	if source == nil {
 		return

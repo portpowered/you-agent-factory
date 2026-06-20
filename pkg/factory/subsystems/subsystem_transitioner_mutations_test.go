@@ -335,6 +335,119 @@ func TestCalculateMutations_PreserveInput_MultiInput_UsesPrimaryNonResourceInput
 	}
 }
 
+func TestCalculateMutations_PreserveInput_MultiOutput_AllLanesKeepConsumedWorkData(t *testing.T) {
+	now := time.Date(2026, time.June, 20, 12, 0, 0, 0, time.UTC)
+	places := map[string]*petri.Place{
+		"wt-code:init":     {ID: "wt-code:init", TypeID: "wt-code", State: "init"},
+		"wt-review-a:init": {ID: "wt-review-a:init", TypeID: "wt-review-a", State: "init"},
+		"wt-review-b:init": {ID: "wt-review-b:init", TypeID: "wt-review-b", State: "init"},
+		"wt-review-c:init": {ID: "wt-review-c:init", TypeID: "wt-review-c", State: "init"},
+	}
+	workTypes := map[string]*state.WorkType{
+		"wt-code":     {ID: "wt-code"},
+		"wt-review-a": {ID: "wt-review-a"},
+		"wt-review-b": {ID: "wt-review-b"},
+		"wt-review-c": {ID: "wt-review-c"},
+	}
+	consumed := []interfaces.Token{{
+		ID:      "tok-1",
+		PlaceID: "wt-code:init",
+		Color: interfaces.TokenColor{
+			WorkID:     "work-code-1",
+			WorkTypeID: "wt-code",
+			Payload:    []byte("input-payload"),
+			Content: []interfaces.WorkContentPart{{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: "input-content",
+			}},
+			Tags: map[string]string{"objective": "goal-1"},
+		},
+		CreatedAt: now.Add(-time.Hour),
+		EnteredAt: now.Add(-time.Hour),
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	}}
+
+	mutations, err := calculateMutations(mutationCalculationInput{
+		transition:  &petri.Transition{ID: "t1"},
+		workstation: preserveInputWorkstation(),
+		arcs: []petri.Arc{
+			{ID: "review-a", PlaceID: "wt-review-a:init"},
+			{ID: "review-b", PlaceID: "wt-review-b:init"},
+			{ID: "review-c", PlaceID: "wt-review-c:init"},
+		},
+		consumed:    consumed,
+		result:      resolvedWorkResult{transitionID: "t1", outcome: interfaces.OutcomeAccepted, output: "worker-output"},
+		now:         now,
+		history:     interfaces.TokenHistory{},
+		inputColors: tokenColorsFromTokens(consumed),
+		transformer: token_transformer.New(places, workTypes, token_transformer.WithWorkIDGenerator(petri.NewWorkIDGenerator())),
+	})
+	if err != nil {
+		t.Fatalf("calculateMutations() error = %v", err)
+	}
+	if len(mutations) != 3 {
+		t.Fatalf("mutation count = %d, want 3", len(mutations))
+	}
+	for i, mutation := range mutations {
+		token := mutation.NewToken
+		if string(token.Color.Payload) != "input-payload" {
+			t.Fatalf("mutation %d payload = %q, want input-payload", i, token.Color.Payload)
+		}
+		if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "input-content" {
+			t.Fatalf("mutation %d content = %#v, want preserved input content", i, token.Color.Content)
+		}
+		if token.Color.Tags["objective"] != "goal-1" {
+			t.Fatalf("mutation %d tags = %#v, want preserved input tags", i, token.Color.Tags)
+		}
+	}
+}
+
+func TestCalculateMutations_PreserveInput_RecordedOutputWork_KeepsExplicitContent(t *testing.T) {
+	fixture := newCalculateMutationsFixture()
+	fixture.consumed[0].Color.Payload = []byte("input-payload")
+	fixture.consumed[0].Color.Content = []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "input-content",
+	}}
+	fixture.inputColors = tokenColorsFromTokens(fixture.consumed)
+
+	mutations, err := fixture.calculateWithWorkstation(
+		[]petri.Arc{{ID: "cross", PlaceID: "wt-review:init"}},
+		resolvedWorkResult{
+			transitionID: "t1",
+			outcome:      interfaces.OutcomeAccepted,
+			output:       "worker-output",
+			recordedOutputWork: []interfaces.FactoryWorkItem{{
+				ID:          "work-review-99",
+				WorkTypeID:  "wt-review",
+				DisplayName: "review-override",
+				Content: []interfaces.WorkContentPart{{
+					Type: interfaces.WorkContentPartTypeText,
+					Text: "recorded-content",
+				}},
+			}},
+		},
+		preserveInputWorkstation(),
+	)
+	if err != nil {
+		t.Fatalf("calculateMutations() error = %v", err)
+	}
+	if len(mutations) != 1 {
+		t.Fatalf("mutation count = %d, want 1", len(mutations))
+	}
+	token := mutations[0].NewToken
+	if string(token.Color.Payload) != "input-payload" {
+		t.Fatalf("payload = %q, want preserved input payload", token.Color.Payload)
+	}
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "recorded-content" {
+		t.Fatalf("content = %#v, want explicit recorded content", token.Color.Content)
+	}
+}
+
 func (f calculateMutationsFixture) calculateWithWorkstation(
 	arcs []petri.Arc,
 	result resolvedWorkResult,
