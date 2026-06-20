@@ -959,6 +959,11 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 var BuiltInGoalFactoryJSON = []byte(`{
   "name": "@you/goal",
   "id": "builtin-goal",
+  "invocationReturn": {
+    "policy": "EXPLICIT",
+    "workTypeName": "goal",
+    "terminalState": "complete"
+  },
   "workTypes": [
     {
       "name": "goal",
