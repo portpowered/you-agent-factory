@@ -216,11 +216,11 @@ func TestPauseFactorySession_NonDurableSessionPreservesLiveStub(t *testing.T) {
 		"pause",
 		nil,
 	)
-	if status != http.StatusNotImplemented {
-		t.Fatalf("status = %d, want 501", status)
+	if status != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", status)
 	}
-	if errResp.Code != factoryapi.INTERNALERROR {
-		t.Fatalf("code = %q, want INTERNAL_ERROR", errResp.Code)
+	if errResp.Code != factoryapi.NOTFOUND {
+		t.Fatalf("code = %q, want NOT_FOUND", errResp.Code)
 	}
 }
 

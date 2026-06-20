@@ -459,6 +459,47 @@ func (s *Server) handleDurableLifecycleControl(
 	s.writeJSON(w, status, response)
 }
 
+func (s *Server) handleLiveLifecycleControl(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	invoke func(apisurface.SessionAPI, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
+) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+
+	req, err := decodeOptionalLifecycleControlRequest(r.Body)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+
+	response, err := invoke(sessionRuntime, req)
+	if err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
+			return
+		}
+		if s.writeDurableLifecycleControlError(w, string(sessionID), err) {
+			return
+		}
+		s.logger.Error("live factory session lifecycle control failed",
+			zap.Error(err),
+			zap.String("session_id", string(sessionID)),
+		)
+		s.writeError(w, http.StatusInternalServerError, "live factory session lifecycle control failed", "INTERNAL_ERROR")
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, response)
+}
+
 func decodeOptionalLifecycleControlRequest(body io.Reader) (factoryapi.FactorySessionLifecycleControlRequest, error) {
 	return decodeOptionalJSONRequest(body, func() factoryapi.FactorySessionLifecycleControlRequest {
 		return factoryapi.FactorySessionLifecycleControlRequest{}

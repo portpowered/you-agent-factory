@@ -3,6 +3,7 @@ package testutil
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -694,6 +695,28 @@ func (m *MockFactory) CloseFactorySession(_ context.Context, sessionID string) e
 	}
 	m.ClosedFactorySessions = append(m.ClosedFactorySessions, sessionID)
 	return nil
+}
+
+func (m *MockFactory) PauseLiveFactorySession(
+	_ context.Context,
+	sessionID string,
+	_ factoryapi.FactorySessionLifecycleControlRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	if _, err := m.sessionFactory(sessionID); err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
+	}
+	return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
+}
+
+func (m *MockFactory) ResumeLiveFactorySession(
+	_ context.Context,
+	sessionID string,
+	_ factoryapi.FactorySessionLifecycleControlRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	if _, err := m.sessionFactory(sessionID); err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
+	}
+	return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
 }
 
 func (m *MockFactory) WaitToComplete() <-chan struct{} {

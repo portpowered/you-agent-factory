@@ -326,20 +326,38 @@ func (s *Server) ApproveFactorySession(w http.ResponseWriter, r *http.Request, s
 }
 
 func (s *Server) PauseFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	s.handleDurableLifecycleControl(w, r, sessionID, "pause", func(
-		lifecycle apisurface.DurableSessionLifecycleAPI,
+	if isDurableExecutionSessionID(string(sessionID)) {
+		s.handleDurableLifecycleControl(w, r, sessionID, "pause", func(
+			lifecycle apisurface.DurableSessionLifecycleAPI,
+			req factoryapi.FactorySessionLifecycleControlRequest,
+		) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+			return lifecycle.PauseDurableFactorySession(r.Context(), string(sessionID), req)
+		})
+		return
+	}
+	s.handleLiveLifecycleControl(w, r, sessionID, func(
+		sessionRuntime apisurface.SessionAPI,
 		req factoryapi.FactorySessionLifecycleControlRequest,
 	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-		return lifecycle.PauseDurableFactorySession(r.Context(), string(sessionID), req)
+		return sessionRuntime.PauseLiveFactorySession(r.Context(), string(sessionID), req)
 	})
 }
 
 func (s *Server) ResumeFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
-	s.handleDurableLifecycleControl(w, r, sessionID, "resume", func(
-		lifecycle apisurface.DurableSessionLifecycleAPI,
+	if isDurableExecutionSessionID(string(sessionID)) {
+		s.handleDurableLifecycleControl(w, r, sessionID, "resume", func(
+			lifecycle apisurface.DurableSessionLifecycleAPI,
+			req factoryapi.FactorySessionLifecycleControlRequest,
+		) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+			return lifecycle.ResumeDurableFactorySession(r.Context(), string(sessionID), req)
+		})
+		return
+	}
+	s.handleLiveLifecycleControl(w, r, sessionID, func(
+		sessionRuntime apisurface.SessionAPI,
 		req factoryapi.FactorySessionLifecycleControlRequest,
 	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-		return lifecycle.ResumeDurableFactorySession(r.Context(), string(sessionID), req)
+		return sessionRuntime.ResumeLiveFactorySession(r.Context(), string(sessionID), req)
 	})
 }
 
