@@ -402,8 +402,6 @@ function WorkstationHeaderContent({
   semanticIconMetadata: ReturnType<typeof workstationGraphPresentation>;
   workstationTitle: string;
 }) {
-  const messages = getActivityGraphMessages(data.locale);
-
   return (
     <>
       <span
@@ -424,14 +422,6 @@ function WorkstationHeaderContent({
       >
         {workstationTitle}
       </span>
-      {data.active ? (
-        <GraphSemanticIcon
-          className="h-4 w-4 shrink-0 text-success"
-          kind="active-work"
-          label={messages.activeBadgeLabel}
-          locale={data.locale}
-        />
-      ) : null}
     </>
   );
 }

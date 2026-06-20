@@ -6,6 +6,7 @@ import type {
   DashboardPlaceRef,
   DashboardWorkstationNode,
 } from "../../../api/dashboard/types";
+import { WorkstationKind } from "../../../api/generated/openapi";
 import {
   type CurrentActivityWorkstationNode,
   WorkstationNodeView,
@@ -42,6 +43,7 @@ const workTypePlace: DashboardPlaceRef = {
 
 const workstation: DashboardWorkstationNode = {
   node_id: "workstation:draft",
+  workstation_kind: WorkstationKind.WorkstationKindStandard,
   workstation_name: "Draft",
 };
 
@@ -182,5 +184,42 @@ describe("CurrentActivity node hover surfaces", () => {
     expect(mutedWorkstationShell?.className).toContain(
       MUTED_HOVER_OPACITY_CLASS,
     );
+  });
+
+  it("keeps active workstation state visible without a trailing header badge", () => {
+    const activeWorkstation = renderWorkstationNode({
+      active: true,
+      activeFlow: true,
+      executions: [
+        {
+          dispatch_id: "dispatch-1",
+          started_at: "2026-06-09T00:00:00Z",
+          work_items: [{ work_id: "work-1", work_type: "story" }],
+        },
+      ],
+      onSelectWorkstation: vi.fn(),
+    });
+
+    const workstationShell = activeWorkstation.container.querySelector(
+      "[data-current-activity-node-type='workstation']",
+    );
+    const headerButton = activeWorkstation.getByRole("button", {
+      name: "Select Draft workstation",
+    });
+
+    expect(workstationShell?.className).toContain("border-af-success-border");
+    expect(workstationShell?.className).toContain("ring-af-success-border");
+    expect(
+      activeWorkstation.container.querySelector("[data-active='true']"),
+    ).toBeTruthy();
+    expect(
+      headerButton.querySelector("[data-graph-semantic-icon='active-work']"),
+    ).toBeNull();
+    expect(
+      headerButton.querySelector("[data-workstation-semantic-icon]"),
+    ).toBeTruthy();
+    expect(
+      headerButton.querySelector("[data-workstation-title]")?.textContent,
+    ).toBe("Draft");
   });
 });
