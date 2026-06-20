@@ -261,16 +261,49 @@ func assertWorksNotAtDonePlace(t *testing.T, f factory.Factory, workIDs []string
 
 func waitForWorkDoneAfterResume(t *testing.T, f factory.Factory, workID string) {
 	t.Helper()
-	waitForAggregateSnapshot(t, f, func(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
+	waitForAggregateSnapshotWithTimeout(t, f, 2*time.Second, func(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
 		return markingContainsWorkAtPlace(&snap.Marking, workID, "task:done")
 	})
 }
 
 func waitForQuiescentWorksAtDone(t *testing.T, f factory.Factory, workIDs []string) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
 	t.Helper()
-	return waitForAggregateSnapshot(t, f, func(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
+	return waitForAggregateSnapshotWithTimeout(t, f, 5*time.Second, func(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool {
 		return allWorksAtDonePlace(&snap.Marking, workIDs) && snap.InFlightCount == 0
 	})
+}
+
+func waitForAggregateSnapshotWithTimeout(
+	t *testing.T,
+	f factory.Factory,
+	timeout time.Duration,
+	match func(*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) bool,
+) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	var last *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+	for time.Now().Before(deadline) {
+		snap, err := f.GetEngineStateSnapshot(context.Background())
+		if err != nil {
+			t.Fatalf("GetEngineStateSnapshot: %v", err)
+		}
+		last = snap
+		if match(snap) {
+			return snap
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if last == nil {
+		t.Fatal("timed out waiting for aggregate snapshot; no snapshot captured")
+	}
+	t.Fatalf("timed out waiting for aggregate snapshot after %s; last status=%q in_flight=%d tick=%d",
+		timeout,
+		last.RuntimeStatus,
+		last.InFlightCount,
+		last.TickCount,
+	)
+	return nil
 }
 
 func assertDispatchOrder(t *testing.T, history []interfaces.CompletedDispatch, wantWorkIDs []string) {
