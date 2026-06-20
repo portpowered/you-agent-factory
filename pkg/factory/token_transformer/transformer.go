@@ -52,6 +52,7 @@ type OutputTokenInput struct {
 	InputColors         []interfaces.TokenColor
 	Output              string
 	WorkPropagationMode interfaces.WorkPropagationMode
+	WorkstationName     string
 	Outcome             interfaces.WorkOutcome
 	TransitionID        string
 	Error               string
@@ -179,7 +180,9 @@ func (t *Transformer) OutputToken(in OutputTokenInput) (*interfaces.Token, error
 		if place := t.places[arc.PlaceID]; place != nil {
 			targetTypeID = place.TypeID
 		}
-		applyOutputPayloadPropagation(&color, in, targetTypeID)
+		if err := applyOutputPayloadPropagation(&color, in, targetTypeID); err != nil {
+			return nil, err
+		}
 	}
 
 	if token := reuseConsumedResourceToken(in, arc, color); token != nil {
@@ -199,9 +202,9 @@ func (t *Transformer) OutputToken(in OutputTokenInput) (*interfaces.Token, error
 	return token, nil
 }
 
-func applyOutputPayloadPropagation(color *interfaces.TokenColor, in OutputTokenInput, targetTypeID string) {
+func applyOutputPayloadPropagation(color *interfaces.TokenColor, in OutputTokenInput, targetTypeID string) error {
 	if color == nil {
-		return
+		return nil
 	}
 	mode := in.WorkPropagationMode
 	if mode == "" {
@@ -209,29 +212,65 @@ func applyOutputPayloadPropagation(color *interfaces.TokenColor, in OutputTokenI
 	}
 	switch mode {
 	case interfaces.WorkPropagationModePreserveInput:
-		applyPreservedInputPayload(color, in, targetTypeID)
+		return ApplyPreservedInputToColor(color, in.InputColors, targetTypeID, in.WorkstationName)
 	default:
 		if in.Output != "" {
 			color.Payload = []byte(in.Output)
 		}
+		return nil
 	}
 }
 
-func applyPreservedInputPayload(color *interfaces.TokenColor, in OutputTokenInput, targetTypeID string) {
+// PreserveInputApplicationError reports invalid PRESERVE_INPUT routing.
+type PreserveInputApplicationError struct {
+	WorkstationName string
+}
+
+func (e *PreserveInputApplicationError) Error() string {
+	name := e.WorkstationName
+	if name == "" {
+		name = "workstation"
+	}
+	return fmt.Sprintf(
+		`workstation %q cannot apply work propagation PRESERVE_INPUT: preserve-input requires consumed non-resource input work`,
+		name,
+	)
+}
+
+// ApplyPreservedInputToColor copies payload, content, and tags from the selected
+// consumed input work onto a routed output color when they are not already set.
+func ApplyPreservedInputToColor(
+	color *interfaces.TokenColor,
+	inputColors []interfaces.TokenColor,
+	targetTypeID string,
+	workstationName string,
+) error {
+	if color == nil {
+		return nil
+	}
 	if len(color.Payload) > 0 {
-		return
+		return nil
 	}
-	source := findMatchingInput(in.InputColors, targetTypeID)
+	source := SelectedPreserveInputSource(inputColors, targetTypeID)
 	if source == nil {
-		source = firstNonResourceInput(in.InputColors)
-	}
-	if source == nil {
-		return
+		return &PreserveInputApplicationError{WorkstationName: workstationName}
 	}
 	color.Payload = factorypkg.CloneRuntimePayload(source.Payload)
 	if len(color.Content) == 0 && len(source.Content) > 0 {
 		color.Content = interfaces.CloneWorkContentParts(source.Content)
 	}
+	if len(color.Tags) == 0 && len(source.Tags) > 0 {
+		color.Tags = factorypkg.CloneRuntimeTags(source.Tags)
+	}
+	return nil
+}
+
+// SelectedPreserveInputSource resolves the consumed input work used for preserve-input routing.
+func SelectedPreserveInputSource(inputColors []interfaces.TokenColor, targetTypeID string) *interfaces.TokenColor {
+	if source := findMatchingInput(inputColors, targetTypeID); source != nil {
+		return source
+	}
+	return firstNonResourceInput(inputColors)
 }
 
 func reuseConsumedResourceToken(in OutputTokenInput, arc petri.Arc, color interfaces.TokenColor) *interfaces.Token {
