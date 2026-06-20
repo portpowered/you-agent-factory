@@ -78,8 +78,9 @@ func TestSessionPauseCommand_HelpDocumentsOperatorControls(t *testing.T) {
 
 	help := out.String()
 	for _, want := range []string{
-		"pause [session-id]",
-		"default compatibility session",
+		"pause <session-id>",
+		"dur-sess-",
+		"you session list --scope all",
 		"already-paused",
 		"invalid-state",
 		"not-found",
@@ -109,7 +110,7 @@ func TestSessionPauseCommand_GlobalJSONMapsToConfig(t *testing.T) {
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "pause", "session-beta"})
+	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "pause", "dur-sess-js-run-n-001"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute session pause with global --json: %v", err)
@@ -120,8 +121,8 @@ func TestSessionPauseCommand_GlobalJSONMapsToConfig(t *testing.T) {
 	if got.Server != "http://127.0.0.1:9090" {
 		t.Fatalf("server = %q, want http://127.0.0.1:9090", got.Server)
 	}
-	if got.SessionID != "session-beta" {
-		t.Fatalf("sessionId = %q, want session-beta", got.SessionID)
+	if got.SessionID != "dur-sess-js-run-n-001" {
+		t.Fatalf("sessionId = %q, want dur-sess-js-run-n-001", got.SessionID)
 	}
 }
 
@@ -140,7 +141,7 @@ func TestSessionResumeCommand_GlobalJSONMapsToConfig(t *testing.T) {
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "resume", "session-beta"})
+	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "resume", "dur-sess-js-run-n-001"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("execute session resume with global --json: %v", err)
@@ -151,33 +152,19 @@ func TestSessionResumeCommand_GlobalJSONMapsToConfig(t *testing.T) {
 	if got.Server != "http://127.0.0.1:9090" {
 		t.Fatalf("server = %q, want http://127.0.0.1:9090", got.Server)
 	}
-	if got.SessionID != "session-beta" {
-		t.Fatalf("sessionId = %q, want session-beta", got.SessionID)
+	if got.SessionID != "dur-sess-js-run-n-001" {
+		t.Fatalf("sessionId = %q, want dur-sess-js-run-n-001", got.SessionID)
 	}
 }
 
-func TestSessionPauseCommand_OmittedSessionIDTargetsDefaultCompatibilitySession(t *testing.T) {
-	originalPauseSession := pauseSession
-	defer func() {
-		pauseSession = originalPauseSession
-	}()
-
-	var got session.LifecycleControlConfig
-	pauseSession = func(cfg session.LifecycleControlConfig) error {
-		got = cfg
-		return nil
-	}
-
+func TestSessionPauseCommand_RequiresSessionID(t *testing.T) {
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{"session", "pause"})
 
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute session pause without session id: %v", err)
-	}
-	if got.SessionID != "" {
-		t.Fatalf("sessionId = %q, want empty for default compatibility routing", got.SessionID)
+	if err := root.Execute(); err == nil {
+		t.Fatal("execute session pause without session id: expected error")
 	}
 }
 
@@ -194,8 +181,9 @@ func TestSessionResumeCommand_HelpDocumentsOperatorControls(t *testing.T) {
 
 	help := out.String()
 	for _, want := range []string{
-		"resume [session-id]",
-		"default compatibility session",
+		"resume <session-id>",
+		"dur-sess-",
+		"you session list --scope all",
 		"already-running",
 		"invalid-state",
 		"not-found",

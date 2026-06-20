@@ -12,23 +12,30 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
 
-func TestPause_DefaultSessionRoutesToCompatibilitySession(t *testing.T) {
-	var gotPath string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		encodeLifecycleControlHTTPResponse(t, w, samplePauseAcceptedResponse("dur-sess-default"))
-	}))
-	defer srv.Close()
-
+func TestPause_RejectsNonDurableSessionID(t *testing.T) {
 	err := Pause(LifecycleControlConfig{
-		Server: srv.URL,
+		Server:    "http://127.0.0.1:1",
+		SessionID: "~default",
+		Output:    &bytes.Buffer{},
+	})
+	if err == nil {
+		t.Fatal("Pause: expected error for non-durable session id")
+	}
+	if !strings.Contains(err.Error(), `factory session "~default" does not support pause lifecycle control`) {
+		t.Fatalf("error = %q, want non-durable session rejection", err)
+	}
+}
+
+func TestPause_RejectsMissingSessionID(t *testing.T) {
+	err := Pause(LifecycleControlConfig{
+		Server: "http://127.0.0.1:1",
 		Output: &bytes.Buffer{},
 	})
-	if err != nil {
-		t.Fatalf("Pause: %v", err)
+	if err == nil {
+		t.Fatal("Pause: expected error for missing session id")
 	}
-	if gotPath != "/factory-sessions/~default/pause" {
-		t.Fatalf("path = %q, want default compatibility pause path", gotPath)
+	if !strings.Contains(err.Error(), "factory session id is required") {
+		t.Fatalf("error = %q, want missing session id rejection", err)
 	}
 }
 
@@ -341,28 +348,30 @@ func TestResume_SuccessReturnsAcceptedOutcome(t *testing.T) {
 	}
 }
 
-func TestResume_DefaultSessionRoutesToCompatibilitySession(t *testing.T) {
-	var gotPath string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPath = r.URL.Path
-		encodeLifecycleControlHTTPResponse(t, w, factoryapi.FactorySessionLifecycleControlResponse{
-			SessionId: "dur-sess-default",
-			Operation: factoryapi.FactorySessionLifecycleControlKindResume,
-			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
-			Status:    factoryapi.FactorySessionDurableLifecycleStatusRunning,
-		})
-	}))
-	defer srv.Close()
-
+func TestResume_RejectsNonDurableSessionID(t *testing.T) {
 	err := Resume(LifecycleControlConfig{
-		Server: srv.URL,
+		Server:    "http://127.0.0.1:1",
+		SessionID: "session-beta",
+		Output:    &bytes.Buffer{},
+	})
+	if err == nil {
+		t.Fatal("Resume: expected error for non-durable session id")
+	}
+	if !strings.Contains(err.Error(), `factory session "session-beta" does not support resume lifecycle control`) {
+		t.Fatalf("error = %q, want non-durable session rejection", err)
+	}
+}
+
+func TestResume_RejectsMissingSessionID(t *testing.T) {
+	err := Resume(LifecycleControlConfig{
+		Server: "http://127.0.0.1:1",
 		Output: &bytes.Buffer{},
 	})
-	if err != nil {
-		t.Fatalf("Resume: %v", err)
+	if err == nil {
+		t.Fatal("Resume: expected error for missing session id")
 	}
-	if gotPath != "/factory-sessions/~default/resume" {
-		t.Fatalf("path = %q, want default compatibility resume path", gotPath)
+	if !strings.Contains(err.Error(), "factory session id is required") {
+		t.Fatalf("error = %q, want missing session id rejection", err)
 	}
 }
 
