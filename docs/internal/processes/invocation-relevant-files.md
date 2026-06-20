@@ -59,6 +59,12 @@ primary-result behavior.
   `@you/goal` factory. Behavioral proof for named goal batch invocation lives
   in `tests/functional/smoke/cli_named_goal_run_smoke_test.go` using the real
   `you run --named @you/goal` CLI path with `--with-mock-workers`.
+- `tests/functional/smoke/cli_run_mode_compat_smoke_test.go` holds focused
+  regression coverage for adjacent `you run` modes after packaged-goal changes:
+  operator-oriented continuous startup output without `--quiet`, factory text
+  invocation stdout that suppresses operator chatter, and named-goal batch
+  stdout that stays primary-result-only. Reuse helpers from
+  `cli_factory_prompt_run_smoke_test.go` when extending these regressions.
 - `pkg/packagedfactories/tts/` owns packaged TTS invocation metadata shaping
   helpers used when `INFERENCE_RUN` (or legacy `MODEL_INVOKE`) work completes on the `execute-tts` workstation.
   `metadata.go` derives the `backend` metadata field from the loaded on-disk
