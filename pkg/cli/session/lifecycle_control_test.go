@@ -32,6 +32,85 @@ func TestPause_DefaultSessionRoutesToCompatibilitySession(t *testing.T) {
 	}
 }
 
+func TestPause_HumanOutputReportsPausedOutcome(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		encodeLifecycleControlHTTPResponse(t, w, samplePauseAcceptedResponse("dur-sess-pause-001"))
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := Pause(LifecycleControlConfig{
+		Server:    srv.URL,
+		SessionID: "dur-sess-pause-001",
+		Output:    &out,
+	})
+	if err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+	text := strings.TrimSpace(out.String())
+	if text != "Paused Factory session dur-sess-pause-001 (lifecycle status: PAUSED)." {
+		t.Fatalf("output = %q", text)
+	}
+}
+
+func TestPause_HumanOutputReportsAlreadyPausedOutcome(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		encodeLifecycleControlHTTPResponse(t, w, factoryapi.FactorySessionLifecycleControlResponse{
+			SessionId: "dur-sess-paused-001",
+			Operation: factoryapi.FactorySessionLifecycleControlKindPause,
+			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeNoOp,
+			Status:    factoryapi.FactorySessionDurableLifecycleStatusPaused,
+		})
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := Pause(LifecycleControlConfig{
+		Server:    srv.URL,
+		SessionID: "dur-sess-paused-001",
+		Output:    &out,
+	})
+	if err != nil {
+		t.Fatalf("Pause no-op: %v", err)
+	}
+	text := strings.TrimSpace(out.String())
+	if text != "Factory session dur-sess-paused-001 is already paused." {
+		t.Fatalf("output = %q", text)
+	}
+}
+
+func TestPause_HumanOutputReportsInvalidStateOutcome(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		if err := json.NewEncoder(w).Encode(factoryapi.FactorySessionLifecycleControlResponse{
+			SessionId: "dur-sess-awaiting-001",
+			Operation: factoryapi.FactorySessionLifecycleControlKindPause,
+			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeInvalidState,
+			Status:    factoryapi.FactorySessionDurableLifecycleStatusAwaitingApproval,
+			Detail:    lifecycleControlStringPtr("pause is not allowed while awaiting approval"),
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := Pause(LifecycleControlConfig{
+		Server:    srv.URL,
+		SessionID: "dur-sess-awaiting-001",
+		Output:    &out,
+	})
+	if err == nil {
+		t.Fatal("expected invalid-state error")
+	}
+	text := strings.TrimSpace(out.String())
+	want := "Factory session dur-sess-awaiting-001 cannot be paused while lifecycle status is AWAITING_APPROVAL. pause is not allowed while awaiting approval"
+	if text != want {
+		t.Fatalf("output = %q, want %q", text, want)
+	}
+}
+
 func TestPause_SuccessReturnsAcceptedOutcome(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		encodeLifecycleControlHTTPResponse(t, w, samplePauseAcceptedResponse("dur-sess-pause-001"))
@@ -170,6 +249,58 @@ func TestPause_UnreachableHostReturnsTransportError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "not reachable") {
 		t.Fatalf("error = %q, want unreachable-host wording", err.Error())
+	}
+}
+
+func TestResume_HumanOutputReportsResumedOutcome(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		encodeLifecycleControlHTTPResponse(t, w, factoryapi.FactorySessionLifecycleControlResponse{
+			SessionId: "dur-sess-paused-001",
+			Operation: factoryapi.FactorySessionLifecycleControlKindResume,
+			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+			Status:    factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		})
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := Resume(LifecycleControlConfig{
+		Server:    srv.URL,
+		SessionID: "dur-sess-paused-001",
+		Output:    &out,
+	})
+	if err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+	text := strings.TrimSpace(out.String())
+	if text != "Resumed Factory session dur-sess-paused-001 (lifecycle status: RUNNING)." {
+		t.Fatalf("output = %q", text)
+	}
+}
+
+func TestResume_HumanOutputReportsAlreadyRunningOutcome(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		encodeLifecycleControlHTTPResponse(t, w, factoryapi.FactorySessionLifecycleControlResponse{
+			SessionId: "dur-sess-running-001",
+			Operation: factoryapi.FactorySessionLifecycleControlKindResume,
+			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeNoOp,
+			Status:    factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		})
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := Resume(LifecycleControlConfig{
+		Server:    srv.URL,
+		SessionID: "dur-sess-running-001",
+		Output:    &out,
+	})
+	if err != nil {
+		t.Fatalf("Resume no-op: %v", err)
+	}
+	text := strings.TrimSpace(out.String())
+	if text != "Factory session dur-sess-running-001 is already running." {
+		t.Fatalf("output = %q", text)
 	}
 }
 

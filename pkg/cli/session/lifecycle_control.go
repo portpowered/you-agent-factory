@@ -209,14 +209,7 @@ func writeLifecycleControlResponse(
 	if cfg.JSON {
 		return json.NewEncoder(cfg.Output).Encode(response)
 	}
-	_, err := fmt.Fprintf(
-		cfg.Output,
-		"Factory session %s %s: %s (%s)\n",
-		response.SessionId,
-		strings.ToLower(string(response.Operation)),
-		response.Outcome,
-		response.Status,
-	)
+	_, err := fmt.Fprintln(cfg.Output, lifecycleControlHumanLine(response))
 	return err
 }
 

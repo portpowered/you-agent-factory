@@ -20,6 +20,8 @@ func TestSessionCommand_RegistersSubcommands(t *testing.T) {
 	for _, path := range [][]string{
 		{"session", "list"},
 		{"session", "show"},
+		{"session", "pause"},
+		{"session", "resume"},
 		{"session", "create"},
 		{"session", "delete"},
 	} {
@@ -44,10 +46,14 @@ func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	for _, want := range []string{
 		"list",
 		"show",
+		"pause",
+		"resume",
 		"create",
 		"delete",
 		"you session list",
 		"you session show",
+		"you session pause",
+		"you session resume",
 		"you session list --json",
 		"you session create --dir /workspace/fleet --port 9090",
 		"you session delete session-beta --port 9090 --json",
@@ -55,6 +61,64 @@ func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("session help missing %q:\n%s", want, help)
+		}
+	}
+}
+
+func TestSessionPauseCommand_HelpDocumentsOperatorControls(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"session", "pause", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session pause --help: %v", err)
+	}
+
+	help := out.String()
+	for _, want := range []string{
+		"pause [session-id]",
+		"default compatibility session",
+		"already-paused",
+		"invalid-state",
+		"not-found",
+		"unreachable-host",
+		"Factory Session",
+		"you session pause",
+		"--json",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("session pause help missing %q:\n%s", want, help)
+		}
+	}
+}
+
+func TestSessionResumeCommand_HelpDocumentsOperatorControls(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"session", "resume", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session resume --help: %v", err)
+	}
+
+	help := out.String()
+	for _, want := range []string{
+		"resume [session-id]",
+		"default compatibility session",
+		"already-running",
+		"invalid-state",
+		"not-found",
+		"unreachable-host",
+		"Factory Session",
+		"you session resume",
+		"--json",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("session resume help missing %q:\n%s", want, help)
 		}
 	}
 }
