@@ -631,7 +631,7 @@ func (s *JavaScriptRuntimeService) runAsyncSession(
 			},
 		}
 		terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, failureOutcome, startedAt)
-		s.applyTerminalRuntimeState(state, terminal, startedAt)
+		s.applyTerminalRuntimeState(state, terminal, failureOutcome, startedAt)
 		persistState := cloneRuntimeSessionState(state)
 		s.mu.Unlock()
 		_ = s.persistTerminalSessionState(persistState)
@@ -639,15 +639,20 @@ func (s *JavaScriptRuntimeService) runAsyncSession(
 	}
 
 	terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, outcome, startedAt)
-	s.applyTerminalRuntimeState(state, terminal, startedAt)
+	s.applyTerminalRuntimeState(state, terminal, outcome, startedAt)
 	persistState := cloneRuntimeSessionState(state)
 	s.mu.Unlock()
 	_ = s.persistTerminalSessionState(persistState)
 }
 
-func (s *JavaScriptRuntimeService) applyTerminalRuntimeState(state *runtimeSessionState, terminal runtimeSessionState, startedAt time.Time) {
+func (s *JavaScriptRuntimeService) applyTerminalRuntimeState(
+	state *runtimeSessionState,
+	terminal runtimeSessionState,
+	outcome workflowruntime.Outcome,
+	startedAt time.Time,
+) {
 	finishedAt := time.Now().UTC()
-	applyRuntimeSessionFields(state, terminal)
+	applyTerminalRuntimeProjection(state, terminal, outcome)
 	if state.session.Lifecycle == nil {
 		state.session.Lifecycle = &LifecycleTimestamps{}
 	}

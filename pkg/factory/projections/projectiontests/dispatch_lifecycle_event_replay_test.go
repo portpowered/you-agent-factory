@@ -39,6 +39,51 @@ func TestReconstructFactoryWorldState_JavaScriptDispatchLifecycleReconstructsQue
 	}
 }
 
+func TestReconstructFactoryWorldState_JavaScriptDispatchLifecycleSuppressesLateReconcileAfterInterrupt(t *testing.T) {
+	t0 := time.Date(2026, 6, 9, 14, 10, 0, 0, time.UTC)
+	events := []factoryapi.FactoryEvent{
+		javascriptRunRequestEvent(t0),
+		dispatchQueuedEvent(1, t0.Add(2*time.Second)),
+		dispatchInterruptedEvent(2, t0.Add(3*time.Second)),
+		lateDispatchReconciledEvent(3, t0.Add(4*time.Second)),
+	}
+
+	worldState, err := ReconstructFactoryWorldState(events, 3)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	if worldState.JavaScriptRuntime == nil || len(worldState.JavaScriptRuntime.Dispatches) != 1 {
+		t.Fatalf("dispatches = %#v, want one dispatch", worldState.JavaScriptRuntime)
+	}
+	dispatch := worldState.JavaScriptRuntime.Dispatches[0]
+	if dispatch.Status != string(factoryapi.FactoryDispatchStatusFAILED) {
+		t.Fatalf("dispatch status = %q, want observed FAILED status preserved after suppressed reconcile", dispatch.Status)
+	}
+	if len(dispatch.ArtifactIDs) != 0 {
+		t.Fatalf("artifact ids = %#v, want late reconcile artifacts suppressed", dispatch.ArtifactIDs)
+	}
+}
+
+func lateDispatchReconciledEvent(tick int, eventTime time.Time) factoryapi.FactoryEvent {
+	sessionID := "session-js"
+	kind := factoryapi.JAVASCRIPT
+	dispatchID := "dispatch-js-1"
+	source := "provider-session"
+	context := factoryapi.FactoryEventContext{
+		SessionId:        &sessionID,
+		OrchestratorKind: &kind,
+		DispatchId:       stringPointer(dispatchID),
+		Source:           &source,
+	}
+	payload := factoryapi.DispatchReconciledEventPayload{
+		ReconciledStatus:     factoryapi.FactoryDispatchStatusCOMPLETED,
+		ReconciliationSource: factoryapi.PROVIDERSESSION,
+		Replayed:             false,
+		ArtifactIds:          &[]string{"artifact-result-1"},
+	}
+	return generatedProjectionEvent(factoryapi.FactoryEventTypeDispatchReconciled, "dispatch-reconciled/"+dispatchID, tick, eventTime, context, payload)
+}
+
 func TestReconstructFactoryWorldState_PetriDispatchRequestResponseRemainsRepresentable(t *testing.T) {
 	t0 := time.Date(2026, 6, 9, 14, 15, 0, 0, time.UTC)
 	workItem := interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "draft", TraceID: "trace-1"}

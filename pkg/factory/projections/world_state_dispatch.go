@@ -622,6 +622,10 @@ func (r *factoryWorldReducer) applyDispatchInterruptedEvent(event factoryapi.Fac
 	if dispatchID == "" {
 		return nil
 	}
+	if r.interruptedDispatchIDs == nil {
+		r.interruptedDispatchIDs = make(map[string]struct{})
+	}
+	r.interruptedDispatchIDs[dispatchID] = struct{}{}
 	state := interfaces.FactorySessionDispatchState{
 		ID:     dispatchID,
 		Status: string(payload.ObservedStatus),
@@ -643,6 +647,9 @@ func (r *factoryWorldReducer) applyDispatchReconciledEvent(event factoryapi.Fact
 	}
 	dispatchID := stringValue(event.Context.DispatchId)
 	if dispatchID == "" {
+		return nil
+	}
+	if r.dispatchInterrupted(dispatchID) && !payload.Replayed {
 		return nil
 	}
 	state := interfaces.FactorySessionDispatchState{
@@ -747,6 +754,14 @@ func mergeJavaScriptDispatchState(
 		merged.JavaScript = incoming.JavaScript
 	}
 	return merged
+}
+
+func (r *factoryWorldReducer) dispatchInterrupted(dispatchID string) bool {
+	if r == nil || len(r.interruptedDispatchIDs) == 0 {
+		return false
+	}
+	_, ok := r.interruptedDispatchIDs[strings.TrimSpace(dispatchID)]
+	return ok
 }
 
 func (r *factoryWorldReducer) recountJavaScriptDispatchTotals() {
