@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -152,5 +153,45 @@ func TestFactoryConfigMapper_FlattenRoundTripsWorkPropagation(t *testing.T) {
 	}
 	if *expanded.Workstations[0].WorkPropagation != *cfg.Workstations[0].WorkPropagation {
 		t.Fatalf("expanded WorkPropagation = %#v, want %#v", expanded.Workstations[0].WorkPropagation, cfg.Workstations[0].WorkPropagation)
+	}
+}
+
+func TestFactoryConfigValidator_RejectsUnsupportedWorkPropagationMode(t *testing.T) {
+	cfgJSON := []byte(`{
+		"name":"work-propagation-validation-factory",
+		"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers": [{"name":"executor"}],
+		"workstations": [{
+			"name":"execute-story",
+			"worker":"executor",
+			"inputs":[{"workType":"story","state":"init"}],
+			"outputs":[{"workType":"story","state":"complete"}],
+			"onFailure":[{"workType":"story","state":"failed"}],
+			"workPropagation":{"mode":"preserve_input"}
+		}]
+	}`)
+
+	cfg, err := FactoryConfigFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+
+	result := NewConfigValidator().Validate(cfg)
+	if !result.HasErrors() {
+		t.Fatal("expected unsupported workPropagation.mode to fail validation")
+	}
+
+	var matched bool
+	for _, finding := range result.Errors() {
+		if finding.Rule != factoryvalidation.CodeWorkstationUnsupportedWorkPropagationMode {
+			continue
+		}
+		matched = true
+		if finding.Path != "factory.workstations[0](execute-story).workPropagation.mode" {
+			t.Fatalf("finding path = %q, want workstation workPropagation path", finding.Path)
+		}
+	}
+	if !matched {
+		t.Fatalf("expected %q finding, got %#v", factoryvalidation.CodeWorkstationUnsupportedWorkPropagationMode, result.Errors())
 	}
 }
