@@ -27,7 +27,7 @@ func TestMaterializePackagedGoalFactory_WritesEditableSplitLayout(t *testing.T) 
 	if worker.Body == "" {
 		t.Fatal("expected worker body loaded from split-layout workers/ directory")
 	}
-	workstation, ok := loaded.Workstation(PackagedInvokeWorkstationName)
+	workstation, ok := loaded.Workstation(PackagedExecuteWorkstationName)
 	if !ok {
 		t.Fatal("expected materialized execute-goal workstation")
 	}
@@ -59,7 +59,7 @@ func assertMaterializedSplitLayout(t *testing.T, factoryDir string) {
 	for _, path := range []string{
 		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
 		filepath.Join(factoryDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName),
-		filepath.Join(factoryDir, interfaces.WorkstationsDir, PackagedInvokeWorkstationName, interfaces.FactoryAgentsFileName),
+		filepath.Join(factoryDir, interfaces.WorkstationsDir, PackagedExecuteWorkstationName, interfaces.FactoryAgentsFileName),
 	} {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("expected materialized path %s: %v", path, err)

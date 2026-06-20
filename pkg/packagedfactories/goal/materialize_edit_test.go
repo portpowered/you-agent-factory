@@ -38,7 +38,7 @@ func TestEditedMaterializedPackagedGoalFactoryWorkstationChangesNextLoad(t *test
 	}
 
 	editedBody := "Execute the customer-edited goal work for {{ .WorkID }}.\n"
-	editMaterializedWorkstationBody(t, factoryDir, PackagedInvokeWorkstationName, editedBody)
+	editMaterializedWorkstationBody(t, factoryDir, PackagedExecuteWorkstationName, editedBody)
 
 	editedWorkstation := loadPackagedGoalWorkstation(t, factoryDir)
 	if editedWorkstation.Body != strings.TrimSpace(editedBody) {
@@ -90,7 +90,7 @@ func loadPackagedGoalWorker(t *testing.T, factoryDir string) *interfaces.WorkerC
 func loadPackagedGoalWorkstation(t *testing.T, factoryDir string) *interfaces.FactoryWorkstationConfig {
 	t.Helper()
 	loaded := loadPackagedGoalRuntimeConfig(t, factoryDir)
-	workstation, ok := loaded.Workstation(PackagedInvokeWorkstationName)
+	workstation, ok := loaded.Workstation(PackagedExecuteWorkstationName)
 	if !ok {
 		t.Fatal("expected materialized execute-goal workstation")
 	}
