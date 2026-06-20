@@ -961,11 +961,18 @@ var BuiltInGoalFactoryJSON = []byte(`{
   "id": "builtin-goal",
   "workTypes": [
     {
-      "name": "task",
+      "name": "goal",
       "handlingBehavior": ["DEFAULT"],
       "states": [
         {"name": "init", "type": "INITIAL"},
+        {"name": "plan", "type": "PROCESSING"},
+        {"name": "execute", "type": "PROCESSING"},
+        {"name": "check", "type": "PROCESSING"},
+        {"name": "review", "type": "PROCESSING"},
         {"name": "complete", "type": "TERMINAL"},
+        {"name": "blocked", "type": "PROCESSING"},
+        {"name": "needs-human", "type": "PROCESSING"},
+        {"name": "interrupted", "type": "PROCESSING"},
         {"name": "failed", "type": "FAILED"}
       ]
     }
@@ -983,13 +990,13 @@ var BuiltInGoalFactoryJSON = []byte(`{
       "type": "MODEL_WORKSTATION",
       "worker": "goal-executor",
       "inputs": [
-        {"workType": "task", "state": "init"}
+        {"workType": "goal", "state": "init"}
       ],
       "outputs": [
-        {"workType": "task", "state": "complete"}
+        {"workType": "goal", "state": "complete"}
       ],
       "onFailure": [
-        {"workType": "task", "state": "failed"}
+        {"workType": "goal", "state": "failed"}
       ],
       "body": "Execute the requested goal work for {{ .WorkID }}."
     }
