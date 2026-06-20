@@ -1,6 +1,7 @@
 package goal
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -69,5 +70,60 @@ func TestPackagedGoalInvocationPrimaryResult_ReturnsSummaryNotSubmittedInput(t *
 	}
 	if selection.PrimaryResult[0].Text == submitted.Content[0].Text {
 		t.Fatalf("primary result echoed submitted goal text")
+	}
+}
+
+func TestPackagedGoalInvocationPrimaryResult_UnresolvedWhenConfiguredTerminalMissing(t *testing.T) {
+	requestID := "req-goal-unresolved"
+	workID := "work-goal-unresolved"
+	submitted := interfaces.FactoryWorkItem{
+		ID:         workID,
+		WorkTypeID: PackagedInvocationReturnWorkTypeName,
+		State:      "init",
+		TraceID:    requestID,
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "customer goal request text",
+		}},
+	}
+	failedTerminal := interfaces.FactoryWorkItem{
+		ID:         workID,
+		WorkTypeID: PackagedInvocationReturnWorkTypeName,
+		State:      "failed",
+		TraceID:    requestID,
+		PlaceID:    PackagedInvocationReturnWorkTypeName + ":failed",
+		Content:    submitted.Content,
+	}
+
+	state := interfaces.FactoryWorldState{
+		PayloadLineage:   interfaces.WorkPayloadLineageProjection{},
+		WorkRequestsByID: make(map[string]interfaces.WorkRequestPayload),
+		TerminalWorkByID: make(map[string]interfaces.FactoryTerminalWork),
+	}
+	state.WorkRequestsByID[requestID] = interfaces.WorkRequestPayload{
+		RequestID: requestID,
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		WorkItems: []interfaces.FactoryWorkItem{submitted},
+	}
+	state.PayloadLineage.RecordWorkRequestSnapshot(1, requestID, submitted)
+	state.PayloadLineage.RecordConsumedInputSnapshot("dispatch-goal", submitted)
+	state.PayloadLineage.RecordDispatchOutputSnapshot(2, "dispatch-goal", []interfaces.FactoryWorkItem{submitted}, failedTerminal, 0)
+	state.TerminalWorkByID[workID] = interfaces.FactoryTerminalWork{WorkItem: failedTerminal, Status: "FAILED"}
+
+	_, err := invocations.ResolvePrimaryResult(invocations.PrimaryResultSelectionInput{
+		RequestID: requestID,
+		InvocationReturn: &interfaces.InvocationReturnConfig{
+			Policy:        "EXPLICIT",
+			WorkTypeName:  PackagedInvocationReturnWorkTypeName,
+			TerminalState: PackagedInvocationReturnTerminalState,
+		},
+		WorldState: state,
+	})
+	var selectionErr *invocations.PrimaryResultError
+	if !errors.As(err, &selectionErr) {
+		t.Fatalf("error = %v, want PrimaryResultError", err)
+	}
+	if selectionErr.Code != invocations.PrimaryResultErrorCodeUnresolved {
+		t.Fatalf("code = %q, want %q", selectionErr.Code, invocations.PrimaryResultErrorCodeUnresolved)
 	}
 }

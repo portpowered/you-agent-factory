@@ -81,12 +81,20 @@ func scaffoldPackagedGoalInvocationFactoryForSmoke(t *testing.T) string {
 	cfg["name"] = "@you/goal"
 	cfg["invocationReturn"] = map[string]any{
 		"policy":        "EXPLICIT",
-		"workTypeName":  "prompt-task",
+		"workTypeName":  "goal",
 		"terminalState": "complete",
 	}
+	workTypes := cfg["workTypes"].([]map[string]any)
+	workTypes[0]["name"] = "goal"
 	workstations := cfg["workstations"].([]map[string]any)
 	workstations[0]["name"] = "execute-goal"
 	workstations[0]["worker"] = "goal-executor"
+	for _, ioKey := range []string{"inputs", "outputs", "onFailure"} {
+		ios := workstations[0][ioKey].([]map[string]string)
+		for i := range ios {
+			ios[i]["workType"] = "goal"
+		}
+	}
 	cfg["workers"] = []map[string]string{{"name": "goal-executor"}}
 
 	dir := support.ScaffoldFactory(t, cfg)

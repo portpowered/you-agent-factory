@@ -53,6 +53,25 @@ func TestSessionInvocationAPI_PackagedGoalReturnsExplicitSummaryPrimaryResult(t 
 	}
 }
 
+func TestSessionInvocationAPI_PackagedGoalUnresolvedPrimaryResultReturnsFailedStatus(t *testing.T) {
+	dir := scaffoldPackagedGoalInvocationFactory(t)
+	server := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.ProviderCommandRunnerOverride = support.NewStaticSuccessCommandRunner("goal output without stop token")
+	})
+
+	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke packaged goal", nil))
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want FAILED", response.Status)
+	}
+	if response.ErrorCode == nil || *response.ErrorCode != factoryapi.INVOCATIONPRIMARYRESULTUNRESOLVED {
+		t.Fatalf("invocation errorCode = %#v, want INVOCATION_PRIMARY_RESULT_UNRESOLVED", response.ErrorCode)
+	}
+	if response.PrimaryResult != nil {
+		t.Fatalf("invocation primaryResult = %#v, want nil on unresolved output", response.PrimaryResult)
+	}
+}
+
 func scaffoldPackagedGoalInvocationFactory(t *testing.T) string {
 	t.Helper()
 
