@@ -436,6 +436,7 @@ describe("SubmitWorkCard submission textarea", () => {
     expect(submissionTextarea.className).toContain("overflow-y-auto");
     expect(submissionTextarea.className).toContain("resize-none");
     expect(submissionTextarea.className).toContain("border-outline");
+    expect(submissionTextarea.className).toContain("af-styled-scrollbar");
 
     Object.defineProperty(submissionTextarea, "scrollHeight", {
       configurable: true,

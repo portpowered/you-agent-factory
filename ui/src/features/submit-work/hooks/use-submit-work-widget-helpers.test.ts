@@ -51,6 +51,28 @@ describe("buildStructuredSubmitItems", () => {
     ]);
   });
 
+  it("preserves long text payloads without truncation or added formatting", () => {
+    const longText = "line\n".repeat(80).trimEnd();
+    const draft: SubmitWorkDraft = {
+      items: [
+        {
+          id: "submission-item-1",
+          text: longText,
+          type: "text",
+        },
+      ],
+      requestName: "Long text review",
+      workTypeName: "story",
+    };
+
+    expect(buildStructuredSubmitItems(draft)).toEqual([
+      {
+        text: longText,
+        type: "text",
+      },
+    ]);
+  });
+
   it("omits file-backed items that are not fully staged", () => {
     const draft: SubmitWorkDraft = {
       items: [
