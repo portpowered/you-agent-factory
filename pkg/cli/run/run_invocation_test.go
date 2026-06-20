@@ -10,6 +10,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
+	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
@@ -458,6 +460,578 @@ func TestRun_FactoryInvocationFailureKeepsStdoutEmpty(t *testing.T) {
 	if output.Len() != 0 {
 		t.Fatalf("stdout = %q, want empty on invocation failure", output.String())
 	}
+}
+
+const namedGoalParityText = "Plan the sprint from CLI and API parity coverage"
+
+func TestResolveFactoryInvocationRequest_NamedGoalInputSourcesMatchSharedResolver(t *testing.T) {
+	planSprint := "Plan the sprint"
+	stdinText := "Ship the feature from stdin"
+
+	tests := []struct {
+		name       string
+		cfg        RunConfig
+		wantSource invocations.InputSourceLabel
+		wantText   string
+	}{
+		{
+			name: "positional text",
+			cfg: RunConfig{
+				Dir:                      "/tmp/builtin-goal",
+				NamedFactoryName:         goal.PackagedFactoryName,
+				InvocationPositionalText: &planSprint,
+				StdinIsTTY:               func() bool { return true },
+			},
+			wantSource: invocations.InputSourcePositionalText,
+			wantText:   planSprint,
+		},
+		{
+			name: "explicit stdin text",
+			cfg: RunConfig{
+				Dir:                 "/tmp/builtin-goal",
+				NamedFactoryName:    goal.PackagedFactoryName,
+				InvocationStdinText: &stdinText,
+				StdinIsTTY:          func() bool { return true },
+			},
+			wantSource: invocations.InputSourceStdinText,
+			wantText:   stdinText,
+		},
+		{
+			name: "piped non-tty stdin",
+			cfg: RunConfig{
+				Dir:              "/tmp/builtin-goal",
+				NamedFactoryName: goal.PackagedFactoryName,
+				Stdin:            strings.NewReader("Ship from pipe\n"),
+				StdinIsTTY:       func() bool { return false },
+			},
+			wantSource: invocations.InputSourceStdinText,
+			wantText:   "Ship from pipe\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			request, invocationMode, err := resolveFactoryInvocationRequest(tc.cfg)
+			if err != nil {
+				t.Fatalf("resolveFactoryInvocationRequest: %v", err)
+			}
+			if !invocationMode {
+				t.Fatal("expected invocation mode for named goal input source")
+			}
+			assertInvocationRequestMatchesSharedResolver(t, request, tc.wantSource, tc.wantText)
+		})
+	}
+}
+
+func TestRun_NamedGoalPositionalInvocationWritesPrimaryResult(t *testing.T) {
+	preserveRunGlobals(t)
+
+	text := "Plan the sprint"
+	var output bytes.Buffer
+
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubInvocationService{
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			},
+			invoke: func(_ context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				if sessionID != defaultFactorySessionID {
+					t.Fatalf("sessionID = %q, want %q", sessionID, defaultFactorySessionID)
+				}
+				assertInvocationRequestMatchesSharedResolver(t, &request, invocations.InputSourcePositionalText, text)
+				return apisurface.FactoryInvocationResult{
+					RequestID: "request-goal-positional",
+					TraceID:   "trace-goal-positional",
+					Status:    factoryapi.InvocationTerminalStatusCompleted,
+					PrimaryResult: []interfaces.WorkContentPart{{
+						Type: interfaces.WorkContentPartTypeText,
+						Text: "goal completed",
+					}},
+				}, nil
+			},
+		}, nil
+	}
+
+	err := Run(context.Background(), RunConfig{
+		Dir:                      "/tmp/builtin-goal",
+		NamedFactoryName:         goal.PackagedFactoryName,
+		InvocationPositionalText: &text,
+		StdinIsTTY:               func() bool { return true },
+		Output:                   &output,
+		Port:                     7437,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := output.String(); got != "goal completed" {
+		t.Fatalf("stdout = %q, want primary result text", got)
+	}
+}
+
+func TestRun_NamedGoalExplicitStdinInvocationWritesPrimaryResult(t *testing.T) {
+	preserveRunGlobals(t)
+
+	stdinText := "Ship the feature from explicit stdin"
+	var output bytes.Buffer
+
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubInvocationService{
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			},
+			invoke: func(_ context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				if sessionID != defaultFactorySessionID {
+					t.Fatalf("sessionID = %q, want %q", sessionID, defaultFactorySessionID)
+				}
+				assertInvocationRequestMatchesSharedResolver(t, &request, invocations.InputSourceStdinText, stdinText)
+				return apisurface.FactoryInvocationResult{
+					RequestID: "request-goal-stdin",
+					TraceID:   "trace-goal-stdin",
+					Status:    factoryapi.InvocationTerminalStatusCompleted,
+					PrimaryResult: []interfaces.WorkContentPart{{
+						Type: interfaces.WorkContentPartTypeText,
+						Text: "goal stdin completed",
+					}},
+				}, nil
+			},
+		}, nil
+	}
+
+	err := Run(context.Background(), RunConfig{
+		Dir:                 "/tmp/builtin-goal",
+		NamedFactoryName:    goal.PackagedFactoryName,
+		InvocationStdinText: &stdinText,
+		StdinIsTTY:          func() bool { return true },
+		Output:              &output,
+		Port:                7437,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := output.String(); got != "goal stdin completed" {
+		t.Fatalf("stdout = %q, want primary result text", got)
+	}
+}
+
+func TestRun_NamedGoalPipedStdinInvocationWritesPrimaryResult(t *testing.T) {
+	preserveRunGlobals(t)
+
+	stdinText := "Ship from pipe\n"
+	var output bytes.Buffer
+
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubInvocationService{
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			},
+			invoke: func(_ context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				if sessionID != defaultFactorySessionID {
+					t.Fatalf("sessionID = %q, want %q", sessionID, defaultFactorySessionID)
+				}
+				assertInvocationRequestMatchesSharedResolver(t, &request, invocations.InputSourceStdinText, stdinText)
+				return apisurface.FactoryInvocationResult{
+					RequestID: "request-goal-pipe",
+					TraceID:   "trace-goal-pipe",
+					Status:    factoryapi.InvocationTerminalStatusCompleted,
+					PrimaryResult: []interfaces.WorkContentPart{{
+						Type: interfaces.WorkContentPartTypeText,
+						Text: "goal pipe completed",
+					}},
+				}, nil
+			},
+		}, nil
+	}
+
+	err := Run(context.Background(), RunConfig{
+		Dir:              "/tmp/builtin-goal",
+		NamedFactoryName: goal.PackagedFactoryName,
+		Stdin:            strings.NewReader(stdinText),
+		StdinIsTTY:       func() bool { return false },
+		Output:           &output,
+		Port:             7437,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if got := output.String(); got != "goal pipe completed" {
+		t.Fatalf("stdout = %q, want primary result text", got)
+	}
+}
+
+func TestResolveFactoryInvocationRequest_NamedGoalRejectsConflictingSources(t *testing.T) {
+	text := "Plan from args"
+
+	tests := []struct {
+		name string
+		cfg  RunConfig
+	}{
+		{
+			name: "positional text with piped non-tty stdin",
+			cfg: RunConfig{
+				Dir:                      "/tmp/builtin-goal",
+				NamedFactoryName:         goal.PackagedFactoryName,
+				InvocationPositionalText: &text,
+				Stdin:                    strings.NewReader("Plan from stdin\n"),
+				StdinIsTTY:               func() bool { return false },
+			},
+		},
+		{
+			name: "positional text with explicit stdin text",
+			cfg: RunConfig{
+				Dir:                      "/tmp/builtin-goal",
+				NamedFactoryName:         goal.PackagedFactoryName,
+				InvocationPositionalText: &text,
+				InvocationStdinText:      stringPtr("Plan from explicit stdin"),
+				StdinIsTTY:               func() bool { return true },
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, invocationMode, err := resolveFactoryInvocationRequest(tc.cfg)
+			if !invocationMode {
+				t.Fatal("expected invocation mode when both sources are present for named goal")
+			}
+			assertStableSourceConflictError(t, err)
+		})
+	}
+}
+
+func TestRun_NamedGoalConflictingSourcesFailsBeforeInvocation(t *testing.T) {
+	preserveRunGlobals(t)
+
+	text := "Plan from args"
+	var output bytes.Buffer
+	invokeCalled := false
+
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubInvocationService{
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			},
+			invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				invokeCalled = true
+				t.Fatal("expected conflicting goal invocation sources to fail before InvokeFactorySession")
+				return apisurface.FactoryInvocationResult{}, nil
+			},
+		}, nil
+	}
+
+	err := Run(context.Background(), RunConfig{
+		Dir:                      "/tmp/builtin-goal",
+		NamedFactoryName:         goal.PackagedFactoryName,
+		InvocationPositionalText: &text,
+		Stdin:                    strings.NewReader("Plan from stdin\n"),
+		StdinIsTTY:               func() bool { return false },
+		Output:                   &output,
+		Port:                     7437,
+	})
+	if err == nil {
+		t.Fatal("expected conflicting goal invocation sources to fail")
+	}
+	assertStableSourceConflictError(t, err)
+	if invokeCalled {
+		t.Fatal("expected InvokeFactorySession to stay uncalled for conflicting goal sources")
+	}
+	if output.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty on conflicting-source failure", output.String())
+	}
+}
+
+func TestNamedGoalCLIAndAPIInvocationRequestsMatchForSameLogicalText(t *testing.T) {
+	apiRequest, err := invocationRequestFromLogicalAPIText(namedGoalParityText)
+	if err != nil {
+		t.Fatalf("invocationRequestFromLogicalAPIText: %v", err)
+	}
+
+	stdinText := namedGoalParityText
+	tests := []struct {
+		name string
+		cfg  RunConfig
+	}{
+		{
+			name: "positional cli",
+			cfg: RunConfig{
+				Dir:                      "/tmp/builtin-goal",
+				NamedFactoryName:         goal.PackagedFactoryName,
+				InvocationPositionalText: stringPtr(namedGoalParityText),
+				StdinIsTTY:               func() bool { return true },
+			},
+		},
+		{
+			name: "explicit stdin cli",
+			cfg: RunConfig{
+				Dir:                 "/tmp/builtin-goal",
+				NamedFactoryName:    goal.PackagedFactoryName,
+				InvocationStdinText: stringPtr(namedGoalParityText),
+				StdinIsTTY:          func() bool { return true },
+			},
+		},
+		{
+			name: "piped stdin cli",
+			cfg: RunConfig{
+				Dir:              "/tmp/builtin-goal",
+				NamedFactoryName: goal.PackagedFactoryName,
+				Stdin:            strings.NewReader(stdinText),
+				StdinIsTTY:       func() bool { return false },
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cliRequest, invocationMode, err := resolveFactoryInvocationRequest(tc.cfg)
+			if err != nil {
+				t.Fatalf("resolveFactoryInvocationRequest: %v", err)
+			}
+			if !invocationMode {
+				t.Fatal("expected invocation mode for named goal parity input source")
+			}
+			assertEquivalentInvocationRequests(t, cliRequest, apiRequest)
+		})
+	}
+}
+
+func TestRun_NamedGoalInvocationSuccessParityAcrossCLIAndAPIEnvelope(t *testing.T) {
+	preserveRunGlobals(t)
+
+	sharedResult := apisurface.FactoryInvocationResult{
+		RequestID: "request-goal-parity-success",
+		TraceID:   "trace-goal-parity-success",
+		Status:    factoryapi.InvocationTerminalStatusCompleted,
+		PrimaryResult: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "goal parity completed",
+		}},
+	}
+
+	var textOutput bytes.Buffer
+	var jsonOutput bytes.Buffer
+	invoke := func(_ context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+		if sessionID != defaultFactorySessionID {
+			t.Fatalf("sessionID = %q, want %q", sessionID, defaultFactorySessionID)
+		}
+		apiRequest, err := invocationRequestFromLogicalAPIText(namedGoalParityText)
+		if err != nil {
+			t.Fatalf("invocationRequestFromLogicalAPIText: %v", err)
+		}
+		assertEquivalentInvocationRequests(t, &request, apiRequest)
+		return sharedResult, nil
+	}
+
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubInvocationService{
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			},
+			invoke: invoke,
+		}, nil
+	}
+
+	baseCfg := RunConfig{
+		Dir:                      "/tmp/builtin-goal",
+		NamedFactoryName:         goal.PackagedFactoryName,
+		InvocationPositionalText: stringPtr(namedGoalParityText),
+		StdinIsTTY:               func() bool { return true },
+		Port:                     7437,
+	}
+
+	if err := Run(context.Background(), withRunOutput(baseCfg, &textOutput)); err != nil {
+		t.Fatalf("Run text output: %v", err)
+	}
+	if got := textOutput.String(); got != "goal parity completed" {
+		t.Fatalf("stdout = %q, want primary result text", got)
+	}
+
+	jsonCfg := baseCfg
+	jsonCfg.JSONOutput = true
+	if err := Run(context.Background(), withRunOutput(jsonCfg, &jsonOutput)); err != nil {
+		t.Fatalf("Run json output: %v", err)
+	}
+
+	var cliResponse factoryapi.InvocationResponse
+	if err := json.Unmarshal(bytes.TrimSpace(jsonOutput.Bytes()), &cliResponse); err != nil {
+		t.Fatalf("decode CLI invocation response: %v\n%s", err, jsonOutput.String())
+	}
+	assertInvocationResponseMatchesFactoryResult(t, cliResponse, sharedResult)
+}
+
+func TestNamedGoalInvocationSourceConflictParityAcrossCLIAndAPIContract(t *testing.T) {
+	text := "Plan from args"
+	conflictMessage := "invocation input sources conflict: positional_text, stdin_text"
+
+	cliCfg := RunConfig{
+		Dir:                      "/tmp/builtin-goal",
+		NamedFactoryName:         goal.PackagedFactoryName,
+		InvocationPositionalText: &text,
+		Stdin:                    strings.NewReader("Plan from stdin\n"),
+		StdinIsTTY:               func() bool { return false },
+	}
+	_, _, cliErr := resolveFactoryInvocationRequest(cliCfg)
+	assertStableSourceConflictError(t, cliErr)
+	assertStableInvocationSourceConflictMessage(t, cliErr.Error(), conflictMessage)
+
+	apiErr := &invocations.InputError{
+		Code:    invocations.InputErrorCodeSourceConflict,
+		Message: conflictMessage,
+	}
+	assertStableInvocationSourceConflictMessage(t, apiErr.Error(), conflictMessage)
+}
+
+func assertStableSourceConflictError(t *testing.T, err error) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatal("expected stable source conflict error")
+	}
+	for _, want := range []string{
+		string(invocations.InputErrorCodeSourceConflict),
+		string(invocations.InputSourcePositionalText),
+		string(invocations.InputSourceStdinText),
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want %q", err.Error(), want)
+		}
+	}
+}
+
+func stringPtr(value string) *string {
+	return &value
+}
+
+func assertInvocationRequestMatchesSharedResolver(
+	t *testing.T,
+	request *factoryapi.InvocationRequest,
+	source invocations.InputSourceLabel,
+	text string,
+) {
+	t.Helper()
+
+	if request == nil {
+		t.Fatal("invocation request = nil")
+	}
+	if request.SourceKind != factoryapi.InvocationInputSourceKindText {
+		t.Fatalf("sourceKind = %q, want text", request.SourceKind)
+	}
+
+	sources := invocations.TextInputSources{}
+	switch source {
+	case invocations.InputSourcePositionalText:
+		sources.PositionalText = &text
+	case invocations.InputSourceStdinText:
+		sources.StdinText = &text
+	default:
+		t.Fatalf("unsupported source label %q", source)
+	}
+
+	resolved, err := invocations.ResolveTextInput(sources)
+	if err != nil {
+		t.Fatalf("ResolveTextInput: %v", err)
+	}
+	want := invocationRequestFromResolvedInput(resolved)
+	if got := extractInvocationText(t, request); got != extractInvocationText(t, want) {
+		t.Fatalf("invocation text = %q, want %q", got, extractInvocationText(t, want))
+	}
+	if request.SourceKind != want.SourceKind {
+		t.Fatalf("sourceKind = %q, want %q", request.SourceKind, want.SourceKind)
+	}
+}
+
+func assertStableInvocationSourceConflictMessage(t *testing.T, got string, wantMessage string) {
+	t.Helper()
+
+	for _, fragment := range []string{
+		string(invocations.InputSourcePositionalText),
+		string(invocations.InputSourceStdinText),
+		wantMessage,
+	} {
+		if !strings.Contains(got, fragment) {
+			t.Fatalf("error = %q, want fragment %q", got, fragment)
+		}
+	}
+}
+
+func invocationRequestFromLogicalAPIText(text string) (*factoryapi.InvocationRequest, error) {
+	resolved, err := invocations.ResolveAPITextInputContent([]interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: text,
+	}})
+	if err != nil {
+		return nil, err
+	}
+	return invocationRequestFromResolvedInput(resolved), nil
+}
+
+func assertEquivalentInvocationRequests(
+	t *testing.T,
+	cliRequest *factoryapi.InvocationRequest,
+	apiRequest *factoryapi.InvocationRequest,
+) {
+	t.Helper()
+
+	if cliRequest == nil || apiRequest == nil {
+		t.Fatal("invocation request = nil")
+	}
+	if cliRequest.SourceKind != apiRequest.SourceKind {
+		t.Fatalf("sourceKind = %q, want %q", cliRequest.SourceKind, apiRequest.SourceKind)
+	}
+	if got := extractInvocationText(t, cliRequest); got != extractInvocationText(t, apiRequest) {
+		t.Fatalf("invocation text = %q, want %q", got, extractInvocationText(t, apiRequest))
+	}
+}
+
+func assertInvocationResponseMatchesFactoryResult(
+	t *testing.T,
+	response factoryapi.InvocationResponse,
+	result apisurface.FactoryInvocationResult,
+) {
+	t.Helper()
+
+	if response.RequestId != result.RequestID {
+		t.Fatalf("requestId = %q, want %q", response.RequestId, result.RequestID)
+	}
+	if response.TraceId != result.TraceID {
+		t.Fatalf("traceId = %q, want %q", response.TraceId, result.TraceID)
+	}
+	if response.Status != result.Status {
+		t.Fatalf("status = %q, want %q", response.Status, result.Status)
+	}
+	assertGeneratedWorkContentPartsFromResponse(t, response.PrimaryResult, result.PrimaryResult)
+}
+
+func assertGeneratedWorkContentPartsFromResponse(
+	t *testing.T,
+	content *factoryapi.WorkContent,
+	want []interfaces.WorkContentPart,
+) {
+	t.Helper()
+
+	if content == nil {
+		t.Fatal("primary result content = nil")
+	}
+	if len(*content) != len(want) {
+		t.Fatalf("primary result parts = %d, want %d", len(*content), len(want))
+	}
+	for i, part := range want {
+		gotPart, err := (*content)[i].AsWorkTextContentPart()
+		if err != nil {
+			t.Fatalf("AsWorkTextContentPart[%d]: %v", i, err)
+		}
+		if gotPart.Text != part.Text {
+			t.Fatalf("primary result[%d].text = %q, want %q", i, gotPart.Text, part.Text)
+		}
+	}
+}
+
+func withRunOutput(cfg RunConfig, output *bytes.Buffer) RunConfig {
+	cfg.Output = output
+	return cfg
 }
 
 func extractInvocationText(t *testing.T, request *factoryapi.InvocationRequest) string {
