@@ -239,7 +239,11 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 		mutations = append(reconcileMutations, mutations...)
 	}
 	mutations = append(mutations, t.releaseResourceTokensOnFailureMutations(resolved.outcome, result.TransitionID, consumedTokens, arcs, now)...)
-	mutations = append(mutations, t.getSpawnedWorkMutations(workstationDef, inputColors, resolved, now)...)
+	spawnedMutations, err := t.getSpawnedWorkMutations(workstationDef, inputColors, resolved, now)
+	if err != nil {
+		return nil, interfaces.CompletedDispatch{}, nil, err
+	}
+	mutations = append(mutations, spawnedMutations...)
 	mutations = append(mutations, t.createFanoutGuardToken(inputColors, resolved, now)...)
 
 	t.logger.Info("releasing tokens", "transition", result.TransitionID, "outcome", resolved.outcome, "mutation_count", len(mutations))
@@ -632,18 +636,24 @@ func (t *TransitionerSubsystem) getSpawnedWorkMutations(
 	inputColors []interfaces.TokenColor,
 	result resolvedWorkResult,
 	now time.Time,
-) []interfaces.MarkingMutation {
+) ([]interfaces.MarkingMutation, error) {
 	mutations := []interfaces.MarkingMutation{}
 	workPropagationMode := workstationconfig.WorkPropagationMode(workstation)
+	workstationName := ""
+	if workstation != nil {
+		workstationName = workstation.Name
+	}
 	for i := range result.spawnedWork {
 		spawnColor := interfaces.CloneTokenColor(result.spawnedWork[i])
 		if workPropagationMode == interfaces.WorkPropagationModePreserveInput {
-			token_transformer.ApplyPreservedInputToColor(&spawnColor, inputColors, spawnColor.WorkTypeID)
+			if err := token_transformer.ApplyPreservedInputToColor(&spawnColor, inputColors, spawnColor.WorkTypeID, workstationName); err != nil {
+				return nil, err
+			}
 		}
 		spawnMuts := t.createSpawnedTokens(&spawnColor, result.transitionID, now)
 		mutations = append(mutations, spawnMuts...)
 	}
-	return mutations
+	return mutations, nil
 }
 
 func calculateArcs(currentTransition *petri.Transition, outcome interfaces.WorkOutcome) ([]petri.Arc, error) {
@@ -689,6 +699,10 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 	mutations := make([]interfaces.MarkingMutation, 0)
 	workOutputIndex := 0
 	workPropagationMode := workstationconfig.WorkPropagationMode(in.workstation)
+	workstationName := ""
+	if in.workstation != nil {
+		workstationName = in.workstation.Name
+	}
 	for arcIdx, arc := range in.arcs {
 		baseInput := token_transformer.OutputTokenInput{
 			ArcIndex:            arcIdx,
@@ -697,6 +711,7 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 			InputColors:         in.inputColors,
 			Output:              in.result.output,
 			WorkPropagationMode: workPropagationMode,
+			WorkstationName:     workstationName,
 			Outcome:             in.result.outcome,
 			TransitionID:        in.result.transitionID,
 			Error:               in.result.err,

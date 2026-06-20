@@ -1,7 +1,9 @@
 package token_transformer
 
 import (
+	"errors"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -979,5 +981,125 @@ func TestOutputToken_PreserveInput_MultiOutput_EachLaneKeepsConsumedWorkData(t *
 		if token.Color.Tags["objective"] != "goal-1" {
 			t.Fatalf("arc %d tags = %#v, want preserved input tags", arcIdx, token.Color.Tags)
 		}
+	}
+}
+
+func TestOutputToken_PreserveInput_WithoutConsumedWorkInput_ReturnsDiagnostic(t *testing.T) {
+	transformer := New(
+		map[string]*petri.Place{
+			"task:done": {ID: "task:done", TypeID: "task"},
+		},
+		map[string]*state.WorkType{
+			"task": {ID: "task"},
+		},
+	)
+
+	_, err := transformer.OutputToken(OutputTokenInput{
+		ArcIndex: 0,
+		Arcs: []petri.Arc{
+			{PlaceID: "task:done", Direction: petri.ArcOutput},
+		},
+		InputColors:         nil,
+		Output:              "worker-output",
+		WorkPropagationMode: interfaces.WorkPropagationModePreserveInput,
+		WorkstationName:     "review-story",
+		Outcome:             interfaces.OutcomeAccepted,
+		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	})
+	if err == nil {
+		t.Fatal("OutputToken() error = nil, want preserve-input diagnostic")
+	}
+	var preserveErr *PreserveInputApplicationError
+	if !errors.As(err, &preserveErr) {
+		t.Fatalf("OutputToken() error = %v, want *PreserveInputApplicationError", err)
+	}
+	if preserveErr.WorkstationName != "review-story" {
+		t.Fatalf("workstation name = %q, want review-story", preserveErr.WorkstationName)
+	}
+	if !strings.Contains(err.Error(), "preserve-input requires consumed non-resource input work") {
+		t.Fatalf("error = %q, want preserve-input requirement explanation", err.Error())
+	}
+}
+
+func TestOutputToken_PreserveInput_OnlyResourceInputs_ReturnsDiagnostic(t *testing.T) {
+	transformer := New(
+		map[string]*petri.Place{
+			"task:done": {ID: "task:done", TypeID: "task"},
+		},
+		map[string]*state.WorkType{
+			"task":     {ID: "task"},
+			"resource": {ID: "resource"},
+		},
+	)
+
+	_, err := transformer.OutputToken(OutputTokenInput{
+		ArcIndex: 0,
+		Arcs: []petri.Arc{
+			{PlaceID: "task:done", Direction: petri.ArcOutput},
+		},
+		InputColors: []interfaces.TokenColor{{
+			WorkTypeID: "resource",
+			WorkID:     "resource-1",
+			DataType:   interfaces.DataTypeResource,
+		}},
+		Output:              "worker-output",
+		WorkPropagationMode: interfaces.WorkPropagationModePreserveInput,
+		WorkstationName:     "review-story",
+		Outcome:             interfaces.OutcomeAccepted,
+		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	})
+	if err == nil {
+		t.Fatal("OutputToken() error = nil, want preserve-input diagnostic")
+	}
+	if !strings.Contains(err.Error(), `workstation "review-story" cannot apply work propagation PRESERVE_INPUT`) {
+		t.Fatalf("error = %q, want workstation-targeted preserve-input diagnostic", err.Error())
+	}
+}
+
+func TestOutputToken_OutputAsPayloadExplicit_UsesWorkerOutput(t *testing.T) {
+	transformer := New(
+		map[string]*petri.Place{
+			"task:done": {ID: "task:done", TypeID: "task"},
+		},
+		map[string]*state.WorkType{
+			"task": {ID: "task"},
+		},
+	)
+
+	token, err := transformer.OutputToken(OutputTokenInput{
+		ArcIndex: 0,
+		Arcs: []petri.Arc{
+			{PlaceID: "task:done", Direction: petri.ArcOutput},
+		},
+		InputColors: []interfaces.TokenColor{{
+			WorkTypeID: "task",
+			WorkID:     "work-1",
+			Payload:    []byte("input-payload"),
+		}},
+		Output:              "worker-output",
+		WorkPropagationMode: interfaces.WorkPropagationModeOutputAsPayload,
+		Outcome:             interfaces.OutcomeAccepted,
+		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("OutputToken() error = %v", err)
+	}
+	if string(token.Color.Payload) != "worker-output" {
+		t.Fatalf("payload = %q, want worker-output", token.Color.Payload)
 	}
 }

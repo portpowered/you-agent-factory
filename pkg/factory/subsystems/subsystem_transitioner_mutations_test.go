@@ -2,6 +2,7 @@ package subsystems
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 	"time"
 
@@ -464,4 +465,93 @@ func (f calculateMutationsFixture) calculateWithWorkstation(
 		inputColors: f.inputColors,
 		transformer: f.transformer,
 	})
+}
+
+func TestCalculateMutations_OutputAsPayloadExplicit_UsesWorkerOutputPayload(t *testing.T) {
+	fixture := newCalculateMutationsFixture()
+	fixture.consumed[0].Color.Payload = []byte("input-payload")
+	fixture.inputColors = tokenColorsFromTokens(fixture.consumed)
+
+	mutations, err := fixture.calculateWithWorkstation(
+		[]petri.Arc{{ID: "out", PlaceID: "wt-code:done"}},
+		resolvedWorkResult{
+			transitionID: "t1",
+			outcome:      interfaces.OutcomeAccepted,
+			output:       "worker-output",
+		},
+		&interfaces.FactoryWorkstationConfig{
+			Name: "execute-story",
+			WorkPropagation: &interfaces.WorkPropagationConfig{
+				Mode: interfaces.WorkPropagationModeOutputAsPayload,
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("calculateMutations() error = %v", err)
+	}
+	if string(mutations[0].NewToken.Color.Payload) != "worker-output" {
+		t.Fatalf("payload = %q, want worker-output", mutations[0].NewToken.Color.Payload)
+	}
+}
+
+func TestCalculateMutations_PreserveInput_WithoutConsumedWorkInput_ReturnsDiagnostic(t *testing.T) {
+	fixture := newCalculateMutationsFixture()
+	fixture.consumed = nil
+	fixture.inputColors = nil
+
+	_, err := fixture.calculateWithWorkstation(
+		[]petri.Arc{{ID: "out", PlaceID: "wt-code:done"}},
+		resolvedWorkResult{
+			transitionID: "t1",
+			outcome:      interfaces.OutcomeAccepted,
+			output:       "worker-output",
+		},
+		&interfaces.FactoryWorkstationConfig{
+			Name: "review-story",
+			WorkPropagation: &interfaces.WorkPropagationConfig{
+				Mode: interfaces.WorkPropagationModePreserveInput,
+			},
+		},
+	)
+	if err == nil {
+		t.Fatal("calculateMutations() error = nil, want preserve-input diagnostic")
+	}
+	if !strings.Contains(err.Error(), `workstation "review-story" cannot apply work propagation PRESERVE_INPUT`) {
+		t.Fatalf("error = %q, want workstation-targeted preserve-input diagnostic", err.Error())
+	}
+}
+
+func TestCalculateMutations_PreserveInput_OnlyResourceInputs_ReturnsDiagnostic(t *testing.T) {
+	fixture := newCalculateMutationsFixture()
+	fixture.consumed = []interfaces.Token{{
+		ID:      "resource-1",
+		PlaceID: "resource:available",
+		Color: interfaces.TokenColor{
+			WorkID:     "resource-1",
+			WorkTypeID: "resource",
+			DataType:   interfaces.DataTypeResource,
+		},
+	}}
+	fixture.inputColors = tokenColorsFromTokens(fixture.consumed)
+
+	_, err := fixture.calculateWithWorkstation(
+		[]petri.Arc{{ID: "out", PlaceID: "wt-code:done"}},
+		resolvedWorkResult{
+			transitionID: "t1",
+			outcome:      interfaces.OutcomeAccepted,
+			output:       "worker-output",
+		},
+		&interfaces.FactoryWorkstationConfig{
+			Name: "review-story",
+			WorkPropagation: &interfaces.WorkPropagationConfig{
+				Mode: interfaces.WorkPropagationModePreserveInput,
+			},
+		},
+	)
+	if err == nil {
+		t.Fatal("calculateMutations() error = nil, want preserve-input diagnostic")
+	}
+	if !strings.Contains(err.Error(), "preserve-input requires consumed non-resource input work") {
+		t.Fatalf("error = %q, want preserve-input requirement explanation", err.Error())
+	}
 }
