@@ -73,19 +73,6 @@ const (
 	GoalRoutingDecisionFailed       = "failed"
 )
 
-// SupportedGoalRoutingDecisions returns the accepted packaged-goal routing vocabulary.
-func SupportedGoalRoutingDecisions() []string {
-	return []string{
-		GoalRoutingDecisionAccepted,
-		GoalRoutingDecisionNeedsChanges,
-		GoalRoutingDecisionTestsFailed,
-		GoalRoutingDecisionNeedsHuman,
-		GoalRoutingDecisionBlocked,
-		GoalRoutingDecisionInterrupted,
-		GoalRoutingDecisionFailed,
-	}
-}
-
 // NormalizeGoalRoutingDecision canonicalizes a packaged-goal envelope decision label.
 func NormalizeGoalRoutingDecision(decision string) (string, error) {
 	trimmed := strings.TrimSpace(decision)

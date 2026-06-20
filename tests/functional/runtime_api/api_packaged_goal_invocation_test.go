@@ -368,10 +368,6 @@ func packagedGoalBuiltInTopologyMockWorkersConfig(reviewModeLabel, reviewerOutpu
 	}
 }
 
-func packagedGoalStructuredReviewMockWorkersConfig(envelopeJSON string) *factoryconfig.MockWorkersConfig {
-	return packagedGoalBuiltInTopologyMockWorkersConfig(goal.PackagedReviewModeStructuredLabel, envelopeJSON)
-}
-
 func packagedGoalReviewClassifierMockWorkersConfig(label string) *factoryconfig.MockWorkersConfig {
 	return &factoryconfig.MockWorkersConfig{
 		MockWorkers: []factoryconfig.MockWorkerConfig{{
