@@ -125,7 +125,26 @@ func TestPackagedGoalBuiltInTopologyScaffold_PrimaryResultIsExecutionSummaryNotR
 func scaffoldPackagedGoalBuiltInTopologyFactory(t *testing.T) (string, *interfaces.InvocationReturnConfig) {
 	t.Helper()
 
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON([]byte(`{
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON([]byte(packagedGoalBuiltInTopologyOpenAPIJSON()))
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+
+	dir := t.TempDir()
+	factoryvalidation.NormalizeFixtureConfig(cfg)
+	data, err := factoryconfig.MarshalCanonicalFactoryConfig(cfg)
+	if err != nil {
+		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
+		t.Fatalf("write factory.json: %v", err)
+	}
+	writePackagedGoalBuiltInTopologyFixtureFiles(t, dir, cfg)
+	return dir, cfg.InvocationReturn
+}
+
+func packagedGoalBuiltInTopologyOpenAPIJSON() string {
+	return `{
 		"name": "@you/goal",
 		"invocationReturn": {
 			"policy": "EXPLICIT",
@@ -194,20 +213,12 @@ func scaffoldPackagedGoalBuiltInTopologyFactory(t *testing.T) (string, *interfac
 				"onFailure": [{"workType": "goal", "state": "failed"}]
 			}
 		]
-	}`))
-	if err != nil {
-		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
-	}
+	}`
+}
 
-	dir := t.TempDir()
-	factoryvalidation.NormalizeFixtureConfig(cfg)
-	data, err := factoryconfig.MarshalCanonicalFactoryConfig(cfg)
-	if err != nil {
-		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, interfaces.FactoryConfigFile), data, 0o644); err != nil {
-		t.Fatalf("write factory.json: %v", err)
-	}
+func writePackagedGoalBuiltInTopologyFixtureFiles(t *testing.T, dir string, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+
 	for _, workstation := range cfg.Workstations {
 		body := "---\ntype: MODEL_WORKSTATION\n---\nProcess packaged goal work.\n"
 		if workstation.Type == interfaces.WorkstationTypeClassify {
@@ -233,7 +244,6 @@ args:
   - "goal-check-ok"
 ---
 `)
-	return dir, cfg.InvocationReturn
 }
 
 func packagedGoalReviewClassifierMockWorkersConfig() *factoryconfig.MockWorkersConfig {
