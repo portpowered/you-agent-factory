@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/config/builtingoal"
 	"github.com/portpowered/infinite-you/pkg/config/inboxgitkeep"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -336,7 +337,7 @@ func expandSingleWorkstation(
 		return 0, 0, fmt.Errorf("write workstation %q prompt file: %w", workstationCfg.Name, err)
 	}
 	promptsWritten = 1
-	if err := writeSupplementaryWorkstationPromptFiles(workstationDir, workstationCfg.Name); err != nil {
+	if err := builtingoal.WriteSupplementaryWorkstationPromptFiles(workstationDir, workstationCfg.Name); err != nil {
 		return 0, 0, err
 	}
 	return agentsWritten, promptsWritten, nil
