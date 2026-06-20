@@ -440,13 +440,32 @@ func (f *factoryImpl) SubscribeFactoryEvents(ctx context.Context, reconnect *int
 	return &stream, nil
 }
 
-// Pause pauses the factory.
+// Pause pauses the factory. Repeated calls while already paused are a no-op.
 func (f *factoryImpl) Pause(_ context.Context) error {
 	f.mu.Lock()
 	previousState := f.state
+	if previousState == interfaces.FactoryStatePaused {
+		f.mu.Unlock()
+		return nil
+	}
 	f.state = interfaces.FactoryStatePaused
 	f.mu.Unlock()
 	f.recordStateChange(previousState, interfaces.FactoryStatePaused, "pause requested")
+	return nil
+}
+
+// Resume re-enables processing for a paused factory.
+func (f *factoryImpl) Resume(_ context.Context) error {
+	f.mu.Lock()
+	previousState := f.state
+	if previousState != interfaces.FactoryStatePaused {
+		f.mu.Unlock()
+		return nil
+	}
+	f.state = interfaces.FactoryStateRunning
+	f.mu.Unlock()
+	f.recordStateChange(previousState, interfaces.FactoryStateRunning, "resume requested")
+	f.engine.WakeForPendingProcessing()
 	return nil
 }
 
