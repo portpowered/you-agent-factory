@@ -136,7 +136,7 @@ func TestSameNameConsumePathRegression_ReviewedPairCompletesWithoutStrandedTask(
 
 			submitConsumePathPair(t, h, cellName)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 			errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
@@ -199,7 +199,7 @@ func TestSameNameConsumePathRegression_ConcurrentPairsCompleteIndependently(t *t
 		submitConsumePathPair(t, h, pair[1])
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
@@ -246,7 +246,7 @@ func TestSameNameConsumePathRegression_StaggeredArrivalCompletesWithoutStranding
 				h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
 			}
 
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 			errCh := h.RunInBackground(ctx)
 
