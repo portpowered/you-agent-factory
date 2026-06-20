@@ -151,10 +151,14 @@ func (h *workerPoolDispatchResultHook) WaitCh() <-chan struct{} {
 	return h.waitCh
 }
 
-func (h *workerPoolDispatchResultHook) HasBufferedResults() bool {
+func (h *workerPoolDispatchResultHook) HasPendingResults() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return len(h.results) > 0
+}
+
+func (h *workerPoolDispatchResultHook) HasBufferedResults() bool {
+	return h.HasPendingResults()
 }
 
 func (h *workerPoolDispatchResultHook) SignalBufferedResults() {

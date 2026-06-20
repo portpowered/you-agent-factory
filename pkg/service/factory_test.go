@@ -12,6 +12,7 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
@@ -703,6 +704,7 @@ type runningSessionServiceOptions struct {
 	rootConfig     map[string]any
 	runtimeLogDir  string
 	recordPath     string
+	extraOptions   []factory.FactoryOption
 }
 
 type runningSessionService struct {
@@ -755,6 +757,7 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 		RuntimeLogDir:     runtimeLogDir,
 		RuntimeMetricsDir: runtimeMetricsDir,
 		RecordPath:        options.recordPath,
+		ExtraOptions:      options.extraOptions,
 	})
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)

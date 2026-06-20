@@ -92,8 +92,12 @@ func (h *testDispatchResultHook) WaitCh() <-chan struct{} {
 	return h.waitCh
 }
 
-func (h *testDispatchResultHook) HasBufferedResults() bool {
+func (h *testDispatchResultHook) HasPendingResults() bool {
 	return len(h.results) > 0
+}
+
+func (h *testDispatchResultHook) HasBufferedResults() bool {
+	return h.HasPendingResults()
 }
 
 func (h *testDispatchResultHook) SignalBufferedResults() {

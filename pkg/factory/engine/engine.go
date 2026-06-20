@@ -208,17 +208,12 @@ func (e *FactoryEngine) WakeForPendingProcessing() {
 }
 
 func (e *FactoryEngine) wakeForPendingProcessing() {
-	if e.submissionHook != nil && len(e.submissionHook.batches) > 0 {
-		select {
-		case e.submitSignal <- struct{}{}:
-		default:
-		}
+	if !e.hasBufferedInputs() {
+		return
 	}
-	if buffer := e.runtimeState.ResultBuffer; buffer != nil && buffer.HasData() {
-		select {
-		case e.submitSignal <- struct{}{}:
-		default:
-		}
+	select {
+	case e.submitSignal <- struct{}{}:
+	default:
 	}
 	if hook, ok := e.dispatchHook.(factory.DispatchResultHookWakeSignaler); ok && hook.HasBufferedResults() {
 		hook.SignalBufferedResults()
@@ -229,11 +224,12 @@ func (e *FactoryEngine) hasBufferedInputs() bool {
 	if e.submissionHook != nil && len(e.submissionHook.batches) > 0 {
 		return true
 	}
-	if buffer := e.runtimeState.ResultBuffer; buffer != nil && buffer.HasData() {
+	buffer := e.runtimeState.ResultBuffer
+	if buffer != nil && buffer.HasData() {
 		return true
 	}
-	if hook, ok := e.dispatchHook.(factory.DispatchResultHookWakeSignaler); ok {
-		return hook.HasBufferedResults()
+	if e.dispatchHook != nil && e.dispatchHook.HasPendingResults() {
+		return true
 	}
 	return false
 }
