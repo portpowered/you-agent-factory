@@ -169,6 +169,83 @@ func TestResolveNamedFactoryAcrossRoots_MaterializesBuiltInIntoGlobalRoot(t *tes
 	}
 }
 
+func TestResolveNamedFactoryAcrossRoots_RepeatedBuiltinGoalResolutionReusesMaterializedDir(t *testing.T) {
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+
+	first, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots(first goal): %v", err)
+	}
+	second, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots(second goal): %v", err)
+	}
+	third, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots(third goal): %v", err)
+	}
+
+	if first.Source != NamedFactoryResolutionSourceBuiltin {
+		t.Fatalf("first resolution source = %q, want builtin materialization", first.Source)
+	}
+	for idx, resolution := range []*NamedFactoryResolution{first, second, third} {
+		if resolution.FactoryDir != first.FactoryDir {
+			t.Fatalf("resolution[%d] dir = %q, want stable %q", idx, resolution.FactoryDir, first.FactoryDir)
+		}
+	}
+	if second.Source != NamedFactoryResolutionSourceGlobal {
+		t.Fatalf("second resolution source = %q, want global reuse of materialized builtin", second.Source)
+	}
+	if third.Source != NamedFactoryResolutionSourceGlobal {
+		t.Fatalf("third resolution source = %q, want global reuse of materialized builtin", third.Source)
+	}
+
+	loaded, err := LoadRuntimeConfigFromFactoryDir(first.FactoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir(stable builtin goal): %v", err)
+	}
+	if loaded.FactoryConfig().Project != "builtin-goal" {
+		t.Fatalf("stable builtin goal project = %q, want builtin-goal", loaded.FactoryConfig().Project)
+	}
+}
+
+func TestResolveNamedFactoryAcrossRoots_UsesEditedMaterializedBuiltInGoalOnNextLoad(t *testing.T) {
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+
+	resolution, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots(initial builtin goal): %v", err)
+	}
+
+	workerPath := filepath.Join(resolution.FactoryDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName)
+	editedBody := "You are the customer-edited @you/goal built-in.\n"
+	if err := os.WriteFile(workerPath, []byte(editedBody), 0o644); err != nil {
+		t.Fatalf("WriteFile(materialized goal worker body): %v", err)
+	}
+
+	resolvedDir, err := ResolveNamedFactoryDirAcrossRoots(projectRoot, globalRoot, "@you/goal")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryDirAcrossRoots(edited builtin goal): %v", err)
+	}
+	if resolvedDir != resolution.FactoryDir {
+		t.Fatalf("resolved dir after edit = %q, want %q", resolvedDir, resolution.FactoryDir)
+	}
+
+	loaded, err := LoadRuntimeConfigFromFactoryDir(resolvedDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir(edited builtin goal): %v", err)
+	}
+	worker, ok := loaded.Worker("goal-executor")
+	if !ok {
+		t.Fatal("expected materialized builtin goal worker")
+	}
+	if worker.Body != strings.TrimSpace(editedBody) {
+		t.Fatalf("edited builtin goal worker body = %q, want %q", worker.Body, strings.TrimSpace(editedBody))
+	}
+}
+
 func TestResolveNamedFactoryAcrossRoots_RepeatedBuiltinResolutionReusesMaterializedDir(t *testing.T) {
 	projectRoot := t.TempDir()
 	globalRoot := t.TempDir()

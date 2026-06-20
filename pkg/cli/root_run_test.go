@@ -969,6 +969,89 @@ func TestRunCommand_NamedFactoryResolutionMetadataFlowsForBuiltInGoal(t *testing
 	}
 }
 
+func TestRunCommand_RepeatedBuiltInGoalRunReusesMaterializedCopy(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	workingDirectory := t.TempDir()
+	homeDir := t.TempDir()
+	originalWorkingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(workingDirectory); err != nil {
+		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
+	}
+	defer func() {
+		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
+			t.Fatalf("restore working directory: %v", chdirErr)
+		}
+	}()
+	t.Setenv("HOME", homeDir)
+
+	var runs []runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		runs = append(runs, cfg)
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+
+	for range 2 {
+		root.SetArgs([]string{"run", "--named", "@you/goal", "--no-record"})
+		if err := root.Execute(); err != nil {
+			t.Fatalf("execute run --named @you/goal: %v", err)
+		}
+	}
+	if len(runs) != 2 {
+		t.Fatalf("run count = %d, want 2", len(runs))
+	}
+
+	first := runs[0]
+	second := runs[1]
+	if first.NamedFactoryResolution.Source != factoryconfig.NamedFactoryResolutionSourceBuiltin {
+		t.Fatalf("first resolution source = %q, want %q", first.NamedFactoryResolution.Source, factoryconfig.NamedFactoryResolutionSourceBuiltin)
+	}
+	if second.NamedFactoryResolution.Source != factoryconfig.NamedFactoryResolutionSourceGlobal {
+		t.Fatalf("second resolution source = %q, want %q", second.NamedFactoryResolution.Source, factoryconfig.NamedFactoryResolutionSourceGlobal)
+	}
+	if second.NamedFactoryResolution.FactoryDir != first.NamedFactoryResolution.FactoryDir {
+		t.Fatalf("second factory dir = %q, want stable %q", second.NamedFactoryResolution.FactoryDir, first.NamedFactoryResolution.FactoryDir)
+	}
+
+	wantMaterializedDir := filepath.Join(homeDir, ".you-agent-factory", "factories", "@you%2Fgoal")
+	workerPath := filepath.Join(wantMaterializedDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName)
+	editedBody := "You are the customer-edited @you/goal built-in.\n"
+	if err := os.WriteFile(workerPath, []byte(editedBody), 0o644); err != nil {
+		t.Fatalf("WriteFile(materialized goal worker body): %v", err)
+	}
+
+	root.SetArgs([]string{"run", "--named", "@you/goal", "--no-record"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --named @you/goal after edit: %v", err)
+	}
+	third := runs[2]
+	if third.NamedFactoryResolution.FactoryDir != wantMaterializedDir {
+		t.Fatalf("third factory dir = %q, want %q", third.NamedFactoryResolution.FactoryDir, wantMaterializedDir)
+	}
+
+	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(third.NamedFactoryResolution.FactoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir(edited goal): %v", err)
+	}
+	worker, ok := loaded.Worker("goal-executor")
+	if !ok {
+		t.Fatal("expected materialized goal worker")
+	}
+	if worker.Body != strings.TrimSpace(editedBody) {
+		t.Fatalf("edited goal worker body = %q, want %q", worker.Body, strings.TrimSpace(editedBody))
+	}
+}
+
 func TestRunCommand_NamedFactoryResolutionMetadataFlowsIntoRunConfig(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
