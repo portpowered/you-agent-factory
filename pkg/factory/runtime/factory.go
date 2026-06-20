@@ -514,20 +514,6 @@ func (f *factoryImpl) Resume(_ context.Context) error {
 	f.recordSessionLifecycleResume()
 	f.markResumeDrainPending()
 	f.logRuntimeLifecycleControl("RESUME", previousState, interfaces.FactoryStateRunning, "ACCEPTED")
-	return nil
-}
-
-// Resume resumes a paused factory and wakes the engine so buffered work can drain.
-func (f *factoryImpl) Resume(_ context.Context) error {
-	f.mu.Lock()
-	previousState := f.state
-	if previousState != interfaces.FactoryStatePaused {
-		f.mu.Unlock()
-		return nil
-	}
-	f.state = interfaces.FactoryStateRunning
-	f.mu.Unlock()
-	f.recordStateChange(previousState, interfaces.FactoryStateRunning, "resume requested")
 	f.engine.WakeForPendingProcessing()
 	return nil
 }

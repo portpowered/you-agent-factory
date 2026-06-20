@@ -403,8 +403,6 @@ func (m *MockFactory) Run(_ context.Context) error    { return nil }
 func (m *MockFactory) Pause(_ context.Context) error  { return nil }
 func (m *MockFactory) Resume(_ context.Context) error { return nil }
 
-func (m *MockFactory) Resume(_ context.Context) error { return nil }
-
 func (m *MockFactory) MoveWork(_ context.Context, workID, stateName string, _ interfaces.WorkStateChangeSource, requestID string) (interfaces.OperatorMoveResult, error) {
 	if m.MoveWorkErr != nil {
 		return interfaces.OperatorMoveResult{}, m.MoveWorkErr
