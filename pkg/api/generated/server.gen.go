@@ -6675,7 +6675,7 @@ type ServerInterface interface {
 	// Get one factory session partial result
 	// (GET /factory-sessions/{session_id}/partial-result)
 	GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request, sessionId SessionID)
-	// Pause one durable factory session
+	// Pause one factory session
 	// (POST /factory-sessions/{session_id}/pause)
 	PauseFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Get one live factory session result
@@ -6684,7 +6684,7 @@ type ServerInterface interface {
 	// Get durable factory session results
 	// (GET /factory-sessions/{session_id}/results)
 	GetFactorySessionResults(w http.ResponseWriter, r *http.Request, sessionId SessionID, params GetFactorySessionResultsParams)
-	// Resume one durable factory session
+	// Resume one factory session
 	// (POST /factory-sessions/{session_id}/resume)
 	ResumeFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Retry one durable factory session dispatch

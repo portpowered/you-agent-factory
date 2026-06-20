@@ -583,8 +583,8 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Pause one durable factory session
-     * @description Pauses one durable factory session while preserving inspectable partial results, dispatches, and artifacts. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
+     * Pause one factory session
+     * @description Pauses one live or durable factory session while preserving inspectable partial results, dispatches, and artifacts. Live workspace sessions use the same route family as durable execution sessions. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
      */
     post: operations["pauseFactorySession"];
     delete?: never;
@@ -603,8 +603,8 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Resume one durable factory session
-     * @description Resumes one paused durable factory session while preserving inspectable partial results, dispatches, and artifacts. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
+     * Resume one factory session
+     * @description Resumes one paused live or durable factory session while preserving inspectable partial results, dispatches, and artifacts. Live workspace sessions use the same route family as durable execution sessions. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
      */
     post: operations["resumeFactorySession"];
     delete?: never;

@@ -1,6 +1,26 @@
 package factorysessionexecution
 
-import "time"
+import (
+	"strings"
+	"time"
+)
+
+// LifecycleStatusFromFactoryRuntimeState maps one live Petri factory runtime state
+// into the shared Factory Session lifecycle vocabulary used by control surfaces.
+func LifecycleStatusFromFactoryRuntimeState(factoryState string) LifecycleStatus {
+	switch strings.ToUpper(strings.TrimSpace(factoryState)) {
+	case "RUNNING", "IDLE":
+		return LifecycleStatusRunning
+	case "PAUSED":
+		return LifecycleStatusPaused
+	case "COMPLETED":
+		return LifecycleStatusSucceeded
+	case "FAILED":
+		return LifecycleStatusFailed
+	default:
+		return ""
+	}
+}
 
 // IsTerminalLifecycleStatus reports whether status is terminal and therefore
 // immutable except for explicitly allowed inspection or retry behaviors.
