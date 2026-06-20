@@ -48,8 +48,14 @@ primary-result behavior.
   invocation input-source rules and the canonical pointers into packaged docs.
   `runInvocationModes` and `resolveRunFactoryPrompt` also treat `you run --named`
   as an invocation factory selector for positional/stdin text.
-- `pkg/config/layout.go` owns the built-in `@you/tts` factory JSON (`BuiltInTTSFactoryJSON`)
+- `pkg/config/layout.go` owns the built-in `@you/goal` factory JSON
+  (`BuiltInGoalFactoryJSON`) and `@you/tts` factory JSON (`BuiltInTTSFactoryJSON`)
   registered from `builtInNamedFactoryCatalog` in `pkg/config/layout.go`.
+- `pkg/packagedfactories/goal/decision_envelope.go` owns the canonical
+  reviewer/checker JSON envelope and its mapping onto `interfaces.WorkResult`.
+- `factory/docs/decision-envelope.md` is the packaged-authoring guide for the
+  reviewer/checker envelope shape, accepted decision values, and malformed-input
+  behavior used by `factory/workstations/review/AGENTS.md`.
 - `pkg/packagedfactories/tts/` owns packaged TTS invocation metadata shaping
   helpers used when `INFERENCE_RUN` (or legacy `MODEL_INVOKE`) work completes on the `execute-tts` workstation.
   `metadata.go` derives the `backend` metadata field from the loaded on-disk
