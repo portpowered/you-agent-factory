@@ -583,8 +583,8 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Pause one durable factory session
-     * @description Pauses one durable factory session while preserving inspectable partial results, dispatches, and artifacts. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
+     * Pause one factory session
+     * @description Pauses one live or durable factory session while preserving inspectable partial results, dispatches, and artifacts. Live workspace sessions use the same route family as durable execution sessions. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
      */
     post: operations["pauseFactorySession"];
     delete?: never;
@@ -603,8 +603,8 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Resume one durable factory session
-     * @description Resumes one paused durable factory session while preserving inspectable partial results, dispatches, and artifacts. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
+     * Resume one factory session
+     * @description Resumes one paused live or durable factory session while preserving inspectable partial results, dispatches, and artifacts. Live workspace sessions use the same route family as durable execution sessions. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
      */
     post: operations["resumeFactorySession"];
     delete?: never;
@@ -1005,6 +1005,8 @@ export interface components {
     StatusResponse: {
       categories: components["schemas"]["StatusCategories"];
       factoryState: string;
+      /** @description Canonical Factory Session lifecycle-control status reconstructed from SESSION_PAUSED and SESSION_RESUMED events when present. Live status reads report PAUSED after a successful pause and RUNNING after a successful resume. */
+      lifecycleControlStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
       runtimeStatus: string;
       totalTokens: number;
       resources?: components["schemas"]["ResourceUsage"][];
@@ -1285,6 +1287,8 @@ export interface components {
       /** @description Stable hash of the effective orchestrator policy. */
       policyHash?: string;
       status: components["schemas"]["FactorySessionStatus"];
+      /** @description Canonical Factory Session lifecycle-control status reconstructed from SESSION_PAUSED and SESSION_RESUMED events when present. Live session inspection reads report PAUSED after a successful pause and RUNNING after a successful resume. */
+      lifecycleControlStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
       progress: components["schemas"]["FactorySessionProgress"];
       budgets?: components["schemas"]["FactorySessionBudgets"];
       usage: components["schemas"]["FactorySessionUsage"];
@@ -1755,6 +1759,26 @@ export interface components {
        * @description When durable session execution started.
        */
       startedAt: string;
+    };
+    /** @description Factory Session lifecycle pause recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only. */
+    SessionPausedEventPayload: {
+      /** @description Lifecycle status after a successful pause control. */
+      status: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+      /**
+       * Format: date-time
+       * @description When the Factory Session entered PAUSED.
+       */
+      pausedAt: string;
+    };
+    /** @description Factory Session lifecycle resume recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only. */
+    SessionResumedEventPayload: {
+      /** @description Lifecycle status after a successful resume control. */
+      status: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+      /**
+       * Format: date-time
+       * @description When the Factory Session returned to RUNNING.
+       */
+      resumedAt: string;
     };
     /** @description Partial or final session result availability on the canonical factory event stream. Identity and ordering live in FactoryEvent.context. */
     SessionResultUpdatedEventPayload: {
@@ -2734,6 +2758,8 @@ export interface components {
         | components["schemas"]["FactoryStateResponseEventPayload"]
         | components["schemas"]["RunResponseEventPayload"]
         | components["schemas"]["SessionStartedEventPayload"]
+        | components["schemas"]["SessionPausedEventPayload"]
+        | components["schemas"]["SessionResumedEventPayload"]
         | components["schemas"]["SessionResultUpdatedEventPayload"]
         | components["schemas"]["SessionCompletedEventPayload"]
         | components["schemas"]["OrchestratorPhaseChangedEventPayload"]
@@ -6343,6 +6369,10 @@ export const FactoryEventType = {
   FactoryEventTypeRunResponse: "RUN_RESPONSE",
   // Durable factory session execution started and replay-safe session facts are available.
   FactoryEventTypeSessionStarted: "SESSION_STARTED",
+  // A Factory Session lifecycle pause control transitioned the session into PAUSED.
+  FactoryEventTypeSessionPaused: "SESSION_PAUSED",
+  // A Factory Session lifecycle resume control transitioned the session into RUNNING.
+  FactoryEventTypeSessionResumed: "SESSION_RESUMED",
   // Partial or final customer-visible session result availability was recorded.
   FactoryEventTypeSessionResultUpdated: "SESSION_RESULT_UPDATED",
   // Durable factory session execution reached a terminal lifecycle state.

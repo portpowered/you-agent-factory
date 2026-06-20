@@ -158,7 +158,9 @@ const (
 	FactoryEventTypeScriptRequest                 FactoryEventType = "SCRIPT_REQUEST"
 	FactoryEventTypeScriptResponse                FactoryEventType = "SCRIPT_RESPONSE"
 	FactoryEventTypeSessionCompleted              FactoryEventType = "SESSION_COMPLETED"
+	FactoryEventTypeSessionPaused                 FactoryEventType = "SESSION_PAUSED"
 	FactoryEventTypeSessionResultUpdated          FactoryEventType = "SESSION_RESULT_UPDATED"
+	FactoryEventTypeSessionResumed                FactoryEventType = "SESSION_RESUMED"
 	FactoryEventTypeSessionStarted                FactoryEventType = "SESSION_STARTED"
 	FactoryEventTypeWorkRequest                   FactoryEventType = "WORK_REQUEST"
 	FactoryEventTypeWorkStateChange               FactoryEventType = "WORK_STATE_CHANGE"
@@ -2404,6 +2406,9 @@ type FactorySessionRuntime struct {
 	Javascript *FactorySessionJavaScriptProjection `json:"javascript,omitempty"`
 	Lifecycle  FactorySessionLifecycle             `json:"lifecycle"`
 
+	// LifecycleControlStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	LifecycleControlStatus *FactorySessionDurableLifecycleStatus `json:"lifecycleControlStatus,omitempty"`
+
 	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
 	OrchestratorKind FactoryOrchestratorKind        `json:"orchestratorKind"`
 	Petri            *FactorySessionPetriProjection `json:"petri,omitempty"`
@@ -4074,6 +4079,15 @@ type SessionCompletedEventPayload struct {
 	ResultStatus *FactoryEventSessionResultStatus `json:"resultStatus,omitempty"`
 }
 
+// SessionPausedEventPayload Factory Session lifecycle pause recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only.
+type SessionPausedEventPayload struct {
+	// PausedAt When the Factory Session entered PAUSED.
+	PausedAt time.Time `json:"pausedAt"`
+
+	// Status Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	Status FactorySessionDurableLifecycleStatus `json:"status"`
+}
+
 // SessionResultUpdatedEventPayload Partial or final session result availability on the canonical factory event stream. Identity and ordering live in FactoryEvent.context.
 type SessionResultUpdatedEventPayload struct {
 	// ArtifactIds Artifact identifiers associated with this result update.
@@ -4084,6 +4098,15 @@ type SessionResultUpdatedEventPayload struct {
 
 	// ResultSummary Ordered canonical content parts for one work item.
 	ResultSummary *WorkContent `json:"resultSummary,omitempty"`
+}
+
+// SessionResumedEventPayload Factory Session lifecycle resume recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only.
+type SessionResumedEventPayload struct {
+	// ResumedAt When the Factory Session returned to RUNNING.
+	ResumedAt time.Time `json:"resumedAt"`
+
+	// Status Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	Status FactorySessionDurableLifecycleStatus `json:"status"`
 }
 
 // SessionStartedEventPayload Session execution start recorded on the canonical factory event stream. Session and orchestrator identity live in FactoryEvent.context; this payload carries replay-safe factory and source facts only.
@@ -4147,11 +4170,14 @@ type StatusCategories struct {
 
 // StatusResponse defines model for StatusResponse.
 type StatusResponse struct {
-	Categories    StatusCategories `json:"categories"`
-	FactoryState  string           `json:"factoryState"`
-	Resources     *[]ResourceUsage `json:"resources,omitempty"`
-	RuntimeStatus string           `json:"runtimeStatus"`
-	TotalTokens   int              `json:"totalTokens"`
+	Categories   StatusCategories `json:"categories"`
+	FactoryState string           `json:"factoryState"`
+
+	// LifecycleControlStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	LifecycleControlStatus *FactorySessionDurableLifecycleStatus `json:"lifecycleControlStatus,omitempty"`
+	Resources              *[]ResourceUsage                      `json:"resources,omitempty"`
+	RuntimeStatus          string                                `json:"runtimeStatus"`
+	TotalTokens            int                                   `json:"totalTokens"`
 }
 
 // StringMap defines model for StringMap.
@@ -5875,6 +5901,58 @@ func (t *FactoryEvent_Payload) MergeSessionStartedEventPayload(v SessionStartedE
 	return err
 }
 
+// AsSessionPausedEventPayload returns the union data inside the FactoryEvent_Payload as a SessionPausedEventPayload
+func (t FactoryEvent_Payload) AsSessionPausedEventPayload() (SessionPausedEventPayload, error) {
+	var body SessionPausedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionPausedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided SessionPausedEventPayload
+func (t *FactoryEvent_Payload) FromSessionPausedEventPayload(v SessionPausedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionPausedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided SessionPausedEventPayload
+func (t *FactoryEvent_Payload) MergeSessionPausedEventPayload(v SessionPausedEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionResumedEventPayload returns the union data inside the FactoryEvent_Payload as a SessionResumedEventPayload
+func (t FactoryEvent_Payload) AsSessionResumedEventPayload() (SessionResumedEventPayload, error) {
+	var body SessionResumedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionResumedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided SessionResumedEventPayload
+func (t *FactoryEvent_Payload) FromSessionResumedEventPayload(v SessionResumedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionResumedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided SessionResumedEventPayload
+func (t *FactoryEvent_Payload) MergeSessionResumedEventPayload(v SessionResumedEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
 // AsSessionResultUpdatedEventPayload returns the union data inside the FactoryEvent_Payload as a SessionResultUpdatedEventPayload
 func (t FactoryEvent_Payload) AsSessionResultUpdatedEventPayload() (SessionResultUpdatedEventPayload, error) {
 	var body SessionResultUpdatedEventPayload
@@ -6614,7 +6692,7 @@ type ServerInterface interface {
 	// Get one factory session partial result
 	// (GET /factory-sessions/{session_id}/partial-result)
 	GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request, sessionId SessionID)
-	// Pause one durable factory session
+	// Pause one factory session
 	// (POST /factory-sessions/{session_id}/pause)
 	PauseFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Get one live factory session result
@@ -6623,7 +6701,7 @@ type ServerInterface interface {
 	// Get durable factory session results
 	// (GET /factory-sessions/{session_id}/results)
 	GetFactorySessionResults(w http.ResponseWriter, r *http.Request, sessionId SessionID, params GetFactorySessionResultsParams)
-	// Resume one durable factory session
+	// Resume one factory session
 	// (POST /factory-sessions/{session_id}/resume)
 	ResumeFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Retry one durable factory session dispatch

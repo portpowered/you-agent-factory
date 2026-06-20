@@ -12,6 +12,10 @@ func (r *factoryWorldReducer) applySessionLifecycleEvent(event factoryapi.Factor
 	switch event.Type {
 	case factoryapi.FactoryEventTypeSessionStarted:
 		return true, r.applySessionStartedEvent(event)
+	case factoryapi.FactoryEventTypeSessionPaused:
+		return true, r.applySessionPausedEvent(event)
+	case factoryapi.FactoryEventTypeSessionResumed:
+		return true, r.applySessionResumedEvent(event)
 	case factoryapi.FactoryEventTypeSessionResultUpdated:
 		return true, r.applySessionResultUpdatedEvent(event)
 	case factoryapi.FactoryEventTypeSessionCompleted:
@@ -40,6 +44,30 @@ func (r *factoryWorldReducer) applySessionStartedEvent(event factoryapi.FactoryE
 	bracket.PolicyHash = stringValue(payload.PolicyHash)
 	bracket.ArgsDigest = stringValue(payload.ArgsDigest)
 	bracket.StartedAt = payload.StartedAt.UTC()
+	return nil
+}
+
+func (r *factoryWorldReducer) applySessionPausedEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsSessionPausedEventPayload()
+	if err != nil {
+		return err
+	}
+	bracket := r.ensureSessionBracket()
+	mergeSessionBracketIdentity(bracket, event.Context)
+	bracket.LifecycleControlStatus = string(payload.Status)
+	bracket.PausedAt = payload.PausedAt.UTC()
+	return nil
+}
+
+func (r *factoryWorldReducer) applySessionResumedEvent(event factoryapi.FactoryEvent) error {
+	payload, err := event.Payload.AsSessionResumedEventPayload()
+	if err != nil {
+		return err
+	}
+	bracket := r.ensureSessionBracket()
+	mergeSessionBracketIdentity(bracket, event.Context)
+	bracket.LifecycleControlStatus = string(payload.Status)
+	bracket.ResumedAt = payload.ResumedAt.UTC()
 	return nil
 }
 
@@ -157,8 +185,11 @@ func buildFactoryWorldSessionBracketProjection(
 		OrchestratorDialect: bracket.OrchestratorDialect,
 		FactoryID:           bracket.FactoryID,
 		SourceRef:           bracket.SourceRef,
-		StartedAt:           bracket.StartedAt,
-		ResultStatus:        bracket.ResultStatus,
+		StartedAt:              bracket.StartedAt,
+		LifecycleControlStatus: bracket.LifecycleControlStatus,
+		PausedAt:               bracket.PausedAt,
+		ResumedAt:              bracket.ResumedAt,
+		ResultStatus:           bracket.ResultStatus,
 		ResultSummary:       cloneWorkContentParts(bracket.ResultSummary),
 		ArtifactIDs:         cloneStringSlice(bracket.ArtifactIDs),
 		Terminal:            bracket.Terminal,
