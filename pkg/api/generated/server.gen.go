@@ -653,6 +653,12 @@ const (
 	WorkOutcomeRejected WorkOutcome = "REJECTED"
 )
 
+// Defines values for WorkPropagationMode.
+const (
+	WorkPropagationModeOutputAsPayload WorkPropagationMode = "OUTPUT_AS_PAYLOAD"
+	WorkPropagationModePreserveInput   WorkPropagationMode = "PRESERVE_INPUT"
+)
+
 // Defines values for WorkRequestType.
 const (
 	WorkRequestTypeFactoryRequestBatch WorkRequestType = "FACTORY_REQUEST_BATCH"
@@ -715,6 +721,11 @@ const (
 	WorkstationKindPoller   WorkstationKind = "POLLER"
 	WorkstationKindRepeater WorkstationKind = "REPEATER"
 	WorkstationKindStandard WorkstationKind = "STANDARD"
+)
+
+// Defines values for WorkstationOutcomeFormat.
+const (
+	WorkstationOutcomeFormatDecisionEnvelope WorkstationOutcomeFormat = "decision-envelope"
 )
 
 // Defines values for WorkstationType.
@@ -4585,6 +4596,15 @@ type WorkMetrics struct {
 // WorkOutcome Result category returned by a workstation execution.
 type WorkOutcome string
 
+// WorkPropagation Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload.
+type WorkPropagation struct {
+	// Mode Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.
+	Mode WorkPropagationMode `json:"mode"`
+}
+
+// WorkPropagationMode Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.
+type WorkPropagationMode string
+
 // WorkRequest defines model for WorkRequest.
 type WorkRequest struct {
 	// CurrentChainingTraceId Optional default chaining-trace identifier applied to submitted work items that omit it.
@@ -4950,6 +4970,9 @@ type Workstation struct {
 	// OperationBindings Optional workstation-authored slot bindings that resolve operation inputs from runtime content or static config content.
 	OperationBindings *[]WorkstationOperationBinding `json:"operationBindings,omitempty"`
 
+	// OutcomeFormat Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+	OutcomeFormat *WorkstationOutcomeFormat `json:"outcomeFormat,omitempty"`
+
 	// OutputSchema JSON schema string used to validate or parse structured model output when configured.
 	OutputSchema *string `json:"outputSchema,omitempty"`
 
@@ -4970,6 +4993,9 @@ type Workstation struct {
 
 	// Type Runtime workstation implementation types supported by the public factory-config contract.
 	Type *WorkstationType `json:"type,omitempty"`
+
+	// WorkPropagation Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload.
+	WorkPropagation *WorkPropagation `json:"workPropagation,omitempty"`
 
 	// Worker Name of a worker declared in the workers list.
 	Worker string `json:"worker"`
@@ -5049,6 +5075,9 @@ type WorkstationOperationBindingSelector struct {
 	// Type Uppercase content-part categories supported by worker model-operation capability slots.
 	Type *ModelOperationContentType `json:"type,omitempty"`
 }
+
+// WorkstationOutcomeFormat Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+type WorkstationOutcomeFormat string
 
 // WorkstationType Runtime workstation implementation types supported by the public factory-config contract.
 type WorkstationType string

@@ -3713,8 +3713,12 @@ export interface components {
       promptFile?: string;
       /** @description JSON schema string used to validate or parse structured model output when configured. */
       outputSchema?: string;
+      /** @description Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing. */
+      outcomeFormat?: components["schemas"]["WorkstationOutcomeFormat"];
       /** @description Retry and execution ceilings applied to this workstation. */
       limits?: components["schemas"]["WorkstationLimits"];
+      /** @description Optional policy for whether downstream work uses the workstation output payload or preserves the consumed input payload. */
+      workPropagation?: components["schemas"]["WorkPropagation"];
       /** @description Inline workstation instructions or script body when authored directly in factory config. */
       body?: string;
       /** @description Cron trigger configuration for workstations whose behavior is CRON. */
@@ -3784,6 +3788,16 @@ export interface components {
       /** @description Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted. */
       expiryWindow?: string;
     };
+    /** @description Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload. */
+    WorkPropagation: {
+      /** @description Propagation mode for downstream work payload selection after this workstation succeeds. */
+      mode: components["schemas"]["WorkPropagationMode"];
+    };
+    /**
+     * @description Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.
+     * @enum {string}
+     */
+    WorkPropagationMode: WorkPropagationMode;
     /**
      * @description Guard condition attached to a workstation or one of its specific inputs.
      * @enum {string}
@@ -4384,6 +4398,11 @@ export interface components {
       /** @description Optional claim-related configuration that v1 hosted Linear polling allows. */
       claim?: components["schemas"]["HostedLinearWorkerClaim"];
     };
+    /**
+     * @description Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+     * @enum {string}
+     */
+    WorkstationOutcomeFormat: WorkstationOutcomeFormat;
   };
   responses: {
     /** @description Request payload or parameter was invalid. */
@@ -6621,6 +6640,14 @@ export const WorkstationType = {
 } as const;
 export type WorkstationType =
   (typeof WorkstationType)[keyof typeof WorkstationType];
+export const WorkPropagationMode = {
+  // Downstream work receives the workstation output payload.
+  WorkPropagationModeOutputAsPayload: "OUTPUT_AS_PAYLOAD",
+  // Downstream work keeps the consumed input payload instead of the workstation output.
+  WorkPropagationModePreserveInput: "PRESERVE_INPUT",
+} as const;
+export type WorkPropagationMode =
+  (typeof WorkPropagationMode)[keyof typeof WorkPropagationMode];
 export const GuardType = {
   // Allows or blocks work based on how many times a workstation has already handled it.
   GuardTypeVisitCount: "VISIT_COUNT",
@@ -6774,6 +6801,12 @@ export const HostedWorkerProvider = {
 } as const;
 export type HostedWorkerProvider =
   (typeof HostedWorkerProvider)[keyof typeof HostedWorkerProvider];
+export const WorkstationOutcomeFormat = {
+  // Parse agent output as a reviewer/checker decision envelope instead of stop-token routing.
+  WorkstationOutcomeFormatDecisionEnvelope: "decision-envelope",
+} as const;
+export type WorkstationOutcomeFormat =
+  (typeof WorkstationOutcomeFormat)[keyof typeof WorkstationOutcomeFormat];
 export const ComponentsParametersSortBy = {
   state_type: "state.type",
 } as const;

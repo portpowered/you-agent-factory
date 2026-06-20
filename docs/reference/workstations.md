@@ -178,6 +178,30 @@ execute:
 | `cron` | Cron only | Trigger timing for `behavior: "CRON"`. |
 | `operation` | `INFERENCE_RUN` only | Uppercase provider-agnostic operation such as `TTS`. |
 | `operationBindings` | `INFERENCE_RUN` only | Deterministic slot bindings from runtime input content, static config content, defaults, or omission. |
+| `workPropagation` | No | Downstream payload policy. Omit to use workstation output as downstream payload (`OUTPUT_AS_PAYLOAD`). Use `PRESERVE_INPUT` to keep the consumed input payload for downstream work. |
+
+## Work Payload Propagation
+
+`workPropagation` controls which payload downstream work receives after a
+workstation succeeds:
+
+- `OUTPUT_AS_PAYLOAD` (default when omitted) replaces downstream work payload
+  with the workstation output payload. This matches current factory behavior.
+- `PRESERVE_INPUT` keeps the consumed input payload for downstream work instead
+  of replacing it with the workstation output payload.
+
+Example preserving the input payload:
+
+```json
+{
+  "name": "annotate-story",
+  "type": "AGENT_RUN",
+  "worker": "reviewer",
+  "inputs": [{ "workType": "story", "state": "in-review" }],
+  "outputs": [{ "workType": "story", "state": "complete" }],
+  "workPropagation": { "mode": "PRESERVE_INPUT" }
+}
+```
 
 ## Implicit Failure Routing
 

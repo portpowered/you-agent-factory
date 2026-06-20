@@ -19,6 +19,7 @@ Before submitting work, read:
 * `docs/internal/progress.txt`
 * `factory/docs/batch-inputs.md`
 * `factory/docs/batch-input-example.json`
+* `factory/docs/decision-envelope.md`
 * `you docs agents`
 * `you docs batch-inputs`
 

@@ -97,8 +97,13 @@ func assertRuntimeSmokePollObservesRunningOrTerminal(t *testing.T, client *stdio
 		status := runtimeSmokeSessionStatus(t, client, sessionID)
 		switch status {
 		case factoryapi.FactorySessionDurableLifecycleStatusRunning:
-			assertRuntimeSmokeRunningNotReady(t, client, sessionID, mode)
-			observedRunningNotReady = true
+			if runtimeSmokeResultIsFinal(t, client, sessionID, mode) {
+				assertRuntimeSmokeTerminalResult(t, client, sessionID, mode)
+				observedTerminal = true
+			} else {
+				assertRuntimeSmokeRunningNotReady(t, client, sessionID, mode)
+				observedRunningNotReady = true
+			}
 		case factoryapi.FactorySessionDurableLifecycleStatusSucceeded:
 			assertRuntimeSmokeTerminalResult(t, client, sessionID, mode)
 			observedTerminal = true
@@ -127,6 +132,25 @@ func runtimeSmokeSessionStatus(t *testing.T, client *stdioMCPClient, sessionID s
 		t.Fatalf("get = %#v, want success", statusResponse)
 	}
 	return statusResponse.Result.Status
+}
+
+func runtimeSmokeResultIsFinal(
+	t *testing.T,
+	client *stdioMCPClient,
+	sessionID string,
+	mode factoryapi.FactorySessionResultMode,
+) bool {
+	t.Helper()
+	response := decodeToolResponse[factoryapi.FactorySessionResult](
+		t,
+		client.callTool(mcpfactorysession.ToolGetResult, map[string]any{
+			"sessionId": sessionID,
+			"mode":      mode,
+		}),
+	)
+	return response.Error == nil &&
+		response.Result != nil &&
+		response.Result.ResultStatus == factoryapi.FactorySessionResultStatusFinal
 }
 
 func assertRuntimeSmokeRunningNotReady(
