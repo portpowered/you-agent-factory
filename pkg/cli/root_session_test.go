@@ -20,6 +20,8 @@ func TestSessionCommand_RegistersSubcommands(t *testing.T) {
 	for _, path := range [][]string{
 		{"session", "list"},
 		{"session", "show"},
+		{"session", "pause"},
+		{"session", "resume"},
 		{"session", "create"},
 		{"session", "delete"},
 	} {
@@ -44,10 +46,14 @@ func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	for _, want := range []string{
 		"list",
 		"show",
+		"pause",
+		"resume",
 		"create",
 		"delete",
 		"you session list",
 		"you session show",
+		"you session pause",
+		"you session resume",
 		"you session list --json",
 		"you session create --dir /workspace/fleet --port 9090",
 		"you session delete session-beta --port 9090 --json",

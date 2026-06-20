@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-06-08
+last-modified: 2026-06-20
 doc-id: agent-factory/guides/sessions
 ---
 
@@ -27,6 +27,7 @@ see `you docs config`.
 | Confirm anything is listening before `you submit` or `POST /factory-sessions/{session_id}/work` | [Session list](#session-list) |
 | Read the active factory name and directory on a live host | [Factory query](#factory-query) |
 | Inspect lifecycle phase, engine activity, and token buckets | [Session status API](#session-status-api) |
+| Pause or resume one live Factory Session without losing buffered work | [Session pause and resume](#session-pause-and-resume) |
 | Open the operator dashboard in a browser | [Dashboard](#dashboard) |
 | Inspect orchestrator-aware runtime for one live session | [Session show](#session-show) and `you docs orchestrators` |
 | Target a non-default session on submit or work commands | [`--server` and `--session`](#server-and-session-routing) |
@@ -107,6 +108,106 @@ show marking token counts and enabled transitions. JavaScript sessions show
 phase, checkpoint refs, child dispatch counts, and dynamic workflow shorthand
 only as JavaScript terminology. See `you docs orchestrators` for the accepted
 alias rules.
+
+## Session pause and resume
+
+`you session pause` and `you session resume` control one live Factory Session
+through the same lifecycle-control routes as
+`POST /factory-sessions/{session_id}/pause` and
+`POST /factory-sessions/{session_id}/resume`. Pause stops new runtime
+processing for the addressed session while preserving inspectable partial
+results, dispatches, and artifacts. Resume returns the Factory Session to
+running lifecycle control and drains buffered work that arrived while the
+session was paused.
+
+The runtime is event-first: successful pause and resume transitions emit
+canonical `SESSION_PAUSED` and `SESSION_RESUMED` events on the Factory Session
+event stream. Live reads such as `you session show`,
+`GET /factory-sessions/{session_id}`, and
+`GET /factory-sessions/{session_id}/status` reconstruct
+`lifecycleControlStatus` and `factoryState` from that canonical history instead
+of inventing frontend-owned lifecycle state. The dashboard replays the same
+events into its session lifecycle banner.
+
+### Copy-paste examples
+
+```bash
+# Pause the default compatibility Factory Session (~default).
+you session pause
+
+# Resume the default compatibility Factory Session.
+you session resume
+
+# Pause or resume one named live session.
+you session pause session-beta
+you session resume session-beta
+
+# API-shaped JSON for automation.
+you --json session pause session-beta
+you --json session resume session-beta
+
+# Non-default host via global --server.
+you --server http://localhost:9090 session pause session-beta
+you --server http://localhost:9090 session resume session-beta
+```
+
+Equivalent API requests:
+
+```bash
+curl -s -X POST "http://localhost:7437/factory-sessions/~default/pause"
+curl -s -X POST "http://localhost:7437/factory-sessions/~default/resume"
+curl -s -X POST "http://localhost:7437/factory-sessions/session-beta/pause"
+curl -s -X POST "http://localhost:7437/factory-sessions/session-beta/resume"
+```
+
+### Expected outcomes
+
+Lifecycle-control responses use typed `outcome` and `status` fields:
+
+| Outcome | Meaning |
+|---------|---------|
+| `ACCEPTED` | Pause or resume applied immediately. |
+| `NO_OP` | The session was already paused or already running. |
+| `INVALID_STATE` | The control is not valid for the current Factory Session status (HTTP `409`). |
+| `TERMINAL_SESSION` | The session already reached a terminal lifecycle status and cannot be paused or resumed (HTTP `409`). |
+
+Human CLI output summarizes the same facts, for example
+`Paused factory session ~default (outcome=ACCEPTED status=PAUSED)` or
+`Factory session ~default already paused (outcome=NO_OP status=PAUSED)`.
+
+### Buffered work while paused
+
+While a Factory Session is paused:
+
+- New work submissions accepted by the running service are buffered instead of
+  being dropped.
+- Worker results that arrive while processing is paused are buffered in the
+  runtime result path.
+- Inspectable partial results, dispatches, and artifacts already recorded on the
+  canonical event stream remain available through `you session show`, session
+  status reads, and the dashboard.
+
+After `you session resume`, the runtime drains buffered submissions and results
+and continues processing from the preserved Factory Session state. Pausing does
+not discard in-flight Factory Session history; it only defers new processing
+until resume.
+
+### Verify pause and resume
+
+```bash
+# Confirm lifecycle-control status on the session read model.
+you session show session-beta
+
+# Read factoryState and lifecycle fields from the status API.
+curl -s "http://localhost:7437/factory-sessions/session-beta/status"
+
+# Watch canonical lifecycle events on the session stream.
+curl -s "http://localhost:7437/factory-sessions/session-beta/events"
+```
+
+When paused, expect `lifecycleControlStatus: "PAUSED"` or `factoryState:
+"PAUSED"` on live reads, plus `SESSION_PAUSED` on the event stream. After
+resume, expect running lifecycle status and `SESSION_RESUMED`.
 
 ## Factory query
 
@@ -260,7 +361,10 @@ When the service was started via `you` or `you run` without `--quiet`, open:
 
 Use the same host and port as the API unless you passed `--server` or `--port` on
 the process that bound the listener. The dashboard shows live session selection,
-work position, and factory activity alongside CLI inspection.
+work position, factory activity, and Factory Session lifecycle control status
+alongside CLI inspection. Paused and running lifecycle copy in the session
+lifecycle banner is derived from canonical API status and replayed
+`SESSION_PAUSED` / `SESSION_RESUMED` events rather than dashboard-owned state.
 
 ## `--server` and `--session` routing
 
@@ -317,15 +421,16 @@ API, CLI, dashboard, and future MCP tools observe the same canonical
 | Surface | How lifecycle is observed |
 |---------|---------------------------|
 | API | `GET /events` and `GET /factory-sessions/{session_id}/events` stream canonical lifecycle variants; reconnect with `after_event_id` or `after_sequence`. |
-| CLI | `you session show` prints lifecycle timestamps, dispatch status, artifact refs, and best-effort partial/final result refs from the session API. |
-| Dashboard | Replays lifecycle events into the timeline projection and shows reconnecting/stale, partial, and terminal states in the session lifecycle banner. |
+| CLI | `you session show` prints lifecycle timestamps, dispatch status, artifact refs, and best-effort partial/final result refs from the session API. `you session pause` and `you session resume` apply lifecycle controls on live Factory Sessions. |
+| Dashboard | Replays lifecycle events into the timeline projection and shows reconnecting/stale, partial, paused, running, and terminal states in the session lifecycle banner. |
 | MCP (planned) | Status/result/event tools should map `NOT_READY`, `PARTIAL`, `FINAL`, `FAILED_WITH_PARTIAL`, `INTERRUPTED`, and `RECONCILED` to the same `FactorySessionResultStatus` and dispatch status vocabulary as the session API and event stream. |
 
-Lifecycle brackets use `SESSION_STARTED`, `SESSION_RESULT_UPDATED`, and
-`SESSION_COMPLETED`. Orchestrator progress, dispatch queue/interruption/reconciliation,
-and `ARTIFACT_CREATED` events remain on the same stream so reconnect replay can rebuild
-phase, dispatch counts, artifact refs, and terminal outcomes without waiting for only
-`SESSION_COMPLETED`.
+Lifecycle brackets use `SESSION_STARTED`, `SESSION_PAUSED`, `SESSION_RESUMED`,
+`SESSION_RESULT_UPDATED`, and `SESSION_COMPLETED`. Orchestrator progress,
+dispatch queue/interruption/reconciliation, and `ARTIFACT_CREATED` events remain
+on the same stream so reconnect replay can rebuild phase, dispatch counts,
+artifact refs, pause/resume lifecycle control status, and terminal outcomes
+without waiting for only `SESSION_COMPLETED`.
 
 ## Related Topics
 
