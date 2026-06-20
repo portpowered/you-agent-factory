@@ -351,6 +351,9 @@ func TestNamedFactoryHelpers_ValidateAndResolvePreparedPayload(t *testing.T) {
 	if err := ValidateNamedFactoryName("@you/tts"); err != nil {
 		t.Fatalf("ValidateNamedFactoryName(@you/tts): %v", err)
 	}
+	if err := ValidateNamedFactoryName("@you/goal"); err != nil {
+		t.Fatalf("ValidateNamedFactoryName(@you/goal): %v", err)
+	}
 	if err := ValidateNamedFactoryName("@broken"); err == nil {
 		t.Fatal("expected invalid scoped name to fail")
 	}

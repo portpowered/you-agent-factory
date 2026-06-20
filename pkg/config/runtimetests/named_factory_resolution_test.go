@@ -119,6 +119,31 @@ func TestResolveNamedFactoryAcrossRoots_RejectsInvalidCanonicalName(t *testing.T
 	}
 }
 
+func TestResolveNamedFactoryAcrossRoots_MaterializesBuiltInGoalIntoGlobalRoot(t *testing.T) {
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+
+	resolution, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots(builtin goal): %v", err)
+	}
+
+	wantDir := filepath.Join(globalRoot, "@you%2Fgoal")
+	assertNamedFactoryResolution(t, resolution, "@you/goal", wantDir, NamedFactoryResolutionSourceBuiltin, projectRoot, globalRoot)
+	if resolution.PrecedenceDecision != NamedFactoryPrecedenceDecisionNone {
+		t.Fatalf("resolution precedence = %q, want %q", resolution.PrecedenceDecision, NamedFactoryPrecedenceDecisionNone)
+	}
+	assertBuiltInGoalMaterializedLayout(t, wantDir)
+
+	loaded, err := LoadRuntimeConfigFromFactoryDir(resolution.FactoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir(materialized builtin goal): %v", err)
+	}
+	if loaded.FactoryConfig().Project != "builtin-goal" {
+		t.Fatalf("materialized builtin project = %q, want builtin-goal", loaded.FactoryConfig().Project)
+	}
+}
+
 func TestResolveNamedFactoryAcrossRoots_MaterializesBuiltInIntoGlobalRoot(t *testing.T) {
 	projectRoot := t.TempDir()
 	globalRoot := t.TempDir()
@@ -233,8 +258,50 @@ func TestResolveNamedFactoryAcrossRoots_ReportsCorruptMaterializedBuiltInTarget(
 	if err == nil {
 		t.Fatal("expected corrupt materialized builtin to fail")
 	}
-	if got := err.Error(); !containsAll(got, `materialize built-in named factory "@you/tts"`, "existing target invalid", "find factory config") {
+	if got := err.Error(); !containsAll(got, `resolve named factory "@you/tts"`, "existing target could not be loaded", "find factory config") {
 		t.Fatalf("expected corrupt-target resolution error, got %v", err)
+	}
+}
+
+func TestResolveNamedFactoryAcrossRoots_ReportsCorruptProjectEditableGoalTarget(t *testing.T) {
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+	corruptDir := filepath.Join(projectRoot, "@you%2Fgoal")
+	if err := os.MkdirAll(corruptDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(corrupt project goal dir): %v", err)
+	}
+
+	_, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
+	if err == nil {
+		t.Fatal("expected corrupt project editable goal to fail")
+	}
+	got := err.Error()
+	if !containsAll(got, `resolve named factory "@you/goal"`, "existing target could not be loaded", "find factory config") {
+		t.Fatalf("expected corrupt project editable goal resolution error, got %v", err)
+	}
+	if strings.Contains(got, "materialize built-in named factory") {
+		t.Fatalf("expected project editable failure without builtin fallback, got %v", err)
+	}
+}
+
+func TestResolveNamedFactoryAcrossRoots_ReportsCorruptGlobalEditableGoalTarget(t *testing.T) {
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+	corruptDir := filepath.Join(globalRoot, "@you%2Fgoal")
+	if err := os.MkdirAll(corruptDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(corrupt global goal dir): %v", err)
+	}
+
+	_, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
+	if err == nil {
+		t.Fatal("expected corrupt global editable goal to fail")
+	}
+	got := err.Error()
+	if !containsAll(got, `resolve named factory "@you/goal"`, "existing target could not be loaded", "find factory config") {
+		t.Fatalf("expected corrupt global editable goal resolution error, got %v", err)
+	}
+	if strings.Contains(got, "materialize built-in named factory") {
+		t.Fatalf("expected global editable failure without builtin fallback, got %v", err)
 	}
 }
 
@@ -301,6 +368,20 @@ func namedFactoryEntryNames(entries []NamedFactoryListEntry) []string {
 		names = append(names, entry.Name)
 	}
 	return names
+}
+
+func assertBuiltInGoalMaterializedLayout(t *testing.T, factoryDir string) {
+	t.Helper()
+
+	for _, path := range []string{
+		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
+		filepath.Join(factoryDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName),
+		filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-goal", interfaces.FactoryAgentsFileName),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected built-in goal materialized path %s: %v", path, err)
+		}
+	}
 }
 
 func assertBuiltInMaterializedLayout(t *testing.T, factoryDir string) {

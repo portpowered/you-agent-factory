@@ -135,7 +135,7 @@ func TestExecuteFailsWhenCoverageBelowMinimumAndZeroCoveragePackage(t *testing.T
 			modulePath + "/pkg/generatedclient",
 		}, ","),
 		packages:        "./pkg/config",
-		packageBaseline: writeEmptyPackageBaseline(t),
+		packageBaseline: emptyPackageCoverageBaselinePath(t),
 	})
 	if err == nil {
 		t.Fatal("execute() unexpectedly succeeded")
@@ -190,7 +190,7 @@ func TestExecuteFailsWhenZeroCoveragePackageOnly(t *testing.T) {
 			modulePath + "/pkg/generatedclient",
 		}, ","),
 		packages:        "./pkg/config",
-		packageBaseline: writeEmptyPackageBaseline(t),
+		packageBaseline: emptyPackageCoverageBaselinePath(t),
 	})
 	if err == nil {
 		t.Fatal("execute() unexpectedly succeeded")

@@ -11,18 +11,11 @@ import (
 
 var emptyCoverageBaseline = map[string]struct{}{}
 
-func writeEmptyPackageBaseline(t *testing.T) string {
-	t.Helper()
+const emptyPackageCoverageBaselineRelPath = "cmd/gocoveragecheck/testdata/empty-package-baseline.txt"
 
-	baselinePath := filepath.Join(t.TempDir(), "baseline.txt")
-	absoluteBaselinePath, err := filepath.Abs(baselinePath)
-	if err != nil {
-		t.Fatalf("resolve absolute baseline path: %v", err)
-	}
-	if err := os.WriteFile(absoluteBaselinePath, nil, 0o600); err != nil {
-		t.Fatalf("write empty baseline: %v", err)
-	}
-	return absoluteBaselinePath
+func emptyPackageCoverageBaselinePath(t *testing.T) string {
+	t.Helper()
+	return emptyPackageCoverageBaselineRelPath
 }
 
 func TestIsBackendCoveragePackage(t *testing.T) {

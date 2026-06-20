@@ -138,11 +138,13 @@ func TestMainFailsWhenZeroCoveragePackagesDetectedViaFailf(t *testing.T) {
 	var stderr bytes.Buffer
 	var exitCode int
 
+	baselinePath := emptyPackageCoverageBaselinePath(t)
+
 	flag.CommandLine = flag.NewFlagSet("gocoveragecheck", flag.ExitOnError)
 	os.Args = []string{
 		"gocoveragecheck",
 		"-min=80",
-		"-package-baseline=" + writeEmptyPackageBaseline(t),
+		"-package-baseline=" + baselinePath,
 		"-coverpkg=" + strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
@@ -194,11 +196,13 @@ func TestMainFailsWithZeroCoveragePackageSummary(t *testing.T) {
 	var stderr bytes.Buffer
 	var exitCode int
 
+	baselinePath := emptyPackageCoverageBaselinePath(t)
+
 	flag.CommandLine = flag.NewFlagSet("gocoveragecheck", flag.ExitOnError)
 	os.Args = []string{
 		"gocoveragecheck",
 		"-min=80",
-		"-package-baseline=" + writeEmptyPackageBaseline(t),
+		"-package-baseline=" + baselinePath,
 		"-coverpkg=" + strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
@@ -250,11 +254,13 @@ func TestMainFailsWithZeroCoverageOKPackageSummary(t *testing.T) {
 	var stderr bytes.Buffer
 	var exitCode int
 
+	baselinePath := emptyPackageCoverageBaselinePath(t)
+
 	flag.CommandLine = flag.NewFlagSet("gocoveragecheck", flag.ExitOnError)
 	os.Args = []string{
 		"gocoveragecheck",
 		"-min=80",
-		"-package-baseline=" + writeEmptyPackageBaseline(t),
+		"-package-baseline=" + baselinePath,
 		"-coverpkg=" + strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
@@ -306,11 +312,13 @@ func TestMainFailsWithZeroCoverageCoverpkgOKPackageSummary(t *testing.T) {
 	var stderr bytes.Buffer
 	var exitCode int
 
+	baselinePath := emptyPackageCoverageBaselinePath(t)
+
 	flag.CommandLine = flag.NewFlagSet("gocoveragecheck", flag.ExitOnError)
 	os.Args = []string{
 		"gocoveragecheck",
 		"-min=80",
-		"-package-baseline=" + writeEmptyPackageBaseline(t),
+		"-package-baseline=" + baselinePath,
 		"-coverpkg=" + strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
