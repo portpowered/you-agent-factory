@@ -44,6 +44,34 @@ import (
 	"go.uber.org/zap"
 )
 
+type runtimeBundleBuildInput struct {
+	dir                   string
+	folderPath            string
+	sessionID             string
+	cfg                   *FactoryServiceConfig
+	loadedFactoryCfg      *factoryconfig.LoadedFactoryConfig
+	baseLogger            *zap.Logger
+	runtimeInstanceID     string
+	clock                 factory.Clock
+	recordPath            string
+	workflowID            string
+	providerOverride      workers.Provider
+	providerCommandRunner workers.CommandRunner
+	commandRunnerOverride workers.CommandRunner
+	additionalFactoryOpts         []factory.FactoryOption
+	prefetchedLocalModels         localModelDomain
+	inferenceProgressPublisher    workerprovider.InferenceProgressPublisher
+	inferenceProgressPublisherSet bool
+}
+
+type liveSessionState struct {
+	bundle                *factoryRuntimeBundle
+	handle                *liveRuntimeHandle
+	spec                  *runtimebuild.SessionBuildSpec
+	javascriptCheckpoints *factorysessions.JavaScriptCheckpointStore
+	responseStream        *factorysessions.SessionResponseStream
+}
+
 // BuildFactoryService loads factory.json from the config directory, constructs
 // the petri net, factory runtime, file watcher, and session metrics.
 func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryService, error) {

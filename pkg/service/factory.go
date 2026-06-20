@@ -29,7 +29,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 
 	"go.uber.org/zap"
 )
@@ -119,34 +118,6 @@ type serviceRunState struct {
 	ctx       context.Context
 	sessionID string
 	runtime   *liveRuntimeHandle
-}
-
-type runtimeBundleBuildInput struct {
-	dir                   string
-	folderPath            string
-	sessionID             string
-	cfg                   *FactoryServiceConfig
-	loadedFactoryCfg      *factoryconfig.LoadedFactoryConfig
-	baseLogger            *zap.Logger
-	runtimeInstanceID     string
-	clock                 factory.Clock
-	recordPath            string
-	workflowID            string
-	providerOverride      workers.Provider
-	providerCommandRunner workers.CommandRunner
-	commandRunnerOverride workers.CommandRunner
-	additionalFactoryOpts         []factory.FactoryOption
-	prefetchedLocalModels         localModelDomain
-	inferenceProgressPublisher    workerprovider.InferenceProgressPublisher
-	inferenceProgressPublisherSet bool
-}
-
-type liveSessionState struct {
-	bundle                *factoryRuntimeBundle
-	handle                *liveRuntimeHandle
-	spec                  *runtimebuild.SessionBuildSpec
-	javascriptCheckpoints *factorysessions.JavaScriptCheckpointStore
-	responseStream        *factorysessions.SessionResponseStream
 }
 
 // FactoryService is an instantiation of a factory along with its runtime
