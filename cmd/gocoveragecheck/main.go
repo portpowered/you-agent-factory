@@ -218,11 +218,7 @@ func run(cfg config) (coverageResult, error) {
 		localPackageSummaryReport += "\n" + localPackageStderr
 	}
 
-	baselinePath := cfg.packageCoverageBaselinePath()
-	if !filepath.IsAbs(baselinePath) {
-		baselinePath = filepath.Join(repoRoot, baselinePath)
-	}
-	baselinePackages, err := readPackageCoverageBaseline(baselinePath)
+	baselinePackages, err := packageCoverageBaselinePackages(cfg, repoRoot)
 	if err != nil {
 		return coverageResult{}, err
 	}
@@ -233,6 +229,14 @@ func run(cfg config) (coverageResult, error) {
 	}
 	fmt.Fprintln(stdoutWriter, totalLine)
 	return result, nil
+}
+
+func packageCoverageBaselinePackages(cfg config, repoRoot string) (map[string]struct{}, error) {
+	baselinePath := cfg.packageCoverageBaselinePath()
+	if !filepath.IsAbs(baselinePath) {
+		baselinePath = filepath.Join(repoRoot, baselinePath)
+	}
+	return readPackageCoverageBaseline(baselinePath)
 }
 
 func runGoTestCoverageLane(args []string, failurePrefix string) (string, string, error) {
