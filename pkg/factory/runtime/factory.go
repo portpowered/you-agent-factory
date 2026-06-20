@@ -454,7 +454,7 @@ func (f *factoryImpl) Pause(_ context.Context) error {
 	return nil
 }
 
-// Resume re-enables processing for a paused factory.
+// Resume resumes a paused factory and wakes the engine so buffered work can drain.
 func (f *factoryImpl) Resume(_ context.Context) error {
 	f.mu.Lock()
 	previousState := f.state
