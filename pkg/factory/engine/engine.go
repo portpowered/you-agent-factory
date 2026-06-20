@@ -222,7 +222,13 @@ func (e *FactoryEngine) hasBufferedInputs() bool {
 		return true
 	}
 	buffer := e.runtimeState.ResultBuffer
-	return buffer != nil && buffer.HasData()
+	if buffer != nil && buffer.HasData() {
+		return true
+	}
+	if e.dispatchHook != nil && e.dispatchHook.HasPendingResults() {
+		return true
+	}
+	return false
 }
 
 // SubmitWorkRequest validates and enqueues a canonical work request batch.
