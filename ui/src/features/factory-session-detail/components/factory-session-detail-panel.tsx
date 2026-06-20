@@ -1,4 +1,5 @@
 import type { components } from "../../../api/generated/openapi";
+import { isDurableFactorySessionID } from "../../../api/factory-sessions";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 import {
   AlertPanel,
@@ -7,6 +8,12 @@ import {
   DashboardText,
 } from "../../../components/ui";
 import { DetailCopy } from "../../../components/ui/widget-frame";
+import {
+  DurableFactorySessionDetailError,
+  DurableFactorySessionDetailLoading,
+  DurableFactorySessionDetailNotFound,
+  DurableFactorySessionDetailSuccess,
+} from "./durable-factory-session-detail-states";
 import type { FactorySessionDetailData } from "../hooks/use-factory-session-detail";
 import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
 import { getFactorySessionDetailMessages } from "../messages/factory-session-detail";
@@ -25,6 +32,10 @@ export function FactorySessionDetailPanel({
 }: FactorySessionDetailPanelProps) {
   const messages = getFactorySessionDetailMessages(locale);
   const detailState = useFactorySessionDetail(sessionID);
+  const isDurableSession =
+    sessionID !== null &&
+    sessionID.trim() !== "" &&
+    isDurableFactorySessionID(sessionID);
 
   if (sessionID === null || sessionID.trim() === "") {
     return null;
@@ -39,21 +50,36 @@ export function FactorySessionDetailPanel({
       </div>
 
       {detailState.status === "loading" ? (
-        <DetailCopy>{messages.loadingState}</DetailCopy>
+        isDurableSession ? (
+          <DurableFactorySessionDetailLoading messages={messages} />
+        ) : (
+          <DetailCopy>{messages.loadingState}</DetailCopy>
+        )
       ) : null}
       {detailState.status === "not-found" ? (
-        <DetailCopy>{messages.missingState}</DetailCopy>
+        isDurableSession ? (
+          <DurableFactorySessionDetailNotFound messages={messages} />
+        ) : (
+          <DetailCopy>{messages.missingState}</DetailCopy>
+        )
       ) : null}
       {detailState.status === "error" ? (
-        <AlertPanel tone="danger">
-          {detailState.message ?? messages.errorState}
-        </AlertPanel>
+        isDurableSession ? (
+          <DurableFactorySessionDetailError
+            message={detailState.message}
+            messages={messages}
+          />
+        ) : (
+          <AlertPanel tone="danger">
+            {detailState.message ?? messages.errorState}
+          </AlertPanel>
+        )
       ) : null}
       {detailState.status === "success" ? (
         detailState.data.kind === "durable" ? (
-          <DurableSessionSummarySections
+          <DurableFactorySessionDetailSuccess
             data={detailState.data}
-            locale={locale}
+            messages={messages}
           />
         ) : (
           <FactorySessionRuntimeSections
@@ -63,76 +89,6 @@ export function FactorySessionDetailPanel({
         )
       ) : null}
     </section>
-  );
-}
-
-function DurableSessionSummarySections({
-  data,
-  locale,
-}: {
-  data: Extract<FactorySessionDetailData, { kind: "durable" }>;
-  locale?: string;
-}) {
-  const messages = getFactorySessionDetailMessages(locale);
-  const session = data.session;
-  const progress = session.progress;
-  const progressSummary =
-    progress === undefined
-      ? undefined
-      : [
-          progress.completedDispatches !== undefined
-            ? `completed ${progress.completedDispatches}`
-            : null,
-          progress.inFlightDispatches !== undefined
-            ? `in flight ${progress.inFlightDispatches}`
-            : null,
-          progress.totalDispatches !== undefined
-            ? `total ${progress.totalDispatches}`
-            : null,
-        ]
-          .filter((value): value is string => value !== null)
-          .join(", ");
-
-  return (
-    <div className="grid gap-4">
-      <div className="grid gap-2 sm:grid-cols-2">
-        <Metric
-          label={messages.orchestratorKindLabel}
-          value={session.orchestratorKind}
-        />
-        <Metric label={messages.statusLabel} value={session.status} />
-      </div>
-
-      {session.phase ? (
-        <Metric label={messages.phaseLabel} value={session.phase} />
-      ) : null}
-
-      {session.resolvedSource.sourceRef ? (
-        <Metric
-          label={messages.resolvedSourceLabel}
-          value={session.resolvedSource.sourceRef}
-        />
-      ) : null}
-
-      {session.resultSummary ? (
-        <div className="grid gap-2">
-          <Metric
-            label={messages.durableResultStatusLabel}
-            value={session.resultSummary.resultStatus}
-          />
-          {session.resultSummary.summary ? (
-            <Metric
-              label={messages.resultSummaryLabel}
-              value={session.resultSummary.summary}
-            />
-          ) : null}
-        </div>
-      ) : null}
-
-      {progressSummary ? (
-        <Metric label={messages.progressLabel} value={progressSummary} />
-      ) : null}
-    </div>
   );
 }
 

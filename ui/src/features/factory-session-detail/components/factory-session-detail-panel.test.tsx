@@ -195,6 +195,141 @@ describe("FactorySessionDetailPanel", () => {
     });
   });
 
+  it("shows durable loading state with accessible Factory Session detail semantics", () => {
+    vi.mocked(globalThis.fetch).mockImplementation(
+      () => new Promise<Response>(() => {}),
+    );
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="dur-sess-running-001" />,
+    );
+
+    const loadingRegions = screen.getAllByRole("status");
+    const durableLoading = loadingRegions.find(
+      (region) => region.getAttribute("aria-busy") === "true",
+    );
+    expect(durableLoading).toBeTruthy();
+    expect(screen.getByText("Loading Factory Session detail")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Loading Factory Session detail from durable reads…",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("Loading factory session runtime…")).toBeNull();
+  });
+
+  it("shows a distinct durable not-found state", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(JSON.stringify({ code: "NOT_FOUND", message: "missing" }), {
+        headers: { "Content-Type": "application/json" },
+        status: 404,
+      }),
+    );
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="dur-sess-missing-001" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Factory Session not found")).toBeTruthy();
+    });
+
+    expect(
+      screen.getByText(
+        "This Factory Session is not available. It may have been removed or the id is incorrect.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("This factory session is no longer available.")).toBeNull();
+  });
+
+  it("shows a distinct durable error state separate from not-found", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      new Response(JSON.stringify({ code: "INTERNAL_ERROR", message: "boom" }), {
+        headers: { "Content-Type": "application/json" },
+        status: 500,
+      }),
+    );
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="dur-sess-error-001" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Factory Session detail unavailable")).toBeTruthy();
+    });
+
+    expect(screen.getByText("boom")).toBeTruthy();
+    expect(screen.queryByText("Factory Session not found")).toBeNull();
+  });
+
+  it("shows durable partial-result inspection for in-progress sessions", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === "/factory-sessions/dur-sess-js-run-n-001") {
+        return jsonResponse({
+          orchestratorKind: "JAVASCRIPT",
+          phase: "review",
+          progress: {
+            completedDispatches: 1,
+            inFlightDispatches: 1,
+            totalDispatches: 3,
+          },
+          resolvedSource: {
+            kind: "INLINE_WORKFLOW",
+            sourceRef: "inline/review-flow",
+          },
+          resultSummary: {
+            resultStatus: "PARTIAL",
+            summary: "Review checkpoint saved.",
+          },
+          sessionId: "dur-sess-js-run-n-001",
+          status: "RUNNING",
+        });
+      }
+      if (url.endsWith("/results?mode=final")) {
+        return new Response("not ready", { status: 404 });
+      }
+      if (url.endsWith("/results?mode=partial")) {
+        return jsonResponse({
+          artifactRefs: [
+            {
+              id: "artifact-partial",
+              kind: "CHILD_RESULT",
+              visibility: "CUSTOMER",
+            },
+          ],
+          availability: {
+            message: "Partial result is available while execution continues.",
+          },
+          mode: "partial",
+          resultStatus: "PARTIAL",
+          sessionId: "dur-sess-js-run-n-001",
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="dur-sess-js-run-n-001" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Factory Session in progress")).toBeTruthy();
+    });
+
+    expect(
+      screen.getByText(
+        "This Factory Session has not produced a final result yet. Partial inspection is shown below.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Review checkpoint saved.")).toBeTruthy();
+    expect(
+      screen.getByText("Partial result is available while execution continues."),
+    ).toBeTruthy();
+    expect(screen.getByText("artifact-partial · CHILD_RESULT")).toBeTruthy();
+    expect(screen.queryByText("Factory Session complete")).toBeNull();
+  });
+
   it("shows durable factory session summary fields from the durable read model", async () => {
     vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
       const url = String(input);
@@ -242,10 +377,17 @@ describe("FactorySessionDetailPanel", () => {
       expect(screen.getByText("Ticket triaged and resolved.")).toBeTruthy();
     });
 
+    expect(screen.getByText("Factory Session complete")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "This Factory Session reached a terminal state. Final inspection is shown below.",
+      ),
+    ).toBeTruthy();
     expect(screen.getByText("factory/customer-support-triage")).toBeTruthy();
     expect(screen.getByText("SUCCEEDED")).toBeTruthy();
     expect(screen.getByText("FINAL")).toBeTruthy();
     expect(screen.getByText("completed 1, total 1")).toBeTruthy();
+    expect(screen.queryByText("Factory Session in progress")).toBeNull();
     expect(
       screen.queryByText("Dynamic workflow (JavaScript factory session)"),
     ).toBeNull();

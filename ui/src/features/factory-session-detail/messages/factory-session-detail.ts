@@ -7,7 +7,22 @@ export interface FactorySessionDetailMessages {
   artifactsHeading: string;
   checkpointRefsHeading: string;
   childDispatchCountsLabel: string;
+  durableAvailabilityLabel: string;
+  durableDetailRegionLabel: string;
+  durableErrorState: string;
+  durableErrorTitle: string;
+  durableFailureLabel: string;
+  durableLoadingState: string;
+  durableLoadingTitle: string;
+  durableMissingState: string;
+  durableMissingTitle: string;
+  durablePartialArtifactRefsHeading: string;
+  durablePartialState: string;
+  durablePartialTitle: string;
   durableResultStatusLabel: string;
+  durableTerminalArtifactRefsHeading: string;
+  durableTerminalState: string;
+  durableTerminalTitle: string;
   dynamicWorkflowShorthand: string;
   enabledTransitionsHeading: string;
   errorState: string;
@@ -36,7 +51,26 @@ const factorySessionDetailMessagesByLocale = {
     artifactsHeading: "Artifacts",
     checkpointRefsHeading: "Checkpoint refs",
     childDispatchCountsLabel: "Child dispatches",
+    durableAvailabilityLabel: "Result availability",
+    durableDetailRegionLabel: "Factory Session detail",
+    durableErrorState:
+      "The Factory Session detail request failed. Retry the selection or check factory session API availability.",
+    durableErrorTitle: "Factory Session detail unavailable",
+    durableFailureLabel: "Failure detail",
+    durableLoadingState: "Loading Factory Session detail from durable reads…",
+    durableLoadingTitle: "Loading Factory Session detail",
+    durableMissingState:
+      "This Factory Session is not available. It may have been removed or the id is incorrect.",
+    durableMissingTitle: "Factory Session not found",
+    durablePartialArtifactRefsHeading: "Partial result artifact refs",
+    durablePartialState:
+      "This Factory Session has not produced a final result yet. Partial inspection is shown below.",
+    durablePartialTitle: "Factory Session in progress",
     durableResultStatusLabel: "Result status",
+    durableTerminalArtifactRefsHeading: "Final result artifact refs",
+    durableTerminalState:
+      "This Factory Session reached a terminal state. Final inspection is shown below.",
+    durableTerminalTitle: "Factory Session complete",
     dynamicWorkflowShorthand: "Dynamic workflow (JavaScript factory session)",
     enabledTransitionsHeading: "Enabled transitions",
     errorState: "The factory session runtime could not be loaded.",
@@ -63,7 +97,26 @@ const factorySessionDetailMessagesByLocale = {
     artifactsHeading: "工件",
     checkpointRefsHeading: "检查点引用",
     childDispatchCountsLabel: "子调度",
+    durableAvailabilityLabel: "结果可用性",
+    durableDetailRegionLabel: "工厂会话详情",
+    durableErrorState:
+      "工厂会话详情请求失败。请重试选择或检查工厂会话 API 是否可用。",
+    durableErrorTitle: "工厂会话详情不可用",
+    durableFailureLabel: "失败详情",
+    durableLoadingState: "正在从持久化读取加载工厂会话详情…",
+    durableLoadingTitle: "正在加载工厂会话详情",
+    durableMissingState:
+      "此工厂会话不可用。它可能已被移除，或标识符不正确。",
+    durableMissingTitle: "未找到工厂会话",
+    durablePartialArtifactRefsHeading: "部分结果工件引用",
+    durablePartialState:
+      "此工厂会话尚未产生最终结果。下方显示部分检查信息。",
+    durablePartialTitle: "工厂会话进行中",
     durableResultStatusLabel: "结果状态",
+    durableTerminalArtifactRefsHeading: "最终结果工件引用",
+    durableTerminalState:
+      "此工厂会话已达到终止状态。下方显示最终检查信息。",
+    durableTerminalTitle: "工厂会话已完成",
     dynamicWorkflowShorthand: "动态工作流（JavaScript 工厂会话）",
     enabledTransitionsHeading: "已启用变迁",
     errorState: "无法加载工厂会话运行时。",
