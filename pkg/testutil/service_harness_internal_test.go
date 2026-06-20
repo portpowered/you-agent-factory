@@ -1,9 +1,14 @@
 package testutil
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -35,5 +40,96 @@ func TestServiceTestHarnessMarkingFallsBackToCachedSnapshot(t *testing.T) {
 	}
 	if got := len(snap.TokensInPlace("task:init")); got != 0 {
 		t.Fatalf("TokensInPlace(task:init) = %d, want 0", got)
+	}
+}
+
+func TestMockFactory_LiveSessionPauseResume_ReturnsTypedControlForExistingSession(t *testing.T) {
+	ctx := context.Background()
+	mock := &MockFactory{
+		State: interfaces.FactoryStateRunning,
+		SessionFactories: map[string]*MockFactory{
+			"live-sess-001": {
+				State: interfaces.FactoryStateRunning,
+			},
+		},
+	}
+
+	pauseResp, err := mock.PauseLiveFactorySession(ctx, "live-sess-001", factoryapi.FactorySessionLifecycleControlRequest{})
+	if err != nil {
+		t.Fatalf("PauseLiveFactorySession() error = %v", err)
+	}
+	if pauseResp.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("pause outcome = %s, want ACCEPTED", pauseResp.Outcome)
+	}
+	if pauseResp.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("pause status = %s, want PAUSED", pauseResp.Status)
+	}
+
+	resumeResp, err := mock.ResumeLiveFactorySession(ctx, "live-sess-001", factoryapi.FactorySessionLifecycleControlRequest{})
+	if err != nil {
+		t.Fatalf("ResumeLiveFactorySession() error = %v", err)
+	}
+	if resumeResp.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("resume outcome = %s, want ACCEPTED", resumeResp.Outcome)
+	}
+	if resumeResp.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("resume status = %s, want RUNNING", resumeResp.Status)
+	}
+
+	noOpResp, err := mock.ResumeLiveFactorySession(ctx, "live-sess-001", factoryapi.FactorySessionLifecycleControlRequest{})
+	if err != nil {
+		t.Fatalf("ResumeLiveFactorySession() on running session error = %v", err)
+	}
+	if noOpResp.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeNoOp {
+		t.Fatalf("resume no-op outcome = %s, want NO_OP", noOpResp.Outcome)
+	}
+	if noOpResp.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("resume no-op status = %s, want RUNNING", noOpResp.Status)
+	}
+}
+
+func TestMockFactory_LiveSessionPauseResume_ReturnsNotFoundForMissingSession(t *testing.T) {
+	ctx := context.Background()
+	mock := &MockFactory{
+		SessionFactories: map[string]*MockFactory{},
+	}
+
+	_, err := mock.PauseLiveFactorySession(ctx, "missing-session", factoryapi.FactorySessionLifecycleControlRequest{})
+	if err == nil {
+		t.Fatal("PauseLiveFactorySession() error = nil, want not found")
+	}
+	if !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+		t.Fatalf("PauseLiveFactorySession() error = %v, want %v", err, apisurface.ErrFactorySessionNotFound)
+	}
+
+	_, err = mock.ResumeLiveFactorySession(ctx, "missing-session", factoryapi.FactorySessionLifecycleControlRequest{})
+	if err == nil {
+		t.Fatal("ResumeLiveFactorySession() error = nil, want not found")
+	}
+	if !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+		t.Fatalf("ResumeLiveFactorySession() error = %v, want %v", err, apisurface.ErrFactorySessionNotFound)
+	}
+}
+
+func TestMockFactory_LiveSessionPauseResume_ReturnsControlErrorForInvalidState(t *testing.T) {
+	ctx := context.Background()
+	mock := &MockFactory{
+		SessionFactories: map[string]*MockFactory{
+			"live-sess-001": {
+				State: interfaces.FactoryStateCompleted,
+			},
+		},
+	}
+
+	_, err := mock.PauseLiveFactorySession(ctx, "live-sess-001", factoryapi.FactorySessionLifecycleControlRequest{})
+	if err == nil {
+		t.Fatal("PauseLiveFactorySession() error = nil, want control error")
+	}
+	var controlErr *factorysessionexecution.ControlError
+	if !errors.As(err, &controlErr) {
+		t.Fatalf("PauseLiveFactorySession() error = %T(%v), want *ControlError", err, err)
+	}
+	if controlErr.Outcome != factorysessionexecution.LifecycleControlOutcomeTerminalSession {
+		t.Fatalf("control outcome = %s, want TERMINAL_SESSION", controlErr.Outcome)
 	}
 }

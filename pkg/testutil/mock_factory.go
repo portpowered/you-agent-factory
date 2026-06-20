@@ -400,9 +400,29 @@ func (m *MockFactory) requireDurableExecutionService() (factorysessionexecution.
 	return m.DurableExecutionService, nil
 }
 
-func (m *MockFactory) Run(_ context.Context) error    { return nil }
-func (m *MockFactory) Pause(_ context.Context) error  { return nil }
-func (m *MockFactory) Resume(_ context.Context) error { return nil }
+func (m *MockFactory) Run(_ context.Context) error { return nil }
+
+func (m *MockFactory) Pause(_ context.Context) error {
+	if m == nil {
+		return nil
+	}
+	m.State = interfaces.FactoryStatePaused
+	if m.EngineState != nil {
+		m.EngineState.FactoryState = string(interfaces.FactoryStatePaused)
+	}
+	return nil
+}
+
+func (m *MockFactory) Resume(_ context.Context) error {
+	if m == nil {
+		return nil
+	}
+	m.State = interfaces.FactoryStateRunning
+	if m.EngineState != nil {
+		m.EngineState.FactoryState = string(interfaces.FactoryStateRunning)
+	}
+	return nil
+}
 
 func (m *MockFactory) MoveWork(_ context.Context, workID, stateName string, _ interfaces.WorkStateChangeSource, requestID string) (interfaces.OperatorMoveResult, error) {
 	if m.MoveWorkErr != nil {
@@ -698,25 +718,74 @@ func (m *MockFactory) CloseFactorySession(_ context.Context, sessionID string) e
 }
 
 func (m *MockFactory) PauseLiveFactorySession(
-	_ context.Context,
+	ctx context.Context,
 	sessionID string,
-	_ factoryapi.FactorySessionLifecycleControlRequest,
+	request factoryapi.FactorySessionLifecycleControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	if _, err := m.sessionFactory(sessionID); err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
+	if _, err := factorysession.ControlRequestFromAPI(request); err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
-	return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
+	return m.applyLiveFactorySessionLifecycleControl(ctx, sessionID, factorysessionexecution.LifecycleControlPause)
 }
 
 func (m *MockFactory) ResumeLiveFactorySession(
-	_ context.Context,
+	ctx context.Context,
 	sessionID string,
-	_ factoryapi.FactorySessionLifecycleControlRequest,
+	request factoryapi.FactorySessionLifecycleControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	if _, err := m.sessionFactory(sessionID); err != nil {
+	if _, err := factorysession.ControlRequestFromAPI(request); err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return m.applyLiveFactorySessionLifecycleControl(ctx, sessionID, factorysessionexecution.LifecycleControlResume)
+}
+
+func (m *MockFactory) applyLiveFactorySessionLifecycleControl(
+	ctx context.Context,
+	sessionID string,
+	operation factorysessionexecution.LifecycleControlKind,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	activeFactory, err := m.sessionFactory(sessionID)
+	if err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
 	}
-	return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
+
+	snapshot, err := activeFactory.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("get engine state snapshot: %w", err)
+	}
+
+	currentState := interfaces.FactoryState(snapshot.FactoryState)
+	currentStatus := factorysession.FactoryStateToLifecycleStatus(currentState)
+	outcome := factorysessionexecution.EvaluateLifecycleControl(operation, currentStatus)
+	if outcome == factorysessionexecution.LifecycleControlOutcomeInvalidState ||
+		outcome == factorysessionexecution.LifecycleControlOutcomeTerminalSession {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, &factorysessionexecution.ControlError{
+			Operation: operation,
+			Outcome:   outcome,
+			Status:    currentStatus,
+			Message:   fmt.Sprintf("%s rejected for session %s in factory state %s", operation, sessionID, currentState),
+		}
+	}
+
+	if outcome == factorysessionexecution.LifecycleControlOutcomeAccepted {
+		switch operation {
+		case factorysessionexecution.LifecycleControlPause:
+			if err := activeFactory.Pause(ctx); err != nil {
+				return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("pause factory session: %w", err)
+			}
+		case factorysessionexecution.LifecycleControlResume:
+			if err := activeFactory.Resume(ctx); err != nil {
+				return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("resume factory session: %w", err)
+			}
+		}
+	}
+
+	updatedSnapshot, err := activeFactory.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, fmt.Errorf("get engine state snapshot after control: %w", err)
+	}
+	updatedStatus := factorysession.FactoryStateToLifecycleStatus(interfaces.FactoryState(updatedSnapshot.FactoryState))
+	return factorysession.LiveLifecycleControlResponse(sessionID, operation, outcome, updatedStatus), nil
 }
 
 func (m *MockFactory) WaitToComplete() <-chan struct{} {
