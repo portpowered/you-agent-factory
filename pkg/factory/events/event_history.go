@@ -593,6 +593,8 @@ func factoryEventPayload(payload any) factoryapi.FactoryEvent_Payload {
 		err = out.FromSessionResultUpdatedEventPayload(typed)
 	case factoryapi.SessionCompletedEventPayload:
 		err = out.FromSessionCompletedEventPayload(typed)
+	case factoryapi.SessionLifecycleControlEventPayload:
+		err = out.FromSessionLifecycleControlEventPayload(typed)
 	default:
 		encoded, marshalErr := json.Marshal(typed)
 		if marshalErr != nil {

@@ -1,0 +1,1 @@
+# Intentionally empty baseline for gocoveragecheck integration tests.

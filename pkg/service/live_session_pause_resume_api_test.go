@@ -70,6 +70,94 @@ func TestFactoryService_LiveSessionPauseResume_HTTPReturnsTypedLifecycleControl(
 	}
 }
 
+func TestFactoryService_LiveSessionResume_HTTPNoOpWhenAlreadyRunning(t *testing.T) {
+	t.Parallel()
+
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	server := httptest.NewServer(api.NewServer(harness.svc, 0, zap.NewNop()).Handler())
+	defer server.Close()
+
+	sessionID := factorysessions.DefaultSessionID
+
+	if _, status := postLiveSessionLifecycleControl(t, server.URL, sessionID, "pause"); status != http.StatusOK {
+		t.Fatalf("pause status = %d, want 200", status)
+	}
+	if _, status := postLiveSessionLifecycleControl(t, server.URL, sessionID, "resume"); status != http.StatusOK {
+		t.Fatalf("first resume status = %d, want 200", status)
+	}
+
+	resumeResp, resumeStatus := postLiveSessionLifecycleControl(t, server.URL, sessionID, "resume")
+	if resumeStatus != http.StatusOK {
+		t.Fatalf("second resume status = %d, want 200", resumeStatus)
+	}
+	if resumeResp.Operation != factoryapi.FactorySessionLifecycleControlKindResume {
+		t.Fatalf("operation = %q, want RESUME", resumeResp.Operation)
+	}
+	if resumeResp.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeNoOp {
+		t.Fatalf("outcome = %q, want NO_OP", resumeResp.Outcome)
+	}
+	if resumeResp.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", resumeResp.Status)
+	}
+}
+
+func TestFactoryService_LiveSessionPauseResume_HTTPEmitsSessionLifecycleControlEvents(t *testing.T) {
+	t.Parallel()
+
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	server := httptest.NewServer(api.NewServer(harness.svc, 0, zap.NewNop()).Handler())
+	defer server.Close()
+
+	sessionID := factorysessions.DefaultSessionID
+
+	if _, status := postLiveSessionLifecycleControl(t, server.URL, sessionID, "pause"); status != http.StatusOK {
+		t.Fatalf("pause status = %d, want 200", status)
+	}
+	if _, status := postLiveSessionLifecycleControl(t, server.URL, sessionID, "resume"); status != http.StatusOK {
+		t.Fatalf("resume status = %d, want 200", status)
+	}
+
+	events, err := harness.svc.GetFactoryEvents(context.Background())
+	if err != nil {
+		t.Fatalf("GetFactoryEvents: %v", err)
+	}
+	var lifecycleControls []factoryapi.FactoryEvent
+	for _, event := range events {
+		if event.Type == factoryapi.FactoryEventTypeSessionLifecycleControl {
+			lifecycleControls = append(lifecycleControls, event)
+		}
+	}
+	if len(lifecycleControls) != 2 {
+		t.Fatalf("SESSION_LIFECYCLE_CONTROL events = %d, want pause and resume", len(lifecycleControls))
+	}
+
+	pausePayload, err := lifecycleControls[0].Payload.AsSessionLifecycleControlEventPayload()
+	if err != nil {
+		t.Fatalf("pause lifecycle payload: %v", err)
+	}
+	if pausePayload.Operation != factoryapi.FactorySessionLifecycleControlKindPause ||
+		pausePayload.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted ||
+		pausePayload.PreviousStatus != factoryapi.FactorySessionDurableLifecycleStatusRunning ||
+		pausePayload.NewStatus != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("pause lifecycle payload = %#v, want RUNNING->PAUSED ACCEPTED", pausePayload)
+	}
+
+	resumePayload, err := lifecycleControls[1].Payload.AsSessionLifecycleControlEventPayload()
+	if err != nil {
+		t.Fatalf("resume lifecycle payload: %v", err)
+	}
+	if resumePayload.Operation != factoryapi.FactorySessionLifecycleControlKindResume ||
+		resumePayload.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted ||
+		resumePayload.PreviousStatus != factoryapi.FactorySessionDurableLifecycleStatusPaused ||
+		resumePayload.NewStatus != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("resume lifecycle payload = %#v, want PAUSED->RUNNING ACCEPTED", resumePayload)
+	}
+}
+
 func TestFactoryService_LiveSessionPauseResume_HTTPDrainsBufferedSubmissionWithoutExternalSignal(t *testing.T) {
 	t.Parallel()
 

@@ -302,6 +302,7 @@ func assertOrderedEventSequence(t *testing.T, events []factoryapi.FactoryEvent) 
 		factoryapi.FactoryEventTypeDispatchRequest,
 		factoryapi.FactoryEventTypeDispatchResponse,
 		factoryapi.FactoryEventTypeFactoryStateResponse,
+		factoryapi.FactoryEventTypeSessionLifecycleControl,
 	}...)
 	if len(events) != len(wantTypes) {
 		t.Fatalf("event count = %d, want %d: %#v", len(events), len(wantTypes), events)

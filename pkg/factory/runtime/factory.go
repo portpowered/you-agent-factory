@@ -446,7 +446,9 @@ func (f *factoryImpl) Pause(_ context.Context) error {
 	previousState := f.state
 	f.state = interfaces.FactoryStatePaused
 	f.mu.Unlock()
-	f.recordStateChange(previousState, interfaces.FactoryStatePaused, "pause requested")
+	reason := "pause requested"
+	f.recordStateChange(previousState, interfaces.FactoryStatePaused, reason)
+	f.recordSessionLifecycleControl(previousState, interfaces.FactoryStatePaused, factoryapi.FactorySessionLifecycleControlKindPause, reason)
 	return nil
 }
 
@@ -460,7 +462,9 @@ func (f *factoryImpl) Resume(_ context.Context) error {
 	}
 	f.state = interfaces.FactoryStateRunning
 	f.mu.Unlock()
-	f.recordStateChange(previousState, interfaces.FactoryStateRunning, "resume requested")
+	reason := "resume requested"
+	f.recordStateChange(previousState, interfaces.FactoryStateRunning, reason)
+	f.recordSessionLifecycleControl(previousState, interfaces.FactoryStateRunning, factoryapi.FactorySessionLifecycleControlKindResume, reason)
 	f.engine.WakeForPendingProcessing()
 	return nil
 }
@@ -530,6 +534,39 @@ func (f *factoryImpl) recordStateChange(previous interfaces.FactoryState, next i
 		tick = f.engine.GetRuntimeStateSnapshot().TickCount
 	}
 	f.eventHistory.RecordFactoryStateChange(tick, previous, next, reason, f.clock.Now())
+}
+
+func (f *factoryImpl) recordSessionLifecycleControl(
+	previous interfaces.FactoryState,
+	next interfaces.FactoryState,
+	operation factoryapi.FactorySessionLifecycleControlKind,
+	reason string,
+) {
+	if f.eventHistory == nil || f.cfg == nil {
+		return
+	}
+	tick := 0
+	if f.engine != nil {
+		tick = f.engine.GetRuntimeStateSnapshot().TickCount
+	}
+	factoryCfg := factoryConfigFromFactoryConfig(f.cfg)
+	orchestratorKind := interfaces.GeneratedPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryCfg))
+	var orchestratorDialect string
+	if factoryCfg != nil && factoryCfg.Orchestrator != nil && factoryCfg.Orchestrator.JavaScript != nil {
+		orchestratorDialect = factoryCfg.Orchestrator.JavaScript.Dialect
+	}
+	f.eventHistory.RecordSessionLifecycleControl(factoryevents.SessionLifecycleControlInput{
+		SessionID:           sessionIDFromFactoryConfig(f.cfg),
+		OrchestratorKind:    orchestratorKind,
+		OrchestratorDialect: orchestratorDialect,
+		Source:              "runtime",
+		Tick:                tick,
+		Operation:           operation,
+		Outcome:             factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+		PreviousStatus:      factoryevents.FactoryStateToDurableLifecycleStatus(previous),
+		NewStatus:           factoryevents.FactoryStateToDurableLifecycleStatus(next),
+		Reason:              reason,
+	}, f.clock.Now())
 }
 
 func (f *factoryImpl) currentWorldState(tick int) *interfaces.FactoryWorldState {
