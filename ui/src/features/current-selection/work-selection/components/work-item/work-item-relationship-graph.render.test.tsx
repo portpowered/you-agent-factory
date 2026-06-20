@@ -243,7 +243,7 @@ describe("WorkRelationshipsSection repeated DEPENDS_ON rendering", () => {
     );
   });
 
-  it("renders every loopback dependency from the checked-in local agent CLI runtime batch example", async () => {
+  it("renders every loopback dependency from the smoke test fixture", async () => {
     const loopbackWorkItem = localAgentCliRuntimeLoopbackWorkItem();
     const relationshipGraph = buildSelectedWorkRelationshipGraph({
       selectedWorkItem: loopbackWorkItem,

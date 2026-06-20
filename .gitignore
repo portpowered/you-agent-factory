@@ -11,8 +11,14 @@ ui/dist/
 ui/dist_embed_generated.go
 ui/dist_stamp.go
 
-docs/temp/*
-!docs/temp/dynamic-workflows-plan.md
+## do not include temporary working files
+docs/temp/**
+## Do not include temporary files in general for worktree progress
+prd.json
+prd.md
+progress.md
+progress.txt
+
 tasks/todo
 tasks/done
 factory/internal/**

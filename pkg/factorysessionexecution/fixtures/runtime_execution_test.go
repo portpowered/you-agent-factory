@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
+	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
@@ -456,7 +456,10 @@ func decodePrimaryResultMap(t *testing.T, raw json.RawMessage) map[string]any {
 
 func newJavaScriptRuntimeService(t *testing.T) fse.Service {
 	t.Helper()
-	projectRoot := t.TempDir()
+	projectRoot, err := os.MkdirTemp("", "runtime-execution-fixture-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
 	service, err := fse.NewExecutionService(
 		fse.ExecutionProviderJavaScriptRuntime,
 		fse.ServiceConfig{ProjectRoot: projectRoot},
@@ -464,7 +467,52 @@ func newJavaScriptRuntimeService(t *testing.T) fse.Service {
 	if err != nil {
 		t.Fatalf("NewExecutionService: %v", err)
 	}
+	t.Cleanup(func() {
+		drainRuntimeSessions(t, service)
+		removeRuntimeProjectState(t, projectRoot)
+	})
 	return service
+}
+
+func drainRuntimeSessions(t *testing.T, service fse.Service) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		list, err := service.ListSessions(context.Background(), fse.ListSessionsRequest{
+			Scope: fse.SessionListScopeAll,
+		})
+		if err != nil {
+			return
+		}
+
+		pending := false
+		for _, session := range list.DurableSessions {
+			if fse.IsTerminalLifecycleStatus(session.Status) {
+				continue
+			}
+			pending = true
+			_, _ = service.Terminate(context.Background(), session.SessionID, fse.ControlRequest{
+				Reason: "test cleanup",
+			})
+		}
+		if !pending {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+}
+
+func removeRuntimeProjectState(t *testing.T, projectRoot string) {
+	t.Helper()
+	runtimeStateRoot := filepath.Join(projectRoot, ".you-agent-factory")
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if err := os.RemoveAll(runtimeStateRoot); err == nil {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	_ = os.RemoveAll(runtimeStateRoot)
 }
 
 func inlineWorkflowStartRequest(

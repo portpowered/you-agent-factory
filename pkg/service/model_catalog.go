@@ -177,13 +177,6 @@ func (fs *FactoryService) modelHost() modelhost.Host {
 	return nil
 }
 
-func (s *runtimeModelService) catalogOptions() localmodels.CatalogOptions {
-	return localmodels.CatalogOptions{
-		RuntimeCacheInspector: s.modelAssetPuller(),
-		SourceResolver:        localmodels.DefaultManagedRuntimeSourceResolver(),
-	}
-}
-
 func (s *runtimeModelService) PullModel(ctx context.Context, modelName string) (apisurface.ModelPullResult, error) {
 	started := time.Now()
 	host := s.modelHost()

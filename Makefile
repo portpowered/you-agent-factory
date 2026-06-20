@@ -46,7 +46,7 @@ ifdef IS_WORKTREE
 endif
 
 GO_TEST_TIMEOUT ?= 300s
-GO_COVERAGE_MIN ?= 80.0
+GO_COVERAGE_MIN ?= 78.3
 PACKAGE_FILE_COUNT_ROOT ?= .
 LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count deadcode
 

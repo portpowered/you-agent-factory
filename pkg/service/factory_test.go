@@ -10,17 +10,20 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 	"os"
@@ -3818,4 +3821,325 @@ func (p *managedPullMetricsAssetPuller) ResolveModelCache(context.Context, *fact
 
 func (p *managedPullMetricsAssetPuller) InspectRuntimeCache(context.Context, *factoryconfig.LoadedFactoryConfig, string) (localmodels.RuntimeCacheInspection, error) {
 	return p.inspection, nil
+}
+
+type capturingInvocationMetricsRecorder struct {
+	mu      sync.Mutex
+	metrics []InvocationMetric
+}
+
+func (r *capturingInvocationMetricsRecorder) RecordInvocationMetric(metric InvocationMetric) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.metrics = append(r.metrics, metric)
+}
+
+func TestResolveFactoryServiceRoot_AssignsLoggerAndRuntimeInstanceID(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	cfg := &FactoryServiceConfig{Dir: rootDir}
+
+	resolved, err := ResolveFactoryServiceRoot(cfg)
+	if err != nil {
+		t.Fatalf("ResolveFactoryServiceRoot: %v", err)
+	}
+	if resolved.FactoryRootDir != rootDir {
+		t.Fatalf("FactoryRootDir = %q, want %q", resolved.FactoryRootDir, rootDir)
+	}
+	if resolved.BaseLogger == nil || cfg.Logger == nil {
+		t.Fatal("expected base logger to be assigned")
+	}
+	if resolved.BaseLogger != cfg.Logger {
+		t.Fatal("resolved BaseLogger should match cfg.Logger")
+	}
+	if strings.TrimSpace(cfg.RuntimeInstanceID) == "" {
+		t.Fatal("expected runtime instance id to be generated")
+	}
+}
+
+func TestFactoryService_GetCurrentNamedFactory_FallsBackToLiveRuntimeWhenPointerMissing(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	writeFactoryJSON(t, rootDir, minimalFactoryConfig())
+
+	runtimeCfg, err := config.LoadRuntimeConfig(rootDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+	svc := &FactoryService{
+		factoryRootDir: rootDir,
+		cfg:            &FactoryServiceConfig{Dir: rootDir},
+	}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
+		dir:        rootDir,
+		folderPath: rootDir,
+		runtimeCfg: runtimeCfg,
+	})
+
+	current, err := svc.GetCurrentNamedFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentNamedFactory: %v", err)
+	}
+	if current.Name != apisurface.DefaultCurrentFactoryName {
+		t.Fatalf("current factory name = %q, want %q", current.Name, apisurface.DefaultCurrentFactoryName)
+	}
+}
+
+func TestFactoryService_CurrentFactoryDefinitionVersionAtRoot_UsesConfigVersionOrFileModTime(t *testing.T) {
+	t.Parallel()
+
+	t.Run("named factory version from config", func(t *testing.T) {
+		rootDir := t.TempDir()
+		versionTime := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
+		if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayloadWithVersion(t, "alpha", factoryapi.HybridLogicalTimestamp{
+			Logical:  23,
+			Physical: versionTime,
+		})); err != nil {
+			t.Fatalf("PersistNamedFactory: %v", err)
+		}
+
+		got, err := (&FactoryService{}).currentFactoryDefinitionVersionAtRoot(rootDir, "alpha")
+		if err != nil {
+			t.Fatalf("currentFactoryDefinitionVersionAtRoot: %v", err)
+		}
+		if got.Logical != 23 || !got.Physical.Equal(versionTime) {
+			t.Fatalf("version = %#v, want logical=23 physical=%s", got, versionTime)
+		}
+	})
+
+	t.Run("default factory version from file mod time", func(t *testing.T) {
+		rootDir := t.TempDir()
+		writeFactoryJSON(t, rootDir, minimalFactoryConfig())
+		modTime := time.Date(2026, time.February, 3, 4, 5, 6, 0, time.UTC)
+		factoryPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+		if err := os.Chtimes(factoryPath, modTime, modTime); err != nil {
+			t.Fatalf("Chtimes: %v", err)
+		}
+
+		got, err := (&FactoryService{}).currentFactoryDefinitionVersionAtRoot(rootDir, apisurface.DefaultCurrentFactoryName)
+		if err != nil {
+			t.Fatalf("currentFactoryDefinitionVersionAtRoot: %v", err)
+		}
+		if got.Logical.Int64() != modTime.UnixNano() || !got.Physical.Equal(modTime) {
+			t.Fatalf("version = %#v, want logical=%d physical=%s", got, modTime.UnixNano(), modTime)
+		}
+	})
+}
+
+func TestFactoryService_ComposeCollaboratorSnapshot_ReflectsCoreAndFactorySave(t *testing.T) {
+	t.Parallel()
+
+	core := &FactoryCore{
+		collaborators: FactoryServiceCollaborators{
+			Sessions:     factorysessions.NewRegistry(),
+			LocalModels:  localModelDomain{manager: &managedLocalModelManager{}},
+			RuntimeBuild: &runtimebuild.Service{},
+		},
+		hostedWorkers: hostedworkers.Config{Logger: zap.NewNop()},
+		startupBundle: &factoryRuntimeBundle{
+			modelResources: newLocalModelResourceLimiter(),
+			localModels:    &managedLocalModelManager{},
+		},
+		modelAssets: staticModelAssetPuller{},
+	}
+
+	svc := NewFactoryServiceFromCore(core)
+	svc.factorySave = &recordingFactorySaveSaver{}
+
+	snapshot := svc.ComposeCollaboratorSnapshot()
+	if !snapshot.SessionsInitialized || !snapshot.RuntimeBuildInitialized || !snapshot.LocalModelsInitialized {
+		t.Fatalf("snapshot missing core collaborators: %+v", snapshot)
+	}
+	if !snapshot.ModelAssetsInitialized || !snapshot.FactorySaveInitialized || !snapshot.DefinitionsInitialized {
+		t.Fatalf("snapshot missing service collaborators: %+v", snapshot)
+	}
+	if !snapshot.HostedWorkersLoggerReady || !snapshot.BundleModelResources || !snapshot.BundleLocalModels {
+		t.Fatalf("snapshot missing runtime bundle collaborators: %+v", snapshot)
+	}
+}
+
+func TestFactoryService_RuntimeLogDiagnostics_ReportsRuntimeArtifacts(t *testing.T) {
+	t.Parallel()
+
+	logDir := t.TempDir()
+	metricsDir := t.TempDir()
+	logSink, err := logging.BuildRuntimeLogger(zap.NewNop(), "runtime-1", logDir, logging.RuntimeLogConfig{})
+	if err != nil {
+		t.Fatalf("BuildRuntimeLogger: %v", err)
+	}
+	defer func() {
+		if closeErr := logSink.Close(); closeErr != nil {
+			t.Fatalf("close log sink: %v", closeErr)
+		}
+	}()
+	metricsSink, err := logging.BuildRuntimeMetricsSink("session-1", "runtime-1", "/tmp/folder", "/tmp/factory", metricsDir, logging.RuntimeMetricsConfig{})
+	if err != nil {
+		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
+	}
+	defer func() {
+		if closeErr := metricsSink.Close(); closeErr != nil {
+			t.Fatalf("close metrics sink: %v", closeErr)
+		}
+	}()
+
+	svc := &FactoryService{
+		startupBundle: &factoryRuntimeBundle{
+			logSink:     logSink,
+			metricsSink: metricsSink,
+		},
+	}
+
+	diagnostics := svc.RuntimeLogDiagnostics()
+	if diagnostics.Path != logSink.Path() || diagnostics.RootDir != logSink.RootDir() {
+		t.Fatalf("log diagnostics = %#v, want path %q root %q", diagnostics, logSink.Path(), logSink.RootDir())
+	}
+	if diagnostics.MetricsPath != metricsSink.Path() || diagnostics.MetricsRootDir != metricsSink.RootDir() {
+		t.Fatalf("metrics diagnostics = %#v, want path %q root %q", diagnostics, metricsSink.Path(), metricsSink.RootDir())
+	}
+	if !diagnostics.StartTimeUTC.Equal(logSink.StartTimeUTC()) || !diagnostics.MetricsStartTimeUTC.Equal(metricsSink.StartTimeUTC()) {
+		t.Fatalf("diagnostic start times = %#v", diagnostics)
+	}
+}
+
+func TestModelEventHelpersAndModelHostAdapters(t *testing.T) {
+	t.Parallel()
+
+	t.Run("model event diagnostics", testModelEventDiagnosticsBranches)
+	t.Run("model event error classes", testModelEventErrorClassBranches)
+	t.Run("model host logger adapter", testModelHostLoggerAdapterBranches)
+	t.Run("model host metrics and diagnostics", testModelHostMetricsAndDiagnosticsBranches)
+}
+
+func testModelEventDiagnosticsBranches(t *testing.T) {
+	t.Helper()
+
+	successDiagnostics := &interfaces.WorkDiagnostics{
+		Provider: &interfaces.ProviderDiagnostic{
+			ResponseMetadata: map[string]string{"request_id": "req-1"},
+		},
+	}
+	if got := modelEventDiagnostics(successDiagnostics, nil); got == nil || got.Provider == nil || got.Provider.ResponseMetadata == nil || (*got.Provider.ResponseMetadata)["request_id"] != "req-1" {
+		t.Fatalf("success diagnostics = %#v", got)
+	}
+
+	providerDiagnostics := &interfaces.WorkDiagnostics{
+		Provider: &interfaces.ProviderDiagnostic{
+			ResponseMetadata: map[string]string{"request_id": "req-2"},
+		},
+	}
+	providerErr := workerprovider.NewProviderError(interfaces.WorkFailureTypeTimeout, "timeout", errors.New("boom"))
+	providerErr.Diagnostics = providerDiagnostics
+	if got := modelEventDiagnostics(nil, providerErr); got == nil || got.Provider == nil || got.Provider.ResponseMetadata == nil || (*got.Provider.ResponseMetadata)["request_id"] != "req-2" {
+		t.Fatalf("provider diagnostics = %#v", got)
+	}
+}
+
+func testModelEventErrorClassBranches(t *testing.T) {
+	t.Helper()
+
+	providerErr := workerprovider.NewProviderError(interfaces.WorkFailureTypeTimeout, "timeout", errors.New("boom"))
+	readinessErr := &apisurface.ManagedRuntimeInvocationError{ReadinessState: factoryapi.ManagedRuntimeReadinessStateLOADING}
+	if got := modelEventErrorClass(readinessErr); got != "MANAGED_RUNTIME_LOADING" {
+		t.Fatalf("managed runtime error class = %q, want MANAGED_RUNTIME_LOADING", got)
+	}
+	if got := modelEventErrorClass(providerErr); got != string(interfaces.WorkFailureTypeTimeout) {
+		t.Fatalf("provider error class = %q, want %q", got, interfaces.WorkFailureTypeTimeout)
+	}
+	if got := modelEventErrorClass(errors.New("plain failure")); got != "MODEL_EXECUTION_FAILED" {
+		t.Fatalf("plain error class = %q, want MODEL_EXECUTION_FAILED", got)
+	}
+	if got := modelEventErrorClass(nil); got != "" {
+		t.Fatalf("nil error class = %q, want empty string", got)
+	}
+}
+
+func testModelHostLoggerAdapterBranches(t *testing.T) {
+	t.Helper()
+
+	core, observed := observer.New(zap.InfoLevel)
+	hostLogger := newZapModelHostLogger(zap.New(core))
+	if hostLogger == nil {
+		t.Fatal("expected model host logger")
+	}
+	hostLogger.Info("loaded", map[string]string{"identity": "model-a"})
+	hostLogger.Warn("slow", map[string]string{"state": "warming"})
+	entries := observed.All()
+	if len(entries) != 2 {
+		t.Fatalf("entry count = %d, want 2", len(entries))
+	}
+	if fields := entries[0].ContextMap(); fields["identity"] != "model-a" {
+		t.Fatalf("info fields = %#v, want identity=model-a", fields)
+	}
+	if fields := entries[1].ContextMap(); fields["state"] != "warming" {
+		t.Fatalf("warn fields = %#v, want state=warming", fields)
+	}
+	if got := modelHostZapFields(nil); got != nil {
+		t.Fatalf("modelHostZapFields(nil) = %#v, want nil", got)
+	}
+}
+
+func testModelHostMetricsAndDiagnosticsBranches(t *testing.T) {
+	t.Helper()
+
+	recorder := &capturingInvocationMetricsRecorder{}
+	adapter := newModelHostMetricsRecorder(recorder)
+	if adapter == nil {
+		t.Fatal("expected metrics recorder adapter")
+	}
+	adapter.RecordMetric("runtime.loaded", map[string]string{"identity": "model-a"})
+	adapter.RecordMetric("   ", map[string]string{"ignored": "true"})
+	if len(recorder.metrics) != 1 {
+		t.Fatalf("metric count = %d, want 1", len(recorder.metrics))
+	}
+	if recorder.metrics[0].Name != "runtime.loaded" || recorder.metrics[0].Labels["identity"] != "model-a" {
+		t.Fatalf("recorded metric = %#v", recorder.metrics[0])
+	}
+
+	diagnostics := modelHostDiagnostics(&FactoryServiceConfig{InvocationMetricsRecorder: recorder}, zap.NewNop())
+	if diagnostics.Logger == nil || diagnostics.Metrics == nil {
+		t.Fatalf("modelHostDiagnostics = %#v, want logger and metrics", diagnostics)
+	}
+}
+
+func TestScriptMetricHelpers_PreferFailureMetadataAndDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	timeoutResult := interfaces.WorkResult{
+		FailureMetadata: &interfaces.WorkFailureMetadata{Type: interfaces.WorkFailureTypeTimeout},
+	}
+	if !scriptMetricTimedOut(timeoutResult) {
+		t.Fatal("expected timeout result to report timed out")
+	}
+	if got := scriptMetricFailureReason(timeoutResult); got != string(interfaces.WorkFailureTypeTimeout) {
+		t.Fatalf("failure reason = %q, want %q", got, interfaces.WorkFailureTypeTimeout)
+	}
+
+	commandResult := interfaces.WorkResult{
+		Outcome: interfaces.OutcomeRejected,
+		Diagnostics: &interfaces.WorkDiagnostics{
+			Command: &interfaces.CommandDiagnostic{
+				ExitCode: 7,
+				Duration: 250 * time.Millisecond,
+			},
+		},
+	}
+	if got := scriptMetricFailureReason(commandResult); got != "exit_code" {
+		t.Fatalf("failure reason = %q, want exit_code", got)
+	}
+	if duration, ok := scriptMetricDurationMilliseconds(commandResult); !ok || duration != 250 {
+		t.Fatalf("command duration = %v, %v want 250, true", duration, ok)
+	}
+
+	outcomeResult := interfaces.WorkResult{
+		Outcome: interfaces.OutcomeContinue,
+		Metrics: interfaces.WorkMetrics{Duration: 125 * time.Millisecond},
+	}
+	if duration, ok := scriptMetricDurationMilliseconds(outcomeResult); !ok || duration != 125 {
+		t.Fatalf("metrics duration = %v, %v want 125, true", duration, ok)
+	}
+	if got := scriptMetricFailureReason(outcomeResult); got != string(interfaces.OutcomeContinue) {
+		t.Fatalf("fallback failure reason = %q, want %q", got, interfaces.OutcomeContinue)
+	}
 }

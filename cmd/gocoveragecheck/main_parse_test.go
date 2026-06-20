@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -49,7 +48,7 @@ func TestSplitList(t *testing.T) {
 	}
 }
 
-func TestParseZeroCoveragePackagesFromReport(t *testing.T) {
+func TestParsePackageCoverageSummariesFromReport(t *testing.T) {
 	t.Parallel()
 
 	report := strings.Join([]string{
@@ -61,16 +60,17 @@ func TestParseZeroCoveragePackagesFromReport(t *testing.T) {
 		"",
 	}, "\n")
 
-	got, err := parseZeroCoveragePackagesFromReport(report)
+	got, err := parsePackageCoverageSummariesFromReport(report)
 	if err != nil {
-		t.Fatalf("parseZeroCoveragePackagesFromReport() error = %v", err)
+		t.Fatalf("parsePackageCoverageSummariesFromReport() error = %v", err)
 	}
 
-	want := map[string]bool{
-		modulePath + "/pkg/config": true,
+	want := map[string]float64{
+		modulePath + "/pkg/config":  0,
+		modulePath + "/pkg/service": 82.5,
 	}
-	if !maps.Equal(got, want) {
-		t.Fatalf("parseZeroCoveragePackagesFromReport() = %v, want %v", got, want)
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("parsePackageCoverageSummariesFromReport() = %v, want %v", got, want)
 	}
 }
 
@@ -88,18 +88,18 @@ func TestParseTotalCoverageRejectsMalformedPercentageToken(t *testing.T) {
 	}
 }
 
-func TestParseZeroCoveragePackagesFromReportRejectsMalformedPercentageToken(t *testing.T) {
+func TestParsePackageCoverageSummariesFromReportRejectsMalformedPercentageToken(t *testing.T) {
 	t.Parallel()
 
 	report := modulePath + "/pkg/config\t\tcoverage: 1.2.3% of statements\n"
-	_, err := parseZeroCoveragePackagesFromReport(report)
+	_, err := parsePackageCoverageSummariesFromReport(report)
 	if err == nil {
-		t.Fatal("parseZeroCoveragePackagesFromReport() unexpectedly succeeded")
+		t.Fatal("parsePackageCoverageSummariesFromReport() unexpectedly succeeded")
 	}
 
 	wantErr := "parse go coverage package percentage \"1.2.3\": strconv.ParseFloat: parsing \"1.2.3\": invalid syntax"
 	if err.Error() != wantErr {
-		t.Fatalf("parseZeroCoveragePackagesFromReport() error = %q, want %q", err.Error(), wantErr)
+		t.Fatalf("parsePackageCoverageSummariesFromReport() error = %q, want %q", err.Error(), wantErr)
 	}
 }
 

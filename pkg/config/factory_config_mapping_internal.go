@@ -873,10 +873,6 @@ func internalFactoryInputKindFromPublic(kind factoryapi.InputKind) interfaces.In
 	}
 }
 
-func publicFactoryWorkerTypeFromInternal(value string) factoryapi.WorkerType {
-	return interfaces.GeneratedPublicFactoryWorkerType(value)
-}
-
 func internalFactoryWorkerTypeFromPublic(value factoryapi.WorkerType) string {
 	if runtimeType := interfaces.InternalRuntimeWorkerTypeFromPublic(string(value)); runtimeType != "" {
 		return runtimeType

@@ -1,9 +1,6 @@
 package factorysessionexecution
 
-import (
-	"strings"
-	"time"
-)
+import "time"
 
 // IsTerminalLifecycleStatus reports whether status is terminal and therefore
 // immutable except for explicitly allowed inspection or retry behaviors.
@@ -19,12 +16,6 @@ func IsTerminalLifecycleStatus(status LifecycleStatus) bool {
 	default:
 		return false
 	}
-}
-
-// AllowsPostTerminalInspection reports whether read/status/result/dispatch/artifact
-// inspection remains allowed after the session reaches a terminal status.
-func AllowsPostTerminalInspection(status LifecycleStatus) bool {
-	return status != ""
 }
 
 // AllowsRetryDispatchOnTerminal reports whether retry-dispatch remains permitted
@@ -123,49 +114,23 @@ func EvaluateLifecycleControl(operation LifecycleControlKind, status LifecycleSt
 	}
 }
 
-// NormalizeLifecycleStatus trims and validates one durable lifecycle status value.
-func NormalizeLifecycleStatus(status string) (LifecycleStatus, error) {
-	trimmed := strings.TrimSpace(status)
-	if trimmed == "" {
-		return "", NewValidationError("status", "status is required")
-	}
-	normalized := LifecycleStatus(trimmed)
-	switch normalized {
-	case LifecycleStatusQueued,
-		LifecycleStatusAwaitingApproval,
-		LifecycleStatusRunning,
-		LifecycleStatusPaused,
-		LifecycleStatusResuming,
-		LifecycleStatusSucceeded,
-		LifecycleStatusFailed,
-		LifecycleStatusCanceling,
-		LifecycleStatusCanceled,
-		LifecycleStatusTimedOut,
-		LifecycleStatusInterrupted,
-		LifecycleStatusTerminated:
-		return normalized, nil
-	default:
-		return "", NewValidationError("status", "status is invalid")
-	}
-}
-
 // LifecycleStatus is the durable factory-session lifecycle status shared by read
 // and control surfaces.
 type LifecycleStatus string
 
 const (
-	LifecycleStatusQueued            LifecycleStatus = "QUEUED"
-	LifecycleStatusAwaitingApproval  LifecycleStatus = "AWAITING_APPROVAL"
-	LifecycleStatusRunning           LifecycleStatus = "RUNNING"
-	LifecycleStatusPaused            LifecycleStatus = "PAUSED"
-	LifecycleStatusResuming          LifecycleStatus = "RESUMING"
-	LifecycleStatusSucceeded         LifecycleStatus = "SUCCEEDED"
-	LifecycleStatusFailed            LifecycleStatus = "FAILED"
-	LifecycleStatusCanceling         LifecycleStatus = "CANCELING"
-	LifecycleStatusCanceled          LifecycleStatus = "CANCELED"
-	LifecycleStatusTimedOut          LifecycleStatus = "TIMED_OUT"
-	LifecycleStatusInterrupted       LifecycleStatus = "INTERRUPTED"
-	LifecycleStatusTerminated        LifecycleStatus = "TERMINATED"
+	LifecycleStatusQueued           LifecycleStatus = "QUEUED"
+	LifecycleStatusAwaitingApproval LifecycleStatus = "AWAITING_APPROVAL"
+	LifecycleStatusRunning          LifecycleStatus = "RUNNING"
+	LifecycleStatusPaused           LifecycleStatus = "PAUSED"
+	LifecycleStatusResuming         LifecycleStatus = "RESUMING"
+	LifecycleStatusSucceeded        LifecycleStatus = "SUCCEEDED"
+	LifecycleStatusFailed           LifecycleStatus = "FAILED"
+	LifecycleStatusCanceling        LifecycleStatus = "CANCELING"
+	LifecycleStatusCanceled         LifecycleStatus = "CANCELED"
+	LifecycleStatusTimedOut         LifecycleStatus = "TIMED_OUT"
+	LifecycleStatusInterrupted      LifecycleStatus = "INTERRUPTED"
+	LifecycleStatusTerminated       LifecycleStatus = "TERMINATED"
 )
 
 // LifecycleControlKind identifies one durable session lifecycle control operation.
@@ -174,10 +139,10 @@ type LifecycleControlKind string
 const (
 	LifecycleControlPause         LifecycleControlKind = "PAUSE"
 	LifecycleControlResume        LifecycleControlKind = "RESUME"
-	LifecycleControlCancel          LifecycleControlKind = "CANCEL"
-	LifecycleControlTerminate       LifecycleControlKind = "TERMINATE"
-	LifecycleControlApprove         LifecycleControlKind = "APPROVE"
-	LifecycleControlRetryDispatch   LifecycleControlKind = "RETRY_DISPATCH"
+	LifecycleControlCancel        LifecycleControlKind = "CANCEL"
+	LifecycleControlTerminate     LifecycleControlKind = "TERMINATE"
+	LifecycleControlApprove       LifecycleControlKind = "APPROVE"
+	LifecycleControlRetryDispatch LifecycleControlKind = "RETRY_DISPATCH"
 )
 
 // LifecycleControlOutcome reports how one lifecycle control request was evaluated.
@@ -292,25 +257,25 @@ func EmptySessionUsage() SessionUsage {
 // SessionReadResult is the shared durable session read projection consumed by API,
 // CLI, MCP, and UI transports.
 type SessionReadResult struct {
-	SessionID         string
-	Status            LifecycleStatus
-	OrchestratorKind  string
-	Dialect           string
-	ResolvedSource    ResolvedSource
-	SourceHash        string
-	Policy            PolicyProjection
-	Phase             string
-	PhaseSummaries    []PhaseSummary
-	Progress          *ProgressCounts
-	Budgets           *SessionBudgets
-	Usage             SessionUsage
-	ResultSummary     *ResultSummary
-	ArtifactRefs      []ArtifactRefSummary
-	ArtifactCount     int
-	Failure           *FailureSummary
-	Lifecycle         *LifecycleTimestamps
-	StaleLease        bool
-	Links             InspectionLinks
+	SessionID        string
+	Status           LifecycleStatus
+	OrchestratorKind string
+	Dialect          string
+	ResolvedSource   ResolvedSource
+	SourceHash       string
+	Policy           PolicyProjection
+	Phase            string
+	PhaseSummaries   []PhaseSummary
+	Progress         *ProgressCounts
+	Budgets          *SessionBudgets
+	Usage            SessionUsage
+	ResultSummary    *ResultSummary
+	ArtifactRefs     []ArtifactRefSummary
+	ArtifactCount    int
+	Failure          *FailureSummary
+	Lifecycle        *LifecycleTimestamps
+	StaleLease       bool
+	Links            InspectionLinks
 }
 
 // LifecycleControlLinks are API-relative links for post-control inspection.

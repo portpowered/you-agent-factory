@@ -10,6 +10,8 @@ import (
 	"testing"
 )
 
+const tempProfileMarkerFilename = "gocoveragecheck-last-temp-profile.txt"
+
 func TestGoCoverageCheckFakeGoProcess(t *testing.T) {
 	args, ok := helperCommandArgs(os.Args)
 	if !ok || len(args) == 0 || args[0] != "go" {
@@ -18,16 +20,23 @@ func TestGoCoverageCheckFakeGoProcess(t *testing.T) {
 
 	switch {
 	case len(args) >= 2 && args[1] == "test":
-		profilePath := helperCoverProfilePath(args[2:])
-		writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
-			"mode: count",
-			modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
-			modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
-			"",
-		}, "\n"))
+		if helperHasArgPrefix(args[2:], "-coverpkg=") {
+			profilePath := helperCoverProfilePath(args[2:])
+			writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
+				"mode: count",
+				modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
+				modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
+				"",
+			}, "\n"))
+			fmt.Fprint(os.Stdout,
+				modulePath+"/pkg/config\t\tcoverage: 0.0% of statements\n"+
+					modulePath+"/pkg/generatedclient\t\tcoverage: 0.0% of statements\n",
+			)
+			os.Exit(0)
+		}
 		fmt.Fprint(os.Stdout,
 			modulePath+"/pkg/config\t\tcoverage: 0.0% of statements\n"+
-				modulePath+"/pkg/generatedclient\t\tcoverage: 0.0% of statements\n",
+				modulePath+"/pkg/service\t\tcoverage: 100.0% of statements\n",
 		)
 		os.Exit(0)
 	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
@@ -50,16 +59,23 @@ func TestGoCoverageCheckFakeGoProcessWithOKSummary(t *testing.T) {
 
 	switch {
 	case len(args) >= 2 && args[1] == "test":
-		profilePath := helperCoverProfilePath(args[2:])
-		writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
-			"mode: count",
-			modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
-			modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
-			"",
-		}, "\n"))
+		if helperHasArgPrefix(args[2:], "-coverpkg=") {
+			profilePath := helperCoverProfilePath(args[2:])
+			writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
+				"mode: count",
+				modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
+				modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
+				"",
+			}, "\n"))
+			fmt.Fprint(os.Stdout,
+				"ok  "+modulePath+"/pkg/config\t0.123s\tcoverage: 0.0% of statements\n"+
+					"ok  "+modulePath+"/pkg/generatedclient\t(cached)\tcoverage: 0.0% of statements\n",
+			)
+			os.Exit(0)
+		}
 		fmt.Fprint(os.Stdout,
 			"ok  "+modulePath+"/pkg/config\t0.123s\tcoverage: 0.0% of statements\n"+
-				"ok  "+modulePath+"/pkg/generatedclient\t(cached)\tcoverage: 0.0% of statements\n",
+				"ok  "+modulePath+"/pkg/service\t(cached)\tcoverage: 100.0% of statements\n",
 		)
 		os.Exit(0)
 	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
@@ -82,14 +98,21 @@ func TestGoCoverageCheckFakeGoProcessPassing(t *testing.T) {
 
 	switch {
 	case len(args) >= 2 && args[1] == "test":
-		profilePath := helperCoverProfilePath(args[2:])
-		writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
-			"mode: count",
-			modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
-			modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
-			"",
-		}, "\n"))
-		fmt.Fprint(os.Stdout, modulePath+"/pkg/config\t\tcoverage: 75.0% of statements\n")
+		if helperHasArgPrefix(args[2:], "-coverpkg=") {
+			profilePath := helperCoverProfilePath(args[2:])
+			writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
+				"mode: count",
+				modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
+				modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
+				"",
+			}, "\n"))
+			fmt.Fprint(os.Stdout, modulePath+"/pkg/config\t\tcoverage: 75.0% of statements\n")
+			os.Exit(0)
+		}
+		fmt.Fprint(os.Stdout,
+			modulePath+"/pkg/config\t\tcoverage: 100.0% of statements\n"+
+				modulePath+"/pkg/service\t\tcoverage: 100.0% of statements\n",
+		)
 		os.Exit(0)
 	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
 		fmt.Fprint(os.Stdout,
@@ -112,16 +135,23 @@ func TestGoCoverageCheckFakeGoProcessWithCoverpkgOKSummary(t *testing.T) {
 
 	switch {
 	case len(args) >= 2 && args[1] == "test":
-		profilePath := helperCoverProfilePath(args[2:])
-		writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
-			"mode: count",
-			modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
-			modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
-			"",
-		}, "\n"))
+		if helperHasArgPrefix(args[2:], "-coverpkg=") {
+			profilePath := helperCoverProfilePath(args[2:])
+			writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
+				"mode: count",
+				modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
+				modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
+				"",
+			}, "\n"))
+			fmt.Fprint(os.Stdout,
+				"ok  "+modulePath+"/pkg/config\t0.123s\tcoverage: 0.0% of statements in "+modulePath+"/pkg/config, "+modulePath+"/pkg/service, "+modulePath+"/pkg/generatedclient\n"+
+					"ok  "+modulePath+"/pkg/generatedclient\t(cached)\tcoverage: 0.0% of statements in "+modulePath+"/pkg/generatedclient, "+modulePath+"/pkg/service\n",
+			)
+			os.Exit(0)
+		}
 		fmt.Fprint(os.Stdout,
-			"ok  "+modulePath+"/pkg/config\t0.123s\tcoverage: 0.0% of statements in "+modulePath+"/pkg/config, "+modulePath+"/pkg/service, "+modulePath+"/pkg/generatedclient\n"+
-				"ok  "+modulePath+"/pkg/generatedclient\t(cached)\tcoverage: 0.0% of statements in "+modulePath+"/pkg/generatedclient, "+modulePath+"/pkg/service\n",
+			"ok  "+modulePath+"/pkg/config\t0.123s\tcoverage: 0.0% of statements\n"+
+				"ok  "+modulePath+"/pkg/service\t(cached)\tcoverage: 100.0% of statements\n",
 		)
 		os.Exit(0)
 	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
@@ -144,15 +174,22 @@ func TestGoCoverageCheckFakeGoProcessWithTempProfileReport(t *testing.T) {
 
 	switch {
 	case len(args) >= 2 && args[1] == "test":
-		profilePath := helperCoverProfilePath(args[2:])
-		writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
-			"mode: count",
-			modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
-			modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
-			"",
-		}, "\n"))
-		fmt.Fprintf(os.Stdout, "TEMP_PROFILE=%s\n", profilePath)
-		fmt.Fprint(os.Stdout, modulePath+"/pkg/config\t\tcoverage: 75.0% of statements\n")
+		if helperHasArgPrefix(args[2:], "-coverpkg=") {
+			profilePath := helperCoverProfilePath(args[2:])
+			writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
+				"mode: count",
+				modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
+				modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
+				"",
+			}, "\n"))
+			writeTempProfileMarkerOrExit(profilePath)
+			fmt.Fprint(os.Stdout, modulePath+"/pkg/config\t\tcoverage: 75.0% of statements\n")
+			os.Exit(0)
+		}
+		fmt.Fprint(os.Stdout,
+			modulePath+"/pkg/config\t\tcoverage: 100.0% of statements\n"+
+				modulePath+"/pkg/service\t\tcoverage: 100.0% of statements\n",
+		)
 		os.Exit(0)
 	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
 		fmt.Fprint(os.Stdout,
@@ -175,13 +212,17 @@ func TestGoCoverageCheckFakeGoProcessCoverFailsWithStderr(t *testing.T) {
 
 	switch {
 	case len(args) >= 2 && args[1] == "test":
-		profilePath := helperCoverProfilePath(args[2:])
-		writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
-			"mode: count",
-			modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
-			"",
-		}, "\n"))
-		fmt.Fprint(os.Stdout, modulePath+"/pkg/config\t\tcoverage: 75.0% of statements\n")
+		if helperHasArgPrefix(args[2:], "-coverpkg=") {
+			profilePath := helperCoverProfilePath(args[2:])
+			writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
+				"mode: count",
+				modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
+				"",
+			}, "\n"))
+			fmt.Fprint(os.Stdout, modulePath+"/pkg/config\t\tcoverage: 75.0% of statements\n")
+			os.Exit(0)
+		}
+		fmt.Fprint(os.Stdout, modulePath+"/pkg/config\t\tcoverage: 100.0% of statements\n")
 		os.Exit(0)
 	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
 		fmt.Fprint(os.Stderr, "stderr detail from cover tool")
@@ -200,13 +241,17 @@ func TestGoCoverageCheckFakeGoProcessCoverFailsWithStdout(t *testing.T) {
 
 	switch {
 	case len(args) >= 2 && args[1] == "test":
-		profilePath := helperCoverProfilePath(args[2:])
-		writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
-			"mode: count",
-			modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
-			"",
-		}, "\n"))
-		fmt.Fprint(os.Stdout, modulePath+"/pkg/config\t\tcoverage: 75.0% of statements\n")
+		if helperHasArgPrefix(args[2:], "-coverpkg=") {
+			profilePath := helperCoverProfilePath(args[2:])
+			writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
+				"mode: count",
+				modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
+				"",
+			}, "\n"))
+			fmt.Fprint(os.Stdout, modulePath+"/pkg/config\t\tcoverage: 75.0% of statements\n")
+			os.Exit(0)
+		}
+		fmt.Fprint(os.Stdout, modulePath+"/pkg/config\t\tcoverage: 100.0% of statements\n")
 		os.Exit(0)
 	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
 		fmt.Fprint(os.Stdout, "stdout detail from cover tool")
@@ -224,6 +269,7 @@ func TestGoCoverageCheckFakeGoProcessTestFailsWithoutDetail(t *testing.T) {
 	}
 
 	if len(args) >= 2 && args[1] == "test" {
+		fmt.Fprint(os.Stdout, "raw failure output from go test")
 		os.Exit(7)
 	}
 
@@ -239,13 +285,17 @@ func TestGoCoverageCheckFakeGoProcessCoverFailsWithoutDetail(t *testing.T) {
 
 	switch {
 	case len(args) >= 2 && args[1] == "test":
-		profilePath := helperCoverProfilePath(args[2:])
-		writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
-			"mode: count",
-			modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
-			"",
-		}, "\n"))
-		fmt.Fprint(os.Stdout, modulePath+"/pkg/config\t\tcoverage: 75.0% of statements\n")
+		if helperHasArgPrefix(args[2:], "-coverpkg=") {
+			profilePath := helperCoverProfilePath(args[2:])
+			writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
+				"mode: count",
+				modulePath + "/pkg/config/config.go:1.1,2.1 3 1",
+				"",
+			}, "\n"))
+			fmt.Fprint(os.Stdout, modulePath+"/pkg/config\t\tcoverage: 75.0% of statements\n")
+			os.Exit(0)
+		}
+		fmt.Fprint(os.Stdout, modulePath+"/pkg/config\t\tcoverage: 100.0% of statements\n")
 		os.Exit(0)
 	case len(args) == 5 && args[1] == "tool" && args[2] == "cover" && args[3] == "-func":
 		os.Exit(8)
@@ -344,16 +394,12 @@ func helperCommandArgs(argv []string) ([]string, bool) {
 	return nil, false
 }
 
-func parseTempProfilePath(t *testing.T, output string) string {
-	t.Helper()
-
-	for _, line := range strings.Split(output, "\n") {
-		if strings.HasPrefix(line, "TEMP_PROFILE=") {
-			return strings.TrimPrefix(line, "TEMP_PROFILE=")
-		}
+func writeTempProfileMarkerOrExit(profilePath string) {
+	markerPath := filepath.Join(os.TempDir(), tempProfileMarkerFilename)
+	if err := os.WriteFile(markerPath, []byte(profilePath), 0o600); err != nil {
+		fmt.Fprintf(os.Stderr, "write temp profile marker: %v", err)
+		os.Exit(2)
 	}
-	t.Fatalf("TEMP_PROFILE marker missing from output %q", output)
-	return ""
 }
 
 func helperCoverProfilePath(args []string) string {
@@ -365,6 +411,15 @@ func helperCoverProfilePath(args []string) string {
 	fmt.Fprint(os.Stderr, "missing coverprofile argument")
 	os.Exit(2)
 	return ""
+}
+
+func helperHasArgPrefix(args []string, prefix string) bool {
+	for _, arg := range args {
+		if strings.HasPrefix(arg, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func writeFakeCoverageProfileOrExit(profilePath string, profile string) {

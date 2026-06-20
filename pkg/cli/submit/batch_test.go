@@ -797,7 +797,7 @@ func TestSubmitBatch_UsesDocsExampleStartupWorkFile(t *testing.T) {
 func TestSubmitBatch_DryRunLocalAgentCliRuntimeBatchExample(t *testing.T) {
 	path := testutil.MustRepoPath(
 		t,
-		"factory/inputs/BATCH/default/factory-batch-local-agent-cli-runtime.json",
+		"tests/functional/smoke/testdata/factory-batch-local-agent-cli-runtime.json",
 	)
 
 	var out bytes.Buffer

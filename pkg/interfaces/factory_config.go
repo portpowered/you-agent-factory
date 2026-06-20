@@ -686,11 +686,6 @@ func StrictPublicFactoryOrchestratorKind(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryOrchestratorKindAliases, false)
 }
 
-// PermissivePublicFactoryOrchestratorKind canonicalizes supported orchestrator kinds and preserves unknown values.
-func PermissivePublicFactoryOrchestratorKind(value string) string {
-	return normalizePublicFactoryEnumValue(value, publicFactoryOrchestratorKindAliases, true)
-}
-
 var publicFactoryOrchestratorKindAliases = map[string]string{
 	OrchestratorKindPetri:      OrchestratorKindPetri,
 	OrchestratorKindJavaScript: OrchestratorKindJavaScript,

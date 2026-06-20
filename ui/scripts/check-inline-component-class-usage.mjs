@@ -278,12 +278,8 @@ function collectReferences(sourceFile, constantName, declarationName, checker) {
   return references;
 }
 
-function findInlineComponentClassViolations(
-  filePath,
-  _relativeFilePath,
-  sourceText,
-) {
-  const program = ts.createProgram([filePath], {
+function createProgram(sourceFiles) {
+  return ts.createProgram(sourceFiles, {
     allowJs: false,
     jsx: ts.JsxEmit.Preserve,
     module: ts.ModuleKind.ESNext,
@@ -291,13 +287,13 @@ function findInlineComponentClassViolations(
     skipLibCheck: true,
     target: ts.ScriptTarget.Latest,
   });
-  const sourceFile = program.getSourceFile(filePath);
+}
 
+function findInlineComponentClassViolations(sourceFile, sourceText, checker) {
   if (!sourceFile) {
     return [];
   }
 
-  const checker = program.getTypeChecker();
   const declarations = collectTopLevelDeclarations(sourceFile);
   const importedBindings = collectImportedBindings(sourceFile);
   const violations = [];
@@ -354,19 +350,22 @@ export async function scanInlineComponentClassUsage(
   allowlist = allowlistedInlineComponentClassUsage,
 ) {
   const sourceFiles = await collectSourceFiles(rootDirectory);
+  const program = createProgram(sourceFiles);
+  const checker = program.getTypeChecker();
   const rootUiDirectory = path.dirname(rootDirectory);
   const allowlistedKeys = new Set(allowlist.map((entry) => toPosixPath(entry)));
   const observedAllowlistedKeys = new Set();
   const violations = [];
 
-  for (const sourceFile of sourceFiles.sort()) {
-    const relativeFilePath = toUiRelativePath(sourceFile, rootUiDirectory);
-    const sourceText = await readFile(sourceFile, "utf8");
+  for (const sourceFilePath of sourceFiles.sort()) {
+    const relativeFilePath = toUiRelativePath(sourceFilePath, rootUiDirectory);
+    const sourceText = await readFile(sourceFilePath, "utf8");
+    const sourceFile = program.getSourceFile(sourceFilePath);
 
     for (const violation of findInlineComponentClassViolations(
       sourceFile,
-      relativeFilePath,
       sourceText,
+      checker,
     )) {
       const allowlistKey = createAllowlistKey(
         relativeFilePath,
@@ -380,7 +379,7 @@ export async function scanInlineComponentClassUsage(
       violations.push({
         ...violation,
         allowlistKey,
-        filePath: sourceFile,
+        filePath: sourceFilePath,
         relativeFilePath,
       });
     }

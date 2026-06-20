@@ -48,20 +48,6 @@ func bindServiceStartupRuntime(svc *FactoryService, bundle *factoryRuntimeBundle
 	svc.setRunState(context.Background(), defaultFactorySessionID, handle)
 }
 
-func rewireProcessModelHost(svc *FactoryService, puller modelAssetPuller) modelhost.Host {
-	if puller == nil {
-		return nil
-	}
-	host := modelhost.NewCatalogHost(modelhost.NewLocalAssetGateway(puller), modelhost.Options{
-		SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
-	})
-	if svc != nil && svc.core != nil {
-		svc.core.collaborators.LocalModels.host = host
-		svc.core.collaborators.LocalModels.assets = puller
-	}
-	return host
-}
-
 type recordingDiagnosticsProvider struct{}
 
 func (recordingDiagnosticsProvider) Infer(_ context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
