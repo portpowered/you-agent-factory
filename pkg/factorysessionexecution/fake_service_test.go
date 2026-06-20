@@ -1356,6 +1356,7 @@ func TestReplaySessionProjection_PauseResumeLifecycleEventsDeriveStatus(t *testi
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this regression keeps pause/resume append and no-op event immutability assertions together.
 func TestFakeService_PauseResumeAppendsLifecycleControlEventsWithoutNoOpMutation(t *testing.T) {
 	service, err := NewFakeServiceFromContractFixtures(contractFixturesPath(t))
 	if err != nil {

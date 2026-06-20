@@ -125,36 +125,53 @@ func TestFactoryService_LiveSessionPauseResume_HTTPEmitsSessionLifecycleControlE
 	if err != nil {
 		t.Fatalf("GetFactoryEvents: %v", err)
 	}
+	lifecycleControls := filterSessionLifecycleControlEvents(events)
+	if len(lifecycleControls) != 2 {
+		t.Fatalf("SESSION_LIFECYCLE_CONTROL events = %d, want pause and resume", len(lifecycleControls))
+	}
+	assertAcceptedSessionLifecycleControlPayload(
+		t,
+		lifecycleControls[0],
+		factoryapi.FactorySessionLifecycleControlKindPause,
+		factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		factoryapi.FactorySessionDurableLifecycleStatusPaused,
+	)
+	assertAcceptedSessionLifecycleControlPayload(
+		t,
+		lifecycleControls[1],
+		factoryapi.FactorySessionLifecycleControlKindResume,
+		factoryapi.FactorySessionDurableLifecycleStatusPaused,
+		factoryapi.FactorySessionDurableLifecycleStatusRunning,
+	)
+}
+
+func filterSessionLifecycleControlEvents(events []factoryapi.FactoryEvent) []factoryapi.FactoryEvent {
 	var lifecycleControls []factoryapi.FactoryEvent
 	for _, event := range events {
 		if event.Type == factoryapi.FactoryEventTypeSessionLifecycleControl {
 			lifecycleControls = append(lifecycleControls, event)
 		}
 	}
-	if len(lifecycleControls) != 2 {
-		t.Fatalf("SESSION_LIFECYCLE_CONTROL events = %d, want pause and resume", len(lifecycleControls))
-	}
+	return lifecycleControls
+}
 
-	pausePayload, err := lifecycleControls[0].Payload.AsSessionLifecycleControlEventPayload()
+func assertAcceptedSessionLifecycleControlPayload(
+	t *testing.T,
+	event factoryapi.FactoryEvent,
+	operation factoryapi.FactorySessionLifecycleControlKind,
+	previousStatus factoryapi.FactorySessionDurableLifecycleStatus,
+	newStatus factoryapi.FactorySessionDurableLifecycleStatus,
+) {
+	t.Helper()
+	payload, err := event.Payload.AsSessionLifecycleControlEventPayload()
 	if err != nil {
-		t.Fatalf("pause lifecycle payload: %v", err)
+		t.Fatalf("lifecycle payload: %v", err)
 	}
-	if pausePayload.Operation != factoryapi.FactorySessionLifecycleControlKindPause ||
-		pausePayload.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted ||
-		pausePayload.PreviousStatus != factoryapi.FactorySessionDurableLifecycleStatusRunning ||
-		pausePayload.NewStatus != factoryapi.FactorySessionDurableLifecycleStatusPaused {
-		t.Fatalf("pause lifecycle payload = %#v, want RUNNING->PAUSED ACCEPTED", pausePayload)
-	}
-
-	resumePayload, err := lifecycleControls[1].Payload.AsSessionLifecycleControlEventPayload()
-	if err != nil {
-		t.Fatalf("resume lifecycle payload: %v", err)
-	}
-	if resumePayload.Operation != factoryapi.FactorySessionLifecycleControlKindResume ||
-		resumePayload.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted ||
-		resumePayload.PreviousStatus != factoryapi.FactorySessionDurableLifecycleStatusPaused ||
-		resumePayload.NewStatus != factoryapi.FactorySessionDurableLifecycleStatusRunning {
-		t.Fatalf("resume lifecycle payload = %#v, want PAUSED->RUNNING ACCEPTED", resumePayload)
+	if payload.Operation != operation ||
+		payload.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted ||
+		payload.PreviousStatus != previousStatus ||
+		payload.NewStatus != newStatus {
+		t.Fatalf("lifecycle payload = %#v, want %s %s->%s ACCEPTED", payload, operation, previousStatus, newStatus)
 	}
 }
 

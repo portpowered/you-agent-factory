@@ -272,6 +272,7 @@ func lookupRuntimeExtendedControlReplay(
 	return runtimeExtendedControlReplayLookup{requestID: requestID, tupleHash: tupleHash}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this runtime control path keeps validation, replay, accepted mutation, and event append together on one seam.
 func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 	ctx context.Context,
 	sessionID string,
