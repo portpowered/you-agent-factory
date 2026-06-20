@@ -41,6 +41,10 @@ type Factory interface {
 	// Pause pauses the factory loop. No transitions fire until resumed.
 	Pause(ctx context.Context) error
 
+	// Resume re-enables processing for a paused factory and wakes the engine
+	// when buffered submissions or worker results are waiting.
+	Resume(ctx context.Context) error
+
 	// GetFactoryEvents returns the current-process canonical event history.
 	GetFactoryEvents(ctx context.Context) ([]factoryapi.FactoryEvent, error)
 

@@ -196,10 +196,33 @@ func (e *FactoryEngine) NotifyResult() {
 }
 
 func (e *FactoryEngine) wakeForOperatorControl() {
+	e.wakeForPendingProcessing()
+}
+
+// WakeForPendingProcessing signals the engine loop when buffered submissions or
+// worker results are waiting to be processed.
+func (e *FactoryEngine) WakeForPendingProcessing() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.wakeForPendingProcessing()
+}
+
+func (e *FactoryEngine) wakeForPendingProcessing() {
+	if !e.hasBufferedInputs() {
+		return
+	}
 	select {
 	case e.submitSignal <- struct{}{}:
 	default:
 	}
+}
+
+func (e *FactoryEngine) hasBufferedInputs() bool {
+	if e.submissionHook != nil && len(e.submissionHook.batches) > 0 {
+		return true
+	}
+	buffer := e.runtimeState.ResultBuffer
+	return buffer != nil && buffer.HasData()
 }
 
 // SubmitWorkRequest validates and enqueues a canonical work request batch.
