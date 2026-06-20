@@ -80,6 +80,13 @@ type DispatchResultHook interface {
 	WaitCh() <-chan struct{}
 }
 
+// DispatchResultHookWakeSignaler is implemented by dispatch hooks that may
+// retain completed results after a consumed wake while automatic ticks are paused.
+type DispatchResultHookWakeSignaler interface {
+	HasBufferedResults() bool
+	SignalBufferedResults()
+}
+
 // CompletionDeliveryPlanner maps a runtime dispatch to the logical tick at
 // which a completed worker result may become visible.
 type CompletionDeliveryPlanner interface {

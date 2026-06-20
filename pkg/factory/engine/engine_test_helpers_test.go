@@ -92,6 +92,17 @@ func (h *testDispatchResultHook) WaitCh() <-chan struct{} {
 	return h.waitCh
 }
 
+func (h *testDispatchResultHook) HasBufferedResults() bool {
+	return len(h.results) > 0
+}
+
+func (h *testDispatchResultHook) SignalBufferedResults() {
+	select {
+	case h.waitCh <- struct{}{}:
+	default:
+	}
+}
+
 // buildTestNet creates a minimal net with one work type (init -> complete -> failed).
 func buildTestNet() *state.Net {
 	wt := &state.WorkType{

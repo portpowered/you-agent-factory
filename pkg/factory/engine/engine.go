@@ -208,12 +208,20 @@ func (e *FactoryEngine) WakeForPendingProcessing() {
 }
 
 func (e *FactoryEngine) wakeForPendingProcessing() {
-	if !e.hasBufferedInputs() {
-		return
+	if e.submissionHook != nil && len(e.submissionHook.batches) > 0 {
+		select {
+		case e.submitSignal <- struct{}{}:
+		default:
+		}
 	}
-	select {
-	case e.submitSignal <- struct{}{}:
-	default:
+	if buffer := e.runtimeState.ResultBuffer; buffer != nil && buffer.HasData() {
+		select {
+		case e.submitSignal <- struct{}{}:
+		default:
+		}
+	}
+	if hook, ok := e.dispatchHook.(factory.DispatchResultHookWakeSignaler); ok && hook.HasBufferedResults() {
+		hook.SignalBufferedResults()
 	}
 }
 
@@ -221,8 +229,13 @@ func (e *FactoryEngine) hasBufferedInputs() bool {
 	if e.submissionHook != nil && len(e.submissionHook.batches) > 0 {
 		return true
 	}
-	buffer := e.runtimeState.ResultBuffer
-	return buffer != nil && buffer.HasData()
+	if buffer := e.runtimeState.ResultBuffer; buffer != nil && buffer.HasData() {
+		return true
+	}
+	if hook, ok := e.dispatchHook.(factory.DispatchResultHookWakeSignaler); ok {
+		return hook.HasBufferedResults()
+	}
+	return false
 }
 
 // SubmitWorkRequest validates and enqueues a canonical work request batch.
