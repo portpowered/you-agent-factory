@@ -232,6 +232,9 @@ func applyPreservedInputPayload(color *interfaces.TokenColor, in OutputTokenInpu
 	if len(color.Content) == 0 && len(source.Content) > 0 {
 		color.Content = interfaces.CloneWorkContentParts(source.Content)
 	}
+	if len(color.Tags) == 0 && len(source.Tags) > 0 {
+		color.Tags = factorypkg.CloneRuntimeTags(source.Tags)
+	}
 }
 
 func reuseConsumedResourceToken(in OutputTokenInput, arc petri.Arc, color interfaces.TokenColor) *interfaces.Token {

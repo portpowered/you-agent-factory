@@ -763,3 +763,161 @@ func TestOutputToken_OutputAsPayload_UsesWorkerOutput(t *testing.T) {
 		t.Fatalf("payload = %q, want worker-output", token.Color.Payload)
 	}
 }
+
+func TestOutputToken_PreserveInput_KeepsConsumedTags(t *testing.T) {
+	transformer := New(
+		map[string]*petri.Place{
+			"review:init": {ID: "review:init", TypeID: "review"},
+		},
+		map[string]*state.WorkType{
+			"task":   {ID: "task"},
+			"review": {ID: "review"},
+		},
+		WithWorkIDGenerator(petri.NewWorkIDGenerator()),
+	)
+
+	token, err := transformer.OutputToken(OutputTokenInput{
+		ArcIndex: 0,
+		Arcs: []petri.Arc{
+			{PlaceID: "review:init", Direction: petri.ArcOutput},
+		},
+		InputColors: []interfaces.TokenColor{{
+			WorkTypeID: "task",
+			WorkID:     "work-task-1",
+			Payload:    []byte("input-payload"),
+			Tags:       map[string]string{"objective": "goal-1", "lane": "review"},
+		}},
+		Output:              "worker-output",
+		WorkPropagationMode: interfaces.WorkPropagationModePreserveInput,
+		Outcome:             interfaces.OutcomeAccepted,
+		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("OutputToken() error = %v", err)
+	}
+	if token.Color.Tags["objective"] != "goal-1" || token.Color.Tags["lane"] != "review" {
+		t.Fatalf("tags = %#v, want preserved input tags", token.Color.Tags)
+	}
+}
+
+func TestOutputToken_PreserveInput_OutcomeLanes_KeepConsumedPayload(t *testing.T) {
+	transformer := New(
+		map[string]*petri.Place{
+			"task:init":   {ID: "task:init", TypeID: "task", State: "init"},
+			"task:failed": {ID: "task:failed", TypeID: "task", State: "failed"},
+		},
+		map[string]*state.WorkType{
+			"task": {
+				ID: "task",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+					{Value: "failed", Category: state.StateCategoryFailed},
+				},
+			},
+		},
+	)
+
+	tests := []struct {
+		name    string
+		placeID string
+		outcome interfaces.WorkOutcome
+		feedback string
+		errText  string
+	}{
+		{name: "Continue", placeID: "task:init", outcome: interfaces.OutcomeContinue, feedback: "needs revision"},
+		{name: "Rejected", placeID: "task:init", outcome: interfaces.OutcomeRejected, feedback: "rejected"},
+		{name: "Failed", placeID: "task:failed", outcome: interfaces.OutcomeFailed, errText: "agent crashed"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			token, err := transformer.OutputToken(OutputTokenInput{
+				ArcIndex: 0,
+				Arcs: []petri.Arc{
+					{PlaceID: tt.placeID, Direction: petri.ArcOutput},
+				},
+				InputColors: []interfaces.TokenColor{{
+					WorkTypeID: "task",
+					WorkID:     "work-1",
+					Payload:    []byte("input-payload"),
+				}},
+				Output:              "worker-output",
+				WorkPropagationMode: interfaces.WorkPropagationModePreserveInput,
+				Outcome:             tt.outcome,
+				Feedback:            tt.feedback,
+				Error:               tt.errText,
+				TransitionID:        "t1",
+				Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
+				History: interfaces.TokenHistory{
+					TotalVisits:         map[string]int{},
+					ConsecutiveFailures: map[string]int{},
+					PlaceVisits:         map[string]int{},
+				},
+			})
+			if err != nil {
+				t.Fatalf("OutputToken() error = %v", err)
+			}
+			if string(token.Color.Payload) != "input-payload" {
+				t.Fatalf("payload = %q, want input-payload", token.Color.Payload)
+			}
+		})
+	}
+}
+
+func TestOutputToken_PreserveInput_MultiInput_UsesPrimaryNonResourceInput(t *testing.T) {
+	transformer := New(
+		map[string]*petri.Place{
+			"review:init": {ID: "review:init", TypeID: "review"},
+		},
+		map[string]*state.WorkType{
+			"objective": {ID: "objective"},
+			"context":   {ID: "context"},
+			"review":    {ID: "review"},
+		},
+		WithWorkIDGenerator(petri.NewWorkIDGenerator()),
+	)
+
+	token, err := transformer.OutputToken(OutputTokenInput{
+		ArcIndex: 0,
+		Arcs: []petri.Arc{
+			{PlaceID: "review:init", Direction: petri.ArcOutput},
+		},
+		InputColors: []interfaces.TokenColor{
+			{
+				WorkTypeID: "objective",
+				WorkID:     "work-objective",
+				Payload:    []byte("primary-input-payload"),
+				Tags:       map[string]string{"role": "primary"},
+			},
+			{
+				WorkTypeID: "context",
+				WorkID:     "work-context",
+				Payload:    []byte("secondary-input-payload"),
+				Tags:       map[string]string{"role": "secondary"},
+			},
+		},
+		Output:              "worker-output",
+		WorkPropagationMode: interfaces.WorkPropagationModePreserveInput,
+		Outcome:             interfaces.OutcomeAccepted,
+		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("OutputToken() error = %v", err)
+	}
+	if string(token.Color.Payload) != "primary-input-payload" {
+		t.Fatalf("payload = %q, want primary-input-payload", token.Color.Payload)
+	}
+	if token.Color.Tags["role"] != "primary" {
+		t.Fatalf("tags = %#v, want primary input tags", token.Color.Tags)
+	}
+}

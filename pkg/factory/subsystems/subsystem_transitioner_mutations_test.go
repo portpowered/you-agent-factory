@@ -125,6 +125,7 @@ func TestCalculateMutations_PreserveInput_KeepsConsumedPayloadForDownstreamWork(
 		Type: interfaces.WorkContentPartTypeText,
 		Text: "input-content",
 	}}
+	fixture.consumed[0].Color.Tags = map[string]string{"objective": "goal-1"}
 	fixture.inputColors = tokenColorsFromTokens(fixture.consumed)
 
 	mutations, err := fixture.calculateWithWorkstation(
@@ -152,6 +153,9 @@ func TestCalculateMutations_PreserveInput_KeepsConsumedPayloadForDownstreamWork(
 	if len(mutations[0].NewToken.Color.Content) != 1 || mutations[0].NewToken.Color.Content[0].Text != "input-content" {
 		t.Fatalf("content = %#v, want preserved input content", mutations[0].NewToken.Color.Content)
 	}
+	if mutations[0].NewToken.Color.Tags["objective"] != "goal-1" {
+		t.Fatalf("tags = %#v, want preserved input tags", mutations[0].NewToken.Color.Tags)
+	}
 }
 
 func TestCalculateMutations_OmittedWorkPropagation_UsesWorkerOutputPayload(t *testing.T) {
@@ -175,6 +179,159 @@ func TestCalculateMutations_OmittedWorkPropagation_UsesWorkerOutputPayload(t *te
 	}
 	if string(mutations[0].NewToken.Color.Payload) != "worker-output" {
 		t.Fatalf("payload = %q, want worker-output", mutations[0].NewToken.Color.Payload)
+	}
+}
+
+func preserveInputWorkstation() *interfaces.FactoryWorkstationConfig {
+	return &interfaces.FactoryWorkstationConfig{
+		WorkPropagation: &interfaces.WorkPropagationConfig{
+			Mode: interfaces.WorkPropagationModePreserveInput,
+		},
+	}
+}
+
+func TestCalculateMutations_PreserveInput_OutcomeLanes_KeepConsumedWorkData(t *testing.T) {
+	fixture := newCalculateMutationsFixture()
+	fixture.consumed[0].Color.Payload = []byte("input-payload")
+	fixture.consumed[0].Color.Content = []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: "input-content",
+	}}
+	fixture.consumed[0].Color.Tags = map[string]string{"objective": "goal-1"}
+	fixture.inputColors = tokenColorsFromTokens(fixture.consumed)
+
+	tests := []struct {
+		name   string
+		arcs   []petri.Arc
+		result resolvedWorkResult
+	}{
+		{
+			name: "Continue",
+			arcs: []petri.Arc{{ID: "continue", PlaceID: "wt-code:init"}},
+			result: resolvedWorkResult{
+				transitionID: "t1",
+				outcome:      interfaces.OutcomeContinue,
+				output:       "worker-output",
+				feedback:     "needs revision",
+			},
+		},
+		{
+			name: "Rejected",
+			arcs: []petri.Arc{{ID: "reject", PlaceID: "wt-code:init"}},
+			result: resolvedWorkResult{
+				transitionID: "t1",
+				outcome:      interfaces.OutcomeRejected,
+				output:       "worker-output",
+				feedback:     "rejected",
+			},
+		},
+		{
+			name: "Failed",
+			arcs: []petri.Arc{{ID: "fail", PlaceID: "wt-code:failed"}},
+			result: resolvedWorkResult{
+				transitionID: "t1",
+				outcome:      interfaces.OutcomeFailed,
+				output:       "worker-output",
+				err:          "agent crashed",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mutations, err := fixture.calculateWithWorkstation(tt.arcs, tt.result, preserveInputWorkstation())
+			if err != nil {
+				t.Fatalf("calculateMutations() error = %v", err)
+			}
+			if len(mutations) != 1 {
+				t.Fatalf("mutation count = %d, want 1", len(mutations))
+			}
+			token := mutations[0].NewToken
+			if string(token.Color.Payload) != "input-payload" {
+				t.Fatalf("payload = %q, want input-payload", token.Color.Payload)
+			}
+			if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "input-content" {
+				t.Fatalf("content = %#v, want preserved input content", token.Color.Content)
+			}
+			if token.Color.Tags["objective"] != "goal-1" {
+				t.Fatalf("tags = %#v, want preserved input tags", token.Color.Tags)
+			}
+		})
+	}
+}
+
+func TestCalculateMutations_PreserveInput_MultiInput_UsesPrimaryNonResourceInput(t *testing.T) {
+	fixture := newCalculateMutationsFixture()
+	fixture.consumed = []interfaces.Token{
+		{
+			ID:      "tok-primary",
+			PlaceID: "wt-objective:init",
+			Color: interfaces.TokenColor{
+				WorkID:     "work-objective",
+				WorkTypeID: "wt-objective",
+				Payload:    []byte("primary-input-payload"),
+				Tags:       map[string]string{"role": "primary"},
+			},
+			CreatedAt: fixture.now.Add(-2 * time.Hour),
+			EnteredAt: fixture.now.Add(-2 * time.Hour),
+			History: interfaces.TokenHistory{
+				TotalVisits:         map[string]int{},
+				ConsecutiveFailures: map[string]int{},
+				PlaceVisits:         map[string]int{},
+			},
+		},
+		{
+			ID:      "tok-secondary",
+			PlaceID: "wt-context:init",
+			Color: interfaces.TokenColor{
+				WorkID:     "work-context",
+				WorkTypeID: "wt-context",
+				Payload:    []byte("secondary-input-payload"),
+				Tags:       map[string]string{"role": "secondary"},
+			},
+			CreatedAt: fixture.now.Add(-time.Hour),
+			EnteredAt: fixture.now.Add(-time.Hour),
+			History: interfaces.TokenHistory{
+				TotalVisits:         map[string]int{},
+				ConsecutiveFailures: map[string]int{},
+				PlaceVisits:         map[string]int{},
+			},
+		},
+	}
+	fixture.inputColors = tokenColorsFromTokens(fixture.consumed)
+	places := map[string]*petri.Place{
+		"wt-objective:init": {ID: "wt-objective:init", TypeID: "wt-objective", State: "init"},
+		"wt-context:init":   {ID: "wt-context:init", TypeID: "wt-context", State: "init"},
+		"wt-review:init":    {ID: "wt-review:init", TypeID: "wt-review", State: "init"},
+	}
+	workTypes := map[string]*state.WorkType{
+		"wt-objective": {ID: "wt-objective"},
+		"wt-context":   {ID: "wt-context"},
+		"wt-review":    {ID: "wt-review"},
+	}
+	fixture.transformer = token_transformer.New(places, workTypes, token_transformer.WithWorkIDGenerator(petri.NewWorkIDGenerator()))
+
+	mutations, err := fixture.calculateWithWorkstation(
+		[]petri.Arc{{ID: "cross", PlaceID: "wt-review:init"}},
+		resolvedWorkResult{
+			transitionID: "t1",
+			outcome:      interfaces.OutcomeAccepted,
+			output:       "worker-output",
+		},
+		preserveInputWorkstation(),
+	)
+	if err != nil {
+		t.Fatalf("calculateMutations() error = %v", err)
+	}
+	if len(mutations) != 1 {
+		t.Fatalf("mutation count = %d, want 1", len(mutations))
+	}
+	token := mutations[0].NewToken
+	if string(token.Color.Payload) != "primary-input-payload" {
+		t.Fatalf("payload = %q, want primary-input-payload", token.Color.Payload)
+	}
+	if token.Color.Tags["role"] != "primary" {
+		t.Fatalf("tags = %#v, want primary input tags", token.Color.Tags)
 	}
 }
 
