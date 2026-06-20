@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 
+import { pausedDashboardStreamState } from "../lib/dashboard-event-stream";
 import { DashboardSessionLifecycleBanner } from "./dashboard-session-lifecycle-banner";
 
 describe("DashboardSessionLifecycleBanner", () => {
@@ -148,5 +149,69 @@ describe("DashboardSessionLifecycleBanner", () => {
 
     expect(screen.getAllByText("Factory Session paused").length).toBeGreaterThan(0);
     expect(screen.getByText("PAUSED")).toBeTruthy();
+  });
+
+  it("keeps paused Factory Session lifecycle visible alongside stale offline stream notice", () => {
+    render(
+      <DashboardSessionLifecycleBanner
+        bracket={{
+          lifecycle_control_status: "PAUSED",
+          paused_at: "2026-06-09T12:00:02Z",
+          started_at: "2026-06-09T12:00:00Z",
+        }}
+        streamState={{
+          message: "",
+          status: "offline",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Event stream stale")).toBeTruthy();
+    expect(screen.getAllByText("Factory Session paused").length).toBeGreaterThan(0);
+    expect(screen.getByText("PAUSED")).toBeTruthy();
+    expect(
+      screen.getByTestId("dashboard-session-lifecycle-banner").getAttribute(
+        "aria-live",
+      ),
+    ).toBe("polite");
+  });
+
+  it("keeps paused Factory Session lifecycle visible while reconnecting to the event stream", () => {
+    render(
+      <DashboardSessionLifecycleBanner
+        bracket={{
+          lifecycle_control_status: "PAUSED",
+          paused_at: "2026-06-09T12:00:02Z",
+          started_at: "2026-06-09T12:00:00Z",
+        }}
+        streamState={{
+          message: "Reconnecting to factory events...",
+          status: "reconnecting",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Reconnecting event stream")).toBeTruthy();
+    expect(screen.getAllByText("Factory Session paused").length).toBeGreaterThan(0);
+    expect(screen.getByText("PAUSED")).toBeTruthy();
+  });
+
+  it("shows paused-dashboard offline stream copy when live updates are paused", () => {
+    render(
+      <DashboardSessionLifecycleBanner
+        bracket={{
+          lifecycle_control_status: "RUNNING",
+          resumed_at: "2026-06-09T12:00:04Z",
+          started_at: "2026-06-09T12:00:00Z",
+        }}
+        streamState={pausedDashboardStreamState()}
+      />,
+    );
+
+    expect(
+      screen.getByText("Live session updates paused. Showing last event state."),
+    ).toBeTruthy();
+    expect(screen.getAllByText("Factory Session running").length).toBeGreaterThan(0);
+    expect(screen.getByText("RUNNING")).toBeTruthy();
   });
 });
