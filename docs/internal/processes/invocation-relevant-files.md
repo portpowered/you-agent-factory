@@ -77,6 +77,14 @@ primary-result behavior.
 - `pkg/cli/run/packaged_goal_invocation_test.go` also proves named `@you/goal`
   conflicting-source failures stay on the shared resolver contract and fail before
   `InvokeFactorySession`.
+- `pkg/cli/run/packaged_goal_invocation_parity_test.go` proves packaged `@you/goal`
+  CLI invocation requests and JSON success envelopes match the session invocation
+  API contract for the same logical text input, including stable
+  `INVOCATION_INPUT_SOURCE_CONFLICT` semantics.
+- `pkg/api/server_factory_goal_invocation_parity_test.go` proves the session
+  invocation API returns the same observable request and primary-result behavior
+  for packaged `@you/goal` text input and source-conflict failures as the CLI
+  parity tests.
 - `pkg/service/model_catalog.go` owns the session invocation wait loop, packaged TTS
   loading/completion/failure logs, and packaged-factory metrics while polling for
   primary results.
