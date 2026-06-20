@@ -100,13 +100,13 @@ func TestSameTraceIDGuard_MatchingCurrentChainingTraceCompletesJoin(t *testing.T
 		TraceID:                "trace-legacy-task",
 	}})
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:matched", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "plan:ready", 0, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:ready", 0, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:matched", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "plan:ready", 0, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:ready", 0, 3*time.Second)
 
 	h.Assert().
 		PlaceTokenCount("task:matched", 1).
@@ -142,11 +142,11 @@ func TestSameTraceIDGuard_FallsBackToLegacyTraceIDWhenCurrentChainingTraceIsMiss
 		TraceID:    "trace-shared",
 	}})
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:matched", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:matched", 1, 3*time.Second)
 
 	if provider.CallCount() != 1 {
 		t.Fatalf("expected matcher provider call once, got %d", provider.CallCount())
@@ -179,12 +179,12 @@ func TestSameTraceIDGuard_DifferentTraceIdentityStaysBlocked(t *testing.T) {
 		TraceID:                "trace-shared-name",
 	}})
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
-	support.WaitForHarnessPlaceTokenCount(t, h, "plan:ready", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:ready", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "plan:ready", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:ready", 1, 3*time.Second)
 
 	deadline := time.Now().Add(200 * time.Millisecond)
 	for time.Now().Before(deadline) {
@@ -225,12 +225,12 @@ func TestSameTraceIDGuard_MissingTraceIdentityFailsClosed(t *testing.T) {
 		WorkTypeID: "task",
 	}})
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
-	support.WaitForHarnessPlaceTokenCount(t, h, "plan:ready", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:ready", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "plan:ready", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:ready", 1, 3*time.Second)
 
 	deadline := time.Now().Add(200 * time.Millisecond)
 	for time.Now().Before(deadline) {

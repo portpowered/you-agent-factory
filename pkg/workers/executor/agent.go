@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -76,8 +77,30 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request interfaces.Worksta
 	}
 	diagnostics = withInferenceResponseDiagnostics(diagnostics, resp, retryCount)
 
+	if goal.UsesDecisionEnvelopeOutcome(workstationDef) {
+		return decisionEnvelopeWorkResult(request, resp, diagnostics, retryCount, start), nil
+	}
+
 	outcome := ae.evaluateOutcome(resp, workerDef)
 	return ae.workResultForInferenceResponse(request, resp, outcome, diagnostics, retryCount, start)
+}
+
+func decisionEnvelopeWorkResult(
+	request interfaces.WorkstationExecutionRequest,
+	resp interfaces.InferenceResponse,
+	diagnostics *interfaces.WorkDiagnostics,
+	retryCount int,
+	start time.Time,
+) interfaces.WorkResult {
+	result := goal.WorkResultFromDecisionEnvelopeJSONOrFailed(
+		request.Dispatch.DispatchID,
+		request.Dispatch.TransitionID,
+		resp.Content,
+	)
+	result.ProviderSession = interfaces.CloneProviderSessionMetadata(resp.ProviderSession)
+	result.Diagnostics = diagnostics
+	result.Metrics = agentWorkMetrics(start, retryCount)
+	return result
 }
 
 func workerTypeForExecutionRequest(request interfaces.WorkstationExecutionRequest) string {

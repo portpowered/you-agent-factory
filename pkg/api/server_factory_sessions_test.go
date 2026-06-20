@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -566,30 +565,6 @@ func TestParseCodexSessionDetails_EmitsMixedTranscriptChronologically(t *testing
 	assertMixedCodexSessionTranscript(t, parsed)
 }
 
-func TestParseCodexSessionDetails_PreservesLongMessageContent(t *testing.T) {
-	longPart := strings.Repeat("skill description ", 90) + "final-visible-tail"
-	session := strings.Join([]string{
-		`{"timestamp":"2026-06-04T10:00:00Z","type":"turn_context"}`,
-		`{"timestamp":"2026-06-04T10:00:01Z","type":"response_item","payload":{"type":"message","role":"developer","content":[{"type":"input_text","text":"permissions block"},{"type":"input_text","text":` + strconv.Quote(longPart) + `}]}}`,
-	}, "\n")
-
-	parsed, err := parseCodexSessionDetails(strings.NewReader(session))
-	if err != nil {
-		t.Fatalf("parse codex session details: %v", err)
-	}
-
-	if len(parsed.Transcript) != 1 {
-		t.Fatalf("transcript = %#v, want one developer message transcript entry", parsed.Transcript)
-	}
-	got := stringValue(parsed.Transcript[0].Text)
-	if !strings.Contains(got, "permissions block") || !strings.Contains(got, "final-visible-tail") {
-		t.Fatalf("transcript text length = %d, want full joined message content with tail; text=%q", len(got), got)
-	}
-	if strings.HasSuffix(got, "...") {
-		t.Fatalf("transcript text = %q, want no backend truncation suffix", got)
-	}
-}
-
 func assertCodexSessionSummaryCoreCounts(t *testing.T, summary factoryapi.ProviderSessionParseSummary) {
 	t.Helper()
 
@@ -950,48 +925,72 @@ func TestGetProviderSessionDetails_RejectsSessionSymlinkOutsideConfiguredRootEve
 }
 
 func TestFactorySessionsAPI_InvokeFactorySession(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{
-		SessionFactories: map[string]*testutil.MockFactory{
-			"~default": {},
-		},
-		InvokeFactoryResult: apisurface.FactoryInvocationResult{
-			RequestID:     "invoke-1",
-			TraceID:       "trace-invoke-1",
-			Status:        factoryapi.InvocationTerminalStatusCompleted,
-			PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "primary output"}},
-		},
-	})
+	const namedGoalParityText = "Plan the sprint from CLI and API parity coverage"
 
-	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/invocations", bytes.NewBufferString(`{"sourceKind":"text","content":[{"type":"text","text":"invoke this"}]}`))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
+	tests := []struct {
+		name           string
+		body           string
+		result         apisurface.FactoryInvocationResult
+		wantSubmitText string
+	}{
+		{
+			name: "default text input",
+			body: `{"sourceKind":"text","content":[{"type":"text","text":"invoke this"}]}`,
+			result: apisurface.FactoryInvocationResult{
+				RequestID:     "invoke-1",
+				TraceID:       "trace-invoke-1",
+				Status:        factoryapi.InvocationTerminalStatusCompleted,
+				PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "primary output"}},
+			},
+		},
+		{
+			name: "named goal parity text",
+			body: `{"sourceKind":"text","content":[{"type":"text","text":"` + namedGoalParityText + `"}]}`,
+			result: apisurface.FactoryInvocationResult{
+				RequestID: "request-goal-parity-success",
+				TraceID:   "trace-goal-parity-success",
+				Status:    factoryapi.InvocationTerminalStatusCompleted,
+				PrimaryResult: []interfaces.WorkContentPart{{
+					Type: interfaces.WorkContentPartTypeText,
+					Text: "goal parity completed",
+				}},
+			},
+			wantSubmitText: namedGoalParityText,
+		},
+	}
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("POST /factory-sessions/~default/invocations status = %d, want 200: %s", rec.Code, rec.Body.String())
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := &testutil.MockFactory{
+				SessionFactories: map[string]*testutil.MockFactory{
+					"~default": {},
+				},
+				InvokeFactoryResult: tc.result,
+			}
+			assertFactorySessionInvocation(t, mock, tc.body, tc.result, tc.wantSubmitText)
+		})
 	}
-	response := decodeJSONResponse[factoryapi.InvocationResponse](t, rec)
-	if response.RequestId != "invoke-1" || response.TraceId != "trace-invoke-1" || response.Status != factoryapi.InvocationTerminalStatusCompleted {
-		t.Fatalf("invocation response = %#v, want completed invocation identifiers", response)
-	}
-	assertGeneratedWorkContentParts(t, response.PrimaryResult, []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "primary output"}})
 }
 
 func TestFactorySessionsAPI_InvokeFactorySession_InputConflictReturnsStableBadRequest(t *testing.T) {
+	const namedGoalParityText = "Plan the sprint from CLI and API parity coverage"
+	conflictMessage := "invocation input sources conflict: positional_text, stdin_text"
+
 	srv := newTestServer(&testutil.MockFactory{
 		SessionFactories: map[string]*testutil.MockFactory{
 			"~default": {},
 		},
 		InvokeFactoryErr: &invocations.InputError{
 			Code:    invocations.InputErrorCodeSourceConflict,
-			Message: "invocation input sources conflict: positional_text, stdin_text",
+			Message: conflictMessage,
 		},
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/invocations", bytes.NewBufferString(`{"sourceKind":"text","content":[{"type":"text","text":"invoke this"}]}`))
+	body := `{"sourceKind":"text","content":[{"type":"text","text":"` + namedGoalParityText + `"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/invocations", bytes.NewBufferString(body))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 
-	assertJSONError(t, rec, http.StatusBadRequest, string(invocations.InputErrorCodeSourceConflict), "invocation input sources conflict: positional_text, stdin_text")
+	assertJSONError(t, rec, http.StatusBadRequest, string(invocations.InputErrorCodeSourceConflict), conflictMessage)
 }

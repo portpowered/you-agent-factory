@@ -2510,3 +2510,131 @@ func TestBuildFactoryService_StartupModelHostMatchesRuntimeBundle(t *testing.T) 
 		t.Fatal("startup bundle model host does not match service collaborator host")
 	}
 }
+
+func TestFactoryService_PausedSessionBufferedSubmission_DoesNotAffectOtherSessions(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha", "beta"},
+	})
+	defer harness.stop(t)
+
+	betaSessionID := harness.openFactorySession(t, "beta")
+	alphaSession := harness.requireSession(t, defaultFactorySessionID)
+	betaSession := harness.requireSession(t, betaSessionID)
+
+	pauseSessionFactory(t, betaSession)
+	waitForSessionFactoryState(t, harness.svc, betaSession.ID, interfaces.FactoryStatePaused, time.Second, "beta session paused")
+	waitForSessionFactoryState(t, harness.svc, alphaSession.ID, interfaces.FactoryStateRunning, time.Second, "alpha session still running")
+
+	submitSessionWork(t, betaSession, "beta-paused-submit-work", "trace-beta-paused-submit")
+	submitSessionWork(t, alphaSession, "alpha-running-submit-work", "trace-alpha-running-submit")
+
+	waitForSessionEventsToContain(t, alphaSession, "alpha-running-submit-work", time.Second)
+	assertSessionEventsDoNotContain(t, betaSession, "beta-paused-submit-work")
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		betaSnap := sessionEngineSnapshot(t, betaSession)
+		if betaSnap.FactoryState != string(interfaces.FactoryStatePaused) {
+			t.Fatalf("beta factory state = %q, want PAUSED", betaSnap.FactoryState)
+		}
+		if snapshotHasTokenAtPlace(betaSnap, "task:complete") || snapshotHasTokenAtPlace(betaSnap, "task:init") {
+			t.Fatalf("paused beta submission applied to marking = %#v", betaSnap.Marking.Tokens)
+		}
+		if betaSnap.InFlightCount > 0 || len(betaSnap.Dispatches) > 0 {
+			t.Fatalf("beta dispatch started while paused inFlight=%d dispatches=%d", betaSnap.InFlightCount, len(betaSnap.Dispatches))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	resumeSessionFactory(t, betaSession)
+	waitForSessionFactoryState(t, harness.svc, betaSession.ID, interfaces.FactoryStateRunning, time.Second, "beta session resumed")
+	waitForSessionEventsToContain(t, betaSession, "beta-paused-submit-work", time.Second)
+	assertSessionEventsDoNotContain(t, betaSession, "alpha-running-submit-work")
+}
+
+func TestFactoryService_PausedSessionBufferedWorkerResult_DoesNotAffectOtherSessions(t *testing.T) {
+	blocking := &prefixBlockingExecutor{
+		blockPrefix: "beta-blocked-",
+		started:     make(chan struct{}),
+		release:     make(chan struct{}),
+	}
+
+	rootDir := t.TempDir()
+	secondDir := t.TempDir()
+	writeFactoryJSON(t, rootDir, minimalFactoryConfig())
+	writeFactoryJSON(t, secondDir, minimalFactoryConfig())
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		ExtraOptions: []factory.FactoryOption{
+			factory.WithWorkerExecutor("worker-a", blocking),
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- svc.Run(runCtx)
+	}()
+	defer func() {
+		cancelRun()
+		select {
+		case err := <-runErrCh:
+			if err != nil {
+				t.Fatalf("Run after cancellation: %v", err)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for service shutdown")
+		}
+	}()
+
+	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
+	openResult, err := svc.OpenFactorySessionFromFolder(context.Background(), secondDir, nil, false, false)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder: %v", err)
+	}
+
+	alphaSession := requireLiveSession(t, svc, defaultFactorySessionID)
+	betaSession := requireLiveSession(t, svc, openResult.SessionID)
+
+	submitSessionWork(t, betaSession, "beta-blocked-result-work", "trace-beta-blocked-result")
+	waitForSessionInFlight(t, betaSession, time.Second)
+
+	pauseSessionFactory(t, betaSession)
+	waitForSessionFactoryState(t, svc, betaSession.ID, interfaces.FactoryStatePaused, time.Second, "beta session paused")
+	close(blocking.release)
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		betaSnap := sessionEngineSnapshot(t, betaSession)
+		if betaSnap.FactoryState != string(interfaces.FactoryStatePaused) {
+			t.Fatalf("beta factory state = %q, want PAUSED", betaSnap.FactoryState)
+		}
+		if snapshotHasTokenAtPlace(betaSnap, "task:complete") {
+			t.Fatalf("beta worker result applied while paused")
+		}
+		if betaSnap.InFlightCount == 0 {
+			t.Fatalf("beta dispatch completed while paused")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	submitSessionWork(t, alphaSession, "alpha-running-result-work", "trace-alpha-running-result")
+	waitForSessionEventsToContain(t, alphaSession, "alpha-running-result-work", time.Second)
+	assertSessionEventsDoNotContain(t, betaSession, "alpha-running-result-work")
+	betaSnap := sessionEngineSnapshot(t, betaSession)
+	if snapshotHasTokenAtPlace(betaSnap, "task:complete") {
+		t.Fatalf("beta worker result applied while alpha session processed normally")
+	}
+
+	resumeSessionFactory(t, betaSession)
+	waitForSessionFactoryState(t, svc, betaSession.ID, interfaces.FactoryStateRunning, time.Second, "beta session resumed")
+	waitForSessionEventsToContain(t, betaSession, "beta-blocked-result-work", time.Second)
+	assertSessionEventsDoNotContain(t, betaSession, "alpha-running-result-work")
+}

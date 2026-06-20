@@ -92,6 +92,8 @@ func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 		"CheckpointResumabilityStatus":          "./components/schemas/events/CheckpointResumabilityStatus.yaml",
 		"DispatchReconciliationSource":          "./components/schemas/events/DispatchReconciliationSource.yaml",
 		"SessionStartedEventPayload":            "./components/schemas/events/payloads/SessionStartedEventPayload.yaml",
+		"SessionPausedEventPayload":             "./components/schemas/events/payloads/SessionPausedEventPayload.yaml",
+		"SessionResumedEventPayload":            "./components/schemas/events/payloads/SessionResumedEventPayload.yaml",
 		"SessionResultUpdatedEventPayload":      "./components/schemas/events/payloads/SessionResultUpdatedEventPayload.yaml",
 		"SessionCompletedEventPayload":          "./components/schemas/events/payloads/SessionCompletedEventPayload.yaml",
 		"OrchestratorPhaseChangedEventPayload":  "./components/schemas/events/payloads/OrchestratorPhaseChangedEventPayload.yaml",

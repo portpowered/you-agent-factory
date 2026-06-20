@@ -243,6 +243,14 @@ var publicFactoryRunnerIDAliases = map[string]string{
 	RunnerIDOpenCode:  RunnerIDOpenCode,
 }
 
+// WorkstationOutcomeFormatDecisionEnvelope routes agent output through the
+// reviewer/checker JSON decision envelope instead of stop-token parsing.
+const WorkstationOutcomeFormatDecisionEnvelope = "decision-envelope"
+
+var publicFactoryWorkstationOutcomeFormatAliases = map[string]string{
+	WorkstationOutcomeFormatDecisionEnvelope: WorkstationOutcomeFormatDecisionEnvelope,
+}
+
 var publicFactoryRunnerSelectionSourceAliases = map[string]string{
 	string(RunnerSelectionSourceWorkstation):    string(RunnerSelectionSourceWorkstation),
 	string(RunnerSelectionSourceFactory):        string(RunnerSelectionSourceFactory),
@@ -546,6 +554,16 @@ func StrictPublicFactoryRunnerID(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryRunnerIDAliases, false)
 }
 
+// PermissivePublicFactoryWorkstationOutcomeFormat canonicalizes supported public workstation outcome formats and preserves unknown values.
+func PermissivePublicFactoryWorkstationOutcomeFormat(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryWorkstationOutcomeFormatAliases, true)
+}
+
+// StrictPublicFactoryWorkstationOutcomeFormat canonicalizes supported public workstation outcome formats and rejects unknown values.
+func StrictPublicFactoryWorkstationOutcomeFormat(value string) string {
+	return normalizePublicFactoryEnumValue(value, publicFactoryWorkstationOutcomeFormatAliases, false)
+}
+
 // PermissivePublicFactoryRunnerSelectionSource canonicalizes supported public runner selection sources and preserves unknown values.
 func PermissivePublicFactoryRunnerSelectionSource(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryRunnerSelectionSourceAliases, true)
@@ -640,6 +658,16 @@ func GeneratedPublicFactoryRunnerID(value string) factoryapi.RunnerID {
 // GeneratedPublicFactoryRunnerIDPtr returns the generated runner ID enum when non-empty.
 func GeneratedPublicFactoryRunnerIDPtr(value string) *factoryapi.RunnerID {
 	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryRunnerID)
+}
+
+// GeneratedPublicFactoryWorkstationOutcomeFormat returns the generated workstation outcome format enum.
+func GeneratedPublicFactoryWorkstationOutcomeFormat(value string) factoryapi.WorkstationOutcomeFormat {
+	return factoryapi.WorkstationOutcomeFormat(PermissivePublicFactoryWorkstationOutcomeFormat(value))
+}
+
+// GeneratedPublicFactoryWorkstationOutcomeFormatPtr returns the generated workstation outcome format enum when non-empty.
+func GeneratedPublicFactoryWorkstationOutcomeFormatPtr(value string) *factoryapi.WorkstationOutcomeFormat {
+	return generatedPublicFactoryEnumPtr(value, GeneratedPublicFactoryWorkstationOutcomeFormat)
 }
 
 // GeneratedPublicFactoryRunnerSelectionSource returns the generated runner selection source enum.

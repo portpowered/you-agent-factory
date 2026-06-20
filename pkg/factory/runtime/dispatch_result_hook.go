@@ -151,6 +151,12 @@ func (h *workerPoolDispatchResultHook) WaitCh() <-chan struct{} {
 	return h.waitCh
 }
 
+func (h *workerPoolDispatchResultHook) HasPendingResults() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.results) > 0
+}
+
 func (h *workerPoolDispatchResultHook) Start(ctx context.Context) {
 	go func() {
 		for {

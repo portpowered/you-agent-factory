@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -239,7 +240,11 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 		mutations = append(reconcileMutations, mutations...)
 	}
 	mutations = append(mutations, t.releaseResourceTokensOnFailureMutations(resolved.outcome, result.TransitionID, consumedTokens, arcs, now)...)
-	mutations = append(mutations, t.getSpawnedWorkMutations(resolved, now)...)
+	spawnedMutations, err := t.getSpawnedWorkMutations(workstationDef, inputColors, resolved, now)
+	if err != nil {
+		return nil, interfaces.CompletedDispatch{}, nil, err
+	}
+	mutations = append(mutations, spawnedMutations...)
 	mutations = append(mutations, t.createFanoutGuardToken(inputColors, resolved, now)...)
 
 	t.logger.Info("releasing tokens", "transition", result.TransitionID, "outcome", resolved.outcome, "mutation_count", len(mutations))
@@ -627,14 +632,29 @@ func arcCoverageCount(arc petri.Arc) int {
 	return 1
 }
 
-func (t *TransitionerSubsystem) getSpawnedWorkMutations(result resolvedWorkResult, now time.Time) []interfaces.MarkingMutation {
-	// Implementation for getting spawned work mutations
+func (t *TransitionerSubsystem) getSpawnedWorkMutations(
+	workstation *interfaces.FactoryWorkstationConfig,
+	inputColors []interfaces.TokenColor,
+	result resolvedWorkResult,
+	now time.Time,
+) ([]interfaces.MarkingMutation, error) {
 	mutations := []interfaces.MarkingMutation{}
+	workPropagationMode := workstationconfig.WorkPropagationMode(workstation)
+	workstationName := ""
+	if workstation != nil {
+		workstationName = workstation.Name
+	}
 	for i := range result.spawnedWork {
-		spawnMuts := t.createSpawnedTokens(&result.spawnedWork[i], result.transitionID, now)
+		spawnColor := interfaces.CloneTokenColor(result.spawnedWork[i])
+		if workPropagationMode == interfaces.WorkPropagationModePreserveInput {
+			if err := token_transformer.ApplyPreservedInputToColor(&spawnColor, inputColors, spawnColor.WorkTypeID, workstationName); err != nil {
+				return nil, err
+			}
+		}
+		spawnMuts := t.createSpawnedTokens(&spawnColor, result.transitionID, now)
 		mutations = append(mutations, spawnMuts...)
 	}
-	return mutations
+	return mutations, nil
 }
 
 func calculateArcs(currentTransition *petri.Transition, outcome interfaces.WorkOutcome) ([]petri.Arc, error) {
@@ -679,19 +699,26 @@ func (t *TransitionerSubsystem) createFanoutGuardToken(inputColors []interfaces.
 func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutation, error) {
 	mutations := make([]interfaces.MarkingMutation, 0)
 	workOutputIndex := 0
+	workPropagationMode := workstationconfig.WorkPropagationMode(in.workstation)
+	workstationName := ""
+	if in.workstation != nil {
+		workstationName = in.workstation.Name
+	}
 	for arcIdx, arc := range in.arcs {
 		baseInput := token_transformer.OutputTokenInput{
-			ArcIndex:       arcIdx,
-			Arcs:           in.arcs,
-			ConsumedTokens: in.consumed,
-			InputColors:    in.inputColors,
-			Output:         in.result.output,
-			Outcome:        in.result.outcome,
-			TransitionID:   in.result.transitionID,
-			Error:          in.result.err,
-			Feedback:       in.result.feedback,
-			Now:            in.now,
-			History:        in.history,
+			ArcIndex:            arcIdx,
+			Arcs:                in.arcs,
+			ConsumedTokens:      in.consumed,
+			InputColors:         in.inputColors,
+			Output:              in.result.output,
+			WorkPropagationMode: workPropagationMode,
+			WorkstationName:     workstationName,
+			Outcome:             in.result.outcome,
+			TransitionID:        in.result.transitionID,
+			Error:               in.result.err,
+			Feedback:            in.result.feedback,
+			Now:                 in.now,
+			History:             in.history,
 		}
 		repeatCount := mutationRepeatCountForArc(arc, in.consumed)
 		for resourceTokenIndex := 0; resourceTokenIndex < repeatCount; resourceTokenIndex++ {
@@ -702,6 +729,9 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 				return nil, err
 			}
 			if err := applyPackagedTTSInvocationMetadata(newToken, in.workstation, in.result.output, in.inputColors, in.runtimeConfig); err != nil {
+				return nil, err
+			}
+			if err := applyPackagedGoalInvocationSummary(newToken, in.workstation, in.result.output, in.runtimeConfig); err != nil {
 				return nil, err
 			}
 			if newToken.Color.DataType != interfaces.DataTypeResource {
@@ -784,6 +814,9 @@ func applyRecordedOutputWorkIdentity(token *interfaces.Token, recorded interface
 	}
 	if len(recorded.Tags) > 0 {
 		token.Color.Tags = cloneTags(recorded.Tags)
+	}
+	if len(recorded.Content) > 0 {
+		token.Color.Content = interfaces.CloneWorkContentParts(recorded.Content)
 	}
 }
 
@@ -931,6 +964,38 @@ func applyPackagedTTSInvocationMetadata(
 	}
 
 	token.Color.Content = metadataContent
+	token.Color.Payload = nil
+	return nil
+}
+
+func applyPackagedGoalInvocationSummary(
+	token *interfaces.Token,
+	workstation *interfaces.FactoryWorkstationConfig,
+	workerOutput string,
+	runtimeConfig interfaces.RuntimeWorkstationLookup,
+) error {
+	if token == nil || !goal.ShouldFormatInvocationSummary(workstation) {
+		return nil
+	}
+	if strings.TrimSpace(workerOutput) == "" {
+		return nil
+	}
+
+	stopToken := ""
+	if workstation != nil && runtimeConfig != nil {
+		if lookup, ok := runtimeConfig.(interfaces.RuntimeDefinitionLookup); ok {
+			if worker, ok := lookup.Worker(strings.TrimSpace(workstation.WorkerTypeName)); ok && worker != nil {
+				stopToken = strings.TrimSpace(worker.StopToken)
+			}
+		}
+	}
+
+	summaryContent, err := goal.SummaryContentFromWorkerOutput(workerOutput, stopToken)
+	if err != nil {
+		return fmt.Errorf("shape packaged goal invocation summary: %w", err)
+	}
+
+	token.Color.Content = summaryContent
 	token.Color.Payload = nil
 	return nil
 }
