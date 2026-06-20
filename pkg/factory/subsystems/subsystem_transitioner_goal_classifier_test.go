@@ -2,6 +2,7 @@ package subsystems
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,6 +76,57 @@ func TestTransitioner_PackagedGoalReviewClassifierRoutesPlainDecisionLabels(t *t
 				t.Fatalf("selected classification label = %q, want %q", completed.SelectedClassificationLabel, tc.label)
 			}
 		})
+	}
+}
+
+func TestTransitioner_PackagedGoalReviewClassifierUnknownLabelRoutesToFailed(t *testing.T) {
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+
+	mapper := &factoryconfig.ConfigMapper{}
+	net, err := mapper.Map(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("ConfigMapper.Map: %v", err)
+	}
+
+	reviewTransition := findTransitionByWorkstationName(t, net, goal.PackagedReviewWorkstationName)
+	workstations := workstationLookupFromConfig(cfg.Workstations)
+
+	now := time.Date(2026, time.June, 20, 15, 0, 0, 0, time.UTC)
+	transitioner := NewTransitioner(
+		net,
+		nil,
+		WithTransitionerClock(func() time.Time { return now }),
+		WithTransitionerRuntimeConfig(runtimefixtures.RuntimeWorkstationLookupFixture{
+			Workstations: workstations,
+		}),
+	)
+	snapshot := packagedGoalReviewClassifierSnapshot(now, reviewTransition.ID, "MAYBE")
+
+	result, err := transitioner.Execute(context.Background(), snapshot)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result == nil || len(result.Mutations) != 1 {
+		t.Fatalf("mutations = %#v, want one failure mutation", result)
+	}
+	if result.Mutations[0].ToPlace != "goal:failed" {
+		t.Fatalf("routed place = %q, want goal:failed", result.Mutations[0].ToPlace)
+	}
+	if len(result.CompletedDispatches) != 1 {
+		t.Fatalf("completed dispatches = %#v, want 1", result.CompletedDispatches)
+	}
+	completed := result.CompletedDispatches[0]
+	if completed.Outcome != interfaces.OutcomeFailed {
+		t.Fatalf("completed outcome = %s, want FAILED", completed.Outcome)
+	}
+	if completed.SelectedClassificationLabel != "" {
+		t.Fatalf("selected classification label = %q, want empty on unknown classifier label", completed.SelectedClassificationLabel)
+	}
+	if !strings.Contains(completed.Reason, `classifier label "MAYBE" did not match any authored classification route`) {
+		t.Fatalf("completed reason = %q, want unknown classifier label explanation", completed.Reason)
 	}
 }
 

@@ -79,6 +79,10 @@ primary-result behavior.
   through the mapped runtime net. `subsystem_transitioner_goal_envelope_test.go`
   proves structured `structured-review-goal` envelopes route from parsed decision
   labels while preserving mapped `WorkResult` fields.
+  `subsystem_transitioner_goal_classifier_test.go` and
+  `subsystem_transitioner_goal_envelope_test.go` also prove malformed JSON and
+  unknown decisions route to `goal:failed` with actionable failure text instead
+  of misrouting to complete, rework, or escalation states.
 - `pkg/packagedfactories/tts/` owns packaged TTS invocation metadata shaping
   helpers used when `INFERENCE_RUN` (or legacy `MODEL_INVOKE`) work completes on the `execute-tts` workstation.
   `metadata.go` derives the `backend` metadata field from the loaded on-disk

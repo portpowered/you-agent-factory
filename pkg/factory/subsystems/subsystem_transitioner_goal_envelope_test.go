@@ -3,6 +3,7 @@ package subsystems
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -86,6 +87,123 @@ func TestTransitioner_PackagedGoalStructuredReviewEnvelopeRoutesParsedDecisions(
 				t.Fatalf("recorded output work = %#v, want mapped work item preserved", result.RecordedOutputWork)
 			}
 		})
+	}
+}
+
+func TestTransitioner_PackagedGoalStructuredReviewEnvelopeRejectsMalformedAndUnknownDecisions(t *testing.T) {
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+
+	mapper := &factoryconfig.ConfigMapper{}
+	net, err := mapper.Map(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("ConfigMapper.Map: %v", err)
+	}
+
+	reviewTransition := findTransitionByWorkstationName(t, net, goal.PackagedStructuredReviewWorkstationName)
+	workstations := workstationLookupFromConfig(cfg.Workstations)
+
+	cases := []struct {
+		name       string
+		raw        string
+		wantErr    string
+		wantFeedbk string
+	}{
+		{
+			name:    "malformed json",
+			raw:     `not-json`,
+			wantErr: "invalid JSON",
+		},
+		{
+			name:       "unknown decision",
+			raw:        `{"decision":"MAYBE","feedback":"needs another pass"}`,
+			wantErr:    `unknown decision "MAYBE"`,
+			wantFeedbk: "needs another pass",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			now := time.Date(2026, time.June, 20, 15, 30, 0, 0, time.UTC)
+			transitioner := NewTransitioner(
+				net,
+				nil,
+				WithTransitionerClock(func() time.Time { return now }),
+				WithTransitionerRuntimeConfig(runtimefixtures.RuntimeWorkstationLookupFixture{
+					Workstations: workstations,
+				}),
+			)
+			snapshot := packagedGoalStructuredReviewMalformedEnvelopeSnapshot(t, now, reviewTransition.ID, tc.raw)
+			if tc.wantFeedbk != "" {
+				if len(snapshot.Results) != 1 || snapshot.Results[0].Feedback != tc.wantFeedbk {
+					t.Fatalf("result feedback = %q, want %q preserved for inspection", snapshot.Results[0].Feedback, tc.wantFeedbk)
+				}
+			}
+
+			tickResult, err := transitioner.Execute(context.Background(), snapshot)
+			if err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			if tickResult == nil || len(tickResult.Mutations) != 1 {
+				t.Fatalf("mutations = %#v, want one failure mutation", tickResult)
+			}
+			if tickResult.Mutations[0].ToPlace != "goal:failed" {
+				t.Fatalf("routed place = %q, want goal:failed", tickResult.Mutations[0].ToPlace)
+			}
+			if len(tickResult.CompletedDispatches) != 1 {
+				t.Fatalf("completed dispatches = %#v, want 1", tickResult.CompletedDispatches)
+			}
+			completed := tickResult.CompletedDispatches[0]
+			if completed.Outcome != interfaces.OutcomeFailed {
+				t.Fatalf("completed outcome = %s, want FAILED", completed.Outcome)
+			}
+			if completed.SelectedClassificationLabel != "" {
+				t.Fatalf("selected classification label = %q, want empty on malformed envelope", completed.SelectedClassificationLabel)
+			}
+			if !strings.Contains(completed.Reason, tc.wantErr) {
+				t.Fatalf("completed reason = %q, want %q", completed.Reason, tc.wantErr)
+			}
+		})
+	}
+}
+
+func packagedGoalStructuredReviewMalformedEnvelopeSnapshot(
+	t *testing.T,
+	now time.Time,
+	transitionID string,
+	raw string,
+) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	t.Helper()
+
+	result := goal.WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed("d-structured-review", transitionID, raw)
+
+	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Dispatches: map[string]*interfaces.DispatchEntry{
+			"d-structured-review": {
+				DispatchID:      "d-structured-review",
+				TransitionID:    transitionID,
+				WorkstationName: goal.PackagedStructuredReviewWorkstationName,
+				StartTime:       now.Add(-time.Second),
+				ConsumedTokens: []interfaces.Token{{
+					ID:        "tok-structured-review",
+					PlaceID:   "goal:structured-review",
+					CreatedAt: now.Add(-time.Hour),
+					EnteredAt: now.Add(-time.Hour),
+					Color: interfaces.TokenColor{
+						WorkID:     "work-goal-structured-1",
+						WorkTypeID: goal.PackagedGoalWorkTypeName,
+					},
+					History: interfaces.TokenHistory{
+						TotalVisits:         map[string]int{},
+						ConsecutiveFailures: map[string]int{},
+						PlaceVisits:         map[string]int{},
+					},
+				}},
+			},
+		},
+		Results: []interfaces.WorkResult{result},
 	}
 }
 

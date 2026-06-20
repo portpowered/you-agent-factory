@@ -267,6 +267,42 @@ func TestWorkResultFromDecisionEnvelopeJSONOrFailed_MissingDecisionUsesFailedOut
 	}
 }
 
+func TestWorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed_InvalidJSONUsesFailedOutcome(t *testing.T) {
+	result := WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed("dispatch-structured", "structured-review-goal", `not-json`)
+	if result.Outcome != MalformedEnvelopeFailureOutcome {
+		t.Fatalf("Outcome = %q, want %q", result.Outcome, MalformedEnvelopeFailureOutcome)
+	}
+	if result.Error == "" {
+		t.Fatal("Error is empty, want actionable malformed-envelope text")
+	}
+	if !strings.Contains(result.Error, "invalid JSON") {
+		t.Fatalf("Error = %q, want invalid JSON detail", result.Error)
+	}
+	if result.SelectedClassificationLabel != "" {
+		t.Fatalf("SelectedClassificationLabel = %q, want empty on malformed envelope", result.SelectedClassificationLabel)
+	}
+}
+
+func TestWorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed_UnknownDecisionUsesFailedOutcome(t *testing.T) {
+	raw := `{"decision":"MAYBE","feedback":"needs another pass"}`
+	result := WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed("dispatch-structured", "structured-review-goal", raw)
+	if result.Outcome != MalformedEnvelopeFailureOutcome {
+		t.Fatalf("Outcome = %q, want %q", result.Outcome, MalformedEnvelopeFailureOutcome)
+	}
+	if result.Error == "" {
+		t.Fatal("Error is empty, want actionable malformed-envelope text")
+	}
+	if !strings.Contains(result.Error, `unknown decision "MAYBE"`) {
+		t.Fatalf("Error = %q, want unknown decision detail", result.Error)
+	}
+	if result.Feedback != "needs another pass" {
+		t.Fatalf("Feedback = %q, want reviewer feedback preserved", result.Feedback)
+	}
+	if result.SelectedClassificationLabel != "" {
+		t.Fatalf("SelectedClassificationLabel = %q, want empty on unknown decision", result.SelectedClassificationLabel)
+	}
+}
+
 func TestFailedWorkResultFromDecisionEnvelopeError_MapsToWorkResultFailedOutcome(t *testing.T) {
 	parseErr := fmt.Errorf("decision envelope: invalid JSON: unexpected EOF")
 	result := FailedWorkResultFromDecisionEnvelopeError("dispatch-5", "check", parseErr, DecisionEnvelope{})
