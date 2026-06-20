@@ -49,7 +49,16 @@ primary-result behavior.
   `runInvocationModes` and `resolveRunFactoryPrompt` also treat `you run --named`
   as an invocation factory selector for positional/stdin text.
 - `pkg/config/layout.go` owns the built-in `@you/tts` factory JSON (`BuiltInTTSFactoryJSON`)
-  registered from `builtInNamedFactoryCatalog` in `pkg/config/layout.go`.
+  and `@you/goal` factory JSON (`BuiltInGoalFactoryJSON`) registered from
+  `builtInNamedFactoryCatalog` in `pkg/config/layout.go`. Packaged workstation
+  `body` templates must use canonical `PromptData` roots such as
+  `(index .Inputs 0).Payload`; legacy top-level aliases like `{{ .WorkID }}`
+  fail prompt rendering before mock-worker dispatch.
+- `pkg/packagedfactories/goal/` owns packaged goal metadata constants
+  (`PackagedFactoryName`, `PackagedInvokeWorkstationName`) for the built-in
+  `@you/goal` factory. Behavioral proof for named goal batch invocation lives
+  in `tests/functional/smoke/cli_named_goal_run_smoke_test.go` using the real
+  `you run --named @you/goal` CLI path with `--with-mock-workers`.
 - `pkg/packagedfactories/tts/` owns packaged TTS invocation metadata shaping
   helpers used when `INFERENCE_RUN` (or legacy `MODEL_INVOKE`) work completes on the `execute-tts` workstation.
   `metadata.go` derives the `backend` metadata field from the loaded on-disk

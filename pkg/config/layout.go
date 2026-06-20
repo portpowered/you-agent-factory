@@ -991,7 +991,7 @@ var BuiltInGoalFactoryJSON = []byte(`{
       "onFailure": [
         {"workType": "task", "state": "failed"}
       ],
-      "body": "Execute the requested goal work for {{ .WorkID }}."
+      "body": "Execute the requested goal: {{ (index .Inputs 0).Payload }}"
     }
   ]
 }`)
