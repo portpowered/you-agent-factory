@@ -258,8 +258,50 @@ func TestResolveNamedFactoryAcrossRoots_ReportsCorruptMaterializedBuiltInTarget(
 	if err == nil {
 		t.Fatal("expected corrupt materialized builtin to fail")
 	}
-	if got := err.Error(); !containsAll(got, `materialize built-in named factory "@you/tts"`, "existing target invalid", "find factory config") {
+	if got := err.Error(); !containsAll(got, `resolve named factory "@you/tts"`, "existing target could not be loaded", "find factory config") {
 		t.Fatalf("expected corrupt-target resolution error, got %v", err)
+	}
+}
+
+func TestResolveNamedFactoryAcrossRoots_ReportsCorruptProjectEditableGoalTarget(t *testing.T) {
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+	corruptDir := filepath.Join(projectRoot, "@you%2Fgoal")
+	if err := os.MkdirAll(corruptDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(corrupt project goal dir): %v", err)
+	}
+
+	_, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
+	if err == nil {
+		t.Fatal("expected corrupt project editable goal to fail")
+	}
+	got := err.Error()
+	if !containsAll(got, `resolve named factory "@you/goal"`, "existing target could not be loaded", "find factory config") {
+		t.Fatalf("expected corrupt project editable goal resolution error, got %v", err)
+	}
+	if strings.Contains(got, "materialize built-in named factory") {
+		t.Fatalf("expected project editable failure without builtin fallback, got %v", err)
+	}
+}
+
+func TestResolveNamedFactoryAcrossRoots_ReportsCorruptGlobalEditableGoalTarget(t *testing.T) {
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+	corruptDir := filepath.Join(globalRoot, "@you%2Fgoal")
+	if err := os.MkdirAll(corruptDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(corrupt global goal dir): %v", err)
+	}
+
+	_, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
+	if err == nil {
+		t.Fatal("expected corrupt global editable goal to fail")
+	}
+	got := err.Error()
+	if !containsAll(got, `resolve named factory "@you/goal"`, "existing target could not be loaded", "find factory config") {
+		t.Fatalf("expected corrupt global editable goal resolution error, got %v", err)
+	}
+	if strings.Contains(got, "materialize built-in named factory") {
+		t.Fatalf("expected global editable failure without builtin fallback, got %v", err)
 	}
 }
 

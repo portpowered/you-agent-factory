@@ -922,7 +922,7 @@ func resolveNamedFactoryCandidate(rootDir, name string) (string, bool, error) {
 	if err == nil {
 		return factoryDir, true, nil
 	}
-	if errors.Is(err, os.ErrNotExist) {
+	if errors.Is(err, ErrNamedFactoryNotFound) {
 		return "", false, nil
 	}
 	return "", false, err

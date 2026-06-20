@@ -877,6 +877,14 @@ func ResolveNamedFactoryDir(rootDir, name string) (string, error) {
 	factoryDir := filepath.Join(rootDir, segment)
 	if err := requireFactoryConfig(factoryDir); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			if info, statErr := os.Stat(factoryDir); statErr == nil && info.IsDir() {
+				return "", fmt.Errorf(
+					"resolve named factory %q in root %s: existing target could not be loaded: %w",
+					canonicalName,
+					rootDir,
+					err,
+				)
+			}
 			return "", fmt.Errorf(
 				"resolve named factory %q in root %s: %w",
 				canonicalName,
