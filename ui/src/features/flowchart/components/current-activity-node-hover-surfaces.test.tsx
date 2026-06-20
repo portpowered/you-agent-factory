@@ -329,3 +329,76 @@ describe("Active workstation work item rows", () => {
     expect(workItemButton.getAttribute("title")).toBe("Story Alpha - 13m 5s");
   });
 });
+
+describe("Active workstation label truncation", () => {
+  it("keeps short workstation titles at the largest readable size", () => {
+    const shortTitle = "Short Active Story";
+    const activeWorkstation = renderWorkstationNode({
+      active: true,
+      workstation: {
+        ...workstation,
+        workstation_name: shortTitle,
+      },
+    });
+    const titleLabel = activeWorkstation
+      .getByText(shortTitle)
+      .closest("[data-workstation-title]");
+
+    expect(titleLabel?.className).toContain("text-[1rem]");
+    expect(titleLabel?.className).toContain("truncate");
+    expect(titleLabel?.className).toContain("whitespace-nowrap");
+  });
+
+  it("keeps medium workstation titles at the intermediate readable size", () => {
+    const mediumTitle = "Review Requests With Medium Title";
+    const activeWorkstation = renderWorkstationNode({
+      active: true,
+      workstation: {
+        ...workstation,
+        workstation_name: mediumTitle,
+      },
+    });
+    const titleLabel = activeWorkstation
+      .getByText(mediumTitle)
+      .closest("[data-workstation-title]");
+
+    expect(titleLabel?.className).toContain("text-[0.88rem]");
+    expect(titleLabel?.className).not.toContain("text-[0.78rem]");
+    expect(titleLabel?.className).toContain("truncate");
+  });
+
+  it("keeps medium active work labels at the default row size", () => {
+    const mediumLabel = "Active Story With A Medium Sized Label";
+    const activeWorkstation = renderWorkstationNode({
+      active: true,
+      executions: [
+        {
+          dispatch_id: "dispatch-1",
+          started_at: "2026-06-09T00:00:00Z",
+          work_items: [
+            {
+              display_name: mediumLabel,
+              work_id: "work-1",
+              work_type: "story",
+            },
+          ],
+        },
+      ],
+      onSelectWorkID: vi.fn(),
+    });
+    const workItemButton = activeWorkstation.getByRole("button", {
+      name: new RegExp(mediumLabel),
+    });
+    const workLabel = workItemButton.querySelector("[data-active-work-label]");
+    const durationLabel = workItemButton.querySelector(
+      "[data-active-work-duration]",
+    );
+
+    expect(workLabel?.className).toContain("text-[0.74rem]");
+    expect(workLabel?.className).not.toContain("text-[0.68rem]");
+    expect(workLabel?.className).toContain("truncate");
+    expect(workLabel?.className).toContain("basis-0");
+    expect(durationLabel?.className).toContain("shrink-0");
+    expect(workItemButton.className).toContain("overflow-hidden");
+  });
+});
