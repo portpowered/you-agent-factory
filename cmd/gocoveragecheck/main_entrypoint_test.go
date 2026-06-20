@@ -142,6 +142,7 @@ func TestMainFailsWhenZeroCoveragePackagesDetectedViaFailf(t *testing.T) {
 	os.Args = []string{
 		"gocoveragecheck",
 		"-min=80",
+		"-package-baseline=" + writeEmptyPackageBaseline(t),
 		"-coverpkg=" + strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
@@ -197,6 +198,7 @@ func TestMainFailsWithZeroCoveragePackageSummary(t *testing.T) {
 	os.Args = []string{
 		"gocoveragecheck",
 		"-min=80",
+		"-package-baseline=" + writeEmptyPackageBaseline(t),
 		"-coverpkg=" + strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
@@ -252,6 +254,7 @@ func TestMainFailsWithZeroCoverageOKPackageSummary(t *testing.T) {
 	os.Args = []string{
 		"gocoveragecheck",
 		"-min=80",
+		"-package-baseline=" + writeEmptyPackageBaseline(t),
 		"-coverpkg=" + strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
@@ -307,6 +310,7 @@ func TestMainFailsWithZeroCoverageCoverpkgOKPackageSummary(t *testing.T) {
 	os.Args = []string{
 		"gocoveragecheck",
 		"-min=80",
+		"-package-baseline=" + writeEmptyPackageBaseline(t),
 		"-coverpkg=" + strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
