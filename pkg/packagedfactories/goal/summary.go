@@ -1,0 +1,55 @@
+package goal
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+)
+
+// ShouldFormatInvocationSummary reports whether workstation output should be
+// shaped into packaged goal summary work content for terminal primary-result
+// selection.
+func ShouldFormatInvocationSummary(workstation *interfaces.FactoryWorkstationConfig) bool {
+	if workstation == nil {
+		return false
+	}
+	name := strings.TrimSpace(workstation.Name)
+	if name != PackagedReviewWorkstationName && name != PackagedExecuteWorkstationName {
+		return false
+	}
+	switch interfaces.EffectiveWorkstationTypeForCompatibility(*workstation) {
+	case interfaces.WorkstationTypeModel, interfaces.WorkstationTypeAgent, interfaces.WorkstationTypeClassify:
+		return true
+	default:
+		return false
+	}
+}
+
+// SummaryContentFromWorkerOutput converts goal worker output into canonical text
+// work content for invocation primary-result selection.
+func SummaryContentFromWorkerOutput(output, stopToken string) ([]interfaces.WorkContentPart, error) {
+	summary := normalizeGoalSummaryText(output, stopToken)
+	if summary == "" {
+		return nil, fmt.Errorf("goal worker output is empty after normalization")
+	}
+	return []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: summary,
+	}}, nil
+}
+
+func normalizeGoalSummaryText(output, stopToken string) string {
+	trimmed := strings.TrimSpace(output)
+	stopToken = strings.TrimSpace(stopToken)
+	if stopToken == "" {
+		return trimmed
+	}
+	if strings.HasSuffix(trimmed, stopToken) {
+		return strings.TrimSpace(strings.TrimSuffix(trimmed, stopToken))
+	}
+	if idx := strings.LastIndex(trimmed, "\n"+stopToken); idx >= 0 {
+		return strings.TrimSpace(trimmed[:idx])
+	}
+	return trimmed
+}
