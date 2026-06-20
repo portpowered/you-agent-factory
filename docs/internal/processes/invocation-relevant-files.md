@@ -48,9 +48,18 @@ primary-result behavior.
   invocation input-source rules and the canonical pointers into packaged docs.
   `runInvocationModes` and `resolveRunFactoryPrompt` also treat `you run --named`
   as an invocation factory selector for positional/stdin text.
-- `pkg/config/layout.go` owns the built-in `@you/goal` factory JSON
-  (`BuiltInGoalFactoryJSON`) and `@you/tts` factory JSON (`BuiltInTTSFactoryJSON`)
-  registered from `builtInNamedFactoryCatalog` in `pkg/config/layout.go`.
+- `pkg/config/layout.go` owns the built-in `@you/goal` and `@you/tts` factory JSON
+  (`BuiltInGoalFactoryJSON`, `BuiltInTTSFactoryJSON`) registered from
+  `builtInNamedFactoryCatalog` in `pkg/config/layout.go`.
+- `pkg/packagedfactories/goal/` owns packaged goal factory metadata constants and
+  config-load regression coverage for the authored `invocationReturn` policy that
+  selects terminal `goal:complete` work content as the primary result.
+  `summary.go` shapes terminal `execute-goal` work content from worker output so
+  EXPLICIT primary-result selection returns the final summary instead of
+  submitted goal input text; classifier `review-goal` output is a route label
+  and must preserve carried summary content. `primary_result_test.go` covers both
+  successful EXPLICIT selection and unresolved failure when `goal:complete` is
+  absent from terminal work in scope.
 - `pkg/packagedfactories/goal/decision_envelope.go` owns the canonical
   reviewer/checker JSON envelope and its mapping onto `interfaces.WorkResult`.
 - `pkg/workers/executor/agent.go` routes `review` workstation agent output through
@@ -58,6 +67,9 @@ primary-result behavior.
 - `factory/docs/decision-envelope.md` is the packaged-authoring guide for the
   reviewer/checker envelope shape, accepted decision values, and malformed-input
   behavior used by `factory/workstations/review/AGENTS.md`.
+- `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged goal
+  invocation summary shaping on `execute-goal` workstations alongside packaged
+  TTS metadata shaping.
 - `pkg/packagedfactories/tts/` owns packaged TTS invocation metadata shaping
   helpers used when `INFERENCE_RUN` (or legacy `MODEL_INVOKE`) work completes on the `execute-tts` workstation.
   `metadata.go` derives the `backend` metadata field from the loaded on-disk

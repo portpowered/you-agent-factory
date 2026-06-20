@@ -12,6 +12,7 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
@@ -299,7 +300,8 @@ func (f *aggregateSnapshotFactory) SubmitWorkRequest(ctx context.Context, reques
 func (f *aggregateSnapshotFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
 }
-func (f *aggregateSnapshotFactory) Pause(context.Context) error { return f.pauseErr }
+func (f *aggregateSnapshotFactory) Pause(context.Context) error  { return f.pauseErr }
+func (f *aggregateSnapshotFactory) Resume(context.Context) error { return nil }
 func (f *aggregateSnapshotFactory) MoveWork(context.Context, string, string, interfaces.WorkStateChangeSource, string) (interfaces.OperatorMoveResult, error) {
 	return interfaces.OperatorMoveResult{}, errors.New("MoveWork is not implemented in aggregateSnapshotFactory")
 }
@@ -336,7 +338,8 @@ func (f *runtimeMetricsObserverFactory) SubmitWorkRequest(context.Context, inter
 func (f *runtimeMetricsObserverFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
 }
-func (f *runtimeMetricsObserverFactory) Pause(context.Context) error { return nil }
+func (f *runtimeMetricsObserverFactory) Pause(context.Context) error  { return nil }
+func (f *runtimeMetricsObserverFactory) Resume(context.Context) error { return nil }
 func (f *runtimeMetricsObserverFactory) MoveWork(context.Context, string, string, interfaces.WorkStateChangeSource, string) (interfaces.OperatorMoveResult, error) {
 	return interfaces.OperatorMoveResult{}, nil
 }
@@ -701,6 +704,7 @@ type runningSessionServiceOptions struct {
 	rootConfig     map[string]any
 	runtimeLogDir  string
 	recordPath     string
+	extraOptions   []factory.FactoryOption
 }
 
 type runningSessionService struct {
@@ -753,6 +757,7 @@ func startRunningSessionService(t *testing.T, options runningSessionServiceOptio
 		RuntimeLogDir:     runtimeLogDir,
 		RuntimeMetricsDir: runtimeMetricsDir,
 		RecordPath:        options.recordPath,
+		ExtraOptions:      options.extraOptions,
 	})
 	if err != nil {
 		t.Fatalf("BuildFactoryService: %v", err)
