@@ -1054,17 +1054,6 @@ var BuiltInGoalFactoryJSON = []byte(`{
       "body": "Run verification checks for goal {{ .WorkID }}."
     },
     {
-      "name": "advance-goal-review",
-      "type": "LOGICAL_MOVE",
-      "inputs": [
-        {"workType": "goal", "state": "check"}
-      ],
-      "outputs": [
-        {"workType": "goal", "state": "review"}
-      ],
-      "worker": ""
-    },
-    {
       "name": "advance-goal-structured-review",
       "type": "LOGICAL_MOVE",
       "inputs": [
@@ -1124,7 +1113,7 @@ var BuiltInGoalFactoryJSON = []byte(`{
       "guards": [
         {
           "type": "VISIT_COUNT",
-          "workstation": "review-goal",
+          "workstation": "structured-review-goal",
           "maxVisits": 5
         }
       ],

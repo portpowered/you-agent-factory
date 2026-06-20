@@ -79,6 +79,53 @@ func TestSessionInvocationAPI_PackagedGoalUnresolvedPrimaryResultReturnsFailedSt
 	}
 }
 
+func TestPackagedGoalBuiltInTopology_CheckAdvancesStructuredReviewLane(t *testing.T) {
+	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(dir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
+	}
+	writePackagedGoalBuiltInTopologyFixtureFiles(t, dir, loaded.FactoryConfig())
+
+	envelope := `{"decision":"accepted","feedback":"review ok","output":"mock worker accepted"}`
+	h := testutil.NewServiceTestHarness(t, dir,
+		testutil.WithRunAsync(),
+		testutil.WithMockWorkersConfig(packagedGoalStructuredReviewMockWorkersConfig(envelope)),
+	)
+	if err := h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+		WorkTypeID: goal.PackagedGoalWorkTypeName,
+		TraceID:    "goal-structured-review-trace",
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "customer goal request text",
+		}},
+	}}); err != nil {
+		t.Fatalf("SubmitFull: %v", err)
+	}
+	h.RunUntilComplete(t, 30*time.Second)
+	h.Assert().HasTokenInPlace("goal:complete")
+
+	snapshot, err := h.GetEngineStateSnapshot()
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	var structuredReviewDispatches int
+	for _, dispatch := range snapshot.DispatchHistory {
+		switch dispatch.WorkstationName {
+		case goal.PackagedStructuredReviewWorkstationName:
+			structuredReviewDispatches++
+		case goal.PackagedReviewWorkstationName:
+			t.Fatalf("plain classifier %q dispatched from packaged topology, want structured review lane only", dispatch.WorkstationName)
+		}
+	}
+	if structuredReviewDispatches != 1 {
+		t.Fatalf("structured review dispatch count = %d, want 1", structuredReviewDispatches)
+	}
+}
+
 func TestPackagedGoalBuiltInTopologyScaffold_PrimaryResultIsExecutionSummaryNotReviewLabel(t *testing.T) {
 	dir, _ := scaffoldPackagedGoalBuiltInTopologyFactory(t)
 	wantSummary := "mock worker accepted"
@@ -244,6 +291,31 @@ args:
   - "goal-check-ok"
 ---
 `)
+}
+
+func packagedGoalStructuredReviewMockWorkersConfig(envelopeJSON string) *factoryconfig.MockWorkersConfig {
+	return &factoryconfig.MockWorkersConfig{
+		MockWorkers: []factoryconfig.MockWorkerConfig{
+			{
+				WorkerName:      "goal-checker",
+				WorkstationName: goal.PackagedCheckWorkstationName,
+				RunType:         factoryconfig.MockWorkerRunTypeScript,
+				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+					Command: "/bin/echo",
+					Args:    []string{"goal-check-ok"},
+				},
+			},
+			{
+				WorkerName:      "goal-reviewer",
+				WorkstationName: goal.PackagedStructuredReviewWorkstationName,
+				RunType:         factoryconfig.MockWorkerRunTypeScript,
+				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+					Command: "/bin/echo",
+					Args:    []string{envelopeJSON},
+				},
+			},
+		},
+	}
 }
 
 func packagedGoalReviewClassifierMockWorkersConfig(label string) *factoryconfig.MockWorkersConfig {

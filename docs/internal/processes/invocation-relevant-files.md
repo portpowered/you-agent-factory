@@ -48,9 +48,12 @@ primary-result behavior.
   invocation input-source rules and the canonical pointers into packaged docs.
   `runInvocationModes` and `resolveRunFactoryPrompt` also treat `you run --named`
   as an invocation factory selector for positional/stdin text.
-- `pkg/config/layout.go` owns the built-in `@you/goal` and `@you/tts` factory JSON
+-   `pkg/config/layout.go` owns the built-in `@you/goal` and `@you/tts` factory JSON
   (`BuiltInGoalFactoryJSON`, `BuiltInTTSFactoryJSON`) registered from
-  `builtInNamedFactoryCatalog` in `pkg/config/layout.go`.
+  `builtInNamedFactoryCatalog` in `pkg/config/layout.go`. Packaged `@you/goal`
+  advances checked work only through `advance-goal-structured-review` so the
+  structured envelope lane is reachable; plain `review-goal` classifier routing
+  remains authored for decision-only branches and is covered by transitioner tests.
 - `pkg/packagedfactories/goal/` owns packaged goal factory metadata constants and
   config-load regression coverage for the authored `invocationReturn` policy that
   selects terminal `goal:complete` work content as the primary result.
@@ -83,6 +86,11 @@ primary-result behavior.
   `subsystem_transitioner_goal_envelope_test.go` also prove malformed JSON and
   unknown decisions route to `goal:failed` with actionable failure text instead
   of misrouting to complete, rework, or escalation states.
+- `pkg/packagedfactories/goal/factory_test.go` proves `goal:check` schedules only
+  `advance-goal-structured-review` in the mapped runtime net.
+- `tests/functional/runtime_api/api_packaged_goal_invocation_test.go` proves the
+  materialized built-in goal topology dispatches `structured-review-goal` from the
+  real check-to-review progression.
 - `pkg/packagedfactories/tts/` owns packaged TTS invocation metadata shaping
   helpers used when `INFERENCE_RUN` (or legacy `MODEL_INVOKE`) work completes on the `execute-tts` workstation.
   `metadata.go` derives the `backend` metadata field from the loaded on-disk

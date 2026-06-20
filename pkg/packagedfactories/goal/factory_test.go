@@ -1,11 +1,16 @@
 package goal
 
 import (
+	"context"
 	"slices"
 	"testing"
+	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 var packagedGoalLifecycleStates = []string{
@@ -32,7 +37,7 @@ var packagedGoalProgressionWorkstations = []struct {
 	{name: PackagedPlanWorkstationName, inputState: "init", outputState: "plan", publicType: interfaces.WorkstationTypeAgent, workerName: "goal-planner"},
 	{name: PackagedExecuteWorkstationName, inputState: "plan", outputState: "execute", publicType: interfaces.WorkstationTypeAgent, workerName: "goal-executor"},
 	{name: PackagedCheckWorkstationName, inputState: "execute", outputState: "check", publicType: interfaces.WorkstationTypeScript, workerName: "goal-checker"},
-	{name: "advance-goal-review", inputState: "check", outputState: "review", publicType: interfaces.WorkstationTypeLogical, workerName: ""},
+	{name: PackagedAdvanceStructuredReviewWorkstationName, inputState: "check", outputState: PackagedStructuredReviewStateName, publicType: interfaces.WorkstationTypeLogical, workerName: ""},
 }
 
 var packagedGoalWorkerPublicTypes = map[string]string{
@@ -46,7 +51,6 @@ var packagedGoalWorkstationPublicTypes = map[string]string{
 	PackagedPlanWorkstationName:          interfaces.WorkstationTypeAgent,
 	PackagedExecuteWorkstationName:       interfaces.WorkstationTypeAgent,
 	PackagedCheckWorkstationName:         interfaces.WorkstationTypeScript,
-	"advance-goal-review":                   interfaces.WorkstationTypeLogical,
 	PackagedAdvanceStructuredReviewWorkstationName: interfaces.WorkstationTypeLogical,
 	PackagedReviewWorkstationName:                   interfaces.WorkstationTypeClassify,
 	PackagedStructuredReviewWorkstationName: interfaces.WorkstationTypeAgent,
@@ -80,6 +84,81 @@ func TestBuiltInFactoryJSON_LoadsRunnablePackagedGoalFactory(t *testing.T) {
 	assertGoalStructuredReviewRoutes(t, cfg.Workstations)
 	assertGoalLoopBreaker(t, cfg.Workstations)
 	assertGoalPublicPrimitiveVocabulary(t, cfg.Workers, cfg.Workstations)
+}
+
+func TestBuiltInGoalFactory_CheckStateSchedulesStructuredReviewAdvance(t *testing.T) {
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+
+	mapper := &factoryconfig.ConfigMapper{}
+	net, err := mapper.Map(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("ConfigMapper.Map: %v", err)
+	}
+
+	now := time.Date(2026, time.June, 20, 16, 0, 0, 0, time.UTC)
+	checkToken := &interfaces.Token{
+		ID:        "tok-check",
+		PlaceID:   "goal:check",
+		CreatedAt: now.Add(-time.Hour),
+		EnteredAt: now.Add(-time.Minute),
+		Color: interfaces.TokenColor{
+			WorkID:     "work-goal-1",
+			WorkTypeID: PackagedGoalWorkTypeName,
+		},
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	}
+	marking := petri.MarkingSnapshot{
+		Tokens:      map[string]*interfaces.Token{"tok-check": checkToken},
+		PlaceTokens: map[string][]string{"goal:check": {"tok-check"}},
+	}
+	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Marking:  marking,
+		Topology: net,
+	}
+
+	runtimeLookup := goalRuntimeLookup{
+		workstations: indexWorkstationsByName(cfg.Workstations),
+		workers:      indexWorkerConfigsByName(cfg.Workers),
+	}
+	evaluator := scheduler.NewEnablementEvaluator(
+		nil,
+		scheduler.WithEnablementRuntimeConfig(runtimeLookup),
+	)
+	enabled := evaluator.FindEnabledTransitionsWithSnapshot(context.Background(), net, snapshot)
+
+	var checkAdvanceTransitionIDs []string
+	for _, et := range enabled {
+		transition := net.Transitions[et.TransitionID]
+		if transition == nil {
+			continue
+		}
+		switch transition.Name {
+		case PackagedAdvanceStructuredReviewWorkstationName:
+			checkAdvanceTransitionIDs = append(checkAdvanceTransitionIDs, transition.Name)
+		case "advance-goal-review":
+			t.Fatalf("plain review advance %q should not be enabled from goal:check", transition.Name)
+		}
+	}
+	if len(checkAdvanceTransitionIDs) != 1 {
+		t.Fatalf("enabled check advances = %#v, want only %q", checkAdvanceTransitionIDs, PackagedAdvanceStructuredReviewWorkstationName)
+	}
+
+	sched := scheduler.NewWorkInQueueScheduler(1)
+	decisions := sched.Select(enabled, snapshot)
+	if len(decisions) != 1 {
+		t.Fatalf("scheduler decisions = %#v, want one advance from goal:check", decisions)
+	}
+	selected := net.Transitions[decisions[0].TransitionID]
+	if selected == nil || selected.Name != PackagedAdvanceStructuredReviewWorkstationName {
+		t.Fatalf("selected transition = %#v, want %q", selected, PackagedAdvanceStructuredReviewWorkstationName)
+	}
 }
 
 func TestBuiltInGoalFactoryJSON_ExposesCurrentPublicPrimitiveVocabulary(t *testing.T) {
@@ -321,8 +400,8 @@ func assertGoalLoopBreaker(t *testing.T, workstations []interfaces.FactoryWorkst
 	if guard.Type != interfaces.GuardTypeVisitCount {
 		t.Fatalf("loop breaker guard type = %q, want %q", guard.Type, interfaces.GuardTypeVisitCount)
 	}
-	if guard.Workstation != PackagedReviewWorkstationName {
-		t.Fatalf("loop breaker guard workstation = %q, want %q", guard.Workstation, PackagedReviewWorkstationName)
+	if guard.Workstation != PackagedStructuredReviewWorkstationName {
+		t.Fatalf("loop breaker guard workstation = %q, want %q", guard.Workstation, PackagedStructuredReviewWorkstationName)
 	}
 	if guard.MaxVisits != 5 {
 		t.Fatalf("loop breaker guard maxVisits = %d, want 5", guard.MaxVisits)
@@ -345,6 +424,14 @@ func assertSingleGoalRoute(t *testing.T, workstationName string, routes []interf
 	}
 }
 
+func indexWorkerConfigsByName(workers []interfaces.WorkerConfig) map[string]interfaces.WorkerConfig {
+	byName := make(map[string]interfaces.WorkerConfig, len(workers))
+	for _, worker := range workers {
+		byName[worker.Name] = worker
+	}
+	return byName
+}
+
 func indexWorkerTypesByName(workers []interfaces.WorkerConfig) map[string]string {
 	byName := make(map[string]string, len(workers))
 	for _, worker := range workers {
@@ -359,4 +446,25 @@ func indexWorkstationsByName(workstations []interfaces.FactoryWorkstationConfig)
 		byName[workstation.Name] = workstation
 	}
 	return byName
+}
+
+type goalRuntimeLookup struct {
+	workstations map[string]interfaces.FactoryWorkstationConfig
+	workers      map[string]interfaces.WorkerConfig
+}
+
+func (l goalRuntimeLookup) Workstation(name string) (*interfaces.FactoryWorkstationConfig, bool) {
+	workstation, ok := l.workstations[name]
+	if !ok {
+		return nil, false
+	}
+	return &workstation, true
+}
+
+func (l goalRuntimeLookup) Worker(name string) (*interfaces.WorkerConfig, bool) {
+	worker, ok := l.workers[name]
+	if !ok {
+		return nil, false
+	}
+	return &worker, true
 }
