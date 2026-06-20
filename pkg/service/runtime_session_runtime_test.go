@@ -2350,7 +2350,7 @@ func TestFactoryService_InferenceProgressPublisherPublishesOrderedInternalEvents
 	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "partial-response"))
 
 	session := sessions.Get(sessionID)
-	stream := sessionResponseStreamForLiveSession(session)
+	stream := (&FactoryService{sessions: sessions}).sessionResponseStream(session)
 	if stream == nil {
 		t.Fatal("session stream = nil, want live session stream")
 	}
