@@ -889,6 +889,62 @@ func TestRunCommand_VerboseDiagnosticsUseStderr(t *testing.T) {
 	}
 }
 
+func TestRunCommand_NamedFactoryResolutionMetadataFlowsForBuiltInGoal(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	workingDirectory := t.TempDir()
+	homeDir := t.TempDir()
+	originalWorkingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(workingDirectory); err != nil {
+		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
+	}
+	defer func() {
+		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
+			t.Fatalf("restore working directory: %v", chdirErr)
+		}
+	}()
+	t.Setenv("HOME", homeDir)
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--named", "@you/goal", "--no-record"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --named @you/goal: %v", err)
+	}
+	if got.NamedFactoryName != "@you/goal" {
+		t.Fatalf("named factory = %q, want @you/goal", got.NamedFactoryName)
+	}
+	if got.NamedFactoryResolution == nil {
+		t.Fatal("expected named-factory resolution metadata")
+	}
+	if got.Dir != got.NamedFactoryResolution.FactoryDir {
+		t.Fatalf("run dir = %q, want resolved named-factory dir %q", got.Dir, got.NamedFactoryResolution.FactoryDir)
+	}
+	if got.NamedFactoryResolution.Name != "@you/goal" {
+		t.Fatalf("resolution name = %q, want @you/goal", got.NamedFactoryResolution.Name)
+	}
+	if got.NamedFactoryResolution.Source != factoryconfig.NamedFactoryResolutionSourceBuiltin {
+		t.Fatalf("resolution source = %q, want %q", got.NamedFactoryResolution.Source, factoryconfig.NamedFactoryResolutionSourceBuiltin)
+	}
+	if got.NamedFactoryResolution.PrecedenceDecision != factoryconfig.NamedFactoryPrecedenceDecisionNone {
+		t.Fatalf("resolution precedence = %q, want %q", got.NamedFactoryResolution.PrecedenceDecision, factoryconfig.NamedFactoryPrecedenceDecisionNone)
+	}
+}
+
 func TestRunCommand_NamedFactoryResolutionMetadataFlowsIntoRunConfig(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {

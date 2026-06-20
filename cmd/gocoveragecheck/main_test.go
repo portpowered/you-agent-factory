@@ -11,6 +11,13 @@ import (
 
 var emptyCoverageBaseline = map[string]struct{}{}
 
+const emptyPackageCoverageBaselineRelPath = "cmd/gocoveragecheck/testdata/empty-package-baseline.txt"
+
+func emptyPackageCoverageBaselinePath(t *testing.T) string {
+	t.Helper()
+	return emptyPackageCoverageBaselineRelPath
+}
+
 func TestIsBackendCoveragePackage(t *testing.T) {
 	t.Parallel()
 

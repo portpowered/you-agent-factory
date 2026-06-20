@@ -573,14 +573,11 @@ func TestResolveNamedFactoryDir_RejectsDirectoryWithoutFactoryConfig(t *testing.
 	if err == nil {
 		t.Fatal("expected missing named factory config to fail")
 	}
-	if !errors.Is(err, ErrNamedFactoryNotFound) {
-		t.Fatalf("error = %v, want ErrNamedFactoryNotFound", err)
+	if errors.Is(err, ErrNamedFactoryNotFound) {
+		t.Fatalf("error = %v, did not want ErrNamedFactoryNotFound for existing invalid target", err)
 	}
-	if !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("error = %v, want os.ErrNotExist", err)
-	}
-	if got := err.Error(); !containsAll(got, `resolve named factory "beta"`, "root", `named factory "beta" not found`) {
-		t.Fatalf("expected missing-config resolution error, got %v", err)
+	if got := err.Error(); !containsAll(got, `resolve named factory "beta"`, "root", "existing target could not be loaded", "find factory config") {
+		t.Fatalf("expected invalid-target resolution error, got %v", err)
 	}
 }
 
