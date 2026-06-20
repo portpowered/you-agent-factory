@@ -94,6 +94,93 @@ func TestSessionPauseCommand_HelpDocumentsOperatorControls(t *testing.T) {
 	}
 }
 
+func TestSessionPauseCommand_GlobalJSONMapsToConfig(t *testing.T) {
+	originalPauseSession := pauseSession
+	defer func() {
+		pauseSession = originalPauseSession
+	}()
+
+	var got session.LifecycleControlConfig
+	pauseSession = func(cfg session.LifecycleControlConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "pause", "session-beta"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session pause with global --json: %v", err)
+	}
+	if !got.JSON {
+		t.Fatal("expected global --json to map to LifecycleControlConfig.JSON")
+	}
+	if got.Server != "http://127.0.0.1:9090" {
+		t.Fatalf("server = %q, want http://127.0.0.1:9090", got.Server)
+	}
+	if got.SessionID != "session-beta" {
+		t.Fatalf("sessionId = %q, want session-beta", got.SessionID)
+	}
+}
+
+func TestSessionResumeCommand_GlobalJSONMapsToConfig(t *testing.T) {
+	originalResumeSession := resumeSession
+	defer func() {
+		resumeSession = originalResumeSession
+	}()
+
+	var got session.LifecycleControlConfig
+	resumeSession = func(cfg session.LifecycleControlConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "resume", "session-beta"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session resume with global --json: %v", err)
+	}
+	if !got.JSON {
+		t.Fatal("expected global --json to map to LifecycleControlConfig.JSON")
+	}
+	if got.Server != "http://127.0.0.1:9090" {
+		t.Fatalf("server = %q, want http://127.0.0.1:9090", got.Server)
+	}
+	if got.SessionID != "session-beta" {
+		t.Fatalf("sessionId = %q, want session-beta", got.SessionID)
+	}
+}
+
+func TestSessionPauseCommand_OmittedSessionIDTargetsDefaultCompatibilitySession(t *testing.T) {
+	originalPauseSession := pauseSession
+	defer func() {
+		pauseSession = originalPauseSession
+	}()
+
+	var got session.LifecycleControlConfig
+	pauseSession = func(cfg session.LifecycleControlConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"session", "pause"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session pause without session id: %v", err)
+	}
+	if got.SessionID != "" {
+		t.Fatalf("sessionId = %q, want empty for default compatibility routing", got.SessionID)
+	}
+}
+
 func TestSessionResumeCommand_HelpDocumentsOperatorControls(t *testing.T) {
 	var out bytes.Buffer
 	root := NewRootCommand()

@@ -341,6 +341,141 @@ func TestResume_SuccessReturnsAcceptedOutcome(t *testing.T) {
 	}
 }
 
+func TestResume_DefaultSessionRoutesToCompatibilitySession(t *testing.T) {
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		encodeLifecycleControlHTTPResponse(t, w, factoryapi.FactorySessionLifecycleControlResponse{
+			SessionId: "dur-sess-default",
+			Operation: factoryapi.FactorySessionLifecycleControlKindResume,
+			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+			Status:    factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		})
+	}))
+	defer srv.Close()
+
+	err := Resume(LifecycleControlConfig{
+		Server: srv.URL,
+		Output: &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+	if gotPath != "/factory-sessions/~default/resume" {
+		t.Fatalf("path = %q, want default compatibility resume path", gotPath)
+	}
+}
+
+func TestResume_HumanOutputReportsInvalidStateOutcome(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		if err := json.NewEncoder(w).Encode(factoryapi.FactorySessionLifecycleControlResponse{
+			SessionId: "dur-sess-awaiting-001",
+			Operation: factoryapi.FactorySessionLifecycleControlKindResume,
+			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeInvalidState,
+			Status:    factoryapi.FactorySessionDurableLifecycleStatusAwaitingApproval,
+			Detail:    lifecycleControlStringPtr("resume is not allowed while awaiting approval"),
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := Resume(LifecycleControlConfig{
+		Server:    srv.URL,
+		SessionID: "dur-sess-awaiting-001",
+		Output:    &out,
+	})
+	if err == nil {
+		t.Fatal("expected invalid-state error")
+	}
+	text := strings.TrimSpace(out.String())
+	want := "Factory session dur-sess-awaiting-001 cannot be resumed while lifecycle status is AWAITING_APPROVAL. resume is not allowed while awaiting approval"
+	if text != want {
+		t.Fatalf("output = %q, want %q", text, want)
+	}
+}
+
+func TestResume_InvalidStateReturnsTypedRejection(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		if err := json.NewEncoder(w).Encode(factoryapi.FactorySessionLifecycleControlResponse{
+			SessionId: "dur-sess-awaiting-001",
+			Operation: factoryapi.FactorySessionLifecycleControlKindResume,
+			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeInvalidState,
+			Status:    factoryapi.FactorySessionDurableLifecycleStatusAwaitingApproval,
+			Detail:    lifecycleControlStringPtr("resume is not allowed while awaiting approval"),
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := Resume(LifecycleControlConfig{
+		Server:    srv.URL,
+		SessionID: "dur-sess-awaiting-001",
+		JSON:      true,
+		Output:    &out,
+	})
+	var rejected *LifecycleControlRejectedError
+	if !errors.As(err, &rejected) {
+		t.Fatalf("error = %v, want LifecycleControlRejectedError", err)
+	}
+	if rejected.Response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeInvalidState {
+		t.Fatalf("outcome = %q, want INVALID_STATE", rejected.Response.Outcome)
+	}
+
+	var response factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(out.Bytes(), &response); err != nil {
+		t.Fatalf("decode JSON: %v", err)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeInvalidState {
+		t.Fatalf("stdout outcome = %q, want INVALID_STATE", response.Outcome)
+	}
+}
+
+func TestResume_NotFoundReturnsDistinctError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"code":"NOT_FOUND","message":"factory session not found"}`))
+	}))
+	defer srv.Close()
+
+	err := Resume(LifecycleControlConfig{
+		Server:    srv.URL,
+		SessionID: "dur-sess-missing-001",
+		Output:    &bytes.Buffer{},
+	})
+	if err == nil {
+		t.Fatal("expected not-found error")
+	}
+	if strings.Contains(err.Error(), "INVALID_STATE") || strings.Contains(err.Error(), "NO_OP") {
+		t.Fatalf("not-found error should not look like typed lifecycle outcome: %v", err)
+	}
+	if !strings.Contains(err.Error(), `factory session "dur-sess-missing-001" not found`) {
+		t.Fatalf("error = %q", err.Error())
+	}
+}
+
+func TestResume_UnreachableHostReturnsTransportError(t *testing.T) {
+	err := Resume(LifecycleControlConfig{
+		Server:    "http://127.0.0.1:1",
+		SessionID: "dur-sess-paused-001",
+		Output:    &bytes.Buffer{},
+	})
+	if err == nil {
+		t.Fatal("expected unreachable error")
+	}
+	if !strings.Contains(err.Error(), "not reachable") {
+		t.Fatalf("error = %q, want unreachable-host wording", err.Error())
+	}
+}
+
 func TestResume_NoOpAlreadyRunningReturnsNoOpOutcome(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		encodeLifecycleControlHTTPResponse(t, w, factoryapi.FactorySessionLifecycleControlResponse{
