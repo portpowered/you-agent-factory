@@ -43,12 +43,12 @@ When changing these factory-local docs or the checked-in example, run the
 narrow verification path from the repository root:
 
 ```sh
-go test ./pkg/config -run TestFlattenFactoryConfig_CheckedInFactoryBundles -count=1
+go test ./pkg/workers/prompting -run TestPromptRenderer_ResolvesCheckedInPlannerFactoryDocs -count=1
 go test ./pkg/cli/submit -run TestSubmitBatch_DryRunFactoryDocsBatchInputExample -count=1
 ```
 
-The first command is the bundled-doc path smoke check: it confirms
-`factory/docs/overview.md` and `factory/docs/batch-inputs.md` resolve through
-the checked-in factory layout and match their on-disk content. The second
-command proves `factory/docs/batch-input-example.json` is accepted by the batch
-parser without syntax or contract-shape errors.
+The first command is the doc-path smoke check: it renders
+`factory/docs/overview.md` and `factory/docs/batch-inputs.md` through the
+checked-in factory directory using the same prompt `.Docs` resolution path workers
+use at runtime. The second command proves `factory/docs/batch-input-example.json`
+is accepted by the batch parser without syntax or contract-shape errors.
