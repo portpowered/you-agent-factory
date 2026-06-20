@@ -85,6 +85,24 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request interfaces.Worksta
 	return ae.workResultForInferenceResponse(request, resp, outcome, diagnostics, retryCount, start)
 }
 
+func decisionEnvelopeWorkResult(
+	request interfaces.WorkstationExecutionRequest,
+	resp interfaces.InferenceResponse,
+	diagnostics *interfaces.WorkDiagnostics,
+	retryCount int,
+	start time.Time,
+) interfaces.WorkResult {
+	result := goal.WorkResultFromDecisionEnvelopeJSONOrFailed(
+		request.Dispatch.DispatchID,
+		request.Dispatch.TransitionID,
+		resp.Content,
+	)
+	result.ProviderSession = interfaces.CloneProviderSessionMetadata(resp.ProviderSession)
+	result.Diagnostics = diagnostics
+	result.Metrics = agentWorkMetrics(start, retryCount)
+	return result
+}
+
 func workerTypeForExecutionRequest(request interfaces.WorkstationExecutionRequest) string {
 	if request.WorkerType != "" {
 		return request.WorkerType
