@@ -561,14 +561,41 @@ func buildCanonicalSessionEvents(session SessionReadResult, result ResultReadRes
 			"startedAt":  eventTime.UTC().Format(time.RFC3339),
 		})),
 	}
+	sessionSequence := 1
 
 	if result.ResultStatus != "" {
 		events = append(events, builder.event(
 			"SESSION_RESULT_UPDATED",
 			"session-result-updated/"+sessionID,
-			1,
+			sessionSequence,
 			mustMarshalPayload(canonicalSessionResultUpdatedPayload(session, result)),
 		))
+		sessionSequence++
+	}
+
+	if session.Lifecycle != nil && session.Lifecycle.PausedAt != nil {
+		events = append(events, builder.event(
+			"SESSION_PAUSED",
+			"session-paused/"+sessionID,
+			sessionSequence,
+			mustMarshalPayload(map[string]any{
+				"status":   string(LifecycleStatusPaused),
+				"pausedAt": session.Lifecycle.PausedAt.UTC().Format(time.RFC3339),
+			}),
+		))
+		sessionSequence++
+	}
+	if session.Lifecycle != nil && session.Lifecycle.ResumedAt != nil {
+		events = append(events, builder.event(
+			"SESSION_RESUMED",
+			"session-resumed/"+sessionID,
+			sessionSequence,
+			mustMarshalPayload(map[string]any{
+				"status":    string(LifecycleStatusRunning),
+				"resumedAt": session.Lifecycle.ResumedAt.UTC().Format(time.RFC3339),
+			}),
+		))
+		sessionSequence++
 	}
 
 	if IsTerminalLifecycleStatus(session.Status) {
@@ -593,7 +620,7 @@ func buildCanonicalSessionEvents(session SessionReadResult, result ResultReadRes
 		if len(result.ArtifactIDs) > 0 {
 			payload["artifactIds"] = append([]string(nil), result.ArtifactIDs...)
 		}
-		events = append(events, builder.event("SESSION_COMPLETED", "session-completed/"+sessionID, 2, mustMarshalPayload(payload)))
+		events = append(events, builder.event("SESSION_COMPLETED", "session-completed/"+sessionID, sessionSequence, mustMarshalPayload(payload)))
 	}
 
 	return events

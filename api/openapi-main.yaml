@@ -1582,6 +1582,10 @@ components:
       $ref: './components/schemas/events/DispatchReconciliationSource.yaml'
     SessionStartedEventPayload:
       $ref: './components/schemas/events/payloads/SessionStartedEventPayload.yaml'
+    SessionPausedEventPayload:
+      $ref: './components/schemas/events/payloads/SessionPausedEventPayload.yaml'
+    SessionResumedEventPayload:
+      $ref: './components/schemas/events/payloads/SessionResumedEventPayload.yaml'
     SessionResultUpdatedEventPayload:
       $ref: './components/schemas/events/payloads/SessionResultUpdatedEventPayload.yaml'
     SessionCompletedEventPayload:

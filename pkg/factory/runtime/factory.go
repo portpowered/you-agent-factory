@@ -220,6 +220,38 @@ func recordSessionLifecycleCompletionFromFactory(
 	)
 }
 
+func (f *factoryImpl) recordSessionLifecyclePause() {
+	if f == nil || f.eventHistory == nil || f.cfg == nil {
+		return
+	}
+	tick := 0
+	if f.engine != nil {
+		tick = f.engine.GetRuntimeStateSnapshot().TickCount
+	}
+	f.eventHistory.RecordSessionPaused(factoryevents.SessionLifecycleControlInput{
+		SessionID:        sessionIDFromFactoryConfig(f.cfg),
+		OrchestratorKind: interfaces.GeneratedPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryConfigFromFactoryConfig(f.cfg))),
+		Source:           "runtime",
+		Tick:             tick,
+	}, f.clock.Now())
+}
+
+func (f *factoryImpl) recordSessionLifecycleResume() {
+	if f == nil || f.eventHistory == nil || f.cfg == nil {
+		return
+	}
+	tick := 0
+	if f.engine != nil {
+		tick = f.engine.GetRuntimeStateSnapshot().TickCount
+	}
+	f.eventHistory.RecordSessionResumed(factoryevents.SessionLifecycleControlInput{
+		SessionID:        sessionIDFromFactoryConfig(f.cfg),
+		OrchestratorKind: interfaces.GeneratedPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryConfigFromFactoryConfig(f.cfg))),
+		Source:           "runtime",
+		Tick:             tick,
+	}, f.clock.Now())
+}
+
 func buildRuntimeEngineOptions(cfg *factory.FactoryConfig, logger logging.Logger, sharedTransformer *token_transformer.Transformer, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult], eventHistory *factoryevents.FactoryEventHistory) []engine.Option {
 	engineOpts := []engine.Option{
 		engine.WithLogger(logger),
@@ -448,9 +480,33 @@ func (f *factoryImpl) Pause(_ context.Context) error {
 		f.mu.Unlock()
 		return nil
 	}
+	if previousState == interfaces.FactoryStateCompleted || previousState == interfaces.FactoryStateFailed {
+		f.mu.Unlock()
+		return fmt.Errorf("pause factory: invalid state %s", previousState)
+	}
 	f.state = interfaces.FactoryStatePaused
 	f.mu.Unlock()
 	f.recordStateChange(previousState, interfaces.FactoryStatePaused, "pause requested")
+	f.recordSessionLifecyclePause()
+	return nil
+}
+
+// Resume resumes a paused factory.
+func (f *factoryImpl) Resume(_ context.Context) error {
+	f.mu.Lock()
+	previousState := f.state
+	if previousState == interfaces.FactoryStateRunning || previousState == interfaces.FactoryStateIdle {
+		f.mu.Unlock()
+		return nil
+	}
+	if previousState != interfaces.FactoryStatePaused {
+		f.mu.Unlock()
+		return fmt.Errorf("resume factory: invalid state %s", previousState)
+	}
+	f.state = interfaces.FactoryStateRunning
+	f.mu.Unlock()
+	f.recordStateChange(previousState, interfaces.FactoryStateRunning, "resume requested")
+	f.recordSessionLifecycleResume()
 	return nil
 }
 

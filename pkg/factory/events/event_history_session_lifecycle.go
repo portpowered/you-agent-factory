@@ -14,9 +14,11 @@ import (
 )
 
 const (
-	eventIDSessionStarted            = "factory-event/session-started"
+	eventIDSessionStarted             = "factory-event/session-started"
+	eventIDSessionPausedPrefix        = "factory-event/session-paused"
+	eventIDSessionResumedPrefix       = "factory-event/session-resumed"
 	eventIDSessionResultUpdatedPrefix = "factory-event/session-result-updated"
-	eventIDSessionCompleted          = "factory-event/session-completed"
+	eventIDSessionCompleted           = "factory-event/session-completed"
 )
 
 // SessionLifecycleStartInput carries replay-safe facts for SESSION_STARTED.
@@ -57,6 +59,50 @@ type SessionLifecycleCompleteInput struct {
 	ArtifactIDs      []string
 	DispatchCounts   *factoryapi.FactorySessionJavaScriptChildDispatchCounts
 	FailureDetail    *factoryapi.FactoryDispatchFailureDetail
+}
+
+// SessionLifecycleControlInput carries replay-safe facts for SESSION_PAUSED and SESSION_RESUMED.
+type SessionLifecycleControlInput struct {
+	SessionID        string
+	OrchestratorKind factoryapi.FactoryOrchestratorKind
+	Source           string
+	Tick             int
+}
+
+// RecordSessionPaused records a successful Factory Session pause lifecycle transition.
+func (h *FactoryEventHistory) RecordSessionPaused(input SessionLifecycleControlInput, eventTime time.Time) {
+	if h == nil || strings.TrimSpace(input.SessionID) == "" {
+		return
+	}
+	eventTime = interfaces.CanonicalEventTime(eventTime)
+	sequence := h.allocateSessionLifecycleSequence()
+	h.appendGenerated(factoryEvent(
+		factoryapi.FactoryEventTypeSessionPaused,
+		fmt.Sprintf("%s/%d", eventIDSessionPausedPrefix, sequence),
+		h.sessionLifecycleContext(input.SessionID, input.OrchestratorKind, "", input.Source, input.Tick, eventTime, sequence),
+		factoryapi.SessionPausedEventPayload{
+			Status:   factoryapi.FactorySessionDurableLifecycleStatusPaused,
+			PausedAt: eventTime,
+		},
+	))
+}
+
+// RecordSessionResumed records a successful Factory Session resume lifecycle transition.
+func (h *FactoryEventHistory) RecordSessionResumed(input SessionLifecycleControlInput, eventTime time.Time) {
+	if h == nil || strings.TrimSpace(input.SessionID) == "" {
+		return
+	}
+	eventTime = interfaces.CanonicalEventTime(eventTime)
+	sequence := h.allocateSessionLifecycleSequence()
+	h.appendGenerated(factoryEvent(
+		factoryapi.FactoryEventTypeSessionResumed,
+		fmt.Sprintf("%s/%d", eventIDSessionResumedPrefix, sequence),
+		h.sessionLifecycleContext(input.SessionID, input.OrchestratorKind, "", input.Source, input.Tick, eventTime, sequence),
+		factoryapi.SessionResumedEventPayload{
+			Status:    factoryapi.FactorySessionDurableLifecycleStatusRunning,
+			ResumedAt: eventTime,
+		},
+	))
 }
 
 // RecordSessionStarted records the canonical session execution start marker.

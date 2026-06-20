@@ -158,7 +158,9 @@ const (
 	FactoryEventTypeScriptRequest                 FactoryEventType = "SCRIPT_REQUEST"
 	FactoryEventTypeScriptResponse                FactoryEventType = "SCRIPT_RESPONSE"
 	FactoryEventTypeSessionCompleted              FactoryEventType = "SESSION_COMPLETED"
+	FactoryEventTypeSessionPaused                 FactoryEventType = "SESSION_PAUSED"
 	FactoryEventTypeSessionResultUpdated          FactoryEventType = "SESSION_RESULT_UPDATED"
+	FactoryEventTypeSessionResumed                FactoryEventType = "SESSION_RESUMED"
 	FactoryEventTypeSessionStarted                FactoryEventType = "SESSION_STARTED"
 	FactoryEventTypeWorkRequest                   FactoryEventType = "WORK_REQUEST"
 	FactoryEventTypeWorkStateChange               FactoryEventType = "WORK_STATE_CHANGE"
@@ -4069,6 +4071,15 @@ type SessionCompletedEventPayload struct {
 	ResultStatus *FactoryEventSessionResultStatus `json:"resultStatus,omitempty"`
 }
 
+// SessionPausedEventPayload Factory Session lifecycle pause recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only.
+type SessionPausedEventPayload struct {
+	// PausedAt When the Factory Session entered PAUSED.
+	PausedAt time.Time `json:"pausedAt"`
+
+	// Status Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	Status FactorySessionDurableLifecycleStatus `json:"status"`
+}
+
 // SessionResultUpdatedEventPayload Partial or final session result availability on the canonical factory event stream. Identity and ordering live in FactoryEvent.context.
 type SessionResultUpdatedEventPayload struct {
 	// ArtifactIds Artifact identifiers associated with this result update.
@@ -4079,6 +4090,15 @@ type SessionResultUpdatedEventPayload struct {
 
 	// ResultSummary Ordered canonical content parts for one work item.
 	ResultSummary *WorkContent `json:"resultSummary,omitempty"`
+}
+
+// SessionResumedEventPayload Factory Session lifecycle resume recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only.
+type SessionResumedEventPayload struct {
+	// ResumedAt When the Factory Session returned to RUNNING.
+	ResumedAt time.Time `json:"resumedAt"`
+
+	// Status Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	Status FactorySessionDurableLifecycleStatus `json:"status"`
 }
 
 // SessionStartedEventPayload Session execution start recorded on the canonical factory event stream. Session and orchestrator identity live in FactoryEvent.context; this payload carries replay-safe factory and source facts only.
@@ -5854,6 +5874,58 @@ func (t *FactoryEvent_Payload) FromSessionStartedEventPayload(v SessionStartedEv
 
 // MergeSessionStartedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided SessionStartedEventPayload
 func (t *FactoryEvent_Payload) MergeSessionStartedEventPayload(v SessionStartedEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionPausedEventPayload returns the union data inside the FactoryEvent_Payload as a SessionPausedEventPayload
+func (t FactoryEvent_Payload) AsSessionPausedEventPayload() (SessionPausedEventPayload, error) {
+	var body SessionPausedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionPausedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided SessionPausedEventPayload
+func (t *FactoryEvent_Payload) FromSessionPausedEventPayload(v SessionPausedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionPausedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided SessionPausedEventPayload
+func (t *FactoryEvent_Payload) MergeSessionPausedEventPayload(v SessionPausedEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionResumedEventPayload returns the union data inside the FactoryEvent_Payload as a SessionResumedEventPayload
+func (t FactoryEvent_Payload) AsSessionResumedEventPayload() (SessionResumedEventPayload, error) {
+	var body SessionResumedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionResumedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided SessionResumedEventPayload
+func (t *FactoryEvent_Payload) FromSessionResumedEventPayload(v SessionResumedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionResumedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided SessionResumedEventPayload
+func (t *FactoryEvent_Payload) MergeSessionResumedEventPayload(v SessionResumedEventPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

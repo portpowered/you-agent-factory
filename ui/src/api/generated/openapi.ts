@@ -1756,6 +1756,26 @@ export interface components {
        */
       startedAt: string;
     };
+    /** @description Factory Session lifecycle pause recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only. */
+    SessionPausedEventPayload: {
+      /** @description Lifecycle status after a successful pause control. */
+      status: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+      /**
+       * Format: date-time
+       * @description When the Factory Session entered PAUSED.
+       */
+      pausedAt: string;
+    };
+    /** @description Factory Session lifecycle resume recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only. */
+    SessionResumedEventPayload: {
+      /** @description Lifecycle status after a successful resume control. */
+      status: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+      /**
+       * Format: date-time
+       * @description When the Factory Session returned to RUNNING.
+       */
+      resumedAt: string;
+    };
     /** @description Partial or final session result availability on the canonical factory event stream. Identity and ordering live in FactoryEvent.context. */
     SessionResultUpdatedEventPayload: {
       resultStatus: components["schemas"]["FactoryEventSessionResultStatus"];
@@ -2734,6 +2754,8 @@ export interface components {
         | components["schemas"]["FactoryStateResponseEventPayload"]
         | components["schemas"]["RunResponseEventPayload"]
         | components["schemas"]["SessionStartedEventPayload"]
+        | components["schemas"]["SessionPausedEventPayload"]
+        | components["schemas"]["SessionResumedEventPayload"]
         | components["schemas"]["SessionResultUpdatedEventPayload"]
         | components["schemas"]["SessionCompletedEventPayload"]
         | components["schemas"]["OrchestratorPhaseChangedEventPayload"]
@@ -6336,6 +6358,10 @@ export const FactoryEventType = {
   FactoryEventTypeRunResponse: "RUN_RESPONSE",
   // Durable factory session execution started and replay-safe session facts are available.
   FactoryEventTypeSessionStarted: "SESSION_STARTED",
+  // A Factory Session lifecycle pause control transitioned the session into PAUSED.
+  FactoryEventTypeSessionPaused: "SESSION_PAUSED",
+  // A Factory Session lifecycle resume control transitioned the session into RUNNING.
+  FactoryEventTypeSessionResumed: "SESSION_RESUMED",
   // Partial or final customer-visible session result availability was recorded.
   FactoryEventTypeSessionResultUpdated: "SESSION_RESULT_UPDATED",
   // Durable factory session execution reached a terminal lifecycle state.
