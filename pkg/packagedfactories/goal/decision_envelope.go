@@ -8,8 +8,22 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+// MalformedEnvelopeFailureOutcome is the WorkOutcome used when reviewer/checker output
+// is not valid JSON or contains an unsupported decision value. Both failure cases use
+// the runtime FAILED path so routing does not silently coerce or guess a decision.
+const MalformedEnvelopeFailureOutcome = interfaces.OutcomeFailed
+
 // DecisionEnvelope is the canonical JSON response shape for reviewer/checker workers
 // in packaged @you/goal flows.
+//
+// Malformed-envelope failure behavior:
+//   - Invalid JSON, empty output, missing decision, and unknown decision values all map
+//     to WorkResult.Outcome FAILED (MalformedEnvelopeFailureOutcome).
+//   - The failure WorkResult carries actionable inspection text in Error and, when the
+//     JSON shape parsed, any reviewer-provided Feedback from the envelope.
+//   - Callers that need a WorkResult for every reviewer output should use
+//     WorkResultFromDecisionEnvelopeJSONOrFailed; callers that prefer explicit Go errors
+//     can use WorkResultFromDecisionEnvelopeJSON and FailedWorkResultFromDecisionEnvelopeError.
 type DecisionEnvelope struct {
 	Decision           string                     `json:"decision"`
 	Feedback           string                     `json:"feedback"`
@@ -88,4 +102,39 @@ func WorkResultFromDecisionEnvelopeJSON(dispatchID, transitionID, raw string) (i
 		return interfaces.WorkResult{}, err
 	}
 	return WorkResultFromDecisionEnvelope(dispatchID, transitionID, envelope)
+}
+
+// FailedWorkResultFromDecisionEnvelopeError maps malformed-envelope failures onto WorkResult
+// using MalformedEnvelopeFailureOutcome. When partial carries parsed envelope fields, any
+// reviewer feedback is preserved for inspection without treating the decision as understood.
+func FailedWorkResultFromDecisionEnvelopeError(
+	dispatchID, transitionID string,
+	err error,
+	partial DecisionEnvelope,
+) interfaces.WorkResult {
+	message := "reviewer decision envelope invalid"
+	if err != nil {
+		message += ": " + err.Error()
+	}
+	return interfaces.WorkResult{
+		DispatchID:   dispatchID,
+		TransitionID: transitionID,
+		Outcome:      MalformedEnvelopeFailureOutcome,
+		Error:        message,
+		Feedback:     partial.Feedback,
+	}
+}
+
+// WorkResultFromDecisionEnvelopeJSONOrFailed parses reviewer/checker output and always
+// returns a WorkResult. Invalid JSON and unknown decisions use MalformedEnvelopeFailureOutcome.
+func WorkResultFromDecisionEnvelopeJSONOrFailed(dispatchID, transitionID, raw string) interfaces.WorkResult {
+	envelope, err := ParseDecisionEnvelopeJSON(raw)
+	if err != nil {
+		return FailedWorkResultFromDecisionEnvelopeError(dispatchID, transitionID, err, DecisionEnvelope{})
+	}
+	result, err := WorkResultFromDecisionEnvelope(dispatchID, transitionID, envelope)
+	if err != nil {
+		return FailedWorkResultFromDecisionEnvelopeError(dispatchID, transitionID, err, envelope)
+	}
+	return result
 }

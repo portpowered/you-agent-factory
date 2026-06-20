@@ -1,6 +1,8 @@
 package goal
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -106,5 +108,87 @@ func TestWorkResultFromDecisionEnvelopeJSON_MapsEachDecisionOutcome(t *testing.T
 		if result.Feedback != "notes" {
 			t.Fatalf("decision %q => Feedback %q, want notes", tc.decision, result.Feedback)
 		}
+	}
+}
+
+func TestWorkResultFromDecisionEnvelopeJSON_RejectsInvalidJSON(t *testing.T) {
+	_, err := WorkResultFromDecisionEnvelopeJSON("dispatch-3", "review", `{decision: broken`)
+	if err == nil {
+		t.Fatal("WorkResultFromDecisionEnvelopeJSON: error = nil, want invalid JSON error")
+	}
+	if !strings.Contains(err.Error(), "invalid JSON") {
+		t.Fatalf("error = %v, want invalid JSON detail", err)
+	}
+}
+
+func TestWorkResultFromDecisionEnvelopeJSON_RejectsUnknownDecision(t *testing.T) {
+	raw := `{"decision":"MAYBE","feedback":"needs another pass"}`
+	_, err := WorkResultFromDecisionEnvelopeJSON("dispatch-3", "review", raw)
+	if err == nil {
+		t.Fatal("WorkResultFromDecisionEnvelopeJSON: error = nil, want unknown decision error")
+	}
+	if !strings.Contains(err.Error(), `unknown decision "MAYBE"`) {
+		t.Fatalf("error = %v, want unknown decision detail", err)
+	}
+}
+
+func TestWorkResultFromDecisionEnvelopeJSONOrFailed_InvalidJSONUsesFailedOutcome(t *testing.T) {
+	result := WorkResultFromDecisionEnvelopeJSONOrFailed("dispatch-4", "review", `not-json`)
+	if result.Outcome != MalformedEnvelopeFailureOutcome {
+		t.Fatalf("Outcome = %q, want %q", result.Outcome, MalformedEnvelopeFailureOutcome)
+	}
+	if result.Error == "" {
+		t.Fatal("Error is empty, want actionable malformed-envelope text")
+	}
+	if !strings.Contains(result.Error, "invalid JSON") {
+		t.Fatalf("Error = %q, want invalid JSON detail", result.Error)
+	}
+	if result.Feedback != "" {
+		t.Fatalf("Feedback = %q, want empty when JSON did not parse", result.Feedback)
+	}
+}
+
+func TestWorkResultFromDecisionEnvelopeJSONOrFailed_UnknownDecisionUsesFailedOutcome(t *testing.T) {
+	raw := `{"decision":"MAYBE","feedback":"needs another pass"}`
+	result := WorkResultFromDecisionEnvelopeJSONOrFailed("dispatch-4", "review", raw)
+	if result.Outcome != MalformedEnvelopeFailureOutcome {
+		t.Fatalf("Outcome = %q, want %q", result.Outcome, MalformedEnvelopeFailureOutcome)
+	}
+	if result.Error == "" {
+		t.Fatal("Error is empty, want actionable malformed-envelope text")
+	}
+	if !strings.Contains(result.Error, `unknown decision "MAYBE"`) {
+		t.Fatalf("Error = %q, want unknown decision detail", result.Error)
+	}
+	if result.Feedback != "needs another pass" {
+		t.Fatalf("Feedback = %q, want reviewer feedback preserved", result.Feedback)
+	}
+}
+
+func TestWorkResultFromDecisionEnvelopeJSONOrFailed_MissingDecisionUsesFailedOutcome(t *testing.T) {
+	raw := `{"feedback":"missing decision field"}`
+	result := WorkResultFromDecisionEnvelopeJSONOrFailed("dispatch-4", "review", raw)
+	if result.Outcome != MalformedEnvelopeFailureOutcome {
+		t.Fatalf("Outcome = %q, want %q", result.Outcome, MalformedEnvelopeFailureOutcome)
+	}
+	if !strings.Contains(result.Error, "decision is required") {
+		t.Fatalf("Error = %q, want missing decision detail", result.Error)
+	}
+	if result.Feedback != "missing decision field" {
+		t.Fatalf("Feedback = %q, want reviewer feedback preserved", result.Feedback)
+	}
+}
+
+func TestFailedWorkResultFromDecisionEnvelopeError_MapsToWorkResultFailedOutcome(t *testing.T) {
+	parseErr := fmt.Errorf("decision envelope: invalid JSON: unexpected EOF")
+	result := FailedWorkResultFromDecisionEnvelopeError("dispatch-5", "check", parseErr, DecisionEnvelope{})
+	if result.DispatchID != "dispatch-5" || result.TransitionID != "check" {
+		t.Fatalf("dispatch metadata = %#v, want dispatch-5/check", result)
+	}
+	if result.Outcome != interfaces.OutcomeFailed {
+		t.Fatalf("Outcome = %q, want FAILED", result.Outcome)
+	}
+	if !strings.Contains(result.Error, "invalid JSON") {
+		t.Fatalf("Error = %q, want parse error detail", result.Error)
 	}
 }
