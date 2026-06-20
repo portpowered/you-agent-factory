@@ -1067,8 +1067,8 @@ var BuiltInGoalFactoryJSON = []byte(`{
       ],
       "classificationRoutes": [
         {"label": "accepted", "outputs": [{"workType": "goal", "state": "complete"}]},
-        {"label": "needs_changes", "outputs": [{"workType": "goal", "state": "execute"}]},
-        {"label": "tests_failed", "outputs": [{"workType": "goal", "state": "execute"}]},
+        {"label": "needs_changes", "outputs": [{"workType": "goal", "state": "plan"}]},
+        {"label": "tests_failed", "outputs": [{"workType": "goal", "state": "plan"}]},
         {"label": "needs_human", "outputs": [{"workType": "goal", "state": "needs-human"}]},
         {"label": "blocked", "outputs": [{"workType": "goal", "state": "blocked"}]},
         {"label": "interrupted", "outputs": [{"workType": "goal", "state": "interrupted"}]},
@@ -1090,7 +1090,7 @@ var BuiltInGoalFactoryJSON = []byte(`{
         }
       ],
       "inputs": [
-        {"workType": "goal", "state": "review"}
+        {"workType": "goal", "state": "plan"}
       ],
       "outputs": [
         {"workType": "goal", "state": "failed"}

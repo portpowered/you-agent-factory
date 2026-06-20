@@ -1,30 +1,12 @@
 package goal
 
 import (
-	"io/fs"
-	"os"
-	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
-
-var packagedGoalLegacyPrimitiveAliases = []string{
-	"MODEL_WORKER",
-	"MODEL_WORKSTATION",
-}
-
-var packagedGoalRequiredPublicPrimitives = []string{
-	interfaces.WorkerTypeAgent,
-	interfaces.WorkerTypeScript,
-	interfaces.WorkstationTypeAgent,
-	interfaces.WorkstationTypeScript,
-	interfaces.WorkstationTypeLogical,
-	interfaces.WorkstationTypeClassify,
-}
 
 var packagedGoalLifecycleStates = []string{
 	"init",
@@ -52,6 +34,22 @@ var packagedGoalProgressionWorkstations = []struct {
 	{name: "advance-goal-review", inputState: "check", outputState: "review", publicType: interfaces.WorkstationTypeLogical, workerName: ""},
 }
 
+var packagedGoalWorkerPublicTypes = map[string]string{
+	"goal-planner":  interfaces.WorkerTypeAgent,
+	"goal-executor": interfaces.WorkerTypeAgent,
+	"goal-checker":  interfaces.WorkerTypeScript,
+	"goal-reviewer": interfaces.WorkerTypeAgent,
+}
+
+var packagedGoalWorkstationPublicTypes = map[string]string{
+	PackagedPlanWorkstationName:          interfaces.WorkstationTypeAgent,
+	PackagedExecuteWorkstationName:       interfaces.WorkstationTypeAgent,
+	PackagedCheckWorkstationName:         interfaces.WorkstationTypeScript,
+	"advance-goal-review":                interfaces.WorkstationTypeLogical,
+	PackagedReviewWorkstationName:        interfaces.WorkstationTypeClassify,
+	PackagedLoopBreakerWorkstationName:   interfaces.WorkstationTypeLogical,
+}
+
 func TestBuiltInFactoryJSON_LoadsRunnablePackagedGoalFactory(t *testing.T) {
 	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
 	if err != nil {
@@ -77,49 +75,15 @@ func TestBuiltInFactoryJSON_LoadsRunnablePackagedGoalFactory(t *testing.T) {
 	assertGoalProgressionTopology(t, cfg.Workstations, cfg.Workers)
 	assertGoalReviewRoutes(t, cfg.Workstations)
 	assertGoalLoopBreaker(t, cfg.Workstations)
+	assertGoalPublicPrimitiveVocabulary(t, cfg.Workers, cfg.Workstations)
 }
 
-func TestBuiltInGoalFactoryJSON_UsesCurrentPublicPrimitiveNames(t *testing.T) {
-	assertPackagedGoalAuthoredJSONUsesPublicPrimitives(t, "built-in goal factory JSON", factoryconfig.BuiltInGoalFactoryJSON)
-}
-
-func TestMaterializedPackagedGoalFactory_AuthoredFilesUseCurrentPublicPrimitiveNames(t *testing.T) {
-	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+func TestBuiltInGoalFactoryJSON_ExposesCurrentPublicPrimitiveVocabulary(t *testing.T) {
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
 	if err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
+		t.Fatalf("ParseFactoryConfig: %v", err)
 	}
-
-	factoryJSONPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
-	factoryJSON, err := os.ReadFile(factoryJSONPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", factoryJSONPath, err)
-	}
-	assertPackagedGoalAuthoredJSONUsesPublicPrimitives(t, interfaces.FactoryConfigFile, factoryJSON)
-
-	err = filepath.WalkDir(factoryDir, func(path string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() || path == factoryJSONPath {
-			return nil
-		}
-		if strings.HasSuffix(entry.Name(), ".gitkeep") {
-			return nil
-		}
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		relativePath, err := filepath.Rel(factoryDir, path)
-		if err != nil {
-			return err
-		}
-		assertPackagedGoalAuthoredContentUsesPublicPrimitives(t, relativePath, string(content))
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("WalkDir(materialized goal factory): %v", err)
-	}
+	assertGoalPublicPrimitiveVocabulary(t, cfg.Workers, cfg.Workstations)
 }
 
 func TestMaterializedPackagedGoalFactory_ExposesCanonicalWorkTypeAndLifecycleStates(t *testing.T) {
@@ -151,26 +115,54 @@ func TestMaterializedPackagedGoalFactory_ExposesCanonicalWorkTypeAndLifecycleSta
 	assertGoalProgressionTopology(t, cfg.Workstations, cfg.Workers)
 	assertGoalReviewRoutes(t, cfg.Workstations)
 	assertGoalLoopBreaker(t, cfg.Workstations)
+	assertGoalPublicPrimitiveVocabulary(t, cfg.Workers, cfg.Workstations)
 }
 
-func assertPackagedGoalAuthoredContentUsesPublicPrimitives(t *testing.T, sourceLabel, content string) {
+func TestMaterializedPackagedGoalFactory_ExposesCurrentPublicPrimitiveVocabulary(t *testing.T) {
+	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+
+	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
+	}
+
+	assertGoalPublicPrimitiveVocabulary(t, loaded.FactoryConfig().Workers, loaded.FactoryConfig().Workstations)
+}
+
+func assertGoalPublicPrimitiveVocabulary(t *testing.T, workers []interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) {
 	t.Helper()
 
-	for _, alias := range packagedGoalLegacyPrimitiveAliases {
-		if strings.Contains(content, alias) {
-			t.Fatalf("%s introduces legacy alias %q", sourceLabel, alias)
+	workerTypes := indexWorkerTypesByName(workers)
+	for name, wantPublic := range packagedGoalWorkerPublicTypes {
+		rawType, ok := workerTypes[name]
+		if !ok {
+			t.Fatalf("missing worker %q", name)
+		}
+		if rawType == interfaces.WorkerTypeModel {
+			t.Fatalf("worker %q uses legacy alias %q", name, interfaces.WorkerTypeModel)
+		}
+		publicType := interfaces.PublicWorkerTypeFromInternalRuntime(rawType)
+		if publicType != wantPublic {
+			t.Fatalf("worker %q public type = %q, want %q", name, publicType, wantPublic)
 		}
 	}
-}
 
-func assertPackagedGoalAuthoredJSONUsesPublicPrimitives(t *testing.T, sourceLabel string, content []byte) {
-	t.Helper()
-
-	authored := string(content)
-	assertPackagedGoalAuthoredContentUsesPublicPrimitives(t, sourceLabel, authored)
-	for _, primitive := range packagedGoalRequiredPublicPrimitives {
-		if !strings.Contains(authored, primitive) {
-			t.Fatalf("%s missing required public primitive %q", sourceLabel, primitive)
+	byName := indexWorkstationsByName(workstations)
+	for name, wantPublic := range packagedGoalWorkstationPublicTypes {
+		workstation, ok := byName[name]
+		if !ok {
+			t.Fatalf("missing workstation %q", name)
+		}
+		workerType := workerTypes[workstation.WorkerTypeName]
+		publicType := interfaces.PublicWorkstationTypeFromInternalRuntime(workstation.Type, workerType, workstation.Kind)
+		if publicType == interfaces.WorkstationTypeModel {
+			t.Fatalf("workstation %q projects to legacy alias %q", name, interfaces.WorkstationTypeModel)
+		}
+		if publicType != wantPublic {
+			t.Fatalf("workstation %q public type = %q, want %q", name, publicType, wantPublic)
 		}
 	}
 }
@@ -223,8 +215,8 @@ func assertGoalReviewRoutes(t *testing.T, workstations []interfaces.FactoryWorks
 
 	wantRoutes := map[string]string{
 		"accepted":      "complete",
-		"needs_changes": "execute",
-		"tests_failed":  "execute",
+		"needs_changes": "plan",
+		"tests_failed":  "plan",
 		"needs_human":   "needs-human",
 		"blocked":       "blocked",
 		"interrupted":   "interrupted",
@@ -246,6 +238,12 @@ func assertGoalReviewRoutes(t *testing.T, workstations []interfaces.FactoryWorks
 			t.Fatalf("review route %q state = %q, want %q", label, gotState, wantState)
 		}
 	}
+
+	execute, ok := indexWorkstationsByName(workstations)[PackagedExecuteWorkstationName]
+	if !ok {
+		t.Fatal("missing execute workstation for retry path")
+	}
+	assertSingleGoalRoute(t, execute.Name, execute.Inputs, "plan")
 }
 
 func assertGoalLoopBreaker(t *testing.T, workstations []interfaces.FactoryWorkstationConfig) {
@@ -271,7 +269,7 @@ func assertGoalLoopBreaker(t *testing.T, workstations []interfaces.FactoryWorkst
 	if guard.MaxVisits != 5 {
 		t.Fatalf("loop breaker guard maxVisits = %d, want 5", guard.MaxVisits)
 	}
-	assertSingleGoalRoute(t, loopBreaker.Name, loopBreaker.Inputs, "review")
+	assertSingleGoalRoute(t, loopBreaker.Name, loopBreaker.Inputs, "plan")
 	assertSingleGoalRoute(t, loopBreaker.Name, loopBreaker.Outputs, "failed")
 }
 
