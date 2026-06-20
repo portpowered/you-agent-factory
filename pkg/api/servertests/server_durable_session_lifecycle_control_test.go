@@ -800,6 +800,7 @@ func TestInterruptFactorySessionDispatch_FixtureBackedRunningSessionReturnsTyped
 
 	response, status := postFactorySessionInterruptDispatch(t, server.URL, row.SessionID, factoryapi.FactorySessionInterruptDispatchRequest{
 		DispatchId: "disp-js-002",
+		Reason:     stringPtr("stop bad run"),
 	})
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want 200", status)
@@ -820,6 +821,30 @@ func TestInterruptFactorySessionDispatch_FixtureBackedRunningSessionReturnsTyped
 	}
 	if dispatch.Status != factorysessionexecution.DispatchStatusInterrupted {
 		t.Fatalf("dispatch status = %q, want INTERRUPTED", dispatch.Status)
+	}
+	if dispatch.FailureDetail == nil || dispatch.FailureDetail.Message != "stop bad run" {
+		t.Fatalf("failureDetail = %#v, want stop bad run", dispatch.FailureDetail)
+	}
+
+	events, err := service.ReadEvents(context.Background(), row.SessionID, factorysessionexecution.EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents after interrupt: %v", err)
+	}
+	foundInterruptedEvent := false
+	for _, raw := range events.Events {
+		var envelope struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(raw, &envelope); err != nil {
+			t.Fatalf("unmarshal event: %v", err)
+		}
+		if envelope.Type == "DISPATCH_INTERRUPTED" {
+			foundInterruptedEvent = true
+			break
+		}
+	}
+	if !foundInterruptedEvent {
+		t.Fatal("DISPATCH_INTERRUPTED event missing after interrupt")
 	}
 }
 

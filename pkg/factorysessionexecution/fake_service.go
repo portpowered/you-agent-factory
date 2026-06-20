@@ -525,7 +525,7 @@ func (s *FakeService) applyLifecycleControl(
 	}
 
 	if outcome == LifecycleControlOutcomeAccepted {
-		s.mutateSessionForControl(state, operation, retry.DispatchID, interrupt.DispatchID)
+		s.mutateSessionForControl(state, operation, retry, interrupt)
 	}
 
 	result := lifecycleControlResultFromState(state, id, operation, outcome, retry, interrupt)
@@ -534,7 +534,14 @@ func (s *FakeService) applyLifecycleControl(
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this fake mutation helper keeps lifecycle control state transitions together for deterministic fixtures.
-func (s *FakeService) mutateSessionForControl(state *fakeSessionState, operation LifecycleControlKind, retryDispatchID, interruptDispatchID string) {
+func (s *FakeService) mutateSessionForControl(
+	state *fakeSessionState,
+	operation LifecycleControlKind,
+	retry RetryDispatchRequest,
+	interrupt InterruptDispatchRequest,
+) {
+	var interruptedDispatch DispatchSummary
+	var priorDispatchStatus DispatchStatus
 	switch operation {
 	case LifecycleControlPause:
 		if state.session.Status == LifecycleStatusRunning || state.session.Status == LifecycleStatusResuming {
@@ -567,35 +574,51 @@ func (s *FakeService) mutateSessionForControl(state *fakeSessionState, operation
 	case LifecycleControlRetryDispatch:
 		if state.session.Status == LifecycleStatusFailed {
 			for index, dispatch := range state.dispatches {
-				if dispatch.ID != retryDispatchID {
+				if dispatch.ID != retry.DispatchID {
 					continue
 				}
 				dispatch.Status = DispatchStatusQueued
 				dispatch.Attempt++
 				state.dispatches[index] = dispatch
-				if detail, ok := state.dispatchDetails[retryDispatchID]; ok {
+				if detail, ok := state.dispatchDetails[retry.DispatchID]; ok {
 					detail.Status = DispatchStatusQueued
 					detail.Attempt = dispatch.Attempt
-					state.dispatchDetails[retryDispatchID] = detail
+					state.dispatchDetails[retry.DispatchID] = detail
 				}
 			}
 			state.session.Status = LifecycleStatusRunning
 			state.result.SessionStatus = LifecycleStatusRunning
 		}
 	case LifecycleControlInterruptDispatch:
-		for index, dispatch := range state.dispatches {
-			if dispatch.ID != interruptDispatchID {
-				continue
+		if summary, ok := findDispatchSummary(state.dispatches, interrupt.DispatchID); ok {
+			interruptedDispatch = summary
+			priorDispatchStatus = summary.Status
+		}
+		state.dispatches, _ = MarkDispatchInterrupted(
+			state.dispatches,
+			nil,
+			interrupt.DispatchID,
+			interrupt,
+		)
+		if detail, ok := state.dispatchDetails[interrupt.DispatchID]; ok {
+			detail.Status = DispatchStatusInterrupted
+			if summary, ok := findDispatchSummary(state.dispatches, interrupt.DispatchID); ok {
+				detail.FailureDetail = summary.FailureDetail
 			}
-			dispatch.Status = DispatchStatusInterrupted
-			state.dispatches[index] = dispatch
-			if detail, ok := state.dispatchDetails[interruptDispatchID]; ok {
-				detail.Status = DispatchStatusInterrupted
-				state.dispatchDetails[interruptDispatchID] = detail
-			}
+			state.dispatchDetails[interrupt.DispatchID] = detail
 		}
 	}
 	state.events = deriveProjectionEvents(state.session, state.result)
+	if operation == LifecycleControlInterruptDispatch && interruptedDispatch.ID != "" {
+		state.events = AppendDispatchInterruptedEvent(
+			state.events,
+			state.session,
+			interruptedDispatch,
+			interrupt,
+			priorDispatchStatus,
+			canonicalEventSourceFakeService,
+		)
+	}
 }
 
 func (s *FakeService) asyncStartFromScenario(scenario FakeScenario, state *fakeSessionState) AsyncStartResult {

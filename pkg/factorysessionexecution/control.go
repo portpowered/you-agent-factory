@@ -395,11 +395,25 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 	}
 
 	if outcome == LifecycleControlOutcomeAccepted {
+		var priorDispatchStatus DispatchStatus
+		if operation == LifecycleControlInterruptDispatch {
+			priorDispatchStatus = dispatchSummary.Status
+		}
 		interruptRuntime := applyRuntimeAcceptedLifecycleControl(s, state, operation, retry, interrupt)
 		if interruptRuntime && state.runCancel != nil {
 			state.runCancel()
 		}
 		state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+		if operation == LifecycleControlInterruptDispatch {
+			state.events = AppendDispatchInterruptedEvent(
+				state.events,
+				state.session,
+				dispatchSummary,
+				interrupt,
+				priorDispatchStatus,
+				canonicalEventSourceRuntimeService,
+			)
+		}
 	}
 
 	result := runtimeExtendedLifecycleControlResultFromState(state, id, operation, outcome, retry, interrupt)
@@ -476,24 +490,14 @@ func applyRuntimeAcceptedLifecycleControl(
 			state.result.SessionStatus = LifecycleStatusRunning
 		}
 	case LifecycleControlInterruptDispatch:
-		markDispatchInterrupted(state, interrupt.DispatchID)
+		state.dispatches, state.dispatchStatusTransitions = MarkDispatchInterrupted(
+			state.dispatches,
+			state.dispatchStatusTransitions,
+			interrupt.DispatchID,
+			interrupt,
+		)
 	}
 	return interruptRuntime
-}
-
-func markDispatchInterrupted(state *runtimeSessionState, dispatchID string) {
-	for index, dispatch := range state.dispatches {
-		if dispatch.ID != dispatchID {
-			continue
-		}
-		dispatch.Status = DispatchStatusInterrupted
-		state.dispatches[index] = dispatch
-		if transitions, ok := state.dispatchStatusTransitions[dispatchID]; ok {
-			state.dispatchStatusTransitions[dispatchID] = append(transitions, DispatchStatusInterrupted)
-		} else {
-			state.dispatchStatusTransitions[dispatchID] = []DispatchStatus{DispatchStatusInterrupted}
-		}
-	}
 }
 
 func runtimeExtendedLifecycleControlResultFromState(

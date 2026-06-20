@@ -231,19 +231,19 @@ func TestFakeService_InternalLifecycleHelpers(t *testing.T) {
 	}
 
 	service := &FakeService{}
-	service.mutateSessionForControl(state, LifecycleControlApprove, "", "")
+	service.mutateSessionForControl(state, LifecycleControlApprove, RetryDispatchRequest{}, InterruptDispatchRequest{})
 	if state.session.Status != LifecycleStatusRunning {
 		t.Fatalf("approve mutate status = %q, want RUNNING", state.session.Status)
 	}
 	state.session.Status = LifecycleStatusFailed
 	state.result.SessionStatus = LifecycleStatusFailed
-	service.mutateSessionForControl(state, LifecycleControlRetryDispatch, "disp-1", "")
+	service.mutateSessionForControl(state, LifecycleControlRetryDispatch, RetryDispatchRequest{DispatchID: "disp-1"}, InterruptDispatchRequest{})
 	if state.session.Status != LifecycleStatusRunning || state.dispatches[0].Status != DispatchStatusQueued || state.dispatches[0].Attempt != 2 {
 		t.Fatalf("retry mutate state = %#v / %#v", state.session, state.dispatches[0])
 	}
 	state.dispatches[0].Status = DispatchStatusRunning
 	state.dispatches[0].Attempt = 1
-	service.mutateSessionForControl(state, LifecycleControlInterruptDispatch, "", "disp-1")
+	service.mutateSessionForControl(state, LifecycleControlInterruptDispatch, RetryDispatchRequest{}, InterruptDispatchRequest{DispatchID: "disp-1"})
 	if state.dispatches[0].Status != DispatchStatusInterrupted {
 		t.Fatalf("interrupt mutate status = %q, want INTERRUPTED", state.dispatches[0].Status)
 	}

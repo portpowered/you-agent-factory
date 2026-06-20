@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
@@ -1285,5 +1286,180 @@ func TestReplaySessionProjection_IgnoresUnknownEventTypes(t *testing.T) {
 	}
 	if session.SessionID != sessionID {
 		t.Fatalf("sessionId = %q, want %q", session.SessionID, sessionID)
+	}
+}
+
+func TestAppendDispatchInterruptedEvent_RecordsCanonicalMetadata(t *testing.T) {
+	startedAt := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+	session := SessionReadResult{
+		SessionID:        "dur-sess-interrupt-001",
+		Status:           LifecycleStatusRunning,
+		OrchestratorKind: "JAVASCRIPT",
+		Dialect:          "you-workflow-v1",
+		Phase:            "execute",
+		Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+	}
+	base := BuildCanonicalRuntimeSessionEvents(session, ResultReadResult{
+		SessionID:    session.SessionID,
+		ResultStatus: ResultStatusNotReady,
+	})
+	dispatch := DispatchSummary{
+		ID:     "disp-js-002",
+		Status: DispatchStatusRunning,
+		Phase:  "execute",
+		Label:  "audit",
+	}
+	events := AppendDispatchInterruptedEvent(
+		base,
+		session,
+		dispatch,
+		InterruptDispatchRequest{
+			ControlRequest: ControlRequest{Reason: "operator stop"},
+			DispatchID:     "disp-js-002",
+		},
+		DispatchStatusRunning,
+		canonicalEventSourceRuntimeService,
+	)
+	if len(events) != len(base)+1 {
+		t.Fatalf("events = %d, want %d", len(events), len(base)+1)
+	}
+
+	var envelope canonicalFactoryEvent
+	if err := json.Unmarshal(events[len(events)-1], &envelope); err != nil {
+		t.Fatalf("unmarshal interrupted event: %v", err)
+	}
+	if envelope.Type != "DISPATCH_INTERRUPTED" {
+		t.Fatalf("type = %q, want DISPATCH_INTERRUPTED", envelope.Type)
+	}
+	if envelope.Context.DispatchID == nil || *envelope.Context.DispatchID != "disp-js-002" {
+		t.Fatalf("dispatchId = %#v, want disp-js-002", envelope.Context.DispatchID)
+	}
+
+	var payload dispatchInterruptedEventPayload
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload.Reason != "operator stop" {
+		t.Fatalf("reason = %q, want operator stop", payload.Reason)
+	}
+	if payload.ObservedStatus != string(factoryapi.FactoryDispatchStatusRUNNING) {
+		t.Fatalf("observedStatus = %q, want RUNNING", payload.ObservedStatus)
+	}
+	if payload.RetryPlanned {
+		t.Fatal("retryPlanned = true, want false")
+	}
+}
+
+func TestMarkDispatchInterrupted_UpdatesInspectionProjection(t *testing.T) {
+	dispatches := []DispatchSummary{{
+		ID:     "disp-js-002",
+		Status: DispatchStatusRunning,
+	}}
+	updated, _ := MarkDispatchInterrupted(
+		dispatches,
+		map[string][]DispatchStatus{},
+		"disp-js-002",
+		InterruptDispatchRequest{DispatchID: "disp-js-002"},
+	)
+	if updated[0].Status != DispatchStatusInterrupted {
+		t.Fatalf("status = %q, want INTERRUPTED", updated[0].Status)
+	}
+	if updated[0].FailureDetail == nil || updated[0].FailureDetail.Reason != dispatchInterruptionFailureReasonCode {
+		t.Fatalf("failureDetail = %#v, want DISPATCH_INTERRUPTED reason", updated[0].FailureDetail)
+	}
+	if updated[0].FailureDetail.Message != defaultDispatchInterruptionReason {
+		t.Fatalf("failure message = %q", updated[0].FailureDetail.Message)
+	}
+}
+
+func TestReplayDispatchProjection_DerivesInterruptedDispatchMetadata(t *testing.T) {
+	startedAt := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+	session := SessionReadResult{
+		SessionID:        "dur-sess-interrupt-002",
+		Status:           LifecycleStatusRunning,
+		OrchestratorKind: "JAVASCRIPT",
+		Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+	}
+	events := AppendDispatchInterruptedEvent(
+		BuildCanonicalRuntimeSessionEvents(session, ResultReadResult{SessionID: session.SessionID}),
+		session,
+		DispatchSummary{ID: "disp-js-002", Status: DispatchStatusRunning, Phase: "execute"},
+		InterruptDispatchRequest{
+			ControlRequest: ControlRequest{Reason: "bad prompt"},
+			DispatchID:     "disp-js-002",
+		},
+		DispatchStatusRunning,
+		canonicalEventSourceRuntimeService,
+	)
+
+	replayed, err := ReplayDispatchProjection(events)
+	if err != nil {
+		t.Fatalf("ReplayDispatchProjection: %v", err)
+	}
+	if len(replayed) != 1 {
+		t.Fatalf("replayed dispatches = %#v, want one interrupted dispatch", replayed)
+	}
+	if replayed[0].Status != DispatchStatusInterrupted {
+		t.Fatalf("status = %q, want INTERRUPTED", replayed[0].Status)
+	}
+	if replayed[0].FailureDetail == nil || replayed[0].FailureDetail.Message != "bad prompt" {
+		t.Fatalf("failureDetail = %#v, want bad prompt", replayed[0].FailureDetail)
+	}
+}
+
+func TestFakeService_InterruptDispatch_RecordsDispatchInterruptedEvent(t *testing.T) {
+	service := newContractFakeService(t)
+	started := startAsyncByRequestID(t, service, "req-js-run-n-001")
+
+	result, err := service.InterruptDispatch(context.Background(), started.SessionID, InterruptDispatchRequest{
+		ControlRequest: ControlRequest{Reason: "stop bad run"},
+		DispatchID:     "disp-js-002",
+	})
+	if err != nil {
+		t.Fatalf("InterruptDispatch: %v", err)
+	}
+	if result.Outcome != LifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
+	}
+
+	dispatch, err := service.GetDispatch(context.Background(), started.SessionID, "disp-js-002")
+	if err != nil {
+		t.Fatalf("GetDispatch: %v", err)
+	}
+	if dispatch.Status != DispatchStatusInterrupted {
+		t.Fatalf("dispatch status = %q, want INTERRUPTED", dispatch.Status)
+	}
+	if dispatch.FailureDetail == nil || dispatch.FailureDetail.Message != "stop bad run" {
+		t.Fatalf("failureDetail = %#v, want stop bad run", dispatch.FailureDetail)
+	}
+
+	events, err := service.ReadEvents(context.Background(), started.SessionID, EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
+	}
+	found := false
+	for _, raw := range events.Events {
+		var envelope canonicalFactoryEvent
+		if err := json.Unmarshal(raw, &envelope); err != nil {
+			t.Fatalf("unmarshal event: %v", err)
+		}
+		if envelope.Type != "DISPATCH_INTERRUPTED" {
+			continue
+		}
+		found = true
+		if envelope.Context.DispatchID == nil || *envelope.Context.DispatchID != "disp-js-002" {
+			t.Fatalf("dispatchId = %#v, want disp-js-002", envelope.Context.DispatchID)
+		}
+	}
+	if !found {
+		t.Fatal("DISPATCH_INTERRUPTED event missing from session events")
+	}
+
+	replayed, err := ReplayDispatchProjection(events.Events)
+	if err != nil {
+		t.Fatalf("ReplayDispatchProjection: %v", err)
+	}
+	if len(replayed) != 1 || replayed[0].Status != DispatchStatusInterrupted {
+		t.Fatalf("replayed = %#v, want one interrupted dispatch", replayed)
 	}
 }
