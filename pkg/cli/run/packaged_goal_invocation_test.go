@@ -211,6 +211,109 @@ func TestRun_NamedGoalPipedStdinInvocationWritesPrimaryResult(t *testing.T) {
 	}
 }
 
+func TestResolveFactoryInvocationRequest_NamedGoalRejectsConflictingSources(t *testing.T) {
+	text := "Plan from args"
+
+	tests := []struct {
+		name string
+		cfg  RunConfig
+	}{
+		{
+			name: "positional text with piped non-tty stdin",
+			cfg: RunConfig{
+				Dir:                      "/tmp/builtin-goal",
+				NamedFactoryName:         goal.PackagedFactoryName,
+				InvocationPositionalText: &text,
+				Stdin:                    strings.NewReader("Plan from stdin\n"),
+				StdinIsTTY:               func() bool { return false },
+			},
+		},
+		{
+			name: "positional text with explicit stdin text",
+			cfg: RunConfig{
+				Dir:                      "/tmp/builtin-goal",
+				NamedFactoryName:         goal.PackagedFactoryName,
+				InvocationPositionalText: &text,
+				InvocationStdinText:      stringPtr("Plan from explicit stdin"),
+				StdinIsTTY:               func() bool { return true },
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, invocationMode, err := resolveFactoryInvocationRequest(tc.cfg)
+			if !invocationMode {
+				t.Fatal("expected invocation mode when both sources are present for named goal")
+			}
+			assertStableSourceConflictError(t, err)
+		})
+	}
+}
+
+func TestRun_NamedGoalConflictingSourcesFailsBeforeInvocation(t *testing.T) {
+	preserveRunGlobals(t)
+
+	text := "Plan from args"
+	var output bytes.Buffer
+	invokeCalled := false
+
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubInvocationService{
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			},
+			invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				invokeCalled = true
+				t.Fatal("expected conflicting goal invocation sources to fail before InvokeFactorySession")
+				return apisurface.FactoryInvocationResult{}, nil
+			},
+		}, nil
+	}
+
+	err := Run(context.Background(), RunConfig{
+		Dir:                      "/tmp/builtin-goal",
+		NamedFactoryName:         goal.PackagedFactoryName,
+		InvocationPositionalText: &text,
+		Stdin:                    strings.NewReader("Plan from stdin\n"),
+		StdinIsTTY:               func() bool { return false },
+		Output:                   &output,
+		Port:                     7437,
+	})
+	if err == nil {
+		t.Fatal("expected conflicting goal invocation sources to fail")
+	}
+	assertStableSourceConflictError(t, err)
+	if invokeCalled {
+		t.Fatal("expected InvokeFactorySession to stay uncalled for conflicting goal sources")
+	}
+	if output.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty on conflicting-source failure", output.String())
+	}
+}
+
+func assertStableSourceConflictError(t *testing.T, err error) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatal("expected stable source conflict error")
+	}
+	for _, want := range []string{
+		string(invocations.InputErrorCodeSourceConflict),
+		string(invocations.InputSourcePositionalText),
+		string(invocations.InputSourceStdinText),
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want %q", err.Error(), want)
+		}
+	}
+}
+
+func stringPtr(value string) *string {
+	return &value
+}
+
 func assertInvocationRequestMatchesSharedResolver(
 	t *testing.T,
 	request *factoryapi.InvocationRequest,

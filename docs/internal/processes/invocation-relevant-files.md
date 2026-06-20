@@ -72,7 +72,11 @@ primary-result behavior.
   invocation input sources resolve through `invocations.ResolveTextInput` and
   reach the shared `InvocationRequest` payload shape.
 - `pkg/cli/root_run_goal_prompt_test.go` proves root `you run --named @you/goal`
-  wiring for positional text, piped stdin, and explicit `-` stdin forms.
+  wiring for positional text, piped stdin, explicit `-` stdin forms, and stable
+  `INVOCATION_INPUT_SOURCE_CONFLICT` rejection when sources combine.
+- `pkg/cli/run/packaged_goal_invocation_test.go` also proves named `@you/goal`
+  conflicting-source failures stay on the shared resolver contract and fail before
+  `InvokeFactorySession`.
 - `pkg/service/model_catalog.go` owns the session invocation wait loop, packaged TTS
   loading/completion/failure logs, and packaged-factory metrics while polling for
   primary results.
