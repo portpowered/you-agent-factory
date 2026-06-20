@@ -375,8 +375,15 @@ func assertBuiltInGoalMaterializedLayout(t *testing.T, factoryDir string) {
 
 	for _, path := range []string{
 		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
+		filepath.Join(factoryDir, interfaces.WorkersDir, "goal-planner", interfaces.FactoryAgentsFileName),
 		filepath.Join(factoryDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName),
+		filepath.Join(factoryDir, interfaces.WorkersDir, "goal-checker", interfaces.FactoryAgentsFileName),
+		filepath.Join(factoryDir, interfaces.WorkersDir, "goal-reviewer", interfaces.FactoryAgentsFileName),
+		filepath.Join(factoryDir, interfaces.WorkstationsDir, "plan-goal", interfaces.FactoryAgentsFileName),
 		filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-goal", interfaces.FactoryAgentsFileName),
+		filepath.Join(factoryDir, interfaces.WorkstationsDir, "check-goal", interfaces.FactoryAgentsFileName),
+		filepath.Join(factoryDir, interfaces.WorkstationsDir, "review-goal", interfaces.FactoryAgentsFileName),
+		filepath.Join(factoryDir, interfaces.WorkstationsDir, "goal-loop-breaker", interfaces.FactoryAgentsFileName),
 	} {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("expected built-in goal materialized path %s: %v", path, err)

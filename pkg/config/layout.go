@@ -979,26 +979,123 @@ var BuiltInGoalFactoryJSON = []byte(`{
   ],
   "workers": [
     {
+      "name": "goal-planner",
+      "type": "AGENT_WORKER",
+      "body": "You are the @you/goal planner worker."
+    },
+    {
       "name": "goal-executor",
-      "type": "MODEL_WORKER",
-      "body": "You are the @you/goal built-in factory worker."
+      "type": "AGENT_WORKER",
+      "body": "You are the @you/goal executor worker."
+    },
+    {
+      "name": "goal-checker",
+      "type": "SCRIPT_WORKER",
+      "command": "make",
+      "args": ["test"],
+      "body": "You are the @you/goal checker worker."
+    },
+    {
+      "name": "goal-reviewer",
+      "type": "AGENT_WORKER",
+      "body": "You are the @you/goal reviewer worker."
     }
   ],
   "workstations": [
     {
-      "name": "execute-goal",
-      "type": "MODEL_WORKSTATION",
-      "worker": "goal-executor",
+      "name": "plan-goal",
+      "type": "AGENT_RUN",
+      "worker": "goal-planner",
       "inputs": [
         {"workType": "goal", "state": "init"}
       ],
       "outputs": [
-        {"workType": "goal", "state": "complete"}
+        {"workType": "goal", "state": "plan"}
       ],
       "onFailure": [
         {"workType": "goal", "state": "failed"}
       ],
-      "body": "Execute the requested goal work for {{ .WorkID }}."
+      "body": "Plan the requested goal for {{ .WorkID }}."
+    },
+    {
+      "name": "execute-goal",
+      "type": "AGENT_RUN",
+      "worker": "goal-executor",
+      "inputs": [
+        {"workType": "goal", "state": "plan"}
+      ],
+      "outputs": [
+        {"workType": "goal", "state": "execute"}
+      ],
+      "onFailure": [
+        {"workType": "goal", "state": "failed"}
+      ],
+      "body": "Execute the planned goal for {{ .WorkID }}."
+    },
+    {
+      "name": "check-goal",
+      "type": "SCRIPT_RUN",
+      "worker": "goal-checker",
+      "inputs": [
+        {"workType": "goal", "state": "execute"}
+      ],
+      "outputs": [
+        {"workType": "goal", "state": "check"}
+      ],
+      "onFailure": [
+        {"workType": "goal", "state": "failed"}
+      ],
+      "body": "Run verification checks for goal {{ .WorkID }}."
+    },
+    {
+      "name": "advance-goal-review",
+      "type": "LOGICAL_MOVE",
+      "inputs": [
+        {"workType": "goal", "state": "check"}
+      ],
+      "outputs": [
+        {"workType": "goal", "state": "review"}
+      ],
+      "worker": ""
+    },
+    {
+      "name": "review-goal",
+      "type": "CLASSIFIER_WORKSTATION",
+      "worker": "goal-reviewer",
+      "inputs": [
+        {"workType": "goal", "state": "review"}
+      ],
+      "classificationRoutes": [
+        {"label": "accepted", "outputs": [{"workType": "goal", "state": "complete"}]},
+        {"label": "needs_changes", "outputs": [{"workType": "goal", "state": "execute"}]},
+        {"label": "tests_failed", "outputs": [{"workType": "goal", "state": "execute"}]},
+        {"label": "needs_human", "outputs": [{"workType": "goal", "state": "needs-human"}]},
+        {"label": "blocked", "outputs": [{"workType": "goal", "state": "blocked"}]},
+        {"label": "interrupted", "outputs": [{"workType": "goal", "state": "interrupted"}]},
+        {"label": "failed", "outputs": [{"workType": "goal", "state": "failed"}]}
+      ],
+      "onFailure": [
+        {"workType": "goal", "state": "failed"}
+      ],
+      "body": "Review goal progress for {{ .WorkID }}."
+    },
+    {
+      "name": "goal-loop-breaker",
+      "type": "LOGICAL_MOVE",
+      "guards": [
+        {
+          "type": "VISIT_COUNT",
+          "workstation": "review-goal",
+          "maxVisits": 5
+        }
+      ],
+      "inputs": [
+        {"workType": "goal", "state": "review"}
+      ],
+      "outputs": [
+        {"workType": "goal", "state": "failed"}
+      ],
+      "worker": ""
     }
   ]
 }`)

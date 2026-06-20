@@ -21,6 +21,19 @@ var packagedGoalLifecycleStates = []string{
 	"failed",
 }
 
+var packagedGoalProgressionWorkstations = []struct {
+	name            string
+	inputState      string
+	outputState     string
+	publicType      string
+	workerName      string
+}{
+	{name: PackagedPlanWorkstationName, inputState: "init", outputState: "plan", publicType: interfaces.WorkstationTypeAgent, workerName: "goal-planner"},
+	{name: PackagedExecuteWorkstationName, inputState: "plan", outputState: "execute", publicType: interfaces.WorkstationTypeAgent, workerName: "goal-executor"},
+	{name: PackagedCheckWorkstationName, inputState: "execute", outputState: "check", publicType: interfaces.WorkstationTypeScript, workerName: "goal-checker"},
+	{name: "advance-goal-review", inputState: "check", outputState: "review", publicType: interfaces.WorkstationTypeLogical, workerName: ""},
+}
+
 func TestBuiltInFactoryJSON_LoadsRunnablePackagedGoalFactory(t *testing.T) {
 	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
 	if err != nil {
@@ -43,9 +56,9 @@ func TestBuiltInFactoryJSON_LoadsRunnablePackagedGoalFactory(t *testing.T) {
 		t.Fatalf("handlingBehavior = %#v, want [DEFAULT]", workType.HandlingBehavior)
 	}
 	assertGoalLifecycleStates(t, workType.States)
-	if len(cfg.Workstations) != 1 || cfg.Workstations[0].Name != PackagedInvokeWorkstationName {
-		t.Fatalf("workstations = %#v, want packaged goal workstation", cfg.Workstations)
-	}
+	assertGoalProgressionTopology(t, cfg.Workstations, cfg.Workers)
+	assertGoalReviewRoutes(t, cfg.Workstations)
+	assertGoalLoopBreaker(t, cfg.Workstations)
 }
 
 func TestMaterializedPackagedGoalFactory_ExposesCanonicalWorkTypeAndLifecycleStates(t *testing.T) {
@@ -74,6 +87,9 @@ func TestMaterializedPackagedGoalFactory_ExposesCanonicalWorkTypeAndLifecycleSta
 		t.Fatalf("materialized handlingBehavior = %#v, want [DEFAULT]", workType.HandlingBehavior)
 	}
 	assertGoalLifecycleStates(t, workType.States)
+	assertGoalProgressionTopology(t, cfg.Workstations, cfg.Workers)
+	assertGoalReviewRoutes(t, cfg.Workstations)
+	assertGoalLoopBreaker(t, cfg.Workstations)
 }
 
 func assertGoalLifecycleStates(t *testing.T, states []interfaces.StateConfig) {
@@ -89,4 +105,119 @@ func assertGoalLifecycleStates(t *testing.T, states []interfaces.StateConfig) {
 	if !slices.Equal(got, want) {
 		t.Fatalf("goal lifecycle states = %#v, want %#v", got, want)
 	}
+}
+
+func assertGoalProgressionTopology(t *testing.T, workstations []interfaces.FactoryWorkstationConfig, workers []interfaces.WorkerConfig) {
+	t.Helper()
+
+	byName := indexWorkstationsByName(workstations)
+	workerTypes := indexWorkerTypesByName(workers)
+	for _, want := range packagedGoalProgressionWorkstations {
+		workstation, ok := byName[want.name]
+		if !ok {
+			t.Fatalf("missing progression workstation %q", want.name)
+		}
+		workerType := workerTypes[workstation.WorkerTypeName]
+		publicType := interfaces.PublicWorkstationTypeFromInternalRuntime(workstation.Type, workerType, workstation.Kind)
+		if publicType != want.publicType {
+			t.Fatalf("workstation %q public type = %q, want %q", want.name, publicType, want.publicType)
+		}
+		assertSingleGoalRoute(t, want.name, workstation.Inputs, want.inputState)
+		assertSingleGoalRoute(t, want.name, workstation.Outputs, want.outputState)
+	}
+}
+
+func assertGoalReviewRoutes(t *testing.T, workstations []interfaces.FactoryWorkstationConfig) {
+	t.Helper()
+
+	review, ok := indexWorkstationsByName(workstations)[PackagedReviewWorkstationName]
+	if !ok {
+		t.Fatal("missing review workstation")
+	}
+	if review.Type != interfaces.WorkstationTypeClassify {
+		t.Fatalf("review workstation type = %q, want %q", review.Type, interfaces.WorkstationTypeClassify)
+	}
+
+	wantRoutes := map[string]string{
+		"accepted":      "complete",
+		"needs_changes": "execute",
+		"tests_failed":  "execute",
+		"needs_human":   "needs-human",
+		"blocked":       "blocked",
+		"interrupted":   "interrupted",
+		"failed":        "failed",
+	}
+	gotRoutes := make(map[string]string, len(review.ClassificationRoutes))
+	for _, route := range review.ClassificationRoutes {
+		if len(route.Outputs) != 1 {
+			t.Fatalf("review route %q outputs = %#v, want one goal output", route.Label, route.Outputs)
+		}
+		gotRoutes[route.Label] = route.Outputs[0].StateName
+	}
+	for label, wantState := range wantRoutes {
+		gotState, ok := gotRoutes[label]
+		if !ok {
+			t.Fatalf("review route missing label %q", label)
+		}
+		if gotState != wantState {
+			t.Fatalf("review route %q state = %q, want %q", label, gotState, wantState)
+		}
+	}
+}
+
+func assertGoalLoopBreaker(t *testing.T, workstations []interfaces.FactoryWorkstationConfig) {
+	t.Helper()
+
+	loopBreaker, ok := indexWorkstationsByName(workstations)[PackagedLoopBreakerWorkstationName]
+	if !ok {
+		t.Fatal("missing goal loop breaker workstation")
+	}
+	if loopBreaker.Type != interfaces.WorkstationTypeLogical {
+		t.Fatalf("loop breaker type = %q, want %q", loopBreaker.Type, interfaces.WorkstationTypeLogical)
+	}
+	if len(loopBreaker.Guards) != 1 {
+		t.Fatalf("loop breaker guards = %#v, want one visit_count guard", loopBreaker.Guards)
+	}
+	guard := loopBreaker.Guards[0]
+	if guard.Type != interfaces.GuardTypeVisitCount {
+		t.Fatalf("loop breaker guard type = %q, want %q", guard.Type, interfaces.GuardTypeVisitCount)
+	}
+	if guard.Workstation != PackagedReviewWorkstationName {
+		t.Fatalf("loop breaker guard workstation = %q, want %q", guard.Workstation, PackagedReviewWorkstationName)
+	}
+	if guard.MaxVisits != 5 {
+		t.Fatalf("loop breaker guard maxVisits = %d, want 5", guard.MaxVisits)
+	}
+	assertSingleGoalRoute(t, loopBreaker.Name, loopBreaker.Inputs, "review")
+	assertSingleGoalRoute(t, loopBreaker.Name, loopBreaker.Outputs, "failed")
+}
+
+func assertSingleGoalRoute(t *testing.T, workstationName string, routes []interfaces.IOConfig, wantState string) {
+	t.Helper()
+
+	if len(routes) != 1 {
+		t.Fatalf("workstation %q routes = %#v, want one goal route", workstationName, routes)
+	}
+	if routes[0].WorkTypeName != PackagedGoalWorkTypeName {
+		t.Fatalf("workstation %q work type = %q, want %s", workstationName, routes[0].WorkTypeName, PackagedGoalWorkTypeName)
+	}
+	if routes[0].StateName != wantState {
+		t.Fatalf("workstation %q state = %q, want %q", workstationName, routes[0].StateName, wantState)
+	}
+}
+
+func indexWorkerTypesByName(workers []interfaces.WorkerConfig) map[string]string {
+	byName := make(map[string]string, len(workers))
+	for _, worker := range workers {
+		byName[worker.Name] = worker.Type
+	}
+	return byName
+}
+
+func indexWorkstationsByName(workstations []interfaces.FactoryWorkstationConfig) map[string]interfaces.FactoryWorkstationConfig {
+	byName := make(map[string]interfaces.FactoryWorkstationConfig, len(workstations))
+	for _, workstation := range workstations {
+		byName[workstation.Name] = workstation
+	}
+	return byName
 }
