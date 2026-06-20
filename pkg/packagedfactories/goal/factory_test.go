@@ -1,12 +1,30 @@
 package goal
 
 import (
+	"io/fs"
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
+
+var packagedGoalLegacyPrimitiveAliases = []string{
+	"MODEL_WORKER",
+	"MODEL_WORKSTATION",
+}
+
+var packagedGoalRequiredPublicPrimitives = []string{
+	interfaces.WorkerTypeAgent,
+	interfaces.WorkerTypeScript,
+	interfaces.WorkstationTypeAgent,
+	interfaces.WorkstationTypeScript,
+	interfaces.WorkstationTypeLogical,
+	interfaces.WorkstationTypeClassify,
+}
 
 var packagedGoalLifecycleStates = []string{
 	"init",
@@ -61,6 +79,49 @@ func TestBuiltInFactoryJSON_LoadsRunnablePackagedGoalFactory(t *testing.T) {
 	assertGoalLoopBreaker(t, cfg.Workstations)
 }
 
+func TestBuiltInGoalFactoryJSON_UsesCurrentPublicPrimitiveNames(t *testing.T) {
+	assertPackagedGoalAuthoredJSONUsesPublicPrimitives(t, "built-in goal factory JSON", factoryconfig.BuiltInGoalFactoryJSON)
+}
+
+func TestMaterializedPackagedGoalFactory_AuthoredFilesUseCurrentPublicPrimitiveNames(t *testing.T) {
+	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+
+	factoryJSONPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	factoryJSON, err := os.ReadFile(factoryJSONPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", factoryJSONPath, err)
+	}
+	assertPackagedGoalAuthoredJSONUsesPublicPrimitives(t, interfaces.FactoryConfigFile, factoryJSON)
+
+	err = filepath.WalkDir(factoryDir, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || path == factoryJSONPath {
+			return nil
+		}
+		if strings.HasSuffix(entry.Name(), ".gitkeep") {
+			return nil
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		relativePath, err := filepath.Rel(factoryDir, path)
+		if err != nil {
+			return err
+		}
+		assertPackagedGoalAuthoredContentUsesPublicPrimitives(t, relativePath, string(content))
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WalkDir(materialized goal factory): %v", err)
+	}
+}
+
 func TestMaterializedPackagedGoalFactory_ExposesCanonicalWorkTypeAndLifecycleStates(t *testing.T) {
 	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
 	if err != nil {
@@ -90,6 +151,28 @@ func TestMaterializedPackagedGoalFactory_ExposesCanonicalWorkTypeAndLifecycleSta
 	assertGoalProgressionTopology(t, cfg.Workstations, cfg.Workers)
 	assertGoalReviewRoutes(t, cfg.Workstations)
 	assertGoalLoopBreaker(t, cfg.Workstations)
+}
+
+func assertPackagedGoalAuthoredContentUsesPublicPrimitives(t *testing.T, sourceLabel, content string) {
+	t.Helper()
+
+	for _, alias := range packagedGoalLegacyPrimitiveAliases {
+		if strings.Contains(content, alias) {
+			t.Fatalf("%s introduces legacy alias %q", sourceLabel, alias)
+		}
+	}
+}
+
+func assertPackagedGoalAuthoredJSONUsesPublicPrimitives(t *testing.T, sourceLabel string, content []byte) {
+	t.Helper()
+
+	authored := string(content)
+	assertPackagedGoalAuthoredContentUsesPublicPrimitives(t, sourceLabel, authored)
+	for _, primitive := range packagedGoalRequiredPublicPrimitives {
+		if !strings.Contains(authored, primitive) {
+			t.Fatalf("%s missing required public primitive %q", sourceLabel, primitive)
+		}
+	}
 }
 
 func assertGoalLifecycleStates(t *testing.T, states []interfaces.StateConfig) {
