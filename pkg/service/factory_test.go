@@ -299,7 +299,8 @@ func (f *aggregateSnapshotFactory) SubmitWorkRequest(ctx context.Context, reques
 func (f *aggregateSnapshotFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
 }
-func (f *aggregateSnapshotFactory) Pause(context.Context) error { return f.pauseErr }
+func (f *aggregateSnapshotFactory) Pause(context.Context) error  { return f.pauseErr }
+func (f *aggregateSnapshotFactory) Resume(context.Context) error { return nil }
 func (f *aggregateSnapshotFactory) MoveWork(context.Context, string, string, interfaces.WorkStateChangeSource, string) (interfaces.OperatorMoveResult, error) {
 	return interfaces.OperatorMoveResult{}, errors.New("MoveWork is not implemented in aggregateSnapshotFactory")
 }
@@ -336,7 +337,8 @@ func (f *runtimeMetricsObserverFactory) SubmitWorkRequest(context.Context, inter
 func (f *runtimeMetricsObserverFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
 }
-func (f *runtimeMetricsObserverFactory) Pause(context.Context) error { return nil }
+func (f *runtimeMetricsObserverFactory) Pause(context.Context) error  { return nil }
+func (f *runtimeMetricsObserverFactory) Resume(context.Context) error { return nil }
 func (f *runtimeMetricsObserverFactory) MoveWork(context.Context, string, string, interfaces.WorkStateChangeSource, string) (interfaces.OperatorMoveResult, error) {
 	return interfaces.OperatorMoveResult{}, nil
 }

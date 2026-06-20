@@ -450,6 +450,21 @@ func (f *factoryImpl) Pause(_ context.Context) error {
 	return nil
 }
 
+// Resume re-enables processing for a paused factory.
+func (f *factoryImpl) Resume(_ context.Context) error {
+	f.mu.Lock()
+	previousState := f.state
+	if previousState != interfaces.FactoryStatePaused {
+		f.mu.Unlock()
+		return nil
+	}
+	f.state = interfaces.FactoryStateRunning
+	f.mu.Unlock()
+	f.recordStateChange(previousState, interfaces.FactoryStateRunning, "resume requested")
+	f.engine.WakeForPendingProcessing()
+	return nil
+}
+
 func (f *factoryImpl) automaticTicksPaused() bool {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
