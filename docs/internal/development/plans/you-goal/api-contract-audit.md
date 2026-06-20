@@ -4,8 +4,8 @@ Implementation-ready contract boundary for the `@you/goal` slice. This audit
 maps each relevant surface to ownership, public vs internal scope, reuse vs
 change posture, and follow-on verification expectations.
 
-**Status:** in progress (stories `you-goal-p11-api-contract-audit-001` and
-`you-goal-p11-api-contract-audit-002` complete)
+**Status:** complete (all stories `you-goal-p11-api-contract-audit-001` through
+`you-goal-p11-api-contract-audit-003`)
 
 **Last updated:** 2026-06-20 UTC
 
@@ -28,7 +28,7 @@ result). Invocation equivalence rules: `docs/architecture/invocation-contract.md
 |---------|-------|--------|
 | [Invocation and adapter reuse boundaries](#invocation-and-adapter-reuse-boundaries) | `you-goal-p11-api-contract-audit-001` | complete |
 | [Response streams vs lifecycle contracts](#response-streams-vs-lifecycle-contracts) | `you-goal-p11-api-contract-audit-002` | complete |
-| Public OpenAPI delta and generated-client expectations | `you-goal-p11-api-contract-audit-003` | pending |
+| [Public OpenAPI delta and generated-client expectations](#public-openapi-delta-and-generated-client-expectations) | `you-goal-p11-api-contract-audit-003` | complete |
 
 ---
 
@@ -328,4 +328,119 @@ changes, or contract smoke updates unless story 003's public delta
 
 ## Public OpenAPI delta and generated-client expectations
 
-*Pending story `you-goal-p11-api-contract-audit-003`.*
+`@you/goal` follow-on API work may change **one** public factory-configuration
+field on the existing `Workstation` schema. Everything else in this slice —
+invocation routes, event vocabulary, lifecycle routes, internal response streams,
+and CLI invocation adapters — reuses or repairs existing public surfaces without
+new OpenAPI route families or generated-client churn.
+
+### Only expected public OpenAPI change
+
+| Surface | Current state | @you/goal posture | Follow-on verification |
+|---------|---------------|-------------------|------------------------|
+| `Workstation.workPropagation` | **Not yet in OpenAPI** — planned optional field on `api/components/schemas/data-models/Workstation.yaml` | **Add in follow-on PR** — sole expected public contract delta for this slice | `make generate-api`; `make api-smoke`; factory config load/save round-trip tests; dashboard factory-definition decode if the field is authorable in UI |
+| `WorkPropagationMode` | **Not yet in OpenAPI** — planned enum referenced by `workPropagation` | **Add in follow-on PR** — companion schema fragment under `api/components/schemas/data-models/` | Same as `workPropagation`; enum normalization in `pkg/interfaces/public_factory_enums.go` if runtime projection is required |
+| All other `Workstation` fields | Present in `Workstation.yaml` | **Reuse as-is** — no goal-prefixed duplicates | Existing factory validation and topology tests |
+| `Factory`, `FactorySession`, invocation, event, lifecycle schemas | Present | **Reuse as-is** — stories 001–002 lock reuse posture | Existing contract and servertests only |
+| `SessionResponseStream` / `SessionResponseStreamEvent` | Internal runtime models (not in OpenAPI) | **Internal-only** — must not appear in authored OpenAPI fragments | Runtime/session tests near implementing packages; **no** `make generate-api` |
+
+No other public OpenAPI additions are in scope for `@you/goal` in this slice:
+no new routes, no new `FactoryEventType` values, no response-stream endpoints,
+and no goal-prefixed configuration objects parallel to `Workstation`.
+
+### Stable follow-on terminology
+
+Later `@you/goal` PRs must use **exactly** these names across docs, OpenAPI
+fragments, backend config mapping, CLI/API adapters, and generated clients:
+
+| Name | Layer | Usage rule |
+|------|-------|------------|
+| `Workstation.workPropagation` | Public OpenAPI + factory JSON | JSON property name on each `Workstation` object in factory configuration; OpenAPI field on `Workstation.yaml` |
+| `WorkPropagationMode` | Public OpenAPI enum | Enum type for `workPropagation` values; fragment file `WorkPropagationMode.yaml` (or equivalent) registered in `api/openapi-main.yaml` |
+| `SessionResponseStream` | Internal runtime/session | In-process aggregate for ephemeral provider output; **never** a public schema, route, or generated-client type |
+| `SessionResponseStreamEvent` | Internal runtime/session | One internal stream record; **never** a `FactoryEventType`, SSE payload, or public client export |
+
+**Naming consistency requirements:**
+
+- Docs and planning artifacts use `Workstation.workPropagation` (schema-qualified)
+  when referring to the public field; use `workPropagation` only when describing
+  JSON/YAML on disk.
+- OpenAPI `x-enum-varnames` for `WorkPropagationMode` should follow existing
+  workstation enum style (for example `WorkPropagationModeImmediate` — exact
+  enum members are defined in the follow-on implementation PR, not this audit).
+- Go internal structs may use idiomatic Go field names (`WorkPropagation`) but
+  JSON tags and OpenAPI property names must remain `workPropagation`.
+- TypeScript factory-definition decoders must read the generated OpenAPI
+  `Workstation` shape — no parallel `goalWorkPropagation` or UI-only property
+  names.
+- CLI factory validate/save paths must accept the same factory JSON the API
+  exposes; no goal-only flags that bypass `Workstation.workPropagation`.
+
+### Generated-client and artifact rules
+
+Public generated artifacts are derived from authored OpenAPI only. Internal
+response-stream work must not touch them.
+
+| Change class | Regenerate? | Required verification |
+|--------------|-------------|----------------------|
+| Add or modify `Workstation.workPropagation` / `WorkPropagationMode` in authored OpenAPI | **Yes** — run `make generate-api` | `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, `pkg/generatedclient/client.gen.go`, `ui/src/api/generated/openapi.ts` must match authored fragments; run `make api-smoke` when feasible |
+| Internal `SessionResponseStream` / `SessionResponseStreamEvent` implementation | **No** | Package-local runtime/session tests; reject PRs that regenerate public clients for stream-only diffs |
+| Invocation reuse, lifecycle behavioral repair, dispatch vocabulary reuse | **No** — unless an unrelated public schema also changes | Extend existing API/CLI/servertests from stories 001–002 |
+| Dashboard factory editor exposing `workPropagation` | **Yes** — only after OpenAPI field exists | UI decoders in `ui/src/api/factory-definition/` aligned with generated `Workstation`; `make ui-test` / `make verify-fast` for affected modules |
+
+**Generation pipeline (public contract changes only):**
+
+1. Author fragments under `api/components/schemas/data-models/` and register in
+   `api/openapi-main.yaml`.
+2. Run `make generate-api` (bundles `api/openapi.yaml`, regenerates Go server
+   and client, regenerates `ui/src/api/generated/openapi.ts`).
+3. Wire config load/save through `pkg/config/factory_config_mapping*.go` and
+   validation through `pkg/factory/validation/` if the field affects runtime
+   topology or dispatch behavior.
+4. Map API read/write surfaces through `pkg/apisurface/` when factory
+   configuration crosses the HTTP boundary.
+5. Run `make api-smoke` to prove bundled contract, generated drift checks, and
+   contract integration smoke stay aligned.
+
+**Explicitly not required** for internal-only response-stream PRs:
+
+- `make generate-api` or edits to generated files listed above.
+- `make api-smoke` solely because stream subscribers changed.
+- Meta tests that scan the repository for forbidden route names or file
+  inventories — observable API, CLI, runtime, and event behavior tests are
+  sufficient.
+
+### Boundary matrix (public vs internal artifacts)
+
+| Artifact | Role | @you/goal posture |
+|----------|------|-------------------|
+| `api/openapi-main.yaml` + `api/components/` | Authored public contract | Change only for `Workstation.workPropagation` / `WorkPropagationMode` |
+| `api/openapi.yaml` | Bundled contract | Regenerated; never hand-edited |
+| `pkg/api/generated/server.gen.go` | Go server types | Regenerated only on public OpenAPI change |
+| `pkg/generatedclient/client.gen.go` | Go HTTP client | Regenerated only on public OpenAPI change |
+| `ui/src/api/generated/openapi.ts` | TypeScript API types | Regenerated only on public OpenAPI change |
+| `pkg/api/contracttests/` | Contract smoke and authoring guards | Extend when `Workstation` schema changes; no new inventory tests for streams |
+| `pkg/config/layout.go` (`BuiltInGoalFactoryJSON`) | Built-in factory payload | May set `workPropagation` in follow-on PR without new routes; still no `make generate-api` until OpenAPI field lands |
+| Internal response-stream packages | Runtime/session plumbing | New Go packages only; zero OpenAPI footprint |
+
+### Reviewer evidence for this boundary
+
+Maintainers reviewing `@you/goal` public-contract follow-on PRs should verify:
+
+| Evidence | What it proves |
+|----------|----------------|
+| This section + stories 001–002 | Only `Workstation.workPropagation` may change OpenAPI; streams stay internal |
+| `api/components/schemas/data-models/Workstation.yaml` | Field and enum fragments use `workPropagation` / `WorkPropagationMode` naming |
+| `make generate-api` diff | Generated artifacts change only when authored OpenAPI changes |
+| `make api-smoke` | Bundled contract, drift checks, and integration smoke pass after public delta |
+| `pkg/api/contracttests/openapi_contract_surface_test.go` | Factory data-model schemas remain contract-complete when `Workstation` grows |
+| `pkg/config/mappingtests/` or factory validation tests | Factory JSON round-trips `workPropagation` through config mapping |
+| Absence of `SessionResponseStream*` in `api/components/` | Internal stream models did not leak into public contract |
+| Stories 001–002 reviewer tables | Invocation, events, and lifecycle reuse unchanged by `workPropagation` work |
+
+**Follow-on implementation PRs** that add only internal `SessionResponseStream`
+behavior should cite stories 001–002 and prove runtime behavior with focused
+tests. They must **not** include generated OpenAPI client diffs. PRs that add
+`Workstation.workPropagation` must include the full generation and
+`make api-smoke` verification path above and use the locked terminology table
+in this section.
