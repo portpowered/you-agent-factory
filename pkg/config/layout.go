@@ -1040,29 +1040,19 @@ var BuiltInGoalFactoryJSON = []byte(`{
     },
     {
       "name": "check-goal",
-      "type": "SCRIPT_RUN",
+      "type": "CLASSIFIER_WORKSTATION",
       "worker": "goal-checker",
       "inputs": [
         {"workType": "goal", "state": "execute"}
       ],
-      "outputs": [
-        {"workType": "goal", "state": "check"}
+      "classificationRoutes": [
+        {"label": "plain", "outputs": [{"workType": "goal", "state": "review"}]},
+        {"label": "structured", "outputs": [{"workType": "goal", "state": "structured-review"}]}
       ],
       "onFailure": [
         {"workType": "goal", "state": "failed"}
       ],
-      "body": "Run verification checks for goal {{ .WorkID }}."
-    },
-    {
-      "name": "advance-goal-structured-review",
-      "type": "LOGICAL_MOVE",
-      "inputs": [
-        {"workType": "goal", "state": "check"}
-      ],
-      "outputs": [
-        {"workType": "goal", "state": "structured-review"}
-      ],
-      "worker": ""
+      "body": "Run verification checks and choose the review lane for {{ .WorkID }}."
     },
     {
       "name": "structured-review-goal",
@@ -1113,7 +1103,7 @@ var BuiltInGoalFactoryJSON = []byte(`{
       "guards": [
         {
           "type": "VISIT_COUNT",
-          "workstation": "structured-review-goal",
+          "workstation": "review-goal",
           "maxVisits": 5
         }
       ],

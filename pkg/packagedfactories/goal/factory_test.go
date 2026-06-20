@@ -36,8 +36,7 @@ var packagedGoalProgressionWorkstations = []struct {
 }{
 	{name: PackagedPlanWorkstationName, inputState: "init", outputState: "plan", publicType: interfaces.WorkstationTypeAgent, workerName: "goal-planner"},
 	{name: PackagedExecuteWorkstationName, inputState: "plan", outputState: "execute", publicType: interfaces.WorkstationTypeAgent, workerName: "goal-executor"},
-	{name: PackagedCheckWorkstationName, inputState: "execute", outputState: "check", publicType: interfaces.WorkstationTypeScript, workerName: "goal-checker"},
-	{name: PackagedAdvanceStructuredReviewWorkstationName, inputState: "check", outputState: PackagedStructuredReviewStateName, publicType: interfaces.WorkstationTypeLogical, workerName: ""},
+	{name: PackagedCheckWorkstationName, inputState: "execute", outputState: "", publicType: interfaces.WorkstationTypeClassify, workerName: "goal-checker"},
 }
 
 var packagedGoalWorkerPublicTypes = map[string]string{
@@ -50,8 +49,7 @@ var packagedGoalWorkerPublicTypes = map[string]string{
 var packagedGoalWorkstationPublicTypes = map[string]string{
 	PackagedPlanWorkstationName:          interfaces.WorkstationTypeAgent,
 	PackagedExecuteWorkstationName:       interfaces.WorkstationTypeAgent,
-	PackagedCheckWorkstationName:         interfaces.WorkstationTypeScript,
-	PackagedAdvanceStructuredReviewWorkstationName: interfaces.WorkstationTypeLogical,
+	PackagedCheckWorkstationName:                    interfaces.WorkstationTypeClassify,
 	PackagedReviewWorkstationName:                   interfaces.WorkstationTypeClassify,
 	PackagedStructuredReviewWorkstationName: interfaces.WorkstationTypeAgent,
 	PackagedLoopBreakerWorkstationName:   interfaces.WorkstationTypeLogical,
@@ -80,13 +78,14 @@ func TestBuiltInFactoryJSON_LoadsRunnablePackagedGoalFactory(t *testing.T) {
 	}
 	assertGoalLifecycleStates(t, workType.States)
 	assertGoalProgressionTopology(t, cfg.Workstations, cfg.Workers)
+	assertGoalCheckReviewModeRoutes(t, cfg.Workstations)
 	assertGoalReviewRoutes(t, cfg.Workstations)
 	assertGoalStructuredReviewRoutes(t, cfg.Workstations)
 	assertGoalLoopBreaker(t, cfg.Workstations)
 	assertGoalPublicPrimitiveVocabulary(t, cfg.Workers, cfg.Workstations)
 }
 
-func TestBuiltInGoalFactory_CheckStateSchedulesStructuredReviewAdvance(t *testing.T) {
+func TestBuiltInGoalFactory_ExecuteStateSchedulesCheckReviewModeClassifier(t *testing.T) {
 	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
@@ -99,9 +98,9 @@ func TestBuiltInGoalFactory_CheckStateSchedulesStructuredReviewAdvance(t *testin
 	}
 
 	now := time.Date(2026, time.June, 20, 16, 0, 0, 0, time.UTC)
-	checkToken := &interfaces.Token{
-		ID:        "tok-check",
-		PlaceID:   "goal:check",
+	executeToken := &interfaces.Token{
+		ID:        "tok-execute",
+		PlaceID:   "goal:execute",
 		CreatedAt: now.Add(-time.Hour),
 		EnteredAt: now.Add(-time.Minute),
 		Color: interfaces.TokenColor{
@@ -115,8 +114,8 @@ func TestBuiltInGoalFactory_CheckStateSchedulesStructuredReviewAdvance(t *testin
 		},
 	}
 	marking := petri.MarkingSnapshot{
-		Tokens:      map[string]*interfaces.Token{"tok-check": checkToken},
-		PlaceTokens: map[string][]string{"goal:check": {"tok-check"}},
+		Tokens:      map[string]*interfaces.Token{"tok-execute": executeToken},
+		PlaceTokens: map[string][]string{"goal:execute": {"tok-execute"}},
 	}
 	snapshot := &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Marking:  marking,
@@ -133,31 +132,28 @@ func TestBuiltInGoalFactory_CheckStateSchedulesStructuredReviewAdvance(t *testin
 	)
 	enabled := evaluator.FindEnabledTransitionsWithSnapshot(context.Background(), net, snapshot)
 
-	var checkAdvanceTransitionIDs []string
+	var checkTransitionIDs []string
 	for _, et := range enabled {
 		transition := net.Transitions[et.TransitionID]
 		if transition == nil {
 			continue
 		}
-		switch transition.Name {
-		case PackagedAdvanceStructuredReviewWorkstationName:
-			checkAdvanceTransitionIDs = append(checkAdvanceTransitionIDs, transition.Name)
-		case "advance-goal-review":
-			t.Fatalf("plain review advance %q should not be enabled from goal:check", transition.Name)
+		if transition.Name == PackagedCheckWorkstationName {
+			checkTransitionIDs = append(checkTransitionIDs, transition.Name)
 		}
 	}
-	if len(checkAdvanceTransitionIDs) != 1 {
-		t.Fatalf("enabled check advances = %#v, want only %q", checkAdvanceTransitionIDs, PackagedAdvanceStructuredReviewWorkstationName)
+	if len(checkTransitionIDs) != 1 {
+		t.Fatalf("enabled check classifiers = %#v, want only %q", checkTransitionIDs, PackagedCheckWorkstationName)
 	}
 
 	sched := scheduler.NewWorkInQueueScheduler(1)
 	decisions := sched.Select(enabled, snapshot)
 	if len(decisions) != 1 {
-		t.Fatalf("scheduler decisions = %#v, want one advance from goal:check", decisions)
+		t.Fatalf("scheduler decisions = %#v, want one check classifier from goal:execute", decisions)
 	}
 	selected := net.Transitions[decisions[0].TransitionID]
-	if selected == nil || selected.Name != PackagedAdvanceStructuredReviewWorkstationName {
-		t.Fatalf("selected transition = %#v, want %q", selected, PackagedAdvanceStructuredReviewWorkstationName)
+	if selected == nil || selected.Name != PackagedCheckWorkstationName {
+		t.Fatalf("selected transition = %#v, want %q", selected, PackagedCheckWorkstationName)
 	}
 }
 
@@ -196,6 +192,7 @@ func TestMaterializedPackagedGoalFactory_ExposesCanonicalWorkTypeAndLifecycleSta
 	}
 	assertGoalLifecycleStates(t, workType.States)
 	assertGoalProgressionTopology(t, cfg.Workstations, cfg.Workers)
+	assertGoalCheckReviewModeRoutes(t, cfg.Workstations)
 	assertGoalReviewRoutes(t, cfg.Workstations)
 	assertGoalStructuredReviewRoutes(t, cfg.Workstations)
 	assertGoalLoopBreaker(t, cfg.Workstations)
@@ -282,7 +279,9 @@ func assertGoalProgressionTopology(t *testing.T, workstations []interfaces.Facto
 			t.Fatalf("workstation %q public type = %q, want %q", want.name, publicType, want.publicType)
 		}
 		assertSingleGoalRoute(t, want.name, workstation.Inputs, want.inputState)
-		assertSingleGoalRoute(t, want.name, workstation.Outputs, want.outputState)
+		if want.outputState != "" {
+			assertSingleGoalRoute(t, want.name, workstation.Outputs, want.outputState)
+		}
 	}
 }
 
@@ -375,12 +374,43 @@ func assertGoalStructuredReviewRoutes(t *testing.T, workstations []interfaces.Fa
 		}
 	}
 
-	advance, ok := byName[PackagedAdvanceStructuredReviewWorkstationName]
-	if !ok {
-		t.Fatal("missing structured review advance workstation")
+	if _, ok := byName[PackagedAdvanceStructuredReviewWorkstationName]; ok {
+		t.Fatalf("built-in factory should not declare %q; check-goal routes review modes directly", PackagedAdvanceStructuredReviewWorkstationName)
 	}
-	assertSingleGoalRoute(t, advance.Name, advance.Inputs, "check")
-	assertSingleGoalRoute(t, advance.Name, advance.Outputs, PackagedStructuredReviewStateName)
+}
+
+func assertGoalCheckReviewModeRoutes(t *testing.T, workstations []interfaces.FactoryWorkstationConfig) {
+	t.Helper()
+
+	check, ok := indexWorkstationsByName(workstations)[PackagedCheckWorkstationName]
+	if !ok {
+		t.Fatal("missing check workstation")
+	}
+	if check.Type != interfaces.WorkstationTypeClassify {
+		t.Fatalf("check workstation type = %q, want %q", check.Type, interfaces.WorkstationTypeClassify)
+	}
+	assertSingleGoalRoute(t, check.Name, check.Inputs, "execute")
+
+	wantRoutes := map[string]string{
+		PackagedReviewModePlainLabel:      "review",
+		PackagedReviewModeStructuredLabel: PackagedStructuredReviewStateName,
+	}
+	gotRoutes := make(map[string]string, len(check.ClassificationRoutes))
+	for _, route := range check.ClassificationRoutes {
+		if len(route.Outputs) != 1 {
+			t.Fatalf("check route %q outputs = %#v, want one goal output", route.Label, route.Outputs)
+		}
+		gotRoutes[route.Label] = route.Outputs[0].StateName
+	}
+	for label, wantState := range wantRoutes {
+		gotState, ok := gotRoutes[label]
+		if !ok {
+			t.Fatalf("check route missing label %q", label)
+		}
+		if gotState != wantState {
+			t.Fatalf("check route %q state = %q, want %q", label, gotState, wantState)
+		}
+	}
 }
 
 func assertGoalLoopBreaker(t *testing.T, workstations []interfaces.FactoryWorkstationConfig) {
@@ -400,8 +430,8 @@ func assertGoalLoopBreaker(t *testing.T, workstations []interfaces.FactoryWorkst
 	if guard.Type != interfaces.GuardTypeVisitCount {
 		t.Fatalf("loop breaker guard type = %q, want %q", guard.Type, interfaces.GuardTypeVisitCount)
 	}
-	if guard.Workstation != PackagedStructuredReviewWorkstationName {
-		t.Fatalf("loop breaker guard workstation = %q, want %q", guard.Workstation, PackagedStructuredReviewWorkstationName)
+	if guard.Workstation != PackagedReviewWorkstationName {
+		t.Fatalf("loop breaker guard workstation = %q, want %q", guard.Workstation, PackagedReviewWorkstationName)
 	}
 	if guard.MaxVisits != 5 {
 		t.Fatalf("loop breaker guard maxVisits = %d, want 5", guard.MaxVisits)

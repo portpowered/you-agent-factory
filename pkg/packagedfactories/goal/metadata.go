@@ -17,8 +17,12 @@ const (
 	PackagedReviewWorkstationName = "review-goal"
 	// PackagedStructuredReviewStateName is the goal state for structured envelope review.
 	PackagedStructuredReviewStateName = "structured-review"
-	// PackagedAdvanceStructuredReviewWorkstationName advances checked goal work into
-	// the structured envelope review lane.
+	// PackagedReviewModePlainLabel selects the classifier-driven plain review lane.
+	PackagedReviewModePlainLabel = "plain"
+	// PackagedReviewModeStructuredLabel selects the structured envelope review lane.
+	PackagedReviewModeStructuredLabel = "structured"
+	// PackagedAdvanceStructuredReviewWorkstationName is retained for factories that
+	// still advance checked work through a dedicated logical move.
 	PackagedAdvanceStructuredReviewWorkstationName = "advance-goal-structured-review"
 	// PackagedStructuredReviewWorkstationName routes richer reviewer envelopes through
 	// parsed goal decision labels.
