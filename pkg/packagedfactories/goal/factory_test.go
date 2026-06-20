@@ -139,6 +139,102 @@ func TestMaterializedPackagedGoalFactory_ExposesCurrentPublicPrimitiveVocabulary
 	assertGoalPublicPrimitiveVocabulary(t, loaded.FactoryConfig().Workers, loaded.FactoryConfig().Workstations)
 }
 
+var packagedGoalBoundedWorkerRolePromptExpectations = []struct {
+	role           string
+	mustContain    []string
+	mustNotContain []string
+}{
+	{
+		role: "planner",
+		mustContain: []string{
+			"AGENT_RUN",
+			"AGENT_WORKER",
+			"bounded plan",
+			"## Goal",
+			"## Plan",
+			"## Acceptance checks",
+			"open-ended discussion",
+		},
+		mustNotContain: []string{"MODEL_WORKER", "MODEL_RUN"},
+	},
+	{
+		role: "executor",
+		mustContain: []string{
+			"AGENT_RUN",
+			"AGENT_WORKER",
+			"bounded execution result",
+			"## Completed work",
+			"## Blockers",
+			"## Follow-up for review",
+			"open-ended discussion",
+		},
+		mustNotContain: []string{"MODEL_WORKER", "MODEL_RUN"},
+	},
+	{
+		role: "checker",
+		mustContain: []string{
+			"SCRIPT_RUN",
+			"reviewable verification findings",
+			"## Checks run",
+			"## Findings",
+			"## Recommendation",
+			"open-ended discussion",
+		},
+		mustNotContain: []string{"MODEL_WORKER", "MODEL_RUN"},
+	},
+	{
+		role: "reviewer",
+		mustContain: []string{
+			"AGENT_WORKER",
+			"reviewable disposition",
+			"## Disposition",
+			"accepted",
+			"needs_changes",
+			"## Findings",
+			"open-ended discussion",
+		},
+		mustNotContain: []string{"MODEL_WORKER", "MODEL_RUN"},
+	},
+}
+
+func TestMaterializedPackagedGoalFactory_AuthorBoundedWorkerRolePrompts(t *testing.T) {
+	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+
+	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
+	}
+
+	for _, expectation := range packagedGoalBoundedWorkerRolePromptExpectations {
+		source, ok := packagedGoalRolePromptSourceByRole(expectation.role)
+		if !ok {
+			t.Fatalf("missing packaged role prompt source for role %q", expectation.role)
+		}
+
+		workstation, ok := loaded.Workstation(source.WorkstationName)
+		if !ok {
+			t.Fatalf("missing workstation %q for role %q", source.WorkstationName, expectation.role)
+		}
+		prompt := strings.TrimSpace(workstation.PromptTemplate)
+		if prompt == "" {
+			t.Fatalf("role %q prompt is empty", expectation.role)
+		}
+		for _, marker := range expectation.mustContain {
+			if !strings.Contains(prompt, marker) {
+				t.Fatalf("role %q prompt missing %q:\n%s", expectation.role, marker, prompt)
+			}
+		}
+		for _, marker := range expectation.mustNotContain {
+			if strings.Contains(prompt, marker) {
+				t.Fatalf("role %q prompt must not contain legacy marker %q:\n%s", expectation.role, marker, prompt)
+			}
+		}
+	}
+}
+
 func TestMaterializedPackagedGoalFactory_ResolvesSplitRolePromptFiles(t *testing.T) {
 	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
 	if err != nil {
@@ -343,4 +439,13 @@ func indexWorkstationsByName(workstations []interfaces.FactoryWorkstationConfig)
 		byName[workstation.Name] = workstation
 	}
 	return byName
+}
+
+func packagedGoalRolePromptSourceByRole(role string) (PackagedGoalRolePromptSource, bool) {
+	for _, source := range PackagedGoalRolePromptSources {
+		if source.Role == role {
+			return source, true
+		}
+	}
+	return PackagedGoalRolePromptSource{}, false
 }

@@ -1022,7 +1022,7 @@ var BuiltInGoalFactoryJSON = []byte(`{
         {"workType": "goal", "state": "failed"}
       ],
       "promptFile": "prompts/planner.md",
-      "body": "Plan the requested goal for {{ .WorkID }}."
+      "body": "You are planning goal work {{ .WorkID }} for an AGENT_RUN workstation backed by an AGENT_WORKER.\n\nProduce a bounded plan the executor and reviewer can inspect quickly. Do not respond with open-ended discussion or unrestricted narrative.\n\nReturn exactly these sections:\n## Goal\nOne sentence restating the requested goal in customer-facing terms.\n## Plan\nNumbered steps specific enough for later execution. Limit to at most 8 steps.\n## Acceptance checks\nBullet list of observable outcomes the checker and reviewer should verify.\n## Risks and assumptions\nBullet list of risks, blockers, or assumptions needing review. Write \"None identified.\" if there are none."
     },
     {
       "name": "execute-goal",
@@ -1038,7 +1038,7 @@ var BuiltInGoalFactoryJSON = []byte(`{
         {"workType": "goal", "state": "failed"}
       ],
       "promptFile": "prompts/executor.md",
-      "body": "Execute the planned goal for {{ .WorkID }}."
+      "body": "You are executing goal work {{ .WorkID }} at an AGENT_RUN workstation backed by an AGENT_WORKER.\n\nProduce a bounded execution result the checker and reviewer can inspect quickly. Do not respond with open-ended discussion or unrestricted narrative.\n\nReturn exactly these sections:\n## Completed work\nBullet list of concrete work completed in this attempt.\n## Blockers\nBullet list of blockers that stopped or slowed progress. Write \"None.\" if there are none.\n## Follow-up for review\nBullet list of remaining items, decisions, or validation the reviewer should judge before routing the goal forward.\n## Outcome\nOne of: ready_for_check, needs_replan, blocked."
     },
     {
       "name": "check-goal",
@@ -1054,7 +1054,7 @@ var BuiltInGoalFactoryJSON = []byte(`{
         {"workType": "goal", "state": "failed"}
       ],
       "promptFile": "prompts/checker.md",
-      "body": "Run verification checks for goal {{ .WorkID }}."
+      "body": "You are running verification for goal work {{ .WorkID }} at a SCRIPT_RUN workstation.\n\nProduce reviewable verification findings the reviewer can route on. Do not respond with open-ended discussion or unrestricted narrative.\n\nReturn exactly these sections:\n## Checks run\nBullet list of verification commands or checks executed.\n## Results\nPass/fail summary for each check.\n## Findings\nBullet list of concrete failures, warnings, or gaps. Write \"None.\" if all checks passed.\n## Recommendation\nOne of: pass, fail, needs_human."
     },
     {
       "name": "advance-goal-review",
@@ -1087,7 +1087,7 @@ var BuiltInGoalFactoryJSON = []byte(`{
         {"workType": "goal", "state": "failed"}
       ],
       "promptFile": "prompts/reviewer.md",
-      "body": "Review goal progress for {{ .WorkID }}."
+      "body": "You are reviewing goal work {{ .WorkID }} backed by an AGENT_WORKER.\n\nProduce a reviewable disposition the factory can route on. Do not respond with open-ended discussion or unrestricted narrative.\n\nReturn exactly these sections:\n## Disposition\nOne of: accepted, needs_changes, tests_failed, needs_human, blocked, interrupted, failed.\n## Findings\nBullet list of concrete review findings supporting the disposition.\n## Required follow-up\nBullet list of changes, checks, or human actions needed before the goal can advance. Write \"None.\" if disposition is accepted."
     },
     {
       "name": "summarize-goal",
