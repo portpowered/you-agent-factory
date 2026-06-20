@@ -335,7 +335,11 @@ func expandSingleWorkstation(
 	if err := os.WriteFile(promptPath, []byte(promptFileContent), 0o644); err != nil {
 		return 0, 0, fmt.Errorf("write workstation %q prompt file: %w", workstationCfg.Name, err)
 	}
-	return agentsWritten, 1, nil
+	promptsWritten = 1
+	if err := writeSupplementaryWorkstationPromptFiles(workstationDir, workstationCfg.Name); err != nil {
+		return 0, 0, err
+	}
+	return agentsWritten, promptsWritten, nil
 }
 
 func shouldSkipWorkstationExpansion(

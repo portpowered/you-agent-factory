@@ -23,6 +23,24 @@ func TestAuthoredRolePrompt_RejectsUnknownRole(t *testing.T) {
 	}
 }
 
+func TestSupplementaryWorkstationPromptFiles_ReviewGoalHostsSummarizerPrompt(t *testing.T) {
+	got := SupplementaryWorkstationPromptFiles("review-goal")
+	wantPath := "prompts/summarizer.md"
+	prompt, ok := got[wantPath]
+	if !ok {
+		t.Fatalf("supplementary prompts = %#v, want %q entry", got, wantPath)
+	}
+	if prompt != strings.TrimSpace(summarizerPrompt) {
+		t.Fatalf("supplementary summarizer prompt does not match authored source")
+	}
+}
+
+func TestSupplementaryWorkstationPromptFiles_OmitsUnknownWorkstations(t *testing.T) {
+	if got := SupplementaryWorkstationPromptFiles("plan-goal"); got != nil {
+		t.Fatalf("supplementary prompts for plan-goal = %#v, want nil", got)
+	}
+}
+
 func TestAssembleBuiltInGoalFactoryJSON_RejectsMalformedWorkstations(t *testing.T) {
 	t.Run("workstations not array", func(t *testing.T) {
 		root := map[string]any{

@@ -11,11 +11,10 @@ import (
 )
 
 var workstationRoleByName = map[string]string{
-	"plan-goal":      "planner",
-	"execute-goal":   "executor",
-	"check-goal":     "checker",
-	"review-goal":    "reviewer",
-	"summarize-goal": "summarizer",
+	"plan-goal":    "planner",
+	"execute-goal": "executor",
+	"check-goal":   "checker",
+	"review-goal":  "reviewer",
 }
 
 func TestBuiltInGoalFactoryJSON_AssemblesFromAuthoredPromptFiles(t *testing.T) {

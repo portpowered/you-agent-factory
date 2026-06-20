@@ -41,11 +41,6 @@
       "name": "goal-reviewer",
       "type": "AGENT_WORKER",
       "body": "Reviewer worker for @you/goal."
-    },
-    {
-      "name": "goal-summarizer",
-      "type": "AGENT_WORKER",
-      "body": "Summarizer worker for @you/goal."
     }
   ],
   "workstations": [
@@ -125,21 +120,6 @@
         {"workType": "goal", "state": "failed"}
       ],
       "promptFile": "prompts/reviewer.md"
-    },
-    {
-      "name": "summarize-goal",
-      "type": "AGENT_RUN",
-      "worker": "goal-summarizer",
-      "inputs": [
-        {"workType": "goal", "state": "complete"}
-      ],
-      "outputs": [
-        {"workType": "goal", "state": "complete"}
-      ],
-      "onFailure": [
-        {"workType": "goal", "state": "failed"}
-      ],
-      "promptFile": "prompts/summarizer.md"
     },
     {
       "name": "goal-loop-breaker",

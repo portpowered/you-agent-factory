@@ -26,11 +26,10 @@ var reviewerPrompt string
 var summarizerPrompt string
 
 var workstationPromptBodies = map[string]string{
-	"plan-goal":     plannerPrompt,
-	"execute-goal":  executorPrompt,
-	"check-goal":    checkerPrompt,
-	"review-goal":   reviewerPrompt,
-	"summarize-goal": summarizerPrompt,
+	"plan-goal":    plannerPrompt,
+	"execute-goal": executorPrompt,
+	"check-goal":   checkerPrompt,
+	"review-goal":  reviewerPrompt,
 }
 
 // AuthoredRolePrompts maps each goal role to its authored prompt source file content.
@@ -50,6 +49,17 @@ var BuiltInGoalFactoryJSON = mustAssembleBuiltInGoalFactoryJSON()
 func AuthoredRolePrompt(role string) (string, bool) {
 	prompt, ok := AuthoredRolePrompts[role]
 	return strings.TrimSpace(prompt), ok
+}
+
+// SupplementaryWorkstationPromptFiles returns extra prompt files to materialize under
+// an existing workstation directory without adding workers, workstations, or routes.
+func SupplementaryWorkstationPromptFiles(workstationName string) map[string]string {
+	if workstationName != "review-goal" {
+		return nil
+	}
+	return map[string]string{
+		"prompts/summarizer.md": strings.TrimSpace(summarizerPrompt),
+	}
 }
 
 // FactoryJSON returns the authored factory scaffold without assembled prompt bodies.
