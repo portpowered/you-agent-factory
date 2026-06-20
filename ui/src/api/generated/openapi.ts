@@ -3715,6 +3715,8 @@ export interface components {
       outputSchema?: string;
       /** @description Retry and execution ceilings applied to this workstation. */
       limits?: components["schemas"]["WorkstationLimits"];
+      /** @description Optional policy for whether downstream work uses the workstation output payload or preserves the consumed input payload. */
+      workPropagation?: components["schemas"]["WorkPropagation"];
       /** @description Inline workstation instructions or script body when authored directly in factory config. */
       body?: string;
       /** @description Cron trigger configuration for workstations whose behavior is CRON. */
@@ -3784,6 +3786,16 @@ export interface components {
       /** @description Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted. */
       expiryWindow?: string;
     };
+    /** @description Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload. */
+    WorkPropagation: {
+      /** @description Propagation mode for downstream work payload selection after this workstation succeeds. */
+      mode?: components["schemas"]["WorkPropagationMode"];
+    };
+    /**
+     * @description Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.
+     * @enum {string}
+     */
+    WorkPropagationMode: WorkPropagationMode;
     /**
      * @description Guard condition attached to a workstation or one of its specific inputs.
      * @enum {string}
@@ -6621,6 +6633,14 @@ export const WorkstationType = {
 } as const;
 export type WorkstationType =
   (typeof WorkstationType)[keyof typeof WorkstationType];
+export const WorkPropagationMode = {
+  // Downstream work receives the workstation output payload.
+  WorkPropagationModeOutputAsPayload: "OUTPUT_AS_PAYLOAD",
+  // Downstream work keeps the consumed input payload instead of the workstation output.
+  WorkPropagationModePreserveInput: "PRESERVE_INPUT",
+} as const;
+export type WorkPropagationMode =
+  (typeof WorkPropagationMode)[keyof typeof WorkPropagationMode];
 export const GuardType = {
   // Allows or blocks work based on how many times a workstation has already handled it.
   GuardTypeVisitCount: "VISIT_COUNT",

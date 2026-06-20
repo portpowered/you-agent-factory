@@ -757,6 +757,7 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig,
 		Env:                   stringMapPtr(normalized.Env),
 		Body:                  stringPtrIfNotEmpty(promptBody),
 		Limits:                workstationLimitsAPIFromInternal(normalized.Limits),
+		WorkPropagation:       workPropagationAPIFromInternal(normalized.WorkPropagation),
 		OutputSchema:          stringPtrIfNotEmpty(normalized.OutputSchema),
 		Operation:             stringPtrIfNotEmpty(normalized.Operation),
 		OperationBindings:     workstationOperationBindingsAPIFromInternal(normalized.OperationBindings),
@@ -1039,6 +1040,14 @@ func workstationLimitsAPIFromInternal(limits interfaces.WorkstationLimits) *fact
 		MaxExecutionTime: stringPtrIfNotEmpty(limits.MaxExecutionTime),
 		MaxRetries:       intPtrIfNonZero(limits.MaxRetries),
 	}
+}
+
+func workPropagationAPIFromInternal(value *interfaces.WorkPropagationConfig) *factoryapi.WorkPropagation {
+	if value == nil || value.Mode == "" {
+		return nil
+	}
+	mode := factoryapi.WorkPropagationMode(value.Mode)
+	return &factoryapi.WorkPropagation{Mode: &mode}
 }
 
 func workstationOperationBindingsAPIFromInternal(bindings []interfaces.ModelOperationBinding) *[]factoryapi.WorkstationOperationBinding {
