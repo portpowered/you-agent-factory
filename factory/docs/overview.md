@@ -182,3 +182,11 @@ make lint          # broader repository lint when touching shared surfaces
 
 For higher-risk runtime, API, or UI changes, use `make verify-pr` or the
 focused targets described in root `AGENTS.md`.
+
+When changing factory-local planner docs or the checked-in batch example, also
+run the narrow verification recipe documented in `factory/docs/batch-inputs.md`:
+
+```sh
+go test ./pkg/config -run TestFlattenFactoryConfig_CheckedInFactoryBundles -count=1
+go test ./pkg/cli/submit -run TestSubmitBatch_DryRunFactoryDocsBatchInputExample -count=1
+```
