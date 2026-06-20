@@ -2299,3 +2299,28 @@ func decodeJSONResponse(resp *http.Response, target any) error {
 	decoder := json.NewDecoder(resp.Body)
 	return decoder.Decode(target)
 }
+
+func TestFactoryService_SessionResponseStreamOwnedByLiveSessionRuntime(t *testing.T) {
+	session := &factorysessions.LiveSession{
+		ID:     "session-response-stream",
+		Handle: &liveSessionState{},
+	}
+	svc := &FactoryService{}
+
+	first := svc.sessionResponseStream(session)
+	second := svc.sessionResponseStream(session)
+	if first == nil || second == nil {
+		t.Fatal("session response stream = nil, want live session runtime instance")
+	}
+	if first != second {
+		t.Fatal("session response stream instances differ, want one stream per live session")
+	}
+
+	state := liveSessionRuntimeState(session)
+	if state == nil || state.responseStream != first {
+		t.Fatalf("live session state stream = %#v, want %p", state.responseStream, first)
+	}
+	if svc.sessionResponseStream(nil) != nil {
+		t.Fatal("nil session stream = non-nil, want nil")
+	}
+}

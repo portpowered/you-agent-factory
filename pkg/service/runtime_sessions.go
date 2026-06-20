@@ -1034,6 +1034,17 @@ func (fs *FactoryService) javascriptCheckpointStore(session *factorysessions.Liv
 	return state.javascriptCheckpoints
 }
 
+func (fs *FactoryService) sessionResponseStream(session *factorysessions.LiveSession) *factorysessions.SessionResponseStream {
+	state := liveSessionRuntimeState(session)
+	if state == nil {
+		return nil
+	}
+	if state.responseStream == nil {
+		state.responseStream = factorysessions.NewSessionResponseStream()
+	}
+	return state.responseStream
+}
+
 func sortFactorySessionSummaries(summaries []factoryapi.FactorySessionSummary) {
 	sort.SliceStable(summaries, func(i, j int) bool {
 		if summaries[i].IsDefault != summaries[j].IsDefault {
