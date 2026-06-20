@@ -80,6 +80,18 @@ describe("formatGraphDurationMillis", () => {
     expect(formatGraphDurationMillis(192_000)).toBe("3m");
   });
 
+  it("formats graph durations with locale-specific single-character units", () => {
+    expect(formatGraphDurationMillis(36_000_000, "zh-CN")).toBe("10时");
+    expect(formatGraphDurationMillis(780_000, "zh-CN")).toBe("13分");
+    expect(formatGraphDurationMillis(10_000, "zh-CN")).toBe("10秒");
+    expect(formatGraphDurationMillis(36_000_000, "ja")).toBe("10時");
+    expect(formatGraphDurationMillis(780_000, "ja")).toBe("13分");
+    expect(formatGraphDurationMillis(10_000, "ja")).toBe("10秒");
+    expect(formatGraphDurationMillis(36_000_000, "ko")).toBe("10시");
+    expect(formatGraphDurationMillis(780_000, "ko")).toBe("13분");
+    expect(formatGraphDurationMillis(10_000, "ko")).toBe("10초");
+  });
+
   it("shows zero seconds for sub-second durations", () => {
     expect(formatGraphDurationMillis(450)).toBe("0s");
   });

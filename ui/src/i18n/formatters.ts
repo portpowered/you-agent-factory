@@ -228,6 +228,33 @@ const COMPACT_DURATION_LABELS: Record<string, Record<DurationUnit, string>> = {
   },
 };
 
+const GRAPH_DURATION_LABELS: Record<string, Record<DurationUnit, string>> = {
+  en: {
+    hour: "h",
+    minute: "m",
+    second: "s",
+    millisecond: "ms",
+  },
+  "zh-CN": {
+    hour: "时",
+    minute: "分",
+    second: "秒",
+    millisecond: "毫秒",
+  },
+  ja: {
+    hour: "時",
+    minute: "分",
+    second: "秒",
+    millisecond: "ミリ秒",
+  },
+  ko: {
+    hour: "시",
+    minute: "분",
+    second: "초",
+    millisecond: "밀리초",
+  },
+};
+
 const VERBOSE_DURATION_LABELS: Record<
   string,
   Record<DurationUnit, string | CountLabels>
@@ -317,40 +344,36 @@ function formatGraphDurationToken(
   const minutes = Math.floor((durationSeconds % 3600) / 60);
   const seconds = durationSeconds % 60;
 
-  let token: string;
   if (hours > 0) {
-    token = formatCompactDurationPart(hours, "hour", locale);
-  } else if (minutes > 0) {
-    token = formatCompactDurationPart(minutes, "minute", locale);
-  } else if (seconds > 0) {
-    token = formatCompactDurationPart(seconds, "second", locale);
-  } else {
-    token = formatCompactDurationPart(0, "second", locale);
+    return formatGraphDurationPart(hours, "hour", locale);
+  }
+  if (minutes > 0) {
+    return formatGraphDurationPart(minutes, "minute", locale);
+  }
+  if (seconds > 0) {
+    return formatGraphDurationPart(seconds, "second", locale);
   }
 
-  return capGraphDurationToken(token);
+  return formatGraphDurationPart(0, "second", locale);
 }
 
-function capGraphDurationToken(token: string): string {
-  if (token.length <= 3) {
-    return token;
-  }
-
-  const match = /^(\d+)(.+)$/.exec(token);
-  if (!match) {
-    return token.slice(0, 3);
-  }
-
-  const unit = match[2];
-  const maxDigits = 3 - unit.length;
-  if (maxDigits <= 0) {
-    return token.slice(0, 3);
-  }
-
+function formatGraphDurationPart(
+  value: number,
+  unit: DurationUnit,
+  locale: string,
+): string {
+  const unitLabel = getGraphDurationLabel(unit, locale);
+  const maxDigits = Math.max(1, 3 - unitLabel.length);
   const maxValue = 10 ** maxDigits - 1;
-  const value = Math.min(Number.parseInt(match[1], 10), maxValue);
+  const clampedValue = Math.min(value, maxValue);
 
-  return `${value}${unit}`;
+  return `${formatNumber(clampedValue, locale)}${unitLabel}`;
+}
+
+function getGraphDurationLabel(unit: DurationUnit, locale: string): string {
+  return (
+    GRAPH_DURATION_LABELS[locale]?.[unit] ?? GRAPH_DURATION_LABELS.en[unit]
+  );
 }
 
 function formatVerboseDurationParts(
