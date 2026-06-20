@@ -12,6 +12,10 @@ const dashboardSnapshotState = vi.hoisted(() => ({
     error: null as Error | null,
     isInitialLoading: false,
     snapshot: null as DashboardSnapshot | null,
+    streamState: {
+      message: "Factory event stream connected.",
+      status: "live" as const,
+    },
   },
 }));
 
@@ -388,6 +392,10 @@ describe("DashboardScreen scroll ownership", () => {
       error: null,
       isInitialLoading: false,
       snapshot: dashboardSemanticSnapshotFixtures.activeWork,
+      streamState: {
+        message: "Factory event stream connected.",
+        status: "live",
+      },
     };
   });
 

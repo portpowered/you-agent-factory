@@ -93,6 +93,36 @@ function applySessionResultUpdated(
   );
 }
 
+function applySessionPaused(
+  state: ReplayWorldState,
+  event: FactoryEvent,
+): void {
+  const payload = event.payload as Record<string, unknown>;
+  const bracket = ensureSessionBracket(state);
+  mergeSessionBracketIdentity(bracket, event.context);
+  if (typeof payload.status === "string") {
+    bracket.lifecycle_control_status = payload.status;
+  }
+  if (typeof payload.pausedAt === "string") {
+    bracket.paused_at = payload.pausedAt;
+  }
+}
+
+function applySessionResumed(
+  state: ReplayWorldState,
+  event: FactoryEvent,
+): void {
+  const payload = event.payload as Record<string, unknown>;
+  const bracket = ensureSessionBracket(state);
+  mergeSessionBracketIdentity(bracket, event.context);
+  if (typeof payload.status === "string") {
+    bracket.lifecycle_control_status = payload.status;
+  }
+  if (typeof payload.resumedAt === "string") {
+    bracket.resumed_at = payload.resumedAt;
+  }
+}
+
 function applySessionCompleted(
   state: ReplayWorldState,
   event: FactoryEvent,
@@ -142,6 +172,12 @@ export function applySessionLifecycleEvent(
   switch (event.type) {
     case FACTORY_EVENT_TYPES.sessionStarted:
       applySessionStarted(state, event);
+      return true;
+    case FACTORY_EVENT_TYPES.sessionPaused:
+      applySessionPaused(state, event);
+      return true;
+    case FACTORY_EVENT_TYPES.sessionResumed:
+      applySessionResumed(state, event);
       return true;
     case FACTORY_EVENT_TYPES.sessionResultUpdated:
       applySessionResultUpdated(state, event);

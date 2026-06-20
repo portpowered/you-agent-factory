@@ -77,6 +77,12 @@ function FactorySessionRuntimeSections({
       <div className="grid gap-2 sm:grid-cols-2">
         <Metric label={messages.orchestratorKindLabel} value={runtime.orchestratorKind} />
         <Metric label={messages.statusLabel} value={runtime.status} />
+        {runtime.lifecycleControlStatus ? (
+          <Metric
+            label={messages.lifecycleControlStatusLabel}
+            value={runtime.lifecycleControlStatus}
+          />
+        ) : null}
       </div>
 
       {runtime.orchestratorKind === FactoryOrchestratorKind.JAVASCRIPT ? (

@@ -128,6 +128,84 @@ describe("FactorySessionDetailPanel", () => {
     expect(screen.queryByText("rawCheckpointBody")).toBeNull();
   });
 
+  it("shows canonical paused Factory Session lifecycle status from the API read model", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse({
+        factoryDir: "/workspace/root/beta",
+        folderPath: "/workspace/root",
+        id: "session-beta",
+        isDefault: false,
+        project: "beta",
+        runtime: {
+          lifecycle: {
+            startedAt: "2026-06-08T14:00:00Z",
+            updatedAt: "2026-06-08T14:05:00Z",
+          },
+          lifecycleControlStatus: "PAUSED",
+          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+          progress: {
+            categories: {},
+            factoryState: "PAUSED",
+            inFlightCount: 0,
+            totalTokens: 0,
+          },
+          status: "ACTIVE",
+          usage: { resources: [] },
+        },
+        target: { kind: "named", name: "beta" },
+      }),
+    );
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="session-beta" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("PAUSED")).toBeTruthy();
+    });
+
+    expect(screen.getByText("Factory Session lifecycle")).toBeTruthy();
+  });
+
+  it("shows running Factory Session lifecycle status after a canonical resume read", async () => {
+    vi.mocked(globalThis.fetch).mockResolvedValue(
+      jsonResponse({
+        factoryDir: "/workspace/root/beta",
+        folderPath: "/workspace/root",
+        id: "session-beta",
+        isDefault: false,
+        project: "beta",
+        runtime: {
+          lifecycle: {
+            startedAt: "2026-06-08T14:00:00Z",
+            updatedAt: "2026-06-08T14:10:00Z",
+          },
+          lifecycleControlStatus: "RUNNING",
+          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+          progress: {
+            categories: {},
+            factoryState: "RUNNING",
+            inFlightCount: 1,
+            totalTokens: 0,
+          },
+          status: "ACTIVE",
+          usage: { resources: [] },
+        },
+        target: { kind: "named", name: "beta" },
+      }),
+    );
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="session-beta" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("RUNNING")).toBeTruthy();
+    });
+
+    expect(screen.getByText("Factory Session lifecycle")).toBeTruthy();
+  });
+
   it("shows Petri marking and enabled transitions without dynamic workflow shorthand", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
       jsonResponse({

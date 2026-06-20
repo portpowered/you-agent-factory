@@ -11,6 +11,7 @@ export interface FactorySessionDetailMessages {
   enabledTransitionsHeading: string;
   errorState: string;
   finalResultRefLabel: string;
+  lifecycleControlStatusLabel: string;
   loadingState: string;
   markingEmptyState: string;
   markingHeading: string;
@@ -36,6 +37,7 @@ const factorySessionDetailMessagesByLocale = {
     enabledTransitionsHeading: "Enabled transitions",
     errorState: "The factory session runtime could not be loaded.",
     finalResultRefLabel: "Final result ref",
+    lifecycleControlStatusLabel: "Factory Session lifecycle",
     loadingState: "Loading factory session runtime…",
     markingEmptyState: "Petri marking: none",
     markingHeading: "Petri marking",
@@ -59,6 +61,7 @@ const factorySessionDetailMessagesByLocale = {
     enabledTransitionsHeading: "已启用变迁",
     errorState: "无法加载工厂会话运行时。",
     finalResultRefLabel: "最终结果引用",
+    lifecycleControlStatusLabel: "工厂会话生命周期",
     loadingState: "正在加载工厂会话运行时…",
     markingEmptyState: "Petri 标识：无",
     markingHeading: "Petri 标识",

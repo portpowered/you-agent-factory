@@ -18,6 +18,8 @@ export const FACTORY_EVENT_TYPES = {
   workRequest: "WORK_REQUEST",
   workStateChange: "WORK_STATE_CHANGE",
   sessionStarted: "SESSION_STARTED",
+  sessionPaused: "SESSION_PAUSED",
+  sessionResumed: "SESSION_RESUMED",
   sessionResultUpdated: "SESSION_RESULT_UPDATED",
   sessionCompleted: "SESSION_COMPLETED",
   orchestratorPhaseChanged: "ORCHESTRATOR_PHASE_CHANGED",

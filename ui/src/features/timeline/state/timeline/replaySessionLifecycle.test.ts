@@ -58,6 +58,38 @@ describe("reconstructWorldState session lifecycle replay", () => {
     });
     expect(state.sessionBracket?.artifact_ids).toEqual(["artifact-final"]);
   });
+
+  it("reconstructs paused and resumed lifecycle control status from canonical events", () => {
+    const events = [
+      lifecycleEvent(FACTORY_EVENT_TYPES.sessionStarted, "started", 1, 1, {
+        factoryId: "factory-alpha",
+        sourceRef: "workflow/main.js",
+        startedAt: "2026-06-09T12:00:00Z",
+      }),
+      lifecycleEvent(FACTORY_EVENT_TYPES.sessionPaused, "paused", 2, 2, {
+        pausedAt: "2026-06-09T12:00:02Z",
+        status: "PAUSED",
+      }),
+      lifecycleEvent(FACTORY_EVENT_TYPES.sessionResumed, "resumed", 3, 3, {
+        resumedAt: "2026-06-09T12:00:04Z",
+        status: "RUNNING",
+      }),
+    ];
+
+    const pausedState = reconstructWorldState(events, 2);
+    expect(pausedState.sessionBracket).toMatchObject({
+      lifecycle_control_status: "PAUSED",
+      paused_at: "2026-06-09T12:00:02Z",
+      session_id: "session-alpha",
+    });
+
+    const runningState = reconstructWorldState(events, 3);
+    expect(runningState.sessionBracket).toMatchObject({
+      lifecycle_control_status: "RUNNING",
+      resumed_at: "2026-06-09T12:00:04Z",
+      session_id: "session-alpha",
+    });
+  });
 });
 
 describe("reconstructWorldState dispatch and artifact replay", () => {

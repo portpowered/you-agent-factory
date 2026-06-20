@@ -64,6 +64,12 @@ vi.mock("../hooks/useDashboardSnapshot", () => ({
   useDashboardSnapshot: vi.fn(() => dashboardSnapshotState),
 }));
 
+vi.mock("./dashboard-session-lifecycle-banner", () => ({
+  DashboardSessionLifecycleBanner: () => (
+    <section data-testid="dashboard-session-lifecycle-banner-probe" />
+  ),
+}));
+
 function expectDashboardShellContract() {
   const shell = screen.getByRole("main");
 
@@ -103,6 +109,10 @@ describe("DashboardScreen", () => {
       error: null,
       isInitialLoading: true,
       snapshot: null,
+      streamState: {
+        message: "Connecting to factory events...",
+        status: "connecting",
+      },
     };
   });
 
@@ -123,6 +133,10 @@ describe("DashboardScreen", () => {
       error: new Error("Factory API timed out."),
       isInitialLoading: false,
       snapshot: null,
+      streamState: {
+        message: "Factory event stream unavailable.",
+        status: "offline",
+      },
     };
 
     render(<DashboardScreen />);
@@ -153,6 +167,10 @@ describe("DashboardScreen", () => {
       error: new Error("Factory API timed out."),
       isInitialLoading: false,
       snapshot: null,
+      streamState: {
+        message: "Factory event stream unavailable.",
+        status: "offline",
+      },
     };
     rerender(
       <AppLocaleProvider initialLocale="zh-CN">
@@ -172,6 +190,10 @@ describe("DashboardScreen", () => {
       error: null,
       isInitialLoading: false,
       snapshot: {} as never,
+      streamState: {
+        message: "Factory event stream connected.",
+        status: "live",
+      },
     };
 
     render(
@@ -191,6 +213,10 @@ describe("DashboardScreen", () => {
       error: null,
       isInitialLoading: false,
       snapshot: {} as never,
+      streamState: {
+        message: "Factory event stream connected.",
+        status: "live",
+      },
     };
 
     render(<DashboardScreen />);
@@ -204,6 +230,10 @@ describe("DashboardScreen", () => {
       error: null,
       isInitialLoading: false,
       snapshot: null,
+      streamState: {
+        message: "Factory event stream connected.",
+        status: "live",
+      },
     };
 
     render(<DashboardScreen />);
@@ -222,6 +252,10 @@ describe("DashboardScreen", () => {
       error: null,
       isInitialLoading: false,
       snapshot: {} as never,
+      streamState: {
+        message: "Factory event stream connected.",
+        status: "live",
+      },
     };
 
     render(<DashboardScreen locale="zh-CN" />);

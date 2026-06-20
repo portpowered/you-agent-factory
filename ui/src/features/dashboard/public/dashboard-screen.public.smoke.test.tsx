@@ -54,6 +54,12 @@ vi.mock("../hooks/useDashboardSnapshot", () => ({
   useDashboardSnapshot: vi.fn(() => dashboardSnapshotState),
 }));
 
+vi.mock("../components/dashboard-session-lifecycle-banner", () => ({
+  DashboardSessionLifecycleBanner: () => (
+    <section data-testid="dashboard-session-lifecycle-banner-probe" />
+  ),
+}));
+
 describe("dashboard public barrel composition", () => {
   beforeEach(() => {
     resetDashboardSessionStore();
@@ -65,6 +71,10 @@ describe("dashboard public barrel composition", () => {
       error: null,
       isInitialLoading: true,
       snapshot: null,
+      streamState: {
+        message: "Connecting to factory events...",
+        status: "connecting",
+      },
     };
   });
 
@@ -86,6 +96,10 @@ describe("dashboard public barrel composition", () => {
       error: null,
       isInitialLoading: false,
       snapshot: {} as never,
+      streamState: {
+        message: "Factory event stream connected.",
+        status: "live",
+      },
     };
 
     render(<DashboardScreen />);

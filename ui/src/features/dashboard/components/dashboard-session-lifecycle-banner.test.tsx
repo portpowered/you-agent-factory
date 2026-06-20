@@ -94,4 +94,59 @@ describe("DashboardSessionLifecycleBanner", () => {
     expect(screen.getAllByText("Current phase").length).toBeGreaterThan(0);
     expect(screen.getAllByText("plan").length).toBeGreaterThan(0);
   });
+
+  it("shows paused Factory Session lifecycle state from replayed bracket data", () => {
+    render(
+      <DashboardSessionLifecycleBanner
+        bracket={{
+          lifecycle_control_status: "PAUSED",
+          paused_at: "2026-06-09T12:00:02Z",
+          started_at: "2026-06-09T12:00:00Z",
+        }}
+        streamState={{
+          message: "Factory event stream connected.",
+          status: "live",
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("Factory Session paused").length).toBeGreaterThan(0);
+    expect(screen.getByText("2026-06-09T12:00:02Z")).toBeTruthy();
+    expect(screen.getByText("PAUSED")).toBeTruthy();
+  });
+
+  it("shows running Factory Session lifecycle state after a canonical resume event", () => {
+    render(
+      <DashboardSessionLifecycleBanner
+        bracket={{
+          lifecycle_control_status: "RUNNING",
+          resumed_at: "2026-06-09T12:00:04Z",
+          started_at: "2026-06-09T12:00:00Z",
+        }}
+        streamState={{
+          message: "Factory event stream connected.",
+          status: "live",
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("Factory Session running").length).toBeGreaterThan(0);
+    expect(screen.getByText("2026-06-09T12:00:04Z")).toBeTruthy();
+    expect(screen.getByText("RUNNING")).toBeTruthy();
+  });
+
+  it("shows paused lifecycle state from canonical factory state when bracket status is absent", () => {
+    render(
+      <DashboardSessionLifecycleBanner
+        factoryState="PAUSED"
+        streamState={{
+          message: "Factory event stream connected.",
+          status: "live",
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("Factory Session paused").length).toBeGreaterThan(0);
+    expect(screen.getByText("PAUSED")).toBeTruthy();
+  });
 });

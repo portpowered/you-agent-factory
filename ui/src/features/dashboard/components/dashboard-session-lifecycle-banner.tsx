@@ -5,6 +5,7 @@ import { getDashboardSessionLifecycleMessages } from "../messages/dashboard-sess
 
 export interface DashboardSessionLifecycleBannerProps {
   bracket?: DashboardSessionBracket;
+  factoryState?: string;
   locale?: string | null;
   phase?: string;
   streamState: DashboardStreamState;
@@ -12,13 +13,19 @@ export interface DashboardSessionLifecycleBannerProps {
 
 export function DashboardSessionLifecycleBanner({
   bracket,
+  factoryState,
   locale,
   phase,
   streamState,
 }: DashboardSessionLifecycleBannerProps) {
   const messages = getDashboardSessionLifecycleMessages(locale);
   const streamNotice = streamNoticeForState(streamState, messages);
-  const lifecycleNotice = lifecycleNoticeForBracket(bracket, phase, messages);
+  const lifecycleNotice = lifecycleNoticeForBracket(
+    bracket,
+    factoryState,
+    phase,
+    messages,
+  );
 
   if (!streamNotice && !lifecycleNotice) {
     return null;
@@ -91,6 +98,7 @@ function streamNoticeForState(
 
 function lifecycleNoticeForBracket(
   bracket: DashboardSessionBracket | undefined,
+  factoryState: string | undefined,
   phase: string | undefined,
   messages: ReturnType<typeof getDashboardSessionLifecycleMessages>,
 ): {
@@ -99,10 +107,17 @@ function lifecycleNoticeForBracket(
   summary: string;
   title: string;
 } | null {
-  if (!bracket && !phase) {
+  if (!bracket && !phase && !factoryState) {
     return null;
   }
   if (!bracket) {
+    if (factoryState === "PAUSED") {
+      return {
+        resultStatus: factoryState,
+        summary: messages.sessionPausedLabel,
+        title: messages.lifecycleControlStatusLabel,
+      };
+    }
     return {
       summary: phase ?? "",
       title: messages.phaseLabel,
@@ -142,6 +157,26 @@ function lifecycleNoticeForBracket(
         bracket.result_summary?.map((part) => part.text).filter(Boolean).join(" ") ||
         messages.partialResultLabel,
       title: messages.partialResultLabel,
+    };
+  }
+
+  const reflectedLifecycleStatus =
+    bracket.lifecycle_control_status ??
+    (factoryState === "PAUSED" ? "PAUSED" : undefined);
+
+  if (reflectedLifecycleStatus === "PAUSED") {
+    return {
+      resultStatus: reflectedLifecycleStatus,
+      summary: bracket.paused_at ?? messages.sessionPausedLabel,
+      title: messages.sessionPausedLabel,
+    };
+  }
+
+  if (reflectedLifecycleStatus === "RUNNING") {
+    return {
+      resultStatus: reflectedLifecycleStatus,
+      summary: bracket.resumed_at ?? messages.sessionRunningLabel,
+      title: messages.sessionRunningLabel,
     };
   }
 
