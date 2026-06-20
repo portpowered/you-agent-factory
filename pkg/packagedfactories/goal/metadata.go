@@ -17,8 +17,8 @@ const (
 	PackagedReviewWorkstationName = "review-goal"
 	// PackagedLoopBreakerWorkstationName is the guarded loop breaker for review retries.
 	PackagedLoopBreakerWorkstationName = "goal-loop-breaker"
-	// PackagedSummarizerPromptPath is the on-disk materialized authored summarizer prompt path.
-	PackagedSummarizerPromptPath = "docs/summarizer.md"
+	// PackagedSummarizeWorkstationName hosts the summarizer split prompt without adding a summarize lifecycle stage.
+	PackagedSummarizeWorkstationName = "summarize-goal"
 )
 
 // PackagedGoalRolePromptSource identifies the authored split prompt file for a goal role.
@@ -26,8 +26,6 @@ type PackagedGoalRolePromptSource struct {
 	Role            string
 	WorkstationName string
 	PromptFile      string
-	// FactoryRelative marks prompts materialized from factory-root paths instead of workstation promptFile resolution.
-	FactoryRelative bool
 }
 
 // PackagedGoalRolePromptSources lists each role-specific split prompt wired through
@@ -37,5 +35,5 @@ var PackagedGoalRolePromptSources = []PackagedGoalRolePromptSource{
 	{Role: "executor", WorkstationName: PackagedExecuteWorkstationName, PromptFile: "prompts/executor.md"},
 	{Role: "checker", WorkstationName: PackagedCheckWorkstationName, PromptFile: "prompts/checker.md"},
 	{Role: "reviewer", WorkstationName: PackagedReviewWorkstationName, PromptFile: "prompts/reviewer.md"},
-	{Role: "summarizer", PromptFile: PackagedSummarizerPromptPath, FactoryRelative: true},
+	{Role: "summarizer", WorkstationName: PackagedSummarizeWorkstationName, PromptFile: "prompts/summarizer.md"},
 }

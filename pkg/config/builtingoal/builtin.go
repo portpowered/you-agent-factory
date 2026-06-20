@@ -7,11 +7,6 @@ import (
 	"strings"
 )
 
-const (
-	// SummarizerPromptTargetPath is the materialized path for the authored summarizer prompt.
-	SummarizerPromptTargetPath = "factory/docs/summarizer.md"
-)
-
 //go:embed factory.json
 var factoryJSON []byte
 
@@ -31,10 +26,11 @@ var reviewerPrompt string
 var summarizerPrompt string
 
 var workstationPromptBodies = map[string]string{
-	"plan-goal":    plannerPrompt,
-	"execute-goal": executorPrompt,
-	"check-goal":   checkerPrompt,
-	"review-goal":  reviewerPrompt,
+	"plan-goal":     plannerPrompt,
+	"execute-goal":  executorPrompt,
+	"check-goal":    checkerPrompt,
+	"review-goal":   reviewerPrompt,
+	"summarize-goal": summarizerPrompt,
 }
 
 // AuthoredRolePrompts maps each goal role to its authored prompt source file content.
@@ -95,38 +91,9 @@ func assembleBuiltInGoalFactoryJSONFromRoot(root map[string]any) ([]byte, error)
 		workstation["body"] = strings.TrimSpace(promptBody)
 	}
 
-	if err := injectSummarizerBundledPrompt(root); err != nil {
-		return nil, err
-	}
-
 	payload, err := json.Marshal(root)
 	if err != nil {
 		return nil, fmt.Errorf("marshal assembled factory json: %w", err)
 	}
 	return payload, nil
-}
-
-func injectSummarizerBundledPrompt(root map[string]any) error {
-	supportingFiles, ok := root["supportingFiles"].(map[string]any)
-	if !ok {
-		return fmt.Errorf("factory.json supportingFiles must be an object")
-	}
-	bundledFiles, ok := supportingFiles["bundledFiles"].([]any)
-	if !ok || len(bundledFiles) != 1 {
-		return fmt.Errorf("factory.json must declare exactly one summarizer bundled file")
-	}
-	bundledFile, ok := bundledFiles[0].(map[string]any)
-	if !ok {
-		return fmt.Errorf("summarizer bundled file entry must be an object")
-	}
-	targetPath, _ := bundledFile["targetPath"].(string)
-	if targetPath != SummarizerPromptTargetPath {
-		return fmt.Errorf("summarizer bundled file targetPath = %q, want %q", targetPath, SummarizerPromptTargetPath)
-	}
-	content, ok := bundledFile["content"].(map[string]any)
-	if !ok {
-		return fmt.Errorf("summarizer bundled file content must be an object")
-	}
-	content["inline"] = strings.TrimSpace(summarizerPrompt)
-	return nil
 }

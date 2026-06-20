@@ -11,10 +11,11 @@ import (
 )
 
 var workstationRoleByName = map[string]string{
-	"plan-goal":    "planner",
-	"execute-goal": "executor",
-	"check-goal":   "checker",
-	"review-goal":  "reviewer",
+	"plan-goal":      "planner",
+	"execute-goal":   "executor",
+	"check-goal":     "checker",
+	"review-goal":    "reviewer",
+	"summarize-goal": "summarizer",
 }
 
 func TestBuiltInGoalFactoryJSON_AssemblesFromAuthoredPromptFiles(t *testing.T) {
@@ -25,7 +26,6 @@ func TestBuiltInGoalFactoryJSON_AssemblesFromAuthoredPromptFiles(t *testing.T) {
 
 	assertAuthoredRolePromptsNonEmpty(t)
 	assertWorkstationBodiesMatchAuthoredPrompts(t, cfg)
-	assertSummarizerBundledPromptMatchesAuthoredSource(t, cfg)
 	assertFactoryJSONWorkstationsHaveNoInlineBodies(t)
 }
 
@@ -49,21 +49,6 @@ func assertWorkstationBodiesMatchAuthoredPrompts(t *testing.T, cfg *interfaces.F
 		if got := workstationBodies[workstationName]; got != want {
 			t.Fatalf("%s body does not match authored %s prompt", workstationName, role)
 		}
-	}
-}
-
-func assertSummarizerBundledPromptMatchesAuthoredSource(t *testing.T, cfg *interfaces.FactoryConfig) {
-	t.Helper()
-	if cfg.ResourceManifest == nil || len(cfg.ResourceManifest.BundledFiles) != 1 {
-		t.Fatalf("resource manifest bundled files = %#v, want one summarizer doc", cfg.ResourceManifest)
-	}
-	bundled := cfg.ResourceManifest.BundledFiles[0]
-	if bundled.TargetPath != builtingoal.SummarizerPromptTargetPath {
-		t.Fatalf("summarizer bundled targetPath = %q, want %q", bundled.TargetPath, builtingoal.SummarizerPromptTargetPath)
-	}
-	want := strings.TrimSpace(builtingoal.AuthoredRolePrompts["summarizer"])
-	if got := strings.TrimSpace(bundled.Content.Inline); got != want {
-		t.Fatalf("summarizer bundled inline content does not match authored summarizer prompt")
 	}
 }
 
