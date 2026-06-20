@@ -74,9 +74,9 @@ primary-result behavior.
   `INVOCATION_INPUT_SOURCE_CONFLICT` before `InvokeFactorySession`, and match the
   session invocation API contract for the same logical text input and JSON success
   envelopes.
-- `pkg/cli/root_run_factory_prompt_test.go` proves root `you run --named @you/goal`
-  wiring for positional text, piped stdin, explicit `-` stdin forms, and stable
-  `INVOCATION_INPUT_SOURCE_CONFLICT` rejection when sources combine.
+- `pkg/cli/root_run_server_test.go` proves root `you run --named @you/goal` and
+  `@you/tts` wiring for positional text, piped stdin, explicit `-` stdin forms,
+  and stable `INVOCATION_INPUT_SOURCE_CONFLICT` rejection when sources combine.
 - `pkg/api/server_factory_sessions_test.go` proves the session invocation API
   returns the same observable request and primary-result behavior for packaged
   `@you/goal` text input and source-conflict failures as the CLI parity tests.

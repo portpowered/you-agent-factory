@@ -177,11 +177,8 @@ func TestRunCommand_RuntimeMetricsFlagsMapToRunConfig(t *testing.T) {
 	}
 }
 
-func TestRunCommand_NamedFactoryPromptCarriesInvocationText(t *testing.T) {
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
+func withNamedPackagedFactoryRunRoot(t *testing.T) func() {
+	t.Helper()
 
 	workingDirectory := t.TempDir()
 	homeDir := t.TempDir()
@@ -192,188 +189,198 @@ func TestRunCommand_NamedFactoryPromptCarriesInvocationText(t *testing.T) {
 	if err := os.Chdir(workingDirectory); err != nil {
 		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
 	}
-	defer func() {
+	t.Setenv("HOME", homeDir)
+
+	return func() {
 		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
 			t.Fatalf("restore working directory: %v", chdirErr)
 		}
-	}()
-	t.Setenv("HOME", homeDir)
-
-	var got runcli.RunConfig
-	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
-		got = cfg
-		return nil
-	}
-
-	root := NewRootCommand()
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run", "--named", "@you/tts", "--no-record", "hi", "there"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute run --named @you/tts with prompt: %v", err)
-	}
-	if got.InvocationPositionalText == nil {
-		t.Fatal("expected invocation positional text for named factory prompt run")
-	}
-	if gotText := *got.InvocationPositionalText; gotText != "hi there" {
-		t.Fatalf("invocation positional text = %q, want joined prompt text", gotText)
-	}
-	if got.NamedFactoryName != "@you/tts" {
-		t.Fatalf("named factory = %q, want @you/tts", got.NamedFactoryName)
-	}
-	if !got.SuppressDashboardRendering {
-		t.Fatal("expected named text invocation to suppress dashboard rendering")
 	}
 }
 
-func TestRunCommand_NamedFactoryStdinPromptCarriesInvocationText(t *testing.T) {
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
+func assertNamedPackagedFactoryInvocationInput(
+	t *testing.T,
+	got runcli.RunConfig,
+	factory string,
+	wantPositional string,
+	wantStdin string,
+) {
+	t.Helper()
 
-	workingDirectory := t.TempDir()
-	homeDir := t.TempDir()
-	originalWorkingDirectory, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
+	if got.NamedFactoryName != factory {
+		t.Fatalf("named factory = %q, want %q", got.NamedFactoryName, factory)
 	}
-	if err := os.Chdir(workingDirectory); err != nil {
-		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
-	}
-	defer func() {
-		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
-			t.Fatalf("restore working directory: %v", chdirErr)
+	if wantPositional != "" {
+		if got.InvocationPositionalText == nil {
+			t.Fatal("expected invocation positional text")
 		}
-	}()
-	t.Setenv("HOME", homeDir)
-
-	var got runcli.RunConfig
-	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
-		got = cfg
-		return nil
+		if gotText := *got.InvocationPositionalText; gotText != wantPositional {
+			t.Fatalf("invocation positional text = %q, want %q", gotText, wantPositional)
+		}
+		if !got.SuppressDashboardRendering {
+			t.Fatal("expected named text invocation to suppress dashboard rendering")
+		}
 	}
-
-	root := NewRootCommand()
-	root.SetIn(strings.NewReader("hi from stdin\n"))
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run", "--named", "@you/tts", "--no-record"})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute run --named @you/tts with piped stdin: %v", err)
-	}
-	if got.InvocationPositionalText != nil {
-		t.Fatal("expected no invocation positional text for named factory stdin run")
-	}
-	if got.InvocationStdinText == nil {
-		t.Fatal("expected invocation stdin text for named factory stdin run")
-	}
-	if gotText := *got.InvocationStdinText; gotText != "hi from stdin\n" {
-		t.Fatalf("invocation stdin text = %q, want raw stdin prompt text", gotText)
-	}
-	if got.NamedFactoryName != "@you/tts" {
-		t.Fatalf("named factory = %q, want @you/tts", got.NamedFactoryName)
-	}
-	if !got.SuppressDashboardRendering {
-		t.Fatal("expected named stdin invocation to suppress dashboard rendering")
+	if wantStdin != "" {
+		if got.InvocationPositionalText != nil {
+			t.Fatal("expected no invocation positional text for stdin run")
+		}
+		if got.InvocationStdinText == nil {
+			t.Fatal("expected invocation stdin text")
+		}
+		if gotText := *got.InvocationStdinText; gotText != wantStdin {
+			t.Fatalf("invocation stdin text = %q, want %q", gotText, wantStdin)
+		}
+		if !got.SuppressDashboardRendering {
+			t.Fatal("expected named stdin invocation to suppress dashboard rendering")
+		}
 	}
 }
 
-func TestRunCommand_NamedFactoryExplicitStdinPromptCarriesInvocationText(t *testing.T) {
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
+func TestRunCommand_NamedPackagedFactoryInvocationInputSources(t *testing.T) {
+	tests := []struct {
+		name           string
+		factory        string
+		stdin          string
+		args           []string
+		wantPositional string
+		wantStdin      string
+	}{
+		{
+			name:           "tts positional",
+			factory:        "@you/tts",
+			args:           []string{"hi", "there"},
+			wantPositional: "hi there",
+		},
+		{
+			name:           "goal positional",
+			factory:        "@you/goal",
+			args:           []string{"Plan", "the", "sprint"},
+			wantPositional: "Plan the sprint",
+		},
+		{
+			name:      "tts piped stdin",
+			factory:   "@you/tts",
+			stdin:     "hi from stdin\n",
+			wantStdin: "hi from stdin\n",
+		},
+		{
+			name:      "goal piped stdin",
+			factory:   "@you/goal",
+			stdin:     "Ship from stdin\n",
+			wantStdin: "Ship from stdin\n",
+		},
+		{
+			name:      "tts explicit stdin",
+			factory:   "@you/tts",
+			stdin:     "hi from explicit stdin\n",
+			args:      []string{"-"},
+			wantStdin: "hi from explicit stdin\n",
+		},
+		{
+			name:      "goal explicit stdin",
+			factory:   "@you/goal",
+			stdin:     "Ship from explicit stdin\n",
+			args:      []string{"-"},
+			wantStdin: "Ship from explicit stdin\n",
+		},
+	}
 
-	workingDirectory := t.TempDir()
-	homeDir := t.TempDir()
-	originalWorkingDirectory, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
-	}
-	if err := os.Chdir(workingDirectory); err != nil {
-		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
-	}
-	defer func() {
-		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
-			t.Fatalf("restore working directory: %v", chdirErr)
-		}
-	}()
-	t.Setenv("HOME", homeDir)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			originalRunCLI := runCLI
+			defer func() {
+				runCLI = originalRunCLI
+			}()
+			restore := withNamedPackagedFactoryRunRoot(t)
+			defer restore()
 
-	var got runcli.RunConfig
-	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
-		got = cfg
-		return nil
-	}
+			var got runcli.RunConfig
+			runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+				got = cfg
+				return nil
+			}
 
-	root := NewRootCommand()
-	root.SetIn(strings.NewReader("hi from explicit stdin\n"))
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run", "--named", "@you/tts", "--no-record", "-"})
+			root := NewRootCommand()
+			if tc.stdin != "" {
+				root.SetIn(strings.NewReader(tc.stdin))
+			}
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			root.SetArgs(append([]string{"run", "--named", tc.factory, "--no-record"}, tc.args...))
 
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute run --named @you/tts with explicit stdin: %v", err)
-	}
-	if got.InvocationStdinText == nil {
-		t.Fatal("expected invocation stdin text for named factory explicit stdin run")
-	}
-	if gotText := *got.InvocationStdinText; gotText != "hi from explicit stdin\n" {
-		t.Fatalf("invocation stdin text = %q, want raw stdin prompt text", gotText)
+			if err := root.Execute(); err != nil {
+				t.Fatalf("execute run --named %s: %v", tc.factory, err)
+			}
+			assertNamedPackagedFactoryInvocationInput(t, got, tc.factory, tc.wantPositional, tc.wantStdin)
+		})
 	}
 }
 
-func TestRunCommand_NamedFactoryPromptRejectsAmbiguousPositionalAndStdin(t *testing.T) {
-	originalRunCLI := runCLI
-	defer func() {
-		runCLI = originalRunCLI
-	}()
+func TestRunCommand_NamedPackagedFactoryRejectsAmbiguousInvocationInput(t *testing.T) {
+	tests := []struct {
+		name    string
+		factory string
+		stdin   string
+		args    []string
+	}{
+		{
+			name:    "tts positional and explicit stdin",
+			factory: "@you/tts",
+			stdin:   "Fix from stdin\n",
+			args:    []string{"Fix from args", "-"},
+		},
+		{
+			name:    "goal positional and explicit stdin",
+			factory: "@you/goal",
+			stdin:   "Plan from stdin\n",
+			args:    []string{"Plan from args", "-"},
+		},
+		{
+			name:    "goal positional and piped stdin",
+			factory: "@you/goal",
+			stdin:   "Plan from piped stdin\n",
+			args:    []string{"Plan from args"},
+		},
+	}
 
-	workingDirectory := t.TempDir()
-	homeDir := t.TempDir()
-	originalWorkingDirectory, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
-	}
-	if err := os.Chdir(workingDirectory); err != nil {
-		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
-	}
-	defer func() {
-		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
-			t.Fatalf("restore working directory: %v", chdirErr)
-		}
-	}()
-	t.Setenv("HOME", homeDir)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			originalRunCLI := runCLI
+			defer func() {
+				runCLI = originalRunCLI
+			}()
+			restore := withNamedPackagedFactoryRunRoot(t)
+			defer restore()
 
-	runCalled := false
-	runCLI = func(context.Context, runcli.RunConfig) error {
-		runCalled = true
-		return nil
-	}
+			runCalled := false
+			runCLI = func(context.Context, runcli.RunConfig) error {
+				runCalled = true
+				return nil
+			}
 
-	root := NewRootCommand()
-	root.SetIn(strings.NewReader("Fix from stdin\n"))
-	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run", "--named", "@you/tts", "--no-record", "Fix from args", "-"})
+			root := NewRootCommand()
+			root.SetIn(strings.NewReader(tc.stdin))
+			root.SetOut(io.Discard)
+			root.SetErr(io.Discard)
+			root.SetArgs(append([]string{"run", "--named", tc.factory, "--no-record"}, tc.args...))
 
-	err = root.Execute()
-	if err == nil {
-		t.Fatal("expected ambiguous positional and stdin prompt rejection for named factory")
-	}
-	for _, want := range []string{
-		"INVOCATION_INPUT_SOURCE_CONFLICT",
-		"positional_text",
-		"stdin_text",
-	} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("error = %q, want %q", err.Error(), want)
-		}
-	}
-	if runCalled {
-		t.Fatal("run should not start for ambiguous named factory prompt input")
+			err := root.Execute()
+			if err == nil {
+				t.Fatal("expected ambiguous invocation input rejection")
+			}
+			for _, want := range []string{
+				"INVOCATION_INPUT_SOURCE_CONFLICT",
+				"positional_text",
+				"stdin_text",
+			} {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("error = %q, want %q", err.Error(), want)
+				}
+			}
+			if runCalled {
+				t.Fatal("run should not start for ambiguous named factory prompt input")
+			}
+		})
 	}
 }
