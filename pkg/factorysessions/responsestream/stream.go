@@ -229,10 +229,13 @@ func (s *SessionResponseStream) tryCoalesceLocked() (bool, int64) {
 }
 
 func (s *SessionResponseStream) firstRetainedSequenceLocked() int64 {
-	if len(s.events) == 0 {
-		return s.nextSequence + 1
+	for _, event := range s.events {
+		if event.Kind == EventKindCompactionSignal {
+			continue
+		}
+		return event.Sequence
 	}
-	return s.events[0].Sequence
+	return s.nextSequence + 1
 }
 
 func canCoalesceEvents(left, right Event) bool {
@@ -310,18 +313,18 @@ func (s *SessionResponseStream) EventsAfter(afterSequence int64) ReadResult {
 		return ReadResult{FirstRetainedSequence: firstRetained}
 	}
 
-	if afterSequence > 0 && afterSequence < s.events[0].Sequence {
+	if afterSequence > 0 && afterSequence < firstRetained {
 		out := make([]Event, len(s.events))
 		copy(out, s.events)
 		return ReadResult{
-			Events:                out,
-			BehindRetainedWindow:    true,
-			FirstRetainedSequence:   s.events[0].Sequence,
+			Events:              out,
+			BehindRetainedWindow:  true,
+			FirstRetainedSequence: firstRetained,
 			Compaction: &CompactionSummary{
 				Reason:                CompactionReasonTruncated,
-				DroppedSequenceCount:  int(s.events[0].Sequence - afterSequence),
-				FirstRetainedSequence: s.events[0].Sequence,
-				LastDroppedSequence:   s.events[0].Sequence - 1,
+				DroppedSequenceCount:  int(firstRetained - afterSequence),
+				FirstRetainedSequence: firstRetained,
+				LastDroppedSequence:   firstRetained - 1,
 			},
 		}
 	}

@@ -81,6 +81,8 @@ func (s *SessionResponseStream) appendCompactionSignal(event Event) {
 			merged := mergeCompactionSummary(existing.Compaction, replacement.Compaction)
 			replacement.Compaction = merged
 		}
+		s.totalBytes -= existing.PayloadBytes
+		s.events = append(s.events[:i], s.events[i+1:]...)
 		s.nextSequence++
 		replacement.Sequence = s.nextSequence
 		if replacement.RecordedAt.IsZero() {
@@ -91,9 +93,8 @@ func (s *SessionResponseStream) appendCompactionSignal(event Event) {
 		if replacement.PayloadBytes <= 0 {
 			replacement.PayloadBytes = len([]byte(replacement.Payload))
 		}
-		s.totalBytes -= existing.PayloadBytes
 		s.totalBytes += replacement.PayloadBytes
-		s.events[i] = replacement
+		s.events = append(s.events, replacement)
 		return
 	}
 

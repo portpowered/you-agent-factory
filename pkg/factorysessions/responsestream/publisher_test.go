@@ -137,6 +137,63 @@ func TestPublisher_ReportCompactionReplacesExistingSignal(t *testing.T) {
 	}
 }
 
+func TestPublisher_SecondCompactionPreservesSequenceOrder(t *testing.T) {
+	stream := responsestream.NewSessionResponseStreamWithClock(
+		&fixedClock{now: time.Unix(0, 0).UTC()},
+		responsestream.RetentionLimits{MaxEvents: 1},
+	)
+	publisher := responsestream.NewPublisher(stream, nil)
+
+	publisher.Publish(responsestream.Event{
+		Kind:       responsestream.EventKindProgressFragment,
+		DispatchID: "dispatch-1",
+		Payload:    "A",
+	})
+	publisher.Publish(responsestream.Event{
+		Kind:       responsestream.EventKindProgressFragment,
+		DispatchID: "dispatch-1",
+		Payload:    "B",
+	})
+	publisher.Publish(responsestream.Event{
+		Kind:       responsestream.EventKindProgressFragment,
+		DispatchID: "dispatch-1",
+		Payload:    "C",
+	})
+
+	events := stream.Events()
+	if len(events) != 2 {
+		t.Fatalf("event count = %d, want retained progress plus compaction signal", len(events))
+	}
+	for i := 1; i < len(events); i++ {
+		if events[i].Sequence <= events[i-1].Sequence {
+			t.Fatalf("sequences = %#v, want strictly ascending order", events)
+		}
+	}
+	if events[0].Kind != responsestream.EventKindProgressFragment || events[0].Payload != "C" {
+		t.Fatalf("first event = %#v, want retained progress C", events[0])
+	}
+	if events[1].Kind != responsestream.EventKindCompactionSignal {
+		t.Fatalf("second event = %#v, want compaction signal at tail", events[1])
+	}
+
+	behind := stream.EventsAfter(2)
+	if !behind.BehindRetainedWindow {
+		t.Fatal("behind retained window = false, want true after dropped progress")
+	}
+	if behind.FirstRetainedSequence != events[0].Sequence {
+		t.Fatalf("first retained sequence = %d, want %d from oldest progress event",
+			behind.FirstRetainedSequence, events[0].Sequence)
+	}
+
+	current := stream.EventsAfter(events[0].Sequence)
+	if current.BehindRetainedWindow {
+		t.Fatal("behind retained window = true, want false at latest progress sequence")
+	}
+	if len(current.Events) != 1 || current.Events[0].Kind != responsestream.EventKindCompactionSignal {
+		t.Fatalf("current read = %#v, want compaction signal after latest progress", current.Events)
+	}
+}
+
 func TestPublisher_PublishReportsRetentionCompaction(t *testing.T) {
 	var observed responsestream.CompactionSummary
 	stream := responsestream.NewSessionResponseStreamWithClock(
