@@ -64,6 +64,10 @@ primary-result behavior.
   `metadata.go` derives the `backend` metadata field from the loaded on-disk
   worker model so customer edits to materialized `factory.json` affect the next
   invocation result.
+- `docs/reference/packaged-goal.md` is the packaged `you docs packaged-goal`
+  customer guide for `@you/goal` batch invocation, stdout primary result, and
+  the supported headless operator-interaction scope without widening localhost
+  listener promises.
 - `docs/reference/packaged-tts.md` is the packaged `you docs packaged-tts`
   customer guide for `@you/tts` invocation, materialization, metadata result,
   edit-after-materialize behavior, and raw-artifact streaming scope. Prefer

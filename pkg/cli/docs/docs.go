@@ -32,6 +32,7 @@ const (
 	TopicMCPHosts           Topic = "mcp-hosts"
 	TopicOrchestrators      Topic = "orchestrators"
 	TopicMCP                Topic = "mcp"
+	TopicPackagedGoal       Topic = "packaged-goal"
 	TopicPackagedTTS        Topic = "packaged-tts"
 	TopicBatchInputs        Topic = "batch-inputs"
 	TopicTemplates          Topic = "templates"
@@ -59,6 +60,7 @@ const (
 	referenceMCPHostsPath           = "mcp-hosts.md"
 	referenceOrchestratorsPath      = "orchestrators.md"
 	referenceMCPPath                = "mcp.md"
+	referencePackagedGoalPath       = "packaged-goal.md"
 	referencePackagedTTSPath        = "packaged-tts.md"
 	referenceBatchInputsPath        = "batch-inputs.md"
 	referenceTemplatesPath          = "templates.md"
@@ -89,6 +91,7 @@ var topicDocuments = []topicDocument{
 	{topic: TopicWorkers, description: "Worker types, model providers, script workers, and worker configuration.", path: referenceWorkersPath, displayOrder: 50},
 	{topic: TopicResources, description: "Resource capacity, bounded concurrency, and workstation resource requirements.", path: referenceResourcesPath, displayOrder: 60},
 	{topic: TopicModels, description: "Local and hosted model setup for workers and CLI model commands.", path: referenceModelsPath, displayOrder: 70},
+	{topic: TopicPackagedGoal, description: "Packaged @you/goal batch invocation, stdout primary result, and headless operator-interaction scope.", path: referencePackagedGoalPath, displayOrder: 71},
 	{topic: TopicPackagedTTS, description: "Packaged @you/tts invocation, materialization path, metadata result, and on-disk editability.", path: referencePackagedTTSPath, displayOrder: 72},
 	{topic: TopicBatchInputs, description: "Batch input files, request shape, dependencies, and validation.", path: referenceBatchInputsPath, displayOrder: 80, aliases: []Topic{TopicBatchWorkAlias}},
 	{topic: TopicTemplates, description: "Prompt template variables, context fields, and Go template behavior.", path: referenceTemplatesPath, displayOrder: 90},

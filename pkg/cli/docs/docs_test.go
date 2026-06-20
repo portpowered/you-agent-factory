@@ -69,6 +69,7 @@ func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 		"workers",
 		"resources",
 		"models",
+		"packaged-goal",
 		"packaged-tts",
 		"batch-inputs",
 		"templates",
@@ -106,6 +107,7 @@ func TestSupportedTopicCommands_ReturnsCanonicalTopicsAndAliases(t *testing.T) {
 		"workers",
 		"resources",
 		"models",
+		"packaged-goal",
 		"packaged-tts",
 		"batch-inputs",
 		"batch-work",
@@ -193,6 +195,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"`workers` - Worker types",
 		"`resources` - Resource capacity",
 		"`models` - Local and hosted model setup",
+		"`packaged-goal` - Packaged @you/goal batch invocation",
 		"`packaged-tts` - Packaged @you/tts invocation",
 		"`batch-inputs` - Batch input files",
 		"`templates` - Prompt template variables",
@@ -204,6 +207,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"`you docs work`",
 		"`you docs sessions`",
 		"`you docs workstations`",
+		"`you docs packaged-goal`",
 		"`you docs packaged-tts`",
 		"`you docs batch-inputs`",
 	} {
@@ -763,6 +767,44 @@ func TestMarkdown_RecordReplayReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
+func TestMarkdown_PackagedGoalReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("packaged-goal")
+	if err != nil {
+		t.Fatalf("Markdown(packaged-goal) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Packaged Goal (`@you/goal`)",
+		"you run --named @you/goal",
+		"browser or dashboard interaction",
+		"primaryResult",
+		"SUBMITTED_WORK_TERMINAL",
+		"avoids binding a localhost API listener",
+		"~/.you-agent-factory/factories",
+		"@you%2Fgoal",
+		"INVOCATION_INPUT_SOURCE_CONFLICT",
+		"editable",
+		"invocation-return contract",
+		"`you docs authoring-factories`",
+		"`you docs config`",
+		"`you docs sessions`",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(packaged-goal) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs packaged-goal`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(packaged-goal) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
 func TestMarkdown_PackagedTTSReturnsRawAuthoredMarkdown(t *testing.T) {
 	t.Parallel()
 
@@ -952,7 +994,7 @@ func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, sessions, mcp-hosts, orchestrators, mcp, workstations, workers, resources, models, packaged-tts, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, sessions, mcp-hosts, orchestrators, mcp, workstations, workers, resources, models, packaged-goal, packaged-tts, batch-inputs, templates)` {
 		t.Fatalf("unsupported topic error = %q", got)
 	}
 }
