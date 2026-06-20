@@ -1,8 +1,8 @@
 package config
 
 import (
-	"errors"
 	"bytes"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -813,6 +813,7 @@ func resolvePortableBundledLinkTarget(path, linkTarget string) (string, bool, er
 	}
 	return resolvedPath, true, nil
 }
+
 // ReadCurrentFactoryPointer returns the current named factory selected for the
 // root directory's named-factory layout.
 func ReadCurrentFactoryPointer(rootDir string) (string, error) {
