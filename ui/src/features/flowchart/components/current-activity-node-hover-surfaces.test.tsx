@@ -19,6 +19,7 @@ import {
   type CurrentActivityWorkerNode,
   WorkerNodeView,
 } from "./current-activity-worker-node";
+import { activityGraphNodeSurfaceClassName } from "./current-activity-node-chrome";
 
 vi.mock("@xyflow/react", () => ({
   Handle: ({ id }: { id: string }) => <div data-testid={`handle-${id}`} />,
@@ -400,5 +401,54 @@ describe("Active workstation label truncation", () => {
     expect(workLabel?.className).toContain("basis-0");
     expect(durationLabel?.className).toContain("shrink-0");
     expect(workItemButton.className).toContain("overflow-hidden");
+  });
+});
+
+describe("Activity graph node surface tones", () => {
+  it.each([
+    ["worker", () => renderWorkerNode(), "bg-info-container"],
+    ["workType", () => renderWorkTypeNode(), "bg-info-container"],
+    ["workstation", () => renderWorkstationNode(), "bg-surface-container-highest"],
+  ] as const)(
+    "applies shared surface mapping on %s nodes",
+    (_nodeType, renderNode, expectedBackgroundClass) => {
+      const shell = renderNode().container.querySelector("article");
+
+      expect(shell?.className).toContain(expectedBackgroundClass);
+      expect(shell?.className).toContain(
+        activityGraphNodeSurfaceClassName(
+          _nodeType === "workstation" ? "workstation" : "info",
+        ),
+      );
+    },
+  );
+
+  it("keeps workstation active and selected overlays visible on mapped surfaces", () => {
+    const activeWorkstationShell = renderWorkstationNode({
+      active: true,
+      activeFlow: true,
+    }).container.querySelector("[data-current-activity-node-type='workstation']");
+    const selectedWorkstationShell = renderWorkstationNode({
+      active: true,
+      onSelectWorkstation: vi.fn(),
+      selectedWorkstation: true,
+    }).container.querySelector("[data-current-activity-node-type='workstation']");
+
+    expect(activeWorkstationShell?.className).toContain(
+      "bg-surface-container-highest",
+    );
+    expect(activeWorkstationShell?.className).toContain(
+      "border-af-success-border",
+    );
+    expect(activeWorkstationShell?.className).toContain(
+      "ring-af-success-border",
+    );
+    expect(selectedWorkstationShell?.className).toContain(
+      "bg-surface-container-highest",
+    );
+    expect(selectedWorkstationShell?.className).toContain("border-primary");
+    expect(selectedWorkstationShell?.className).toContain(
+      "shadow-af-accent-selected",
+    );
   });
 });

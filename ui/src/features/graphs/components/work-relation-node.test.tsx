@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { WorkRelationNode } from "./work-relation-node";
 import { WORK_RELATION_NODE_TYPES } from "./work-relation-node";
+import { activityGraphNodeSurfaceClassName } from "../../flowchart/components/current-activity-node-chrome";
 
 const RelationNode = WORK_RELATION_NODE_TYPES.workRelation;
 
@@ -155,4 +156,41 @@ describe("WorkRelationNodeView readability", () => {
     expect(onSelectWorkID).toHaveBeenNthCalledWith(3, "work-b");
     expect(button.className).toContain("focus-visible:ring-af-focus-ring");
   });
+});
+
+describe("WorkRelationNodeView semantic surfaces", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it.each([
+    ["FAILED", "danger", "bg-error-container"],
+    ["DONE", "success", "bg-success-container"],
+    ["PENDING", "warning", "bg-warning-container"],
+  ] as const)(
+    "maps %s relation states to %s semantic surfaces",
+    (relationState, _tone, expectedBackgroundClass) => {
+      render(
+        <RelationNode
+          {...relationNodeProps(
+            relationNodeData({
+              displayLabel: `${relationState} Story`,
+              kind: "worker",
+              relationStates: [relationState],
+            }),
+          )}
+        />,
+      );
+
+      const node = screen.getByText(`${relationState} Story`).closest("article");
+      if (!node) {
+        throw new Error("Expected relation node shell to render.");
+      }
+
+      expect(node.className).toContain(expectedBackgroundClass);
+      expect(node.className).toContain(
+        activityGraphNodeSurfaceClassName(_tone),
+      );
+    },
+  );
 });
