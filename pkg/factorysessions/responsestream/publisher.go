@@ -71,6 +71,32 @@ func (s *SessionResponseStream) appendCompactionSignal(event Event) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	for i, existing := range s.events {
+		if existing.Kind != EventKindCompactionSignal {
+			continue
+		}
+		replacement := event
+		if existing.Compaction != nil && replacement.Compaction != nil {
+			merged := mergeCompactionSummary(existing.Compaction, replacement.Compaction)
+			replacement.Compaction = merged
+		}
+		s.nextSequence++
+		replacement.Sequence = s.nextSequence
+		if replacement.RecordedAt.IsZero() {
+			replacement.RecordedAt = s.clock.Now().UTC()
+		} else {
+			replacement.RecordedAt = replacement.RecordedAt.UTC()
+		}
+		if replacement.PayloadBytes <= 0 {
+			replacement.PayloadBytes = len([]byte(replacement.Payload))
+		}
+		s.totalBytes -= existing.PayloadBytes
+		s.totalBytes += replacement.PayloadBytes
+		s.events[i] = replacement
+		return
+	}
+
 	s.appendLocked(event, true)
 }
 

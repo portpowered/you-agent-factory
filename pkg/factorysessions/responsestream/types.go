@@ -19,7 +19,8 @@ const (
 	// terminal workstation completion.
 	EventKindResponseFragment EventKind = "RESPONSE_FRAGMENT"
 	// EventKindCompactionSignal records bounded-fidelity degradation such as
-	// truncation, coalescing, or age eviction for downstream consumers.
+	// truncation, coalescing, or age eviction for downstream consumers. At most
+	// one compaction signal is retained; later compactions replace it in place.
 	EventKindCompactionSignal EventKind = "STREAM_COMPACTION_SIGNAL"
 )
 
