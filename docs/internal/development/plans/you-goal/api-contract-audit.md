@@ -72,7 +72,8 @@ the existing invocation route, not durable start/result routes.
 **Authoritative references:**
 
 - OpenAPI: `api/openapi-main.yaml` (`/factory-sessions/{session_id}/invocations`)
-- Handler: `pkg/api/handlers_factory.go` → `FactoryService.InvokeFactorySession`
+- Handler: `pkg/api/handlers_work_write.go` → `Server.InvokeFactorySessionBySessionId`
+  (delegates to session runtime `InvokeFactorySession`)
 - Service: `pkg/service/model_catalog.go` (`InvokeFactorySession`,
   `resolveSessionInvocationInput`, session wait + primary-result projection)
 
@@ -143,8 +144,9 @@ Maintainers reviewing `@you/goal` invocation follow-on PRs should verify:
 | `pkg/cli/run/factory_invocation_input.go` | CLI path uses `invocations.ResolveTextInput` and `InvokeFactorySession` |
 | `pkg/invocations/input_test.go`, `pkg/invocations/primary_result_test.go` | Unit coverage for input conflicts and both return policies |
 | `pkg/cli/run/run_invocation_test.go` | CLI request construction from positional/stdin sources |
+| `pkg/cli/run/run_invocation_test.go` (`TestResolveFactoryInvocationRequest_NamedFactory*`) | Named factory positional/stdin text selects standard invocation mode and builds `InvocationRequest` through the shared resolver (same code path as `@you/goal`) |
 | `tests/functional/runtime_api/api_session_invocation_test.go` | End-to-end API invocation returns `primaryResult`; explicit `invocationReturn` policy honored |
-| `pkg/cli/root_run_test.go` (`run --named @you/goal`) | Named goal factory routes through standard invocation mode |
+| `pkg/cli/root_run_test.go` (`TestRunCommand_NamedFactoryResolutionMetadataFlowsForBuiltInGoal`) | `run --named @you/goal` resolves built-in goal factory metadata into `RunConfig` at the CLI flag layer |
 
 **Follow-on implementation PRs** that touch invocation behavior should extend
 the evidence above (API functional tests, CLI run tests, and
