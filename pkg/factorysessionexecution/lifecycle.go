@@ -5,6 +5,18 @@ import (
 	"time"
 )
 
+// ProjectedLifecycleControlStatus returns the lifecycle-control status that live
+// session status reads should expose. Canonical SESSION_PAUSED and SESSION_RESUMED
+// replay reconstruct the same PAUSED or RUNNING value; when no control events are
+// present yet, the current factory runtime state is mapped into the shared
+// lifecycle vocabulary.
+func ProjectedLifecycleControlStatus(lifecycleControlStatus string, factoryState string) LifecycleStatus {
+	if trimmed := LifecycleStatus(strings.TrimSpace(lifecycleControlStatus)); trimmed != "" {
+		return trimmed
+	}
+	return LifecycleStatusFromFactoryRuntimeState(factoryState)
+}
+
 // LifecycleStatusFromFactoryRuntimeState maps one live Petri factory runtime state
 // into the shared Factory Session lifecycle vocabulary used by control surfaces.
 func LifecycleStatusFromFactoryRuntimeState(factoryState string) LifecycleStatus {

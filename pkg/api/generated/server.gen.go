@@ -2401,6 +2401,9 @@ type FactorySessionRuntime struct {
 	Javascript *FactorySessionJavaScriptProjection `json:"javascript,omitempty"`
 	Lifecycle  FactorySessionLifecycle             `json:"lifecycle"`
 
+	// LifecycleControlStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	LifecycleControlStatus *FactorySessionDurableLifecycleStatus `json:"lifecycleControlStatus,omitempty"`
+
 	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
 	OrchestratorKind FactoryOrchestratorKind        `json:"orchestratorKind"`
 	Petri            *FactorySessionPetriProjection `json:"petri,omitempty"`
@@ -4162,11 +4165,14 @@ type StatusCategories struct {
 
 // StatusResponse defines model for StatusResponse.
 type StatusResponse struct {
-	Categories    StatusCategories `json:"categories"`
-	FactoryState  string           `json:"factoryState"`
-	Resources     *[]ResourceUsage `json:"resources,omitempty"`
-	RuntimeStatus string           `json:"runtimeStatus"`
-	TotalTokens   int              `json:"totalTokens"`
+	Categories   StatusCategories `json:"categories"`
+	FactoryState string           `json:"factoryState"`
+
+	// LifecycleControlStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	LifecycleControlStatus *FactorySessionDurableLifecycleStatus `json:"lifecycleControlStatus,omitempty"`
+	Resources              *[]ResourceUsage                      `json:"resources,omitempty"`
+	RuntimeStatus          string                                `json:"runtimeStatus"`
+	TotalTokens            int                                   `json:"totalTokens"`
 }
 
 // StringMap defines model for StringMap.

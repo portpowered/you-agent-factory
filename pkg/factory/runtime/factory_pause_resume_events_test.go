@@ -125,6 +125,14 @@ func TestPauseResume_ReplayPreservesFinalPausedStatus(t *testing.T) {
 		t.Fatalf("Pause: %v", err)
 	}
 
+	snapshot, err := f.GetEngineStateSnapshot(ctx)
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot after pause: %v", err)
+	}
+	if snapshot.LifecycleControlStatus != string(factoryapi.FactorySessionDurableLifecycleStatusPaused) {
+		t.Fatalf("lifecycleControlStatus = %q, want PAUSED", snapshot.LifecycleControlStatus)
+	}
+
 	events, err := f.GetFactoryEvents(ctx)
 	if err != nil {
 		t.Fatalf("GetFactoryEvents: %v", err)

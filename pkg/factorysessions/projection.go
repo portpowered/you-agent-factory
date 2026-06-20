@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
@@ -23,6 +24,7 @@ type ProjectionContext struct {
 	Session               *LiveSession
 	FactoryCfg            *interfaces.FactoryConfig
 	Snapshot              *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+	LifecycleControlStatus string
 	Enabled               []interfaces.EnabledTransition
 	JavaScript            *interfaces.FactorySessionJavaScriptRuntimeState
 	JavaScriptCheckpoints []interfaces.JavaScriptCheckpointRecord
@@ -65,6 +67,10 @@ func ProjectRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {
 		Progress:         projectedSessionProgress(ctx),
 		Usage:            projectedSessionUsage(ctx),
 		Lifecycle:        projectedSessionLifecycle(ctx, now),
+	}
+	if lifecycleControlStatus := projectedSessionLifecycleControlStatus(ctx); lifecycleControlStatus != "" {
+		status := factoryapi.FactorySessionDurableLifecycleStatus(lifecycleControlStatus)
+		runtime.LifecycleControlStatus = &status
 	}
 	projectOrchestratorIdentity(&runtime, ctx.FactoryCfg)
 	switch kind {
@@ -135,10 +141,32 @@ func projectedSessionStatus(ctx ProjectionContext) factoryapi.FactorySessionStat
 	return factoryapi.FactorySessionStatus(ctx.Snapshot.RuntimeStatus)
 }
 
+func projectedSessionLifecycleControlStatus(ctx ProjectionContext) string {
+	if ctx.Snapshot != nil {
+		return strings.TrimSpace(ctx.Snapshot.LifecycleControlStatus)
+	}
+	return strings.TrimSpace(ctx.LifecycleControlStatus)
+}
+
+func projectedSessionFactoryState(ctx ProjectionContext) string {
+	factoryState := "UNKNOWN"
+	if ctx.Snapshot != nil {
+		factoryState = ctx.Snapshot.FactoryState
+	}
+	projected := factorysessionexecution.ProjectedLifecycleControlStatus(
+		projectedSessionLifecycleControlStatus(ctx),
+		factoryState,
+	)
+	if projected == "" {
+		return factoryState
+	}
+	return string(projected)
+}
+
 func projectedSessionProgress(ctx ProjectionContext) factoryapi.FactorySessionProgress {
 	if ctx.Snapshot == nil {
 		return factoryapi.FactorySessionProgress{
-			FactoryState:  "UNKNOWN",
+			FactoryState:  projectedSessionFactoryState(ctx),
 			Categories:    factoryapi.StatusCategories{},
 			InFlightCount: 0,
 			TotalTokens:   0,
@@ -146,7 +174,7 @@ func projectedSessionProgress(ctx ProjectionContext) factoryapi.FactorySessionPr
 	}
 	categories, _ := categorizeProjectionTokens(&ctx.Snapshot.Marking, ctx.Snapshot.Topology)
 	return factoryapi.FactorySessionProgress{
-		FactoryState:  ctx.Snapshot.FactoryState,
+		FactoryState:  projectedSessionFactoryState(ctx),
 		Categories:    categories,
 		InFlightCount: ctx.Snapshot.InFlightCount,
 		TotalTokens:   countProjectionTokens(&ctx.Snapshot.Marking),

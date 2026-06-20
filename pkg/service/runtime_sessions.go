@@ -965,14 +965,21 @@ func (fs *FactoryService) buildSessionProjectionContext(
 			projectionCtx.JavaScript,
 		)
 		projectionCtx.JavaScriptCheckpoints = checkpointStore.List()
+	} else {
+		snapshot, err := fs.GetEngineStateSnapshotForSession(ctx, session.ID)
+		if err != nil {
+			return factorysessions.ProjectionContext{}, err
+		}
+		projectionCtx.Snapshot = snapshot
+		projectionCtx.LifecycleControlStatus = snapshot.LifecycleControlStatus
+		projectionCtx.Enabled = factorysessions.EnabledTransitionsForSnapshot(ctx, snapshot, runtimeCfg)
 		return projectionCtx, nil
 	}
 	snapshot, err := fs.GetEngineStateSnapshotForSession(ctx, session.ID)
 	if err != nil {
 		return factorysessions.ProjectionContext{}, err
 	}
-	projectionCtx.Snapshot = snapshot
-	projectionCtx.Enabled = factorysessions.EnabledTransitionsForSnapshot(ctx, snapshot, runtimeCfg)
+	projectionCtx.LifecycleControlStatus = snapshot.LifecycleControlStatus
 	return projectionCtx, nil
 }
 

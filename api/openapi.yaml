@@ -2046,6 +2046,9 @@ components:
           $ref: '#/components/schemas/StatusCategories'
         factoryState:
           type: string
+        lifecycleControlStatus:
+          $ref: '#/components/schemas/FactorySessionDurableLifecycleStatus'
+          description: Canonical Factory Session lifecycle-control status reconstructed from SESSION_PAUSED and SESSION_RESUMED events when present. Live status reads report PAUSED after a successful pause and RUNNING after a successful resume.
         runtimeStatus:
           type: string
         totalTokens:
@@ -2717,6 +2720,9 @@ components:
           description: Stable hash of the effective orchestrator policy.
         status:
           $ref: '#/components/schemas/FactorySessionStatus'
+        lifecycleControlStatus:
+          $ref: '#/components/schemas/FactorySessionDurableLifecycleStatus'
+          description: Canonical Factory Session lifecycle-control status reconstructed from SESSION_PAUSED and SESSION_RESUMED events when present. Live session inspection reads report PAUSED after a successful pause and RUNNING after a successful resume.
         progress:
           $ref: '#/components/schemas/FactorySessionProgress'
         budgets:

@@ -1005,6 +1005,8 @@ export interface components {
     StatusResponse: {
       categories: components["schemas"]["StatusCategories"];
       factoryState: string;
+      /** @description Canonical Factory Session lifecycle-control status reconstructed from SESSION_PAUSED and SESSION_RESUMED events when present. Live status reads report PAUSED after a successful pause and RUNNING after a successful resume. */
+      lifecycleControlStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
       runtimeStatus: string;
       totalTokens: number;
       resources?: components["schemas"]["ResourceUsage"][];
@@ -1285,6 +1287,8 @@ export interface components {
       /** @description Stable hash of the effective orchestrator policy. */
       policyHash?: string;
       status: components["schemas"]["FactorySessionStatus"];
+      /** @description Canonical Factory Session lifecycle-control status reconstructed from SESSION_PAUSED and SESSION_RESUMED events when present. Live session inspection reads report PAUSED after a successful pause and RUNNING after a successful resume. */
+      lifecycleControlStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
       progress: components["schemas"]["FactorySessionProgress"];
       budgets?: components["schemas"]["FactorySessionBudgets"];
       usage: components["schemas"]["FactorySessionUsage"];

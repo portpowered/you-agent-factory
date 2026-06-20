@@ -202,13 +202,22 @@ func tokenToResponse(t *interfaces.Token, includeHistory bool) factoryapi.TokenR
 
 func statusFromEngineStateSnapshot(snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) factoryapi.StatusResponse {
 	categories, resources := categorizeStatusTokens(&snapshot.Marking, snapshot.Topology)
-	return factoryapi.StatusResponse{
+	projectedLifecycle := factorysessionexecution.ProjectedLifecycleControlStatus(
+		snapshot.LifecycleControlStatus,
+		snapshot.FactoryState,
+	)
+	response := factoryapi.StatusResponse{
 		Categories:    categories,
 		FactoryState:  snapshot.FactoryState,
 		Resources:     resourceUsagePtr(resources),
 		RuntimeStatus: string(snapshot.RuntimeStatus),
 		TotalTokens:   countPublicStatusTokens(&snapshot.Marking),
 	}
+	if projectedLifecycle != "" {
+		status := factoryapi.FactorySessionDurableLifecycleStatus(projectedLifecycle)
+		response.LifecycleControlStatus = &status
+	}
+	return response
 }
 
 func categorizeStatusTokens(marking *petri.MarkingSnapshot, net *state.Net) (factoryapi.StatusCategories, []factoryapi.ResourceUsage) {
