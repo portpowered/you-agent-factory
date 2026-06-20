@@ -128,7 +128,8 @@ func TestExecuteFailsWhenCoverageBelowMinimumAndZeroCoveragePackage(t *testing.T
 	stderrWriter = &stderr
 
 	err := execute(config{
-		min: 100.1,
+		min:             100.1,
+		packageBaseline: writeTestPackageCoverageBaseline(t),
 		coverpkg: strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
@@ -182,7 +183,8 @@ func TestExecuteFailsWhenZeroCoveragePackageOnly(t *testing.T) {
 	stderrWriter = &stderr
 
 	err := execute(config{
-		min: 80,
+		min:             80,
+		packageBaseline: writeTestPackageCoverageBaseline(t),
 		coverpkg: strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",

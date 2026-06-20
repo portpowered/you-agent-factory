@@ -30,7 +30,7 @@
     "storybook:choose-file-check": "node scripts/run-choose-file-browser-check.mjs",
     "storybook:prompt-syntax-save-check": "node scripts/run-prompt-syntax-save-browser-check.mjs",
     "storybook:checkbox-consistency-check": "node scripts/run-checkbox-consistency-browser-check.mjs",
-    "storybook:submit-work-textarea-scrollable-check": "node scripts/run-submit-work-textarea-scrollable-browser-check.mjs",
+    "storybook:submit-work-textarea-scrollable-check": "bun run build-storybook && node scripts/run-submit-work-textarea-scrollable-browser-check.mjs",
     "storybook:current-selection-save-notifications-check": "node scripts/run-current-selection-save-notifications-browser-check.mjs",
     "storybook:factory-graph-toolbar-jitter-check": "bun run build-storybook && node scripts/run-factory-graph-toolbar-jitter-browser-check.mjs",
     "storybook:factory-graph-visual-group-save-check": "bun run build-storybook && node scripts/run-factory-graph-visual-group-save-browser-check.mjs",

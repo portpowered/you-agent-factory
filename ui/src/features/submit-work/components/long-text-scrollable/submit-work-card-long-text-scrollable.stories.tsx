@@ -1,42 +1,23 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactElement } from "react";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, within } from "storybook/test";
 
-import { DashboardSessionTestProvider } from "../../../../testing/dashboard-session-test-provider";
+import meta from "../submit-work-card.stories";
 import { SubmitWorkCardLongTextScrollableVerification } from "./submit-work-card-long-text-scrollable-verification";
 
-const withQueryClient = (Story: () => ReactElement) => (
-  <QueryClientProvider
-    client={
-      new QueryClient({
-        defaultOptions: {
-          mutations: {
-            retry: false,
-          },
-          queries: {
-            retry: false,
-          },
-        },
-      })
-    }
-  >
-    <DashboardSessionTestProvider>
-      <Story />
-    </DashboardSessionTestProvider>
-  </QueryClientProvider>
-);
-
 export default {
+  ...meta,
   title: "Agent Factory/Dashboard/Submit Work Card",
-  decorators: [withQueryClient],
-};
+} satisfies Meta;
 
-export const LongTextScrollableVerification = {
+type Story = StoryObj;
+
+export const LongTextScrollableVerification: Story = {
   tags: ["test"],
   render: () => <SubmitWorkCardLongTextScrollableVerification />,
-  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
-    const canvas = within(canvasElement);
-    const card = await canvas.findByRole("article", { name: "Submit work" });
+  play: async ({ canvasElement }) => {
+    const card = await within(canvasElement).findByRole("article", {
+      name: "Submit work",
+    });
     const scope = within(card);
     const submissionTextarea = scope.getByRole<HTMLTextAreaElement>("textbox", {
       name: "Text item 1",

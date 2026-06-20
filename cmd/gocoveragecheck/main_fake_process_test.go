@@ -12,6 +12,17 @@ import (
 
 const tempProfileMarkerFilename = "gocoveragecheck-last-temp-profile.txt"
 
+func writeTestPackageCoverageBaseline(t *testing.T) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "package-baseline.txt")
+	if err := os.WriteFile(path, []byte(modulePath+"/pkg/service\n"), 0o644); err != nil {
+		t.Fatalf("write test package baseline: %v", err)
+	}
+
+	return path
+}
+
 func TestGoCoverageCheckFakeGoProcess(t *testing.T) {
 	args, ok := helperCommandArgs(os.Args)
 	if !ok || len(args) == 0 || args[0] != "go" {

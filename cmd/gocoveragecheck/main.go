@@ -218,7 +218,11 @@ func run(cfg config) (coverageResult, error) {
 		localPackageSummaryReport += "\n" + localPackageStderr
 	}
 
-	baselinePackages, err := readPackageCoverageBaseline(filepath.Join(repoRoot, cfg.packageCoverageBaselinePath()))
+	baselinePath := cfg.packageCoverageBaselinePath()
+	if !filepath.IsAbs(baselinePath) {
+		baselinePath = filepath.Join(repoRoot, baselinePath)
+	}
+	baselinePackages, err := readPackageCoverageBaseline(baselinePath)
 	if err != nil {
 		return coverageResult{}, err
 	}

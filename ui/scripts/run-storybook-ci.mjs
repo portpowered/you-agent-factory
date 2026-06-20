@@ -253,6 +253,30 @@ export async function stopServer(child) {
   });
 }
 
+export async function waitForStorybookIndexReady({
+  runWaitOn = () =>
+    runBun([
+      "x",
+      "--no-install",
+      "wait-on",
+      "--timeout",
+      String(READY_TIMEOUT_MS),
+      STORYBOOK_INDEX_URL,
+    ]),
+  waitForStableIndex = () => waitForStableStorybookIndex(),
+  serverExit,
+} = {}) {
+  await Promise.race([
+    Promise.resolve()
+      .then(runWaitOn)
+      .catch(() => {
+        throw createStorybookIndexTimeoutError();
+      }),
+    serverExit,
+  ]);
+  await waitForStableIndex();
+}
+
 export async function waitForStorybookReady({
   runWaitOn = () =>
     runBun([
@@ -267,15 +291,11 @@ export async function waitForStorybookReady({
   waitForStableIframe = () => waitForStableStorybookIframe(),
   serverExit,
 } = {}) {
-  await Promise.race([
-    Promise.resolve()
-      .then(runWaitOn)
-      .catch(() => {
-        throw createStorybookIndexTimeoutError();
-      }),
+  await waitForStorybookIndexReady({
+    runWaitOn,
     serverExit,
-  ]);
-  await waitForStableIndex();
+    waitForStableIndex,
+  });
   await waitForStableIframe();
 }
 

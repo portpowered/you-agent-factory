@@ -6,6 +6,7 @@ import {
   runStorybookCI,
   verifyStorybookIframe,
   waitForStableStorybookIframe,
+  waitForStorybookIndexReady,
   waitForStorybookReady,
 } from "./run-storybook-ci.mjs";
 
@@ -93,6 +94,33 @@ describe("waitForStableStorybookIframe", () => {
     expect(verifyIframe).toHaveBeenCalledTimes(2);
     expect(delayFn).toHaveBeenNthCalledWith(1, 250);
     expect(delayFn).toHaveBeenNthCalledWith(2, 250);
+  });
+});
+
+describe("waitForStorybookIndexReady", () => {
+  test("waits for the index to stabilize without checking the iframe shell", async () => {
+    const runWaitOn = vi.fn().mockResolvedValue(undefined);
+    const waitForStableIndex = vi.fn().mockResolvedValue(undefined);
+    const waitForStableIframe = vi.fn().mockResolvedValue(undefined);
+
+    await waitForStorybookIndexReady({
+      runWaitOn,
+      serverExit: new Promise(() => {}),
+      waitForStableIndex,
+    });
+
+    expect(runWaitOn).toHaveBeenCalledTimes(1);
+    expect(waitForStableIndex).toHaveBeenCalledTimes(1);
+    expect(waitForStableIframe).not.toHaveBeenCalled();
+  });
+
+  test("maps wait-on failures to the index timeout error contract", async () => {
+    await expect(
+      waitForStorybookIndexReady({
+        runWaitOn: vi.fn().mockRejectedValue(new Error("not ready")),
+        serverExit: new Promise(() => {}),
+      }),
+    ).rejects.toThrow(createStorybookIndexTimeoutError().message);
   });
 });
 
