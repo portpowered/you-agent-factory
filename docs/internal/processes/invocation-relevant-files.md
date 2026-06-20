@@ -69,7 +69,9 @@ primary-result behavior.
   behavior used by `factory/workstations/review/AGENTS.md`.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged goal
   invocation summary shaping on `execute-goal` workstations alongside packaged
-  TTS metadata shaping.
+  TTS metadata shaping. `subsystem_transitioner_goal_classifier_test.go` proves
+  each authored `review-goal` classifier label routes to the expected goal place
+  through the mapped runtime net.
 - `pkg/packagedfactories/tts/` owns packaged TTS invocation metadata shaping
   helpers used when `INFERENCE_RUN` (or legacy `MODEL_INVOKE`) work completes on the `execute-tts` workstation.
   `metadata.go` derives the `backend` metadata field from the loaded on-disk

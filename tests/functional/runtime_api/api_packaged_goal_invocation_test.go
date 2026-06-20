@@ -85,7 +85,7 @@ func TestPackagedGoalBuiltInTopologyScaffold_PrimaryResultIsExecutionSummaryNotR
 
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithRunAsync(),
-		testutil.WithMockWorkersConfig(packagedGoalReviewClassifierMockWorkersConfig()),
+		testutil.WithMockWorkersConfig(packagedGoalReviewClassifierMockWorkersConfig("accepted")),
 	)
 	if err := h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
 		WorkTypeID: goal.PackagedGoalWorkTypeName,
@@ -246,7 +246,7 @@ args:
 `)
 }
 
-func packagedGoalReviewClassifierMockWorkersConfig() *factoryconfig.MockWorkersConfig {
+func packagedGoalReviewClassifierMockWorkersConfig(label string) *factoryconfig.MockWorkersConfig {
 	return &factoryconfig.MockWorkersConfig{
 		MockWorkers: []factoryconfig.MockWorkerConfig{{
 			WorkerName:      "goal-reviewer",
@@ -254,7 +254,7 @@ func packagedGoalReviewClassifierMockWorkersConfig() *factoryconfig.MockWorkersC
 			RunType:         factoryconfig.MockWorkerRunTypeScript,
 			ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
 				Command: "/bin/echo",
-				Args:    []string{"accepted"},
+				Args:    []string{label},
 			},
 		}},
 	}
