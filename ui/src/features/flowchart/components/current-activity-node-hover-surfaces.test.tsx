@@ -296,4 +296,36 @@ describe("Active workstation work item rows", () => {
     expect(selectedWorkButton.className).toContain("bg-info-container");
     expect(selectedWorkButton.className).toContain("shadow-af-info-chip");
   });
+
+  it("shows three-character-or-shorter graph duration tokens with full duration in title", () => {
+    const activeWorkstation = renderWorkstationNode({
+      active: true,
+      executions: [
+        {
+          dispatch_id: "dispatch-1",
+          started_at: "2026-06-09T00:00:00Z",
+          work_items: [
+            {
+              display_name: "Story Alpha",
+              work_id: "work-1",
+              work_type: "story",
+            },
+          ],
+        },
+      ],
+      now: Date.parse("2026-06-09T00:13:05Z"),
+      onSelectWorkID: vi.fn(),
+    });
+
+    const workItemButton = activeWorkstation.getByRole("button", {
+      name: /Story Alpha/,
+    });
+    const durationLabel = workItemButton.querySelector(
+      "[data-active-work-duration]",
+    );
+
+    expect(durationLabel?.textContent).toBe("13m");
+    expect(durationLabel?.textContent?.length).toBeLessThanOrEqual(3);
+    expect(workItemButton.getAttribute("title")).toBe("Story Alpha - 13m 5s");
+  });
 });

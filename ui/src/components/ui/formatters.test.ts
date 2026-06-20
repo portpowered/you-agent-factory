@@ -5,6 +5,8 @@ import {
   formatDurationFromISO,
   formatDurationMillis,
   formatDurationMillisVerbose,
+  formatGraphDurationFromISO,
+  formatGraphDurationMillis,
   formatList,
   formatLocalDateTime,
   formatLocalTimezoneContext,
@@ -66,6 +68,55 @@ describe("formatDurationFromISO", () => {
 
   it("returns unavailable for invalid timestamps", () => {
     expect(formatDurationFromISO("not-a-date", Date.now())).toBe("Unavailable");
+  });
+});
+
+describe("formatGraphDurationMillis", () => {
+  it("formats graph durations as single-unit tokens capped at three characters", () => {
+    expect(formatGraphDurationMillis(10_000)).toBe("10s");
+    expect(formatGraphDurationMillis(780_000)).toBe("13m");
+    expect(formatGraphDurationMillis(3_600_000)).toBe("1h");
+    expect(formatGraphDurationMillis(7_440_000)).toBe("2h");
+    expect(formatGraphDurationMillis(192_000)).toBe("3m");
+  });
+
+  it("shows zero seconds for sub-second durations", () => {
+    expect(formatGraphDurationMillis(450)).toBe("0s");
+  });
+
+  it("does not leak invalid numeric duration values into display labels", () => {
+    expect(formatGraphDurationMillis(Number.NaN)).toBe("");
+  });
+});
+
+describe("formatGraphDurationFromISO", () => {
+  it("formats elapsed graph durations from ISO timestamps", () => {
+    expect(
+      formatGraphDurationFromISO(
+        "2026-04-10T12:00:00.000Z",
+        Date.parse("2026-04-10T12:00:10.000Z"),
+      ),
+    ).toBe("10s");
+
+    expect(
+      formatGraphDurationFromISO(
+        "2026-04-10T12:00:00.000Z",
+        Date.parse("2026-04-10T12:13:00.000Z"),
+      ),
+    ).toBe("13m");
+
+    expect(
+      formatGraphDurationFromISO(
+        "2026-04-10T12:00:00.000Z",
+        Date.parse("2026-04-10T13:00:00.000Z"),
+      ),
+    ).toBe("1h");
+  });
+
+  it("returns unavailable for invalid timestamps", () => {
+    expect(formatGraphDurationFromISO("not-a-date", Date.now())).toBe(
+      "Unavailable",
+    );
   });
 });
 

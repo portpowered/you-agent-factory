@@ -98,6 +98,11 @@ describe("shared locale duration and relative-time formatters", () => {
     expect(formatDuration(192_000, "zh-CN")).toBe("3分 12秒");
     expect(formatDuration(192_000, "ja")).toBe("3分 12秒");
     expect(formatDuration(192_000, "ko")).toBe("3분 12초");
+    expect(formatDuration(10_000, "en", { style: "graph" })).toBe("10s");
+    expect(formatDuration(780_000, "en", { style: "graph" })).toBe("13m");
+    expect(formatDuration(3_600_000, "en", { style: "graph" })).toBe("1h");
+    expect(formatDuration(7_440_000, "en", { style: "graph" })).toBe("2h");
+    expect(formatDuration(450, "en", { style: "graph" })).toBe("0s");
     expect(
       formatDuration(7_440_000, "en", {
         style: "verbose",

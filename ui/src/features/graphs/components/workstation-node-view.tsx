@@ -7,6 +7,7 @@ import type {
 } from "../../../api/dashboard/types";
 import {
   formatDurationFromISO,
+  formatGraphDurationFromISO,
   formatWorkItemLabel,
 } from "../../../components/ui/formatters";
 import { cn } from "../../../lib/cn";
@@ -327,9 +328,15 @@ function ActiveWorkstationNodeContent({
         {visibleWorkItemEntries.map(({ execution, workItem }) => {
           const workItemSelected = data.selectedWorkID === workItem.work_id;
           const workItemLabel = formatWorkItemLabel(workItem);
-          const durationLabel = formatDurationFromISO(
+          const durationLabel = formatGraphDurationFromISO(
             execution.started_at,
             data.now,
+            data.locale,
+          );
+          const durationTitle = formatDurationFromISO(
+            execution.started_at,
+            data.now,
+            data.locale,
           );
           const workItemContent = (
             <>
@@ -367,7 +374,7 @@ function ActiveWorkstationNodeContent({
                       nodeID: data.workstation.node_id,
                     });
                   }}
-                  title={`${workItemLabel} - ${durationLabel}`}
+                  title={`${workItemLabel} - ${durationTitle}`}
                 >
                   {workItemContent}
                 </GraphNodeButton>
@@ -375,7 +382,7 @@ function ActiveWorkstationNodeContent({
                 <div
                   className={workItemClassName}
                   data-selected={workItemSelected ? "true" : undefined}
-                  title={`${workItemLabel} - ${durationLabel}`}
+                  title={`${workItemLabel} - ${durationTitle}`}
                 >
                   {workItemContent}
                 </div>

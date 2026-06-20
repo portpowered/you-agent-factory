@@ -13,7 +13,7 @@ type RelativeTimeFormatterOptions = Intl.RelativeTimeFormatOptions & {
   fallback?: string;
 };
 
-export type DurationFormatStyle = "compact" | "verbose";
+export type DurationFormatStyle = "compact" | "verbose" | "graph";
 
 export interface DurationFormatterOptions {
   fallback?: string;
@@ -147,6 +147,10 @@ export function formatDuration(
 
   if (style === "verbose") {
     return formatVerboseDurationParts(units, resolvedLocale);
+  }
+
+  if (style === "graph") {
+    return formatGraphDurationToken(safeDurationMillis, resolvedLocale);
   }
 
   return formatCompactDurationParts(units, resolvedLocale);
@@ -302,6 +306,51 @@ function formatCompactDurationParts(
   return getDurationParts(units)
     .map(({ unit, value }) => formatCompactDurationPart(value, unit, locale))
     .join(" ");
+}
+
+function formatGraphDurationToken(
+  durationMillis: number,
+  locale: string,
+): string {
+  const durationSeconds = Math.floor(durationMillis / 1000);
+  const hours = Math.floor(durationSeconds / 3600);
+  const minutes = Math.floor((durationSeconds % 3600) / 60);
+  const seconds = durationSeconds % 60;
+
+  let token: string;
+  if (hours > 0) {
+    token = formatCompactDurationPart(hours, "hour", locale);
+  } else if (minutes > 0) {
+    token = formatCompactDurationPart(minutes, "minute", locale);
+  } else if (seconds > 0) {
+    token = formatCompactDurationPart(seconds, "second", locale);
+  } else {
+    token = formatCompactDurationPart(0, "second", locale);
+  }
+
+  return capGraphDurationToken(token);
+}
+
+function capGraphDurationToken(token: string): string {
+  if (token.length <= 3) {
+    return token;
+  }
+
+  const match = /^(\d+)(.+)$/.exec(token);
+  if (!match) {
+    return token.slice(0, 3);
+  }
+
+  const unit = match[2];
+  const maxDigits = 3 - unit.length;
+  if (maxDigits <= 0) {
+    return token.slice(0, 3);
+  }
+
+  const maxValue = 10 ** maxDigits - 1;
+  const value = Math.min(Number.parseInt(match[1], 10), maxValue);
+
+  return `${value}${unit}`;
 }
 
 function formatVerboseDurationParts(
