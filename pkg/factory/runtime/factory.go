@@ -61,6 +61,7 @@ type factoryImpl struct {
 	completeCh           chan struct{}
 	usePool              bool
 	operatorMoveRequests map[string]appliedOperatorMove
+	resumeDrainPending   bool
 }
 
 type appliedOperatorMove struct {
@@ -98,7 +99,10 @@ func New(opts ...factory.FactoryOption) (factory.Factory, error) {
 	usePool := !cfg.IsInlineDispatch()
 	pool, dispatchHook, engineOpts := configureRuntimeDispatch(cfg, logger, resultBuffer, usePool, engineOpts)
 	impl := newFactoryImpl(cfg, nil, pool, logger, resultBuffer, dispatchHook, eventHistory, usePool)
-	engineOpts = append(engineOpts, engine.WithAutomaticTicksPaused(impl.automaticTicksPaused))
+	engineOpts = append(engineOpts,
+		engine.WithAutomaticTicksPaused(impl.automaticTicksPaused),
+		engine.WithResultBufferDrainObserver(impl.observePostResumeBufferedDrain),
+	)
 	impl.engine = engine.NewFactoryEngine(cfg.GetNet(), marking, subs, engineOpts...)
 	return impl, nil
 }
@@ -489,6 +493,7 @@ func (f *factoryImpl) Pause(_ context.Context) error {
 	f.mu.Unlock()
 	f.recordStateChange(previousState, interfaces.FactoryStatePaused, "pause requested")
 	f.recordSessionLifecyclePause()
+	f.logRuntimeLifecycleControl("PAUSE", previousState, interfaces.FactoryStatePaused, "ACCEPTED")
 	return nil
 }
 
@@ -508,6 +513,8 @@ func (f *factoryImpl) Resume(_ context.Context) error {
 	f.mu.Unlock()
 	f.recordStateChange(previousState, interfaces.FactoryStateRunning, "resume requested")
 	f.recordSessionLifecycleResume()
+	f.markResumeDrainPending()
+	f.logRuntimeLifecycleControl("RESUME", previousState, interfaces.FactoryStateRunning, "ACCEPTED")
 	return nil
 }
 
@@ -592,6 +599,65 @@ func (f *factoryImpl) recordStateChange(previous interfaces.FactoryState, next i
 		tick = f.engine.GetRuntimeStateSnapshot().TickCount
 	}
 	f.eventHistory.RecordFactoryStateChange(tick, previous, next, reason, f.clock.Now())
+}
+
+func (f *factoryImpl) logRuntimeLifecycleControl(
+	operation string,
+	previousState interfaces.FactoryState,
+	nextState interfaces.FactoryState,
+	outcome string,
+) {
+	if f == nil || f.logger == nil {
+		return
+	}
+	f.logger.Info(
+		"factory runtime lifecycle control",
+		"session_id", sessionIDFromFactoryConfig(f.cfg),
+		"operation", operation,
+		"outcome", outcome,
+		"previous_factory_state", string(previousState),
+		"factory_state", string(nextState),
+	)
+}
+
+func (f *factoryImpl) markResumeDrainPending() {
+	if f == nil {
+		return
+	}
+	pending := 0
+	if f.resultBuffer != nil {
+		pending = f.resultBuffer.Len()
+	}
+	f.mu.Lock()
+	f.resumeDrainPending = pending > 0
+	f.mu.Unlock()
+	if pending > 0 {
+		f.logger.Info(
+			"factory runtime resume buffered results pending drain",
+			"session_id", sessionIDFromFactoryConfig(f.cfg),
+			"buffered_result_count", pending,
+		)
+	}
+}
+
+func (f *factoryImpl) observePostResumeBufferedDrain(drainedCount int) {
+	if f == nil || drainedCount <= 0 {
+		return
+	}
+	f.mu.Lock()
+	pending := f.resumeDrainPending
+	if pending {
+		f.resumeDrainPending = false
+	}
+	f.mu.Unlock()
+	if !pending {
+		return
+	}
+	f.logger.Info(
+		"factory runtime resume buffered results drained",
+		"session_id", sessionIDFromFactoryConfig(f.cfg),
+		"drained_result_count", drainedCount,
+	)
 }
 
 func (f *factoryImpl) currentWorldState(tick int) *interfaces.FactoryWorldState {

@@ -70,6 +70,7 @@ func (fs *FactoryService) applyLiveLifecycleControl(
 
 	activeFactory, err := fs.sessionFactory(sessionID)
 	if err != nil {
+		fs.observeLiveLifecycleControl(sessionID, operation, control, "", "", err)
 		return factorysessionexecution.LifecycleControlResult{}, err
 	}
 
@@ -82,7 +83,7 @@ func (fs *FactoryService) applyLiveLifecycleControl(
 	outcome := factorysessionexecution.EvaluateLifecycleControl(operation, currentStatus)
 	if outcome == factorysessionexecution.LifecycleControlOutcomeInvalidState ||
 		outcome == factorysessionexecution.LifecycleControlOutcomeTerminalSession {
-		return factorysessionexecution.LifecycleControlResult{}, &factorysessionexecution.ControlError{
+		controlErr := &factorysessionexecution.ControlError{
 			Operation: operation,
 			Outcome:   outcome,
 			Status:    currentStatus,
@@ -93,6 +94,8 @@ func (fs *FactoryService) applyLiveLifecycleControl(
 				currentStatus,
 			),
 		}
+		fs.observeLiveLifecycleControl(sessionID, operation, control, outcome, currentStatus, controlErr)
+		return factorysessionexecution.LifecycleControlResult{}, controlErr
 	}
 
 	resultStatus := currentStatus
@@ -113,11 +116,13 @@ func (fs *FactoryService) applyLiveLifecycleControl(
 		}
 	}
 
-	return factorysessionexecution.LifecycleControlResult{
+	result := factorysessionexecution.LifecycleControlResult{
 		SessionID: sessionID,
 		Operation: operation,
 		Outcome:   outcome,
 		Status:    resultStatus,
 		Links:     factorysession.LiveLifecycleControlLinksForSession(sessionID),
-	}, nil
+	}
+	fs.observeLiveLifecycleControl(sessionID, operation, control, outcome, resultStatus, nil)
+	return result, nil
 }

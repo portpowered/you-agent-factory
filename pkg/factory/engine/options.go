@@ -128,3 +128,11 @@ func WithAutomaticTicksPaused(paused func() bool) Option {
 		e.automaticTicksPaused = paused
 	}
 }
+
+// WithResultBufferDrainObserver registers a callback invoked after buffered
+// worker results are drained into runtime state during a tick.
+func WithResultBufferDrainObserver(observer func(drainedCount int)) Option {
+	return func(e *FactoryEngine) {
+		e.onResultBufferDrained = observer
+	}
+}
