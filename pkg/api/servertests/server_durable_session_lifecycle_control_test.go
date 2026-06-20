@@ -18,6 +18,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
@@ -940,6 +942,102 @@ func TestInterruptFactorySessionDispatch_NonDurableSessionPreservesLiveStub(t *t
 	}
 	if errResp.Code != factoryapi.INTERNALERROR {
 		t.Fatalf("code = %q, want INTERNAL_ERROR", errResp.Code)
+	}
+}
+
+func TestInterruptFactorySessionDispatch_LateResultAfterInterruptSuppressedFromNormalRouting(t *testing.T) {
+	projectRoot := setupAPILifecycleWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
+	})
+	sessionID := "dur-sess-interrupt-transport-late-001"
+	if err := factorysessionexecution.SeedRuntimeSessionWithRunningDispatch(service, sessionID, "dispatch-1", "summarize-findings"); err != nil {
+		t.Fatalf("SeedRuntimeSessionWithRunningDispatch: %v", err)
+	}
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	response, status := postFactorySessionInterruptDispatch(t, server.URL, sessionID, factoryapi.FactorySessionInterruptDispatchRequest{
+		DispatchId: "dispatch-1",
+		Reason:     stringPtr("stop before provider completion"),
+	})
+	if status != http.StatusOK {
+		t.Fatalf("interrupt status = %d, want 200", status)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	if response.DispatchId == nil || *response.DispatchId != "dispatch-1" {
+		t.Fatalf("dispatchId = %#v, want dispatch-1", response.DispatchId)
+	}
+
+	lateRecords := []workflowruntime.RuntimeRecord{{
+		Kind: workflowruntime.RecordKindChildDispatch,
+		ChildDispatch: &workflowruntime.ChildDispatchRecord{
+			DispatchID:         "dispatch-1",
+			Status:             workflowruntime.ChildDispatchStatusCompleted,
+			Label:              "summarize-findings",
+			ArtifactRef:        workflowresult.FormatArtifactURI(sessionID, "child-artifact-late"),
+			ProviderSessionRef: "provider-session-late",
+			Provider:           "mock",
+		},
+	}}
+	if err := factorysessionexecution.ApplyRuntimeTerminalOutcomeForTests(service, sessionID, workflowruntime.Outcome{
+		OK:      true,
+		Records: lateRecords,
+		Value:   workflowresult.TypedValue{JSON: json.RawMessage(`{"label":"agent-run-fake-child"}`)},
+	}); err != nil {
+		t.Fatalf("ApplyRuntimeTerminalOutcomeForTests: %v", err)
+	}
+
+	resp, err := http.Get(server.URL + "/factory-sessions/" + sessionID + "/dispatches/dispatch-1")
+	if err != nil {
+		t.Fatalf("GET dispatch: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("dispatch GET status = %d, want 200: %s", resp.StatusCode, readBody(t, resp))
+	}
+	var dispatch factoryapi.FactoryDispatch
+	if err := json.NewDecoder(resp.Body).Decode(&dispatch); err != nil {
+		t.Fatalf("decode dispatch: %v", err)
+	}
+	if dispatch.Status != factoryapi.FactoryDispatchStatusINTERRUPTED {
+		t.Fatalf("dispatch status = %q, want INTERRUPTED", dispatch.Status)
+	}
+	if dispatch.ArtifactIds != nil && len(*dispatch.ArtifactIds) != 0 {
+		t.Fatalf("artifactIds = %#v, want suppressed late child output", *dispatch.ArtifactIds)
+	}
+
+	session, err := service.GetSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if session.Progress != nil && session.Progress.CompletedDispatches != 0 {
+		t.Fatalf("completedDispatches = %d, want 0 after late result suppression", session.Progress.CompletedDispatches)
+	}
+
+	events, err := service.ReadEvents(context.Background(), sessionID, factorysessionexecution.EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
+	}
+	foundInterruptedEvent := false
+	for _, raw := range events.Events {
+		var envelope struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(raw, &envelope); err != nil {
+			t.Fatalf("unmarshal event: %v", err)
+		}
+		if envelope.Type == "DISPATCH_INTERRUPTED" {
+			foundInterruptedEvent = true
+			break
+		}
+	}
+	if !foundInterruptedEvent {
+		t.Fatal("DISPATCH_INTERRUPTED event missing after transport interrupt and late completion")
 	}
 }
 
