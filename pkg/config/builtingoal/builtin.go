@@ -74,7 +74,10 @@ func assembleBuiltInGoalFactoryJSON() ([]byte, error) {
 	if err := json.Unmarshal(factoryJSON, &root); err != nil {
 		return nil, fmt.Errorf("unmarshal factory.json: %w", err)
 	}
+	return assembleBuiltInGoalFactoryJSONFromRoot(root)
+}
 
+func assembleBuiltInGoalFactoryJSONFromRoot(root map[string]any) ([]byte, error) {
 	workstations, ok := root["workstations"].([]any)
 	if !ok {
 		return nil, fmt.Errorf("factory.json workstations must be an array")
