@@ -54,14 +54,15 @@ primary-result behavior.
 - `pkg/packagedfactories/goal/` owns packaged goal factory metadata constants and
   config-load regression coverage for the authored `invocationReturn` policy that
   selects terminal `goal:complete` work content as the primary result.
-  `summary.go` shapes terminal `review-goal` and simplified `execute-goal` work
-  content from worker output so EXPLICIT primary-result selection returns the
-  final summary instead of submitted goal input text. `primary_result_test.go`
-  covers both successful EXPLICIT selection and unresolved failure when
-  `goal:complete` is absent from terminal work in scope.
+  `summary.go` shapes terminal `execute-goal` work content from worker output so
+  EXPLICIT primary-result selection returns the final summary instead of
+  submitted goal input text; classifier `review-goal` output is a route label
+  and must preserve carried summary content. `primary_result_test.go` covers both
+  successful EXPLICIT selection and unresolved failure when `goal:complete` is
+  absent from terminal work in scope.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged goal
-  invocation summary shaping on `review-goal` and `execute-goal` workstations
-  alongside packaged TTS metadata shaping.
+  invocation summary shaping on `execute-goal` workstations alongside packaged
+  TTS metadata shaping.
 - `pkg/packagedfactories/tts/` owns packaged TTS invocation metadata shaping
   helpers used when `INFERENCE_RUN` (or legacy `MODEL_INVOKE`) work completes on the `execute-tts` workstation.
   `metadata.go` derives the `backend` metadata field from the loaded on-disk

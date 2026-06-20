@@ -9,17 +9,18 @@ import (
 
 // ShouldFormatInvocationSummary reports whether workstation output should be
 // shaped into packaged goal summary work content for terminal primary-result
-// selection.
+// selection. Only the execute workstation produces the execution summary;
+// classifier review output is a route label and must not replace carried
+// summary content on the accepted complete path.
 func ShouldFormatInvocationSummary(workstation *interfaces.FactoryWorkstationConfig) bool {
 	if workstation == nil {
 		return false
 	}
-	name := strings.TrimSpace(workstation.Name)
-	if name != PackagedReviewWorkstationName && name != PackagedExecuteWorkstationName {
+	if strings.TrimSpace(workstation.Name) != PackagedExecuteWorkstationName {
 		return false
 	}
 	switch interfaces.EffectiveWorkstationTypeForCompatibility(*workstation) {
-	case interfaces.WorkstationTypeModel, interfaces.WorkstationTypeAgent, interfaces.WorkstationTypeClassify:
+	case interfaces.WorkstationTypeModel, interfaces.WorkstationTypeAgent:
 		return true
 	default:
 		return false

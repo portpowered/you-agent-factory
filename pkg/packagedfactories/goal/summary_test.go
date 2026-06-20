@@ -26,7 +26,6 @@ func TestShouldFormatInvocationSummary_MatchesPackagedInvokeWorkstation(t *testi
 				Name: PackagedReviewWorkstationName,
 				Type: interfaces.WorkstationTypeClassify,
 			},
-			want: true,
 		},
 		{
 			name: "other workstation",
