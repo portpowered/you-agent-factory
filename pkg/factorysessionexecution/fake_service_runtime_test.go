@@ -200,39 +200,52 @@ func TestFakeService_InternalLifecycleHelpers(t *testing.T) {
 		},
 	}
 
-	if err := validateLifecycleControlRequest(LifecycleControlApprove, ControlRequest{}, ApproveRequest{}, RetryDispatchRequest{}); err != nil {
+	if err := validateLifecycleControlRequest(LifecycleControlApprove, ControlRequest{}, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{}); err != nil {
 		t.Fatalf("approve validation: %v", err)
 	}
-	if err := validateLifecycleControlRequest(LifecycleControlRetryDispatch, ControlRequest{}, ApproveRequest{}, RetryDispatchRequest{}); err == nil {
+	if err := validateLifecycleControlRequest(LifecycleControlRetryDispatch, ControlRequest{}, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{}); err == nil {
 		t.Fatal("retry without dispatch id should fail validation")
 	}
-	if err := validateLifecycleControlRequest(LifecycleControlPause, ControlRequest{}, ApproveRequest{}, RetryDispatchRequest{}); err != nil {
+	if err := validateLifecycleControlRequest(LifecycleControlInterruptDispatch, ControlRequest{}, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{}); err == nil {
+		t.Fatal("interrupt without dispatch id should fail validation")
+	}
+	if err := validateLifecycleControlRequest(LifecycleControlPause, ControlRequest{}, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{}); err != nil {
 		t.Fatalf("pause validation: %v", err)
 	}
 
-	accepted := lifecycleControlResultFromState(state, "dur-sess-1", LifecycleControlApprove, LifecycleControlOutcomeAccepted, RetryDispatchRequest{})
+	accepted := lifecycleControlResultFromState(state, "dur-sess-1", LifecycleControlApprove, LifecycleControlOutcomeAccepted, RetryDispatchRequest{}, InterruptDispatchRequest{})
 	if accepted.Session == nil || accepted.Session.Status != LifecycleStatusAwaitingApproval {
 		t.Fatalf("accepted lifecycle control result = %#v", accepted)
 	}
-	noop := lifecycleControlResultFromState(state, "dur-sess-1", LifecycleControlPause, LifecycleControlOutcomeNoOp, RetryDispatchRequest{})
+	noop := lifecycleControlResultFromState(state, "dur-sess-1", LifecycleControlPause, LifecycleControlOutcomeNoOp, RetryDispatchRequest{}, InterruptDispatchRequest{})
 	if noop.Session == nil {
 		t.Fatalf("noop lifecycle control result = %#v", noop)
 	}
-	retry := lifecycleControlResultFromState(state, "dur-sess-1", LifecycleControlRetryDispatch, LifecycleControlOutcomeAccepted, RetryDispatchRequest{DispatchID: "disp-1"})
+	retry := lifecycleControlResultFromState(state, "dur-sess-1", LifecycleControlRetryDispatch, LifecycleControlOutcomeAccepted, RetryDispatchRequest{DispatchID: "disp-1"}, InterruptDispatchRequest{})
 	if retry.DispatchID != "disp-1" || retry.RetryDispatchID != "disp-1" {
 		t.Fatalf("retry lifecycle control result = %#v", retry)
 	}
+	interrupt := lifecycleControlResultFromState(state, "dur-sess-1", LifecycleControlInterruptDispatch, LifecycleControlOutcomeAccepted, RetryDispatchRequest{}, InterruptDispatchRequest{DispatchID: "disp-1"})
+	if interrupt.DispatchID != "disp-1" {
+		t.Fatalf("interrupt lifecycle control result = %#v", interrupt)
+	}
 
 	service := &FakeService{}
-	service.mutateSessionForControl(state, LifecycleControlApprove, "")
+	service.mutateSessionForControl(state, LifecycleControlApprove, "", "")
 	if state.session.Status != LifecycleStatusRunning {
 		t.Fatalf("approve mutate status = %q, want RUNNING", state.session.Status)
 	}
 	state.session.Status = LifecycleStatusFailed
 	state.result.SessionStatus = LifecycleStatusFailed
-	service.mutateSessionForControl(state, LifecycleControlRetryDispatch, "disp-1")
+	service.mutateSessionForControl(state, LifecycleControlRetryDispatch, "disp-1", "")
 	if state.session.Status != LifecycleStatusRunning || state.dispatches[0].Status != DispatchStatusQueued || state.dispatches[0].Attempt != 2 {
 		t.Fatalf("retry mutate state = %#v / %#v", state.session, state.dispatches[0])
+	}
+	state.dispatches[0].Status = DispatchStatusRunning
+	state.dispatches[0].Attempt = 1
+	service.mutateSessionForControl(state, LifecycleControlInterruptDispatch, "", "disp-1")
+	if state.dispatches[0].Status != DispatchStatusInterrupted {
+		t.Fatalf("interrupt mutate status = %q, want INTERRUPTED", state.dispatches[0].Status)
 	}
 }
 
@@ -520,11 +533,11 @@ func TestControlIdempotencyTupleHash_IsStable(t *testing.T) {
 		ControlRequest: ControlRequest{RequestID: "req-retry-001"},
 		DispatchID:     "disp-js-success-002",
 	}
-	first, err := ControlIdempotencyTupleHash(LifecycleControlRetryDispatch, "dur-sess-js-success-002", ApproveRequest{}, retry)
+	first, err := ControlIdempotencyTupleHash(LifecycleControlRetryDispatch, "dur-sess-js-success-002", ApproveRequest{}, retry, InterruptDispatchRequest{})
 	if err != nil {
 		t.Fatalf("first hash: %v", err)
 	}
-	second, err := ControlIdempotencyTupleHash(LifecycleControlRetryDispatch, "dur-sess-js-success-002", ApproveRequest{}, retry)
+	second, err := ControlIdempotencyTupleHash(LifecycleControlRetryDispatch, "dur-sess-js-success-002", ApproveRequest{}, retry, InterruptDispatchRequest{})
 	if err != nil {
 		t.Fatalf("second hash: %v", err)
 	}
@@ -584,6 +597,9 @@ func (stubCancelAwareService) Approve(context.Context, string, ApproveRequest) (
 	return LifecycleControlResult{}, nil
 }
 func (stubCancelAwareService) RetryDispatch(context.Context, string, RetryDispatchRequest) (LifecycleControlResult, error) {
+	return LifecycleControlResult{}, nil
+}
+func (stubCancelAwareService) InterruptDispatch(context.Context, string, InterruptDispatchRequest) (LifecycleControlResult, error) {
 	return LifecycleControlResult{}, nil
 }
 func (stubCancelAwareService) GetResult(context.Context, string, ResultRequest) (ResultReadResult, error) {

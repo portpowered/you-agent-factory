@@ -195,6 +195,12 @@ func invokeLifecycleControl(
 			return factorysessionexecution.LifecycleControlResult{}, err
 		}
 		return service.RetryDispatch(ctx, sessionID, retry)
+	case factoryapi.FactorySessionLifecycleControlKindInterruptDispatch:
+		interrupt, err := normalizeInterruptDispatchInput(input)
+		if err != nil {
+			return factorysessionexecution.LifecycleControlResult{}, err
+		}
+		return service.InterruptDispatch(ctx, sessionID, interrupt)
 	default:
 		return factorysessionexecution.LifecycleControlResult{}, factorysessionexecution.NewValidationError(
 			"operation",
@@ -233,6 +239,17 @@ func normalizeRetryDispatchInput(input ControlInput) (factorysessionexecution.Re
 		DispatchID: derefString(input.DispatchID),
 	}
 	return factorysessionexecution.NormalizeRetryDispatchRequest(retry)
+}
+
+func normalizeInterruptDispatchInput(input ControlInput) (factorysessionexecution.InterruptDispatchRequest, error) {
+	interrupt := factorysessionexecution.InterruptDispatchRequest{
+		ControlRequest: factorysessionexecution.ControlRequest{
+			RequestID: derefString(input.RequestID),
+			Reason:    derefString(input.Reason),
+		},
+		DispatchID: derefString(input.DispatchID),
+	}
+	return factorysessionexecution.NormalizeInterruptDispatchRequest(interrupt)
 }
 
 func derefString(value *string) string {

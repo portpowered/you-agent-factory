@@ -1320,6 +1320,22 @@ func (fs *FactoryService) RetryDurableFactorySessionDispatch(
 	return factorysession.LifecycleControlResponseToAPI(result), nil
 }
 
+func (fs *FactoryService) InterruptDurableFactorySessionDispatch(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.FactorySessionInterruptDispatchRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	interrupt, err := factorysession.InterruptDispatchRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := fs.durableExecutionService().InterruptDispatch(ctx, sessionID, interrupt)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
+}
+
 func (fs *FactoryService) PauseLiveFactorySession(
 	ctx context.Context,
 	sessionID string,
@@ -1533,3 +1549,4 @@ func (fs *FactoryService) emitLiveLifecycleControlMetric(
 		Reason:  string(operation),
 	})
 }
+

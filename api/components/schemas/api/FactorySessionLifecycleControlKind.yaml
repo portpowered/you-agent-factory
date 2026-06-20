@@ -7,6 +7,7 @@ enum:
   - CANCEL
   - TERMINATE
   - RETRY_DISPATCH
+  - INTERRUPT_DISPATCH
 x-enum-varnames:
   - FactorySessionLifecycleControlKindApprove
   - FactorySessionLifecycleControlKindPause
@@ -14,6 +15,7 @@ x-enum-varnames:
   - FactorySessionLifecycleControlKindCancel
   - FactorySessionLifecycleControlKindTerminate
   - FactorySessionLifecycleControlKindRetryDispatch
+  - FactorySessionLifecycleControlKindInterruptDispatch
 x-enum-descriptions:
   - Approve requested orchestrator policy so execution can proceed.
   - Pause active durable session scheduling while preserving inspectable state.
@@ -21,3 +23,4 @@ x-enum-descriptions:
   - Request graceful cancellation while preserving partial results and artifacts.
   - Forcefully terminate a durable session while preserving inspectable state.
   - Retry one failed or interrupted dispatch within the targeted session.
+  - Interrupt one active dispatch within the targeted session.

@@ -168,9 +168,10 @@ const (
 	DispatchStatusRunning   DispatchStatus = "RUNNING"
 	DispatchStatusCompleted DispatchStatus = "COMPLETED"
 	DispatchStatusFailed    DispatchStatus = "FAILED"
-	DispatchStatusCanceled  DispatchStatus = "CANCELED"
-	DispatchStatusTimedOut  DispatchStatus = "TIMED_OUT"
-	DispatchStatusSkipped   DispatchStatus = "SKIPPED"
+	DispatchStatusCanceled     DispatchStatus = "CANCELED"
+	DispatchStatusTimedOut     DispatchStatus = "TIMED_OUT"
+	DispatchStatusSkipped      DispatchStatus = "SKIPPED"
+	DispatchStatusInterrupted  DispatchStatus = "INTERRUPTED"
 )
 
 // DispatchUsage summarizes one dispatch execution.

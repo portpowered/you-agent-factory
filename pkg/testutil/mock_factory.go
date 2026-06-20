@@ -227,6 +227,26 @@ func (m *MockFactory) RetryDurableFactorySessionDispatch(
 	return factorysession.LifecycleControlResponseToAPI(result), nil
 }
 
+func (m *MockFactory) InterruptDurableFactorySessionDispatch(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.FactorySessionInterruptDispatchRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	interrupt, err := factorysession.InterruptDispatchRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := service.InterruptDispatch(ctx, sessionID, interrupt)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
+}
+
 func (m *MockFactory) ListDurableFactorySessions(
 	ctx context.Context,
 	params factoryapi.ListFactorySessionsParams,

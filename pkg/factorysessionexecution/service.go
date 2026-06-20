@@ -24,6 +24,7 @@ type Service interface {
 	Terminate(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error)
 	Approve(ctx context.Context, sessionID string, req ApproveRequest) (LifecycleControlResult, error)
 	RetryDispatch(ctx context.Context, sessionID string, req RetryDispatchRequest) (LifecycleControlResult, error)
+	InterruptDispatch(ctx context.Context, sessionID string, req InterruptDispatchRequest) (LifecycleControlResult, error)
 	GetResult(ctx context.Context, sessionID string, req ResultRequest) (ResultReadResult, error)
 	ListDispatches(ctx context.Context, sessionID string) (ListDispatchesResult, error)
 	GetDispatch(ctx context.Context, sessionID, dispatchID string) (DispatchDetail, error)

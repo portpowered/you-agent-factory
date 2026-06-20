@@ -57,6 +57,41 @@ func AllowsRetryDispatchOnTerminal(status LifecycleStatus) bool {
 	return status == LifecycleStatusFailed
 }
 
+// AllowsInterruptDispatchOnSession reports whether interrupt-dispatch remains
+// permitted while the session is actively running goal work.
+func AllowsInterruptDispatchOnSession(status LifecycleStatus) bool {
+	switch status {
+	case LifecycleStatusRunning, LifecycleStatusPaused, LifecycleStatusResuming:
+		return true
+	default:
+		return false
+	}
+}
+
+// EvaluateInterruptDispatchControl classifies one interrupt-dispatch request
+// against the current durable session and dispatch status.
+func EvaluateInterruptDispatchControl(sessionStatus LifecycleStatus, dispatchStatus DispatchStatus) LifecycleControlOutcome {
+	if sessionStatus == "" {
+		return LifecycleControlOutcomeInvalidState
+	}
+	if IsTerminalLifecycleStatus(sessionStatus) {
+		return LifecycleControlOutcomeTerminalSession
+	}
+	if !AllowsInterruptDispatchOnSession(sessionStatus) {
+		return LifecycleControlOutcomeInvalidState
+	}
+	switch dispatchStatus {
+	case DispatchStatusQueued, DispatchStatusRunning:
+		return LifecycleControlOutcomeAccepted
+	case DispatchStatusInterrupted:
+		return LifecycleControlOutcomeNoOp
+	case DispatchStatusCompleted, DispatchStatusFailed, DispatchStatusCanceled, DispatchStatusTimedOut, DispatchStatusSkipped:
+		return LifecycleControlOutcomeInvalidState
+	default:
+		return LifecycleControlOutcomeInvalidState
+	}
+}
+
 // EvaluateLifecycleControl classifies one lifecycle control request against the
 // current durable session status without runtime-specific dispatch context.
 //
@@ -174,7 +209,8 @@ const (
 	LifecycleControlCancel        LifecycleControlKind = "CANCEL"
 	LifecycleControlTerminate     LifecycleControlKind = "TERMINATE"
 	LifecycleControlApprove       LifecycleControlKind = "APPROVE"
-	LifecycleControlRetryDispatch LifecycleControlKind = "RETRY_DISPATCH"
+	LifecycleControlRetryDispatch    LifecycleControlKind = "RETRY_DISPATCH"
+	LifecycleControlInterruptDispatch LifecycleControlKind = "INTERRUPT_DISPATCH"
 )
 
 // LifecycleControlOutcome reports how one lifecycle control request was evaluated.
@@ -207,6 +243,12 @@ type RetryDispatchRequest struct {
 	DispatchID        string
 	ForceNewAttempt   bool
 	ResetAttemptCount bool
+}
+
+// InterruptDispatchRequest interrupts one active durable session dispatch.
+type InterruptDispatchRequest struct {
+	ControlRequest
+	DispatchID string
 }
 
 // PhaseSummary summarizes dispatch progress for one workflow phase.

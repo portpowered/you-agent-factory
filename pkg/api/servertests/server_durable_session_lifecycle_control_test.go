@@ -790,6 +790,198 @@ func postFactorySessionRetryDispatchRaw(
 	}
 	return resp, nil
 }
+func TestInterruptFactorySessionDispatch_FixtureBackedRunningSessionReturnsTypedLifecycleControl(t *testing.T) {
+	service := newAPILifecycleFakeService(t)
+	row := startAPIRunningSessionForControl(t, service)
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	response, status := postFactorySessionInterruptDispatch(t, server.URL, row.SessionID, factoryapi.FactorySessionInterruptDispatchRequest{
+		DispatchId: "disp-js-002",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindInterruptDispatch {
+		t.Fatalf("operation = %q, want INTERRUPT_DISPATCH", response.Operation)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	if response.DispatchId == nil || *response.DispatchId != "disp-js-002" {
+		t.Fatalf("dispatchId = %#v, want disp-js-002", response.DispatchId)
+	}
+
+	dispatch, err := service.GetDispatch(context.Background(), row.SessionID, "disp-js-002")
+	if err != nil {
+		t.Fatalf("GetDispatch after interrupt: %v", err)
+	}
+	if dispatch.Status != factorysessionexecution.DispatchStatusInterrupted {
+		t.Fatalf("dispatch status = %q, want INTERRUPTED", dispatch.Status)
+	}
+}
+
+func TestInterruptFactorySessionDispatch_AlreadyInterruptedReturnsNoOp(t *testing.T) {
+	service := newAPILifecycleFakeService(t)
+	row := startAPIRunningSessionForControl(t, service)
+	serverURL := serverURLForLifecycle(t, service)
+
+	first, status := postFactorySessionInterruptDispatch(t, serverURL, row.SessionID, factoryapi.FactorySessionInterruptDispatchRequest{
+		DispatchId: "disp-js-002",
+	})
+	if status != http.StatusOK || first.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("first interrupt = status %d outcome %q", status, first.Outcome)
+	}
+
+	second, status := postFactorySessionInterruptDispatch(t, serverURL, row.SessionID, factoryapi.FactorySessionInterruptDispatchRequest{
+		DispatchId: "disp-js-002",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if second.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeNoOp {
+		t.Fatalf("outcome = %q, want NO_OP", second.Outcome)
+	}
+}
+
+func TestInterruptFactorySessionDispatch_CompletedDispatchReturnsTypedConflict(t *testing.T) {
+	service := newAPILifecycleFakeService(t)
+	row := startAPIRunningSessionForControl(t, service)
+	serverURL := serverURLForLifecycle(t, service)
+
+	response, status := postFactorySessionInterruptDispatch(t, serverURL, row.SessionID, factoryapi.FactorySessionInterruptDispatchRequest{
+		DispatchId: "disp-js-001",
+	})
+	if status != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", status)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeInvalidState {
+		t.Fatalf("outcome = %q, want INVALID_STATE", response.Outcome)
+	}
+}
+
+func TestInterruptFactorySessionDispatch_MissingDispatchReturnsNotFound(t *testing.T) {
+	service := newAPILifecycleFakeService(t)
+	startAPIRunningSessionForControl(t, service)
+	serverURL := serverURLForLifecycle(t, service)
+
+	status, errResp := postFactorySessionInterruptDispatchExpectError(
+		t,
+		serverURL,
+		"dur-sess-js-run-n-001",
+		factoryapi.FactorySessionInterruptDispatchRequest{DispatchId: "disp-missing-001"},
+	)
+	if status != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", status)
+	}
+	if errResp.Code != factoryapi.NOTFOUND {
+		t.Fatalf("code = %q, want NOT_FOUND", errResp.Code)
+	}
+}
+
+func TestInterruptFactorySessionDispatch_MissingDispatchIDReturnsBadRequest(t *testing.T) {
+	service := newAPILifecycleFakeService(t)
+	startAPIRunningSessionForControl(t, service)
+	serverURL := serverURLForLifecycle(t, service)
+
+	status, errResp := postFactorySessionInterruptDispatchExpectError(
+		t,
+		serverURL,
+		"dur-sess-js-run-n-001",
+		factoryapi.FactorySessionInterruptDispatchRequest{},
+	)
+	if status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", status)
+	}
+	if errResp.Code != factoryapi.BADREQUEST {
+		t.Fatalf("code = %q, want BAD_REQUEST", errResp.Code)
+	}
+}
+
+func TestInterruptFactorySessionDispatch_NonDurableSessionPreservesLiveStub(t *testing.T) {
+	service := newAPILifecycleFakeService(t)
+	serverURL := serverURLForLifecycle(t, service)
+
+	status, errResp := postFactorySessionInterruptDispatchExpectError(
+		t,
+		serverURL,
+		"live-session-001",
+		factoryapi.FactorySessionInterruptDispatchRequest{DispatchId: "disp-live-001"},
+	)
+	if status != http.StatusNotImplemented {
+		t.Fatalf("status = %d, want 501", status)
+	}
+	if errResp.Code != factoryapi.INTERNALERROR {
+		t.Fatalf("code = %q, want INTERNAL_ERROR", errResp.Code)
+	}
+}
+
+func postFactorySessionInterruptDispatch(
+	t *testing.T,
+	serverURL, sessionID string,
+	request factoryapi.FactorySessionInterruptDispatchRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, int) {
+	t.Helper()
+	resp, err := postFactorySessionInterruptDispatchRaw(t, serverURL, sessionID, request)
+	if err != nil {
+		t.Fatalf("POST /factory-sessions/%s/interrupt-dispatch: %v", sessionID, err)
+	}
+	defer resp.Body.Close()
+	var response factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		t.Fatalf("decode interrupt-dispatch response: %v", err)
+	}
+	return response, resp.StatusCode
+}
+
+func postFactorySessionInterruptDispatchExpectError(
+	t *testing.T,
+	serverURL, sessionID string,
+	request factoryapi.FactorySessionInterruptDispatchRequest,
+) (int, factoryapi.ErrorResponse) {
+	t.Helper()
+	encoded, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	url := serverURL + "/factory-sessions/" + sessionID + "/interrupt-dispatch"
+	resp, err := http.Post(url, "application/json", bytes.NewReader(encoded))
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+	var errResp factoryapi.ErrorResponse
+	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	return resp.StatusCode, errResp
+}
+
+func postFactorySessionInterruptDispatchRaw(
+	t *testing.T,
+	serverURL, sessionID string,
+	request factoryapi.FactorySessionInterruptDispatchRequest,
+) (*http.Response, error) {
+	t.Helper()
+	encoded, err := json.Marshal(request)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	url := serverURL + "/factory-sessions/" + sessionID + "/interrupt-dispatch"
+	resp, err := http.Post(url, "application/json", bytes.NewReader(encoded))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 500 {
+		var errResp factoryapi.ErrorResponse
+		_ = json.NewDecoder(resp.Body).Decode(&errResp)
+		return nil, errors.New(errResp.Message)
+	}
+	return resp, nil
+}
+
 func TestRealBackendFactorySessionRoutes_LifecycleControlsAreImplemented(t *testing.T) {
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "busy-loop.workflow.js", "busy-loop")
 	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
