@@ -28,6 +28,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -2322,5 +2323,45 @@ func TestFactoryService_SessionResponseStreamOwnedByLiveSessionRuntime(t *testin
 	}
 	if svc.sessionResponseStream(nil) != nil {
 		t.Fatal("nil session stream = non-nil, want nil")
+	}
+}
+
+func TestFactoryService_InferenceProgressPublisherPublishesOrderedInternalEvents(t *testing.T) {
+	sessions := factorysessions.NewRegistry()
+	sessionID := "session-progress-publish"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{},
+		false,
+		"factory",
+	), true)
+
+	factory := newInferenceProgressPublisherFactory(sessions, nil)
+	publisher := factory(sessionID)
+	if publisher == nil {
+		t.Fatal("publisher = nil, want session publisher")
+	}
+
+	publisher(workerprovider.ProgressFragment("dispatch-1", nil, "phase=planning"))
+	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "partial-response"))
+
+	session := sessions.Get(sessionID)
+	stream := sessionResponseStreamForLiveSession(session)
+	if stream == nil {
+		t.Fatal("session stream = nil, want live session stream")
+	}
+	events := stream.Events()
+	if len(events) != 2 || events[0].Sequence != 1 || events[1].Sequence != 2 {
+		t.Fatalf("stream events = %#v, want ascending internal sequences", events)
+	}
+
+	var factoryEventType factoryapi.FactoryEventType
+	_ = factoryEventType
+	if string(events[0].Kind) == string(factoryapi.FactoryEventTypeInferenceResponse) {
+		t.Fatal("internal stream event must not alias canonical inference response events")
 	}
 }

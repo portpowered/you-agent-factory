@@ -391,7 +391,7 @@ func loadRuntimeBundleWorkerOptions(
 		logging.NewZapLogger(logger, input.cfg.Verbose),
 		input.cfg.SkipBuiltInRunnerPrerequisiteValidation,
 		input.providerOverride,
-		input.providerCommandRunner,
+		wrapProviderCommandRunnerForProgress(input, input.providerCommandRunner),
 		input.commandRunnerOverride,
 		eventHistory.RecordScriptEvent,
 		eventHistory.RecordInferenceEvent,
@@ -1258,6 +1258,7 @@ func newRuntimeBuildService(
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	startupLocalModels *localModelDomain,
+	progressPublisherFactory inferenceProgressPublisherFactory,
 ) *runtimebuild.Service {
 	buildCfg := runtimeBuildConfigFromService(cfg)
 	return runtimebuild.New(
@@ -1281,12 +1282,36 @@ func newRuntimeBuildService(
 				commandRunnerOverride: input.CommandRunnerOverride,
 				additionalFactoryOpts: input.AdditionalFactoryOpts,
 			}
+			if progressPublisherFactory != nil {
+				bundleInput.inferenceProgressPublisher = progressPublisherFactory(bundleInput.sessionID)
+				bundleInput.inferenceProgressPublisherSet = true
+			}
 			if startupLocalModels != nil && startupLocalModels.manager != nil {
 				bundleInput.prefetchedLocalModels = *startupLocalModels
 				*startupLocalModels = localModelDomain{}
 			}
 			return buildRuntimeBundle(ctx, bundleInput)
 		},
+	)
+}
+
+func wrapProviderCommandRunnerForProgress(
+	input runtimeBundleBuildInput,
+	runner workers.CommandRunner,
+) workers.CommandRunner {
+	if !input.inferenceProgressPublisherSet || input.inferenceProgressPublisher == nil {
+		return runner
+	}
+	if runner != nil {
+		return runner
+	}
+	var logger logging.Logger = logging.NoopLogger{}
+	if input.baseLogger != nil {
+		logger = logging.NewZapLogger(input.baseLogger, input.cfg != nil && input.cfg.Verbose)
+	}
+	return workerprovider.NewInferenceProgressPublishingCommandRunner(
+		input.inferenceProgressPublisher,
+		logger,
 	)
 }
 

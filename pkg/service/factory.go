@@ -29,6 +29,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 
 	"go.uber.org/zap"
 )
@@ -134,8 +135,10 @@ type runtimeBundleBuildInput struct {
 	providerOverride      workers.Provider
 	providerCommandRunner workers.CommandRunner
 	commandRunnerOverride workers.CommandRunner
-	additionalFactoryOpts []factory.FactoryOption
-	prefetchedLocalModels localModelDomain
+	additionalFactoryOpts         []factory.FactoryOption
+	prefetchedLocalModels         localModelDomain
+	inferenceProgressPublisher    workerprovider.InferenceProgressPublisher
+	inferenceProgressPublisherSet bool
 }
 
 type liveSessionState struct {
