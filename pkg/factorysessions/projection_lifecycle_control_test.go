@@ -30,8 +30,29 @@ func TestProjectRuntime_LifecycleControlStatusReflectsCanonicalProjection(t *tes
 	if *runtime.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusPaused {
 		t.Fatalf("lifecycleControlStatus = %q, want PAUSED", *runtime.LifecycleControlStatus)
 	}
-	if runtime.Progress.FactoryState != string(factoryapi.FactorySessionDurableLifecycleStatusPaused) {
-		t.Fatalf("progress.factoryState = %q, want PAUSED", runtime.Progress.FactoryState)
+	if runtime.Progress.FactoryState != "RUNNING" {
+		t.Fatalf("progress.factoryState = %q, want raw engine snapshot RUNNING", runtime.Progress.FactoryState)
+	}
+}
+
+func TestProjectRuntime_UntouchedIdleSessionPreservesRawFactoryState(t *testing.T) {
+	now := time.Date(2026, 6, 20, 15, 10, 0, 0, time.UTC)
+	runtime := ProjectRuntime(ProjectionContext{
+		Session: &LiveSession{ID: "~default", IsDefault: true},
+		FactoryCfg: &interfaces.FactoryConfig{
+			Name: "legacy-petri",
+		},
+		Snapshot: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			RuntimeStatus: interfaces.RuntimeStatusIdle,
+			FactoryState:  "IDLE",
+		},
+		Now: now,
+	})
+	if runtime.LifecycleControlStatus != nil {
+		t.Fatalf("lifecycleControlStatus = %#v, want unset for untouched idle session", runtime.LifecycleControlStatus)
+	}
+	if runtime.Progress.FactoryState != "IDLE" {
+		t.Fatalf("progress.factoryState = %q, want raw engine snapshot IDLE", runtime.Progress.FactoryState)
 	}
 }
 

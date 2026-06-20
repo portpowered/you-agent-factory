@@ -22,7 +22,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -673,11 +672,11 @@ func (f *factoryImpl) currentWorldState(tick int) *interfaces.FactoryWorldState 
 }
 
 func lifecycleControlStatusFromWorldState(worldState *interfaces.FactoryWorldState, factoryState string) string {
-	bracketStatus := ""
+	_ = factoryState
 	if worldState != nil && worldState.SessionBracket != nil {
-		bracketStatus = worldState.SessionBracket.LifecycleControlStatus
+		return strings.TrimSpace(worldState.SessionBracket.LifecycleControlStatus)
 	}
-	return string(factorysessionexecution.ProjectedLifecycleControlStatus(bracketStatus, factoryState))
+	return ""
 }
 
 // schedulerAdapter adapts factory.TransitionScheduler to scheduler.Scheduler.

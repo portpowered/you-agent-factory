@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"sort"
+	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
@@ -202,10 +203,6 @@ func tokenToResponse(t *interfaces.Token, includeHistory bool) factoryapi.TokenR
 
 func statusFromEngineStateSnapshot(snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) factoryapi.StatusResponse {
 	categories, resources := categorizeStatusTokens(&snapshot.Marking, snapshot.Topology)
-	projectedLifecycle := factorysessionexecution.ProjectedLifecycleControlStatus(
-		snapshot.LifecycleControlStatus,
-		snapshot.FactoryState,
-	)
 	response := factoryapi.StatusResponse{
 		Categories:    categories,
 		FactoryState:  snapshot.FactoryState,
@@ -213,8 +210,8 @@ func statusFromEngineStateSnapshot(snapshot interfaces.EngineStateSnapshot[petri
 		RuntimeStatus: string(snapshot.RuntimeStatus),
 		TotalTokens:   countPublicStatusTokens(&snapshot.Marking),
 	}
-	if projectedLifecycle != "" {
-		status := factoryapi.FactorySessionDurableLifecycleStatus(projectedLifecycle)
+	if lifecycleControlStatus := strings.TrimSpace(snapshot.LifecycleControlStatus); lifecycleControlStatus != "" {
+		status := factoryapi.FactorySessionDurableLifecycleStatus(lifecycleControlStatus)
 		response.LifecycleControlStatus = &status
 	}
 	return response

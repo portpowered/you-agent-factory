@@ -49,8 +49,31 @@ func TestFactoryService_GetFactorySession_ReflectsPausedLifecycleControlStatus(t
 	if *session.Runtime.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusPaused {
 		t.Fatalf("lifecycleControlStatus = %q, want PAUSED", *session.Runtime.LifecycleControlStatus)
 	}
-	if session.Runtime.Progress.FactoryState != string(factoryapi.FactorySessionDurableLifecycleStatusPaused) {
-		t.Fatalf("progress.factoryState = %q, want PAUSED", session.Runtime.Progress.FactoryState)
+	if session.Runtime.Progress.FactoryState != string(interfaces.FactoryStatePaused) {
+		t.Fatalf("progress.factoryState = %q, want raw engine snapshot PAUSED", session.Runtime.Progress.FactoryState)
+	}
+}
+
+func TestFactoryService_GetFactorySession_UntouchedSessionPreservesRawFactoryState(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	snapshot, err := harness.svc.GetEngineStateSnapshotForSession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshotForSession: %v", err)
+	}
+
+	session, err := harness.svc.GetFactorySession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetFactorySession: %v", err)
+	}
+	if session.Runtime.LifecycleControlStatus != nil {
+		t.Fatalf("lifecycleControlStatus = %#v, want unset before canonical pause/resume events", session.Runtime.LifecycleControlStatus)
+	}
+	if session.Runtime.Progress.FactoryState != snapshot.FactoryState {
+		t.Fatalf("progress.factoryState = %q, want raw engine snapshot %q", session.Runtime.Progress.FactoryState, snapshot.FactoryState)
 	}
 }
 

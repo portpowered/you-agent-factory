@@ -13,7 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
@@ -149,18 +148,10 @@ func projectedSessionLifecycleControlStatus(ctx ProjectionContext) string {
 }
 
 func projectedSessionFactoryState(ctx ProjectionContext) string {
-	factoryState := "UNKNOWN"
-	if ctx.Snapshot != nil {
-		factoryState = ctx.Snapshot.FactoryState
+	if ctx.Snapshot == nil {
+		return "UNKNOWN"
 	}
-	projected := factorysessionexecution.ProjectedLifecycleControlStatus(
-		projectedSessionLifecycleControlStatus(ctx),
-		factoryState,
-	)
-	if projected == "" {
-		return factoryState
-	}
-	return string(projected)
+	return ctx.Snapshot.FactoryState
 }
 
 func projectedSessionProgress(ctx ProjectionContext) factoryapi.FactorySessionProgress {
