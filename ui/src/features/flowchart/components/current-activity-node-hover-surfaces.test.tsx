@@ -223,3 +223,77 @@ describe("CurrentActivity node hover surfaces", () => {
     ).toBe("Draft");
   });
 });
+
+describe("Active workstation work item rows", () => {
+  it("uses compact spacing on active workstation work item rows", () => {
+    const activeWorkstation = renderWorkstationNode({
+      active: true,
+      executions: [
+        {
+          dispatch_id: "dispatch-1",
+          started_at: "2026-06-09T00:00:00Z",
+          work_items: [
+            {
+              display_name: "Story Alpha",
+              work_id: "work-1",
+              work_type: "story",
+            },
+          ],
+        },
+        {
+          dispatch_id: "dispatch-2",
+          started_at: "2026-06-09T00:00:00Z",
+          work_items: [
+            {
+              display_name: "Story Beta",
+              work_id: "work-2",
+              work_type: "story",
+            },
+          ],
+        },
+        {
+          dispatch_id: "dispatch-3",
+          started_at: "2026-06-09T00:00:00Z",
+          work_items: [
+            {
+              display_name: "Story Gamma",
+              work_id: "work-3",
+              work_type: "story",
+            },
+          ],
+        },
+      ],
+      onSelectWorkID: vi.fn(),
+      selectedWorkID: "work-2",
+    });
+
+    const workItemButtons = [
+      activeWorkstation.getByRole("button", { name: /Story Alpha/ }),
+      activeWorkstation.getByRole("button", { name: /Story Beta/ }),
+      activeWorkstation.getByRole("button", { name: /Story Gamma/ }),
+    ];
+
+    workItemButtons.forEach((button) => {
+      expect(button.className).toContain("gap-1");
+      expect(button.className).toContain("px-1.5");
+      expect(button.className).toContain("py-1");
+      expect(button.className).toContain("grid-cols-[minmax(0,1fr)_auto]");
+      expect(button.className).toContain("overflow-hidden");
+      expect(button.className).toContain("min-w-0");
+      expect(
+        button.querySelector("[data-active-work-label]")?.className,
+      ).toContain("truncate");
+      expect(
+        button.querySelector("[data-active-work-duration]")?.className,
+      ).toContain("shrink-0");
+    });
+
+    const selectedWorkButton = activeWorkstation.getByRole("button", {
+      name: /Story Beta/,
+      pressed: true,
+    });
+    expect(selectedWorkButton.className).toContain("border-info-border");
+    expect(selectedWorkButton.className).toContain("bg-info-container");
+    expect(selectedWorkButton.className).toContain("shadow-af-info-chip");
+  });
+});

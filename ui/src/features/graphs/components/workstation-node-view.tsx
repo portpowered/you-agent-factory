@@ -348,7 +348,7 @@ function ActiveWorkstationNodeContent({
             </>
           );
           const workItemClassName = cn(
-            "grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-hidden rounded-lg border border-outline bg-surface px-2 py-1.5 text-[0.74rem]",
+            "grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-1 overflow-hidden rounded-lg border border-outline bg-surface px-1.5 py-1 text-[0.74rem]",
             workItemSelected &&
               "border-info-border bg-info-container shadow-af-info-chip",
           );
