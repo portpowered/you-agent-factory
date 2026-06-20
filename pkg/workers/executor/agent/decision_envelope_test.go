@@ -4,11 +4,16 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
+	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	executorpkg "github.com/portpowered/infinite-you/pkg/workers/executor"
+	"github.com/portpowered/infinite-you/pkg/workers/prompting"
 )
 
 func reviewAgentRequest(dispatchID string, content string) (interfaces.WorkstationExecutionRequest, *agentMockProvider) {
@@ -54,8 +59,102 @@ func TestAgentExecutor_ReviewWorkstation_ParsesDecisionEnvelopeAccepted(t *testi
 	if result.Feedback != "All criteria pass." {
 		t.Fatalf("Feedback = %q, want reviewer feedback", result.Feedback)
 	}
-	if result.Output != raw {
-		t.Fatalf("Output = %q, want raw envelope JSON", result.Output)
+	if result.Output != "" {
+		t.Fatalf("Output = %q, want empty when envelope omits output", result.Output)
+	}
+}
+
+func TestAgentExecutor_ReviewWorkstation_ParsesDecisionEnvelopeExplicitOutput(t *testing.T) {
+	raw := `{"decision":"ACCEPTED","feedback":"All criteria pass.","output":"Ship-ready summary."}`
+	request, provider := reviewAgentRequest("d-review-explicit-output", raw)
+	executor := reviewAgentExecutor(provider)
+
+	result, err := executor.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Output != "Ship-ready summary." {
+		t.Fatalf("Output = %q, want explicit envelope output text", result.Output)
+	}
+}
+
+func TestAgentExecutor_ReviewWorkstation_OmittedOutputDoesNotLeakIntoRetryPromptState(t *testing.T) {
+	raw := `{"decision":"REJECTED","feedback":"Add tests."}`
+	request, provider := reviewAgentRequest("d-review-retry-prompt", raw)
+	executor := reviewAgentExecutor(provider)
+
+	result, err := executor.Execute(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Output != "" {
+		t.Fatalf("Output = %q, want empty when envelope omits output", result.Output)
+	}
+
+	const priorDraft = "user-authored draft content"
+	now := time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC)
+	transformer := token_transformer.New(
+		map[string]*petri.Place{
+			"task:init": {ID: "task:init", TypeID: "task", State: "init"},
+		},
+		map[string]*state.WorkType{
+			"task": {
+				ID: "task",
+				States: []state.StateDefinition{
+					{Value: "init", Category: state.StateCategoryInitial},
+				},
+			},
+		},
+	)
+	consumed := interfaces.Token{
+		ID: "work-task-1",
+		Color: interfaces.TokenColor{
+			WorkID:     "work-task-1",
+			WorkTypeID: "task",
+			Payload:    []byte(priorDraft),
+			Tags: map[string]string{
+				"_last_output": priorDraft,
+			},
+		},
+	}
+	outputToken, err := transformer.OutputToken(token_transformer.OutputTokenInput{
+		ArcIndex: 0,
+		Arcs: []petri.Arc{
+			{PlaceID: "task:init", Direction: petri.ArcOutput},
+		},
+		ConsumedTokens: []interfaces.Token{consumed},
+		InputColors:    []interfaces.TokenColor{consumed.Color},
+		Output:         result.Output,
+		Outcome:        result.Outcome,
+		Feedback:       result.Feedback,
+		Now:            now,
+		History:        interfaces.TokenHistory{TotalVisits: map[string]int{"review": 1}},
+	})
+	if err != nil {
+		t.Fatalf("OutputToken: %v", err)
+	}
+	payload := string(outputToken.Color.Payload)
+	if payload != priorDraft {
+		t.Fatalf("downstream payload = %q, want preserved draft %q", payload, priorDraft)
+	}
+	if strings.Contains(payload, `"decision"`) {
+		t.Fatalf("downstream payload leaked decision envelope JSON: %q", payload)
+	}
+
+	renderer := &prompting.DefaultPromptRenderer{}
+	rendered, err := renderer.Render(
+		`Previous output: {{ (index .Inputs 0).PreviousOutput }}`,
+		[]interfaces.Token{*outputToken},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if strings.Contains(rendered, `"decision"`) {
+		t.Fatalf("PreviousOutput leaked decision envelope JSON: %q", rendered)
+	}
+	if !strings.Contains(rendered, priorDraft) {
+		t.Fatalf("PreviousOutput = %q, want preserved draft content", rendered)
 	}
 }
 

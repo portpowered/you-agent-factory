@@ -19,9 +19,6 @@ func decisionEnvelopeWorkResult(
 		request.Dispatch.TransitionID,
 		resp.Content,
 	)
-	if result.Output == "" {
-		result.Output = resp.Content
-	}
 	result.ProviderSession = interfaces.CloneProviderSessionMetadata(resp.ProviderSession)
 	result.Diagnostics = diagnostics
 	result.Metrics = agentWorkMetrics(start, retryCount)
