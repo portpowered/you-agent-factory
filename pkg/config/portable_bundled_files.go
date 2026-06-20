@@ -1,8 +1,8 @@
 package config
 
 import (
-	"errors"
 	"bytes"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -813,6 +813,7 @@ func resolvePortableBundledLinkTarget(path, linkTarget string) (string, bool, er
 	}
 	return resolvedPath, true, nil
 }
+
 // ReadCurrentFactoryPointer returns the current named factory selected for the
 // root directory's named-factory layout.
 func ReadCurrentFactoryPointer(rootDir string) (string, error) {
@@ -877,6 +878,14 @@ func ResolveNamedFactoryDir(rootDir, name string) (string, error) {
 	factoryDir := filepath.Join(rootDir, segment)
 	if err := requireFactoryConfig(factoryDir); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			if info, statErr := os.Stat(factoryDir); statErr == nil && info.IsDir() {
+				return "", fmt.Errorf(
+					"resolve named factory %q in root %s: existing target could not be loaded: %w",
+					canonicalName,
+					rootDir,
+					err,
+				)
+			}
 			return "", fmt.Errorf(
 				"resolve named factory %q in root %s: %w",
 				canonicalName,

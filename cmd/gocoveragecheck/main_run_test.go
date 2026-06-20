@@ -11,23 +11,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
-func emptyPackageCoverageBaselinePath(t *testing.T) string {
-	t.Helper()
-	repoRoot, err := repoRootDir()
-	if err != nil {
-		t.Fatalf("repoRootDir: %v", err)
-	}
-	path := filepath.Join(t.TempDir(), "empty-package-baseline.txt")
-	if err := os.WriteFile(path, nil, 0o600); err != nil {
-		t.Fatalf("write empty package baseline: %v", err)
-	}
-	rel, err := filepath.Rel(repoRoot, path)
-	if err != nil {
-		t.Fatalf("resolve package baseline path relative to repo root: %v", err)
-	}
-	return rel
-}
-
 func TestExecuteReportsPassingCoverage(t *testing.T) {
 	originalExecCommand := execCommand
 	originalStdout := stdoutWriter
@@ -145,14 +128,14 @@ func TestExecuteFailsWhenCoverageBelowMinimumAndZeroCoveragePackage(t *testing.T
 	stderrWriter = &stderr
 
 	err := execute(config{
-		min: 100.1,
+		min:             100.1,
+		packageBaseline: emptyPackageCoverageBaselinePath(t),
 		coverpkg: strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
 			modulePath + "/pkg/generatedclient",
 		}, ","),
-		packages:        "./pkg/config",
-		packageBaseline: emptyPackageCoverageBaselinePath(t),
+		packages: "./pkg/config",
 	})
 	if err == nil {
 		t.Fatal("execute() unexpectedly succeeded")
@@ -200,14 +183,14 @@ func TestExecuteFailsWhenZeroCoveragePackageOnly(t *testing.T) {
 	stderrWriter = &stderr
 
 	err := execute(config{
-		min: 80,
+		min:             80,
+		packageBaseline: emptyPackageCoverageBaselinePath(t),
 		coverpkg: strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
 			modulePath + "/pkg/generatedclient",
 		}, ","),
-		packages:        "./pkg/config",
-		packageBaseline: emptyPackageCoverageBaselinePath(t),
+		packages: "./pkg/config",
 	})
 	if err == nil {
 		t.Fatal("execute() unexpectedly succeeded")

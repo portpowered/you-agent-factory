@@ -30,6 +30,7 @@ github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime
 github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source
 github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store
 github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation
+github.com/portpowered/infinite-you/pkg/packagedfactories/goal
 github.com/portpowered/infinite-you/pkg/packagedfactories/tts
 github.com/portpowered/infinite-you/pkg/replay
 github.com/portpowered/infinite-you/pkg/service
