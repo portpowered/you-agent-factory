@@ -17,4 +17,13 @@ const (
 	PackagedReviewWorkstationName = "review-goal"
 	// PackagedLoopBreakerWorkstationName is the guarded loop breaker for review retries.
 	PackagedLoopBreakerWorkstationName = "goal-loop-breaker"
+	// PackagedInvokeWorkstationName aliases the execute workstation for simplified
+	// invocation-primary-result scaffolds and legacy references.
+	PackagedInvokeWorkstationName = PackagedExecuteWorkstationName
+	// PackagedInvocationReturnWorkTypeName is the work type selected by the goal
+	// factory invocationReturn policy.
+	PackagedInvocationReturnWorkTypeName = PackagedGoalWorkTypeName
+	// PackagedInvocationReturnTerminalState is the terminal state selected by the
+	// goal factory invocationReturn policy.
+	PackagedInvocationReturnTerminalState = "complete"
 )

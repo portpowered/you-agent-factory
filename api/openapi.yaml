@@ -7314,6 +7314,9 @@ components:
         limits:
           $ref: '#/components/schemas/WorkstationLimits'
           description: Retry and execution ceilings applied to this workstation.
+        workPropagation:
+          $ref: '#/components/schemas/WorkPropagation'
+          description: Optional policy for whether downstream work uses the workstation output payload or preserves the consumed input payload.
         body:
           type: string
           description: Inline workstation instructions or script body when authored directly in factory config.
@@ -7472,6 +7475,28 @@ components:
         expiryWindow:
           type: string
           description: Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted.
+    WorkPropagation:
+      type: object
+      additionalProperties: false
+      required:
+        - mode
+      description: Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload.
+      properties:
+        mode:
+          $ref: '#/components/schemas/WorkPropagationMode'
+          description: Propagation mode for downstream work payload selection after this workstation succeeds.
+    WorkPropagationMode:
+      type: string
+      description: Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.
+      enum:
+        - OUTPUT_AS_PAYLOAD
+        - PRESERVE_INPUT
+      x-enum-varnames:
+        - WorkPropagationModeOutputAsPayload
+        - WorkPropagationModePreserveInput
+      x-enum-descriptions:
+        - Downstream work receives the workstation output payload.
+        - Downstream work keeps the consumed input payload instead of the workstation output.
     GuardType:
       type: string
       description: Guard condition attached to a workstation or one of its specific inputs.

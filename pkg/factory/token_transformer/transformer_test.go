@@ -640,3 +640,126 @@ func TestReleasedResourceToken_PreservesConsumedTokenIdentity(t *testing.T) {
 		t.Fatalf("PlaceVisits after source mutation = %#v, want detached original", released.History.PlaceVisits)
 	}
 }
+
+func TestOutputToken_PreserveInput_SameType_KeepsConsumedPayload(t *testing.T) {
+	transformer := New(
+		map[string]*petri.Place{
+			"task:done": {ID: "task:done", TypeID: "task"},
+		},
+		map[string]*state.WorkType{
+			"task": {ID: "task"},
+		},
+	)
+
+	token, err := transformer.OutputToken(OutputTokenInput{
+		ArcIndex: 0,
+		Arcs: []petri.Arc{
+			{PlaceID: "task:done", Direction: petri.ArcOutput},
+		},
+		InputColors: []interfaces.TokenColor{{
+			WorkTypeID: "task",
+			WorkID:     "work-1",
+			Payload:    []byte("input-payload"),
+			Content: []interfaces.WorkContentPart{{
+				Type: interfaces.WorkContentPartTypeText,
+				Text: "input-content",
+			}},
+		}},
+		Output:              "worker-output",
+		WorkPropagationMode: interfaces.WorkPropagationModePreserveInput,
+		Outcome:             interfaces.OutcomeAccepted,
+		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("OutputToken() error = %v", err)
+	}
+	if string(token.Color.Payload) != "input-payload" {
+		t.Fatalf("payload = %q, want input-payload", token.Color.Payload)
+	}
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Text != "input-content" {
+		t.Fatalf("content = %#v, want preserved input content", token.Color.Content)
+	}
+}
+
+func TestOutputToken_PreserveInput_CrossType_CopiesConsumedPayload(t *testing.T) {
+	transformer := New(
+		map[string]*petri.Place{
+			"review:init": {ID: "review:init", TypeID: "review"},
+		},
+		map[string]*state.WorkType{
+			"task":   {ID: "task"},
+			"review": {ID: "review"},
+		},
+		WithWorkIDGenerator(petri.NewWorkIDGenerator()),
+	)
+
+	token, err := transformer.OutputToken(OutputTokenInput{
+		ArcIndex: 0,
+		Arcs: []petri.Arc{
+			{PlaceID: "review:init", Direction: petri.ArcOutput},
+		},
+		InputColors: []interfaces.TokenColor{{
+			WorkTypeID: "task",
+			WorkID:     "work-task-1",
+			Payload:    []byte("input-payload"),
+		}},
+		Output:              "worker-output",
+		WorkPropagationMode: interfaces.WorkPropagationModePreserveInput,
+		Outcome:             interfaces.OutcomeAccepted,
+		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("OutputToken() error = %v", err)
+	}
+	if string(token.Color.Payload) != "input-payload" {
+		t.Fatalf("payload = %q, want input-payload", token.Color.Payload)
+	}
+}
+
+func TestOutputToken_OutputAsPayload_UsesWorkerOutput(t *testing.T) {
+	transformer := New(
+		map[string]*petri.Place{
+			"task:done": {ID: "task:done", TypeID: "task"},
+		},
+		map[string]*state.WorkType{
+			"task": {ID: "task"},
+		},
+	)
+
+	token, err := transformer.OutputToken(OutputTokenInput{
+		ArcIndex: 0,
+		Arcs: []petri.Arc{
+			{PlaceID: "task:done", Direction: petri.ArcOutput},
+		},
+		InputColors: []interfaces.TokenColor{{
+			WorkTypeID: "task",
+			WorkID:     "work-1",
+			Payload:    []byte("input-payload"),
+		}},
+		Output:              "worker-output",
+		WorkPropagationMode: interfaces.WorkPropagationModeOutputAsPayload,
+		Outcome:             interfaces.OutcomeAccepted,
+		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
+		History: interfaces.TokenHistory{
+			TotalVisits:         map[string]int{},
+			ConsecutiveFailures: map[string]int{},
+			PlaceVisits:         map[string]int{},
+		},
+	})
+	if err != nil {
+		t.Fatalf("OutputToken() error = %v", err)
+	}
+	if string(token.Color.Payload) != "worker-output" {
+		t.Fatalf("payload = %q, want worker-output", token.Color.Payload)
+	}
+}

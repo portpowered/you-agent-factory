@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -679,19 +680,21 @@ func (t *TransitionerSubsystem) createFanoutGuardToken(inputColors []interfaces.
 func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutation, error) {
 	mutations := make([]interfaces.MarkingMutation, 0)
 	workOutputIndex := 0
+	workPropagationMode := workstationconfig.WorkPropagationMode(in.workstation)
 	for arcIdx, arc := range in.arcs {
 		baseInput := token_transformer.OutputTokenInput{
-			ArcIndex:       arcIdx,
-			Arcs:           in.arcs,
-			ConsumedTokens: in.consumed,
-			InputColors:    in.inputColors,
-			Output:         in.result.output,
-			Outcome:        in.result.outcome,
-			TransitionID:   in.result.transitionID,
-			Error:          in.result.err,
-			Feedback:       in.result.feedback,
-			Now:            in.now,
-			History:        in.history,
+			ArcIndex:            arcIdx,
+			Arcs:                in.arcs,
+			ConsumedTokens:      in.consumed,
+			InputColors:         in.inputColors,
+			Output:              in.result.output,
+			WorkPropagationMode: workPropagationMode,
+			Outcome:             in.result.outcome,
+			TransitionID:        in.result.transitionID,
+			Error:               in.result.err,
+			Feedback:            in.result.feedback,
+			Now:                 in.now,
+			History:             in.history,
 		}
 		repeatCount := mutationRepeatCountForArc(arc, in.consumed)
 		for resourceTokenIndex := 0; resourceTokenIndex < repeatCount; resourceTokenIndex++ {
@@ -702,6 +705,9 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 				return nil, err
 			}
 			if err := applyPackagedTTSInvocationMetadata(newToken, in.workstation, in.result.output, in.inputColors, in.runtimeConfig); err != nil {
+				return nil, err
+			}
+			if err := applyPackagedGoalInvocationSummary(newToken, in.workstation, in.result.output, in.runtimeConfig); err != nil {
 				return nil, err
 			}
 			if newToken.Color.DataType != interfaces.DataTypeResource {
@@ -931,6 +937,38 @@ func applyPackagedTTSInvocationMetadata(
 	}
 
 	token.Color.Content = metadataContent
+	token.Color.Payload = nil
+	return nil
+}
+
+func applyPackagedGoalInvocationSummary(
+	token *interfaces.Token,
+	workstation *interfaces.FactoryWorkstationConfig,
+	workerOutput string,
+	runtimeConfig interfaces.RuntimeWorkstationLookup,
+) error {
+	if token == nil || !goal.ShouldFormatInvocationSummary(workstation) {
+		return nil
+	}
+	if strings.TrimSpace(workerOutput) == "" {
+		return nil
+	}
+
+	stopToken := ""
+	if workstation != nil && runtimeConfig != nil {
+		if lookup, ok := runtimeConfig.(interfaces.RuntimeDefinitionLookup); ok {
+			if worker, ok := lookup.Worker(strings.TrimSpace(workstation.WorkerTypeName)); ok && worker != nil {
+				stopToken = strings.TrimSpace(worker.StopToken)
+			}
+		}
+	}
+
+	summaryContent, err := goal.SummaryContentFromWorkerOutput(workerOutput, stopToken)
+	if err != nil {
+		return fmt.Errorf("shape packaged goal invocation summary: %w", err)
+	}
+
+	token.Color.Content = summaryContent
 	token.Color.Payload = nil
 	return nil
 }
