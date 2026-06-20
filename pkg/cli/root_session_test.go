@@ -2,12 +2,16 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/session"
 	"github.com/portpowered/infinite-you/pkg/cli/workflow"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
@@ -61,6 +65,125 @@ func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	} {
 		if !strings.Contains(help, want) {
 			t.Fatalf("session help missing %q:\n%s", want, help)
+		}
+	}
+}
+
+func TestSessionPauseCommand_ServerFlagExecutesLifecycleControl(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/factory-sessions/session-beta/pause" {
+			t.Fatalf("request = %s %s, want POST /factory-sessions/session-beta/pause", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.FactorySessionLifecycleControlResponse{
+			SessionId: "session-beta",
+			Operation: factoryapi.FactorySessionLifecycleControlKindPause,
+			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+			Status:    factoryapi.FactorySessionDurableLifecycleStatusPaused,
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"session", "pause", "session-beta",
+		"--server", strings.TrimSuffix(srv.URL, "/"),
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session pause --server: %v", err)
+	}
+	if got := out.String(); got != "Paused factory session session-beta\n" {
+		t.Fatalf("output = %q", got)
+	}
+}
+
+func TestSessionResumeCommand_JSONEmitsLifecycleControlResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/factory-sessions/~default/resume" {
+			t.Fatalf("request = %s %s, want POST /factory-sessions/~default/resume", r.Method, r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(factoryapi.FactorySessionLifecycleControlResponse{
+			SessionId: "~default",
+			Operation: factoryapi.FactorySessionLifecycleControlKindResume,
+			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+			Status:    factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"--json", "--server", strings.TrimSuffix(srv.URL, "/"),
+		"session", "resume",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session resume --json --server: %v", err)
+	}
+
+	var got factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+		t.Fatalf("decode JSON: %v\n%s", err, out.String())
+	}
+	if got.SessionId != "~default" || got.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("response = %#v", got)
+	}
+}
+
+func TestSessionPauseCommand_PortFlagRejected(t *testing.T) {
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"session", "pause", "--port", "9090"})
+
+	if execErr := root.Execute(); execErr == nil {
+		t.Fatal("expected --port rejection")
+	} else if !strings.Contains(execErr.Error(), "--server") {
+		t.Fatalf("error = %v, want --server guidance", execErr)
+	}
+}
+
+func TestSessionPauseCommand_HelpDocumentsBufferedWorkSemantics(t *testing.T) {
+	root := NewRootCommand()
+	pauseCmd, _, err := root.Find([]string{"session", "pause"})
+	if err != nil {
+		t.Fatalf("find session pause: %v", err)
+	}
+	resumeCmd, _, err := root.Find([]string{"session", "resume"})
+	if err != nil {
+		t.Fatalf("find session resume: %v", err)
+	}
+
+	for _, want := range []string{
+		"POST /factory-sessions/{session_id}/pause",
+		"preserving inbound submissions",
+		"~default",
+		"--json",
+		"--server",
+	} {
+		if !strings.Contains(pauseCmd.Long, want) {
+			t.Fatalf("pause long help missing %q:\n%s", want, pauseCmd.Long)
+		}
+	}
+	for _, want := range []string{
+		"POST /factory-sessions/{session_id}/resume",
+		"drains ready buffered submissions",
+		"without requiring another external signal",
+	} {
+		if !strings.Contains(resumeCmd.Long, want) {
+			t.Fatalf("resume long help missing %q:\n%s", want, resumeCmd.Long)
 		}
 	}
 }
