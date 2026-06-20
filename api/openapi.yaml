@@ -7307,6 +7307,9 @@ components:
         outputSchema:
           type: string
           description: JSON schema string used to validate or parse structured model output when configured.
+        outcomeFormat:
+          type: string
+          description: Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
         limits:
           $ref: '#/components/schemas/WorkstationLimits'
           description: Retry and execution ceilings applied to this workstation.

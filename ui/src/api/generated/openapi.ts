@@ -3713,6 +3713,8 @@ export interface components {
       promptFile?: string;
       /** @description JSON schema string used to validate or parse structured model output when configured. */
       outputSchema?: string;
+      /** @description Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing. */
+      outcomeFormat?: string;
       /** @description Retry and execution ceilings applied to this workstation. */
       limits?: components["schemas"]["WorkstationLimits"];
       /** @description Inline workstation instructions or script body when authored directly in factory config. */
