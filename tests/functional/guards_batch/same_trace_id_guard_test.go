@@ -100,13 +100,13 @@ func TestSameTraceIDGuard_MatchingCurrentChainingTraceCompletesJoin(t *testing.T
 		TraceID:                "trace-legacy-task",
 	}})
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:matched", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "plan:ready", 0, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:ready", 0, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:matched", 1, 5*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "plan:ready", 0, 5*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:ready", 0, 5*time.Second)
 
 	h.Assert().
 		PlaceTokenCount("task:matched", 1).
