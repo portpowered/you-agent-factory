@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: dashboard shell loading, error, and success paths share one snapshot harness.
 import { render, screen } from "@testing-library/react";
 
 import { AppLocaleProvider, useAppLocale } from "../../../i18n";

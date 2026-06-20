@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: lifecycle banner stream, bracket, and pause/resume cases share one render harness.
 import { render, screen } from "@testing-library/react";
 
 import { pausedDashboardStreamState } from "../lib/dashboard-event-stream";

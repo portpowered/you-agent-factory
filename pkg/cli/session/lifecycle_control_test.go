@@ -40,7 +40,7 @@ func TestPause_PerformsPOSTFactorySessionPause(t *testing.T) {
 	if gotPath != "/factory-sessions/~default/pause" {
 		t.Fatalf("path = %q, want /factory-sessions/~default/pause", gotPath)
 	}
-	if !strings.Contains(out.String(), "Paused factory session ~default") {
+	if !strings.Contains(out.String(), "Paused factory session ~default (outcome=ACCEPTED status=PAUSED)") {
 		t.Fatalf("output = %q, want paused confirmation", out.String())
 	}
 }
@@ -69,7 +69,7 @@ func TestResume_PerformsPOSTFactorySessionResume(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resume: %v", err)
 	}
-	if !strings.Contains(out.String(), "Resumed factory session session-beta") {
+	if out.String() != "Resumed factory session session-beta (outcome=ACCEPTED status=RUNNING)\n" {
 		t.Fatalf("output = %q, want resumed confirmation", out.String())
 	}
 }
@@ -90,8 +90,33 @@ func TestPause_NoOpRendersAlreadyPausedCopy(t *testing.T) {
 	if err := Pause(LifecycleControlConfig{Server: srv.URL, Output: &out}); err != nil {
 		t.Fatalf("Pause: %v", err)
 	}
-	if !strings.Contains(out.String(), "already paused") {
+	if out.String() != "Factory session ~default already paused (outcome=NO_OP status=PAUSED)\n" {
 		t.Fatalf("output = %q, want no-op paused copy", out.String())
+	}
+}
+
+func TestResume_NoOpRendersAlreadyRunningCopy(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(factoryapi.FactorySessionLifecycleControlResponse{
+			SessionId: "session-beta",
+			Operation: factoryapi.FactorySessionLifecycleControlKindResume,
+			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeNoOp,
+			Status:    factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		})
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	if err := Resume(LifecycleControlConfig{
+		Server:    srv.URL,
+		SessionID: "session-beta",
+		Output:    &out,
+	}); err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+	if out.String() != "Factory session session-beta already running (outcome=NO_OP status=RUNNING)\n" {
+		t.Fatalf("output = %q, want no-op running copy", out.String())
 	}
 }
 

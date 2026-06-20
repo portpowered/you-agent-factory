@@ -1,3 +1,4 @@
+// biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: timeline store operation and session lifecycle replay cases share fixture events.
 import type { FactoryEvent } from "../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import { canonicalSessionLifecycleReplayEvents } from "../../../testing/session-lifecycle-replay-fixtures";

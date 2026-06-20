@@ -141,25 +141,27 @@ func renderLifecycleControlSuccess(
 	operation string,
 	result factoryapi.FactorySessionLifecycleControlResponse,
 ) error {
-	verb := lifecycleControlVerb(operation, result.Outcome)
-	_, err := fmt.Fprintf(
-		output,
-		"%s factory session %s (outcome=%s status=%s)\n",
-		verb,
-		result.SessionId,
-		result.Outcome,
-		result.Status,
-	)
-	return err
-}
-
-func lifecycleControlVerb(operation string, outcome factoryapi.FactorySessionLifecycleControlOutcome) string {
-	switch outcome {
+	var line string
+	switch result.Outcome {
 	case factoryapi.FactorySessionLifecycleControlOutcomeNoOp:
-		return "Factory session already " + lifecycleControlStateLabel(operation)
+		line = fmt.Sprintf(
+			"Factory session %s already %s (outcome=%s status=%s)",
+			result.SessionId,
+			lifecycleControlStateLabel(operation),
+			result.Outcome,
+			result.Status,
+		)
 	default:
-		return lifecycleControlAppliedLabel(operation)
+		line = fmt.Sprintf(
+			"%s factory session %s (outcome=%s status=%s)",
+			lifecycleControlAppliedLabel(operation),
+			result.SessionId,
+			result.Outcome,
+			result.Status,
+		)
 	}
+	_, err := fmt.Fprintln(output, line)
+	return err
 }
 
 func lifecycleControlAppliedLabel(operation string) string {

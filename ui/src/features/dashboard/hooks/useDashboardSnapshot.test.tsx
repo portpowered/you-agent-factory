@@ -7,6 +7,12 @@ import { FACTORY_EVENT_TYPES } from "../../../api/events";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { createReplayHarness } from "../../../testing/replay-harness";
 import {
+  type canonicalSessionLifecycleReplayEvents,
+  sessionLifecyclePausedEvent,
+  sessionLifecycleResumedEvent,
+  sessionLifecycleStartedEvent,
+} from "../../../testing/session-lifecycle-replay-fixtures";
+import {
   FACTORY_TIMELINE_DEBUG_GLOBAL,
   FACTORY_TIMELINE_DEBUG_STORAGE_KEY,
 } from "../../timeline/state/factoryTimelineDebug";
@@ -20,12 +26,6 @@ import {
   createDefaultDashboardStreamState,
   useDashboardStreamStore,
 } from "../state/dashboardStreamStore";
-import {
-  canonicalSessionLifecycleReplayEvents,
-  sessionLifecyclePausedEvent,
-  sessionLifecycleResumedEvent,
-  sessionLifecycleStartedEvent,
-} from "../../../testing/session-lifecycle-replay-fixtures";
 import { useDashboardSnapshot } from "./useDashboardSnapshot";
 
 const replayHarness = createReplayHarness();
@@ -278,9 +278,7 @@ describe("useDashboardSnapshot session lifecycle replay", () => {
     await emitStreamMessage(stream, sessionLifecyclePausedEvent);
 
     await waitFor(() => {
-      expect(
-        result.current.snapshot?.runtime?.session?.bracket,
-      ).toMatchObject({
+      expect(result.current.snapshot?.runtime?.session?.bracket).toMatchObject({
         lifecycle_control_status: "PAUSED",
         paused_at: "2026-06-09T12:00:02Z",
         session_id: "session-alpha",
@@ -290,9 +288,7 @@ describe("useDashboardSnapshot session lifecycle replay", () => {
     await emitStreamMessage(stream, sessionLifecycleResumedEvent);
 
     await waitFor(() => {
-      expect(
-        result.current.snapshot?.runtime?.session?.bracket,
-      ).toMatchObject({
+      expect(result.current.snapshot?.runtime?.session?.bracket).toMatchObject({
         lifecycle_control_status: "RUNNING",
         resumed_at: "2026-06-09T12:00:04Z",
         session_id: "session-alpha",
@@ -303,9 +299,12 @@ describe("useDashboardSnapshot session lifecycle replay", () => {
   });
 
   it("keeps paused and resumed lifecycle reflection after event-stream reconnect", async () => {
-    const { result } = renderHook(() => useDashboardSnapshot({ locale: "en" }), {
-      wrapper: createWrapper(queryClient),
-    });
+    const { result } = renderHook(
+      () => useDashboardSnapshot({ locale: "en" }),
+      {
+        wrapper: createWrapper(queryClient),
+      },
+    );
 
     const stream = replayHarness.getStreams()[0];
     if (!stream) {
@@ -317,7 +316,8 @@ describe("useDashboardSnapshot session lifecycle replay", () => {
 
     await waitFor(() => {
       expect(
-        result.current.snapshot?.runtime?.session?.bracket?.lifecycle_control_status,
+        result.current.snapshot?.runtime?.session?.bracket
+          ?.lifecycle_control_status,
       ).toBe("PAUSED");
     });
 
@@ -342,15 +342,15 @@ describe("useDashboardSnapshot session lifecycle replay", () => {
       throw new Error("expected reconnect stream to be opened");
     }
 
-    expect(reconnectStream.url).toContain("after_event_id=session-lifecycle-replay-paused");
+    expect(reconnectStream.url).toContain(
+      "after_event_id=session-lifecycle-replay-paused",
+    );
     expect(reconnectStream.url).toContain("after_sequence=2");
 
     await emitStreamMessage(reconnectStream, sessionLifecycleResumedEvent);
 
     await waitFor(() => {
-      expect(
-        result.current.snapshot?.runtime?.session?.bracket,
-      ).toMatchObject({
+      expect(result.current.snapshot?.runtime?.session?.bracket).toMatchObject({
         lifecycle_control_status: "RUNNING",
         paused_at: "2026-06-09T12:00:02Z",
         resumed_at: "2026-06-09T12:00:04Z",
