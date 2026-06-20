@@ -7,6 +7,7 @@ import {
   DashboardText,
 } from "../../../components/ui";
 import { DetailCopy } from "../../../components/ui/widget-frame";
+import type { FactorySessionDetailData } from "../hooks/use-factory-session-detail";
 import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
 import { getFactorySessionDetailMessages } from "../messages/factory-session-detail";
 
@@ -49,12 +50,89 @@ export function FactorySessionDetailPanel({
         </AlertPanel>
       ) : null}
       {detailState.status === "success" ? (
-        <FactorySessionRuntimeSections
-          data={detailState.data}
-          locale={locale}
-        />
+        detailState.data.kind === "durable" ? (
+          <DurableSessionSummarySections
+            data={detailState.data}
+            locale={locale}
+          />
+        ) : (
+          <FactorySessionRuntimeSections
+            data={detailState.data}
+            locale={locale}
+          />
+        )
       ) : null}
     </section>
+  );
+}
+
+function DurableSessionSummarySections({
+  data,
+  locale,
+}: {
+  data: Extract<FactorySessionDetailData, { kind: "durable" }>;
+  locale?: string;
+}) {
+  const messages = getFactorySessionDetailMessages(locale);
+  const session = data.session;
+  const progress = session.progress;
+  const progressSummary =
+    progress === undefined
+      ? undefined
+      : [
+          progress.completedDispatches !== undefined
+            ? `completed ${progress.completedDispatches}`
+            : null,
+          progress.inFlightDispatches !== undefined
+            ? `in flight ${progress.inFlightDispatches}`
+            : null,
+          progress.totalDispatches !== undefined
+            ? `total ${progress.totalDispatches}`
+            : null,
+        ]
+          .filter((value): value is string => value !== null)
+          .join(", ");
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Metric
+          label={messages.orchestratorKindLabel}
+          value={session.orchestratorKind}
+        />
+        <Metric label={messages.statusLabel} value={session.status} />
+      </div>
+
+      {session.phase ? (
+        <Metric label={messages.phaseLabel} value={session.phase} />
+      ) : null}
+
+      {session.resolvedSource.sourceRef ? (
+        <Metric
+          label={messages.resolvedSourceLabel}
+          value={session.resolvedSource.sourceRef}
+        />
+      ) : null}
+
+      {session.resultSummary ? (
+        <div className="grid gap-2">
+          <Metric
+            label={messages.durableResultStatusLabel}
+            value={session.resultSummary.resultStatus}
+          />
+          {session.resultSummary.summary ? (
+            <Metric
+              label={messages.resultSummaryLabel}
+              value={session.resultSummary.summary}
+            />
+          ) : null}
+        </div>
+      ) : null}
+
+      {progressSummary ? (
+        <Metric label={messages.progressLabel} value={progressSummary} />
+      ) : null}
+    </div>
   );
 }
 
@@ -62,11 +140,7 @@ function FactorySessionRuntimeSections({
   data,
   locale,
 }: {
-  data: {
-    partialResult?: components["schemas"]["FactorySessionPartialResult"];
-    result?: components["schemas"]["FactorySessionLiveResult"];
-    session: components["schemas"]["FactorySession"];
-  };
+  data: Extract<FactorySessionDetailData, { kind: "live" }>;
   locale?: string;
 }) {
   const messages = getFactorySessionDetailMessages(locale);

@@ -3,24 +3,37 @@ import { useMemo } from "react";
 
 import {
   type FactorySession,
+  type FactorySessionDurableReadModel,
   type FactorySessionLiveResult,
   type FactorySessionPartialResult,
+  type FactorySessionResult,
   type FactorySessionsAPIError,
+  getDurableFactorySession,
+  getDurableFactorySessionResult,
   getFactorySession,
   getFactorySessionPartialResult,
   getFactorySessionResult,
-} from "../../../api/factory-sessions/api";
+  isDurableFactorySessionID,
+} from "../../../api/factory-sessions";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 
 export const FACTORY_SESSION_DETAIL_QUERY_KEY = [
   "factory-session-detail",
 ] as const;
 
-export interface FactorySessionDetailData {
-  partialResult?: FactorySessionPartialResult;
-  result?: FactorySessionLiveResult;
-  session: FactorySession;
-}
+export type FactorySessionDetailData =
+  | {
+      durablePartialResult?: FactorySessionResult;
+      durableResult?: FactorySessionResult;
+      kind: "durable";
+      session: FactorySessionDurableReadModel;
+    }
+  | {
+      kind: "live";
+      partialResult?: FactorySessionPartialResult;
+      result?: FactorySessionLiveResult;
+      session: FactorySession;
+    };
 
 export type FactorySessionDetailViewState =
   | { status: "idle" }
@@ -28,6 +41,48 @@ export type FactorySessionDetailViewState =
   | { message?: string; status: "error" }
   | { status: "loading" }
   | { status: "not-found" };
+
+async function loadLiveFactorySessionDetail(
+  sessionID: string,
+): Promise<FactorySessionDetailData> {
+  const session = await getFactorySession(sessionID);
+  if (session.runtime.orchestratorKind !== FactoryOrchestratorKind.JAVASCRIPT) {
+    return { kind: "live", session };
+  }
+
+  const [result, partialResult] = await Promise.all([
+    getFactorySessionResult(sessionID).catch(() => undefined),
+    getFactorySessionPartialResult(sessionID).catch(() => undefined),
+  ]);
+
+  return {
+    kind: "live",
+    partialResult,
+    result,
+    session,
+  };
+}
+
+async function loadDurableFactorySessionDetail(
+  sessionID: string,
+): Promise<FactorySessionDetailData> {
+  const session = await getDurableFactorySession(sessionID);
+  const [durableResult, durablePartialResult] = await Promise.all([
+    getDurableFactorySessionResult(sessionID, { mode: "final" }).catch(
+      () => undefined,
+    ),
+    getDurableFactorySessionResult(sessionID, { mode: "partial" }).catch(
+      () => undefined,
+    ),
+  ]);
+
+  return {
+    durablePartialResult,
+    durableResult,
+    kind: "durable",
+    session,
+  };
+}
 
 export function useFactorySessionDetail(
   sessionID: string | null,
@@ -39,21 +94,11 @@ export function useFactorySessionDetail(
         throw new Error("Factory session detail requires a selected session id.");
       }
 
-      const session = await getFactorySession(sessionID);
-      if (session.runtime.orchestratorKind !== FactoryOrchestratorKind.JAVASCRIPT) {
-        return { session };
+      if (isDurableFactorySessionID(sessionID)) {
+        return loadDurableFactorySessionDetail(sessionID);
       }
 
-      const [result, partialResult] = await Promise.all([
-        getFactorySessionResult(sessionID).catch(() => undefined),
-        getFactorySessionPartialResult(sessionID).catch(() => undefined),
-      ]);
-
-      return {
-        partialResult,
-        result,
-        session,
-      };
+      return loadLiveFactorySessionDetail(sessionID);
     },
     enabled: sessionID !== null && sessionID.trim() !== "",
     gcTime: 0,

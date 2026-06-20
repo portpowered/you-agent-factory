@@ -7,6 +7,7 @@ export interface FactorySessionDetailMessages {
   artifactsHeading: string;
   checkpointRefsHeading: string;
   childDispatchCountsLabel: string;
+  durableResultStatusLabel: string;
   dynamicWorkflowShorthand: string;
   enabledTransitionsHeading: string;
   errorState: string;
@@ -19,6 +20,9 @@ export interface FactorySessionDetailMessages {
   partialResultRefLabel: string;
   phaseLabel: string;
   phasesLabel: string;
+  progressLabel: string;
+  resolvedSourceLabel: string;
+  resultSummaryLabel: string;
   runtimeHeading: string;
   scriptStatusLabel: string;
   selectedSessionHeading: string;
@@ -32,6 +36,7 @@ const factorySessionDetailMessagesByLocale = {
     artifactsHeading: "Artifacts",
     checkpointRefsHeading: "Checkpoint refs",
     childDispatchCountsLabel: "Child dispatches",
+    durableResultStatusLabel: "Result status",
     dynamicWorkflowShorthand: "Dynamic workflow (JavaScript factory session)",
     enabledTransitionsHeading: "Enabled transitions",
     errorState: "The factory session runtime could not be loaded.",
@@ -44,6 +49,9 @@ const factorySessionDetailMessagesByLocale = {
     partialResultRefLabel: "Partial result ref",
     phaseLabel: "Phase",
     phasesLabel: "Phases",
+    progressLabel: "Progress",
+    resolvedSourceLabel: "Resolved source",
+    resultSummaryLabel: "Result summary",
     runtimeHeading: "Runtime",
     scriptStatusLabel: "Script status",
     selectedSessionHeading: "Factory session runtime",
@@ -55,6 +63,7 @@ const factorySessionDetailMessagesByLocale = {
     artifactsHeading: "工件",
     checkpointRefsHeading: "检查点引用",
     childDispatchCountsLabel: "子调度",
+    durableResultStatusLabel: "结果状态",
     dynamicWorkflowShorthand: "动态工作流（JavaScript 工厂会话）",
     enabledTransitionsHeading: "已启用变迁",
     errorState: "无法加载工厂会话运行时。",
@@ -67,6 +76,9 @@ const factorySessionDetailMessagesByLocale = {
     partialResultRefLabel: "部分结果引用",
     phaseLabel: "阶段",
     phasesLabel: "阶段列表",
+    progressLabel: "进度",
+    resolvedSourceLabel: "已解析来源",
+    resultSummaryLabel: "结果摘要",
     runtimeHeading: "运行时",
     scriptStatusLabel: "脚本状态",
     selectedSessionHeading: "工厂会话运行时",

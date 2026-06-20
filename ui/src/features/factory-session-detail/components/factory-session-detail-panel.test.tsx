@@ -194,6 +194,62 @@ describe("FactorySessionDetailPanel", () => {
       expect(screen.getByText("boom")).toBeTruthy();
     });
   });
+
+  it("shows durable factory session summary fields from the durable read model", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url === "/factory-sessions/dur-sess-petri-success-001") {
+        return jsonResponse({
+          orchestratorKind: "PETRI",
+          progress: {
+            completedDispatches: 1,
+            totalDispatches: 1,
+          },
+          resolvedSource: {
+            kind: "FACTORY_ID",
+            sourceRef: "factory/customer-support-triage",
+          },
+          resultSummary: {
+            resultStatus: "FINAL",
+            summary: "Ticket triaged and resolved.",
+          },
+          sessionId: "dur-sess-petri-success-001",
+          status: "SUCCEEDED",
+        });
+      }
+      if (url.endsWith("/results?mode=final")) {
+        return jsonResponse({
+          mode: "final",
+          resultStatus: "FINAL",
+          sessionId: "dur-sess-petri-success-001",
+        });
+      }
+      if (url.endsWith("/results?mode=partial")) {
+        return jsonResponse({
+          mode: "partial",
+          resultStatus: "PARTIAL",
+          sessionId: "dur-sess-petri-success-001",
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="dur-sess-petri-success-001" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Ticket triaged and resolved.")).toBeTruthy();
+    });
+
+    expect(screen.getByText("factory/customer-support-triage")).toBeTruthy();
+    expect(screen.getByText("SUCCEEDED")).toBeTruthy();
+    expect(screen.getByText("FINAL")).toBeTruthy();
+    expect(screen.getByText("completed 1, total 1")).toBeTruthy();
+    expect(
+      screen.queryByText("Dynamic workflow (JavaScript factory session)"),
+    ).toBeNull();
+  });
 });
 
 function renderWithQueryClient(children: ReactNode) {
