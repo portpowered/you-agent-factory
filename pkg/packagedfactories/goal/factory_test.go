@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/builtingoal"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -17,7 +18,6 @@ var packagedGoalLifecycleStates = []string{
 	"execute",
 	"check",
 	"review",
-	"summarize",
 	"complete",
 	"blocked",
 	"needs-human",
@@ -36,15 +36,13 @@ var packagedGoalProgressionWorkstations = []struct {
 	{name: PackagedExecuteWorkstationName, inputState: "plan", outputState: "execute", publicType: interfaces.WorkstationTypeAgent, workerName: "goal-executor"},
 	{name: PackagedCheckWorkstationName, inputState: "execute", outputState: "check", publicType: interfaces.WorkstationTypeScript, workerName: "goal-checker"},
 	{name: "advance-goal-review", inputState: "check", outputState: "review", publicType: interfaces.WorkstationTypeLogical, workerName: ""},
-	{name: PackagedSummarizeWorkstationName, inputState: "summarize", outputState: "complete", publicType: interfaces.WorkstationTypeAgent, workerName: PackagedSummarizerWorkerName},
 }
 
 var packagedGoalWorkerPublicTypes = map[string]string{
 	"goal-planner":  interfaces.WorkerTypeAgent,
 	"goal-executor": interfaces.WorkerTypeAgent,
 	"goal-checker":  interfaces.WorkerTypeScript,
-	"goal-reviewer":   interfaces.WorkerTypeAgent,
-	PackagedSummarizerWorkerName: interfaces.WorkerTypeAgent,
+	"goal-reviewer": interfaces.WorkerTypeAgent,
 }
 
 var packagedGoalWorkstationPublicTypes = map[string]string{
@@ -53,7 +51,6 @@ var packagedGoalWorkstationPublicTypes = map[string]string{
 	PackagedCheckWorkstationName:         interfaces.WorkstationTypeScript,
 	"advance-goal-review":                interfaces.WorkstationTypeLogical,
 	PackagedReviewWorkstationName:      interfaces.WorkstationTypeClassify,
-	PackagedSummarizeWorkstationName:   interfaces.WorkstationTypeAgent,
 	PackagedLoopBreakerWorkstationName: interfaces.WorkstationTypeLogical,
 }
 
@@ -272,21 +269,17 @@ func TestMaterializedPackagedGoalFactory_AuthorBoundedSummarizerPrompt(t *testin
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}
 
-	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, nil)
-	if err != nil {
-		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
-	}
-
 	source, ok := packagedGoalRolePromptSourceByRole("summarizer")
 	if !ok {
 		t.Fatal("missing packaged role prompt source for summarizer")
 	}
 
-	workstation, ok := loaded.Workstation(source.WorkstationName)
-	if !ok {
-		t.Fatalf("missing workstation %q for summarizer role", source.WorkstationName)
+	promptPath := packagedGoalMaterializedPromptPath(factoryDir, source)
+	promptBytes, err := os.ReadFile(promptPath)
+	if err != nil {
+		t.Fatalf("summarizer prompt file %s: %v", promptPath, err)
 	}
-	prompt := strings.TrimSpace(workstation.PromptTemplate)
+	prompt := strings.TrimSpace(string(promptBytes))
 	if prompt == "" {
 		t.Fatal("summarizer prompt is empty")
 	}
@@ -381,15 +374,51 @@ func TestResolveNamedFactoryAcrossRoots_BuiltInGoalGuardsSplitRolePromptRegressi
 	assertPackagedGoalSplitRolePromptRegression(t, resolution.FactoryDir, loaded)
 }
 
+func TestMaterializedPackagedGoalFactory_AuthoredPromptSourcesMatchMaterializedFiles(t *testing.T) {
+	factoryDir, loaded := materializeAndLoadPackagedGoalFactory(t)
+
+	for _, source := range PackagedGoalRolePromptSources {
+		authoredPrompt, ok := builtingoal.AuthoredRolePrompt(source.Role)
+		if !ok {
+			t.Fatalf("missing authored prompt source for role %q", source.Role)
+		}
+
+		promptPath := packagedGoalMaterializedPromptPath(factoryDir, source)
+		promptBytes, err := os.ReadFile(promptPath)
+		if err != nil {
+			t.Fatalf("role %q materialized prompt file %s: %v", source.Role, promptPath, err)
+		}
+		materializedPrompt := strings.TrimSpace(string(promptBytes))
+		if materializedPrompt != authoredPrompt {
+			t.Fatalf("role %q materialized prompt does not match authored source file", source.Role)
+		}
+
+		if source.FactoryRelative {
+			continue
+		}
+
+		workstation, ok := loaded.Workstation(source.WorkstationName)
+		if !ok {
+			t.Fatalf("missing workstation %q for role %q", source.WorkstationName, source.Role)
+		}
+		if strings.TrimSpace(workstation.PromptTemplate) != materializedPrompt {
+			t.Fatalf("workstation %q prompt template does not match authored source for role %q", source.WorkstationName, source.Role)
+		}
+	}
+}
+
 func TestMaterializedPackagedGoalFactory_SplitRolePromptRegressionFailsWhenPromptMissing(t *testing.T) {
 	for _, source := range PackagedGoalRolePromptSources {
 		source := source
 		t.Run(source.Role, func(t *testing.T) {
+			if source.FactoryRelative {
+				t.Skip("summarizer prompt is shipped as a bundled doc without workstation promptFile wiring")
+			}
 			factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
 			if err != nil {
 				t.Fatalf("PersistNamedFactory: %v", err)
 			}
-			promptPath := filepath.Join(factoryDir, interfaces.WorkstationsDir, source.WorkstationName, source.PromptFile)
+			promptPath := packagedGoalMaterializedPromptPath(factoryDir, source)
 			if err := os.Remove(promptPath); err != nil {
 				t.Fatalf("remove role %q prompt file %s: %v", source.Role, promptPath, err)
 			}
@@ -409,6 +438,9 @@ func TestMaterializedPackagedGoalFactory_SplitRolePromptRegressionFailsWhenPromp
 	for _, source := range PackagedGoalRolePromptSources {
 		source := source
 		t.Run(source.Role, func(t *testing.T) {
+			if source.FactoryRelative {
+				t.Skip("summarizer prompt is shipped as a bundled doc without workstation promptFile wiring")
+			}
 			factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
 			if err != nil {
 				t.Fatalf("PersistNamedFactory: %v", err)
@@ -473,7 +505,7 @@ func assertPackagedGoalSplitRolePromptRegression(t *testing.T, factoryDir string
 			t.Fatalf("missing regression expectations for role %q", source.Role)
 		}
 
-		promptPath := filepath.Join(factoryDir, interfaces.WorkstationsDir, source.WorkstationName, source.PromptFile)
+		promptPath := packagedGoalMaterializedPromptPath(factoryDir, source)
 		promptBytes, err := os.ReadFile(promptPath)
 		if err != nil {
 			t.Fatalf("role %q prompt file %s: %v", source.Role, promptPath, err)
@@ -481,6 +513,19 @@ func assertPackagedGoalSplitRolePromptRegression(t *testing.T, factoryDir string
 		promptOnDisk := strings.TrimSpace(string(promptBytes))
 		if promptOnDisk == "" {
 			t.Fatalf("role %q prompt file %s is empty", source.Role, promptPath)
+		}
+
+		authoredPrompt, ok := builtingoal.AuthoredRolePrompt(source.Role)
+		if !ok {
+			t.Fatalf("missing authored prompt source for role %q", source.Role)
+		}
+		if promptOnDisk != authoredPrompt {
+			t.Fatalf("role %q materialized prompt does not match authored source file", source.Role)
+		}
+
+		if source.FactoryRelative {
+			assertPackagedGoalRolePromptVocabulary(t, source.Role, promptOnDisk, expectation.mustContain, expectation.mustNotContain)
+			continue
 		}
 
 		workstation, ok := loaded.Workstation(source.WorkstationName)
@@ -496,6 +541,13 @@ func assertPackagedGoalSplitRolePromptRegression(t *testing.T, factoryDir string
 
 		assertPackagedGoalRolePromptVocabulary(t, source.Role, workstation.PromptTemplate, expectation.mustContain, expectation.mustNotContain)
 	}
+}
+
+func packagedGoalMaterializedPromptPath(factoryDir string, source PackagedGoalRolePromptSource) string {
+	if source.FactoryRelative {
+		return filepath.Join(factoryDir, source.PromptFile)
+	}
+	return filepath.Join(factoryDir, interfaces.WorkstationsDir, source.WorkstationName, source.PromptFile)
 }
 
 func assertPackagedGoalRolePromptVocabulary(t *testing.T, role, prompt string, mustContain, mustNotContain []string) {
@@ -599,7 +651,7 @@ func assertGoalReviewRoutes(t *testing.T, workstations []interfaces.FactoryWorks
 	}
 
 	wantRoutes := map[string]string{
-		"accepted":      "summarize",
+		"accepted":      "complete",
 		"needs_changes": "plan",
 		"tests_failed":  "plan",
 		"needs_human":   "needs-human",

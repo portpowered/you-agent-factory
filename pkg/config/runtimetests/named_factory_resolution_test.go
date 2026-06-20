@@ -379,7 +379,6 @@ func assertBuiltInGoalMaterializedLayout(t *testing.T, factoryDir string) {
 		filepath.Join(factoryDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName),
 		filepath.Join(factoryDir, interfaces.WorkersDir, "goal-checker", interfaces.FactoryAgentsFileName),
 		filepath.Join(factoryDir, interfaces.WorkersDir, "goal-reviewer", interfaces.FactoryAgentsFileName),
-		filepath.Join(factoryDir, interfaces.WorkersDir, "goal-summarizer", interfaces.FactoryAgentsFileName),
 		filepath.Join(factoryDir, interfaces.WorkstationsDir, "plan-goal", interfaces.FactoryAgentsFileName),
 		filepath.Join(factoryDir, interfaces.WorkstationsDir, "plan-goal", "prompts", "planner.md"),
 		filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-goal", interfaces.FactoryAgentsFileName),
@@ -388,8 +387,7 @@ func assertBuiltInGoalMaterializedLayout(t *testing.T, factoryDir string) {
 		filepath.Join(factoryDir, interfaces.WorkstationsDir, "check-goal", "prompts", "checker.md"),
 		filepath.Join(factoryDir, interfaces.WorkstationsDir, "review-goal", interfaces.FactoryAgentsFileName),
 		filepath.Join(factoryDir, interfaces.WorkstationsDir, "review-goal", "prompts", "reviewer.md"),
-		filepath.Join(factoryDir, interfaces.WorkstationsDir, "summarize-goal", interfaces.FactoryAgentsFileName),
-		filepath.Join(factoryDir, interfaces.WorkstationsDir, "summarize-goal", "prompts", "summarizer.md"),
+		filepath.Join(factoryDir, "docs", "summarizer.md"),
 		filepath.Join(factoryDir, interfaces.WorkstationsDir, "goal-loop-breaker", interfaces.FactoryAgentsFileName),
 	} {
 		if _, err := os.Stat(path); err != nil {
