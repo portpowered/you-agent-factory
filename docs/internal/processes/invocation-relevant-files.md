@@ -53,6 +53,8 @@ primary-result behavior.
   registered from `builtInNamedFactoryCatalog` in `pkg/config/layout.go`.
 - `pkg/packagedfactories/goal/decision_envelope.go` owns the canonical
   reviewer/checker JSON envelope and its mapping onto `interfaces.WorkResult`.
+- `pkg/workers/executor/agent.go` routes `review` workstation agent output through
+  `goal.WorkResultFromDecisionEnvelopeJSONOrFailed` instead of stop-token parsing.
 - `factory/docs/decision-envelope.md` is the packaged-authoring guide for the
   reviewer/checker envelope shape, accepted decision values, and malformed-input
   behavior used by `factory/workstations/review/AGENTS.md`.

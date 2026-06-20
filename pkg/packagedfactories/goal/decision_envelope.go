@@ -39,6 +39,19 @@ const (
 	DecisionFailed   = string(interfaces.OutcomeFailed)
 )
 
+// DecisionEnvelopeOutcomeFormat is the workstation outcomeFormat value that routes
+// agent output through the reviewer/checker JSON envelope contract.
+const DecisionEnvelopeOutcomeFormat = "decision-envelope"
+
+// UsesDecisionEnvelopeOutcome reports whether the workstation routes agent output
+// through the reviewer/checker decision envelope instead of stop-token markers.
+func UsesDecisionEnvelopeOutcome(workstation *interfaces.FactoryWorkstationConfig) bool {
+	if workstation == nil {
+		return false
+	}
+	return strings.TrimSpace(workstation.OutcomeFormat) == DecisionEnvelopeOutcomeFormat
+}
+
 // SupportedDecisions returns the accepted decision vocabulary in stable order.
 func SupportedDecisions() []string {
 	return []string{

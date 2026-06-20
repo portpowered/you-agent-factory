@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -75,6 +76,10 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request interfaces.Worksta
 		return inferenceErrorWorkResult(request.Dispatch, err, diagnostics, retryCount, start), nil
 	}
 	diagnostics = withInferenceResponseDiagnostics(diagnostics, resp, retryCount)
+
+	if goal.UsesDecisionEnvelopeOutcome(workstationDef) {
+		return decisionEnvelopeWorkResult(request, resp, diagnostics, retryCount, start), nil
+	}
 
 	outcome := ae.evaluateOutcome(resp, workerDef)
 	return ae.workResultForInferenceResponse(request, resp, outcome, diagnostics, retryCount, start)

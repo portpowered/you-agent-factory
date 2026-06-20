@@ -8,6 +8,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+func TestUsesDecisionEnvelopeOutcome_IdentifiesConfiguredWorkstation(t *testing.T) {
+	if !UsesDecisionEnvelopeOutcome(&interfaces.FactoryWorkstationConfig{
+		OutcomeFormat: DecisionEnvelopeOutcomeFormat,
+	}) {
+		t.Fatal("decision-envelope outcomeFormat should enable envelope parsing")
+	}
+	if UsesDecisionEnvelopeOutcome(&interfaces.FactoryWorkstationConfig{Name: "review"}) {
+		t.Fatal("review workstation without outcomeFormat should not use envelope parsing")
+	}
+	if UsesDecisionEnvelopeOutcome(nil) {
+		t.Fatal("nil workstation should not use envelope parsing")
+	}
+}
+
 func TestSupportedDecisions_MatchesWorkOutcomeVocabulary(t *testing.T) {
 	want := []interfaces.WorkOutcome{
 		interfaces.OutcomeAccepted,

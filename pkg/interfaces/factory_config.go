@@ -376,6 +376,7 @@ type FactoryWorkstationConfig struct {
 	Guards                []GuardConfig               `json:"guards,omitempty" yaml:"guards,omitempty"`
 	StopWords             []string                    `json:"stop_words,omitempty" yaml:"stopWords,omitempty"`
 	RuntimeStopWords      []string                    `json:"runtime_stop_words,omitempty" yaml:"-"`
+	OutcomeFormat         string                      `json:"outcomeFormat,omitempty" yaml:"outcomeFormat,omitempty"`
 	Body                  string                      `json:"body,omitempty" yaml:"-"`
 	PromptTemplate        string                      `json:"prompt_template,omitempty" yaml:"-"`
 	WorkingDirectory      string                      `json:"working_directory,omitempty" yaml:"workingDirectory,omitempty"`

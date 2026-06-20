@@ -5,6 +5,9 @@ instead of ad hoc text markers. The runtime maps that envelope directly onto the
 existing `WorkResult` contract.
 
 Authoritative parsing lives in `pkg/packagedfactories/goal/decision_envelope.go`.
+Workstations that emit this envelope set `outcomeFormat: "decision-envelope"` in
+`factory.json` so the agent executor routes output through the envelope parser
+instead of stop-token markers.
 
 ## Envelope shape
 
