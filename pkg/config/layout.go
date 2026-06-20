@@ -969,6 +969,7 @@ var BuiltInGoalFactoryJSON = []byte(`{
         {"name": "execute", "type": "PROCESSING"},
         {"name": "check", "type": "PROCESSING"},
         {"name": "review", "type": "PROCESSING"},
+        {"name": "summarize", "type": "PROCESSING"},
         {"name": "complete", "type": "TERMINAL"},
         {"name": "blocked", "type": "PROCESSING"},
         {"name": "needs-human", "type": "PROCESSING"},
@@ -981,24 +982,29 @@ var BuiltInGoalFactoryJSON = []byte(`{
     {
       "name": "goal-planner",
       "type": "AGENT_WORKER",
-      "body": "You are the @you/goal planner worker."
+      "body": "Planner worker for @you/goal."
     },
     {
       "name": "goal-executor",
       "type": "AGENT_WORKER",
-      "body": "You are the @you/goal executor worker."
+      "body": "Executor worker for @you/goal."
     },
     {
       "name": "goal-checker",
       "type": "SCRIPT_WORKER",
       "command": "make",
       "args": ["test"],
-      "body": "You are the @you/goal checker worker."
+      "body": "Checker worker for @you/goal."
     },
     {
       "name": "goal-reviewer",
       "type": "AGENT_WORKER",
-      "body": "You are the @you/goal reviewer worker."
+      "body": "Reviewer worker for @you/goal."
+    },
+    {
+      "name": "goal-summarizer",
+      "type": "AGENT_WORKER",
+      "body": "Summarizer worker for @you/goal."
     }
   ],
   "workstations": [
@@ -1015,6 +1021,7 @@ var BuiltInGoalFactoryJSON = []byte(`{
       "onFailure": [
         {"workType": "goal", "state": "failed"}
       ],
+      "promptFile": "prompts/planner.md",
       "body": "Plan the requested goal for {{ .WorkID }}."
     },
     {
@@ -1030,6 +1037,7 @@ var BuiltInGoalFactoryJSON = []byte(`{
       "onFailure": [
         {"workType": "goal", "state": "failed"}
       ],
+      "promptFile": "prompts/executor.md",
       "body": "Execute the planned goal for {{ .WorkID }}."
     },
     {
@@ -1045,6 +1053,7 @@ var BuiltInGoalFactoryJSON = []byte(`{
       "onFailure": [
         {"workType": "goal", "state": "failed"}
       ],
+      "promptFile": "prompts/checker.md",
       "body": "Run verification checks for goal {{ .WorkID }}."
     },
     {
@@ -1066,7 +1075,7 @@ var BuiltInGoalFactoryJSON = []byte(`{
         {"workType": "goal", "state": "review"}
       ],
       "classificationRoutes": [
-        {"label": "accepted", "outputs": [{"workType": "goal", "state": "complete"}]},
+        {"label": "accepted", "outputs": [{"workType": "goal", "state": "summarize"}]},
         {"label": "needs_changes", "outputs": [{"workType": "goal", "state": "plan"}]},
         {"label": "tests_failed", "outputs": [{"workType": "goal", "state": "plan"}]},
         {"label": "needs_human", "outputs": [{"workType": "goal", "state": "needs-human"}]},
@@ -1077,7 +1086,24 @@ var BuiltInGoalFactoryJSON = []byte(`{
       "onFailure": [
         {"workType": "goal", "state": "failed"}
       ],
+      "promptFile": "prompts/reviewer.md",
       "body": "Review goal progress for {{ .WorkID }}."
+    },
+    {
+      "name": "summarize-goal",
+      "type": "AGENT_RUN",
+      "worker": "goal-summarizer",
+      "inputs": [
+        {"workType": "goal", "state": "summarize"}
+      ],
+      "outputs": [
+        {"workType": "goal", "state": "complete"}
+      ],
+      "onFailure": [
+        {"workType": "goal", "state": "failed"}
+      ],
+      "promptFile": "prompts/summarizer.md",
+      "body": "Summarize the completed goal for {{ .WorkID }}."
     },
     {
       "name": "goal-loop-breaker",

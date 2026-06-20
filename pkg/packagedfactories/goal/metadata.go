@@ -15,6 +15,27 @@ const (
 	PackagedCheckWorkstationName = "check-goal"
 	// PackagedReviewWorkstationName is the workstation that classifies review outcomes.
 	PackagedReviewWorkstationName = "review-goal"
+	// PackagedSummarizeWorkstationName is the workstation that produces the final goal summary.
+	PackagedSummarizeWorkstationName = "summarize-goal"
 	// PackagedLoopBreakerWorkstationName is the guarded loop breaker for review retries.
 	PackagedLoopBreakerWorkstationName = "goal-loop-breaker"
+	// PackagedSummarizerWorkerName is the worker that produces the final goal summary.
+	PackagedSummarizerWorkerName = "goal-summarizer"
 )
+
+// PackagedGoalRolePromptSource identifies the authored split prompt file for a goal role.
+type PackagedGoalRolePromptSource struct {
+	Role            string
+	WorkstationName string
+	PromptFile      string
+}
+
+// PackagedGoalRolePromptSources lists each role-specific split prompt wired through
+// the normal workstation promptFile resolution path.
+var PackagedGoalRolePromptSources = []PackagedGoalRolePromptSource{
+	{Role: "planner", WorkstationName: PackagedPlanWorkstationName, PromptFile: "prompts/planner.md"},
+	{Role: "executor", WorkstationName: PackagedExecuteWorkstationName, PromptFile: "prompts/executor.md"},
+	{Role: "checker", WorkstationName: PackagedCheckWorkstationName, PromptFile: "prompts/checker.md"},
+	{Role: "reviewer", WorkstationName: PackagedReviewWorkstationName, PromptFile: "prompts/reviewer.md"},
+	{Role: "summarizer", WorkstationName: PackagedSummarizeWorkstationName, PromptFile: "prompts/summarizer.md"},
+}

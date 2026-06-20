@@ -1,7 +1,10 @@
 package goal
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -14,6 +17,7 @@ var packagedGoalLifecycleStates = []string{
 	"execute",
 	"check",
 	"review",
+	"summarize",
 	"complete",
 	"blocked",
 	"needs-human",
@@ -32,13 +36,15 @@ var packagedGoalProgressionWorkstations = []struct {
 	{name: PackagedExecuteWorkstationName, inputState: "plan", outputState: "execute", publicType: interfaces.WorkstationTypeAgent, workerName: "goal-executor"},
 	{name: PackagedCheckWorkstationName, inputState: "execute", outputState: "check", publicType: interfaces.WorkstationTypeScript, workerName: "goal-checker"},
 	{name: "advance-goal-review", inputState: "check", outputState: "review", publicType: interfaces.WorkstationTypeLogical, workerName: ""},
+	{name: PackagedSummarizeWorkstationName, inputState: "summarize", outputState: "complete", publicType: interfaces.WorkstationTypeAgent, workerName: PackagedSummarizerWorkerName},
 }
 
 var packagedGoalWorkerPublicTypes = map[string]string{
 	"goal-planner":  interfaces.WorkerTypeAgent,
 	"goal-executor": interfaces.WorkerTypeAgent,
 	"goal-checker":  interfaces.WorkerTypeScript,
-	"goal-reviewer": interfaces.WorkerTypeAgent,
+	"goal-reviewer":   interfaces.WorkerTypeAgent,
+	PackagedSummarizerWorkerName: interfaces.WorkerTypeAgent,
 }
 
 var packagedGoalWorkstationPublicTypes = map[string]string{
@@ -46,8 +52,9 @@ var packagedGoalWorkstationPublicTypes = map[string]string{
 	PackagedExecuteWorkstationName:       interfaces.WorkstationTypeAgent,
 	PackagedCheckWorkstationName:         interfaces.WorkstationTypeScript,
 	"advance-goal-review":                interfaces.WorkstationTypeLogical,
-	PackagedReviewWorkstationName:        interfaces.WorkstationTypeClassify,
-	PackagedLoopBreakerWorkstationName:   interfaces.WorkstationTypeLogical,
+	PackagedReviewWorkstationName:      interfaces.WorkstationTypeClassify,
+	PackagedSummarizeWorkstationName:   interfaces.WorkstationTypeAgent,
+	PackagedLoopBreakerWorkstationName: interfaces.WorkstationTypeLogical,
 }
 
 func TestBuiltInFactoryJSON_LoadsRunnablePackagedGoalFactory(t *testing.T) {
@@ -132,6 +139,41 @@ func TestMaterializedPackagedGoalFactory_ExposesCurrentPublicPrimitiveVocabulary
 	assertGoalPublicPrimitiveVocabulary(t, loaded.FactoryConfig().Workers, loaded.FactoryConfig().Workstations)
 }
 
+func TestMaterializedPackagedGoalFactory_ResolvesSplitRolePromptFiles(t *testing.T) {
+	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+
+	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
+	}
+
+	for _, source := range PackagedGoalRolePromptSources {
+		promptPath := filepath.Join(factoryDir, interfaces.WorkstationsDir, source.WorkstationName, source.PromptFile)
+		promptBytes, err := os.ReadFile(promptPath)
+		if err != nil {
+			t.Fatalf("role %q prompt file %s: %v", source.Role, promptPath, err)
+		}
+		promptOnDisk := strings.TrimSpace(string(promptBytes))
+		if promptOnDisk == "" {
+			t.Fatalf("role %q prompt file %s is empty", source.Role, promptPath)
+		}
+
+		workstation, ok := loaded.Workstation(source.WorkstationName)
+		if !ok {
+			t.Fatalf("missing workstation %q for role %q", source.WorkstationName, source.Role)
+		}
+		if workstation.PromptFile != source.PromptFile {
+			t.Fatalf("workstation %q promptFile = %q, want %q", source.WorkstationName, workstation.PromptFile, source.PromptFile)
+		}
+		if strings.TrimSpace(workstation.PromptTemplate) != promptOnDisk {
+			t.Fatalf("workstation %q prompt template = %q, want loaded split file %q", source.WorkstationName, workstation.PromptTemplate, promptOnDisk)
+		}
+	}
+}
+
 func assertGoalPublicPrimitiveVocabulary(t *testing.T, workers []interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) {
 	t.Helper()
 
@@ -214,7 +256,7 @@ func assertGoalReviewRoutes(t *testing.T, workstations []interfaces.FactoryWorks
 	}
 
 	wantRoutes := map[string]string{
-		"accepted":      "complete",
+		"accepted":      "summarize",
 		"needs_changes": "plan",
 		"tests_failed":  "plan",
 		"needs_human":   "needs-human",
