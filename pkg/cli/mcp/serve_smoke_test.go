@@ -10,10 +10,11 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	mcpcli "github.com/portpowered/infinite-you/pkg/cli/mcp"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
@@ -166,7 +167,8 @@ func closeRunServeSmokeServer(t *testing.T, stdinWrite *os.File, serveErr <-chan
 		if err != nil && err != io.EOF && !strings.Contains(err.Error(), "file already closed") {
 			t.Fatalf("RunServe: %v", err)
 		}
-	default:
+	case <-time.After(2 * time.Second):
+		t.Fatal("RunServe did not shut down after stdin closed")
 	}
 }
 
