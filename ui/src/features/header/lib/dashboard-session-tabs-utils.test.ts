@@ -1,5 +1,8 @@
 import { FactorySessionsAPIError } from "../../../api/factory-sessions";
-import { factorySessionFieldTarget } from "../../../testing/factory-validation-target-fixtures";
+import {
+  factorySessionFieldTarget,
+  factorySessionTargetTarget,
+} from "../../../testing/factory-validation-target-fixtures";
 import { getHeaderControlsMessages } from "../messages/header-controls";
 import {
   classifyFactorySessionFolderValidationError,
@@ -176,6 +179,26 @@ describe("dashboard session tabs utils", () => {
       ),
     ).toBe(messages.openSessionOverrideNotFoundError);
 
+    expect(
+      classifyFactorySessionFolderValidationError(
+        new FactorySessionsAPIError("config load failed", {
+          code: "FACTORY_SESSION_CONFIG_LOAD_FAILED",
+          targets: [
+            factorySessionTargetTarget(
+              "config_load_failed",
+              "default",
+              "broken factory config",
+            ),
+          ],
+        }),
+      ),
+    ).toBe("config_load_failed");
+    expect(
+      folderValidationStatusMessage(
+        { status: "error", reason: "config_load_failed" },
+        messages,
+      ),
+    ).toBeNull();
     expect(
       classifyFactorySessionFolderValidationError(
         new FactorySessionsAPIError("ignored", {
