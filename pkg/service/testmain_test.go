@@ -295,10 +295,6 @@ func scaffoldLocalModelLongTestFactoryDir(t *testing.T, cfg *interfaces.FactoryC
 	return dir
 }
 
-func localModelLongTestFactoryConfig() *interfaces.FactoryConfig {
-	return localModelLongTestFactoryConfigWithHealthEndpoint("")
-}
-
 func localModelLongTestFactoryConfigWithHealthEndpoint(healthEndpoint string) *interfaces.FactoryConfig {
 	cfg := &interfaces.FactoryConfig{
 		Name: "omnivoice-local-model-test",
@@ -2102,7 +2098,7 @@ func TestWorkerWorkstationTaxonomyRuntime_InferencePairingExecutesLikeLegacyMode
 		{
 			name:                   "inference taxonomy",
 			publicWorkerType:       interfaces.WorkerTypeInference,
-			publicWorkstationType:    interfaces.WorkstationTypeInference,
+			publicWorkstationType:  interfaces.WorkstationTypeInference,
 			wantRuntimeWorkerType:  interfaces.WorkerTypeModel,
 			wantRuntimeWorkstation: interfaces.WorkstationTypeInvoke,
 		},

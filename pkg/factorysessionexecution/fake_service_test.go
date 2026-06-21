@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file consolidated fake-service contract and projection tests remain together until dedicated execution test seams split.
+// pkgmaintcheck:ignore-file-lines consolidated fake-service contract and projection tests remain together until dedicated execution test seams split.
 package factorysessionexecution
 
 import (
@@ -7,7 +9,10 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
+	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
@@ -117,6 +122,30 @@ func TestFakeService_StartAsync_IdempotentReplay(t *testing.T) {
 	}
 }
 
+func TestFakeService_StartAsync_ErrorBranches(t *testing.T) {
+	service := newContractFakeService(t)
+
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := service.StartAsync(canceledCtx, StartRequest{
+		RequestID: "req-petri-run-001",
+		Source:    Source{Kind: workflowsource.KindFactoryID, FactoryID: "customer-support-triage"},
+	}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled StartAsync error = %v", err)
+	}
+
+	if _, err := service.StartAsync(context.Background(), StartRequest{}); err == nil {
+		t.Fatal("invalid StartAsync request should fail")
+	}
+
+	if _, err := service.StartAsync(context.Background(), StartRequest{
+		RequestID: "missing-scenario",
+		Source:    Source{Kind: workflowsource.KindFactoryID, FactoryID: "customer-support-triage"},
+	}); err == nil {
+		t.Fatal("unknown scenario should fail")
+	}
+}
+
 func TestFakeService_StartSync_TerminalAndTimeoutFixtures(t *testing.T) {
 	service := newContractFakeService(t)
 
@@ -187,6 +216,37 @@ func TestFakeService_StartSync_AppliesCancelOnTimeoutOverlay(t *testing.T) {
 	}
 	if result.Availability == nil || result.Availability.Reason != "SESSION_CANCELED" {
 		t.Fatalf("availability = %#v, want SESSION_CANCELED", result.Availability)
+	}
+}
+
+func TestFakeService_StartSync_ErrorAndReplayBranches(t *testing.T) {
+	service := newContractFakeService(t)
+
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := service.StartSync(canceledCtx, StartRequest{
+		RequestID: "req-petri-success-001",
+		Source:    Source{Kind: workflowsource.KindFactoryID, FactoryID: "customer-support-triage"},
+	}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled StartSync error = %v", err)
+	}
+
+	if _, err := service.StartSync(context.Background(), StartRequest{}); err == nil {
+		t.Fatal("invalid StartSync request should fail")
+	}
+
+	asyncService := newContractFakeService(t)
+	if _, err := asyncService.StartAsync(context.Background(), StartRequest{
+		RequestID: "req-petri-run-001",
+		Source:    Source{Kind: workflowsource.KindFactoryID, FactoryID: "customer-support-triage"},
+	}); err != nil {
+		t.Fatalf("seed StartAsync: %v", err)
+	}
+	if _, err := asyncService.StartSync(context.Background(), StartRequest{
+		RequestID: "req-petri-run-001",
+		Source:    Source{Kind: workflowsource.KindFactoryID, FactoryID: "customer-support-triage"},
+	}); !errors.Is(err, ErrExecutionRequestIDConflict) {
+		t.Fatalf("async replay StartSync error = %v, want ErrExecutionRequestIDConflict", err)
 	}
 }
 
@@ -273,6 +333,35 @@ func TestFakeService_LifecycleControls_UpdateStateAndErrors(t *testing.T) {
 	}
 }
 
+func TestFakeService_LifecycleControl_ErrorBranches(t *testing.T) {
+	service := newContractFakeService(t)
+
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := service.Pause(canceledCtx, "dur-sess-js-run-n-001", ControlRequest{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled Pause error = %v", err)
+	}
+	if _, err := service.Pause(context.Background(), " ", ControlRequest{}); err == nil {
+		t.Fatal("blank session id should fail")
+	}
+	if _, err := service.Pause(context.Background(), "missing-session", ControlRequest{}); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("missing session Pause error = %v", err)
+	}
+
+	startAsyncByRequestID(t, service, "req-petri-success-001")
+	if _, err := service.Terminate(context.Background(), "dur-sess-petri-success-001", ControlRequest{RequestID: "term-1"}); err == nil {
+		t.Fatal("terminate on terminal session should fail")
+	}
+	if _, err := service.Terminate(context.Background(), "dur-sess-petri-success-001", ControlRequest{RequestID: "term-1"}); err == nil {
+		t.Fatal("terminate replay should repeat stored error")
+	}
+
+	startAsyncByRequestID(t, service, "req-js-awaiting-001")
+	if _, err := service.Approve(context.Background(), "dur-sess-js-awaiting-001", ApproveRequest{}); err != nil {
+		t.Fatalf("Approve awaiting session: %v", err)
+	}
+}
+
 func TestFakeService_ReadProjections_MatchFixtureDispatchesArtifactsEvents(t *testing.T) {
 	service := newContractFakeService(t)
 	startAsyncByRequestID(t, service, "req-petri-success-001")
@@ -306,6 +395,144 @@ func TestFakeService_ReadProjections_MatchFixtureDispatchesArtifactsEvents(t *te
 	}
 	if err := ValidateResultMatchesEventProjection(result, events.Events); err != nil {
 		t.Fatalf("ValidateResultMatchesEventProjection: %v", err)
+	}
+}
+
+func TestFakeService_ReadMethods_ErrorAndFallbackBranches(t *testing.T) {
+	t.Run("session and result branches", testFakeServiceReadSessionAndResultBranches)
+	t.Run("dispatch and artifact branches", testFakeServiceReadDispatchAndArtifactBranches)
+	t.Run("event and listing branches", testFakeServiceReadEventAndListingBranches)
+}
+
+func testFakeServiceReadSessionAndResultBranches(t *testing.T) {
+	t.Helper()
+
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-petri-success-001")
+
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := service.GetSession(canceledCtx, "dur-sess-petri-success-001"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled GetSession error = %v", err)
+	}
+	if _, err := service.GetSession(context.Background(), " "); err == nil {
+		t.Fatal("blank GetSession id should fail")
+	}
+	if _, err := service.GetSession(context.Background(), "missing"); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("missing GetSession error = %v", err)
+	}
+
+	if _, err := service.GetResult(canceledCtx, "dur-sess-petri-success-001", ResultRequest{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled GetResult error = %v", err)
+	}
+	if _, err := service.GetResult(context.Background(), "dur-sess-petri-success-001", ResultRequest{Mode: ResultMode("bad")}); err == nil {
+		t.Fatal("invalid GetResult mode should fail")
+	}
+}
+
+func testFakeServiceReadDispatchAndArtifactBranches(t *testing.T) {
+	t.Helper()
+
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-petri-success-001")
+
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := service.ListDispatches(canceledCtx, "dur-sess-petri-success-001"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled ListDispatches error = %v", err)
+	}
+	detail, err := service.GetDispatch(context.Background(), "dur-sess-petri-success-001", "disp-petri-success-001")
+	if err != nil {
+		t.Fatalf("GetDispatch detail: %v", err)
+	}
+	if detail.OrchestratorKind == "" {
+		t.Fatalf("dispatch detail = %#v", detail)
+	}
+	fallbackService := NewFakeService(WithFakeScenarios(FakeScenario{
+		RequestID: "fallback-dispatch",
+		Session: SessionReadResult{
+			SessionID:        "dur-sess-fallback",
+			Status:           LifecycleStatusRunning,
+			OrchestratorKind: "PETRI",
+		},
+		Result: ResultReadResult{
+			SessionID:     "dur-sess-fallback",
+			SessionStatus: LifecycleStatusRunning,
+			ResultStatus:  ResultStatusNotReady,
+		},
+		Dispatches: []DispatchSummary{{ID: "disp-fallback", DispatchKind: "PETRI", Status: DispatchStatusQueued}},
+	}))
+	startAsyncByRequestID(t, fallbackService, "fallback-dispatch")
+	fallback, err := fallbackService.GetDispatch(context.Background(), "dur-sess-fallback", "disp-fallback")
+	if err != nil {
+		t.Fatalf("GetDispatch fallback: %v", err)
+	}
+	if fallback.ID != "disp-fallback" || fallback.OrchestratorKind != "PETRI" {
+		t.Fatalf("fallback dispatch detail = %#v", fallback)
+	}
+	if _, err := service.GetDispatch(context.Background(), "dur-sess-petri-success-001", "missing"); !errors.Is(err, ErrDispatchNotFound) {
+		t.Fatalf("missing GetDispatch error = %v", err)
+	}
+
+	if _, err := service.ListArtifacts(canceledCtx, "dur-sess-petri-success-001"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled ListArtifacts error = %v", err)
+	}
+	artifact, err := service.GetArtifact(context.Background(), "dur-sess-petri-success-001", "art-petri-final-001")
+	if err != nil {
+		t.Fatalf("GetArtifact detail: %v", err)
+	}
+	if artifact.ID != "art-petri-final-001" {
+		t.Fatalf("artifact detail = %#v", artifact)
+	}
+	fallbackArtifactService := NewFakeService(WithFakeScenarios(FakeScenario{
+		RequestID: "fallback-artifact",
+		Session: SessionReadResult{
+			SessionID: "dur-sess-art-fallback",
+			Status:    LifecycleStatusSucceeded,
+		},
+		Result: ResultReadResult{
+			SessionID:     "dur-sess-art-fallback",
+			SessionStatus: LifecycleStatusSucceeded,
+			ResultStatus:  ResultStatusFinal,
+		},
+		Artifacts: []ArtifactSummary{{ID: "art-fallback", Kind: "LOG", Visibility: "PUBLIC"}},
+	}))
+	startAsyncByRequestID(t, fallbackArtifactService, "fallback-artifact")
+	fallbackArtifact, err := fallbackArtifactService.GetArtifact(context.Background(), "dur-sess-art-fallback", "art-fallback")
+	if err != nil {
+		t.Fatalf("GetArtifact fallback: %v", err)
+	}
+	if fallbackArtifact.ID != "art-fallback" {
+		t.Fatalf("fallback artifact detail = %#v", fallbackArtifact)
+	}
+	if _, err := service.GetArtifact(context.Background(), "dur-sess-petri-success-001", "missing"); !errors.Is(err, ErrArtifactNotFound) {
+		t.Fatalf("missing GetArtifact error = %v", err)
+	}
+}
+
+func testFakeServiceReadEventAndListingBranches(t *testing.T) {
+	t.Helper()
+
+	service := newContractFakeService(t)
+	startAsyncByRequestID(t, service, "req-petri-success-001")
+
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := service.ReadEvents(canceledCtx, "dur-sess-petri-success-001", EventReconnectRequest{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled ReadEvents error = %v", err)
+	}
+	sequence := -1
+	if _, err := service.ReadEvents(context.Background(), "dur-sess-petri-success-001", EventReconnectRequest{AfterSequence: &sequence}); err == nil {
+		t.Fatal("negative reconnect sequence should fail")
+	}
+
+	if _, err := service.ListSessions(canceledCtx, ListSessionsRequest{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled ListSessions error = %v", err)
+	}
+	if _, err := service.ListSessions(context.Background(), ListSessionsRequest{Scope: SessionListScope("bad")}); err == nil {
+		t.Fatal("invalid list sessions scope should fail")
 	}
 }
 
@@ -460,336 +687,751 @@ func TestFakeService_StartAsync_ConcurrentIdempotentStarts(t *testing.T) {
 	}
 }
 
-func int64Ptr(value int64) *int64 {
-	return &value
-}
-func TestProjectResultRead_ModePartialAndFinal(t *testing.T) {
-	service := newContractFakeService(t)
-	startAsyncByRequestID(t, service, "req-js-run-n-001")
+func TestFakeService_ConstructorsAndHelpers(t *testing.T) {
+	scenario := BuiltinInterruptedRecoverableScenario()
+	service := NewFakeService(WithFakeScenarios(
+		FakeScenario{},
+		scenario,
+		FakeScenario{
+			RequestID: "seeded-terminal",
+			ListSummary: &DurableSessionListSummary{
+				SessionID: "dur-sess-seeded-terminal",
+				Status:    LifecycleStatusSucceeded,
+			},
+		},
+	))
+	if service == nil {
+		t.Fatal("NewFakeService returned nil")
+	}
+	if _, ok := service.scenariosByRequestID[scenario.RequestID]; !ok {
+		t.Fatal("scenario was not registered")
+	}
+	if len(service.persistedSeeds) != 2 {
+		t.Fatalf("persistedSeeds = %#v", service.persistedSeeds)
+	}
 
-	partial, err := service.GetResult(context.Background(), "dur-sess-js-run-n-001", ResultRequest{Mode: ResultModePartial})
+	loaded, err := NewFakeServiceFromContractFixtures(contractFixturesPath(t))
 	if err != nil {
-		t.Fatalf("GetResult partial: %v", err)
+		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
 	}
-	if partial.ResultStatus != ResultStatusPartial {
-		t.Fatalf("partial status = %q, want PARTIAL", partial.ResultStatus)
-	}
-	if len(partial.PrimaryResult) == 0 {
-		t.Fatal("partial primaryResult missing")
-	}
-	if partial.Mode != ResultModePartial {
-		t.Fatalf("mode = %q, want partial", partial.Mode)
+	if loaded == nil || len(loaded.scenariosByRequestID) == 0 {
+		t.Fatal("loaded fake service should contain fixture scenarios")
 	}
 
-	final, err := service.GetResult(context.Background(), "dur-sess-js-run-n-001", ResultRequest{Mode: ResultModeFinal})
-	if err != nil {
-		t.Fatalf("GetResult final: %v", err)
+	if seeded := appendPersistedSeed(nil, DurableSessionListSummary{SessionID: "a"}); len(seeded) != 1 {
+		t.Fatalf("appendPersistedSeed = %#v", seeded)
 	}
-	if final.ResultStatus != ResultStatusNotReady {
-		t.Fatalf("final status = %q, want NOT_READY", final.ResultStatus)
-	}
-	if len(final.PrimaryResult) != 0 {
-		t.Fatal("final primaryResult should be omitted for running session")
-	}
-	if final.Availability == nil || final.Availability.Reason != "RESULT_NOT_READY" {
-		t.Fatalf("availability = %#v, want RESULT_NOT_READY", final.Availability)
-	}
-}
-
-func TestProjectResultRead_TerminalFinalAndUnavailable(t *testing.T) {
-	service := newContractFakeService(t)
-	startAsyncByRequestID(t, service, "req-petri-success-001")
-
-	final, err := service.GetResult(context.Background(), "dur-sess-petri-success-001", ResultRequest{Mode: ResultModeFinal})
-	if err != nil {
-		t.Fatalf("GetResult terminal final: %v", err)
-	}
-	if final.ResultStatus != ResultStatusFinal {
-		t.Fatalf("status = %q, want FINAL", final.ResultStatus)
-	}
-	if len(final.PrimaryResult) == 0 {
-		t.Fatal("final primaryResult missing")
+	seeded := appendPersistedSeed([]DurableSessionListSummary{{SessionID: "a"}}, DurableSessionListSummary{SessionID: "a"})
+	if len(seeded) != 1 {
+		t.Fatalf("deduped persisted seeds = %#v", seeded)
 	}
 
-	startAsyncByRequestID(t, service, "req-petri-cancel-001")
-	unavailable, err := service.GetResult(context.Background(), "dur-sess-petri-cancel-001", ResultRequest{Mode: ResultModeFinal})
-	if err != nil {
-		t.Fatalf("GetResult unavailable: %v", err)
+	dispatch, ok := findDispatchSummary([]DispatchSummary{{ID: "disp-1"}}, "disp-1")
+	if !ok || dispatch.ID != "disp-1" {
+		t.Fatalf("findDispatchSummary found = %#v, %v", dispatch, ok)
 	}
-	if unavailable.ResultStatus != ResultStatusUnavailable {
-		t.Fatalf("status = %q, want UNAVAILABLE", unavailable.ResultStatus)
-	}
-	if unavailable.Availability == nil || unavailable.Availability.Reason != "SESSION_CANCELED" {
-		t.Fatalf("availability = %#v", unavailable.Availability)
+	if _, ok := findDispatchSummary([]DispatchSummary{{ID: "disp-1"}}, "missing"); ok {
+		t.Fatal("findDispatchSummary should report missing dispatch")
 	}
 }
 
-func TestProjectResultRead_FailedWithPartialHonorsPartialMode(t *testing.T) {
-	service := newContractFakeService(t)
-	startAsyncByRequestID(t, service, "req-js-failed-partial-001")
-
-	result, err := service.GetResult(context.Background(), "dur-sess-js-failed-partial-001", ResultRequest{Mode: ResultModePartial})
+func TestNormalizeResultRequest_DefaultsAndValidation(t *testing.T) {
+	normalized, err := NormalizeResultRequest(ResultRequest{})
 	if err != nil {
-		t.Fatalf("GetResult: %v", err)
+		t.Fatalf("NormalizeResultRequest: %v", err)
 	}
-	if result.ResultStatus != ResultStatusFailedWithPartial {
-		t.Fatalf("status = %q, want FAILED_WITH_PARTIAL", result.ResultStatus)
+	if normalized.Mode != ResultModeFinal {
+		t.Fatalf("mode = %q, want final", normalized.Mode)
 	}
-	if len(result.PrimaryResult) == 0 {
-		t.Fatal("partial primaryResult missing")
-	}
-	if result.Failure == nil || !result.Failure.PartialResultAvailable {
-		t.Fatal("failure detail missing")
-	}
-}
 
-func TestProjectResultRead_IncludeArtifactsShaping(t *testing.T) {
-	service := newContractFakeService(t)
-	startAsyncByRequestID(t, service, "req-petri-success-001")
-
-	excluded, err := service.GetResult(context.Background(), "dur-sess-petri-success-001", ResultRequest{
-		Mode:             ResultModeFinal,
-		IncludeArtifacts: false,
-	})
+	partial, err := NormalizeResultRequest(ResultRequest{Mode: ResultModePartial, IncludeArtifacts: true})
 	if err != nil {
-		t.Fatalf("GetResult excluded: %v", err)
+		t.Fatalf("NormalizeResultRequest partial: %v", err)
 	}
-	if excluded.IncludeArtifacts {
-		t.Fatal("includeArtifacts = true, want false")
-	}
-	if len(excluded.ArtifactRefs) != 0 {
-		t.Fatalf("artifactRefs = %#v, want omitted", excluded.ArtifactRefs)
-	}
-	if len(excluded.ArtifactIDs) != 1 || excluded.ArtifactIDs[0] != "art-petri-final-001" {
-		t.Fatalf("artifactIds = %#v", excluded.ArtifactIDs)
-	}
-
-	included, err := service.GetResult(context.Background(), "dur-sess-petri-success-001", ResultRequest{
-		Mode:             ResultModeFinal,
-		IncludeArtifacts: true,
-	})
-	if err != nil {
-		t.Fatalf("GetResult included: %v", err)
-	}
-	if !included.IncludeArtifacts {
+	if !partial.IncludeArtifacts {
 		t.Fatal("includeArtifacts = false, want true")
 	}
-	if len(included.ArtifactRefs) != 1 || included.ArtifactRefs[0].ID != "art-petri-final-001" {
-		t.Fatalf("artifactRefs = %#v", included.ArtifactRefs)
-	}
-	if len(included.ArtifactIDs) != 0 {
-		t.Fatalf("artifactIds = %#v, want omitted when refs included", included.ArtifactIDs)
-	}
-}
 
-func TestProjectResultRead_NotReadyRunningSession(t *testing.T) {
-	service := newContractFakeService(t)
-	startAsyncByRequestID(t, service, "req-petri-run-001")
-
-	result, err := service.GetResult(context.Background(), "dur-sess-petri-run-001", ResultRequest{Mode: ResultModeFinal})
-	if err != nil {
-		t.Fatalf("GetResult: %v", err)
-	}
-	if result.ResultStatus != ResultStatusNotReady {
-		t.Fatalf("status = %q, want NOT_READY", result.ResultStatus)
-	}
-	if result.Availability == nil || result.Availability.Message == "" {
-		t.Fatal("availability missing")
-	}
-}
-
-func TestProjectResultRead_DefaultsToFinalMode(t *testing.T) {
-	canonical := ResultReadResult{
-		SessionID:     "dur-sess-001",
-		ResultStatus:  ResultStatusFinal,
-		SessionStatus: LifecycleStatusSucceeded,
-		PrimaryResult: json.RawMessage(`[{"type":"text","text":"done"}]`),
-	}
-	session := SessionReadResult{
-		SessionID: "dur-sess-001",
-		Status:    LifecycleStatusSucceeded,
-		ResultSummary: &ResultSummary{
-			ResultStatus: string(ResultStatusFinal),
-		},
-	}
-
-	projected, err := ProjectResultRead(canonical, session, nil, ResultRequest{})
-	if err != nil {
-		t.Fatalf("ProjectResultRead: %v", err)
-	}
-	if projected.Mode != ResultModeFinal {
-		t.Fatalf("mode = %q, want final", projected.Mode)
-	}
-	if projected.ResultStatus != ResultStatusFinal {
-		t.Fatalf("status = %q, want FINAL", projected.ResultStatus)
-	}
-}
-
-func TestIsTerminalLifecycleStatus(t *testing.T) {
-	terminal := []LifecycleStatus{
-		LifecycleStatusSucceeded,
-		LifecycleStatusFailed,
-		LifecycleStatusCanceled,
-		LifecycleStatusTimedOut,
-		LifecycleStatusInterrupted,
-		LifecycleStatusTerminated,
-	}
-	for _, status := range terminal {
-		if !IsTerminalLifecycleStatus(status) {
-			t.Fatalf("status %q should be terminal", status)
-		}
-		if status != LifecycleStatusFailed && AllowsRetryDispatchOnTerminal(status) {
-			t.Fatalf("retry-dispatch should be rejected on terminal status %q", status)
-		}
-	}
-	if !AllowsRetryDispatchOnTerminal(LifecycleStatusFailed) {
-		t.Fatal("retry-dispatch should remain allowed on FAILED terminal sessions")
-	}
-	active := []LifecycleStatus{
-		LifecycleStatusRunning,
-		LifecycleStatusPaused,
-		LifecycleStatusCanceling,
-	}
-	for _, status := range active {
-		if IsTerminalLifecycleStatus(status) {
-			t.Fatalf("status %q should be active", status)
-		}
-	}
-}
-
-func TestEvaluateLifecycleControl_ValidTransitions(t *testing.T) {
-	cases := []struct {
-		operation LifecycleControlKind
-		status    LifecycleStatus
-		want      LifecycleControlOutcome
-	}{
-		{LifecycleControlPause, LifecycleStatusRunning, LifecycleControlOutcomeAccepted},
-		{LifecycleControlPause, LifecycleStatusPaused, LifecycleControlOutcomeNoOp},
-		{LifecycleControlResume, LifecycleStatusPaused, LifecycleControlOutcomeAccepted},
-		{LifecycleControlCancel, LifecycleStatusRunning, LifecycleControlOutcomeAccepted},
-		{LifecycleControlCancel, LifecycleStatusCanceling, LifecycleControlOutcomeNoOp},
-		{LifecycleControlTerminate, LifecycleStatusRunning, LifecycleControlOutcomeAccepted},
-		{LifecycleControlApprove, LifecycleStatusAwaitingApproval, LifecycleControlOutcomeAccepted},
-		{LifecycleControlRetryDispatch, LifecycleStatusRunning, LifecycleControlOutcomeAccepted},
-		{LifecycleControlRetryDispatch, LifecycleStatusFailed, LifecycleControlOutcomeAccepted},
-	}
-	for _, tc := range cases {
-		got := EvaluateLifecycleControl(tc.operation, tc.status)
-		if got != tc.want {
-			t.Fatalf("%s on %s = %q, want %q", tc.operation, tc.status, got, tc.want)
-		}
-	}
-}
-
-func TestEvaluateLifecycleControl_InvalidAndTerminal(t *testing.T) {
-	if got := EvaluateLifecycleControl(LifecycleControlPause, LifecycleStatusAwaitingApproval); got != LifecycleControlOutcomeInvalidState {
-		t.Fatalf("pause on awaiting approval = %q, want INVALID_STATE", got)
-	}
-	if got := EvaluateLifecycleControl(LifecycleControlRetryDispatch, LifecycleStatusSucceeded); got != LifecycleControlOutcomeTerminalSession {
-		t.Fatalf("retry on succeeded = %q, want TERMINAL_SESSION", got)
-	}
-	if got := EvaluateLifecycleControl(LifecycleControlCancel, LifecycleStatusCanceled); got != LifecycleControlOutcomeNoOp {
-		t.Fatalf("cancel on canceled = %q, want NO_OP", got)
-	}
-}
-
-func TestNormalizeRetryDispatchRequest_RequiresDispatchID(t *testing.T) {
-	_, err := NormalizeRetryDispatchRequest(RetryDispatchRequest{})
+	_, err = NormalizeResultRequest(ResultRequest{Mode: ResultMode("invalid")})
 	if err == nil {
 		t.Fatal("error = nil, want validation error")
 	}
-	var validationErr *ValidationError
-	if !errors.As(err, &validationErr) {
-		t.Fatalf("error = %T, want ValidationError", err)
+}
+
+func TestNormalizeEventReconnectRequest_RejectsNegativeSequence(t *testing.T) {
+	sequence := -1
+	_, err := NormalizeEventReconnectRequest(EventReconnectRequest{AfterSequence: &sequence})
+	if err == nil {
+		t.Fatal("error = nil, want validation error")
 	}
 }
 
-func TestControlIdempotencyTupleHash_IsStable(t *testing.T) {
-	retry := RetryDispatchRequest{
-		ControlRequest: ControlRequest{RequestID: "req-retry-001"},
-		DispatchID:     "disp-js-success-002",
+func TestValidateResultMatchesSessionRead(t *testing.T) {
+	session := SessionReadResult{
+		SessionID: "dur-sess-001",
+		Status:    LifecycleStatusRunning,
+		ResultSummary: &ResultSummary{
+			ResultStatus: string(ResultStatusPartial),
+		},
 	}
-	first, err := ControlIdempotencyTupleHash(LifecycleControlRetryDispatch, "dur-sess-js-success-002", ApproveRequest{}, retry)
-	if err != nil {
-		t.Fatalf("first hash: %v", err)
+	result := ResultReadResult{
+		SessionID:     "dur-sess-001",
+		ResultStatus:  ResultStatusPartial,
+		SessionStatus: LifecycleStatusRunning,
 	}
-	second, err := ControlIdempotencyTupleHash(LifecycleControlRetryDispatch, "dur-sess-js-success-002", ApproveRequest{}, retry)
-	if err != nil {
-		t.Fatalf("second hash: %v", err)
+	if err := ValidateResultMatchesSessionRead(session, result); err != nil {
+		t.Fatalf("ValidateResultMatchesSessionRead: %v", err)
 	}
-	if first != second {
-		t.Fatalf("hash mismatch: %q vs %q", first, second)
+
+	mismatch := result
+	mismatch.ResultStatus = ResultStatusFinal
+	if err := ValidateResultMatchesSessionRead(session, mismatch); err == nil {
+		t.Fatal("error = nil, want mismatch")
 	}
 }
 
-func TestCheckControlRequestIDReplay_Conflict(t *testing.T) {
-	err := CheckControlRequestIDReplay("req-1", "sha256:abc", "sha256:def")
-	if !errors.Is(err, ErrControlRequestIDConflict) {
-		t.Fatalf("error = %v, want ErrControlRequestIDConflict", err)
+func TestValidateDispatchListMatchesSessionProgress(t *testing.T) {
+	session := SessionReadResult{
+		SessionID: "dur-sess-001",
+		Progress: &ProgressCounts{
+			TotalDispatches: 3,
+		},
+	}
+	dispatches := []DispatchSummary{
+		{ID: "disp-1"},
+		{ID: "disp-2"},
+		{ID: "disp-3"},
+	}
+	if err := ValidateDispatchListMatchesSessionProgress(session, dispatches); err != nil {
+		t.Fatalf("ValidateDispatchListMatchesSessionProgress: %v", err)
+	}
+
+	tooMany := append(dispatches, DispatchSummary{ID: "disp-4"})
+	if err := ValidateDispatchListMatchesSessionProgress(session, tooMany); err == nil {
+		t.Fatal("error = nil, want dispatch count mismatch")
 	}
 }
 
-func TestServiceMethods_PropagateContextCancellation(t *testing.T) {
+func TestValidateResultMatchesEventProjection(t *testing.T) {
+	events := []json.RawMessage{
+		json.RawMessage(`{"type":"SESSION_RESULT_UPDATED","payload":{"resultStatus":"PARTIAL"}}`),
+		json.RawMessage(`{"type":"SESSION_RESULT_UPDATED","payload":{"resultStatus":"FINAL"}}`),
+	}
+	result := ResultReadResult{
+		SessionID:    "dur-sess-001",
+		ResultStatus: ResultStatusFinal,
+	}
+	if err := ValidateResultMatchesEventProjection(result, events); err != nil {
+		t.Fatalf("ValidateResultMatchesEventProjection: %v", err)
+	}
+
+	mismatch := result
+	mismatch.ResultStatus = ResultStatusPartial
+	if err := ValidateResultMatchesEventProjection(mismatch, events); err == nil {
+		t.Fatal("error = nil, want event mismatch")
+	}
+}
+
+func TestProjectionServiceMethods_PropagateContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
 	var service interface {
-		GetSession(context.Context, string) (SessionReadResult, error)
+		GetResult(context.Context, string, ResultRequest) (ResultReadResult, error)
 	}
-	service = stubCancelAwareService{}
-	if _, err := service.GetSession(ctx, "dur-sess-001"); !errors.Is(err, context.Canceled) {
-		t.Fatalf("GetSession error = %v, want context.Canceled", err)
+	service = stubProjectionCancelAwareService{}
+	if _, err := service.GetResult(ctx, "dur-sess-001", ResultRequest{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("GetResult error = %v, want context.Canceled", err)
 	}
 }
 
-type stubCancelAwareService struct{}
+type stubProjectionCancelAwareService struct{}
 
-func (stubCancelAwareService) GetSession(ctx context.Context, _ string) (SessionReadResult, error) {
+func (stubProjectionCancelAwareService) GetResult(ctx context.Context, _ string, _ ResultRequest) (ResultReadResult, error) {
 	if err := ctx.Err(); err != nil {
-		return SessionReadResult{}, err
+		return ResultReadResult{}, err
 	}
-	return SessionReadResult{}, nil
-}
-
-func (stubCancelAwareService) StartAsync(context.Context, StartRequest) (AsyncStartResult, error) {
-	return AsyncStartResult{}, nil
-}
-func (stubCancelAwareService) StartSync(context.Context, StartRequest) (SyncStartResult, error) {
-	return SyncStartResult{}, nil
-}
-func (stubCancelAwareService) Pause(context.Context, string, ControlRequest) (LifecycleControlResult, error) {
-	return LifecycleControlResult{}, nil
-}
-func (stubCancelAwareService) Resume(context.Context, string, ControlRequest) (LifecycleControlResult, error) {
-	return LifecycleControlResult{}, nil
-}
-func (stubCancelAwareService) Cancel(context.Context, string, ControlRequest) (LifecycleControlResult, error) {
-	return LifecycleControlResult{}, nil
-}
-func (stubCancelAwareService) Terminate(context.Context, string, ControlRequest) (LifecycleControlResult, error) {
-	return LifecycleControlResult{}, nil
-}
-func (stubCancelAwareService) Approve(context.Context, string, ApproveRequest) (LifecycleControlResult, error) {
-	return LifecycleControlResult{}, nil
-}
-func (stubCancelAwareService) RetryDispatch(context.Context, string, RetryDispatchRequest) (LifecycleControlResult, error) {
-	return LifecycleControlResult{}, nil
-}
-func (stubCancelAwareService) GetResult(context.Context, string, ResultRequest) (ResultReadResult, error) {
 	return ResultReadResult{}, nil
 }
-func (stubCancelAwareService) ListDispatches(context.Context, string) (ListDispatchesResult, error) {
-	return ListDispatchesResult{}, nil
+
+func TestBuildCanonicalSessionEvents_RunningAndTerminalSessions(t *testing.T) {
+	startedAt := time.Date(2026, 6, 8, 14, 0, 0, 0, time.UTC)
+	finishedAt := time.Date(2026, 6, 8, 14, 10, 0, 0, time.UTC)
+
+	runningEvents := BuildCanonicalSessionEvents(
+		SessionReadResult{
+			SessionID:        "dur-sess-js-run-n-001",
+			Status:           LifecycleStatusRunning,
+			OrchestratorKind: "JAVASCRIPT",
+			Dialect:          "you-workflow-v1",
+			Phase:            "verify",
+			Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+		},
+		ResultReadResult{
+			SessionID:    "dur-sess-js-run-n-001",
+			ResultStatus: ResultStatusPartial,
+		},
+	)
+	if len(runningEvents) != 2 {
+		t.Fatalf("running events = %d, want 2", len(runningEvents))
+	}
+	assertCanonicalEventEnvelope(t, runningEvents[0], "SESSION_STARTED", "session-started/dur-sess-js-run-n-001")
+	assertCanonicalEventEnvelope(t, runningEvents[1], "SESSION_RESULT_UPDATED", "session-result-updated/dur-sess-js-run-n-001")
+
+	terminalEvents := BuildCanonicalSessionEvents(
+		SessionReadResult{
+			SessionID:        "dur-sess-js-success-002",
+			Status:           LifecycleStatusSucceeded,
+			OrchestratorKind: "JAVASCRIPT",
+			Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt, FinishedAt: &finishedAt},
+		},
+		ResultReadResult{
+			SessionID:    "dur-sess-js-success-002",
+			ResultStatus: ResultStatusFinal,
+		},
+	)
+	if len(terminalEvents) != 3 {
+		t.Fatalf("terminal events = %d, want 3", len(terminalEvents))
+	}
+	assertCanonicalEventEnvelope(t, terminalEvents[2], "SESSION_COMPLETED", "session-completed/dur-sess-js-success-002")
 }
-func (stubCancelAwareService) GetDispatch(context.Context, string, string) (DispatchDetail, error) {
-	return DispatchDetail{}, nil
+
+func TestProjectRuntimeExecutionRecords_LiveChildDispatch_ProjectsLifecycleArtifactsAndProviderSession(t *testing.T) {
+	artifactRef := workflowresult.FormatArtifactURI("session-live-child", "child-artifact-1")
+	records := []workflowruntime.RuntimeRecord{
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:    "dispatch-1",
+				Status:        workflowruntime.ChildDispatchStatusQueued,
+				Label:         "summarize-findings",
+				ExecutionMode: ChildExecutorModeLive,
+				ArtifactRef:   artifactRef,
+			},
+		},
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:    "dispatch-1",
+				Status:        workflowruntime.ChildDispatchStatusRunning,
+				Label:         "summarize-findings",
+				ExecutionMode: ChildExecutorModeLive,
+				ArtifactRef:   artifactRef,
+			},
+		},
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:         "dispatch-1",
+				Status:             workflowruntime.ChildDispatchStatusCompleted,
+				Label:              "summarize-findings",
+				ExecutionMode:      ChildExecutorModeLive,
+				Provider:           "mock",
+				ProviderSessionRef: "provider-session-42",
+				ArtifactRef:        artifactRef,
+			},
+		},
+	}
+
+	observedAt := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+	projection := ProjectRuntimeExecutionRecords("session-live-child", records, observedAt)
+	if len(projection.Dispatches) != 1 {
+		t.Fatalf("dispatches = %#v, want one dispatch", projection.Dispatches)
+	}
+	dispatch := projection.Dispatches[0]
+	if dispatch.Status != DispatchStatusCompleted {
+		t.Fatalf("dispatch status = %q, want COMPLETED", dispatch.Status)
+	}
+	if len(dispatch.ProviderSessionRefs) != 1 || dispatch.ProviderSessionRefs[0].ID != "provider-session-42" {
+		t.Fatalf("providerSessionRefs = %#v", dispatch.ProviderSessionRefs)
+	}
+	if len(dispatch.OutputArtifactIDs) != 1 || dispatch.OutputArtifactIDs[0] != "child-artifact-1" {
+		t.Fatalf("outputArtifactIds = %#v", dispatch.OutputArtifactIDs)
+	}
+	transitions := projection.DispatchStatusTransitions["dispatch-1"]
+	if len(transitions) != 3 {
+		t.Fatalf("statusTransitions = %#v, want queued/running/completed", transitions)
+	}
+	if len(projection.Artifacts) != 1 || projection.Artifacts[0].ID != "child-artifact-1" {
+		t.Fatalf("artifacts = %#v", projection.Artifacts)
+	}
 }
-func (stubCancelAwareService) ListArtifacts(context.Context, string) (ListArtifactsResult, error) {
-	return ListArtifactsResult{}, nil
+
+func TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail(t *testing.T) {
+	records := []workflowruntime.RuntimeRecord{
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:    "dispatch-2",
+				Status:        workflowruntime.ChildDispatchStatusQueued,
+				Label:         "child-1",
+				ExecutionMode: ChildExecutorModeLive,
+			},
+		},
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:    "dispatch-2",
+				Status:        workflowruntime.ChildDispatchStatusRunning,
+				Label:         "child-1",
+				ExecutionMode: ChildExecutorModeLive,
+			},
+		},
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:        "dispatch-2",
+				Status:            workflowruntime.ChildDispatchStatusFailed,
+				Label:             "child-1",
+				ExecutionMode:     ChildExecutorModeLive,
+				FailureReason:     workflowruntime.ChildExecutionFailureReason,
+				FailureMessage:    "live child failed: simulated child error",
+				FailureErrorClass: "terminal",
+			},
+		},
+	}
+
+	observedAt := time.Date(2026, 6, 16, 14, 0, 0, 0, time.UTC)
+	projection := ProjectRuntimeExecutionRecords("session-live-child-failure", records, observedAt)
+	if len(projection.Dispatches) != 1 {
+		t.Fatalf("dispatches = %#v, want one failed dispatch", projection.Dispatches)
+	}
+	dispatch := projection.Dispatches[0]
+	if dispatch.Status != DispatchStatusFailed {
+		t.Fatalf("dispatch status = %q, want FAILED", dispatch.Status)
+	}
+	if dispatch.FailureDetail == nil || dispatch.FailureDetail.Reason != workflowruntime.ChildExecutionFailureReason {
+		t.Fatalf("failureDetail = %#v", dispatch.FailureDetail)
+	}
+	if dispatch.FailureDetail.Message != "live child failed: simulated child error" {
+		t.Fatalf("failure message = %q", dispatch.FailureDetail.Message)
+	}
+	if dispatch.FailureDetail.ErrorClass != "terminal" {
+		t.Fatalf("failure errorClass = %q, want terminal", dispatch.FailureDetail.ErrorClass)
+	}
+	if len(projection.Artifacts) != 0 {
+		t.Fatalf("artifacts = %#v, want none for failed child", projection.Artifacts)
+	}
+	transitions := projection.DispatchStatusTransitions["dispatch-2"]
+	if len(transitions) != 3 || transitions[2] != DispatchStatusFailed {
+		t.Fatalf("statusTransitions = %#v, want queued/running/failed", transitions)
+	}
 }
-func (stubCancelAwareService) GetArtifact(context.Context, string, string) (ArtifactDetail, error) {
-	return ArtifactDetail{}, nil
+
+func TestFilterEventsAfterReconnect_AfterEventIDAndSequence(t *testing.T) {
+	events := []json.RawMessage{
+		json.RawMessage(`{"id":"session-started/s1","context":{"sequence":1,"sessionSequence":0}}`),
+		json.RawMessage(`{"id":"session-result-updated/s1","context":{"sequence":2,"sessionSequence":1}}`),
+		json.RawMessage(`{"id":"session-completed/s1","context":{"sequence":3,"sessionSequence":2}}`),
+	}
+
+	all, err := FilterEventsAfterReconnect(events, EventReconnectRequest{}, "s1")
+	if err != nil {
+		t.Fatalf("FilterEventsAfterReconnect all: %v", err)
+	}
+	if len(all) != 3 {
+		t.Fatalf("all events = %d, want 3", len(all))
+	}
+
+	afterStart, err := FilterEventsAfterReconnect(events, EventReconnectRequest{
+		AfterEventID: "session-started/s1",
+	}, "s1")
+	if err != nil {
+		t.Fatalf("FilterEventsAfterReconnect after start: %v", err)
+	}
+	if len(afterStart) != 2 {
+		t.Fatalf("after start events = %d, want 2", len(afterStart))
+	}
+
+	sequence := 1
+	afterSequence, err := FilterEventsAfterReconnect(events, EventReconnectRequest{
+		AfterSequence: &sequence,
+	}, "s1")
+	if err != nil {
+		t.Fatalf("FilterEventsAfterReconnect after sequence: %v", err)
+	}
+	if len(afterSequence) != 1 {
+		t.Fatalf("after sequence events = %d, want 1", len(afterSequence))
+	}
+
+	_, err = FilterEventsAfterReconnect(events, EventReconnectRequest{
+		AfterEventID: "missing-event",
+	}, "s1")
+	if !errors.Is(err, ErrReconnectCursorNotFound) {
+		t.Fatalf("missing cursor error = %v, want ErrReconnectCursorNotFound", err)
+	}
 }
-func (stubCancelAwareService) ReadEvents(context.Context, string, EventReconnectRequest) (EventReadResult, error) {
-	return EventReadResult{}, nil
+
+func assertCanonicalEventEnvelope(t *testing.T, raw json.RawMessage, eventType, id string) {
+	t.Helper()
+	var envelope struct {
+		SchemaVersion string `json:"schemaVersion"`
+		ID            string `json:"id"`
+		Type          string `json:"type"`
+		Context       struct {
+			Sequence int `json:"sequence"`
+		} `json:"context"`
+		Payload json.RawMessage `json:"payload"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		t.Fatalf("Unmarshal event: %v", err)
+	}
+	if envelope.SchemaVersion != canonicalFactoryEventSchemaVersion {
+		t.Fatalf("schemaVersion = %q, want %q", envelope.SchemaVersion, canonicalFactoryEventSchemaVersion)
+	}
+	if id != "" && envelope.ID != id {
+		t.Fatalf("id = %q, want %q", envelope.ID, id)
+	}
+	if eventType != "" && envelope.Type != eventType {
+		t.Fatalf("type = %q, want %q", envelope.Type, eventType)
+	}
+	if envelope.Context.Sequence <= 0 {
+		t.Fatalf("sequence = %d, want positive", envelope.Context.Sequence)
+	}
+	if len(envelope.Payload) == 0 {
+		t.Fatal("payload missing")
+	}
+}
+func TestReplaySessionProjection_TerminalSessionBracket(t *testing.T) {
+	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	finishedAt := time.Date(2026, 6, 11, 12, 0, 2, 0, time.UTC)
+	sessionID := "dur-sess-replay-001"
+	events := BuildCanonicalRuntimeSessionEvents(
+		SessionReadResult{
+			SessionID:        sessionID,
+			Status:           LifecycleStatusSucceeded,
+			OrchestratorKind: "JAVASCRIPT",
+			Dialect:          "you-workflow-v1",
+			SourceHash:       "sha256:fixture",
+			Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
+			ResolvedSource: ResolvedSource{
+				SourceRef:  "workflow/simple-final",
+				SourceHash: "sha256:fixture",
+			},
+			ResultSummary: &ResultSummary{
+				ResultStatus: string(ResultStatusFinal),
+				Summary:      "Completed simple workflow.",
+			},
+			Lifecycle: &LifecycleTimestamps{
+				StartedAt:  &startedAt,
+				FinishedAt: &finishedAt,
+			},
+		},
+		ResultReadResult{
+			SessionID:    sessionID,
+			ResultStatus: ResultStatusFinal,
+		},
+	)
+
+	session, result, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if session.Status != LifecycleStatusSucceeded {
+		t.Fatalf("status = %q, want SUCCEEDED", session.Status)
+	}
+	if session.SourceHash != "sha256:fixture" {
+		t.Fatalf("sourceHash = %q", session.SourceHash)
+	}
+	if session.Policy.EffectiveHash != "sha256:policy" {
+		t.Fatalf("policyHash = %q", session.Policy.EffectiveHash)
+	}
+	if session.ResultSummary == nil || session.ResultSummary.ResultStatus != string(ResultStatusFinal) {
+		t.Fatalf("resultSummary = %#v, want FINAL", session.ResultSummary)
+	}
+	if session.Links.Session == "" || session.Links.Events == "" {
+		t.Fatal("expected inspection links")
+	}
+	if result.ResultStatus != ResultStatusFinal {
+		t.Fatalf("resultStatus = %q, want FINAL", result.ResultStatus)
+	}
+}
+
+func TestReplaySessionProjection_IdempotentOnDuplicateSequence(t *testing.T) {
+	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	sessionID := "dur-sess-replay-002"
+	events := BuildCanonicalRuntimeSessionEvents(
+		SessionReadResult{
+			SessionID:        sessionID,
+			Status:           LifecycleStatusRunning,
+			OrchestratorKind: "JAVASCRIPT",
+			SourceHash:       "sha256:fixture",
+			Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
+			ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
+			Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+		},
+		ResultReadResult{
+			SessionID:    sessionID,
+			ResultStatus: ResultStatusNotReady,
+		},
+	)
+
+	firstSession, firstResult, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection first: %v", err)
+	}
+	secondSession, secondResult, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection second: %v", err)
+	}
+	if firstSession.SessionID != secondSession.SessionID ||
+		firstSession.Status != secondSession.Status ||
+		firstSession.SourceHash != secondSession.SourceHash ||
+		firstSession.Policy.EffectiveHash != secondSession.Policy.EffectiveHash ||
+		firstSession.Links.Session != secondSession.Links.Session {
+		t.Fatalf("session projection changed on replay: %#v vs %#v", firstSession, secondSession)
+	}
+	if firstResult.ResultStatus != secondResult.ResultStatus ||
+		firstResult.SessionStatus != secondResult.SessionStatus {
+		t.Fatalf("result projection changed on replay: %#v vs %#v", firstResult, secondResult)
+	}
+}
+
+func TestReplaySessionProjection_ReplacesArtifactStubsWithoutDuplication(t *testing.T) {
+	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	finishedAt := time.Date(2026, 6, 11, 12, 0, 2, 0, time.UTC)
+	sessionID := "dur-sess-replay-003"
+	events := BuildCanonicalRuntimeSessionEvents(
+		SessionReadResult{
+			SessionID:        sessionID,
+			Status:           LifecycleStatusSucceeded,
+			OrchestratorKind: "JAVASCRIPT",
+			SourceHash:       "sha256:fixture",
+			Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
+			ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
+			Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt, FinishedAt: &finishedAt},
+		},
+		ResultReadResult{
+			SessionID:    sessionID,
+			ResultStatus: ResultStatusFinal,
+			ArtifactIDs:  []string{"art-1", "art-2"},
+		},
+	)
+
+	session, _, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if len(session.ArtifactRefs) != 2 {
+		t.Fatalf("artifact refs = %d, want 2", len(session.ArtifactRefs))
+	}
+
+	// Replaying the same events again must not duplicate artifact stubs.
+	sessionAgain, _, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection again: %v", err)
+	}
+	if len(sessionAgain.ArtifactRefs) != 2 {
+		t.Fatalf("artifact refs after second replay = %d, want 2", len(sessionAgain.ArtifactRefs))
+	}
+}
+
+func TestReplaySessionProjection_PreservesSyncTimeoutAvailability(t *testing.T) {
+	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	sessionID := "dur-sess-replay-timeout-availability"
+	events := BuildCanonicalRuntimeSessionEvents(
+		SessionReadResult{
+			SessionID:        sessionID,
+			Status:           LifecycleStatusRunning,
+			OrchestratorKind: "JAVASCRIPT",
+			SourceHash:       "sha256:fixture",
+			Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
+			ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
+			Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+		},
+		ResultReadResult{
+			SessionID:    sessionID,
+			ResultStatus: ResultStatusNotReady,
+			Availability: &ResultAvailabilityDetail{
+				Reason:    "SYNC_WAIT_TIMED_OUT",
+				Message:   "Sync wait ended before a terminal result was available.",
+				Retryable: true,
+			},
+		},
+	)
+
+	_, result, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if result.Availability == nil || result.Availability.Reason != "SYNC_WAIT_TIMED_OUT" {
+		t.Fatalf("availability = %#v, want SYNC_WAIT_TIMED_OUT", result.Availability)
+	}
+}
+
+func TestReplaySessionProjection_IgnoresUnknownEventTypes(t *testing.T) {
+	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	sessionID := "dur-sess-replay-004"
+	base := BuildCanonicalRuntimeSessionEvents(
+		SessionReadResult{
+			SessionID:        sessionID,
+			Status:           LifecycleStatusRunning,
+			OrchestratorKind: "JAVASCRIPT",
+			SourceHash:       "sha256:fixture",
+			Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
+			ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
+			Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+		},
+		ResultReadResult{
+			SessionID:    sessionID,
+			ResultStatus: ResultStatusNotReady,
+		},
+	)
+	events := append(append([]json.RawMessage(nil), base...), json.RawMessage(`{"type":"DISPATCH_QUEUED","id":"dispatch-queued/1","context":{"sequence":99},"payload":{}}`))
+
+	session, _, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if session.SessionID != sessionID {
+		t.Fatalf("sessionId = %q, want %q", session.SessionID, sessionID)
+	}
+}
+
+func TestReplaySessionProjection_PauseResumeLifecycleEventsDeriveStatus(t *testing.T) {
+	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	pausedAt := time.Date(2026, 6, 11, 12, 0, 5, 0, time.UTC)
+	resumedAt := time.Date(2026, 6, 11, 12, 0, 10, 0, time.UTC)
+	sessionID := "dur-sess-replay-pause-resume-001"
+
+	baseSession := SessionReadResult{
+		SessionID:        sessionID,
+		Status:           LifecycleStatusRunning,
+		OrchestratorKind: "JAVASCRIPT",
+		SourceHash:       "sha256:fixture",
+		Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
+		ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
+		Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+	}
+	baseResult := ResultReadResult{
+		SessionID:    sessionID,
+		ResultStatus: ResultStatusNotReady,
+	}
+
+	events := BuildCanonicalRuntimeSessionEvents(baseSession, baseResult)
+	events = AppendSessionLifecycleControlEvent(
+		events,
+		SessionReadResult{SessionID: sessionID, Status: LifecycleStatusPaused, OrchestratorKind: "JAVASCRIPT", Dialect: "you-workflow-v1"},
+		LifecycleStatusRunning,
+		LifecycleControlPause,
+		LifecycleControlOutcomeAccepted,
+		pausedAt,
+		canonicalEventSourceRuntimeService,
+		"",
+	)
+	events = AppendSessionLifecycleControlEvent(
+		events,
+		SessionReadResult{SessionID: sessionID, Status: LifecycleStatusRunning, OrchestratorKind: "JAVASCRIPT", Dialect: "you-workflow-v1"},
+		LifecycleStatusPaused,
+		LifecycleControlResume,
+		LifecycleControlOutcomeAccepted,
+		resumedAt,
+		canonicalEventSourceRuntimeService,
+		"",
+	)
+
+	session, result, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if session.Status != LifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", session.Status)
+	}
+	if result.SessionStatus != LifecycleStatusRunning {
+		t.Fatalf("result sessionStatus = %q, want RUNNING", result.SessionStatus)
+	}
+	if session.Lifecycle == nil || session.Lifecycle.PausedAt == nil || !session.Lifecycle.PausedAt.Equal(pausedAt) {
+		t.Fatalf("pausedAt = %#v, want %s", session.Lifecycle, pausedAt)
+	}
+	if session.Lifecycle.ResumedAt == nil || !session.Lifecycle.ResumedAt.Equal(resumedAt) {
+		t.Fatalf("resumedAt = %#v, want %s", session.Lifecycle.ResumedAt, resumedAt)
+	}
+
+	var lifecycleEnvelope canonicalFactoryEvent
+	if err := json.Unmarshal(events[2], &lifecycleEnvelope); err != nil {
+		t.Fatalf("unmarshal lifecycle event: %v", err)
+	}
+	if lifecycleEnvelope.Type != "SESSION_LIFECYCLE_CONTROL" {
+		t.Fatalf("event type = %q, want SESSION_LIFECYCLE_CONTROL", lifecycleEnvelope.Type)
+	}
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity this regression keeps pause/resume append and no-op event immutability assertions together.
+func TestFakeService_PauseResumeAppendsLifecycleControlEventsWithoutNoOpMutation(t *testing.T) {
+	service, err := NewFakeServiceFromContractFixtures(contractFixturesPath(t))
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+	}
+	started, err := service.StartAsync(context.Background(), StartRequest{
+		RequestID: "req-js-run-n-001",
+		Source: Source{
+			Kind:      workflowsource.KindFactoryID,
+			FactoryID: "customer-support-triage",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	beforeEvents, err := service.ReadEvents(context.Background(), started.SessionID, EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents before pause: %v", err)
+	}
+	beforeCount := len(beforeEvents.Events)
+
+	paused, err := service.Pause(context.Background(), started.SessionID, ControlRequest{RequestID: "ctrl-pause-events-001"})
+	if err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+	if paused.Outcome != LifecycleControlOutcomeAccepted || paused.Status != LifecycleStatusPaused {
+		t.Fatalf("pause = %#v, want ACCEPTED/PAUSED", paused)
+	}
+
+	afterPause, err := service.ReadEvents(context.Background(), started.SessionID, EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents after pause: %v", err)
+	}
+	if len(afterPause.Events) != beforeCount+1 {
+		t.Fatalf("event count after pause = %d, want %d", len(afterPause.Events), beforeCount+1)
+	}
+	assertCanonicalEventEnvelope(t, afterPause.Events[len(afterPause.Events)-1], "SESSION_LIFECYCLE_CONTROL", "session-lifecycle-control/"+started.SessionID+"/2")
+
+	pauseNoOp, err := service.Pause(context.Background(), started.SessionID, ControlRequest{})
+	if err != nil {
+		t.Fatalf("Pause no-op: %v", err)
+	}
+	if pauseNoOp.Outcome != LifecycleControlOutcomeNoOp {
+		t.Fatalf("pause no-op outcome = %q, want NO_OP", pauseNoOp.Outcome)
+	}
+	afterNoOp, err := service.ReadEvents(context.Background(), started.SessionID, EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents after no-op: %v", err)
+	}
+	if len(afterNoOp.Events) != len(afterPause.Events) {
+		t.Fatalf("event count after no-op = %d, want unchanged %d", len(afterNoOp.Events), len(afterPause.Events))
+	}
+
+	resumed, err := service.Resume(context.Background(), started.SessionID, ControlRequest{RequestID: "ctrl-resume-events-001"})
+	if err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+	if resumed.Outcome != LifecycleControlOutcomeAccepted || resumed.Status != LifecycleStatusRunning {
+		t.Fatalf("resume = %#v, want ACCEPTED/RUNNING", resumed)
+	}
+
+	afterResume, err := service.ReadEvents(context.Background(), started.SessionID, EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents after resume: %v", err)
+	}
+	if len(afterResume.Events) != len(afterPause.Events)+1 {
+		t.Fatalf("event count after resume = %d, want %d", len(afterResume.Events), len(afterPause.Events)+1)
+	}
+
+	replayed, _, err := ReplaySessionProjection(afterResume.Events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if replayed.Status != LifecycleStatusRunning {
+		t.Fatalf("replayed status = %q, want RUNNING", replayed.Status)
+	}
 }

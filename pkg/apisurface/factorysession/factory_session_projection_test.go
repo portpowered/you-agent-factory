@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
@@ -163,6 +164,82 @@ func TestArtifactProjectionToAPI_MapsSummaryAndDetailFixtures(t *testing.T) {
 	}
 }
 
+func TestDispatchAndArtifactProjectionToAPI_MapsUsageWarningsAndRedactionCounts(t *testing.T) {
+	t.Run("dispatch detail", testDispatchProjectionMapsUsageWarningsAndFailure)
+	t.Run("artifact detail", testArtifactProjectionMapsRedactionCountsAndMetadata)
+}
+
+func testDispatchProjectionMapsUsageWarningsAndFailure(t *testing.T) {
+	t.Helper()
+
+	dispatchMapped := factorysession.DispatchDetailResponseToAPI(factorysessionexecution.DispatchDetail{
+		DispatchSummary: factorysessionexecution.DispatchSummary{
+			ID:           "disp-1",
+			Status:       factorysessionexecution.DispatchStatusFailed,
+			DispatchKind: "JAVASCRIPT_AGENT",
+			Usage: &factorysessionexecution.DispatchUsage{
+				InputTokens:    11,
+				OutputTokens:   7,
+				TotalTokens:    18,
+				DurationMillis: 250,
+				CostUSD:        1.25,
+				RetryCount:     2,
+			},
+			Warnings: []factorysessionexecution.DispatchWarning{
+				{Code: "RATE_LIMIT", Message: " retried once "},
+			},
+			FailureDetail: &factorysessionexecution.DispatchFailureDetail{
+				Reason:     " TEMPORARY ",
+				Message:    " provider unavailable ",
+				ErrorClass: " transient ",
+			},
+		},
+		SessionID:         "dur-sess-1",
+		OrchestratorKind:  "JAVASCRIPT",
+		StatusTransitions: []factorysessionexecution.DispatchStatus{factorysessionexecution.DispatchStatusQueued, factorysessionexecution.DispatchStatusFailed},
+	})
+	if dispatchMapped.Usage == nil || dispatchMapped.Usage.TotalTokens == nil || *dispatchMapped.Usage.TotalTokens != 18 {
+		t.Fatalf("dispatch usage = %#v, want populated usage fields", dispatchMapped.Usage)
+	}
+	if dispatchMapped.Warnings == nil || len(*dispatchMapped.Warnings) != 1 || (*dispatchMapped.Warnings)[0].Message != "retried once" {
+		t.Fatalf("dispatch warnings = %#v, want trimmed warning", dispatchMapped.Warnings)
+	}
+	if dispatchMapped.FailureDetail == nil || dispatchMapped.FailureDetail.Reason == nil || *dispatchMapped.FailureDetail.Reason != "TEMPORARY" {
+		t.Fatalf("dispatch failure detail = %#v, want trimmed failure", dispatchMapped.FailureDetail)
+	}
+}
+
+func testArtifactProjectionMapsRedactionCountsAndMetadata(t *testing.T) {
+	t.Helper()
+
+	createdAt := mustParseTime(t, "2026-06-08T10:05:00Z")
+	artifactMapped := factorysession.ArtifactDetailResponseToAPI(factorysessionexecution.ArtifactDetail{
+		ArtifactSummary: factorysessionexecution.ArtifactSummary{
+			ID:         "art-1",
+			Kind:       "LOG",
+			Visibility: "PUBLIC",
+			CreatedAt:  &createdAt,
+			RedactionCounts: &factorysessionexecution.ArtifactRedactionCounts{
+				Paths:   1,
+				Secrets: 2,
+				Tokens:  3,
+			},
+		},
+		SessionID: "dur-sess-1",
+		CaptureMetadata: map[string]any{
+			"capturedAt":       createdAt.Format(time.RFC3339),
+			"sourceDispatchId": []byte("disp-1"),
+			"mimeType":         " text/plain ",
+		},
+	})
+	if artifactMapped.RedactionCounts == nil || artifactMapped.RedactionCounts.Paths == nil || *artifactMapped.RedactionCounts.Paths != 1 {
+		t.Fatalf("artifact redaction counts = %#v, want populated counts", artifactMapped.RedactionCounts)
+	}
+	if artifactMapped.CaptureMetadata == nil || artifactMapped.CaptureMetadata.SourceDispatchId == nil || *artifactMapped.CaptureMetadata.SourceDispatchId != "disp-1" {
+		t.Fatalf("artifact capture metadata = %#v, want projected sourceDispatchId", artifactMapped.CaptureMetadata)
+	}
+}
+
 func TestResultRequestFromAPI_MapsModeAndIncludeArtifacts(t *testing.T) {
 	mode := factoryapi.FactorySessionResultModePartial
 	include := true
@@ -187,6 +264,145 @@ func TestResultRequestFromAPI_RejectsInvalidMode(t *testing.T) {
 	var validationErr *factorysessionexecution.ValidationError
 	if !errors.As(err, &validationErr) {
 		t.Fatalf("error = %T, want ValidationError", err)
+	}
+}
+
+func TestEventAndProjectionResponses_HandleEmptyAndInvalidBranches(t *testing.T) {
+	t.Run("reconnect request", testEventReconnectRequestBranches)
+	t.Run("event read response", testEventReadResponseBranches)
+	t.Run("factory event stream", testFactoryEventStreamBranches)
+}
+
+func testEventReconnectRequestBranches(t *testing.T) {
+	t.Helper()
+
+	reconnect, err := factorysession.EventReconnectRequestFromAPI(factoryapi.GetEventsBySessionIdParams{})
+	if err != nil {
+		t.Fatalf("EventReconnectRequestFromAPI empty: %v", err)
+	}
+	if reconnect.AfterEventID != "" || reconnect.AfterSequence != nil {
+		t.Fatalf("reconnect = %#v", reconnect)
+	}
+
+	afterEventID := factoryapi.AfterEventId("event-2")
+	afterSequence := factoryapi.AfterSequence(3)
+	reconnect, err = factorysession.EventReconnectRequestFromAPI(factoryapi.GetEventsBySessionIdParams{
+		AfterEventId:  &afterEventID,
+		AfterSequence: &afterSequence,
+	})
+	if err != nil {
+		t.Fatalf("EventReconnectRequestFromAPI populated: %v", err)
+	}
+	if reconnect.AfterEventID != "event-2" || reconnect.AfterSequence == nil || *reconnect.AfterSequence != 3 {
+		t.Fatalf("reconnect populated = %#v", reconnect)
+	}
+}
+
+func testEventReadResponseBranches(t *testing.T) {
+	t.Helper()
+
+	if events := factorysession.EventReadResponseToAPI(factorysessionexecution.EventReadResult{}); events != nil {
+		t.Fatalf("empty events = %#v, want nil", events)
+	}
+
+	validEvent := []byte(`{"id":"event-1","type":"factory.session.started","sequence":1}`)
+	events := factorysession.EventReadResponseToAPI(factorysessionexecution.EventReadResult{
+		Events: []json.RawMessage{
+			validEvent,
+			json.RawMessage(`{not-json}`),
+		},
+	})
+	if len(events) != 1 || events[0].Id != "event-1" {
+		t.Fatalf("events = %#v", events)
+	}
+}
+
+func testFactoryEventStreamBranches(t *testing.T) {
+	t.Helper()
+
+	validEvent := []byte(`{"id":"event-1","type":"factory.session.started","sequence":1}`)
+
+	stream := factorysession.FactoryEventStreamFromReadResult(factorysessionexecution.EventReadResult{})
+	if stream == nil || len(stream.History) != 0 {
+		t.Fatalf("empty stream = %#v", stream)
+	}
+	if _, ok := <-stream.Events; ok {
+		t.Fatal("empty stream channel should be closed")
+	}
+
+	stream = factorysession.FactoryEventStreamFromReadResult(factorysessionexecution.EventReadResult{
+		Events: []json.RawMessage{validEvent},
+	})
+	if len(stream.History) != 1 || stream.History[0].Id != "event-1" {
+		t.Fatalf("stream history = %#v", stream.History)
+	}
+}
+
+func TestProjectionResponses_TrimAndOmitOptionalFields(t *testing.T) {
+	mapped := factorysession.ResultResponseToAPI(factorysessionexecution.ResultReadResult{
+		SessionID:        "dur-sess-1",
+		ResultStatus:     factorysessionexecution.ResultStatusFinal,
+		SessionStatus:    factorysessionexecution.LifecycleStatusSucceeded,
+		Mode:             factorysessionexecution.ResultModeFinal,
+		IncludeArtifacts: true,
+		PrimaryResult:    json.RawMessage(`{"bad":true}`),
+		ArtifactIDs:      []string{" one ", " ", "two"},
+		Failure:          &factorysessionexecution.FailureSummary{},
+		Availability:     &factorysessionexecution.ResultAvailabilityDetail{},
+	})
+	if mapped.PrimaryResult != nil {
+		t.Fatalf("primaryResult = %#v, want omitted for invalid work content", mapped.PrimaryResult)
+	}
+	if mapped.ArtifactIds == nil || len(*mapped.ArtifactIds) != 2 || (*mapped.ArtifactIds)[0] != "one" {
+		t.Fatalf("artifactIds = %#v", mapped.ArtifactIds)
+	}
+	if mapped.Failure != nil {
+		t.Fatalf("failure = %#v, want omitted", mapped.Failure)
+	}
+	if mapped.Availability != nil {
+		t.Fatalf("availability = %#v, want omitted", mapped.Availability)
+	}
+
+	dispatches := factorysession.ListDispatchesResponseToAPI(factorysessionexecution.ListDispatchesResult{
+		SessionID: "dur-sess-1",
+		Dispatches: []factorysessionexecution.DispatchSummary{{
+			ID:                  "disp-1",
+			Status:              factorysessionexecution.DispatchStatusRunning,
+			DispatchKind:        "MODEL",
+			Phase:               " plan ",
+			Label:               " summarize ",
+			Attempt:             2,
+			RunnerID:            "runner-1",
+			Model:               "gpt",
+			Provider:            "openai",
+			ProviderSessionRefs: []factorysessionexecution.ProviderSessionRef{{Provider: "openai", Kind: "RESPONSES", ID: "prov-1"}},
+			OutputArtifactIDs:   []string{" out-1 ", " "},
+		}},
+	})
+	if len(dispatches.Dispatches) != 1 {
+		t.Fatalf("dispatches = %#v", dispatches.Dispatches)
+	}
+	if dispatches.Dispatches[0].OutputArtifactIds == nil || len(*dispatches.Dispatches[0].OutputArtifactIds) != 1 {
+		t.Fatalf("outputArtifactIds = %#v", dispatches.Dispatches[0].OutputArtifactIds)
+	}
+	if dispatches.Dispatches[0].ProviderSessionRefs == nil || len(*dispatches.Dispatches[0].ProviderSessionRefs) != 1 {
+		t.Fatalf("providerSessionRefs = %#v", dispatches.Dispatches[0].ProviderSessionRefs)
+	}
+
+	artifacts := factorysession.ListArtifactsResponseToAPI(factorysessionexecution.ListArtifactsResult{
+		SessionID: "dur-sess-1",
+		Artifacts: []factorysessionexecution.ArtifactSummary{{
+			ID:          "art-1",
+			Kind:        "LOG",
+			Visibility:  "PUBLIC",
+			Label:       " audit ",
+			ContentHash: " hash ",
+			DispatchID:  "disp-1",
+			AuditMode:   " SUMMARY ",
+		}},
+	})
+	if len(artifacts.Artifacts) != 1 || artifacts.Artifacts[0].Label == nil || *artifacts.Artifacts[0].Label != "audit" {
+		t.Fatalf("artifacts = %#v", artifacts.Artifacts)
 	}
 }
 
@@ -425,4 +641,13 @@ func marshalFixtureValue(value any) json.RawMessage {
 		return nil
 	}
 	return encoded
+}
+
+func mustParseTime(t *testing.T, raw string) time.Time {
+	t.Helper()
+	value, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		t.Fatalf("time.Parse(%q): %v", raw, err)
+	}
+	return value
 }

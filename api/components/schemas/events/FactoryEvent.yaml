@@ -45,8 +45,11 @@ properties:
       - $ref: ./payloads/FactoryStateResponseEventPayload.yaml
       - $ref: ./payloads/RunResponseEventPayload.yaml
       - $ref: ./payloads/SessionStartedEventPayload.yaml
+      - $ref: ./payloads/SessionPausedEventPayload.yaml
+      - $ref: ./payloads/SessionResumedEventPayload.yaml
       - $ref: ./payloads/SessionResultUpdatedEventPayload.yaml
       - $ref: ./payloads/SessionCompletedEventPayload.yaml
+      - $ref: ./payloads/SessionLifecycleControlEventPayload.yaml
       - $ref: ./payloads/OrchestratorPhaseChangedEventPayload.yaml
       - $ref: ./payloads/OrchestratorCheckpointWrittenEventPayload.yaml
       - $ref: ./payloads/DispatchQueuedEventPayload.yaml

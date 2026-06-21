@@ -90,7 +90,7 @@ describe("buildSelectedWorkRelationshipGraph repeated DEPENDS_ON", () => {
 });
 
 describe("factory-batch-local-agent-cli-runtime relationship graph", () => {
-  it("preserves every DEPENDS_ON relation from the loopback work item in the checked-in batch example", () => {
+  it("preserves every DEPENDS_ON relation from the loopback work item in the smoke test fixture", () => {
     const batch = loadLocalAgentCliRuntimeBatch();
     const loopbackDependsOn = batch.relations.filter(
       (relation) =>

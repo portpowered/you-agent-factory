@@ -797,7 +797,7 @@ func TestSubmitBatch_UsesDocsExampleStartupWorkFile(t *testing.T) {
 func TestSubmitBatch_DryRunLocalAgentCliRuntimeBatchExample(t *testing.T) {
 	path := testutil.MustRepoPath(
 		t,
-		"factory/inputs/BATCH/default/factory-batch-local-agent-cli-runtime.json",
+		"tests/functional/smoke/testdata/factory-batch-local-agent-cli-runtime.json",
 	)
 
 	var out bytes.Buffer
@@ -817,6 +817,35 @@ func TestSubmitBatch_DryRunLocalAgentCliRuntimeBatchExample(t *testing.T) {
 		"work count: 6",
 		"relationCount: 10",
 		"local-agent-cli-runtime-loopback",
+		"dry-run: no request sent",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestSubmitBatch_DryRunFactoryDocsBatchInputExample(t *testing.T) {
+	path := testutil.MustRepoPath(t, "factory/docs/batch-input-example.json")
+
+	var out bytes.Buffer
+	err := SubmitBatch(BatchConfig{
+		Args:      []string{path},
+		DryRun:    true,
+		SessionID: "c803e7f7-1361-4ba6-bb2b-b5c9cfeb2754",
+		Server:    "http://127.0.0.1:1",
+		Output:    &out,
+	})
+	if err != nil {
+		t.Fatalf("SubmitBatch dry-run on factory docs batch input example: %v", err)
+	}
+
+	got := out.String()
+	for _, want := range []string{
+		"requestId: planner-docs-live-session-example-20260620",
+		"work count: 4",
+		"relationCount: 3",
+		"planner-docs-live-session-loopback",
 		"dry-run: no request sent",
 	} {
 		if !strings.Contains(got, want) {

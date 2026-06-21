@@ -3,6 +3,7 @@ package factorysession_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,8 +12,10 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
@@ -476,6 +479,21 @@ func TestLifecycleControlErrorResponse_MapsControlConflictAndNotFound(t *testing
 	if !ok || errResp.Code != factoryapi.NOTFOUND {
 		t.Fatalf("response = %#v, want NOT_FOUND ErrorResponse", response)
 	}
+
+	status, response, ok = factorysession.LifecycleControlErrorResponse(
+		"live-session-missing-001",
+		fmt.Errorf("%w: live-session-missing-001", apisurface.ErrFactorySessionNotFound),
+	)
+	if !ok {
+		t.Fatal("LifecycleControlErrorResponse = false, want true for live not found")
+	}
+	if status != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", status)
+	}
+	errResp, ok = response.(factoryapi.ErrorResponse)
+	if !ok || errResp.Code != factoryapi.NOTFOUND {
+		t.Fatalf("response = %#v, want NOT_FOUND ErrorResponse", response)
+	}
 }
 
 func TestLifecycleControlSuccessStatus_MapsAcceptedCancelAndTerminate(t *testing.T) {
@@ -531,5 +549,46 @@ func TestLifecycleControlErrorResponse_MapsValidationAndDispatchNotFound(t *test
 	errResp, ok = response.(factoryapi.ErrorResponse)
 	if !ok || errResp.Code != factoryapi.NOTFOUND {
 		t.Fatalf("response = %#v, want NOT_FOUND ErrorResponse", response)
+	}
+}
+func TestFactoryStateToLifecycleStatus_MapsLiveFactoryStates(t *testing.T) {
+	cases := []struct {
+		state interfaces.FactoryState
+		want  factorysessionexecution.LifecycleStatus
+	}{
+		{interfaces.FactoryStateIdle, factorysessionexecution.LifecycleStatusRunning},
+		{interfaces.FactoryStateRunning, factorysessionexecution.LifecycleStatusRunning},
+		{interfaces.FactoryStatePaused, factorysessionexecution.LifecycleStatusPaused},
+		{interfaces.FactoryStateCompleted, factorysessionexecution.LifecycleStatusSucceeded},
+		{interfaces.FactoryStateFailed, factorysessionexecution.LifecycleStatusFailed},
+	}
+	for _, tc := range cases {
+		if got := factorysession.FactoryStateToLifecycleStatus(tc.state); got != tc.want {
+			t.Fatalf("state %q = %q, want %q", tc.state, got, tc.want)
+		}
+	}
+}
+
+func TestLiveLifecycleControlResponse_BuildsTypedPauseOutcome(t *testing.T) {
+	response := factorysession.LiveLifecycleControlResponse(
+		"~default",
+		factorysessionexecution.LifecycleControlPause,
+		factorysessionexecution.LifecycleControlOutcomeAccepted,
+		factorysessionexecution.LifecycleStatusPaused,
+	)
+	if response.SessionId != "~default" {
+		t.Fatalf("sessionId = %q, want ~default", response.SessionId)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindPause {
+		t.Fatalf("operation = %q, want PAUSE", response.Operation)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("status = %q, want PAUSED", response.Status)
+	}
+	if response.Links == nil || response.Links.Session == nil || *response.Links.Session != "/factory-sessions/~default" {
+		t.Fatalf("links = %#v, want /factory-sessions/~default", response.Links)
 	}
 }

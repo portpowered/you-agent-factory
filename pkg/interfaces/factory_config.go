@@ -341,6 +341,21 @@ type WorkstationLimits struct {
 	MaxExecutionTime string `json:"max_execution_time,omitempty" yaml:"maxExecutionTime,omitempty"`
 }
 
+// WorkPropagationMode selects how downstream work receives payload content.
+type WorkPropagationMode string
+
+const (
+	// WorkPropagationModeOutputAsPayload uses workstation output as downstream payload.
+	WorkPropagationModeOutputAsPayload WorkPropagationMode = "OUTPUT_AS_PAYLOAD"
+	// WorkPropagationModePreserveInput keeps the consumed input payload for downstream work.
+	WorkPropagationModePreserveInput WorkPropagationMode = "PRESERVE_INPUT"
+)
+
+// WorkPropagationConfig declares workstation payload propagation policy.
+type WorkPropagationConfig struct {
+	Mode WorkPropagationMode `json:"mode,omitempty" yaml:"mode,omitempty"`
+}
+
 type WorkflowConfig struct {
 	Name  string             `json:"name"`
 	Paths []TransitionConfig `json:"transitions"`
@@ -364,6 +379,7 @@ type FactoryWorkstationConfig struct {
 	OutputSchema          string                      `json:"output_schema,omitempty" yaml:"outputSchema,omitempty"`
 	Timeout               string                      `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	Limits                WorkstationLimits           `json:"limits,omitempty" yaml:"limits,omitempty"`
+	WorkPropagation       *WorkPropagationConfig      `json:"workPropagation,omitempty" yaml:"workPropagation,omitempty"`
 	Cron                  *CronConfig                 `json:"cron,omitempty" yaml:"cron,omitempty"`
 	Inputs                []IOConfig                  `json:"inputs" yaml:"inputs,omitempty"`
 	Outputs               []IOConfig                  `json:"outputs" yaml:"outputs,omitempty"`
@@ -376,6 +392,7 @@ type FactoryWorkstationConfig struct {
 	Guards                []GuardConfig               `json:"guards,omitempty" yaml:"guards,omitempty"`
 	StopWords             []string                    `json:"stop_words,omitempty" yaml:"stopWords,omitempty"`
 	RuntimeStopWords      []string                    `json:"runtime_stop_words,omitempty" yaml:"-"`
+	OutcomeFormat         string                      `json:"outcomeFormat,omitempty" yaml:"outcomeFormat,omitempty"`
 	Body                  string                      `json:"body,omitempty" yaml:"-"`
 	PromptTemplate        string                      `json:"prompt_template,omitempty" yaml:"-"`
 	WorkingDirectory      string                      `json:"working_directory,omitempty" yaml:"workingDirectory,omitempty"`
@@ -684,11 +701,6 @@ func IsPetriOrchestratorFactory(cfg *FactoryConfig) bool {
 // StrictPublicFactoryOrchestratorKind canonicalizes supported orchestrator kinds.
 func StrictPublicFactoryOrchestratorKind(value string) string {
 	return normalizePublicFactoryEnumValue(value, publicFactoryOrchestratorKindAliases, false)
-}
-
-// PermissivePublicFactoryOrchestratorKind canonicalizes supported orchestrator kinds and preserves unknown values.
-func PermissivePublicFactoryOrchestratorKind(value string) string {
-	return normalizePublicFactoryEnumValue(value, publicFactoryOrchestratorKindAliases, true)
 }
 
 var publicFactoryOrchestratorKindAliases = map[string]string{

@@ -459,6 +459,45 @@ func (s *Server) handleDurableLifecycleControl(
 	s.writeJSON(w, status, response)
 }
 
+func (s *Server) handleLiveLifecycleControl(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	operation string,
+	invoke func(apisurface.SessionAPI, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
+) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+
+	req, err := decodeOptionalLifecycleControlRequest(r.Body)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+
+	response, err := invoke(sessionRuntime, req)
+	if err != nil {
+		if s.writeDurableLifecycleControlError(w, string(sessionID), err) {
+			return
+		}
+		s.logger.Error("live factory session lifecycle control failed",
+			zap.Error(err),
+			zap.String("session_id", string(sessionID)),
+			zap.String("operation", operation),
+		)
+		s.writeError(w, http.StatusInternalServerError, "live factory session lifecycle control failed", "INTERNAL_ERROR")
+		return
+	}
+
+	s.writeJSON(w, factorysession.LifecycleControlSuccessStatus(factorysession.LifecycleControlResultFromAPI(response)), response)
+}
+
 func decodeOptionalLifecycleControlRequest(body io.Reader) (factoryapi.FactorySessionLifecycleControlRequest, error) {
 	return decodeOptionalJSONRequest(body, func() factoryapi.FactorySessionLifecycleControlRequest {
 		return factoryapi.FactorySessionLifecycleControlRequest{}
@@ -580,4 +619,75 @@ func (s *Server) handleDurableRetryDispatchControl(
 	}
 
 	s.writeJSON(w, http.StatusOK, response)
+}
+func (s *Server) ApproveFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	s.handleDurableApproveControl(w, r, sessionID, func(
+		lifecycle apisurface.DurableSessionLifecycleAPI,
+		req factoryapi.FactorySessionApproveRequest,
+	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+		return lifecycle.ApproveDurableFactorySession(r.Context(), string(sessionID), req)
+	})
+}
+
+func (s *Server) PauseFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	if isDurableExecutionSessionID(string(sessionID)) {
+		s.handleDurableLifecycleControl(w, r, sessionID, "pause", func(
+			lifecycle apisurface.DurableSessionLifecycleAPI,
+			req factoryapi.FactorySessionLifecycleControlRequest,
+		) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+			return lifecycle.PauseDurableFactorySession(r.Context(), string(sessionID), req)
+		})
+		return
+	}
+	s.handleLiveLifecycleControl(w, r, sessionID, "pause", func(
+		sessionRuntime apisurface.SessionAPI,
+		req factoryapi.FactorySessionLifecycleControlRequest,
+	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+		return sessionRuntime.PauseLiveFactorySession(r.Context(), string(sessionID), req)
+	})
+}
+
+func (s *Server) ResumeFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	if isDurableExecutionSessionID(string(sessionID)) {
+		s.handleDurableLifecycleControl(w, r, sessionID, "resume", func(
+			lifecycle apisurface.DurableSessionLifecycleAPI,
+			req factoryapi.FactorySessionLifecycleControlRequest,
+		) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+			return lifecycle.ResumeDurableFactorySession(r.Context(), string(sessionID), req)
+		})
+		return
+	}
+	s.handleLiveLifecycleControl(w, r, sessionID, "resume", func(
+		sessionRuntime apisurface.SessionAPI,
+		req factoryapi.FactorySessionLifecycleControlRequest,
+	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+		return sessionRuntime.ResumeLiveFactorySession(r.Context(), string(sessionID), req)
+	})
+}
+
+func (s *Server) CancelFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	s.handleDurableLifecycleControl(w, r, sessionID, "cancel", func(
+		lifecycle apisurface.DurableSessionLifecycleAPI,
+		req factoryapi.FactorySessionLifecycleControlRequest,
+	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+		return lifecycle.CancelDurableFactorySession(r.Context(), string(sessionID), req)
+	})
+}
+
+func (s *Server) TerminateFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	s.handleDurableLifecycleControl(w, r, sessionID, "terminate", func(
+		lifecycle apisurface.DurableSessionLifecycleAPI,
+		req factoryapi.FactorySessionLifecycleControlRequest,
+	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+		return lifecycle.TerminateDurableFactorySession(r.Context(), string(sessionID), req)
+	})
+}
+
+func (s *Server) RetryFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	s.handleDurableRetryDispatchControl(w, r, sessionID, func(
+		lifecycle apisurface.DurableSessionLifecycleAPI,
+		req factoryapi.FactorySessionRetryDispatchRequest,
+	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+		return lifecycle.RetryDurableFactorySessionDispatch(r.Context(), string(sessionID), req)
+	})
 }

@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/livechild"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -276,15 +276,12 @@ func (s *JavaScriptRuntimeService) StartAsync(ctx context.Context, req StartRequ
 	reserved.state.result = running.result
 	reserved.state.events = running.events
 	reserved.state.runCancel = runCancel
+	startState := cloneRuntimeSessionState(reserved.state)
 	s.mu.Unlock()
 
 	go s.runAsyncSession(runCtx, reserved.state.session.SessionID, normalized, resolved, sourceContent, policyResolution, startedAt)
 
-	snapshot, err := s.snapshotSessionState(reserved.state.session.SessionID)
-	if err != nil {
-		return AsyncStartResult{}, err
-	}
-	result := s.asyncStartFromState(snapshot)
+	result := s.asyncStartFromState(startState)
 	s.recordAsyncStartReplay(normalized.RequestID, result)
 	return result, nil
 }

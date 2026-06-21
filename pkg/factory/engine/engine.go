@@ -43,6 +43,7 @@ type FactoryEngine struct {
 	dispatchHook           factory.DispatchResultHook
 	resultHandler          func() // called when a result event is processed (e.g. decrement in-flight counter)
 	automaticTicksPaused   func() bool
+	onResultBufferDrained  func(drainedCount int)
 	mu                     sync.Mutex
 	transformer            *token_transformer.Transformer
 	acceptingSubmits       bool
@@ -103,12 +104,17 @@ func (e *FactoryEngine) drainPendingResults() {
 		return
 	}
 
+	drained := 0
 	for {
 		result, ok := buffer.Read()
 		if !ok {
-			return
+			break
 		}
 		e.appendObservedResult(result)
+		drained++
+	}
+	if drained > 0 && e.onResultBufferDrained != nil {
+		e.onResultBufferDrained(drained)
 	}
 }
 
@@ -196,10 +202,42 @@ func (e *FactoryEngine) NotifyResult() {
 }
 
 func (e *FactoryEngine) wakeForOperatorControl() {
+	e.wakeForPendingProcessing()
+}
+
+// WakeForPendingProcessing signals the engine loop when buffered submissions or
+// worker results are waiting to be processed.
+func (e *FactoryEngine) WakeForPendingProcessing() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.wakeForPendingProcessing()
+}
+
+func (e *FactoryEngine) wakeForPendingProcessing() {
+	if !e.hasBufferedInputs() {
+		return
+	}
 	select {
 	case e.submitSignal <- struct{}{}:
 	default:
 	}
+	if hook, ok := e.dispatchHook.(factory.DispatchResultHookWakeSignaler); ok && hook.HasBufferedResults() {
+		hook.SignalBufferedResults()
+	}
+}
+
+func (e *FactoryEngine) hasBufferedInputs() bool {
+	if e.submissionHook != nil && len(e.submissionHook.batches) > 0 {
+		return true
+	}
+	buffer := e.runtimeState.ResultBuffer
+	if buffer != nil && buffer.HasData() {
+		return true
+	}
+	if e.dispatchHook != nil && e.dispatchHook.HasPendingResults() {
+		return true
+	}
+	return false
 }
 
 // SubmitWorkRequest validates and enqueues a canonical work request batch.

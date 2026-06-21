@@ -1,0 +1,77 @@
+{
+  "requestId": "planner-docs-live-session-example-20260620",
+  "type": "FACTORY_REQUEST_BATCH",
+  "works": [
+    {
+      "name": "planner-docs-overview-live-loop",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Rewrite planner overview for the live ideafy loop",
+        "sourcePath": "docs/temp/customer-ask.md",
+        "currentProgress": [
+          "factory/docs/overview.md still described an unrelated Awesome-list factory.",
+          "Planner state guidance pointed at obsolete docs/internal paths instead of docs/temp/*.",
+          "Session and queue inspection commands were missing from the factory-local overview."
+        ],
+        "requestedOutcome": "Rewrite factory/docs/overview.md around this repository's ideafy planner loop, live docs/temp state files, and session-scoped queue inspection guidance."
+      }
+    },
+    {
+      "name": "planner-docs-batch-input-example",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Add a checked-in FACTORY_REQUEST_BATCH example",
+        "sourcePath": "factory/docs/batch-inputs.md",
+        "currentProgress": [
+          "factory/docs/overview.md and ideafy AGENTS.md reference factory/docs/batch-input-example.json.",
+          "The example file did not exist, so planners had to repair docs before copying a batch pattern.",
+          "Dry-run validation is the narrow proof that the example matches the batch parser contract."
+        ],
+        "requestedOutcome": "Add factory/docs/batch-input-example.json with idea items plus a thoughts loopback connected through DEPENDS_ON relations, and validate it with you submit batch --dry-run."
+      }
+    },
+    {
+      "name": "planner-docs-reference-alignment",
+      "workTypeName": "idea",
+      "payload": {
+        "title": "Align nearby factory-local planner references",
+        "sourcePath": "factory/docs/batch-inputs.md",
+        "currentProgress": [
+          "Factory-local docs still mixed obsolete planner-state paths with the live docs/temp contract.",
+          "Verification guidance did not consistently point at the checked-in batch example.",
+          "Ideafy passes had to reconcile conflicting paths before moving from docs to validation."
+        ],
+        "requestedOutcome": "Update directly related factory-local references so they consistently use docs/temp/progress.md, docs/temp/checklist.md, docs/temp/meta.md, and factory/docs/batch-input-example.json, and preserve a narrow doc-path smoke plus batch dry-run verification recipe."
+      }
+    },
+    {
+      "name": "planner-docs-live-session-loopback",
+      "workTypeName": "thoughts",
+      "payload": {
+        "title": "Meta-planner follow-up after planner docs alignment batch",
+        "sourcePath": "factory/docs/batch-input-example.json",
+        "requestedOutcome": "Review the queued planner-docs ideas after their plans are generated and decide whether to submit the next dependency-aware implementation batch."
+      }
+    }
+  ],
+  "relations": [
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-docs-live-session-loopback",
+      "targetWorkName": "planner-docs-overview-live-loop",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-docs-live-session-loopback",
+      "targetWorkName": "planner-docs-batch-input-example",
+      "requiredState": "complete"
+    },
+    {
+      "type": "DEPENDS_ON",
+      "sourceWorkName": "planner-docs-live-session-loopback",
+      "targetWorkName": "planner-docs-reference-alignment",
+      "requiredState": "complete"
+    }
+  ]
+}

@@ -16,10 +16,12 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
+	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -46,20 +48,6 @@ func bindServiceStartupRuntime(svc *FactoryService, bundle *factoryRuntimeBundle
 		Ref: FactorySessionTargetRef{Kind: FactorySessionTargetKindDefault},
 	}, true)
 	svc.setRunState(context.Background(), defaultFactorySessionID, handle)
-}
-
-func rewireProcessModelHost(svc *FactoryService, puller modelAssetPuller) modelhost.Host {
-	if puller == nil {
-		return nil
-	}
-	host := modelhost.NewCatalogHost(modelhost.NewLocalAssetGateway(puller), modelhost.Options{
-		SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
-	})
-	if svc != nil && svc.core != nil {
-		svc.core.collaborators.LocalModels.host = host
-		svc.core.collaborators.LocalModels.assets = puller
-	}
-	return host
 }
 
 type recordingDiagnosticsProvider struct{}
@@ -1143,4 +1131,88 @@ func (p *serviceTestFakeManagedProcess) Wait() error {
 func (p *serviceTestFakeManagedProcess) Stop(context.Context) error {
 	close(p.stopCh)
 	return nil
+}
+
+type prefixBlockingExecutor struct {
+	blockPrefix string
+	started     chan struct{}
+	release     chan struct{}
+}
+
+func (e *prefixBlockingExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	workID := ""
+	if len(dispatch.Execution.WorkIDs) > 0 {
+		workID = dispatch.Execution.WorkIDs[0]
+	}
+	if strings.HasPrefix(workID, e.blockPrefix) {
+		select {
+		case e.started <- struct{}{}:
+		default:
+		}
+		<-e.release
+	}
+	return interfaces.WorkResult{
+		DispatchID:   dispatch.DispatchID,
+		TransitionID: dispatch.TransitionID,
+		Outcome:      interfaces.OutcomeAccepted,
+		Output:       "done",
+	}, nil
+}
+
+func pauseSessionFactory(t *testing.T, session *liveFactorySession) {
+	t.Helper()
+	if err := liveSessionHandle(session).runtime.factory.Pause(context.Background()); err != nil {
+		t.Fatalf("Pause(%s): %v", session.ID, err)
+	}
+}
+
+func resumeSessionFactory(t *testing.T, session *liveFactorySession) {
+	t.Helper()
+	if err := liveSessionHandle(session).runtime.factory.Resume(context.Background()); err != nil {
+		t.Fatalf("Resume(%s): %v", session.ID, err)
+	}
+}
+
+func requireLiveSession(t *testing.T, svc *FactoryService, sessionID string) *liveFactorySession {
+	t.Helper()
+	session := svc.sessionByID(sessionID)
+	if session == nil {
+		t.Fatalf("session %q is not registered", sessionID)
+	}
+	return session
+}
+
+func sessionEngineSnapshot(t *testing.T, session *liveFactorySession) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	t.Helper()
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil {
+		t.Fatal("live session runtime is required")
+	}
+	snap, err := liveSessionHandle(session).runtime.factory.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot(%s): %v", session.ID, err)
+	}
+	return snap
+}
+
+func snapshotHasTokenAtPlace(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], placeID string) bool {
+	for _, token := range snap.Marking.Tokens {
+		if token.PlaceID == placeID {
+			return true
+		}
+	}
+	return false
+}
+
+func waitForSessionInFlight(t *testing.T, session *liveFactorySession, wait time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(wait)
+	for time.Now().Before(deadline) {
+		snap := sessionEngineSnapshot(t, session)
+		if snap.InFlightCount > 0 && len(snap.Dispatches) > 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	snap := sessionEngineSnapshot(t, session)
+	t.Fatalf("timed out waiting for in-flight dispatch on session %s inFlight=%d dispatches=%d", session.ID, snap.InFlightCount, len(snap.Dispatches))
 }

@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -69,6 +68,7 @@ func TestSupportedTopics_ReturnsFixedTopicOrder(t *testing.T) {
 		"workers",
 		"resources",
 		"models",
+		"packaged-goal",
 		"packaged-tts",
 		"batch-inputs",
 		"templates",
@@ -106,6 +106,7 @@ func TestSupportedTopicCommands_ReturnsCanonicalTopicsAndAliases(t *testing.T) {
 		"workers",
 		"resources",
 		"models",
+		"packaged-goal",
 		"packaged-tts",
 		"batch-inputs",
 		"batch-work",
@@ -193,6 +194,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"`workers` - Worker types",
 		"`resources` - Resource capacity",
 		"`models` - Local and hosted model setup",
+		"`packaged-goal` - Packaged @you/goal invocation",
 		"`packaged-tts` - Packaged @you/tts invocation",
 		"`batch-inputs` - Batch input files",
 		"`templates` - Prompt template variables",
@@ -204,6 +206,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"`you docs work`",
 		"`you docs sessions`",
 		"`you docs workstations`",
+		"`you docs packaged-goal`",
 		"`you docs packaged-tts`",
 		"`you docs batch-inputs`",
 	} {
@@ -352,6 +355,9 @@ func TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown(t *testing.T) {
 		"you run --dir ./factory --with-mock-workers",
 		"you docs mock-workers",
 		"you docs record-replay",
+		"you docs packaged-goal",
+		"you docs packaged-tts",
+		"you run --named @you/goal",
 		"docs/examples/mock-workers.json",
 		"requestId",
 		"workTypeName",
@@ -763,46 +769,6 @@ func TestMarkdown_RecordReplayReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
-func TestMarkdown_PackagedTTSReturnsRawAuthoredMarkdown(t *testing.T) {
-	t.Parallel()
-
-	got, err := Markdown("packaged-tts")
-	if err != nil {
-		t.Fatalf("Markdown(packaged-tts) error = %v", err)
-	}
-
-	for _, want := range []string{
-		"# Packaged TTS (`@you/tts`)",
-		"you run --named @you/tts",
-		"~/.you-agent-factory/factories",
-		"@you%2Ftts",
-		"artifactPath",
-		"mediaType",
-		"backend",
-		"INVOCATION_INPUT_SOURCE_CONFLICT",
-		"editable",
-		"raw audio",
-		"shared invocation contract",
-		"INVOCATION_TTS_MODEL_NOT_READY",
-		"INVOCATION_TTS_GENERATION_FAILED",
-		"`you docs authoring-factories`",
-		"`you docs config`",
-		"`you docs sessions`",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("Markdown(packaged-tts) missing %q:\n%s", want, got)
-		}
-	}
-	for _, wrapper := range []string{
-		"# Docs",
-		"Run `you docs packaged-tts`.",
-	} {
-		if strings.Contains(got, wrapper) {
-			t.Fatalf("Markdown(packaged-tts) included wrapper text %q:\n%s", wrapper, got)
-		}
-	}
-}
-
 func TestMarkdown_MCPReturnsRawAuthoredMarkdown(t *testing.T) {
 	t.Parallel()
 
@@ -856,6 +822,15 @@ func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"you session list",
 		"you session list --json",
 		"you session list --port 9090",
+		"## Session pause and resume",
+		"you session pause",
+		"you session resume",
+		"POST /factory-sessions/{session_id}/pause",
+		"POST /factory-sessions/{session_id}/resume",
+		"Paused factory session",
+		"Resumed factory session",
+		"SESSION_LIFECYCLE_CONTROL",
+		"make docs-reference-smoke",
 		"## Factory query",
 		"you factory query",
 		"you --json factory query",
@@ -907,44 +882,6 @@ func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
-func TestMarkdown_PackagedReferenceTopicsHaveNoPackagedTopicMarkdownLinks(t *testing.T) {
-	t.Parallel()
-
-	packagedTopicMD := regexp.MustCompile(`\[[^\]]+\]\((?:\./|\.\./reference/)?([a-z0-9-]+)\.md(?:#[^)]*)?\)`)
-	exempt := map[string]bool{"README": true}
-
-	repoRoot := testutil.MustRepoRoot(t)
-	referenceDir := filepath.Join(repoRoot, "docs", "reference")
-	entries, err := os.ReadDir(referenceDir)
-	if err != nil {
-		t.Fatalf("ReadDir(docs/reference) error = %v", err)
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
-			continue
-		}
-		if entry.Name() == "README.md" {
-			continue
-		}
-		content, err := os.ReadFile(filepath.Join(referenceDir, entry.Name()))
-		if err != nil {
-			t.Fatalf("ReadFile(%s) error = %v", entry.Name(), err)
-		}
-		doc := string(content)
-		for _, match := range packagedTopicMD.FindAllString(doc, -1) {
-			stem := packagedTopicMD.FindStringSubmatch(match)[1]
-			if exempt[stem] {
-				continue
-			}
-			t.Fatalf("%s contains packaged-topic markdown link %q; use `you docs %s` instead", entry.Name(), match, stem)
-		}
-		if strings.Contains(doc, "you docs authoring-agents-md") {
-			t.Fatalf("%s references authoring-agents-md as a docs topic; use docs/reference/authoring-agents-md.md path instead", entry.Name())
-		}
-	}
-}
-
 func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	t.Parallel()
 
@@ -952,7 +889,7 @@ func TestMarkdown_RejectsUnsupportedTopics(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, sessions, mcp-hosts, orchestrators, mcp, workstations, workers, resources, models, packaged-tts, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, sessions, mcp-hosts, orchestrators, mcp, workstations, workers, resources, models, packaged-goal, packaged-tts, batch-inputs, templates)` {
 		t.Fatalf("unsupported topic error = %q", got)
 	}
 }

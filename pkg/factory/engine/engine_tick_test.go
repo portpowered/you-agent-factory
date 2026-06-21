@@ -2,7 +2,9 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
@@ -249,4 +251,254 @@ func TestMutationsAppliedBetweenSubsystems(t *testing.T) {
 	if observedPlace != "task:complete" {
 		t.Errorf("expected observer to see token in 'task:complete', got %q", observedPlace)
 	}
+}
+
+func TestResumeDrainsMultipleBufferedSubmissionsToQuiescence(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+	sub := &mockSubsystem{group: subsystems.Scheduler}
+
+	paused := true
+	engine := NewFactoryEngine(n, marking, []subsystems.Subsystem{sub}, WithAutomaticTicksPaused(func() bool {
+		return paused
+	}))
+
+	traceIDs := []string{"trace-resume-a", "trace-resume-b", "trace-resume-c"}
+	for _, traceID := range traceIDs {
+		if _, err := submitWorkRequests(context.Background(), engine, []interfaces.SubmitRequest{{
+			WorkTypeID: "task",
+			TraceID:    traceID,
+		}}); err != nil {
+			t.Fatalf("SubmitWorkRequest %s: %v", traceID, err)
+		}
+	}
+
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick while paused with consumed wake: %v", err)
+	}
+	assertNoTokensInPlace(t, engine, "task:init")
+
+	paused = false
+	engine.WakeForPendingProcessing()
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick after resume wake: %v", err)
+	}
+
+	snap := engine.GetMarking()
+	tokens := (&snap).TokensInPlace("task:init")
+	if len(tokens) != len(traceIDs) {
+		t.Fatalf("tokens in task:init = %d, want %d after resume drain", len(tokens), len(traceIDs))
+	}
+	for i, wantTrace := range traceIDs {
+		if tokens[i].Color.TraceID != wantTrace {
+			t.Fatalf("token[%d] traceID = %q, want %q", i, tokens[i].Color.TraceID, wantTrace)
+		}
+	}
+}
+
+func TestWakeForPendingProcessing_SignalsDispatchHookBacklogAfterPausedWake(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+
+	alreadyDispatched := false
+	dispatchSub := &mockSubsystem{
+		group: subsystems.Dispatcher,
+		execFn: func(_ context.Context, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+			if alreadyDispatched {
+				return nil, nil
+			}
+			alreadyDispatched = true
+			return &interfaces.TickResult{
+				Dispatches: []interfaces.DispatchRecord{{
+					Dispatch: interfaces.WorkDispatch{DispatchID: "d-hook-paused-wake", TransitionID: "t1", WorkerType: "test-worker"},
+				}},
+			}, nil
+		},
+	}
+
+	hook := newTestDispatchResultHook()
+	hook.submit = func(_ context.Context, dispatch interfaces.WorkDispatch) error {
+		hook.submits = append(hook.submits, dispatch)
+		return nil
+	}
+
+	paused := false
+	engine := NewFactoryEngine(n, marking, []subsystems.Subsystem{dispatchSub},
+		WithAutomaticTicksPaused(func() bool { return paused }),
+		WithDispatchResultHook(hook),
+		WithDispatchHandler(func(interfaces.WorkDispatch) {}),
+	)
+
+	if _, err := submitWorkRequests(context.Background(), engine, []interfaces.SubmitRequest{{
+		WorkTypeID: "task",
+		TraceID:    "trace-hook-paused-wake",
+	}}); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- engine.Run(ctx)
+	}()
+
+	if err := waitForRunningDispatch(t, engine, "d-hook-paused-wake", time.Second); err != nil {
+		t.Fatalf("wait for dispatch before pause: %v", err)
+	}
+
+	paused = true
+	hook.results = []interfaces.WorkResult{{
+		DispatchID:   "d-hook-paused-wake",
+		TransitionID: "t1",
+		Outcome:      interfaces.OutcomeAccepted,
+	}}
+	hook.SignalBufferedResults()
+
+	time.Sleep(100 * time.Millisecond)
+	if len(engine.RunningDispatches()) != 1 {
+		t.Fatalf("running dispatches while paused = %d, want 1", len(engine.RunningDispatches()))
+	}
+	if !hook.HasBufferedResults() {
+		t.Fatal("dispatch hook backlog empty while paused, want buffered completion")
+	}
+
+	paused = false
+	engine.WakeForPendingProcessing()
+	if err := waitForNoRunningDispatches(t, engine, time.Second); err != nil {
+		t.Fatalf("wait for dispatch hook drain after resume: %v", err)
+	}
+
+	cancel()
+	if err := <-errCh; err != nil && err != context.Canceled {
+		t.Fatalf("Run: %v", err)
+	}
+}
+
+func TestRepeatedPausedWakePreservesBufferedSubmission(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+	sub := &mockSubsystem{group: subsystems.Scheduler}
+
+	paused := true
+	engine := NewFactoryEngine(n, marking, []subsystems.Subsystem{sub}, WithAutomaticTicksPaused(func() bool {
+		return paused
+	}))
+
+	if _, err := submitWorkRequests(context.Background(), engine, []interfaces.SubmitRequest{{
+		WorkTypeID: "task",
+		TraceID:    "trace-repeated-pause-submit",
+	}}); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+
+	for range 3 {
+		if err := engine.Tick(context.Background()); err != nil {
+			t.Fatalf("Tick while paused: %v", err)
+		}
+		assertNoTokensInPlace(t, engine, "task:init")
+	}
+
+	paused = false
+	engine.WakeForPendingProcessing()
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick after resume wake: %v", err)
+	}
+	snap := engine.GetMarking()
+	if len((&snap).TokensInPlace("task:init")) != 1 {
+		t.Fatalf("buffered submission was not reachable after repeated paused wakes")
+	}
+}
+
+func TestRepeatedPausedWakePreservesBufferedResult(t *testing.T) {
+	n := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+	dispatchSub := &mockSubsystem{
+		group: subsystems.Dispatcher,
+		execFn: func(_ context.Context, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+			return &interfaces.TickResult{
+				Dispatches: []interfaces.DispatchRecord{{
+					Dispatch: interfaces.WorkDispatch{
+						DispatchID:   "dispatch-repeated-pause",
+						TransitionID: "t1",
+						WorkerType:   "test-worker",
+					},
+					Mutations: []interfaces.MarkingMutation{{
+						Type:      interfaces.MutationConsume,
+						TokenID:   "tok-1",
+						FromPlace: "task:init",
+					}},
+				}},
+			}, nil
+		},
+	}
+
+	paused := true
+	engine := NewFactoryEngine(n, marking, []subsystems.Subsystem{dispatchSub},
+		WithDispatchHandler(func(interfaces.WorkDispatch) {}),
+		WithAutomaticTicksPaused(func() bool {
+			return paused
+		}),
+	)
+
+	if _, err := submitWorkRequests(context.Background(), engine, []interfaces.SubmitRequest{{
+		WorkTypeID: "task",
+		TraceID:    "trace-repeated-pause-result",
+	}}); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+	paused = false
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick to dispatch: %v", err)
+	}
+
+	paused = true
+	engine.GetResultBuffer().Write(context.Background(), interfaces.WorkResult{
+		DispatchID:   "dispatch-repeated-pause",
+		TransitionID: "t1",
+		Outcome:      interfaces.OutcomeAccepted,
+	})
+	engine.NotifyResult()
+	for range 3 {
+		if err := engine.Tick(context.Background()); err != nil {
+			t.Fatalf("Tick while paused: %v", err)
+		}
+		if len(engine.GetRuntimeStateSnapshot().DispatchHistory) != 0 {
+			t.Fatal("dispatch completed while paused")
+		}
+	}
+
+	paused = false
+	engine.WakeForPendingProcessing()
+	if err := engine.Tick(context.Background()); err != nil {
+		t.Fatalf("Tick after resume wake: %v", err)
+	}
+	if len(engine.GetRuntimeStateSnapshot().DispatchHistory) != 1 {
+		t.Fatalf("buffered result was not reachable after repeated paused wakes")
+	}
+}
+
+func waitForRunningDispatch(t *testing.T, engine *FactoryEngine, dispatchID string, timeout time.Duration) error {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if _, ok := engine.RunningDispatches()[dispatchID]; ok {
+			return nil
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return fmt.Errorf("timed out waiting for running dispatch %q", dispatchID)
+}
+
+func waitForNoRunningDispatches(t *testing.T, engine *FactoryEngine, timeout time.Duration) error {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if len(engine.RunningDispatches()) == 0 {
+			return nil
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return fmt.Errorf("timed out waiting for running dispatches to drain, still have %d", len(engine.RunningDispatches()))
 }

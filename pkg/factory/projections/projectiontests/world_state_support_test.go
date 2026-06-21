@@ -681,6 +681,14 @@ func assignGeneratedProjectionSessionLifecyclePayload(event *factoryapi.FactoryE
 		if err := event.Payload.FromSessionCompletedEventPayload(typed); err != nil {
 			panic(err)
 		}
+	case factoryapi.SessionPausedEventPayload:
+		if err := event.Payload.FromSessionPausedEventPayload(typed); err != nil {
+			panic(err)
+		}
+	case factoryapi.SessionResumedEventPayload:
+		if err := event.Payload.FromSessionResumedEventPayload(typed); err != nil {
+			panic(err)
+		}
 	case factoryapi.OrchestratorPhaseChangedEventPayload:
 		if err := event.Payload.FromOrchestratorPhaseChangedEventPayload(typed); err != nil {
 			panic(err)

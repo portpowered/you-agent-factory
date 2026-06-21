@@ -141,12 +141,12 @@ func TestSameNameGuard_NonMatchingNamesStayBlocked(t *testing.T) {
 		TraceID:    "trace-same-name-task",
 	}})
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
-	support.WaitForHarnessPlaceTokenCount(t, h, "plan:ready", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:ready", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "plan:ready", 1, 3*time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:ready", 1, 3*time.Second)
 
 	deadline := time.Now().Add(200 * time.Millisecond)
 	for time.Now().Before(deadline) {

@@ -28,7 +28,7 @@ concept owners below when you need the complete customer-facing contract.
 | `mock-workers` | `--with-mock-workers` and the `mockWorkers` JSON contract | [Mock workers](mock-workers.md) |
 | `record-replay` | Default recording, `--record`, `--replay`, and `--no-record` | [Record and replay](record-replay.md) |
 | `work` | Submitted work: session-scoped work routes, tags, and batch cross-links | [Submitted work](work.md) |
-| `sessions` | Session list, session show, factory query, status API, dashboard, and run modes | [Sessions](sessions.md) |
+| `sessions` | Session list, session show, pause and resume, factory query, status API, dashboard, and run modes | [Sessions](sessions.md) |
 | `mcp-hosts` | Dynamic workflow MCP host setup, `you mcp serve`, transport assumptions, and host examples | [MCP host setup](mcp-hosts.md) |
 | `orchestrators` | Factory orchestrator identity, FactorySession runtime nouns, dispatch/artifact/event aliases | [Orchestrators](orchestrators.md) |
 | `mcp` | Canonical `you mcp serve` install path, preview tool catalog, and scope boundaries | [MCP install path](mcp.md) |
@@ -36,6 +36,7 @@ concept owners below when you need the complete customer-facing contract.
 | `workers` | Worker quick reference | [Workers](workers.md) |
 | `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Config](config.md) |
 | `models` | Model discovery, invocation, and contract quick reference | [Models and model operations](models.md) |
+| `packaged-goal` | Packaged `@you/goal` invocation, materialization, and editability | [Packaged Goal](packaged-goal.md) |
 | `packaged-tts` | Packaged `@you/tts` invocation, materialization, metadata result, and editability | [Packaged TTS](packaged-tts.md) |
 | `batch-inputs` | Batch-request quick reference | [Batch inputs](batch-inputs.md) |
 | `templates` | Template authoring guide | [Templates](templates.md) |
@@ -77,9 +78,9 @@ filesystem work around that invocation.
   routing behavior, runtime resources, and portability fields.
 - [Submitted work](work.md) owns `POST /factory-sessions/{session_id}/work`,
   submitted-work tags, and batch cross-links.
-- [Sessions](sessions.md) owns live session discovery, session show, factory query,
-  status API fields, dashboard URL, and `--server` / `--session` routing for HTTP
-  client commands.
+- [Sessions](sessions.md) owns live session discovery, session show, pause and
+  resume, factory query, status API fields, dashboard URL, and `--server` /
+  `--session` routing for HTTP client commands.
 - [Orchestrators](orchestrators.md) owns `Factory`, `FactoryOrchestrator`,
   `FactorySession`, `Dispatch`, `FactoryArtifact`, `FactoryEvent`, and accepted
   dynamic workflow aliases.

@@ -154,10 +154,6 @@ func transitionWorkerIDs(transitions map[string]*petri.Transition) []string {
 	return ids
 }
 
-func factoryWorker(workerID string, def *interfaces.WorkerConfig) interfaces.FactoryWorker {
-	return factoryWorkerWithUsage(workerID, def, nil)
-}
-
 func factoryWorkerWithUsage(workerID string, def *interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) interfaces.FactoryWorker {
 	return interfaces.FactoryWorker{
 		ID:            workerID,
@@ -167,10 +163,6 @@ func factoryWorkerWithUsage(workerID string, def *interfaces.WorkerConfig, works
 		Model:         def.Model,
 		Config:        workerConfigWithUsage(def, workstations),
 	}
-}
-
-func workerConfig(def *interfaces.WorkerConfig) map[string]string {
-	return workerConfigWithUsage(def, nil)
 }
 
 func workerConfigWithUsage(def *interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) map[string]string {

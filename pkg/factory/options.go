@@ -78,6 +78,14 @@ type DispatchResultHook interface {
 	SubmitDispatch(ctx context.Context, dispatch interfaces.WorkDispatch) error
 	OnTick(ctx context.Context, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]interfaces.WorkResult, error)
 	WaitCh() <-chan struct{}
+	HasPendingResults() bool
+}
+
+// DispatchResultHookWakeSignaler is implemented by dispatch hooks that may
+// retain completed results after a consumed wake while automatic ticks are paused.
+type DispatchResultHookWakeSignaler interface {
+	HasBufferedResults() bool
+	SignalBufferedResults()
 }
 
 // CompletionDeliveryPlanner maps a runtime dispatch to the logical tick at

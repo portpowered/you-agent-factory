@@ -757,7 +757,9 @@ func workstationAPIFromInternal(workstation interfaces.FactoryWorkstationConfig,
 		Env:                   stringMapPtr(normalized.Env),
 		Body:                  stringPtrIfNotEmpty(promptBody),
 		Limits:                workstationLimitsAPIFromInternal(normalized.Limits),
+		WorkPropagation:       workPropagationAPIFromInternal(normalized.WorkPropagation),
 		OutputSchema:          stringPtrIfNotEmpty(normalized.OutputSchema),
+		OutcomeFormat:         interfaces.GeneratedPublicFactoryWorkstationOutcomeFormatPtr(normalized.OutcomeFormat),
 		Operation:             stringPtrIfNotEmpty(normalized.Operation),
 		OperationBindings:     workstationOperationBindingsAPIFromInternal(normalized.OperationBindings),
 		PromptFile:            stringPtrIfNotEmpty(normalized.PromptFile),
@@ -912,10 +914,6 @@ func WorkstationConfigToOpenAPIWithWorkerType(workstation interfaces.FactoryWork
 	return workstationAPIFromInternal(workstation, workerType)
 }
 
-func workerDefinitionAPIFromInternal(def *interfaces.WorkerConfig) *factoryapi.Worker {
-	return workerDefinitionAPIFromInternalWithUsage(def, nil)
-}
-
 func workerDefinitionAPIFromInternalWithUsage(def *interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) *factoryapi.Worker {
 	if def == nil {
 		return nil
@@ -1042,6 +1040,15 @@ func workstationLimitsAPIFromInternal(limits interfaces.WorkstationLimits) *fact
 	return &factoryapi.WorkstationLimits{
 		MaxExecutionTime: stringPtrIfNotEmpty(limits.MaxExecutionTime),
 		MaxRetries:       intPtrIfNonZero(limits.MaxRetries),
+	}
+}
+
+func workPropagationAPIFromInternal(value *interfaces.WorkPropagationConfig) *factoryapi.WorkPropagation {
+	if value == nil {
+		return nil
+	}
+	return &factoryapi.WorkPropagation{
+		Mode: factoryapi.WorkPropagationMode(value.Mode),
 	}
 }
 
@@ -1190,14 +1197,6 @@ func guardMatchConfigAPIFromInternal(matchConfig *interfaces.GuardMatchConfig) *
 	return &factoryapi.GuardMatchConfig{
 		InputKey: matchConfig.InputKey,
 	}
-}
-
-func workerTypePtrIfNotEmpty(value string) *factoryapi.WorkerType {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	enumValue := publicFactoryWorkerTypeFromInternal(value)
-	return &enumValue
 }
 
 func workerTypePtrForFactoryUsage(def *interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) *factoryapi.WorkerType {

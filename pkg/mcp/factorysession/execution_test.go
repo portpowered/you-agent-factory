@@ -845,13 +845,12 @@ func assertRuntimeTerminalSessionReads(t *testing.T, client *runtimeMCPClient, s
 
 func newRuntimeMCPClient(t *testing.T) *runtimeMCPClient {
 	t.Helper()
-	service, err := factorysessionexecution.NewExecutionService(
-		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
-		factorysessionexecution.ServiceConfig{ProjectRoot: t.TempDir()},
-	)
-	if err != nil {
-		t.Fatalf("NewExecutionService: %v", err)
-	}
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: t.TempDir(),
+	})
+	t.Cleanup(func() {
+		drainRuntimeMCPClientSessions(t, service)
+	})
 	return &runtimeMCPClient{
 		Client:  mcpfactorysession.NewClientWithService(service),
 		service: service,
@@ -869,6 +868,34 @@ func runtimeServiceFromClient(t *testing.T, client *runtimeMCPClient) factoryses
 		t.Fatal("runtime service missing from MCP client wrapper")
 	}
 	return client.service
+}
+
+func drainRuntimeMCPClientSessions(t *testing.T, service factorysessionexecution.Service) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		list, err := service.ListSessions(context.Background(), factorysessionexecution.ListSessionsRequest{
+			Scope: factorysessionexecution.SessionListScopeAll,
+		})
+		if err != nil {
+			return
+		}
+
+		pending := false
+		for _, session := range list.DurableSessions {
+			if factorysessionexecution.IsTerminalLifecycleStatus(session.Status) {
+				continue
+			}
+			pending = true
+			_, _ = service.Terminate(context.Background(), session.SessionID, factorysessionexecution.ControlRequest{
+				Reason: "test cleanup",
+			})
+		}
+		if !pending {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func runtimeBusyLoopAsyncRequest(requestID string) factoryapi.FactorySessionExecutionRequest {

@@ -97,8 +97,13 @@ func assertRuntimeSmokePollObservesRunningOrTerminal(t *testing.T, client *stdio
 		status := runtimeSmokeSessionStatus(t, client, sessionID)
 		switch status {
 		case factoryapi.FactorySessionDurableLifecycleStatusRunning:
-			assertRuntimeSmokeRunningNotReady(t, client, sessionID, mode)
-			observedRunningNotReady = true
+			if runtimeSmokeResultIsFinal(t, client, sessionID, mode) {
+				assertRuntimeSmokeTerminalResult(t, client, sessionID, mode)
+				observedTerminal = true
+			} else {
+				assertRuntimeSmokeRunningNotReady(t, client, sessionID, mode)
+				observedRunningNotReady = true
+			}
 		case factoryapi.FactorySessionDurableLifecycleStatusSucceeded:
 			assertRuntimeSmokeTerminalResult(t, client, sessionID, mode)
 			observedTerminal = true
@@ -129,25 +134,56 @@ func runtimeSmokeSessionStatus(t *testing.T, client *stdioMCPClient, sessionID s
 	return statusResponse.Result.Status
 }
 
-func assertRuntimeSmokeRunningNotReady(
+func runtimeSmokeResultIsFinal(
 	t *testing.T,
 	client *stdioMCPClient,
 	sessionID string,
 	mode factoryapi.FactorySessionResultMode,
-) {
+) bool {
 	t.Helper()
-	notReady := decodeToolResponse[factoryapi.FactorySessionResult](
+	response := decodeToolResponse[factoryapi.FactorySessionResult](
 		t,
 		client.callTool(mcpfactorysession.ToolGetResult, map[string]any{
 			"sessionId": sessionID,
 			"mode":      mode,
 		}),
 	)
-	if notReady.Result != nil {
-		t.Fatalf("get_result running = %#v, want not-ready envelope", notReady.Result)
+	return response.Error == nil &&
+		response.Result != nil &&
+		response.Result.ResultStatus == factoryapi.FactorySessionResultStatusFinal
+}
+
+func assertRuntimeSmokeRunningNotReady(
+	t *testing.T,
+	client *stdioMCPClient,
+	sessionID string,
+	mode factoryapi.FactorySessionResultMode,
+) bool {
+	t.Helper()
+	response := decodeToolResponse[factoryapi.FactorySessionResult](
+		t,
+		client.callTool(mcpfactorysession.ToolGetResult, map[string]any{
+			"sessionId": sessionID,
+			"mode":      mode,
+		}),
+	)
+	if response.Result != nil && response.Result.ResultStatus == factoryapi.FactorySessionResultStatusFinal {
+		if response.Result.PrimaryResult == nil {
+			t.Fatal("primaryResult missing from terminal result")
+		}
+		return true
 	}
-	if notReady.Error == nil || notReady.Error.Code != "factory_session.result.not_ready" {
-		t.Fatalf("get_result error = %#v, want factory_session.result.not_ready", notReady.Error)
+	assertRuntimeSmokeRunningNotReadyResponse(t, response)
+	return false
+}
+
+func assertRuntimeSmokeRunningNotReadyResponse(t *testing.T, response mcpfactorysession.ToolResponse[factoryapi.FactorySessionResult]) {
+	t.Helper()
+	if response.Result != nil {
+		t.Fatalf("get_result running = %#v, want not-ready envelope", response.Result)
+	}
+	if response.Error == nil || response.Error.Code != "factory_session.result.not_ready" {
+		t.Fatalf("get_result error = %#v, want factory_session.result.not_ready", response.Error)
 	}
 }
 

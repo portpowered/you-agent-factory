@@ -46,18 +46,20 @@ func New(places map[string]*petri.Place, workTypes map[string]*state.WorkType, o
 // OutputTokenInput contains the data needed to convert consumed input tokens
 // plus an output arc into a routed output token.
 type OutputTokenInput struct {
-	ArcIndex           int
-	Arcs               []petri.Arc
-	ConsumedTokens     []interfaces.Token
-	InputColors        []interfaces.TokenColor
-	Output             string
-	Outcome            interfaces.WorkOutcome
-	TransitionID       string
-	Error              string
-	Feedback           string
-	Now                time.Time
-	History            interfaces.TokenHistory
-	ResourceTokenIndex int
+	ArcIndex            int
+	Arcs                []petri.Arc
+	ConsumedTokens      []interfaces.Token
+	InputColors         []interfaces.TokenColor
+	Output              string
+	WorkPropagationMode interfaces.WorkPropagationMode
+	WorkstationName     string
+	Outcome             interfaces.WorkOutcome
+	TransitionID        string
+	Error               string
+	Feedback            string
+	Now                 time.Time
+	History             interfaces.TokenHistory
+	ResourceTokenIndex  int
 }
 
 // InitialTokenFromSubmit converts a submit request into a token placed in the
@@ -173,8 +175,14 @@ func (t *Transformer) OutputToken(in OutputTokenInput) (*interfaces.Token, error
 		return nil, err
 	}
 
-	if in.Output != "" && color.DataType != interfaces.DataTypeResource {
-		color.Payload = []byte(in.Output)
+	if color.DataType != interfaces.DataTypeResource {
+		targetTypeID := ""
+		if place := t.places[arc.PlaceID]; place != nil {
+			targetTypeID = place.TypeID
+		}
+		if err := applyOutputPayloadPropagation(&color, in, targetTypeID); err != nil {
+			return nil, err
+		}
 	}
 
 	if token := reuseConsumedResourceToken(in, arc, color); token != nil {
@@ -192,6 +200,77 @@ func (t *Transformer) OutputToken(in OutputTokenInput) (*interfaces.Token, error
 
 	applyOutputOutcome(token, in, t.places[arc.PlaceID], t.workTypes)
 	return token, nil
+}
+
+func applyOutputPayloadPropagation(color *interfaces.TokenColor, in OutputTokenInput, targetTypeID string) error {
+	if color == nil {
+		return nil
+	}
+	mode := in.WorkPropagationMode
+	if mode == "" {
+		mode = interfaces.WorkPropagationModeOutputAsPayload
+	}
+	switch mode {
+	case interfaces.WorkPropagationModePreserveInput:
+		return ApplyPreservedInputToColor(color, in.InputColors, targetTypeID, in.WorkstationName)
+	default:
+		if in.Output != "" {
+			color.Payload = []byte(in.Output)
+		}
+		return nil
+	}
+}
+
+// PreserveInputApplicationError reports invalid PRESERVE_INPUT routing.
+type PreserveInputApplicationError struct {
+	WorkstationName string
+}
+
+func (e *PreserveInputApplicationError) Error() string {
+	name := e.WorkstationName
+	if name == "" {
+		name = "workstation"
+	}
+	return fmt.Sprintf(
+		`workstation %q cannot apply work propagation PRESERVE_INPUT: preserve-input requires consumed non-resource input work`,
+		name,
+	)
+}
+
+// ApplyPreservedInputToColor copies payload, content, and tags from the selected
+// consumed input work onto a routed output color when they are not already set.
+func ApplyPreservedInputToColor(
+	color *interfaces.TokenColor,
+	inputColors []interfaces.TokenColor,
+	targetTypeID string,
+	workstationName string,
+) error {
+	if color == nil {
+		return nil
+	}
+	if len(color.Payload) > 0 {
+		return nil
+	}
+	source := SelectedPreserveInputSource(inputColors, targetTypeID)
+	if source == nil {
+		return &PreserveInputApplicationError{WorkstationName: workstationName}
+	}
+	color.Payload = factorypkg.CloneRuntimePayload(source.Payload)
+	if len(color.Content) == 0 && len(source.Content) > 0 {
+		color.Content = interfaces.CloneWorkContentParts(source.Content)
+	}
+	if len(color.Tags) == 0 && len(source.Tags) > 0 {
+		color.Tags = factorypkg.CloneRuntimeTags(source.Tags)
+	}
+	return nil
+}
+
+// SelectedPreserveInputSource resolves the consumed input work used for preserve-input routing.
+func SelectedPreserveInputSource(inputColors []interfaces.TokenColor, targetTypeID string) *interfaces.TokenColor {
+	if source := findMatchingInput(inputColors, targetTypeID); source != nil {
+		return source
+	}
+	return firstNonResourceInput(inputColors)
 }
 
 func reuseConsumedResourceToken(in OutputTokenInput, arc petri.Arc, color interfaces.TokenColor) *interfaces.Token {

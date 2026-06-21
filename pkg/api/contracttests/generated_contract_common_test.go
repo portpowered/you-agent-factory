@@ -28,8 +28,11 @@ var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeFactoryStateResponse,
 	factoryapi.FactoryEventTypeRunResponse,
 	factoryapi.FactoryEventTypeSessionStarted,
+	factoryapi.FactoryEventTypeSessionPaused,
+	factoryapi.FactoryEventTypeSessionResumed,
 	factoryapi.FactoryEventTypeSessionResultUpdated,
 	factoryapi.FactoryEventTypeSessionCompleted,
+	factoryapi.FactoryEventTypeSessionLifecycleControl,
 	factoryapi.FactoryEventTypeOrchestratorPhaseChanged,
 	factoryapi.FactoryEventTypeOrchestratorCheckpointWritten,
 	factoryapi.FactoryEventTypeDispatchQueued,
@@ -119,12 +122,24 @@ var generatedFactoryEventPayloadDecoders = map[factoryapi.FactoryEventType]func(
 		_, err := payload.AsSessionStartedEventPayload()
 		return err
 	},
+	factoryapi.FactoryEventTypeSessionPaused: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsSessionPausedEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeSessionResumed: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsSessionResumedEventPayload()
+		return err
+	},
 	factoryapi.FactoryEventTypeSessionResultUpdated: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsSessionResultUpdatedEventPayload()
 		return err
 	},
 	factoryapi.FactoryEventTypeSessionCompleted: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsSessionCompletedEventPayload()
+		return err
+	},
+	factoryapi.FactoryEventTypeSessionLifecycleControl: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsSessionLifecycleControlEventPayload()
 		return err
 	},
 	factoryapi.FactoryEventTypeOrchestratorPhaseChanged: func(payload factoryapi.FactoryEvent_Payload) error {
@@ -213,11 +228,20 @@ var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.Fac
 	reflect.TypeOf(factoryapi.SessionStartedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromSessionStartedEventPayload(value.(factoryapi.SessionStartedEventPayload))
 	},
+	reflect.TypeOf(factoryapi.SessionPausedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromSessionPausedEventPayload(value.(factoryapi.SessionPausedEventPayload))
+	},
+	reflect.TypeOf(factoryapi.SessionResumedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromSessionResumedEventPayload(value.(factoryapi.SessionResumedEventPayload))
+	},
 	reflect.TypeOf(factoryapi.SessionResultUpdatedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromSessionResultUpdatedEventPayload(value.(factoryapi.SessionResultUpdatedEventPayload))
 	},
 	reflect.TypeOf(factoryapi.SessionCompletedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromSessionCompletedEventPayload(value.(factoryapi.SessionCompletedEventPayload))
+	},
+	reflect.TypeOf(factoryapi.SessionLifecycleControlEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromSessionLifecycleControlEventPayload(value.(factoryapi.SessionLifecycleControlEventPayload))
 	},
 	reflect.TypeOf(factoryapi.OrchestratorPhaseChangedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromOrchestratorPhaseChangedEventPayload(value.(factoryapi.OrchestratorPhaseChangedEventPayload))
@@ -390,6 +414,7 @@ func generatedFactorySessionLifecycleEvents(t *testing.T, eventTime time.Time) [
 	}
 	events := make([]factoryapi.FactoryEvent, 0, 8)
 	events = append(events, generatedSessionLifecycleBracketEvents(t, fixture, eventTime)...)
+	events = append(events, generatedSessionLifecyclePauseResumeEvents(t, fixture, eventTime)...)
 	events = append(events, generatedSessionLifecycleOrchestratorEvents(t, fixture, eventTime)...)
 	events = append(events, generatedSessionLifecycleDispatchEvents(t, fixture, eventTime)...)
 	return events
@@ -430,7 +455,7 @@ func generatedSessionLifecycleBracketEvents(
 			Id:            "event-session-result-updated",
 			Type:          factoryapi.FactoryEventTypeSessionResultUpdated,
 			Context: factoryapi.FactoryEventContext{
-				Sequence:         11,
+				Sequence:         13,
 				Tick:             6,
 				EventTime:        eventTime,
 				SessionId:        &fixture.sessionID,
@@ -447,11 +472,33 @@ func generatedSessionLifecycleBracketEvents(
 		},
 		{
 			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-session-lifecycle-control",
+			Type:          factoryapi.FactoryEventTypeSessionLifecycleControl,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:         14,
+				Tick:             7,
+				EventTime:        eventTime,
+				SessionId:        &fixture.sessionID,
+				SessionSequence:  intPtr(fixture.nextSessionSequence()),
+				OrchestratorKind: &fixture.orchestratorKind,
+				Source:           &fixture.source,
+			},
+			Payload: factoryEventPayload(t, factoryapi.SessionLifecycleControlEventPayload{
+				Operation:      factoryapi.FactorySessionLifecycleControlKindPause,
+				Outcome:        factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+				PreviousStatus: factoryapi.FactorySessionDurableLifecycleStatusRunning,
+				NewStatus:      factoryapi.FactorySessionDurableLifecycleStatusPaused,
+				OccurredAt:     eventTime,
+				Reason:         stringPtr("operator requested pause"),
+			}),
+		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
 			Id:            "event-session-completed",
 			Type:          factoryapi.FactoryEventTypeSessionCompleted,
 			Context: factoryapi.FactoryEventContext{
-				Sequence:         12,
-				Tick:             7,
+				Sequence:         13,
+				Tick:             8,
 				EventTime:        eventTime,
 				SessionId:        &fixture.sessionID,
 				SessionSequence:  intPtr(fixture.nextSessionSequence()),
@@ -469,6 +516,52 @@ func generatedSessionLifecycleBracketEvents(
 					Running:   0,
 					Completed: 2,
 				},
+			}),
+		},
+	}
+}
+
+func generatedSessionLifecyclePauseResumeEvents(
+	t *testing.T,
+	fixture *generatedSessionLifecycleFixture,
+	eventTime time.Time,
+) []factoryapi.FactoryEvent {
+	t.Helper()
+	return []factoryapi.FactoryEvent{
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-session-paused",
+			Type:          factoryapi.FactoryEventTypeSessionPaused,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:         11,
+				Tick:             6,
+				EventTime:        eventTime,
+				SessionId:        &fixture.sessionID,
+				SessionSequence:  intPtr(fixture.nextSessionSequence()),
+				OrchestratorKind: &fixture.orchestratorKind,
+				Source:           &fixture.source,
+			},
+			Payload: factoryEventPayload(t, factoryapi.SessionPausedEventPayload{
+				Status:   factoryapi.FactorySessionDurableLifecycleStatusPaused,
+				PausedAt: eventTime,
+			}),
+		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-session-resumed",
+			Type:          factoryapi.FactoryEventTypeSessionResumed,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:         12,
+				Tick:             6,
+				EventTime:        eventTime,
+				SessionId:        &fixture.sessionID,
+				SessionSequence:  intPtr(fixture.nextSessionSequence()),
+				OrchestratorKind: &fixture.orchestratorKind,
+				Source:           &fixture.source,
+			},
+			Payload: factoryEventPayload(t, factoryapi.SessionResumedEventPayload{
+				Status:    factoryapi.FactorySessionDurableLifecycleStatusRunning,
+				ResumedAt: eventTime,
 			}),
 		},
 	}

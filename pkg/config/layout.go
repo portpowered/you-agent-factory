@@ -1,5 +1,5 @@
-// backendsizecheck:ignore-file built-in catalog layout and @you/tts factory JSON remain co-located until dedicated config seams split.
-// pkgmaintcheck:ignore-file-lines built-in catalog layout and @you/tts factory JSON remain co-located until dedicated config seams split.
+// backendsizecheck:ignore-file built-in catalog layout and packaged factory JSON remain co-located until dedicated config seams split.
+// pkgmaintcheck:ignore-file-lines built-in catalog layout and packaged factory JSON remain co-located until dedicated config seams split.
 package config
 
 import (
@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/config/builtingoal"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -829,7 +830,8 @@ func restoreFactorySplitLayoutReplace(targetDir, backupDir string) {
 }
 
 var builtInNamedFactoryCatalog = map[string][]byte{
-	"@you/tts": BuiltInTTSFactoryJSON,
+	"@you/goal": BuiltInGoalFactoryJSON,
+	"@you/tts":  BuiltInTTSFactoryJSON,
 }
 
 // ResolveNamedFactoryDirAcrossRoots returns the runnable factory directory for
@@ -921,7 +923,7 @@ func resolveNamedFactoryCandidate(rootDir, name string) (string, bool, error) {
 	if err == nil {
 		return factoryDir, true, nil
 	}
-	if errors.Is(err, os.ErrNotExist) {
+	if errors.Is(err, ErrNamedFactoryNotFound) {
 		return "", false, nil
 	}
 	return "", false, err
@@ -953,6 +955,9 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 	}
 	return factoryDir, true, nil
 }
+
+// BuiltInGoalFactoryJSON is the canonical runnable @you/goal packaged factory payload.
+var BuiltInGoalFactoryJSON = builtingoal.BuiltInGoalFactoryJSON
 
 // BuiltInTTSFactoryJSON is the canonical runnable @you/tts packaged factory payload.
 var BuiltInTTSFactoryJSON = []byte(`{

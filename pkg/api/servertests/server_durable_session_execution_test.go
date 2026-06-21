@@ -252,7 +252,8 @@ func TestLifecycleControls_PreserveRunningSessionReadParity(t *testing.T) {
 	}
 	assertLifecycleControlPreservesInspectionLinks(t, started.SessionID, pauseResp.Links)
 	assertReadSurfacesReachableAfterLifecycle(t, server.URL, started.SessionID)
-	assertEventReconnectStillWorks(t, server.URL, started.SessionID, beforeEvents)
+	currentEvents := getDurableFactorySessionEvents(t, server.URL, started.SessionID, "")
+	assertEventReconnectStillWorks(t, server.URL, started.SessionID, currentEvents)
 
 	pausedRead := getDurableFactorySession(t, server.URL, started.SessionID)
 	if pausedRead.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
@@ -467,21 +468,22 @@ func assertReadSurfacesReachableAfterLifecycle(t *testing.T, serverURL, sessionI
 func assertEventReconnectStillWorks(
 	t *testing.T,
 	serverURL, sessionID string,
-	allEvents []factoryapi.FactoryEvent,
+	_ []factoryapi.FactoryEvent,
 ) {
 	t.Helper()
-	if len(allEvents) == 0 {
+	currentEvents := getDurableFactorySessionEvents(t, serverURL, sessionID, "")
+	if len(currentEvents) == 0 {
 		t.Fatal("expected at least one event for reconnect assertion")
 	}
-	firstID := allEvents[0].Id
+	firstID := currentEvents[0].Id
 	afterStart := getDurableFactorySessionEvents(
 		t,
 		serverURL,
 		sessionID,
 		"after_event_id="+firstID,
 	)
-	if len(afterStart) != len(allEvents)-1 {
-		t.Fatalf("reconnect event count = %d, want %d", len(afterStart), len(allEvents)-1)
+	if len(afterStart) != len(currentEvents)-1 {
+		t.Fatalf("reconnect event count = %d, want %d", len(afterStart), len(currentEvents)-1)
 	}
 }
 
