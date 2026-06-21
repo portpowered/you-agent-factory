@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 )
 
 // FakeService is a deterministic in-memory implementation of Service for API, CLI,
@@ -495,7 +496,30 @@ func (s *FakeService) applyLifecycleControl(
 	}
 
 	if outcome == LifecycleControlOutcomeAccepted {
+		previousStatus := state.session.Status
 		s.mutateSessionForControl(state, operation, retry.DispatchID)
+		switch operation {
+		case LifecycleControlPause, LifecycleControlResume:
+			occurredAt := time.Now().UTC()
+			if state.session.Lifecycle != nil && state.session.Lifecycle.PausedAt != nil && operation == LifecycleControlPause {
+				occurredAt = state.session.Lifecycle.PausedAt.UTC()
+			}
+			if state.session.Lifecycle != nil && state.session.Lifecycle.ResumedAt != nil && operation == LifecycleControlResume {
+				occurredAt = state.session.Lifecycle.ResumedAt.UTC()
+			}
+			state.events = AppendSessionLifecycleControlEvent(
+				state.events,
+				state.session,
+				previousStatus,
+				operation,
+				outcome,
+				occurredAt,
+				canonicalEventSourceFakeService,
+				control.Reason,
+			)
+		default:
+			state.events = deriveProjectionEvents(state.session, state.result)
+		}
 	}
 
 	result := lifecycleControlResultFromState(state, id, operation, outcome, retry)
@@ -508,13 +532,23 @@ func (s *FakeService) mutateSessionForControl(state *fakeSessionState, operation
 	switch operation {
 	case LifecycleControlPause:
 		if state.session.Status == LifecycleStatusRunning || state.session.Status == LifecycleStatusResuming {
+			pausedAt := time.Now().UTC()
 			state.session.Status = LifecycleStatusPaused
 			state.result.SessionStatus = LifecycleStatusPaused
+			if state.session.Lifecycle == nil {
+				state.session.Lifecycle = &LifecycleTimestamps{}
+			}
+			state.session.Lifecycle.PausedAt = &pausedAt
 		}
 	case LifecycleControlResume:
 		if state.session.Status == LifecycleStatusPaused {
+			resumedAt := time.Now().UTC()
 			state.session.Status = LifecycleStatusRunning
 			state.result.SessionStatus = LifecycleStatusRunning
+			if state.session.Lifecycle == nil {
+				state.session.Lifecycle = &LifecycleTimestamps{}
+			}
+			state.session.Lifecycle.ResumedAt = &resumedAt
 		}
 	case LifecycleControlCancel:
 		switch state.session.Status {
@@ -553,7 +587,6 @@ func (s *FakeService) mutateSessionForControl(state *fakeSessionState, operation
 			state.result.SessionStatus = LifecycleStatusRunning
 		}
 	}
-	state.events = deriveProjectionEvents(state.session, state.result)
 }
 
 func (s *FakeService) asyncStartFromScenario(scenario FakeScenario, state *fakeSessionState) AsyncStartResult {

@@ -21,8 +21,8 @@ import (
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/internal/metrics"
 	"github.com/portpowered/infinite-you/pkg/petri"
@@ -897,7 +897,6 @@ func startupReadinessError(err error) error {
 	return fmt.Errorf("wait for service-mode startup work readiness: %w", err)
 }
 
-
 func (fs *FactoryService) ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error) {
 	return fs.requireCoordinator().ListFactorySessions(ctx)
 }
@@ -1319,7 +1318,6 @@ func (fs *FactoryService) RetryDurableFactorySessionDispatch(
 	}
 	return factorysession.LifecycleControlResponseToAPI(result), nil
 }
-
 func (fs *FactoryService) PauseLiveFactorySession(
 	ctx context.Context,
 	sessionID string,
@@ -1437,6 +1435,7 @@ func (fs *FactoryService) applyLiveLifecycleControl(
 	fs.observeLiveLifecycleControl(sessionID, operation, control, outcome, resultStatus, nil)
 	return result, nil
 }
+
 const (
 	runtimeMetricLifecycleControl = "runtime.lifecycle_control"
 )
