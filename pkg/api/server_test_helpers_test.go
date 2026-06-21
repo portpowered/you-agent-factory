@@ -18,6 +18,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/internal/cursorstorage"
@@ -291,6 +292,55 @@ func assertGeneratedWorkContentParts(t *testing.T, content *factoryapi.WorkConte
 	}
 	for i, wantPart := range want {
 		assertGeneratedWorkContentPart(t, (*content)[i], i, wantPart)
+	}
+}
+
+func extractInvocationRequestText(t *testing.T, request *factoryapi.InvocationRequest) string {
+	t.Helper()
+
+	if request == nil {
+		t.Fatal("invocation request = nil")
+	}
+	if len(request.Content) != 1 {
+		t.Fatalf("content parts = %d, want 1", len(request.Content))
+	}
+	part, err := request.Content[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("AsWorkTextContentPart: %v", err)
+	}
+	return part.Text
+}
+
+func assertFactorySessionInvocation(
+	t *testing.T,
+	mock *testutil.MockFactory,
+	body string,
+	wantResult apisurface.FactoryInvocationResult,
+	wantSubmitText string,
+) {
+	t.Helper()
+
+	srv := newTestServer(mock)
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/invocations", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /factory-sessions/~default/invocations status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	response := decodeJSONResponse[factoryapi.InvocationResponse](t, rec)
+	if response.RequestId != wantResult.RequestID || response.TraceId != wantResult.TraceID || response.Status != wantResult.Status {
+		t.Fatalf("invocation response = %#v, want completed invocation identifiers", response)
+	}
+	assertGeneratedWorkContentParts(t, response.PrimaryResult, wantResult.PrimaryResult)
+	if wantSubmitText != "" {
+		if len(mock.InvokedFactorySessions) != 1 {
+			t.Fatalf("invoked factory sessions = %d, want 1", len(mock.InvokedFactorySessions))
+		}
+		if got := extractInvocationRequestText(t, &mock.InvokedFactorySessions[0]); got != wantSubmitText {
+			t.Fatalf("invocation text = %q, want %q", got, wantSubmitText)
+		}
 	}
 }
 

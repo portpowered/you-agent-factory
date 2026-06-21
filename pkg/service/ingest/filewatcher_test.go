@@ -46,7 +46,8 @@ func (m *mockFactory) Run(_ context.Context) error { return nil }
 func (m *mockFactory) SubscribeFactoryEvents(_ context.Context, _ *interfaces.FactoryEventReconnectCursor, _ interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
 }
-func (m *mockFactory) Pause(_ context.Context) error { return nil }
+func (m *mockFactory) Pause(_ context.Context) error  { return nil }
+func (m *mockFactory) Resume(_ context.Context) error { return nil }
 func (m *mockFactory) MoveWork(_ context.Context, _ string, _ string, _ interfaces.WorkStateChangeSource, _ string) (interfaces.OperatorMoveResult, error) {
 	return interfaces.OperatorMoveResult{}, errors.New("MoveWork is not implemented in ingest mockFactory")
 }

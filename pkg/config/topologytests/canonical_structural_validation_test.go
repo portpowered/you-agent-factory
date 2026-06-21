@@ -236,6 +236,24 @@ func TestCanonicalStructuralFindings_RejectsLocalWorkerWithoutModelResource(t *t
 	assertFindingExists(t, findings, factoryvalidation.CodeManagedRuntimeWorkerMissingDep)
 }
 
+func TestCanonicalStructuralFindings_RejectsUnsupportedWorkPropagationMode(t *testing.T) {
+	cfg := topologyTestBaseConfig()
+	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
+		Name:   "process",
+		Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
+		Outputs: []interfaces.IOConfig{
+			{WorkTypeName: "task", StateName: "done"},
+		},
+		WorkPropagation: &interfaces.WorkPropagationConfig{
+			Mode: interfaces.WorkPropagationMode("MERGE_PAYLOAD"),
+		},
+	}}
+
+	findings := factoryconfig.CanonicalStructuralFindings(cfg)
+	assertCanonicalFindingCode(t, findings, factoryvalidation.CodeWorkstationUnsupportedWorkPropagationMode)
+	assertCanonicalFindingPath(t, findings, "factory.workstations[0](process).workPropagation.mode")
+}
+
 func assertCanonicalFindingCode(t *testing.T, findings []factoryconfig.Finding, code string) {
 	t.Helper()
 	for _, finding := range findings {

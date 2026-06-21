@@ -3,6 +3,7 @@ package factorysession_test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
@@ -473,6 +475,21 @@ func TestLifecycleControlErrorResponse_MapsControlConflictAndNotFound(t *testing
 		t.Fatalf("status = %d, want 404", status)
 	}
 	errResp, ok := response.(factoryapi.ErrorResponse)
+	if !ok || errResp.Code != factoryapi.NOTFOUND {
+		t.Fatalf("response = %#v, want NOT_FOUND ErrorResponse", response)
+	}
+
+	status, response, ok = factorysession.LifecycleControlErrorResponse(
+		"live-session-missing-001",
+		fmt.Errorf("%w: live-session-missing-001", apisurface.ErrFactorySessionNotFound),
+	)
+	if !ok {
+		t.Fatal("LifecycleControlErrorResponse = false, want true for live not found")
+	}
+	if status != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", status)
+	}
+	errResp, ok = response.(factoryapi.ErrorResponse)
 	if !ok || errResp.Code != factoryapi.NOTFOUND {
 		t.Fatalf("response = %#v, want NOT_FOUND ErrorResponse", response)
 	}

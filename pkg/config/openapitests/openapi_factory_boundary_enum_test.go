@@ -218,6 +218,24 @@ func generatedFactoryMisCasedWorkstationEnumTestCases() []generatedFactoryMisCas
 				}]
 			}`,
 		},
+		{
+			name:      "workstation outcome format",
+			fieldPath: "workstations[0].outcomeFormat",
+			value:     "Decision-Envelope",
+			payload: `{
+				"name":"workstation-outcome-format-factory",
+				"workTypes": [{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+				"workers": [{"name":"executor","type":"MODEL_WORKER"}],
+				"workstations": [{
+					"name":"review-story",
+					"worker":"executor",
+					"type":"MODEL_WORKSTATION",
+					"outcomeFormat":"Decision-Envelope",
+					"inputs":[{"workType":"story","state":"init"}],
+					"outputs":[{"workType":"story","state":"complete"}]
+				}]
+			}`,
+		},
 	}
 }
 

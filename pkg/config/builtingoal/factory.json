@@ -1,6 +1,11 @@
 {
   "name": "@you/goal",
   "id": "builtin-goal",
+  "invocationReturn": {
+    "policy": "EXPLICIT",
+    "workTypeName": "goal",
+    "terminalState": "complete"
+  },
   "workTypes": [
     {
       "name": "goal",

@@ -871,11 +871,12 @@ paths:
       tags:
         - Factory
       operationId: pauseFactorySession
-      summary: Pause one durable factory session
+      summary: Pause one factory session
       description: >-
-        Pauses one durable factory session while preserving inspectable partial
-        results, dispatches, and artifacts. Returns the updated session or a
-        typed lifecycle-control outcome for no-op, invalid-state,
+        Pauses one live or durable factory session while preserving inspectable
+        partial results, dispatches, and artifacts. Live workspace sessions use
+        the same route family as durable execution sessions. Returns the updated
+        session or a typed lifecycle-control outcome for no-op, invalid-state,
         terminal-session, or conflict cases.
       parameters:
         - $ref: '#/components/parameters/SessionID'
@@ -911,12 +912,13 @@ paths:
       tags:
         - Factory
       operationId: resumeFactorySession
-      summary: Resume one durable factory session
+      summary: Resume one factory session
       description: >-
-        Resumes one paused durable factory session while preserving inspectable
-        partial results, dispatches, and artifacts. Returns the updated session
-        or a typed lifecycle-control outcome for no-op, invalid-state,
-        terminal-session, or conflict cases.
+        Resumes one paused live or durable factory session while preserving
+        inspectable partial results, dispatches, and artifacts. Live workspace
+        sessions use the same route family as durable execution sessions.
+        Returns the updated session or a typed lifecycle-control outcome for
+        no-op, invalid-state, terminal-session, or conflict cases.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       requestBody:
@@ -1582,6 +1584,10 @@ components:
       $ref: './components/schemas/events/DispatchReconciliationSource.yaml'
     SessionStartedEventPayload:
       $ref: './components/schemas/events/payloads/SessionStartedEventPayload.yaml'
+    SessionPausedEventPayload:
+      $ref: './components/schemas/events/payloads/SessionPausedEventPayload.yaml'
+    SessionResumedEventPayload:
+      $ref: './components/schemas/events/payloads/SessionResumedEventPayload.yaml'
     SessionResultUpdatedEventPayload:
       $ref: './components/schemas/events/payloads/SessionResultUpdatedEventPayload.yaml'
     SessionCompletedEventPayload:
@@ -1906,6 +1912,10 @@ components:
       $ref: './components/schemas/data-models/WorkstationType.yaml'
     WorkstationCron:
       $ref: './components/schemas/data-models/WorkstationCron.yaml'
+    WorkPropagation:
+      $ref: './components/schemas/data-models/WorkPropagation.yaml'
+    WorkPropagationMode:
+      $ref: './components/schemas/data-models/WorkPropagationMode.yaml'
     GuardType:
       $ref: './components/schemas/data-models/GuardType.yaml'
     Guard:

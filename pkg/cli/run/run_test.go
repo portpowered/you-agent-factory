@@ -14,9 +14,11 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
@@ -603,4 +605,154 @@ func TestIsFailedState(t *testing.T) {
 	if isFailedState("done") {
 		t.Error("done should not be failed")
 	}
+}
+
+func assertStableSourceConflictError(t *testing.T, err error) {
+	t.Helper()
+
+	if err == nil {
+		t.Fatal("expected stable source conflict error")
+	}
+	for _, want := range []string{
+		string(invocations.InputErrorCodeSourceConflict),
+		string(invocations.InputSourcePositionalText),
+		string(invocations.InputSourceStdinText),
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want %q", err.Error(), want)
+		}
+	}
+}
+
+func stringPtr(value string) *string {
+	return &value
+}
+
+func assertInvocationRequestMatchesSharedResolver(
+	t *testing.T,
+	request *factoryapi.InvocationRequest,
+	source invocations.InputSourceLabel,
+	text string,
+) {
+	t.Helper()
+
+	if request == nil {
+		t.Fatal("invocation request = nil")
+	}
+	if request.SourceKind != factoryapi.InvocationInputSourceKindText {
+		t.Fatalf("sourceKind = %q, want text", request.SourceKind)
+	}
+
+	sources := invocations.TextInputSources{}
+	switch source {
+	case invocations.InputSourcePositionalText:
+		sources.PositionalText = &text
+	case invocations.InputSourceStdinText:
+		sources.StdinText = &text
+	default:
+		t.Fatalf("unsupported source label %q", source)
+	}
+
+	resolved, err := invocations.ResolveTextInput(sources)
+	if err != nil {
+		t.Fatalf("ResolveTextInput: %v", err)
+	}
+	want := invocationRequestFromResolvedInput(resolved)
+	if got := extractInvocationText(t, request); got != extractInvocationText(t, want) {
+		t.Fatalf("invocation text = %q, want %q", got, extractInvocationText(t, want))
+	}
+	if request.SourceKind != want.SourceKind {
+		t.Fatalf("sourceKind = %q, want %q", request.SourceKind, want.SourceKind)
+	}
+}
+
+func assertStableInvocationSourceConflictMessage(t *testing.T, got string, wantMessage string) {
+	t.Helper()
+
+	for _, fragment := range []string{
+		string(invocations.InputSourcePositionalText),
+		string(invocations.InputSourceStdinText),
+		wantMessage,
+	} {
+		if !strings.Contains(got, fragment) {
+			t.Fatalf("error = %q, want fragment %q", got, fragment)
+		}
+	}
+}
+
+func invocationRequestFromLogicalAPIText(text string) (*factoryapi.InvocationRequest, error) {
+	resolved, err := invocations.ResolveAPITextInputContent([]interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: text,
+	}})
+	if err != nil {
+		return nil, err
+	}
+	return invocationRequestFromResolvedInput(resolved), nil
+}
+
+func assertEquivalentInvocationRequests(
+	t *testing.T,
+	cliRequest *factoryapi.InvocationRequest,
+	apiRequest *factoryapi.InvocationRequest,
+) {
+	t.Helper()
+
+	if cliRequest == nil || apiRequest == nil {
+		t.Fatal("invocation request = nil")
+	}
+	if cliRequest.SourceKind != apiRequest.SourceKind {
+		t.Fatalf("sourceKind = %q, want %q", cliRequest.SourceKind, apiRequest.SourceKind)
+	}
+	if got := extractInvocationText(t, cliRequest); got != extractInvocationText(t, apiRequest) {
+		t.Fatalf("invocation text = %q, want %q", got, extractInvocationText(t, apiRequest))
+	}
+}
+
+func assertInvocationResponseMatchesFactoryResult(
+	t *testing.T,
+	response factoryapi.InvocationResponse,
+	result apisurface.FactoryInvocationResult,
+) {
+	t.Helper()
+
+	if response.RequestId != result.RequestID {
+		t.Fatalf("requestId = %q, want %q", response.RequestId, result.RequestID)
+	}
+	if response.TraceId != result.TraceID {
+		t.Fatalf("traceId = %q, want %q", response.TraceId, result.TraceID)
+	}
+	if response.Status != result.Status {
+		t.Fatalf("status = %q, want %q", response.Status, result.Status)
+	}
+	assertGeneratedWorkContentPartsFromResponse(t, response.PrimaryResult, result.PrimaryResult)
+}
+
+func assertGeneratedWorkContentPartsFromResponse(
+	t *testing.T,
+	content *factoryapi.WorkContent,
+	want []interfaces.WorkContentPart,
+) {
+	t.Helper()
+
+	if content == nil {
+		t.Fatal("primary result content = nil")
+	}
+	if len(*content) != len(want) {
+		t.Fatalf("primary result parts = %d, want %d", len(*content), len(want))
+	}
+	for i, part := range want {
+		gotPart, err := (*content)[i].AsWorkTextContentPart()
+		if err != nil {
+			t.Fatalf("AsWorkTextContentPart[%d]: %v", i, err)
+		}
+		if gotPart.Text != part.Text {
+			t.Fatalf("primary result[%d].text = %q, want %q", i, gotPart.Text, part.Text)
+		}
+	}
+}
+
+func withRunOutput(cfg RunConfig, output *bytes.Buffer) RunConfig {
+	cfg.Output = output
+	return cfg
 }

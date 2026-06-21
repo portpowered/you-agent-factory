@@ -561,15 +561,19 @@ func buildCanonicalSessionEvents(session SessionReadResult, result ResultReadRes
 			"startedAt":  eventTime.UTC().Format(time.RFC3339),
 		})),
 	}
+	sessionSequence := 1
 
 	if result.ResultStatus != "" {
 		events = append(events, builder.event(
 			"SESSION_RESULT_UPDATED",
 			"session-result-updated/"+sessionID,
-			1,
+			sessionSequence,
 			mustMarshalPayload(canonicalSessionResultUpdatedPayload(session, result)),
 		))
+		sessionSequence++
 	}
+
+	events, sessionSequence = appendCanonicalPauseResumeSessionEvents(events, builder, sessionID, session.Lifecycle, sessionSequence)
 
 	if IsTerminalLifecycleStatus(session.Status) {
 		completedAt := eventTime
@@ -593,10 +597,47 @@ func buildCanonicalSessionEvents(session SessionReadResult, result ResultReadRes
 		if len(result.ArtifactIDs) > 0 {
 			payload["artifactIds"] = append([]string(nil), result.ArtifactIDs...)
 		}
-		events = append(events, builder.event("SESSION_COMPLETED", "session-completed/"+sessionID, 2, mustMarshalPayload(payload)))
+		events = append(events, builder.event("SESSION_COMPLETED", "session-completed/"+sessionID, sessionSequence, mustMarshalPayload(payload)))
 	}
 
 	return events
+}
+
+func appendCanonicalPauseResumeSessionEvents(
+	events []json.RawMessage,
+	builder canonicalSessionEventBuilder,
+	sessionID string,
+	lifecycle *LifecycleTimestamps,
+	sessionSequence int,
+) ([]json.RawMessage, int) {
+	if lifecycle == nil {
+		return events, sessionSequence
+	}
+	if lifecycle.PausedAt != nil {
+		events = append(events, builder.event(
+			"SESSION_PAUSED",
+			"session-paused/"+sessionID,
+			sessionSequence,
+			mustMarshalPayload(map[string]any{
+				"status":   string(LifecycleStatusPaused),
+				"pausedAt": lifecycle.PausedAt.UTC().Format(time.RFC3339),
+			}),
+		))
+		sessionSequence++
+	}
+	if lifecycle.ResumedAt != nil {
+		events = append(events, builder.event(
+			"SESSION_RESUMED",
+			"session-resumed/"+sessionID,
+			sessionSequence,
+			mustMarshalPayload(map[string]any{
+				"status":    string(LifecycleStatusRunning),
+				"resumedAt": lifecycle.ResumedAt.UTC().Format(time.RFC3339),
+			}),
+		))
+		sessionSequence++
+	}
+	return events, sessionSequence
 }
 
 func canonicalSessionResultUpdatedPayload(session SessionReadResult, result ResultReadResult) map[string]any {

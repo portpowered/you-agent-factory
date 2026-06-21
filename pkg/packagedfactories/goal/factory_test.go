@@ -26,11 +26,11 @@ var packagedGoalLifecycleStates = []string{
 }
 
 var packagedGoalProgressionWorkstations = []struct {
-	name            string
-	inputState      string
-	outputState     string
-	publicType      string
-	workerName      string
+	name        string
+	inputState  string
+	outputState string
+	publicType  string
+	workerName  string
 }{
 	{name: PackagedPlanWorkstationName, inputState: "init", outputState: "plan", publicType: interfaces.WorkstationTypeAgent, workerName: "goal-planner"},
 	{name: PackagedExecuteWorkstationName, inputState: "plan", outputState: "execute", publicType: interfaces.WorkstationTypeAgent, workerName: "goal-executor"},

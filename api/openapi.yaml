@@ -786,8 +786,8 @@ paths:
       tags:
         - Factory
       operationId: pauseFactorySession
-      summary: Pause one durable factory session
-      description: Pauses one durable factory session while preserving inspectable partial results, dispatches, and artifacts. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
+      summary: Pause one factory session
+      description: Pauses one live or durable factory session while preserving inspectable partial results, dispatches, and artifacts. Live workspace sessions use the same route family as durable execution sessions. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       requestBody:
@@ -822,8 +822,8 @@ paths:
       tags:
         - Factory
       operationId: resumeFactorySession
-      summary: Resume one durable factory session
-      description: Resumes one paused durable factory session while preserving inspectable partial results, dispatches, and artifacts. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
+      summary: Resume one factory session
+      description: Resumes one paused live or durable factory session while preserving inspectable partial results, dispatches, and artifacts. Live workspace sessions use the same route family as durable execution sessions. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       requestBody:
@@ -2046,6 +2046,9 @@ components:
           $ref: '#/components/schemas/StatusCategories'
         factoryState:
           type: string
+        lifecycleControlStatus:
+          $ref: '#/components/schemas/FactorySessionDurableLifecycleStatus'
+          description: Canonical Factory Session lifecycle-control status reconstructed from SESSION_PAUSED and SESSION_RESUMED events when present. Live status reads report PAUSED after a successful pause and RUNNING after a successful resume.
         runtimeStatus:
           type: string
         totalTokens:
@@ -2717,6 +2720,9 @@ components:
           description: Stable hash of the effective orchestrator policy.
         status:
           $ref: '#/components/schemas/FactorySessionStatus'
+        lifecycleControlStatus:
+          $ref: '#/components/schemas/FactorySessionDurableLifecycleStatus'
+          description: Canonical Factory Session lifecycle-control status reconstructed from SESSION_PAUSED and SESSION_RESUMED events when present. Live session inspection reads report PAUSED after a successful pause and RUNNING after a successful resume.
         progress:
           $ref: '#/components/schemas/FactorySessionProgress'
         budgets:
@@ -3672,6 +3678,36 @@ components:
           type: string
           format: date-time
           description: When durable session execution started.
+    SessionPausedEventPayload:
+      type: object
+      additionalProperties: false
+      description: Factory Session lifecycle pause recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only.
+      required:
+        - status
+        - pausedAt
+      properties:
+        status:
+          $ref: '#/components/schemas/FactorySessionDurableLifecycleStatus'
+          description: Lifecycle status after a successful pause control.
+        pausedAt:
+          type: string
+          format: date-time
+          description: When the Factory Session entered PAUSED.
+    SessionResumedEventPayload:
+      type: object
+      additionalProperties: false
+      description: Factory Session lifecycle resume recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only.
+      required:
+        - status
+        - resumedAt
+      properties:
+        status:
+          $ref: '#/components/schemas/FactorySessionDurableLifecycleStatus'
+          description: Lifecycle status after a successful resume control.
+        resumedAt:
+          type: string
+          format: date-time
+          description: When the Factory Session returned to RUNNING.
     SessionResultUpdatedEventPayload:
       type: object
       additionalProperties: false
@@ -5534,6 +5570,8 @@ components:
             - $ref: '#/components/schemas/FactoryStateResponseEventPayload'
             - $ref: '#/components/schemas/RunResponseEventPayload'
             - $ref: '#/components/schemas/SessionStartedEventPayload'
+            - $ref: '#/components/schemas/SessionPausedEventPayload'
+            - $ref: '#/components/schemas/SessionResumedEventPayload'
             - $ref: '#/components/schemas/SessionResultUpdatedEventPayload'
             - $ref: '#/components/schemas/SessionCompletedEventPayload'
             - $ref: '#/components/schemas/OrchestratorPhaseChangedEventPayload'
@@ -5565,6 +5603,8 @@ components:
         - FactoryEventTypeFactoryStateResponse
         - FactoryEventTypeRunResponse
         - FactoryEventTypeSessionStarted
+        - FactoryEventTypeSessionPaused
+        - FactoryEventTypeSessionResumed
         - FactoryEventTypeSessionResultUpdated
         - FactoryEventTypeSessionCompleted
         - FactoryEventTypeOrchestratorPhaseChanged
@@ -5593,6 +5633,8 @@ components:
         - FACTORY_STATE_RESPONSE
         - RUN_RESPONSE
         - SESSION_STARTED
+        - SESSION_PAUSED
+        - SESSION_RESUMED
         - SESSION_RESULT_UPDATED
         - SESSION_COMPLETED
         - ORCHESTRATOR_PHASE_CHANGED
@@ -5621,6 +5663,8 @@ components:
         - The factory lifecycle state response was recorded.
         - A factory run response ended and final metadata is available.
         - Durable factory session execution started and replay-safe session facts are available.
+        - A Factory Session lifecycle pause control transitioned the session into PAUSED.
+        - A Factory Session lifecycle resume control transitioned the session into RUNNING.
         - Partial or final customer-visible session result availability was recorded.
         - Durable factory session execution reached a terminal lifecycle state.
         - An orchestrator workflow phase transition was recorded.
@@ -7307,9 +7351,15 @@ components:
         outputSchema:
           type: string
           description: JSON schema string used to validate or parse structured model output when configured.
+        outcomeFormat:
+          $ref: '#/components/schemas/WorkstationOutcomeFormat'
+          description: Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
         limits:
           $ref: '#/components/schemas/WorkstationLimits'
           description: Retry and execution ceilings applied to this workstation.
+        workPropagation:
+          $ref: '#/components/schemas/WorkPropagation'
+          description: Optional policy for whether downstream work uses the workstation output payload or preserves the consumed input payload.
         body:
           type: string
           description: Inline workstation instructions or script body when authored directly in factory config.
@@ -7468,6 +7518,28 @@ components:
         expiryWindow:
           type: string
           description: Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted.
+    WorkPropagation:
+      type: object
+      additionalProperties: false
+      required:
+        - mode
+      description: Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload.
+      properties:
+        mode:
+          $ref: '#/components/schemas/WorkPropagationMode'
+          description: Propagation mode for downstream work payload selection after this workstation succeeds.
+    WorkPropagationMode:
+      type: string
+      description: Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.
+      enum:
+        - OUTPUT_AS_PAYLOAD
+        - PRESERVE_INPUT
+      x-enum-varnames:
+        - WorkPropagationModeOutputAsPayload
+        - WorkPropagationModePreserveInput
+      x-enum-descriptions:
+        - Downstream work receives the workstation output payload.
+        - Downstream work keeps the consumed input payload instead of the workstation output.
     GuardType:
       type: string
       description: Guard condition attached to a workstation or one of its specific inputs.
@@ -8633,3 +8705,12 @@ components:
         claim:
           $ref: '#/components/schemas/HostedLinearWorkerClaim'
           description: Optional claim-related configuration that v1 hosted Linear polling allows.
+    WorkstationOutcomeFormat:
+      type: string
+      description: Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+      x-enum-varnames:
+        - WorkstationOutcomeFormatDecisionEnvelope
+      enum:
+        - decision-envelope
+      x-enum-descriptions:
+        - Parse agent output as a reviewer/checker decision envelope instead of stop-token routing.
