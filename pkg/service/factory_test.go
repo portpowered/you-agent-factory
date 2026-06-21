@@ -2871,6 +2871,92 @@ func TestFactoryService_OpenFactorySession_ValidateOnlyMapsInitsNewFactoryToAPIR
 	}
 }
 
+func TestFactoryService_OpenFactorySessionFromFolder_AlignsValidateAndOpenDiscoveryAcrossRunnableEmptyAndBrokenFolders(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha"},
+	})
+	defer harness.stop(t)
+
+	emptyDir := filepath.Join(harness.rootDir, "empty")
+	if err := os.Mkdir(emptyDir, 0o755); err != nil {
+		t.Fatalf("Mkdir(empty): %v", err)
+	}
+
+	brokenDir := filepath.Join(harness.rootDir, "broken")
+	if err := os.MkdirAll(brokenDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", brokenDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(brokenDir, interfaces.FactoryConfigFile), []byte(`{"name":`), 0o644); err != nil {
+		t.Fatalf("WriteFile(broken factory.json): %v", err)
+	}
+
+	before := harness.svc.sessions.Count()
+
+	validateRunnable, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil, true, false)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(validate runnable): %v", err)
+	}
+	if validateRunnable == nil || validateRunnable.InitsNewFactory || len(validateRunnable.Targets) == 0 || validateRunnable.SessionID != "" {
+		t.Fatalf("validate runnable result = %#v, want discovered targets without session or init-new-factory", validateRunnable)
+	}
+	if got := harness.svc.sessions.Count(); got != before {
+		t.Fatalf("validate runnable mutated live sessions to %d, want %d", got, before)
+	}
+
+	openRunnable, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil, false, false)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(open runnable): %v", err)
+	}
+	if openRunnable == nil || openRunnable.SessionID == "" {
+		t.Fatalf("open runnable result = %#v, want session id", openRunnable)
+	}
+	if got := harness.svc.sessions.Count(); got != before+1 {
+		t.Fatalf("open runnable live sessions = %d, want %d", got, before+1)
+	}
+
+	validateEmpty, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), emptyDir, nil, true, false)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(validate empty): %v", err)
+	}
+	if validateEmpty == nil || !validateEmpty.InitsNewFactory || validateEmpty.FolderPath != emptyDir {
+		t.Fatalf("validate empty result = %#v, want init-new-factory metadata", validateEmpty)
+	}
+	if got := harness.svc.sessions.Count(); got != before+1 {
+		t.Fatalf("validate empty mutated live sessions to %d, want %d", got, before+1)
+	}
+
+	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), emptyDir, nil, false, false); err == nil {
+		t.Fatal("OpenFactorySessionFromFolder(open empty) error = nil, want not-runnable failure")
+	} else {
+		assertFactorySessionValidationTarget(t, err, "not_runnable", "folderPath")
+	}
+	if got := harness.svc.sessions.Count(); got != before+1 {
+		t.Fatalf("open empty mutated live sessions to %d, want %d", got, before+1)
+	}
+
+	validateBroken, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), brokenDir, nil, true, false)
+	if err == nil {
+		t.Fatal("OpenFactorySessionFromFolder(validate broken) error = nil, want config-load failure")
+	}
+	assertFactorySessionConfigLoadFailure(t, err, "default")
+	if validateBroken != nil {
+		t.Fatalf("validate broken result = %#v, want no init-new-factory fallback", validateBroken)
+	}
+	if got := harness.svc.sessions.Count(); got != before+1 {
+		t.Fatalf("validate broken mutated live sessions to %d, want %d", got, before+1)
+	}
+
+	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), brokenDir, nil, false, false); err == nil {
+		t.Fatal("OpenFactorySessionFromFolder(open broken) error = nil, want config-load failure")
+	} else {
+		assertFactorySessionConfigLoadFailure(t, err, "default")
+	}
+	if got := harness.svc.sessions.Count(); got != before+1 {
+		t.Fatalf("open broken mutated live sessions to %d, want %d", got, before+1)
+	}
+}
+
 func TestFactoryService_OpenFactorySessionFromFolder_ValidateOnlyRunnableFolderOmitsInitsNewFactory(t *testing.T) {
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
 		defaultFactory: "alpha",
