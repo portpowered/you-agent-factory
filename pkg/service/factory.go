@@ -17,13 +17,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
@@ -120,31 +120,6 @@ type serviceRunState struct {
 	runtime   *liveRuntimeHandle
 }
 
-type runtimeBundleBuildInput struct {
-	dir                   string
-	folderPath            string
-	sessionID             string
-	cfg                   *FactoryServiceConfig
-	loadedFactoryCfg      *factoryconfig.LoadedFactoryConfig
-	baseLogger            *zap.Logger
-	runtimeInstanceID     string
-	clock                 factory.Clock
-	recordPath            string
-	workflowID            string
-	providerOverride      workers.Provider
-	providerCommandRunner workers.CommandRunner
-	commandRunnerOverride workers.CommandRunner
-	additionalFactoryOpts []factory.FactoryOption
-	prefetchedLocalModels localModelDomain
-}
-
-type liveSessionState struct {
-	bundle              *factoryRuntimeBundle
-	handle              *liveRuntimeHandle
-	spec                *runtimebuild.SessionBuildSpec
-	javascriptCheckpoints *factorysessions.JavaScriptCheckpointStore
-}
-
 // FactoryService is an instantiation of a factory along with its runtime
 // concerns: file watcher, dashboard, API server. It owns the full lifecycle
 // so that CLI and other entry points remain thin wrappers.
@@ -166,19 +141,20 @@ type FactoryService struct {
 	factoryRootDir string
 	policy         serviceCoordinatorPolicy
 	// startupBundle holds the built default runtime before Run registers ~default.
-	startupBundle *factoryRuntimeBundle
-	cfg           *FactoryServiceConfig
-	baseLogger    *zap.Logger
-	logger        *zap.Logger
-	startTime     time.Time
-	clock         factory.Clock
-	modelAssets   modelAssetPuller
-	modelService  ModelService
-	coordinator   FactoryCoordinator
-	definitions   FactoryDefinitionService
-	modelInitOnce sync.Once
-	durableExecutionMu sync.Mutex
-	durableExecution   factorysessionexecution.Service
+	startupBundle            *factoryRuntimeBundle
+	cfg                      *FactoryServiceConfig
+	baseLogger               *zap.Logger
+	logger                   *zap.Logger
+	startTime                time.Time
+	clock                    factory.Clock
+	modelAssets              modelAssetPuller
+	modelService             ModelService
+	coordinator              FactoryCoordinator
+	definitions              FactoryDefinitionService
+	newSessionResponseStream func() *factorysessions.SessionResponseStream
+	modelInitOnce            sync.Once
+	durableExecutionMu       sync.Mutex
+	durableExecution         factorysessionexecution.Service
 }
 
 var _ factory.APIFactory = (*FactoryService)(nil)

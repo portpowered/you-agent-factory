@@ -916,17 +916,3 @@ func tokenColorsFromTokens(tokens []interfaces.Token) []interfaces.TokenColor {
 	}
 	return colors
 }
-
-func firstNonResourceInput(inputs []interfaces.TokenColor) *interfaces.TokenColor {
-	for i := range inputs {
-		if inputs[i].DataType != interfaces.DataTypeResource && inputs[i].WorkTypeID != interfaces.SystemTimeWorkTypeID {
-			return &inputs[i]
-		}
-	}
-	for i := range inputs {
-		if inputs[i].DataType != interfaces.DataTypeResource {
-			return &inputs[i]
-		}
-	}
-	return nil
-}

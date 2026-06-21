@@ -443,7 +443,7 @@ func NewFactoryServiceCollaborators(
 	return FactoryServiceCollaborators{
 		Sessions:     sessions,
 		LocalModels:  startupLocalModels,
-		RuntimeBuild: newRuntimeBuildService(cfg, clock, baseLogger, &startupLocalModels),
+		RuntimeBuild: newRuntimeBuildService(cfg, clock, baseLogger, &startupLocalModels, newInferenceProgressPublisherFactory(sessions, baseLogger)),
 	}
 }
 
@@ -468,7 +468,7 @@ func NewRuntimeBuildService(
 	baseLogger *zap.Logger,
 	localModels *LocalModelDomain,
 ) *runtimebuild.Service {
-	return newRuntimeBuildService(cfg, clock, baseLogger, localModels)
+	return newRuntimeBuildService(cfg, clock, baseLogger, localModels, nil)
 }
 
 // FactoryConfigLoadResult carries factory config load outputs needed before
