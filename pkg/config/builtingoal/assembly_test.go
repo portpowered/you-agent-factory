@@ -23,27 +23,30 @@ func TestAuthoredRolePrompt_RejectsUnknownRole(t *testing.T) {
 	}
 }
 
-func TestSupplementaryWorkstationPromptFiles_ReviewGoalHostsSummarizerPrompt(t *testing.T) {
-	got := SupplementaryWorkstationPromptFiles("review-goal")
-	wantPath := "prompts/summarizer.md"
-	prompt, ok := got[wantPath]
-	if !ok {
-		t.Fatalf("supplementary prompts = %#v, want %q entry", got, wantPath)
-	}
-	if prompt != strings.TrimSpace(summarizerPrompt) {
-		t.Fatalf("supplementary summarizer prompt does not match authored source")
-	}
-}
-
-func TestSupplementaryWorkstationPromptFiles_OmitsUnknownWorkstations(t *testing.T) {
-	if got := SupplementaryWorkstationPromptFiles("plan-goal"); got != nil {
-		t.Fatalf("supplementary prompts for plan-goal = %#v, want nil", got)
-	}
-}
-
 func TestAssembleBuiltInGoalFactoryJSON_RejectsMalformedWorkstations(t *testing.T) {
+	t.Run("workers not array", func(t *testing.T) {
+		root := map[string]any{
+			"workers": "not-an-array",
+		}
+		_, err := assembleBuiltInGoalFactoryJSONFromRoot(root)
+		if err == nil || !strings.Contains(err.Error(), "workers must be an array") {
+			t.Fatalf("assemble error = %v, want workers array validation", err)
+		}
+	})
+
+	t.Run("worker entry not object", func(t *testing.T) {
+		root := map[string]any{
+			"workers": []any{"not-an-object"},
+		}
+		_, err := assembleBuiltInGoalFactoryJSONFromRoot(root)
+		if err == nil || !strings.Contains(err.Error(), "worker entry must be an object") {
+			t.Fatalf("assemble error = %v, want worker object validation", err)
+		}
+	})
+
 	t.Run("workstations not array", func(t *testing.T) {
 		root := map[string]any{
+			"workers":      []any{},
 			"workstations": "not-an-array",
 		}
 		_, err := assembleBuiltInGoalFactoryJSONFromRoot(root)
@@ -54,6 +57,7 @@ func TestAssembleBuiltInGoalFactoryJSON_RejectsMalformedWorkstations(t *testing.
 
 	t.Run("workstation entry not object", func(t *testing.T) {
 		root := map[string]any{
+			"workers":      []any{},
 			"workstations": []any{"not-an-object"},
 		}
 		_, err := assembleBuiltInGoalFactoryJSONFromRoot(root)

@@ -472,7 +472,6 @@ func assertBuiltInGoalMaterializedLayout(t *testing.T, factoryDir string) {
 		filepath.Join(factoryDir, interfaces.WorkstationsDir, "check-goal", interfaces.FactoryAgentsFileName),
 		filepath.Join(factoryDir, interfaces.WorkstationsDir, "check-goal", "prompts", "checker.md"),
 		filepath.Join(factoryDir, interfaces.WorkstationsDir, "review-goal", interfaces.FactoryAgentsFileName),
-		filepath.Join(factoryDir, interfaces.WorkstationsDir, "review-goal", "prompts", "reviewer.md"),
 		filepath.Join(factoryDir, interfaces.WorkstationsDir, "review-goal", "prompts", "summarizer.md"),
 		filepath.Join(factoryDir, interfaces.WorkstationsDir, "goal-loop-breaker", interfaces.FactoryAgentsFileName),
 	} {

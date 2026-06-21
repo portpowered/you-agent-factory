@@ -25,11 +25,15 @@ var reviewerPrompt string
 //go:embed prompts/summarizer.md
 var summarizerPrompt string
 
+var workerPromptBodies = map[string]string{
+	"goal-reviewer": reviewerPrompt,
+}
+
 var workstationPromptBodies = map[string]string{
 	"plan-goal":    plannerPrompt,
 	"execute-goal": executorPrompt,
 	"check-goal":   checkerPrompt,
-	"review-goal":  reviewerPrompt,
+	"review-goal":  summarizerPrompt,
 }
 
 // AuthoredRolePrompts maps each goal role to its authored prompt source file content.
@@ -49,17 +53,6 @@ var BuiltInGoalFactoryJSON = mustAssembleBuiltInGoalFactoryJSON()
 func AuthoredRolePrompt(role string) (string, bool) {
 	prompt, ok := AuthoredRolePrompts[role]
 	return strings.TrimSpace(prompt), ok
-}
-
-// SupplementaryWorkstationPromptFiles returns extra prompt files to materialize under
-// an existing workstation directory without adding workers, workstations, or routes.
-func SupplementaryWorkstationPromptFiles(workstationName string) map[string]string {
-	if workstationName != "review-goal" {
-		return nil
-	}
-	return map[string]string{
-		"prompts/summarizer.md": strings.TrimSpace(summarizerPrompt),
-	}
 }
 
 // FactoryJSON returns the authored factory scaffold without assembled prompt bodies.
@@ -84,6 +77,23 @@ func assembleBuiltInGoalFactoryJSON() ([]byte, error) {
 }
 
 func assembleBuiltInGoalFactoryJSONFromRoot(root map[string]any) ([]byte, error) {
+	workers, ok := root["workers"].([]any)
+	if !ok {
+		return nil, fmt.Errorf("factory.json workers must be an array")
+	}
+	for _, entry := range workers {
+		worker, ok := entry.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("factory.json worker entry must be an object")
+		}
+		name, _ := worker["name"].(string)
+		promptBody, ok := workerPromptBodies[name]
+		if !ok {
+			continue
+		}
+		worker["body"] = strings.TrimSpace(promptBody)
+	}
+
 	workstations, ok := root["workstations"].([]any)
 	if !ok {
 		return nil, fmt.Errorf("factory.json workstations must be an array")

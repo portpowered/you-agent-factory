@@ -31,19 +31,23 @@ const (
 // PackagedGoalRolePromptSource identifies the authored split prompt file for a goal role.
 type PackagedGoalRolePromptSource struct {
 	Role            string
+	WorkerName      string
 	WorkstationName string
 	PromptFile      string
-	// SupplementaryPrompt marks role prompts materialized as extra files under an
-	// existing workstation directory without changing factory topology.
-	SupplementaryPrompt bool
+	SourceKind      string
 }
 
-// PackagedGoalRolePromptSources lists each role-specific split prompt wired through
-// the normal workstation promptFile resolution path.
+const (
+	PackagedGoalRolePromptSourceKindWorkstationPromptFile = "workstation_prompt_file"
+	PackagedGoalRolePromptSourceKindWorkerBody            = "worker_body"
+)
+
+// PackagedGoalRolePromptSources lists each role-specific authored prompt source in
+// the packaged goal factory's normal worker/workstation load paths.
 var PackagedGoalRolePromptSources = []PackagedGoalRolePromptSource{
-	{Role: "planner", WorkstationName: PackagedPlanWorkstationName, PromptFile: "prompts/planner.md"},
-	{Role: "executor", WorkstationName: PackagedExecuteWorkstationName, PromptFile: "prompts/executor.md"},
-	{Role: "checker", WorkstationName: PackagedCheckWorkstationName, PromptFile: "prompts/checker.md"},
-	{Role: "reviewer", WorkstationName: PackagedReviewWorkstationName, PromptFile: "prompts/reviewer.md"},
-	{Role: "summarizer", WorkstationName: PackagedReviewWorkstationName, PromptFile: "prompts/summarizer.md", SupplementaryPrompt: true},
+	{Role: "planner", WorkstationName: PackagedPlanWorkstationName, PromptFile: "prompts/planner.md", SourceKind: PackagedGoalRolePromptSourceKindWorkstationPromptFile},
+	{Role: "executor", WorkstationName: PackagedExecuteWorkstationName, PromptFile: "prompts/executor.md", SourceKind: PackagedGoalRolePromptSourceKindWorkstationPromptFile},
+	{Role: "checker", WorkstationName: PackagedCheckWorkstationName, PromptFile: "prompts/checker.md", SourceKind: PackagedGoalRolePromptSourceKindWorkstationPromptFile},
+	{Role: "reviewer", WorkerName: "goal-reviewer", SourceKind: PackagedGoalRolePromptSourceKindWorkerBody},
+	{Role: "summarizer", WorkstationName: PackagedReviewWorkstationName, PromptFile: "prompts/summarizer.md", SourceKind: PackagedGoalRolePromptSourceKindWorkstationPromptFile},
 }

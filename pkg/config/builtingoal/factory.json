@@ -124,7 +124,7 @@
       "onFailure": [
         {"workType": "goal", "state": "failed"}
       ],
-      "promptFile": "prompts/reviewer.md"
+      "promptFile": "prompts/summarizer.md"
     },
     {
       "name": "goal-loop-breaker",
