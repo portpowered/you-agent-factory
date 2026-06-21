@@ -1,22 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import {
-  type FactorySession,
-  type FactorySessionLiveResult,
-  type FactorySessionPartialResult,
-  type FactorySessionsAPIError,
-  getFactorySession,
-  getFactorySessionPartialResult,
-  getFactorySessionResult,
-} from "../../../api/factory-sessions/api";
-import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
+import type {
+  FactorySession,
+  FactorySessionDurableReadModel,
+  FactorySessionLiveResult,
+  FactorySessionPartialResult,
+  FactorySessionsAPIError,
+} from "../../../api/factory-sessions";
+import { loadFactorySessionDetailData } from "./load-factory-session-detail-data";
 
 export const FACTORY_SESSION_DETAIL_QUERY_KEY = [
   "factory-session-detail",
 ] as const;
 
 export interface FactorySessionDetailData {
+  durableLifecycleStatus?: FactorySessionDurableReadModel["status"];
   partialResult?: FactorySessionPartialResult;
   result?: FactorySessionLiveResult;
   session: FactorySession;
@@ -39,21 +38,7 @@ export function useFactorySessionDetail(
         throw new Error("Factory session detail requires a selected session id.");
       }
 
-      const session = await getFactorySession(sessionID);
-      if (session.runtime.orchestratorKind !== FactoryOrchestratorKind.JAVASCRIPT) {
-        return { session };
-      }
-
-      const [result, partialResult] = await Promise.all([
-        getFactorySessionResult(sessionID).catch(() => undefined),
-        getFactorySessionPartialResult(sessionID).catch(() => undefined),
-      ]);
-
-      return {
-        partialResult,
-        result,
-        session,
-      };
+      return loadFactorySessionDetailData(sessionID);
     },
     enabled: sessionID !== null && sessionID.trim() !== "",
     gcTime: 0,

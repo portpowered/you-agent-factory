@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type { components } from "../../../api/generated/openapi";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 import {
@@ -8,6 +10,11 @@ import {
 } from "../../../components/ui";
 import { DetailCopy } from "../../../components/ui/widget-frame";
 import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
+import {
+  formatFactoryOrchestratorKind,
+  formatFactorySessionRuntimeStatus,
+  formatFactorySessionScriptStatus,
+} from "../messages/factory-session-runtime-display";
 import { getFactorySessionDetailMessages } from "../messages/factory-session-detail";
 
 type FactoryArtifact = components["schemas"]["FactoryArtifact"];
@@ -38,15 +45,15 @@ export function FactorySessionDetailPanel({
       </div>
 
       {detailState.status === "loading" ? (
-        <DetailCopy>{messages.loadingState}</DetailCopy>
+        <StatusNotice>{messages.loadingState}</StatusNotice>
       ) : null}
       {detailState.status === "not-found" ? (
-        <DetailCopy>{messages.missingState}</DetailCopy>
+        <StatusNotice>{messages.missingState}</StatusNotice>
       ) : null}
       {detailState.status === "error" ? (
-        <AlertPanel tone="danger">
+        <StatusNotice tone="error">
           {detailState.message ?? messages.errorState}
-        </AlertPanel>
+        </StatusNotice>
       ) : null}
       {detailState.status === "success" ? (
         <FactorySessionRuntimeSections
@@ -63,6 +70,7 @@ function FactorySessionRuntimeSections({
   locale,
 }: {
   data: {
+    durableLifecycleStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
     partialResult?: components["schemas"]["FactorySessionPartialResult"];
     result?: components["schemas"]["FactorySessionLiveResult"];
     session: components["schemas"]["FactorySession"];
@@ -74,9 +82,20 @@ function FactorySessionRuntimeSections({
 
   return (
     <div className="grid gap-4">
+      <DashboardHeading>{messages.runtimeHeading}</DashboardHeading>
       <div className="grid gap-2 sm:grid-cols-2">
-        <Metric label={messages.orchestratorKindLabel} value={runtime.orchestratorKind} />
-        <Metric label={messages.statusLabel} value={runtime.status} />
+        <Metric
+          label={messages.orchestratorKindLabel}
+          value={formatFactoryOrchestratorKind(runtime.orchestratorKind, locale)}
+        />
+        <Metric
+          label={messages.statusLabel}
+          value={formatFactorySessionRuntimeStatus(
+            runtime.status,
+            data.durableLifecycleStatus,
+            locale,
+          )}
+        />
       </div>
 
       {runtime.orchestratorKind === FactoryOrchestratorKind.JAVASCRIPT ? (
@@ -113,7 +132,7 @@ function JavaScriptSessionProjection({
   const messages = getFactorySessionDetailMessages(locale);
 
   if (!javascript) {
-    return <DetailCopy>{messages.dynamicWorkflowShorthand}</DetailCopy>;
+    return <DetailCopy>{messages.javascriptProjectionMissingState}</DetailCopy>;
   }
 
   const warnings = (dispatches ?? []).flatMap(
@@ -122,14 +141,13 @@ function JavaScriptSessionProjection({
 
   return (
     <div className="grid gap-4">
-      <DetailCopy>{messages.dynamicWorkflowShorthand}</DetailCopy>
       <div className="grid gap-2 sm:grid-cols-2">
         {javascript.phase ? (
           <Metric label={messages.phaseLabel} value={javascript.phase} />
         ) : null}
         <Metric
           label={messages.scriptStatusLabel}
-          value={javascript.scriptStatus}
+          value={formatFactorySessionScriptStatus(javascript.scriptStatus, locale)}
         />
         <Metric
           label={messages.childDispatchCountsLabel}
@@ -138,6 +156,10 @@ function JavaScriptSessionProjection({
       </div>
       {javascript.phases.length > 0 ? (
         <Metric label={messages.phasesLabel} value={javascript.phases.join(", ")} />
+      ) : null}
+
+      {dispatches && dispatches.length > 0 ? (
+        <DispatchList dispatches={dispatches} heading={messages.dispatchesHeading} />
       ) : null}
 
       {javascript.checkpoints && javascript.checkpoints.length > 0 ? (
@@ -204,6 +226,31 @@ function PetriSessionProjection({
           </ul>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function DispatchList({
+  dispatches,
+  heading,
+}: {
+  dispatches: FactoryDispatch[];
+  heading: string;
+}) {
+  return (
+    <div className="grid gap-2">
+      <DashboardLabel>{heading}</DashboardLabel>
+      <ul className="grid gap-1">
+        {dispatches.map((dispatch) => (
+          <li key={dispatch.id}>
+            <DashboardText>
+              {dispatch.label ? `${dispatch.id} (${dispatch.label})` : dispatch.id}
+              {dispatch.phase ? ` · ${dispatch.phase}` : ""}
+              {` · ${dispatch.status}`}
+            </DashboardText>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -283,6 +330,24 @@ function Metric({ label, value }: { label: string; value: string }) {
       <DashboardLabel>{label}</DashboardLabel>
       <DashboardText>{value}</DashboardText>
     </div>
+  );
+}
+
+function StatusNotice({
+  children,
+  tone = "default",
+}: {
+  children: ReactNode;
+  tone?: "default" | "error";
+}) {
+  return (
+    <AlertPanel
+      radius="lg"
+      role={tone === "error" ? "alert" : "status"}
+      tone={tone === "error" ? "danger" : "info"}
+    >
+      {children}
+    </AlertPanel>
   );
 }
 
