@@ -30,48 +30,9 @@ func DiscoverTargets(folderPath string, probe func(folderPath string, factoryDir
 		return nil, fmt.Errorf("factory session target probe is required")
 	}
 
-	targets := make([]Target, 0, 4)
-	loadFailures := make([]DiscoveryFailure, 0, 2)
-	if target, ok, failure := probe(resolvedFolder, resolvedFolder, TargetRef{
-		Kind: TargetKindDefault,
-	}); ok {
-		targets = append(targets, target)
-	} else if failure != nil {
-		loadFailures = append(loadFailures, *failure)
-	}
-
-	childEntries, err := os.ReadDir(resolvedFolder)
+	targets, loadFailures, err := collectDiscoveredTargets(resolvedFolder, probe)
 	if err != nil {
-		if os.IsPermission(err) {
-			return nil, NewValidationError(
-				validationReasonUnreadable,
-				"folderPath",
-				fmt.Errorf("read factory session folder %s: %w", resolvedFolder, err),
-			)
-		}
-		return nil, fmt.Errorf("read factory session folder %s: %w", resolvedFolder, err)
-	}
-	for _, entry := range childEntries {
-		if !entry.IsDir() {
-			continue
-		}
-		name := strings.TrimSpace(entry.Name())
-		if name == "" {
-			continue
-		}
-		if err := factoryconfig.ValidateNamedFactoryName(name); err != nil {
-			continue
-		}
-		targetDir := filepath.Join(resolvedFolder, name)
-		target, ok, failure := probe(resolvedFolder, targetDir, TargetRef{
-			Kind: TargetKindNamed,
-			Name: name,
-		})
-		if ok {
-			targets = append(targets, target)
-		} else if failure != nil {
-			loadFailures = append(loadFailures, *failure)
-		}
+		return nil, err
 	}
 
 	sort.Slice(targets, func(i, j int) bool {
@@ -93,6 +54,54 @@ func DiscoverTargets(folderPath string, probe func(folderPath string, factoryDir
 		)
 	}
 	return targets, nil
+}
+
+func collectDiscoveredTargets(folderPath string, probe TargetProbe) ([]Target, []DiscoveryFailure, error) {
+	targets := make([]Target, 0, 4)
+	loadFailures := make([]DiscoveryFailure, 0, 2)
+	appendProbedTarget(&targets, &loadFailures, probe, folderPath, folderPath, TargetRef{
+		Kind: TargetKindDefault,
+	})
+
+	childEntries, err := os.ReadDir(folderPath)
+	if err != nil {
+		if os.IsPermission(err) {
+			return nil, nil, NewValidationError(
+				validationReasonUnreadable,
+				"folderPath",
+				fmt.Errorf("read factory session folder %s: %w", folderPath, err),
+			)
+		}
+		return nil, nil, fmt.Errorf("read factory session folder %s: %w", folderPath, err)
+	}
+	for _, entry := range childEntries {
+		if !entry.IsDir() {
+			continue
+		}
+		name := strings.TrimSpace(entry.Name())
+		if name == "" {
+			continue
+		}
+		if err := factoryconfig.ValidateNamedFactoryName(name); err != nil {
+			continue
+		}
+		appendProbedTarget(&targets, &loadFailures, probe, folderPath, filepath.Join(folderPath, name), TargetRef{
+			Kind: TargetKindNamed,
+			Name: name,
+		})
+	}
+	return targets, loadFailures, nil
+}
+
+func appendProbedTarget(targets *[]Target, failures *[]DiscoveryFailure, probe TargetProbe, folderPath string, factoryDir string, ref TargetRef) {
+	target, ok, failure := probe(folderPath, factoryDir, ref)
+	if ok {
+		*targets = append(*targets, target)
+		return
+	}
+	if failure != nil {
+		*failures = append(*failures, *failure)
+	}
 }
 
 // SelectTarget chooses a discovered target from an optional explicit ref.

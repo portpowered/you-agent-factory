@@ -2892,6 +2892,16 @@ func TestFactoryService_OpenFactorySessionFromFolder_AlignsValidateAndOpenDiscov
 	}
 
 	before := harness.svc.sessions.Count()
+	assertValidateRunnableDiscovery(t, harness, before)
+	assertOpenRunnableDiscovery(t, harness, before+1)
+	assertValidateEmptyDiscovery(t, harness, emptyDir, before+1)
+	assertOpenEmptyDiscoveryFailure(t, harness, emptyDir, before+1)
+	assertValidateBrokenDiscoveryFailure(t, harness, brokenDir, before+1)
+	assertOpenBrokenDiscoveryFailure(t, harness, brokenDir, before+1)
+}
+
+func assertValidateRunnableDiscovery(t *testing.T, harness *runningSessionService, wantSessionCount int) {
+	t.Helper()
 
 	validateRunnable, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil, true, false)
 	if err != nil {
@@ -2900,9 +2910,11 @@ func TestFactoryService_OpenFactorySessionFromFolder_AlignsValidateAndOpenDiscov
 	if validateRunnable == nil || validateRunnable.InitsNewFactory || len(validateRunnable.Targets) == 0 || validateRunnable.SessionID != "" {
 		t.Fatalf("validate runnable result = %#v, want discovered targets without session or init-new-factory", validateRunnable)
 	}
-	if got := harness.svc.sessions.Count(); got != before {
-		t.Fatalf("validate runnable mutated live sessions to %d, want %d", got, before)
-	}
+	assertLiveSessionCount(t, harness, "validate runnable", wantSessionCount)
+}
+
+func assertOpenRunnableDiscovery(t *testing.T, harness *runningSessionService, wantSessionCount int) {
+	t.Helper()
 
 	openRunnable, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil, false, false)
 	if err != nil {
@@ -2911,9 +2923,11 @@ func TestFactoryService_OpenFactorySessionFromFolder_AlignsValidateAndOpenDiscov
 	if openRunnable == nil || openRunnable.SessionID == "" {
 		t.Fatalf("open runnable result = %#v, want session id", openRunnable)
 	}
-	if got := harness.svc.sessions.Count(); got != before+1 {
-		t.Fatalf("open runnable live sessions = %d, want %d", got, before+1)
-	}
+	assertLiveSessionCount(t, harness, "open runnable", wantSessionCount)
+}
+
+func assertValidateEmptyDiscovery(t *testing.T, harness *runningSessionService, emptyDir string, wantSessionCount int) {
+	t.Helper()
 
 	validateEmpty, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), emptyDir, nil, true, false)
 	if err != nil {
@@ -2922,18 +2936,22 @@ func TestFactoryService_OpenFactorySessionFromFolder_AlignsValidateAndOpenDiscov
 	if validateEmpty == nil || !validateEmpty.InitsNewFactory || validateEmpty.FolderPath != emptyDir {
 		t.Fatalf("validate empty result = %#v, want init-new-factory metadata", validateEmpty)
 	}
-	if got := harness.svc.sessions.Count(); got != before+1 {
-		t.Fatalf("validate empty mutated live sessions to %d, want %d", got, before+1)
-	}
+	assertLiveSessionCount(t, harness, "validate empty", wantSessionCount)
+}
+
+func assertOpenEmptyDiscoveryFailure(t *testing.T, harness *runningSessionService, emptyDir string, wantSessionCount int) {
+	t.Helper()
 
 	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), emptyDir, nil, false, false); err == nil {
 		t.Fatal("OpenFactorySessionFromFolder(open empty) error = nil, want not-runnable failure")
 	} else {
 		assertFactorySessionValidationTarget(t, err, "not_runnable", "folderPath")
 	}
-	if got := harness.svc.sessions.Count(); got != before+1 {
-		t.Fatalf("open empty mutated live sessions to %d, want %d", got, before+1)
-	}
+	assertLiveSessionCount(t, harness, "open empty", wantSessionCount)
+}
+
+func assertValidateBrokenDiscoveryFailure(t *testing.T, harness *runningSessionService, brokenDir string, wantSessionCount int) {
+	t.Helper()
 
 	validateBroken, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), brokenDir, nil, true, false)
 	if err == nil {
@@ -2943,17 +2961,25 @@ func TestFactoryService_OpenFactorySessionFromFolder_AlignsValidateAndOpenDiscov
 	if validateBroken != nil {
 		t.Fatalf("validate broken result = %#v, want no init-new-factory fallback", validateBroken)
 	}
-	if got := harness.svc.sessions.Count(); got != before+1 {
-		t.Fatalf("validate broken mutated live sessions to %d, want %d", got, before+1)
-	}
+	assertLiveSessionCount(t, harness, "validate broken", wantSessionCount)
+}
+
+func assertOpenBrokenDiscoveryFailure(t *testing.T, harness *runningSessionService, brokenDir string, wantSessionCount int) {
+	t.Helper()
 
 	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), brokenDir, nil, false, false); err == nil {
 		t.Fatal("OpenFactorySessionFromFolder(open broken) error = nil, want config-load failure")
 	} else {
 		assertFactorySessionConfigLoadFailure(t, err, "default")
 	}
-	if got := harness.svc.sessions.Count(); got != before+1 {
-		t.Fatalf("open broken mutated live sessions to %d, want %d", got, before+1)
+	assertLiveSessionCount(t, harness, "open broken", wantSessionCount)
+}
+
+func assertLiveSessionCount(t *testing.T, harness *runningSessionService, label string, want int) {
+	t.Helper()
+
+	if got := harness.svc.sessions.Count(); got != want {
+		t.Fatalf("%s mutated live sessions to %d, want %d", label, got, want)
 	}
 }
 
