@@ -874,7 +874,7 @@ func (fs *FactoryService) logFactorySessionTargetProbeFailure(
 		logger = zap.NewNop()
 	}
 	fields := []zap.Field{
-		zap.String("folder_path", folderPath),
+		zap.String("submitted_folder_path", folderPath),
 		zap.String("target_factory_dir", factoryDir),
 		zap.String("target_kind", string(ref.Kind)),
 		zap.String("target_display_name", factorysessions.TargetDisplayName(ref)),

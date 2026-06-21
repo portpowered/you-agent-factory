@@ -3447,7 +3447,7 @@ func TestFactoryService_OpenFactorySessionFromFolder_LogsBrokenDiscoveryTargetFo
 			continue
 		}
 		matchingLogs++
-		assertObservedLogFieldPresent(t, entry, "folder_path")
+		assertObservedLogFieldPresent(t, entry, "submitted_folder_path")
 		assertLogField(t, entry, "target_kind", string(factorysessions.TargetKindDefault))
 		assertLogField(t, entry, "target_display_name", "default")
 		assertObservedLogFieldContains(t, entry, "failure_summary", "unexpected end of JSON input")
