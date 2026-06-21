@@ -11,10 +11,17 @@ import (
 )
 
 // TargetProbe loads metadata for one discovered factory session target.
-type TargetProbe func(folderPath string, factoryDir string, ref TargetRef) (Target, bool)
+type TargetProbe func(folderPath string, factoryDir string, ref TargetRef) (Target, bool, *DiscoveryFailure)
+
+// DiscoveryFailure captures one target that looked like a factory but failed to load.
+type DiscoveryFailure struct {
+	FactoryDir string
+	Ref        TargetRef
+	Summary    string
+}
 
 // DiscoverTargets lists runnable factory targets under folderPath.
-func DiscoverTargets(folderPath string, probe TargetProbe) ([]Target, error) {
+func DiscoverTargets(folderPath string, probe func(folderPath string, factoryDir string, ref TargetRef) (Target, bool, *DiscoveryFailure)) ([]Target, error) {
 	resolvedFolder, err := ResolveSessionFolder(folderPath)
 	if err != nil {
 		return nil, err
@@ -24,10 +31,13 @@ func DiscoverTargets(folderPath string, probe TargetProbe) ([]Target, error) {
 	}
 
 	targets := make([]Target, 0, 4)
-	if target, ok := probe(resolvedFolder, resolvedFolder, TargetRef{
+	loadFailures := make([]DiscoveryFailure, 0, 2)
+	if target, ok, failure := probe(resolvedFolder, resolvedFolder, TargetRef{
 		Kind: TargetKindDefault,
 	}); ok {
 		targets = append(targets, target)
+	} else if failure != nil {
+		loadFailures = append(loadFailures, *failure)
 	}
 
 	childEntries, err := os.ReadDir(resolvedFolder)
@@ -53,12 +63,14 @@ func DiscoverTargets(folderPath string, probe TargetProbe) ([]Target, error) {
 			continue
 		}
 		targetDir := filepath.Join(resolvedFolder, name)
-		target, ok := probe(resolvedFolder, targetDir, TargetRef{
+		target, ok, failure := probe(resolvedFolder, targetDir, TargetRef{
 			Kind: TargetKindNamed,
 			Name: name,
 		})
 		if ok {
 			targets = append(targets, target)
+		} else if failure != nil {
+			loadFailures = append(loadFailures, *failure)
 		}
 	}
 
@@ -71,6 +83,9 @@ func DiscoverTargets(folderPath string, probe TargetProbe) ([]Target, error) {
 		return left.Ref.Name < right.Ref.Name
 	})
 	if len(targets) == 0 {
+		if len(loadFailures) > 0 {
+			return nil, NewConfigLoadFailedError(loadFailures)
+		}
 		return nil, NewValidationError(
 			validationReasonNotRunnable,
 			"folderPath",

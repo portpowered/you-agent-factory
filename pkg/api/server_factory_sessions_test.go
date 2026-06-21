@@ -380,6 +380,52 @@ func TestFactorySessionsAPI_OpenFactorySession_ValidationTargets(t *testing.T) {
 	}
 }
 
+func TestFactorySessionsAPI_OpenFactorySession_ConfigLoadFailureTargets(t *testing.T) {
+	mf := &testutil.MockFactory{
+		OpenFactorySessionErr: apiTestSessionValidationError{
+			message: "factory configuration could not be loaded from the selected folder",
+			code:    "FACTORY_SESSION_CONFIG_LOAD_FAILED",
+			targets: []factoryapi.FactoryValidationTarget{
+				factoryvalidation.FactorySessionTargetTarget(
+					"config_load_failed",
+					"default",
+					`Factory target "default" at "/workspace/fleet" could not be loaded: unexpected end of JSON input`,
+				),
+			},
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions", bytes.NewBufferString(`{"folderPath":"/workspace/fleet","validateOnly":true}`))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST /factory-sessions config-load failure status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+
+	var response factoryapi.ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("decode open factory session config-load error response: %v", err)
+	}
+	if response.Code != "FACTORY_SESSION_CONFIG_LOAD_FAILED" {
+		t.Fatalf("open factory session config-load error code = %q, want FACTORY_SESSION_CONFIG_LOAD_FAILED", response.Code)
+	}
+	if response.Message != "factory configuration could not be loaded from the selected folder" {
+		t.Fatalf("open factory session config-load error message = %q, want safe summary", response.Message)
+	}
+	if response.Targets == nil || len(*response.Targets) != 1 {
+		t.Fatalf("open factory session config-load error targets = %#v, want one target", response.Targets)
+	}
+	target := (*response.Targets)[0]
+	if target.Code != "factory.session.target.config_load_failed" ||
+		target.Subject.Type != factoryapi.FactoryValidationSubjectTypeFactory ||
+		target.Subject.Id != "default" ||
+		target.Subject.Location != factoryapi.FactoryValidationSubjectLocationReference {
+		t.Fatalf("open factory session config-load error target = %#v, want structured config-load target", target)
+	}
+}
+
 func TestFactorySessionsAPI_CloseFactorySession(t *testing.T) {
 	mf := &testutil.MockFactory{}
 	srv := newTestServer(mf)
@@ -398,6 +444,7 @@ func TestFactorySessionsAPI_CloseFactorySession(t *testing.T) {
 
 type apiTestSessionValidationError struct {
 	message string
+	code    string
 	targets []factoryapi.FactoryValidationTarget
 }
 
@@ -407,6 +454,13 @@ func (e apiTestSessionValidationError) Error() string {
 
 func (e apiTestSessionValidationError) ErrorTargets() []factoryapi.FactoryValidationTarget {
 	return e.targets
+}
+
+func (e apiTestSessionValidationError) ErrorCode() string {
+	if e.code == "" {
+		return "BAD_REQUEST"
+	}
+	return e.code
 }
 
 func TestFactorySessionsAPI_CloseFactorySession_NotFound(t *testing.T) {

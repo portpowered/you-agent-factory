@@ -23,6 +23,7 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
@@ -1226,6 +1227,33 @@ func assertFactorySessionValidationTarget(t *testing.T, err error, wantReason st
 	}
 	if target.Subject.Id != wantField {
 		t.Fatalf("validation target subject id = %q, want %q", target.Subject.Id, wantField)
+	}
+}
+
+func assertFactorySessionConfigLoadFailure(t *testing.T, err error, wantTargetID string) {
+	t.Helper()
+
+	reason, field, ok := factorysessions.ValidationReasonFromError(err)
+	if !ok || reason != factorysessions.ValidationReasonConfigLoadFailed || field != "folderPath" {
+		t.Fatalf("validation = (%q, %q, %v), want config_load_failed folderPath", reason, field, ok)
+	}
+
+	var targetedErr interface {
+		ErrorTargets() []factoryapi.FactoryValidationTarget
+	}
+	if !errors.As(err, &targetedErr) {
+		t.Fatalf("config load error %v did not expose structured targets", err)
+	}
+	targets := targetedErr.ErrorTargets()
+	if len(targets) != 1 {
+		t.Fatalf("config load error targets = %#v, want one target", targets)
+	}
+	target := targets[0]
+	if target.Code != "factory.session.target.config_load_failed" {
+		t.Fatalf("config load target code = %q, want factory.session.target.config_load_failed", target.Code)
+	}
+	if target.Subject.Id != wantTargetID {
+		t.Fatalf("config load target subject id = %q, want %q", target.Subject.Id, wantTargetID)
 	}
 }
 

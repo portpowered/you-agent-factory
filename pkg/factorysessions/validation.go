@@ -2,6 +2,8 @@ package factorysessions
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
@@ -10,14 +12,17 @@ import (
 const validationTargetKind = "factory-session-validation"
 
 const (
-	validationReasonRequired       = "required"
+	validationReasonRequired         = "required"
 	validationReasonMissing          = "missing"
 	validationReasonNotDirectory     = "not_directory"
 	validationReasonNotRunnable      = "not_runnable"
+	validationReasonConfigLoadFailed = "config_load_failed"
 	validationReasonTargetNotFound   = "target_not_found"
 	validationReasonUnreadable       = "unreadable"
 	validationReasonConflict         = "conflict"
 )
+
+const validationErrorCodeConfigLoadFailed = "FACTORY_SESSION_CONFIG_LOAD_FAILED"
 
 // ValidationTargetKind is the API error-target kind for factory-session validation failures.
 const ValidationTargetKind = validationTargetKind
@@ -34,6 +39,9 @@ const ValidationReasonNotDirectory = validationReasonNotDirectory
 // ValidationReasonNotRunnable reports that the folder exposes no runnable factory targets.
 const ValidationReasonNotRunnable = validationReasonNotRunnable
 
+// ValidationReasonConfigLoadFailed reports that discovery found a factory target but loading its config failed.
+const ValidationReasonConfigLoadFailed = validationReasonConfigLoadFailed
+
 // ValidationReasonTargetNotFound reports that the requested target was not discovered.
 const ValidationReasonTargetNotFound = validationReasonTargetNotFound
 
@@ -44,9 +52,11 @@ const ValidationReasonUnreadable = validationReasonUnreadable
 const ValidationReasonConflict = validationReasonConflict
 
 type validationError struct {
-	reason string
-	field  string
-	err    error
+	reason  string
+	field   string
+	err     error
+	code    string
+	targets []factoryapi.FactoryValidationTarget
 }
 
 func (e *validationError) Error() string {
@@ -67,7 +77,17 @@ func (e *validationError) ErrorTargets() []factoryapi.FactoryValidationTarget {
 	if e == nil {
 		return nil
 	}
+	if len(e.targets) > 0 {
+		return append([]factoryapi.FactoryValidationTarget(nil), e.targets...)
+	}
 	return []factoryapi.FactoryValidationTarget{validationErrorTarget(e.reason, e.field, e.Error())}
+}
+
+func (e *validationError) ErrorCode() string {
+	if e == nil || strings.TrimSpace(e.code) == "" {
+		return "BAD_REQUEST"
+	}
+	return e.code
 }
 
 // NewValidationError builds a structured factory-session validation error.
@@ -79,6 +99,26 @@ func NewValidationError(reason string, field string, err error) error {
 		reason: reason,
 		field:  field,
 		err:    err,
+	}
+}
+
+// NewConfigLoadFailedError builds a structured discovery-time config load failure.
+func NewConfigLoadFailedError(failures []DiscoveryFailure) error {
+	if len(failures) == 0 {
+		return nil
+	}
+	targets := make([]factoryapi.FactoryValidationTarget, 0, len(failures))
+	for _, failure := range failures {
+		targetID := TargetDisplayName(failure.Ref)
+		message := fmt.Sprintf("Factory target %q at %q could not be loaded: %s", targetID, failure.FactoryDir, failure.Summary)
+		targets = append(targets, factoryvalidation.FactorySessionTargetTarget(validationReasonConfigLoadFailed, targetID, message))
+	}
+	return &validationError{
+		reason:  validationReasonConfigLoadFailed,
+		field:   "folderPath",
+		err:     fmt.Errorf("factory configuration could not be loaded from the selected folder"),
+		code:    validationErrorCodeConfigLoadFailed,
+		targets: targets,
 	}
 }
 

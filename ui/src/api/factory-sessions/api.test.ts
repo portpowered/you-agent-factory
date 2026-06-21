@@ -1,4 +1,7 @@
-import { factorySessionFieldTarget } from "../../testing/factory-validation-target-fixtures";
+import {
+  factorySessionFieldTarget,
+  factorySessionTargetTarget,
+} from "../../testing/factory-validation-target-fixtures";
 import {
   closeFactorySession,
   FactorySessionsAPIError,
@@ -387,6 +390,68 @@ describe("factory sessions API", () => {
           ),
         ],
       }),
+    );
+  });
+
+  it("preserves config-load-failed responses as distinct typed API errors", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "FACTORY_SESSION_CONFIG_LOAD_FAILED",
+          message:
+            "factory configuration could not be loaded from the selected folder",
+          targets: [
+            factorySessionTargetTarget(
+              "config_load_failed",
+              "default",
+              'Factory target "default" at "/workspace/project" could not be loaded: unexpected end of JSON input',
+            ),
+          ],
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 400,
+          statusText: "Bad Request",
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      openFactorySession({
+        folderPath: "/workspace/project",
+        validateOnly: true,
+      }),
+    ).rejects.toEqual(
+      new FactorySessionsAPIError(
+        "factory configuration could not be loaded from the selected folder",
+        {
+          code: "FACTORY_SESSION_CONFIG_LOAD_FAILED",
+          responseBody: {
+            code: "FACTORY_SESSION_CONFIG_LOAD_FAILED",
+            message:
+              "factory configuration could not be loaded from the selected folder",
+            targets: [
+              factorySessionTargetTarget(
+                "config_load_failed",
+                "default",
+                'Factory target "default" at "/workspace/project" could not be loaded: unexpected end of JSON input',
+              ),
+            ],
+          },
+          status: 400,
+          statusText: "Bad Request",
+          targets: [
+            factorySessionTargetTarget(
+              "config_load_failed",
+              "default",
+              'Factory target "default" at "/workspace/project" could not be loaded: unexpected end of JSON input',
+            ),
+          ],
+        },
+      ),
     );
   });
 

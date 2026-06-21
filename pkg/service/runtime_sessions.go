@@ -833,16 +833,21 @@ func (fs *FactoryService) probeFactorySessionTarget(
 	folderPath string,
 	factoryDir string,
 	ref factorysessions.TargetRef,
-) (factorysessions.Target, bool) {
+) (factorysessions.Target, bool, *factorysessions.DiscoveryFailure) {
 	if fs == nil {
-		return factorysessions.Target{}, false
+		return factorysessions.Target{}, false, nil
 	}
 	loaded, err := configload.LoadRuntimeConfigFromFactoryDir(factoryDir, fs.coordinatorPolicy().workstationLoader)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) && !configload.IsFactoryLayoutNotFound(err) && !configload.IsNamedFactoryNotFound(err) {
 			fs.logFactorySessionTargetProbeFailure(folderPath, factoryDir, ref, err)
+			return factorysessions.Target{}, false, &factorysessions.DiscoveryFailure{
+				FactoryDir: factoryDir,
+				Ref:        ref,
+				Summary:    err.Error(),
+			}
 		}
-		return factorysessions.Target{}, false
+		return factorysessions.Target{}, false, nil
 	}
 
 	project := ""
@@ -852,7 +857,7 @@ func (fs *FactoryService) probeFactorySessionTarget(
 			project = strings.TrimSpace(cfg.Name)
 		}
 	}
-	return factorysessions.BuildTargetFromConfig(folderPath, factoryDir, ref, project), true
+	return factorysessions.BuildTargetFromConfig(folderPath, factoryDir, ref, project), true, nil
 }
 
 func (fs *FactoryService) logFactorySessionTargetProbeFailure(

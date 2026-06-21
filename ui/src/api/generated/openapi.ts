@@ -5980,6 +5980,8 @@ export type ErrorFamily = (typeof ErrorFamily)[keyof typeof ErrorFamily];
 export const ErrorResponseCode = {
   // Request payload or parameter validation failed.
   BAD_REQUEST: "BAD_REQUEST",
+  // Factory session discovery found a readable factory target whose config could not be loaded.
+  FACTORY_SESSION_CONFIG_LOAD_FAILED: "FACTORY_SESSION_CONFIG_LOAD_FAILED",
   // Named factory name validation failed.
   INVALID_FACTORY_NAME: "INVALID_FACTORY_NAME",
   // Submitted named factory already exists.

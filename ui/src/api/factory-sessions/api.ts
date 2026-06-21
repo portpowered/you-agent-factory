@@ -24,6 +24,7 @@ export type OpenFactorySessionResponse =
 
 export type FactorySessionsAPIErrorCode =
   | "BAD_REQUEST"
+  | "FACTORY_SESSION_CONFIG_LOAD_FAILED"
   | "INTERNAL_ERROR"
   | "NETWORK_ERROR";
 
@@ -354,6 +355,7 @@ function normalizeFactorySessionsAPIErrorCode(
 ): FactorySessionsAPIErrorCode {
   switch (code) {
     case "BAD_REQUEST":
+    case "FACTORY_SESSION_CONFIG_LOAD_FAILED":
       return code;
     case "NOT_FOUND":
       // hardcoded-ui-copy-exception: non-product-diagnostic

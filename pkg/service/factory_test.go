@@ -3341,18 +3341,19 @@ func TestFactoryService_OpenFactorySessionFromFolder_LogsBrokenDiscoveryTargetFo
 	resolvedBrokenDir = filepath.Clean(resolvedBrokenDir)
 
 	validateResult, err := svc.OpenFactorySessionFromFolder(context.Background(), brokenDir, nil, true, false)
-	if err != nil {
-		t.Fatalf("OpenFactorySessionFromFolder(validate broken): %v", err)
+	if err == nil {
+		t.Fatal("OpenFactorySessionFromFolder(validate broken) error = nil, want config-load failure")
 	}
-	if validateResult == nil || !validateResult.InitsNewFactory {
-		t.Fatalf("validate result = %#v, want init-new-factory validation fallback", validateResult)
+	assertFactorySessionConfigLoadFailure(t, err, "default")
+	if validateResult != nil {
+		t.Fatalf("validate result = %#v, want no init-new-factory fallback on broken config", validateResult)
 	}
 
 	_, err = svc.OpenFactorySessionFromFolder(context.Background(), brokenDir, nil, false, false)
 	if err == nil {
-		t.Fatal("OpenFactorySessionFromFolder(open broken) error = nil, want not_runnable failure")
+		t.Fatal("OpenFactorySessionFromFolder(open broken) error = nil, want config-load failure")
 	}
-	assertFactorySessionValidationTarget(t, err, factorysessions.ValidationReasonNotRunnable, "folderPath")
+	assertFactorySessionConfigLoadFailure(t, err, "default")
 
 	matchingLogs := 0
 	for _, entry := range observedLogs.FilterMessage("factory session discovery target runtime config load failed").All() {
@@ -3384,9 +3385,12 @@ func TestFactoryService_ProbeFactorySessionTarget_DoesNotLogSuccessfulProbe(t *t
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	target, ok := svc.probeFactorySessionTarget(rootDir, rootDir, factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault})
+	target, ok, failure := svc.probeFactorySessionTarget(rootDir, rootDir, factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault})
 	if !ok {
 		t.Fatal("probeFactorySessionTarget(valid root) = false, want runnable target")
+	}
+	if failure != nil {
+		t.Fatalf("probeFactorySessionTarget(valid root) failure = %#v, want nil", failure)
 	}
 	if target.FactoryDir == "" {
 		t.Fatalf("probeFactorySessionTarget(valid root) = %#v, want populated target", target)
