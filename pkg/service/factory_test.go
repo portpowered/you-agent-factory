@@ -3313,6 +3313,122 @@ func TestFactoryService_OpenFactorySession_InitNewFactoryRejectsValidateOnlyComb
 	}
 }
 
+func TestFactoryService_OpenFactorySessionFromFolder_LogsBrokenDiscoveryTargetForValidateAndOpen(t *testing.T) {
+	rootDir := t.TempDir()
+	writeFactoryJSON(t, rootDir, minimalFactoryConfig())
+
+	logCore, observedLogs := observer.New(zap.ErrorLevel)
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.New(logCore),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	brokenDir := filepath.Join(rootDir, "broken")
+	if err := os.MkdirAll(brokenDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", brokenDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(brokenDir, interfaces.FactoryConfigFile), []byte(`{"name":`), 0o644); err != nil {
+		t.Fatalf("WriteFile(broken factory.json): %v", err)
+	}
+	resolvedBrokenDir, err := filepath.Abs(brokenDir)
+	if err != nil {
+		t.Fatalf("Abs(%s): %v", brokenDir, err)
+	}
+	resolvedBrokenDir = filepath.Clean(resolvedBrokenDir)
+
+	validateResult, err := svc.OpenFactorySessionFromFolder(context.Background(), brokenDir, nil, true, false)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(validate broken): %v", err)
+	}
+	if validateResult == nil || !validateResult.InitsNewFactory {
+		t.Fatalf("validate result = %#v, want init-new-factory validation fallback", validateResult)
+	}
+
+	_, err = svc.OpenFactorySessionFromFolder(context.Background(), brokenDir, nil, false, false)
+	if err == nil {
+		t.Fatal("OpenFactorySessionFromFolder(open broken) error = nil, want not_runnable failure")
+	}
+	assertFactorySessionValidationTarget(t, err, factorysessions.ValidationReasonNotRunnable, "folderPath")
+
+	matchingLogs := 0
+	for _, entry := range observedLogs.FilterMessage("factory session discovery target runtime config load failed").All() {
+		if !observedLogFieldEquals(entry, "target_factory_dir", resolvedBrokenDir) {
+			continue
+		}
+		matchingLogs++
+		assertObservedLogFieldPresent(t, entry, "folder_path")
+		assertLogField(t, entry, "target_kind", string(factorysessions.TargetKindDefault))
+		assertLogField(t, entry, "target_display_name", "default")
+		assertObservedLogFieldContains(t, entry, "failure_summary", "unexpected end of JSON input")
+	}
+	if matchingLogs != 2 {
+		t.Fatalf("matching discovery failure logs = %d, want 2", matchingLogs)
+	}
+}
+
+func TestFactoryService_ProbeFactorySessionTarget_DoesNotLogSuccessfulProbe(t *testing.T) {
+	rootDir := t.TempDir()
+	writeFactoryJSON(t, rootDir, minimalFactoryConfig())
+
+	logCore, observedLogs := observer.New(zap.ErrorLevel)
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.New(logCore),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	target, ok := svc.probeFactorySessionTarget(rootDir, rootDir, factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault})
+	if !ok {
+		t.Fatal("probeFactorySessionTarget(valid root) = false, want runnable target")
+	}
+	if target.FactoryDir == "" {
+		t.Fatalf("probeFactorySessionTarget(valid root) = %#v, want populated target", target)
+	}
+	if got := len(observedLogs.FilterMessage("factory session discovery target runtime config load failed").All()); got != 0 {
+		t.Fatalf("discovery failure logs = %d, want 0", got)
+	}
+}
+
+func assertObservedLogFieldContains(t *testing.T, entry observer.LoggedEntry, key, want string) {
+	t.Helper()
+	for _, field := range entry.Context {
+		if field.Key != key {
+			continue
+		}
+		if strings.Contains(field.String, want) {
+			return
+		}
+		t.Fatalf("log field %q = %q, want substring %q", key, field.String, want)
+	}
+	t.Fatalf("log field %q missing from %#v", key, entry.Context)
+}
+
+func observedLogFieldEquals(entry observer.LoggedEntry, key, want string) bool {
+	for _, field := range entry.Context {
+		if field.Key == key && field.String == want {
+			return true
+		}
+	}
+	return false
+}
+
+func assertObservedLogFieldPresent(t *testing.T, entry observer.LoggedEntry, key string) {
+	t.Helper()
+	for _, field := range entry.Context {
+		if field.Key == key && strings.TrimSpace(field.String) != "" {
+			return
+		}
+	}
+	t.Fatalf("log field %q missing or empty in %#v", key, entry.Context)
+}
+
 func normalizeInitFactoryJSON(t *testing.T, raw string) string {
 	t.Helper()
 	var payload any

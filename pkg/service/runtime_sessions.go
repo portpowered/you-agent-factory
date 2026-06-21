@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -838,6 +839,9 @@ func (fs *FactoryService) probeFactorySessionTarget(
 	}
 	loaded, err := configload.LoadRuntimeConfigFromFactoryDir(factoryDir, fs.coordinatorPolicy().workstationLoader)
 	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) && !configload.IsFactoryLayoutNotFound(err) && !configload.IsNamedFactoryNotFound(err) {
+			fs.logFactorySessionTargetProbeFailure(folderPath, factoryDir, ref, err)
+		}
 		return factorysessions.Target{}, false
 	}
 
@@ -849,6 +853,33 @@ func (fs *FactoryService) probeFactorySessionTarget(
 		}
 	}
 	return factorysessions.BuildTargetFromConfig(folderPath, factoryDir, ref, project), true
+}
+
+func (fs *FactoryService) logFactorySessionTargetProbeFailure(
+	folderPath string,
+	factoryDir string,
+	ref factorysessions.TargetRef,
+	err error,
+) {
+	if fs == nil || err == nil {
+		return
+	}
+	logger := fs.logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	fields := []zap.Field{
+		zap.String("folder_path", folderPath),
+		zap.String("target_factory_dir", factoryDir),
+		zap.String("target_kind", string(ref.Kind)),
+		zap.String("target_display_name", factorysessions.TargetDisplayName(ref)),
+		zap.String("failure_summary", err.Error()),
+		zap.Error(err),
+	}
+	if ref.Kind == factorysessions.TargetKindNamed && strings.TrimSpace(ref.Name) != "" {
+		fields = append(fields, zap.String("target_name", strings.TrimSpace(ref.Name)))
+	}
+	logger.Error("factory session discovery target runtime config load failed", fields...)
 }
 
 func (fs *FactoryService) waitForServiceModeStartupWorkReadability(ctx context.Context, serviceMode bool) error {
