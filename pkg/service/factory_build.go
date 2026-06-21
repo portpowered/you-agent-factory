@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -45,19 +46,19 @@ import (
 )
 
 type runtimeBundleBuildInput struct {
-	dir                   string
-	folderPath            string
-	sessionID             string
-	cfg                   *FactoryServiceConfig
-	loadedFactoryCfg      *factoryconfig.LoadedFactoryConfig
-	baseLogger            *zap.Logger
-	runtimeInstanceID     string
-	clock                 factory.Clock
-	recordPath            string
-	workflowID            string
-	providerOverride      workers.Provider
-	providerCommandRunner workers.CommandRunner
-	commandRunnerOverride workers.CommandRunner
+	dir                           string
+	folderPath                    string
+	sessionID                     string
+	cfg                           *FactoryServiceConfig
+	loadedFactoryCfg              *factoryconfig.LoadedFactoryConfig
+	baseLogger                    *zap.Logger
+	runtimeInstanceID             string
+	clock                         factory.Clock
+	recordPath                    string
+	workflowID                    string
+	providerOverride              workers.Provider
+	providerCommandRunner         workers.CommandRunner
+	commandRunnerOverride         workers.CommandRunner
 	additionalFactoryOpts         []factory.FactoryOption
 	prefetchedLocalModels         localModelDomain
 	inferenceProgressPublisher    workerprovider.InferenceProgressPublisher
@@ -69,6 +70,7 @@ type liveSessionState struct {
 	handle                *liveRuntimeHandle
 	spec                  *runtimebuild.SessionBuildSpec
 	javascriptCheckpoints *factorysessions.JavaScriptCheckpointStore
+	responseStreamOnce    sync.Once
 	responseStream        *factorysessions.SessionResponseStream
 }
 

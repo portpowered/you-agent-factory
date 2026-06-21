@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -851,9 +852,12 @@ func TestInferenceProgressPublishingCommandRunner_PublishesOrderedFragments(t *t
 		t.Fatalf("write script: %v", err)
 	}
 
+	var publishedMu sync.Mutex
 	var published []InferenceProgressFragment
 	runner := NewInferenceProgressPublishingCommandRunner(func(fragment InferenceProgressFragment) {
+		publishedMu.Lock()
 		published = append(published, fragment)
+		publishedMu.Unlock()
 	}, nil)
 
 	result, err := runner.Run(context.Background(), CommandRequest{
@@ -866,6 +870,8 @@ func TestInferenceProgressPublishingCommandRunner_PublishesOrderedFragments(t *t
 	if !strings.Contains(string(result.Stdout), "stdout-chunk") {
 		t.Fatalf("stdout = %q, want stdout-chunk", result.Stdout)
 	}
+	publishedMu.Lock()
+	defer publishedMu.Unlock()
 	if len(published) < 2 {
 		t.Fatalf("published events = %d, want at least 2", len(published))
 	}

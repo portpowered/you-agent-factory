@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,13 +24,15 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -2363,5 +2366,84 @@ func TestFactoryService_InferenceProgressPublisherPublishesOrderedInternalEvents
 	_ = factoryEventType
 	if string(events[0].Kind) == string(factoryapi.FactoryEventTypeInferenceResponse) {
 		t.Fatal("internal stream event must not alias canonical inference response events")
+	}
+}
+
+func TestFactoryService_InferenceProgressPublisherConcurrentFirstFragmentsShareOneSessionStream(t *testing.T) {
+	sessions := factorysessions.NewRegistry()
+	sessionID := "session-progress-concurrent-first"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{},
+		false,
+		"factory",
+	), true)
+
+	constructorEntered := make(chan struct{}, 1)
+	releaseConstructor := make(chan struct{})
+	var constructorCalls atomic.Int32
+	svc := &FactoryService{
+		sessions: sessions,
+		newSessionResponseStream: func() *factorysessions.SessionResponseStream {
+			constructorCalls.Add(1)
+			constructorEntered <- struct{}{}
+			<-releaseConstructor
+			return factorysessions.NewSessionResponseStream()
+		},
+	}
+	publisher := svc.inferenceProgressPublisher(sessionID, nil)
+	if publisher == nil {
+		t.Fatal("publisher = nil, want session publisher")
+	}
+
+	start := make(chan struct{})
+	var publishWG sync.WaitGroup
+	publishWG.Add(2)
+	go func() {
+		defer publishWG.Done()
+		<-start
+		publisher(workerprovider.ResponseFragment("dispatch-1", nil, "stdout-fragment"))
+	}()
+	go func() {
+		defer publishWG.Done()
+		<-start
+		publisher(workerprovider.ProgressFragment("dispatch-1", nil, "stderr-fragment"))
+	}()
+
+	close(start)
+	<-constructorEntered
+	close(releaseConstructor)
+	publishWG.Wait()
+
+	if got := constructorCalls.Load(); got != 1 {
+		t.Fatalf("stream constructor calls = %d, want 1", got)
+	}
+
+	session := sessions.Get(sessionID)
+	stream := svc.sessionResponseStream(session)
+	if stream == nil {
+		t.Fatal("session stream = nil, want live session stream")
+	}
+	events := stream.Events()
+	if len(events) != 2 {
+		t.Fatalf("stream events = %#v, want both concurrent fragments retained", events)
+	}
+	if events[0].Sequence != 1 || events[1].Sequence != 2 {
+		t.Fatalf("event sequences = %#v, want ascending retained order", events)
+	}
+
+	payloads := map[string]responsestream.EventKind{}
+	for _, event := range events {
+		payloads[event.Payload] = event.Kind
+	}
+	if payloads["stdout-fragment"] != responsestream.EventKindResponseFragment {
+		t.Fatalf("stdout fragment kind = %q, want %q", payloads["stdout-fragment"], responsestream.EventKindResponseFragment)
+	}
+	if payloads["stderr-fragment"] != responsestream.EventKindProgressFragment {
+		t.Fatalf("stderr fragment kind = %q, want %q", payloads["stderr-fragment"], responsestream.EventKindProgressFragment)
 	}
 }

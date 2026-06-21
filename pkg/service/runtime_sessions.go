@@ -33,19 +33,19 @@ import (
 )
 
 const (
-	defaultFactorySessionID         = factorysessions.DefaultSessionID
-	FactorySessionTargetKindDefault = factorysessions.TargetKindDefault
-	FactorySessionTargetKindNamed   = factorysessions.TargetKindNamed
+	defaultFactorySessionID                     = factorysessions.DefaultSessionID
+	FactorySessionTargetKindDefault             = factorysessions.TargetKindDefault
+	FactorySessionTargetKindNamed               = factorysessions.TargetKindNamed
 	runtimeMetricSessionResponseStreamPublished = "session_response_stream.published"
 	runtimeMetricSessionResponseStreamCompacted = "session_response_stream.compacted"
 )
 
 type (
-	FactorySessionTargetKind = factorysessions.TargetKind
-	FactorySessionTargetRef  = factorysessions.TargetRef
-	FactorySessionTarget     = factorysessions.Target
-	FactorySessionOpenResult = factorysessions.OpenResult
-	liveFactorySession       = factorysessions.LiveSession
+	FactorySessionTargetKind          = factorysessions.TargetKind
+	FactorySessionTargetRef           = factorysessions.TargetRef
+	FactorySessionTarget              = factorysessions.Target
+	FactorySessionOpenResult          = factorysessions.OpenResult
+	liveFactorySession                = factorysessions.LiveSession
 	inferenceProgressPublisherFactory func(sessionID string) workerprovider.InferenceProgressPublisher
 )
 
@@ -1044,10 +1044,17 @@ func (fs *FactoryService) sessionResponseStream(session *factorysessions.LiveSes
 	if state == nil {
 		return nil
 	}
-	if state.responseStream == nil {
-		state.responseStream = factorysessions.NewSessionResponseStream()
-	}
+	state.responseStreamOnce.Do(func() {
+		state.responseStream = fs.newSessionResponseStreamInstance()
+	})
 	return state.responseStream
+}
+
+func (fs *FactoryService) newSessionResponseStreamInstance() *factorysessions.SessionResponseStream {
+	if fs != nil && fs.newSessionResponseStream != nil {
+		return fs.newSessionResponseStream()
+	}
+	return factorysessions.NewSessionResponseStream()
 }
 
 func mapInferenceProgressFragment(fragment workerprovider.InferenceProgressFragment) responsestream.Event {
@@ -1072,33 +1079,44 @@ func newInferenceProgressPublisherFactory(
 	}
 	svc := &FactoryService{sessions: sessions}
 	return func(sessionID string) workerprovider.InferenceProgressPublisher {
-		sessionID = strings.TrimSpace(sessionID)
-		if sessionID == "" {
-			sessionID = defaultFactorySessionID
+		return svc.inferenceProgressPublisher(sessionID, logger)
+	}
+}
+
+func (fs *FactoryService) inferenceProgressPublisher(
+	sessionID string,
+	logger *zap.Logger,
+) workerprovider.InferenceProgressPublisher {
+	if fs == nil || fs.sessions == nil {
+		return nil
+	}
+	sessions := fs.sessions
+	normalizedSessionID := strings.TrimSpace(sessionID)
+	if normalizedSessionID == "" {
+		normalizedSessionID = defaultFactorySessionID
+	}
+	return func(fragment workerprovider.InferenceProgressFragment) {
+		session := sessions.Get(normalizedSessionID)
+		if session == nil && normalizedSessionID == defaultFactorySessionID {
+			session = sessions.Get(defaultFactorySessionID)
 		}
-		return func(fragment workerprovider.InferenceProgressFragment) {
-			session := sessions.Get(sessionID)
-			if session == nil && sessionID == defaultFactorySessionID {
-				session = sessions.Get(defaultFactorySessionID)
+		stream := fs.sessionResponseStream(session)
+		if stream == nil {
+			if logger != nil {
+				logger.Warn("session response stream unavailable; dropping internal provider progress",
+					zap.String("session_id", normalizedSessionID),
+					zap.String("dispatch_id", fragment.DispatchID),
+					zap.String("stream_kind", fragment.Kind),
+				)
 			}
-			stream := svc.sessionResponseStream(session)
-			if stream == nil {
-				if logger != nil {
-					logger.Warn("session response stream unavailable; dropping internal provider progress",
-						zap.String("session_id", sessionID),
-						zap.String("dispatch_id", fragment.DispatchID),
-						zap.String("stream_kind", fragment.Kind),
-					)
-				}
-				return
-			}
-			publisher := responsestream.NewPublisher(stream, func(summary responsestream.CompactionSummary) {
-				emitSessionResponseStreamCompaction(session, sessionID, strings.TrimSpace(fragment.DispatchID), summary)
-			})
-			event := mapInferenceProgressFragment(fragment)
-			stored := publisher.Publish(event)
-			emitSessionResponseStreamPublished(session, sessionID, stored)
+			return
 		}
+		publisher := responsestream.NewPublisher(stream, func(summary responsestream.CompactionSummary) {
+			emitSessionResponseStreamCompaction(session, normalizedSessionID, strings.TrimSpace(fragment.DispatchID), summary)
+		})
+		event := mapInferenceProgressFragment(fragment)
+		stored := publisher.Publish(event)
+		emitSessionResponseStreamPublished(session, normalizedSessionID, stored)
 	}
 }
 
