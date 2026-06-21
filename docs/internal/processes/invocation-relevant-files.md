@@ -60,6 +60,13 @@ primary-result behavior.
   and must preserve carried summary content. `primary_result_test.go` covers both
   successful EXPLICIT selection and unresolved failure when `goal:complete` is
   absent from terminal work in scope.
+- `pkg/packagedfactories/goal/decision_envelope.go` owns the canonical
+  reviewer/checker JSON envelope and its mapping onto `interfaces.WorkResult`.
+- `pkg/workers/executor/agent.go` routes `review` workstation agent output through
+  `goal.WorkResultFromDecisionEnvelopeJSONOrFailed` instead of stop-token parsing.
+- `factory/docs/decision-envelope.md` is the packaged-authoring guide for the
+  reviewer/checker envelope shape, accepted decision values, and malformed-input
+  behavior used by `factory/workstations/review/AGENTS.md`.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged goal
   invocation summary shaping on `execute-goal` workstations alongside packaged
   TTS metadata shaping.
@@ -79,6 +86,20 @@ primary-result behavior.
 - `pkg/cli/run/packaged_tts_invocation.go` logs named-factory resolution context at
   the CLI boundary without recording packaged-factory metrics or logging submitted
   text or generated artifact bodies.
+- `pkg/packagedfactories/goal/` owns packaged `@you/goal` factory metadata
+  constants (`PackagedFactoryName`, `PackagedInvokeWorkstationName`).
+- `pkg/cli/run/run_invocation_test.go` proves `@you/goal` CLI invocation input
+  sources resolve through `invocations.ResolveTextInput`, reach the shared
+  `InvocationRequest` payload shape, fail with stable
+  `INVOCATION_INPUT_SOURCE_CONFLICT` before `InvokeFactorySession`, and match the
+  session invocation API contract for the same logical text input and JSON success
+  envelopes.
+- `pkg/cli/root_run_server_test.go` proves root `you run --named @you/goal` and
+  `@you/tts` wiring for positional text, piped stdin, explicit `-` stdin forms,
+  and stable `INVOCATION_INPUT_SOURCE_CONFLICT` rejection when sources combine.
+- `pkg/api/server_factory_sessions_test.go` proves the session invocation API
+  returns the same observable request and primary-result behavior for packaged
+  `@you/goal` text input and source-conflict failures as the CLI parity tests.
 - `pkg/service/model_catalog.go` owns the session invocation wait loop, packaged TTS
   loading/completion/failure logs, and packaged-factory metrics while polling for
   primary results.

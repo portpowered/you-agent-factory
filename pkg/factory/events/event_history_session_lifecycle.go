@@ -8,16 +8,18 @@ import (
 	"strings"
 	"time"
 
-	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 const (
-	eventIDSessionStarted                    = "factory-event/session-started"
-	eventIDSessionResultUpdatedPrefix          = "factory-event/session-result-updated"
-	eventIDSessionCompleted                    = "factory-event/session-completed"
-	eventIDSessionLifecycleControlPrefix       = "session-lifecycle-control"
+	eventIDSessionStarted                = "factory-event/session-started"
+	eventIDSessionPausedPrefix           = "factory-event/session-paused"
+	eventIDSessionResumedPrefix          = "factory-event/session-resumed"
+	eventIDSessionResultUpdatedPrefix    = "factory-event/session-result-updated"
+	eventIDSessionCompleted              = "factory-event/session-completed"
+	eventIDSessionLifecycleControlPrefix = "session-lifecycle-control"
 )
 
 // SessionLifecycleStartInput carries replay-safe facts for SESSION_STARTED.
@@ -72,6 +74,42 @@ type SessionLifecycleControlInput struct {
 	PreviousStatus      factoryapi.FactorySessionDurableLifecycleStatus
 	NewStatus           factoryapi.FactorySessionDurableLifecycleStatus
 	Reason              string
+}
+
+// RecordSessionPaused records a successful Factory Session pause lifecycle transition.
+func (h *FactoryEventHistory) RecordSessionPaused(input SessionLifecycleControlInput, eventTime time.Time) {
+	if h == nil || strings.TrimSpace(input.SessionID) == "" {
+		return
+	}
+	eventTime = interfaces.CanonicalEventTime(eventTime)
+	sequence := h.allocateSessionLifecycleSequence()
+	h.appendGenerated(factoryEvent(
+		factoryapi.FactoryEventTypeSessionPaused,
+		fmt.Sprintf("%s/%d", eventIDSessionPausedPrefix, sequence),
+		h.sessionLifecycleContext(input.SessionID, input.OrchestratorKind, input.OrchestratorDialect, input.Source, input.Tick, eventTime, sequence),
+		factoryapi.SessionPausedEventPayload{
+			Status:   factoryapi.FactorySessionDurableLifecycleStatusPaused,
+			PausedAt: eventTime,
+		},
+	))
+}
+
+// RecordSessionResumed records a successful Factory Session resume lifecycle transition.
+func (h *FactoryEventHistory) RecordSessionResumed(input SessionLifecycleControlInput, eventTime time.Time) {
+	if h == nil || strings.TrimSpace(input.SessionID) == "" {
+		return
+	}
+	eventTime = interfaces.CanonicalEventTime(eventTime)
+	sequence := h.allocateSessionLifecycleSequence()
+	h.appendGenerated(factoryEvent(
+		factoryapi.FactoryEventTypeSessionResumed,
+		fmt.Sprintf("%s/%d", eventIDSessionResumedPrefix, sequence),
+		h.sessionLifecycleContext(input.SessionID, input.OrchestratorKind, input.OrchestratorDialect, input.Source, input.Tick, eventTime, sequence),
+		factoryapi.SessionResumedEventPayload{
+			Status:    factoryapi.FactorySessionDurableLifecycleStatusRunning,
+			ResumedAt: eventTime,
+		},
+	))
 }
 
 // RecordSessionStarted records the canonical session execution start marker.
@@ -375,9 +413,9 @@ func generatedWorkContentPtr(parts []interfaces.WorkContentPart) *factoryapi.Wor
 		case interfaces.WorkContentPartTypeText:
 			text := part.Text
 			if err := item.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-			Type: factoryapi.WorkContentPartTypeText,
-			Text: text,
-		}); err != nil {
+				Type: factoryapi.WorkContentPartTypeText,
+				Text: text,
+			}); err != nil {
 				continue
 			}
 		case interfaces.WorkContentPartTypeImage:

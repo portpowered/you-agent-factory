@@ -16,6 +16,8 @@ import (
 // session lifecycle, result, dispatch, artifact, phase, checkpoint, and budget state.
 var SessionProjectionEventKinds = []string{
 	"SESSION_STARTED",
+	"SESSION_PAUSED",
+	"SESSION_RESUMED",
 	"SESSION_RESULT_UPDATED",
 	"SESSION_LIFECYCLE_CONTROL",
 	"SESSION_COMPLETED",
@@ -366,6 +368,10 @@ func (r *sessionProjectionReducer) apply(raw json.RawMessage) error {
 	switch strings.TrimSpace(envelope.Type) {
 	case "SESSION_STARTED":
 		return r.applySessionStarted(envelope)
+	case "SESSION_PAUSED":
+		return r.applySessionPaused(envelope)
+	case "SESSION_RESUMED":
+		return r.applySessionResumed(envelope)
 	case "SESSION_RESULT_UPDATED":
 		return r.applySessionResultUpdated(envelope)
 	case "SESSION_LIFECYCLE_CONTROL":
@@ -423,6 +429,48 @@ func (r *sessionProjectionReducer) applySessionStarted(envelope canonicalFactory
 	}
 	r.session.Progress = &ProgressCounts{}
 	r.session.Usage = EmptySessionUsage()
+	return nil
+}
+
+func (r *sessionProjectionReducer) applySessionPaused(envelope canonicalFactoryEvent) error {
+	var payload struct {
+		Status   string `json:"status"`
+		PausedAt string `json:"pausedAt"`
+	}
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("unmarshal SESSION_PAUSED payload: %w", err)
+	}
+	pausedAt, err := time.Parse(time.RFC3339, strings.TrimSpace(payload.PausedAt))
+	if err != nil {
+		return fmt.Errorf("parse pausedAt: %w", err)
+	}
+	r.session.Status = LifecycleStatusPaused
+	r.result.SessionStatus = LifecycleStatusPaused
+	if r.session.Lifecycle == nil {
+		r.session.Lifecycle = &LifecycleTimestamps{}
+	}
+	r.session.Lifecycle.PausedAt = timePtr(pausedAt.UTC())
+	return nil
+}
+
+func (r *sessionProjectionReducer) applySessionResumed(envelope canonicalFactoryEvent) error {
+	var payload struct {
+		Status    string `json:"status"`
+		ResumedAt string `json:"resumedAt"`
+	}
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("unmarshal SESSION_RESUMED payload: %w", err)
+	}
+	resumedAt, err := time.Parse(time.RFC3339, strings.TrimSpace(payload.ResumedAt))
+	if err != nil {
+		return fmt.Errorf("parse resumedAt: %w", err)
+	}
+	r.session.Status = LifecycleStatusRunning
+	r.result.SessionStatus = LifecycleStatusRunning
+	if r.session.Lifecycle == nil {
+		r.session.Lifecycle = &LifecycleTimestamps{}
+	}
+	r.session.Lifecycle.ResumedAt = timePtr(resumedAt.UTC())
 	return nil
 }
 

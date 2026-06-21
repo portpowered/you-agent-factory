@@ -30,6 +30,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestSessionScopedRecordPath_ReplacesGeneratedSessionTokenPerSession(t *testing.T) {
@@ -1759,4 +1760,542 @@ func sessionHasWorkAtPlace(t *testing.T, svc *FactoryService, sessionID, placeID
 		}
 	}
 	return false
+}
+
+func TestFactoryService_PauseLiveFactorySession_AcceptsRunningSession(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	response, err := harness.svc.PauseLiveFactorySession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	)
+	if err != nil {
+		t.Fatalf("PauseLiveFactorySession: %v", err)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindPause {
+		t.Fatalf("operation = %q, want PAUSE", response.Operation)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("status = %q, want PAUSED", response.Status)
+	}
+
+	waitForSessionFactoryState(
+		t,
+		harness.svc,
+		defaultFactorySessionID,
+		interfaces.FactoryStatePaused,
+		time.Second,
+		"live session paused",
+	)
+}
+
+func TestFactoryService_ResumeLiveFactorySession_AcceptsPausedSession(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	if _, err := harness.svc.PauseLiveFactorySession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	); err != nil {
+		t.Fatalf("PauseLiveFactorySession: %v", err)
+	}
+
+	response, err := harness.svc.ResumeLiveFactorySession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	)
+	if err != nil {
+		t.Fatalf("ResumeLiveFactorySession: %v", err)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindResume {
+		t.Fatalf("operation = %q, want RESUME", response.Operation)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", response.Status)
+	}
+}
+
+func TestFactoryService_PauseLiveFactorySession_RepeatPauseReturnsNoOp(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	if _, err := harness.svc.PauseLiveFactorySession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	); err != nil {
+		t.Fatalf("PauseLiveFactorySession: %v", err)
+	}
+
+	response, err := harness.svc.PauseLiveFactorySession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	)
+	if err != nil {
+		t.Fatalf("repeat PauseLiveFactorySession: %v", err)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeNoOp {
+		t.Fatalf("outcome = %q, want NO_OP", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("status = %q, want PAUSED", response.Status)
+	}
+}
+
+func TestFactoryService_PauseLiveFactorySession_MissingSessionReturnsNotFound(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	_, err := harness.svc.PauseLiveFactorySession(
+		context.Background(),
+		"live-session-missing-001",
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	)
+	if err == nil {
+		t.Fatal("PauseLiveFactorySession = nil, want not found")
+	}
+	if !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+		t.Fatalf("error = %v, want ErrFactorySessionNotFound", err)
+	}
+}
+
+func TestFactoryService_ResumeLiveFactorySession_RunningSessionReturnsNoOp(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	response, err := harness.svc.ResumeLiveFactorySession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	)
+	if err != nil {
+		t.Fatalf("ResumeLiveFactorySession: %v", err)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeNoOp {
+		t.Fatalf("outcome = %q, want NO_OP", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", response.Status)
+	}
+}
+
+func TestObserveLiveLifecycleControl_LogsAcceptedPauseWithoutSensitiveFields(t *testing.T) {
+	core, observed := observer.New(zap.InfoLevel)
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	harness.svc.logger = zap.New(core)
+	defer harness.stop(t)
+
+	if _, err := harness.svc.PauseLiveFactorySession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySessionLifecycleControlRequest{
+			RequestId: strPtr("pause-req-001"),
+			Reason:    strPtr("operator pause with secret /Users/me/prompt.txt"),
+		},
+	); err != nil {
+		t.Fatalf("PauseLiveFactorySession: %v", err)
+	}
+
+	entry := findLifecycleControlLog(t, observed, "factory session lifecycle control")
+	assertLogField(t, entry, "session_id", defaultFactorySessionID)
+	assertLogField(t, entry, "operation", "PAUSE")
+	assertLogField(t, entry, "outcome", "ACCEPTED")
+	assertLogField(t, entry, "lifecycle_control_status", "PAUSED")
+	assertLogField(t, entry, "request_id", "pause-req-001")
+	assertLogDoesNotContain(t, entry, "prompt")
+	assertLogDoesNotContain(t, entry, "/Users/")
+}
+
+func TestObserveLiveLifecycleControl_LogsNoOpRepeatPause(t *testing.T) {
+	core, observed := observer.New(zap.InfoLevel)
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	harness.svc.logger = zap.New(core)
+	defer harness.stop(t)
+
+	if _, err := harness.svc.PauseLiveFactorySession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	); err != nil {
+		t.Fatalf("initial PauseLiveFactorySession: %v", err)
+	}
+	observed.TakeAll()
+
+	if _, err := harness.svc.PauseLiveFactorySession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	); err != nil {
+		t.Fatalf("repeat PauseLiveFactorySession: %v", err)
+	}
+
+	entry := findLifecycleControlLog(t, observed, "factory session lifecycle control")
+	assertLogField(t, entry, "outcome", "NO_OP")
+}
+
+func TestObserveLiveLifecycleControl_LogsNoOpResume(t *testing.T) {
+	core, observed := observer.New(zap.InfoLevel)
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	harness.svc.logger = zap.New(core)
+	defer harness.stop(t)
+
+	response, err := harness.svc.ResumeLiveFactorySession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	)
+	if err != nil {
+		t.Fatalf("ResumeLiveFactorySession: %v", err)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeNoOp {
+		t.Fatalf("outcome = %q, want NO_OP", response.Outcome)
+	}
+
+	entry := findLifecycleControlLog(t, observed, "factory session lifecycle control")
+	assertLogField(t, entry, "operation", "RESUME")
+	assertLogField(t, entry, "outcome", "NO_OP")
+}
+
+func TestObserveLiveLifecycleControl_LogsNotFound(t *testing.T) {
+	core, observed := observer.New(zap.WarnLevel)
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	harness.svc.logger = zap.New(core)
+	defer harness.stop(t)
+
+	_, err := harness.svc.PauseLiveFactorySession(
+		context.Background(),
+		"live-session-missing-001",
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	)
+	if err == nil {
+		t.Fatal("PauseLiveFactorySession = nil, want not found")
+	}
+	if !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+		t.Fatalf("error = %v, want ErrFactorySessionNotFound", err)
+	}
+
+	entry := findLifecycleControlLog(t, observed, "factory session lifecycle control rejected")
+	assertLogField(t, entry, "session_id", "live-session-missing-001")
+	assertLogField(t, entry, "outcome", "NOT_FOUND")
+}
+
+func TestObserveLiveLifecycleControl_EmitsAcceptedPauseMetric(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	session := harness.svc.sessionByID(defaultFactorySessionID)
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.metricsSink == nil {
+		t.Fatal("live session runtime metrics sink is required")
+	}
+	metricsPath := liveSessionHandle(session).runtime.metricsSink.Path()
+
+	if _, err := harness.svc.PauseLiveFactorySession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	); err != nil {
+		t.Fatalf("PauseLiveFactorySession: %v", err)
+	}
+
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricLifecycleControl, 1) &&
+			metricRecordString(record, "outcome") == "ACCEPTED" &&
+			metricRecordString(record, "reason") == "PAUSE"
+	}, "accepted pause lifecycle control")
+}
+
+func findLifecycleControlLog(t *testing.T, observed *observer.ObservedLogs, message string) observer.LoggedEntry {
+	t.Helper()
+	for _, entry := range observed.All() {
+		if entry.Message == message {
+			return entry
+		}
+	}
+	t.Fatalf("lifecycle control log %q not found in %#v", message, observed.All())
+	return observer.LoggedEntry{}
+}
+
+func assertLogField(t *testing.T, entry observer.LoggedEntry, key, want string) {
+	t.Helper()
+	for _, field := range entry.Context {
+		if field.Key != key {
+			continue
+		}
+		if field.String == want {
+			return
+		}
+		t.Fatalf("log field %q = %q, want %q", key, field.String, want)
+	}
+	t.Fatalf("log field %q missing from %#v", key, entry.Context)
+}
+
+func assertLogDoesNotContain(t *testing.T, entry observer.LoggedEntry, fragment string) {
+	t.Helper()
+	for _, field := range entry.Context {
+		if strings.Contains(field.String, fragment) {
+			t.Fatalf("log field %q leaked %q: %q", field.Key, fragment, field.String)
+		}
+	}
+}
+
+func TestFactoryService_GetFactorySession_ReflectsPausedLifecycleControlStatus(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	if _, err := harness.svc.PauseLiveFactorySession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	); err != nil {
+		t.Fatalf("PauseLiveFactorySession: %v", err)
+	}
+
+	waitForSessionFactoryState(
+		t,
+		harness.svc,
+		defaultFactorySessionID,
+		interfaces.FactoryStatePaused,
+		time.Second,
+		"live session paused",
+	)
+
+	session, err := harness.svc.GetFactorySession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetFactorySession: %v", err)
+	}
+	if session.Runtime.LifecycleControlStatus == nil {
+		t.Fatal("lifecycleControlStatus = nil, want PAUSED")
+	}
+	if *session.Runtime.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("lifecycleControlStatus = %q, want PAUSED", *session.Runtime.LifecycleControlStatus)
+	}
+	if session.Runtime.Progress.FactoryState != string(interfaces.FactoryStatePaused) {
+		t.Fatalf("progress.factoryState = %q, want raw engine snapshot PAUSED", session.Runtime.Progress.FactoryState)
+	}
+}
+
+func TestFactoryService_GetFactorySession_UntouchedSessionPreservesRawFactoryState(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	snapshot, err := harness.svc.GetEngineStateSnapshotForSession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshotForSession: %v", err)
+	}
+
+	session, err := harness.svc.GetFactorySession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetFactorySession: %v", err)
+	}
+	if session.Runtime.LifecycleControlStatus != nil {
+		t.Fatalf("lifecycleControlStatus = %#v, want unset before canonical pause/resume events", session.Runtime.LifecycleControlStatus)
+	}
+	if session.Runtime.Progress.FactoryState != snapshot.FactoryState {
+		t.Fatalf("progress.factoryState = %q, want raw engine snapshot %q", session.Runtime.Progress.FactoryState, snapshot.FactoryState)
+	}
+}
+
+func TestFactoryService_GetFactorySession_ReflectsResumedLifecycleControlStatus(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	if _, err := harness.svc.PauseLiveFactorySession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	); err != nil {
+		t.Fatalf("PauseLiveFactorySession: %v", err)
+	}
+	if _, err := harness.svc.ResumeLiveFactorySession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	); err != nil {
+		t.Fatalf("ResumeLiveFactorySession: %v", err)
+	}
+
+	waitForSessionFactoryState(
+		t,
+		harness.svc,
+		defaultFactorySessionID,
+		interfaces.FactoryStateRunning,
+		time.Second,
+		"live session resumed",
+	)
+
+	session, err := harness.svc.GetFactorySession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetFactorySession: %v", err)
+	}
+	if session.Runtime.LifecycleControlStatus == nil {
+		t.Fatal("lifecycleControlStatus = nil, want RUNNING")
+	}
+	if *session.Runtime.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("lifecycleControlStatus = %q, want RUNNING", *session.Runtime.LifecycleControlStatus)
+	}
+}
+
+func TestFactoryService_GetFactorySession_RepeatPauseDoesNotChangeLifecycleControlStatus(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	if _, err := harness.svc.PauseLiveFactorySession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	); err != nil {
+		t.Fatalf("PauseLiveFactorySession: %v", err)
+	}
+	before, err := harness.svc.GetFactorySession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetFactorySession before repeat pause: %v", err)
+	}
+
+	if _, err := harness.svc.PauseLiveFactorySession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	); err != nil {
+		t.Fatalf("repeat PauseLiveFactorySession: %v", err)
+	}
+	after, err := harness.svc.GetFactorySession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetFactorySession after repeat pause: %v", err)
+	}
+	if before.Runtime.LifecycleControlStatus == nil || after.Runtime.LifecycleControlStatus == nil {
+		t.Fatalf("lifecycleControlStatus missing: before=%#v after=%#v", before.Runtime.LifecycleControlStatus, after.Runtime.LifecycleControlStatus)
+	}
+	if *before.Runtime.LifecycleControlStatus != *after.Runtime.LifecycleControlStatus {
+		t.Fatalf("lifecycleControlStatus changed after no-op pause: before=%q after=%q",
+			*before.Runtime.LifecycleControlStatus, *after.Runtime.LifecycleControlStatus)
+	}
+}
+
+func TestFactoryService_GetEngineStateSnapshotForSession_ReflectsLifecycleControlStatus(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	if _, err := harness.svc.PauseLiveFactorySession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	); err != nil {
+		t.Fatalf("PauseLiveFactorySession: %v", err)
+	}
+
+	snapshot, err := harness.svc.GetEngineStateSnapshotForSession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshotForSession: %v", err)
+	}
+	if snapshot.LifecycleControlStatus != string(factoryapi.FactorySessionDurableLifecycleStatusPaused) {
+		t.Fatalf("lifecycleControlStatus = %q, want PAUSED", snapshot.LifecycleControlStatus)
+	}
+}
+
+func TestGetStatusBySessionId_ReflectsPausedLifecycleControlStatus(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	if _, err := harness.svc.PauseLiveFactorySession(
+		context.Background(),
+		defaultFactorySessionID,
+		factoryapi.FactorySessionLifecycleControlRequest{},
+	); err != nil {
+		t.Fatalf("PauseLiveFactorySession: %v", err)
+	}
+
+	server := newLiveSessionStatusTestServer(t, harness.svc)
+	defer server.Close()
+
+	req, err := http.NewRequest(http.MethodGet, server.URL+"/factory-sessions/"+defaultFactorySessionID+"/status", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET status: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status code = %d, want 200", resp.StatusCode)
+	}
+
+	var payload factoryapi.StatusResponse
+	if err := decodeJSONResponse(resp, &payload); err != nil {
+		t.Fatalf("decode status response: %v", err)
+	}
+	if payload.LifecycleControlStatus == nil {
+		t.Fatal("lifecycleControlStatus = nil, want PAUSED")
+	}
+	if *payload.LifecycleControlStatus != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("lifecycleControlStatus = %q, want PAUSED", *payload.LifecycleControlStatus)
+	}
+}
+
+func TestGetFactorySession_MissingLiveSessionReturnsNotFound(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	_, err := harness.svc.GetFactorySession(context.Background(), "live-session-missing-001")
+	if err == nil {
+		t.Fatal("GetFactorySession = nil, want not found")
+	}
+	if !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+		t.Fatalf("error = %v, want ErrFactorySessionNotFound", err)
+	}
+}
+
+func newLiveSessionStatusTestServer(t *testing.T, svc *FactoryService) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(api.NewServer(svc, 0, zap.NewNop()).Handler())
+}
+
+func decodeJSONResponse(resp *http.Response, target any) error {
+	decoder := json.NewDecoder(resp.Body)
+	return decoder.Decode(target)
 }

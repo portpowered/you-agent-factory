@@ -159,7 +159,9 @@ const (
 	FactoryEventTypeScriptResponse                FactoryEventType = "SCRIPT_RESPONSE"
 	FactoryEventTypeSessionCompleted              FactoryEventType = "SESSION_COMPLETED"
 	FactoryEventTypeSessionLifecycleControl       FactoryEventType = "SESSION_LIFECYCLE_CONTROL"
+	FactoryEventTypeSessionPaused                 FactoryEventType = "SESSION_PAUSED"
 	FactoryEventTypeSessionResultUpdated          FactoryEventType = "SESSION_RESULT_UPDATED"
+	FactoryEventTypeSessionResumed                FactoryEventType = "SESSION_RESUMED"
 	FactoryEventTypeSessionStarted                FactoryEventType = "SESSION_STARTED"
 	FactoryEventTypeWorkRequest                   FactoryEventType = "WORK_REQUEST"
 	FactoryEventTypeWorkStateChange               FactoryEventType = "WORK_STATE_CHANGE"
@@ -722,6 +724,11 @@ const (
 	WorkstationKindPoller   WorkstationKind = "POLLER"
 	WorkstationKindRepeater WorkstationKind = "REPEATER"
 	WorkstationKindStandard WorkstationKind = "STANDARD"
+)
+
+// Defines values for WorkstationOutcomeFormat.
+const (
+	WorkstationOutcomeFormatDecisionEnvelope WorkstationOutcomeFormat = "decision-envelope"
 )
 
 // Defines values for WorkstationType.
@@ -2399,6 +2406,9 @@ type FactorySessionRuntime struct {
 	Dispatches *[]FactoryDispatch                  `json:"dispatches,omitempty"`
 	Javascript *FactorySessionJavaScriptProjection `json:"javascript,omitempty"`
 	Lifecycle  FactorySessionLifecycle             `json:"lifecycle"`
+
+	// LifecycleControlStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	LifecycleControlStatus *FactorySessionDurableLifecycleStatus `json:"lifecycleControlStatus,omitempty"`
 
 	// OrchestratorKind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
 	OrchestratorKind FactoryOrchestratorKind        `json:"orchestratorKind"`
@@ -4091,6 +4101,15 @@ type SessionLifecycleControlEventPayload struct {
 	Reason *string `json:"reason,omitempty"`
 }
 
+// SessionPausedEventPayload Factory Session lifecycle pause recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only.
+type SessionPausedEventPayload struct {
+	// PausedAt When the Factory Session entered PAUSED.
+	PausedAt time.Time `json:"pausedAt"`
+
+	// Status Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	Status FactorySessionDurableLifecycleStatus `json:"status"`
+}
+
 // SessionResultUpdatedEventPayload Partial or final session result availability on the canonical factory event stream. Identity and ordering live in FactoryEvent.context.
 type SessionResultUpdatedEventPayload struct {
 	// ArtifactIds Artifact identifiers associated with this result update.
@@ -4101,6 +4120,15 @@ type SessionResultUpdatedEventPayload struct {
 
 	// ResultSummary Ordered canonical content parts for one work item.
 	ResultSummary *WorkContent `json:"resultSummary,omitempty"`
+}
+
+// SessionResumedEventPayload Factory Session lifecycle resume recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only.
+type SessionResumedEventPayload struct {
+	// ResumedAt When the Factory Session returned to RUNNING.
+	ResumedAt time.Time `json:"resumedAt"`
+
+	// Status Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	Status FactorySessionDurableLifecycleStatus `json:"status"`
 }
 
 // SessionStartedEventPayload Session execution start recorded on the canonical factory event stream. Session and orchestrator identity live in FactoryEvent.context; this payload carries replay-safe factory and source facts only.
@@ -4164,11 +4192,14 @@ type StatusCategories struct {
 
 // StatusResponse defines model for StatusResponse.
 type StatusResponse struct {
-	Categories    StatusCategories `json:"categories"`
-	FactoryState  string           `json:"factoryState"`
-	Resources     *[]ResourceUsage `json:"resources,omitempty"`
-	RuntimeStatus string           `json:"runtimeStatus"`
-	TotalTokens   int              `json:"totalTokens"`
+	Categories   StatusCategories `json:"categories"`
+	FactoryState string           `json:"factoryState"`
+
+	// LifecycleControlStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	LifecycleControlStatus *FactorySessionDurableLifecycleStatus `json:"lifecycleControlStatus,omitempty"`
+	Resources              *[]ResourceUsage                      `json:"resources,omitempty"`
+	RuntimeStatus          string                                `json:"runtimeStatus"`
+	TotalTokens            int                                   `json:"totalTokens"`
 }
 
 // StringMap defines model for StringMap.
@@ -4987,6 +5018,9 @@ type Workstation struct {
 	// OperationBindings Optional workstation-authored slot bindings that resolve operation inputs from runtime content or static config content.
 	OperationBindings *[]WorkstationOperationBinding `json:"operationBindings,omitempty"`
 
+	// OutcomeFormat Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+	OutcomeFormat *WorkstationOutcomeFormat `json:"outcomeFormat,omitempty"`
+
 	// OutputSchema JSON schema string used to validate or parse structured model output when configured.
 	OutputSchema *string `json:"outputSchema,omitempty"`
 
@@ -5089,6 +5123,9 @@ type WorkstationOperationBindingSelector struct {
 	// Type Uppercase content-part categories supported by worker model-operation capability slots.
 	Type *ModelOperationContentType `json:"type,omitempty"`
 }
+
+// WorkstationOutcomeFormat Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+type WorkstationOutcomeFormat string
 
 // WorkstationType Runtime workstation implementation types supported by the public factory-config contract.
 type WorkstationType string
@@ -5876,6 +5913,58 @@ func (t *FactoryEvent_Payload) FromSessionStartedEventPayload(v SessionStartedEv
 
 // MergeSessionStartedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided SessionStartedEventPayload
 func (t *FactoryEvent_Payload) MergeSessionStartedEventPayload(v SessionStartedEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionPausedEventPayload returns the union data inside the FactoryEvent_Payload as a SessionPausedEventPayload
+func (t FactoryEvent_Payload) AsSessionPausedEventPayload() (SessionPausedEventPayload, error) {
+	var body SessionPausedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionPausedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided SessionPausedEventPayload
+func (t *FactoryEvent_Payload) FromSessionPausedEventPayload(v SessionPausedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionPausedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided SessionPausedEventPayload
+func (t *FactoryEvent_Payload) MergeSessionPausedEventPayload(v SessionPausedEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsSessionResumedEventPayload returns the union data inside the FactoryEvent_Payload as a SessionResumedEventPayload
+func (t FactoryEvent_Payload) AsSessionResumedEventPayload() (SessionResumedEventPayload, error) {
+	var body SessionResumedEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionResumedEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided SessionResumedEventPayload
+func (t *FactoryEvent_Payload) FromSessionResumedEventPayload(v SessionResumedEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionResumedEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided SessionResumedEventPayload
+func (t *FactoryEvent_Payload) MergeSessionResumedEventPayload(v SessionResumedEventPayload) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

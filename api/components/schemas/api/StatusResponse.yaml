@@ -10,6 +10,12 @@ properties:
     $ref: './StatusCategories.yaml'
   factoryState:
     type: string
+  lifecycleControlStatus:
+    $ref: './FactorySessionDurableLifecycleStatus.yaml'
+    description: >-
+      Canonical Factory Session lifecycle-control status reconstructed from
+      SESSION_PAUSED and SESSION_RESUMED events when present. Live status reads
+      report PAUSED after a successful pause and RUNNING after a successful resume.
   runtimeStatus:
     type: string
   totalTokens:

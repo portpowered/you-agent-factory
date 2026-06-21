@@ -514,6 +514,7 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 		Type:                  internalFactoryWorkstationTypeFromPublic(workstation.Type),
 		PromptFile:            stringValue(workstation.PromptFile),
 		OutputSchema:          stringValue(workstation.OutputSchema),
+		OutcomeFormat:         enumStringValue(workstation.OutcomeFormat),
 		Limits:                workstationLimitsInternalFromAPI(workstation.Limits),
 		WorkPropagation:       workPropagationInternalFromAPI(workstation.WorkPropagation),
 		Cron:                  workstationCronInternalFromAPI(workstation.Cron),

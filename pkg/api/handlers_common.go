@@ -463,6 +463,7 @@ func (s *Server) handleLiveLifecycleControl(
 	w http.ResponseWriter,
 	r *http.Request,
 	sessionID factoryapi.SessionID,
+	operation string,
 	invoke func(apisurface.SessionAPI, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
 ) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
@@ -482,22 +483,19 @@ func (s *Server) handleLiveLifecycleControl(
 
 	response, err := invoke(sessionRuntime, req)
 	if err != nil {
-		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
-			s.writeError(w, http.StatusNotFound, "factory session not found", "NOT_FOUND")
-			return
-		}
 		if s.writeDurableLifecycleControlError(w, string(sessionID), err) {
 			return
 		}
 		s.logger.Error("live factory session lifecycle control failed",
 			zap.Error(err),
 			zap.String("session_id", string(sessionID)),
+			zap.String("operation", operation),
 		)
 		s.writeError(w, http.StatusInternalServerError, "live factory session lifecycle control failed", "INTERNAL_ERROR")
 		return
 	}
 
-	s.writeJSON(w, http.StatusOK, response)
+	s.writeJSON(w, factorysession.LifecycleControlSuccessStatus(factorysession.LifecycleControlResultFromAPI(response)), response)
 }
 
 func decodeOptionalLifecycleControlRequest(body io.Reader) (factoryapi.FactorySessionLifecycleControlRequest, error) {
@@ -641,7 +639,7 @@ func (s *Server) PauseFactorySession(w http.ResponseWriter, r *http.Request, ses
 		})
 		return
 	}
-	s.handleLiveLifecycleControl(w, r, sessionID, func(
+	s.handleLiveLifecycleControl(w, r, sessionID, "pause", func(
 		sessionRuntime apisurface.SessionAPI,
 		req factoryapi.FactorySessionLifecycleControlRequest,
 	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
@@ -659,7 +657,7 @@ func (s *Server) ResumeFactorySession(w http.ResponseWriter, r *http.Request, se
 		})
 		return
 	}
-	s.handleLiveLifecycleControl(w, r, sessionID, func(
+	s.handleLiveLifecycleControl(w, r, sessionID, "resume", func(
 		sessionRuntime apisurface.SessionAPI,
 		req factoryapi.FactorySessionLifecycleControlRequest,
 	) (factoryapi.FactorySessionLifecycleControlResponse, error) {

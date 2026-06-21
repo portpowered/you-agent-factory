@@ -325,6 +325,10 @@ type EngineStateSnapshot[TMarking any, TTopology any] struct {
 	// Factory lifecycle state.
 	FactoryState string `json:"factory_state"`
 
+	// LifecycleControlStatus is the canonical pause/resume lifecycle status
+	// reconstructed from SESSION_PAUSED and SESSION_RESUMED events when present.
+	LifecycleControlStatus string `json:"lifecycle_control_status,omitempty"`
+
 	// Uptime since the factory started.
 	Uptime time.Duration `json:"uptime"`
 

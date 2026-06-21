@@ -1,0 +1,17 @@
+type: object
+additionalProperties: false
+description: >-
+  Factory Session lifecycle pause recorded on the canonical factory event stream.
+  Session identity lives in FactoryEvent.context; this payload carries replay-safe
+  control-transition facts only.
+required:
+  - status
+  - pausedAt
+properties:
+  status:
+    $ref: '../../api/FactorySessionDurableLifecycleStatus.yaml'
+    description: Lifecycle status after a successful pause control.
+  pausedAt:
+    type: string
+    format: date-time
+    description: When the Factory Session entered PAUSED.

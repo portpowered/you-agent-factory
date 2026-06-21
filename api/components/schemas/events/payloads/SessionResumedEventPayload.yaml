@@ -1,0 +1,17 @@
+type: object
+additionalProperties: false
+description: >-
+  Factory Session lifecycle resume recorded on the canonical factory event stream.
+  Session identity lives in FactoryEvent.context; this payload carries replay-safe
+  control-transition facts only.
+required:
+  - status
+  - resumedAt
+properties:
+  status:
+    $ref: '../../api/FactorySessionDurableLifecycleStatus.yaml'
+    description: Lifecycle status after a successful resume control.
+  resumedAt:
+    type: string
+    format: date-time
+    description: When the Factory Session returned to RUNNING.

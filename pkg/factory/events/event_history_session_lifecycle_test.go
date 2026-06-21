@@ -164,3 +164,47 @@ func assertSessionLifecycleEventType(
 		t.Fatalf("event id = %q, want %q", event.Id, wantID)
 	}
 }
+
+func TestFactoryEventHistory_RecordSessionPauseResume_EmitsReconstructableControlStatus(t *testing.T) {
+	t0 := time.Date(2026, 6, 20, 10, 0, 0, 0, time.UTC)
+	history := NewFactoryEventHistory(nil, func() time.Time { return t0 })
+	history.RecordSessionLifecycleFromFactoryConfig("session-live", &interfaces.FactoryConfig{
+		Name: "factory-live",
+		Orchestrator: &interfaces.FactoryOrchestratorConfig{
+			Kind: interfaces.OrchestratorKindPetri,
+		},
+	}, 0, t0)
+	history.RecordSessionPaused(SessionLifecycleControlInput{
+		SessionID:        "session-live",
+		OrchestratorKind: factoryapi.PETRI,
+		Source:           "runtime",
+		Tick:             1,
+	}, t0.Add(time.Second))
+	history.RecordSessionResumed(SessionLifecycleControlInput{
+		SessionID:        "session-live",
+		OrchestratorKind: factoryapi.PETRI,
+		Source:           "runtime",
+		Tick:             2,
+	}, t0.Add(2*time.Second))
+
+	events := history.Events()
+	if len(events) != 3 {
+		t.Fatalf("events = %d, want started, paused, resumed", len(events))
+	}
+	assertSessionLifecycleEventType(t, events[1], factoryapi.FactoryEventTypeSessionPaused, "factory-event/session-paused/1")
+	assertSessionLifecycleEventType(t, events[2], factoryapi.FactoryEventTypeSessionResumed, "factory-event/session-resumed/2")
+
+	worldState, err := projections.ReconstructFactoryWorldState(events, 2)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	if worldState.SessionBracket == nil {
+		t.Fatal("session bracket = nil, want pause/resume lifecycle")
+	}
+	if worldState.SessionBracket.LifecycleControlStatus != string(factoryapi.FactorySessionDurableLifecycleStatusRunning) {
+		t.Fatalf("lifecycle control status = %q, want RUNNING", worldState.SessionBracket.LifecycleControlStatus)
+	}
+	if worldState.SessionBracket.PausedAt.IsZero() || worldState.SessionBracket.ResumedAt.IsZero() {
+		t.Fatalf("paused/resumed timestamps = %#v, want both set", worldState.SessionBracket)
+	}
+}

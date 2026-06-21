@@ -21,6 +21,8 @@ x-enum-varnames:
   - FactoryEventTypeFactoryStateResponse
   - FactoryEventTypeRunResponse
   - FactoryEventTypeSessionStarted
+  - FactoryEventTypeSessionPaused
+  - FactoryEventTypeSessionResumed
   - FactoryEventTypeSessionResultUpdated
   - FactoryEventTypeSessionCompleted
   - FactoryEventTypeSessionLifecycleControl
@@ -50,6 +52,8 @@ enum:
   - FACTORY_STATE_RESPONSE
   - RUN_RESPONSE
   - SESSION_STARTED
+  - SESSION_PAUSED
+  - SESSION_RESUMED
   - SESSION_RESULT_UPDATED
   - SESSION_COMPLETED
   - SESSION_LIFECYCLE_CONTROL
@@ -79,6 +83,8 @@ x-enum-descriptions:
   - The factory lifecycle state response was recorded.
   - A factory run response ended and final metadata is available.
   - Durable factory session execution started and replay-safe session facts are available.
+  - A Factory Session lifecycle pause control transitioned the session into PAUSED.
+  - A Factory Session lifecycle resume control transitioned the session into RUNNING.
   - Partial or final customer-visible session result availability was recorded.
   - Durable factory session execution reached a terminal lifecycle state.
   - Durable factory session lifecycle control was applied or recorded for replay.

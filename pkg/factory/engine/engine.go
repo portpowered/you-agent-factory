@@ -43,6 +43,7 @@ type FactoryEngine struct {
 	dispatchHook           factory.DispatchResultHook
 	resultHandler          func() // called when a result event is processed (e.g. decrement in-flight counter)
 	automaticTicksPaused   func() bool
+	onResultBufferDrained  func(drainedCount int)
 	mu                     sync.Mutex
 	transformer            *token_transformer.Transformer
 	acceptingSubmits       bool
@@ -103,12 +104,17 @@ func (e *FactoryEngine) drainPendingResults() {
 		return
 	}
 
+	drained := 0
 	for {
 		result, ok := buffer.Read()
 		if !ok {
-			return
+			break
 		}
 		e.appendObservedResult(result)
+		drained++
+	}
+	if drained > 0 && e.onResultBufferDrained != nil {
+		e.onResultBufferDrained(drained)
 	}
 }
 
