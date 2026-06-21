@@ -5,7 +5,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { FactorySessionsAPIError } from "../../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
-import { factorySessionFieldTarget } from "../../../testing/factory-validation-target-fixtures";
+import {
+  factorySessionFieldTarget,
+  factorySessionTargetTarget,
+} from "../../../testing/factory-validation-target-fixtures";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import {
   SESSION_TAB_PATH_MAX_LENGTH,
@@ -1181,6 +1184,181 @@ describe("DashboardSessionTabs", () => {
         }) as HTMLInputElement
       ).value,
     ).toBe(emptyFolderPath);
+  });
+
+  it("shows inline config-load diagnostics instead of init-new-factory actions for broken folders", async () => {
+    const selectedFolderPath = "/workspace/broken-project";
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+    ]);
+    openFactorySession.mockRejectedValueOnce(
+      new FactorySessionsAPIError(
+        "factory configuration could not be loaded from the selected folder",
+        {
+          code: "FACTORY_SESSION_CONFIG_LOAD_FAILED",
+          targets: [
+            factorySessionTargetTarget(
+              "config_load_failed",
+              "default",
+              'Factory target "default" at "/workspace/broken-project" could not be loaded: unexpected end of JSON input',
+            ),
+          ],
+        },
+      ),
+    );
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+    const messages = getHeaderControlsMessages("en");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+      ).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder),
+      {
+        target: { value: selectedFolderPath },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: messages.openSessionSubmitLabel })
+        .closest("form") as HTMLFormElement,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "factory configuration could not be loaded from the selected folder",
+        ),
+      ).toBeTruthy();
+    });
+
+    expect(
+      screen.getByText(
+        'Factory target "default" at "/workspace/broken-project" could not be loaded: unexpected end of JSON input',
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", {
+        name: messages.openSessionCreateFactoryLabel,
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByText(messages.openSessionFolderUnknownError),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("tab", { name: "broken-project" }),
+    ).toBeNull();
+  });
+
+  it("keeps config-load diagnostics inline when the selected target fails during open", async () => {
+    const selectedFolderPath = "/workspace/broken-project";
+    const targetLoadMessage =
+      'Factory target "review" at "/workspace/broken-project/review" could not be loaded: unknown workstation runner';
+    listFactorySessions.mockResolvedValue([
+      {
+        factoryDir: "/workspace/root",
+        folderPath: "/workspace/root",
+        id: "~default",
+        isDefault: true,
+        project: "root",
+        target: {
+          kind: "default",
+        },
+      },
+    ]);
+    openFactorySession
+      .mockResolvedValueOnce({
+        targets: [
+          {
+            factoryDir: "/workspace/broken-project/review",
+            folderPath: selectedFolderPath,
+            label: "review",
+            project: "broken-project",
+            ref: {
+              kind: "named",
+              name: "review",
+            },
+          },
+        ],
+      })
+      .mockRejectedValueOnce(
+        new FactorySessionsAPIError(
+          "factory configuration could not be loaded from the selected folder",
+          {
+            code: "FACTORY_SESSION_CONFIG_LOAD_FAILED",
+            targets: [
+              factorySessionTargetTarget(
+                "config_load_failed",
+                "review",
+                targetLoadMessage,
+              ),
+            ],
+          },
+        ),
+      );
+
+    renderWithQueryClient(<DashboardSessionTabs locale="en" />);
+    const messages = getHeaderControlsMessages("en");
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+      ).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", { name: messages.openSessionButtonLabel }),
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText(messages.sessionFolderFieldPlaceholder),
+      {
+        target: { value: selectedFolderPath },
+      },
+    );
+    fireEvent.submit(
+      screen
+        .getByRole("button", { name: messages.openSessionSubmitLabel })
+        .closest("form") as HTMLFormElement,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("/workspace/broken-project/review")).toBeTruthy();
+    });
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /review.*\/workspace\/broken-project\/review/i,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(targetLoadMessage)).toBeTruthy();
+    });
+
+    expect(
+      screen.queryByRole("button", {
+        name: messages.openSessionCreateFactoryLabel,
+      }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("tab", { name: "broken-project" }),
+    ).toBeNull();
   });
 
   it("closes the active session tab and selects the remaining session deterministically", async () => {

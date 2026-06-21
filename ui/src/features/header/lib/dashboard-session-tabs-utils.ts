@@ -17,6 +17,7 @@ export type FolderValidationState =
   | { status: "ready"; targets: FactorySessionTarget[] };
 
 export type FolderValidationErrorReason =
+  | "config_load_failed"
   | "required"
   | "missing"
   | "not_directory"
@@ -191,6 +192,9 @@ export function folderValidationStatusMessage(
         ? messages.openSessionLaunchReadyMultipleTargets
         : messages.openSessionLaunchReadySingleTarget;
     case "error":
+      if (validation.reason === "config_load_failed") {
+        return null;
+      }
       return folderValidationErrorMessage(validation.reason, messages);
     default:
       return null;
@@ -200,6 +204,10 @@ export function folderValidationStatusMessage(
 export function classifyFactorySessionFolderValidationError(
   error: FactorySessionsAPIError,
 ): FolderValidationErrorReason {
+  if (error.code === "FACTORY_SESSION_CONFIG_LOAD_FAILED") {
+    return "config_load_failed";
+  }
+
   const targetedReason = classifyFactorySessionFolderValidationTarget(
     error.targets,
   );
@@ -294,7 +302,7 @@ export function selectedFactorySessionTarget(
 }
 
 function folderValidationErrorMessage(
-  reason: FolderValidationErrorReason,
+  reason: Exclude<FolderValidationErrorReason, "config_load_failed">,
   messages: ReturnType<typeof getHeaderControlsMessages>,
 ): string {
   switch (reason) {
