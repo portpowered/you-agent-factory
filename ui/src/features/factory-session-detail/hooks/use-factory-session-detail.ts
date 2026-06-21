@@ -1,12 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
-import {
-  type FactorySession,
-  type FactorySessionDurableReadModel,
-  type FactorySessionLiveResult,
-  type FactorySessionPartialResult,
-  type FactorySessionsAPIError,
+import type {
+  FactorySession,
+  FactorySessionDurableReadModel,
+  FactorySessionLiveResult,
+  FactorySessionPartialResult,
+  FactorySessionsAPIError,
 } from "../../../api/factory-sessions";
 import { loadFactorySessionDetailData } from "./load-factory-session-detail-data";
 

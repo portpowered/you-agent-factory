@@ -1,6 +1,5 @@
 import {
   type FactorySession,
-  type FactorySessionDurableReadModel,
   type FactorySessionLiveResult,
   type FactorySessionPartialResult,
   durableResultSurfacesFromResultsResponse,
