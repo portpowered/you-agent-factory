@@ -15,6 +15,7 @@ import {
   getFactorySessionDurableResults,
   listFactorySessionDispatches,
 } from "./api-durable-inspection";
+import { getFactorySessionDispatchDetail } from "./dispatch-detail";
 
 describe("factory sessions API", () => {
   afterEach(() => {
@@ -686,7 +687,9 @@ describe("factory sessions API", () => {
       status: "SUCCEEDED",
       result: [{ type: "text", text: "done" }],
     });
-    await expect(getFactorySessionPartialResult("session-beta")).resolves.toEqual({
+    await expect(
+      getFactorySessionPartialResult("session-beta"),
+    ).resolves.toEqual({
       sessionId: "session-beta",
       status: "RUNNING",
       result: [{ type: "text", text: "partial" }],
@@ -795,6 +798,110 @@ describe("factory sessions API", () => {
     );
   });
 
+  it("loads one durable dispatch detail from the typed API surface", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          artifactIds: ["artifact-1"],
+          dispatchKind: "JAVASCRIPT_VERIFY",
+          id: "dispatch-1",
+          javascript: {
+            executionMode: "live",
+            taskKind: "VERIFY",
+            taskLabel: "verify release",
+          },
+          orchestratorKind: "JAVASCRIPT",
+          providerSessionRefs: [
+            {
+              id: "sess-1",
+              kind: "session_id",
+              provider: "codex",
+            },
+          ],
+          sessionId: "session-beta",
+          status: "FAILED",
+          statusTransitions: ["QUEUED", "RUNNING", "FAILED"],
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getFactorySessionDispatchDetail({
+        dispatch_id: "dispatch-1",
+        session_id: "session-beta",
+      }),
+    ).resolves.toEqual({
+      artifactIds: ["artifact-1"],
+      dispatchKind: "JAVASCRIPT_VERIFY",
+      id: "dispatch-1",
+      javascript: {
+        executionMode: "live",
+        taskKind: "VERIFY",
+        taskLabel: "verify release",
+      },
+      orchestratorKind: "JAVASCRIPT",
+      providerSessionRefs: [
+        {
+          id: "sess-1",
+          kind: "session_id",
+          provider: "codex",
+        },
+      ],
+      sessionId: "session-beta",
+      status: "FAILED",
+      statusTransitions: ["QUEUED", "RUNNING", "FAILED"],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions/session-beta/dispatches/dispatch-1",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("rejects invalid durable dispatch detail responses", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          dispatchKind: "JAVASCRIPT_VERIFY",
+          id: "dispatch-1",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getFactorySessionDispatchDetail({
+        dispatch_id: "dispatch-1",
+        session_id: "session-beta",
+      }),
+    ).rejects.toEqual(
+      new FactorySessionsAPIError(
+        "The factory sessions API returned an invalid response.",
+        {
+          code: "INTERNAL_ERROR",
+          responseBody: {
+            dispatchKind: "JAVASCRIPT_VERIFY",
+            id: "dispatch-1",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+  });
   it("deletes one live factory session from the typed API surface", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(null, {
