@@ -19,6 +19,7 @@ var SessionProjectionEventKinds = []string{
 	"SESSION_PAUSED",
 	"SESSION_RESUMED",
 	"SESSION_RESULT_UPDATED",
+	"SESSION_LIFECYCLE_CONTROL",
 	"SESSION_COMPLETED",
 	"ORCHESTRATOR_PHASE_CHANGED",
 	"ORCHESTRATOR_CHECKPOINT_WRITTEN",
@@ -373,6 +374,8 @@ func (r *sessionProjectionReducer) apply(raw json.RawMessage) error {
 		return r.applySessionResumed(envelope)
 	case "SESSION_RESULT_UPDATED":
 		return r.applySessionResultUpdated(envelope)
+	case "SESSION_LIFECYCLE_CONTROL":
+		return r.applySessionLifecycleControl(envelope)
 	case "SESSION_COMPLETED":
 		return r.applySessionCompleted(envelope)
 	default:
@@ -494,6 +497,43 @@ func (r *sessionProjectionReducer) applySessionResultUpdated(envelope canonicalF
 			Message:   strings.TrimSpace(payload.Availability.Message),
 			Retryable: payload.Availability.Retryable,
 		}
+	}
+	return nil
+}
+
+func (r *sessionProjectionReducer) applySessionLifecycleControl(envelope canonicalFactoryEvent) error {
+	var payload struct {
+		Operation      string `json:"operation"`
+		Outcome        string `json:"outcome"`
+		PreviousStatus string `json:"previousStatus"`
+		NewStatus      string `json:"newStatus"`
+		OccurredAt     string `json:"occurredAt"`
+	}
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("unmarshal SESSION_LIFECYCLE_CONTROL payload: %w", err)
+	}
+	if strings.TrimSpace(payload.Outcome) != string(LifecycleControlOutcomeAccepted) {
+		return nil
+	}
+	r.mergeSessionIdentity(envelope.Context)
+
+	newStatus := strings.TrimSpace(payload.NewStatus)
+	if newStatus != "" {
+		r.session.Status = LifecycleStatus(newStatus)
+	}
+	occurredAt, err := time.Parse(time.RFC3339, strings.TrimSpace(payload.OccurredAt))
+	if err != nil {
+		return fmt.Errorf("parse occurredAt: %w", err)
+	}
+	if r.session.Lifecycle == nil {
+		r.session.Lifecycle = &LifecycleTimestamps{}
+	}
+	operation := strings.TrimSpace(payload.Operation)
+	switch operation {
+	case string(LifecycleControlPause):
+		r.session.Lifecycle.PausedAt = timePtr(occurredAt.UTC())
+	case string(LifecycleControlResume):
+		r.session.Lifecycle.ResumedAt = timePtr(occurredAt.UTC())
 	}
 	return nil
 }

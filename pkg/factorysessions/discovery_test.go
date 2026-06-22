@@ -1,13 +1,16 @@
 package factorysessions
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 )
 
-func alwaysRunnableProbe(folderPath, factoryDir string, ref TargetRef) (Target, bool) {
-	return BuildTargetFromConfig(folderPath, factoryDir, ref, filepath.Base(factoryDir)), true
+func alwaysRunnableProbe(folderPath, factoryDir string, ref TargetRef) (Target, bool, *DiscoveryFailure) {
+	return BuildTargetFromConfig(folderPath, factoryDir, ref, filepath.Base(factoryDir)), true, nil
 }
 
 func TestDiscoverTargets_ReturnsDefaultAndNamedTargets(t *testing.T) {
@@ -30,8 +33,8 @@ func TestDiscoverTargets_ReturnsDefaultAndNamedTargets(t *testing.T) {
 
 func TestDiscoverTargets_RejectsFolderWithoutRunnableTargets(t *testing.T) {
 	root := t.TempDir()
-	_, err := DiscoverTargets(root, func(string, string, TargetRef) (Target, bool) {
-		return Target{}, false
+	_, err := DiscoverTargets(root, func(string, string, TargetRef) (Target, bool, *DiscoveryFailure) {
+		return Target{}, false, nil
 	})
 	if err == nil {
 		t.Fatal("DiscoverTargets(empty) error = nil, want not runnable")
@@ -39,6 +42,41 @@ func TestDiscoverTargets_RejectsFolderWithoutRunnableTargets(t *testing.T) {
 	reason, field, ok := ValidationReasonFromError(err)
 	if !ok || reason != ValidationReasonNotRunnable || field != "folderPath" {
 		t.Fatalf("validation = (%q, %q, %v), want not_runnable folderPath", reason, field, ok)
+	}
+}
+
+func TestDiscoverTargets_PreservesConfigLoadFailuresWhenNoRunnableTargetsRemain(t *testing.T) {
+	root := t.TempDir()
+
+	_, err := DiscoverTargets(root, func(_ string, factoryDir string, ref TargetRef) (Target, bool, *DiscoveryFailure) {
+		return Target{}, false, &DiscoveryFailure{
+			FactoryDir: factoryDir,
+			Ref:        ref,
+			Summary:    "unexpected end of JSON input",
+		}
+	})
+	if err == nil {
+		t.Fatal("DiscoverTargets(config load failed) error = nil, want structured failure")
+	}
+	reason, field, ok := ValidationReasonFromError(err)
+	if !ok || reason != ValidationReasonConfigLoadFailed || field != "folderPath" {
+		t.Fatalf("validation = (%q, %q, %v), want config_load_failed folderPath", reason, field, ok)
+	}
+	var targetedErr interface {
+		ErrorTargets() []factoryapi.FactoryValidationTarget
+	}
+	if !errors.As(err, &targetedErr) {
+		t.Fatalf("config load error %v did not expose structured targets", err)
+	}
+	targets := targetedErr.ErrorTargets()
+	if len(targets) != 1 {
+		t.Fatalf("config load error targets = %#v, want one target", targets)
+	}
+	if targets[0].Code != "factory.session.target.config_load_failed" {
+		t.Fatalf("config load target code = %q, want factory.session.target.config_load_failed", targets[0].Code)
+	}
+	if targets[0].Subject.Id != "default" {
+		t.Fatalf("config load target subject id = %q, want default", targets[0].Subject.Id)
 	}
 }
 

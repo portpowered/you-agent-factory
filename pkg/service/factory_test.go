@@ -2871,6 +2871,118 @@ func TestFactoryService_OpenFactorySession_ValidateOnlyMapsInitsNewFactoryToAPIR
 	}
 }
 
+func TestFactoryService_OpenFactorySessionFromFolder_AlignsValidateAndOpenDiscoveryAcrossRunnableEmptyAndBrokenFolders(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha"},
+	})
+	defer harness.stop(t)
+
+	emptyDir := filepath.Join(harness.rootDir, "empty")
+	if err := os.Mkdir(emptyDir, 0o755); err != nil {
+		t.Fatalf("Mkdir(empty): %v", err)
+	}
+
+	brokenDir := filepath.Join(harness.rootDir, "broken")
+	if err := os.MkdirAll(brokenDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", brokenDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(brokenDir, interfaces.FactoryConfigFile), []byte(`{"name":`), 0o644); err != nil {
+		t.Fatalf("WriteFile(broken factory.json): %v", err)
+	}
+
+	before := harness.svc.sessions.Count()
+	assertValidateRunnableDiscovery(t, harness, before)
+	assertOpenRunnableDiscovery(t, harness, before+1)
+	assertValidateEmptyDiscovery(t, harness, emptyDir, before+1)
+	assertOpenEmptyDiscoveryFailure(t, harness, emptyDir, before+1)
+	assertValidateBrokenDiscoveryFailure(t, harness, brokenDir, before+1)
+	assertOpenBrokenDiscoveryFailure(t, harness, brokenDir, before+1)
+}
+
+func assertValidateRunnableDiscovery(t *testing.T, harness *runningSessionService, wantSessionCount int) {
+	t.Helper()
+
+	validateRunnable, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil, true, false)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(validate runnable): %v", err)
+	}
+	if validateRunnable == nil || validateRunnable.InitsNewFactory || len(validateRunnable.Targets) == 0 || validateRunnable.SessionID != "" {
+		t.Fatalf("validate runnable result = %#v, want discovered targets without session or init-new-factory", validateRunnable)
+	}
+	assertLiveSessionCount(t, harness, "validate runnable", wantSessionCount)
+}
+
+func assertOpenRunnableDiscovery(t *testing.T, harness *runningSessionService, wantSessionCount int) {
+	t.Helper()
+
+	openRunnable, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), harness.rootDir, nil, false, false)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(open runnable): %v", err)
+	}
+	if openRunnable == nil || openRunnable.SessionID == "" {
+		t.Fatalf("open runnable result = %#v, want session id", openRunnable)
+	}
+	assertLiveSessionCount(t, harness, "open runnable", wantSessionCount)
+}
+
+func assertValidateEmptyDiscovery(t *testing.T, harness *runningSessionService, emptyDir string, wantSessionCount int) {
+	t.Helper()
+
+	validateEmpty, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), emptyDir, nil, true, false)
+	if err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder(validate empty): %v", err)
+	}
+	if validateEmpty == nil || !validateEmpty.InitsNewFactory || validateEmpty.FolderPath != emptyDir {
+		t.Fatalf("validate empty result = %#v, want init-new-factory metadata", validateEmpty)
+	}
+	assertLiveSessionCount(t, harness, "validate empty", wantSessionCount)
+}
+
+func assertOpenEmptyDiscoveryFailure(t *testing.T, harness *runningSessionService, emptyDir string, wantSessionCount int) {
+	t.Helper()
+
+	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), emptyDir, nil, false, false); err == nil {
+		t.Fatal("OpenFactorySessionFromFolder(open empty) error = nil, want not-runnable failure")
+	} else {
+		assertFactorySessionValidationTarget(t, err, "not_runnable", "folderPath")
+	}
+	assertLiveSessionCount(t, harness, "open empty", wantSessionCount)
+}
+
+func assertValidateBrokenDiscoveryFailure(t *testing.T, harness *runningSessionService, brokenDir string, wantSessionCount int) {
+	t.Helper()
+
+	validateBroken, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), brokenDir, nil, true, false)
+	if err == nil {
+		t.Fatal("OpenFactorySessionFromFolder(validate broken) error = nil, want config-load failure")
+	}
+	assertFactorySessionConfigLoadFailure(t, err, "default")
+	if validateBroken != nil {
+		t.Fatalf("validate broken result = %#v, want no init-new-factory fallback", validateBroken)
+	}
+	assertLiveSessionCount(t, harness, "validate broken", wantSessionCount)
+}
+
+func assertOpenBrokenDiscoveryFailure(t *testing.T, harness *runningSessionService, brokenDir string, wantSessionCount int) {
+	t.Helper()
+
+	if _, err := harness.svc.OpenFactorySessionFromFolder(context.Background(), brokenDir, nil, false, false); err == nil {
+		t.Fatal("OpenFactorySessionFromFolder(open broken) error = nil, want config-load failure")
+	} else {
+		assertFactorySessionConfigLoadFailure(t, err, "default")
+	}
+	assertLiveSessionCount(t, harness, "open broken", wantSessionCount)
+}
+
+func assertLiveSessionCount(t *testing.T, harness *runningSessionService, label string, want int) {
+	t.Helper()
+
+	if got := harness.svc.sessions.Count(); got != want {
+		t.Fatalf("%s mutated live sessions to %d, want %d", label, got, want)
+	}
+}
+
 func TestFactoryService_OpenFactorySessionFromFolder_ValidateOnlyRunnableFolderOmitsInitsNewFactory(t *testing.T) {
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
 		defaultFactory: "alpha",
@@ -3311,6 +3423,126 @@ func TestFactoryService_OpenFactorySession_InitNewFactoryRejectsValidateOnlyComb
 	} else {
 		assertFactorySessionValidationTarget(t, err, factorysessions.ValidationReasonRequired, "initNewFactory")
 	}
+}
+
+func TestFactoryService_OpenFactorySessionFromFolder_LogsBrokenDiscoveryTargetForValidateAndOpen(t *testing.T) {
+	rootDir := t.TempDir()
+	writeFactoryJSON(t, rootDir, minimalFactoryConfig())
+
+	logCore, observedLogs := observer.New(zap.ErrorLevel)
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.New(logCore),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	brokenDir := filepath.Join(rootDir, "broken")
+	if err := os.MkdirAll(brokenDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", brokenDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(brokenDir, interfaces.FactoryConfigFile), []byte(`{"name":`), 0o644); err != nil {
+		t.Fatalf("WriteFile(broken factory.json): %v", err)
+	}
+	resolvedBrokenDir, err := filepath.Abs(brokenDir)
+	if err != nil {
+		t.Fatalf("Abs(%s): %v", brokenDir, err)
+	}
+	resolvedBrokenDir = filepath.Clean(resolvedBrokenDir)
+
+	validateResult, err := svc.OpenFactorySessionFromFolder(context.Background(), brokenDir, nil, true, false)
+	if err == nil {
+		t.Fatal("OpenFactorySessionFromFolder(validate broken) error = nil, want config-load failure")
+	}
+	assertFactorySessionConfigLoadFailure(t, err, "default")
+	if validateResult != nil {
+		t.Fatalf("validate result = %#v, want no init-new-factory fallback on broken config", validateResult)
+	}
+
+	_, err = svc.OpenFactorySessionFromFolder(context.Background(), brokenDir, nil, false, false)
+	if err == nil {
+		t.Fatal("OpenFactorySessionFromFolder(open broken) error = nil, want config-load failure")
+	}
+	assertFactorySessionConfigLoadFailure(t, err, "default")
+
+	matchingLogs := 0
+	for _, entry := range observedLogs.FilterMessage("factory session discovery target runtime config load failed").All() {
+		if !observedLogFieldEquals(entry, "target_factory_dir", resolvedBrokenDir) {
+			continue
+		}
+		matchingLogs++
+		assertObservedLogFieldPresent(t, entry, "submitted_folder_path")
+		assertLogField(t, entry, "target_kind", string(factorysessions.TargetKindDefault))
+		assertLogField(t, entry, "target_display_name", "default")
+		assertObservedLogFieldContains(t, entry, "failure_summary", "unexpected end of JSON input")
+	}
+	if matchingLogs != 2 {
+		t.Fatalf("matching discovery failure logs = %d, want 2", matchingLogs)
+	}
+}
+
+func TestFactoryService_ProbeFactorySessionTarget_DoesNotLogSuccessfulProbe(t *testing.T) {
+	rootDir := t.TempDir()
+	writeFactoryJSON(t, rootDir, minimalFactoryConfig())
+
+	logCore, observedLogs := observer.New(zap.ErrorLevel)
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.New(logCore),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	target, ok, failure := svc.probeFactorySessionTarget(rootDir, rootDir, factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault})
+	if !ok {
+		t.Fatal("probeFactorySessionTarget(valid root) = false, want runnable target")
+	}
+	if failure != nil {
+		t.Fatalf("probeFactorySessionTarget(valid root) failure = %#v, want nil", failure)
+	}
+	if target.FactoryDir == "" {
+		t.Fatalf("probeFactorySessionTarget(valid root) = %#v, want populated target", target)
+	}
+	if got := len(observedLogs.FilterMessage("factory session discovery target runtime config load failed").All()); got != 0 {
+		t.Fatalf("discovery failure logs = %d, want 0", got)
+	}
+}
+
+func assertObservedLogFieldContains(t *testing.T, entry observer.LoggedEntry, key, want string) {
+	t.Helper()
+	for _, field := range entry.Context {
+		if field.Key != key {
+			continue
+		}
+		if strings.Contains(field.String, want) {
+			return
+		}
+		t.Fatalf("log field %q = %q, want substring %q", key, field.String, want)
+	}
+	t.Fatalf("log field %q missing from %#v", key, entry.Context)
+}
+
+func observedLogFieldEquals(entry observer.LoggedEntry, key, want string) bool {
+	for _, field := range entry.Context {
+		if field.Key == key && field.String == want {
+			return true
+		}
+	}
+	return false
+}
+
+func assertObservedLogFieldPresent(t *testing.T, entry observer.LoggedEntry, key string) {
+	t.Helper()
+	for _, field := range entry.Context {
+		if field.Key == key && strings.TrimSpace(field.String) != "" {
+			return
+		}
+	}
+	t.Fatalf("log field %q missing or empty in %#v", key, entry.Context)
 }
 
 func normalizeInitFactoryJSON(t *testing.T, raw string) string {

@@ -8,17 +8,18 @@ import (
 	"strings"
 	"time"
 
-	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 const (
-	eventIDSessionStarted             = "factory-event/session-started"
-	eventIDSessionPausedPrefix        = "factory-event/session-paused"
-	eventIDSessionResumedPrefix       = "factory-event/session-resumed"
-	eventIDSessionResultUpdatedPrefix = "factory-event/session-result-updated"
-	eventIDSessionCompleted           = "factory-event/session-completed"
+	eventIDSessionStarted                = "factory-event/session-started"
+	eventIDSessionPausedPrefix           = "factory-event/session-paused"
+	eventIDSessionResumedPrefix          = "factory-event/session-resumed"
+	eventIDSessionResultUpdatedPrefix    = "factory-event/session-result-updated"
+	eventIDSessionCompleted              = "factory-event/session-completed"
+	eventIDSessionLifecycleControlPrefix = "session-lifecycle-control"
 )
 
 // SessionLifecycleStartInput carries replay-safe facts for SESSION_STARTED.
@@ -61,12 +62,18 @@ type SessionLifecycleCompleteInput struct {
 	FailureDetail    *factoryapi.FactoryDispatchFailureDetail
 }
 
-// SessionLifecycleControlInput carries replay-safe facts for SESSION_PAUSED and SESSION_RESUMED.
+// SessionLifecycleControlInput carries replay-safe facts for SESSION_LIFECYCLE_CONTROL.
 type SessionLifecycleControlInput struct {
-	SessionID        string
-	OrchestratorKind factoryapi.FactoryOrchestratorKind
-	Source           string
-	Tick             int
+	SessionID           string
+	OrchestratorKind    factoryapi.FactoryOrchestratorKind
+	OrchestratorDialect string
+	Source              string
+	Tick                int
+	Operation           factoryapi.FactorySessionLifecycleControlKind
+	Outcome             factoryapi.FactorySessionLifecycleControlOutcome
+	PreviousStatus      factoryapi.FactorySessionDurableLifecycleStatus
+	NewStatus           factoryapi.FactorySessionDurableLifecycleStatus
+	Reason              string
 }
 
 // RecordSessionPaused records a successful Factory Session pause lifecycle transition.
@@ -79,7 +86,7 @@ func (h *FactoryEventHistory) RecordSessionPaused(input SessionLifecycleControlI
 	h.appendGenerated(factoryEvent(
 		factoryapi.FactoryEventTypeSessionPaused,
 		fmt.Sprintf("%s/%d", eventIDSessionPausedPrefix, sequence),
-		h.sessionLifecycleContext(input.SessionID, input.OrchestratorKind, "", input.Source, input.Tick, eventTime, sequence),
+		h.sessionLifecycleContext(input.SessionID, input.OrchestratorKind, input.OrchestratorDialect, input.Source, input.Tick, eventTime, sequence),
 		factoryapi.SessionPausedEventPayload{
 			Status:   factoryapi.FactorySessionDurableLifecycleStatusPaused,
 			PausedAt: eventTime,
@@ -97,7 +104,7 @@ func (h *FactoryEventHistory) RecordSessionResumed(input SessionLifecycleControl
 	h.appendGenerated(factoryEvent(
 		factoryapi.FactoryEventTypeSessionResumed,
 		fmt.Sprintf("%s/%d", eventIDSessionResumedPrefix, sequence),
-		h.sessionLifecycleContext(input.SessionID, input.OrchestratorKind, "", input.Source, input.Tick, eventTime, sequence),
+		h.sessionLifecycleContext(input.SessionID, input.OrchestratorKind, input.OrchestratorDialect, input.Source, input.Tick, eventTime, sequence),
 		factoryapi.SessionResumedEventPayload{
 			Status:    factoryapi.FactorySessionDurableLifecycleStatusRunning,
 			ResumedAt: eventTime,
@@ -298,6 +305,56 @@ func (h *FactoryEventHistory) RecordSessionLifecycleCompletion(
 	}, eventTime)
 }
 
+// RecordSessionLifecycleControl records one accepted pause or resume control on the
+// canonical factory event stream for live runtime sessions.
+func (h *FactoryEventHistory) RecordSessionLifecycleControl(input SessionLifecycleControlInput, eventTime time.Time) {
+	if h == nil || strings.TrimSpace(input.SessionID) == "" {
+		return
+	}
+	if input.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		return
+	}
+	if input.Operation != factoryapi.FactorySessionLifecycleControlKindPause &&
+		input.Operation != factoryapi.FactorySessionLifecycleControlKindResume {
+		return
+	}
+	if input.PreviousStatus == input.NewStatus {
+		return
+	}
+
+	eventTime = interfaces.CanonicalEventTime(eventTime)
+	sequence := h.allocateSessionLifecycleSequence()
+	payload := factoryapi.SessionLifecycleControlEventPayload{
+		Operation:      input.Operation,
+		Outcome:        input.Outcome,
+		PreviousStatus: input.PreviousStatus,
+		NewStatus:      input.NewStatus,
+		OccurredAt:     eventTime,
+	}
+	if reason := strings.TrimSpace(input.Reason); reason != "" {
+		payload.Reason = stringPtrIfNotEmpty(reason)
+	}
+	h.appendGenerated(factoryEvent(
+		factoryapi.FactoryEventTypeSessionLifecycleControl,
+		fmt.Sprintf("%s/%s/%d", eventIDSessionLifecycleControlPrefix, input.SessionID, sequence),
+		h.sessionLifecycleContext(input.SessionID, input.OrchestratorKind, input.OrchestratorDialect, input.Source, input.Tick, eventTime, sequence),
+		payload,
+	))
+}
+
+func FactoryStateToDurableLifecycleStatus(state interfaces.FactoryState) factoryapi.FactorySessionDurableLifecycleStatus {
+	switch state {
+	case interfaces.FactoryStatePaused:
+		return factoryapi.FactorySessionDurableLifecycleStatusPaused
+	case interfaces.FactoryStateCompleted:
+		return factoryapi.FactorySessionDurableLifecycleStatusSucceeded
+	case interfaces.FactoryStateFailed:
+		return factoryapi.FactorySessionDurableLifecycleStatusFailed
+	default:
+		return factoryapi.FactorySessionDurableLifecycleStatusRunning
+	}
+}
+
 func (h *FactoryEventHistory) sessionLifecycleContext(
 	sessionID string,
 	orchestratorKind factoryapi.FactoryOrchestratorKind,
@@ -356,9 +413,9 @@ func generatedWorkContentPtr(parts []interfaces.WorkContentPart) *factoryapi.Wor
 		case interfaces.WorkContentPartTypeText:
 			text := part.Text
 			if err := item.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-			Type: factoryapi.WorkContentPartTypeText,
-			Text: text,
-		}); err != nil {
+				Type: factoryapi.WorkContentPartTypeText,
+				Text: text,
+			}); err != nil {
 				continue
 			}
 		case interfaces.WorkContentPartTypeImage:

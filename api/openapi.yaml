@@ -786,8 +786,8 @@ paths:
       tags:
         - Factory
       operationId: pauseFactorySession
-      summary: Pause one factory session
-      description: Pauses one live or durable factory session while preserving inspectable partial results, dispatches, and artifacts. Live workspace sessions use the same route family as durable execution sessions. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
+      summary: Pause one Factory Session
+      description: Pauses one live or durable Factory Session while preserving inspectable partial results, dispatches, artifacts, and buffered inbound submissions or completed worker results. Live workspace sessions use the same route family as durable execution sessions. Automatic progression stops until resume. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       requestBody:
@@ -822,8 +822,8 @@ paths:
       tags:
         - Factory
       operationId: resumeFactorySession
-      summary: Resume one factory session
-      description: Resumes one paused live or durable factory session while preserving inspectable partial results, dispatches, and artifacts. Live workspace sessions use the same route family as durable execution sessions. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
+      summary: Resume one Factory Session
+      description: Resumes one paused live or durable Factory Session while preserving inspectable partial results, dispatches, and artifacts. Live workspace sessions use the same route family as durable execution sessions. Wakes the runtime internally and drains ready buffered submissions and completed worker results without requiring a new external signal. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       requestBody:
@@ -2529,6 +2529,7 @@ components:
           description: Stable machine-readable error code.
           enum:
             - BAD_REQUEST
+            - FACTORY_SESSION_CONFIG_LOAD_FAILED
             - INVALID_FACTORY_NAME
             - FACTORY_ALREADY_EXISTS
             - INVALID_FACTORY
@@ -2541,6 +2542,7 @@ components:
             - INTERNAL_ERROR
           x-enum-descriptions:
             - Request payload or parameter validation failed.
+            - Factory session discovery found a readable factory target whose config could not be loaded.
             - Named factory name validation failed.
             - Submitted named factory already exists.
             - Submitted named factory payload failed validation.
@@ -3290,6 +3292,11 @@ components:
           items:
             type: string
           description: Artifact identifiers produced by the dispatch.
+        statusTransitions:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactoryDispatchStatus'
+          description: Ordered durable status history observed for the dispatch.
         usage:
           $ref: '#/components/schemas/FactoryDispatchUsage'
         warnings:
@@ -3399,6 +3406,9 @@ components:
         taskLabel:
           type: string
           description: Customer-visible label for the JavaScript workflow task.
+        executionMode:
+          type: string
+          description: Durable child execution mode recorded for the JavaScript workflow task when available.
     FactoryDispatchUsage:
       type: object
       additionalProperties: false
@@ -3708,6 +3718,32 @@ components:
           type: string
           format: date-time
           description: When the Factory Session returned to RUNNING.
+    SessionLifecycleControlEventPayload:
+      type: object
+      additionalProperties: false
+      description: Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only.
+      required:
+        - operation
+        - outcome
+        - previousStatus
+        - newStatus
+        - occurredAt
+      properties:
+        operation:
+          $ref: '#/components/schemas/FactorySessionLifecycleControlKind'
+        outcome:
+          $ref: '#/components/schemas/FactorySessionLifecycleControlOutcome'
+        previousStatus:
+          $ref: '#/components/schemas/FactorySessionDurableLifecycleStatus'
+        newStatus:
+          $ref: '#/components/schemas/FactorySessionDurableLifecycleStatus'
+        occurredAt:
+          type: string
+          format: date-time
+          description: When the lifecycle control took effect.
+        reason:
+          type: string
+          description: Optional operator-provided reason for the control request.
     SessionResultUpdatedEventPayload:
       type: object
       additionalProperties: false
@@ -4662,8 +4698,8 @@ components:
         - FactorySessionLifecycleControlKindRetryDispatch
       x-enum-descriptions:
         - Approve requested orchestrator policy so execution can proceed.
-        - Pause active durable session scheduling while preserving inspectable state.
-        - Resume a paused durable session.
+        - Pause active Factory Session scheduling while preserving inspectable state and buffered work.
+        - Resume a paused Factory Session and drain ready buffered work.
         - Request graceful cancellation while preserving partial results and artifacts.
         - Forcefully terminate a durable session while preserving inspectable state.
         - Retry one failed or interrupted dispatch within the targeted session.
@@ -5574,6 +5610,7 @@ components:
             - $ref: '#/components/schemas/SessionResumedEventPayload'
             - $ref: '#/components/schemas/SessionResultUpdatedEventPayload'
             - $ref: '#/components/schemas/SessionCompletedEventPayload'
+            - $ref: '#/components/schemas/SessionLifecycleControlEventPayload'
             - $ref: '#/components/schemas/OrchestratorPhaseChangedEventPayload'
             - $ref: '#/components/schemas/OrchestratorCheckpointWrittenEventPayload'
             - $ref: '#/components/schemas/DispatchQueuedEventPayload'
@@ -5607,6 +5644,7 @@ components:
         - FactoryEventTypeSessionResumed
         - FactoryEventTypeSessionResultUpdated
         - FactoryEventTypeSessionCompleted
+        - FactoryEventTypeSessionLifecycleControl
         - FactoryEventTypeOrchestratorPhaseChanged
         - FactoryEventTypeOrchestratorCheckpointWritten
         - FactoryEventTypeDispatchQueued
@@ -5637,6 +5675,7 @@ components:
         - SESSION_RESUMED
         - SESSION_RESULT_UPDATED
         - SESSION_COMPLETED
+        - SESSION_LIFECYCLE_CONTROL
         - ORCHESTRATOR_PHASE_CHANGED
         - ORCHESTRATOR_CHECKPOINT_WRITTEN
         - DISPATCH_QUEUED
@@ -5667,6 +5706,7 @@ components:
         - A Factory Session lifecycle resume control transitioned the session into RUNNING.
         - Partial or final customer-visible session result availability was recorded.
         - Durable factory session execution reached a terminal lifecycle state.
+        - Durable factory session lifecycle control was applied or recorded for replay.
         - An orchestrator workflow phase transition was recorded.
         - An orchestrator checkpoint reference was recorded without exposing raw VM state.
         - A child dispatch was queued for execution.
@@ -7423,6 +7463,15 @@ components:
         env:
           $ref: '#/components/schemas/StringMap'
           description: Environment variables added to the workstation execution context.
+    WorkstationOutcomeFormat:
+      type: string
+      description: Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+      x-enum-varnames:
+        - WorkstationOutcomeFormatDecisionEnvelope
+      enum:
+        - decision-envelope
+      x-enum-descriptions:
+        - Parse agent output as a reviewer/checker decision envelope instead of stop-token routing.
     ClassificationRoute:
       type: object
       additionalProperties: false
@@ -8705,12 +8754,3 @@ components:
         claim:
           $ref: '#/components/schemas/HostedLinearWorkerClaim'
           description: Optional claim-related configuration that v1 hosted Linear polling allows.
-    WorkstationOutcomeFormat:
-      type: string
-      description: Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
-      x-enum-varnames:
-        - WorkstationOutcomeFormatDecisionEnvelope
-      enum:
-        - decision-envelope
-      x-enum-descriptions:
-        - Parse agent output as a reviewer/checker decision envelope instead of stop-token routing.

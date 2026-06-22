@@ -97,6 +97,11 @@ flowchart TB
 
 At any tick, the current world is the composition of all prior events. Because the stream is deterministic, customers can receive the same event history and reconstruct a consistent view at any chosen timestamp or tick.
 
+`SESSION_LIFECYCLE_CONTROL` events record accepted Factory Session pause, resume,
+and related lifecycle controls. Replay and status reads use those events together
+with loop-state changes so current and historical session lifecycle state stay
+aligned with live control operations.
+
 # Front End
 
 The frontend is an embedded React application that consumes the backend event stream and derives a customer-facing world view from it. The UI emphasizes composable dashboards and visualizations rather than owning the authoritative system state.

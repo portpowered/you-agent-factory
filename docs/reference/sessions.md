@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-06-08
+last-modified: 2026-06-20
 doc-id: agent-factory/guides/sessions
 ---
 
@@ -31,6 +31,7 @@ see `you docs config`.
 | Inspect orchestrator-aware runtime for one live session | [Session show](#session-show) and `you docs orchestrators` |
 | Target a non-default session on submit or work commands | [`--server` and `--session`](#server-and-session-routing) |
 | Choose a run mode that stays up for later submissions | [Run modes](#run-modes) |
+| Pause or resume a live Factory Session without losing buffered work | [Session pause and resume](#session-pause-and-resume) |
 
 ## Session list
 
@@ -107,6 +108,80 @@ show marking token counts and enabled transitions. JavaScript sessions show
 phase, checkpoint refs, child dispatch counts, and dynamic workflow shorthand
 only as JavaScript terminology. See `you docs orchestrators` for the accepted
 alias rules.
+
+## Session pause and resume
+
+`you session pause` and `you session resume` control one live `FactorySession`
+through the existing lifecycle routes:
+
+```http
+POST /factory-sessions/{session_id}/pause
+POST /factory-sessions/{session_id}/resume
+```
+
+Pausing stops automatic progression while the service keeps accepting inbound
+work and worker results. Resume records the lifecycle transition, wakes the
+runtime internally, and drains ready buffered submissions and completed worker
+results through the normal engine path. You do **not** need another submission,
+worker result, or dispatch signal after resume to restart processing.
+
+### Copy-paste examples
+
+```bash
+# Pause the default compatibility session (~default).
+you session pause
+
+# Pause or resume a named live session.
+you session pause session-beta
+you session resume session-beta
+
+# API-shaped JSON for automation (place global flags before the subcommand).
+you --json session pause
+you --server http://localhost:9090 --json session resume session-beta
+```
+
+When you omit the session id, pause and resume follow the same default
+compatibility session routing as `you session show` (`~default`).
+
+### Human output
+
+| Outcome | Pause stdout | Resume stdout |
+|---------|--------------|---------------|
+| Accepted | `Paused factory session <session-id>` | `Resumed factory session <session-id>` |
+| No-op | `Factory session <session-id> is already paused` | `Factory session <session-id> is already running` |
+
+Rejected controls return a non-zero exit code with an error message such as
+`pause rejected for <session-id>: <detail>` or
+`resume rejected for <session-id>: <detail>`. A missing session returns
+`factory session "<session-id>" not found`. Connection failures return
+`factory sessions endpoint not reachable at <url>`.
+
+With `--json`, stdout is the API-shaped `FactorySessionLifecycleControlResponse`
+(`sessionId`, `operation`, `outcome`, `status`, and optional `detail`).
+
+### Buffered work while paused
+
+While a live Factory Session is paused:
+
+- `POST /factory-sessions/{session_id}/work` and `you submit` can still accept
+  new work; accepted submissions stay buffered and are not applied until resume.
+- Completed worker results stay buffered and are not routed through result
+  handling until resume.
+- `GET /factory-sessions/{session_id}/status` and `you session show` report
+  `factoryState: PAUSED` (or the equivalent lifecycle status on session reads)
+  without treating buffered work as already processed.
+- A wake signal observed while paused does not drop buffered submissions or
+  results; resume re-signals the runtime so that work can drain.
+
+After a successful resume, inspect progress with `you session show`,
+`GET /factory-sessions/{session_id}`, or the event stream. Canonical
+`SESSION_LIFECYCLE_CONTROL` events record pause and resume for replay and
+historical status reads.
+
+### Maintainer verification
+
+After editing this reference topic, run `make docs-reference-smoke` from the
+repository root.
 
 ## Factory query
 
@@ -275,6 +350,7 @@ you --server http://localhost:9090 --json work list
 | Command family | Host selection | Session selection |
 |----------------|----------------|-----------------|
 | `you session list` / `create` / `delete` | `--port` (default `7437`) | Session id is a subcommand argument on `create` / `delete` |
+| `you session show`, `you session pause`, `you session resume` | Global `--server` | Session id is an optional subcommand argument (defaults to `~default`) |
 | `you factory query`, `you submit`, `you work …` | Global `--server` | `--session` on submit, batch submit, and work commands |
 | `you run` | Binds locally to host/port from `--server` | N/A — starts or attaches runtime |
 
@@ -322,9 +398,12 @@ API, CLI, dashboard, and future MCP tools observe the same canonical
 | MCP (planned) | Status/result/event tools should map `NOT_READY`, `PARTIAL`, `FINAL`, `FAILED_WITH_PARTIAL`, `INTERRUPTED`, and `RECONCILED` to the same `FactorySessionResultStatus` and dispatch status vocabulary as the session API and event stream. |
 
 Lifecycle brackets use `SESSION_STARTED`, `SESSION_RESULT_UPDATED`, and
-`SESSION_COMPLETED`. Orchestrator progress, dispatch queue/interruption/reconciliation,
-and `ARTIFACT_CREATED` events remain on the same stream so reconnect replay can rebuild
-phase, dispatch counts, artifact refs, and terminal outcomes without waiting for only
+`SESSION_COMPLETED`. `SESSION_LIFECYCLE_CONTROL` records pause, resume, and other
+accepted Factory Session lifecycle controls so replay and status reads can derive
+`PAUSED` and `RUNNING` state from the same canonical stream. Orchestrator
+progress, dispatch queue/interruption/reconciliation, and `ARTIFACT_CREATED`
+events remain on the same stream so reconnect replay can rebuild phase, dispatch
+counts, artifact refs, and terminal outcomes without waiting for only
 `SESSION_COMPLETED`.
 
 ## Related Topics

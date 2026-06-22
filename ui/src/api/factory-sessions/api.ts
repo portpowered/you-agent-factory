@@ -6,10 +6,17 @@ import {
   isAPIRecord,
   readAPIResponseBody,
 } from "../transport";
+import {
+  type NormalizedFactorySessionGet,
+  normalizeFactorySessionGetResponse,
+} from "./normalize-session-get";
 
+export type { NormalizedFactorySessionGet } from "./normalize-session-get";
 export type FactorySessionSummary =
   components["schemas"]["FactorySessionSummary"];
 export type FactorySession = components["schemas"]["FactorySession"];
+export type FactorySessionDurableReadModel =
+  components["schemas"]["FactorySessionDurableReadModel"];
 export type FactorySessionLiveResult =
   components["schemas"]["FactorySessionLiveResult"];
 export type FactorySessionPartialResult =
@@ -27,6 +34,7 @@ export type OpenFactorySessionResponse =
 
 export type FactorySessionsAPIErrorCode =
   | "BAD_REQUEST"
+  | "FACTORY_SESSION_CONFIG_LOAD_FAILED"
   | "INTERNAL_ERROR"
   | "NETWORK_ERROR";
 
@@ -74,6 +82,8 @@ export interface GetFactorySessionArtifactOptions {
 }
 
 const FACTORY_SESSIONS_ENDPOINT = "/factory-sessions";
+
+export { FACTORY_SESSIONS_ENDPOINT };
 
 export class FactorySessionsAPIError extends Error {
   public readonly code: FactorySessionsAPIErrorCode;
@@ -220,7 +230,7 @@ export async function openFactorySession(
 export async function getFactorySession(
   sessionID: string,
   options: GetFactorySessionOptions = {},
-): Promise<FactorySession> {
+): Promise<NormalizedFactorySessionGet> {
   const fetchImplementation = options.fetch ?? globalThis.fetch;
   if (typeof fetchImplementation !== "function") {
     throw new FactorySessionsAPIError(
@@ -260,7 +270,9 @@ export async function getFactorySession(
     );
   }
 
-  if (!isFactorySession(responseBody)) {
+  try {
+    return normalizeFactorySessionGetResponse(responseBody);
+  } catch {
     throw new FactorySessionsAPIError(
       "The factory sessions API returned an invalid response.",
       {
@@ -271,8 +283,6 @@ export async function getFactorySession(
       },
     );
   }
-
-  return responseBody;
 }
 
 export async function getFactorySessionResult(
@@ -396,7 +406,7 @@ export async function closeFactorySession(
   }
 }
 
-function buildFactorySessionsAPIError(
+export function buildFactorySessionsAPIError(
   response: Response,
   responseBody: unknown,
   fallbackMessage: string,
@@ -416,6 +426,7 @@ function normalizeFactorySessionsAPIErrorCode(
 ): FactorySessionsAPIErrorCode {
   switch (code) {
     case "BAD_REQUEST":
+    case "FACTORY_SESSION_CONFIG_LOAD_FAILED":
       return code;
     case "NOT_FOUND":
       // hardcoded-ui-copy-exception: non-product-diagnostic
@@ -522,15 +533,6 @@ async function readFactorySessionResultSurface<
   return responseBody as T;
 }
 
-function isFactorySession(value: unknown): value is FactorySession {
-  return (
-    isAPIRecord(value) &&
-    typeof value.id === "string" &&
-    isAPIRecord(value.runtime) &&
-    typeof value.runtime.orchestratorKind === "string"
-  );
-}
-
 function isFactorySessionArtifactDetail(
   value: unknown,
 ): value is FactorySessionArtifactDetail {
@@ -542,7 +544,6 @@ function isFactorySessionArtifactDetail(
     typeof value.visibility === "string"
   );
 }
-
 function isListFactorySessionsResponse(
   value: unknown,
 ): value is { sessions: FactorySessionSummary[] } {

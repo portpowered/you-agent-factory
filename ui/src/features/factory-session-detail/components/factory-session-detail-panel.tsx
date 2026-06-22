@@ -1,19 +1,27 @@
+import type { ReactNode } from "react";
+
 import type { components } from "../../../api/generated/openapi";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
-import { useState } from "react";
 import {
   AlertPanel,
-  ButtonLink,
   DashboardHeading,
   DashboardLabel,
+  DashboardStatusPill,
   DashboardText,
-  ExpandablePanelTrigger,
 } from "../../../components/ui";
+import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { DetailCopy } from "../../../components/ui/widget-frame";
-import { WorkContentReadOnlyList } from "../../work-content/public";
-import { useFactorySessionArtifactDrilldown } from "../hooks/use-factory-session-artifact-drilldown";
+import { FactorySessionArtifactList } from "./artifact-drilldown/factory-session-artifact-list";
+import { DispatchDetailContent } from "./dispatch-detail-content";
+import { useFactorySessionDispatchDetail } from "../hooks/use-factory-session-dispatch-detail";
 import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
+import {
+  formatFactoryOrchestratorKind,
+  formatFactorySessionRuntimeStatus,
+  formatFactorySessionScriptStatus,
+} from "../messages/factory-session-runtime-display";
 import { getFactorySessionDetailMessages } from "../messages/factory-session-detail";
+import { useId, useState } from "react";
 
 type FactoryArtifact = components["schemas"]["FactoryArtifact"];
 type FactoryDispatch = components["schemas"]["FactoryDispatch"];
@@ -35,7 +43,10 @@ export function FactorySessionDetailPanel({
   }
 
   return (
-    <section aria-label={messages.selectedSessionHeading} className="grid gap-4">
+    <section
+      aria-label={messages.selectedSessionHeading}
+      className="grid gap-4"
+    >
       <DashboardHeading>{messages.selectedSessionHeading}</DashboardHeading>
       <div className="grid gap-2">
         <DashboardLabel>{messages.sessionIdLabel}</DashboardLabel>
@@ -43,15 +54,15 @@ export function FactorySessionDetailPanel({
       </div>
 
       {detailState.status === "loading" ? (
-        <DetailCopy>{messages.loadingState}</DetailCopy>
+        <StatusNotice>{messages.loadingState}</StatusNotice>
       ) : null}
       {detailState.status === "not-found" ? (
-        <DetailCopy>{messages.missingState}</DetailCopy>
+        <StatusNotice>{messages.missingState}</StatusNotice>
       ) : null}
       {detailState.status === "error" ? (
-        <AlertPanel tone="danger">
+        <StatusNotice tone="error">
           {detailState.message ?? messages.errorState}
-        </AlertPanel>
+        </StatusNotice>
       ) : null}
       {detailState.status === "success" ? (
         <FactorySessionRuntimeSections
@@ -68,6 +79,7 @@ function FactorySessionRuntimeSections({
   locale,
 }: {
   data: {
+    durableLifecycleStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
     partialResult?: components["schemas"]["FactorySessionPartialResult"];
     result?: components["schemas"]["FactorySessionLiveResult"];
     session: components["schemas"]["FactorySession"];
@@ -79,9 +91,20 @@ function FactorySessionRuntimeSections({
 
   return (
     <div className="grid gap-4">
+      <DashboardHeading>{messages.runtimeHeading}</DashboardHeading>
       <div className="grid gap-2 sm:grid-cols-2">
-        <Metric label={messages.orchestratorKindLabel} value={runtime.orchestratorKind} />
-        <Metric label={messages.statusLabel} value={runtime.status} />
+        <Metric
+          label={messages.orchestratorKindLabel}
+          value={formatFactoryOrchestratorKind(runtime.orchestratorKind, locale)}
+        />
+        <Metric
+          label={messages.statusLabel}
+          value={formatFactorySessionRuntimeStatus(
+            runtime.status,
+            data.durableLifecycleStatus,
+            locale,
+          )}
+        />
       </div>
 
       {runtime.orchestratorKind === FactoryOrchestratorKind.JAVASCRIPT ? (
@@ -119,9 +142,12 @@ function JavaScriptSessionProjection({
   sessionID: string;
 }) {
   const messages = getFactorySessionDetailMessages(locale);
+  const [selectedDispatchID, setSelectedDispatchID] = useState<string | null>(
+    null,
+  );
 
   if (!javascript) {
-    return <DetailCopy>{messages.dynamicWorkflowShorthand}</DetailCopy>;
+    return <DetailCopy>{messages.javascriptProjectionMissingState}</DetailCopy>;
   }
 
   const warnings = (dispatches ?? []).flatMap(
@@ -130,14 +156,13 @@ function JavaScriptSessionProjection({
 
   return (
     <div className="grid gap-4">
-      <DetailCopy>{messages.dynamicWorkflowShorthand}</DetailCopy>
       <div className="grid gap-2 sm:grid-cols-2">
         {javascript.phase ? (
           <Metric label={messages.phaseLabel} value={javascript.phase} />
         ) : null}
         <Metric
           label={messages.scriptStatusLabel}
-          value={javascript.scriptStatus}
+          value={formatFactorySessionScriptStatus(javascript.scriptStatus, locale)}
         />
         <Metric
           label={messages.childDispatchCountsLabel}
@@ -145,7 +170,10 @@ function JavaScriptSessionProjection({
         />
       </div>
       {javascript.phases.length > 0 ? (
-        <Metric label={messages.phasesLabel} value={javascript.phases.join(", ")} />
+        <Metric
+          label={messages.phasesLabel}
+          value={javascript.phases.join(", ")}
+        />
       ) : null}
 
       {javascript.checkpoints && javascript.checkpoints.length > 0 ? (
@@ -156,7 +184,7 @@ function JavaScriptSessionProjection({
       ) : null}
 
       {artifacts && artifacts.length > 0 ? (
-        <ArtifactList
+        <FactorySessionArtifactList
           artifacts={artifacts}
           heading={messages.artifactsHeading}
           locale={locale}
@@ -166,6 +194,16 @@ function JavaScriptSessionProjection({
 
       {warnings.length > 0 ? (
         <WarningList heading={messages.warningsHeading} warnings={warnings} />
+      ) : null}
+
+      {dispatches && dispatches.length > 0 ? (
+        <DispatchSummaryList
+          dispatches={dispatches}
+          locale={locale}
+          selectedDispatchID={selectedDispatchID}
+          setSelectedDispatchID={setSelectedDispatchID}
+          sessionID={result?.sessionId ?? partialResult?.sessionId}
+        />
       ) : null}
 
       {result?.resultArtifactRef ? (
@@ -180,6 +218,158 @@ function JavaScriptSessionProjection({
           value={formatArtifactRef(partialResult.partialResultArtifactRef)}
         />
       ) : null}
+    </div>
+  );
+}
+
+function DispatchSummaryList({
+  dispatches,
+  locale,
+  selectedDispatchID,
+  sessionID,
+  setSelectedDispatchID,
+}: {
+  dispatches: FactoryDispatch[];
+  locale?: string;
+  selectedDispatchID: string | null;
+  sessionID?: string;
+  setSelectedDispatchID: (dispatchID: string | null) => void;
+}) {
+  const messages = getFactorySessionDetailMessages(locale);
+
+  return (
+    <section className="grid gap-3">
+      <DashboardLabel>{messages.dispatchesHeading}</DashboardLabel>
+      <DetailCopy>{messages.dispatchSelectionHint}</DetailCopy>
+      <div className="grid gap-3">
+        {dispatches.map((dispatch) => (
+          <DispatchSummaryRow
+            dispatch={dispatch}
+            expanded={selectedDispatchID === dispatch.id}
+            key={dispatch.id}
+            locale={locale}
+            onToggle={(expanded) =>
+              setSelectedDispatchID(expanded ? dispatch.id : null)
+            }
+            sessionID={sessionID ?? dispatch.sessionId}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DispatchSummaryRow({
+  dispatch,
+  expanded,
+  locale,
+  onToggle,
+  sessionID,
+}: {
+  dispatch: FactoryDispatch;
+  expanded: boolean;
+  locale?: string;
+  onToggle: (expanded: boolean) => void;
+  sessionID: string;
+}) {
+  const messages = getFactorySessionDetailMessages(locale);
+  const detailRegionID = useId();
+  const detailState = useFactorySessionDispatchDetail(
+    sessionID,
+    expanded ? dispatch.id : null,
+  );
+  const dispatchLabel = dispatch.label?.trim() || dispatch.id;
+
+  return (
+    <article className="grid gap-3 rounded-lg border border-outline bg-surface-container-low p-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="grid min-w-0 gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <DashboardLabel>{dispatchLabel}</DashboardLabel>
+            <DashboardStatusPill size="compact">
+              {dispatch.status}
+            </DashboardStatusPill>
+          </div>
+          <DashboardText
+            as="div"
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 text-on-surface-subtle"
+            variant="supporting"
+          >
+            <span>{dispatch.dispatchKind}</span>
+            <span>{dispatch.id}</span>
+          </DashboardText>
+        </div>
+        <ExpandablePanelTrigger
+          aria-label={
+            expanded
+              ? messages.collapseDispatchDetailLabel(dispatch.id)
+              : messages.expandDispatchDetailLabel(dispatch.id)
+          }
+          controlsID={detailRegionID}
+          expanded={expanded}
+          onClick={() => onToggle(!expanded)}
+          variant="compact"
+        >
+          {messages.dispatchDetailHeading}
+        </ExpandablePanelTrigger>
+      </div>
+
+      {expanded ? (
+        <DispatchDetailState
+          detailRegionID={detailRegionID}
+          locale={locale}
+          state={detailState}
+        />
+      ) : null}
+    </article>
+  );
+}
+
+function DispatchDetailState({
+  detailRegionID,
+  locale,
+  state,
+}: {
+  detailRegionID: string;
+  locale?: string;
+  state: ReturnType<typeof useFactorySessionDispatchDetail>;
+}) {
+  const messages = getFactorySessionDetailMessages(locale);
+
+  if (state.status === "loading") {
+    return (
+      <DetailCopy id={detailRegionID}>
+        {messages.dispatchDetailLoadingState}
+      </DetailCopy>
+    );
+  }
+
+  if (state.status === "not-found") {
+    return (
+      <DetailCopy id={detailRegionID}>
+        {messages.dispatchDetailMissingState}
+      </DetailCopy>
+    );
+  }
+
+  if (state.status === "error") {
+    return (
+      <AlertPanel id={detailRegionID} tone="danger">
+        {state.message ?? messages.dispatchDetailErrorState}
+      </AlertPanel>
+    );
+  }
+
+  if (state.status !== "success") {
+    return null;
+  }
+
+  return (
+    <div
+      className="grid gap-3 border-t border-outline pt-3"
+      id={detailRegionID}
+    >
+      <DispatchDetailContent data={state.data} locale={locale} />
     </div>
   );
 }
@@ -235,235 +425,14 @@ function CheckpointRefList({
         {checkpoints.map((checkpoint) => (
           <li key={checkpoint.id}>
             <DashboardText>
-              {checkpoint.label ? `${checkpoint.id} (${checkpoint.label})` : checkpoint.id}
+              {checkpoint.label
+                ? `${checkpoint.id} (${checkpoint.label})`
+                : checkpoint.id}
               {checkpoint.summary ? ` — ${checkpoint.summary}` : ""}
             </DashboardText>
           </li>
         ))}
       </ul>
-    </div>
-  );
-}
-
-function ArtifactList({
-  artifacts,
-  heading,
-  locale,
-  sessionID,
-}: {
-  artifacts: FactoryArtifact[];
-  heading: string;
-  locale?: string;
-  sessionID: string | null;
-}) {
-  const messages = getFactorySessionDetailMessages(locale);
-  const [expandedArtifactID, setExpandedArtifactID] = useState<string | null>(
-    null,
-  );
-
-  return (
-    <div className="grid gap-2">
-      <DashboardLabel>{heading}</DashboardLabel>
-      <ul className="grid gap-1">
-        {artifacts.map((artifact) => (
-          <li key={artifact.id}>
-            <ArtifactDisclosure
-              artifact={artifact}
-              expanded={expandedArtifactID === artifact.id}
-              locale={locale}
-              messages={messages}
-              onToggle={(expanded) => {
-                setExpandedArtifactID(expanded ? artifact.id : null);
-              }}
-              sessionID={sessionID}
-            />
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function ArtifactDisclosure({
-  artifact,
-  expanded,
-  locale,
-  messages,
-  onToggle,
-  sessionID,
-}: {
-  artifact: FactoryArtifact;
-  expanded: boolean;
-  locale?: string;
-  messages: ReturnType<typeof getFactorySessionDetailMessages>;
-  onToggle: (expanded: boolean) => void;
-  sessionID: string | null;
-}) {
-  const contentID = `factory-session-artifact-${artifact.id}`;
-
-  return (
-    <div className="grid gap-2 rounded-lg border border-outline bg-surface-container-low p-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div className="grid gap-1">
-          <DashboardText>
-            {artifact.kind}
-            {artifact.label ? ` — ${artifact.label}` : ""}
-          </DashboardText>
-          <DashboardText variant="supporting">{artifact.id}</DashboardText>
-        </div>
-        <ExpandablePanelTrigger
-          aria-label={`${messages.artifactViewLabel} ${artifact.id}`}
-          controlsID={contentID}
-          expanded={expanded}
-          onClick={() => {
-            onToggle(!expanded);
-          }}
-          variant="compact"
-        >
-          {messages.artifactViewLabel}
-        </ExpandablePanelTrigger>
-      </div>
-      {expanded ? (
-        <div className="grid gap-3 border-t border-outline pt-3" id={contentID}>
-          <ArtifactDrilldownBody
-            artifactID={artifact.id}
-            locale={locale}
-            sessionID={sessionID}
-          />
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ArtifactDrilldownBody({
-  artifactID,
-  locale,
-  sessionID,
-}: {
-  artifactID: string;
-  locale?: string;
-  sessionID: string | null;
-}) {
-  const messages = getFactorySessionDetailMessages(locale);
-  const state = useFactorySessionArtifactDrilldown(sessionID, artifactID, true);
-
-  if (state.status === "loading") {
-    return <DetailCopy>{messages.artifactDetailLoadingState}</DetailCopy>;
-  }
-
-  if (state.status === "error") {
-    return (
-      <AlertPanel tone="danger">
-        {state.failure.message || messages.artifactDetailErrorState}
-      </AlertPanel>
-    );
-  }
-
-  if (state.status !== "success") {
-    return null;
-  }
-
-  return (
-    <div className="grid gap-3">
-      <DashboardHeading as="h4">{messages.artifactDetailHeading}</DashboardHeading>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <Metric label={messages.artifactIdLabel} value={state.artifact.artifactId} />
-        <Metric label={messages.artifactKindLabel} value={state.artifact.kind} />
-        <Metric
-          label={messages.artifactVisibilityLabel}
-          value={state.artifact.visibility}
-        />
-        {state.artifact.label ? (
-          <Metric
-            label={messages.artifactLabelValueLabel}
-            value={state.artifact.label}
-          />
-        ) : null}
-        {state.artifact.dispatchId ? (
-          <Metric
-            label={messages.artifactDispatchIdLabel}
-            value={state.artifact.dispatchId}
-          />
-        ) : null}
-        {state.artifact.capture?.sourceDispatchId ? (
-          <Metric
-            label={messages.artifactSourceDispatchIdLabel}
-            value={state.artifact.capture.sourceDispatchId}
-          />
-        ) : null}
-        {state.artifact.summary ? (
-          <Metric
-            label={messages.artifactSummaryLabel}
-            value={state.artifact.summary}
-          />
-        ) : null}
-        {state.artifact.createdAt ? (
-          <Metric
-            label={messages.artifactCreatedAtLabel}
-            value={state.artifact.createdAt}
-          />
-        ) : null}
-        {state.artifact.capture?.capturedAt ? (
-          <Metric
-            label={messages.artifactCapturedAtLabel}
-            value={state.artifact.capture.capturedAt}
-          />
-        ) : null}
-        {state.artifact.auditMode ? (
-          <Metric
-            label={messages.artifactAuditModeLabel}
-            value={state.artifact.auditMode}
-          />
-        ) : null}
-        {state.artifact.capture?.mimeType ? (
-          <Metric
-            label={messages.artifactCaptureMimeTypeLabel}
-            value={state.artifact.capture.mimeType}
-          />
-        ) : null}
-        {typeof state.artifact.sizeBytes === "number" ? (
-          <Metric
-            label={messages.artifactSizeBytesLabel}
-            value={String(state.artifact.sizeBytes)}
-          />
-        ) : null}
-        {state.artifact.contentHash ? (
-          <Metric
-            label={messages.artifactContentHashLabel}
-            value={state.artifact.contentHash}
-          />
-        ) : null}
-      </div>
-      <div className="grid gap-2">
-        <DashboardLabel>{messages.artifactPreviewHeading}</DashboardLabel>
-        {state.artifact.preview.kind === "inline" ? (
-          <WorkContentReadOnlyList
-            ariaLabel={messages.artifactPreviewHeading}
-            content={state.artifact.preview.content}
-            landmark={false}
-            showHeading={false}
-          />
-        ) : state.artifact.preview.kind === "download" ? (
-          <div className="grid gap-2">
-            <DashboardText variant="supporting">
-              {messages.artifactDownloadState}
-            </DashboardText>
-            <ButtonLink
-              className="w-fit"
-              href={state.artifact.preview.contentRef.href}
-              size="sm"
-              tone="outline"
-            >
-              {messages.artifactDownloadActionLabel}
-            </ButtonLink>
-          </div>
-        ) : (
-          <DashboardText variant="supporting">
-            {messages.artifactDetailUnavailableState}
-          </DashboardText>
-        )}
-      </div>
     </div>
   );
 }
@@ -495,6 +464,24 @@ function Metric({ label, value }: { label: string; value: string }) {
       <DashboardLabel>{label}</DashboardLabel>
       <DashboardText>{value}</DashboardText>
     </div>
+  );
+}
+
+function StatusNotice({
+  children,
+  tone = "default",
+}: {
+  children: ReactNode;
+  tone?: "default" | "error";
+}) {
+  return (
+    <AlertPanel
+      radius="lg"
+      role={tone === "error" ? "alert" : "status"}
+      tone={tone === "error" ? "danger" : "info"}
+    >
+      {children}
+    </AlertPanel>
   );
 }
 

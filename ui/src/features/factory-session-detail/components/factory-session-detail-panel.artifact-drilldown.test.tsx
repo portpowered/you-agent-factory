@@ -147,9 +147,7 @@ describe("FactorySessionDetailPanel artifact drilldown", () => {
     expect(screen.getByText("Loading factory session runtime…")).toBeTruthy();
 
     await waitFor(() => {
-      expect(
-        screen.getByText("Dynamic workflow (JavaScript factory session)"),
-      ).toBeTruthy();
+      expect(screen.getByText("JavaScript workflow")).toBeTruthy();
     });
 
     expect(screen.getByText("review")).toBeTruthy();
@@ -183,7 +181,7 @@ describe("FactorySessionDetailPanel artifact drilldown", () => {
     expect(screen.queryByText("rawCheckpointBody")).toBeNull();
   });
 
-  it("opens artifact detail with keyboard interaction and shows download-only artifacts without a broken preview", async () => {
+  it("opens artifact detail with keyboard interaction and suppresses self-referential download refs", async () => {
     vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
       const url = String(input);
       if (url.endsWith("/factory-sessions/session-beta")) {
@@ -269,15 +267,15 @@ describe("FactorySessionDetailPanel artifact drilldown", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("link", { name: "Download artifact" }),
+        screen.getByText(
+          "Inline preview is unavailable for this durable artifact, and this session detail route does not expose a downloadable payload yet.",
+        ),
       ).toBeTruthy();
     });
 
     expect(
-      screen.getByText(
-        "Inline preview is unavailable for this durable artifact. Download the artifact to inspect it.",
-      ),
-    ).toBeTruthy();
+      screen.queryByRole("link", { name: "Download artifact" }),
+    ).toBeNull();
   });
 
   it("shows explicit unavailable preview copy when the artifact has no inline preview or download ref", async () => {

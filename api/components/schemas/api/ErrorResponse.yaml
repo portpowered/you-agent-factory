@@ -14,6 +14,7 @@ properties:
     description: Stable machine-readable error code.
     enum:
       - BAD_REQUEST
+      - FACTORY_SESSION_CONFIG_LOAD_FAILED
       - INVALID_FACTORY_NAME
       - FACTORY_ALREADY_EXISTS
       - INVALID_FACTORY
@@ -26,6 +27,7 @@ properties:
       - INTERNAL_ERROR
     x-enum-descriptions:
       - Request payload or parameter validation failed.
+      - Factory session discovery found a readable factory target whose config could not be loaded.
       - Named factory name validation failed.
       - Submitted named factory already exists.
       - Submitted named factory payload failed validation.

@@ -3,6 +3,7 @@ import {
   FactorySessionsAPIError,
 } from "../../../api/factory-sessions";
 import {
+  hasUsableArtifactDownload,
   normalizeFactorySessionArtifactDrilldown,
   normalizeFactorySessionArtifactDrilldownLoadFailure,
 } from "./factory-session-artifact-drilldown";
@@ -59,6 +60,30 @@ describe("normalizeFactorySessionArtifactDrilldown", () => {
       href: "/factory-sessions/dur-sess-js-paused-001/artifacts/art-js-pause-001",
       method: "GET",
     });
+  });
+
+  it("treats self-referential artifact detail refs as unavailable download paths", () => {
+    const normalized = normalizeFactorySessionArtifactDrilldown(
+      artifactFixture.downloadOnly as FactorySessionArtifactDetail,
+    );
+
+    expect(hasUsableArtifactDownload(normalized)).toBe(false);
+  });
+
+  it("allows download actions when the retrieval ref points to a distinct payload path", () => {
+    expect(
+      hasUsableArtifactDownload({
+        artifactId: "art-js-success-001",
+        preview: {
+          kind: "download",
+          contentRef: {
+            href: "/factory-sessions/dur-sess-js-success-002/artifacts/art-js-success-001/content",
+            method: "GET",
+          },
+        },
+        sessionId: "dur-sess-js-success-002",
+      }),
+    ).toBe(true);
   });
 });
 

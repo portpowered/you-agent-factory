@@ -56,6 +56,7 @@ const (
 	EXECUTIONREQUESTIDCONFLICT                 ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
 	FACTORYALREADYEXISTS                       ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
 	FACTORYNOTIDLE                             ErrorResponseCode = "FACTORY_NOT_IDLE"
+	FACTORYSESSIONCONFIGLOADFAILED             ErrorResponseCode = "FACTORY_SESSION_CONFIG_LOAD_FAILED"
 	FACTORYSESSIONCONTROLREQUESTALREADYAPPLIED ErrorResponseCode = "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED"
 	INTERNALERROR                              ErrorResponseCode = "INTERNAL_ERROR"
 	INVALIDFACTORY                             ErrorResponseCode = "INVALID_FACTORY"
@@ -158,6 +159,7 @@ const (
 	FactoryEventTypeScriptRequest                 FactoryEventType = "SCRIPT_REQUEST"
 	FactoryEventTypeScriptResponse                FactoryEventType = "SCRIPT_RESPONSE"
 	FactoryEventTypeSessionCompleted              FactoryEventType = "SESSION_COMPLETED"
+	FactoryEventTypeSessionLifecycleControl       FactoryEventType = "SESSION_LIFECYCLE_CONTROL"
 	FactoryEventTypeSessionPaused                 FactoryEventType = "SESSION_PAUSED"
 	FactoryEventTypeSessionResultUpdated          FactoryEventType = "SESSION_RESULT_UPDATED"
 	FactoryEventTypeSessionResumed                FactoryEventType = "SESSION_RESUMED"
@@ -1182,9 +1184,12 @@ type FactoryDispatch struct {
 	SessionId string `json:"sessionId"`
 
 	// Status Canonical dispatch lifecycle status shared across orchestrators.
-	Status   FactoryDispatchStatus     `json:"status"`
-	Usage    *FactoryDispatchUsage     `json:"usage,omitempty"`
-	Warnings *[]FactoryDispatchWarning `json:"warnings,omitempty"`
+	Status FactoryDispatchStatus `json:"status"`
+
+	// StatusTransitions Ordered durable status history observed for the dispatch.
+	StatusTransitions *[]FactoryDispatchStatus  `json:"statusTransitions,omitempty"`
+	Usage             *FactoryDispatchUsage     `json:"usage,omitempty"`
+	Warnings          *[]FactoryDispatchWarning `json:"warnings,omitempty"`
 }
 
 // FactoryDispatchFailureDetail defines model for FactoryDispatchFailureDetail.
@@ -1201,6 +1206,9 @@ type FactoryDispatchFailureDetail struct {
 
 // FactoryDispatchJavaScriptProjection defines model for FactoryDispatchJavaScriptProjection.
 type FactoryDispatchJavaScriptProjection struct {
+	// ExecutionMode Durable child execution mode recorded for the JavaScript workflow task when available.
+	ExecutionMode *string `json:"executionMode,omitempty"`
+
 	// TaskKind JavaScript workflow task kind for one child dispatch.
 	TaskKind FactoryDispatchJavaScriptTaskKind `json:"taskKind"`
 
@@ -4079,6 +4087,27 @@ type SessionCompletedEventPayload struct {
 	ResultStatus *FactoryEventSessionResultStatus `json:"resultStatus,omitempty"`
 }
 
+// SessionLifecycleControlEventPayload Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only.
+type SessionLifecycleControlEventPayload struct {
+	// NewStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	NewStatus FactorySessionDurableLifecycleStatus `json:"newStatus"`
+
+	// OccurredAt When the lifecycle control took effect.
+	OccurredAt time.Time `json:"occurredAt"`
+
+	// Operation Durable factory-session lifecycle control operation requested by the client.
+	Operation FactorySessionLifecycleControlKind `json:"operation"`
+
+	// Outcome Typed lifecycle-control outcome. ACCEPTED means the control request was accepted and may complete asynchronously. NO_OP means the session was already in the requested end state. INVALID_STATE means the current session state does not allow the requested control. TERMINAL_SESSION means the session is already terminal and cannot accept the requested control. CONFLICT means another in-flight or incompatible control prevents the request.
+	Outcome FactorySessionLifecycleControlOutcome `json:"outcome"`
+
+	// PreviousStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	PreviousStatus FactorySessionDurableLifecycleStatus `json:"previousStatus"`
+
+	// Reason Optional operator-provided reason for the control request.
+	Reason *string `json:"reason,omitempty"`
+}
+
 // SessionPausedEventPayload Factory Session lifecycle pause recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only.
 type SessionPausedEventPayload struct {
 	// PausedAt When the Factory Session entered PAUSED.
@@ -6005,6 +6034,32 @@ func (t *FactoryEvent_Payload) MergeSessionCompletedEventPayload(v SessionComple
 	return err
 }
 
+// AsSessionLifecycleControlEventPayload returns the union data inside the FactoryEvent_Payload as a SessionLifecycleControlEventPayload
+func (t FactoryEvent_Payload) AsSessionLifecycleControlEventPayload() (SessionLifecycleControlEventPayload, error) {
+	var body SessionLifecycleControlEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromSessionLifecycleControlEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided SessionLifecycleControlEventPayload
+func (t *FactoryEvent_Payload) FromSessionLifecycleControlEventPayload(v SessionLifecycleControlEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeSessionLifecycleControlEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided SessionLifecycleControlEventPayload
+func (t *FactoryEvent_Payload) MergeSessionLifecycleControlEventPayload(v SessionLifecycleControlEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
 // AsOrchestratorPhaseChangedEventPayload returns the union data inside the FactoryEvent_Payload as a OrchestratorPhaseChangedEventPayload
 func (t FactoryEvent_Payload) AsOrchestratorPhaseChangedEventPayload() (OrchestratorPhaseChangedEventPayload, error) {
 	var body OrchestratorPhaseChangedEventPayload
@@ -6692,7 +6747,7 @@ type ServerInterface interface {
 	// Get one factory session partial result
 	// (GET /factory-sessions/{session_id}/partial-result)
 	GetFactorySessionPartialResult(w http.ResponseWriter, r *http.Request, sessionId SessionID)
-	// Pause one factory session
+	// Pause one Factory Session
 	// (POST /factory-sessions/{session_id}/pause)
 	PauseFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Get one live factory session result
@@ -6701,7 +6756,7 @@ type ServerInterface interface {
 	// Get durable factory session results
 	// (GET /factory-sessions/{session_id}/results)
 	GetFactorySessionResults(w http.ResponseWriter, r *http.Request, sessionId SessionID, params GetFactorySessionResultsParams)
-	// Resume one factory session
+	// Resume one Factory Session
 	// (POST /factory-sessions/{session_id}/resume)
 	ResumeFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
 	// Retry one durable factory session dispatch

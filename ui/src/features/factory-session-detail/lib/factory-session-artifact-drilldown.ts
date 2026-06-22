@@ -124,6 +124,24 @@ export function normalizeFactorySessionArtifactDrilldownLoadFailure(
   };
 }
 
+export function hasUsableArtifactDownload(
+  artifact: Pick<
+    FactorySessionArtifactDrilldown,
+    "artifactId" | "preview" | "sessionId"
+  >,
+): boolean {
+  if (artifact.preview.kind !== "download") {
+    return false;
+  }
+
+  return (
+    normalizeArtifactRetrievalHref(artifact.preview.contentRef.href) !==
+    normalizeArtifactRetrievalHref(
+      buildArtifactDetailPath(artifact.sessionId, artifact.artifactId),
+    )
+  );
+}
+
 function normalizeArtifactPreview(
   artifact: FactorySessionArtifactDetail,
 ): FactorySessionArtifactDrilldownPreview {
@@ -154,4 +172,17 @@ function isFactorySessionsAPIError(
     error.name === "FactorySessionsAPIError" &&
     "code" in error
   );
+}
+
+function buildArtifactDetailPath(sessionId: string, artifactId: string): string {
+  // hardcoded-ui-copy-exception: non-product-diagnostic
+  return `/factory-sessions/${encodeURIComponent(sessionId)}/artifacts/${encodeURIComponent(artifactId)}`;
+}
+
+function normalizeArtifactRetrievalHref(href: string): string {
+  const normalized = href.trim().split("#", 1)[0]?.split("?", 1)[0] ?? "";
+  if (normalized.length > 1 && normalized.endsWith("/")) {
+    return normalized.slice(0, -1);
+  }
+  return normalized;
 }
