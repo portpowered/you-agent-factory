@@ -369,20 +369,69 @@ function ArtifactDrilldownBody({
       <DashboardHeading as="h4">{messages.artifactDetailHeading}</DashboardHeading>
       <div className="grid gap-2 sm:grid-cols-2">
         <Metric label={messages.artifactIdLabel} value={state.artifact.artifactId} />
+        <Metric label={messages.artifactKindLabel} value={state.artifact.kind} />
         <Metric
           label={messages.artifactVisibilityLabel}
           value={state.artifact.visibility}
         />
+        {state.artifact.label ? (
+          <Metric
+            label={messages.artifactLabelValueLabel}
+            value={state.artifact.label}
+          />
+        ) : null}
         {state.artifact.dispatchId ? (
           <Metric
             label={messages.artifactDispatchIdLabel}
             value={state.artifact.dispatchId}
           />
         ) : null}
+        {state.artifact.capture?.sourceDispatchId ? (
+          <Metric
+            label={messages.artifactSourceDispatchIdLabel}
+            value={state.artifact.capture.sourceDispatchId}
+          />
+        ) : null}
         {state.artifact.summary ? (
           <Metric
             label={messages.artifactSummaryLabel}
             value={state.artifact.summary}
+          />
+        ) : null}
+        {state.artifact.createdAt ? (
+          <Metric
+            label={messages.artifactCreatedAtLabel}
+            value={state.artifact.createdAt}
+          />
+        ) : null}
+        {state.artifact.capture?.capturedAt ? (
+          <Metric
+            label={messages.artifactCapturedAtLabel}
+            value={state.artifact.capture.capturedAt}
+          />
+        ) : null}
+        {state.artifact.auditMode ? (
+          <Metric
+            label={messages.artifactAuditModeLabel}
+            value={state.artifact.auditMode}
+          />
+        ) : null}
+        {state.artifact.capture?.mimeType ? (
+          <Metric
+            label={messages.artifactCaptureMimeTypeLabel}
+            value={state.artifact.capture.mimeType}
+          />
+        ) : null}
+        {typeof state.artifact.sizeBytes === "number" ? (
+          <Metric
+            label={messages.artifactSizeBytesLabel}
+            value={String(state.artifact.sizeBytes)}
+          />
+        ) : null}
+        {state.artifact.contentHash ? (
+          <Metric
+            label={messages.artifactContentHashLabel}
+            value={state.artifact.contentHash}
           />
         ) : null}
       </div>
@@ -398,7 +447,7 @@ function ArtifactDrilldownBody({
         ) : state.artifact.preview.kind === "download" ? (
           <div className="grid gap-2">
             <DashboardText variant="supporting">
-              {messages.artifactDetailUnavailableState}
+              {messages.artifactDownloadState}
             </DashboardText>
             <ButtonLink
               className="w-fit"
@@ -406,7 +455,7 @@ function ArtifactDrilldownBody({
               size="sm"
               tone="outline"
             >
-              {messages.artifactViewLabel}
+              {messages.artifactDownloadActionLabel}
             </ButtonLink>
           </div>
         ) : (

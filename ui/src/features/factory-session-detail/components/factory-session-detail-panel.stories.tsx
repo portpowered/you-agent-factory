@@ -50,6 +50,12 @@ export const ArtifactDrilldown = {
                     label: "bundle export",
                     visibility: "CUSTOMER",
                   },
+                  {
+                    id: "artifact-unavailable",
+                    kind: "TRACE_EXPORT",
+                    label: "trace snapshot",
+                    visibility: "CUSTOMER",
+                  },
                 ],
                 dispatches: [
                   {
@@ -126,13 +132,20 @@ export const ArtifactDrilldown = {
           response: {
             body: {
               auditMode: "OFF",
+              captureMetadata: {
+                capturedAt: "2026-06-08T14:02:30Z",
+                mimeType: "text/plain",
+                sourceDispatchId: "dispatch-parent",
+              },
               content: [{ text: "review output body", type: "output_text" }],
+              contentHash: "sha256:artifact-preview-1",
               createdAt: "2026-06-08T14:03:00Z",
               dispatchId: "dispatch-1",
               id: "artifact-1",
               kind: "CHILD_RESULT",
               label: "review output",
               sessionId: sessionID,
+              sizeBytes: 128,
               summary: "Captured during review",
               visibility: "CUSTOMER",
             },
@@ -157,6 +170,21 @@ export const ArtifactDrilldown = {
             },
           },
         },
+        {
+          method: "GET",
+          path: `/factory-sessions/${sessionID}/artifacts/artifact-unavailable`,
+          response: {
+            body: {
+              auditMode: "OFF",
+              createdAt: "2026-06-08T14:04:00Z",
+              id: "artifact-unavailable",
+              kind: "TRACE_EXPORT",
+              label: "trace snapshot",
+              sessionId: sessionID,
+              visibility: "CUSTOMER",
+            },
+          },
+        },
       ],
     },
   },
@@ -174,9 +202,21 @@ export const ArtifactDrilldown = {
     });
     await userEvent.click(downloadToggle);
     await expect(
+      canvas.getByText(
+        "Inline preview is unavailable for this durable artifact. Download the artifact to inspect it.",
+      ),
+    ).toBeTruthy();
+    await expect(
+      canvas.getByRole("link", { name: "Download artifact" }),
+    ).toBeTruthy();
+
+    const unavailableToggle = canvas.getByRole("button", {
+      name: "View artifact artifact-unavailable",
+    });
+    await userEvent.click(unavailableToggle);
+    await expect(
       canvas.getByText("Inline preview is unavailable for this durable artifact."),
     ).toBeTruthy();
-    await expect(canvas.getByRole("link", { name: "View artifact" })).toBeTruthy();
   },
   render: () => (
     <div style={{ maxWidth: "960px" }}>
