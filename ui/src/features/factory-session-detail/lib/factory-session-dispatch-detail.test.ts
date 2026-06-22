@@ -1,13 +1,15 @@
 import type { FactoryDispatch } from "../../../api/factory-sessions/dispatch-detail";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
+import { describe, expect, it } from "vitest";
 import { normalizeFactorySessionDispatchDetail } from "./factory-session-dispatch-detail";
 
-const successfulDispatchFixture: FactoryDispatch = {
+const successfulDispatchFixture = {
   artifactIds: ["artifact-final-1", "artifact-log-2"],
   attempt: 2,
   dispatchKind: "JAVASCRIPT_AGENT",
   id: "dispatch-success-1",
   javascript: {
+    executionMode: " live ",
     taskKind: "AGENT",
     taskLabel: " Draft response ",
   },
@@ -29,6 +31,7 @@ const successfulDispatchFixture: FactoryDispatch = {
   schemaDigest: " sha256:schema-1 ",
   sessionId: "dur-sess-js-success-1",
   status: "COMPLETED",
+  statusTransitions: ["QUEUED", "RUNNING", "COMPLETED"],
   usage: {
     costUsd: 0.21,
     durationMillis: 4400,
@@ -43,9 +46,14 @@ const successfulDispatchFixture: FactoryDispatch = {
       message: "Token budget was nearly exhausted.",
     },
   ],
+} as FactoryDispatch & {
+  statusTransitions: string[];
+  javascript: FactoryDispatch["javascript"] & {
+    executionMode: string;
+  };
 };
 
-const failedDispatchFixture: FactoryDispatch = {
+const failedDispatchFixture = {
   artifactIds: [],
   dispatchKind: "JAVASCRIPT_VERIFY",
   failureDetail: {
@@ -55,6 +63,7 @@ const failedDispatchFixture: FactoryDispatch = {
   },
   id: "dispatch-failed-1",
   javascript: {
+    executionMode: " live ",
     taskKind: "VERIFY",
   },
   label: " verify ",
@@ -64,6 +73,12 @@ const failedDispatchFixture: FactoryDispatch = {
   runnerId: "   ",
   sessionId: "dur-sess-js-failed-1",
   status: "FAILED",
+  statusTransitions: ["QUEUED", "RUNNING", "FAILED"],
+} as FactoryDispatch & {
+  statusTransitions: string[];
+  javascript: FactoryDispatch["javascript"] & {
+    executionMode: string;
+  };
 };
 
 describe("normalizeFactorySessionDispatchDetail", () => {
@@ -85,6 +100,7 @@ describe("normalizeFactorySessionDispatchDetail", () => {
       dispatchID: "dispatch-success-1",
       dispatchKind: "JAVASCRIPT_AGENT",
       javascript: {
+        executionMode: "live",
         taskKind: "AGENT",
         taskLabel: "Draft response",
       },
@@ -106,7 +122,7 @@ describe("normalizeFactorySessionDispatchDetail", () => {
       schemaDigest: "sha256:schema-1",
       sessionID: "dur-sess-js-success-1",
       status: "COMPLETED",
-      statusHistory: [],
+      statusHistory: ["QUEUED", "RUNNING", "COMPLETED"],
       usage: {
         costUsd: 0.21,
         durationMillis: 4400,
@@ -137,6 +153,7 @@ describe("normalizeFactorySessionDispatchDetail", () => {
         reason: "VERIFY_ASSERTION_FAILED",
       },
       javascript: {
+        executionMode: "live",
         taskKind: "VERIFY",
         taskLabel: undefined,
       },
@@ -152,7 +169,7 @@ describe("normalizeFactorySessionDispatchDetail", () => {
       schemaDigest: undefined,
       sessionID: "dur-sess-js-failed-1",
       status: "FAILED",
-      statusHistory: [],
+      statusHistory: ["QUEUED", "RUNNING", "FAILED"],
       usage: undefined,
       warnings: [],
     });

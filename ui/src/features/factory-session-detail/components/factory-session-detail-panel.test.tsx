@@ -1,11 +1,15 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: orchestrator-aware session detail states share one fetch harness and assertion seam.
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 import { FactorySessionDetailPanel } from "./factory-session-detail-panel";
+import {
+  createDeferred,
+  jsonResponse,
+  renderWithQueryClient,
+} from "./factory-session-detail-panel.test-helpers";
 
 describe("FactorySessionDetailPanel", () => {
   beforeEach(() => {
@@ -152,20 +156,68 @@ describe("FactorySessionDetailPanel", () => {
 
     dispatchDetailResponse.resolve(
       jsonResponse({
+        artifactIds: ["artifact-dispatch-1"],
+        attempt: 2,
         dispatchKind: "JAVASCRIPT_AGENT",
         id: "dispatch-1",
+        javascript: {
+          executionMode: " live ",
+          taskKind: "AGENT",
+          taskLabel: " Review child task ",
+        },
+        label: " Review child task ",
+        model: " gpt-5.5 ",
         orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+        phase: " review ",
+        promptDigest: " sha256:prompt-1 ",
+        provider: " openai ",
+        providerSessionRefs: [
+          {
+            id: "provider-session-1",
+            kind: "response_id",
+            provider: "openai",
+          },
+        ],
+        relatedWorkIds: ["work-123"],
+        runnerId: " runner-a ",
+        schemaDigest: " sha256:schema-1 ",
         sessionId: "session-beta",
         status: "COMPLETED",
+        statusTransitions: ["QUEUED", "RUNNING", "COMPLETED"],
+        usage: {
+          costUsd: 0.21,
+          durationMillis: 4400,
+          inputTokens: 120,
+          outputTokens: 80,
+          retryCount: 1,
+          totalTokens: 200,
+        },
+        warnings: [
+          {
+            code: "DISPATCH_WARNING",
+            message: "Token budget was nearly exhausted.",
+          },
+        ],
       }),
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Dispatch kind")).toBeTruthy();
+      expect(screen.getByText("JavaScript task")).toBeTruthy();
     });
 
     expect(screen.getAllByText("COMPLETED").length).toBeGreaterThan(0);
     expect(screen.getAllByText("JAVASCRIPT_AGENT").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Review child task").length).toBeGreaterThan(1);
+    expect(screen.getByText("live")).toBeTruthy();
+    expect(screen.getByText("response_id · provider-session-1")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "artifact-dispatch-1" }),
+    ).toBeTruthy();
+    expect(screen.getByText("QUEUED")).toBeTruthy();
+    expect(screen.getByText("RUNNING")).toBeTruthy();
+    expect(screen.getByText("$0.21")).toBeTruthy();
+    expect(screen.getByText("4,400 ms")).toBeTruthy();
+    expect(screen.getByText("Token budget was nearly exhausted.")).toBeTruthy();
   });
 
   it("shows durable JavaScript session summary from shared typed session data", async () => {
@@ -621,40 +673,5 @@ describe("FactorySessionDetailPanel", () => {
       expect(screen.getByText("dispatch boom")).toBeTruthy();
     });
   });
+
 });
-
-function renderWithQueryClient(children: ReactNode) {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false,
-      },
-    },
-  });
-
-  return render(
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>,
-  );
-}
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    headers: { "Content-Type": "application/json" },
-    status,
-  });
-}
-
-function createDeferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
-    resolve = resolvePromise;
-    reject = rejectPromise;
-  });
-
-  return {
-    promise,
-    reject,
-    resolve,
-  };
-}

@@ -38,7 +38,7 @@ export interface FactorySessionDispatchDrilldownModel {
   phase?: string;
   promptDigest?: string;
   provider?: string;
-  providerSessionRefs: FactoryDispatch["providerSessionRefs"];
+  providerSessionRefs: NonNullable<FactoryDispatch["providerSessionRefs"]>;
   relatedWorkIDs: string[];
   runnerID?: string;
   schemaDigest?: string;
@@ -46,7 +46,7 @@ export interface FactorySessionDispatchDrilldownModel {
   status: string;
   statusHistory: string[];
   usage?: FactoryDispatch["usage"];
-  warnings: FactoryDispatch["warnings"];
+  warnings: NonNullable<FactoryDispatch["warnings"]>;
   javascript?: FactorySessionDispatchJavaScriptModel;
   petri?: FactorySessionDispatchPetriModel;
 }
@@ -74,6 +74,7 @@ export function normalizeFactorySessionDispatchDetail(
       : undefined,
     javascript: dispatch.javascript
       ? {
+          executionMode: getJavaScriptExecutionMode(dispatch),
           taskKind: dispatch.javascript.taskKind,
           taskLabel: normalizeOptionalText(dispatch.javascript.taskLabel),
         }
@@ -99,7 +100,7 @@ export function normalizeFactorySessionDispatchDetail(
     schemaDigest: normalizeOptionalText(dispatch.schemaDigest),
     sessionID: dispatch.sessionId,
     status: dispatch.status,
-    statusHistory: [],
+    statusHistory: getStatusHistory(dispatch),
     usage: dispatch.usage,
     warnings: dispatch.warnings ?? [],
   };
@@ -118,4 +119,32 @@ function buildFactorySessionArtifactHref({
 function normalizeOptionalText(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : undefined;
+}
+
+function getJavaScriptExecutionMode(
+  dispatch: FactoryDispatch,
+): string | undefined {
+  const javascript = readRecord(readRecord(dispatch).javascript);
+  return typeof javascript.executionMode === "string"
+    ? normalizeOptionalText(javascript.executionMode)
+    : undefined;
+}
+
+function getStatusHistory(dispatch: FactoryDispatch): string[] {
+  const statusTransitions = readRecord(dispatch).statusTransitions;
+  if (!Array.isArray(statusTransitions)) {
+    return [];
+  }
+
+  return statusTransitions.flatMap((status) => {
+    const normalizedStatus =
+      typeof status === "string" ? normalizeOptionalText(status) : undefined;
+    return normalizedStatus ? [normalizedStatus] : [];
+  });
+}
+
+function readRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : {};
 }
