@@ -85,6 +85,35 @@ describe("normalizeFactorySessionArtifactDrilldown", () => {
       }),
     ).toBe(true);
   });
+
+  it("treats inline previews as non-downloadable drilldowns", () => {
+    expect(
+      hasUsableArtifactDownload({
+        artifactId: "art-js-inline-001",
+        preview: {
+          content: [{ text: "inline artifact", type: "text" }],
+          kind: "inline",
+        },
+        sessionId: "dur-sess-js-inline-001",
+      }),
+    ).toBe(false);
+  });
+
+  it("normalizes self-referential download refs that only differ by query, hash, or trailing slash", () => {
+    expect(
+      hasUsableArtifactDownload({
+        artifactId: "art-js-success-001",
+        preview: {
+          kind: "download",
+          contentRef: {
+            href: "/factory-sessions/dur-sess-js-success-002/artifacts/art-js-success-001/?download=1#content",
+            method: "GET",
+          },
+        },
+        sessionId: "dur-sess-js-success-002",
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("normalizeFactorySessionArtifactDrilldownLoadFailure", () => {
@@ -132,6 +161,17 @@ describe("normalizeFactorySessionArtifactDrilldownLoadFailure", () => {
     expect(failure).toEqual({
       kind: "invalid-response",
       message: "The factory sessions API returned an invalid response.",
+    });
+  });
+
+  it("maps non-API errors to an unknown failure with the original error message", () => {
+    const failure = normalizeFactorySessionArtifactDrilldownLoadFailure(
+      new Error("Artifact normalization crashed."),
+    );
+
+    expect(failure).toEqual({
+      kind: "unknown",
+      message: "Artifact normalization crashed.",
     });
   });
 });
