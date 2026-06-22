@@ -1,12 +1,17 @@
 import type { components } from "../../../api/generated/openapi";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
+import { useState } from "react";
 import {
   AlertPanel,
+  ButtonLink,
   DashboardHeading,
   DashboardLabel,
   DashboardText,
+  ExpandablePanelTrigger,
 } from "../../../components/ui";
 import { DetailCopy } from "../../../components/ui/widget-frame";
+import { WorkContentReadOnlyList } from "../../work-content/public";
+import { useFactorySessionArtifactDrilldown } from "../hooks/use-factory-session-artifact-drilldown";
 import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
 import { getFactorySessionDetailMessages } from "../messages/factory-session-detail";
 
@@ -87,6 +92,7 @@ function FactorySessionRuntimeSections({
           locale={locale}
           partialResult={data.partialResult}
           result={data.result}
+          sessionID={data.session.id}
         />
       ) : (
         <PetriSessionProjection locale={locale} petri={runtime.petri} />
@@ -102,6 +108,7 @@ function JavaScriptSessionProjection({
   locale,
   partialResult,
   result,
+  sessionID,
 }: {
   artifacts?: FactoryArtifact[];
   dispatches?: FactoryDispatch[];
@@ -109,6 +116,7 @@ function JavaScriptSessionProjection({
   locale?: string;
   partialResult?: components["schemas"]["FactorySessionPartialResult"];
   result?: components["schemas"]["FactorySessionLiveResult"];
+  sessionID: string;
 }) {
   const messages = getFactorySessionDetailMessages(locale);
 
@@ -148,7 +156,12 @@ function JavaScriptSessionProjection({
       ) : null}
 
       {artifacts && artifacts.length > 0 ? (
-        <ArtifactList artifacts={artifacts} heading={messages.artifactsHeading} />
+        <ArtifactList
+          artifacts={artifacts}
+          heading={messages.artifactsHeading}
+          locale={locale}
+          sessionID={sessionID}
+        />
       ) : null}
 
       {warnings.length > 0 ? (
@@ -235,23 +248,173 @@ function CheckpointRefList({
 function ArtifactList({
   artifacts,
   heading,
+  locale,
+  sessionID,
 }: {
   artifacts: FactoryArtifact[];
   heading: string;
+  locale?: string;
+  sessionID: string | null;
 }) {
+  const messages = getFactorySessionDetailMessages(locale);
+  const [expandedArtifactID, setExpandedArtifactID] = useState<string | null>(
+    null,
+  );
+
   return (
     <div className="grid gap-2">
       <DashboardLabel>{heading}</DashboardLabel>
       <ul className="grid gap-1">
         {artifacts.map((artifact) => (
           <li key={artifact.id}>
-            <DashboardText>
-              {artifact.kind}
-              {artifact.label ? ` — ${artifact.label}` : ""}
-            </DashboardText>
+            <ArtifactDisclosure
+              artifact={artifact}
+              expanded={expandedArtifactID === artifact.id}
+              locale={locale}
+              messages={messages}
+              onToggle={(expanded) => {
+                setExpandedArtifactID(expanded ? artifact.id : null);
+              }}
+              sessionID={sessionID}
+            />
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+function ArtifactDisclosure({
+  artifact,
+  expanded,
+  locale,
+  messages,
+  onToggle,
+  sessionID,
+}: {
+  artifact: FactoryArtifact;
+  expanded: boolean;
+  locale?: string;
+  messages: ReturnType<typeof getFactorySessionDetailMessages>;
+  onToggle: (expanded: boolean) => void;
+  sessionID: string | null;
+}) {
+  const contentID = `factory-session-artifact-${artifact.id}`;
+
+  return (
+    <div className="grid gap-2 rounded-lg border border-outline bg-surface-container-low p-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="grid gap-1">
+          <DashboardText>
+            {artifact.kind}
+            {artifact.label ? ` — ${artifact.label}` : ""}
+          </DashboardText>
+          <DashboardText variant="supporting">{artifact.id}</DashboardText>
+        </div>
+        <ExpandablePanelTrigger
+          aria-label={`${messages.artifactViewLabel} ${artifact.id}`}
+          controlsID={contentID}
+          expanded={expanded}
+          onClick={() => {
+            onToggle(!expanded);
+          }}
+          variant="compact"
+        >
+          {messages.artifactViewLabel}
+        </ExpandablePanelTrigger>
+      </div>
+      {expanded ? (
+        <div className="grid gap-3 border-t border-outline pt-3" id={contentID}>
+          <ArtifactDrilldownBody
+            artifactID={artifact.id}
+            locale={locale}
+            sessionID={sessionID}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ArtifactDrilldownBody({
+  artifactID,
+  locale,
+  sessionID,
+}: {
+  artifactID: string;
+  locale?: string;
+  sessionID: string | null;
+}) {
+  const messages = getFactorySessionDetailMessages(locale);
+  const state = useFactorySessionArtifactDrilldown(sessionID, artifactID, true);
+
+  if (state.status === "loading") {
+    return <DetailCopy>{messages.artifactDetailLoadingState}</DetailCopy>;
+  }
+
+  if (state.status === "error") {
+    return (
+      <AlertPanel tone="danger">
+        {state.failure.message || messages.artifactDetailErrorState}
+      </AlertPanel>
+    );
+  }
+
+  if (state.status !== "success") {
+    return null;
+  }
+
+  return (
+    <div className="grid gap-3">
+      <DashboardHeading as="h4">{messages.artifactDetailHeading}</DashboardHeading>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Metric label={messages.artifactIdLabel} value={state.artifact.artifactId} />
+        <Metric
+          label={messages.artifactVisibilityLabel}
+          value={state.artifact.visibility}
+        />
+        {state.artifact.dispatchId ? (
+          <Metric
+            label={messages.artifactDispatchIdLabel}
+            value={state.artifact.dispatchId}
+          />
+        ) : null}
+        {state.artifact.summary ? (
+          <Metric
+            label={messages.artifactSummaryLabel}
+            value={state.artifact.summary}
+          />
+        ) : null}
+      </div>
+      <div className="grid gap-2">
+        <DashboardLabel>{messages.artifactPreviewHeading}</DashboardLabel>
+        {state.artifact.preview.kind === "inline" ? (
+          <WorkContentReadOnlyList
+            ariaLabel={messages.artifactPreviewHeading}
+            content={state.artifact.preview.content}
+            landmark={false}
+            showHeading={false}
+          />
+        ) : state.artifact.preview.kind === "download" ? (
+          <div className="grid gap-2">
+            <DashboardText variant="supporting">
+              {messages.artifactDetailUnavailableState}
+            </DashboardText>
+            <ButtonLink
+              className="w-fit"
+              href={state.artifact.preview.contentRef.href}
+              size="sm"
+              tone="outline"
+            >
+              {messages.artifactViewLabel}
+            </ButtonLink>
+          </div>
+        ) : (
+          <DashboardText variant="supporting">
+            {messages.artifactDetailUnavailableState}
+          </DashboardText>
+        )}
+      </div>
     </div>
   );
 }

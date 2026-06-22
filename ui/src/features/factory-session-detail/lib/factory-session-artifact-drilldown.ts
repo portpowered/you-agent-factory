@@ -43,19 +43,19 @@ export type FactorySessionArtifactDrilldownPreview =
 export type FactorySessionArtifactDrilldownLoadFailure =
   | {
       kind: "invalid-response";
-      message: string;
+      message?: string;
     }
   | {
       kind: "network";
-      message: string;
+      message?: string;
     }
   | {
       kind: "not-found";
-      message: string;
+      message?: string;
     }
   | {
       kind: "unknown";
-      message: string;
+      message?: string;
     };
 
 export function normalizeFactorySessionArtifactDrilldown(
@@ -91,8 +91,7 @@ export function normalizeFactorySessionArtifactDrilldownLoadFailure(
   if (!isFactorySessionsAPIError(error)) {
     return {
       kind: "unknown",
-      message:
-        error instanceof Error ? error.message : "Artifact loading failed.",
+      message: error instanceof Error ? error.message : undefined,
     };
   }
 

@@ -4,7 +4,17 @@ import {
 } from "../../../i18n";
 
 export interface FactorySessionDetailMessages {
+  artifactDetailErrorState: string;
+  artifactDetailHeading: string;
+  artifactDetailLoadingState: string;
+  artifactDetailUnavailableState: string;
+  artifactDispatchIdLabel: string;
+  artifactIdLabel: string;
+  artifactPreviewHeading: string;
   artifactsHeading: string;
+  artifactSummaryLabel: string;
+  artifactViewLabel: string;
+  artifactVisibilityLabel: string;
   checkpointRefsHeading: string;
   childDispatchCountsLabel: string;
   dynamicWorkflowShorthand: string;
@@ -29,7 +39,18 @@ export interface FactorySessionDetailMessages {
 
 const factorySessionDetailMessagesByLocale = {
   en: {
+    artifactDetailErrorState: "The artifact detail could not be loaded.",
+    artifactDetailHeading: "Artifact detail",
+    artifactDetailLoadingState: "Loading artifact detail…",
+    artifactDetailUnavailableState:
+      "Inline preview is unavailable for this durable artifact.",
+    artifactDispatchIdLabel: "Dispatch id",
+    artifactIdLabel: "Artifact id",
+    artifactPreviewHeading: "Preview",
     artifactsHeading: "Artifacts",
+    artifactSummaryLabel: "Summary",
+    artifactViewLabel: "View artifact",
+    artifactVisibilityLabel: "Visibility",
     checkpointRefsHeading: "Checkpoint refs",
     childDispatchCountsLabel: "Child dispatches",
     dynamicWorkflowShorthand: "Dynamic workflow (JavaScript factory session)",
@@ -52,7 +73,17 @@ const factorySessionDetailMessagesByLocale = {
     warningsHeading: "Dispatch warnings",
   },
   "zh-CN": {
+    artifactDetailErrorState: "无法加载工件详情。",
+    artifactDetailHeading: "工件详情",
+    artifactDetailLoadingState: "正在加载工件详情…",
+    artifactDetailUnavailableState: "此持久工件暂不支持内联预览。",
+    artifactDispatchIdLabel: "调度 ID",
+    artifactIdLabel: "工件 ID",
+    artifactPreviewHeading: "预览",
     artifactsHeading: "工件",
+    artifactSummaryLabel: "摘要",
+    artifactViewLabel: "查看工件",
+    artifactVisibilityLabel: "可见性",
     checkpointRefsHeading: "检查点引用",
     childDispatchCountsLabel: "子调度",
     dynamicWorkflowShorthand: "动态工作流（JavaScript 工厂会话）",
