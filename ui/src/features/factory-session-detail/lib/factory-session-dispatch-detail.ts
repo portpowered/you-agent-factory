@@ -111,6 +111,7 @@ function buildFactorySessionArtifactHref({
 }: Pick<FactorySessionDispatchDetailRef, "session_id"> & {
   artifactID: string;
 }): string {
+  // hardcoded-ui-copy-exception: non-product-diagnostic
   return `/factory-sessions/${encodeURIComponent(session_id)}/artifacts/${encodeURIComponent(artifactID)}`;
 }
 

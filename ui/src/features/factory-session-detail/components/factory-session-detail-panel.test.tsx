@@ -1,6 +1,7 @@
 // biome-ignore-all lint/complexity/noExcessiveLinesPerFunction: orchestrator-aware session detail states share one fetch harness and assertion seam.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
@@ -16,6 +17,7 @@ describe("FactorySessionDetailPanel", () => {
   });
 
   it("shows loading and success states for a JavaScript factory session", async () => {
+    const dispatchDetailResponse = createDeferred<Response>();
     vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
       const url = String(input);
       if (url.endsWith("/factory-sessions/session-beta")) {
@@ -105,6 +107,11 @@ describe("FactorySessionDetailPanel", () => {
           sessionId: "session-beta",
         });
       }
+      if (
+        url.endsWith("/factory-sessions/session-beta/dispatches/dispatch-1")
+      ) {
+        return dispatchDetailResponse.promise;
+      }
       return new Response("not found", { status: 404 });
     });
 
@@ -123,11 +130,42 @@ describe("FactorySessionDetailPanel", () => {
     expect(screen.getByText("JavaScript workflow")).toBeTruthy();
     expect(screen.getAllByText("Idle").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("review")).toBeTruthy();
-    expect(screen.getByText("cp-1 (plan) — saved plan checkpoint")).toBeTruthy();
+    expect(
+      screen.getByText("cp-1 (plan) — saved plan checkpoint"),
+    ).toBeTruthy();
     expect(screen.getByText("child agent retry scheduled")).toBeTruthy();
     expect(screen.getByText("artifact-final · FINAL_RESULT")).toBeTruthy();
     expect(screen.getByText("artifact-partial · CHILD_RESULT")).toBeTruthy();
     expect(screen.queryByText("rawCheckpointBody")).toBeNull();
+
+    const user = userEvent.setup();
+    const drilldownTrigger = screen.getByRole("button", {
+      name: "Expand dispatch detail for dispatch-1",
+    });
+
+    expect(drilldownTrigger.getAttribute("aria-expanded")).toBe("false");
+
+    await user.click(drilldownTrigger);
+
+    expect(screen.getByText("Loading dispatch detail…")).toBeTruthy();
+    expect(drilldownTrigger.getAttribute("aria-expanded")).toBe("true");
+
+    dispatchDetailResponse.resolve(
+      jsonResponse({
+        dispatchKind: "JAVASCRIPT_AGENT",
+        id: "dispatch-1",
+        orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+        sessionId: "session-beta",
+        status: "COMPLETED",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Dispatch kind")).toBeTruthy();
+    });
+
+    expect(screen.getAllByText("COMPLETED").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("JAVASCRIPT_AGENT").length).toBeGreaterThan(0);
   });
 
   it("shows durable JavaScript session summary from shared typed session data", async () => {
@@ -318,9 +356,7 @@ describe("FactorySessionDetailPanel", () => {
       }),
     );
 
-    renderWithQueryClient(
-      <FactorySessionDetailPanel sessionID="~default" />,
-    );
+    renderWithQueryClient(<FactorySessionDetailPanel sessionID="~default" />);
 
     await waitFor(() => {
       expect(screen.getByText("1 token")).toBeTruthy();
@@ -334,10 +370,13 @@ describe("FactorySessionDetailPanel", () => {
 
   it("shows an error state when the factory session API fails", async () => {
     vi.mocked(globalThis.fetch).mockResolvedValue(
-      new Response(JSON.stringify({ code: "INTERNAL_ERROR", message: "boom" }), {
-        headers: { "Content-Type": "application/json" },
-        status: 500,
-      }),
+      new Response(
+        JSON.stringify({ code: "INTERNAL_ERROR", message: "boom" }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 500,
+        },
+      ),
     );
 
     renderWithQueryClient(
@@ -414,6 +453,174 @@ describe("FactorySessionDetailPanel", () => {
       );
     });
   });
+
+  it("shows unavailable dispatch detail when the durable dispatch read returns not found", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/factory-sessions/session-beta")) {
+        return jsonResponse({
+          factoryDir: "/workspace/root/beta",
+          folderPath: "/workspace/root",
+          id: "session-beta",
+          isDefault: false,
+          project: "beta",
+          runtime: {
+            dispatches: [
+              {
+                dispatchKind: "JAVASCRIPT_AGENT",
+                id: "dispatch-404",
+                orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+                sessionId: "session-beta",
+                status: "FAILED",
+              },
+            ],
+            javascript: {
+              childDispatchCounts: {
+                completed: 0,
+                queued: 0,
+                running: 0,
+              },
+              phases: [],
+              scriptStatus: "FAILED",
+            },
+            lifecycle: {
+              startedAt: "2026-06-08T14:00:00Z",
+              updatedAt: "2026-06-08T14:05:00Z",
+            },
+            orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+            progress: {
+              categories: {},
+              factoryState: "RUNNING",
+              inFlightCount: 0,
+              totalTokens: 0,
+            },
+            status: "FAILED",
+            usage: { resources: [] },
+          },
+          target: { kind: "named", name: "beta" },
+        });
+      }
+      if (url.endsWith("/factory-sessions/session-beta/result")) {
+        return new Response("not found", { status: 404 });
+      }
+      if (url.endsWith("/factory-sessions/session-beta/partial-result")) {
+        return new Response("not found", { status: 404 });
+      }
+      if (
+        url.endsWith("/factory-sessions/session-beta/dispatches/dispatch-404")
+      ) {
+        return new Response("not found", { status: 404 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="session-beta" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Dispatches")).toBeTruthy();
+    });
+
+    const user = userEvent.setup();
+    const drilldownTrigger = screen.getByRole("button", {
+      name: "Expand dispatch detail for dispatch-404",
+    });
+    drilldownTrigger.focus();
+    await user.keyboard("{Enter}");
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("This dispatch detail is no longer available."),
+      ).toBeTruthy();
+    });
+  });
+
+  it("shows a dispatch-detail error state when the durable dispatch read fails", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/factory-sessions/session-beta")) {
+        return jsonResponse({
+          factoryDir: "/workspace/root/beta",
+          folderPath: "/workspace/root",
+          id: "session-beta",
+          isDefault: false,
+          project: "beta",
+          runtime: {
+            dispatches: [
+              {
+                dispatchKind: "JAVASCRIPT_AGENT",
+                id: "dispatch-500",
+                orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+                sessionId: "session-beta",
+                status: "FAILED",
+              },
+            ],
+            javascript: {
+              childDispatchCounts: {
+                completed: 0,
+                queued: 0,
+                running: 0,
+              },
+              phases: [],
+              scriptStatus: "FAILED",
+            },
+            lifecycle: {
+              startedAt: "2026-06-08T14:00:00Z",
+              updatedAt: "2026-06-08T14:05:00Z",
+            },
+            orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+            progress: {
+              categories: {},
+              factoryState: "RUNNING",
+              inFlightCount: 0,
+              totalTokens: 0,
+            },
+            status: "FAILED",
+            usage: { resources: [] },
+          },
+          target: { kind: "named", name: "beta" },
+        });
+      }
+      if (url.endsWith("/factory-sessions/session-beta/result")) {
+        return new Response("not found", { status: 404 });
+      }
+      if (url.endsWith("/factory-sessions/session-beta/partial-result")) {
+        return new Response("not found", { status: 404 });
+      }
+      if (
+        url.endsWith("/factory-sessions/session-beta/dispatches/dispatch-500")
+      ) {
+        return new Response(
+          JSON.stringify({ code: "INTERNAL_ERROR", message: "dispatch boom" }),
+          {
+            headers: { "Content-Type": "application/json" },
+            status: 500,
+          },
+        );
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID="session-beta" />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Dispatches")).toBeTruthy();
+    });
+
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", {
+        name: "Expand dispatch detail for dispatch-500",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("dispatch boom")).toBeTruthy();
+    });
+  });
 });
 
 function renderWithQueryClient(children: ReactNode) {
@@ -435,4 +642,19 @@ function jsonResponse(body: unknown, status = 200): Response {
     headers: { "Content-Type": "application/json" },
     status,
   });
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+
+  return {
+    promise,
+    reject,
+    resolve,
+  };
 }
