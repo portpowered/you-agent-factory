@@ -3,6 +3,7 @@ import {
   closeFactorySession,
   FactorySessionsAPIError,
   getFactorySession,
+  getFactorySessionArtifact,
   getFactorySessionPartialResult,
   getFactorySessionResult,
   listFactorySessions,
@@ -256,6 +257,77 @@ describe("factory sessions API", () => {
         method: "POST",
       }),
     );
+  });
+
+  it("loads durable artifact detail from the typed artifact route", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          sessionId: "dur-sess-js-success-002",
+          id: "art-js-success-001",
+          kind: "FINAL_RESULT",
+          visibility: "PUBLIC",
+          label: "Docs refresh output",
+          content: [
+            {
+              text: "Documentation refresh complete.",
+              type: "text",
+            },
+          ],
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getFactorySessionArtifact(
+        "dur-sess-js-success-002",
+        "art-js-success-001",
+      ),
+    ).resolves.toMatchObject({
+      content: [
+        {
+          text: "Documentation refresh complete.",
+          type: "text",
+        },
+      ],
+      id: "art-js-success-001",
+      sessionId: "dur-sess-js-success-002",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions/dur-sess-js-success-002/artifacts/art-js-success-001",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("rejects invalid durable artifact detail responses", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ id: "art-js-success-001" }), {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        }),
+      ),
+    );
+
+    await expect(
+      getFactorySessionArtifact(
+        "dur-sess-js-success-002",
+        "art-js-success-001",
+      ),
+    ).rejects.toMatchObject<Partial<FactorySessionsAPIError>>({
+      code: "INTERNAL_ERROR",
+      message: "The factory sessions API returned an invalid response.",
+    });
   });
 
   it("accepts validateOnly initsNewFactory discovery responses", async () => {
@@ -554,7 +626,9 @@ describe("factory sessions API", () => {
       status: "SUCCEEDED",
       result: [{ type: "text", text: "done" }],
     });
-    await expect(getFactorySessionPartialResult("session-beta")).resolves.toEqual({
+    await expect(
+      getFactorySessionPartialResult("session-beta"),
+    ).resolves.toEqual({
       sessionId: "session-beta",
       status: "RUNNING",
       result: [{ type: "text", text: "partial" }],

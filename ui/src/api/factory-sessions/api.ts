@@ -1,3 +1,4 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: typed factory-session transport helpers stay grouped around one API surface.
 import { factoryAPIURL } from "../baseUrl";
 import type { components } from "../generated/openapi";
 import {
@@ -13,6 +14,8 @@ export type FactorySessionLiveResult =
   components["schemas"]["FactorySessionLiveResult"];
 export type FactorySessionPartialResult =
   components["schemas"]["FactorySessionPartialResult"];
+export type FactorySessionArtifactDetail =
+  components["schemas"]["FactorySessionArtifactDetail"];
 export type FactorySessionTarget =
   components["schemas"]["FactorySessionTarget"];
 export type FactorySessionTargetRef =
@@ -63,6 +66,10 @@ export interface GetFactorySessionResultOptions {
 }
 
 export interface GetFactorySessionPartialResultOptions {
+  fetch?: typeof globalThis.fetch;
+}
+
+export interface GetFactorySessionArtifactOptions {
   fetch?: typeof globalThis.fetch;
 }
 
@@ -272,11 +279,7 @@ export async function getFactorySessionResult(
   sessionID: string,
   options: GetFactorySessionResultOptions = {},
 ): Promise<FactorySessionLiveResult> {
-  return readFactorySessionResultSurface(
-    sessionID,
-    "result",
-    options.fetch,
-  );
+  return readFactorySessionResultSurface(sessionID, "result", options.fetch);
 }
 
 export async function getFactorySessionPartialResult(
@@ -288,6 +291,65 @@ export async function getFactorySessionPartialResult(
     "partial-result",
     options.fetch,
   );
+}
+
+export async function getFactorySessionArtifact(
+  sessionID: string,
+  artifactID: string,
+  options: GetFactorySessionArtifactOptions = {},
+): Promise<FactorySessionArtifactDetail> {
+  const fetchFn = options.fetch ?? globalThis.fetch;
+  if (typeof fetchFn !== "function") {
+    throw new FactorySessionsAPIError(
+      "Factory sessions are unavailable in this environment.",
+      {
+        code: "NETWORK_ERROR",
+      },
+    );
+  }
+
+  let response: Response;
+  try {
+    response = await fetchFn(
+      factoryAPIURL(
+        `${FACTORY_SESSIONS_ENDPOINT}/${encodeURIComponent(sessionID)}/artifacts/${encodeURIComponent(artifactID)}`,
+      ),
+      {
+        method: "GET",
+      },
+    );
+  } catch (error) {
+    throw new FactorySessionsAPIError(
+      "The dashboard could not reach the factory sessions API.",
+      {
+        code: "NETWORK_ERROR",
+        responseBody: error,
+      },
+    );
+  }
+
+  const responseBody = await readAPIResponseBody(response);
+  if (!response.ok) {
+    throw buildFactorySessionsAPIError(
+      response,
+      responseBody,
+      "The factory sessions API rejected the request.",
+    );
+  }
+
+  if (!isFactorySessionArtifactDetail(responseBody)) {
+    throw new FactorySessionsAPIError(
+      "The factory sessions API returned an invalid response.",
+      {
+        code: "INTERNAL_ERROR",
+        responseBody,
+        status: response.status,
+        statusText: response.statusText,
+      },
+    );
+  }
+
+  return responseBody;
 }
 
 export async function closeFactorySession(
@@ -396,7 +458,9 @@ function isFactorySessionsAPIErrorTarget(
   return true;
 }
 
-async function readFactorySessionResultSurface<T extends FactorySessionLiveResult | FactorySessionPartialResult>(
+async function readFactorySessionResultSurface<
+  T extends FactorySessionLiveResult | FactorySessionPartialResult,
+>(
   sessionID: string,
   surface: "result" | "partial-result",
   fetchImplementation: typeof globalThis.fetch | undefined,
@@ -440,7 +504,10 @@ async function readFactorySessionResultSurface<T extends FactorySessionLiveResul
     );
   }
 
-  if (!isAPIRecord(responseBody) || typeof responseBody.sessionId !== "string") {
+  if (
+    !isAPIRecord(responseBody) ||
+    typeof responseBody.sessionId !== "string"
+  ) {
     throw new FactorySessionsAPIError(
       "The factory sessions API returned an invalid response.",
       {
@@ -461,6 +528,18 @@ function isFactorySession(value: unknown): value is FactorySession {
     typeof value.id === "string" &&
     isAPIRecord(value.runtime) &&
     typeof value.runtime.orchestratorKind === "string"
+  );
+}
+
+function isFactorySessionArtifactDetail(
+  value: unknown,
+): value is FactorySessionArtifactDetail {
+  return (
+    isAPIRecord(value) &&
+    typeof value.sessionId === "string" &&
+    typeof value.id === "string" &&
+    typeof value.kind === "string" &&
+    typeof value.visibility === "string"
   );
 }
 
