@@ -14,7 +14,6 @@ import { DetailCopy } from "../../../components/ui/widget-frame";
 import { DispatchDetailContent } from "./dispatch-detail-content";
 import { useFactorySessionDispatchDetail } from "../hooks/use-factory-session-dispatch-detail";
 import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
-import { DispatchDetailContent } from "./dispatch-detail-content";
 import {
   formatFactoryOrchestratorKind,
   formatFactorySessionRuntimeStatus,

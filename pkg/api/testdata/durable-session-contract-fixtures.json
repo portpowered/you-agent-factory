@@ -493,8 +493,10 @@
         "attempt": 1,
         "javascript": {
           "taskKind": "VERIFY",
-          "taskLabel": "verify-release"
-        }
+          "taskLabel": "verify-release",
+          "executionMode": "live"
+        },
+        "statusTransitions": ["QUEUED", "RUNNING"]
       },
       "artifacts": [],
       "result": {
@@ -805,8 +807,10 @@
         "attempt": 1,
         "javascript": {
           "taskKind": "VERIFY",
-          "taskLabel": "verify"
+          "taskLabel": "verify",
+          "executionMode": "live"
         },
+        "statusTransitions": ["QUEUED", "RUNNING", "FAILED"],
         "failureDetail": {
           "reason": "VERIFY_ASSERTION_FAILED",
           "message": "Expected release manifest checksum."
@@ -920,8 +924,10 @@
         "attempt": 1,
         "javascript": {
           "taskKind": "AGENT",
-          "taskLabel": "audit"
-        }
+          "taskLabel": "audit",
+          "executionMode": "live"
+        },
+        "statusTransitions": ["QUEUED", "RUNNING"]
       },
       "artifacts": [],
       "result": {
@@ -1145,8 +1151,10 @@
         ],
         "javascript": {
           "taskKind": "VERIFY",
-          "taskLabel": "verify-docs"
-        }
+          "taskLabel": "verify-docs",
+          "executionMode": "live"
+        },
+        "statusTransitions": ["QUEUED", "RUNNING", "COMPLETED"]
       },
       "artifacts": [
         {

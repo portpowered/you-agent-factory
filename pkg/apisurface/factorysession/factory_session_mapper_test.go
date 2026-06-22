@@ -790,6 +790,16 @@ func assertDispatchDetailFieldsPreserved(t *testing.T, fixture map[string]any, m
 	if string(mapped.Status) != stringValue(fixture, "status") {
 		t.Fatalf("status = %q, want %q", mapped.Status, stringValue(fixture, "status"))
 	}
+	if fixtureJavaScript, ok := fixture["javascript"].(map[string]any); ok && fixtureJavaScript["executionMode"] != nil {
+		if mapped.Javascript == nil || mapped.Javascript.ExecutionMode == nil || *mapped.Javascript.ExecutionMode != stringValue(fixtureJavaScript, "executionMode") {
+			t.Fatalf("javascript.executionMode = %#v, want %q", mapped.Javascript, stringValue(fixtureJavaScript, "executionMode"))
+		}
+	}
+	if fixtureTransitions, ok := fixture["statusTransitions"].([]any); ok {
+		if mapped.StatusTransitions == nil || len(*mapped.StatusTransitions) != len(fixtureTransitions) {
+			t.Fatalf("statusTransitions = %#v, want %d entries", mapped.StatusTransitions, len(fixtureTransitions))
+		}
+	}
 }
 
 func assertArtifactListFieldsPreserved(t *testing.T, fixture map[string]any, mapped factoryapi.ListFactorySessionArtifactsResponse) {

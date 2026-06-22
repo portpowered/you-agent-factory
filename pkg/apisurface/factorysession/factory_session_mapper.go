@@ -6,8 +6,8 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
@@ -239,6 +239,16 @@ func DispatchDetailFromAPI(response factoryapi.FactoryDispatch) factorysessionex
 	if response.ArtifactIds != nil {
 		detail.ArtifactIDs = append([]string(nil), *response.ArtifactIds...)
 	}
+	if response.StatusTransitions != nil {
+		detail.StatusTransitions = make([]factorysessionexecution.DispatchStatus, 0, len(*response.StatusTransitions))
+		for _, transition := range *response.StatusTransitions {
+			status := strings.TrimSpace(string(transition))
+			if status == "" {
+				continue
+			}
+			detail.StatusTransitions = append(detail.StatusTransitions, factorysessionexecution.DispatchStatus(status))
+		}
+	}
 	if response.Petri != nil {
 		detail.Petri = &factorysessionexecution.DispatchPetriProjection{
 			TransitionID: response.Petri.TransitionId,
@@ -256,6 +266,9 @@ func DispatchDetailFromAPI(response factoryapi.FactoryDispatch) factorysessionex
 		}
 		if response.Javascript.TaskLabel != nil {
 			detail.JavaScript.TaskLabel = strings.TrimSpace(*response.Javascript.TaskLabel)
+		}
+		if response.Javascript.ExecutionMode != nil {
+			detail.JavaScript.ExecutionMode = strings.TrimSpace(*response.Javascript.ExecutionMode)
 		}
 	}
 	return detail

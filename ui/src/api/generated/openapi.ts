@@ -1591,6 +1591,8 @@ export interface components {
       relatedWorkIds?: string[];
       /** @description Artifact identifiers produced by the dispatch. */
       artifactIds?: string[];
+      /** @description Ordered durable status history observed for the dispatch. */
+      statusTransitions?: components["schemas"]["FactoryDispatchStatus"][];
       usage?: components["schemas"]["FactoryDispatchUsage"];
       warnings?: components["schemas"]["FactoryDispatchWarning"][];
       failureDetail?: components["schemas"]["FactoryDispatchFailureDetail"];
@@ -1626,6 +1628,8 @@ export interface components {
       taskKind: components["schemas"]["FactoryDispatchJavaScriptTaskKind"];
       /** @description Customer-visible label for the JavaScript workflow task. */
       taskLabel?: string;
+      /** @description Durable child execution mode recorded for the JavaScript workflow task when available. */
+      executionMode?: string;
     };
     FactoryDispatchUsage: {
       /** Format: int64 */

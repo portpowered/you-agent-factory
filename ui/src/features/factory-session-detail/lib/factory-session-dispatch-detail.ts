@@ -74,7 +74,7 @@ export function normalizeFactorySessionDispatchDetail(
       : undefined,
     javascript: dispatch.javascript
       ? {
-          executionMode: getJavaScriptExecutionMode(dispatch),
+          executionMode: normalizeOptionalText(dispatch.javascript.executionMode),
           taskKind: dispatch.javascript.taskKind,
           taskLabel: normalizeOptionalText(dispatch.javascript.taskLabel),
         }
@@ -100,7 +100,10 @@ export function normalizeFactorySessionDispatchDetail(
     schemaDigest: normalizeOptionalText(dispatch.schemaDigest),
     sessionID: dispatch.sessionId,
     status: dispatch.status,
-    statusHistory: getStatusHistory(dispatch),
+    statusHistory: (dispatch.statusTransitions ?? []).flatMap((status) => {
+      const normalizedStatus = normalizeOptionalText(status);
+      return normalizedStatus ? [normalizedStatus] : [];
+    }),
     usage: dispatch.usage,
     warnings: dispatch.warnings ?? [],
   };
@@ -119,32 +122,4 @@ function buildFactorySessionArtifactHref({
 function normalizeOptionalText(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : undefined;
-}
-
-function getJavaScriptExecutionMode(
-  dispatch: FactoryDispatch,
-): string | undefined {
-  const javascript = readRecord(readRecord(dispatch).javascript);
-  return typeof javascript.executionMode === "string"
-    ? normalizeOptionalText(javascript.executionMode)
-    : undefined;
-}
-
-function getStatusHistory(dispatch: FactoryDispatch): string[] {
-  const statusTransitions = readRecord(dispatch).statusTransitions;
-  if (!Array.isArray(statusTransitions)) {
-    return [];
-  }
-
-  return statusTransitions.flatMap((status) => {
-    const normalizedStatus =
-      typeof status === "string" ? normalizeOptionalText(status) : undefined;
-    return normalizedStatus ? [normalizedStatus] : [];
-  });
-}
-
-function readRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object"
-    ? (value as Record<string, unknown>)
-    : {};
 }

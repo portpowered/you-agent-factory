@@ -60,6 +60,11 @@ properties:
     items:
       type: string
     description: Artifact identifiers produced by the dispatch.
+  statusTransitions:
+    type: array
+    items:
+      $ref: './FactoryDispatchStatus.yaml'
+    description: Ordered durable status history observed for the dispatch.
   usage:
     $ref: './FactoryDispatchUsage.yaml'
   warnings:

@@ -46,12 +46,7 @@ const successfulDispatchFixture = {
       message: "Token budget was nearly exhausted.",
     },
   ],
-} as FactoryDispatch & {
-  statusTransitions: string[];
-  javascript: FactoryDispatch["javascript"] & {
-    executionMode: string;
-  };
-};
+} satisfies FactoryDispatch;
 
 const failedDispatchFixture = {
   artifactIds: [],
@@ -74,12 +69,7 @@ const failedDispatchFixture = {
   sessionId: "dur-sess-js-failed-1",
   status: "FAILED",
   statusTransitions: ["QUEUED", "RUNNING", "FAILED"],
-} as FactoryDispatch & {
-  statusTransitions: string[];
-  javascript: FactoryDispatch["javascript"] & {
-    executionMode: string;
-  };
-};
+} satisfies FactoryDispatch;
 
 describe("normalizeFactorySessionDispatchDetail", () => {
   it("maps a successful durable JavaScript dispatch into a website drilldown model", () => {

@@ -3292,6 +3292,11 @@ components:
           items:
             type: string
           description: Artifact identifiers produced by the dispatch.
+        statusTransitions:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactoryDispatchStatus'
+          description: Ordered durable status history observed for the dispatch.
         usage:
           $ref: '#/components/schemas/FactoryDispatchUsage'
         warnings:
@@ -3401,6 +3406,9 @@ components:
         taskLabel:
           type: string
           description: Customer-visible label for the JavaScript workflow task.
+        executionMode:
+          type: string
+          description: Durable child execution mode recorded for the JavaScript workflow task when available.
     FactoryDispatchUsage:
       type: object
       additionalProperties: false

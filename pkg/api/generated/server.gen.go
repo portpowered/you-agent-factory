@@ -1184,9 +1184,12 @@ type FactoryDispatch struct {
 	SessionId string `json:"sessionId"`
 
 	// Status Canonical dispatch lifecycle status shared across orchestrators.
-	Status   FactoryDispatchStatus     `json:"status"`
-	Usage    *FactoryDispatchUsage     `json:"usage,omitempty"`
-	Warnings *[]FactoryDispatchWarning `json:"warnings,omitempty"`
+	Status FactoryDispatchStatus `json:"status"`
+
+	// StatusTransitions Ordered durable status history observed for the dispatch.
+	StatusTransitions *[]FactoryDispatchStatus  `json:"statusTransitions,omitempty"`
+	Usage             *FactoryDispatchUsage     `json:"usage,omitempty"`
+	Warnings          *[]FactoryDispatchWarning `json:"warnings,omitempty"`
 }
 
 // FactoryDispatchFailureDetail defines model for FactoryDispatchFailureDetail.
@@ -1203,6 +1206,9 @@ type FactoryDispatchFailureDetail struct {
 
 // FactoryDispatchJavaScriptProjection defines model for FactoryDispatchJavaScriptProjection.
 type FactoryDispatchJavaScriptProjection struct {
+	// ExecutionMode Durable child execution mode recorded for the JavaScript workflow task when available.
+	ExecutionMode *string `json:"executionMode,omitempty"`
+
 	// TaskKind JavaScript workflow task kind for one child dispatch.
 	TaskKind FactoryDispatchJavaScriptTaskKind `json:"taskKind"`
 

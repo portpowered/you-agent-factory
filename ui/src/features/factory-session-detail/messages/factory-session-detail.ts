@@ -259,10 +259,7 @@ const factorySessionDetailMessagesByLocale = {
     relatedWorkLabel: "Work id",
     runnerIdLabel: "Runner id",
     runtimeHeading: "Runtime",
-<<<<<<< HEAD
     runtimeStatusLabels: englishRuntimeStatusLabels,
-=======
->>>>>>> dd47f69bb (feat: [dynamic-workflows-cell-website-dispatch-drilldown-003] - [Render bounded success and failure dispatch detail without widening scope])
     schemaDigestLabel: "Schema digest",
     scriptStatusLabel: "Script status",
     scriptStatusLabels: englishScriptStatusLabels,
@@ -310,10 +307,7 @@ const factorySessionDetailMessagesByLocale = {
     failureMessageLabel: "失败消息",
     failureReasonLabel: "失败原因",
     finalResultRefLabel: "最终结果引用",
-<<<<<<< HEAD
     javascriptProjectionMissingState: "此会话的 JavaScript 工作流运行时详情不可用。",
-=======
->>>>>>> dd47f69bb (feat: [dynamic-workflows-cell-website-dispatch-drilldown-003] - [Render bounded success and failure dispatch detail without widening scope])
     javascriptTaskHeading: "JavaScript 任务",
     javascriptTaskKindLabel: "任务类型",
     javascriptTaskLabel: "任务标签",
@@ -339,10 +333,7 @@ const factorySessionDetailMessagesByLocale = {
     relatedWorkLabel: "工作 ID",
     runnerIdLabel: "运行器 ID",
     runtimeHeading: "运行时",
-<<<<<<< HEAD
     runtimeStatusLabels: chineseRuntimeStatusLabels,
-=======
->>>>>>> dd47f69bb (feat: [dynamic-workflows-cell-website-dispatch-drilldown-003] - [Render bounded success and failure dispatch detail without widening scope])
     schemaDigestLabel: "Schema 摘要",
     scriptStatusLabel: "脚本状态",
     scriptStatusLabels: chineseScriptStatusLabels,
