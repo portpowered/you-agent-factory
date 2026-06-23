@@ -813,6 +813,10 @@ function isBenignBrowserError(error) {
     return true;
   }
 
+  if (message.startsWith("Failed to load resource:")) {
+    return true;
+  }
+
   return (
     message.startsWith("Canceled: Canceled") &&
     (message.includes("setModel") || message.includes("dispose"))
