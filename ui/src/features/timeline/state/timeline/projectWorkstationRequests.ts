@@ -40,6 +40,7 @@ export function projectRuntimeWorkstationRequests({
   payloadLineage,
   scriptRequestsByDispatchID,
   scriptResponsesByDispatchID,
+  textBlobsByID,
   workItemsByID,
 }: {
   activeDispatches: WorldDispatch[];
@@ -57,6 +58,7 @@ export function projectRuntimeWorkstationRequests({
     string,
     Record<string, WorldScriptResponse>
   >;
+  textBlobsByID?: Record<string, string>;
   workItemsByID: Record<string, FactoryWorkItem>;
 }): Record<string, DashboardRuntimeWorkstationRequest> | undefined {
   const requests: Record<string, TimelineWorkstationRequest> = {};
@@ -92,6 +94,7 @@ export function projectRuntimeWorkstationRequests({
       latestScriptRequest,
       latestScriptResponse,
       payloadLineage,
+      textBlobsByID,
       workItemsByID,
     );
   }
@@ -124,6 +127,7 @@ export function projectWorkstationDispatchRequestsByID({
   runtimeRequestsByDispatchID,
   scriptRequestsByDispatchID,
   scriptResponsesByDispatchID,
+  textBlobsByID,
   workRequestsByID,
 }: {
   activeDispatches: Record<string, WorldDispatch>;
@@ -145,6 +149,7 @@ export function projectWorkstationDispatchRequestsByID({
     Record<string, WorldScriptResponse>
   >;
   workRequestsByID: Record<string, TimelineWorkRequestPayload>;
+  textBlobsByID?: Record<string, string>;
 }): Record<string, DashboardWorkstationRequest> {
   const requestIDsByWorkID = requestIDsByWorkItemID(workRequestsByID);
   const dispatchRequests = new Map<string, DashboardWorkstationRequest>();
@@ -165,6 +170,7 @@ export function projectWorkstationDispatchRequestsByID({
         scriptResponsesByDispatchID,
         requestIDsByWorkID,
         workstationRequestCounts,
+        textBlobsByID,
       ),
     );
   }
@@ -185,6 +191,7 @@ export function projectWorkstationDispatchRequestsByID({
         scriptResponsesByDispatchID,
         requestIDsByWorkID,
         workstationRequestCounts,
+        textBlobsByID,
       ),
     );
   }
@@ -237,6 +244,7 @@ function workstationRequestFromCompletion(
   latestScriptRequest: WorldScriptRequest | undefined,
   latestScriptResponse: WorldScriptResponse | undefined,
   payloadLineage: WorkPayloadLineageProjection,
+  textBlobsByID: Record<string, string> | undefined,
   workItemsByID: Record<string, FactoryWorkItem>,
 ): TimelineWorkstationRequest {
   const inputWorkItems = consumedWorkItemRefsForDispatch(
@@ -267,7 +275,10 @@ function workstationRequestFromCompletion(
       endTime: completion.endTime,
       failureMessage: completion.failureMessage,
       failureReason: completion.failureReason,
-      feedback: completion.feedback,
+      feedback:
+        completion.feedbackTextBlobID && textBlobsByID
+          ? textBlobsByID[completion.feedbackTextBlobID]
+          : completion.feedback,
       outcome: completion.outcome,
       outputMutations: completion.outputMutations,
       outputWorkItems: outputWorkItemsFromCompletion(
@@ -275,7 +286,10 @@ function workstationRequestFromCompletion(
         completion,
         workItemsByID,
       ),
-      scriptResponse: timelineScriptResponse(latestScriptResponse),
+      scriptResponse: timelineScriptResponse(
+        latestScriptResponse,
+        textBlobsByID,
+      ),
     },
     transitionId: completion.transitionID,
     workstationName: completion.workstationName,
@@ -338,6 +352,7 @@ function timelineScriptRequest(
 
 function timelineScriptResponse(
   response: WorldScriptResponse | undefined,
+  textBlobsByID?: Record<string, string>,
 ): TimelineScriptResponse | undefined {
   if (!response) {
     return undefined;
@@ -349,7 +364,11 @@ function timelineScriptResponse(
     failureType: response.failure_type,
     outcome: response.outcome,
     scriptRequestId: response.script_request_id,
-    stderr: response.stderr,
-    stdout: response.stdout,
+    stderr: response.stderrTextBlobID
+      ? (textBlobsByID?.[response.stderrTextBlobID] ?? response.stderr)
+      : response.stderr,
+    stdout: response.stdoutTextBlobID
+      ? (textBlobsByID?.[response.stdoutTextBlobID] ?? response.stdout)
+      : response.stdout,
   };
 }

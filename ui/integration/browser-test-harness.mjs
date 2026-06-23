@@ -655,12 +655,19 @@ export async function startBrowserPreview() {
   const { apiPort, previewPort } = await browserPreviewPorts();
   const apiOrigin = `http://${previewHost}:${apiPort}`;
   const previewURL = `http://${previewHost}:${previewPort}/dashboard/ui/`;
+  const sourceMapBuild =
+    process.env.AGENT_FACTORY_PROFILE_SOURCEMAPS === "true" ||
+    process.env.AGENT_FACTORY_PROFILE_SOURCEMAPS === "1";
+  const buildCacheKey = sourceMapBuild
+    ? `${browserBuildCacheKey}:sourcemaps`
+    : browserBuildCacheKey;
 
   const globalBuildState = globalThis;
-  if (!globalBuildState[browserBuildCacheKey]) {
+  if (!globalBuildState[buildCacheKey]) {
     await runRuntime(
       ["run", "build"],
       {
+        AGENT_FACTORY_PROFILE_SOURCEMAPS: sourceMapBuild ? "true" : "false",
         VITE_AGENT_FACTORY_API_ORIGIN: apiOrigin,
       },
       buildTimeoutMs,
@@ -669,7 +676,7 @@ export async function startBrowserPreview() {
         stripVitestEnv: true,
       },
     );
-    globalBuildState[browserBuildCacheKey] = true;
+    globalBuildState[buildCacheKey] = true;
   }
 
   const previewProcess = spawnRuntime(
@@ -1027,7 +1034,7 @@ export async function startFactoryApiServer({
                 parsedBody.factory &&
                 typeof parsedBody.factory === "object"
               ? parsedBody.factory
-            : parsedBody;
+              : parsedBody;
         const normalizedFactory =
           factory && typeof factory === "object"
             ? {

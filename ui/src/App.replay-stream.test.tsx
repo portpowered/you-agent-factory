@@ -120,14 +120,16 @@ function expectSeparatedStateMarkerZones(label: string, count: number): void {
   ).toHaveLength(count);
 }
 
-function requireEventStream(): MockEventSource {
-  const stream = MockEventSource.instances[0];
+async function requireEventStream(): Promise<MockEventSource> {
+  return await waitFor(() => {
+    const stream = MockEventSource.instances[0];
 
-  if (!stream) {
-    throw new Error("expected factory event stream to be opened");
-  }
+    if (!stream) {
+      throw new Error("expected factory event stream to be opened");
+    }
 
-  return stream;
+    return stream;
+  });
 }
 
 const streamGraphBaseFactory = {
@@ -246,7 +248,7 @@ describe("App streamed replay rendering flows", () => {
   it("smoke tests /events replay rendering without the removed dashboard snapshot route", async () => {
     const { fetchMock } = renderApp({ snapshot: historicalTimelineSnapshot });
 
-    const stream = requireEventStream();
+    const stream = await requireEventStream();
     expect(stream.url).toBe(
       `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
     );
@@ -289,7 +291,7 @@ describe("App streamed replay rendering flows", () => {
   it("smoke tests failure analysis from streamed events through fixed-tick rendering", async () => {
     const { fetchMock } = renderApp({ snapshot: historicalTimelineSnapshot });
 
-    const stream = requireEventStream();
+    const stream = await requireEventStream();
 
     act(() => {
       for (const event of failureAnalysisTimelineEvents) {
@@ -392,7 +394,7 @@ describe("App streamed replay rendering flows", () => {
   it("smoke tests resource counts from streamed events against backend world-view counts", async () => {
     const { fetchMock } = renderApp({ snapshot: historicalTimelineSnapshot });
 
-    const stream = requireEventStream();
+    const stream = await requireEventStream();
 
     act(() => {
       for (const event of resourceCountTimelineEvents) {
@@ -434,7 +436,7 @@ describe("App streamed replay rendering flows", () => {
       snapshot: baselineSnapshot,
     });
 
-    const stream = requireEventStream();
+    const stream = await requireEventStream();
 
     act(() => {
       stream.emit("message", streamedGraphChangeEvents[0]);
@@ -454,9 +456,7 @@ describe("App streamed replay rendering flows", () => {
       stream.emit("message", streamedGraphChangeEvents[1]);
     });
 
-    const qaNode = await waitFor(() =>
-      getWorkstationNodeByLabel("QA"),
-    );
+    const qaNode = await waitFor(() => getWorkstationNodeByLabel("QA"));
     expectReactFlowNodePosition(qaNode, { x: 640, y: 260 });
     await waitFor(() => {
       expectReactFlowViewportTransform({ x: -180, y: 55, zoom: 0.85 });
