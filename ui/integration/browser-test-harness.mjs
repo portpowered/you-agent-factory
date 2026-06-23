@@ -2,7 +2,7 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import process from "node:process";
@@ -219,6 +219,8 @@ export function modelProviderOptionLabel(value) {
 }
 
 const browserBuildCacheKey = "__agentFactoryBrowserIntegrationBuildComplete";
+const browserProcessStateKey = "__agentFactoryBrowserIntegrationBrowserState";
+const browserPreviewStateKey = "__agentFactoryBrowserIntegrationPreviewState";
 let browserArtifactSequence = 0;
 let sharedBrowserPorts = null;
 export const exportCoverImagePath = path.resolve(
@@ -306,6 +308,17 @@ function sanitizeArtifactLabel(value) {
 function localPackageBinaryCommand(name) {
   const suffix = process.platform === "win32" ? ".cmd" : "";
   return path.join(packageRoot, "node_modules", ".bin", `${name}${suffix}`);
+}
+
+async function browserDistReady() {
+  try {
+    await stat(path.join(packageRoot, "dist", "index.html"));
+    await stat(path.join(packageRoot, "dist", "assets", "index.js"));
+    await stat(path.join(packageRoot, "dist", "assets", "index.css"));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function findAvailablePort() {
@@ -651,7 +664,7 @@ function ensureSessionState(
   );
 }
 
-export async function startBrowserPreview() {
+async function createBrowserPreview() {
   const { apiPort, previewPort } = await browserPreviewPorts();
   const apiOrigin = `http://${previewHost}:${apiPort}`;
   const previewURL = `http://${previewHost}:${previewPort}/dashboard/ui/`;
@@ -663,12 +676,11 @@ export async function startBrowserPreview() {
     : browserBuildCacheKey;
 
   const globalBuildState = globalThis;
-  if (!globalBuildState[buildCacheKey]) {
+  if (!globalBuildState[buildCacheKey] && !(await browserDistReady())) {
     await runRuntime(
       ["run", "build"],
       {
         AGENT_FACTORY_PROFILE_SOURCEMAPS: sourceMapBuild ? "true" : "false",
-        VITE_AGENT_FACTORY_API_ORIGIN: apiOrigin,
       },
       buildTimeoutMs,
       {
@@ -676,8 +688,8 @@ export async function startBrowserPreview() {
         stripVitestEnv: true,
       },
     );
-    globalBuildState[buildCacheKey] = true;
   }
+  globalBuildState[buildCacheKey] = true;
 
   const previewProcess = spawnRuntime(
     [
@@ -712,6 +724,59 @@ export async function startBrowserPreview() {
   };
 }
 
+function browserPreviewState() {
+  const globalState = globalThis;
+  if (!globalState[browserPreviewStateKey]) {
+    globalState[browserPreviewStateKey] = {
+      cleanupRegistered: false,
+      preview: null,
+      previewPromise: null,
+    };
+  }
+  return globalState[browserPreviewStateKey];
+}
+
+function browserProcessState() {
+  const globalState = globalThis;
+  if (!globalState[browserProcessStateKey]) {
+    globalState[browserProcessStateKey] = {
+      browser: null,
+      browserPromise: null,
+      cleanupRegistered: false,
+    };
+  }
+  return globalState[browserProcessStateKey];
+}
+
+export async function startBrowserPreview() {
+  const state = browserPreviewState();
+  if (!state.previewPromise) {
+    state.previewPromise = createBrowserPreview()
+      .then((preview) => {
+        state.preview = preview;
+        if (!state.cleanupRegistered) {
+          state.cleanupRegistered = true;
+          process.once("exit", () => {
+            if (state.preview) {
+              state.preview.stop().catch(() => {});
+            }
+          });
+        }
+        return preview;
+      })
+      .catch((error) => {
+        state.previewPromise = null;
+        throw error;
+      });
+  }
+
+  const preview = await state.previewPromise;
+  return {
+    ...preview,
+    stop: async () => {},
+  };
+}
+
 export async function loadReplayLines(fileName) {
   return (await readFile(path.join(replayFixtureDirectory, fileName), "utf8"))
     .split(/\r?\n/)
@@ -726,7 +791,22 @@ export async function openBrowserPage(options = {}) {
     options.artifactLabel ??
       `browser-session-${String(browserArtifactSequence).padStart(2, "0")}`,
   );
-  const browser = await chromium.launch({ headless: true });
+  const state = browserProcessState();
+  if (!state.browserPromise) {
+    state.browserPromise = chromium.launch({ headless: true }).then((browser) => {
+      state.browser = browser;
+      if (!state.cleanupRegistered) {
+        state.cleanupRegistered = true;
+        process.once("exit", () => {
+          if (state.browser) {
+            state.browser.close().catch(() => {});
+          }
+        });
+      }
+      return browser;
+    });
+  }
+  const browser = await state.browserPromise;
   const context = await browser.newContext({
     acceptDownloads: options.acceptDownloads ?? false,
   });
@@ -802,7 +882,6 @@ export async function openBrowserPage(options = {}) {
       }
       await page.close();
       await context.close();
-      await browser.close();
     },
   };
 }
