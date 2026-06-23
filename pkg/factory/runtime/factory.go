@@ -733,15 +733,11 @@ func (f *factoryImpl) deriveRuntimeStatus(currentState interfaces.FactoryState, 
 		return interfaces.RuntimeStatusFinished
 	}
 
-	if snapshot.InFlightCount > 0 || len(snapshot.Dispatches) > 0 || hasNonTerminalWorkInWorldState(worldState) || hasNonTerminalWork(snapshot.Marking, f.topology) {
+	if snapshot.InFlightCount > 0 || len(snapshot.Dispatches) > 0 || hasNonTerminalWork(snapshot.Marking, f.topology) {
 		return interfaces.RuntimeStatusActive
 	}
 
 	return interfaces.RuntimeStatusIdle
-}
-
-func hasNonTerminalWorkInWorldState(worldState *interfaces.FactoryWorldState) bool {
-	return worldState != nil && len(worldState.ActiveWorkItemsByID) > 0
 }
 
 func hasNonTerminalWork(marking petri.MarkingSnapshot, topology *state.Net) bool {
