@@ -14,6 +14,7 @@ import {
   useFactoryTimelineStore,
   type WorldState,
 } from "../../timeline/state/factoryTimelineStore";
+import { readTimelineCheckpoint } from "../../timeline/state/timelineCheckpointPersistence";
 import { DashboardSessionProvider } from "../session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 import {
@@ -51,6 +52,66 @@ const REFRESHED_SNAPSHOT: DashboardSnapshot = {
   uptime_seconds: 1,
 };
 
+function installIndexedDBTestDouble() {
+  const records = new Map<string, unknown>();
+  const database = {
+    close: () => {},
+    createObjectStore: () => undefined,
+    objectStoreNames: {
+      contains: () => true,
+    },
+    transaction: () => ({
+      objectStore: () => ({
+        delete: (key: string) =>
+          indexedDBRequest(undefined, () => {
+            records.delete(key);
+          }),
+        get: (key: string) => indexedDBRequest(records.get(key)),
+        put: (value: { sessionID: string }) =>
+          indexedDBRequest(value.sessionID, () => {
+            records.set(value.sessionID, value);
+          }),
+      }),
+    }),
+  };
+  const indexedDB = {
+    open: () => {
+      const request = indexedDBRequest(database);
+      window.setTimeout(
+        () => request.onupgradeneeded?.({} as IDBVersionChangeEvent),
+        0,
+      );
+      return request;
+    },
+  };
+
+  Object.defineProperty(window, "indexedDB", {
+    configurable: true,
+    value: indexedDB,
+  });
+}
+
+function indexedDBRequest<T>(result: T, beforeSuccess?: () => void) {
+  const request = {
+    error: null,
+    onblocked: null,
+    onerror: null,
+    onsuccess: null,
+    onupgradeneeded: null,
+    result,
+  } as unknown as IDBRequest<T> & {
+    onblocked?: ((event: Event) => void) | null;
+    onupgradeneeded?: ((event: IDBVersionChangeEvent) => void) | null;
+  };
+
+  window.setTimeout(() => {
+    beforeSuccess?.();
+    request.onsuccess?.({} as Event);
+  }, 0);
+
+  return request;
+}
+
 function timelineSnapshot(snapshot: DashboardSnapshot): WorldState {
   return {
     ...snapshot,
@@ -66,6 +127,8 @@ describe("useDashboardSnapshot composer", () => {
 
   beforeEach(() => {
     replayHarness.install();
+    installIndexedDBTestDouble();
+    window.sessionStorage.clear();
     queryClient = new QueryClient({
       defaultOptions: {
         mutations: { retry: false },
@@ -93,6 +156,7 @@ describe("useDashboardSnapshot composer", () => {
 
   afterEach(() => {
     replayHarness.reset();
+    window.sessionStorage.clear();
     useDashboardStreamStore.setState({
       streamState: createDefaultDashboardStreamState(),
     });
@@ -116,7 +180,9 @@ describe("useDashboardSnapshot composer", () => {
     expect(result.current.snapshot?.tick_count).toBe(
       SEEDED_SNAPSHOT.tick_count,
     );
-    expect(replayHarness.getStreams()).toHaveLength(1);
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
 
     act(() => {
       rerender({ refreshToken: 1 });
@@ -126,7 +192,9 @@ describe("useDashboardSnapshot composer", () => {
       expect(result.current.isInitialLoading).toBe(true);
     });
     expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
-    expect(replayHarness.getStreams()).toHaveLength(2);
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(2);
+    });
 
     act(() => {
       replayHarness.emitSnapshot(REFRESHED_SNAPSHOT);
@@ -146,7 +214,9 @@ describe("useDashboardSnapshot composer", () => {
       wrapper: createWrapper(queryClient),
     });
 
-    expect(replayHarness.getStreams()).toHaveLength(1);
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
     expect(replayHarness.getStreams()[0]?.url).toBe(
       `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
     );
@@ -170,10 +240,10 @@ describe("useDashboardSnapshot composer", () => {
       wrapper: createWrapper(queryClient),
     });
 
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
     const stream = replayHarness.getStreams()[0];
-    if (!stream) {
-      throw new Error("expected dashboard stream to be opened");
-    }
 
     await act(async () => {
       stream.emit("message", {
@@ -210,6 +280,84 @@ describe("useDashboardSnapshot composer", () => {
     expect(
       window.localStorage.getItem(FACTORY_TIMELINE_DEBUG_STORAGE_KEY),
     ).toBeNull();
+  });
+
+  it("hydrates a persisted checkpoint and opens the stream after its cursor", async () => {
+    useFactoryTimelineStore.getState().reset();
+
+    const { unmount } = renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    const stream = replayHarness.getStreams()[0];
+
+    await act(async () => {
+      stream.emit("message", {
+        context: {
+          eventTime: "2026-04-25T20:00:01Z",
+          sequence: 7,
+          tick: 7,
+        },
+        id: "checkpoint-event-7",
+        payload: {
+          factory: {
+            workTypes: [
+              {
+                name: "story",
+                states: [{ name: "new", type: "INITIAL" }],
+              },
+            ],
+            workstations: [],
+            workers: [],
+          },
+        },
+        type: FACTORY_EVENT_TYPES.initialStructureRequest,
+      });
+      await new Promise<void>((resolve) => {
+        window.setTimeout(() => resolve(), 20);
+      });
+    });
+
+    await waitFor(() => {
+      expect(
+        useFactoryTimelineStore.getState().currentReplayCheckpoint,
+      ).toEqual(
+        expect.objectContaining({
+          afterEventId: "checkpoint-event-7",
+          afterSequence: 7,
+          selectedTick: 7,
+        }),
+      );
+    });
+    await waitFor(async () => {
+      await expect(
+        readTimelineCheckpoint(window.indexedDB, DEFAULT_FACTORY_SESSION_ID),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          afterEventId: "checkpoint-event-7",
+          afterSequence: 7,
+          selectedTick: 7,
+        }),
+      );
+    });
+
+    unmount();
+    replayHarness.reset();
+    replayHarness.install();
+    useFactoryTimelineStore.getState().reset();
+
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(useFactoryTimelineStore.getState().selectedTick).toBe(7);
+    });
+    expect(replayHarness.getStreams().at(-1)?.url).toBe(
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events?after_event_id=checkpoint-event-7&after_sequence=7`,
+    );
   });
 });
 

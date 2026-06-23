@@ -10,6 +10,10 @@ import type {
 import type { FactoryWorkItem } from "../../../../api/events";
 import { uniqueSorted } from "./shared";
 import { isSystemTimeWorkItem } from "./systemTime";
+import {
+  hydrateInferenceAttempt,
+  resolveTextBlob,
+} from "./text-blobs/timelineTextBlobs";
 import type {
   TimelineWorkRequestPayload,
   WorldCompletion,
@@ -76,6 +80,7 @@ export function dashboardScriptRequest(
 
 export function dashboardScriptResponse(
   response: WorldScriptResponse | undefined,
+  textBlobsByID?: Record<string, string>,
 ): DashboardScriptResponse | undefined {
   if (!response) {
     return undefined;
@@ -87,8 +92,20 @@ export function dashboardScriptResponse(
     failure_type: response.failure_type,
     outcome: response.outcome,
     script_request_id: response.script_request_id,
-    stderr: response.stderr,
-    stdout: response.stdout,
+    stderr: response.stderrTextBlobID
+      ? resolveTextBlob(
+          textBlobsByID,
+          response.stderrTextBlobID,
+          response.stderr,
+        )
+      : response.stderr,
+    stdout: response.stdoutTextBlobID
+      ? resolveTextBlob(
+          textBlobsByID,
+          response.stdoutTextBlobID,
+          response.stdout,
+        )
+      : response.stdout,
   };
 }
 
@@ -210,9 +227,12 @@ export function projectWorkstationDispatchRequest(
     erroredCount?: number;
     respondedCount?: number;
   },
+  textBlobsByID?: Record<string, string>,
 ): DashboardWorkstationRequest {
   const inferenceAttempts = sortInferenceAttempts(
-    Object.values(inferenceAttemptsByDispatchID[dispatch.dispatchID] ?? {}),
+    Object.values(inferenceAttemptsByDispatchID[dispatch.dispatchID] ?? {}).map(
+      (attempt) => hydrateInferenceAttempt(attempt, textBlobsByID),
+    ),
   );
   const latestAttempt = inferenceAttempts[inferenceAttempts.length - 1];
   const latestScriptResponse = latestWorkstationScriptResponse(
@@ -250,7 +270,7 @@ export function projectWorkstationDispatchRequest(
     errored_request_count: counts.erroredCount ?? 0,
     failure_message: responseView?.failureMessage ?? completion?.failureMessage,
     failure_reason: responseView?.failureReason ?? completion?.failureReason,
-    inference_attempts: inferenceAttempts,
+    inference_attempts: [],
     model: diagnostics?.model ?? completion?.model ?? dispatch.model,
     outcome: responseView?.outcome ?? completion?.outcome,
     prompt: latestAttempt?.prompt,
@@ -267,11 +287,18 @@ export function projectWorkstationDispatchRequest(
     responded_request_count: counts.respondedCount ?? 0,
     response:
       latestAttempt?.response ??
-      (latestScriptResponse ? undefined : completion?.responseText),
+      (latestScriptResponse
+        ? undefined
+        : completion?.responseTextBlobID
+          ? resolveTextBlob(textBlobsByID, completion.responseTextBlobID)
+          : completion?.responseText),
     response_metadata: diagnostics?.responseMetadata,
     response_view: responseView,
     script_request: dashboardScriptRequest(latestScriptRequest),
-    script_response: dashboardScriptResponse(latestScriptResponse),
+    script_response: dashboardScriptResponse(
+      latestScriptResponse,
+      textBlobsByID,
+    ),
     started_at: requestView?.startedAt ?? dispatch.startedAt,
     total_duration_millis:
       responseView?.durationMillis ?? completion?.durationMillis,

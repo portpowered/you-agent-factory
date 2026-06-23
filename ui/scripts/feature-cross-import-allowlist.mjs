@@ -958,15 +958,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
   },
   {
-    relativeFilePath: "src/features/dashboard/hooks/useDashboardSnapshot.ts",
-    importSpecifiers: [
-      "../../timeline/state/factoryTimelineDebug",
-      "../../timeline/state/factoryTimelineStore",
-    ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
     relativeFilePath:
       "src/features/dashboard/hooks/useDashboardTimelineMemoryDebug.ts",
     importSpecifiers: [

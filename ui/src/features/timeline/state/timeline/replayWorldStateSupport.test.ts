@@ -29,6 +29,7 @@ function emptyState(): ReplayWorldState {
     scriptRequestsByDispatchID: {},
     scriptResponsesByDispatchID: {},
     terminalWorkByID: {},
+    textBlobsByID: {},
     tick_count: 0,
     topology: {},
     tracesByID: {},
@@ -367,8 +368,12 @@ describe("replayWorldStateSupport script helpers", () => {
       ],
     ).toMatchObject({
       outcome: "SUCCEEDED",
-      stdout: "ok\n",
+      stdout: "",
+      stdoutTextBlobID: "script:dispatch-script/script-request/1:stdout",
     });
+    expect(
+      state.textBlobsByID["script:dispatch-script/script-request/1:stdout"],
+    ).toBe("ok\n");
   });
 
   it("ignores script events without dispatch or request identifiers", () => {

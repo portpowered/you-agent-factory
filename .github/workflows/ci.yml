@@ -181,6 +181,14 @@ jobs:
       - name: Build dashboard bundle
         run: make ui-build
 
+      - name: Upload dashboard dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-dashboard-dist
+          path: ui/dist/
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Build backend binaries
         run: make build
 
@@ -780,11 +788,15 @@ jobs:
         timeout-minutes: 10
         run: make ui-deps
 
-      # This lane intentionally does not download a prebuilt UI artifact.
-      # The owned browser harness rebuilds with a lane-specific API origin and
-      # starts its own vite preview process, so reusing verify-build-contracts
-      # output would add upload/download coupling without removing the lane's
-      # local build/preview responsibility or making retries clearer.
+      # The browser harness can reuse a normalized dist bundle because the
+      # preview proxy handles the per-lane API origin at runtime.
+      - name: Download dashboard dist artifact
+        if: needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: ui-dashboard-dist
+          path: ui/dist
+
       # Playwright recommends against caching browser binaries in CI because restore
       # time is usually comparable to a fresh download on hosted runners.
       - name: Install Playwright browser for dashboard integration tests

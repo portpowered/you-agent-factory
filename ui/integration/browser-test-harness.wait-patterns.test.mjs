@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  expectNoBrowserErrors,
   uiInteractionTimeoutMs,
   waitForCapturedDownloadOrDialogError,
   waitForDialogHidden,
@@ -72,5 +73,15 @@ describe("browser wait pattern helpers", () => {
     await expect(
       waitForCapturedDownloadOrDialogError(page, dialogLocator, 25),
     ).rejects.toThrow("Export failed");
+  });
+
+  it("ignores browser-generated resource load console errors", () => {
+    expectNoBrowserErrors(
+      [],
+      [
+        "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      ],
+      expect,
+    );
   });
 });
