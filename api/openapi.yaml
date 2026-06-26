@@ -3068,7 +3068,7 @@ components:
         - id
         - status
         - dispatchKind
-      description: Durable factory-session dispatch summary for list responses. Exposes neutral dispatch fields without requiring orchestrator-specific projections.
+      description: Durable factory-session dispatch summary for list responses. Exposes shared dispatch fields plus bounded orchestrator-specific inspection data when available.
       properties:
         id:
           type: string
@@ -3115,6 +3115,8 @@ components:
           description: Artifact identifiers produced by the dispatch.
         failureDetail:
           $ref: '#/components/schemas/FactoryDispatchFailureDetail'
+        javascript:
+          $ref: '#/components/schemas/FactoryDispatchJavaScriptProjection'
     ListFactorySessionDispatchesResponse:
       type: object
       additionalProperties: false

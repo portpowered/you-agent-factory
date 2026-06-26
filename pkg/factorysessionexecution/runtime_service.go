@@ -457,6 +457,9 @@ func (s *JavaScriptRuntimeService) GetDispatch(ctx context.Context, sessionID, d
 			if js, ok := state.dispatchJavaScript[dispatchID]; ok {
 				projection := js
 				detail.JavaScript = &projection
+			} else if summary.JavaScript != nil {
+				projection := *summary.JavaScript
+				detail.JavaScript = &projection
 			}
 			return detail, nil
 		}

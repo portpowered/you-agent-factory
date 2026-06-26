@@ -11,9 +11,9 @@ import (
 )
 
 type durableSessionContractFixtureCatalog struct {
-	Scenarios        []durableSessionContractScenario       `json:"scenarios"`
+	Scenarios        []durableSessionContractScenario      `json:"scenarios"`
 	IdempotentReplay durableSessionIdempotentReplayFixture `json:"idempotentReplay"`
-	ListResponse     map[string]any                         `json:"listResponse"`
+	ListResponse     map[string]any                        `json:"listResponse"`
 }
 
 type durableSessionContractScenario struct {
@@ -41,8 +41,8 @@ type durableSessionContractTags struct {
 }
 
 type durableSessionIdempotentReplayFixture struct {
-	ExecutionRequest   map[string]any `json:"executionRequest"`
-	AsyncResponse      map[string]any `json:"asyncResponse"`
+	ExecutionRequest    map[string]any `json:"executionRequest"`
+	AsyncResponse       map[string]any `json:"asyncResponse"`
 	ReplayAsyncResponse map[string]any `json:"replayAsyncResponse"`
 }
 
@@ -709,11 +709,12 @@ func assertDurableSessionDispatchArtifactSurfaceSchemas(t *testing.T, schemas ma
 	assertPropertyRef(t, dispatchSummaryProperties, "dispatchKind", "#/components/schemas/FactoryDispatchKind")
 	assertPropertyRef(t, dispatchSummaryProperties, "usage", "#/components/schemas/FactoryDispatchUsage")
 	assertPropertyRef(t, dispatchSummaryProperties, "failureDetail", "#/components/schemas/FactoryDispatchFailureDetail")
+	assertPropertyRef(t, dispatchSummaryProperties, "javascript", "#/components/schemas/FactoryDispatchJavaScriptProjection")
 	assertArrayItemRef(t, dispatchSummaryProperties, "providerSessionRefs", "#/components/schemas/LoadableProviderSessionRef")
 	assertArrayItemRef(t, dispatchSummaryProperties, "warnings", "#/components/schemas/FactoryDispatchWarning")
 	assertSchemaPropertiesPresent(t, dispatchSummaryProperties, "FactorySessionDispatchSummary",
 		"id", "status", "dispatchKind", "phase", "label", "attempt", "runnerId", "model", "provider",
-		"providerSessionRefs", "usage", "warnings", "outputArtifactIds", "failureDetail")
+		"providerSessionRefs", "usage", "warnings", "outputArtifactIds", "failureDetail", "javascript")
 
 	dispatchDetailSchema := schemaObject(t, schemas, "FactoryDispatch")
 	dispatchDetailProperties := schemaProperties(t, dispatchDetailSchema, "FactoryDispatch")

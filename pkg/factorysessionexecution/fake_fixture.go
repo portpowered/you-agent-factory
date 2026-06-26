@@ -204,9 +204,9 @@ func syncStartFromFixtureMap(document map[string]any) (SyncStartResult, error) {
 		return SyncStartResult{}, err
 	}
 	result := SyncStartResult{
-		AsyncStartResult: asyncStart,
-		SyncOutcome:    SyncOutcome(fixtureStringValue(document, "syncOutcome")),
-		TimedOut:       fixtureBoolValue(document, "timedOut"),
+		AsyncStartResult:         asyncStart,
+		SyncOutcome:              SyncOutcome(fixtureStringValue(document, "syncOutcome")),
+		TimedOut:                 fixtureBoolValue(document, "timedOut"),
 		SessionCanceledByTimeout: fixtureBoolValue(document, "sessionCanceledByTimeout"),
 	}
 	if raw, ok := document["result"]; ok {
@@ -415,6 +415,13 @@ func dispatchSummaryFromFixtureMap(dispatch map[string]any) DispatchSummary {
 			ErrorClass: fixtureStringValue(failure, "errorClass"),
 		}
 	}
+	if javascript, ok := dispatch["javascript"].(map[string]any); ok {
+		summary.JavaScript = &DispatchJavaScriptProjection{
+			TaskKind:      fixtureStringValue(javascript, "taskKind"),
+			TaskLabel:     fixtureStringValue(javascript, "taskLabel"),
+			ExecutionMode: fixtureStringValue(javascript, "executionMode"),
+		}
+	}
 	return summary
 }
 
@@ -441,8 +448,9 @@ func dispatchDetailFromFixtureMap(dispatch map[string]any) DispatchDetail {
 	}
 	if javascript, ok := dispatch["javascript"].(map[string]any); ok {
 		detail.JavaScript = &DispatchJavaScriptProjection{
-			TaskKind:  fixtureStringValue(javascript, "taskKind"),
-			TaskLabel: fixtureStringValue(javascript, "taskLabel"),
+			TaskKind:      fixtureStringValue(javascript, "taskKind"),
+			TaskLabel:     fixtureStringValue(javascript, "taskLabel"),
+			ExecutionMode: fixtureStringValue(javascript, "executionMode"),
 		}
 	}
 	return detail
@@ -718,18 +726,18 @@ func cloneFixtureMap(values map[string]any) map[string]any {
 // FakeScenario is one deterministic durable-session projection bundle used by
 // FakeService. Scenarios are keyed by execution requestId for start routing.
 type FakeScenario struct {
-	ID        string
-	RequestID string
-	Session   SessionReadResult
-	Dispatches []DispatchSummary
+	ID              string
+	RequestID       string
+	Session         SessionReadResult
+	Dispatches      []DispatchSummary
 	DispatchDetails map[string]DispatchDetail
-	Artifacts []ArtifactSummary
+	Artifacts       []ArtifactSummary
 	ArtifactDetails map[string]ArtifactDetail
-	Result    ResultReadResult
-	Events    []json.RawMessage
-	AsyncStart *AsyncStartResult
-	SyncStart  *SyncStartResult
-	ListSummary *DurableSessionListSummary
+	Result          ResultReadResult
+	Events          []json.RawMessage
+	AsyncStart      *AsyncStartResult
+	SyncStart       *SyncStartResult
+	ListSummary     *DurableSessionListSummary
 }
 
 type fakeSessionState struct {
@@ -877,6 +885,7 @@ func cloneResultRead(result ResultReadResult) ResultReadResult {
 func deriveProjectionEvents(session SessionReadResult, result ResultReadResult) []json.RawMessage {
 	return BuildCanonicalSessionEvents(session, result)
 }
+
 // BuiltinInterruptedRecoverableScenario is a deterministic JavaScript session that
 // was interrupted with a stale lease and remains recoverable for persisted listing.
 func BuiltinInterruptedRecoverableScenario() FakeScenario {
@@ -942,9 +951,9 @@ func BuiltinInterruptedRecoverableScenario() FakeScenario {
 	}
 	listSummary := DurableListSummaryFromSessionRead(session)
 	return FakeScenario{
-		ID:        "javascript-interrupted-recoverable",
-		RequestID: "req-js-interrupted-001",
-		Session:   session,
+		ID:         "javascript-interrupted-recoverable",
+		RequestID:  "req-js-interrupted-001",
+		Session:    session,
 		Dispatches: dispatches,
 		DispatchDetails: map[string]DispatchDetail{
 			"disp-js-interrupted-002": {

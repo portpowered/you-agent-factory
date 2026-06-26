@@ -174,8 +174,8 @@ describe("FactorySessionDetailPanel", () => {
         providerSessionRefs: [
           {
             id: "provider-session-1",
-            kind: "response_id",
-            provider: "openai",
+            kind: "session_id",
+            provider: "codex",
           },
         ],
         relatedWorkIds: ["work-123"],
@@ -209,7 +209,7 @@ describe("FactorySessionDetailPanel", () => {
     expect(screen.getAllByText("JAVASCRIPT_AGENT").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Review child task").length).toBeGreaterThan(1);
     expect(screen.getByText("live")).toBeTruthy();
-    expect(screen.getByText("response_id · provider-session-1")).toBeTruthy();
+    expect(screen.getByText("session_id · provider-session-1")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "artifact-dispatch-1" }),
     ).toBeTruthy();

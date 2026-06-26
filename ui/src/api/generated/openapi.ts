@@ -1458,7 +1458,7 @@ export interface components {
       /** @description Whether polling or a later retry may return a ready result. */
       retryable?: boolean;
     };
-    /** @description Durable factory-session dispatch summary for list responses. Exposes neutral dispatch fields without requiring orchestrator-specific projections. */
+    /** @description Durable factory-session dispatch summary for list responses. Exposes shared dispatch fields plus bounded orchestrator-specific inspection data when available. */
     FactorySessionDispatchSummary: {
       /** @description Stable dispatch identifier. */
       id: string;
@@ -1486,6 +1486,7 @@ export interface components {
       /** @description Artifact identifiers produced by the dispatch. */
       outputArtifactIds?: string[];
       failureDetail?: components["schemas"]["FactoryDispatchFailureDetail"];
+      javascript?: components["schemas"]["FactoryDispatchJavaScriptProjection"];
     };
     ListFactorySessionDispatchesResponse: {
       /** @description Stable factory-session identifier that owns the listed dispatches. */

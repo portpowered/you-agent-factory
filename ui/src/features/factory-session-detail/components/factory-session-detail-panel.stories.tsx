@@ -157,8 +157,8 @@ export const DispatchDrilldownStates = {
               providerSessionRefs: [
                 {
                   id: "provider-session-1",
-                  kind: "response_id",
-                  provider: "openai",
+                  kind: "session_id",
+                  provider: "codex",
                 },
               ],
               relatedWorkIds: ["work-123"],
