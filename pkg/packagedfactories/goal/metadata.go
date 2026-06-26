@@ -21,6 +21,9 @@ const (
 	PackagedReviewModePlainLabel = "plain"
 	// PackagedReviewModeStructuredLabel selects the structured envelope review lane.
 	PackagedReviewModeStructuredLabel = "structured"
+	// PackagedCheckReviewModeEnvVar lets the built-in checker opt into the structured
+	// review lane while defaulting to the plain classifier lane.
+	PackagedCheckReviewModeEnvVar = "YOU_GOAL_REVIEW_MODE"
 	// PackagedAdvanceStructuredReviewWorkstationName is retained for factories that
 	// still advance checked work through a dedicated logical move.
 	PackagedAdvanceStructuredReviewWorkstationName = "advance-goal-structured-review"
@@ -29,6 +32,9 @@ const (
 	PackagedStructuredReviewWorkstationName = "structured-review-goal"
 	// PackagedLoopBreakerWorkstationName is the guarded loop breaker for review retries.
 	PackagedLoopBreakerWorkstationName = "goal-loop-breaker"
+	// PackagedStructuredLoopBreakerWorkstationName is the guarded loop breaker for
+	// structured review retries.
+	PackagedStructuredLoopBreakerWorkstationName = "goal-structured-loop-breaker"
 	// PackagedInvokeWorkstationName aliases the execute workstation for simplified
 	// invocation-primary-result scaffolds and legacy references.
 	PackagedInvokeWorkstationName = PackagedExecuteWorkstationName

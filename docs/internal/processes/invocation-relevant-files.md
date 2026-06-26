@@ -53,7 +53,13 @@ primary-result behavior.
   `builtInNamedFactoryCatalog` in `pkg/config/layout.go`. Packaged `@you/goal`
   routes review mode from `check-goal` (`plain` -> `goal:review`, `structured` ->
   `goal:structured-review`) so plain classifier and structured envelope lanes are
-  both reachable without competing logical advances from `goal:check`.
+  both reachable without competing logical advances from `goal:check`. The built-in
+  `goal-checker` script worker must emit only the lane label on stdout after
+  verification (`plain` by default, opt-in `structured` via
+  `YOU_GOAL_REVIEW_MODE`) because `check-goal` is a `CLASSIFIER_WORKSTATION`.
+  Retry exhaustion is authored separately for `review-goal` and
+  `structured-review-goal`, each with its own guarded loop-breaker from `goal:plan`
+  to `goal:failed`.
 - `pkg/packagedfactories/goal/` owns packaged goal factory metadata constants and
   config-load regression coverage for the authored `invocationReturn` policy that
   selects terminal `goal:complete` work content as the primary result.
@@ -89,7 +95,10 @@ primary-result behavior.
 - `tests/functional/runtime_api/api_packaged_goal_invocation_test.go` proves the
   materialized built-in goal topology dispatches `review-goal` when
   `check-goal` returns `plain` and `structured-review-goal` when `check-goal`
-  returns `structured`.
+  returns `structured`, using the real authored `goal-checker` contract rather
+  than mocked lane-label output. The same file proves repeated structured
+  `needs_changes` rework trips the structured loop-breaker instead of retrying
+  forever.
 - `pkg/packagedfactories/tts/` owns packaged TTS invocation metadata shaping
   helpers used when `INFERENCE_RUN` (or legacy `MODEL_INVOKE`) work completes on the `execute-tts` workstation.
   `metadata.go` derives the `backend` metadata field from the loaded on-disk

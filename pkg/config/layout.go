@@ -997,8 +997,8 @@ var BuiltInGoalFactoryJSON = []byte(`{
     {
       "name": "goal-checker",
       "type": "SCRIPT_WORKER",
-      "command": "make",
-      "args": ["test"],
+      "command": "sh",
+      "args": ["-c", "make test >/dev/null && printf '%s' \"${YOU_GOAL_REVIEW_MODE:-plain}\""],
       "body": "You are the @you/goal checker worker."
     },
     {
@@ -1104,6 +1104,24 @@ var BuiltInGoalFactoryJSON = []byte(`{
         {
           "type": "VISIT_COUNT",
           "workstation": "review-goal",
+          "maxVisits": 5
+        }
+      ],
+      "inputs": [
+        {"workType": "goal", "state": "plan"}
+      ],
+      "outputs": [
+        {"workType": "goal", "state": "failed"}
+      ],
+      "worker": ""
+    },
+    {
+      "name": "goal-structured-loop-breaker",
+      "type": "LOGICAL_MOVE",
+      "guards": [
+        {
+          "type": "VISIT_COUNT",
+          "workstation": "structured-review-goal",
           "maxVisits": 5
         }
       ],

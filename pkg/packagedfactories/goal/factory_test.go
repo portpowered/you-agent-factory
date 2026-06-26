@@ -28,11 +28,11 @@ var packagedGoalLifecycleStates = []string{
 }
 
 var packagedGoalProgressionWorkstations = []struct {
-	name            string
-	inputState      string
-	outputState     string
-	publicType      string
-	workerName      string
+	name        string
+	inputState  string
+	outputState string
+	publicType  string
+	workerName  string
 }{
 	{name: PackagedPlanWorkstationName, inputState: "init", outputState: "plan", publicType: interfaces.WorkstationTypeAgent, workerName: "goal-planner"},
 	{name: PackagedExecuteWorkstationName, inputState: "plan", outputState: "execute", publicType: interfaces.WorkstationTypeAgent, workerName: "goal-executor"},
@@ -47,12 +47,13 @@ var packagedGoalWorkerPublicTypes = map[string]string{
 }
 
 var packagedGoalWorkstationPublicTypes = map[string]string{
-	PackagedPlanWorkstationName:          interfaces.WorkstationTypeAgent,
-	PackagedExecuteWorkstationName:       interfaces.WorkstationTypeAgent,
-	PackagedCheckWorkstationName:                    interfaces.WorkstationTypeClassify,
-	PackagedReviewWorkstationName:                   interfaces.WorkstationTypeClassify,
-	PackagedStructuredReviewWorkstationName: interfaces.WorkstationTypeAgent,
-	PackagedLoopBreakerWorkstationName:   interfaces.WorkstationTypeLogical,
+	PackagedPlanWorkstationName:                  interfaces.WorkstationTypeAgent,
+	PackagedExecuteWorkstationName:               interfaces.WorkstationTypeAgent,
+	PackagedCheckWorkstationName:                 interfaces.WorkstationTypeClassify,
+	PackagedReviewWorkstationName:                interfaces.WorkstationTypeClassify,
+	PackagedStructuredReviewWorkstationName:      interfaces.WorkstationTypeAgent,
+	PackagedLoopBreakerWorkstationName:           interfaces.WorkstationTypeLogical,
+	PackagedStructuredLoopBreakerWorkstationName: interfaces.WorkstationTypeLogical,
 }
 
 func TestBuiltInFactoryJSON_LoadsRunnablePackagedGoalFactory(t *testing.T) {
@@ -78,6 +79,7 @@ func TestBuiltInFactoryJSON_LoadsRunnablePackagedGoalFactory(t *testing.T) {
 	}
 	assertGoalLifecycleStates(t, workType.States)
 	assertGoalProgressionTopology(t, cfg.Workstations, cfg.Workers)
+	assertGoalCheckerContract(t, cfg.Workers)
 	assertGoalCheckReviewModeRoutes(t, cfg.Workstations)
 	assertGoalReviewRoutes(t, cfg.Workstations)
 	assertGoalStructuredReviewRoutes(t, cfg.Workstations)
@@ -192,6 +194,7 @@ func TestMaterializedPackagedGoalFactory_ExposesCanonicalWorkTypeAndLifecycleSta
 	}
 	assertGoalLifecycleStates(t, workType.States)
 	assertGoalProgressionTopology(t, cfg.Workstations, cfg.Workers)
+	assertGoalCheckerContract(t, cfg.Workers)
 	assertGoalCheckReviewModeRoutes(t, cfg.Workstations)
 	assertGoalReviewRoutes(t, cfg.Workstations)
 	assertGoalStructuredReviewRoutes(t, cfg.Workstations)
@@ -282,6 +285,28 @@ func assertGoalProgressionTopology(t *testing.T, workstations []interfaces.Facto
 		if want.outputState != "" {
 			assertSingleGoalRoute(t, want.name, workstation.Outputs, want.outputState)
 		}
+	}
+}
+
+func assertGoalCheckerContract(t *testing.T, workers []interfaces.WorkerConfig) {
+	t.Helper()
+
+	checker, ok := indexWorkerConfigsByName(workers)["goal-checker"]
+	if !ok {
+		t.Fatal("missing goal-checker worker")
+	}
+	if checker.Command != "sh" {
+		t.Fatalf("goal-checker command = %q, want %q", checker.Command, "sh")
+	}
+	if len(checker.Args) != 2 {
+		t.Fatalf("goal-checker args = %#v, want shell wrapper", checker.Args)
+	}
+	if checker.Args[0] != "-c" {
+		t.Fatalf("goal-checker args[0] = %q, want %q", checker.Args[0], "-c")
+	}
+	wantScript := "make test >/dev/null && printf '%s' \"${" + PackagedCheckReviewModeEnvVar + ":-plain}\""
+	if checker.Args[1] != wantScript {
+		t.Fatalf("goal-checker shell wrapper = %q, want %q", checker.Args[1], wantScript)
 	}
 }
 
@@ -411,30 +436,48 @@ func assertGoalCheckReviewModeRoutes(t *testing.T, workstations []interfaces.Fac
 			t.Fatalf("check route %q state = %q, want %q", label, gotState, wantState)
 		}
 	}
+
+	workersByName := indexWorkstationsByName(workstations)
+	if got := workersByName[PackagedCheckWorkstationName].Env[PackagedCheckReviewModeEnvVar]; got != "" {
+		t.Fatalf("check workstation env %q = %q, want empty default so checker falls back to plain", PackagedCheckReviewModeEnvVar, got)
+	}
 }
 
 func assertGoalLoopBreaker(t *testing.T, workstations []interfaces.FactoryWorkstationConfig) {
 	t.Helper()
 
-	loopBreaker, ok := indexWorkstationsByName(workstations)[PackagedLoopBreakerWorkstationName]
+	byName := indexWorkstationsByName(workstations)
+	assertGoalLoopBreakerWorkstation(t, byName, PackagedLoopBreakerWorkstationName, PackagedReviewWorkstationName)
+	assertGoalLoopBreakerWorkstation(t, byName, PackagedStructuredLoopBreakerWorkstationName, PackagedStructuredReviewWorkstationName)
+}
+
+func assertGoalLoopBreakerWorkstation(
+	t *testing.T,
+	workstations map[string]interfaces.FactoryWorkstationConfig,
+	workstationName string,
+	watchedWorkstation string,
+) {
+	t.Helper()
+
+	loopBreaker, ok := workstations[workstationName]
 	if !ok {
-		t.Fatal("missing goal loop breaker workstation")
+		t.Fatalf("missing goal loop breaker workstation %q", workstationName)
 	}
 	if loopBreaker.Type != interfaces.WorkstationTypeLogical {
-		t.Fatalf("loop breaker type = %q, want %q", loopBreaker.Type, interfaces.WorkstationTypeLogical)
+		t.Fatalf("loop breaker %q type = %q, want %q", workstationName, loopBreaker.Type, interfaces.WorkstationTypeLogical)
 	}
 	if len(loopBreaker.Guards) != 1 {
-		t.Fatalf("loop breaker guards = %#v, want one visit_count guard", loopBreaker.Guards)
+		t.Fatalf("loop breaker %q guards = %#v, want one visit_count guard", workstationName, loopBreaker.Guards)
 	}
 	guard := loopBreaker.Guards[0]
 	if guard.Type != interfaces.GuardTypeVisitCount {
-		t.Fatalf("loop breaker guard type = %q, want %q", guard.Type, interfaces.GuardTypeVisitCount)
+		t.Fatalf("loop breaker %q guard type = %q, want %q", workstationName, guard.Type, interfaces.GuardTypeVisitCount)
 	}
-	if guard.Workstation != PackagedReviewWorkstationName {
-		t.Fatalf("loop breaker guard workstation = %q, want %q", guard.Workstation, PackagedReviewWorkstationName)
+	if guard.Workstation != watchedWorkstation {
+		t.Fatalf("loop breaker %q guard workstation = %q, want %q", workstationName, guard.Workstation, watchedWorkstation)
 	}
 	if guard.MaxVisits != 5 {
-		t.Fatalf("loop breaker guard maxVisits = %d, want 5", guard.MaxVisits)
+		t.Fatalf("loop breaker %q guard maxVisits = %d, want 5", workstationName, guard.MaxVisits)
 	}
 	assertSingleGoalRoute(t, loopBreaker.Name, loopBreaker.Inputs, "plan")
 	assertSingleGoalRoute(t, loopBreaker.Name, loopBreaker.Outputs, "failed")
