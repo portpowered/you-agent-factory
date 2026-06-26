@@ -895,3 +895,30 @@ func TestInferenceProgressPublishingCommandRunner_PublishesOrderedFragments(t *t
 		t.Fatalf("published fragments = %#v, want both response and progress kinds", published)
 	}
 }
+
+func TestInferenceProgressPublishingCommandRunner_WithoutPublisherPreservesExecBehavior(t *testing.T) {
+	t.Parallel()
+
+	scriptPath := filepath.Join(t.TempDir(), "nostream.sh")
+	script := "#!/bin/sh\necho stdout-fallback\necho stderr-fallback 1>&2\nexit 7\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+
+	runner := NewInferenceProgressPublishingCommandRunner(nil, nil)
+	result, err := runner.Run(context.Background(), CommandRequest{
+		Command: scriptPath,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 7 {
+		t.Fatalf("exit code = %d, want 7", result.ExitCode)
+	}
+	if !strings.Contains(string(result.Stdout), "stdout-fallback") {
+		t.Fatalf("stdout = %q, want stdout-fallback", result.Stdout)
+	}
+	if !strings.Contains(string(result.Stderr), "stderr-fallback") {
+		t.Fatalf("stderr = %q, want stderr-fallback", result.Stderr)
+	}
+}

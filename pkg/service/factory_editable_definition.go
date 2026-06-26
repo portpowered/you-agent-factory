@@ -441,9 +441,16 @@ func NewFactoryServiceCollaborators(
 ) FactoryServiceCollaborators {
 	startupLocalModels := newRuntimeLocalModelDependencies(cfg)
 	return FactoryServiceCollaborators{
-		Sessions:     sessions,
-		LocalModels:  startupLocalModels,
-		RuntimeBuild: newRuntimeBuildService(cfg, clock, baseLogger, &startupLocalModels, newInferenceProgressPublisherFactory(sessions, baseLogger)),
+		Sessions:    sessions,
+		LocalModels: startupLocalModels,
+		RuntimeBuild: newRuntimeBuildService(
+			cfg,
+			clock,
+			baseLogger,
+			&startupLocalModels,
+			newInferenceProgressPublisherFactory(sessions, baseLogger),
+			newSessionDispatchCompletionObserverFactory(sessions),
+		),
 	}
 }
 
@@ -468,7 +475,7 @@ func NewRuntimeBuildService(
 	baseLogger *zap.Logger,
 	localModels *LocalModelDomain,
 ) *runtimebuild.Service {
-	return newRuntimeBuildService(cfg, clock, baseLogger, localModels, nil)
+	return newRuntimeBuildService(cfg, clock, baseLogger, localModels, nil, nil)
 }
 
 // FactoryConfigLoadResult carries factory config load outputs needed before

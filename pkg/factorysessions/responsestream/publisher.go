@@ -70,7 +70,10 @@ func (s *SessionResponseStream) appendCompactionSignal(event Event) {
 		return
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	if s.closed {
+		s.mu.Unlock()
+		return
+	}
 
 	for i, existing := range s.events {
 		if existing.Kind != EventKindCompactionSignal {
@@ -95,10 +98,16 @@ func (s *SessionResponseStream) appendCompactionSignal(event Event) {
 		}
 		s.totalBytes += replacement.PayloadBytes
 		s.events = append(s.events, replacement)
+		subscribers := s.subscribersSnapshotLocked()
+		s.mu.Unlock()
+		notifySubscribers(subscribers)
 		return
 	}
 
 	s.appendLocked(event, true)
+	subscribers := s.subscribersSnapshotLocked()
+	s.mu.Unlock()
+	notifySubscribers(subscribers)
 }
 
 // Diagnostics returns a snapshot of publication diagnostics for the stream.

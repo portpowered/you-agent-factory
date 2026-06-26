@@ -18,6 +18,9 @@ type SessionResponseStream struct {
 	nextSequence int64
 	events       []Event
 	totalBytes   int
+	closed       bool
+	nextSubID    int64
+	subscribers  map[int64]*streamSubscriber
 }
 
 // NewSessionResponseStream allocates an empty internal response stream with
@@ -30,8 +33,9 @@ func NewSessionResponseStream() *SessionResponseStream {
 // supplied clock and retention limits.
 func NewSessionResponseStreamWithClock(clock factory.Clock, limits RetentionLimits) *SessionResponseStream {
 	return &SessionResponseStream{
-		clock:  factory.EnsureClock(clock),
-		limits: limits,
+		clock:       factory.EnsureClock(clock),
+		limits:      limits,
+		subscribers: make(map[int64]*streamSubscriber),
 	}
 }
 
@@ -76,8 +80,15 @@ func (s *SessionResponseStream) Append(event Event) (Event, *CompactionSummary) 
 		return event, nil
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.appendLocked(event, true)
+	if s.closed {
+		s.mu.Unlock()
+		return event, nil
+	}
+	stored, compaction := s.appendLocked(event, true)
+	subscribers := s.subscribersSnapshotLocked()
+	s.mu.Unlock()
+	notifySubscribers(subscribers)
+	return stored, compaction
 }
 
 func (s *SessionResponseStream) appendLocked(event Event, enforceRetention bool) (Event, *CompactionSummary) {
@@ -307,7 +318,10 @@ func (s *SessionResponseStream) EventsAfter(afterSequence int64) ReadResult {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return s.eventsAfterLocked(afterSequence)
+}
 
+func (s *SessionResponseStream) eventsAfterLocked(afterSequence int64) ReadResult {
 	firstRetained := s.firstRetainedSequenceLocked()
 	if len(s.events) == 0 {
 		return ReadResult{FirstRetainedSequence: firstRetained}
@@ -317,7 +331,7 @@ func (s *SessionResponseStream) EventsAfter(afterSequence int64) ReadResult {
 		out := make([]Event, len(s.events))
 		copy(out, s.events)
 		return ReadResult{
-			Events:              out,
+			Events:                out,
 			BehindRetainedWindow:  true,
 			FirstRetainedSequence: firstRetained,
 			Compaction: &CompactionSummary{
@@ -336,9 +350,20 @@ func (s *SessionResponseStream) EventsAfter(afterSequence int64) ReadResult {
 		}
 	}
 	return ReadResult{
-		Events:              out,
+		Events:                out,
 		FirstRetainedSequence: firstRetained,
 	}
+}
+
+func (s *SessionResponseStream) subscribersSnapshotLocked() []*streamSubscriber {
+	if len(s.subscribers) == 0 {
+		return nil
+	}
+	subscribers := make([]*streamSubscriber, 0, len(s.subscribers))
+	for _, subscriber := range s.subscribers {
+		subscribers = append(subscribers, subscriber)
+	}
+	return subscribers
 }
 
 // LatestSequence returns the highest assigned stream sequence, or zero when the

@@ -100,6 +100,7 @@ type factoryRuntimeBundle struct {
 	recording            *replay.Recorder
 	recordPath           string
 	dispatchMetricFields sync.Map
+	dispatchCompleted    func(string)
 }
 
 type liveRuntimeHandle struct {
