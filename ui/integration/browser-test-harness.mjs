@@ -787,6 +787,16 @@ export async function startBrowserPreview() {
   };
 }
 
+export async function stopBrowserPreview() {
+  const state = browserPreviewState();
+  if (state.preview) {
+    await state.preview.stop();
+  }
+  state.preview = null;
+  state.previewPromise = null;
+  sharedBrowserPorts = null;
+}
+
 export async function loadReplayLines(fileName) {
   return (await readFile(path.join(replayFixtureDirectory, fileName), "utf8"))
     .split(/\r?\n/)
