@@ -150,7 +150,6 @@ func TestCatalogHost_Diagnostics_ReadinessTimeoutEmitsFailureLogAndMetric(t *tes
 
 func TestCatalogHost_Diagnostics_ProcessCrashEmitsFailureLogAndMetric(t *testing.T) {
 	exitCh := make(chan error, 1)
-	exitCh <- errors.New("server exited")
 
 	logger := &capturingDiagnosticsLogger{}
 	metrics := &capturingMetricsRecorder{}
@@ -168,6 +167,7 @@ func TestCatalogHost_Diagnostics_ProcessCrashEmitsFailureLogAndMetric(t *testing
 	if err != nil {
 		t.Fatalf("AcquireLease: %v", err)
 	}
+	exitCh <- errors.New("server exited")
 
 	deadline := time.Now().Add(2 * time.Second)
 	for {

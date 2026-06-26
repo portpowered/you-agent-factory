@@ -501,21 +501,42 @@ func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req C
 		return workerprocess.ExecCommandRunner{}.Run(ctx, req)
 	}
 	dispatchID := strings.TrimSpace(req.DispatchID)
-	return workerprocess.StreamingExecCommandRunner{
+	var cursorStream *cursorpkg.StreamParser
+	if strings.TrimSpace(req.Command) == string(interfaces.ModelProviderCursor) {
+		cursorStream = cursorpkg.NewStreamParser(req.Command, func(fragment cursorpkg.StreamFragment) {
+			switch fragment.Kind {
+			case cursorpkg.StreamFragmentKindResponse:
+				r.Publisher(ResponseFragment(dispatchID, fragment.ProviderSession, fragment.Payload))
+			case cursorpkg.StreamFragmentKindProgress:
+				r.Publisher(ProgressFragment(dispatchID, fragment.ProviderSession, fragment.Payload))
+			}
+		})
+	}
+
+	result, err := workerprocess.StreamingExecCommandRunner{
 		Observer: func(stream string, chunk []byte) {
 			if len(chunk) == 0 {
 				return
 			}
-			payload := string(chunk)
 			switch stream {
 			case workerprocess.OutputStreamStdout:
+				if cursorStream != nil {
+					cursorStream.Consume(chunk)
+					return
+				}
+				payload := string(chunk)
 				r.Publisher(ResponseFragment(dispatchID, nil, payload))
 			case workerprocess.OutputStreamStderr:
+				payload := string(chunk)
 				r.Publisher(ProgressFragment(dispatchID, nil, payload))
 			}
 		},
 		Logger: logging.EnsureLogger(r.Logger),
 	}.Run(ctx, req)
+	if cursorStream != nil {
+		cursorStream.Flush()
+	}
+	return result, err
 }
 
 // NewInferenceProgressPublishingCommandRunner constructs a provider command
