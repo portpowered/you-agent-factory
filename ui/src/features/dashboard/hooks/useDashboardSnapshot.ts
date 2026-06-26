@@ -1,15 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { FactoryEvent } from "../../../api/events";
 import {
-  type FactoryTimelineCheckpoint,
   persistTimelineCheckpoint,
   readFactoryTimelineDebugOptions,
-  readTimelineCheckpoint,
-  reconnectCursorFromCheckpoint,
   useFactoryTimelineStore,
 } from "../../timeline/public";
 import { useDashboardSession } from "../session/dashboard-session-provider";
+import { useDashboardCheckpointPreflight } from "./useDashboardCheckpointPreflight";
 import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
 import { useDashboardTimelineMemoryDebug } from "./useDashboardTimelineMemoryDebug";
@@ -38,10 +36,6 @@ export function useDashboardSnapshot({
   const debugOptions = useMemo(() => readFactoryTimelineDebugOptions(), []);
   const queuedAppendRef =
     useRef<(events: FactoryEvent[]) => void>(appendEvents);
-  const [checkpointHydratedSessionID, setCheckpointHydratedSessionID] =
-    useState<string | null>(null);
-  const [persistedCheckpoint, setPersistedCheckpoint] =
-    useState<FactoryTimelineCheckpoint | null>(null);
 
   queuedAppendRef.current = appendEvents;
 
@@ -51,44 +45,15 @@ export function useDashboardSnapshot({
     sessionID: rawSessionID,
   });
 
-  const checkpointHydrated = checkpointHydratedSessionID === rawSessionID;
-  const initialReconnectCursor = useMemo(
-    () => reconnectCursorFromCheckpoint(persistedCheckpoint),
-    [persistedCheckpoint],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    setCheckpointHydratedSessionID(null);
-    setPersistedCheckpoint(null);
-
-    if (
-      !rawSessionID ||
-      typeof window === "undefined" ||
-      debugOptions.disableTimelineCheckpoint
-    ) {
-      setCheckpointHydratedSessionID(rawSessionID);
-      return;
-    }
-
-    void readTimelineCheckpoint(window.indexedDB, rawSessionID).then(
-      (checkpoint) => {
-        if (cancelled) {
-          return;
-        }
-        if (checkpoint) {
-          restoreCheckpoint(checkpoint);
-        }
-        setPersistedCheckpoint(checkpoint);
-        setCheckpointHydratedSessionID(rawSessionID);
-      },
-    );
-
-    return () => {
-      cancelled = true;
-    };
-  }, [debugOptions.disableTimelineCheckpoint, rawSessionID, restoreCheckpoint]);
+  const {
+    checkpointHydrated,
+    initialReconnectCursor,
+    persistedSyncIdentity,
+  } = useDashboardCheckpointPreflight({
+    checkpointRestoreEnabled: !debugOptions.disableTimelineCheckpoint,
+    rawSessionID,
+    restoreCheckpoint,
+  });
 
   useEffect(() => {
     if (
@@ -101,7 +66,12 @@ export function useDashboardSnapshot({
       void persistTimelineCheckpoint(
         window.indexedDB,
         rawSessionID,
-        currentReplayCheckpoint,
+        currentReplayCheckpoint && persistedSyncIdentity
+          ? {
+              ...currentReplayCheckpoint,
+              syncIdentity: persistedSyncIdentity,
+            }
+          : undefined,
       );
     }, 750);
     return () => {
@@ -110,6 +80,7 @@ export function useDashboardSnapshot({
   }, [
     currentReplayCheckpoint,
     debugOptions.disableTimelineCheckpoint,
+    persistedSyncIdentity,
     rawSessionID,
   ]);
 

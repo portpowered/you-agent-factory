@@ -16,6 +16,7 @@ import {
   listFactorySessionDispatches,
 } from "./api-durable-inspection";
 import { getFactorySessionDispatchDetail } from "./dispatch-detail";
+import { getFactorySessionSyncPreflight } from "./sync-preflight";
 
 describe("factory sessions API", () => {
   afterEach(() => {
@@ -263,6 +264,60 @@ describe("factory sessions API", () => {
         },
         method: "POST",
       }),
+    );
+  });
+
+  it("reads the sync preflight surface with reconnect cursor query parameters", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          backendScopeId: "backend-a",
+          checkpointReusable: true,
+          factorySessionId: "session-beta",
+          logicalSessionKeyId: "logical-beta",
+          reasonCode: "ok",
+          reconnectCursor: {
+            afterEventId: "event-7",
+            afterSequence: 7,
+            provided: true,
+            validForStreamGeneration: true,
+          },
+          requestedSessionId: "session-beta",
+          streamGenerationId: "stream-beta",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getFactorySessionSyncPreflight("session-beta", {
+        afterEventId: "event-7",
+        afterSequence: 7,
+      }),
+    ).resolves.toEqual({
+      backendScopeId: "backend-a",
+      checkpointReusable: true,
+      factorySessionId: "session-beta",
+      logicalSessionKeyId: "logical-beta",
+      reasonCode: "ok",
+      reconnectCursor: {
+        afterEventId: "event-7",
+        afterSequence: 7,
+        provided: true,
+        validForStreamGeneration: true,
+      },
+      requestedSessionId: "session-beta",
+      streamGenerationId: "stream-beta",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions/session-beta/sync-preflight?after_event_id=event-7&after_sequence=7",
+      expect.objectContaining({ method: "GET" }),
     );
   });
 
