@@ -84,25 +84,6 @@ func (e *ArgumentError) Error() string {
 	return e.Message
 }
 
-func NamedArgumentInputsFromMap(values map[string][]string) []NamedArgumentInput {
-	if len(values) == 0 {
-		return nil
-	}
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	inputs := make([]NamedArgumentInput, 0, len(keys))
-	for _, key := range keys {
-		inputs = append(inputs, NamedArgumentInput{
-			Key:    key,
-			Values: slices.Clone(values[key]),
-		})
-	}
-	return inputs
-}
-
 func NamedArgumentInputsFromAnyMap(values map[string]any) ([]NamedArgumentInput, error) {
 	if len(values) == 0 {
 		return nil, nil
