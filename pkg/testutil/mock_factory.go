@@ -559,7 +559,11 @@ func (m *MockFactory) SubscribeFactoryEvents(ctx context.Context, reconnect *int
 		history = replayed
 	}
 	if m.FactoryEventStream != nil {
-		return &interfaces.FactoryEventStream{History: history, Events: m.FactoryEventStream.Events}, nil
+		return &interfaces.FactoryEventStream{
+			StreamGenerationID: m.FactoryEventStream.StreamGenerationID,
+			History:            history,
+			Events:             m.FactoryEventStream.Events,
+		}, nil
 	}
 	ch := make(chan factoryapi.FactoryEvent)
 	return &interfaces.FactoryEventStream{History: history, Events: ch}, nil

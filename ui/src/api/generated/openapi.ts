@@ -4867,6 +4867,8 @@ export interface operations {
       /** @description Factory event stream for the targeted session. */
       200: {
         headers: {
+          /** @description Opaque invalidation token for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `streamGenerationID` values before reusing reconnect cursors or stream-derived projections. */
+          "X-Factory-Session-Stream-Generation-Id"?: string;
           [name: string]: unknown;
         };
         content: {

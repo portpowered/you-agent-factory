@@ -276,6 +276,11 @@ paths:
       responses:
         '200':
           description: Factory event stream for the targeted session.
+          headers:
+            X-Factory-Session-Stream-Generation-Id:
+              description: Opaque invalidation token for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `streamGenerationID` values before reusing reconnect cursors or stream-derived projections.
+              schema:
+                type: string
           content:
             text/event-stream:
               schema:
