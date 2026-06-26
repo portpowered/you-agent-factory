@@ -49,6 +49,12 @@ describe("factory invocation form projection", () => {
         name: "tag",
         valueMode: "REPEATED",
       },
+      {
+        bindings: [{ kind: "NAMED" }],
+        name: "attachment",
+        typeHint: "FILE_PATH",
+        valueMode: "FILE_CONTENTS",
+      },
     ],
   } as const;
 
@@ -86,6 +92,11 @@ describe("factory invocation form projection", () => {
         kind: "repeated",
         name: "tag",
       }),
+      expect.objectContaining({
+        kind: "text",
+        name: "attachment",
+        pathHint: "file",
+      }),
     ]);
   });
 
@@ -95,9 +106,11 @@ describe("factory invocation form projection", () => {
       input: ["hello world"],
       outputPath: ["/tmp/report.txt"],
       tag: ["alpha", "beta", ""],
+      attachment: ["/tmp/source.txt"],
     });
 
     expect(args).toEqual({
+      attachment: "/tmp/source.txt",
       confirm: "false",
       input: "hello world",
       outputPath: "/tmp/report.txt",

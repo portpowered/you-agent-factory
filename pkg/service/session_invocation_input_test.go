@@ -49,6 +49,29 @@ func TestResolveSessionInvocationInput_SignatureArgsRejectMissingRequiredInput(t
 	assertSessionInvocationArgumentErrorCode(t, err, invocations.ArgumentErrorCodeMissingRequiredInput)
 }
 
+func TestResolveSessionInvocationInput_EmptyStructuredArgsStillUseSignature(t *testing.T) {
+	request := factoryapi.InvocationRequest{
+		Args: &map[string]any{},
+	}
+
+	resolved, err := resolveSessionInvocationInput(optionalSignatureInvocationFactoryConfig(), request)
+	if err != nil {
+		t.Fatalf("resolveSessionInvocationInput: %v", err)
+	}
+	if resolved.Source != invocationInputSourceStructuredArgs {
+		t.Fatalf("source = %q, want %q", resolved.Source, invocationInputSourceStructuredArgs)
+	}
+	if resolved.NormalizedArguments == nil {
+		t.Fatal("NormalizedArguments = nil, want normalized args")
+	}
+	if len(resolved.NormalizedArguments.Arguments) != 1 {
+		t.Fatalf("normalized args = %#v, want defaulted optional args", resolved.NormalizedArguments.Arguments)
+	}
+	if values := resolved.NormalizedArguments.Arguments["mode"].Values; len(values) != 1 || values[0] != "fast" {
+		t.Fatalf("mode values = %#v, want [fast]", values)
+	}
+}
+
 func TestResolveSessionInvocationInput_SignatureArgsRejectCompatibilityContentMix(t *testing.T) {
 	sourceKind := factoryapi.InvocationInputSourceKindText
 	content := invocationTextContent(t, "legacy compatibility text")
@@ -83,6 +106,20 @@ func signatureInvocationFactoryConfig() *interfaces.FactoryConfig {
 					}},
 				},
 			},
+		},
+	}
+}
+
+func optionalSignatureInvocationFactoryConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
+		InvocationSignature: &interfaces.InvocationSignatureConfig{
+			Parameters: []interfaces.InvocationParameterConfig{{
+				Name:         "mode",
+				DefaultValue: "fast",
+				Bindings: []interfaces.InvocationParameterBindingConfig{{
+					Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed),
+				}},
+			}},
 		},
 	}
 }

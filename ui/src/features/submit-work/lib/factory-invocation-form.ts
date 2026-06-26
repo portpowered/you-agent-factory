@@ -144,11 +144,7 @@ function projectInvocationField(
 function resolveInvocationFieldKind(
   parameter: FactoryInvocationParameter,
 ): InvocationFieldModel["kind"] {
-  if (
-    parameter.valueMode === "REPEATED" ||
-    parameter.valueMode === "VARIADIC" ||
-    parameter.valueMode === "FILE_CONTENTS"
-  ) {
+  if (parameter.valueMode === "REPEATED" || parameter.valueMode === "VARIADIC") {
     return "repeated";
   }
   if (parameter.choices && parameter.choices.length > 0) {

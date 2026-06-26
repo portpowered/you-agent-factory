@@ -24,6 +24,12 @@ primary-result behavior.
   enum values at the JSON boundary. Keep ordinary non-placeholder values on the
   existing strict enum normalization path so packaged and customer-authored
   factories can use the same interpolation-enabled authored fields.
+- `pkg/config/operatordefaultsruntime/operator_defaults_runtime.go` is the
+  startup-time runtime-validation seam for operator-defaulted model workers.
+  When a model-worker `modelProvider` uses exact `${parameter}` invocation
+  interpolation, validate that it references a declared signature parameter
+  rather than forcing the authored placeholder through concrete provider
+  validation during session startup.
 - `pkg/invocations/primary_result.go` resolves invocation `primaryResult`
   against selected-tick `FactoryWorldState` using `WorkRequestsByID`,
   `TerminalWorkByID`, and payload-lineage scope rather than transport-specific
@@ -61,7 +67,10 @@ primary-result behavior.
   signature-backed runtime behavior needs per-invocation authored-field
   interpolation, carry the normalized argument set on runtime-only
   `interfaces.InvocationArguments` metadata and validate it through
-  `invocations.ValidateInvocationInterpolation` before submitting work.
+  `invocations.ValidateInvocationInterpolation` before submitting work. Treat
+  `args: {}` as an explicit structured invocation request, not as omitted args,
+  so all-optional or defaulted signatures stay transport-equivalent with CLI
+  invocation.
 - `pkg/cli/run/` is the `you run --factory` CLI boundary.
 - Canonical default-path ownership for operator config
   (`~/.you-agent-factory/config.json`) and generated live replay recording roots

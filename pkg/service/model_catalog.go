@@ -450,8 +450,9 @@ func resolveSessionInvocationInput(
 	if err != nil {
 		return resolvedSessionInvocationInput{}, err
 	}
+	argsProvided := request.Args != nil
 
-	if len(namedArgs) == 0 {
+	if !argsProvided {
 		if len(content) == 0 {
 			return resolvedSessionInvocationInput{}, &apisurface.RequestValidationError{
 				Message: "content is required when args are omitted",

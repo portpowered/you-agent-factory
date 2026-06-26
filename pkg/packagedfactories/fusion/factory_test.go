@@ -1,6 +1,7 @@
 package fusion
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,9 +10,12 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
+	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	"go.uber.org/zap"
 )
 
 func TestBuiltInFactoryJSON_LoadsRunnablePackagedFusionFactory(t *testing.T) {
@@ -135,6 +139,46 @@ func TestBuiltInFusionFactory_NormalizesMixedPositionalAndNamedArgumentsThroughS
 	assertArgumentValues(t, got.Arguments, "output", []string{"fusion-summary.md"})
 	assertArgumentValues(t, got.Arguments, "firstEffort", []string{"medium"})
 	assertArgumentValues(t, got.Arguments, "secondEffort", []string{"medium"})
+}
+
+func TestBuiltInFusionFactory_RuntimeBuildAllowsInvocationInterpolatedModelProvider(t *testing.T) {
+	globalRoot := t.TempDir()
+	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(t.TempDir(), globalRoot, PackagedFactoryName)
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots: %v", err)
+	}
+
+	builder := runtimebuild.New(
+		runtimebuild.Config{
+			ApplyOperatorDefaults: true,
+			OperatorDefaults: operatorconfig.ResolvedDefaults{
+				WorkerModelProvider: "CODEX",
+				WorkerModel:         "gpt-5",
+			},
+		},
+		nil,
+		zap.NewNop(),
+		func(context.Context, runtimebuild.SessionBuildSpec) (any, error) {
+			return struct{}{}, nil
+		},
+	)
+	spec, err := builder.BuildSpec(context.Background(), runtimebuild.SessionSpecInput{
+		Dir:              resolution.FactoryDir,
+		FolderPath:       resolution.FactoryDir,
+		SessionID:        "~default",
+		ExecutionBaseDir: resolution.FactoryDir,
+	})
+	if err != nil {
+		t.Fatalf("BuildSpec: %v", err)
+	}
+
+	worker, ok := spec.LoadedFactoryCfg.Worker("fusion-drafter")
+	if !ok {
+		t.Fatal("expected fusion-drafter worker")
+	}
+	if worker.ModelProvider != "${firstProvider}" {
+		t.Fatalf("modelProvider = %q, want exact invocation placeholder preserved", worker.ModelProvider)
+	}
 }
 
 func assertArgumentValues(t *testing.T, arguments map[string]invocations.NormalizedArgument, name string, want []string) {
