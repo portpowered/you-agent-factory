@@ -552,6 +552,55 @@ describe("useDashboardSnapshot composer", () => {
     ).resolves.toBe(null);
     expect(indexedDBRecords.has(checkpointStorageKey())).toBe(false);
   });
+
+  it("clears a stale reconnect checkpoint and silently replays from scratch", async () => {
+    indexedDBRecords.set(checkpointStorageKey(), {
+      checkpoint: {
+        afterEventId: "checkpoint-event-7",
+        afterSequence: 7,
+        replayState: emptyReplayWorldState(7),
+        selectedTick: 7,
+      },
+      schemaVersion: 2,
+      sessionID: DEFAULT_FACTORY_SESSION_ID,
+      storageKey: checkpointStorageKey(),
+      streamIdentity: {
+        backendScopeID: "backend-scope-a",
+        factorySessionID: DEFAULT_FACTORY_SESSION_ID,
+        streamGenerationID: "2026-06-26T00:00:00Z",
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        body: {
+          cancel: vi.fn().mockResolvedValue(undefined),
+        },
+        ok: false,
+        status: 400,
+      }),
+    );
+
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+    );
+    expect(useFactoryTimelineStore.getState().selectedTick).toBe(0);
+    await expect(
+      readTimelineCheckpoint(window.indexedDB, DEFAULT_FACTORY_SESSION_ID, {
+        backendScopeID: "backend-scope-a",
+        factorySessionID: DEFAULT_FACTORY_SESSION_ID,
+        streamGenerationID: "2026-06-26T00:00:00Z",
+      }),
+    ).resolves.toBe(null);
+    expect(indexedDBRecords.has(checkpointStorageKey())).toBe(false);
+  });
 });
 
 function createWrapper(queryClient: QueryClient) {

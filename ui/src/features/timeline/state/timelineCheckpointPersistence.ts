@@ -118,6 +118,17 @@ async function deleteIndexedCheckpoint(
   }
 }
 
+export async function clearTimelineCheckpoint(
+  indexedDB: IndexedDBLike | undefined,
+  streamIdentity: TimelineCheckpointStreamIdentity | null,
+): Promise<void> {
+  const storageKey = checkpointStorageKey(streamIdentity);
+  if (!indexedDB || !storageKey) {
+    return;
+  }
+  await deleteIndexedCheckpoint(indexedDB, storageKey).catch(() => {});
+}
+
 function compactText(value: string): string {
   if (value.length <= MAX_COMPACT_TEXT_CHARS) {
     return value;

@@ -7,6 +7,7 @@ export {
 export {
   clearTimelineCheckpoint,
   type TimelineCheckpointStreamIdentity,
+  clearTimelineCheckpoint,
   persistTimelineCheckpoint,
   readTimelineCheckpoint,
   reconnectCursorFromCheckpoint,
