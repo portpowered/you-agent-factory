@@ -56,6 +56,16 @@ import {
 } from "./session-factory-mocks";
 
 export {
+  chainRenderAppFetchMock,
+  fetchCallPaths,
+  jsonResponse,
+  lastFetchCallBody,
+  nonPromptTemplateFetchPaths,
+  type FetchMock,
+  type RenderAppFetchOverride,
+} from "./app-shell-fetch-test-utils";
+
+export {
   renderWithDashboardSessionTest,
   wrapWithDashboardSessionTest,
 } from "./dashboard-session-test-utils";
