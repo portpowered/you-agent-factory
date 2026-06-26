@@ -254,6 +254,13 @@ primary-result behavior.
 - `pkg/api/server_factory_sessions_test.go` proves the session invocation API
   returns the same observable request and primary-result behavior for packaged
   `@you/goal` text input and source-conflict failures as the CLI parity tests.
+- Dashboard signature-backed invocation submission belongs in
+  `ui/src/api/session-factory/` plus `ui/src/features/submit-work/`. Keep the
+  transport wrapper on `POST /factory-sessions/{session_id}/invocations`,
+  generated field projection/serialization in feature-local pure helpers, and
+  dev/preview proxy coverage aligned in `ui/vite.config.ts` +
+  `ui/vite.config.test.ts` so local dashboard submits use the same session API
+  route outside production builds.
 - `pkg/service/model_catalog.go` owns the session invocation wait loop, packaged TTS
   loading/completion/failure logs, and packaged-factory metrics while polling for
   primary results.

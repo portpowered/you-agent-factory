@@ -1,0 +1,239 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import "@testing-library/jest-dom/vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+
+import { SessionFactoryInvocationError } from "../../../../api/session-factory";
+import { installDashboardBrowserTestShims } from "../../../../components/dashboard/test-browser-shims";
+import { selectLabeledComboboxOption } from "../../../../testing/select-test-helpers";
+import { DashboardSessionTestProvider } from "../../../../testing/dashboard-session-test-provider";
+import { FactoryInvocationWidget } from "./factory-invocation-widget";
+
+const invokeSessionFactory = vi.fn();
+const useCurrentFactoryDefinition = vi.fn();
+let restoreBrowserShims: (() => void) | undefined;
+
+vi.mock("../../../../api/session-factory", async () => {
+  const actual = (await vi.importActual(
+    "../../../../api/session-factory",
+  )) as typeof import("../../../../api/session-factory");
+
+  return {
+    ...actual,
+    invokeSessionFactory: (...args: unknown[]) => invokeSessionFactory(...args),
+  };
+});
+
+vi.mock("../../../current-factory-definition/public", async () => {
+  const actual = (await vi.importActual(
+    "../../../current-factory-definition/public",
+  )) as typeof import("../../../current-factory-definition/public");
+
+  return {
+    ...actual,
+  useCurrentFactoryDefinition: () => useCurrentFactoryDefinition(),
+  };
+});
+
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: focused widget coverage is kept together for the generated invocation flow.
+describe("FactoryInvocationWidget", () => {
+  beforeEach(() => {
+    restoreBrowserShims = installDashboardBrowserTestShims();
+  });
+
+  afterEach(() => {
+    cleanup();
+    invokeSessionFactory.mockReset();
+    useCurrentFactoryDefinition.mockReset();
+    restoreBrowserShims?.();
+    restoreBrowserShims = undefined;
+  });
+
+  it("renders signature-backed fields and submits InvocationRequest.args", async () => {
+    const user = userEvent.setup();
+    useCurrentFactoryDefinition.mockReturnValue({
+      data: {
+        invocationSignature: {
+          outputContract: {
+            mode: "FILE",
+            pathParameter: "output",
+          },
+          parameters: [
+            {
+              bindings: [{ kind: "POSITIONAL", position: 1 }],
+              description: "Source input",
+              name: "input",
+              required: true,
+            },
+            {
+              bindings: [{ kind: "NAMED" }],
+              choices: ["low", "medium", "high"],
+              name: "effort",
+            },
+            {
+              bindings: [{ kind: "NAMED" }],
+              name: "confirm",
+              typeHint: "BOOLEAN_STRING",
+            },
+            {
+              bindings: [{ kind: "NAMED" }],
+              name: "tag",
+              valueMode: "REPEATED",
+            },
+          ],
+        },
+        name: "fusion",
+      },
+      error: null,
+      isLoading: false,
+    });
+    invokeSessionFactory.mockResolvedValue({
+      requestId: "request-1",
+      status: "COMPLETED",
+      traceId: "trace-1",
+    });
+
+    renderFactoryInvocationWidget();
+
+    await user.type(screen.getByRole("textbox", { name: /input/i }), "hello world");
+    await selectLabeledComboboxOption(user, /effort/i, "high");
+    await user.click(screen.getByRole("button", { name: "True" }));
+    await user.type(screen.getByRole("textbox", { name: /tag/i }), "alpha");
+    await user.click(screen.getByRole("button", { name: "Add tag" }));
+    const tagInputs = screen.getAllByRole("textbox", { name: /tag/i });
+    const secondTagInput = tagInputs[1];
+    if (!(secondTagInput instanceof HTMLInputElement)) {
+      throw new Error("expected a second repeated tag input");
+    }
+    await user.type(secondTagInput, "beta");
+    await user.click(screen.getByRole("button", { name: "Run factory" }));
+
+    await waitFor(() => {
+      expect(invokeSessionFactory).toHaveBeenCalledWith(
+        {
+          args: {
+            confirm: "true",
+            effort: "high",
+            input: "hello world",
+            tag: ["alpha", "beta"],
+          },
+        },
+        { sessionID: "~default" },
+      );
+    });
+
+    expect(screen.getByText("Output hint")).toBeVisible();
+    expect(screen.getByText("Factory invocation started. Trace ID: trace-1.")).toBeVisible();
+  });
+
+  it("shows explicit loading and error states from the current-factory query", () => {
+    useCurrentFactoryDefinition.mockReturnValue({
+      data: undefined,
+      error: null,
+      isLoading: true,
+    });
+
+    const { rerender } = renderFactoryInvocationWidget();
+
+    expect(
+      screen.getByText("Loading the current factory invocation contract..."),
+    ).toBeVisible();
+
+    useCurrentFactoryDefinition.mockReturnValue({
+      data: undefined,
+      error: new Error("Current factory failed to load."),
+      isLoading: false,
+    });
+
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <DashboardSessionTestProvider>
+          <FactoryInvocationWidget sessionID="~default" />
+        </DashboardSessionTestProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText("Current factory failed to load.")).toBeVisible();
+  });
+
+  it("surfaces field-level validation failures for required parameters", async () => {
+    const user = userEvent.setup();
+    useCurrentFactoryDefinition.mockReturnValue({
+      data: {
+        invocationSignature: {
+          parameters: [
+            {
+              bindings: [{ kind: "POSITIONAL", position: 1 }],
+              name: "input",
+              required: true,
+            },
+          ],
+        },
+        name: "fusion",
+      },
+      error: null,
+      isLoading: false,
+    });
+
+    renderFactoryInvocationWidget();
+
+    await user.click(screen.getByRole("button", { name: "Run factory" }));
+
+    expect(invokeSessionFactory).not.toHaveBeenCalled();
+    expect(screen.getByText("Enter input before invoking.")).toBeVisible();
+    expect(
+      screen.getByText("Fix the highlighted arguments before invoking."),
+    ).toBeVisible();
+  });
+
+  it("maps backend argument failures back onto the matching field", async () => {
+    const user = userEvent.setup();
+    useCurrentFactoryDefinition.mockReturnValue({
+      data: {
+        invocationSignature: {
+          parameters: [
+            {
+              bindings: [{ kind: "POSITIONAL", position: 1 }],
+              name: "input",
+              required: true,
+            },
+          ],
+        },
+        name: "fusion",
+      },
+      error: null,
+      isLoading: false,
+    });
+    invokeSessionFactory.mockRejectedValue(
+      new SessionFactoryInvocationError(
+        'required invocation parameter "input" is missing',
+        {
+          code: "INVOCATION_ARGUMENT_MISSING_REQUIRED_INPUT",
+          status: 400,
+          statusText: "Bad Request",
+        },
+      ),
+    );
+
+    renderFactoryInvocationWidget();
+
+    await user.type(screen.getByRole("textbox", { name: /input/i }), "hello");
+    await user.click(screen.getByRole("button", { name: "Run factory" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByText('required invocation parameter "input" is missing').length,
+      ).toBeGreaterThan(0);
+    });
+  });
+});
+
+function renderFactoryInvocationWidget() {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <DashboardSessionTestProvider>
+        <FactoryInvocationWidget sessionID="~default" />
+      </DashboardSessionTestProvider>
+    </QueryClientProvider>,
+  );
+}
