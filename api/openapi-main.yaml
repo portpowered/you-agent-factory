@@ -1816,6 +1816,10 @@ components:
       $ref: './components/schemas/factory-world/FactoryWorldRenderedPromptDiagnostic.yaml'
     FactoryWorldProviderDiagnostic:
       $ref: './components/schemas/factory-world/FactoryWorldProviderDiagnostic.yaml'
+    FactoryWorldInvocationDiagnostic:
+      $ref: './components/schemas/factory-world/FactoryWorldInvocationDiagnostic.yaml'
+    FactoryWorldInvocationParameterDiagnostic:
+      $ref: './components/schemas/factory-world/FactoryWorldInvocationParameterDiagnostic.yaml'
     FactoryWorldWorkDiagnostics:
       $ref: './components/schemas/factory-world/FactoryWorldWorkDiagnostics.yaml'
     FactoryWorldWorkItemRef:
@@ -1920,6 +1924,10 @@ components:
       $ref: './components/schemas/events/RenderedPromptDiagnostic.yaml'
     ProviderDiagnostic:
       $ref: './components/schemas/events/ProviderDiagnostic.yaml'
+    InvocationDiagnostic:
+      $ref: './components/schemas/events/InvocationDiagnostic.yaml'
+    InvocationParameterDiagnostic:
+      $ref: './components/schemas/events/InvocationParameterDiagnostic.yaml'
     CommandDiagnostic:
       $ref: './components/schemas/shared/CommandDiagnostic.yaml'
     PanicDiagnostic:

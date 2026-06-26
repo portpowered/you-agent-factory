@@ -69,3 +69,39 @@ func TestInterpolateWorkerConfig_ResolvesFileContentsValueMode(t *testing.T) {
 		t.Fatalf("body = %q, want file contents", worker.Body)
 	}
 }
+
+func TestInvocationDiagnostic_RedactsSensitiveValuesAndPreservesSources(t *testing.T) {
+	diagnostic := InvocationDiagnostic(&interfaces.InvocationSignatureConfig{
+		Parameters: []interfaces.InvocationParameterConfig{{Name: "apiKey"}},
+	}, &interfaces.InvocationArguments{
+		Arguments: map[string]interfaces.InvocationArgument{
+			"apiKey": {
+				Values:    []string{"secret"},
+				Sensitive: true,
+				Sources: []interfaces.InvocationArgumentSource{{
+					Kind:   "NAMED",
+					Name:   "api-key",
+					Redact: true,
+				}},
+			},
+		},
+	})
+	if diagnostic == nil {
+		t.Fatal("InvocationDiagnostic = nil, want summary")
+	}
+	if diagnostic.SignatureHash == "" {
+		t.Fatal("SignatureHash = empty, want stable digest")
+	}
+	if len(diagnostic.Parameters) != 1 {
+		t.Fatalf("parameter count = %d, want 1", len(diagnostic.Parameters))
+	}
+	if diagnostic.Parameters[0].Redacted != true {
+		t.Fatalf("redacted = %v, want true", diagnostic.Parameters[0].Redacted)
+	}
+	if diagnostic.Parameters[0].ValueCount != 1 {
+		t.Fatalf("value count = %d, want 1", diagnostic.Parameters[0].ValueCount)
+	}
+	if len(diagnostic.Parameters[0].SourceKinds) != 1 || diagnostic.Parameters[0].SourceKinds[0] != "NAMED" {
+		t.Fatalf("source kinds = %#v, want [NAMED]", diagnostic.Parameters[0].SourceKinds)
+	}
+}

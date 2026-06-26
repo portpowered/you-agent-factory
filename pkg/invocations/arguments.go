@@ -68,10 +68,11 @@ type NormalizeArgumentsInput struct {
 }
 
 type ArgumentError struct {
-	Code      ArgumentErrorCode
-	Message   string
-	Parameter string
-	Argument  string
+	Code       ArgumentErrorCode
+	Message    string
+	Parameter  string
+	Argument   string
+	SourceKind ArgumentSourceKind
 }
 
 func (e *ArgumentError) Error() string {
@@ -373,8 +374,9 @@ func applyPositionalArguments(index signatureIndex, positionalArgs []string, sta
 	}
 	if len(index.orderedSlots) == 0 || consumed < len(positionalArgs) {
 		return &ArgumentError{
-			Code:    ArgumentErrorCodePositionalOverflow,
-			Message: fmt.Sprintf("received %d positional arguments but the active invocationSignature only accepts %d", len(positionalArgs), consumed),
+			Code:       ArgumentErrorCodePositionalOverflow,
+			Message:    fmt.Sprintf("received %d positional arguments but the active invocationSignature only accepts %d", len(positionalArgs), consumed),
+			SourceKind: ArgumentSourceKindPositional,
 		}
 	}
 	return nil
@@ -391,10 +393,11 @@ func applyNamedArguments(index signatureIndex, namedArgs []NamedArgumentInput, s
 			def := index.parameters[paramName]
 			if !def.named {
 				return &ArgumentError{
-					Code:      ArgumentErrorCodeSourceConflict,
-					Message:   fmt.Sprintf("parameter %q does not accept named input %q", def.name, key),
-					Parameter: def.name,
-					Argument:  key,
+					Code:       ArgumentErrorCodeSourceConflict,
+					Message:    fmt.Sprintf("parameter %q does not accept named input %q", def.name, key),
+					Parameter:  def.name,
+					Argument:   key,
+					SourceKind: ArgumentSourceKindNamed,
 				}
 			}
 			if err := addArgumentValues(state.arguments, def, named.Values, ArgumentSource{Kind: ArgumentSourceKindNamed, Name: key}); err != nil {
@@ -405,9 +408,10 @@ func applyNamedArguments(index signatureIndex, namedArgs []NamedArgumentInput, s
 		switch index.unknownPolicy {
 		case "", string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyReject):
 			return &ArgumentError{
-				Code:     ArgumentErrorCodeUnknownArgument,
-				Message:  fmt.Sprintf("unknown named argument %q", key),
-				Argument: key,
+				Code:       ArgumentErrorCodeUnknownArgument,
+				Message:    fmt.Sprintf("unknown named argument %q", key),
+				Argument:   key,
+				SourceKind: ArgumentSourceKindNamed,
 			}
 		case string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyAllow):
 			state.unknown[key] = append(state.unknown[key], slices.Clone(named.Values)...)
@@ -436,8 +440,9 @@ func applyStdinArgument(index signatureIndex, stdinText *string, state *normaliz
 	}
 	if strings.TrimSpace(index.stdinParameter) == "" {
 		return &ArgumentError{
-			Code:    ArgumentErrorCodeUnroutableStdin,
-			Message: "invocationSignature does not route stdin to any parameter",
+			Code:       ArgumentErrorCodeUnroutableStdin,
+			Message:    "invocationSignature does not route stdin to any parameter",
+			SourceKind: ArgumentSourceKindStdin,
 		}
 	}
 	def := index.parameters[index.stdinParameter]
@@ -503,18 +508,20 @@ func addArgumentValues(arguments map[string]NormalizedArgument, def parameterDef
 	case string(factoryapi.FactoryInvocationParameterValueModeExact), string(factoryapi.FactoryInvocationParameterValueModeFileContents):
 		if len(values) != 1 {
 			return &ArgumentError{
-				Code:      ArgumentErrorCodeSourceConflict,
-				Message:   fmt.Sprintf("parameter %q accepts exactly one value", def.name),
-				Parameter: def.name,
-				Argument:  source.Name,
+				Code:       ArgumentErrorCodeSourceConflict,
+				Message:    fmt.Sprintf("parameter %q accepts exactly one value", def.name),
+				Parameter:  def.name,
+				Argument:   source.Name,
+				SourceKind: source.Kind,
 			}
 		}
 		if len(current.Values) > 0 {
 			return &ArgumentError{
-				Code:      ArgumentErrorCodeSourceConflict,
-				Message:   fmt.Sprintf("parameter %q was supplied more than once", def.name),
-				Parameter: def.name,
-				Argument:  source.Name,
+				Code:       ArgumentErrorCodeSourceConflict,
+				Message:    fmt.Sprintf("parameter %q was supplied more than once", def.name),
+				Parameter:  def.name,
+				Argument:   source.Name,
+				SourceKind: source.Kind,
 			}
 		}
 		current.Values = append(current.Values, values[0])

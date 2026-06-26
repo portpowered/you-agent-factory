@@ -1,0 +1,9 @@
+type: object
+additionalProperties: false
+properties:
+  signatureHash:
+    type: string
+  parameters:
+    type: array
+    items:
+      $ref: '../../../openapi-main.yaml#/components/schemas/FactoryWorldInvocationParameterDiagnostic'

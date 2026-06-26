@@ -98,6 +98,16 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t 
 	mock := &wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
+			Factory: &interfaces.FactoryConfig{
+				InvocationSignature: &interfaces.InvocationSignatureConfig{
+					Parameters: []interfaces.InvocationParameterConfig{
+						{Name: "input"},
+						{Name: "provider"},
+						{Name: "model"},
+						{Name: "apiKey", Sensitive: true},
+					},
+				},
+			},
 			Workers: map[string]*interfaces.WorkerConfig{
 				"worker-a": {
 					Type:  interfaces.WorkerTypeModel,
@@ -130,6 +140,11 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t 
 						"input":    {Values: []string{"draft"}},
 						"provider": {Values: []string{"cursor"}},
 						"model":    {Values: []string{"gpt-5.5"}},
+						"apiKey": {
+							Values:    []string{"secret"},
+							Sensitive: true,
+							Sources:   []interfaces.InvocationArgumentSource{{Kind: "NAMED", Redact: true}},
+						},
 					},
 				},
 			},
@@ -149,6 +164,20 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t 
 	}
 	if !strings.HasSuffix(mock.dispatch.WorkingDirectory, filepath.Join("workspace", "cursor")) {
 		t.Fatalf("working directory = %q, want interpolated provider path suffix", mock.dispatch.WorkingDirectory)
+	}
+	if result.Diagnostics == nil || result.Diagnostics.Invocation == nil {
+		t.Fatalf("result diagnostics = %#v, want invocation summary", result.Diagnostics)
+	}
+	if len(result.Diagnostics.Invocation.Parameters) != 4 {
+		t.Fatalf("invocation parameter count = %d, want 4", len(result.Diagnostics.Invocation.Parameters))
+	}
+	for _, parameter := range result.Diagnostics.Invocation.Parameters {
+		if parameter.Name == "model" && parameter.Redacted {
+			t.Fatalf("model diagnostic = %#v, want non-redacted summary", parameter)
+		}
+		if parameter.Name == "apiKey" && !parameter.Redacted {
+			t.Fatalf("apiKey diagnostic = %#v, want redacted summary", parameter)
+		}
 	}
 }
 

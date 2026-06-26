@@ -5561,6 +5561,32 @@ components:
           $ref: '#/components/schemas/StringMap'
         responseMetadata:
           $ref: '#/components/schemas/StringMap'
+    FactoryWorldInvocationDiagnostic:
+      type: object
+      additionalProperties: false
+      properties:
+        signatureHash:
+          type: string
+        parameters:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactoryWorldInvocationParameterDiagnostic'
+    FactoryWorldInvocationParameterDiagnostic:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        sourceKinds:
+          type: array
+          items:
+            type: string
+        valueCount:
+          type: integer
+          format: int64
+          minimum: 0
+        redacted:
+          type: boolean
     FactoryWorldWorkDiagnostics:
       type: object
       additionalProperties: false
@@ -5569,6 +5595,8 @@ components:
           $ref: '#/components/schemas/FactoryWorldRenderedPromptDiagnostic'
         provider:
           $ref: '#/components/schemas/FactoryWorldProviderDiagnostic'
+        invocation:
+          $ref: '#/components/schemas/FactoryWorldInvocationDiagnostic'
     FactoryWorldWorkItemRef:
       type: object
       additionalProperties: false
@@ -6773,6 +6801,8 @@ components:
           $ref: '#/components/schemas/RenderedPromptDiagnostic'
         provider:
           $ref: '#/components/schemas/ProviderDiagnostic'
+        invocation:
+          $ref: '#/components/schemas/InvocationDiagnostic'
         command:
           $ref: '#/components/schemas/CommandDiagnostic'
         panic:
@@ -6801,6 +6831,32 @@ components:
           $ref: '#/components/schemas/StringMap'
         responseMetadata:
           $ref: '#/components/schemas/StringMap'
+    InvocationDiagnostic:
+      type: object
+      additionalProperties: false
+      properties:
+        signatureHash:
+          type: string
+        parameters:
+          type: array
+          items:
+            $ref: '#/components/schemas/InvocationParameterDiagnostic'
+    InvocationParameterDiagnostic:
+      type: object
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        sourceKinds:
+          type: array
+          items:
+            type: string
+        valueCount:
+          type: integer
+          format: int64
+          minimum: 0
+        redacted:
+          type: boolean
     CommandDiagnostic:
       type: object
       additionalProperties: false
@@ -6857,6 +6913,8 @@ components:
           $ref: '#/components/schemas/RenderedPromptDiagnostic'
         provider:
           $ref: '#/components/schemas/ProviderDiagnostic'
+        invocation:
+          $ref: '#/components/schemas/InvocationDiagnostic'
     WallClock:
       type: object
       additionalProperties: false

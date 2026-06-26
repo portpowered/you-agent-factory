@@ -2917,6 +2917,20 @@ type FactoryValidationTarget struct {
 	Subject  FactoryValidationSubject  `json:"subject"`
 }
 
+// FactoryWorldInvocationDiagnostic defines model for FactoryWorldInvocationDiagnostic.
+type FactoryWorldInvocationDiagnostic struct {
+	Parameters    *[]FactoryWorldInvocationParameterDiagnostic `json:"parameters,omitempty"`
+	SignatureHash *string                                      `json:"signatureHash,omitempty"`
+}
+
+// FactoryWorldInvocationParameterDiagnostic defines model for FactoryWorldInvocationParameterDiagnostic.
+type FactoryWorldInvocationParameterDiagnostic struct {
+	Name        *string   `json:"name,omitempty"`
+	Redacted    *bool     `json:"redacted,omitempty"`
+	SourceKinds *[]string `json:"sourceKinds,omitempty"`
+	ValueCount  *int64    `json:"valueCount,omitempty"`
+}
+
 // FactoryWorldMutationView defines model for FactoryWorldMutationView.
 type FactoryWorldMutationView struct {
 	FromPlace *string                `json:"fromPlace,omitempty"`
@@ -3012,6 +3026,7 @@ type FactoryWorldTokenView struct {
 
 // FactoryWorldWorkDiagnostics defines model for FactoryWorldWorkDiagnostics.
 type FactoryWorldWorkDiagnostics struct {
+	Invocation     *FactoryWorldInvocationDiagnostic     `json:"invocation,omitempty"`
 	Provider       *FactoryWorldProviderDiagnostic       `json:"provider,omitempty"`
 	RenderedPrompt *FactoryWorldRenderedPromptDiagnostic `json:"renderedPrompt,omitempty"`
 }
@@ -3274,8 +3289,22 @@ type InputType struct {
 // IntegerMap defines model for IntegerMap.
 type IntegerMap map[string]int
 
+// InvocationDiagnostic defines model for InvocationDiagnostic.
+type InvocationDiagnostic struct {
+	Parameters    *[]InvocationParameterDiagnostic `json:"parameters,omitempty"`
+	SignatureHash *string                          `json:"signatureHash,omitempty"`
+}
+
 // InvocationInputSourceKind Invocation input source category. `text` is the only implemented API source for the text-first invocation slice. `fileRef` and `audioStream` are reserved future source categories and are not accepted by current runtimes.
 type InvocationInputSourceKind string
+
+// InvocationParameterDiagnostic defines model for InvocationParameterDiagnostic.
+type InvocationParameterDiagnostic struct {
+	Name        *string   `json:"name,omitempty"`
+	Redacted    *bool     `json:"redacted,omitempty"`
+	SourceKinds *[]string `json:"sourceKinds,omitempty"`
+	ValueCount  *int64    `json:"valueCount,omitempty"`
+}
 
 // InvocationRequest defines model for InvocationRequest.
 type InvocationRequest struct {
@@ -4356,6 +4385,7 @@ type RunnerSelectionSource string
 
 // SafeWorkDiagnostics Dashboard-facing execution diagnostics that omit raw prompts, command stdin, and command environment values.
 type SafeWorkDiagnostics struct {
+	Invocation     *InvocationDiagnostic     `json:"invocation,omitempty"`
 	Provider       *ProviderDiagnostic       `json:"provider,omitempty"`
 	RenderedPrompt *RenderedPromptDiagnostic `json:"renderedPrompt,omitempty"`
 }
@@ -4930,6 +4960,7 @@ type WorkContentURLProperty = string
 // WorkDiagnostics defines model for WorkDiagnostics.
 type WorkDiagnostics struct {
 	Command        *CommandDiagnostic        `json:"command,omitempty"`
+	Invocation     *InvocationDiagnostic     `json:"invocation,omitempty"`
 	Metadata       *StringMap                `json:"metadata,omitempty"`
 	Panic          *PanicDiagnostic          `json:"panic,omitempty"`
 	Provider       *ProviderDiagnostic       `json:"provider,omitempty"`

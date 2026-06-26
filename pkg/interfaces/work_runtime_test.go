@@ -337,6 +337,36 @@ func TestSafeWorkDiagnosticsFromGenerated_RoundTripPreservesObservableSafeFields
 	}
 }
 
+func TestSafeWorkDiagnostics_InvocationRoundTripPreservesRedactedSummary(t *testing.T) {
+	original := &WorkDiagnostics{
+		Invocation: &InvocationDiagnostic{
+			SignatureHash: "sig-123",
+			Parameters: []InvocationParameterDiagnostic{
+				{Name: "input", SourceKinds: []string{"NAMED"}, ValueCount: 1},
+				{Name: "apiKey", SourceKinds: []string{"NAMED", "DEFAULT"}, ValueCount: 2, Redacted: true},
+			},
+		},
+	}
+
+	safe := SafeWorkDiagnosticsFromWorkDiagnostics(original)
+	if safe == nil || safe.Invocation == nil {
+		t.Fatalf("safe diagnostics = %#v, want invocation summary", safe)
+	}
+	rehydrated := WorkDiagnosticsFromSafeWorkDiagnostics(safe)
+	if !reflect.DeepEqual(rehydrated, original) {
+		t.Fatalf("rehydrated diagnostics = %#v, want %#v", rehydrated, original)
+	}
+
+	generated := GeneratedSafeWorkDiagnostics(safe)
+	if generated == nil || generated.Invocation == nil || generated.Invocation.Parameters == nil || len(*generated.Invocation.Parameters) != 2 {
+		t.Fatalf("generated diagnostics = %#v, want invocation parameters", generated)
+	}
+	(*generated.Invocation.Parameters)[0].SourceKinds = &[]string{"MUTATED"}
+	if safe.Invocation.Parameters[0].SourceKinds[0] != "NAMED" {
+		t.Fatalf("safe invocation parameter source kinds mutated = %#v", safe.Invocation.Parameters[0].SourceKinds)
+	}
+}
+
 func assertNilStringMapPtr(t *testing.T, got *factoryapi.StringMap, field string) {
 	t.Helper()
 	if got != nil {

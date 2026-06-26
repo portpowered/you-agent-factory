@@ -121,6 +121,7 @@ func (we *WorkstationExecutor) executeLogicalMove(dispatch interfaces.WorkDispat
 func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, dispatch interfaces.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time) (interfaces.WorkResult, error) {
 	logger := logging.EnsureLogger(we.Logger)
 	invocationArgs := invocationArgumentsFromDispatch(dispatch)
+	invocationDiagnostics := invocationDiagnosticsForDispatch(we.RuntimeConfig, invocationArgs)
 	if invocationArgs != nil {
 		interpolatedWorkstation, err := invocations.InterpolateWorkstationConfig(*workstationDef, invocationArgs)
 		if err != nil {
@@ -129,6 +130,7 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 				TransitionID: dispatch.TransitionID,
 				Outcome:      interfaces.OutcomeFailed,
 				Error:        err.Error(),
+				Diagnostics:  invocationDiagnostics,
 				Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
 			}, nil
 		}
@@ -153,6 +155,7 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 				TransitionID: dispatch.TransitionID,
 				Outcome:      interfaces.OutcomeFailed,
 				Error:        err.Error(),
+				Diagnostics:  invocationDiagnostics,
 				Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
 			}, nil
 		}
@@ -173,6 +176,7 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 	}
 
 	result, err := we.executeInnerWorker(ctx, request, workerDef, workstationDef, start, logger)
+	result.Diagnostics = mergeWorkDiagnostics(result.Diagnostics, invocationDiagnostics)
 	if err != nil {
 		return result, err
 	}
@@ -180,6 +184,24 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 		return normalizeClassifierWorkResult(result), nil
 	}
 	return result, nil
+}
+
+func invocationDiagnosticsForDispatch(
+	runtimeCfg interfaces.RuntimeFactoryConfigLookup,
+	args *interfaces.InvocationArguments,
+) *interfaces.WorkDiagnostics {
+	if args == nil {
+		return nil
+	}
+	var signature *interfaces.InvocationSignatureConfig
+	if runtimeCfg != nil && runtimeCfg.FactoryConfig() != nil {
+		signature = runtimeCfg.FactoryConfig().InvocationSignature
+	}
+	diagnostic := invocations.InvocationDiagnostic(signature, args)
+	if diagnostic == nil {
+		return nil
+	}
+	return &interfaces.WorkDiagnostics{Invocation: diagnostic}
 }
 
 func invocationArgumentsFromDispatch(dispatch interfaces.WorkDispatch) *interfaces.InvocationArguments {

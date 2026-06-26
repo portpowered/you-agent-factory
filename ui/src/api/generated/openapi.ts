@@ -2812,9 +2812,21 @@ export interface components {
       requestMetadata?: components["schemas"]["StringMap"];
       responseMetadata?: components["schemas"]["StringMap"];
     };
+    FactoryWorldInvocationDiagnostic: {
+      signatureHash?: string;
+      parameters?: components["schemas"]["FactoryWorldInvocationParameterDiagnostic"][];
+    };
+    FactoryWorldInvocationParameterDiagnostic: {
+      name?: string;
+      sourceKinds?: string[];
+      /** Format: int64 */
+      valueCount?: number;
+      redacted?: boolean;
+    };
     FactoryWorldWorkDiagnostics: {
       renderedPrompt?: components["schemas"]["FactoryWorldRenderedPromptDiagnostic"];
       provider?: components["schemas"]["FactoryWorldProviderDiagnostic"];
+      invocation?: components["schemas"]["FactoryWorldInvocationDiagnostic"];
     };
     FactoryWorldWorkItemRef: {
       workId: string;
@@ -3336,6 +3348,7 @@ export interface components {
     WorkDiagnostics: {
       renderedPrompt?: components["schemas"]["RenderedPromptDiagnostic"];
       provider?: components["schemas"]["ProviderDiagnostic"];
+      invocation?: components["schemas"]["InvocationDiagnostic"];
       command?: components["schemas"]["CommandDiagnostic"];
       panic?: components["schemas"]["PanicDiagnostic"];
       metadata?: components["schemas"]["StringMap"];
@@ -3350,6 +3363,17 @@ export interface components {
       model?: string;
       requestMetadata?: components["schemas"]["StringMap"];
       responseMetadata?: components["schemas"]["StringMap"];
+    };
+    InvocationDiagnostic: {
+      signatureHash?: string;
+      parameters?: components["schemas"]["InvocationParameterDiagnostic"][];
+    };
+    InvocationParameterDiagnostic: {
+      name?: string;
+      sourceKinds?: string[];
+      /** Format: int64 */
+      valueCount?: number;
+      redacted?: boolean;
     };
     CommandDiagnostic: {
       command?: string;
@@ -3378,6 +3402,7 @@ export interface components {
     SafeWorkDiagnostics: {
       renderedPrompt?: components["schemas"]["RenderedPromptDiagnostic"];
       provider?: components["schemas"]["ProviderDiagnostic"];
+      invocation?: components["schemas"]["InvocationDiagnostic"];
     };
     WallClock: {
       /** Format: date-time */

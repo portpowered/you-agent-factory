@@ -14,7 +14,10 @@ primary-result behavior.
   for signature-backed worker and workstation fields plus pre-dispatch
   interpolation validation. Keep file-contents substitution, omitted-exact-field
   behavior, and interpolation error codes there instead of duplicating
-  string-replacement rules in service or worker executors.
+  string-replacement rules in service or worker executors. The same package also
+  owns replay-safe invocation diagnostics such as `InvocationSignatureHash` and
+  `InvocationDiagnostic`; execution layers should reuse that summary instead of
+  inventing transport- or worker-specific argument telemetry.
 - `pkg/config/openapi_factory.go` must preserve exact `${parameter}` placeholders
   on enum-backed authored fields that support invocation interpolation (for
   example `workers[].modelProvider`) instead of rejecting them as invalid public

@@ -1,9 +1,13 @@
 package invocations
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -271,4 +275,71 @@ func invocationArgumentScalar(argument interfaces.InvocationArgument, parameterN
 		}
 	}
 	return string(data), nil
+}
+
+// InvocationDiagnostic returns a replay-safe invocation summary that preserves
+// canonical parameter names, source kinds, and redaction state without raw
+// values.
+func InvocationDiagnostic(
+	signature *interfaces.InvocationSignatureConfig,
+	args *interfaces.InvocationArguments,
+) *interfaces.InvocationDiagnostic {
+	if signature == nil && (args == nil || len(args.Arguments) == 0) {
+		return nil
+	}
+	diagnostic := &interfaces.InvocationDiagnostic{
+		SignatureHash: InvocationSignatureHash(signature),
+	}
+	if args == nil || len(args.Arguments) == 0 {
+		if diagnostic.SignatureHash == "" {
+			return nil
+		}
+		return diagnostic
+	}
+	names := make([]string, 0, len(args.Arguments))
+	for name := range args.Arguments {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	diagnostic.Parameters = make([]interfaces.InvocationParameterDiagnostic, 0, len(names))
+	for _, name := range names {
+		argument := args.Arguments[name]
+		entry := interfaces.InvocationParameterDiagnostic{
+			Name:       name,
+			ValueCount: len(argument.Values),
+			Redacted:   argument.Sensitive,
+		}
+		if len(argument.Sources) > 0 {
+			entry.SourceKinds = make([]string, 0, len(argument.Sources))
+			for _, source := range argument.Sources {
+				kind := strings.TrimSpace(source.Kind)
+				if kind == "" {
+					continue
+				}
+				entry.SourceKinds = append(entry.SourceKinds, kind)
+				if source.Redact {
+					entry.Redacted = true
+				}
+			}
+		}
+		if len(entry.SourceKinds) == 0 {
+			entry.SourceKinds = nil
+		}
+		diagnostic.Parameters = append(diagnostic.Parameters, entry)
+	}
+	return diagnostic
+}
+
+// InvocationSignatureHash returns a stable digest for one authored invocation
+// signature when present.
+func InvocationSignatureHash(signature *interfaces.InvocationSignatureConfig) string {
+	if signature == nil {
+		return ""
+	}
+	encoded, err := json.Marshal(signature)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(encoded)
+	return hex.EncodeToString(sum[:])
 }
