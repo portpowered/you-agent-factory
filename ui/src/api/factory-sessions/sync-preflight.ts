@@ -93,13 +93,34 @@ function buildSyncPreflightQuery(
 function isFactorySessionSyncPreflightResponse(
   value: unknown,
 ): value is FactorySessionSyncPreflightResponse {
+  if (
+    !isAPIRecord(value) ||
+    typeof value.requestedSessionId !== "string" ||
+    typeof value.reasonCode !== "string" ||
+    typeof value.checkpointReusable !== "boolean" ||
+    !isAPIRecord(value.reconnectCursor) ||
+    typeof value.reconnectCursor.provided !== "boolean" ||
+    typeof value.reconnectCursor.validForStreamGeneration !== "boolean"
+  ) {
+    return false;
+  }
+
+  if (!requiresSyncIdentity(value.reasonCode)) {
+    return true;
+  }
+
   return (
-    isAPIRecord(value) &&
-    typeof value.requestedSessionId === "string" &&
-    typeof value.reasonCode === "string" &&
-    typeof value.checkpointReusable === "boolean" &&
-    isAPIRecord(value.reconnectCursor) &&
-    typeof value.reconnectCursor.provided === "boolean" &&
-    typeof value.reconnectCursor.validForStreamGeneration === "boolean"
+    typeof value.backendScopeId === "string" &&
+    typeof value.factorySessionId === "string" &&
+    typeof value.logicalSessionKeyId === "string" &&
+    typeof value.streamGenerationId === "string"
+  );
+}
+
+function requiresSyncIdentity(reasonCode: string): boolean {
+  return (
+    reasonCode === "ok" ||
+    reasonCode === "cursor_stale" ||
+    reasonCode === "logical_session_remap"
   );
 }

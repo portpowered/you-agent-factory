@@ -656,6 +656,43 @@ describe("useDashboardSnapshot composer", () => {
     expect(result.current.isInitialLoading).toBe(false);
   });
 
+  it("blocks stream open when a resumable preflight response is missing the identity set", async () => {
+    useFactoryTimelineStore.getState().reset();
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          checkpointReusable: true,
+          reasonCode: "ok",
+          reconnectCursor: {
+            provided: false,
+            validForStreamGeneration: true,
+          },
+          requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+
+    const { result } = renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(result.current.preflightStatus).toBe("non-recoverable");
+    });
+    expect(result.current.preflightRecovery).toEqual({
+      reasonCode: "preflight_request_failed",
+      requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
+    });
+    expect(replayHarness.getStreams()).toHaveLength(0);
+    expect(result.current.isInitialLoading).toBe(false);
+  });
+
   it("clears the persisted checkpoint after a preflight request failure and retries without the stale cursor", async () => {
     useFactoryTimelineStore.getState().reset();
     const queryKey = currentFactoryDefinitionQueryKey(DEFAULT_FACTORY_SESSION_ID);

@@ -87,19 +87,25 @@ export function buildDashboardSessionRestorePlan(
   preflight: FactorySessionSyncPreflightResponse,
 ): DashboardSessionRestorePlan {
   const syncIdentity = syncIdentityFromPreflight(preflight);
+  const missingIdentity = syncIdentity == null;
   const reconnectCursor = reconnectCursorFromCheckpoint(checkpoint);
   const checkpointHasCursor = reconnectCursor != null;
   const checkpointIdentityMatches = syncIdentityMatches(
     checkpoint?.syncIdentity,
     syncIdentity,
   );
+  const requiresIdentity =
+    preflight.reasonCode === "ok" ||
+    preflight.reasonCode === "cursor_stale" ||
+    preflight.reasonCode === "logical_session_remap";
+  const nonRecoverable =
+    isNonRecoverableReasonCode(preflight.reasonCode) ||
+    (requiresIdentity && missingIdentity);
 
   if (checkpoint == null) {
-    const nonRecoverable = isNonRecoverableReasonCode(preflight.reasonCode);
     return {
       clearCheckpoint: false,
-      clearQueryCache:
-        preflight.reasonCode !== "ok" || syncIdentity == null,
+      clearQueryCache: preflight.reasonCode !== "ok" || missingIdentity,
       preflightStatus: nonRecoverable
         ? "non-recoverable"
         : preflight.reasonCode === "ok"
@@ -149,14 +155,15 @@ export function buildDashboardSessionRestorePlan(
     };
   }
 
-  const missingIdentity =
-    syncIdentity == null || checkpoint.syncIdentity == null;
-  const nonRecoverable = isNonRecoverableReasonCode(preflight.reasonCode);
+  const missingCheckpointIdentity = checkpoint.syncIdentity == null;
 
   return {
     clearCheckpoint: true,
     clearQueryCache:
-      preflight.reasonCode !== "ok" || missingIdentity || !checkpointIdentityMatches,
+      preflight.reasonCode !== "ok" ||
+      missingIdentity ||
+      missingCheckpointIdentity ||
+      !checkpointIdentityMatches,
     preflightStatus: nonRecoverable
       ? "non-recoverable"
       : "silent-recovery",

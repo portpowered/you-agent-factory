@@ -321,6 +321,52 @@ describe("factory sessions API", () => {
     );
   });
 
+  it("rejects partial resumable sync preflight responses that omit the identity set", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          checkpointReusable: true,
+          reasonCode: "ok",
+          reconnectCursor: {
+            provided: false,
+            validForStreamGeneration: true,
+          },
+          requestedSessionId: "session-beta",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getFactorySessionSyncPreflight("session-beta"),
+    ).rejects.toEqual(
+      new FactorySessionsAPIError(
+        "The factory sessions API returned an invalid response.",
+        {
+          code: "INTERNAL_ERROR",
+          responseBody: {
+            checkpointReusable: true,
+            reasonCode: "ok",
+            reconnectCursor: {
+              provided: false,
+              validForStreamGeneration: true,
+            },
+            requestedSessionId: "session-beta",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+  });
+
   it("accepts validateOnly initsNewFactory discovery responses", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
