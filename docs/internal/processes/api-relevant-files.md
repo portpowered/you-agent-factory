@@ -3,6 +3,7 @@
 Use this map when changing the public REST contract.
 
 - `@you/goal` API contract boundary audit lives in `docs/internal/development/plans/you-goal/api-contract-audit.md`. Follow-on goal API PRs should cite that artifact before adding routes, OpenAPI fragments, or generated-client changes. Invocation reuse for goal mode stays on `POST /factory-sessions/{session_id}/invocations` with `Factory.invocationReturn` primary-result selection; internal `SessionResponseStream` / `SessionResponseStreamEvent` models and existing lifecycle routes (`/pause`, `/resume`, `DISPATCH_INTERRUPTED`) are documented in the audit lifecycle section. The only expected public OpenAPI delta for this slice is `Workstation.workPropagation` with companion `WorkPropagationMode` on `api/components/schemas/data-models/Workstation.yaml`; run `make generate-api` and `make api-smoke` when that field lands, but not for internal-only response-stream work.
+- Provider-specific response-stream normalization must stay internal. When changing Cursor/Codex live-stream parsers, extend `pkg/api/contracttests/openapi_contract_surface_test.go` to prove parser-only markers (for example `stream-json`, raw provider event fields, or internal fragment enums) do not appear in `api/openapi.yaml` or generated public API types.
 
 - `api/openapi-main.yaml` is the authored OpenAPI entrypoint. Register new component fragments under `components.schemas` here.
 - `api/components/schemas/api/` contains API request/response fragments.

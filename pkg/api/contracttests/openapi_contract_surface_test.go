@@ -2,6 +2,7 @@ package apicontract_test
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -107,6 +108,34 @@ func TestOpenAPIContract_FactoryOperationsPublishMachineReadableErrors(t *testin
 
 	assertFactoryOperationResponses(t, paths)
 	assertFactoryResponseExamples(t, responses)
+}
+
+func TestOpenAPIContract_CursorStreamParserDetailsRemainInternal(t *testing.T) {
+	doc := loadBundledOpenAPIDocument(t)
+	schemas := componentSchemas(t, doc)
+	bundled, err := os.ReadFile("../../../api/openapi.yaml")
+	if err != nil {
+		t.Fatalf("read bundled openapi: %v", err)
+	}
+	generatedServer, err := os.ReadFile("../generated/server.gen.go")
+	if err != nil {
+		t.Fatalf("read generated server models: %v", err)
+	}
+
+	assertSchemaNamesPresent(t, schemas, bundledFactoryEventContractSchemaNames)
+	for _, artifact := range []string{string(bundled), string(generatedServer)} {
+		assertJSONStringLiteralMissing(
+			t,
+			artifact,
+			"PROGRESS_FRAGMENT",
+			"RESPONSE_FRAGMENT",
+			"stream-json",
+			"timestamp_ms",
+			"model_call_id",
+			"Cursor session initialized",
+			"Cursor stream ignored malformed JSON record",
+		)
+	}
 }
 
 func TestOpenAPIContract_PersistedFactoryRoutesUseCanonicalPluralVocabulary(t *testing.T) {
