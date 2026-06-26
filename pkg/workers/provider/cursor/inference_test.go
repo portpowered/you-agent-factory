@@ -101,6 +101,39 @@ func TestParseInferenceResult_MissingSessionID(t *testing.T) {
 	}
 }
 
+func TestParseInferenceResult_InvalidSessionID(t *testing.T) {
+	stdout := []byte(`{
+		"type": "result",
+		"subtype": "success",
+		"is_error": false,
+		"result": "done",
+		"session_id": "../cursor-session"
+	}`)
+
+	_, err := ParseInferenceResult(string(interfaces.ModelProviderCursor), stdout)
+	if err == nil {
+		t.Fatal("expected parse error for invalid session_id")
+	}
+	if err.Type != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("error type = %q, want permanent_bad_request", err.Type)
+	}
+}
+
+func TestParseInferenceResult_StreamJSONInvalidSessionID(t *testing.T) {
+	stdout := []byte(
+		"{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"cursor-stream-session\"}\n" +
+			"{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"Plan done\",\"session_id\":\"../cursor-stream-session\"}\n",
+	)
+
+	_, err := ParseInferenceResult(string(interfaces.ModelProviderCursor), stdout)
+	if err == nil {
+		t.Fatal("expected parse error for invalid stream session_id")
+	}
+	if err.Type != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("error type = %q, want permanent_bad_request", err.Type)
+	}
+}
+
 func TestParseInferenceResult_MalformedJSON(t *testing.T) {
 	_, err := ParseInferenceResult(string(interfaces.ModelProviderCursor), []byte(`{not json`))
 	if err == nil {

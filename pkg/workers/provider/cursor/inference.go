@@ -3,6 +3,7 @@ package cursor
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -30,6 +31,8 @@ const (
 
 	ProviderSessionKindSessionID = "session_id"
 )
+
+var safeCursorProviderSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 type resultPayload struct {
 	Type          string       `json:"type"`
@@ -103,18 +106,14 @@ func ParseInferenceResult(provider string, stdout []byte) (*InferenceResult, *Pa
 		}
 	}
 
-	sessionID := strings.TrimSpace(payload.SessionID)
-	if sessionID == "" {
-		return nil, resultParseFailure(provider, "cursor JSON success result is missing session_id", nil)
+	session := canonicalProviderSession(provider, payload.SessionID)
+	if session == nil {
+		return nil, resultParseFailure(provider, "cursor JSON success result is missing or invalid session_id", nil)
 	}
 
 	return &InferenceResult{
-		Content: payload.Result,
-		ProviderSession: &interfaces.ProviderSessionMetadata{
-			Provider: interfaces.CanonicalProviderSessionProvider(provider),
-			Kind:     ProviderSessionKindSessionID,
-			ID:       sessionID,
-		},
+		Content:          payload.Result,
+		ProviderSession:  session,
 		ResponseMetadata: responseMetadataFromPayload(payload),
 	}, nil
 }
@@ -136,6 +135,18 @@ func resultParseFailure(provider, message string, cause error) *ParseFailure {
 		Type:    interfaces.WorkFailureTypePermanentBadRequest,
 		Message: message,
 		Cause:   cause,
+	}
+}
+
+func canonicalProviderSession(provider, sessionID string) *interfaces.ProviderSessionMetadata {
+	normalized := strings.TrimSpace(sessionID)
+	if normalized == "" || !safeCursorProviderSessionIDPattern.MatchString(normalized) {
+		return nil
+	}
+	return &interfaces.ProviderSessionMetadata{
+		Provider: interfaces.CanonicalProviderSessionProvider(provider),
+		Kind:     ProviderSessionKindSessionID,
+		ID:       normalized,
 	}
 }
 

@@ -50,6 +50,23 @@ func TestStreamParser_EmitsTrailingAssistantDeltaOnFlush(t *testing.T) {
 	assertStreamFragment(t, fragments[0], StreamFragmentKindResponse, "tail", "cursor-session-456")
 }
 
+func TestStreamParser_OmitsProviderSessionForInvalidSessionID(t *testing.T) {
+	var fragments []StreamFragment
+	parser := NewStreamParser(string(interfaces.ModelProviderCursor), func(fragment StreamFragment) {
+		fragments = append(fragments, fragment)
+	})
+
+	parser.Consume([]byte(`{"type":"assistant","timestamp_ms":7,"message":{"role":"assistant","content":[{"type":"text","text":"tail"}]},"session_id":"../cursor-session-456"}`))
+	parser.Flush()
+
+	if len(fragments) != 1 {
+		t.Fatalf("fragment count = %d, want 1", len(fragments))
+	}
+	if fragments[0].ProviderSession != nil {
+		t.Fatalf("provider session = %#v, want nil for invalid session_id", fragments[0].ProviderSession)
+	}
+}
+
 func assertStreamFragment(t *testing.T, fragment StreamFragment, wantKind StreamFragmentKind, wantPayload string, wantSessionID string) {
 	t.Helper()
 	if fragment.Kind != wantKind {

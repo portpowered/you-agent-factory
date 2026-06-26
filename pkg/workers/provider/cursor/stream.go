@@ -168,18 +168,14 @@ func parseStreamResultLine(provider string, line string) (*InferenceResult, bool
 		}
 	}
 
-	sessionID := strings.TrimSpace(payload.SessionID)
-	if sessionID == "" {
-		return nil, false, resultParseFailure(provider, "cursor stream-json success result is missing session_id", nil)
+	session := canonicalProviderSession(provider, payload.SessionID)
+	if session == nil {
+		return nil, false, resultParseFailure(provider, "cursor stream-json success result is missing or invalid session_id", nil)
 	}
 
 	return &InferenceResult{
-		Content: payload.Result,
-		ProviderSession: &interfaces.ProviderSessionMetadata{
-			Provider: interfaces.CanonicalProviderSessionProvider(provider),
-			Kind:     ProviderSessionKindSessionID,
-			ID:       sessionID,
-		},
+		Content:          payload.Result,
+		ProviderSession:  session,
 		ResponseMetadata: responseMetadataFromPayload(payload),
 	}, true, nil
 }
@@ -197,15 +193,7 @@ func splitNonEmptyLines(stdout []byte) []string {
 }
 
 func streamProviderSession(provider string, event map[string]any) *interfaces.ProviderSessionMetadata {
-	sessionID := stringField(event, "session_id")
-	if sessionID == "" {
-		return nil
-	}
-	return &interfaces.ProviderSessionMetadata{
-		Provider: interfaces.CanonicalProviderSessionProvider(provider),
-		Kind:     ProviderSessionKindSessionID,
-		ID:       sessionID,
-	}
+	return canonicalProviderSession(provider, rawStringField(event, "session_id"))
 }
 
 func shouldEmitAssistantDelta(event map[string]any) bool {
