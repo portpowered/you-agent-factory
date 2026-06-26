@@ -54,13 +54,25 @@ describe("FactoryInvocationWidget", () => {
     useCurrentFactoryDefinition.mockReturnValue({
       data: {
         invocationSignature: {
+          examples: [
+            {
+              argv: ["you", "run", "--named", "@you/fusion", "hello world"],
+              description: "Invoke fusion with positional input.",
+              name: "Positional input",
+              stdin: "Draft a release summary",
+            },
+          ],
           outputContract: {
+            contentType: "text/markdown",
+            description: "Writes the fused result to a markdown file.",
+            fileExtension: ".md",
             mode: "FILE",
             pathParameter: "output",
           },
           parameters: [
             {
-              bindings: [{ kind: "POSITIONAL", position: 1 }],
+              aliases: ["body"],
+              bindings: [{ kind: "POSITIONAL", position: 1 }, { kind: "STDIN" }],
               description: "Source input",
               name: "input",
               required: true,
@@ -88,6 +100,7 @@ describe("FactoryInvocationWidget", () => {
       isLoading: false,
     });
     invokeSessionFactory.mockResolvedValue({
+      primaryResult: [{ text: "Fusion complete." }],
       requestId: "request-1",
       status: "COMPLETED",
       traceId: "trace-1",
@@ -123,7 +136,28 @@ describe("FactoryInvocationWidget", () => {
     });
 
     expect(screen.getByText("Output hint")).toBeVisible();
+    expect(
+      screen.getByText("Writes the fused result to a markdown file."),
+    ).toBeVisible();
+    expect(screen.getByText("Output mode: FILE")).toBeVisible();
+    expect(screen.getByText("Output path argument: output")).toBeVisible();
+    expect(screen.getByText("Content type: text/markdown")).toBeVisible();
+    expect(screen.getByText("File extension: .md")).toBeVisible();
+    expect(screen.getByText("Examples")).toBeVisible();
+    expect(screen.getByText("Positional input")).toBeVisible();
+    expect(
+      screen.getByText("Invoke fusion with positional input."),
+    ).toBeVisible();
+    expect(
+      screen.getByText("you run --named @you/fusion hello world"),
+    ).toBeVisible();
+    expect(
+      screen.getByText("stdin: Draft a release summary"),
+    ).toBeVisible();
+    expect(screen.getByText("Accepts stdin input.")).toBeVisible();
     expect(screen.getByText("Factory invocation started. Trace ID: trace-1.")).toBeVisible();
+    expect(screen.getByText("Primary result")).toBeVisible();
+    expect(screen.getByText("Fusion complete.")).toBeVisible();
   });
 
   it("shows explicit loading and error states from the current-factory query", () => {
@@ -257,6 +291,41 @@ describe("FactoryInvocationWidget", () => {
     );
   });
 
+  it("surfaces runtime failures returned in the invocation response", async () => {
+    const user = userEvent.setup();
+    useCurrentFactoryDefinition.mockReturnValue({
+      data: {
+        invocationSignature: {
+          parameters: [
+            {
+              bindings: [{ kind: "POSITIONAL", position: 1 }],
+              name: "input",
+              required: true,
+            },
+          ],
+        },
+        name: "fusion",
+      },
+      error: null,
+      isLoading: false,
+    });
+    invokeSessionFactory.mockResolvedValue({
+      message: "Provider invocation failed.",
+      requestId: "request-1",
+      status: "FAILED",
+      traceId: "trace-1",
+    });
+
+    renderFactoryInvocationWidget();
+
+    await user.type(screen.getByRole("textbox", { name: /input/i }), "hello");
+    await user.click(screen.getByRole("button", { name: "Run factory" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Provider invocation failed.")).toBeVisible();
+    });
+  });
+
   it("surfaces field-level validation failures for required parameters", async () => {
     const user = userEvent.setup();
     useCurrentFactoryDefinition.mockReturnValue({
@@ -326,6 +395,87 @@ describe("FactoryInvocationWidget", () => {
         screen.getAllByText('required invocation parameter "input" is missing').length,
       ).toBeGreaterThan(0);
     });
+  });
+
+  it("surfaces the generic fallback for unexpected invocation errors", async () => {
+    const user = userEvent.setup();
+    useCurrentFactoryDefinition.mockReturnValue({
+      data: {
+        invocationSignature: {
+          parameters: [
+            {
+              bindings: [{ kind: "POSITIONAL", position: 1 }],
+              name: "input",
+              required: true,
+            },
+          ],
+        },
+        name: "fusion",
+      },
+      error: null,
+      isLoading: false,
+    });
+    invokeSessionFactory.mockRejectedValue(new Error("network down"));
+
+    renderFactoryInvocationWidget();
+
+    await user.type(screen.getByRole("textbox", { name: /input/i }), "hello");
+    await user.click(screen.getByRole("button", { name: "Run factory" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("We couldn't invoke this factory. Try again in a moment."),
+      ).toBeVisible();
+    });
+  });
+
+  it("resets widget state when the session changes", async () => {
+    const user = userEvent.setup();
+    useCurrentFactoryDefinition.mockReturnValue({
+      data: {
+        invocationSignature: {
+          parameters: [
+            {
+              bindings: [{ kind: "POSITIONAL", position: 1 }],
+              name: "input",
+              required: true,
+            },
+          ],
+        },
+        name: "fusion",
+      },
+      error: null,
+      isLoading: false,
+    });
+    invokeSessionFactory.mockResolvedValue({
+      requestId: "request-1",
+      status: "COMPLETED",
+      traceId: "trace-1",
+    });
+
+    const { rerender } = renderFactoryInvocationWidget();
+
+    await user.type(screen.getByRole("textbox", { name: /input/i }), "hello world");
+    await user.click(screen.getByRole("button", { name: "Run factory" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Factory invocation started. Trace ID: trace-1."),
+      ).toBeVisible();
+    });
+
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <DashboardSessionTestProvider>
+          <FactoryInvocationWidget sessionID="session-beta" />
+        </DashboardSessionTestProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(
+      screen.queryByText("Factory invocation started. Trace ID: trace-1."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: /input/i })).toHaveValue("");
   });
 });
 

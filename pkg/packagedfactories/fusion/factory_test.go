@@ -181,6 +181,21 @@ func TestBuiltInFusionFactory_RuntimeBuildAllowsInvocationInterpolatedModelProvi
 	}
 }
 
+func TestIsPackagedFactory_MatchesBuiltInFusionIdentity(t *testing.T) {
+	if !IsPackagedFactory(&interfaces.FactoryConfig{Name: PackagedFactoryName}) {
+		t.Fatal("expected packaged factory name match")
+	}
+	if !IsPackagedFactory(&interfaces.FactoryConfig{Project: PackagedFactoryProject}) {
+		t.Fatal("expected packaged factory project match")
+	}
+	if IsPackagedFactory(&interfaces.FactoryConfig{Name: "customer-fusion"}) {
+		t.Fatal("unexpected packaged factory match for unrelated factory")
+	}
+	if IsPackagedFactory(nil) {
+		t.Fatal("expected nil factory config not to match")
+	}
+}
+
 func assertArgumentValues(t *testing.T, arguments map[string]invocations.NormalizedArgument, name string, want []string) {
 	t.Helper()
 	got, ok := arguments[name]
