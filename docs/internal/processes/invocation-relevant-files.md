@@ -5,6 +5,11 @@ primary-result behavior.
 
 - `pkg/invocations/` contains shared pure invocation contract logic used by CLI
   and API adapters.
+- `pkg/invocations/arguments.go` owns signature-backed invocation argument
+  normalization for positional, named, stdin, defaulted, repeated, variadic,
+  alias-backed, and compatibility fallback inputs. Transport stories should
+  adapt CLI or API payloads into `NormalizeArgumentsInput` rather than
+  re-implementing binding, default, or validation rules at the boundary.
 - `pkg/invocations/primary_result.go` resolves invocation `primaryResult`
   against selected-tick `FactoryWorldState` using `WorkRequestsByID`,
   `TerminalWorkByID`, and payload-lineage scope rather than transport-specific
