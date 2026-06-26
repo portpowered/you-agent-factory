@@ -31,58 +31,122 @@ type readyPayload struct {
 	SessionID string `json:"sessionId"`
 }
 
+type harnessConfig struct {
+	apiPort          int
+	executionBaseDir string
+	factoryDir       string
+	requestID        string
+	startMode        string
+	workflowFixture  string
+	workflowName     string
+}
+
+type runningHTTPServer struct {
+	server *http.Server
+	done   <-chan error
+}
+
 func main() {
-	var apiPort int
-	var executionBaseDir string
-	var factoryDir string
-	var requestID string
-	var startMode string
-	var workflowFixture string
-	var workflowName string
-
-	flag.IntVar(&apiPort, "api-port", 0, "port for the real backend API server")
-	flag.StringVar(&executionBaseDir, "execution-base-dir", "", "project root for durable workflow resolution")
-	flag.StringVar(&factoryDir, "factory-dir", "", "factory directory for the live dashboard session")
-	flag.StringVar(&requestID, "request-id", "req-browser-runtime-001", "durable session request id")
-	flag.StringVar(&startMode, "start-mode", "sync", "durable session start mode: sync or async")
-	flag.StringVar(&workflowFixture, "workflow-fixture", "", "runtime testdata workflow fixture filename")
-	flag.StringVar(&workflowName, "workflow-name", "", "workflow name exposed under .claude/workflows")
-	flag.Parse()
-
-	if apiPort <= 0 {
-		fatalf("expected --api-port > 0")
-	}
-	if factoryDir == "" {
-		fatalf("expected --factory-dir")
-	}
-	if workflowFixture == "" {
-		fatalf("expected --workflow-fixture")
-	}
-	if workflowName == "" {
-		fatalf("expected --workflow-name")
-	}
-	if startMode != "sync" && startMode != "async" {
-		fatalf("expected --start-mode to be sync or async")
-	}
-
+	cfg := parseHarnessConfig()
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
 	logger := zap.NewNop()
-	projectRoot, cleanupProjectRoot, err := prepareWorkflowProjectRoot(executionBaseDir, workflowFixture, workflowName)
+	projectRoot, cleanupProjectRoot, err := prepareWorkflowProjectRoot(
+		cfg.executionBaseDir,
+		cfg.workflowFixture,
+		cfg.workflowName,
+	)
 	if err != nil {
 		fatalf("prepare workflow project root: %v", err)
 	}
 	defer cleanupProjectRoot()
 
+	svc, handler, serviceDone, err := startFactoryService(ctx, logger, cfg, projectRoot)
+	if err != nil {
+		fatalf("InjectFactoryService: %v", err)
+	}
+
+	httpServer, err := startHTTPServer(cfg.apiPort, handler)
+	if err != nil {
+		fatalf("start http server: %v", err)
+	}
+
+	waitForHTTPReady(cfg.apiPort)
+
+	startRequest := factoryapi.FactorySessionExecutionRequest{
+		RequestId: cfg.requestID,
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
+			WorkflowName: strPtr(cfg.workflowName),
+		},
+	}
+	sessionID, err := startSession(ctx, svc, cfg.startMode, startRequest)
+	if err != nil {
+		fatalf("start durable factory session (%s): %v", cfg.startMode, err)
+	}
+
+	if err := json.NewEncoder(os.Stdout).Encode(readyPayload{
+		APIPort:   cfg.apiPort,
+		APIOrigin: fmt.Sprintf("http://127.0.0.1:%d", cfg.apiPort),
+		SessionID: sessionID,
+	}); err != nil {
+		fatalf("encode ready payload: %v", err)
+	}
+
+	<-ctx.Done()
+	shutdownHarness(httpServer, serviceDone)
+}
+
+func parseHarnessConfig() harnessConfig {
+	cfg := harnessConfig{
+		requestID: "req-browser-runtime-001",
+		startMode: "sync",
+	}
+	flag.IntVar(&cfg.apiPort, "api-port", 0, "port for the real backend API server")
+	flag.StringVar(&cfg.executionBaseDir, "execution-base-dir", "", "project root for durable workflow resolution")
+	flag.StringVar(&cfg.factoryDir, "factory-dir", "", "factory directory for the live dashboard session")
+	flag.StringVar(&cfg.requestID, "request-id", cfg.requestID, "durable session request id")
+	flag.StringVar(&cfg.startMode, "start-mode", cfg.startMode, "durable session start mode: sync or async")
+	flag.StringVar(&cfg.workflowFixture, "workflow-fixture", "", "runtime testdata workflow fixture filename")
+	flag.StringVar(&cfg.workflowName, "workflow-name", "", "workflow name exposed under .claude/workflows")
+	flag.Parse()
+	validateHarnessConfig(cfg)
+	return cfg
+}
+
+func validateHarnessConfig(cfg harnessConfig) {
+	if cfg.apiPort <= 0 {
+		fatalf("expected --api-port > 0")
+	}
+	if cfg.factoryDir == "" {
+		fatalf("expected --factory-dir")
+	}
+	if cfg.workflowFixture == "" {
+		fatalf("expected --workflow-fixture")
+	}
+	if cfg.workflowName == "" {
+		fatalf("expected --workflow-name")
+	}
+	if cfg.startMode != "sync" && cfg.startMode != "async" {
+		fatalf("expected --start-mode to be sync or async")
+	}
+}
+
+func startFactoryService(
+	ctx context.Context,
+	logger *zap.Logger,
+	cfg harnessConfig,
+	projectRoot string,
+) (*service.FactoryService, http.Handler, <-chan error, error) {
 	var handler http.Handler
 	readyCh := make(chan struct{})
 	serviceCfg := &service.FactoryServiceConfig{
-		Dir:                      factoryDir,
+		Dir:                      cfg.factoryDir,
 		ExecutionBaseDir:         projectRoot,
 		Logger:                   logger,
 		MockWorkersConfig:        config.NewEmptyMockWorkersConfig(),
-		Port:                     apiPort,
+		Port:                     cfg.apiPort,
 		RuntimeFileLoggingPolicy: service.RuntimeFileLoggingPolicyDisabled,
 		APIServerStarter: func(ctx context.Context, surface apisurface.APISurface, port int, l *zap.Logger) error {
 			handler = api.NewServer(surface, port, l).Handler()
@@ -94,7 +158,7 @@ func main() {
 
 	svc, err := compose.InjectFactoryService(ctx, serviceCfg)
 	if err != nil {
-		fatalf("InjectFactoryService: %v", err)
+		return nil, nil, nil, err
 	}
 
 	serviceDone := make(chan error, 1)
@@ -102,21 +166,30 @@ func main() {
 		serviceDone <- svc.Run(ctx)
 	}()
 
-	select {
-	case <-readyCh:
-	case err := <-serviceDone:
-		fatalf("service exited before API ready: %v", err)
-	case <-time.After(startupTimeout):
-		fatalf("timed out waiting for API handler readiness")
+	if err := waitForAPIHandler(readyCh, serviceDone); err != nil {
+		return nil, nil, nil, err
 	}
 
+	return svc, handler, serviceDone, nil
+}
+
+func waitForAPIHandler(readyCh <-chan struct{}, serviceDone <-chan error) error {
+	select {
+	case <-readyCh:
+		return nil
+	case err := <-serviceDone:
+		return fmt.Errorf("service exited before API ready: %w", err)
+	case <-time.After(startupTimeout):
+		return fmt.Errorf("timed out waiting for API handler readiness")
+	}
+}
+
+func startHTTPServer(apiPort int, handler http.Handler) (*runningHTTPServer, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", apiPort))
 	if err != nil {
-		fatalf("listen on api port %d: %v", apiPort, err)
+		return nil, fmt.Errorf("listen on api port %d: %w", apiPort, err)
 	}
-	httpServer := &http.Server{
-		Handler: handler,
-	}
+	httpServer := &http.Server{Handler: handler}
 	httpDone := make(chan error, 1)
 	go func() {
 		err := httpServer.Serve(listener)
@@ -126,40 +199,23 @@ func main() {
 		}
 		httpDone <- err
 	}()
+	return &runningHTTPServer{
+		server: httpServer,
+		done:   httpDone,
+	}, nil
+}
 
-	waitForHTTPReady(apiPort)
-
-	startRequest := factoryapi.FactorySessionExecutionRequest{
-		RequestId: requestID,
-		Source: factoryapi.FactorySessionExecutionSource{
-			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
-			WorkflowName: strPtr(workflowName),
-		},
-	}
-	sessionID, err := startSession(ctx, svc, startMode, startRequest)
-	if err != nil {
-		fatalf("start durable factory session (%s): %v", startMode, err)
-	}
-
-	if err := json.NewEncoder(os.Stdout).Encode(readyPayload{
-		APIPort:   apiPort,
-		APIOrigin: fmt.Sprintf("http://127.0.0.1:%d", apiPort),
-		SessionID: sessionID,
-	}); err != nil {
-		fatalf("encode ready payload: %v", err)
-	}
-
-	<-ctx.Done()
-
+func shutdownHarness(httpServer *runningHTTPServer, serviceDone <-chan error) {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), startupTimeout)
 	defer shutdownCancel()
-	_ = httpServer.Shutdown(shutdownCtx)
+	_ = httpServer.server.Shutdown(shutdownCtx)
+	waitForExit(httpServer.done)
+	waitForExit(serviceDone)
+}
+
+func waitForExit(done <-chan error) {
 	select {
-	case <-httpDone:
-	case <-time.After(startupTimeout):
-	}
-	select {
-	case <-serviceDone:
+	case <-done:
 	case <-time.After(startupTimeout):
 	}
 }
