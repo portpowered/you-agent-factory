@@ -204,6 +204,17 @@ export async function readTimelineCheckpoint(
   return null;
 }
 
+export async function deleteTimelineCheckpoint(
+  indexedDB: IndexedDBLike | undefined,
+  sessionID: string | null,
+): Promise<void> {
+  if (!indexedDB || !sessionID) {
+    return;
+  }
+
+  await deleteIndexedCheckpoint(indexedDB, sessionID).catch(() => {});
+}
+
 export function reconnectCursorFromCheckpoint(
   checkpoint: FactoryTimelineCheckpoint | null,
 ): FactoryEventReconnectCursor | undefined {

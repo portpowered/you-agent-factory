@@ -1,0 +1,210 @@
+import type { QueryClient } from "@tanstack/react-query";
+import { useMemo, useRef, type RefObject } from "react";
+
+import type {
+  FactoryEventReconnectCursor,
+  probeFactoryEventStreamRecovery,
+} from "../../../../api/events";
+import { deleteTimelineCheckpoint } from "../../../timeline/public";
+import { recoverDashboardSessionScopedState } from "../../lib/dashboard-session-lifecycle";
+import { getDashboardSessionLifecycleMessages } from "../../messages/dashboard-session-lifecycle";
+import type { useDashboardStreamStore } from "../../state/dashboardStreamStore";
+
+export interface DashboardStreamConnectionRefs {
+  hasOpenedStreamRef: RefObject<boolean>;
+  lastSessionKeyRef: RefObject<string | null>;
+  reconnectCursorRef: RefObject<FactoryEventReconnectCursor | undefined>;
+  staleCursorRecoveryAttemptedRef: RefObject<boolean>;
+  reconnectTimeoutRef: RefObject<number | null>;
+  recoveringRef: RefObject<boolean>;
+  streamRef: RefObject<{ close: () => void } | null>;
+}
+
+export function useDashboardStreamConnectionRefs(): DashboardStreamConnectionRefs {
+  const hasOpenedStreamRef = useRef(false);
+  const lastSessionKeyRef = useRef<string | null>(null);
+  const reconnectCursorRef = useRef<FactoryEventReconnectCursor | undefined>(
+    undefined,
+  );
+  const staleCursorRecoveryAttemptedRef = useRef(false);
+  const reconnectTimeoutRef = useRef<number | null>(null);
+  const recoveringRef = useRef(false);
+  const streamRef = useRef<{ close: () => void } | null>(null);
+
+  return useMemo(
+    () => ({
+      hasOpenedStreamRef,
+      lastSessionKeyRef,
+      reconnectCursorRef,
+      staleCursorRecoveryAttemptedRef,
+      reconnectTimeoutRef,
+      recoveringRef,
+      streamRef,
+    }),
+    [],
+  );
+}
+
+export function hasReconnectCursor(
+  cursor: FactoryEventReconnectCursor | undefined,
+): cursor is FactoryEventReconnectCursor {
+  return Boolean(cursor?.afterEventId || cursor?.afterSequence != null);
+}
+
+export function reconnectingStreamState(locale?: string | null) {
+  return {
+    message:
+      getDashboardSessionLifecycleMessages(locale).reconnectingStreamLabel,
+    status: "reconnecting" as const,
+  };
+}
+
+export function scheduleGenericReconnect({
+  cursor,
+  locale,
+  openDashboardStream,
+  reconnectTimeoutRef,
+  setStreamState,
+}: {
+  cursor: FactoryEventReconnectCursor;
+  locale?: string | null;
+  openDashboardStream: (reconnect?: FactoryEventReconnectCursor) => void;
+  reconnectTimeoutRef: RefObject<number | null>;
+  setStreamState: (
+    streamState: ReturnType<
+      typeof useDashboardStreamStore.getState
+    >["streamState"],
+  ) => void;
+}): void {
+  setStreamState(reconnectingStreamState(locale));
+  reconnectTimeoutRef.current = window.setTimeout(() => {
+    reconnectTimeoutRef.current = null;
+    openDashboardStream(cursor);
+  }, 1000);
+}
+
+async function recoverStaleCursor({
+  cursor,
+  disposed,
+  locale,
+  openDashboardStream,
+  probeRecovery,
+  queryClient,
+  queuedEventsRef,
+  reconnectCursorRef,
+  resetTimeline,
+  setStreamState,
+  staleCursorRecoveryAttemptedRef,
+  streamSessionID,
+}: {
+  cursor: FactoryEventReconnectCursor;
+  disposed: RefObject<boolean>;
+  locale?: string | null;
+  openDashboardStream: (reconnect?: FactoryEventReconnectCursor) => void;
+  probeRecovery: typeof probeFactoryEventStreamRecovery;
+  queryClient: QueryClient;
+  queuedEventsRef: RefObject<unknown[]>;
+  reconnectCursorRef: RefObject<FactoryEventReconnectCursor | undefined>;
+  resetTimeline: () => void;
+  setStreamState: (
+    streamState: ReturnType<
+      typeof useDashboardStreamStore.getState
+    >["streamState"],
+  ) => void;
+  staleCursorRecoveryAttemptedRef: RefObject<boolean>;
+  streamSessionID: string;
+}): Promise<boolean> {
+  try {
+    const recovery = await probeRecovery(streamSessionID, cursor);
+    if (
+      disposed.current ||
+      recovery.outcome !== "CURSOR_STALE" ||
+      recovery.factorySessionId !== streamSessionID
+    ) {
+      return false;
+    }
+
+    staleCursorRecoveryAttemptedRef.current = true;
+    reconnectCursorRef.current = undefined;
+    queuedEventsRef.current = [];
+    recoverDashboardSessionScopedState(
+      queryClient,
+      streamSessionID,
+      resetTimeline,
+    );
+    if (typeof window !== "undefined") {
+      await deleteTimelineCheckpoint(window.indexedDB, streamSessionID);
+    }
+    setStreamState(reconnectingStreamState(locale));
+    openDashboardStream(undefined);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function reconnectAfterStreamError({
+  cursor,
+  disposed,
+  locale,
+  openDashboardStream,
+  probeRecovery,
+  queryClient,
+  queuedEventsRef,
+  refs,
+  resetTimeline,
+  setStreamState,
+  streamSessionID,
+}: {
+  cursor: FactoryEventReconnectCursor;
+  disposed: RefObject<boolean>;
+  locale?: string | null;
+  openDashboardStream: (reconnect?: FactoryEventReconnectCursor) => void;
+  probeRecovery: typeof probeFactoryEventStreamRecovery;
+  queryClient: QueryClient;
+  queuedEventsRef: RefObject<unknown[]>;
+  refs: DashboardStreamConnectionRefs;
+  resetTimeline: () => void;
+  setStreamState: (
+    streamState: ReturnType<
+      typeof useDashboardStreamStore.getState
+    >["streamState"],
+  ) => void;
+  streamSessionID: string;
+}): Promise<void> {
+  if (!refs.staleCursorRecoveryAttemptedRef.current) {
+    refs.recoveringRef.current = true;
+    try {
+      const recovered = await recoverStaleCursor({
+        cursor,
+        disposed,
+        locale,
+        openDashboardStream,
+        probeRecovery,
+        queryClient,
+        queuedEventsRef,
+        reconnectCursorRef: refs.reconnectCursorRef,
+        resetTimeline,
+        setStreamState,
+        staleCursorRecoveryAttemptedRef: refs.staleCursorRecoveryAttemptedRef,
+        streamSessionID,
+      });
+      if (recovered) {
+        return;
+      }
+    } finally {
+      refs.recoveringRef.current = false;
+    }
+  }
+
+  if (disposed.current) {
+    return;
+  }
+  scheduleGenericReconnect({
+    cursor,
+    locale,
+    openDashboardStream,
+    reconnectTimeoutRef: refs.reconnectTimeoutRef,
+    setStreamState,
+  });
+}

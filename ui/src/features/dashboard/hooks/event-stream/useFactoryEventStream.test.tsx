@@ -308,7 +308,7 @@ describe("useFactoryEventStream query side effects", () => {
   });
 });
 
-describe("useFactoryEventStream stream reconnect", () => {
+describe("useFactoryEventStream generic reconnect", () => {
   let queryClient = createFactoryEventStreamQueryClient();
 
   beforeEach(() => {
@@ -377,9 +377,11 @@ describe("useFactoryEventStream stream reconnect", () => {
       stream.onerror?.(new Event("error"));
     });
 
-    expect(useDashboardStreamStore.getState().streamState).toMatchObject({
-      message: "Reconnecting event stream",
-      status: "reconnecting",
+    await waitFor(() => {
+      expect(useDashboardStreamStore.getState().streamState).toMatchObject({
+        message: "Reconnecting event stream",
+        status: "reconnecting",
+      });
     });
 
     await waitFor(
@@ -392,6 +394,7 @@ describe("useFactoryEventStream stream reconnect", () => {
       `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
     );
   });
+
 });
 
 function createWrapper(queryClient: QueryClient) {

@@ -4,6 +4,7 @@ export {
   useFactoryTimelineStore,
 } from "../state/factoryTimelineStore";
 export {
+  deleteTimelineCheckpoint,
   persistTimelineCheckpoint,
   readTimelineCheckpoint,
   reconnectCursorFromCheckpoint,
