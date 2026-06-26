@@ -1,6 +1,6 @@
 # `@you/goal` Active PR Refresh
 
-Last updated: 2026-06-26T09:06:00Z
+Last updated: 2026-06-26T08:58:03Z
 
 This artifact tracks the current maintainer-facing refresh for the remaining
 open `@you/goal` PR batch after the recent merges.
@@ -56,7 +56,40 @@ you-goal-p26 in:title,head' --state all` result exists, so this refresh treats
 them as still-open follow-up planning or execution tasks rather than merged PRs
 or reopened active-branch lanes.
 
+## Overlap Audit And Contract Boundaries
+
+This overlap audit uses the current PR diffs plus the latest PR conversation
+comments as the maintainer evidence set. The goal is to show where the remaining
+PRs still touch the same risk surfaces and whether the next action is a rebase,
+content narrowing, or a prerequisite merge.
+
+| Surface | Open PRs touching it | Evidence | Why it overlaps | Smallest next owner action |
+| --- | --- | --- | --- | --- |
+| Packaged-goal topology or config | `#854`, `#856` | Both PRs change `pkg/config/layout.go`. | `#854` rewires built-in `@you/goal` review routing while `#856` depends on the same built-in layout for named-goal invocation and persisted materialization behavior. This is a real content-overlap surface, not just shared verification. | `#854`: `rebase` on current `main` before rerunning checks. `#856`: `narrow` or add an upgrade path so its claim matches the persisted-materialization behavior it actually proves. |
+| `docs/reference/packaged-goal.md` | `#856` only | `gh pr diff 856 --name-only` includes `docs/reference/packaged-goal.md`; `#854` and `#859` do not. | No active cross-PR conflict today, but this page is still a customer-contract surface because `#856` broadens the headless-use claim. | `#856`: update docs only after the existing-materialization path is either fixed or the claim is narrowed to fresh materialization. |
+| Invocation behavior | `#854`, `#856` | `#854` changes packaged-goal routing and `docs/internal/processes/invocation-relevant-files.md`; `#856` changes named-goal CLI smoke coverage, packaged-goal docs, and the same invocation-process map. | Both PRs affect how `@you/goal` reaches terminal invocation output, but through different layers: `#854` changes packaged-factory routing and summary shaping, while `#856` changes the customer-facing headless invocation claim and verification. | `#854`: `rebase` only. `#856`: `narrow` until it proves the reused materialized factory path or ships an upgrade path. |
+| Dispatch lifecycle or control surfaces | `#859` only | `gh pr diff 859 --name-only` shows `pkg/factorysessionexecution/*`, `pkg/service/runtime_sessions.go`, lifecycle tests, and interrupt API surface files. | No current overlap with `#854` or `#856`, but this PR still sits on a shared session-control surface that may depend on later follow-up work such as `P20`/`P26` verification expectations. | `#859`: `rebase` and fix the current `Build, Lint, and API` failure on the rebased head before merge. |
+| Authored OpenAPI fragments | `#859` only | `gh pr diff 859 --name-only` includes `api/openapi-main.yaml` and new API component fragments. | This is an isolated public-contract lane among the remaining open PRs. No active overlap with the packaged-goal PRs was found in the current diff set. | `#859`: keep the interrupt surface isolated and rerun the API/build lane after rebase. |
+| Generated artifacts | `#859` only | `gh pr diff 859 --name-only` includes `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, and `ui/src/api/generated/openapi.ts`. | Generated churn is isolated to the interrupt-dispatch PR, so maintainers should avoid mixing it with packaged-goal rebases unless required by a later base-branch change. | `#859`: regenerate only from the final rebased authored contract and verify the generated diff stays isolated to this lane. |
+
+### Current Boundary Checks
+
+- `Workstation.workPropagation` remains the structured object contract, not a
+  flattened enum field. The current authored schema is
+  `api/components/schemas/data-models/Workstation.yaml` with companion enum
+  `api/components/schemas/data-models/WorkPropagationMode.yaml`, and the only
+  supported mode values remain `OUTPUT_AS_PAYLOAD` and `PRESERVE_INPUT`.
+- Internal response streams remain internal-only. The current audit sources
+  `docs/internal/development/plans/you-goal/api-contract-audit.md` and
+  `docs/internal/processes/api-relevant-files.md` still require
+  `SessionResponseStream` and `SessionResponseStreamEvent` to stay out of
+  `FactoryEvent`, authored OpenAPI fragments, and generated client contracts.
+- None of the remaining open PR diffs add `SessionResponseStream*` to
+  `api/components/`, `api/openapi-main.yaml`, `api/openapi.yaml`, or generated
+  client outputs, so the internal-stream boundary remains intact in the current
+  active batch.
+
 ## Remaining Sections
 
-The overlap audit and concrete merge order are tracked by later P27 stories and
-are intentionally left for follow-up iterations.
+The concrete merge order and final verification prerequisites for `#854`,
+`#856`, and `#859` are tracked by story `004`.
