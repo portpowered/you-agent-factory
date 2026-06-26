@@ -15,6 +15,12 @@ primary-result behavior.
   interpolation validation. Keep file-contents substitution, omitted-exact-field
   behavior, and interpolation error codes there instead of duplicating
   string-replacement rules in service or worker executors.
+- `pkg/config/openapi_factory.go` must preserve exact `${parameter}` placeholders
+  on enum-backed authored fields that support invocation interpolation (for
+  example `workers[].modelProvider`) instead of rejecting them as invalid public
+  enum values at the JSON boundary. Keep ordinary non-placeholder values on the
+  existing strict enum normalization path so packaged and customer-authored
+  factories can use the same interpolation-enabled authored fields.
 - `pkg/invocations/primary_result.go` resolves invocation `primaryResult`
   against selected-tick `FactoryWorldState` using `WorkRequestsByID`,
   `TerminalWorkByID`, and payload-lineage scope rather than transport-specific
