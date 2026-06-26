@@ -341,6 +341,9 @@ func dispatchSummaryFromChildRecord(currentPhase string, child workflowruntime.C
 		RunnerID:     strings.TrimSpace(child.RunnerID),
 		Model:        strings.TrimSpace(child.Model),
 	}
+	if javascript := dispatchJavaScriptFromChildRecord(child); strings.TrimSpace(javascript.TaskKind) != "" {
+		summary.JavaScript = &javascript
+	}
 	if ref := strings.TrimSpace(child.ProviderSessionRef); ref != "" {
 		provider := strings.TrimSpace(child.Provider)
 		if provider == "" && strings.TrimSpace(child.ExecutionMode) == workflowruntime.ChildExecutionModeFake {

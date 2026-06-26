@@ -28,8 +28,14 @@ export interface FactorySessionDetailMessages
   dispatchDetailHeading: string;
   dispatchDetailMissingState: string;
   dispatchDetailLoadingState: string;
+  dispatchExecutionModeSummary: (mode: string) => string;
   dispatchKindLabel: string;
   dispatchLabelField: string;
+  dispatchProviderSessionSummary: (input: {
+    id: string;
+    kind: string;
+    provider?: string;
+  }) => string;
   dispatchSelectionHint: string;
   dispatchStatusLabel: string;
   dispatchesHeading: string;
@@ -220,8 +226,13 @@ const factorySessionDetailMessagesByLocale = {
     dispatchDetailHeading: "Dispatch detail",
     dispatchDetailLoadingState: "Loading dispatch detail…",
     dispatchDetailMissingState: "This dispatch detail is no longer available.",
+    dispatchExecutionModeSummary: (mode) => `Execution mode: ${mode}`,
     dispatchKindLabel: "Dispatch kind",
     dispatchLabelField: "Dispatch label",
+    dispatchProviderSessionSummary: ({ id, kind, provider }) =>
+      provider
+        ? `Provider session: ${provider} / ${kind} / ${id}`
+        : `Provider session: ${kind} / ${id}`,
     dispatchSelectionHint:
       "Select a dispatch to inspect bounded durable detail.",
     dispatchStatusLabel: "Dispatch status",
@@ -298,8 +309,13 @@ const factorySessionDetailMessagesByLocale = {
     dispatchDetailHeading: "调度详情",
     dispatchDetailLoadingState: "正在加载调度详情…",
     dispatchDetailMissingState: "此调度详情已不可用。",
+    dispatchExecutionModeSummary: (mode) => `执行模式：${mode}`,
     dispatchKindLabel: "调度类型",
     dispatchLabelField: "调度标签",
+    dispatchProviderSessionSummary: ({ id, kind, provider }) =>
+      provider
+        ? `Provider session：${provider} / ${kind} / ${id}`
+        : `Provider session：${kind} / ${id}`,
     dispatchSelectionHint: "选择一个调度以检查受限的持久化详情。",
     dispatchStatusLabel: "调度状态",
     dispatchesHeading: "调度",

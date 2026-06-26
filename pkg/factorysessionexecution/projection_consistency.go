@@ -235,6 +235,7 @@ type DispatchSummary struct {
 	Usage               *DispatchUsage
 	Warnings            []DispatchWarning
 	FailureDetail       *DispatchFailureDetail
+	JavaScript          *DispatchJavaScriptProjection
 }
 
 // DispatchDetail is the shared durable dispatch read projection.

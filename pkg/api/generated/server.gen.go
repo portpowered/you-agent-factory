@@ -1726,7 +1726,7 @@ type FactorySessionBudgets struct {
 	MaxAgents *int `json:"maxAgents,omitempty"`
 }
 
-// FactorySessionDispatchSummary Durable factory-session dispatch summary for list responses. Exposes neutral dispatch fields without requiring orchestrator-specific projections.
+// FactorySessionDispatchSummary Durable factory-session dispatch summary for list responses. Exposes shared dispatch fields plus bounded orchestrator-specific inspection data when available.
 type FactorySessionDispatchSummary struct {
 	// Attempt One-based attempt number for retried dispatches.
 	Attempt *int32 `json:"attempt,omitempty"`
@@ -1736,7 +1736,8 @@ type FactorySessionDispatchSummary struct {
 	FailureDetail *FactoryDispatchFailureDetail `json:"failureDetail,omitempty"`
 
 	// Id Stable dispatch identifier.
-	Id string `json:"id"`
+	Id         string                               `json:"id"`
+	Javascript *FactoryDispatchJavaScriptProjection `json:"javascript,omitempty"`
 
 	// Label Customer-visible dispatch label.
 	Label *string `json:"label,omitempty"`

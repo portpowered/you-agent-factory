@@ -44,7 +44,19 @@ describe("FactorySessionDetailPanel", () => {
               {
                 dispatchKind: "JAVASCRIPT_AGENT",
                 id: "dispatch-1",
+                javascript: {
+                  executionMode: " live ",
+                  taskKind: "AGENT",
+                  taskLabel: " Review child task ",
+                },
                 orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+                providerSessionRefs: [
+                  {
+                    id: "provider-session-1",
+                    kind: "session_id",
+                    provider: "codex",
+                  },
+                ],
                 sessionId: "session-beta",
                 status: "COMPLETED",
                 warnings: [
@@ -140,6 +152,12 @@ describe("FactorySessionDetailPanel", () => {
     expect(screen.getByText("child agent retry scheduled")).toBeTruthy();
     expect(screen.getByText("artifact-final · FINAL_RESULT")).toBeTruthy();
     expect(screen.getByText("artifact-partial · CHILD_RESULT")).toBeTruthy();
+    expect(screen.getByText("Execution mode: live")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Provider session: codex / session_id / provider-session-1",
+      ),
+    ).toBeTruthy();
     expect(screen.queryByText("rawCheckpointBody")).toBeNull();
 
     const user = userEvent.setup();
@@ -174,8 +192,8 @@ describe("FactorySessionDetailPanel", () => {
         providerSessionRefs: [
           {
             id: "provider-session-1",
-            kind: "response_id",
-            provider: "openai",
+            kind: "session_id",
+            provider: "codex",
           },
         ],
         relatedWorkIds: ["work-123"],
@@ -209,7 +227,7 @@ describe("FactorySessionDetailPanel", () => {
     expect(screen.getAllByText("JAVASCRIPT_AGENT").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Review child task").length).toBeGreaterThan(1);
     expect(screen.getByText("live")).toBeTruthy();
-    expect(screen.getByText("response_id · provider-session-1")).toBeTruthy();
+    expect(screen.getByText("session_id · provider-session-1")).toBeTruthy();
     expect(
       screen.getByRole("link", { name: "artifact-dispatch-1" }),
     ).toBeTruthy();

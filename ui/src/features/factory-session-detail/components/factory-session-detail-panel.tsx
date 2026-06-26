@@ -293,6 +293,7 @@ function DispatchSummaryRow({
     expanded ? dispatch.id : null,
   );
   const dispatchLabel = dispatch.label?.trim() || dispatch.id;
+  const summaryDetails = getDispatchSummaryDetails(dispatch, messages);
 
   return (
     <article className="grid gap-3 rounded-lg border border-outline bg-surface-container-low p-3">
@@ -312,6 +313,17 @@ function DispatchSummaryRow({
             <span>{dispatch.dispatchKind}</span>
             <span>{dispatch.id}</span>
           </DashboardText>
+          {summaryDetails.length > 0 ? (
+            <DashboardText
+              as="div"
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-on-surface-subtle"
+              variant="supporting"
+            >
+              {summaryDetails.map((detail) => (
+                <span key={detail}>{detail}</span>
+              ))}
+            </DashboardText>
+          ) : null}
         </div>
         <ExpandablePanelTrigger
           aria-label={
@@ -527,4 +539,28 @@ function formatArtifactRef(
   artifactRef: components["schemas"]["FactoryArtifactRef"],
 ): string {
   return `${artifactRef.id} · ${artifactRef.kind}`;
+}
+
+function getDispatchSummaryDetails(
+  dispatch: FactoryDispatch,
+  messages: ReturnType<typeof getFactorySessionDetailMessages>,
+): string[] {
+  const details: string[] = [];
+  const executionMode = dispatch.javascript?.executionMode?.trim();
+  if (executionMode) {
+    details.push(messages.dispatchExecutionModeSummary(executionMode));
+  }
+
+  const firstProviderSessionRef = dispatch.providerSessionRefs?.[0];
+  if (firstProviderSessionRef) {
+    details.push(
+      messages.dispatchProviderSessionSummary({
+        id: firstProviderSessionRef.id,
+        kind: firstProviderSessionRef.kind,
+        provider: firstProviderSessionRef.provider?.trim() || undefined,
+      }),
+    );
+  }
+
+  return details;
 }
