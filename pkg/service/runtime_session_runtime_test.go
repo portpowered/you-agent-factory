@@ -2640,9 +2640,9 @@ func TestFactoryService_InferenceProgressPublisher_SlowSubscriberCompactionEmits
 }
 
 type slowSubscriberCompactionHarness struct {
-	svc        *FactoryService
-	logger     *zap.Logger
-	observed   *observer.ObservedLogs
+	svc         *FactoryService
+	logger      *zap.Logger
+	observed    *observer.ObservedLogs
 	metricsSink *logging.RuntimeMetricsSink
 }
 
@@ -2824,6 +2824,15 @@ func TestFactoryService_DispatchCompletionObserverClosesDispatchSubscribers(t *t
 	session := sessions.Get(sessionID)
 	if got := svc.sessionResponseStreams(session).SubscriberCount("dispatch-1"); got != 0 {
 		t.Fatalf("subscriber count after dispatch completion = %d, want 0", got)
+	}
+	if _, err := svc.SubscribeSessionResponseStream(sessionID, "dispatch-1", 0); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
+		t.Fatalf("Subscribe after dispatch completion error = %v, want ErrSubscriptionClosed", err)
+	}
+
+	publisher := svc.inferenceProgressPublisher(sessionID, nil)
+	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "late-fragment"))
+	if got := svc.sessionResponseStreams(session).Count(); got != 0 {
+		t.Fatalf("stream count after late publish = %d, want 0", got)
 	}
 }
 

@@ -77,4 +77,33 @@ func TestStreamSet_CloseDispatchDetachesSubscribersAndRemovesStream(t *testing.T
 	if _, err := subscription.Next(context.Background()); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
 		t.Fatalf("Next after dispatch close error = %v, want ErrSubscriptionClosed", err)
 	}
+	if stream := set.Stream("dispatch-1"); stream != nil {
+		t.Fatal("Stream after dispatch close = non-nil, want terminal dispatch tombstone")
+	}
+	if _, err := set.Subscribe("dispatch-1", 0); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
+		t.Fatalf("Subscribe after dispatch close error = %v, want ErrSubscriptionClosed", err)
+	}
+	if got := set.Count(); got != 0 {
+		t.Fatalf("stream count after post-close subscribe = %d, want 0", got)
+	}
+}
+
+func TestStreamSet_ClosePreventsStreamRecreation(t *testing.T) {
+	set := responsestream.NewStreamSet()
+	stream := set.Stream("dispatch-1")
+	if stream == nil {
+		t.Fatal("Stream before close = nil, want allocated stream")
+	}
+
+	set.Close()
+
+	if stream := set.Stream("dispatch-1"); stream != nil {
+		t.Fatal("Stream after close = non-nil, want terminal closed set")
+	}
+	if _, err := set.Subscribe("dispatch-1", 0); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
+		t.Fatalf("Subscribe after close error = %v, want ErrSubscriptionClosed", err)
+	}
+	if got := set.Count(); got != 0 {
+		t.Fatalf("stream count after closed subscribe = %d, want 0", got)
+	}
 }

@@ -9,9 +9,11 @@ import (
 // StreamSet keeps the dispatch-keyed internal response streams owned by one
 // live Factory Session runtime.
 type StreamSet struct {
-	mu        sync.RWMutex
-	streams   map[string]*SessionResponseStream
-	newStream func() *SessionResponseStream
+	mu               sync.RWMutex
+	streams          map[string]*SessionResponseStream
+	closedDispatches map[string]struct{}
+	closed           bool
+	newStream        func() *SessionResponseStream
 }
 
 // NewStreamSet allocates an empty response-stream set using the default stream
@@ -27,8 +29,9 @@ func NewStreamSetWithFactory(newStream func() *SessionResponseStream) *StreamSet
 		newStream = NewSessionResponseStream
 	}
 	return &StreamSet{
-		streams:   make(map[string]*SessionResponseStream),
-		newStream: newStream,
+		streams:          make(map[string]*SessionResponseStream),
+		closedDispatches: make(map[string]struct{}),
+		newStream:        newStream,
 	}
 }
 
@@ -43,15 +46,26 @@ func (s *StreamSet) Stream(dispatchID string) *SessionResponseStream {
 
 	s.mu.RLock()
 	stream := s.streams[key]
+	closed := s.closed
+	_, dispatchClosed := s.closedDispatches[key]
 	s.mu.RUnlock()
 	if stream != nil {
 		return stream
+	}
+	if closed || dispatchClosed {
+		return nil
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if stream = s.streams[key]; stream != nil {
 		return stream
+	}
+	if s.closed {
+		return nil
+	}
+	if _, dispatchClosed = s.closedDispatches[key]; dispatchClosed {
+		return nil
 	}
 	stream = s.newStream()
 	s.streams[key] = stream
@@ -103,8 +117,13 @@ func (s *StreamSet) CloseDispatch(dispatchID string) bool {
 	}
 	key := normalizeDispatchID(dispatchID)
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return false
+	}
 	stream := s.streams[key]
 	delete(s.streams, key)
+	s.closedDispatches[key] = struct{}{}
 	s.mu.Unlock()
 	if stream == nil {
 		return false
@@ -119,6 +138,11 @@ func (s *StreamSet) Close() {
 		return
 	}
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return
+	}
+	s.closed = true
 	streams := make([]*SessionResponseStream, 0, len(s.streams))
 	for _, stream := range s.streams {
 		streams = append(streams, stream)
