@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,6 +22,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
@@ -28,6 +30,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
+	"github.com/portpowered/infinite-you/pkg/logging"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
@@ -2568,6 +2571,130 @@ func TestFactoryService_SubscribeSessionResponseStream_ReadsRetainedAndLiveEvent
 	}
 	if len(live.Events) != 1 || live.Events[0].Payload != "live-3" {
 		t.Fatalf("live events = %#v, want one live event", live.Events)
+	}
+}
+
+func TestFactoryService_InferenceProgressPublisher_SlowSubscriberCompactionEmitsDiagnostics(t *testing.T) {
+	metricsSink, err := logging.BuildRuntimeMetricsSink(
+		"session-progress-backpressure",
+		"runtime-progress-backpressure",
+		"/factory",
+		"/factory",
+		t.TempDir(),
+		logging.RuntimeMetricsConfig{},
+	)
+	if err != nil {
+		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
+	}
+	defer metricsSink.Close()
+
+	core, observed := observer.New(zap.WarnLevel)
+	logger := zap.New(core)
+	sessions := factorysessions.NewRegistry()
+	sessionID := "session-progress-backpressure"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{handle: &liveRuntimeHandle{runtime: &factoryRuntimeBundle{
+			logger:      logger,
+			metricsSink: metricsSink,
+		}}},
+		false,
+		"factory",
+	), true)
+
+	svc := &FactoryService{
+		sessions: sessions,
+		newSessionResponseStream: func() *factorysessions.SessionResponseStream {
+			return responsestream.NewSessionResponseStreamWithClock(
+				factory.RealClock{},
+				responsestream.RetentionLimits{MaxEvents: 2},
+			)
+		},
+	}
+	publisher := svc.inferenceProgressPublisher(sessionID, logger)
+	if publisher == nil {
+		t.Fatal("publisher = nil, want inference progress publisher")
+	}
+
+	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "retained-1"))
+	subscription, err := svc.SubscribeSessionResponseStream(sessionID, "dispatch-1", 0)
+	if err != nil {
+		t.Fatalf("SubscribeSessionResponseStream: %v", err)
+	}
+	defer subscription.Detach()
+
+	initial, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(initial): %v", err)
+	}
+	if len(initial.Events) != 1 || initial.Events[0].Payload != "retained-1" {
+		t.Fatalf("initial events = %#v, want retained seed event", initial.Events)
+	}
+
+	publishDone := make(chan struct{})
+	go func() {
+		for i := 0; i < 64; i++ {
+			payload := "chunk-" + strconv.Itoa(i)
+			if i%2 == 0 {
+				publisher(workerprovider.ProgressFragment("dispatch-1", nil, payload))
+				continue
+			}
+			publisher(workerprovider.ResponseFragment("dispatch-1", nil, payload))
+		}
+		close(publishDone)
+	}()
+
+	select {
+	case <-publishDone:
+	case <-time.After(time.Second):
+		t.Fatal("publishing stalled behind a slow subscriber")
+	}
+
+	catchUp, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(catch-up): %v", err)
+	}
+	if !catchUp.BehindRetainedWindow {
+		t.Fatalf("catch-up result = %#v, want retained-window gap signal", catchUp)
+	}
+	if catchUp.Compaction == nil || catchUp.Compaction.Reason != responsestream.CompactionReasonTruncated {
+		t.Fatalf("catch-up compaction = %#v, want truncation summary", catchUp.Compaction)
+	}
+
+	foundSignal := false
+	for _, event := range catchUp.Events {
+		if event.Kind == responsestream.EventKindCompactionSignal {
+			foundSignal = true
+			break
+		}
+	}
+	if !foundSignal {
+		t.Fatalf("catch-up events = %#v, want retained compaction signal", catchUp.Events)
+	}
+
+	waitForRuntimeMetricsRecord(t, metricsSink.Path(), time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricSessionResponseStreamCompacted, 1) &&
+			metricRecordString(record, "dispatch_id") == "dispatch-1" &&
+			metricRecordString(record, "reason") == string(responsestream.CompactionReasonTruncated)
+	}, "response stream compaction")
+
+	foundWarn := false
+	for _, entry := range observed.All() {
+		if entry.Message != "session response stream compacted internal provider progress" {
+			continue
+		}
+		if entry.ContextMap()["dispatch_id"] == "dispatch-1" &&
+			entry.ContextMap()["compaction_reason"] == string(responsestream.CompactionReasonTruncated) {
+			foundWarn = true
+			break
+		}
+	}
+	if !foundWarn {
+		t.Fatalf("compaction warning log not found in %#v", observed.All())
 	}
 }
 

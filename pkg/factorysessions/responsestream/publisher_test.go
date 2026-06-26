@@ -1,6 +1,8 @@
 package responsestream_test
 
 import (
+	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -224,5 +226,92 @@ func TestPublisher_PublishReportsRetentionCompaction(t *testing.T) {
 	}
 	if events[0].Payload != "second" || events[1].Kind != responsestream.EventKindCompactionSignal {
 		t.Fatalf("events = %#v, want truncated progress and compaction signal", events)
+	}
+}
+
+func TestPublisher_SlowSubscriberDoesNotBlockAndReceivesCompactionSignal(t *testing.T) {
+	stream := responsestream.NewSessionResponseStreamWithClock(
+		&fixedClock{now: time.Unix(0, 0).UTC()},
+		responsestream.RetentionLimits{MaxEvents: 2},
+	)
+	publisher := responsestream.NewPublisher(stream, nil)
+
+	subscription, err := stream.Subscribe(0)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer subscription.Detach()
+
+	first := publisher.Publish(responsestream.Event{
+		Kind:       responsestream.EventKindResponseFragment,
+		DispatchID: "dispatch-1",
+		Payload:    "retained-1",
+	})
+	initial, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(initial): %v", err)
+	}
+	if len(initial.Events) != 1 || initial.Events[0].Sequence != first.Sequence {
+		t.Fatalf("initial events = %#v, want first retained event", initial.Events)
+	}
+
+	publishDone := make(chan struct{})
+	go func() {
+		for i := 0; i < 64; i++ {
+			payload := "chunk-" + strconv.Itoa(i)
+			if i%2 == 0 {
+				publisher.Publish(responsestream.Event{
+					Kind:       responsestream.EventKindProgressFragment,
+					DispatchID: "dispatch-1",
+					Payload:    payload,
+				})
+				continue
+			}
+			publisher.Publish(responsestream.Event{
+				Kind:       responsestream.EventKindResponseFragment,
+				DispatchID: "dispatch-1",
+				Payload:    payload,
+			})
+		}
+		close(publishDone)
+	}()
+
+	select {
+	case <-publishDone:
+	case <-time.After(time.Second):
+		t.Fatal("publishing stalled behind a slow subscriber")
+	}
+
+	catchUp, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(catch-up): %v", err)
+	}
+	if !catchUp.BehindRetainedWindow {
+		t.Fatalf("catch-up result = %#v, want retained-window gap signal", catchUp)
+	}
+	if catchUp.Compaction == nil || catchUp.Compaction.Reason != responsestream.CompactionReasonTruncated {
+		t.Fatalf("catch-up compaction = %#v, want truncation summary", catchUp.Compaction)
+	}
+
+	foundSignal := false
+	for _, event := range catchUp.Events {
+		if event.Kind == responsestream.EventKindCompactionSignal {
+			foundSignal = true
+			if event.Compaction == nil {
+				t.Fatal("compaction signal missing summary")
+			}
+			break
+		}
+	}
+	if !foundSignal {
+		t.Fatalf("catch-up events = %#v, want retained compaction signal", catchUp.Events)
+	}
+
+	diagnostics := publisher.Diagnostics()
+	if diagnostics.PublishedCount != 65 {
+		t.Fatalf("published count = %d, want 65", diagnostics.PublishedCount)
+	}
+	if diagnostics.CompactionCount == 0 || diagnostics.LastCompaction == nil {
+		t.Fatalf("diagnostics = %#v, want recorded compaction", diagnostics)
 	}
 }
