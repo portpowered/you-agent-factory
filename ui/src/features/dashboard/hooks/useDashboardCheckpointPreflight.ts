@@ -78,11 +78,19 @@ export function useDashboardCheckpointPreflight({
       if (cancelled) {
         return;
       }
-      setPreflightStatus("non-recoverable");
-      setRecoveryState(
-        buildDashboardSessionPreflightFailureRecoveryState(sessionID),
-      );
-      setCheckpointHydratedKey(hydrationKey);
+      void clearTimelineCheckpoint(window.indexedDB, sessionID)
+        .catch(() => {})
+        .finally(() => {
+          if (cancelled) {
+            return;
+          }
+          clearDashboardSessionScopedQueries(queryClient, sessionID);
+          setPreflightStatus("non-recoverable");
+          setRecoveryState(
+            buildDashboardSessionPreflightFailureRecoveryState(sessionID),
+          );
+          setCheckpointHydratedKey(hydrationKey);
+        });
     });
 
     return () => {

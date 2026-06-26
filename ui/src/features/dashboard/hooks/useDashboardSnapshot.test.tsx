@@ -11,10 +11,7 @@ import {
   FACTORY_TIMELINE_DEBUG_GLOBAL,
   FACTORY_TIMELINE_DEBUG_STORAGE_KEY,
 } from "../../timeline/state/factoryTimelineDebug";
-import {
-  useFactoryTimelineStore,
-  type WorldState,
-} from "../../timeline/state/factoryTimelineStore";
+import { useFactoryTimelineStore, type WorldState } from "../../timeline/state/factoryTimelineStore";
 import { readTimelineCheckpoint } from "../../timeline/state/timelineCheckpointPersistence";
 import { DashboardSessionProvider } from "../session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";
@@ -659,8 +656,65 @@ describe("useDashboardSnapshot composer", () => {
     expect(result.current.isInitialLoading).toBe(false);
   });
 
-  it("retries sync preflight after a recovery refresh and leaves the recovery state when retry succeeds", async () => {
+  it("clears the persisted checkpoint after a preflight request failure and retries without the stale cursor", async () => {
     useFactoryTimelineStore.getState().reset();
+    const queryKey = currentFactoryDefinitionQueryKey(DEFAULT_FACTORY_SESSION_ID);
+    queryClient.setQueryData(queryKey, { cached: true });
+    const { unmount: seedUnmount } = renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    const stream = replayHarness.getStreams()[0];
+
+    await act(async () => {
+      stream.emit("message", {
+        context: {
+          eventTime: "2026-04-25T20:00:01Z",
+          sequence: 7,
+          tick: 7,
+        },
+        id: "stale-event-7",
+        payload: {
+          factory: {
+            workTypes: [
+              {
+                name: "story",
+                states: [{ name: "new", type: "INITIAL" }],
+              },
+            ],
+            workstations: [],
+            workers: [],
+          },
+        },
+        type: FACTORY_EVENT_TYPES.initialStructureRequest,
+      });
+      await new Promise<void>((resolve) => {
+        window.setTimeout(() => resolve(), 800);
+      });
+    });
+
+    await waitFor(async () => {
+      await expect(
+        readTimelineCheckpoint(window.indexedDB, DEFAULT_FACTORY_SESSION_ID),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          afterEventId: "stale-event-7",
+          afterSequence: 7,
+          selectedTick: 7,
+        }),
+      );
+    });
+
+    act(() => {
+      seedUnmount();
+    });
+    replayHarness.reset();
+    replayHarness.install();
+    useFactoryTimelineStore.getState().reset();
+    fetchMock.mockClear();
+
     fetchMock.mockRejectedValueOnce(new Error("network down"));
 
     const { result, rerender } = renderHook(
@@ -680,6 +734,10 @@ describe("useDashboardSnapshot composer", () => {
       requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
     });
     expect(replayHarness.getStreams()).toHaveLength(0);
+    await expect(
+      readTimelineCheckpoint(window.indexedDB, DEFAULT_FACTORY_SESSION_ID),
+    ).resolves.toBeNull();
+    expect(queryClient.getQueryData(queryKey)).toBeUndefined();
 
     act(() => {
       rerender({ refreshToken: 1 });
@@ -693,6 +751,13 @@ describe("useDashboardSnapshot composer", () => {
       expect(replayHarness.getStreams()).toHaveLength(1);
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "after_event_id=stale-event-7",
+    );
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain("after_sequence=7");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe(
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/sync-preflight`,
+    );
   });
 });
 
