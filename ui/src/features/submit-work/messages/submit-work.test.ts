@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { getSubmitWorkMessages } from "./submit-work";
 
-describe("getSubmitWorkMessages invocation copy", () => {
+describe("getSubmitWorkMessages shell copy", () => {
   it("formats the submit-work shell copy exposed to customers", () => {
     const messages = getSubmitWorkMessages("en");
 
@@ -33,7 +33,9 @@ describe("getSubmitWorkMessages invocation copy", () => {
       "Enter a request name before submitting.",
     );
   });
+});
 
+describe("getSubmitWorkMessages invocation copy", () => {
   it("formats the invocation affordances exposed by the widget", () => {
     const messages = getSubmitWorkMessages("en");
 
