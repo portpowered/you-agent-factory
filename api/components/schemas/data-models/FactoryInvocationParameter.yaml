@@ -1,0 +1,50 @@
+type: object
+additionalProperties: false
+required:
+  - name
+description: One canonical invocation parameter declared on a factory.
+properties:
+  name:
+    type: string
+    description: Internal canonical parameter name used for normalized argument maps and interpolation.
+  description:
+    type: string
+    description: Customer-facing description rendered in help, docs, and form controls.
+  externalName:
+    type: string
+    description: Preferred named-argument key shown to callers, such as `output`.
+  aliases:
+    type: array
+    description: Additional accepted named-argument keys that normalize to this parameter.
+    items:
+      type: string
+  typeHint:
+    $ref: './FactoryInvocationParameterTypeHint.yaml'
+    description: String-first hint that guides parsing, docs, and dashboard form selection.
+  valueMode:
+    $ref: './FactoryInvocationParameterValueMode.yaml'
+    description: Declares whether the parameter consumes one value, repeated values, variadic values, or file contents.
+  required:
+    type: boolean
+    description: When true, invocation normalization must reject requests that omit this parameter.
+  sensitive:
+    type: boolean
+    description: When true, diagnostics must preserve names and source metadata but redact concrete values.
+  choices:
+    type: array
+    description: Optional allowed string values for this parameter.
+    items:
+      type: string
+  defaultValue:
+    type: string
+    description: Default string value used when an omitted parameter resolves to one effective value.
+  defaultValues:
+    type: array
+    description: Default string values used when an omitted parameter resolves to multiple effective values.
+    items:
+      type: string
+  bindings:
+    type: array
+    description: Accepted invocation bindings for this parameter across positional, named, and stdin sources.
+    items:
+      $ref: './FactoryInvocationParameterBinding.yaml'

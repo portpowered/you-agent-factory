@@ -169,6 +169,46 @@ const (
 	FactoryEventTypeWorkStateChange               FactoryEventType = "WORK_STATE_CHANGE"
 )
 
+// Defines values for FactoryInvocationOutputContractMode.
+const (
+	FactoryInvocationOutputContractModeFile   FactoryInvocationOutputContractMode = "FILE"
+	FactoryInvocationOutputContractModeInline FactoryInvocationOutputContractMode = "INLINE"
+	FactoryInvocationOutputContractModeJson   FactoryInvocationOutputContractMode = "JSON"
+)
+
+// Defines values for FactoryInvocationParameterBindingKind.
+const (
+	FactoryInvocationParameterBindingKindNamed      FactoryInvocationParameterBindingKind = "NAMED"
+	FactoryInvocationParameterBindingKindNamedRest  FactoryInvocationParameterBindingKind = "NAMED_REST"
+	FactoryInvocationParameterBindingKindPositional FactoryInvocationParameterBindingKind = "POSITIONAL"
+	FactoryInvocationParameterBindingKindStdin      FactoryInvocationParameterBindingKind = "STDIN"
+)
+
+// Defines values for FactoryInvocationParameterTypeHint.
+const (
+	FactoryInvocationParameterTypeHintBooleanString FactoryInvocationParameterTypeHint = "BOOLEAN_STRING"
+	FactoryInvocationParameterTypeHintDirectoryPath FactoryInvocationParameterTypeHint = "DIRECTORY_PATH"
+	FactoryInvocationParameterTypeHintFilePath      FactoryInvocationParameterTypeHint = "FILE_PATH"
+	FactoryInvocationParameterTypeHintNumberString  FactoryInvocationParameterTypeHint = "NUMBER_STRING"
+	FactoryInvocationParameterTypeHintPath          FactoryInvocationParameterTypeHint = "PATH"
+	FactoryInvocationParameterTypeHintString        FactoryInvocationParameterTypeHint = "STRING"
+)
+
+// Defines values for FactoryInvocationParameterValueMode.
+const (
+	FactoryInvocationParameterValueModeExact        FactoryInvocationParameterValueMode = "EXACT"
+	FactoryInvocationParameterValueModeFileContents FactoryInvocationParameterValueMode = "FILE_CONTENTS"
+	FactoryInvocationParameterValueModeRepeated     FactoryInvocationParameterValueMode = "REPEATED"
+	FactoryInvocationParameterValueModeVariadic     FactoryInvocationParameterValueMode = "VARIADIC"
+)
+
+// Defines values for FactoryInvocationUnknownNamedArgumentPolicy.
+const (
+	FactoryInvocationUnknownNamedArgumentPolicyAllow   FactoryInvocationUnknownNamedArgumentPolicy = "ALLOW"
+	FactoryInvocationUnknownNamedArgumentPolicyCollect FactoryInvocationUnknownNamedArgumentPolicy = "COLLECT"
+	FactoryInvocationUnknownNamedArgumentPolicyReject  FactoryInvocationUnknownNamedArgumentPolicy = "REJECT"
+)
+
 // Defines values for FactoryLayoutPreferencesDirection.
 const (
 	DOWN  FactoryLayoutPreferencesDirection = "DOWN"
@@ -1047,6 +1087,9 @@ type Factory struct {
 	// InvocationReturn Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback.
 	InvocationReturn *InvocationReturn `json:"invocationReturn,omitempty"`
 
+	// InvocationSignature Canonical callable argument contract for invoking one factory. When present, CLI, API, dashboard, docs, and packaged-factory surfaces should discover and normalize invocation inputs from this shared schema instead of transport- or factory-specific argument definitions.
+	InvocationSignature *FactoryInvocationSignature `json:"invocationSignature,omitempty"`
+
 	// Layout Non-executable portable graph editor layout metadata keyed by canonical graph ids.
 	Layout   *FactoryLayout `json:"layout,omitempty"`
 	Metadata *StringMap     `json:"metadata,omitempty"`
@@ -1383,6 +1426,117 @@ type FactoryGuard struct {
 	// Type Factory-level guard condition to evaluate before dispatch-ready transitions can proceed.
 	Type GuardType `json:"type"`
 }
+
+// FactoryInvocationExample One example invocation for docs, help, and packaged-factory inspection.
+type FactoryInvocationExample struct {
+	// Argv CLI-style argument vector rendered after factory selection.
+	Argv *[]string `json:"argv,omitempty"`
+
+	// Description Customer-facing explanation of what the example does.
+	Description *string `json:"description,omitempty"`
+
+	// Name Stable example name.
+	Name string `json:"name"`
+
+	// Stdin Example stdin payload when the signature routes stdin into one parameter.
+	Stdin *string `json:"stdin,omitempty"`
+}
+
+// FactoryInvocationOutputContract Customer-facing output hint for a factory invocation signature.
+type FactoryInvocationOutputContract struct {
+	// ContentType Output media type hint for docs, API consumers, and dashboard affordances.
+	ContentType *string `json:"contentType,omitempty"`
+
+	// Description Human-readable summary of the primary output contract.
+	Description *string `json:"description,omitempty"`
+
+	// FileExtension Suggested file extension when the output mode writes a file.
+	FileExtension *string `json:"fileExtension,omitempty"`
+
+	// Mode High-level output shape hint exposed by a factory invocation signature.
+	Mode *FactoryInvocationOutputContractMode `json:"mode,omitempty"`
+
+	// PathParameter Parameter name that controls the destination path when the factory writes output to disk.
+	PathParameter *string `json:"pathParameter,omitempty"`
+}
+
+// FactoryInvocationOutputContractMode High-level output shape hint exposed by a factory invocation signature.
+type FactoryInvocationOutputContractMode string
+
+// FactoryInvocationParameter One canonical invocation parameter declared on a factory.
+type FactoryInvocationParameter struct {
+	// Aliases Additional accepted named-argument keys that normalize to this parameter.
+	Aliases *[]string `json:"aliases,omitempty"`
+
+	// Bindings Accepted invocation bindings for this parameter across positional, named, and stdin sources.
+	Bindings *[]FactoryInvocationParameterBinding `json:"bindings,omitempty"`
+
+	// Choices Optional allowed string values for this parameter.
+	Choices *[]string `json:"choices,omitempty"`
+
+	// DefaultValue Default string value used when an omitted parameter resolves to one effective value.
+	DefaultValue *string `json:"defaultValue,omitempty"`
+
+	// DefaultValues Default string values used when an omitted parameter resolves to multiple effective values.
+	DefaultValues *[]string `json:"defaultValues,omitempty"`
+
+	// Description Customer-facing description rendered in help, docs, and form controls.
+	Description *string `json:"description,omitempty"`
+
+	// ExternalName Preferred named-argument key shown to callers, such as `output`.
+	ExternalName *string `json:"externalName,omitempty"`
+
+	// Name Internal canonical parameter name used for normalized argument maps and interpolation.
+	Name string `json:"name"`
+
+	// Required When true, invocation normalization must reject requests that omit this parameter.
+	Required *bool `json:"required,omitempty"`
+
+	// Sensitive When true, diagnostics must preserve names and source metadata but redact concrete values.
+	Sensitive *bool `json:"sensitive,omitempty"`
+
+	// TypeHint String-first parsing and UI hint for one factory invocation parameter.
+	TypeHint *FactoryInvocationParameterTypeHint `json:"typeHint,omitempty"`
+
+	// ValueMode Declares how one invocation parameter consumes one or more string values.
+	ValueMode *FactoryInvocationParameterValueMode `json:"valueMode,omitempty"`
+}
+
+// FactoryInvocationParameterBinding One public binding that exposes a parameter to callers.
+type FactoryInvocationParameterBinding struct {
+	// Kind Public invocation binding kinds supported by factory signatures.
+	Kind FactoryInvocationParameterBindingKind `json:"kind"`
+
+	// Position 1-based positional slot used when kind is POSITIONAL.
+	Position *int `json:"position,omitempty"`
+}
+
+// FactoryInvocationParameterBindingKind Public invocation binding kinds supported by factory signatures.
+type FactoryInvocationParameterBindingKind string
+
+// FactoryInvocationParameterTypeHint String-first parsing and UI hint for one factory invocation parameter.
+type FactoryInvocationParameterTypeHint string
+
+// FactoryInvocationParameterValueMode Declares how one invocation parameter consumes one or more string values.
+type FactoryInvocationParameterValueMode string
+
+// FactoryInvocationSignature Canonical callable argument contract for invoking one factory. When present, CLI, API, dashboard, docs, and packaged-factory surfaces should discover and normalize invocation inputs from this shared schema instead of transport- or factory-specific argument definitions.
+type FactoryInvocationSignature struct {
+	// Examples Example invocations rendered in docs, help, and inspection surfaces.
+	Examples *[]FactoryInvocationExample `json:"examples,omitempty"`
+
+	// OutputContract Customer-facing output hint for a factory invocation signature.
+	OutputContract *FactoryInvocationOutputContract `json:"outputContract,omitempty"`
+
+	// Parameters Declared invocation parameters keyed by canonical parameter name.
+	Parameters *[]FactoryInvocationParameter `json:"parameters,omitempty"`
+
+	// UnknownNamedArgumentPolicy Policy for named inputs that do not match any declared parameter binding.
+	UnknownNamedArgumentPolicy *FactoryInvocationUnknownNamedArgumentPolicy `json:"unknownNamedArgumentPolicy,omitempty"`
+}
+
+// FactoryInvocationUnknownNamedArgumentPolicy Policy for named inputs that do not match any declared parameter binding.
+type FactoryInvocationUnknownNamedArgumentPolicy string
 
 // FactoryLayout Non-executable portable graph editor layout metadata keyed by canonical graph ids.
 type FactoryLayout struct {

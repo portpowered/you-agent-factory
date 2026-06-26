@@ -49,6 +49,14 @@ type FactoryHostedLinearWorkerConfig =
 type FactoryHostedLinearWorkerMapping =
   FactorySchemas["HostedLinearWorkerMapping"];
 type FactoryHostedWorkerAuth = FactorySchemas["HostedWorkerAuth"];
+type FactoryInvocationExample = FactorySchemas["FactoryInvocationExample"];
+type FactoryInvocationOutputContract =
+  FactorySchemas["FactoryInvocationOutputContract"];
+type FactoryInvocationParameter = FactorySchemas["FactoryInvocationParameter"];
+type FactoryInvocationParameterBinding =
+  FactorySchemas["FactoryInvocationParameterBinding"];
+type FactoryInvocationSignature =
+  FactorySchemas["FactoryInvocationSignature"];
 type FactoryInputType = FactorySchemas["InputType"];
 type FactoryResource = FactorySchemas["Resource"];
 type FactoryResourceRequirement = FactorySchemas["ResourceRequirement"];
@@ -76,6 +84,7 @@ const FACTORY_KEYS = new Set([
   "guards",
   "id",
   "inputTypes",
+  "invocationSignature",
   "metadata",
   "name",
   "layout",
@@ -93,6 +102,40 @@ const FACTORY_GUARD_KEYS = new Set([
   "modelProvider",
   "refreshWindow",
   "type",
+]);
+const INVOCATION_SIGNATURE_KEYS = new Set([
+  "examples",
+  "outputContract",
+  "parameters",
+  "unknownNamedArgumentPolicy",
+]);
+const INVOCATION_PARAMETER_KEYS = new Set([
+  "aliases",
+  "bindings",
+  "choices",
+  "defaultValue",
+  "defaultValues",
+  "description",
+  "externalName",
+  "name",
+  "required",
+  "sensitive",
+  "typeHint",
+  "valueMode",
+]);
+const INVOCATION_PARAMETER_BINDING_KEYS = new Set(["kind", "position"]);
+const INVOCATION_OUTPUT_CONTRACT_KEYS = new Set([
+  "contentType",
+  "description",
+  "fileExtension",
+  "mode",
+  "pathParameter",
+]);
+const INVOCATION_EXAMPLE_KEYS = new Set([
+  "argv",
+  "description",
+  "name",
+  "stdin",
 ]);
 const INPUT_TYPE_KEYS = new Set(["name", "type"]);
 const WORK_TYPE_KEYS = new Set(["handlingBehavior", "id", "name", "states"]);
@@ -210,6 +253,28 @@ const WORKSTATION_CRON_KEYS = new Set([
 ]);
 const RESOURCE_REQUIREMENT_KEYS = new Set(["capacity", "name"]);
 const INPUT_KIND_VALUES = new Set<FactoryInputType["type"]>(["DEFAULT"]);
+const INVOCATION_UNKNOWN_NAMED_ARGUMENT_POLICY_VALUES = new Set<
+  NonNullable<FactoryInvocationSignature["unknownNamedArgumentPolicy"]>
+>(["ALLOW", "COLLECT", "REJECT"]);
+const INVOCATION_PARAMETER_TYPE_HINT_VALUES = new Set<
+  NonNullable<FactoryInvocationParameter["typeHint"]>
+>([
+  "BOOLEAN_STRING",
+  "DIRECTORY_PATH",
+  "FILE_PATH",
+  "NUMBER_STRING",
+  "PATH",
+  "STRING",
+]);
+const INVOCATION_PARAMETER_VALUE_MODE_VALUES = new Set<
+  NonNullable<FactoryInvocationParameter["valueMode"]>
+>(["EXACT", "FILE_CONTENTS", "REPEATED", "VARIADIC"]);
+const INVOCATION_PARAMETER_BINDING_KIND_VALUES = new Set<
+  FactoryInvocationParameterBinding["kind"]
+>(["NAMED", "NAMED_REST", "POSITIONAL", "STDIN"]);
+const INVOCATION_OUTPUT_CONTRACT_MODE_VALUES = new Set<
+  NonNullable<FactoryInvocationOutputContract["mode"]>
+>(["FILE", "INLINE", "JSON"]);
 const WORK_STATE_TYPE_VALUES = new Set<FactoryWorkState["type"]>([
   "FAILED",
   "INITIAL",
@@ -321,6 +386,12 @@ function decodeFactoryDefinition(
   const workTypes = readOptionalArray(value, "workTypes", path, decodeWorkType);
   const resources = readOptionalArray(value, "resources", path, decodeResource);
   const layout = readOptionalObject(value, "layout", path, decodeFactoryLayout);
+  const invocationSignature = readOptionalObject(
+    value,
+    "invocationSignature",
+    path,
+    decodeInvocationSignature,
+  );
   const runner = readOptionalEnum(value, "runner", path, RUNNER_ID_VALUES);
   const supportingFiles = readOptionalObject(
     value,
@@ -371,6 +442,9 @@ function decodeFactoryDefinition(
   if (layout !== undefined) {
     factory.layout = layout;
   }
+  if (invocationSignature !== undefined) {
+    factory.invocationSignature = invocationSignature;
+  }
   if (runner !== undefined) {
     factory.runner = runner;
   }
@@ -382,6 +456,212 @@ function decodeFactoryDefinition(
   }
 
   return factory;
+}
+
+function decodeInvocationSignature(
+  value: unknown,
+  path: string,
+): FactoryInvocationSignature {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, INVOCATION_SIGNATURE_KEYS, path);
+
+  const signature: FactoryInvocationSignature = {};
+  const parameters = readOptionalArray(
+    record,
+    "parameters",
+    path,
+    decodeInvocationParameter,
+  );
+  const unknownNamedArgumentPolicy = readOptionalEnum(
+    record,
+    "unknownNamedArgumentPolicy",
+    path,
+    INVOCATION_UNKNOWN_NAMED_ARGUMENT_POLICY_VALUES,
+  );
+  const outputContract = readOptionalObject(
+    record,
+    "outputContract",
+    path,
+    decodeInvocationOutputContract,
+  );
+  const examples = readOptionalArray(
+    record,
+    "examples",
+    path,
+    decodeInvocationExample,
+  );
+
+  if (parameters !== undefined) {
+    signature.parameters = parameters;
+  }
+  if (unknownNamedArgumentPolicy !== undefined) {
+    signature.unknownNamedArgumentPolicy = unknownNamedArgumentPolicy;
+  }
+  if (outputContract !== undefined) {
+    signature.outputContract = outputContract;
+  }
+  if (examples !== undefined) {
+    signature.examples = examples;
+  }
+  return signature;
+}
+
+function decodeInvocationParameter(
+  value: unknown,
+  path: string,
+): FactoryInvocationParameter {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, INVOCATION_PARAMETER_KEYS, path);
+
+  const parameter: FactoryInvocationParameter = {
+    name: readRequiredString(record, "name", path),
+  };
+  const description = readOptionalString(record, "description", path);
+  const externalName = readOptionalString(record, "externalName", path);
+  const aliases = readOptionalStringArray(record, "aliases", path);
+  const typeHint = readOptionalEnum(
+    record,
+    "typeHint",
+    path,
+    INVOCATION_PARAMETER_TYPE_HINT_VALUES,
+  );
+  const valueMode = readOptionalEnum(
+    record,
+    "valueMode",
+    path,
+    INVOCATION_PARAMETER_VALUE_MODE_VALUES,
+  );
+  const required = readOptionalBoolean(record, "required", path);
+  const sensitive = readOptionalBoolean(record, "sensitive", path);
+  const choices = readOptionalStringArray(record, "choices", path);
+  const defaultValue = readOptionalString(record, "defaultValue", path);
+  const defaultValues = readOptionalStringArray(record, "defaultValues", path);
+  const bindings = readOptionalArray(
+    record,
+    "bindings",
+    path,
+    decodeInvocationParameterBinding,
+  );
+
+  if (description !== undefined) {
+    parameter.description = description;
+  }
+  if (externalName !== undefined) {
+    parameter.externalName = externalName;
+  }
+  if (aliases !== undefined) {
+    parameter.aliases = aliases;
+  }
+  if (typeHint !== undefined) {
+    parameter.typeHint = typeHint;
+  }
+  if (valueMode !== undefined) {
+    parameter.valueMode = valueMode;
+  }
+  if (required !== undefined) {
+    parameter.required = required;
+  }
+  if (sensitive !== undefined) {
+    parameter.sensitive = sensitive;
+  }
+  if (choices !== undefined) {
+    parameter.choices = choices;
+  }
+  if (defaultValue !== undefined) {
+    parameter.defaultValue = defaultValue;
+  }
+  if (defaultValues !== undefined) {
+    parameter.defaultValues = defaultValues;
+  }
+  if (bindings !== undefined) {
+    parameter.bindings = bindings;
+  }
+  return parameter;
+}
+
+function decodeInvocationParameterBinding(
+  value: unknown,
+  path: string,
+): FactoryInvocationParameterBinding {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, INVOCATION_PARAMETER_BINDING_KEYS, path);
+
+  const binding: FactoryInvocationParameterBinding = {
+    kind: readRequiredEnum(
+      record,
+      "kind",
+      path,
+      INVOCATION_PARAMETER_BINDING_KIND_VALUES,
+    ),
+  };
+  const position = readOptionalInteger(record, "position", path);
+  if (position !== undefined) {
+    binding.position = position;
+  }
+  return binding;
+}
+
+function decodeInvocationOutputContract(
+  value: unknown,
+  path: string,
+): FactoryInvocationOutputContract {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, INVOCATION_OUTPUT_CONTRACT_KEYS, path);
+
+  const outputContract: FactoryInvocationOutputContract = {};
+  const mode = readOptionalEnum(
+    record,
+    "mode",
+    path,
+    INVOCATION_OUTPUT_CONTRACT_MODE_VALUES,
+  );
+  const pathParameter = readOptionalString(record, "pathParameter", path);
+  const contentType = readOptionalString(record, "contentType", path);
+  const fileExtension = readOptionalString(record, "fileExtension", path);
+  const description = readOptionalString(record, "description", path);
+
+  if (mode !== undefined) {
+    outputContract.mode = mode;
+  }
+  if (pathParameter !== undefined) {
+    outputContract.pathParameter = pathParameter;
+  }
+  if (contentType !== undefined) {
+    outputContract.contentType = contentType;
+  }
+  if (fileExtension !== undefined) {
+    outputContract.fileExtension = fileExtension;
+  }
+  if (description !== undefined) {
+    outputContract.description = description;
+  }
+  return outputContract;
+}
+
+function decodeInvocationExample(
+  value: unknown,
+  path: string,
+): FactoryInvocationExample {
+  const record = expectObject(value, path);
+  rejectUnknownKeys(record, INVOCATION_EXAMPLE_KEYS, path);
+
+  const example: FactoryInvocationExample = {
+    name: readRequiredString(record, "name", path),
+  };
+  const description = readOptionalString(record, "description", path);
+  const argv = readOptionalStringArray(record, "argv", path);
+  const stdin = readOptionalString(record, "stdin", path);
+
+  if (description !== undefined) {
+    example.description = description;
+  }
+  if (argv !== undefined) {
+    example.argv = argv;
+  }
+  if (stdin !== undefined) {
+    example.stdin = stdin;
+  }
+  return example;
 }
 
 function decodeInputType(value: unknown, path: string): FactoryInputType {
@@ -1250,4 +1530,3 @@ function decodeResourceRequirement(
     name: readRequiredString(record, "name", path),
   };
 }
-

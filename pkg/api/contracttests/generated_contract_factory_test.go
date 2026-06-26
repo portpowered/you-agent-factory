@@ -151,6 +151,29 @@ func assertGeneratedOpenAPISurfaceTypes(
 	}
 	invocationReturnPolicy := factoryapi.InvocationReturnPolicySubmittedWorkTerminal
 	invocationReturn := factoryapi.InvocationReturn{Policy: invocationReturnPolicy}
+	invocationSignaturePolicy := factoryapi.FactoryInvocationUnknownNamedArgumentPolicyCollect
+	parameterTypeHint := factoryapi.FactoryInvocationParameterTypeHintString
+	parameterValueMode := factoryapi.FactoryInvocationParameterValueModeExact
+	bindingKind := factoryapi.FactoryInvocationParameterBindingKindNamed
+	outputContractMode := factoryapi.FactoryInvocationOutputContractModeJson
+	invocationSignature := factoryapi.FactoryInvocationSignature{
+		UnknownNamedArgumentPolicy: &invocationSignaturePolicy,
+		Parameters: &[]factoryapi.FactoryInvocationParameter{{
+			Name:      "input",
+			TypeHint:  &parameterTypeHint,
+			ValueMode: &parameterValueMode,
+			Bindings: &[]factoryapi.FactoryInvocationParameterBinding{{
+				Kind: bindingKind,
+			}},
+		}},
+		OutputContract: &factoryapi.FactoryInvocationOutputContract{
+			Mode: &outputContractMode,
+		},
+		Examples: &[]factoryapi.FactoryInvocationExample{{
+			Name: "basic",
+			Argv: &[]string{"brief.md"},
+		}},
+	}
 	upsertResponse := factoryapi.UpsertWorkRequestResponse{
 		RequestId: workRequest.RequestId,
 		TraceId:   "trace-1",
@@ -171,7 +194,7 @@ func assertGeneratedOpenAPISurfaceTypes(
 		Outputs:  &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 	}
 
-	if submitRequest.Name == "" || submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" || invocationRequest.SourceKind != factoryapi.InvocationInputSourceKindText || invocationResponse.PrimaryResult == nil || invocationReturn.Policy != factoryapi.InvocationReturnPolicySubmittedWorkTerminal || workRequest.RequestId == "" || upsertResponse.RequestId == "" || namedFactory.Name == "" || namedFactory.Workstations == nil || workstation.Behavior == nil || workstation.Type == nil || cron.Schedule == "" || cron.TriggerAtStart == nil {
+	if submitRequest.Name == "" || submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" || invocationRequest.SourceKind != factoryapi.InvocationInputSourceKindText || invocationResponse.PrimaryResult == nil || invocationReturn.Policy != factoryapi.InvocationReturnPolicySubmittedWorkTerminal || invocationSignature.UnknownNamedArgumentPolicy == nil || invocationSignature.Parameters == nil || invocationSignature.OutputContract == nil || invocationSignature.Examples == nil || workRequest.RequestId == "" || upsertResponse.RequestId == "" || namedFactory.Name == "" || namedFactory.Workstations == nil || workstation.Behavior == nil || workstation.Type == nil || cron.Schedule == "" || cron.TriggerAtStart == nil {
 		t.Fatal("generated OpenAPI request and response types should be usable")
 	}
 }
@@ -293,6 +316,9 @@ func assertGeneratedNamedFactoryJSONShape(t *testing.T, encoded []byte) {
 	if !strings.Contains(string(encoded), `"name":"customer-support-triage"`) {
 		t.Fatalf("generated NamedFactory JSON missing canonical name field: %s", encoded)
 	}
+	if !strings.Contains(string(encoded), `"invocationSignature"`) {
+		t.Fatalf("generated NamedFactory JSON missing invocationSignature field: %s", encoded)
+	}
 	if strings.Contains(string(encoded), `"factory_name"`) {
 		t.Fatalf("generated NamedFactory JSON contains unexpected legacy field: %s", encoded)
 	}
@@ -303,6 +329,9 @@ func assertGeneratedNamedFactoryRoundTripFields(t *testing.T, namedFactory facto
 
 	if roundTripped.Name != namedFactory.Name {
 		t.Fatalf("round-tripped named factory name = %q, want %q", roundTripped.Name, namedFactory.Name)
+	}
+	if roundTripped.InvocationSignature == nil || roundTripped.InvocationSignature.Parameters == nil || len(*roundTripped.InvocationSignature.Parameters) != 1 {
+		t.Fatalf("round-tripped named factory invocationSignature = %#v, want one parameter", roundTripped.InvocationSignature)
 	}
 	if roundTripped.Workstations == nil || len(*roundTripped.Workstations) != 1 || (*roundTripped.Workstations)[0].Worker != "planner" {
 		t.Fatalf("round-tripped named factory workstations = %#v, want planner workstation", roundTripped.Workstations)

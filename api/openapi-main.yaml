@@ -1947,6 +1947,26 @@ components:
       $ref: './components/schemas/data-models/FactoryOrchestratorJavaScriptConfig.yaml'
     FactoryOrchestratorJavaScriptInlineSource:
       $ref: './components/schemas/data-models/FactoryOrchestratorJavaScriptInlineSource.yaml'
+    FactoryInvocationSignature:
+      $ref: './components/schemas/data-models/FactoryInvocationSignature.yaml'
+    FactoryInvocationParameter:
+      $ref: './components/schemas/data-models/FactoryInvocationParameter.yaml'
+    FactoryInvocationParameterBinding:
+      $ref: './components/schemas/data-models/FactoryInvocationParameterBinding.yaml'
+    FactoryInvocationParameterBindingKind:
+      $ref: './components/schemas/data-models/FactoryInvocationParameterBindingKind.yaml'
+    FactoryInvocationParameterTypeHint:
+      $ref: './components/schemas/data-models/FactoryInvocationParameterTypeHint.yaml'
+    FactoryInvocationParameterValueMode:
+      $ref: './components/schemas/data-models/FactoryInvocationParameterValueMode.yaml'
+    FactoryInvocationUnknownNamedArgumentPolicy:
+      $ref: './components/schemas/data-models/FactoryInvocationUnknownNamedArgumentPolicy.yaml'
+    FactoryInvocationOutputContract:
+      $ref: './components/schemas/data-models/FactoryInvocationOutputContract.yaml'
+    FactoryInvocationOutputContractMode:
+      $ref: './components/schemas/data-models/FactoryInvocationOutputContractMode.yaml'
+    FactoryInvocationExample:
+      $ref: './components/schemas/data-models/FactoryInvocationExample.yaml'
     InvocationReturn:
       $ref: './components/schemas/data-models/InvocationReturn.yaml'
     InvocationReturnPolicy:
