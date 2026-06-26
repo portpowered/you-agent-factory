@@ -889,7 +889,6 @@ func TestInferenceProgressPublishingCommandRunner_PublishesOrderedFragments(t *t
 		t.Fatalf("published fragments = %#v, want both response and progress kinds", published)
 	}
 }
-
 func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndLaterValidEventsInOrder(t *testing.T) {
 	scriptDir := t.TempDir()
 	scriptPath := filepath.Join(scriptDir, string(interfaces.ModelProviderCursor))
@@ -937,7 +936,6 @@ func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndL
 		ID:       "cursor-session-123",
 	})
 }
-
 func TestInferenceProgressPublishingCommandRunner_WithoutPublisherPreservesExecBehavior(t *testing.T) {
 	t.Parallel()
 

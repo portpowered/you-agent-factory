@@ -472,6 +472,17 @@ const (
 	codexMetadataRunnerIDKey    = "runner_id"
 	codexMetadataWorkIDKey      = "work_id"
 	codexMetadataWorkstationKey = "workstation_name"
+	codexMetadataTextBytesKey   = "text_bytes"
+	codexMetadataTruncatedKey   = "payload_truncated"
+	codexMetadataRawBytesKey    = "raw_bytes"
+	codexMetadataRawSHA256Key   = "raw_sha256"
+	codexMetadataDiagnosticKey  = "diagnostic_class"
+)
+
+const (
+	codexDiagnosticUnknownEvent  = "unknown_event"
+	codexDiagnosticMalformedJSON = "malformed_json"
+	codexDiagnosticIncompleteSSE = "incomplete_event_stream"
 )
 
 // InferenceProgressFragment is the provider-boundary shape for transient internal
