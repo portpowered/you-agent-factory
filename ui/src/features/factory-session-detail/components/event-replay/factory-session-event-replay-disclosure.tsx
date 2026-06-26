@@ -1,6 +1,5 @@
 import { useId, useState } from "react";
 
-import type { FactoryEvent } from "../../../../api/events";
 import {
   AlertPanel,
   DashboardLabel,
@@ -10,6 +9,7 @@ import {
 import { ExpandablePanelTrigger } from "../../../../components/ui/expandable-panel-trigger";
 import { DetailCopy } from "../../../../components/ui/widget-frame";
 import { useFactorySessionEventReplay } from "../../hooks/use-factory-session-event-replay";
+import { buildFactorySessionEventReplayTimeline } from "../../lib/factory-session-event-replay-timeline";
 import { getFactorySessionDetailMessages } from "../../messages/factory-session-detail";
 
 const MAX_VISIBLE_REPLAY_EVENTS = 12;
@@ -98,6 +98,11 @@ function EventReplayState({
 
   const visibleEvents = state.events.slice(-MAX_VISIBLE_REPLAY_EVENTS);
   const truncatedCount = state.events.length - visibleEvents.length;
+  const timelineItems = buildFactorySessionEventReplayTimeline(
+    visibleEvents,
+    messages,
+    locale,
+  );
 
   return (
     <div
@@ -113,57 +118,28 @@ function EventReplayState({
           : messages.eventReplayVisibleSummary(visibleEvents.length)}
       </DashboardText>
       <ol className="grid gap-2">
-        {visibleEvents.map((event) => (
+        {timelineItems.map((item) => (
           <li
             className="grid gap-2 rounded-md border border-outline bg-surface px-3 py-2"
-            key={event.id}
+            key={item.id}
           >
             <div className="flex flex-wrap items-center gap-2">
-              <DashboardStatusPill size="compact">
-                {formatEventType(event.type)}
+              <DashboardStatusPill size="compact" tone={item.tone}>
+                {item.title}
               </DashboardStatusPill>
-              {event.context.sessionSequence != null ? (
-                <DashboardText variant="supporting">
-                  {messages.eventReplaySequenceLabel(event.context.sessionSequence)}
-                </DashboardText>
-              ) : null}
+              <DashboardStatusPill size="compact">
+                {item.typeLabel}
+              </DashboardStatusPill>
             </div>
-            <DashboardText>{formatEventContextSummary(event, messages)}</DashboardText>
-            <DashboardText variant="supporting">
-              {event.context.eventTime}
-            </DashboardText>
+            {item.detail ? <DashboardText>{item.detail}</DashboardText> : null}
+            <DashboardText variant="supporting">{item.referenceSummary}</DashboardText>
+            <div className="flex flex-wrap items-center gap-2">
+              <DashboardText variant="supporting">{item.orderLabel}</DashboardText>
+              <DashboardText variant="supporting">{item.timeLabel}</DashboardText>
+            </div>
           </li>
         ))}
       </ol>
     </div>
   );
-}
-
-function formatEventContextSummary(
-  event: FactoryEvent,
-  messages: ReturnType<typeof getFactorySessionDetailMessages>,
-): string {
-  const details: string[] = [];
-  const phase = event.context.phaseName ?? event.context.phaseId;
-  if (phase) {
-    details.push(messages.eventReplayPhaseLabel(phase));
-  }
-  if (event.context.dispatchId) {
-    details.push(messages.eventReplayDispatchLabel(event.context.dispatchId));
-  }
-  if (event.context.checkpointId) {
-    details.push(messages.eventReplayCheckpointLabel(event.context.checkpointId));
-  }
-  if (event.context.workIds && event.context.workIds.length > 0) {
-    details.push(messages.eventReplayWorkLabel(event.context.workIds.length));
-  }
-  return details.length > 0 ? details.join(" · ") : messages.eventReplayNoContext;
-}
-
-function formatEventType(eventType: string): string {
-  return eventType
-    .toLowerCase()
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }

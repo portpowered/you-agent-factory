@@ -270,9 +270,13 @@ export const DurableReplayDisclosure = {
             body: [
               'data: {"id":"evt-1","type":"SESSION_STARTED","context":{"sequence":1,"tick":1,"eventTime":"2026-06-25T10:00:00Z","sessionId":"dur-sess-js-success-002","sessionSequence":1,"phaseName":"plan"},"payload":{"startedAt":"2026-06-25T10:00:00Z"}}',
               "",
-              'data: {"id":"evt-2","type":"ORCHESTRATOR_PHASE_CHANGED","context":{"sequence":2,"tick":2,"eventTime":"2026-06-25T10:00:01Z","sessionId":"dur-sess-js-success-002","sessionSequence":2,"phaseName":"review"},"payload":{"phase":"review"}}',
+              'data: {"id":"evt-2","type":"ORCHESTRATOR_PHASE_CHANGED","context":{"sequence":2,"tick":2,"eventTime":"2026-06-25T10:00:01Z","sessionId":"dur-sess-js-success-002","sessionSequence":2,"phaseName":"review"},"payload":{"phase":"review","progressSummary":"Review work scheduled."}}',
               "",
-              'data: {"id":"evt-3","type":"DISPATCH_QUEUED","context":{"sequence":3,"tick":3,"eventTime":"2026-06-25T10:00:02Z","sessionId":"dur-sess-js-success-002","sessionSequence":3,"phaseName":"review","dispatchId":"dispatch-1","workIds":["work-1","work-2"]},"payload":{"dispatchKind":"JAVASCRIPT_AGENT"}}',
+              'data: {"id":"evt-3","type":"DISPATCH_QUEUED","context":{"sequence":3,"tick":3,"eventTime":"2026-06-25T10:00:02Z","sessionId":"dur-sess-js-success-002","sessionSequence":3,"phaseName":"review","dispatchId":"dispatch-1","workIds":["work-1","work-2"]},"payload":{"dispatchKind":"JAVASCRIPT_AGENT","label":"Draft release notes","queuePosition":1}}',
+              "",
+              'data: {"id":"evt-4","type":"DISPATCH_RECONCILED","context":{"sequence":4,"tick":4,"eventTime":"2026-06-25T10:00:03Z","sessionId":"dur-sess-js-success-002","sessionSequence":4,"phaseName":"review","dispatchId":"dispatch-1"},"payload":{"reconciledStatus":"COMPLETED","resultArtifactRef":{"id":"artifact-release-notes","kind":"FINAL_RESULT","label":"Release notes"},"artifactIds":["artifact-release-notes"]}}',
+              "",
+              'data: {"id":"evt-5","type":"SESSION_COMPLETED","context":{"sequence":5,"tick":5,"eventTime":"2026-06-25T10:00:05Z","sessionId":"dur-sess-js-success-002","sessionSequence":5,"phaseName":"review"},"payload":{"finalStatus":"SUCCEEDED","completedAt":"2026-06-25T10:00:05Z","artifactIds":["artifact-release-notes"]}}',
               "",
             ].join("\n"),
             headers: {
