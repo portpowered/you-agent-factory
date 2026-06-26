@@ -275,7 +275,10 @@ primary-result behavior.
   generated field projection/serialization in feature-local pure helpers, and
   dev/preview proxy coverage aligned in `ui/vite.config.ts` +
   `ui/vite.config.test.ts` so local dashboard submits use the same session API
-  route outside production builds.
+  route outside production builds. For signature-backed submits, preserve
+  `args: {}` when the user leaves every field empty; collapsing that payload to
+  omitted args changes backend behavior by re-entering the legacy compatibility
+  path instead of the explicit structured-invocation path.
 - `pkg/service/model_catalog.go` owns the session invocation wait loop, packaged TTS
   loading/completion/failure logs, and packaged-factory metrics while polling for
   primary results.

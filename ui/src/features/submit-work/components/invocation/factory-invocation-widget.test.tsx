@@ -156,6 +156,38 @@ describe("FactoryInvocationWidget", () => {
     expect(screen.getByText("Current factory failed to load.")).toBeVisible();
   });
 
+  it("preserves explicit structured invocation when every signature field is omitted", async () => {
+    const user = userEvent.setup();
+    useCurrentFactoryDefinition.mockReturnValue({
+      data: {
+        invocationSignature: {
+          parameters: [],
+        },
+        name: "fusion",
+      },
+      error: null,
+      isLoading: false,
+    });
+    invokeSessionFactory.mockResolvedValue({
+      requestId: "request-1",
+      status: "COMPLETED",
+      traceId: "trace-1",
+    });
+
+    renderFactoryInvocationWidget();
+
+    await user.click(screen.getByRole("button", { name: "Run factory" }));
+
+    await waitFor(() => {
+      expect(invokeSessionFactory).toHaveBeenCalledWith(
+        {
+          args: {},
+        },
+        { sessionID: "~default" },
+      );
+    });
+  });
+
   it("surfaces field-level validation failures for required parameters", async () => {
     const user = userEvent.setup();
     useCurrentFactoryDefinition.mockReturnValue({

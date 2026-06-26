@@ -92,7 +92,7 @@ export function useFactoryInvocationWidget(
       const args = serializeInvocationArgs(projection.fields, fieldValues);
       const response = await invokeSessionFactory(
         {
-          args: Object.keys(args).length > 0 ? args : undefined,
+          args,
         },
         { sessionID },
       );
