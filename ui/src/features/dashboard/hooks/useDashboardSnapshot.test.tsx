@@ -520,7 +520,7 @@ describe("useDashboardSnapshot composer", () => {
   });
 
   it("ignores and deletes legacy v1 checkpoints without reopening from a stale cursor", async () => {
-    indexedDBRecords.set(DEFAULT_FACTORY_SESSION_ID, {
+    indexedDBRecords.set(checkpointStorageKey(), {
       checkpoint: {
         afterEventId: "legacy-event-7",
         afterSequence: 7,
@@ -529,6 +529,7 @@ describe("useDashboardSnapshot composer", () => {
       },
       schemaVersion: 1,
       sessionID: DEFAULT_FACTORY_SESSION_ID,
+      storageKey: checkpointStorageKey(),
     });
 
     renderHook(() => useDashboardSnapshot(), {
@@ -549,7 +550,7 @@ describe("useDashboardSnapshot composer", () => {
         streamGenerationID: "2026-06-26T00:00:00Z",
       }),
     ).resolves.toBe(null);
-    expect(indexedDBRecords.has(DEFAULT_FACTORY_SESSION_ID)).toBe(false);
+    expect(indexedDBRecords.has(checkpointStorageKey())).toBe(false);
   });
 });
 
