@@ -3,6 +3,7 @@ package invocations
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -176,6 +177,33 @@ func TestNormalizeArguments_CompatibilityPreservesAPIContentFallback(t *testing.
 	}
 	if got.CompatibilityInput.Text != "hello" {
 		t.Fatalf("text = %q, want hello", got.CompatibilityInput.Text)
+	}
+}
+
+func TestNamedArgumentInputsFromAnyMap_SortsAndAcceptsStringsAndStringArrays(t *testing.T) {
+	got, err := NamedArgumentInputsFromAnyMap(map[string]any{
+		"mode": "fast",
+		"tag":  []any{"alpha", "beta"},
+	})
+	if err != nil {
+		t.Fatalf("NamedArgumentInputsFromAnyMap: %v", err)
+	}
+
+	want := []NamedArgumentInput{
+		{Key: "mode", Values: []string{"fast"}},
+		{Key: "tag", Values: []string{"alpha", "beta"}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("named args = %#v, want %#v", got, want)
+	}
+}
+
+func TestNamedArgumentInputsFromAnyMap_RejectsNonStringValues(t *testing.T) {
+	_, err := NamedArgumentInputsFromAnyMap(map[string]any{
+		"count": 7,
+	})
+	if err == nil || !strings.Contains(err.Error(), "args.count") {
+		t.Fatalf("error = %v, want args.count validation", err)
 	}
 }
 

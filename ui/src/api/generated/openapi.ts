@@ -39,7 +39,7 @@ export interface paths {
     put?: never;
     /**
      * Invoke one factory session and return its primary result
-     * @description Live-session compatibility API for text-first invocations against an already-open factory session. This route is not the primary durable workflow execution entrypoint; use POST /factory-sessions/async or POST /factory-sessions/sync for dynamic workflow-backed durable execution. Resolves one text-first invocation input, submits it to the selected live factory session, waits for terminal primary-result selection, and returns the result using the factory's invocationReturn policy. When invocationReturn is omitted, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. Empty selected text input is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be resolved, the response status is FAILED with INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
+     * @description Live-session compatibility API for invocations against an already-open factory session. This route is not the primary durable workflow execution entrypoint; use POST /factory-sessions/async or POST /factory-sessions/sync for dynamic workflow-backed durable execution. Requests may use legacy text-first compatibility content or structured invocationSignature args. Structured args normalize through the shared backend argument resolver, while content preserves the legacy compatibility carrier. When invocationReturn is omitted, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT or INVOCATION_ARGUMENT_SOURCE_CONFLICT. Empty selected text input is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be resolved, the response status is FAILED with INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
      */
     post: operations["invokeFactorySessionBySessionId"];
     delete?: never;
@@ -873,10 +873,14 @@ export interface components {
      */
     InvocationInputSourceKind: InvocationInputSourceKind;
     InvocationRequest: {
-      /** @description Input source category selected by the API caller. Current runtimes accept `text` only; future multimodal categories are documented in the enum but not implemented by this contract slice. */
-      sourceKind: components["schemas"]["InvocationInputSourceKind"];
-      /** @description Canonical text-first invocation content. Current runtimes resolve exactly one logical text input from this carrier; non-text source categories are reserved for future contract extensions. */
-      content: components["schemas"]["WorkContent"];
+      /** @description Compatibility input source category selected by the API caller when `content` is supplied. Current runtimes accept `text` only; future multimodal categories are documented in the enum but not implemented by this contract slice. */
+      sourceKind?: components["schemas"]["InvocationInputSourceKind"];
+      /** @description Canonical text-first compatibility invocation content. Current runtimes resolve exactly one logical text input from this carrier; non-text source categories are reserved for future contract extensions. When `args` is omitted, `content` and `sourceKind: text` preserve the legacy invocation contract. */
+      content?: components["schemas"]["WorkContent"];
+      /** @description Optional structured invocation arguments keyed by parameter name, externalName, or alias. Values must decode as a string or an array of strings. Signature-backed runtimes normalize these values through the shared backend argument resolver. Compatibility `content` requests should omit `args`. */
+      args?: {
+        [key: string]: unknown;
+      };
       /** @description Optional caller-supplied idempotency key for the invocation request. */
       requestId?: string;
       /**

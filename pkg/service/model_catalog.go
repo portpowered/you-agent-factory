@@ -322,6 +322,14 @@ type sessionInvocationWaitInput struct {
 	TimeoutMillis    *int64
 }
 
+const invocationInputSourceStructuredArgs invocations.InputSourceLabel = "signature_args"
+
+type resolvedSessionInvocationInput struct {
+	Source              invocations.InputSourceLabel
+	Content             []interfaces.WorkContentPart
+	NormalizedArguments *invocations.NormalizedArguments
+}
+
 func (fs *FactoryService) InvokeFactorySession(
 	ctx context.Context,
 	sessionID string,
@@ -335,7 +343,7 @@ func (fs *FactoryService) InvokeFactorySession(
 		return apisurface.FactoryInvocationResult{}, fmt.Errorf("factory session runtime config is unavailable")
 	}
 
-	resolved, err := resolveSessionInvocationInput(request)
+	resolved, err := resolveSessionInvocationInput(runtimeCfg.FactoryConfig(), request)
 	if err != nil {
 		return apisurface.FactoryInvocationResult{}, err
 	}
@@ -408,25 +416,101 @@ func (fs *FactoryService) InvokeFactorySession(
 	)
 }
 
-func resolveSessionInvocationInput(request factoryapi.InvocationRequest) (invocations.ResolvedInput, error) {
-	if request.SourceKind != factoryapi.InvocationInputSourceKindText {
-		return invocations.ResolvedInput{}, &apisurface.RequestValidationError{
-			Message: "sourceKind must be text",
-		}
+func resolveSessionInvocationInput(
+	cfg *interfaces.FactoryConfig,
+	request factoryapi.InvocationRequest,
+) (resolvedSessionInvocationInput, error) {
+	content, err := sessionInvocationCompatibilityContent(request)
+	if err != nil {
+		return resolvedSessionInvocationInput{}, err
+	}
+	namedArgs, err := sessionInvocationNamedArgs(request)
+	if err != nil {
+		return resolvedSessionInvocationInput{}, err
 	}
 
-	content := workcontent.PartsFromGenerated(&request.Content)
-	resolved, err := invocations.ResolveAPITextInputContent(content)
-	if err != nil {
-		var validationErr *invocations.TextContentValidationError
-		if errors.As(err, &validationErr) {
-			return invocations.ResolvedInput{}, &apisurface.RequestValidationError{
-				Message: validationErr.Message,
+	if len(namedArgs) == 0 {
+		if len(content) == 0 {
+			return resolvedSessionInvocationInput{}, &apisurface.RequestValidationError{
+				Message: "content is required when args are omitted",
 			}
 		}
-		return invocations.ResolvedInput{}, err
+		normalized, err := invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
+			CompatibilityContent: content,
+		})
+		if err != nil {
+			return resolvedSessionInvocationInput{}, normalizeSessionInvocationError(err)
+		}
+		if normalized.CompatibilityInput == nil {
+			return resolvedSessionInvocationInput{}, &apisurface.RequestValidationError{
+				Message: "content did not resolve to one logical invocation input",
+			}
+		}
+		return resolvedSessionInvocationInput{
+			Source:              normalized.CompatibilityInput.Source,
+			Content:             normalized.CompatibilityInput.Content,
+			NormalizedArguments: &normalized,
+		}, nil
 	}
-	return resolved, nil
+
+	normalized, err := invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
+		Signature:            invocationSignatureFromFactoryConfig(cfg),
+		NamedArgs:            namedArgs,
+		CompatibilityContent: content,
+	})
+	if err != nil {
+		return resolvedSessionInvocationInput{}, normalizeSessionInvocationError(err)
+	}
+	source := invocationInputSourceStructuredArgs
+	if normalized.CompatibilityInput != nil {
+		source = normalized.CompatibilityInput.Source
+	}
+	return resolvedSessionInvocationInput{
+		Source:              source,
+		Content:             nil,
+		NormalizedArguments: &normalized,
+	}, nil
+}
+
+func sessionInvocationCompatibilityContent(request factoryapi.InvocationRequest) ([]interfaces.WorkContentPart, error) {
+	if request.Content == nil {
+		if request.SourceKind != nil && *request.SourceKind != factoryapi.InvocationInputSourceKindText {
+			return nil, &apisurface.RequestValidationError{Message: "sourceKind must be text"}
+		}
+		return nil, nil
+	}
+	if request.SourceKind == nil || *request.SourceKind != factoryapi.InvocationInputSourceKindText {
+		return nil, &apisurface.RequestValidationError{Message: "sourceKind must be text"}
+	}
+	return workcontent.PartsFromGenerated(request.Content), nil
+}
+
+func sessionInvocationNamedArgs(request factoryapi.InvocationRequest) ([]invocations.NamedArgumentInput, error) {
+	if request.Args == nil {
+		return nil, nil
+	}
+	namedArgs, err := invocations.NamedArgumentInputsFromAnyMap(*request.Args)
+	if err != nil {
+		return nil, &apisurface.RequestValidationError{Message: err.Error()}
+	}
+	return namedArgs, nil
+}
+
+func normalizeSessionInvocationError(err error) error {
+	var validationErr *invocations.TextContentValidationError
+	if errors.As(err, &validationErr) {
+		return &apisurface.RequestValidationError{
+			Message: validationErr.Message,
+		}
+	}
+	return err
+}
+
+func invocationSignatureFromFactoryConfig(cfg *interfaces.FactoryConfig) *interfaces.InvocationSignatureConfig {
+	if cfg == nil {
+		return nil
+	}
+	return cfg.InvocationSignature
 }
 
 func (fs *FactoryService) waitForSessionInvocationResult(

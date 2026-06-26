@@ -1,6 +1,7 @@
 package invocations
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"sort"
@@ -99,11 +100,68 @@ func NamedArgumentInputsFromMap(values map[string][]string) []NamedArgumentInput
 	return inputs
 }
 
+func NamedArgumentInputsFromAnyMap(values map[string]any) ([]NamedArgumentInput, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	inputs := make([]NamedArgumentInput, 0, len(keys))
+	for _, key := range keys {
+		parsed, err := namedArgumentValuesFromAny(values[key])
+		if err != nil {
+			return nil, fmt.Errorf("args.%s %w", key, err)
+		}
+		inputs = append(inputs, NamedArgumentInput{
+			Key:    key,
+			Values: parsed,
+		})
+	}
+	return inputs, nil
+}
+
 func NormalizeArguments(input NormalizeArgumentsInput) (NormalizedArguments, error) {
 	if input.Signature == nil {
 		return normalizeCompatibilityArguments(input)
 	}
 	return normalizeSignatureArguments(input)
+}
+
+func namedArgumentValuesFromAny(value any) ([]string, error) {
+	switch typed := value.(type) {
+	case string:
+		return []string{typed}, nil
+	case []string:
+		return slices.Clone(typed), nil
+	case []any:
+		if len(typed) == 0 {
+			return []string{}, nil
+		}
+		values := make([]string, 0, len(typed))
+		for _, item := range typed {
+			text, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("must be a string or array of strings")
+			}
+			values = append(values, text)
+		}
+		return values, nil
+	case json.RawMessage:
+		var scalar string
+		if err := json.Unmarshal(typed, &scalar); err == nil {
+			return []string{scalar}, nil
+		}
+		var list []string
+		if err := json.Unmarshal(typed, &list); err == nil {
+			return list, nil
+		}
+		return nil, fmt.Errorf("must be a string or array of strings")
+	default:
+		return nil, fmt.Errorf("must be a string or array of strings")
+	}
 }
 
 func normalizeCompatibilityArguments(input NormalizeArgumentsInput) (NormalizedArguments, error) {

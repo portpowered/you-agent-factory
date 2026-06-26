@@ -265,9 +265,11 @@ func factoryInvocationRoot(cfg RunConfig) string {
 }
 
 func invocationRequestFromResolvedInput(resolved invocations.ResolvedInput) *factoryapi.InvocationRequest {
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	content := *workcontent.GeneratedPtrFromParts(resolved.Content)
 	return &factoryapi.InvocationRequest{
-		SourceKind: factoryapi.InvocationInputSourceKindText,
-		Content:    *workcontent.GeneratedPtrFromParts(resolved.Content),
+		SourceKind: &sourceKind,
+		Content:    &content,
 	}
 }
 

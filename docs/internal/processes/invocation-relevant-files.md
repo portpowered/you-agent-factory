@@ -38,6 +38,12 @@ primary-result behavior.
   item, polls selected-tick world state, and maps timeout/cancel/unresolved
   outcomes into `InvocationResponse`; it also owns invocation boundary logs and
   optional `InvocationMetricsRecorder` counter emission for runtime outcomes.
+- Live-session invocation request normalization lives in
+  `pkg/service/model_catalog.go` (`resolveSessionInvocationInput`). Keep API
+  `InvocationRequest.content` compatibility handling and
+  `InvocationRequest.args` signature handling as thin adapters into
+  `pkg/invocations.NormalizeArguments`; do not duplicate required-input,
+  source-conflict, alias, or string-shape rules in HTTP handlers.
 - `pkg/cli/run/` is the `you run --factory` CLI boundary.
 - Canonical default-path ownership for operator config
   (`~/.you-agent-factory/config.json`) and generated live replay recording roots

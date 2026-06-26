@@ -139,9 +139,12 @@ func assertGeneratedOpenAPISurfaceTypes(
 
 	submitResponse := factoryapi.SubmitWorkResponse{TraceId: "trace-1", RequestId: "request-1", Accepted: true}
 	sourceKind := factoryapi.InvocationInputSourceKindText
+	invocationArgs := map[string]any{"input": "hello", "tag": []any{"alpha", "beta"}}
+	invocationContent := factoryapi.WorkContent{}
 	invocationRequest := factoryapi.InvocationRequest{
-		SourceKind: sourceKind,
-		Content:    []factoryapi.WorkContentPart{},
+		SourceKind: &sourceKind,
+		Content:    &invocationContent,
+		Args:       &invocationArgs,
 	}
 	invocationResponse := factoryapi.InvocationResponse{
 		RequestId:     "invoke-1",
@@ -194,7 +197,7 @@ func assertGeneratedOpenAPISurfaceTypes(
 		Outputs:  &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 	}
 
-	if submitRequest.Name == "" || submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" || invocationRequest.SourceKind != factoryapi.InvocationInputSourceKindText || invocationResponse.PrimaryResult == nil || invocationReturn.Policy != factoryapi.InvocationReturnPolicySubmittedWorkTerminal || invocationSignature.UnknownNamedArgumentPolicy == nil || invocationSignature.Parameters == nil || invocationSignature.OutputContract == nil || invocationSignature.Examples == nil || workRequest.RequestId == "" || upsertResponse.RequestId == "" || namedFactory.Name == "" || namedFactory.Workstations == nil || workstation.Behavior == nil || workstation.Type == nil || cron.Schedule == "" || cron.TriggerAtStart == nil {
+	if submitRequest.Name == "" || submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" || invocationRequest.SourceKind == nil || *invocationRequest.SourceKind != factoryapi.InvocationInputSourceKindText || invocationRequest.Content == nil || invocationResponse.PrimaryResult == nil || invocationReturn.Policy != factoryapi.InvocationReturnPolicySubmittedWorkTerminal || invocationSignature.UnknownNamedArgumentPolicy == nil || invocationSignature.Parameters == nil || invocationSignature.OutputContract == nil || invocationSignature.Examples == nil || workRequest.RequestId == "" || upsertResponse.RequestId == "" || namedFactory.Name == "" || namedFactory.Workstations == nil || workstation.Behavior == nil || workstation.Type == nil || cron.Schedule == "" || cron.TriggerAtStart == nil {
 		t.Fatal("generated OpenAPI request and response types should be usable")
 	}
 }

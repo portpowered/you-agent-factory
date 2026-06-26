@@ -543,12 +543,13 @@ submission mode with different return semantics.
 
 ### Input sources
 
-The current invocation slice is text-first:
+The current invocation slice preserves text-first compatibility while adding
+structured signature args:
 
 | Surface | Supported source now | Notes |
 |---------|----------------------|-------|
 | CLI | Trailing positional text or non-TTY stdin | Supplying both is rejected with `INVOCATION_INPUT_SOURCE_CONFLICT`. Empty selected stdin is rejected with `INVOCATION_INPUT_EMPTY`. |
-| API | Top-level `sourceKind: "text"` plus canonical `content` (`WorkContent`) | `fileRef` and `audioStream` are reserved future source categories and are not accepted yet. |
+| API | Legacy `sourceKind: "text"` plus canonical `content` (`WorkContent`), or structured `args` for factories with `invocationSignature` | `args` values must be strings or arrays of strings. Supplying signature-backed `args` together with compatibility `content` is rejected as a structured argument source conflict. `fileRef` and `audioStream` are reserved future source categories and are not accepted yet. |
 
 Use `you docs sessions` for the session-scoped invocation API examples. Reserve
 future source categories in authored configs and client code, but do not imply

@@ -7,13 +7,16 @@ result selected by factory configuration.
 ## Input Ownership
 
 Input resolution is owned by shared backend logic, not by individual transports.
-The API carries text-first input as canonical `WorkContent` on
-`InvocationRequest`. The CLI adapts positional text and non-TTY stdin into the
-same logical text input. Supplying more than one source for the same logical
-slot is a request error with `INVOCATION_INPUT_SOURCE_CONFLICT`.
+The API carries legacy text-first input as canonical `WorkContent` on
+`InvocationRequest.content`, and it may also carry structured
+`InvocationRequest.args` for factories with `invocationSignature`. The CLI
+adapts positional text, named signature arguments, and non-TTY stdin into the
+same shared resolver. Supplying more than one source for the same logical slot
+is a request error with `INVOCATION_INPUT_SOURCE_CONFLICT` or the corresponding
+structured-argument conflict code.
 
 The OpenAPI source-kind enum documents `fileRef` and `audioStream` as reserved
-future categories. Current runtimes accept text only.
+future categories. Current compatibility content still accepts text only.
 
 ## Return Policy Ownership
 
@@ -35,5 +38,6 @@ runtime invocation.
 
 `you run --factory` and `POST /factory-sessions/{session_id}/invocations` must
 use the same input resolver and primary-result selector. Transport code may only
-adapt its carrier into the shared resolver input and format the shared response.
-It must not invent independent conflict, fallback, or primary-output rules.
+adapt positional text, stdin, API content, or API args into the shared resolver
+input and format the shared response. It must not invent independent conflict,
+fallback, or primary-output rules.

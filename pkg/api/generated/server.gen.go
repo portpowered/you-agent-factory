@@ -3279,14 +3279,17 @@ type InvocationInputSourceKind string
 
 // InvocationRequest defines model for InvocationRequest.
 type InvocationRequest struct {
+	// Args Optional structured invocation arguments keyed by parameter name, externalName, or alias. Values must decode as a string or an array of strings. Signature-backed runtimes normalize these values through the shared backend argument resolver. Compatibility `content` requests should omit `args`.
+	Args *map[string]interface{} `json:"args,omitempty"`
+
 	// Content Ordered canonical content parts for one work item.
-	Content WorkContent `json:"content"`
+	Content *WorkContent `json:"content,omitempty"`
 
 	// RequestId Optional caller-supplied idempotency key for the invocation request.
 	RequestId *string `json:"requestId,omitempty"`
 
 	// SourceKind Invocation input source category. `text` is the only implemented API source for the text-first invocation slice. `fileRef` and `audioStream` are reserved future source categories and are not accepted by current runtimes.
-	SourceKind InvocationInputSourceKind `json:"sourceKind"`
+	SourceKind *InvocationInputSourceKind `json:"sourceKind,omitempty"`
 
 	// TimeoutMillis Optional caller timeout budget in milliseconds for waiting on the primary result.
 	TimeoutMillis *int64 `json:"timeoutMillis,omitempty"`

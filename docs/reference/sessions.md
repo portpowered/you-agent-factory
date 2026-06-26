@@ -412,10 +412,13 @@ result availability before that terminal marker. Legacy `RUN_REQUEST` and
 POST /factory-sessions/{session_id}/invocations
 ```
 
-The current API contract is text-first. Send top-level `sourceKind: "text"` and
-canonical `content` as ordered `WorkContent` parts. Reserved source kinds such
-as `fileRef` and `audioStream` are named in the contract for future
-compatibility, but current runtimes do not accept them yet.
+The current API contract preserves text-first compatibility and also accepts
+structured `args` for factories that declare `invocationSignature`. Legacy
+requests still send top-level `sourceKind: "text"` and canonical `content` as
+ordered `WorkContent` parts. Structured `args` values must decode as strings or
+arrays of strings keyed by parameter name, external name, or alias. Reserved
+source kinds such as `fileRef` and `audioStream` are named in the contract for
+future compatibility, but current runtimes do not accept them yet.
 
 ### Example request
 
@@ -431,6 +434,12 @@ curl -s \
     ]
   }'
 ```
+
+### Structured args compatibility
+
+When `args` is present, omit compatibility `content` unless you are
+intentionally exercising a source-conflict validation path. Factories without an
+active `invocationSignature` reject `args` before dispatch.
 
 ### Example success response
 

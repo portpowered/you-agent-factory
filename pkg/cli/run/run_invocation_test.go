@@ -948,7 +948,10 @@ func extractInvocationText(t *testing.T, request *factoryapi.InvocationRequest) 
 	if request == nil {
 		t.Fatal("invocation request = nil")
 	}
-	parts := request.Content
+	if request.Content == nil {
+		t.Fatal("content = nil, want one text part")
+	}
+	parts := *request.Content
 	if len(parts) != 1 {
 		t.Fatalf("content parts = %d, want 1", len(parts))
 	}
