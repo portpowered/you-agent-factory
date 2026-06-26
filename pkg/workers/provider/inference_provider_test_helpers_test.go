@@ -171,23 +171,46 @@ func writeTestFile(t *testing.T, dir, name, content string) {
 	}
 }
 
+func writeExecutableTestScript(t *testing.T, path string, content string) {
+	t.Helper()
+
+	tempPath := path + ".tmp"
+	file, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		t.Fatalf("opening %s: %v", tempPath, err)
+	}
+	if _, err := file.WriteString(content); err != nil {
+		_ = file.Close()
+		t.Fatalf("writing %s: %v", tempPath, err)
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		t.Fatalf("syncing %s: %v", tempPath, err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("closing %s: %v", tempPath, err)
+	}
+	if err := os.Chmod(tempPath, 0o755); err != nil {
+		t.Fatalf("chmod %s: %v", tempPath, err)
+	}
+	if err := os.Rename(tempPath, path); err != nil {
+		t.Fatalf("renaming %s to %s: %v", tempPath, path, err)
+	}
+}
+
 func writeEditorMarkerScript(t *testing.T, markerPath string) string {
 	t.Helper()
 	dir := t.TempDir()
 	if strings.EqualFold(filepath.Ext(os.Args[0]), ".exe") {
 		script := filepath.Join(dir, "editor.bat")
 		content := "@echo off\r\necho invoked > %1\r\nexit /b 42\r\n"
-		if err := os.WriteFile(script, []byte(content), 0755); err != nil {
-			t.Fatalf("writing editor marker script: %v", err)
-		}
+		writeExecutableTestScript(t, script, content)
 		return script + " " + markerPath
 	}
 
 	script := filepath.Join(dir, "editor.sh")
 	content := "#!/bin/sh\nprintf invoked > \"$1\"\nexit 42\n"
-	if err := os.WriteFile(script, []byte(content), 0755); err != nil {
-		t.Fatalf("writing editor marker script: %v", err)
-	}
+	writeExecutableTestScript(t, script, content)
 	return script + " " + markerPath
 }
 
