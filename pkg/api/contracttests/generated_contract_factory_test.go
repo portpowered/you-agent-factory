@@ -197,8 +197,72 @@ func assertGeneratedOpenAPISurfaceTypes(
 		Outputs:  &[]factoryapi.WorkstationIO{{WorkType: "task", State: "complete"}},
 	}
 
-	if submitRequest.Name == "" || submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" || invocationRequest.SourceKind == nil || *invocationRequest.SourceKind != factoryapi.InvocationInputSourceKindText || invocationRequest.Content == nil || invocationResponse.PrimaryResult == nil || invocationReturn.Policy != factoryapi.InvocationReturnPolicySubmittedWorkTerminal || invocationSignature.UnknownNamedArgumentPolicy == nil || invocationSignature.Parameters == nil || invocationSignature.OutputContract == nil || invocationSignature.Examples == nil || workRequest.RequestId == "" || upsertResponse.RequestId == "" || namedFactory.Name == "" || namedFactory.Workstations == nil || workstation.Behavior == nil || workstation.Type == nil || cron.Schedule == "" || cron.TriggerAtStart == nil {
-		t.Fatal("generated OpenAPI request and response types should be usable")
+	assertGeneratedSubmitAndInvocationTypesUsable(t, submitRequest, submitResponse, invocationRequest, invocationResponse, invocationReturn)
+	assertGeneratedInvocationSignatureTypesUsable(t, invocationSignature)
+	assertGeneratedFactoryAndUpsertTypesUsable(t, workRequest, upsertResponse, namedFactory)
+	assertGeneratedWorkstationTypesUsable(t, workstation, cron)
+}
+
+func assertGeneratedSubmitAndInvocationTypesUsable(
+	t *testing.T,
+	submitRequest factoryapi.SubmitWorkRequest,
+	submitResponse factoryapi.SubmitWorkResponse,
+	invocationRequest factoryapi.InvocationRequest,
+	invocationResponse factoryapi.InvocationResponse,
+	invocationReturn factoryapi.InvocationReturn,
+) {
+	t.Helper()
+
+	if submitRequest.Name == "" || submitRequest.WorkTypeName == "" || submitResponse.TraceId == "" {
+		t.Fatal("generated OpenAPI submit request and response types should be usable")
+	}
+	if invocationRequest.SourceKind == nil || *invocationRequest.SourceKind != factoryapi.InvocationInputSourceKindText || invocationRequest.Content == nil {
+		t.Fatal("generated OpenAPI invocation request types should be usable")
+	}
+	if invocationResponse.PrimaryResult == nil || invocationReturn.Policy != factoryapi.InvocationReturnPolicySubmittedWorkTerminal {
+		t.Fatal("generated OpenAPI invocation response and return types should be usable")
+	}
+}
+
+func assertGeneratedInvocationSignatureTypesUsable(t *testing.T, invocationSignature factoryapi.FactoryInvocationSignature) {
+	t.Helper()
+
+	if invocationSignature.UnknownNamedArgumentPolicy == nil || invocationSignature.Parameters == nil {
+		t.Fatal("generated invocation signature parameters should be usable")
+	}
+	if invocationSignature.OutputContract == nil || invocationSignature.Examples == nil {
+		t.Fatal("generated invocation signature contract and examples should be usable")
+	}
+}
+
+func assertGeneratedFactoryAndUpsertTypesUsable(
+	t *testing.T,
+	workRequest factoryapi.WorkRequest,
+	upsertResponse factoryapi.UpsertWorkRequestResponse,
+	namedFactory factoryapi.Factory,
+) {
+	t.Helper()
+
+	if workRequest.RequestId == "" || upsertResponse.RequestId == "" {
+		t.Fatal("generated work request and upsert response types should be usable")
+	}
+	if namedFactory.Name == "" || namedFactory.Workstations == nil {
+		t.Fatal("generated factory types should be usable")
+	}
+}
+
+func assertGeneratedWorkstationTypesUsable(
+	t *testing.T,
+	workstation factoryapi.Workstation,
+	cron factoryapi.WorkstationCron,
+) {
+	t.Helper()
+
+	if workstation.Behavior == nil || workstation.Type == nil {
+		t.Fatal("generated workstation types should be usable")
+	}
+	if cron.Schedule == "" || cron.TriggerAtStart == nil {
+		t.Fatal("generated workstation cron types should be usable")
 	}
 }
 

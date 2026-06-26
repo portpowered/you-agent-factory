@@ -354,37 +354,8 @@ func TestRunCommand_NamedFactorySignatureArgsPreserveRunFlagsAndNormalizeInputs(
 		runCLI = originalRunCLI
 	}()
 
-	workingDirectory := t.TempDir()
-	homeDirectory := t.TempDir()
-	originalWorkingDirectory, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd: %v", err)
-	}
-	if err := os.Chdir(workingDirectory); err != nil {
-		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
-	}
-	defer func() {
-		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
-			t.Fatalf("restore working directory: %v", chdirErr)
-		}
-	}()
-	t.Setenv("HOME", homeDirectory)
-
-	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
-	if err != nil {
-		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
-	}
-	segment, err := factoryconfig.NamedFactoryNameToLayoutSegment("alpha")
-	if err != nil {
-		t.Fatalf("NamedFactoryNameToLayoutSegment(alpha): %v", err)
-	}
-	factoryDir := filepath.Join(globalRoot, segment)
-	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%q): %v", factoryDir, err)
-	}
-	if err := os.WriteFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile), portableFactoryPayloadWithInvocationSignature(), 0o644); err != nil {
-		t.Fatalf("WriteFile(factory.json): %v", err)
-	}
+	restore := setupNamedFactoryInvocationTest(t)
+	defer restore()
 
 	var got runcli.RunConfig
 	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
@@ -414,17 +385,60 @@ func TestRunCommand_NamedFactorySignatureArgsPreserveRunFlagsAndNormalizeInputs(
 	if got.InvocationNormalizedArguments == nil {
 		t.Fatal("expected signature-backed invocation arguments to be normalized")
 	}
-	if values := got.InvocationNormalizedArguments.Arguments["input"].Values; len(values) != 1 || values[0] != "draft" {
-		t.Fatalf("input values = %#v, want [draft]", values)
+
+	wantValues := map[string]string{
+		"input":   "draft",
+		"mode":    "fast",
+		"confirm": "true",
+		"output":  "result.md",
 	}
-	if values := got.InvocationNormalizedArguments.Arguments["mode"].Values; len(values) != 1 || values[0] != "fast" {
-		t.Fatalf("mode values = %#v, want [fast]", values)
+	for name, want := range wantValues {
+		assertInvocationArgumentValue(t, got, name, want)
 	}
-	if values := got.InvocationNormalizedArguments.Arguments["confirm"].Values; len(values) != 1 || values[0] != "true" {
-		t.Fatalf("confirm values = %#v, want [true]", values)
+}
+
+func setupNamedFactoryInvocationTest(t *testing.T) func() {
+	t.Helper()
+
+	workingDirectory := t.TempDir()
+	homeDirectory := t.TempDir()
+	originalWorkingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
 	}
-	if values := got.InvocationNormalizedArguments.Arguments["output"].Values; len(values) != 1 || values[0] != "result.md" {
-		t.Fatalf("output values = %#v, want [result.md]", values)
+	if err := os.Chdir(workingDirectory); err != nil {
+		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
+	}
+	t.Setenv("HOME", homeDirectory)
+
+	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
+	if err != nil {
+		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
+	}
+	segment, err := factoryconfig.NamedFactoryNameToLayoutSegment("alpha")
+	if err != nil {
+		t.Fatalf("NamedFactoryNameToLayoutSegment(alpha): %v", err)
+	}
+	factoryDir := filepath.Join(globalRoot, segment)
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q): %v", factoryDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile), portableFactoryPayloadWithInvocationSignature(), 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+	return func() {
+		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
+			t.Fatalf("restore working directory: %v", chdirErr)
+		}
+	}
+}
+
+func assertInvocationArgumentValue(t *testing.T, got runcli.RunConfig, name, want string) {
+	t.Helper()
+
+	values := got.InvocationNormalizedArguments.Arguments[name].Values
+	if len(values) != 1 || values[0] != want {
+		t.Fatalf("%s values = %#v, want [%s]", name, values, want)
 	}
 }
 

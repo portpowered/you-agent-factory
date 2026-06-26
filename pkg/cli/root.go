@@ -828,22 +828,7 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 	workChanged := cmd.Flags().Changed("work")
 
 	if !factoryChanged && !namedChanged {
-		for _, arg := range promptArgs {
-			if strings.HasPrefix(arg, "-") {
-				return fmt.Errorf("unknown flag: %s", arg)
-			}
-		}
-		input, err := runcli.ResolveFactoryInvocationInput(runcli.FactoryInvocationInputConfig{
-			PromptArgs: promptArgs,
-			Stdin:      cmd.InOrStdin(),
-		})
-		if err != nil {
-			return err
-		}
-		if input.Payload != "" {
-			return fmt.Errorf("positional prompt arguments require --factory or --named")
-		}
-		return nil
+		return resolveLegacyRunFactoryPrompt(cmd, promptArgs)
 	}
 	if len(promptArgs) == 0 && runCommandInputIsTTY(cmd.InOrStdin()) {
 		return nil
@@ -854,18 +839,17 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 		return err
 	}
 	if signature != nil {
-		normalized, err := runcli.ResolveSignatureFactoryInvocationInput(runcli.SignatureFactoryInvocationInputConfig{
-			PromptArgs: promptArgs,
-			Signature:  signature,
-			Stdin:      cmd.InOrStdin(),
-		})
-		if err != nil {
-			return err
-		}
-		cfg.InvocationNormalizedArguments = &normalized
-		return nil
+		return resolveSignatureRunFactoryPrompt(cmd, cfg, promptArgs, signature)
 	}
+	return resolveCompatibilityRunFactoryPrompt(cmd, cfg, promptArgs, workChanged)
+}
 
+func resolveLegacyRunFactoryPrompt(cmd *cobra.Command, promptArgs []string) error {
+	for _, arg := range promptArgs {
+		if strings.HasPrefix(arg, "-") {
+			return fmt.Errorf("unknown flag: %s", arg)
+		}
+	}
 	input, err := runcli.ResolveFactoryInvocationInput(runcli.FactoryInvocationInputConfig{
 		PromptArgs: promptArgs,
 		Stdin:      cmd.InOrStdin(),
@@ -873,7 +857,43 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 	if err != nil {
 		return err
 	}
+	if input.Payload != "" {
+		return fmt.Errorf("positional prompt arguments require --factory or --named")
+	}
+	return nil
+}
 
+func resolveSignatureRunFactoryPrompt(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	signature *interfaces.InvocationSignatureConfig,
+) error {
+	normalized, err := runcli.ResolveSignatureFactoryInvocationInput(runcli.SignatureFactoryInvocationInputConfig{
+		PromptArgs: promptArgs,
+		Signature:  signature,
+		Stdin:      cmd.InOrStdin(),
+	})
+	if err != nil {
+		return err
+	}
+	cfg.InvocationNormalizedArguments = &normalized
+	return nil
+}
+
+func resolveCompatibilityRunFactoryPrompt(
+	cmd *cobra.Command,
+	cfg *runcli.RunConfig,
+	promptArgs []string,
+	workChanged bool,
+) error {
+	input, err := runcli.ResolveFactoryInvocationInput(runcli.FactoryInvocationInputConfig{
+		PromptArgs: promptArgs,
+		Stdin:      cmd.InOrStdin(),
+	})
+	if err != nil {
+		return err
+	}
 	if workChanged && input.Payload != "" {
 		return fmt.Errorf("%s cannot be used with --work", input.Source)
 	}
@@ -883,7 +903,11 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 	if input.Payload == "" {
 		return nil
 	}
+	assignCompatibilityInvocationInput(cfg, input)
+	return nil
+}
 
+func assignCompatibilityInvocationInput(cfg *runcli.RunConfig, input runcli.FactoryInvocationInput) {
 	payload := input.Payload
 	switch input.Source {
 	case runcli.InvocationInputSourcePositional:
@@ -892,7 +916,6 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 		cfg.InvocationStdinText = &payload
 	}
 	cfg.CleanInvocationInputSource = input.Source
-	return nil
 }
 
 func runCommandInputIsTTY(stdin io.Reader) bool {
