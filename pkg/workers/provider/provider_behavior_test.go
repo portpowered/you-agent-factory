@@ -895,3 +895,78 @@ func TestInferenceProgressPublishingCommandRunner_PublishesOrderedFragments(t *t
 		t.Fatalf("published fragments = %#v, want both response and progress kinds", published)
 	}
 }
+
+func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndLaterValidEventsInOrder(t *testing.T) {
+	scriptDir := t.TempDir()
+	scriptPath := filepath.Join(scriptDir, string(interfaces.ModelProviderCursor))
+	script := "#!/bin/sh\n" +
+		"printf '%s\\n' '{not json}'\n" +
+		"printf '%s\\n' '{\"type\":\"mystery\"}'\n" +
+		"printf '%s\\n' '{\"type\":\"assistant\",\"timestamp_ms\":1,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"tail\"}]},\"session_id\":\"cursor-session-123\"}'\n" +
+		"printf '%s\\n' '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"done\",\"session_id\":\"cursor-session-123\"}'\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+	t.Setenv("PATH", scriptDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var publishedMu sync.Mutex
+	var published []InferenceProgressFragment
+	runner := NewInferenceProgressPublishingCommandRunner(func(fragment InferenceProgressFragment) {
+		publishedMu.Lock()
+		published = append(published, fragment)
+		publishedMu.Unlock()
+	}, nil)
+
+	result, err := runner.Run(context.Background(), CommandRequest{
+		Command:    string(interfaces.ModelProviderCursor),
+		DispatchID: "dispatch-stream-cursor",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	publishedMu.Lock()
+	defer publishedMu.Unlock()
+	if len(published) != 3 {
+		t.Fatalf("published fragments = %#v, want 3 ordered fragments; result=%#v", published, result)
+	}
+	assertInferenceProgressFragment(t, published[0], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored malformed JSON record", nil)
+	assertInferenceProgressFragment(t, published[1], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored unknown event type \"mystery\"", nil)
+	assertInferenceProgressFragment(t, published[2], "dispatch-stream-cursor", ResponseFragmentKind, "tail", &interfaces.ProviderSessionMetadata{
+		Provider: "cursor",
+		Kind:     "session_id",
+		ID:       "cursor-session-123",
+	})
+}
+
+func assertInferenceProgressFragment(
+	t *testing.T,
+	fragment InferenceProgressFragment,
+	wantDispatchID string,
+	wantKind string,
+	wantPayload string,
+	wantSession *interfaces.ProviderSessionMetadata,
+) {
+	t.Helper()
+	if fragment.DispatchID != wantDispatchID {
+		t.Fatalf("dispatch = %q, want %q", fragment.DispatchID, wantDispatchID)
+	}
+	if fragment.Kind != wantKind {
+		t.Fatalf("kind = %q, want %q", fragment.Kind, wantKind)
+	}
+	if fragment.Payload != wantPayload {
+		t.Fatalf("payload = %q, want %q", fragment.Payload, wantPayload)
+	}
+	if wantSession == nil {
+		if fragment.ProviderSessionRef != nil {
+			t.Fatalf("provider session = %#v, want nil", fragment.ProviderSessionRef)
+		}
+		return
+	}
+	if fragment.ProviderSessionRef == nil {
+		t.Fatal("provider session = nil, want canonical session")
+	}
+	if *fragment.ProviderSessionRef != *wantSession {
+		t.Fatalf("provider session = %#v, want %#v", fragment.ProviderSessionRef, wantSession)
+	}
+}

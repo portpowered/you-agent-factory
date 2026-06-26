@@ -12,6 +12,8 @@ import (
 const (
 	CursorOutputFormatJSON       = "json"
 	CursorOutputFormatStreamJSON = "stream-json"
+
+	streamUnknownEventPreviewLimit = 48
 )
 
 type StreamFragmentKind string
@@ -101,10 +103,11 @@ func (p *StreamParser) consumeCompleteLines(flushRemainder bool) {
 func (p *StreamParser) consumeLine(line string) {
 	var event map[string]any
 	if err := json.Unmarshal([]byte(line), &event); err != nil {
+		p.emit(StreamFragmentKindProgress, "Cursor stream ignored malformed JSON record", nil)
 		return
 	}
 
-	switch stringField(event, "type") {
+	switch eventType := stringField(event, "type"); eventType {
 	case "system":
 		if stringField(event, "subtype") == "init" {
 			p.emit(StreamFragmentKindProgress, "Cursor session initialized", streamProviderSession(p.provider, event))
@@ -126,6 +129,10 @@ func (p *StreamParser) consumeLine(line string) {
 			toolName = "tool_call"
 		}
 		p.emit(StreamFragmentKindProgress, fmt.Sprintf("Cursor %s %s", toolName, subtype), streamProviderSession(p.provider, event))
+	case ResultTypeResult:
+		return
+	default:
+		p.emit(StreamFragmentKindProgress, unknownStreamEventMessage(eventType), nil)
 	}
 }
 
@@ -252,4 +259,15 @@ func rawStringField(values map[string]any, key string) string {
 	}
 	value, _ := raw.(string)
 	return value
+}
+
+func unknownStreamEventMessage(eventType string) string {
+	normalized := strings.TrimSpace(eventType)
+	if normalized == "" {
+		return "Cursor stream ignored unknown event"
+	}
+	if len(normalized) > streamUnknownEventPreviewLimit {
+		normalized = normalized[:streamUnknownEventPreviewLimit] + "..."
+	}
+	return fmt.Sprintf("Cursor stream ignored unknown event type %q", normalized)
 }

@@ -83,6 +83,25 @@ func TestParseInferenceResult_StreamJSONSuccess(t *testing.T) {
 	})
 }
 
+func TestParseInferenceResult_StreamJSONIgnoresMalformedAndUnknownLinesBeforeResult(t *testing.T) {
+	stdout := []byte(
+		"{not json}\n" +
+			"{\"type\":\"mystery\"}\n" +
+			"{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"Plan done\",\"session_id\":\"cursor-stream-session\"}\n",
+	)
+
+	parsed, err := ParseInferenceResult(string(interfaces.ModelProviderCursor), stdout)
+	if err != nil {
+		t.Fatalf("ParseInferenceResult returned error: %v", err)
+	}
+	if parsed.Content != "Plan done" {
+		t.Fatalf("content = %q, want stream result text", parsed.Content)
+	}
+	if parsed.ProviderSession == nil || parsed.ProviderSession.ID != "cursor-stream-session" {
+		t.Fatalf("provider session = %#v, want canonical cursor stream session", parsed.ProviderSession)
+	}
+}
+
 func TestParseInferenceResult_MissingSessionID(t *testing.T) {
 	stdout := []byte(`{
 		"type": "result",

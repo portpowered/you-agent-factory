@@ -1,6 +1,7 @@
 package cursor
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -67,6 +68,48 @@ func TestStreamParser_OmitsProviderSessionForInvalidSessionID(t *testing.T) {
 	}
 }
 
+func TestStreamParser_EmitsBoundedDiagnosticsForMalformedAndUnknownRecordsWithoutBlockingLaterEvents(t *testing.T) {
+	var fragments []StreamFragment
+	parser := NewStreamParser(string(interfaces.ModelProviderCursor), func(fragment StreamFragment) {
+		fragments = append(fragments, fragment)
+	})
+
+	parser.Consume([]byte(
+		"{not json}\n" +
+			"{\"type\":\"mystery_event_name_that_is_longer_than_the_preview_limit_and_should_be_truncated\",\"session_id\":\"cursor-session-789\"}\n" +
+			"{\"type\":\"assistant\",\"timestamp_ms\":9,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"tail\"}]},\"session_id\":\"cursor-session-789\"}\n",
+	))
+	parser.Flush()
+
+	if len(fragments) != 3 {
+		t.Fatalf("fragment count = %d, want 3", len(fragments))
+	}
+	assertStreamFragmentPayloadOnly(t, fragments[0], StreamFragmentKindProgress, "Cursor stream ignored malformed JSON record")
+	if fragments[1].Kind != StreamFragmentKindProgress {
+		t.Fatalf("fragment kind = %q, want %q", fragments[1].Kind, StreamFragmentKindProgress)
+	}
+	if !strings.HasPrefix(fragments[1].Payload, "Cursor stream ignored unknown event type \"mystery_event_") {
+		t.Fatalf("fragment payload = %q, want bounded unknown event diagnostic", fragments[1].Payload)
+	}
+	if !strings.HasSuffix(fragments[1].Payload, "...\"") {
+		t.Fatalf("fragment payload = %q, want truncated suffix", fragments[1].Payload)
+	}
+	if fragments[1].ProviderSession != nil {
+		t.Fatalf("provider session = %#v, want nil", fragments[1].ProviderSession)
+	}
+	assertStreamFragment(t, fragments[2], StreamFragmentKindResponse, "tail", "cursor-session-789")
+}
+
+func TestUnknownStreamEventMessage_BoundsEventTypePreview(t *testing.T) {
+	got := unknownStreamEventMessage("mystery_event_name_that_is_longer_than_the_preview_limit_and_should_be_truncated")
+	if !strings.HasPrefix(got, "Cursor stream ignored unknown event type \"mystery_event_") {
+		t.Fatalf("unknownStreamEventMessage() = %q, want bounded unknown event diagnostic", got)
+	}
+	if !strings.HasSuffix(got, "...\"") {
+		t.Fatalf("unknownStreamEventMessage() = %q, want truncated suffix", got)
+	}
+}
+
 func assertStreamFragment(t *testing.T, fragment StreamFragment, wantKind StreamFragmentKind, wantPayload string, wantSessionID string) {
 	t.Helper()
 	if fragment.Kind != wantKind {
@@ -80,5 +123,18 @@ func assertStreamFragment(t *testing.T, fragment StreamFragment, wantKind Stream
 	}
 	if fragment.ProviderSession.Provider != "cursor" || fragment.ProviderSession.Kind != ProviderSessionKindSessionID || fragment.ProviderSession.ID != wantSessionID {
 		t.Fatalf("provider session = %#v, want cursor/session_id/%s", fragment.ProviderSession, wantSessionID)
+	}
+}
+
+func assertStreamFragmentPayloadOnly(t *testing.T, fragment StreamFragment, wantKind StreamFragmentKind, wantPayload string) {
+	t.Helper()
+	if fragment.Kind != wantKind {
+		t.Fatalf("fragment kind = %q, want %q", fragment.Kind, wantKind)
+	}
+	if fragment.Payload != wantPayload {
+		t.Fatalf("fragment payload = %q, want %q", fragment.Payload, wantPayload)
+	}
+	if fragment.ProviderSession != nil {
+		t.Fatalf("provider session = %#v, want nil", fragment.ProviderSession)
 	}
 }
