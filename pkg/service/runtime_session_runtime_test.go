@@ -2466,6 +2466,85 @@ func TestGetFactorySession_MissingLiveSessionReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestFactoryService_GetFactorySessionSyncPreflight_ValidatesReconnectCursor(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	session := harness.requireSession(t, defaultFactorySessionID)
+	eventHistory := liveSessionHandle(session).runtime.eventHistory
+	recorded := eventHistory.Events()
+	if len(recorded) == 0 {
+		t.Fatal("event history = empty, want initial structure event")
+	}
+
+	valid, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, &interfaces.FactoryEventReconnectCursor{
+		AfterEventID: recorded[0].Id,
+	})
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(valid): %v", err)
+	}
+	if valid.ReasonCode != factoryapi.Ok {
+		t.Fatalf("valid reasonCode = %q, want %q", valid.ReasonCode, factoryapi.Ok)
+	}
+	if !valid.CheckpointReusable {
+		t.Fatal("valid checkpointReusable = false, want true")
+	}
+	if !valid.ReconnectCursor.Provided || !valid.ReconnectCursor.ValidForStreamGeneration {
+		t.Fatalf("valid reconnect cursor = %#v, want provided and valid", valid.ReconnectCursor)
+	}
+	if valid.BackendScopeId == nil || strings.TrimSpace(*valid.BackendScopeId) == "" {
+		t.Fatalf("backendScopeId = %#v, want non-empty", valid.BackendScopeId)
+	}
+	if valid.FactorySessionId == nil || *valid.FactorySessionId != defaultFactorySessionID {
+		t.Fatalf("factorySessionId = %#v, want %q", valid.FactorySessionId, defaultFactorySessionID)
+	}
+	if valid.LogicalSessionKeyId == nil || !strings.Contains(*valid.LogicalSessionKeyId, "::default::") {
+		t.Fatalf("logicalSessionKeyId = %#v, want default target key", valid.LogicalSessionKeyId)
+	}
+	if valid.StreamGenerationId == nil || !strings.Contains(*valid.StreamGenerationId, defaultFactorySessionID) {
+		t.Fatalf("streamGenerationId = %#v, want session-scoped generation", valid.StreamGenerationId)
+	}
+
+	stale, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, &interfaces.FactoryEventReconnectCursor{
+		AfterEventID: "factory-event/missing-preflight-cursor",
+	})
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(stale): %v", err)
+	}
+	if stale.ReasonCode != factoryapi.CursorStale {
+		t.Fatalf("stale reasonCode = %q, want %q", stale.ReasonCode, factoryapi.CursorStale)
+	}
+	if stale.CheckpointReusable {
+		t.Fatal("stale checkpointReusable = true, want false")
+	}
+	if !stale.ReconnectCursor.Provided || stale.ReconnectCursor.ValidForStreamGeneration {
+		t.Fatalf("stale reconnect cursor = %#v, want provided and invalid", stale.ReconnectCursor)
+	}
+}
+
+func TestFactoryService_GetFactorySessionSyncPreflight_MissingSessionReturnsTypedOutcome(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), "live-session-missing-001", nil)
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(missing): %v", err)
+	}
+	if response.ReasonCode != factoryapi.SessionNotFound {
+		t.Fatalf("reasonCode = %q, want %q", response.ReasonCode, factoryapi.SessionNotFound)
+	}
+	if response.CheckpointReusable {
+		t.Fatal("checkpointReusable = true, want false")
+	}
+	if response.BackendScopeId != nil || response.FactorySessionId != nil || response.StreamGenerationId != nil {
+		t.Fatalf("missing-session identity fields = %#v, want nil", response)
+	}
+}
+
 func newLiveSessionStatusTestServer(t *testing.T, svc *FactoryService) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(api.NewServer(svc, 0, zap.NewNop()).Handler())

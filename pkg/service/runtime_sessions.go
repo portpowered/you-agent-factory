@@ -21,6 +21,7 @@ import (
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
@@ -56,6 +57,7 @@ type FactoryCoordinator interface {
 	ActivateNamedFactory(context.Context, string) error
 	ListFactorySessions(context.Context) (factoryapi.ListFactorySessionsResponse, error)
 	GetFactorySession(context.Context, string) (factoryapi.FactorySession, error)
+	GetFactorySessionSyncPreflight(context.Context, string, *interfaces.FactoryEventReconnectCursor) (factoryapi.FactorySessionSyncPreflightResponse, error)
 	GetFactorySessionResult(context.Context, string) (factoryapi.FactorySessionLiveResult, error)
 	GetFactorySessionPartialResult(context.Context, string) (factoryapi.FactorySessionPartialResult, error)
 	OpenFactorySession(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
@@ -972,6 +974,14 @@ func (fs *FactoryService) GetFactorySession(ctx context.Context, sessionID strin
 	return fs.requireCoordinator().GetFactorySession(ctx, sessionID)
 }
 
+func (fs *FactoryService) GetFactorySessionSyncPreflight(
+	ctx context.Context,
+	sessionID string,
+	reconnect *interfaces.FactoryEventReconnectCursor,
+) (factoryapi.FactorySessionSyncPreflightResponse, error) {
+	return fs.requireCoordinator().GetFactorySessionSyncPreflight(ctx, sessionID, reconnect)
+}
+
 func (c *runtimeFactoryCoordinator) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
 	fs := c.service
 	session, err := fs.requireSession(sessionID)
@@ -983,6 +993,62 @@ func (c *runtimeFactoryCoordinator) GetFactorySession(ctx context.Context, sessi
 		return factoryapi.FactorySession{}, err
 	}
 	return factorysessions.SessionResponse(projectionCtx), nil
+}
+
+func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
+	_ context.Context,
+	sessionID string,
+	reconnect *interfaces.FactoryEventReconnectCursor,
+) (factoryapi.FactorySessionSyncPreflightResponse, error) {
+	fs := c.service
+	response := newFactorySessionSyncPreflightResponse(sessionID, reconnect)
+	if strings.HasPrefix(sessionID, "dur-sess-") {
+		response.ReasonCode = factoryapi.SessionNotFound
+		return response, nil
+	}
+
+	session, err := fs.requireSession(sessionID)
+	if err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			response.ReasonCode = factoryapi.SessionNotFound
+			return response, nil
+		}
+		return factoryapi.FactorySessionSyncPreflightResponse{}, err
+	}
+
+	response.BackendScopeId = stringPointer(factorySessionBackendScopeID(fs, session))
+	response.LogicalSessionKeyId = stringPointer(factorySessionLogicalSessionKeyID(session))
+	response.FactorySessionId = stringPointer(session.ID)
+	response.StreamGenerationId = stringPointer(factorySessionStreamGenerationID(fs, session))
+
+	if !response.ReconnectCursor.Provided {
+		response.ReasonCode = factoryapi.Ok
+		response.CheckpointReusable = true
+		return response, nil
+	}
+
+	eventHistory := liveSessionHandle(session).runtime.eventHistory
+	eventsSnapshot := []factoryapi.FactoryEvent(nil)
+	if eventHistory != nil {
+		eventsSnapshot = eventHistory.Events()
+	}
+	_, err = events.BuildReconnectReplay(
+		eventsSnapshot,
+		*reconnect,
+		interfaces.FactoryEventReconnectScope{SessionID: session.ID},
+	)
+	if err != nil {
+		if errors.Is(err, events.ErrReconnectCursorNotFound) {
+			response.ReasonCode = factoryapi.CursorStale
+			return response, nil
+		}
+		return factoryapi.FactorySessionSyncPreflightResponse{}, err
+	}
+
+	response.ReasonCode = factoryapi.Ok
+	response.CheckpointReusable = true
+	response.ReconnectCursor.ValidForStreamGeneration = true
+	return response, nil
 }
 
 func (fs *FactoryService) buildSessionProjectionContext(
@@ -1145,10 +1211,84 @@ func (fs *FactoryService) newSessionResponseStreamInstance() *factorysessions.Se
 	return factorysessions.NewSessionResponseStream()
 }
 
+<<<<<<< HEAD
 func (fs *FactoryService) newSessionResponseStreamSetInstance() *factorysessions.SessionResponseStreamSet {
 	return factorysessions.NewSessionResponseStreamSetWithFactory(func() *factorysessions.SessionResponseStream {
 		return fs.newSessionResponseStreamInstance()
 	})
+}
+
+func newFactorySessionSyncPreflightResponse(
+	sessionID string,
+	reconnect *interfaces.FactoryEventReconnectCursor,
+) factoryapi.FactorySessionSyncPreflightResponse {
+	response := factoryapi.FactorySessionSyncPreflightResponse{
+		RequestedSessionId: strings.TrimSpace(sessionID),
+		ReasonCode:         factoryapi.SessionNotFound,
+		ReconnectCursor: factoryapi.FactorySessionSyncPreflightReconnectCursor{
+			Provided: reconnect != nil && (strings.TrimSpace(reconnect.AfterEventID) != "" || reconnect.AfterSequence != nil),
+		},
+	}
+	if reconnect == nil {
+		return response
+	}
+	if afterEventID := strings.TrimSpace(reconnect.AfterEventID); afterEventID != "" {
+		response.ReconnectCursor.AfterEventId = &afterEventID
+	}
+	if reconnect.AfterSequence != nil {
+		value := int64(*reconnect.AfterSequence)
+		response.ReconnectCursor.AfterSequence = &value
+	}
+	return response
+}
+
+func factorySessionBackendScopeID(fs *FactoryService, session *factorysessions.LiveSession) string {
+	if fs != nil && fs.cfg != nil {
+		if runtimeInstanceID := strings.TrimSpace(fs.cfg.RuntimeInstanceID); runtimeInstanceID != "" {
+			return runtimeInstanceID
+		}
+	}
+	return ""
+}
+
+func factorySessionLogicalSessionKeyID(session *factorysessions.LiveSession) string {
+	if session == nil {
+		return ""
+	}
+	folderPath := filepath.Clean(strings.TrimSpace(session.FolderPath))
+	if folderPath == "." {
+		folderPath = ""
+	}
+	targetKind := strings.TrimSpace(string(session.Target.Kind))
+	targetName := strings.TrimSpace(session.Target.Name)
+	if targetKind == "" {
+		targetKind = string(factorysessions.TargetKindDefault)
+	}
+	return strings.Join([]string{folderPath, targetKind, targetName}, "::")
+}
+
+func factorySessionStreamGenerationID(fs *FactoryService, session *factorysessions.LiveSession) string {
+	factorySessionID := ""
+	if session != nil {
+		factorySessionID = strings.TrimSpace(session.ID)
+	}
+	backendScopeID := factorySessionBackendScopeID(fs, session)
+	switch {
+	case backendScopeID != "" && factorySessionID != "":
+		return backendScopeID + "::" + factorySessionID
+	case factorySessionID != "":
+		return factorySessionID
+	default:
+		return backendScopeID
+	}
+}
+
+func stringPointer(value string) *string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }
 
 func mapInferenceProgressFragment(fragment workerprovider.InferenceProgressFragment) responsestream.Event {

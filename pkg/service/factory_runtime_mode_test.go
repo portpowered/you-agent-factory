@@ -255,12 +255,12 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureDispatchOutcomes(t 
 	}
 
 	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:               dir,
-		RuntimeMode:       interfaces.RuntimeModeService,
-		RuntimeMetricsDir: metricsDir,
-		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Dir:                                     dir,
+		RuntimeMode:                             interfaces.RuntimeModeService,
+		RuntimeMetricsDir:                       metricsDir,
+		MockWorkersConfig:                       config.NewEmptyMockWorkersConfig(),
 		SkipBuiltInRunnerPrerequisiteValidation: true,
-		Logger:            zap.NewNop(),
+		Logger:                                  zap.NewNop(),
 		ExtraOptions: []factory.FactoryOption{
 			factory.WithWorkerExecutor("worker-a", dispatchMetricsWorkerExecutor{}),
 		},
@@ -1538,6 +1538,16 @@ func (s *stubFactoryCoordinator) GetFactorySession(_ context.Context, sessionID 
 	return s.getSessionResult, nil
 }
 
+func (s *stubFactoryCoordinator) GetFactorySessionSyncPreflight(
+	_ context.Context,
+	sessionID string,
+	_ *interfaces.FactoryEventReconnectCursor,
+) (factoryapi.FactorySessionSyncPreflightResponse, error) {
+	s.calls = append(s.calls, "get-session-sync-preflight")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return factoryapi.FactorySessionSyncPreflightResponse{}, nil
+}
+
 func (s *stubFactoryCoordinator) GetFactorySessionResult(context.Context, string) (factoryapi.FactorySessionLiveResult, error) {
 	s.calls = append(s.calls, "get-session-result")
 	return factoryapi.FactorySessionLiveResult{}, nil
@@ -2272,13 +2282,13 @@ func TestBuildFactoryService_AppliesOperatorDefaultsToOmittedModelWorkerFields(t
 			"body": "You are the executor.",
 		}},
 		"workstations": []map[string]any{{
-			"name":    "execute-task",
-			"worker":  "executor",
-			"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
+			"name":      "execute-task",
+			"worker":    "executor",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
 			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 			"type":      "MODEL_WORKSTATION",
-			"body":    "Implement {{ .WorkID }}.",
+			"body":      "Implement {{ .WorkID }}.",
 		}},
 	})
 
@@ -2332,13 +2342,13 @@ func TestBuildFactoryService_PreservesAuthoredModelWorkerFieldsOverOperatorDefau
 			"body":          "You are the executor.",
 		}},
 		"workstations": []map[string]any{{
-			"name":    "execute-task",
-			"worker":  "executor",
-			"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
+			"name":      "execute-task",
+			"worker":    "executor",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
 			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 			"type":      "MODEL_WORKSTATION",
-			"body":    "Implement {{ .WorkID }}.",
+			"body":      "Implement {{ .WorkID }}.",
 		}},
 	})
 
@@ -2437,13 +2447,13 @@ func TestGeneratedFactoryFromRuntimeConfig_CapturesOperatorDefaultedModelWorkerF
 			"body": "You are the executor.",
 		}},
 		"workstations": []map[string]any{{
-			"name":    "execute-task",
-			"worker":  "executor",
-			"inputs":  []map[string]string{{"workType": "task", "state": "init"}},
+			"name":      "execute-task",
+			"worker":    "executor",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
 			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
 			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
 			"type":      "MODEL_WORKSTATION",
-			"body":    "Implement {{ .WorkID }}.",
+			"body":      "Implement {{ .WorkID }}.",
 		}},
 	})
 

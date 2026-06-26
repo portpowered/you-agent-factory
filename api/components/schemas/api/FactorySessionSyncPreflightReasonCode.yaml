@@ -1,0 +1,7 @@
+type: string
+description: Stable backend-owned session sync preflight outcome code.
+enum:
+  - ok
+  - cursor_stale
+  - session_not_found
+  - logical_session_remap

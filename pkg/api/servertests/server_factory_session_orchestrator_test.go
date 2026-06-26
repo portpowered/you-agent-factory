@@ -84,6 +84,51 @@ func TestFactorySessionsAPI_GetFactorySession(t *testing.T) {
 	}
 }
 
+func TestFactorySessionsAPI_GetFactorySessionSyncPreflight(t *testing.T) {
+	backendScopeID := "backend-scope-test"
+	logicalSessionKeyID := "/workspace/root::default::"
+	factorySessionID := "~default"
+	streamGenerationID := "backend-scope-test::~default"
+	afterEventID := "factory-event/initial-structure/0"
+	srv := newMockFactorySessionTestServer(&testutil.MockFactory{
+		FactorySessionSyncPreflight: factoryapi.FactorySessionSyncPreflightResponse{
+			RequestedSessionId:  "~default",
+			ReasonCode:          factoryapi.Ok,
+			CheckpointReusable:  true,
+			BackendScopeId:      &backendScopeID,
+			LogicalSessionKeyId: &logicalSessionKeyID,
+			FactorySessionId:    &factorySessionID,
+			StreamGenerationId:  &streamGenerationID,
+			ReconnectCursor: factoryapi.FactorySessionSyncPreflightReconnectCursor{
+				Provided:                 true,
+				ValidForStreamGeneration: true,
+				AfterEventId:             &afterEventID,
+			},
+		},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/~default/sync-preflight?after_event_id="+afterEventID, nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /factory-sessions/~default/sync-preflight status = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var response factoryapi.FactorySessionSyncPreflightResponse
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("decode sync preflight response: %v", err)
+	}
+	if response.ReasonCode != factoryapi.Ok {
+		t.Fatalf("reasonCode = %q, want %q", response.ReasonCode, factoryapi.Ok)
+	}
+	if !response.CheckpointReusable || !response.ReconnectCursor.ValidForStreamGeneration {
+		t.Fatalf("response = %#v, want reusable valid cursor", response)
+	}
+	if response.FactorySessionId == nil || *response.FactorySessionId != factorySessionID {
+		t.Fatalf("factorySessionId = %#v, want %q", response.FactorySessionId, factorySessionID)
+	}
+}
+
 func TestFactorySessionsAPI_GetFactorySessionResult_OmitsRawCheckpointBody(t *testing.T) {
 	hash := "sha256:checkpoint-body"
 	size := int64(128)

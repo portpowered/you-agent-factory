@@ -63,6 +63,8 @@ type MockFactory struct {
 	ListFactorySessionsErr            error
 	FactorySession                    factoryapi.FactorySession
 	GetFactorySessionErr              error
+	FactorySessionSyncPreflight       factoryapi.FactorySessionSyncPreflightResponse
+	GetFactorySessionSyncPreflightErr error
 	FactorySessionLiveResult          factoryapi.FactorySessionLiveResult
 	GetFactorySessionResultErr        error
 	FactorySessionPartialResult       factoryapi.FactorySessionPartialResult
@@ -709,6 +711,17 @@ func (m *MockFactory) GetFactorySession(_ context.Context, _ string) (factoryapi
 		return factoryapi.FactorySession{}, m.GetFactorySessionErr
 	}
 	return m.FactorySession, nil
+}
+
+func (m *MockFactory) GetFactorySessionSyncPreflight(
+	_ context.Context,
+	_ string,
+	_ *interfaces.FactoryEventReconnectCursor,
+) (factoryapi.FactorySessionSyncPreflightResponse, error) {
+	if m.GetFactorySessionSyncPreflightErr != nil {
+		return factoryapi.FactorySessionSyncPreflightResponse{}, m.GetFactorySessionSyncPreflightErr
+	}
+	return m.FactorySessionSyncPreflight, nil
 }
 
 func (m *MockFactory) GetFactorySessionResult(_ context.Context, _ string) (factoryapi.FactorySessionLiveResult, error) {

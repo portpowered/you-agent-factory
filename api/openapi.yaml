@@ -277,6 +277,26 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/sync-preflight:
+    get:
+      tags:
+        - Runtime
+      operationId: getFactorySessionSyncPreflightBySessionId
+      summary: Validate cached session sync state for one session
+      description: Returns the canonical backend-owned session sync identity set and validates an optional reconnect cursor before the dashboard restores cached checkpoint state or opens the event stream. This route accepts `~default` as a session selector, but clients must persist the returned `factorySessionId` field rather than treating `~default` as a durable live-session identifier.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/AfterEventId'
+        - $ref: '#/components/parameters/AfterSequence'
+      responses:
+        '200':
+          description: Typed session sync preflight outcome for the targeted session selector.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionSyncPreflightResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /status:
     get:
       tags:
@@ -2978,6 +2998,68 @@ components:
           type: integer
           minimum: 0
           description: Child dispatches that have completed.
+    FactorySessionSyncPreflightResponse:
+      type: object
+      description: |
+        Typed session sync preflight response used before restoring cached dashboard
+        checkpoint state or opening the session event stream with a reconnect cursor.
+      additionalProperties: false
+      required:
+        - requestedSessionId
+        - reasonCode
+        - checkpointReusable
+        - reconnectCursor
+      properties:
+        requestedSessionId:
+          type: string
+          description: Session selector requested by the client. This may be `~default`.
+        reasonCode:
+          $ref: '#/components/schemas/FactorySessionSyncPreflightReasonCode'
+        backendScopeId:
+          type: string
+          description: Canonical backend scope identifier for the current server-owned session cache and event history scope.
+        logicalSessionKeyId:
+          type: string
+          description: Canonical logical-session key for the resolved session target. This remains stable across live-session remaps for the same folder and target selector.
+        factorySessionId:
+          type: string
+          description: Resolved live Factory Session identifier for the current preflight target. Clients must persist this value rather than treating `~default` as a durable session identifier.
+        streamGenerationId:
+          type: string
+          description: Canonical event-stream generation identifier for the resolved live Factory Session.
+        checkpointReusable:
+          type: boolean
+          description: True when cached stream-derived checkpoint state is safe to restore for the resolved identity set.
+        reconnectCursor:
+          $ref: '#/components/schemas/FactorySessionSyncPreflightReconnectCursor'
+    FactorySessionSyncPreflightReasonCode:
+      type: string
+      description: Stable backend-owned session sync preflight outcome code.
+      enum:
+        - ok
+        - cursor_stale
+        - session_not_found
+        - logical_session_remap
+    FactorySessionSyncPreflightReconnectCursor:
+      type: object
+      additionalProperties: false
+      required:
+        - provided
+        - validForStreamGeneration
+      properties:
+        provided:
+          type: boolean
+          description: True when the client supplied at least one reconnect cursor field for validation.
+        validForStreamGeneration:
+          type: boolean
+          description: True when the supplied reconnect cursor belongs to the current stream generation for the resolved live session.
+        afterEventId:
+          type: string
+          description: Optional acknowledged FactoryEvent.id supplied by the client.
+        afterSequence:
+          type: integer
+          format: int64
+          description: Optional acknowledged FactoryEvent.context.sessionSequence supplied by the client.
     FactorySessionLiveResult:
       type: object
       additionalProperties: false
