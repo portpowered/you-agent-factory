@@ -32,6 +32,15 @@ export interface DashboardSessionRecoveryState {
   requestedSessionId: string;
 }
 
+export function buildDashboardSessionPreflightFailureRecoveryState(
+  requestedSessionId: string,
+): DashboardSessionRecoveryState {
+  return {
+    reasonCode: "preflight_request_failed",
+    requestedSessionId,
+  };
+}
+
 export function syncIdentityFromPreflight(
   preflight: FactorySessionSyncPreflightResponse,
 ): FactoryTimelineSyncIdentity | null {

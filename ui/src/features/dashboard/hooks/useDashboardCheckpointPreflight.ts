@@ -11,6 +11,7 @@ import {
 } from "../../timeline/public";
 import { clearDashboardSessionScopedQueries } from "../lib/dashboard-session-lifecycle";
 import {
+  buildDashboardSessionPreflightFailureRecoveryState,
   buildDashboardSessionRestorePlan,
   type DashboardSessionPreflightStatus,
   type DashboardSessionRecoveryState,
@@ -73,7 +74,10 @@ export function useDashboardCheckpointPreflight({
       if (cancelled) {
         return;
       }
-      setPreflightStatus("idle");
+      setPreflightStatus("non-recoverable");
+      setRecoveryState(
+        buildDashboardSessionPreflightFailureRecoveryState(sessionID),
+      );
       setCheckpointHydratedSessionID(sessionID);
     });
 

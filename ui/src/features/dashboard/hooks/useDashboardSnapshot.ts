@@ -18,6 +18,16 @@ export interface UseDashboardSnapshotOptions {
   refreshToken?: number;
 }
 
+function canOpenEventStream(
+  preflightStatus: ReturnType<
+    typeof useDashboardCheckpointPreflight
+  >["preflightStatus"],
+): boolean {
+  return (
+    preflightStatus === "success" || preflightStatus === "silent-recovery"
+  );
+}
+
 export function useDashboardSnapshot({
   locale,
   refreshToken = 0,
@@ -100,7 +110,7 @@ export function useDashboardSnapshot({
       checkpointHydrated &&
       rawSessionID != null &&
       !isPaused &&
-      preflightStatus !== "non-recoverable",
+      canOpenEventStream(preflightStatus),
     initialReconnectCursor,
     locale,
     onEvent: handleStreamEvent,

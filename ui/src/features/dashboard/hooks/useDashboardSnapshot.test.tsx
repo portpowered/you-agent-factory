@@ -639,6 +639,25 @@ describe("useDashboardSnapshot composer", () => {
     expect(replayHarness.getStreams()).toHaveLength(0);
     expect(result.current.isInitialLoading).toBe(false);
   });
+
+  it("blocks stream open and surfaces recovery state when the preflight request fails", async () => {
+    useFactoryTimelineStore.getState().reset();
+    fetchMock.mockRejectedValueOnce(new Error("network down"));
+
+    const { result } = renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(result.current.preflightStatus).toBe("non-recoverable");
+    });
+    expect(result.current.preflightRecovery).toEqual({
+      reasonCode: "preflight_request_failed",
+      requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
+    });
+    expect(replayHarness.getStreams()).toHaveLength(0);
+    expect(result.current.isInitialLoading).toBe(false);
+  });
 });
 
 function buildSyncPreflightResponse(
