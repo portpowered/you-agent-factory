@@ -2614,6 +2614,41 @@ func TestFactoryService_SubscribeSessionResponseStream_ReadsRetainedAndLiveEvent
 }
 
 func TestFactoryService_InferenceProgressPublisher_SlowSubscriberCompactionEmitsDiagnostics(t *testing.T) {
+	sessionID := "session-progress-backpressure"
+	harness := newSlowSubscriberCompactionHarness(t, sessionID)
+	defer harness.metricsSink.Close()
+
+	publisher := harness.svc.inferenceProgressPublisher(sessionID, harness.logger)
+	if publisher == nil {
+		t.Fatal("publisher = nil, want inference progress publisher")
+	}
+
+	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "retained-1"))
+	subscription := mustSubscribeSessionResponseStream(t, harness.svc, sessionID, "dispatch-1", 0)
+	defer subscription.Detach()
+
+	initial := mustReadSessionResponseSubscription(t, subscription, "initial")
+	if len(initial.Events) != 1 || initial.Events[0].Payload != "retained-1" {
+		t.Fatalf("initial events = %#v, want retained seed event", initial.Events)
+	}
+
+	publishProviderAlternatingFragmentsAsync(t, publisher, 64)
+	catchUp := mustReadSessionResponseSubscription(t, subscription, "catch-up")
+	assertRetainedWindowCompactionResult(t, catchUp)
+	assertResponseStreamCompactionMetric(t, harness.metricsSink.Path())
+	assertResponseStreamCompactionWarning(t, harness.observed)
+}
+
+type slowSubscriberCompactionHarness struct {
+	svc        *FactoryService
+	logger     *zap.Logger
+	observed   *observer.ObservedLogs
+	metricsSink *logging.RuntimeMetricsSink
+}
+
+func newSlowSubscriberCompactionHarness(t *testing.T, sessionID string) slowSubscriberCompactionHarness {
+	t.Helper()
+
 	metricsSink, err := logging.BuildRuntimeMetricsSink(
 		"session-progress-backpressure",
 		"runtime-progress-backpressure",
@@ -2625,12 +2660,10 @@ func TestFactoryService_InferenceProgressPublisher_SlowSubscriberCompactionEmits
 	if err != nil {
 		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
 	}
-	defer metricsSink.Close()
 
 	core, observed := observer.New(zap.WarnLevel)
 	logger := zap.New(core)
 	sessions := factorysessions.NewRegistry()
-	sessionID := "session-progress-backpressure"
 	sessions.Upsert(factorysessions.NewLiveSession(
 		sessionID,
 		"/factory",
@@ -2645,38 +2678,61 @@ func TestFactoryService_InferenceProgressPublisher_SlowSubscriberCompactionEmits
 		"factory",
 	), true)
 
-	svc := &FactoryService{
-		sessions: sessions,
-		newSessionResponseStream: func() *factorysessions.SessionResponseStream {
-			return responsestream.NewSessionResponseStreamWithClock(
-				factory.RealClock{},
-				responsestream.RetentionLimits{MaxEvents: 2},
-			)
+	return slowSubscriberCompactionHarness{
+		svc: &FactoryService{
+			sessions: sessions,
+			newSessionResponseStream: func() *factorysessions.SessionResponseStream {
+				return responsestream.NewSessionResponseStreamWithClock(
+					factory.RealClock{},
+					responsestream.RetentionLimits{MaxEvents: 2},
+				)
+			},
 		},
+		logger:      logger,
+		observed:    observed,
+		metricsSink: metricsSink,
 	}
-	publisher := svc.inferenceProgressPublisher(sessionID, logger)
-	if publisher == nil {
-		t.Fatal("publisher = nil, want inference progress publisher")
-	}
+}
 
-	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "retained-1"))
-	subscription, err := svc.SubscribeSessionResponseStream(sessionID, "dispatch-1", 0)
+func mustSubscribeSessionResponseStream(
+	t *testing.T,
+	svc *FactoryService,
+	sessionID, dispatchID string,
+	afterSequence int64,
+) *responsestream.Subscription {
+	t.Helper()
+
+	subscription, err := svc.SubscribeSessionResponseStream(sessionID, dispatchID, afterSequence)
 	if err != nil {
 		t.Fatalf("SubscribeSessionResponseStream: %v", err)
 	}
-	defer subscription.Detach()
+	return subscription
+}
 
-	initial, err := subscription.Next(context.Background())
+func mustReadSessionResponseSubscription(
+	t *testing.T,
+	subscription *responsestream.Subscription,
+	label string,
+) responsestream.ReadResult {
+	t.Helper()
+
+	result, err := subscription.Next(context.Background())
 	if err != nil {
-		t.Fatalf("Next(initial): %v", err)
+		t.Fatalf("Next(%s): %v", label, err)
 	}
-	if len(initial.Events) != 1 || initial.Events[0].Payload != "retained-1" {
-		t.Fatalf("initial events = %#v, want retained seed event", initial.Events)
-	}
+	return result
+}
+
+func publishProviderAlternatingFragmentsAsync(
+	t *testing.T,
+	publisher workerprovider.InferenceProgressPublisher,
+	count int,
+) {
+	t.Helper()
 
 	publishDone := make(chan struct{})
 	go func() {
-		for i := 0; i < 64; i++ {
+		for i := 0; i < count; i++ {
 			payload := "chunk-" + strconv.Itoa(i)
 			if i%2 == 0 {
 				publisher(workerprovider.ProgressFragment("dispatch-1", nil, payload))
@@ -2692,49 +2748,48 @@ func TestFactoryService_InferenceProgressPublisher_SlowSubscriberCompactionEmits
 	case <-time.After(time.Second):
 		t.Fatal("publishing stalled behind a slow subscriber")
 	}
+}
 
-	catchUp, err := subscription.Next(context.Background())
-	if err != nil {
-		t.Fatalf("Next(catch-up): %v", err)
-	}
-	if !catchUp.BehindRetainedWindow {
-		t.Fatalf("catch-up result = %#v, want retained-window gap signal", catchUp)
-	}
-	if catchUp.Compaction == nil || catchUp.Compaction.Reason != responsestream.CompactionReasonTruncated {
-		t.Fatalf("catch-up compaction = %#v, want truncation summary", catchUp.Compaction)
-	}
+func assertRetainedWindowCompactionResult(t *testing.T, result responsestream.ReadResult) {
+	t.Helper()
 
-	foundSignal := false
-	for _, event := range catchUp.Events {
+	if !result.BehindRetainedWindow {
+		t.Fatalf("catch-up result = %#v, want retained-window gap signal", result)
+	}
+	if result.Compaction == nil || result.Compaction.Reason != responsestream.CompactionReasonTruncated {
+		t.Fatalf("catch-up compaction = %#v, want truncation summary", result.Compaction)
+	}
+	for _, event := range result.Events {
 		if event.Kind == responsestream.EventKindCompactionSignal {
-			foundSignal = true
-			break
+			return
 		}
 	}
-	if !foundSignal {
-		t.Fatalf("catch-up events = %#v, want retained compaction signal", catchUp.Events)
-	}
+	t.Fatalf("catch-up events = %#v, want retained compaction signal", result.Events)
+}
 
-	waitForRuntimeMetricsRecord(t, metricsSink.Path(), time.Second, func(record map[string]any) bool {
+func assertResponseStreamCompactionMetric(t *testing.T, metricsPath string) {
+	t.Helper()
+
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
 		return runtimeMetricNameAndValue(record, runtimeMetricSessionResponseStreamCompacted, 1) &&
 			metricRecordString(record, "dispatch_id") == "dispatch-1" &&
 			metricRecordString(record, "reason") == string(responsestream.CompactionReasonTruncated)
 	}, "response stream compaction")
+}
 
-	foundWarn := false
+func assertResponseStreamCompactionWarning(t *testing.T, observed *observer.ObservedLogs) {
+	t.Helper()
+
 	for _, entry := range observed.All() {
 		if entry.Message != "session response stream compacted internal provider progress" {
 			continue
 		}
 		if entry.ContextMap()["dispatch_id"] == "dispatch-1" &&
 			entry.ContextMap()["compaction_reason"] == string(responsestream.CompactionReasonTruncated) {
-			foundWarn = true
-			break
+			return
 		}
 	}
-	if !foundWarn {
-		t.Fatalf("compaction warning log not found in %#v", observed.All())
-	}
+	t.Fatalf("compaction warning log not found in %#v", observed.All())
 }
 
 func TestFactoryService_DispatchCompletionObserverClosesDispatchSubscribers(t *testing.T) {
