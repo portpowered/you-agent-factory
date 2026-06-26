@@ -34,6 +34,21 @@ export interface FactorySessionDetailMessages {
   dynamicWorkflowShorthand: string;
   executionModeLabel: string;
   enabledTransitionsHeading: string;
+  eventReplayCheckpointLabel: (checkpointID: string) => string;
+  eventReplayDispatchLabel: (dispatchID: string) => string;
+  eventReplayEmptyState: string;
+  eventReplayErrorState: string;
+  eventReplayHeading: string;
+  eventReplayHint: string;
+  eventReplayLoadingState: string;
+  eventReplayNoContext: string;
+  eventReplayPhaseLabel: (phase: string) => string;
+  eventReplaySequenceLabel: (sequence: number) => string;
+  eventReplaySummary: (visibleCount: number, totalCount: number) => string;
+  eventReplayVisibleSummary: (visibleCount: number) => string;
+  eventReplayWorkLabel: (count: number) => string;
+  expandEventReplayLabel: string;
+  collapseEventReplayLabel: string;
   errorState: string;
   expandDispatchDetailLabel: (dispatchID: string) => string;
   failureDetailHeading: string;
@@ -224,6 +239,25 @@ const factorySessionDetailMessagesByLocale = {
     dynamicWorkflowShorthand: "Dynamic workflow (JavaScript factory session)",
     executionModeLabel: "Execution mode",
     enabledTransitionsHeading: "Enabled transitions",
+    eventReplayCheckpointLabel: (checkpointID) => `Checkpoint ${checkpointID}`,
+    eventReplayDispatchLabel: (dispatchID) => `Dispatch ${dispatchID}`,
+    eventReplayEmptyState: "No durable Factory Events are available for this session.",
+    eventReplayErrorState: "The Factory Event replay could not be loaded.",
+    eventReplayHeading: "Factory Event replay",
+    eventReplayHint:
+      "Reveal bounded durable Factory Event history without leaving this session detail view.",
+    eventReplayLoadingState: "Loading durable Factory Event replay…",
+    eventReplayNoContext: "Session-level Factory Event",
+    eventReplayPhaseLabel: (phase) => `Phase ${phase}`,
+    eventReplaySequenceLabel: (sequence) => `Session event ${sequence}`,
+    eventReplaySummary: (visibleCount, totalCount) =>
+      `Showing the latest ${visibleCount} of ${totalCount} Factory Events.`,
+    eventReplayVisibleSummary: (visibleCount) =>
+      `Showing ${visibleCount} Factory Event${visibleCount === 1 ? "" : "s"}.`,
+    eventReplayWorkLabel: (count) =>
+      `${count} related work item${count === 1 ? "" : "s"}`,
+    expandEventReplayLabel: "Expand Factory Event replay",
+    collapseEventReplayLabel: "Collapse Factory Event replay",
     errorState: "The factory session runtime could not be loaded.",
     expandDispatchDetailLabel: (dispatchID) =>
       `Expand dispatch detail for ${dispatchID}`,
@@ -300,6 +334,23 @@ const factorySessionDetailMessagesByLocale = {
     dynamicWorkflowShorthand: "动态工作流（JavaScript 工厂会话）",
     executionModeLabel: "执行模式",
     enabledTransitionsHeading: "已启用变迁",
+    eventReplayCheckpointLabel: (checkpointID) => `检查点 ${checkpointID}`,
+    eventReplayDispatchLabel: (dispatchID) => `调度 ${dispatchID}`,
+    eventReplayEmptyState: "此会话没有可用的持久化工厂事件。",
+    eventReplayErrorState: "无法加载工厂事件回放。",
+    eventReplayHeading: "工厂事件回放",
+    eventReplayHint: "在当前会话详情内展开受限的持久化工厂事件历史。",
+    eventReplayLoadingState: "正在加载持久化工厂事件回放…",
+    eventReplayNoContext: "会话级工厂事件",
+    eventReplayPhaseLabel: (phase) => `阶段 ${phase}`,
+    eventReplaySequenceLabel: (sequence) => `会话事件 ${sequence}`,
+    eventReplaySummary: (visibleCount, totalCount) =>
+      `显示最新 ${visibleCount} / ${totalCount} 条工厂事件。`,
+    eventReplayVisibleSummary: (visibleCount) =>
+      `显示 ${visibleCount} 条工厂事件。`,
+    eventReplayWorkLabel: (count) => `${count} 个关联工作项`,
+    expandEventReplayLabel: "展开工厂事件回放",
+    collapseEventReplayLabel: "收起工厂事件回放",
     errorState: "无法加载工厂会话运行时。",
     expandDispatchDetailLabel: (dispatchID) => `展开 ${dispatchID} 的调度详情`,
     failureDetailHeading: "失败详情",

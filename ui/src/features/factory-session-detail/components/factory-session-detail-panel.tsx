@@ -12,6 +12,7 @@ import {
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { DetailCopy } from "../../../components/ui/widget-frame";
 import { DispatchDetailContent } from "./dispatch-detail-content";
+import { FactorySessionEventReplayDisclosure } from "./event-replay/factory-session-event-replay-disclosure";
 import { useFactorySessionDispatchDetail } from "../hooks/use-factory-session-dispatch-detail";
 import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
 import {
@@ -21,6 +22,7 @@ import {
 } from "../messages/factory-session-runtime-display";
 import { getFactorySessionDetailMessages } from "../messages/factory-session-detail";
 import { useId, useState } from "react";
+import { isDurableJavaScriptSession } from "../../../api/factory-sessions/normalize-durable-inspection";
 
 type FactoryArtifact = components["schemas"]["FactoryArtifact"];
 type FactoryDispatch = components["schemas"]["FactoryDispatch"];
@@ -109,6 +111,7 @@ function FactorySessionRuntimeSections({
       {runtime.orchestratorKind === FactoryOrchestratorKind.JAVASCRIPT ? (
         <JavaScriptSessionProjection
           artifacts={runtime.artifacts}
+          durableLifecycleStatus={data.durableLifecycleStatus}
           dispatches={runtime.dispatches}
           javascript={runtime.javascript}
           locale={locale}
@@ -124,6 +127,7 @@ function FactorySessionRuntimeSections({
 
 function JavaScriptSessionProjection({
   artifacts,
+  durableLifecycleStatus,
   dispatches,
   javascript,
   locale,
@@ -131,6 +135,7 @@ function JavaScriptSessionProjection({
   result,
 }: {
   artifacts?: FactoryArtifact[];
+  durableLifecycleStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
   dispatches?: FactoryDispatch[];
   javascript?: components["schemas"]["FactorySessionJavaScriptProjection"];
   locale?: string;
@@ -148,6 +153,11 @@ function JavaScriptSessionProjection({
 
   const warnings = (dispatches ?? []).flatMap(
     (dispatch) => dispatch.warnings ?? [],
+  );
+  const supportsEventReplay = isDurableJavaScriptSession(
+    result?.sessionId ?? partialResult?.sessionId ?? "",
+    FactoryOrchestratorKind.JAVASCRIPT,
+    durableLifecycleStatus,
   );
 
   return (
@@ -176,6 +186,13 @@ function JavaScriptSessionProjection({
         <CheckpointRefList
           checkpoints={javascript.checkpoints}
           heading={messages.checkpointRefsHeading}
+        />
+      ) : null}
+
+      {supportsEventReplay ? (
+        <FactorySessionEventReplayDisclosure
+          locale={locale}
+          sessionID={result?.sessionId ?? partialResult?.sessionId ?? ""}
         />
       ) : null}
 

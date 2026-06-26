@@ -4,6 +4,7 @@ import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 import { FactorySessionDetailPanel } from "./factory-session-detail-panel";
 
 const storySessionID = "session-beta";
+const durableReplayStorySessionID = "dur-sess-js-success-002";
 
 export default {
   title: "you-agent-factory/Current Selection/Factory Session Detail Panel",
@@ -212,6 +213,109 @@ export const DispatchDrilldownStates = {
       <div style={{ maxWidth: "100%", width: "960px" }}>
         <QueryClientProvider client={queryClient}>
           <FactorySessionDetailPanel sessionID={storySessionID} />
+        </QueryClientProvider>
+      </div>
+    );
+  },
+};
+
+export const DurableReplayDisclosure = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: `/factory-sessions/${durableReplayStorySessionID}`,
+          response: {
+            body: {
+              artifactRefs: [
+                {
+                  id: "art-js-success-001",
+                  kind: "FINAL_RESULT",
+                  label: "Docs refresh output",
+                  visibility: "PUBLIC",
+                },
+              ],
+              dialect: "you-workflow-v1",
+              lifecycle: {
+                finishedAt: "2026-06-08T13:10:00Z",
+                startedAt: "2026-06-08T13:00:02Z",
+              },
+              orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+              progress: {
+                completedDispatches: 2,
+                failedDispatches: 0,
+                inFlightDispatches: 0,
+                totalDispatches: 2,
+              },
+              resolvedSource: {
+                kind: "WORKFLOW_FILE",
+                sourceRef: "workflow/.claude/workflows/docs-refresh.yaml",
+                sourceHash: "sha256:js-workflow-docs-refresh",
+              },
+              resultSummary: {
+                resultStatus: "FINAL",
+                summary: "Documentation refresh complete.",
+              },
+              sessionId: durableReplayStorySessionID,
+              status: "SUCCEEDED",
+              usage: { resources: [] },
+            },
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${durableReplayStorySessionID}/events`,
+          response: {
+            body: [
+              'data: {"id":"evt-1","type":"SESSION_STARTED","context":{"sequence":1,"tick":1,"eventTime":"2026-06-25T10:00:00Z","sessionId":"dur-sess-js-success-002","sessionSequence":1,"phaseName":"plan"},"payload":{"startedAt":"2026-06-25T10:00:00Z"}}',
+              "",
+              'data: {"id":"evt-2","type":"ORCHESTRATOR_PHASE_CHANGED","context":{"sequence":2,"tick":2,"eventTime":"2026-06-25T10:00:01Z","sessionId":"dur-sess-js-success-002","sessionSequence":2,"phaseName":"review"},"payload":{"phase":"review"}}',
+              "",
+              'data: {"id":"evt-3","type":"DISPATCH_QUEUED","context":{"sequence":3,"tick":3,"eventTime":"2026-06-25T10:00:02Z","sessionId":"dur-sess-js-success-002","sessionSequence":3,"phaseName":"review","dispatchId":"dispatch-1","workIds":["work-1","work-2"]},"payload":{"dispatchKind":"JAVASCRIPT_AGENT"}}',
+              "",
+            ].join("\n"),
+            headers: {
+              "Content-Type": "text/event-stream",
+            },
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${durableReplayStorySessionID}/dispatches`,
+          response: {
+            body: {
+              dispatches: [
+                {
+                  dispatchKind: "JAVASCRIPT_AGENT",
+                  id: "dispatch-1",
+                  outputArtifactIds: [],
+                  phase: "review",
+                  status: "COMPLETED",
+                },
+              ],
+              sessionId: durableReplayStorySessionID,
+            },
+          },
+        },
+      ],
+      sessionID: durableReplayStorySessionID,
+    },
+  },
+  render: () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: Infinity,
+          retry: false,
+        },
+      },
+    });
+
+    return (
+      <div style={{ maxWidth: "100%", width: "960px" }}>
+        <QueryClientProvider client={queryClient}>
+          <FactorySessionDetailPanel sessionID={durableReplayStorySessionID} />
         </QueryClientProvider>
       </div>
     );
