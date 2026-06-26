@@ -413,9 +413,3 @@ export function registerAppDashboardTestLifecycle(): void {
 }
 
 export { DEFAULT_FACTORY_SESSION_ID };
-export {
-  fetchCallPaths,
-  jsonResponse,
-  lastFetchCallBody,
-  nonPromptTemplateFetchPaths,
-} from "./app-shell-fetch-test-utils";
