@@ -80,6 +80,14 @@ type SessionResponseStreamEvent = responsestream.Event
 // SessionResponseStreamEventKind identifies internal response-stream semantics.
 type SessionResponseStreamEventKind = responsestream.EventKind
 
+// SessionResponseStreamReadResult is the internal bounded catch-up view for
+// one response-stream subscriber resume point.
+type SessionResponseStreamReadResult = responsestream.ReadResult
+
+// SessionResponseStreamCompactionSummary records bounded fidelity loss for
+// stream subscribers that resume after truncation or coalescing.
+type SessionResponseStreamCompactionSummary = responsestream.CompactionSummary
+
 // SessionResponseStreamRetentionLimits documents bounded-retention controls for
 // one internal session response stream.
 type SessionResponseStreamRetentionLimits = responsestream.RetentionLimits
@@ -101,3 +109,7 @@ func NewSessionResponseStreamSetWithFactory(
 ) *SessionResponseStreamSet {
 	return responsestream.NewStreamSetWithFactory(newStream)
 }
+
+// SessionResponseStreamSubscription is an internal live-session response-stream
+// cursor that can read retained and live dispatch progress.
+type SessionResponseStreamSubscription = responsestream.Subscription

@@ -48,6 +48,7 @@ type (
 	FactorySessionOpenResult          = factorysessions.OpenResult
 	liveFactorySession                = factorysessions.LiveSession
 	inferenceProgressPublisherFactory func(sessionID string) workerprovider.InferenceProgressPublisher
+	dispatchCompletionObserverFactory func(sessionID string) func(dispatchID string)
 )
 
 // FactoryCoordinator owns session tracking and runtime lifecycle orchestration.
@@ -233,6 +234,7 @@ func (fs *FactoryService) unregisterLiveSession(sessionID string) {
 	if fs == nil || fs.sessions == nil {
 		return
 	}
+	fs.closeSessionResponseStreams(fs.sessionByID(sessionID))
 	fs.sessions.Remove(sessionID)
 }
 
@@ -795,6 +797,7 @@ func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
 			executionBaseDir = runtimeBaseDir
 		}
 	}
+	fs.closeSessionResponseStreams(session)
 	fs.sessions.Upsert(factorysessions.NewLiveSession(
 		session.ID,
 		replacement.dir,
@@ -1086,6 +1089,25 @@ func (fs *FactoryService) sessionResponseStreams(session *factorysessions.LiveSe
 	return state.responseStreams
 }
 
+func (fs *FactoryService) closeSessionResponseStreams(session *factorysessions.LiveSession) {
+	streams := fs.sessionResponseStreams(session)
+	if streams == nil {
+		return
+	}
+	streams.Close()
+}
+
+func (fs *FactoryService) closeSessionResponseStreamDispatch(
+	session *factorysessions.LiveSession,
+	dispatchID string,
+) bool {
+	streams := fs.sessionResponseStreams(session)
+	if streams == nil {
+		return false
+	}
+	return streams.CloseDispatch(dispatchID)
+}
+
 func (fs *FactoryService) sessionResponseStream(
 	session *factorysessions.LiveSession,
 	dispatchID string,
@@ -1095,6 +1117,25 @@ func (fs *FactoryService) sessionResponseStream(
 		return nil
 	}
 	return streams.Stream(dispatchID)
+}
+
+func (fs *FactoryService) SubscribeSessionResponseStream(
+	sessionID string,
+	dispatchID string,
+	afterSequence int64,
+) (*factorysessions.SessionResponseStreamSubscription, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("factory service is required")
+	}
+	session, err := fs.requireSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	streams := fs.sessionResponseStreams(session)
+	if streams == nil {
+		return nil, responsestream.ErrSubscriptionClosed
+	}
+	return streams.Subscribe(dispatchID, afterSequence)
 }
 
 func (fs *FactoryService) newSessionResponseStreamInstance() *factorysessions.SessionResponseStream {
@@ -1133,6 +1174,28 @@ func newInferenceProgressPublisherFactory(
 	svc := &FactoryService{sessions: sessions}
 	return func(sessionID string) workerprovider.InferenceProgressPublisher {
 		return svc.inferenceProgressPublisher(sessionID, logger)
+	}
+}
+
+func newSessionDispatchCompletionObserverFactory(
+	sessions *factorysessions.Registry,
+) dispatchCompletionObserverFactory {
+	if sessions == nil {
+		return nil
+	}
+	svc := &FactoryService{sessions: sessions}
+	return func(sessionID string) func(string) {
+		normalizedSessionID := strings.TrimSpace(sessionID)
+		if normalizedSessionID == "" {
+			normalizedSessionID = defaultFactorySessionID
+		}
+		return func(dispatchID string) {
+			session := sessions.Get(normalizedSessionID)
+			if session == nil && normalizedSessionID == defaultFactorySessionID {
+				session = sessions.Get(defaultFactorySessionID)
+			}
+			svc.closeSessionResponseStreamDispatch(session, dispatchID)
+		}
 	}
 }
 

@@ -58,6 +58,16 @@ func (s *StreamSet) Stream(dispatchID string) *SessionResponseStream {
 	return stream
 }
 
+// Subscribe attaches one internal subscriber to the dispatch-scoped stream and
+// returns a retained-window cursor that can continue reading live events.
+func (s *StreamSet) Subscribe(dispatchID string, afterSequence int64) (*Subscription, error) {
+	stream := s.Stream(dispatchID)
+	if stream == nil {
+		return nil, ErrSubscriptionClosed
+	}
+	return stream.Subscribe(afterSequence)
+}
+
 // Count returns the number of dispatch-scoped streams currently allocated.
 func (s *StreamSet) Count() int {
 	if s == nil {
@@ -83,6 +93,56 @@ func (s *StreamSet) DispatchIDs() []string {
 	}
 	sort.Strings(ids)
 	return ids
+}
+
+// CloseDispatch detaches subscribers and removes one dispatch-scoped stream
+// from the set.
+func (s *StreamSet) CloseDispatch(dispatchID string) bool {
+	if s == nil {
+		return false
+	}
+	key := normalizeDispatchID(dispatchID)
+	s.mu.Lock()
+	stream := s.streams[key]
+	delete(s.streams, key)
+	s.mu.Unlock()
+	if stream == nil {
+		return false
+	}
+	stream.Close()
+	return true
+}
+
+// Close detaches all dispatch-scoped subscribers and clears the set.
+func (s *StreamSet) Close() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	streams := make([]*SessionResponseStream, 0, len(s.streams))
+	for _, stream := range s.streams {
+		streams = append(streams, stream)
+	}
+	s.streams = make(map[string]*SessionResponseStream)
+	s.mu.Unlock()
+	for _, stream := range streams {
+		stream.Close()
+	}
+}
+
+// SubscriberCount reports the number of active subscribers for one dispatch.
+func (s *StreamSet) SubscriberCount(dispatchID string) int {
+	if s == nil {
+		return 0
+	}
+	key := normalizeDispatchID(dispatchID)
+	s.mu.RLock()
+	stream := s.streams[key]
+	s.mu.RUnlock()
+	if stream == nil {
+		return 0
+	}
+	return stream.SubscriberCount()
 }
 
 func normalizeDispatchID(dispatchID string) string {
