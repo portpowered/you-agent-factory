@@ -188,6 +188,75 @@ describe("FactoryInvocationWidget", () => {
     });
   });
 
+  it("preserves the success message across a same-signature refresh rerender", async () => {
+    const user = userEvent.setup();
+    const signature = {
+      parameters: [
+        {
+          bindings: [{ kind: "POSITIONAL", position: 1 }],
+          name: "input",
+          required: true,
+        },
+      ],
+    };
+    useCurrentFactoryDefinition.mockReturnValue({
+      data: {
+        invocationSignature: signature,
+        name: "fusion",
+      },
+      error: null,
+      isLoading: false,
+    });
+    invokeSessionFactory.mockResolvedValue({
+      requestId: "request-1",
+      status: "COMPLETED",
+      traceId: "trace-1",
+    });
+
+    const { rerender } = renderFactoryInvocationWidget();
+
+    await user.type(screen.getByRole("textbox", { name: /input/i }), "hello world");
+    await user.click(screen.getByRole("button", { name: "Run factory" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Factory invocation started. Trace ID: trace-1."),
+      ).toBeVisible();
+    });
+
+    useCurrentFactoryDefinition.mockReturnValue({
+      data: {
+        invocationSignature: {
+          parameters: [
+            {
+              bindings: [{ kind: "POSITIONAL", position: 1 }],
+              name: "input",
+              required: true,
+            },
+          ],
+        },
+        name: "fusion",
+      },
+      error: null,
+      isLoading: false,
+    });
+
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <DashboardSessionTestProvider>
+          <FactoryInvocationWidget sessionID="~default" />
+        </DashboardSessionTestProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(
+      screen.getByText("Factory invocation started. Trace ID: trace-1."),
+    ).toBeVisible();
+    expect(screen.getByRole("textbox", { name: /input/i })).toHaveValue(
+      "hello world",
+    );
+  });
+
   it("surfaces field-level validation failures for required parameters", async () => {
     const user = userEvent.setup();
     useCurrentFactoryDefinition.mockReturnValue({

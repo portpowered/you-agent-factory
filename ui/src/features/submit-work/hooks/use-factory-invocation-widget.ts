@@ -1,4 +1,11 @@
-import { useEffect, useState } from "react";
+import {
+  type Dispatch,
+  type SetStateAction,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   invokeSessionFactory,
@@ -31,35 +38,23 @@ export function useFactoryInvocationWidget(
   );
   const signature = currentFactory.data?.invocationSignature;
   const projection = projectInvocationForm(signature);
+  const signatureKey = useMemo(
+    () => (signature ? JSON.stringify(signature) : null),
+    [signature],
+  );
   const [fieldValues, setFieldValues] = useState<Record<string, string[]>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<FactoryInvocationStatusState>({
     kind: "idle",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    void signature;
-    setFieldValues({});
-    setFieldErrors({});
-    setStatus({ kind: "idle" });
-  }, [signature]);
-
-  const clearFieldError = (name: string) => {
-    setFieldErrors((current) => {
-      const next = { ...current };
-      delete next[name];
-      return next;
-    });
-  };
-
-  const setArgumentValues = (name: string, values: string[]) => {
-    setFieldValues((current) => ({
-      ...current,
-      [name]: values,
-    }));
-    clearFieldError(name);
-  };
+  useFactoryInvocationResetOnSignatureChange(
+    sessionID,
+    signatureKey,
+    setFieldValues,
+    setFieldErrors,
+    setStatus,
+  );
 
   const submit = async () => {
     const nextFieldErrors = collectInvocationFieldErrors(
@@ -150,15 +145,67 @@ export function useFactoryInvocationWidget(
     isSubmitting,
     projection,
     setBooleanValue: (name: string, value: "false" | "true" | undefined) => {
-      setArgumentValues(name, value === undefined ? [] : [value]);
+      setInvocationArgumentValues(
+        name,
+        value === undefined ? [] : [value],
+        setFieldValues,
+        setFieldErrors,
+      );
     },
     setFieldValue: (name: string, value: string) => {
-      setArgumentValues(name, [value]);
+      setInvocationArgumentValues(name, [value], setFieldValues, setFieldErrors);
     },
     setRepeatedFieldValue: (name: string, values: string[]) => {
-      setArgumentValues(name, values);
+      setInvocationArgumentValues(name, values, setFieldValues, setFieldErrors);
     },
     status,
     submit,
   };
+}
+
+function useFactoryInvocationResetOnSignatureChange(
+  sessionID: string | null | undefined,
+  signatureKey: string | null,
+  setFieldValues: Dispatch<SetStateAction<Record<string, string[]>>>,
+  setFieldErrors: Dispatch<SetStateAction<Record<string, string>>>,
+  setStatus: Dispatch<SetStateAction<FactoryInvocationStatusState>>,
+) {
+  const resetContextRef = useRef<{
+    sessionID: string | null | undefined;
+    signatureKey: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    const previousContext = resetContextRef.current;
+    resetContextRef.current = { sessionID, signatureKey };
+    if (previousContext == null) {
+      return;
+    }
+    if (
+      previousContext.sessionID === sessionID &&
+      (signatureKey === null || previousContext.signatureKey === signatureKey)
+    ) {
+      return;
+    }
+    setFieldValues({});
+    setFieldErrors({});
+    setStatus({ kind: "idle" });
+  }, [sessionID, setFieldErrors, setFieldValues, setStatus, signatureKey]);
+}
+
+function setInvocationArgumentValues(
+  name: string,
+  values: string[],
+  setFieldValues: Dispatch<SetStateAction<Record<string, string[]>>>,
+  setFieldErrors: Dispatch<SetStateAction<Record<string, string>>>,
+) {
+  setFieldValues((current) => ({
+    ...current,
+    [name]: values,
+  }));
+  setFieldErrors((current) => {
+    const next = { ...current };
+    delete next[name];
+    return next;
+  });
 }

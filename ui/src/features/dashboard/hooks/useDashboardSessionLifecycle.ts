@@ -3,10 +3,19 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
 import {
   dashboardSessionKey,
+  type FactoryDefinitionQueryResetMode,
   resetDashboardSessionScopedState,
   shouldResetDashboardSessionScopedState,
 } from "../lib/dashboard-session-lifecycle";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
+
+function sessionIDFromDashboardSessionKey(sessionKey: string | null): string | null {
+  if (sessionKey == null) {
+    return null;
+  }
+  const separatorIndex = sessionKey.lastIndexOf("::");
+  return separatorIndex === -1 ? sessionKey : sessionKey.slice(0, separatorIndex);
+}
 
 export interface UseDashboardSessionLifecycleOptions {
   locale?: string | null;
@@ -31,14 +40,18 @@ export function useDashboardSessionLifecycle({
     [refreshToken, sessionID],
   );
 
-  const resetLocalizedSessionState = useCallback(() => {
-    resetDashboardSessionScopedState(
-      queryClient,
-      resetStreamState,
-      resetTimeline,
-      locale,
-    );
-  }, [locale, queryClient, resetStreamState, resetTimeline]);
+  const resetLocalizedSessionState = useCallback(
+    (factoryDefinitionQueryResetMode: FactoryDefinitionQueryResetMode) => {
+      resetDashboardSessionScopedState(
+        queryClient,
+        resetStreamState,
+        resetTimeline,
+        locale,
+        factoryDefinitionQueryResetMode,
+      );
+    },
+    [locale, queryClient, resetStreamState, resetTimeline],
+  );
 
   useEffect(() => {
     const previousSessionKey = lastSessionKeyRef.current;
@@ -59,7 +72,12 @@ export function useDashboardSessionLifecycle({
       return;
     }
 
-    resetLocalizedSessionState();
+    const previousSessionID = sessionIDFromDashboardSessionKey(previousSessionKey);
+    resetLocalizedSessionState(
+      previousSessionID !== null && previousSessionID === sessionID
+        ? "invalidate"
+        : "remove",
+    );
   }, [refreshToken, resetLocalizedSessionState, sessionID, sessionKey]);
 
   return useMemo(

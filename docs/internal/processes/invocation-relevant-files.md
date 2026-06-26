@@ -278,7 +278,11 @@ primary-result behavior.
   route outside production builds. For signature-backed submits, preserve
   `args: {}` when the user leaves every field empty; collapsing that payload to
   omitted args changes backend behavior by re-entering the legacy compatibility
-  path instead of the explicit structured-invocation path.
+  path instead of the explicit structured-invocation path. When a successful
+  invocation triggers a same-session dashboard refresh, invalidate the
+  current-factory query instead of removing it so the signature-backed widget
+  can preserve visible success state while still refetching the current factory
+  contract.
 - `pkg/service/model_catalog.go` owns the session invocation wait loop, packaged TTS
   loading/completion/failure logs, and packaged-factory metrics while polling for
   primary results.
