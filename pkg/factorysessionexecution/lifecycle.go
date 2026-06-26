@@ -85,11 +85,11 @@ func EvaluateInterruptDispatchControl(sessionStatus LifecycleStatus, dispatchSta
 		return LifecycleControlOutcomeInvalidState
 	}
 	switch dispatchStatus {
-	case DispatchStatusQueued, DispatchStatusRunning:
+	case DispatchStatusRunning:
 		return LifecycleControlOutcomeAccepted
 	case DispatchStatusInterrupted:
 		return LifecycleControlOutcomeNoOp
-	case DispatchStatusCompleted, DispatchStatusFailed, DispatchStatusCanceled, DispatchStatusTimedOut, DispatchStatusSkipped:
+	case DispatchStatusQueued, DispatchStatusCompleted, DispatchStatusFailed, DispatchStatusCanceled, DispatchStatusTimedOut, DispatchStatusSkipped:
 		return LifecycleControlOutcomeInvalidState
 	default:
 		return LifecycleControlOutcomeInvalidState

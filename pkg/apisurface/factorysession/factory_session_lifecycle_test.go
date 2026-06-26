@@ -176,6 +176,13 @@ func TestEvaluateInterruptDispatchControlFromServiceSpec(t *testing.T) {
 	if accepted != factorysessionexecution.LifecycleControlOutcomeAccepted {
 		t.Fatalf("accepted outcome = %q, want ACCEPTED", accepted)
 	}
+	queued := factorysessionexecution.EvaluateInterruptDispatchControl(
+		factorysessionexecution.LifecycleStatusRunning,
+		factorysessionexecution.DispatchStatusQueued,
+	)
+	if queued != factorysessionexecution.LifecycleControlOutcomeInvalidState {
+		t.Fatalf("queued outcome = %q, want INVALID_STATE", queued)
+	}
 	noop := factorysessionexecution.EvaluateInterruptDispatchControl(
 		factorysessionexecution.LifecycleStatusRunning,
 		factorysessionexecution.DispatchStatusInterrupted,

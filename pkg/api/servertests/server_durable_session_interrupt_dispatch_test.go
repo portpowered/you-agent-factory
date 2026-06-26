@@ -11,6 +11,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/testutil"
@@ -104,6 +105,55 @@ func TestInterruptFactorySessionDispatch_CompletedDispatchReturnsTypedConflict(t
 
 	response, status := postFactorySessionInterruptDispatch(t, serverURL, row.SessionID, factoryapi.FactorySessionInterruptDispatchRequest{
 		DispatchId: "disp-js-001",
+	})
+	if status != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", status)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeInvalidState {
+		t.Fatalf("outcome = %q, want INVALID_STATE", response.Outcome)
+	}
+}
+
+func TestInterruptFactorySessionDispatch_QueuedDispatchReturnsTypedConflict(t *testing.T) {
+	service := factorysessionexecution.NewFakeService(factorysessionexecution.WithFakeScenarios(factorysessionexecution.FakeScenario{
+		ID:        "queued-interrupt-invalid-state",
+		RequestID: "req-js-queued-interrupt-001",
+		Session: factorysessionexecution.SessionReadResult{
+			SessionID: "dur-sess-js-queued-interrupt-001",
+			Status:    factorysessionexecution.LifecycleStatusRunning,
+		},
+		Dispatches: []factorysessionexecution.DispatchSummary{{
+			ID:     "disp-js-queued-001",
+			Status: factorysessionexecution.DispatchStatusQueued,
+		}},
+		DispatchDetails: map[string]factorysessionexecution.DispatchDetail{
+			"disp-js-queued-001": {
+				DispatchSummary: factorysessionexecution.DispatchSummary{
+					ID:     "disp-js-queued-001",
+					Status: factorysessionexecution.DispatchStatusQueued,
+				},
+			},
+		},
+		Result: factorysessionexecution.ResultReadResult{
+			SessionID:     "dur-sess-js-queued-interrupt-001",
+			SessionStatus: factorysessionexecution.LifecycleStatusRunning,
+			ResultStatus:  factorysessionexecution.ResultStatusNotReady,
+		},
+	}))
+	_, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-js-queued-interrupt-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowFile,
+			WorkflowFile: ".claude/workflows/run-n.yaml",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync queued session: %v", err)
+	}
+	serverURL := serverURLForLifecycle(t, service)
+
+	response, status := postFactorySessionInterruptDispatch(t, serverURL, "dur-sess-js-queued-interrupt-001", factoryapi.FactorySessionInterruptDispatchRequest{
+		DispatchId: "disp-js-queued-001",
 	})
 	if status != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", status)
