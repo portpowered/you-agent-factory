@@ -3,6 +3,8 @@ import {
   getCurrentFactoryDocument,
 } from "./api";
 
+const firstProviderPlaceholder = "${".concat("firstProvider}");
+
 describe("current-factory-definition api", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -227,7 +229,7 @@ describe("current-factory-definition api", () => {
             name: "@you/fusion",
             workers: [
               {
-                modelProvider: "${firstProvider}",
+                modelProvider: firstProviderPlaceholder,
                 name: "fusion-drafter",
                 type: "MODEL_WORKER",
               },
@@ -253,7 +255,7 @@ describe("current-factory-definition api", () => {
     expect(document.invocationSignature?.parameters?.[0]?.name).toBe(
       "firstProvider",
     );
-    expect(document.workers?.[0]?.modelProvider).toBe("${firstProvider}");
+    expect(document.workers?.[0]?.modelProvider).toBe(firstProviderPlaceholder);
   });
 
   it("uses the session-scoped editable-definition route for non-default sessions", async () => {

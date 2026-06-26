@@ -4,6 +4,8 @@ import {
   normalizeFactoryDefinition,
 } from "./api";
 
+const providerPlaceholder = "${".concat("provider}");
+
 describe("factory-definition normalization boundary", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -1160,14 +1162,14 @@ describe("worker modelProvider validation", () => {
       name: "provider-factory",
       workers: [
         {
-          modelProvider: "${provider}",
+          modelProvider: providerPlaceholder,
           name: "writer",
           type: "MODEL_WORKER",
         },
       ],
     });
 
-    expect(normalized.workers?.[0]?.modelProvider).toBe("${provider}");
+    expect(normalized.workers?.[0]?.modelProvider).toBe(providerPlaceholder);
   });
 });
 

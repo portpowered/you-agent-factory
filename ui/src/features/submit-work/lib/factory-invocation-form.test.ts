@@ -5,59 +5,59 @@ import {
   serializeInvocationArgs,
 } from "./factory-invocation-form";
 
-describe("factory invocation form projection", () => {
-  const signature = {
-    examples: [
-      {
-        argv: ["fusion", "hello"],
-        name: "basic",
-      },
-    ],
-    outputContract: {
-      contentType: "text/plain",
-      description: "Writes a summary file.",
-      mode: "FILE",
-      pathParameter: "output",
+const signature = {
+  examples: [
+    {
+      argv: ["fusion", "hello"],
+      name: "basic",
     },
-    parameters: [
-      {
-        bindings: [{ kind: "POSITIONAL", position: 1 }],
-        description: "Primary input text.",
-        name: "input",
-        required: true,
-      },
-      {
-        aliases: ["o"],
-        bindings: [{ kind: "NAMED" }],
-        defaultValue: "/tmp/out.txt",
-        externalName: "output",
-        name: "outputPath",
-        typeHint: "FILE_PATH",
-      },
-      {
-        bindings: [{ kind: "NAMED" }],
-        choices: ["low", "medium", "high"],
-        name: "effort",
-      },
-      {
-        bindings: [{ kind: "NAMED" }],
-        name: "confirm",
-        typeHint: "BOOLEAN_STRING",
-      },
-      {
-        bindings: [{ kind: "NAMED" }],
-        name: "tag",
-        valueMode: "REPEATED",
-      },
-      {
-        bindings: [{ kind: "NAMED" }],
-        name: "attachment",
-        typeHint: "FILE_PATH",
-        valueMode: "FILE_CONTENTS",
-      },
-    ],
-  } as const;
+  ],
+  outputContract: {
+    contentType: "text/plain",
+    description: "Writes a summary file.",
+    mode: "FILE",
+    pathParameter: "output",
+  },
+  parameters: [
+    {
+      bindings: [{ kind: "POSITIONAL", position: 1 }],
+      description: "Primary input text.",
+      name: "input",
+      required: true,
+    },
+    {
+      aliases: ["o"],
+      bindings: [{ kind: "NAMED" }],
+      defaultValue: "/tmp/out.txt",
+      externalName: "output",
+      name: "outputPath",
+      typeHint: "FILE_PATH",
+    },
+    {
+      bindings: [{ kind: "NAMED" }],
+      choices: ["low", "medium", "high"],
+      name: "effort",
+    },
+    {
+      bindings: [{ kind: "NAMED" }],
+      name: "confirm",
+      typeHint: "BOOLEAN_STRING",
+    },
+    {
+      bindings: [{ kind: "NAMED" }],
+      name: "tag",
+      valueMode: "REPEATED",
+    },
+    {
+      bindings: [{ kind: "NAMED" }],
+      name: "attachment",
+      typeHint: "FILE_PATH",
+      valueMode: "FILE_CONTENTS",
+    },
+  ],
+} as const;
 
+describe("factory invocation form projection", () => {
   it("projects signature-backed dashboard controls from canonical parameter data", () => {
     const projection = projectInvocationForm(signature);
 
@@ -99,7 +99,9 @@ describe("factory invocation form projection", () => {
       }),
     ]);
   });
+});
 
+describe("factory invocation form serialization", () => {
   it("serializes dashboard field state into InvocationRequest.args", () => {
     const args = serializeInvocationArgs(projectInvocationForm(signature).fields, {
       confirm: ["false"],
@@ -117,7 +119,9 @@ describe("factory invocation form projection", () => {
       tag: ["alpha", "beta"],
     });
   });
+});
 
+describe("factory invocation form validation", () => {
   it("reports local field validation for required and repeated inputs", () => {
     const fieldErrors = collectInvocationFieldErrors(
       projectInvocationForm(signature).fields,
@@ -136,7 +140,9 @@ describe("factory invocation form projection", () => {
       tag: "Each repeated value must be non-empty.",
     });
   });
+});
 
+describe("factory invocation form backend error mapping", () => {
   it("maps backend invocation messages back to the matching field", () => {
     const projection = projectInvocationForm(signature);
 
