@@ -5,6 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FactoryOrchestratorKind } from "../../../../api/generated/openapi";
 import { formatDateTime } from "../../../../i18n/formatters";
 import {
+  awaitingReplaySessionID,
+  buildAwaitingDurableSession,
+  buildAwaitingReplayEventStream,
   buildSuccessfulDurableSession,
   buildSuccessfulReplayEventStream,
   buildWarningDurableSession,
@@ -137,6 +140,50 @@ describe("FactorySessionDetailPanel event replay disclosure", () => {
     expect(
       screen.getByText("Phase verify · Checkpoint checkpoint-9"),
     ).toBeTruthy();
+  });
+
+  it("reveals replay for durable awaiting-approval sessions before result artifacts exist", async () => {
+    vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith(`/factory-sessions/${awaitingReplaySessionID}`)) {
+        return jsonResponse(buildAwaitingDurableSession());
+      }
+      if (url.endsWith(`/factory-sessions/${awaitingReplaySessionID}/events`)) {
+        return new Response(buildAwaitingReplayEventStream(), {
+          headers: {
+            "Content-Type": "text/event-stream",
+          },
+          status: 200,
+        });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    renderWithQueryClient(
+      <FactorySessionDetailPanel sessionID={awaitingReplaySessionID} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Awaiting approval")).toBeTruthy();
+    });
+
+    const user = userEvent.setup();
+    const replayTrigger = screen.getByRole("button", {
+      name: "Expand Factory Event replay",
+    });
+
+    await user.click(replayTrigger);
+
+    await waitFor(() => {
+      expect(screen.getByText("Showing 2 Factory Events.")).toBeTruthy();
+    });
+
+    expect(screen.getByText("Session started")).toBeTruthy();
+    expect(screen.getByText("Session result updated")).toBeTruthy();
+    expect(
+      screen.getByText("Result status not ready"),
+    ).toBeTruthy();
+    expect(screen.getAllByText("Phase approval").length).toBe(2);
   });
 
   it("keeps replay disclosure out of non-durable session detail views", async () => {

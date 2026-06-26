@@ -3,6 +3,9 @@ import { expect, userEvent, within } from "storybook/test";
 
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 import {
+  awaitingReplaySessionID,
+  buildAwaitingDurableSession,
+  buildAwaitingReplayEventStream,
   buildSuccessfulDurableSession,
   buildSuccessfulReplayDispatchList,
   buildSuccessfulReplayEventStream,
@@ -276,6 +279,46 @@ export const DurableReplayDisclosure = {
     expect(canvas.getByText("Dispatch status completed")).toBeTruthy();
   },
   render: () => renderFactorySessionDetailPanel(successfulReplaySessionID),
+};
+
+export const DurableReplayDisclosureAwaitingApproval = {
+  tags: ["test"],
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: `/factory-sessions/${awaitingReplaySessionID}`,
+          response: {
+            body: buildAwaitingDurableSession(),
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${awaitingReplaySessionID}/events`,
+          response: {
+            body: buildAwaitingReplayEventStream(),
+            headers: {
+              "Content-Type": "text/event-stream",
+            },
+          },
+        },
+      ],
+      sessionID: awaitingReplaySessionID,
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const user = userEvent.setup();
+
+    const trigger = await canvas.findByRole("button", {
+      name: "Expand Factory Event replay",
+    });
+    await user.click(trigger);
+    await expect(canvas.findByText("Showing 2 Factory Events.")).resolves.toBeTruthy();
+    await expect(canvas.getByText("Session result updated")).toBeTruthy();
+  },
+  render: () => renderFactorySessionDetailPanel(awaitingReplaySessionID),
 };
 
 export const DurableReplayDisclosureWarning = {

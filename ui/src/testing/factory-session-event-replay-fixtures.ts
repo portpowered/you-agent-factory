@@ -2,6 +2,7 @@ import { FactoryOrchestratorKind } from "../api/generated/openapi";
 
 export const successfulReplaySessionID = "dur-sess-js-success-002";
 export const warningReplaySessionID = "dur-sess-js-warning-003";
+export const awaitingReplaySessionID = "dur-sess-js-awaiting-001";
 export const unavailableReplaySessionID = "dur-sess-js-unavailable-003";
 
 export function buildSuccessfulDurableSession(sessionId = successfulReplaySessionID) {
@@ -82,6 +83,36 @@ export function buildWarningDurableSession(sessionId = warningReplaySessionID) {
     },
     sessionId,
     status: "FAILED",
+    usage: { resources: [] },
+  };
+}
+
+export function buildAwaitingDurableSession(sessionId = awaitingReplaySessionID) {
+  return {
+    artifactRefs: [],
+    dialect: "you-workflow-v1",
+    lifecycle: {
+      awaitingApprovalAt: "2026-06-08T15:00:01Z",
+      queuedAt: "2026-06-08T15:00:00Z",
+    },
+    orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+    progress: {
+      completedDispatches: 0,
+      failedDispatches: 0,
+      inFlightDispatches: 0,
+      totalDispatches: 0,
+    },
+    resolvedSource: {
+      kind: "WORKFLOW_FILE",
+      sourceRef: "workflow/.claude/workflows/policy-gated-release.yaml",
+      sourceHash: "sha256:js-workflow-policy-gated-release",
+    },
+    resultSummary: {
+      resultStatus: "NOT_READY",
+      summary: "Awaiting orchestrator policy approval before execution.",
+    },
+    sessionId,
+    status: "AWAITING_APPROVAL",
     usage: { resources: [] },
   };
 }
@@ -249,6 +280,48 @@ export function buildWarningReplayEventStream(
         failureDetail: {
           message: "Release verification failed.",
         },
+      },
+    })}`,
+    "",
+  ].join("\n");
+}
+
+export function buildAwaitingReplayEventStream(
+  sessionId = awaitingReplaySessionID,
+) {
+  return [
+    `data: ${JSON.stringify({
+      id: "session-started/dur-sess-js-awaiting-001",
+      type: "SESSION_STARTED",
+      context: {
+        sequence: 1,
+        tick: 1,
+        eventTime: "2026-06-08T15:00:00Z",
+        sessionId,
+        sessionSequence: 0,
+        phaseName: "approval",
+      },
+      payload: {
+        sourceRef: "workflow/.claude/workflows/policy-gated-release.yaml",
+        sourceHash: "sha256:js-workflow-policy-gated-release",
+        policyHash: "eff-policy-gated-release",
+        startedAt: "2026-06-08T15:00:00Z",
+      },
+    })}`,
+    "",
+    `data: ${JSON.stringify({
+      id: "session-result-updated/dur-sess-js-awaiting-001",
+      type: "SESSION_RESULT_UPDATED",
+      context: {
+        sequence: 2,
+        tick: 2,
+        eventTime: "2026-06-08T15:00:01Z",
+        sessionId,
+        sessionSequence: 1,
+        phaseName: "approval",
+      },
+      payload: {
+        resultStatus: "NOT_READY",
       },
     })}`,
     "",

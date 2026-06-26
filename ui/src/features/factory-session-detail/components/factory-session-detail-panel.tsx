@@ -117,6 +117,7 @@ function FactorySessionRuntimeSections({
           locale={locale}
           partialResult={data.partialResult}
           result={data.result}
+          sessionID={data.session.id}
         />
       ) : (
         <PetriSessionProjection locale={locale} petri={runtime.petri} />
@@ -133,6 +134,7 @@ function JavaScriptSessionProjection({
   locale,
   partialResult,
   result,
+  sessionID,
 }: {
   artifacts?: FactoryArtifact[];
   durableLifecycleStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
@@ -141,6 +143,7 @@ function JavaScriptSessionProjection({
   locale?: string;
   partialResult?: components["schemas"]["FactorySessionPartialResult"];
   result?: components["schemas"]["FactorySessionLiveResult"];
+  sessionID: string;
 }) {
   const messages = getFactorySessionDetailMessages(locale);
   const [selectedDispatchID, setSelectedDispatchID] = useState<string | null>(
@@ -155,7 +158,7 @@ function JavaScriptSessionProjection({
     (dispatch) => dispatch.warnings ?? [],
   );
   const supportsEventReplay = isDurableJavaScriptSession(
-    result?.sessionId ?? partialResult?.sessionId ?? "",
+    sessionID,
     FactoryOrchestratorKind.JAVASCRIPT,
     durableLifecycleStatus,
   );
@@ -192,7 +195,7 @@ function JavaScriptSessionProjection({
       {supportsEventReplay ? (
         <FactorySessionEventReplayDisclosure
           locale={locale}
-          sessionID={result?.sessionId ?? partialResult?.sessionId ?? ""}
+          sessionID={sessionID}
         />
       ) : null}
 
