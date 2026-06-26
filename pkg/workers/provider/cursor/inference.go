@@ -71,7 +71,8 @@ func (f *ParseFailure) Error() string {
 	return f.Message
 }
 
-// ParseInferenceResult parses Cursor --output-format json success stdout.
+// ParseInferenceResult parses Cursor success stdout from either terminal json
+// or stream-json output.
 func ParseInferenceResult(provider string, stdout []byte) (*InferenceResult, *ParseFailure) {
 	trimmed := strings.TrimSpace(string(stdout))
 	if trimmed == "" {
@@ -80,15 +81,17 @@ func ParseInferenceResult(provider string, stdout []byte) (*InferenceResult, *Pa
 
 	var payload resultPayload
 	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
+		if strings.Contains(trimmed, "\n") {
+			return ParseInferenceStreamResult(provider, stdout)
+		}
 		return nil, resultParseFailure(provider, fmt.Sprintf("cursor JSON output was not valid JSON: %v", err), err)
 	}
 
 	if payload.Type != ResultTypeResult {
-		return nil, resultParseFailure(
-			provider,
-			fmt.Sprintf("cursor JSON output had unexpected type %q, want %q", payload.Type, ResultTypeResult),
-			nil,
-		)
+		if strings.Contains(trimmed, "\n") {
+			return ParseInferenceStreamResult(provider, stdout)
+		}
+		return nil, resultParseFailure(provider, fmt.Sprintf("cursor JSON output had unexpected type %q, want %q", payload.Type, ResultTypeResult), nil)
 	}
 	if payload.Subtype != ResultSubtypeSuccess {
 		return nil, resultErrorSubtype(provider, payload)

@@ -491,9 +491,12 @@ func TestScriptWrapProvider_Infer_ClaudeRejectsImageContentBeforeRunner(t *testi
 	}
 }
 
-func TestScriptWrapProvider_Infer_CursorParsesJSONResult(t *testing.T) {
-	stdout := cursorpkg.SuccessStdoutJSON("Parsed assistant answer.", "cursor-session-abc")
-	stdout = append(stdout, '\n')
+func TestScriptWrapProvider_Infer_CursorParsesStreamJSONResult(t *testing.T) {
+	stdout := []byte(
+		"{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"cursor-session-abc\"}\n" +
+			"{\"type\":\"assistant\",\"timestamp_ms\":1,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Parsed \"}]},\"session_id\":\"cursor-session-abc\"}\n" +
+			"{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"Parsed assistant answer.\",\"session_id\":\"cursor-session-abc\"}\n",
+	)
 	fakeExec := &recordingProviderExec{
 		result: CommandResult{Stdout: stdout},
 	}
@@ -718,7 +721,7 @@ func nonCodexInferencePayloadTestCases() []nonCodexInferencePayloadTestCase {
 					"AGENT_FACTORY_CURSOR_ENV": "enabled",
 				},
 			},
-			wantArgs: []string{"-p", "--model", "gpt-5", "--resume", "cursor-session-123", "--output-format", "json", "run the tests"},
+			wantArgs: []string{"-p", "--model", "gpt-5", "--resume", "cursor-session-123", "--output-format", "stream-json", "--stream-partial-output", "run the tests"},
 			wantEnv:  "AGENT_FACTORY_CURSOR_ENV=enabled",
 		},
 		{

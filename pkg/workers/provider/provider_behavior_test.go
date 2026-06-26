@@ -321,7 +321,7 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 				ModelProvider: string(interfaces.ModelProviderCursor),
 				UserMessage:   "summarize the workspace",
 			},
-			want: []string{"-p", "--output-format", "json", "summarize the workspace"},
+			want: []string{"-p", "--output-format", "stream-json", "--stream-partial-output", "summarize the workspace"},
 		},
 		{
 			name: "WithModelSessionAndForce",
@@ -332,7 +332,7 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 				UserMessage:   "run the tests",
 			},
 			skipPermissions: true,
-			want:            []string{"-f", "-p", "--model", "gpt-5", "--resume", "cursor-session-123", "--output-format", "json", "run the tests"},
+			want:            []string{"-f", "-p", "--model", "gpt-5", "--resume", "cursor-session-123", "--output-format", "stream-json", "--stream-partial-output", "run the tests"},
 		},
 		{
 			name: "WithWorkspace",
@@ -341,7 +341,7 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 				WorkingDirectory: "/tmp/project",
 				UserMessage:      "inspect the repo",
 			},
-			want: []string{"-p", "--workspace", "/tmp/project", "--output-format", "json", "inspect the repo"},
+			want: []string{"-p", "--workspace", "/tmp/project", "--output-format", "stream-json", "--stream-partial-output", "inspect the repo"},
 		},
 	}
 
