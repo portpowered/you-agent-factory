@@ -258,6 +258,12 @@ func canCoalesceEvents(left, right Event) bool {
 	if left.Kind != right.Kind || left.DispatchID != right.DispatchID {
 		return false
 	}
+	if left.Type != right.Type || left.ExternalEventType != right.ExternalEventType {
+		return false
+	}
+	if !stringMapEqual(left.Metadata, right.Metadata) {
+		return false
+	}
 	return providerSessionRefEqual(left.ProviderSessionRef, right.ProviderSessionRef)
 }
 
@@ -269,6 +275,18 @@ func providerSessionRefEqual(left, right *interfaces.ProviderSessionMetadata) bo
 		return false
 	}
 	return left.Provider == right.Provider && left.Kind == right.Kind && left.ID == right.ID
+}
+
+func stringMapEqual(left, right map[string]string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for key, leftValue := range left {
+		if right[key] != leftValue {
+			return false
+		}
+	}
+	return true
 }
 
 func mergeCompactionSummary(left, right *CompactionSummary) *CompactionSummary {

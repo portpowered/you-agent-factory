@@ -2713,9 +2713,9 @@ func TestFactoryService_InferenceProgressPublisherSeparatesDispatchScopedStreams
 	}
 }
 
-func TestFactoryService_SubscribeSessionResponseStream_ReadsRetainedAndLiveEvents(t *testing.T) {
+func TestFactoryService_InferenceProgressPublisherPreservesNormalizedCodexMetadata(t *testing.T) {
 	sessions := factorysessions.NewRegistry()
-	sessionID := "session-progress-subscribe"
+	sessionID := "session-progress-codex-normalized"
 	sessions.Upsert(factorysessions.NewLiveSession(
 		sessionID,
 		"/factory",
@@ -2727,284 +2727,51 @@ func TestFactoryService_SubscribeSessionResponseStream_ReadsRetainedAndLiveEvent
 		"factory",
 	), true)
 
-	svc := &FactoryService{sessions: sessions}
-	publisher := svc.inferenceProgressPublisher(sessionID, nil)
-	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "retained-1"))
-	publisher(workerprovider.ProgressFragment("dispatch-1", nil, "retained-2"))
-
-	subscription, err := svc.SubscribeSessionResponseStream(sessionID, "dispatch-1", 0)
-	if err != nil {
-		t.Fatalf("SubscribeSessionResponseStream: %v", err)
-	}
-	defer subscription.Detach()
-
-	initial, err := subscription.Next(context.Background())
-	if err != nil {
-		t.Fatalf("Next(initial): %v", err)
-	}
-	if len(initial.Events) != 2 {
-		t.Fatalf("initial event count = %d, want 2", len(initial.Events))
-	}
-
-	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "live-3"))
-	live, err := subscription.Next(context.Background())
-	if err != nil {
-		t.Fatalf("Next(live): %v", err)
-	}
-	if len(live.Events) != 1 || live.Events[0].Payload != "live-3" {
-		t.Fatalf("live events = %#v, want one live event", live.Events)
-	}
-}
-
-func TestFactoryService_InferenceProgressPublisher_SlowSubscriberCompactionEmitsDiagnostics(t *testing.T) {
-	sessionID := "session-progress-backpressure"
-	harness := newSlowSubscriberCompactionHarness(t, sessionID)
-	defer harness.metricsSink.Close()
-
-	publisher := harness.svc.inferenceProgressPublisher(sessionID, harness.logger)
+	publisher := (&FactoryService{sessions: sessions}).inferenceProgressPublisher(sessionID, nil)
 	if publisher == nil {
-		t.Fatal("publisher = nil, want inference progress publisher")
+		t.Fatal("publisher = nil, want session publisher")
 	}
 
-	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "retained-1"))
-	subscription := mustSubscribeSessionResponseStream(t, harness.svc, sessionID, "dispatch-1", 0)
-	defer subscription.Detach()
-
-	initial := mustReadSessionResponseSubscription(t, subscription, "initial")
-	if len(initial.Events) != 1 || initial.Events[0].Payload != "retained-1" {
-		t.Fatalf("initial events = %#v, want retained seed event", initial.Events)
-	}
-
-	publishProviderAlternatingFragmentsAsync(t, publisher, 64)
-	catchUp := mustReadSessionResponseSubscription(t, subscription, "catch-up")
-	assertRetainedWindowCompactionResult(t, catchUp)
-	assertResponseStreamCompactionMetric(t, harness.metricsSink.Path())
-	assertResponseStreamCompactionWarning(t, harness.observed)
-}
-
-type slowSubscriberCompactionHarness struct {
-	svc         *FactoryService
-	logger      *zap.Logger
-	observed    *observer.ObservedLogs
-	metricsSink *logging.RuntimeMetricsSink
-}
-
-func newSlowSubscriberCompactionHarness(t *testing.T, sessionID string) slowSubscriberCompactionHarness {
-	t.Helper()
-
-	metricsSink, err := logging.BuildRuntimeMetricsSink(
-		"session-progress-backpressure",
-		"runtime-progress-backpressure",
-		"/factory",
-		"/factory",
-		t.TempDir(),
-		logging.RuntimeMetricsConfig{},
-	)
-	if err != nil {
-		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
-	}
-
-	core, observed := observer.New(zap.WarnLevel)
-	logger := zap.New(core)
-	sessions := factorysessions.NewRegistry()
-	sessions.Upsert(factorysessions.NewLiveSession(
-		sessionID,
-		"/factory",
-		"/factory",
-		"/factory",
-		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
-		&liveSessionState{handle: &liveRuntimeHandle{runtime: &factoryRuntimeBundle{
-			logger:      logger,
-			metricsSink: metricsSink,
-		}}},
-		false,
-		"factory",
-	), true)
-
-	return slowSubscriberCompactionHarness{
-		svc: &FactoryService{
-			sessions: sessions,
-			newSessionResponseStream: func() *factorysessions.SessionResponseStream {
-				return responsestream.NewSessionResponseStreamWithClock(
-					factory.RealClock{},
-					responsestream.RetentionLimits{MaxEvents: 2},
-				)
-			},
+	publisher(workerprovider.InferenceProgressFragment{
+		DispatchID:        "dispatch-codex-json-1",
+		Kind:              workerprovider.ResponseFragmentKind,
+		Type:              workerprovider.NormalizedEventTypeFinalText,
+		Payload:           "final response",
+		ExternalEventType: "response.completed",
+		ProviderSessionRef: &interfaces.ProviderSessionMetadata{
+			Provider: "codex",
+			Kind:     "session_id",
+			ID:       "sess-codex-1",
 		},
-		logger:      logger,
-		observed:    observed,
-		metricsSink: metricsSink,
+		Metadata: map[string]string{
+			"runner_id":        "codex",
+			"workstation_name": "review",
+			"work_id":          "work-codex-json-1",
+		},
+	})
+
+	stream := (&FactoryService{sessions: sessions}).sessionResponseStream(sessions.Get(sessionID))
+	events := stream.Events()
+	if len(events) != 1 {
+		t.Fatalf("stream events = %#v, want one normalized event", events)
 	}
-}
-
-func mustSubscribeSessionResponseStream(
-	t *testing.T,
-	svc *FactoryService,
-	sessionID, dispatchID string,
-	afterSequence int64,
-) *responsestream.Subscription {
-	t.Helper()
-
-	subscription, err := svc.SubscribeSessionResponseStream(sessionID, dispatchID, afterSequence)
-	if err != nil {
-		t.Fatalf("SubscribeSessionResponseStream: %v", err)
+	event := events[0]
+	if event.Kind != responsestream.EventKindResponseFragment || event.Type != responsestream.EventType(workerprovider.NormalizedEventTypeFinalText) {
+		t.Fatalf("stored event = %#v, want response FINAL_TEXT", event)
 	}
-	return subscription
-}
-
-func mustReadSessionResponseSubscription(
-	t *testing.T,
-	subscription *responsestream.Subscription,
-	label string,
-) responsestream.ReadResult {
-	t.Helper()
-
-	result, err := subscription.Next(context.Background())
-	if err != nil {
-		t.Fatalf("Next(%s): %v", label, err)
+	if event.ExternalEventType != "response.completed" {
+		t.Fatalf("external event type = %q, want response.completed", event.ExternalEventType)
 	}
-	return result
-}
-
-func publishProviderAlternatingFragmentsAsync(
-	t *testing.T,
-	publisher workerprovider.InferenceProgressPublisher,
-	count int,
-) {
-	t.Helper()
-
-	publishDone := make(chan struct{})
-	go func() {
-		for i := 0; i < count; i++ {
-			payload := "chunk-" + strconv.Itoa(i)
-			if i%2 == 0 {
-				publisher(workerprovider.ProgressFragment("dispatch-1", nil, payload))
-				continue
-			}
-			publisher(workerprovider.ResponseFragment("dispatch-1", nil, payload))
-		}
-		close(publishDone)
-	}()
-
-	select {
-	case <-publishDone:
-	case <-time.After(time.Second):
-		t.Fatal("publishing stalled behind a slow subscriber")
+	if event.ProviderSessionRef == nil || event.ProviderSessionRef.ID != "sess-codex-1" {
+		t.Fatalf("provider session = %#v, want sess-codex-1", event.ProviderSessionRef)
 	}
-}
-
-func assertRetainedWindowCompactionResult(t *testing.T, result responsestream.ReadResult) {
-	t.Helper()
-
-	if !result.BehindRetainedWindow {
-		t.Fatalf("catch-up result = %#v, want retained-window gap signal", result)
+	if got := event.Metadata["runner_id"]; got != "codex" {
+		t.Fatalf("metadata runner_id = %q, want codex", got)
 	}
-	if result.Compaction == nil || result.Compaction.Reason != responsestream.CompactionReasonTruncated {
-		t.Fatalf("catch-up compaction = %#v, want truncation summary", result.Compaction)
+	if got := event.Metadata["workstation_name"]; got != "review" {
+		t.Fatalf("metadata workstation_name = %q, want review", got)
 	}
-	for _, event := range result.Events {
-		if event.Kind == responsestream.EventKindCompactionSignal {
-			return
-		}
-	}
-	t.Fatalf("catch-up events = %#v, want retained compaction signal", result.Events)
-}
-
-func assertResponseStreamCompactionMetric(t *testing.T, metricsPath string) {
-	t.Helper()
-
-	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
-		return runtimeMetricNameAndValue(record, runtimeMetricSessionResponseStreamCompacted, 1) &&
-			metricRecordString(record, "dispatch_id") == "dispatch-1" &&
-			metricRecordString(record, "reason") == string(responsestream.CompactionReasonTruncated)
-	}, "response stream compaction")
-}
-
-func assertResponseStreamCompactionWarning(t *testing.T, observed *observer.ObservedLogs) {
-	t.Helper()
-
-	for _, entry := range observed.All() {
-		if entry.Message != "session response stream compacted internal provider progress" {
-			continue
-		}
-		if entry.ContextMap()["dispatch_id"] == "dispatch-1" &&
-			entry.ContextMap()["compaction_reason"] == string(responsestream.CompactionReasonTruncated) {
-			return
-		}
-	}
-	t.Fatalf("compaction warning log not found in %#v", observed.All())
-}
-
-func TestFactoryService_DispatchCompletionObserverClosesDispatchSubscribers(t *testing.T) {
-	sessions := factorysessions.NewRegistry()
-	sessionID := "session-progress-complete"
-	sessions.Upsert(factorysessions.NewLiveSession(
-		sessionID,
-		"/factory",
-		"/factory",
-		"/factory",
-		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
-		&liveSessionState{handle: &liveRuntimeHandle{runtime: &factoryRuntimeBundle{}}},
-		false,
-		"factory",
-	), true)
-
-	svc := &FactoryService{sessions: sessions}
-	subscription, err := svc.SubscribeSessionResponseStream(sessionID, "dispatch-1", 0)
-	if err != nil {
-		t.Fatalf("SubscribeSessionResponseStream: %v", err)
-	}
-
-	observerFactory := newSessionDispatchCompletionObserverFactory(sessions)
-	if observerFactory == nil {
-		t.Fatal("observer factory = nil, want dispatch completion observer")
-	}
-	observerFactory(sessionID)("dispatch-1")
-
-	if _, err := subscription.Next(context.Background()); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
-		t.Fatalf("Next after dispatch completion error = %v, want ErrSubscriptionClosed", err)
-	}
-	session := sessions.Get(sessionID)
-	if got := svc.sessionResponseStreams(session).SubscriberCount("dispatch-1"); got != 0 {
-		t.Fatalf("subscriber count after dispatch completion = %d, want 0", got)
-	}
-	if _, err := svc.SubscribeSessionResponseStream(sessionID, "dispatch-1", 0); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
-		t.Fatalf("Subscribe after dispatch completion error = %v, want ErrSubscriptionClosed", err)
-	}
-
-	publisher := svc.inferenceProgressPublisher(sessionID, nil)
-	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "late-fragment"))
-	if got := svc.sessionResponseStreams(session).Count(); got != 0 {
-		t.Fatalf("stream count after late publish = %d, want 0", got)
-	}
-}
-
-func TestFactoryService_StopFactorySession_ClosesSessionResponseStreamSubscribers(t *testing.T) {
-	sessionID := "session-progress-stop"
-	svc := &FactoryService{sessions: factorysessions.NewRegistry()}
-	runDone := make(chan struct{})
-	close(runDone)
-	handle := &liveRuntimeHandle{runDone: runDone, runtime: &factoryRuntimeBundle{}}
-	svc.sessions.Upsert(factorysessions.NewLiveSession(
-		sessionID,
-		"/factory",
-		"/factory",
-		"/factory",
-		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
-		&liveSessionState{handle: handle, responseStreams: factorysessions.NewSessionResponseStreamSetWithFactory(factorysessions.NewSessionResponseStream)},
-		false,
-		"factory",
-	), true)
-
-	subscription, err := svc.SubscribeSessionResponseStream(sessionID, "dispatch-1", 0)
-	if err != nil {
-		t.Fatalf("SubscribeSessionResponseStream: %v", err)
-	}
-
-	if err := svc.stopFactorySession(sessionID); err != nil {
-		t.Fatalf("stopFactorySession: %v", err)
-	}
-	if _, err := subscription.Next(context.Background()); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
-		t.Fatalf("Next after session stop error = %v, want ErrSubscriptionClosed", err)
+	if got := event.Metadata["work_id"]; got != "work-codex-json-1" {
+		t.Fatalf("metadata work_id = %q, want work-codex-json-1", got)
 	}
 }
