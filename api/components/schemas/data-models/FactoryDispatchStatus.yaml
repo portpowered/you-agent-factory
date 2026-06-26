@@ -5,13 +5,16 @@ enum:
   - RUNNING
   - COMPLETED
   - FAILED
+  - INTERRUPTED
 x-enum-varnames:
   - FactoryDispatchStatusQUEUED
   - FactoryDispatchStatusRUNNING
   - FactoryDispatchStatusCOMPLETED
   - FactoryDispatchStatusFAILED
+  - FactoryDispatchStatusINTERRUPTED
 x-enum-descriptions:
   - Dispatch is waiting to start.
   - Dispatch is currently executing.
   - Dispatch completed successfully.
   - Dispatch failed or was rejected.
+  - Dispatch was interrupted before normal completion.

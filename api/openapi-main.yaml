@@ -1071,6 +1071,46 @@ paths:
           $ref: '#/components/responses/FactorySessionLifecycleControlConflict'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/interrupt-dispatch:
+    post:
+      tags:
+        - Factory
+      operationId: interruptFactorySessionDispatch
+      summary: Interrupt one active durable factory session dispatch
+      description: >-
+        Interrupts one active dispatch within the targeted durable factory
+        session. The response links the interruption to the session and dispatch
+        state and preserves inspectable partial results, dispatches, and
+        artifacts after the control operation.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionInterruptDispatchRequest'
+      responses:
+        '200':
+          description: Interrupt dispatch applied immediately or produced a typed no-op outcome.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '202':
+          description: Interrupt-dispatch control request accepted asynchronously.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionLifecycleControlConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/partial-result:
     get:
       tags:
@@ -1681,6 +1721,8 @@ components:
       $ref: './components/schemas/api/FactorySessionApproveRequest.yaml'
     FactorySessionRetryDispatchRequest:
       $ref: './components/schemas/api/FactorySessionRetryDispatchRequest.yaml'
+    FactorySessionInterruptDispatchRequest:
+      $ref: './components/schemas/api/FactorySessionInterruptDispatchRequest.yaml'
     FactorySessionLifecycleControlResponse:
       $ref: './components/schemas/api/FactorySessionLifecycleControlResponse.yaml'
     LoadableProviderSessionRef:

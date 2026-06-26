@@ -673,6 +673,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/interrupt-dispatch": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Interrupt one active durable factory session dispatch
+     * @description Interrupts one active dispatch within the targeted durable factory session. The response links the interruption to the session and dispatch state and preserves inspectable partial results, dispatches, and artifacts after the control operation.
+     */
+    post: operations["interruptFactorySessionDispatch"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/partial-result": {
     parameters: {
       query?: never;
@@ -2082,6 +2102,8 @@ export interface components {
       canApprove?: boolean;
       /** @description True when retry-dispatch is currently valid for the session status. */
       canRetryDispatch?: boolean;
+      /** @description True when interrupt-dispatch is currently valid for the session status. */
+      canInterruptDispatch?: boolean;
     };
     FactorySessionDurableResultSummary: {
       resultStatus: components["schemas"]["FactorySessionResultStatus"];
@@ -2387,6 +2409,15 @@ export interface components {
        * @default false
        */
       resetAttemptCount: boolean;
+    };
+    /** @description Interrupt request for one active durable factory-session dispatch. */
+    FactorySessionInterruptDispatchRequest: {
+      /** @description Optional idempotency key for one lifecycle control request. Replaying the same requestId with the same operation and target must return the prior control outcome instead of applying a second mutation. */
+      requestId?: string;
+      /** @description Optional operator-provided reason for audit and diagnostics. */
+      reason?: string;
+      /** @description Stable dispatch identifier to interrupt within the targeted session. */
+      dispatchId: string;
     };
     FactorySessionLifecycleControlResponse: {
       /** @description Stable durable factory-session identifier. */
@@ -5637,6 +5668,46 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  interruptFactorySessionDispatch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["FactorySessionInterruptDispatchRequest"];
+      };
+    };
+    responses: {
+      /** @description Interrupt dispatch applied immediately or produced a typed no-op outcome. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionLifecycleControlResponse"];
+        };
+      };
+      /** @description Interrupt-dispatch control request accepted asynchronously. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionLifecycleControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["FactorySessionLifecycleControlConflict"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   getFactorySessionPartialResult: {
     parameters: {
       query?: never;
@@ -6078,6 +6149,8 @@ export const FactoryDispatchStatus = {
   FactoryDispatchStatusCOMPLETED: "COMPLETED",
   // Dispatch failed or was rejected.
   FactoryDispatchStatusFAILED: "FAILED",
+  // Dispatch was interrupted before normal completion.
+  FactoryDispatchStatusINTERRUPTED: "INTERRUPTED",
 } as const;
 export type FactoryDispatchStatus =
   (typeof FactoryDispatchStatus)[keyof typeof FactoryDispatchStatus];
@@ -6269,6 +6342,8 @@ export const FactorySessionLifecycleControlKind = {
   FactorySessionLifecycleControlKindTerminate: "TERMINATE",
   // Retry one failed or interrupted dispatch within the targeted session.
   FactorySessionLifecycleControlKindRetryDispatch: "RETRY_DISPATCH",
+  // Interrupt one active dispatch within the targeted session.
+  FactorySessionLifecycleControlKindInterruptDispatch: "INTERRUPT_DISPATCH",
 } as const;
 export type FactorySessionLifecycleControlKind =
   (typeof FactorySessionLifecycleControlKind)[keyof typeof FactorySessionLifecycleControlKind];

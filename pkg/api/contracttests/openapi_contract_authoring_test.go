@@ -677,7 +677,7 @@ func TestOpenAPIContract_FactoryDispatchAndArtifactSchemasExposeSharedProjection
 		"JAVASCRIPT_SYSTEM",
 	})
 	assertEnumValues(t, schemaObject(t, schemas, "FactoryDispatchStatus"), "FactoryDispatchStatus", []string{
-		"QUEUED", "RUNNING", "COMPLETED", "FAILED",
+		"QUEUED", "RUNNING", "COMPLETED", "FAILED", "INTERRUPTED",
 	})
 	assertEnumValues(t, schemaObject(t, schemas, "FactoryArtifactKind"), "FactoryArtifactKind", []string{
 		"FINAL_RESULT",

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
@@ -1288,6 +1289,333 @@ func TestReplaySessionProjection_IgnoresUnknownEventTypes(t *testing.T) {
 	}
 }
 
+func TestAppendDispatchInterruptedEvent_RecordsCanonicalMetadata(t *testing.T) {
+	startedAt := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+	session := SessionReadResult{
+		SessionID:        "dur-sess-interrupt-001",
+		Status:           LifecycleStatusRunning,
+		OrchestratorKind: "JAVASCRIPT",
+		Dialect:          "you-workflow-v1",
+		Phase:            "execute",
+		Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+	}
+	base := BuildCanonicalRuntimeSessionEvents(session, ResultReadResult{
+		SessionID:    session.SessionID,
+		ResultStatus: ResultStatusNotReady,
+	})
+	dispatch := DispatchSummary{
+		ID:     "disp-js-002",
+		Status: DispatchStatusRunning,
+		Phase:  "execute",
+		Label:  "audit",
+	}
+	events := AppendDispatchInterruptedEvent(
+		base,
+		session,
+		dispatch,
+		InterruptDispatchRequest{
+			ControlRequest: ControlRequest{Reason: "operator stop"},
+			DispatchID:     "disp-js-002",
+		},
+		DispatchStatusRunning,
+		canonicalEventSourceRuntimeService,
+	)
+	if len(events) != len(base)+1 {
+		t.Fatalf("events = %d, want %d", len(events), len(base)+1)
+	}
+
+	var envelope canonicalFactoryEvent
+	if err := json.Unmarshal(events[len(events)-1], &envelope); err != nil {
+		t.Fatalf("unmarshal interrupted event: %v", err)
+	}
+	if envelope.Type != "DISPATCH_INTERRUPTED" {
+		t.Fatalf("type = %q, want DISPATCH_INTERRUPTED", envelope.Type)
+	}
+	if envelope.Context.DispatchID == nil || *envelope.Context.DispatchID != "disp-js-002" {
+		t.Fatalf("dispatchId = %#v, want disp-js-002", envelope.Context.DispatchID)
+	}
+
+	var payload dispatchInterruptedEventPayload
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if payload.Reason != "operator stop" {
+		t.Fatalf("reason = %q, want operator stop", payload.Reason)
+	}
+	if payload.ObservedStatus != string(factoryapi.FactoryDispatchStatusRUNNING) {
+		t.Fatalf("observedStatus = %q, want RUNNING", payload.ObservedStatus)
+	}
+	if payload.RetryPlanned {
+		t.Fatal("retryPlanned = true, want false")
+	}
+}
+
+func TestMarkDispatchInterrupted_UpdatesInspectionProjection(t *testing.T) {
+	dispatches := []DispatchSummary{{
+		ID:     "disp-js-002",
+		Status: DispatchStatusRunning,
+	}}
+	updated, _ := MarkDispatchInterrupted(
+		dispatches,
+		map[string][]DispatchStatus{},
+		"disp-js-002",
+		InterruptDispatchRequest{DispatchID: "disp-js-002"},
+	)
+	if updated[0].Status != DispatchStatusInterrupted {
+		t.Fatalf("status = %q, want INTERRUPTED", updated[0].Status)
+	}
+	if updated[0].FailureDetail == nil || updated[0].FailureDetail.Reason != dispatchInterruptionFailureReasonCode {
+		t.Fatalf("failureDetail = %#v, want DISPATCH_INTERRUPTED reason", updated[0].FailureDetail)
+	}
+	if updated[0].FailureDetail.Message != defaultDispatchInterruptionReason {
+		t.Fatalf("failure message = %q", updated[0].FailureDetail.Message)
+	}
+}
+
+func TestReplayDispatchProjection_DerivesInterruptedDispatchMetadata(t *testing.T) {
+	startedAt := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+	session := SessionReadResult{
+		SessionID:        "dur-sess-interrupt-002",
+		Status:           LifecycleStatusRunning,
+		OrchestratorKind: "JAVASCRIPT",
+		Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+	}
+	events := AppendDispatchInterruptedEvent(
+		BuildCanonicalRuntimeSessionEvents(session, ResultReadResult{SessionID: session.SessionID}),
+		session,
+		DispatchSummary{ID: "disp-js-002", Status: DispatchStatusRunning, Phase: "execute"},
+		InterruptDispatchRequest{
+			ControlRequest: ControlRequest{Reason: "bad prompt"},
+			DispatchID:     "disp-js-002",
+		},
+		DispatchStatusRunning,
+		canonicalEventSourceRuntimeService,
+	)
+
+	replayed, err := ReplayDispatchProjection(events)
+	if err != nil {
+		t.Fatalf("ReplayDispatchProjection: %v", err)
+	}
+	if len(replayed) != 1 {
+		t.Fatalf("replayed dispatches = %#v, want one interrupted dispatch", replayed)
+	}
+	if replayed[0].Status != DispatchStatusInterrupted {
+		t.Fatalf("status = %q, want INTERRUPTED", replayed[0].Status)
+	}
+	if replayed[0].FailureDetail == nil || replayed[0].FailureDetail.Message != "bad prompt" {
+		t.Fatalf("failureDetail = %#v, want bad prompt", replayed[0].FailureDetail)
+	}
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity this fake-service regression keeps interrupt event payload assertions together on one scenario.
+func TestFakeService_InterruptDispatch_RecordsDispatchInterruptedEvent(t *testing.T) {
+	service := newContractFakeService(t)
+	started := startAsyncByRequestID(t, service, "req-js-run-n-001")
+
+	result, err := service.InterruptDispatch(context.Background(), started.SessionID, InterruptDispatchRequest{
+		ControlRequest: ControlRequest{Reason: "stop bad run"},
+		DispatchID:     "disp-js-002",
+	})
+	if err != nil {
+		t.Fatalf("InterruptDispatch: %v", err)
+	}
+	if result.Outcome != LifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", result.Outcome)
+	}
+
+	dispatch, err := service.GetDispatch(context.Background(), started.SessionID, "disp-js-002")
+	if err != nil {
+		t.Fatalf("GetDispatch: %v", err)
+	}
+	if dispatch.Status != DispatchStatusInterrupted {
+		t.Fatalf("dispatch status = %q, want INTERRUPTED", dispatch.Status)
+	}
+	if dispatch.FailureDetail == nil || dispatch.FailureDetail.Message != "stop bad run" {
+		t.Fatalf("failureDetail = %#v, want stop bad run", dispatch.FailureDetail)
+	}
+
+	events, err := service.ReadEvents(context.Background(), started.SessionID, EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents: %v", err)
+	}
+	found := false
+	for _, raw := range events.Events {
+		var envelope canonicalFactoryEvent
+		if err := json.Unmarshal(raw, &envelope); err != nil {
+			t.Fatalf("unmarshal event: %v", err)
+		}
+		if envelope.Type != "DISPATCH_INTERRUPTED" {
+			continue
+		}
+		found = true
+		if envelope.Context.DispatchID == nil || *envelope.Context.DispatchID != "disp-js-002" {
+			t.Fatalf("dispatchId = %#v, want disp-js-002", envelope.Context.DispatchID)
+		}
+	}
+	if !found {
+		t.Fatal("DISPATCH_INTERRUPTED event missing from session events")
+	}
+
+	replayed, err := ReplayDispatchProjection(events.Events)
+	if err != nil {
+		t.Fatalf("ReplayDispatchProjection: %v", err)
+	}
+	if len(replayed) != 1 || replayed[0].Status != DispatchStatusInterrupted {
+		t.Fatalf("replayed = %#v, want one interrupted dispatch", replayed)
+	}
+}
+
+func TestRestoreInterruptedDispatchResultSuppression_LateCompletionDoesNotReactivateRouting(t *testing.T) {
+	observedAt := time.Date(2026, 6, 20, 15, 0, 0, 0, time.UTC)
+	interrupted := DispatchSummary{
+		ID:     "disp-js-002",
+		Status: DispatchStatusInterrupted,
+		Phase:  "execute",
+		Label:  "audit",
+		FailureDetail: &DispatchFailureDetail{
+			Reason:  dispatchInterruptionFailureReasonCode,
+			Message: "operator stop",
+		},
+	}
+	state := &runtimeSessionState{
+		session: SessionReadResult{SessionID: "dur-sess-interrupt-late-001", Phase: "execute"},
+		dispatches: []DispatchSummary{
+			interrupted,
+		},
+		dispatchStatusTransitions: map[string][]DispatchStatus{
+			"disp-js-002": {DispatchStatusQueued, DispatchStatusRunning, DispatchStatusInterrupted},
+		},
+	}
+	preserved := snapshotInterruptedDispatches(state)
+
+	lateRecords := []workflowruntime.RuntimeRecord{{
+		Kind: workflowruntime.RecordKindChildDispatch,
+		ChildDispatch: &workflowruntime.ChildDispatchRecord{
+			DispatchID:         "disp-js-002",
+			Status:             workflowruntime.ChildDispatchStatusCompleted,
+			Label:              "audit",
+			ArtifactRef:        "artifact://child-artifact-late",
+			ProviderSessionRef: "provider-session-late",
+			Provider:           "fake",
+		},
+	}}
+	applyRuntimeExecutionRecordProjection(state, "dur-sess-interrupt-late-001", lateRecords, observedAt)
+	if state.dispatches[0].Status != DispatchStatusCompleted {
+		t.Fatalf("projected status = %q, want COMPLETED before suppression", state.dispatches[0].Status)
+	}
+	if state.session.Progress == nil || state.session.Progress.CompletedDispatches != 1 {
+		t.Fatalf("progress before suppression = %#v, want one completed dispatch", state.session.Progress)
+	}
+
+	restoreInterruptedDispatchResultSuppression(state, preserved)
+
+	if state.dispatches[0].Status != DispatchStatusInterrupted {
+		t.Fatalf("status after suppression = %q, want INTERRUPTED", state.dispatches[0].Status)
+	}
+	if len(state.dispatches[0].OutputArtifactIDs) != 0 {
+		t.Fatalf("outputArtifactIds = %#v, want suppressed late output", state.dispatches[0].OutputArtifactIDs)
+	}
+	if len(state.dispatches[0].ProviderSessionRefs) != 1 || state.dispatches[0].ProviderSessionRefs[0].ID != "provider-session-late" {
+		t.Fatalf("providerSessionRefs = %#v, want late diagnostic preserved", state.dispatches[0].ProviderSessionRefs)
+	}
+	if state.session.Progress.CompletedDispatches != 0 {
+		t.Fatalf("completedDispatches = %d, want 0 after suppression", state.session.Progress.CompletedDispatches)
+	}
+	for _, artifact := range state.artifacts {
+		if artifact.DispatchID == "disp-js-002" && artifact.Kind == "CHILD_OUTPUT" {
+			t.Fatalf("artifact = %#v, want late child output suppressed", artifact)
+		}
+	}
+	transitions := state.dispatchStatusTransitions["disp-js-002"]
+	if len(transitions) != 3 || transitions[2] != DispatchStatusInterrupted {
+		t.Fatalf("statusTransitions = %#v, want queued/running/interrupted", transitions)
+	}
+}
+
+func TestApplyTerminalRuntimeProjection_PreservesInterruptedDispatchAndEvents(t *testing.T) {
+	observedAt := time.Date(2026, 6, 20, 15, 30, 0, 0, time.UTC)
+	sessionID := "dur-sess-interrupt-terminal-001"
+	startedAt := observedAt.Add(-time.Minute)
+	running := SessionReadResult{
+		SessionID: sessionID,
+		Status:    LifecycleStatusRunning,
+		Phase:     "execute",
+		Lifecycle: &LifecycleTimestamps{StartedAt: &startedAt},
+	}
+	events := AppendDispatchInterruptedEvent(
+		BuildCanonicalRuntimeSessionEvents(running, ResultReadResult{SessionID: sessionID}),
+		running,
+		DispatchSummary{ID: "disp-js-002", Status: DispatchStatusRunning, Phase: "execute"},
+		InterruptDispatchRequest{DispatchID: "disp-js-002", ControlRequest: ControlRequest{Reason: "operator stop"}},
+		DispatchStatusRunning,
+		canonicalEventSourceRuntimeService,
+	)
+	prior := &runtimeSessionState{
+		session: running,
+		dispatches: []DispatchSummary{{
+			ID:            "disp-js-002",
+			Status:        DispatchStatusInterrupted,
+			Phase:         "execute",
+			FailureDetail: dispatchInterruptionFailureDetail("operator stop"),
+		}},
+		dispatchStatusTransitions: map[string][]DispatchStatus{
+			"disp-js-002": {DispatchStatusQueued, DispatchStatusRunning, DispatchStatusInterrupted},
+		},
+		events: events,
+	}
+	lateRecords := []workflowruntime.RuntimeRecord{{
+		Kind: workflowruntime.RecordKindChildDispatch,
+		ChildDispatch: &workflowruntime.ChildDispatchRecord{
+			DispatchID:  "disp-js-002",
+			Status:      workflowruntime.ChildDispatchStatusCompleted,
+			Label:       "audit",
+			ArtifactRef: "artifact://child-artifact-late",
+		},
+	}}
+	terminal := runtimeSessionState{session: running}
+	applyRuntimeSuccessProjection(&terminal, sessionID, workflowruntime.Outcome{
+		OK:      true,
+		Records: lateRecords,
+		Value:   workflowresult.TypedValue{JSON: json.RawMessage("null")},
+	}, observedAt)
+
+	applyTerminalRuntimeProjection(prior, terminal, workflowruntime.Outcome{
+		OK:      true,
+		Records: lateRecords,
+		Value:   workflowresult.TypedValue{JSON: json.RawMessage("null")},
+	})
+
+	if prior.dispatches[0].Status != DispatchStatusInterrupted {
+		t.Fatalf("dispatch status = %q, want INTERRUPTED", prior.dispatches[0].Status)
+	}
+	foundInterruptedEvent := false
+	for _, raw := range prior.events {
+		var envelope factoryEventEnvelope
+		if err := json.Unmarshal(raw, &envelope); err != nil {
+			continue
+		}
+		if envelope.Type == "DISPATCH_INTERRUPTED" {
+			foundInterruptedEvent = true
+			break
+		}
+	}
+	if !foundInterruptedEvent {
+		t.Fatal("DISPATCH_INTERRUPTED event missing after terminal projection")
+	}
+	if prior.session.Progress != nil && prior.session.Progress.CompletedDispatches != 0 {
+		t.Fatalf("completedDispatches = %d, want 0", prior.session.Progress.CompletedDispatches)
+	}
+	if prior.session.Status != LifecycleStatusInterrupted {
+		t.Fatalf("session status = %q, want INTERRUPTED", prior.session.Status)
+	}
+	if prior.session.ResultSummary == nil || prior.session.ResultSummary.ResultStatus != string(ResultStatusUnavailable) {
+		t.Fatalf("resultSummary = %#v, want UNAVAILABLE", prior.session.ResultSummary)
+	}
+	if prior.result.SessionStatus != LifecycleStatusInterrupted || prior.result.ResultStatus != ResultStatusUnavailable {
+		t.Fatalf("result = status %q session %q, want UNAVAILABLE/INTERRUPTED", prior.result.ResultStatus, prior.result.SessionStatus)
+	}
+}
+
 func TestReplaySessionProjection_PauseResumeLifecycleEventsDeriveStatus(t *testing.T) {
 	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
 	pausedAt := time.Date(2026, 6, 11, 12, 0, 5, 0, time.UTC)
@@ -1353,6 +1681,92 @@ func TestReplaySessionProjection_PauseResumeLifecycleEventsDeriveStatus(t *testi
 	}
 	if lifecycleEnvelope.Type != "SESSION_LIFECYCLE_CONTROL" {
 		t.Fatalf("event type = %q, want SESSION_LIFECYCLE_CONTROL", lifecycleEnvelope.Type)
+	}
+}
+
+func TestReplaySessionProjection_LegacyPauseResumeEventsDeriveStatus(t *testing.T) {
+	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	pausedAt := time.Date(2026, 6, 11, 12, 0, 5, 0, time.UTC)
+	resumedAt := time.Date(2026, 6, 11, 12, 0, 10, 0, time.UTC)
+	sessionID := "dur-sess-replay-legacy-pause-resume-001"
+	sessionSequence := 1
+	source := canonicalEventSourceRuntimeService
+	mustMarshalEvent := func(event canonicalFactoryEvent) json.RawMessage {
+		t.Helper()
+		raw, err := json.Marshal(event)
+		if err != nil {
+			t.Fatalf("json.Marshal event: %v", err)
+		}
+		return raw
+	}
+
+	baseSession := SessionReadResult{
+		SessionID:        sessionID,
+		Status:           LifecycleStatusRunning,
+		OrchestratorKind: "JAVASCRIPT",
+		SourceHash:       "sha256:fixture",
+		Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
+		ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
+		Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+	}
+	baseResult := ResultReadResult{
+		SessionID:    sessionID,
+		ResultStatus: ResultStatusNotReady,
+	}
+
+	events := BuildCanonicalRuntimeSessionEvents(baseSession, baseResult)
+	events = append(events,
+		mustMarshalEvent(canonicalFactoryEvent{
+			SchemaVersion: "v1alpha",
+			ID:            "event-session-paused",
+			Type:          "SESSION_PAUSED",
+			Context: canonicalFactoryEventContext{
+				Sequence:        3,
+				Tick:            3,
+				EventTime:       pausedAt,
+				SessionID:       &sessionID,
+				SessionSequence: &sessionSequence,
+				Source:          &source,
+			},
+			Payload: mustMarshalPayload(map[string]any{
+				"status":   string(LifecycleStatusPaused),
+				"pausedAt": pausedAt.Format(time.RFC3339),
+			}),
+		}),
+		mustMarshalEvent(canonicalFactoryEvent{
+			SchemaVersion: "v1alpha",
+			ID:            "event-session-resumed",
+			Type:          "SESSION_RESUMED",
+			Context: canonicalFactoryEventContext{
+				Sequence:        4,
+				Tick:            4,
+				EventTime:       resumedAt,
+				SessionID:       &sessionID,
+				SessionSequence: &sessionSequence,
+				Source:          &source,
+			},
+			Payload: mustMarshalPayload(map[string]any{
+				"status":    string(LifecycleStatusRunning),
+				"resumedAt": resumedAt.Format(time.RFC3339),
+			}),
+		}),
+	)
+
+	session, result, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if session.Status != LifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", session.Status)
+	}
+	if result.SessionStatus != LifecycleStatusRunning {
+		t.Fatalf("result sessionStatus = %q, want RUNNING", result.SessionStatus)
+	}
+	if session.Lifecycle == nil || session.Lifecycle.PausedAt == nil || !session.Lifecycle.PausedAt.Equal(pausedAt) {
+		t.Fatalf("pausedAt = %#v, want %s", session.Lifecycle, pausedAt)
+	}
+	if session.Lifecycle.ResumedAt == nil || !session.Lifecycle.ResumedAt.Equal(resumedAt) {
+		t.Fatalf("resumedAt = %#v, want %s", session.Lifecycle.ResumedAt, resumedAt)
 	}
 }
 
