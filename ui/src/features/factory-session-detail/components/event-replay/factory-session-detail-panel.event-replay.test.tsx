@@ -4,6 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FactoryOrchestratorKind } from "../../../../api/generated/openapi";
 import { formatDateTime } from "../../../../i18n/formatters";
+import {
+  buildSuccessfulDurableSession,
+  buildSuccessfulReplayEventStream,
+  buildWarningDurableSession,
+  buildWarningReplayEventStream,
+  successfulReplaySessionID,
+  warningReplaySessionID,
+} from "../../../../testing/factory-session-event-replay-fixtures";
 import { FactorySessionDetailPanel } from "../factory-session-detail-panel";
 import {
   jsonResponse,
@@ -23,69 +31,22 @@ describe("FactorySessionDetailPanel event replay disclosure", () => {
   it("reveals bounded durable Factory Event replay inline for durable JavaScript sessions", async () => {
     vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
       const url = String(input);
-      if (url.endsWith("/factory-sessions/dur-sess-js-success-002")) {
-        return jsonResponse({
-          artifactRefs: [
-            {
-              id: "art-js-success-001",
-              kind: "FINAL_RESULT",
-              label: "Docs refresh output",
-              visibility: "PUBLIC",
-            },
-          ],
-          dialect: "you-workflow-v1",
-          lifecycle: {
-            finishedAt: "2026-06-08T13:10:00Z",
-            startedAt: "2026-06-08T13:00:02Z",
-          },
-          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-          progress: {
-            completedDispatches: 2,
-            failedDispatches: 0,
-            inFlightDispatches: 0,
-            totalDispatches: 2,
-          },
-          resolvedSource: {
-            kind: "WORKFLOW_FILE",
-            sourceRef: "workflow/.claude/workflows/docs-refresh.yaml",
-            sourceHash: "sha256:js-workflow-docs-refresh",
-          },
-          resultSummary: {
-            resultStatus: "FINAL",
-            summary: "Documentation refresh complete.",
-          },
-          sessionId: "dur-sess-js-success-002",
-          status: "SUCCEEDED",
-          usage: { resources: [] },
-        });
+      if (url.endsWith(`/factory-sessions/${successfulReplaySessionID}`)) {
+        return jsonResponse(buildSuccessfulDurableSession());
       }
-      if (url.endsWith("/factory-sessions/dur-sess-js-success-002/events")) {
-        return new Response(
-          [
-            'data: {"id":"evt-1","type":"SESSION_STARTED","context":{"sequence":1,"tick":1,"eventTime":"2026-06-25T10:00:00Z","sessionId":"dur-sess-js-success-002","sessionSequence":1,"phaseName":"plan"},"payload":{"startedAt":"2026-06-25T10:00:00Z"}}',
-            "",
-            'data: {"id":"evt-2","type":"ORCHESTRATOR_PHASE_CHANGED","context":{"sequence":2,"tick":2,"eventTime":"2026-06-25T10:00:01Z","sessionId":"dur-sess-js-success-002","sessionSequence":2,"phaseName":"review"},"payload":{"phase":"review","progressSummary":"Review work scheduled."}}',
-            "",
-            'data: {"id":"evt-3","type":"DISPATCH_QUEUED","context":{"sequence":3,"tick":3,"eventTime":"2026-06-25T10:00:02Z","sessionId":"dur-sess-js-success-002","sessionSequence":3,"phaseName":"review","dispatchId":"dispatch-1","workIds":["work-1","work-2"]},"payload":{"dispatchKind":"JAVASCRIPT_AGENT","label":"Draft release notes","queuePosition":1}}',
-            "",
-            'data: {"id":"evt-4","type":"DISPATCH_RECONCILED","context":{"sequence":4,"tick":4,"eventTime":"2026-06-25T10:00:03Z","sessionId":"dur-sess-js-success-002","sessionSequence":4,"phaseName":"review","dispatchId":"dispatch-1"},"payload":{"reconciledStatus":"COMPLETED","resultArtifactRef":{"id":"artifact-release-notes","kind":"FINAL_RESULT","label":"Release notes"},"artifactIds":["artifact-release-notes"]}}',
-            "",
-            'data: {"id":"evt-5","type":"SESSION_COMPLETED","context":{"sequence":5,"tick":5,"eventTime":"2026-06-25T10:00:05Z","sessionId":"dur-sess-js-success-002","sessionSequence":5,"phaseName":"review"},"payload":{"finalStatus":"SUCCEEDED","completedAt":"2026-06-25T10:00:05Z","artifactIds":["artifact-release-notes"]}}',
-            "",
-          ].join("\n"),
-          {
-            headers: {
-              "Content-Type": "text/event-stream",
-            },
-            status: 200,
+      if (url.endsWith(`/factory-sessions/${successfulReplaySessionID}/events`)) {
+        return new Response(buildSuccessfulReplayEventStream(), {
+          headers: {
+            "Content-Type": "text/event-stream",
           },
-        );
+          status: 200,
+        });
       }
       return new Response("not found", { status: 404 });
     });
 
     renderWithQueryClient(
-      <FactorySessionDetailPanel sessionID="dur-sess-js-success-002" />,
+      <FactorySessionDetailPanel sessionID={successfulReplaySessionID} />,
     );
 
     await waitFor(() => {
@@ -137,73 +98,22 @@ describe("FactorySessionDetailPanel event replay disclosure", () => {
   it("surfaces failed and warning replay cues inside the bounded timeline", async () => {
     vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
       const url = String(input);
-      if (url.endsWith("/factory-sessions/dur-sess-js-warning-003")) {
-        return jsonResponse({
-          artifactRefs: [
-            {
-              id: "artifact-release-verification-log",
-              kind: "FINAL_RESULT",
-              label: "Release verification log",
-              visibility: "PRIVATE",
-            },
-          ],
-          dialect: "you-workflow-v1",
-          lifecycle: {
-            finishedAt: "2026-06-25T11:10:00Z",
-            startedAt: "2026-06-25T11:00:00Z",
-          },
-          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-          progress: {
-            completedDispatches: 0,
-            failedDispatches: 1,
-            inFlightDispatches: 0,
-            totalDispatches: 1,
-          },
-          resolvedSource: {
-            kind: "WORKFLOW_FILE",
-            sourceRef: "workflow/.claude/workflows/release-verify.yaml",
-            sourceHash: "sha256:release-verify",
-          },
-          resultSummary: {
-            artifactRefs: [
-              {
-                id: "artifact-release-verification-log",
-                kind: "FINAL_RESULT",
-                label: "Release verification log",
-                visibility: "PRIVATE",
-              },
-            ],
-            resultStatus: "FAILED_WITH_PARTIAL",
-            summary: "Release verification failed after checkpoint recovery.",
-          },
-          sessionId: "dur-sess-js-warning-003",
-          status: "FAILED",
-          usage: { resources: [] },
-        });
+      if (url.endsWith(`/factory-sessions/${warningReplaySessionID}`)) {
+        return jsonResponse(buildWarningDurableSession());
       }
-      if (url.endsWith("/factory-sessions/dur-sess-js-warning-003/events")) {
-        return new Response(
-          [
-            'data: {"id":"evt-w1","type":"JAVASCRIPT_CHECKPOINT_REF","context":{"sequence":1,"tick":1,"eventTime":"2026-06-25T11:00:01Z","sessionId":"dur-sess-js-warning-003","sessionSequence":1,"phaseName":"verify","checkpointId":"checkpoint-9"},"payload":{"label":"Checkpoint before publish","warnings":[{"code":"CHECKPOINT_STALE","message":"Checkpoint is older than the latest source hash."}]}}',
-            "",
-            'data: {"id":"evt-w2","type":"DISPATCH_INTERRUPTED","context":{"sequence":2,"tick":2,"eventTime":"2026-06-25T11:00:02Z","sessionId":"dur-sess-js-warning-003","sessionSequence":2,"phaseName":"verify","dispatchId":"dispatch-verify"},"payload":{"reason":"Provider session timed out","observedStatus":"RUNNING","interruptedAt":"2026-06-25T11:00:02Z","retryPlanned":true}}',
-            "",
-            'data: {"id":"evt-w3","type":"SESSION_COMPLETED","context":{"sequence":3,"tick":3,"eventTime":"2026-06-25T11:00:05Z","sessionId":"dur-sess-js-warning-003","sessionSequence":3,"phaseName":"verify"},"payload":{"finalStatus":"FAILED","completedAt":"2026-06-25T11:00:05Z","failureDetail":{"message":"Release verification failed."}}}',
-            "",
-          ].join("\n"),
-          {
-            headers: {
-              "Content-Type": "text/event-stream",
-            },
-            status: 200,
+      if (url.endsWith(`/factory-sessions/${warningReplaySessionID}/events`)) {
+        return new Response(buildWarningReplayEventStream(), {
+          headers: {
+            "Content-Type": "text/event-stream",
           },
-        );
+          status: 200,
+        });
       }
       return new Response("not found", { status: 404 });
     });
 
     renderWithQueryClient(
-      <FactorySessionDetailPanel sessionID="dur-sess-js-warning-003" />,
+      <FactorySessionDetailPanel sessionID={warningReplaySessionID} />,
     );
 
     await waitFor(() => {
