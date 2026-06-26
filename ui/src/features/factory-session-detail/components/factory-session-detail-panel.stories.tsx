@@ -86,8 +86,21 @@ export const DispatchDrilldownStates = {
                     id: "dispatch-failed",
                     label: "Verify release manifest",
                     orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+                    providerSessionRefs: [
+                      {
+                        id: "provider-session-verify-1",
+                        kind: "session_id",
+                        provider: "codex",
+                      },
+                    ],
                     sessionId: storySessionID,
                     status: "FAILED",
+                    warnings: [
+                      {
+                        code: "DISPATCH_WARNING",
+                        message: "Provider returned a partial verification trace.",
+                      },
+                    ],
                   },
                   {
                     dispatchKind: "JAVASCRIPT_AGENT",
@@ -216,10 +229,23 @@ export const DispatchDrilldownStates = {
               },
               label: "Verify release manifest",
               orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+              providerSessionRefs: [
+                {
+                  id: "provider-session-verify-1",
+                  kind: "session_id",
+                  provider: "codex",
+                },
+              ],
               relatedWorkIds: ["work-verify-1"],
               sessionId: storySessionID,
               status: "FAILED",
               statusTransitions: ["QUEUED", "RUNNING", "FAILED"],
+              warnings: [
+                {
+                  code: "DISPATCH_WARNING",
+                  message: "Provider returned a partial verification trace.",
+                },
+              ],
             },
           },
         },
@@ -252,6 +278,22 @@ export const DispatchDrilldownStates = {
       await canvas.findByText(
         "Provider session: codex / session_id / provider-session-1",
       ),
+    ).toBeTruthy();
+
+    await userEvent.click(
+      await canvas.findByRole("button", {
+        name: "Expand dispatch detail for dispatch-failed",
+      }),
+    );
+
+    expect(await canvas.findByText("Failure detail")).toBeTruthy();
+    expect(await canvas.findByText("VERIFY_ASSERTION_FAILED")).toBeTruthy();
+    expect(await canvas.findByText("verification_error")).toBeTruthy();
+    expect(
+      await canvas.findByText("Expected release manifest checksum."),
+    ).toBeTruthy();
+    expect(
+      await canvas.findByText("session_id · provider-session-verify-1"),
     ).toBeTruthy();
   },
   render: () => renderFactorySessionDetailPanel(storySessionID),
