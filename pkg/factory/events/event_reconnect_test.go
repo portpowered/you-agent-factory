@@ -171,8 +171,8 @@ func TestBuildReconnectReplay_ReconstructsDispatchStateWithoutSessionCompleted(t
 		t.Fatalf("javascript runtime dispatches = %#v, want one interrupted dispatch", worldState.JavaScriptRuntime.Dispatches)
 	}
 	dispatch := worldState.JavaScriptRuntime.Dispatches[0]
-	if dispatch.Status != string(factoryapi.FactoryDispatchStatusFAILED) {
-		t.Fatalf("dispatch status = %q, want FAILED from interruption observed status", dispatch.Status)
+	if dispatch.Status != string(factoryapi.FactoryDispatchStatusINTERRUPTED) {
+		t.Fatalf("dispatch status = %q, want INTERRUPTED after replay suppression", dispatch.Status)
 	}
 	if dispatch.FailureDetail == nil || dispatch.FailureDetail.Message != "provider disconnected" {
 		t.Fatalf("dispatch failure detail = %#v, want provider disconnected interruption reason", dispatch.FailureDetail)

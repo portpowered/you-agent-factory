@@ -8,8 +8,8 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 )
 
 func TestJavaScriptRuntimeService_InterruptAcceptedBeforeChildCompletion_RecordsObservedCancellation(t *testing.T) {
@@ -120,8 +120,25 @@ func TestJavaScriptRuntimeService_LateChildResultAfterInterrupt_SuppressesNormal
 	if err != nil {
 		t.Fatalf("GetSession after late completion: %v", err)
 	}
+	if session.Status != LifecycleStatusInterrupted {
+		t.Fatalf("session status = %q, want INTERRUPTED after late completion", session.Status)
+	}
 	if session.Progress != nil && session.Progress.CompletedDispatches != 0 {
 		t.Fatalf("completedDispatches = %d, want 0 after suppression", session.Progress.CompletedDispatches)
+	}
+	if session.ResultSummary == nil || session.ResultSummary.ResultStatus != string(ResultStatusUnavailable) {
+		t.Fatalf("resultSummary = %#v, want UNAVAILABLE after late completion suppression", session.ResultSummary)
+	}
+
+	result, err := service.GetResult(context.Background(), sessionID, ResultRequest{Mode: ResultModeFinal})
+	if err != nil {
+		t.Fatalf("GetResult after late completion: %v", err)
+	}
+	if result.SessionStatus != LifecycleStatusInterrupted || result.ResultStatus != ResultStatusUnavailable {
+		t.Fatalf("result = status %q session %q, want UNAVAILABLE/INTERRUPTED", result.ResultStatus, result.SessionStatus)
+	}
+	if result.Availability == nil || result.Availability.Reason != "SESSION_INTERRUPTED" {
+		t.Fatalf("availability = %#v, want SESSION_INTERRUPTED", result.Availability)
 	}
 
 	artifacts, err := service.ListArtifacts(context.Background(), sessionID)

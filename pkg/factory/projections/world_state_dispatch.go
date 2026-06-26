@@ -587,16 +587,16 @@ func (r *factoryWorldReducer) applyDispatchQueuedEvent(event factoryapi.FactoryE
 		return nil
 	}
 	state := interfaces.FactorySessionDispatchState{
-		ID:           dispatchID,
-		DispatchKind: string(payload.DispatchKind),
-		Status:       string(factoryapi.FactoryDispatchStatusQUEUED),
-		Phase:        dispatchLifecyclePhase(event.Context),
-		Label:        stringValue(payload.Label),
-		RunnerID:     stringValue(payload.RunnerId),
-		Model:        stringValue(payload.Model),
-		Provider:     stringValue(payload.Provider),
-		PromptDigest: stringValue(payload.PromptDigest),
-		SchemaDigest: stringValue(payload.SchemaDigest),
+		ID:             dispatchID,
+		DispatchKind:   string(payload.DispatchKind),
+		Status:         string(factoryapi.FactoryDispatchStatusQUEUED),
+		Phase:          dispatchLifecyclePhase(event.Context),
+		Label:          stringValue(payload.Label),
+		RunnerID:       stringValue(payload.RunnerId),
+		Model:          stringValue(payload.Model),
+		Provider:       stringValue(payload.Provider),
+		PromptDigest:   stringValue(payload.PromptDigest),
+		SchemaDigest:   stringValue(payload.SchemaDigest),
 		RelatedWorkIDs: cloneStringSlice(sliceValue(payload.InputWorkIds)),
 	}
 	if payload.DispatchKind == factoryapi.FactoryDispatchKindPETRITRANSITION {
@@ -628,7 +628,7 @@ func (r *factoryWorldReducer) applyDispatchInterruptedEvent(event factoryapi.Fac
 	r.interruptedDispatchIDs[dispatchID] = struct{}{}
 	state := interfaces.FactorySessionDispatchState{
 		ID:     dispatchID,
-		Status: string(payload.ObservedStatus),
+		Status: string(factoryapi.FactoryDispatchStatusINTERRUPTED),
 		Phase:  dispatchLifecyclePhase(event.Context),
 	}
 	if payload.Reason != "" {
@@ -653,10 +653,10 @@ func (r *factoryWorldReducer) applyDispatchReconciledEvent(event factoryapi.Fact
 		return nil
 	}
 	state := interfaces.FactorySessionDispatchState{
-		ID:           dispatchID,
-		Status:       string(payload.ReconciledStatus),
-		Phase:        dispatchLifecyclePhase(event.Context),
-		ArtifactIDs:  cloneStringSlice(sliceValue(payload.ArtifactIds)),
+		ID:          dispatchID,
+		Status:      string(payload.ReconciledStatus),
+		Phase:       dispatchLifecyclePhase(event.Context),
+		ArtifactIDs: cloneStringSlice(sliceValue(payload.ArtifactIds)),
 	}
 	if payload.Usage != nil {
 		state.Usage = &interfaces.FactorySessionDispatchUsage{

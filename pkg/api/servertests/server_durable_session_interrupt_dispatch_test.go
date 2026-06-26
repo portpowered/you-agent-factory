@@ -240,8 +240,25 @@ func TestInterruptFactorySessionDispatch_LateResultAfterInterruptSuppressedFromN
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
 	}
+	if session.Status != factorysessionexecution.LifecycleStatusInterrupted {
+		t.Fatalf("session status = %q, want INTERRUPTED after late result suppression", session.Status)
+	}
 	if session.Progress != nil && session.Progress.CompletedDispatches != 0 {
 		t.Fatalf("completedDispatches = %d, want 0 after late result suppression", session.Progress.CompletedDispatches)
+	}
+	if session.ResultSummary == nil || session.ResultSummary.ResultStatus != string(factorysessionexecution.ResultStatusUnavailable) {
+		t.Fatalf("resultSummary = %#v, want UNAVAILABLE after late result suppression", session.ResultSummary)
+	}
+
+	result, err := service.GetResult(context.Background(), sessionID, factorysessionexecution.ResultRequest{
+		Mode: factorysessionexecution.ResultModeFinal,
+	})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.SessionStatus != factorysessionexecution.LifecycleStatusInterrupted ||
+		result.ResultStatus != factorysessionexecution.ResultStatusUnavailable {
+		t.Fatalf("result = status %q session %q, want UNAVAILABLE/INTERRUPTED", result.ResultStatus, result.SessionStatus)
 	}
 
 	events, err := service.ReadEvents(context.Background(), sessionID, factorysessionexecution.EventReconnectRequest{})

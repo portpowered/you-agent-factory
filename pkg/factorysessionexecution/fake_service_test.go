@@ -1553,9 +1553,9 @@ func TestApplyTerminalRuntimeProjection_PreservesInterruptedDispatchAndEvents(t 
 	prior := &runtimeSessionState{
 		session: running,
 		dispatches: []DispatchSummary{{
-			ID:     "disp-js-002",
-			Status: DispatchStatusInterrupted,
-			Phase:  "execute",
+			ID:            "disp-js-002",
+			Status:        DispatchStatusInterrupted,
+			Phase:         "execute",
 			FailureDetail: dispatchInterruptionFailureDetail("operator stop"),
 		}},
 		dispatchStatusTransitions: map[string][]DispatchStatus{
@@ -1604,6 +1604,15 @@ func TestApplyTerminalRuntimeProjection_PreservesInterruptedDispatchAndEvents(t 
 	}
 	if prior.session.Progress != nil && prior.session.Progress.CompletedDispatches != 0 {
 		t.Fatalf("completedDispatches = %d, want 0", prior.session.Progress.CompletedDispatches)
+	}
+	if prior.session.Status != LifecycleStatusInterrupted {
+		t.Fatalf("session status = %q, want INTERRUPTED", prior.session.Status)
+	}
+	if prior.session.ResultSummary == nil || prior.session.ResultSummary.ResultStatus != string(ResultStatusUnavailable) {
+		t.Fatalf("resultSummary = %#v, want UNAVAILABLE", prior.session.ResultSummary)
+	}
+	if prior.result.SessionStatus != LifecycleStatusInterrupted || prior.result.ResultStatus != ResultStatusUnavailable {
+		t.Fatalf("result = status %q session %q, want UNAVAILABLE/INTERRUPTED", prior.result.ResultStatus, prior.result.SessionStatus)
 	}
 }
 

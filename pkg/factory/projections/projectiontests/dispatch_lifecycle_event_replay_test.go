@@ -56,8 +56,8 @@ func TestReconstructFactoryWorldState_JavaScriptDispatchLifecycleSuppressesLateR
 		t.Fatalf("dispatches = %#v, want one dispatch", worldState.JavaScriptRuntime)
 	}
 	dispatch := worldState.JavaScriptRuntime.Dispatches[0]
-	if dispatch.Status != string(factoryapi.FactoryDispatchStatusFAILED) {
-		t.Fatalf("dispatch status = %q, want observed FAILED status preserved after suppressed reconcile", dispatch.Status)
+	if dispatch.Status != string(factoryapi.FactoryDispatchStatusINTERRUPTED) {
+		t.Fatalf("dispatch status = %q, want INTERRUPTED after suppressed reconcile", dispatch.Status)
 	}
 	if len(dispatch.ArtifactIDs) != 0 {
 		t.Fatalf("artifact ids = %#v, want late reconcile artifacts suppressed", dispatch.ArtifactIDs)
