@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/portpowered/infinite-you/pkg/api"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -14,6 +15,7 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
@@ -24,6 +26,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -1033,6 +1036,7 @@ type providerCommandRunnerRecorder struct {
 	mu       sync.Mutex
 	requests []workers.CommandRequest
 	result   workers.CommandResult
+	err      error
 }
 
 func (r *providerCommandRunnerRecorder) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
@@ -1040,7 +1044,7 @@ func (r *providerCommandRunnerRecorder) Run(_ context.Context, req workers.Comma
 	defer r.mu.Unlock()
 
 	r.requests = append(r.requests, workers.CommandRequest(interfaces.CloneSubprocessExecutionRequest(req)))
-	return r.result, nil
+	return r.result, r.err
 }
 
 func (r *providerCommandRunnerRecorder) Requests() []workers.CommandRequest {
@@ -1392,6 +1396,176 @@ You are a helpful assistant.
 	if published[0].ProviderSessionRef == nil || published[0].ProviderSessionRef.ID != "sess_codex_123" {
 		t.Fatalf("provider session ref = %#v, want sess_codex_123", published[0].ProviderSessionRef)
 	}
+}
+
+func TestLoadWorkersFromConfig_ModelWorkerProgressPublisherPanicLeavesSuccessfulOutcomeUnchanged(t *testing.T) {
+	core, observed := observer.New(zap.WarnLevel)
+	result, err, recorded := executeModelWorkerProgressPublisherServiceTest(t, modelWorkerProgressPublisherServiceTestOptions{
+		commandResult: workers.CommandResult{
+			Stdout: []byte("provider-output COMPLETE"),
+			Stderr: []byte(`{"event":"session.created","session_id":"sess_codex_123"}`),
+		},
+		newSessionResponseStream: func() *factorysessions.SessionResponseStream {
+			panic("stream build boom")
+		},
+		logger: zap.New(core),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertCanonicalModelWorkerExecutionResult(t, result)
+	assertRecordedInferenceEvents(t, recorded)
+	entry := findObservedLog(t, observed, "internal provider progress publication degraded")
+	assertLogField(t, entry, "reason", "PUBLISH_PANIC")
+	assertLogField(t, entry, "dispatch_id", "d-model-worker-provider-progress")
+}
+
+func TestLoadWorkersFromConfig_ModelWorkerProgressPublisherPanicLeavesProviderFailureUnchanged(t *testing.T) {
+	core, observed := observer.New(zap.WarnLevel)
+	result, err, recorded := executeModelWorkerProgressPublisherServiceTest(t, modelWorkerProgressPublisherServiceTestOptions{
+		commandErr: errors.New("provider subprocess failed"),
+		newSessionResponseStream: func() *factorysessions.SessionResponseStream {
+			panic("stream build boom")
+		},
+		logger: zap.New(core),
+	})
+	if err != nil {
+		t.Fatalf("unexpected execution error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeFailed {
+		t.Fatalf("result outcome = %q, want failed provider result", result.Outcome)
+	}
+	if strings.TrimSpace(result.Error) == "" || !strings.Contains(result.Error, "provider subprocess failed") {
+		t.Fatalf("result error = %q, want provider failure message", result.Error)
+	}
+	assertRecordedInferenceEvents(t, recorded)
+
+	entry := findObservedLog(t, observed, "internal provider progress publication degraded")
+	assertLogField(t, entry, "reason", "PUBLISH_PANIC")
+	assertLogField(t, entry, "dispatch_id", "d-model-worker-provider-progress")
+}
+
+type modelWorkerProgressPublisherServiceTestOptions struct {
+	commandResult            workers.CommandResult
+	commandErr               error
+	newSessionResponseStream func() *factorysessions.SessionResponseStream
+	logger                   *zap.Logger
+}
+
+func executeModelWorkerProgressPublisherServiceTest(
+	t *testing.T,
+	options modelWorkerProgressPublisherServiceTestOptions,
+) (interfaces.WorkResult, error, []factoryapi.FactoryEvent) {
+	t.Helper()
+
+	dir := t.TempDir()
+	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
+type: MODEL_WORKER
+model: gpt-5.4
+executorProvider: script_wrap
+modelProvider: codex
+stopToken: COMPLETE
+---
+You are a helpful assistant.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
+		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &providerCommandRunnerRecorder{
+		result: options.commandResult,
+		err:    options.commandErr,
+	}
+	recorded := make([]factoryapi.FactoryEvent, 0, 2)
+	recorder := func(event factoryapi.FactoryEvent) {
+		recorded = append(recorded, event)
+	}
+
+	sessions := factorysessions.NewRegistry()
+	const sessionID = "session-provider-progress-publication"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		dir,
+		dir,
+		dir,
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{},
+		false,
+		filepath.Base(dir),
+	), true)
+	svc := &FactoryService{
+		sessions:                 sessions,
+		newSessionResponseStream: options.newSessionResponseStream,
+	}
+
+	logger := options.logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	progressPublisher := svc.inferenceProgressPublisher(sessionID, logger)
+
+	opts, err := loadWorkersFromConfig(
+		cfg.FactoryDir(),
+		cfg.FactoryConfig(),
+		"",
+		cfg,
+		nil,
+		logging.NoopLogger{},
+		false,
+		nil,
+		progressPublisher,
+		runner,
+		nil,
+		nil,
+		recorder,
+		nil,
+		nil,
+		localModelDomain{},
+	)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+
+	exec, ok := fc.WorkerExecutors["worker-a"]
+	if !ok {
+		t.Fatal("expected worker-a executor to be registered")
+	}
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+
+	result, execErr := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-model-worker-provider-progress",
+		TransitionID:    "t-model-worker-provider-progress",
+		WorkerType:      "worker-a",
+		WorkstationName: "review",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "tok-model-worker-provider-progress",
+			Color: interfaces.TokenColor{
+				WorkID:  "work-model-worker-provider-progress",
+				Payload: []byte("helpful input"),
+			},
+		}),
+	})
+	assertCanonicalProviderCommandRequests(t, runner.Requests())
+	return result, execErr, recorded
 }
 
 // backendsizecheck:ignore-function this dual-locality integration test keeps the full model-invoke execution assertion path in one place.

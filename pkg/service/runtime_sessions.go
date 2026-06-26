@@ -39,6 +39,7 @@ const (
 	FactorySessionTargetKindNamed               = factorysessions.TargetKindNamed
 	runtimeMetricSessionResponseStreamPublished = "session_response_stream.published"
 	runtimeMetricSessionResponseStreamCompacted = "session_response_stream.compacted"
+	runtimeMetricSessionResponseStreamDegraded  = "session_response_stream.degraded"
 )
 
 type (
@@ -1231,23 +1232,31 @@ func (fs *FactoryService) inferenceProgressPublisher(
 		normalizedSessionID = defaultFactorySessionID
 	}
 	return func(fragment workerprovider.InferenceProgressFragment) {
-		session := sessions.Get(normalizedSessionID)
+		dispatchID := strings.TrimSpace(fragment.DispatchID)
+		var session *factorysessions.LiveSession
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				emitSessionResponseStreamDegraded(
+					session,
+					normalizedSessionID,
+					dispatchID,
+					"PUBLISH_PANIC",
+					logger,
+					fmt.Errorf("panic during internal provider progress publication: %v", recovered),
+				)
+			}
+		}()
+		session = sessions.Get(normalizedSessionID)
 		if session == nil && normalizedSessionID == defaultFactorySessionID {
 			session = sessions.Get(defaultFactorySessionID)
 		}
 		stream := fs.sessionResponseStream(session, fragment.DispatchID)
 		if stream == nil {
-			if logger != nil {
-				logger.Warn("session response stream unavailable; dropping internal provider progress",
-					zap.String("session_id", normalizedSessionID),
-					zap.String("dispatch_id", fragment.DispatchID),
-					zap.String("stream_kind", fragment.Kind),
-				)
-			}
+			emitSessionResponseStreamDegraded(session, normalizedSessionID, dispatchID, "STREAM_UNAVAILABLE", logger, nil)
 			return
 		}
 		publisher := responsestream.NewPublisher(stream, func(summary responsestream.CompactionSummary) {
-			emitSessionResponseStreamCompaction(session, normalizedSessionID, strings.TrimSpace(fragment.DispatchID), summary)
+			emitSessionResponseStreamCompaction(session, normalizedSessionID, dispatchID, summary)
 		})
 		event := mapInferenceProgressFragment(fragment)
 		stored := publisher.Publish(event)
@@ -1284,6 +1293,38 @@ func emitSessionResponseStreamCompaction(
 			zap.Int64("last_dropped_sequence", summary.LastDroppedSequence),
 		)
 	}
+}
+
+func emitSessionResponseStreamDegraded(
+	session *factorysessions.LiveSession,
+	sessionID string,
+	dispatchID string,
+	reason string,
+	fallbackLogger *zap.Logger,
+	err error,
+) {
+	fields := metrics.Fields{
+		DispatchID: strings.TrimSpace(dispatchID),
+		Reason:     strings.TrimSpace(reason),
+	}
+	emitSessionResponseStreamMetric(session, sessionID, runtimeMetricSessionResponseStreamDegraded, fields)
+
+	log := fallbackLogger
+	if handle := liveSessionHandle(session); handle != nil && handle.runtime != nil && handle.runtime.logger != nil {
+		log = handle.runtime.logger
+	}
+	if log == nil {
+		return
+	}
+	logFields := []zap.Field{
+		zap.String("session_id", sessionID),
+		zap.String("dispatch_id", strings.TrimSpace(dispatchID)),
+		zap.String("reason", strings.TrimSpace(reason)),
+	}
+	if err != nil {
+		logFields = append(logFields, zap.Error(err))
+	}
+	log.Warn("internal provider progress publication degraded", logFields...)
 }
 
 func emitSessionResponseStreamMetric(

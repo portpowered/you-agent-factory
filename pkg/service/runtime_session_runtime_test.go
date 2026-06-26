@@ -2222,6 +2222,17 @@ func findLifecycleControlLog(t *testing.T, observed *observer.ObservedLogs, mess
 	return observer.LoggedEntry{}
 }
 
+func findObservedLog(t *testing.T, observed *observer.ObservedLogs, message string) observer.LoggedEntry {
+	t.Helper()
+	for _, entry := range observed.All() {
+		if entry.Message == message {
+			return entry
+		}
+	}
+	t.Fatalf("log %q not found in %#v", message, observed.All())
+	return observer.LoggedEntry{}
+}
+
 func assertLogField(t *testing.T, entry observer.LoggedEntry, key, want string) {
 	t.Helper()
 	for _, field := range entry.Context {
@@ -2538,12 +2549,13 @@ func TestFactoryService_InferenceProgressPublisherPublishesOrderedInternalEvents
 	publisher(workerprovider.FailedFragment("dispatch-2", nil, "normalized provider failure"))
 
 	session := sessions.Get(sessionID)
-	stream := (&FactoryService{sessions: sessions}).sessionResponseStream(session, "dispatch-1")
+	svc := &FactoryService{sessions: sessions}
+	stream := svc.sessionResponseStream(session, "dispatch-1")
 	if stream == nil {
-		t.Fatal("session stream = nil, want live session stream")
+		t.Fatal("dispatch-1 stream = nil, want live session stream")
 	}
 	events := stream.Events()
-	if len(events) != 4 || events[0].Sequence != 1 || events[3].Sequence != 4 {
+	if len(events) != 3 || events[0].Sequence != 1 || events[2].Sequence != 3 {
 		t.Fatalf("stream events = %#v, want ascending internal sequences", events)
 	}
 	if events[2].Kind != responsestream.EventKindStreamCompleted {
@@ -2552,8 +2564,14 @@ func TestFactoryService_InferenceProgressPublisherPublishesOrderedInternalEvents
 	if events[2].ProviderSessionRef == nil || events[2].ProviderSessionRef.ID != "cursor-session-1" {
 		t.Fatalf("completion provider session = %#v, want cursor-session-1", events[2].ProviderSessionRef)
 	}
-	if events[3].Kind != responsestream.EventKindStreamFailed || events[3].Payload != "normalized provider failure" {
-		t.Fatalf("failure event = %#v, want terminal failed marker", events[3])
+
+	failedStream := svc.sessionResponseStream(session, "dispatch-2")
+	if failedStream == nil {
+		t.Fatal("dispatch-2 stream = nil, want live session stream")
+	}
+	failedEvents := failedStream.Events()
+	if len(failedEvents) != 1 || failedEvents[0].Kind != responsestream.EventKindStreamFailed || failedEvents[0].Payload != "normalized provider failure" {
+		t.Fatalf("failure events = %#v, want one terminal failed marker", failedEvents)
 	}
 
 	var factoryEventType factoryapi.FactoryEventType
@@ -3174,4 +3192,39 @@ func TestFactoryService_InferenceProgressPublisherPreservesNormalizedCodexMetada
 	if got := event.Metadata["work_id"]; got != "work-codex-json-1" {
 		t.Fatalf("metadata work_id = %q, want work-codex-json-1", got)
 	}
+}
+
+func TestFactoryService_InferenceProgressPublisherUnavailableStreamEmitsDegradedDiagnostics(t *testing.T) {
+	core, observed := observer.New(zap.WarnLevel)
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	session := harness.svc.sessionByID(defaultFactorySessionID)
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.metricsSink == nil {
+		t.Fatal("live session runtime metrics sink is required")
+	}
+	liveSessionHandle(session).runtime.logger = zap.New(core)
+	harness.svc.newSessionResponseStream = func() *factorysessions.SessionResponseStream {
+		return nil
+	}
+
+	publisher := harness.svc.inferenceProgressPublisher(defaultFactorySessionID, zap.NewNop())
+	if publisher == nil {
+		t.Fatal("publisher = nil, want session publisher")
+	}
+	publisher(workerprovider.ProgressFragment("dispatch-unavailable", nil, "phase"))
+
+	metricsPath := liveSessionHandle(session).runtime.metricsSink.Path()
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricSessionResponseStreamDegraded, 1) &&
+			metricRecordString(record, "dispatch_id") == "dispatch-unavailable" &&
+			metricRecordString(record, "reason") == "STREAM_UNAVAILABLE"
+	}, "degraded internal provider progress publication")
+
+	entry := findObservedLog(t, observed, "internal provider progress publication degraded")
+	assertLogField(t, entry, "session_id", defaultFactorySessionID)
+	assertLogField(t, entry, "dispatch_id", "dispatch-unavailable")
+	assertLogField(t, entry, "reason", "STREAM_UNAVAILABLE")
 }
