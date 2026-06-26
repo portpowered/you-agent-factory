@@ -171,20 +171,9 @@ func TestInterruptFactorySessionDispatch_NonDurableSessionPreservesLiveStub(t *t
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this transport regression keeps interrupt, late completion, and suppressed routing assertions together.
 func TestInterruptFactorySessionDispatch_LateResultAfterInterruptSuppressedFromNormalRouting(t *testing.T) {
-	projectRoot := setupAPILifecycleWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
-	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-		ProjectRoot: projectRoot,
-	})
-	sessionID := "dur-sess-interrupt-transport-late-001"
-	if err := factorysessionexecution.SeedRuntimeSessionWithRunningDispatch(service, sessionID, "dispatch-1", "summarize-findings"); err != nil {
-		t.Fatalf("SeedRuntimeSessionWithRunningDispatch: %v", err)
-	}
+	service, serverURL, sessionID := newInterruptedLateResultTransportHarness(t)
 
-	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
-	server := httptest.NewServer(srv.Handler())
-	defer server.Close()
-
-	response, status := postFactorySessionInterruptDispatch(t, server.URL, sessionID, factoryapi.FactorySessionInterruptDispatchRequest{
+	response, status := postFactorySessionInterruptDispatch(t, serverURL, sessionID, factoryapi.FactorySessionInterruptDispatchRequest{
 		DispatchId: "dispatch-1",
 		Reason:     stringPtr("stop before provider completion"),
 	})
@@ -198,6 +187,31 @@ func TestInterruptFactorySessionDispatch_LateResultAfterInterruptSuppressedFromN
 		t.Fatalf("dispatchId = %#v, want dispatch-1", response.DispatchId)
 	}
 
+	applyLateInterruptTransportOutcome(t, service, sessionID)
+	assertInterruptedDispatchTransportState(t, serverURL, sessionID)
+	assertInterruptedSessionTransportState(t, service, sessionID)
+	assertDispatchInterruptedEventRecorded(t, service, sessionID, "after transport interrupt and late completion")
+}
+
+func newInterruptedLateResultTransportHarness(t *testing.T) (*factorysessionexecution.JavaScriptRuntimeService, string, string) {
+	t.Helper()
+	projectRoot := setupAPILifecycleWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
+	})
+	sessionID := "dur-sess-interrupt-transport-late-001"
+	if err := factorysessionexecution.SeedRuntimeSessionWithRunningDispatch(service, sessionID, "dispatch-1", "summarize-findings"); err != nil {
+		t.Fatalf("SeedRuntimeSessionWithRunningDispatch: %v", err)
+	}
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	t.Cleanup(server.Close)
+	return service, server.URL, sessionID
+}
+
+func applyLateInterruptTransportOutcome(t *testing.T, service *factorysessionexecution.JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
 	lateRecords := []workflowruntime.RuntimeRecord{{
 		Kind: workflowruntime.RecordKindChildDispatch,
 		ChildDispatch: &workflowruntime.ChildDispatchRecord{
@@ -216,8 +230,11 @@ func TestInterruptFactorySessionDispatch_LateResultAfterInterruptSuppressedFromN
 	}); err != nil {
 		t.Fatalf("ApplyRuntimeTerminalOutcomeForTests: %v", err)
 	}
+}
 
-	resp, err := http.Get(server.URL + "/factory-sessions/" + sessionID + "/dispatches/dispatch-1")
+func assertInterruptedDispatchTransportState(t *testing.T, serverURL, sessionID string) {
+	t.Helper()
+	resp, err := http.Get(serverURL + "/factory-sessions/" + sessionID + "/dispatches/dispatch-1")
 	if err != nil {
 		t.Fatalf("GET dispatch: %v", err)
 	}
@@ -235,7 +252,10 @@ func TestInterruptFactorySessionDispatch_LateResultAfterInterruptSuppressedFromN
 	if dispatch.ArtifactIds != nil && len(*dispatch.ArtifactIds) != 0 {
 		t.Fatalf("artifactIds = %#v, want suppressed late child output", *dispatch.ArtifactIds)
 	}
+}
 
+func assertInterruptedSessionTransportState(t *testing.T, service *factorysessionexecution.JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
 	session, err := service.GetSession(context.Background(), sessionID)
 	if err != nil {
 		t.Fatalf("GetSession: %v", err)
@@ -260,7 +280,14 @@ func TestInterruptFactorySessionDispatch_LateResultAfterInterruptSuppressedFromN
 		result.ResultStatus != factorysessionexecution.ResultStatusUnavailable {
 		t.Fatalf("result = status %q session %q, want UNAVAILABLE/INTERRUPTED", result.ResultStatus, result.SessionStatus)
 	}
+}
 
+func assertDispatchInterruptedEventRecorded(
+	t *testing.T,
+	service *factorysessionexecution.JavaScriptRuntimeService,
+	sessionID, contextSuffix string,
+) {
+	t.Helper()
 	events, err := service.ReadEvents(context.Background(), sessionID, factorysessionexecution.EventReconnectRequest{})
 	if err != nil {
 		t.Fatalf("ReadEvents: %v", err)
@@ -279,7 +306,7 @@ func TestInterruptFactorySessionDispatch_LateResultAfterInterruptSuppressedFromN
 		}
 	}
 	if !foundInterruptedEvent {
-		t.Fatal("DISPATCH_INTERRUPTED event missing after transport interrupt and late completion")
+		t.Fatalf("DISPATCH_INTERRUPTED event missing %s", contextSuffix)
 	}
 }
 
