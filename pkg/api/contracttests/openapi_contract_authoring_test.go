@@ -563,6 +563,7 @@ func TestOpenAPIContract_FactorySessionExposesRuntimeProjectionSchema(t *testing
 	assertSchemaPropertyRef(t, schemas, "FactorySessionSummary", "runtime", "#/components/schemas/FactorySessionRuntime")
 	assertSchemaPropertyRef(t, schemas, "FactorySessionRuntime", "orchestratorKind", "#/components/schemas/FactoryOrchestratorKind")
 	assertSchemaPropertyRef(t, schemas, "FactorySessionRuntime", "status", "#/components/schemas/FactorySessionStatus")
+	assertSchemaPropertyRef(t, schemas, "FactorySessionRuntime", "streamIdentity", "#/components/schemas/FactorySessionStreamIdentity")
 	assertSchemaPropertyRef(t, schemas, "FactorySessionRuntime", "petri", "#/components/schemas/FactorySessionPetriProjection")
 	assertSchemaPropertyRef(t, schemas, "FactorySessionRuntime", "javascript", "#/components/schemas/FactorySessionJavaScriptProjection")
 	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionStatus"), "FactorySessionStatus", []string{"ACTIVE", "IDLE", "FINISHED"})
@@ -586,7 +587,7 @@ func TestGeneratedFactorySessionContracts_RuntimeTypesAgreeWithOpenAPI(t *testin
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySession{}), "Runtime", reflect.TypeOf(factoryapi.FactorySessionRuntime{}))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionSummary{}), "Runtime", reflect.TypeOf((*factoryapi.FactorySessionRuntime)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "OrchestratorKind", reflect.TypeOf(factoryapi.FactoryOrchestratorKind("")))
-	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "StreamGenerationID", reflect.TypeOf((*string)(nil)))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "StreamIdentity", reflect.TypeOf((*factoryapi.FactorySessionStreamIdentity)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "Petri", reflect.TypeOf((*factoryapi.FactorySessionPetriProjection)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "Javascript", reflect.TypeOf((*factoryapi.FactorySessionJavaScriptProjection)(nil)))
 }

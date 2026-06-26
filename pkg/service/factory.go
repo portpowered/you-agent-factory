@@ -83,6 +83,7 @@ type managedLocalModelManager = localmodels.Manager
 type factoryRuntimeBundle struct {
 	dir                  string
 	folderPath           string
+	runtimeInstanceID    string
 	eventHistory         *factoryevents.FactoryEventHistory
 	factory              factory.Factory
 	listener             *ingest.FileWatcher

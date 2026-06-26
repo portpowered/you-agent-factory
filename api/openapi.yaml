@@ -2797,6 +2797,9 @@ components:
           $ref: '#/components/schemas/FactorySessionUsage'
         lifecycle:
           $ref: '#/components/schemas/FactorySessionLifecycle'
+        streamIdentity:
+          $ref: '#/components/schemas/FactorySessionStreamIdentity'
+          description: Backend-authoritative identity for the current live session event stream. Clients must confirm this identity before reusing persisted reconnect cursors or timeline checkpoints.
         petri:
           $ref: '#/components/schemas/FactorySessionPetriProjection'
         javascript:
@@ -2811,6 +2814,23 @@ components:
           items:
             $ref: '#/components/schemas/FactoryArtifact'
           description: Shared artifact projections for the session runtime.
+    FactorySessionStreamIdentity:
+      type: object
+      additionalProperties: false
+      required:
+        - backendScopeID
+        - factorySessionID
+        - streamGenerationID
+      properties:
+        backendScopeID:
+          type: string
+          description: Stable backend process or scope identity for the current live session stream.
+        factorySessionID:
+          type: string
+          description: Stable live Factory Session identifier for the current stream.
+        streamGenerationID:
+          type: string
+          description: Stable generation identifier for the current live session stream incarnation.
     FactorySessionStatus:
       type: string
       description: Canonical lifecycle status for one live factory session runtime.

@@ -6,6 +6,7 @@ export {
 } from "../state/factoryTimelineStore";
 export {
   clearTimelineCheckpoint,
+  type TimelineCheckpointStreamIdentity,
   persistTimelineCheckpoint,
   readTimelineCheckpoint,
   reconnectCursorFromCheckpoint,

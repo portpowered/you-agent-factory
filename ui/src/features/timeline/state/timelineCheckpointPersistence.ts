@@ -2,7 +2,7 @@ import type { FactoryEventReconnectCursor } from "../../../api/events";
 import type { FactoryTimelineCheckpoint } from "./timeline/storeState";
 import type { ReplayWorldState } from "./timeline/types";
 
-const CHECKPOINT_SCHEMA_VERSION = 1;
+const CHECKPOINT_SCHEMA_VERSION_GUARDED = 2;
 const CHECKPOINT_DB_NAME = "agentFactoryTimelineCheckpoints";
 const CHECKPOINT_DB_VERSION = 1;
 const CHECKPOINT_STORE_NAME = "checkpoints";
@@ -12,6 +12,7 @@ interface TimelineCheckpointEnvelope {
   checkpoint: PersistedTimelineCheckpoint;
   schemaVersion: number;
   sessionID: string;
+  streamIdentity?: TimelineCheckpointStreamIdentity;
 }
 
 interface PersistedTimelineCheckpoint {
@@ -20,6 +21,12 @@ interface PersistedTimelineCheckpoint {
   replayState: ReplayWorldState;
   selectedTick: number;
   syncIdentity?: FactoryTimelineCheckpoint["syncIdentity"];
+}
+
+export interface TimelineCheckpointStreamIdentity {
+  backendScopeID: string;
+  factorySessionID: string;
+  streamGenerationID: string;
 }
 
 interface IndexedDBLike {
@@ -150,10 +157,12 @@ function hydrateCheckpoint(
 function parseStoredCheckpoint(
   envelope: TimelineCheckpointEnvelope,
   sessionID: string | null,
+  expectedIdentity: TimelineCheckpointStreamIdentity | null,
 ): FactoryTimelineCheckpoint | null {
   if (
-    envelope.schemaVersion !== CHECKPOINT_SCHEMA_VERSION ||
+    envelope.schemaVersion !== CHECKPOINT_SCHEMA_VERSION_GUARDED ||
     envelope.sessionID !== sessionID ||
+    !matchesStreamIdentity(envelope.streamIdentity, expectedIdentity) ||
     !envelope.checkpoint?.replayState
   ) {
     return null;
@@ -161,19 +170,59 @@ function parseStoredCheckpoint(
   return hydrateCheckpoint(envelope.checkpoint);
 }
 
+function normalizeStreamIdentity(
+  identity: TimelineCheckpointStreamIdentity | null | undefined,
+): TimelineCheckpointStreamIdentity | null {
+  if (!identity) {
+    return null;
+  }
+  const backendScopeID = identity.backendScopeID.trim();
+  const factorySessionID = identity.factorySessionID.trim();
+  const streamGenerationID = identity.streamGenerationID.trim();
+  if (
+    backendScopeID === "" ||
+    factorySessionID === "" ||
+    streamGenerationID === ""
+  ) {
+    return null;
+  }
+  return {
+    backendScopeID,
+    factorySessionID,
+    streamGenerationID,
+  };
+}
+
+function matchesStreamIdentity(
+  actual: TimelineCheckpointStreamIdentity | null | undefined,
+  expected: TimelineCheckpointStreamIdentity | null,
+): boolean {
+  const normalizedActual = normalizeStreamIdentity(actual);
+  return (
+    normalizedActual != null &&
+    expected != null &&
+    normalizedActual.backendScopeID === expected.backendScopeID &&
+    normalizedActual.factorySessionID === expected.factorySessionID &&
+    normalizedActual.streamGenerationID === expected.streamGenerationID
+  );
+}
+
 export async function persistTimelineCheckpoint(
   indexedDB: IndexedDBLike | undefined,
   sessionID: string | null,
   checkpoint: FactoryTimelineCheckpoint | undefined,
+  streamIdentity: TimelineCheckpointStreamIdentity | null,
 ): Promise<void> {
-  if (!indexedDB || !sessionID || !checkpoint) {
+  const normalizedStreamIdentity = normalizeStreamIdentity(streamIdentity);
+  if (!indexedDB || !sessionID || !checkpoint || !normalizedStreamIdentity) {
     return;
   }
 
   const envelope = {
     checkpoint: buildPersistedCheckpoint(checkpoint),
-    schemaVersion: CHECKPOINT_SCHEMA_VERSION,
+    schemaVersion: CHECKPOINT_SCHEMA_VERSION_GUARDED,
     sessionID,
+    streamIdentity: normalizedStreamIdentity,
   } satisfies TimelineCheckpointEnvelope;
 
   try {
@@ -197,15 +246,21 @@ export async function clearTimelineCheckpoint(
 export async function readTimelineCheckpoint(
   indexedDB: IndexedDBLike | undefined,
   sessionID: string | null,
+  streamIdentity: TimelineCheckpointStreamIdentity | null,
 ): Promise<FactoryTimelineCheckpoint | null> {
-  if (!indexedDB || !sessionID) {
+  const normalizedStreamIdentity = normalizeStreamIdentity(streamIdentity);
+  if (!indexedDB || !sessionID || !normalizedStreamIdentity) {
     return null;
   }
 
   try {
     const envelope = await readIndexedCheckpoint(indexedDB, sessionID);
     if (envelope) {
-      const checkpoint = parseStoredCheckpoint(envelope, sessionID);
+      const checkpoint = parseStoredCheckpoint(
+        envelope,
+        sessionID,
+        normalizedStreamIdentity,
+      );
       if (!checkpoint) {
         await deleteIndexedCheckpoint(indexedDB, sessionID).catch(() => {});
       }

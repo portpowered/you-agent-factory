@@ -24,10 +24,11 @@ type ProjectionContext struct {
 	FactoryCfg             *interfaces.FactoryConfig
 	Snapshot               *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 	LifecycleControlStatus string
-	Enabled                []interfaces.EnabledTransition
-	JavaScript             *interfaces.FactorySessionJavaScriptRuntimeState
-	JavaScriptCheckpoints  []interfaces.JavaScriptCheckpointRecord
-	Now                    time.Time
+	BackendScopeID        string
+	Enabled               []interfaces.EnabledTransition
+	JavaScript            *interfaces.FactorySessionJavaScriptRuntimeState
+	JavaScriptCheckpoints []interfaces.JavaScriptCheckpointRecord
+	Now                   time.Time
 }
 
 // SessionResponse maps a live session and runtime projection to the API detail shape.
@@ -67,9 +68,8 @@ func ProjectRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {
 		Usage:            projectedSessionUsage(ctx),
 		Lifecycle:        projectedSessionLifecycle(ctx, now),
 	}
-	if ctx.Snapshot != nil && strings.TrimSpace(ctx.Snapshot.StreamGenerationID) != "" {
-		streamGenerationID := strings.TrimSpace(ctx.Snapshot.StreamGenerationID)
-		runtime.StreamGenerationID = &streamGenerationID
+	if streamIdentity := projectedSessionStreamIdentity(ctx, runtime.Lifecycle); streamIdentity != nil {
+		runtime.StreamIdentity = streamIdentity
 	}
 	if lifecycleControlStatus := projectedSessionLifecycleControlStatus(ctx); lifecycleControlStatus != "" {
 		status := factoryapi.FactorySessionDurableLifecycleStatus(lifecycleControlStatus)
@@ -90,6 +90,26 @@ func ProjectRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {
 		runtime.Artifacts = artifacts
 	}
 	return runtime
+}
+
+func projectedSessionStreamIdentity(
+	ctx ProjectionContext,
+	lifecycle factoryapi.FactorySessionLifecycle,
+) *factoryapi.FactorySessionStreamIdentity {
+	sessionID := ""
+	if ctx.Session != nil {
+		sessionID = strings.TrimSpace(ctx.Session.ID)
+	}
+	backendScopeID := strings.TrimSpace(ctx.BackendScopeID)
+	if backendScopeID == "" || sessionID == "" || lifecycle.StartedAt.IsZero() {
+		return nil
+	}
+	streamGenerationID := lifecycle.StartedAt.UTC().Format(time.RFC3339Nano)
+	return &factoryapi.FactorySessionStreamIdentity{
+		BackendScopeID:    backendScopeID,
+		FactorySessionID:  sessionID,
+		StreamGenerationID: streamGenerationID,
+	}
 }
 
 func projectedSessionDispatchArtifacts(

@@ -518,6 +518,39 @@ describe("useDashboardSnapshot composer", () => {
       `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events?after_event_id=checkpoint-event-7&after_sequence=7`,
     );
   });
+
+  it("ignores and deletes legacy v1 checkpoints without reopening from a stale cursor", async () => {
+    indexedDBRecords.set(DEFAULT_FACTORY_SESSION_ID, {
+      checkpoint: {
+        afterEventId: "legacy-event-7",
+        afterSequence: 7,
+        replayState: emptyReplayWorldState(7),
+        selectedTick: 7,
+      },
+      schemaVersion: 1,
+      sessionID: DEFAULT_FACTORY_SESSION_ID,
+    });
+
+    renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+    );
+    expect(useFactoryTimelineStore.getState().selectedTick).not.toBe(7);
+    await expect(
+      readTimelineCheckpoint(window.indexedDB, DEFAULT_FACTORY_SESSION_ID, {
+        backendScopeID: "backend-scope-a",
+        factorySessionID: DEFAULT_FACTORY_SESSION_ID,
+        streamGenerationID: "2026-06-26T00:00:00Z",
+      }),
+    ).resolves.toBe(null);
+    expect(indexedDBRecords.has(DEFAULT_FACTORY_SESSION_ID)).toBe(false);
+  });
 });
 
 function createWrapper(queryClient: QueryClient) {
