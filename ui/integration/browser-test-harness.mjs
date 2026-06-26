@@ -241,6 +241,7 @@ const sessionFactoryPathPattern = /^\/factory-sessions\/([^/]+)\/factory$/;
 const sessionSyncPreflightPathPattern =
   /^\/factory-sessions\/([^/]+)\/sync-preflight(?:\?.*)?$/;
 const sessionEventsPathPattern = /^\/factory-sessions\/([^/]+)\/events$/;
+const factorySessionReadPathPattern = /^\/factory-sessions\/([^/]+)$/;
 const promptTemplateContractPathPattern =
   /^\/factory-sessions\/([^/]+)\/factory\/workstations\/[^/]+\/prompt-template-contract$/;
 const promptTemplateValidationPathPattern =
@@ -859,18 +860,20 @@ export async function openBrowserPage(options = {}) {
   );
   const state = browserProcessState();
   if (!state.browserPromise) {
-    state.browserPromise = chromium.launch({ headless: true }).then((browser) => {
-      state.browser = browser;
-      if (!state.cleanupRegistered) {
-        state.cleanupRegistered = true;
-        process.once("exit", () => {
-          if (state.browser) {
-            state.browser.close().catch(() => {});
-          }
-        });
-      }
-      return browser;
-    });
+    state.browserPromise = chromium
+      .launch({ headless: true })
+      .then((browser) => {
+        state.browser = browser;
+        if (!state.cleanupRegistered) {
+          state.cleanupRegistered = true;
+          process.once("exit", () => {
+            if (state.browser) {
+              state.browser.close().catch(() => {});
+            }
+          });
+        }
+        return browser;
+      });
   }
   const browser = await state.browserPromise;
   const context = await browser.newContext({
@@ -1139,6 +1142,53 @@ export async function startFactoryApiServer({
     };
   }
 
+  function buildFactorySessionDocument(sessionID) {
+    const sessionState = sessionRegistry.state.get(sessionID);
+    if (!sessionState) {
+      return null;
+    }
+
+    const lifecycleTimestamp = sessionState.version.physical;
+    const factoryState =
+      sessionState.eventLines.length > 0 ? "FINISHED" : "IDLE";
+
+    return {
+      factoryDir: sessionState.session.factoryDir,
+      folderPath: sessionState.session.folderPath,
+      id: sessionState.session.id,
+      isDefault: sessionState.session.isDefault,
+      project: sessionState.session.project,
+      runtime: {
+        lifecycle: {
+          startedAt: lifecycleTimestamp,
+          updatedAt: lifecycleTimestamp,
+        },
+        orchestratorKind: "PETRI",
+        progress: {
+          categories: {
+            failed: 0,
+            initial: 0,
+            processing: 0,
+            terminal: 0,
+          },
+          factoryState,
+          inFlightCount: 0,
+          totalTokens: 0,
+        },
+        status: "IDLE",
+        streamIdentity: {
+          backendScopeID: `${sessionState.session.folderPath}::browser-integration`,
+          factorySessionID: sessionState.session.id,
+          streamGenerationID: lifecycleTimestamp,
+        },
+        usage: {
+          resources: [],
+        },
+      },
+      target: sessionState.session.target,
+    };
+  }
+
   function bumpEditableFactoryDefinitionVersion(sessionID) {
     const sessionState = sessionRegistry.state.get(sessionID);
     sessionState.version = {
@@ -1216,6 +1266,35 @@ export async function startFactoryApiServer({
         });
         response.end(JSON.stringify(result));
       });
+      return;
+    }
+
+    const factorySessionReadMatch =
+      request.method === "GET"
+        ? request.url?.match(factorySessionReadPathPattern)
+        : null;
+    if (factorySessionReadMatch) {
+      const sessionID = decodeURIComponent(factorySessionReadMatch[1]);
+      const sessionDocument = buildFactorySessionDocument(sessionID);
+      if (!sessionDocument) {
+        response.writeHead(404, {
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "application/json",
+        });
+        response.end(
+          JSON.stringify({
+            code: "FACTORY_SESSION_NOT_FOUND",
+            message: `Factory session ${sessionID} was not found.`,
+          }),
+        );
+        return;
+      }
+
+      response.writeHead(200, {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      });
+      response.end(JSON.stringify(sessionDocument));
       return;
     }
 
