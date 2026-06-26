@@ -295,6 +295,34 @@ export const DispatchDrilldownStates = {
     expect(
       await canvas.findByText("session_id · provider-session-verify-1"),
     ).toBeTruthy();
+
+    await userEvent.click(
+      await canvas.findByRole("button", {
+        name: "Expand dispatch detail for dispatch-missing",
+      }),
+    );
+
+    expect(
+      await canvas.findByText("This dispatch detail is no longer available."),
+    ).toBeTruthy();
+    expect(
+      await canvas.findByText(
+        "Provider session: codex / session_id / provider-session-1",
+      ),
+    ).toBeTruthy();
+
+    await userEvent.click(
+      await canvas.findByRole("button", {
+        name: "Expand dispatch detail for dispatch-error",
+      }),
+    );
+
+    expect(await canvas.findByText("dispatch boom")).toBeTruthy();
+    expect(
+      await canvas.findByText(
+        "Provider session: codex / session_id / provider-session-1",
+      ),
+    ).toBeTruthy();
   },
   render: () => renderFactorySessionDetailPanel(storySessionID),
 };
@@ -464,4 +492,94 @@ export const DurableReplayDisclosureUnavailable = {
     },
   },
   render: () => renderFactorySessionDetailPanel(unavailableReplaySessionID),
+};
+
+export const SessionUnavailable = {
+  tags: ["test"],
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions/session-missing",
+          response: {
+            body: {
+              code: "NOT_FOUND",
+              message: "Factory session not found.",
+            },
+            status: 404,
+          },
+        },
+      ],
+      sessionID: "session-missing",
+    },
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    expect(
+      await canvas.findByText("This factory session is no longer available."),
+    ).toBeTruthy();
+  },
+  render: () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: Infinity,
+          retry: false,
+        },
+      },
+    });
+
+    return (
+      <div style={{ maxWidth: "100%", width: "960px" }}>
+        <QueryClientProvider client={queryClient}>
+          <FactorySessionDetailPanel sessionID="session-missing" />
+        </QueryClientProvider>
+      </div>
+    );
+  },
+};
+
+export const SessionErrorState = {
+  tags: ["test"],
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: "/factory-sessions/session-error",
+          response: {
+            body: {
+              code: "INTERNAL_ERROR",
+              message: "session boom",
+            },
+            status: 500,
+          },
+        },
+      ],
+      sessionID: "session-error",
+    },
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    expect(await canvas.findByRole("alert")).toHaveTextContent("session boom");
+  },
+  render: () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: Infinity,
+          retry: false,
+        },
+      },
+    });
+
+    return (
+      <div style={{ maxWidth: "100%", width: "960px" }}>
+        <QueryClientProvider client={queryClient}>
+          <FactorySessionDetailPanel sessionID="session-error" />
+        </QueryClientProvider>
+      </div>
+    );
+  },
 };
