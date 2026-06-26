@@ -47,7 +47,7 @@ func TestGetEvents_WritesHistoricalAndLiveSSE(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/events", nil)
 	rec := httptest.NewRecorder()
-	srv.getEvents(rec, req, func(context.Context) (*interfaces.FactoryEventStream, error) {
+	srv.getEvents(rec, req, false, func(context.Context) (*interfaces.FactoryEventStream, error) {
 		return &interfaces.FactoryEventStream{
 			History: []factoryapi.FactoryEvent{{Id: "event-history", Type: factoryapi.FactoryEventTypeWorkRequest}},
 			Events:  liveEvents,
@@ -82,6 +82,7 @@ func TestGetEvents_ErrorResponses(t *testing.T) {
 		name       string
 		writer     http.ResponseWriter
 		subscribe  func(context.Context) (*interfaces.FactoryEventStream, error)
+		session    bool
 		wantStatus int
 		wantCode   string
 		wantMsg    string
@@ -93,6 +94,7 @@ func TestGetEvents_ErrorResponses(t *testing.T) {
 				t.Fatal("subscribe should not be called when streaming is unsupported")
 				return nil, nil
 			},
+			session:    false,
 			wantStatus: http.StatusInternalServerError,
 			wantCode:   "INTERNAL_ERROR",
 			wantMsg:    "streaming unsupported",
@@ -103,6 +105,7 @@ func TestGetEvents_ErrorResponses(t *testing.T) {
 			subscribe: func(context.Context) (*interfaces.FactoryEventStream, error) {
 				return nil, apisurface.ErrFactorySessionNotFound
 			},
+			session:    false,
 			wantStatus: http.StatusNotFound,
 			wantCode:   "NOT_FOUND",
 			wantMsg:    "factory session not found",
@@ -113,6 +116,7 @@ func TestGetEvents_ErrorResponses(t *testing.T) {
 			subscribe: func(context.Context) (*interfaces.FactoryEventStream, error) {
 				return nil, factoryevents.ErrReconnectCursorNotFound
 			},
+			session:    false,
 			wantStatus: http.StatusBadRequest,
 			wantCode:   "BAD_REQUEST",
 			wantMsg:    "invalid event reconnect cursor",
@@ -123,6 +127,7 @@ func TestGetEvents_ErrorResponses(t *testing.T) {
 			subscribe: func(context.Context) (*interfaces.FactoryEventStream, error) {
 				return nil, errors.New("boom")
 			},
+			session:    false,
 			wantStatus: http.StatusInternalServerError,
 			wantCode:   "INTERNAL_ERROR",
 			wantMsg:    "failed to subscribe to factory events",
@@ -132,7 +137,7 @@ func TestGetEvents_ErrorResponses(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/events", nil)
-			srv.getEvents(tt.writer, req, tt.subscribe)
+			srv.getEvents(tt.writer, req, tt.session, tt.subscribe)
 
 			switch writer := tt.writer.(type) {
 			case *httptest.ResponseRecorder:
@@ -143,6 +148,25 @@ func TestGetEvents_ErrorResponses(t *testing.T) {
 				t.Fatalf("unexpected writer type %T", tt.writer)
 			}
 		})
+	}
+}
+
+func TestGetEvents_SessionHandshakeWritesStreamGenerationHeader(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{})
+	liveEvents := make(chan factoryapi.FactoryEvent)
+	close(liveEvents)
+
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-a/events", nil)
+	rec := httptest.NewRecorder()
+	srv.getEvents(rec, req, true, func(context.Context) (*interfaces.FactoryEventStream, error) {
+		return &interfaces.FactoryEventStream{
+			StreamGenerationID: "stream-gen-live-001",
+			Events:             liveEvents,
+		}, nil
+	})
+
+	if got := rec.Header().Get(sessionEventStreamGenerationHeader); got != "stream-gen-live-001" {
+		t.Fatalf("%s = %q, want stream-gen-live-001", sessionEventStreamGenerationHeader, got)
 	}
 }
 

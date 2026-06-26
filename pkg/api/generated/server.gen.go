@@ -2450,7 +2450,10 @@ type FactorySessionRuntime struct {
 
 	// Status Canonical lifecycle status for one live factory session runtime.
 	Status FactorySessionStatus `json:"status"`
-	Usage  FactorySessionUsage  `json:"usage"`
+
+	// StreamGenerationID Opaque invalidation token for the current live Factory Session event history. Clients can compare this value across preflight reads and stream handshakes to decide whether reconnect cursors and stream-derived projections still belong to the same live history.
+	StreamGenerationID *string             `json:"streamGenerationID,omitempty"`
+	Usage              FactorySessionUsage `json:"usage"`
 }
 
 // FactorySessionStatus Canonical lifecycle status for one live factory session runtime.

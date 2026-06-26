@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -51,6 +52,7 @@ type FactoryEventHistory struct {
 	factoryRunner       string
 	initialFactory      *factoryapi.Factory
 	now                 func() time.Time
+	streamGenerationID  string
 	events              []factoryapi.FactoryEvent
 	recorders           []func(factoryapi.FactoryEvent)
 	nextID              int
@@ -71,11 +73,23 @@ func NewFactoryEventHistory(net *state.Net, now func() time.Time, runtimeConfigs
 		now = time.Now
 	}
 	return &FactoryEventHistory{
-		net:           net,
-		runtimeConfig: interfaces.FirstRuntimeDefinitionLookup(runtimeConfigs...),
-		now:           now,
-		streams:       make(map[int]*eventHistorySubscription),
+		net:                net,
+		runtimeConfig:      interfaces.FirstRuntimeDefinitionLookup(runtimeConfigs...),
+		now:                now,
+		streamGenerationID: uuid.NewString(),
+		streams:            make(map[int]*eventHistorySubscription),
 	}
+}
+
+// StreamGenerationID returns the stable opaque identifier for this live event
+// history instance.
+func (h *FactoryEventHistory) StreamGenerationID() string {
+	if h == nil {
+		return ""
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.streamGenerationID
 }
 
 // SetFactoryRunnerOverride preserves the effective factory-level runner
@@ -129,6 +143,7 @@ func (h *FactoryEventHistory) Subscribe(
 	h.mu.Lock()
 	events := make([]factoryapi.FactoryEvent, len(h.events))
 	copy(events, h.events)
+	streamGenerationID := h.streamGenerationID
 	if reconnect != nil {
 		replayed, err := BuildReconnectReplay(events, *reconnect, scope)
 		if err != nil {
@@ -169,7 +184,11 @@ func (h *FactoryEventHistory) Subscribe(
 		}
 	}()
 
-	return interfaces.FactoryEventStream{History: events, Events: subscription.events}, nil
+	return interfaces.FactoryEventStream{
+		StreamGenerationID: streamGenerationID,
+		History:            events,
+		Events:             subscription.events,
+	}, nil
 }
 
 // AddGeneratedRecorder registers a callback invoked for every future generated

@@ -560,6 +560,7 @@ describe("factory sessions API", () => {
           id: "session-beta",
           runtime: {
             orchestratorKind: "JAVASCRIPT",
+            streamGenerationID: "stream-gen-live-001",
           },
         }),
         {
@@ -577,6 +578,7 @@ describe("factory sessions API", () => {
         id: "session-beta",
         runtime: {
           orchestratorKind: "JAVASCRIPT",
+          streamGenerationID: "stream-gen-live-001",
         },
       },
     });
