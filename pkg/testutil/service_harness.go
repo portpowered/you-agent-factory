@@ -109,6 +109,18 @@ func WithRuntimeLogDir(dir string) ServiceTestHarnessOption {
 	}
 }
 
+// WithRuntimeFileLoggingEnabled controls whether the service creates runtime
+// file logs for the harness run.
+func WithRuntimeFileLoggingEnabled(enabled bool) ServiceTestHarnessOption {
+	return func(cfg *harnessConfig) {
+		if enabled {
+			cfg.serviceConfig.RuntimeFileLoggingPolicy = service.RuntimeFileLoggingPolicyEnabled
+			return
+		}
+		cfg.serviceConfig.RuntimeFileLoggingPolicy = service.RuntimeFileLoggingPolicyDisabled
+	}
+}
+
 // WithRuntimeLogConfig sets bounded rolling-file policy for service runtime logs.
 func WithRuntimeLogConfig(config logging.RuntimeLogConfig) ServiceTestHarnessOption {
 	return func(cfg *harnessConfig) {
@@ -181,7 +193,8 @@ func NewServiceTestHarness(t *testing.T, dir string, opts ...ServiceTestHarnessO
 
 	cfg := &harnessConfig{
 		serviceConfig: service.FactoryServiceConfig{
-			Dir: dir,
+			Dir:                      dir,
+			RuntimeFileLoggingPolicy: service.RuntimeFileLoggingPolicyDisabled,
 		},
 	}
 	for _, opt := range opts {

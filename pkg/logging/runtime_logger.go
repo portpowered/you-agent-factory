@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"go.uber.org/zap"
@@ -19,12 +20,9 @@ import (
 )
 
 const (
-	defaultRuntimeLogDirName = ".you-agent-factory"
 	legacyRuntimeLogDirName  = ".agent-factory"
 	runtimeLogSubdirName     = "logs"
 	runtimeLogExtension      = ".log"
-	runtimeLogMonthLayout    = "2006-01"
-	runtimeLogDateLayout     = "2006-01-02"
 	runtimeLogTimeLayout     = "150405.000000000"
 	defaultRuntimeLogMaxSize = 100
 	defaultRuntimeLogBackups = 20
@@ -275,12 +273,7 @@ func runtimeLogPath(rootDir, runtimeInstanceID string, startTime time.Time, uniq
 		safeRuntimeLogPathComponent(uniqueID),
 		runtimeLogExtension,
 	)
-	return filepath.Join(
-		rootDir,
-		startTime.Format(runtimeLogMonthLayout),
-		startTime.Format(runtimeLogDateLayout),
-		filename,
-	)
+	return filepath.Join(defaultpaths.RuntimeLogsDatedDir(rootDir, startTime), filename)
 }
 
 func safeRuntimeLogPathComponent(value string) string {
@@ -340,7 +333,7 @@ func defaultRuntimeLogDir() (string, error) {
 }
 
 func canonicalRuntimeLogDir(home string) string {
-	return filepath.Join(home, defaultRuntimeLogDirName, runtimeLogSubdirName)
+	return defaultpaths.RuntimeLogsRoot(home)
 }
 
 func legacyRuntimeLogDir(home string) string {

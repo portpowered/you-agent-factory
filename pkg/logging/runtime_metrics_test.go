@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/internal/metrics"
 )
 
@@ -133,7 +134,7 @@ func TestBuildRuntimeMetricsSinkUsesCanonicalDefaultMetricsDirectoryAsRoot(t *te
 	assertRuntimeMetricsPathFormat(
 		t,
 		sink.Path(),
-		filepath.Join(fixture.homeDir, ".you-agent-factory", "metrics"),
+		defaultpaths.RuntimeMetricsRoot(fixture.homeDir),
 		"session-default",
 		"runtime-default",
 		before,

@@ -63,6 +63,7 @@ type runtimeBundleBuildInput struct {
 	prefetchedLocalModels         localModelDomain
 	inferenceProgressPublisher    workerprovider.InferenceProgressPublisher
 	inferenceProgressPublisherSet bool
+	dispatchCompleted             func(string)
 }
 
 type liveSessionState struct {
@@ -70,8 +71,8 @@ type liveSessionState struct {
 	handle                *liveRuntimeHandle
 	spec                  *runtimebuild.SessionBuildSpec
 	javascriptCheckpoints *factorysessions.JavaScriptCheckpointStore
-	responseStreamOnce    sync.Once
-	responseStream        *factorysessions.SessionResponseStream
+	responseStreamsOnce   sync.Once
+	responseStreams       *factorysessions.SessionResponseStreamSet
 }
 
 // BuildFactoryService loads factory.json from the config directory, constructs
@@ -356,7 +357,7 @@ func buildRuntimeBundle(
 	if err != nil {
 		return nil, err
 	}
-	logger := runtimebuild.NewSessionLogger(logSink.Logger(), sessionID, input.folderPath, input.dir)
+	logger := runtimebuild.NewSessionLogger(runtimeSessionBaseLogger(input.baseLogger, logSink), sessionID, input.folderPath, input.dir)
 	metricsSink, err := buildRuntimeMetricsSink(input.cfg, sessionID, runtimeInstanceID, input.folderPath, input.dir)
 	if err != nil {
 		logger.Warn(
@@ -499,6 +500,7 @@ func assembleRuntimeBundle(
 		metricsSink:       metricsSink,
 		recording:         recording,
 		recordPath:        input.recordPath,
+		dispatchCompleted: input.dispatchCompleted,
 	}
 	opts := []factory.FactoryOption{
 		factory.WithNet(net),
@@ -551,11 +553,35 @@ func buildRuntimeLogSink(
 	if cfg == nil {
 		return nil, runtimeInstanceID, fmt.Errorf("factory service config is required to build runtime log sink")
 	}
+	if !runtimeFileLoggingEnabled(cfg.RuntimeFileLoggingPolicy) {
+		return nil, runtimeInstanceID, nil
+	}
 	logSink, err := logging.BuildRuntimeLogger(baseLogger, runtimeInstanceID, cfg.RuntimeLogDir, cfg.RuntimeLogConfig)
 	if err != nil {
 		return nil, runtimeInstanceID, fmt.Errorf("build runtime logger: %w", err)
 	}
 	return logSink, runtimeInstanceID, nil
+}
+
+func runtimeFileLoggingEnabled(policy RuntimeFileLoggingPolicy) bool {
+	switch policy {
+	case "", RuntimeFileLoggingPolicyEnabled:
+		return true
+	case RuntimeFileLoggingPolicyDisabled:
+		return false
+	default:
+		return true
+	}
+}
+
+func runtimeSessionBaseLogger(baseLogger *zap.Logger, logSink *logging.RuntimeLogSink) *zap.Logger {
+	if logSink != nil {
+		return logSink.Logger()
+	}
+	if baseLogger != nil {
+		return baseLogger
+	}
+	return zap.NewNop()
 }
 
 func buildRuntimeMetricsSink(
@@ -626,6 +652,9 @@ func (r *factoryRuntimeBundle) recordCompletionMetrics(record interfaces.Factory
 		r.emitMetricSample(runtimeMetricDispatchCost, record.Result.Metrics.Cost, "usd", metricFields)
 	}
 	r.emitWorkerBoundaryCompletionMetrics(record.Result, metricFields)
+	if r.dispatchCompleted != nil {
+		r.dispatchCompleted(record.DispatchID)
+	}
 }
 
 func runtimeDispatchMetricFields(dispatch interfaces.WorkDispatch) metrics.Fields {
@@ -1289,6 +1318,7 @@ func newRuntimeBuildService(
 	baseLogger *zap.Logger,
 	startupLocalModels *localModelDomain,
 	progressPublisherFactory inferenceProgressPublisherFactory,
+	dispatchCompletionFactory dispatchCompletionObserverFactory,
 ) *runtimebuild.Service {
 	buildCfg := runtimeBuildConfigFromService(cfg)
 	return runtimebuild.New(
@@ -1315,6 +1345,9 @@ func newRuntimeBuildService(
 			if progressPublisherFactory != nil {
 				bundleInput.inferenceProgressPublisher = progressPublisherFactory(bundleInput.sessionID)
 				bundleInput.inferenceProgressPublisherSet = true
+			}
+			if dispatchCompletionFactory != nil {
+				bundleInput.dispatchCompleted = dispatchCompletionFactory(bundleInput.sessionID)
 			}
 			if startupLocalModels != nil && startupLocalModels.manager != nil {
 				bundleInput.prefetchedLocalModels = *startupLocalModels

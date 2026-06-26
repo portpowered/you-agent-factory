@@ -115,6 +115,84 @@ func TestFactoryService_RunWritesStructuredRuntimeLogFile(t *testing.T) {
 	}
 }
 
+func TestFactoryService_RuntimeFileLoggingPolicy_PreservesProductionDefaultAndAllowsExplicitDisable(t *testing.T) {
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	writeWorkstationAgentsMD(t, dir, "process")
+	if err := os.MkdirAll(filepath.Join(dir, interfaces.InputsDir), 0o755); err != nil {
+		t.Fatalf("create inputs dir: %v", err)
+	}
+
+	t.Run("default policy stays enabled for direct service construction", func(t *testing.T) {
+		logDir := t.TempDir()
+		runtimeInstanceID := "runtime-default-enabled"
+
+		svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
+			Dir:               dir,
+			MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+			Logger:            zap.NewNop(),
+			RuntimeLogDir:     logDir,
+			RuntimeInstanceID: runtimeInstanceID,
+		})
+		if err != nil {
+			t.Fatalf("BuildFactoryService: %v", err)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := svc.Run(ctx); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+
+		diagnostics := svc.RuntimeLogDiagnostics()
+		if diagnostics.Path == "" {
+			t.Fatal("RuntimeLogDiagnostics().Path = empty, want runtime log path when production-facing policy is unset")
+		}
+		logPath := requireRuntimeLogPath(t, logDir, runtimeInstanceID)
+		if diagnostics.Path != logPath {
+			t.Fatalf("RuntimeLogDiagnostics().Path = %q, want %q", diagnostics.Path, logPath)
+		}
+		startup := requireRuntimeLogMessage(t, logPath, "factory started")
+		if startup["runtime_log_path"] != logPath {
+			t.Fatalf("runtime_log_path = %#v, want %q", startup["runtime_log_path"], logPath)
+		}
+		if startup["runtime_log_root"] != logDir {
+			t.Fatalf("runtime_log_root = %#v, want %q", startup["runtime_log_root"], logDir)
+		}
+	})
+
+	t.Run("explicit disabled policy suppresses runtime log artifacts", func(t *testing.T) {
+		logDir := t.TempDir()
+
+		svc, err := service.BuildFactoryService(context.Background(), &service.FactoryServiceConfig{
+			Dir:                      dir,
+			MockWorkersConfig:        config.NewEmptyMockWorkersConfig(),
+			Logger:                   zap.NewNop(),
+			RuntimeLogDir:            logDir,
+			RuntimeInstanceID:        "runtime-disabled",
+			RuntimeFileLoggingPolicy: service.RuntimeFileLoggingPolicyDisabled,
+		})
+		if err != nil {
+			t.Fatalf("BuildFactoryService: %v", err)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		if err := svc.Run(ctx); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+
+		diagnostics := svc.RuntimeLogDiagnostics()
+		if diagnostics.Path != "" {
+			t.Fatalf("RuntimeLogDiagnostics().Path = %q, want empty when runtime file logging is disabled", diagnostics.Path)
+		}
+		logFiles := collectRuntimeLogFiles(t, logDir)
+		if len(logFiles) != 0 {
+			t.Fatalf("runtime log files = %v, want none", logFiles)
+		}
+	})
+}
+
 func assertRuntimeStartupLogSelection(t *testing.T, record map[string]any, logPath, logDir string) {
 	t.Helper()
 
@@ -540,6 +618,51 @@ func requireRuntimeLogPath(t *testing.T, logDir, runtimeInstanceID string) strin
 		t.Fatalf("runtime log paths for %q under %s = %v, want exactly one", runtimeInstanceID, logDir, matches)
 	}
 	return matches[0]
+}
+
+func collectRuntimeLogFiles(t *testing.T, dir string) []string {
+	t.Helper()
+
+	var logFiles []string
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) == ".log" {
+			logFiles = append(logFiles, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WalkDir(%s): %v", dir, err)
+	}
+	return logFiles
+}
+
+func requireRuntimeLogMessage(t *testing.T, path, message string) map[string]any {
+	t.Helper()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("runtime log line is not structured JSON: %v\nline: %s", err, line)
+		}
+		if record["msg"] == message {
+			return record
+		}
+	}
+	t.Fatalf("runtime log %s missing message %q", path, message)
+	return nil
 }
 
 func assertRuntimeLogWorkContext(t *testing.T, record map[string]any, eventName string, work interfaces.SubmitRequest) {

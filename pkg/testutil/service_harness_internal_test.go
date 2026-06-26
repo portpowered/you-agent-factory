@@ -3,6 +3,8 @@ package testutil
 import (
 	"context"
 	"errors"
+	"io/fs"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -40,6 +42,45 @@ func TestServiceTestHarnessMarkingFallsBackToCachedSnapshot(t *testing.T) {
 	}
 	if got := len(snap.TokensInPlace("task:init")); got != 0 {
 		t.Fatalf("TokensInPlace(task:init) = %d, want 0", got)
+	}
+}
+
+func TestNewServiceTestHarness_DisablesRuntimeFileLoggingByDefault(t *testing.T) {
+	cfg := PipelineConfig(1, "processor")
+	dir := ScaffoldFactoryDir(t, cfg)
+	logDir := t.TempDir()
+
+	h := NewServiceTestHarness(t, dir, WithRuntimeLogDir(logDir))
+	h.MockWorker("processor", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+
+	if err := h.SubmitWork("task", []byte(`{"title":"no incidental runtime log file"}`)); err != nil {
+		t.Fatalf("submit work: %v", err)
+	}
+	h.RunUntilComplete(t, 5*time.Second)
+
+	diagnostics := h.svc.RuntimeLogDiagnostics()
+	if diagnostics.Path != "" {
+		t.Fatalf("RuntimeLogDiagnostics().Path = %q, want empty when runtime file logging is disabled", diagnostics.Path)
+	}
+
+	var logFiles []string
+	err := filepath.WalkDir(logDir, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) == ".log" {
+			logFiles = append(logFiles, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("WalkDir(%s): %v", logDir, err)
+	}
+	if len(logFiles) != 0 {
+		t.Fatalf("runtime log files = %v, want none", logFiles)
 	}
 }
 
