@@ -12,10 +12,11 @@ import (
 	"testing"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
@@ -413,21 +414,19 @@ func TestGenerateDefaultLiveRunRecordPath_UsesRecordingsHierarchyAndSessionTempl
 		t.Fatalf("generateDefaultLiveRunRecordPath: %v", err)
 	}
 
+	recordingsDir := defaultpaths.RecordingsDatedDir(
+		defaultpaths.RecordingsRoot(homeDir),
+		time.Date(2026, time.May, 23, 18, 45, 12, 0, time.FixedZone("ICT", 7*60*60)),
+	)
 	want := filepath.Join(
-		homeDir,
-		defaultRecordingsDir,
-		"2026-05",
-		"2026-05-23",
+		recordingsDir,
 		"factory-session-"+defaultRecordPathSessionToken+"-184512-uuid-1.json",
 	)
 	if path != want {
 		t.Fatalf("generated path = %q, want %q", path, want)
 	}
 	if got := resolveDefaultSessionRecordPath(path); got != filepath.Join(
-		homeDir,
-		defaultRecordingsDir,
-		"2026-05",
-		"2026-05-23",
+		recordingsDir,
 		"factory-session-"+defaultFactorySessionID+"-184512-uuid-1.json",
 	) {
 		t.Fatalf("resolved default-session path = %q", got)
