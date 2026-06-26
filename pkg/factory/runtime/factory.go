@@ -532,6 +532,7 @@ func (f *factoryImpl) automaticTicksPaused() bool {
 // service-facing callers.
 func (f *factoryImpl) GetEngineStateSnapshot(_ context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 	runtimeSnap := f.engine.GetRuntimeStateSnapshot()
+	runtimeSnap.StreamGenerationID = f.eventHistory.StreamGenerationID()
 
 	f.mu.RLock()
 	currentState := f.state

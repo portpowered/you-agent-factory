@@ -71,6 +71,34 @@ func TestFactoryEventHistory_SubscribeReplaysHistoryThenStreamsLiveEvents(t *tes
 	}
 }
 
+func TestFactoryEventHistory_StreamGenerationIDRemainsStableWithinOneLiveHistory(t *testing.T) {
+	f := newPassingInlineRuntime(t)
+
+	firstSnapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot(first): %v", err)
+	}
+	if strings.TrimSpace(firstSnapshot.StreamGenerationID) == "" {
+		t.Fatal("first snapshot stream generation id is empty")
+	}
+
+	stream, err := f.SubscribeFactoryEvents(context.Background(), nil, interfaces.FactoryEventReconnectScope{})
+	if err != nil {
+		t.Fatalf("SubscribeFactoryEvents: %v", err)
+	}
+	if stream.StreamGenerationID != firstSnapshot.StreamGenerationID {
+		t.Fatalf("stream generation id = %q, want snapshot id %q", stream.StreamGenerationID, firstSnapshot.StreamGenerationID)
+	}
+
+	secondSnapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot(second): %v", err)
+	}
+	if secondSnapshot.StreamGenerationID != firstSnapshot.StreamGenerationID {
+		t.Fatalf("second snapshot stream generation id = %q, want %q", secondSnapshot.StreamGenerationID, firstSnapshot.StreamGenerationID)
+	}
+}
+
 func TestNew_BatchModeWithoutInitialWork_TerminatesWithoutCancellation(t *testing.T) {
 	f, err := New(
 		factory.WithNet(buildSimpleNet()),
