@@ -166,6 +166,13 @@ var _ apisurface.WorkAPI = (*FactoryService)(nil)
 var _ apisurface.APISurface = (*FactoryService)(nil)
 var _ apisurface.SessionAPISurface = (*FactoryService)(nil)
 
+type RuntimeFileLoggingPolicy string
+
+const (
+	RuntimeFileLoggingPolicyEnabled  RuntimeFileLoggingPolicy = "enabled"
+	RuntimeFileLoggingPolicyDisabled RuntimeFileLoggingPolicy = "disabled"
+)
+
 // FactoryServiceConfig holds all parameters needed to build and run a factory.
 type FactoryServiceConfig struct {
 	// Dir is the factory root directory containing factory.json and inputs/.
@@ -196,6 +203,9 @@ type FactoryServiceConfig struct {
 	// RuntimeLogDir optionally overrides the default ~/.agent-factory/logs
 	// directory. Tests use this to keep file-backed logs isolated.
 	RuntimeLogDir string
+	// RuntimeFileLoggingPolicy controls whether the service creates a runtime
+	// file sink. Empty defaults to enabled for production-facing behavior.
+	RuntimeFileLoggingPolicy RuntimeFileLoggingPolicy
 	// RuntimeLogConfig controls bounded runtime file logging behavior.
 	// Zero values use defaults that match the package rolling policy.
 	RuntimeLogConfig logging.RuntimeLogConfig

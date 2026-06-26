@@ -4240,6 +4240,30 @@ func TestFactoryService_RuntimeLogDiagnostics_ReportsRuntimeArtifacts(t *testing
 	}
 }
 
+func TestRuntimeSessionBaseLogger_PreservesBaseLoggerWhenFileLoggingDisabled(t *testing.T) {
+	t.Parallel()
+
+	core, observed := observer.New(zap.InfoLevel)
+	logger := runtimebuild.NewSessionLogger(runtimeSessionBaseLogger(zap.New(core), nil), "session-1", "/tmp/folder", "/tmp/factory")
+
+	logger.Info("session logger still active")
+
+	entries := observed.FilterMessage("session logger still active").All()
+	if len(entries) != 1 {
+		t.Fatalf("session logger entry count = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if got := fields["session_id"]; got != "session-1" {
+		t.Fatalf("session_id = %#v, want session-1", got)
+	}
+	if got := fields["folder_path"]; got != "/tmp/folder" {
+		t.Fatalf("folder_path = %#v, want /tmp/folder", got)
+	}
+	if got := fields["factory_dir"]; got != "/tmp/factory" {
+		t.Fatalf("factory_dir = %#v, want /tmp/factory", got)
+	}
+}
+
 func TestModelEventHelpersAndModelHostAdapters(t *testing.T) {
 	t.Parallel()
 
