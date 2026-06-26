@@ -507,13 +507,7 @@ func (s *FakeService) applyLifecycleControl(
 		}
 	}
 
-	var outcome LifecycleControlOutcome
-	switch operation {
-	case LifecycleControlInterruptDispatch:
-		outcome = EvaluateInterruptDispatchControl(state.session.Status, dispatchSummary.Status)
-	default:
-		outcome = EvaluateLifecycleControl(operation, state.session.Status)
-	}
+	outcome := evaluateExtendedLifecycleControlOutcome(operation, state.session.Status, dispatchSummary.Status)
 	if outcome == LifecycleControlOutcomeInvalidState || outcome == LifecycleControlOutcomeTerminalSession {
 		controlErr := &ControlError{
 			Operation: operation,
@@ -528,26 +522,15 @@ func (s *FakeService) applyLifecycleControl(
 	if outcome == LifecycleControlOutcomeAccepted {
 		previousStatus := state.session.Status
 		s.mutateSessionForControl(state, operation, retry, interrupt)
-		switch operation {
-		case LifecycleControlPause, LifecycleControlResume:
-			occurredAt := time.Now().UTC()
-			if state.session.Lifecycle != nil && state.session.Lifecycle.PausedAt != nil && operation == LifecycleControlPause {
-				occurredAt = state.session.Lifecycle.PausedAt.UTC()
-			}
-			if state.session.Lifecycle != nil && state.session.Lifecycle.ResumedAt != nil && operation == LifecycleControlResume {
-				occurredAt = state.session.Lifecycle.ResumedAt.UTC()
-			}
-			state.events = AppendSessionLifecycleControlEvent(
-				state.events,
-				state.session,
-				previousStatus,
-				operation,
-				outcome,
-				occurredAt,
-				canonicalEventSourceFakeService,
-				control.Reason,
-			)
-		}
+		state.events = appendAcceptedSessionLifecycleEventIfNeeded(
+			state.events,
+			state.session,
+			previousStatus,
+			operation,
+			outcome,
+			canonicalEventSourceFakeService,
+			control.Reason,
+		)
 	}
 
 	result := lifecycleControlResultFromState(state, id, operation, outcome, retry, interrupt)
@@ -639,6 +622,9 @@ func (s *FakeService) mutateSessionForControl(
 			}
 			state.dispatchDetails[interrupt.DispatchID] = detail
 		}
+	}
+	if operation == LifecycleControlPause || operation == LifecycleControlResume {
+		return
 	}
 	state.events = deriveProjectionEvents(state.session, state.result)
 	if operation == LifecycleControlInterruptDispatch && interruptedDispatch.ID != "" {

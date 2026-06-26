@@ -339,6 +339,17 @@ func lookupExtendedControlDispatch(
 	}
 }
 
+func evaluateExtendedLifecycleControlOutcome(
+	operation LifecycleControlKind,
+	sessionStatus LifecycleStatus,
+	dispatchStatus DispatchStatus,
+) LifecycleControlOutcome {
+	if operation == LifecycleControlInterruptDispatch {
+		return EvaluateInterruptDispatchControl(sessionStatus, dispatchStatus)
+	}
+	return EvaluateLifecycleControl(operation, sessionStatus)
+}
+
 func (s *JavaScriptRuntimeService) recordAcceptedRuntimeInterrupt(
 	state *runtimeSessionState,
 	dispatchSummary DispatchSummary,
@@ -356,6 +367,41 @@ func (s *JavaScriptRuntimeService) recordAcceptedRuntimeInterrupt(
 		interrupt,
 		priorDispatchStatus,
 		canonicalEventSourceRuntimeService,
+	)
+}
+
+func lifecycleControlEventOccurredAt(session SessionReadResult, operation LifecycleControlKind) time.Time {
+	occurredAt := time.Now().UTC()
+	if operation == LifecycleControlPause && session.Lifecycle != nil && session.Lifecycle.PausedAt != nil {
+		return session.Lifecycle.PausedAt.UTC()
+	}
+	if operation == LifecycleControlResume && session.Lifecycle != nil && session.Lifecycle.ResumedAt != nil {
+		return session.Lifecycle.ResumedAt.UTC()
+	}
+	return occurredAt
+}
+
+func appendAcceptedSessionLifecycleEventIfNeeded(
+	events []json.RawMessage,
+	session SessionReadResult,
+	previousStatus LifecycleStatus,
+	operation LifecycleControlKind,
+	outcome LifecycleControlOutcome,
+	source string,
+	reason string,
+) []json.RawMessage {
+	if operation != LifecycleControlPause && operation != LifecycleControlResume {
+		return events
+	}
+	return AppendSessionLifecycleControlEvent(
+		events,
+		session,
+		previousStatus,
+		operation,
+		outcome,
+		lifecycleControlEventOccurredAt(session, operation),
+		source,
+		reason,
 	)
 }
 
@@ -414,13 +460,7 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 		}
 	}
 
-	var outcome LifecycleControlOutcome
-	switch operation {
-	case LifecycleControlInterruptDispatch:
-		outcome = EvaluateInterruptDispatchControl(state.session.Status, dispatchSummary.Status)
-	default:
-		outcome = EvaluateLifecycleControl(operation, state.session.Status)
-	}
+	outcome := evaluateExtendedLifecycleControlOutcome(operation, state.session.Status, dispatchSummary.Status)
 	if outcome == LifecycleControlOutcomeInvalidState || outcome == LifecycleControlOutcomeTerminalSession {
 		controlErr := &ControlError{
 			Operation: operation,
@@ -441,26 +481,17 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 			if interruptRuntime && state.runCancel != nil {
 				state.runCancel()
 			}
-			switch operation {
-			case LifecycleControlPause, LifecycleControlResume:
-				occurredAt := time.Now().UTC()
-				if operation == LifecycleControlPause && state.session.Lifecycle != nil && state.session.Lifecycle.PausedAt != nil {
-					occurredAt = state.session.Lifecycle.PausedAt.UTC()
-				}
-				if operation == LifecycleControlResume && state.session.Lifecycle != nil && state.session.Lifecycle.ResumedAt != nil {
-					occurredAt = state.session.Lifecycle.ResumedAt.UTC()
-				}
-				state.events = AppendSessionLifecycleControlEvent(
+			if operation == LifecycleControlPause || operation == LifecycleControlResume {
+				state.events = appendAcceptedSessionLifecycleEventIfNeeded(
 					state.events,
 					state.session,
 					previousStatus,
 					operation,
 					outcome,
-					occurredAt,
 					canonicalEventSourceRuntimeService,
 					control.Reason,
 				)
-			default:
+			} else {
 				state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
 			}
 		}
