@@ -6,6 +6,7 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import process from "node:process";
+import readline from "node:readline";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
@@ -416,6 +417,15 @@ function spawnRuntime(args, extraEnv = {}, options = {}) {
     env: createBunEnv(extraEnv, options),
     shell: false,
     stdio: "pipe",
+  });
+}
+
+function spawnRepoProcess(command, args, options = {}) {
+  return spawn(command, args, {
+    cwd: path.resolve(packageRoot, ".."),
+    env: createBunEnv(options.extraEnv),
+    shell: false,
+    stdio: ["ignore", "pipe", "pipe"],
   });
 }
 
@@ -884,6 +894,101 @@ export async function openBrowserPage(options = {}) {
       await context.close();
     },
   };
+}
+
+export async function startRealBackendBrowserHarness({
+  apiPort,
+  factoryDir = path.resolve(packageRoot, "..", "factory"),
+  requestID = "req-browser-runtime-001",
+  workflowFixture,
+  workflowName,
+} = {}) {
+  if (!workflowFixture || !workflowName) {
+    throw new Error(
+      "startRealBackendBrowserHarness requires workflowFixture and workflowName.",
+    );
+  }
+
+  const child = spawnRepoProcess(
+    "go",
+    [
+      "run",
+      "./tests/functional/internal/support/cmd/browser_api_harness",
+      "--api-port",
+      String(apiPort),
+      "--factory-dir",
+      factoryDir,
+      "--request-id",
+      requestID,
+      "--workflow-fixture",
+      workflowFixture,
+      "--workflow-name",
+      workflowName,
+    ],
+    {
+      extraEnv: {
+        CGO_ENABLED: process.env.CGO_ENABLED ?? "0",
+      },
+    },
+  );
+
+  let stderr = "";
+  child.stderr?.on("data", (chunk) => {
+    stderr += chunk.toString();
+  });
+
+  const lineReader = readline.createInterface({
+    input: child.stdout,
+  });
+  const ready = new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(
+        new Error(
+          `Timed out waiting for real backend browser harness readiness.\n${stderr.trim()}`,
+        ),
+      );
+    }, readyTimeoutMs);
+
+    function rejectWithProcessExit(code, signal) {
+      clearTimeout(timeout);
+      reject(
+        new Error(
+          `Real backend browser harness exited before readiness: code=${code ?? "null"} signal=${signal ?? "null"}\n${stderr.trim()}`,
+        ),
+      );
+    }
+
+    child.once("exit", rejectWithProcessExit);
+    lineReader.once("line", (line) => {
+      clearTimeout(timeout);
+      child.off("exit", rejectWithProcessExit);
+      try {
+        resolve(JSON.parse(line));
+      } catch (error) {
+        reject(
+          new Error(
+            `Failed to parse real backend browser harness ready payload: ${line}\n${error.message}\n${stderr.trim()}`,
+          ),
+        );
+      }
+    });
+  });
+
+  try {
+    const payload = await ready;
+    return {
+      apiOrigin: payload.apiOrigin,
+      sessionID: payload.sessionId,
+      stop: async () => {
+        lineReader.close();
+        await stopProcess(child);
+      },
+    };
+  } catch (error) {
+    lineReader.close();
+    await stopProcess(child);
+    throw error;
+  }
 }
 
 function isBenignBrowserError(error) {
