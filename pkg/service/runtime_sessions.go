@@ -1153,8 +1153,13 @@ func (fs *FactoryService) newSessionResponseStreamSetInstance() *factorysessions
 
 func mapInferenceProgressFragment(fragment workerprovider.InferenceProgressFragment) responsestream.Event {
 	kind := responsestream.EventKindProgressFragment
-	if fragment.Kind == workerprovider.ResponseFragmentKind {
+	switch fragment.Kind {
+	case workerprovider.ResponseFragmentKind:
 		kind = responsestream.EventKindResponseFragment
+	case workerprovider.CompletedFragmentKind:
+		kind = responsestream.EventKindStreamCompleted
+	case workerprovider.FailedFragmentKind:
+		kind = responsestream.EventKindStreamFailed
 	}
 	return responsestream.Event{
 		Kind:               kind,

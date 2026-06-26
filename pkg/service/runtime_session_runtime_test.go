@@ -2530,6 +2530,12 @@ func TestFactoryService_InferenceProgressPublisherPublishesOrderedInternalEvents
 
 	publisher(workerprovider.ProgressFragment("dispatch-1", nil, "phase=planning"))
 	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "partial-response"))
+	publisher(workerprovider.CompletedFragment("dispatch-1", &interfaces.ProviderSessionMetadata{
+		Provider: "cursor",
+		Kind:     "session_id",
+		ID:       "cursor-session-1",
+	}))
+	publisher(workerprovider.FailedFragment("dispatch-2", nil, "normalized provider failure"))
 
 	session := sessions.Get(sessionID)
 	stream := (&FactoryService{sessions: sessions}).sessionResponseStream(session, "dispatch-1")
@@ -2537,8 +2543,17 @@ func TestFactoryService_InferenceProgressPublisherPublishesOrderedInternalEvents
 		t.Fatal("session stream = nil, want live session stream")
 	}
 	events := stream.Events()
-	if len(events) != 2 || events[0].Sequence != 1 || events[1].Sequence != 2 {
+	if len(events) != 4 || events[0].Sequence != 1 || events[3].Sequence != 4 {
 		t.Fatalf("stream events = %#v, want ascending internal sequences", events)
+	}
+	if events[2].Kind != responsestream.EventKindStreamCompleted {
+		t.Fatalf("completion kind = %q, want %q", events[2].Kind, responsestream.EventKindStreamCompleted)
+	}
+	if events[2].ProviderSessionRef == nil || events[2].ProviderSessionRef.ID != "cursor-session-1" {
+		t.Fatalf("completion provider session = %#v, want cursor-session-1", events[2].ProviderSessionRef)
+	}
+	if events[3].Kind != responsestream.EventKindStreamFailed || events[3].Payload != "normalized provider failure" {
+		t.Fatalf("failure event = %#v, want terminal failed marker", events[3])
 	}
 
 	var factoryEventType factoryapi.FactoryEventType

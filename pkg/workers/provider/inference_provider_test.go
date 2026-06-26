@@ -533,6 +533,45 @@ func TestScriptWrapProvider_Infer_CursorParsesStreamJSONResult(t *testing.T) {
 	}
 }
 
+func TestScriptWrapProvider_Infer_CursorPublishesTerminalCompletionMarker(t *testing.T) {
+	stdout := cursorpkg.SuccessStdoutJSON("Parsed assistant answer.", "cursor-session-abc")
+	fakeExec := &recordingProviderExec{
+		result: CommandResult{Stdout: stdout},
+	}
+	var published []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(fakeExec),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) {
+			published = append(published, fragment)
+		}),
+	)
+
+	resp, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-success"},
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		Model:         "gpt-5",
+		UserMessage:   "run the tests",
+	})
+	if err != nil {
+		t.Fatalf("Infer returned error: %v", err)
+	}
+	if resp.ProviderSession == nil {
+		t.Fatal("expected provider session metadata")
+	}
+	if len(published) != 1 {
+		t.Fatalf("published fragments = %#v, want one completion marker", published)
+	}
+	if published[0].Kind != CompletedFragmentKind {
+		t.Fatalf("published kind = %q, want %q", published[0].Kind, CompletedFragmentKind)
+	}
+	if published[0].DispatchID != "dispatch-cursor-success" {
+		t.Fatalf("dispatch id = %q, want dispatch-cursor-success", published[0].DispatchID)
+	}
+	if published[0].ProviderSessionRef == nil || published[0].ProviderSessionRef.ID != "cursor-session-abc" {
+		t.Fatalf("provider session ref = %#v, want cursor-session-abc", published[0].ProviderSessionRef)
+	}
+}
+
 func TestScriptWrapProvider_Infer_CursorMalformedJSONReturnsProviderError(t *testing.T) {
 	stdout := []byte(`{"type":"result"`)
 	stderr := []byte("cursor stderr detail")
@@ -599,6 +638,46 @@ func TestScriptWrapProvider_Infer_CursorExitFailurePreservesBoundedDiagnosticsEx
 	}
 	assertCursorFailureExcerpts(t, providerErr.Diagnostics, string(stdout), string(stderr))
 	assertSafeCursorFailureExcerpts(t, providerErr.Diagnostics)
+}
+
+func TestScriptWrapProvider_Infer_CursorExitFailurePublishesTerminalFailureMarker(t *testing.T) {
+	stdout := []byte("partial json output")
+	stderr := []byte("noise before\nERROR: unexpected status 500 from cursor upstream")
+	fakeExec := &recordingProviderExec{
+		result: CommandResult{
+			Stdout:   stdout,
+			Stderr:   stderr,
+			ExitCode: 1,
+		},
+	}
+	var published []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(fakeExec),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) {
+			published = append(published, fragment)
+		}),
+	)
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-failure"},
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		UserMessage:   "run the tests",
+	})
+	if err == nil {
+		t.Fatal("expected Infer to fail")
+	}
+	if len(published) != 1 {
+		t.Fatalf("published fragments = %#v, want one failure marker", published)
+	}
+	if published[0].Kind != FailedFragmentKind {
+		t.Fatalf("published kind = %q, want %q", published[0].Kind, FailedFragmentKind)
+	}
+	if published[0].DispatchID != "dispatch-cursor-failure" {
+		t.Fatalf("dispatch id = %q, want dispatch-cursor-failure", published[0].DispatchID)
+	}
+	if published[0].Payload != "ERROR: unexpected status 500 from cursor upstream" {
+		t.Fatalf("failure payload = %q, want normalized provider error message", published[0].Payload)
+	}
 }
 
 func assertCursorFailureExcerpts(t *testing.T, diagnostics *interfaces.WorkDiagnostics, wantStdout, wantStderr string) {

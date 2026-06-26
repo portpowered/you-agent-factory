@@ -422,6 +422,7 @@ func loadRuntimeBundleWorkerOptions(
 		logging.NewZapLogger(logger, input.cfg.Verbose),
 		input.cfg.SkipBuiltInRunnerPrerequisiteValidation,
 		input.providerOverride,
+		input.inferenceProgressPublisher,
 		wrapProviderCommandRunnerForProgress(input, input.providerCommandRunner),
 		input.commandRunnerOverride,
 		eventHistory.RecordScriptEvent,
@@ -1061,6 +1062,7 @@ func loadWorkersFromConfig(
 	logger logging.Logger,
 	skipBuiltInRunnerPrerequisiteValidation bool,
 	providerOverride workerprovider.Provider,
+	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 	providerCommandRunner workers.CommandRunner,
 	cmdRunner workers.CommandRunner,
 	scriptRecorder workers.ScriptEventRecorder,
@@ -1088,7 +1090,7 @@ func loadWorkersFromConfig(
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workerexecutor.NoopExecutor{}))
 			continue
 		}
-		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, workflowContext, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, now, modelDomain)
+		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, workflowContext, logger, providerOverride, inferenceProgressPublisher, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, now, modelDomain)
 		if executor != nil {
 			logger.Info("loaded worker", "worker", workerCfg.Name)
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, executor))
@@ -1144,6 +1146,7 @@ func buildWorkerExecutor(
 	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,
 	providerOverride workerprovider.Provider,
+	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 	providerCommandRunner workers.CommandRunner,
 	cmdRunner workers.CommandRunner,
 	scriptRecorder workers.ScriptEventRecorder,
@@ -1166,6 +1169,9 @@ func buildWorkerExecutor(
 			var providerOpts []workerprovider.ScriptWrapProviderOption
 			providerOpts = append(providerOpts, workerprovider.WithSkipPermissions(def.SkipPermissions))
 			providerOpts = append(providerOpts, workerprovider.WithProviderLogger(logger))
+			if inferenceProgressPublisher != nil {
+				providerOpts = append(providerOpts, workerprovider.WithInferenceProgressPublisher(inferenceProgressPublisher))
+			}
 			if providerCommandRunner != nil {
 				providerOpts = append(providerOpts, workerprovider.WithProviderCommandRunner(providerCommandRunner))
 			}

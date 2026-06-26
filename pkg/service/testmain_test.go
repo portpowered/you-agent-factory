@@ -1379,6 +1379,7 @@ func modelInvokeWorkstationExecutorForLocalManagedRuntime(
 		nil,
 		nil,
 		nil,
+		nil,
 		localModelDomain{
 			resources: newLocalModelResourceLimiter(),
 			assets:    staticModelAssetPuller{cache: cache},
@@ -2033,6 +2034,7 @@ func loadWorkersFromConfigForServiceTest(
 		logging.NoopLogger{},
 		false,
 		providerOverride,
+		nil,
 		providerCommandRunner,
 		commandRunner,
 		scriptRecorder,
@@ -2350,6 +2352,7 @@ func taxonomyOmniVoiceInferenceWorkstationExecutorWithEvents(
 		nil,
 		logging.NoopLogger{},
 		true,
+		nil,
 		nil,
 		nil,
 		nil,

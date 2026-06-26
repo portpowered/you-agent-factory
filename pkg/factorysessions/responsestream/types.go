@@ -18,6 +18,12 @@ const (
 	// EventKindResponseFragment carries partial provider response text before
 	// terminal workstation completion.
 	EventKindResponseFragment EventKind = "RESPONSE_FRAGMENT"
+	// EventKindStreamCompleted marks provider-stream terminal success for one
+	// dispatch without changing final WorkResult routing.
+	EventKindStreamCompleted EventKind = "STREAM_COMPLETED"
+	// EventKindStreamFailed marks provider-stream terminal failure for one
+	// dispatch without changing final WorkResult routing.
+	EventKindStreamFailed EventKind = "STREAM_FAILED"
 	// EventKindCompactionSignal records bounded-fidelity degradation such as
 	// truncation, coalescing, or age eviction for downstream consumers. At most
 	// one compaction signal is retained; later compactions replace it at the tail.
