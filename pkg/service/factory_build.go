@@ -551,11 +551,25 @@ func buildRuntimeLogSink(
 	if cfg == nil {
 		return nil, runtimeInstanceID, fmt.Errorf("factory service config is required to build runtime log sink")
 	}
+	if !runtimeFileLoggingEnabled(cfg.RuntimeFileLoggingPolicy) {
+		return nil, runtimeInstanceID, nil
+	}
 	logSink, err := logging.BuildRuntimeLogger(baseLogger, runtimeInstanceID, cfg.RuntimeLogDir, cfg.RuntimeLogConfig)
 	if err != nil {
 		return nil, runtimeInstanceID, fmt.Errorf("build runtime logger: %w", err)
 	}
 	return logSink, runtimeInstanceID, nil
+}
+
+func runtimeFileLoggingEnabled(policy RuntimeFileLoggingPolicy) bool {
+	switch policy {
+	case "", RuntimeFileLoggingPolicyEnabled:
+		return true
+	case RuntimeFileLoggingPolicyDisabled:
+		return false
+	default:
+		return true
+	}
 }
 
 func buildRuntimeMetricsSink(
