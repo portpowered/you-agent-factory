@@ -22,7 +22,7 @@ func TestStreamParser_EmitsKnownFragmentsInOrder(t *testing.T) {
 	parser.Consume([]byte(
 		"{\"type\":\"tool_call\",\"subtype\":\"completed\",\"call_id\":\"call-1\",\"tool_call\":{\"readToolCall\":{\"result\":{\"success\":{}}}},\"session_id\":\"cursor-session-123\"}\n" +
 			"{\"type\":\"assistant\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Plan \"}]},\"session_id\":\"cursor-session-123\"}\n" +
-			"{\"type\":\"assistant\",\"timestamp_ms\":3,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"done\"}]},\"session_id\":\"cursor-session-123\"}",
+			"{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"Plan done\",\"session_id\":\"cursor-session-123\"}",
 	))
 	parser.Flush()
 
@@ -122,6 +122,44 @@ func TestStreamParser_EmitsBoundedDiagnosticsForMalformedAndUnknownRecordsWithou
 		t.Fatalf("provider session = %#v, want nil", fragments[1].ProviderSession)
 	}
 	assertStreamFragment(t, fragments[2], StreamFragmentKindResponse, "tail", "cursor-session-789")
+}
+
+func TestStreamParser_EmitsResultSubtypeDiagnosticsForFailureAndCancel(t *testing.T) {
+	var fragments []StreamFragment
+	parser := NewStreamParser(string(interfaces.ModelProviderCursor), func(fragment StreamFragment) {
+		fragments = append(fragments, fragment)
+	})
+
+	parser.Consume([]byte(
+		"{\"type\":\"result\",\"subtype\":\"error\",\"is_error\":true,\"result\":\"provider unavailable\",\"session_id\":\"cursor-session-321\"}\n" +
+			"{\"type\":\"result\",\"subtype\":\"canceled\",\"is_error\":true,\"result\":\"user canceled request\",\"session_id\":\"cursor-session-654\"}\n",
+	))
+	parser.Flush()
+
+	if len(fragments) != 2 {
+		t.Fatalf("fragment count = %d, want 2", len(fragments))
+	}
+	assertStreamFragment(t, fragments[0], StreamFragmentKindProgress, "Cursor result error: provider unavailable", "cursor-session-321")
+	assertStreamFragment(t, fragments[1], StreamFragmentKindProgress, "Cursor result canceled: user canceled request", "cursor-session-654")
+}
+
+func TestStreamParser_EmitsCompletionDiagnosticWhenResultDoesNotExtendEarlierDelta(t *testing.T) {
+	var fragments []StreamFragment
+	parser := NewStreamParser(string(interfaces.ModelProviderCursor), func(fragment StreamFragment) {
+		fragments = append(fragments, fragment)
+	})
+
+	parser.Consume([]byte(
+		"{\"type\":\"assistant\",\"timestamp_ms\":1,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"tail\"}]},\"session_id\":\"cursor-session-999\"}\n" +
+			"{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"done\",\"session_id\":\"cursor-session-999\"}\n",
+	))
+	parser.Flush()
+
+	if len(fragments) != 2 {
+		t.Fatalf("fragment count = %d, want 2", len(fragments))
+	}
+	assertStreamFragment(t, fragments[0], StreamFragmentKindResponse, "tail", "cursor-session-999")
+	assertStreamFragment(t, fragments[1], StreamFragmentKindProgress, "Cursor result completed", "cursor-session-999")
 }
 
 func TestUnknownStreamEventMessage_BoundsEventTypePreview(t *testing.T) {

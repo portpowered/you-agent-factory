@@ -902,8 +902,8 @@ func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndL
 	script := "#!/bin/sh\n" +
 		"printf '%s\\n' '{not json}'\n" +
 		"printf '%s\\n' '{\"type\":\"mystery\"}'\n" +
-		"printf '%s\\n' '{\"type\":\"assistant\",\"timestamp_ms\":1,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"tail\"}]},\"session_id\":\"cursor-session-123\"}'\n" +
-		"printf '%s\\n' '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"done\",\"session_id\":\"cursor-session-123\"}'\n"
+		"printf '%s\\n' '{\"type\":\"assistant\",\"timestamp_ms\":1,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Plan \"}]},\"session_id\":\"cursor-session-123\"}'\n" +
+		"printf '%s\\n' '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"Plan done\",\"session_id\":\"cursor-session-123\"}'\n"
 	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
 		t.Fatalf("write script: %v", err)
 	}
@@ -927,12 +927,17 @@ func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndL
 
 	publishedMu.Lock()
 	defer publishedMu.Unlock()
-	if len(published) != 3 {
-		t.Fatalf("published fragments = %#v, want 3 ordered fragments; result=%#v", published, result)
+	if len(published) != 4 {
+		t.Fatalf("published fragments = %#v, want 4 ordered fragments; result=%#v", published, result)
 	}
 	assertInferenceProgressFragment(t, published[0], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored malformed JSON record", nil)
 	assertInferenceProgressFragment(t, published[1], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored unknown event type \"mystery\"", nil)
-	assertInferenceProgressFragment(t, published[2], "dispatch-stream-cursor", ResponseFragmentKind, "tail", &interfaces.ProviderSessionMetadata{
+	assertInferenceProgressFragment(t, published[2], "dispatch-stream-cursor", ResponseFragmentKind, "Plan ", &interfaces.ProviderSessionMetadata{
+		Provider: "cursor",
+		Kind:     "session_id",
+		ID:       "cursor-session-123",
+	})
+	assertInferenceProgressFragment(t, published[3], "dispatch-stream-cursor", ResponseFragmentKind, "done", &interfaces.ProviderSessionMetadata{
 		Provider: "cursor",
 		Kind:     "session_id",
 		ID:       "cursor-session-123",

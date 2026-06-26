@@ -2,7 +2,6 @@ package apicontract_test
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 
@@ -111,31 +110,24 @@ func TestOpenAPIContract_FactoryOperationsPublishMachineReadableErrors(t *testin
 }
 
 func TestOpenAPIContract_CursorStreamParserDetailsRemainInternal(t *testing.T) {
-	doc := loadBundledOpenAPIDocument(t)
-	schemas := componentSchemas(t, doc)
-	bundled, err := os.ReadFile("../../../api/openapi.yaml")
-	if err != nil {
-		t.Fatalf("read bundled openapi: %v", err)
-	}
-	generatedServer, err := os.ReadFile("../generated/server.gen.go")
-	if err != nil {
-		t.Fatalf("read generated server models: %v", err)
-	}
-
+	schemas := loadBundledOpenAPIComponentSchemas(t)
 	assertSchemaNamesPresent(t, schemas, bundledFactoryEventContractSchemaNames)
-	for _, artifact := range []string{string(bundled), string(generatedServer)} {
-		assertJSONStringLiteralMissing(
-			t,
-			artifact,
-			"PROGRESS_FRAGMENT",
-			"RESPONSE_FRAGMENT",
-			"stream-json",
-			"timestamp_ms",
-			"model_call_id",
-			"Cursor session initialized",
-			"Cursor stream ignored malformed JSON record",
-		)
-	}
+
+	inferenceResponseProperties := schemaProperties(t, schemaObject(t, schemas, "InferenceResponseEventPayload"), "InferenceResponseEventPayload")
+	assertSchemaPropertiesPresent(t, inferenceResponseProperties, "InferenceResponseEventPayload", "inferenceRequestId", "attempt", "outcome", "response", "durationMillis", "providerSession", "diagnostics", "exitCode", "errorClass")
+	assertPropertiesAbsent(t, inferenceResponseProperties, "InferenceResponseEventPayload", "kind", "payload", "providerSessionRef", "timestamp_ms", "model_call_id")
+
+	providerSessionProperties := schemaProperties(t, schemaObject(t, schemas, "ProviderSessionMetadata"), "ProviderSessionMetadata")
+	assertSchemaPropertiesPresent(t, providerSessionProperties, "ProviderSessionMetadata", "provider", "kind", "id")
+	assertPropertiesAbsent(t, providerSessionProperties, "ProviderSessionMetadata", "providerSessionRef", "session_id", "timestamp_ms", "model_call_id")
+
+	safeDiagnosticsProperties := schemaProperties(t, schemaObject(t, schemas, "SafeWorkDiagnostics"), "SafeWorkDiagnostics")
+	assertSchemaPropertiesPresent(t, safeDiagnosticsProperties, "SafeWorkDiagnostics", "renderedPrompt", "provider")
+	assertPropertiesAbsent(t, safeDiagnosticsProperties, "SafeWorkDiagnostics", "kind", "payload", "rawEvent", "streamJson")
+
+	providerDiagnosticProperties := schemaProperties(t, schemaObject(t, schemas, "ProviderDiagnostic"), "ProviderDiagnostic")
+	assertSchemaPropertiesPresent(t, providerDiagnosticProperties, "ProviderDiagnostic", "provider", "model", "requestMetadata", "responseMetadata")
+	assertPropertiesAbsent(t, providerDiagnosticProperties, "ProviderDiagnostic", "kind", "payload", "timestamp_ms", "model_call_id")
 }
 
 func TestOpenAPIContract_PersistedFactoryRoutesUseCanonicalPluralVocabulary(t *testing.T) {

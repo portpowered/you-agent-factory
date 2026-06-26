@@ -33,7 +33,8 @@ type StreamParser struct {
 	provider string
 	observer func(StreamFragment)
 
-	pending []byte
+	pending         []byte
+	emittedResponse string
 }
 
 func NewStreamParser(provider string, observer func(StreamFragment)) *StreamParser {
@@ -117,7 +118,7 @@ func (p *StreamParser) consumeLine(line string) {
 			return
 		}
 		if text := streamMessageText(event); text != "" {
-			p.emit(StreamFragmentKindResponse, text, streamProviderSession(p.provider, event))
+			p.emitResponse(text, streamProviderSession(p.provider, event))
 		}
 	case "tool_call":
 		subtype := stringField(event, "subtype")
@@ -130,10 +131,27 @@ func (p *StreamParser) consumeLine(line string) {
 		}
 		p.emit(StreamFragmentKindProgress, fmt.Sprintf("Cursor %s %s", toolName, subtype), streamProviderSession(p.provider, event))
 	case ResultTypeResult:
-		return
+		p.consumeResultEvent(event)
 	default:
 		p.emit(StreamFragmentKindProgress, unknownStreamEventMessage(eventType), nil)
 	}
+}
+
+func (p *StreamParser) consumeResultEvent(event map[string]any) {
+	subtype := stringField(event, "subtype")
+	if subtype == "" {
+		p.emit(StreamFragmentKindProgress, "Cursor result finished", streamProviderSession(p.provider, event))
+		return
+	}
+
+	session := streamProviderSession(p.provider, event)
+	resultText := boundedText(rawStringField(event, "result"), PublishedTextLimit)
+	if subtype == ResultSubtypeSuccess {
+		p.emitResultResponse(resultText, session)
+		return
+	}
+
+	p.emit(StreamFragmentKindProgress, streamResultDiagnostic(subtype, resultText), session)
 }
 
 func (p *StreamParser) emit(kind StreamFragmentKind, payload string, session *interfaces.ProviderSessionMetadata) {
@@ -145,6 +163,33 @@ func (p *StreamParser) emit(kind StreamFragmentKind, payload string, session *in
 		Payload:         payload,
 		ProviderSession: interfaces.CloneProviderSessionMetadata(session),
 	})
+}
+
+func (p *StreamParser) emitResponse(payload string, session *interfaces.ProviderSessionMetadata) {
+	if p == nil || strings.TrimSpace(payload) == "" {
+		return
+	}
+	p.emit(StreamFragmentKindResponse, payload, session)
+	p.emittedResponse += payload
+}
+
+func (p *StreamParser) emitResultResponse(resultText string, session *interfaces.ProviderSessionMetadata) {
+	if strings.TrimSpace(resultText) == "" {
+		p.emit(StreamFragmentKindProgress, "Cursor result completed", session)
+		return
+	}
+	if p.emittedResponse == "" {
+		p.emitResponse(resultText, session)
+		return
+	}
+	if resultText == p.emittedResponse {
+		return
+	}
+	if strings.HasPrefix(resultText, p.emittedResponse) {
+		p.emitResponse(resultText[len(p.emittedResponse):], session)
+		return
+	}
+	p.emit(StreamFragmentKindProgress, "Cursor result completed", session)
 }
 
 func parseStreamResultLine(provider string, line string) (*InferenceResult, bool, *ParseFailure) {
@@ -246,6 +291,14 @@ func streamToolCallName(event map[string]any) string {
 		}
 	}
 	return ""
+}
+
+func streamResultDiagnostic(subtype, resultText string) string {
+	message := fmt.Sprintf("Cursor result %s", subtype)
+	if strings.TrimSpace(resultText) == "" {
+		return message
+	}
+	return message + ": " + boundedTrimmedText(resultText, PublishedDiagnosticLimit)
 }
 
 func stringField(values map[string]any, key string) string {
