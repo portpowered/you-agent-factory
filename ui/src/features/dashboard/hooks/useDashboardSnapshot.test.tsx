@@ -605,6 +605,40 @@ describe("useDashboardSnapshot composer", () => {
       ),
     ).toBeUndefined();
   });
+
+  it("holds the dashboard in a recoverable preflight state when the session cannot be resolved", async () => {
+    useFactoryTimelineStore.getState().reset();
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify(
+          buildSyncPreflightResponse({
+            checkpointReusable: false,
+            reasonCode: "session_not_found",
+          }),
+        ),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+
+    const { result } = renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(result.current.preflightStatus).toBe("non-recoverable");
+    });
+    expect(result.current.preflightRecovery).toEqual({
+      reasonCode: "session_not_found",
+      requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
+    });
+    expect(replayHarness.getStreams()).toHaveLength(0);
+    expect(result.current.isInitialLoading).toBe(false);
+  });
 });
 
 function buildSyncPreflightResponse(

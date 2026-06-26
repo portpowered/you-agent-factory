@@ -48,6 +48,8 @@ export function useDashboardSnapshot({
   const {
     checkpointHydrated,
     initialReconnectCursor,
+    preflightStatus,
+    recoveryState,
     persistedSyncIdentity,
   } = useDashboardCheckpointPreflight({
     checkpointRestoreEnabled: !debugOptions.disableTimelineCheckpoint,
@@ -94,7 +96,11 @@ export function useDashboardSnapshot({
   }, []);
 
   useFactoryEventStream({
-    enabled: checkpointHydrated && rawSessionID != null && !isPaused,
+    enabled:
+      checkpointHydrated &&
+      rawSessionID != null &&
+      !isPaused &&
+      preflightStatus !== "non-recoverable",
     initialReconnectCursor,
     locale,
     onEvent: handleStreamEvent,
@@ -110,11 +116,13 @@ export function useDashboardSnapshot({
 
   return useMemo(
     () => ({
+      error,
+      isInitialLoading,
+      preflightRecovery: recoveryState,
+      preflightStatus,
       snapshot,
       streamState,
-      isInitialLoading,
-      error,
     }),
-    [error, snapshot, streamState, isInitialLoading],
+    [error, isInitialLoading, preflightStatus, recoveryState, snapshot, streamState],
   );
 }

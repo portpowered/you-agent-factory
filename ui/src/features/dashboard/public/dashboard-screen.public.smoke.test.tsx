@@ -64,6 +64,8 @@ describe("dashboard public barrel composition", () => {
     dashboardSnapshotState = {
       error: null,
       isInitialLoading: true,
+      preflightRecovery: null,
+      preflightStatus: "loading",
       snapshot: null,
     };
   });
@@ -85,6 +87,8 @@ describe("dashboard public barrel composition", () => {
     dashboardSnapshotState = {
       error: null,
       isInitialLoading: false,
+      preflightRecovery: null,
+      preflightStatus: "success",
       snapshot: {} as never,
     };
 

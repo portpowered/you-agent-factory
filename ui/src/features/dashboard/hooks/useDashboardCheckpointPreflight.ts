@@ -10,7 +10,11 @@ import {
   readTimelineCheckpoint,
 } from "../../timeline/public";
 import { clearDashboardSessionScopedQueries } from "../lib/dashboard-session-lifecycle";
-import { buildDashboardSessionRestorePlan } from "../lib/dashboard-session-sync-preflight";
+import {
+  buildDashboardSessionRestorePlan,
+  type DashboardSessionPreflightStatus,
+  type DashboardSessionRecoveryState,
+} from "../lib/dashboard-session-sync-preflight";
 
 export interface UseDashboardCheckpointPreflightOptions {
   checkpointRestoreEnabled: boolean;
@@ -21,6 +25,8 @@ export interface UseDashboardCheckpointPreflightOptions {
 export interface DashboardCheckpointPreflightState {
   checkpointHydrated: boolean;
   initialReconnectCursor?: FactoryEventReconnectCursor;
+  preflightStatus: DashboardSessionPreflightStatus;
+  recoveryState: DashboardSessionRecoveryState | null;
   persistedSyncIdentity: FactoryTimelineSyncIdentity | null;
 }
 
@@ -36,6 +42,10 @@ export function useDashboardCheckpointPreflight({
     useState<FactoryEventReconnectCursor | undefined>(undefined);
   const [persistedSyncIdentity, setPersistedSyncIdentity] =
     useState<FactoryTimelineSyncIdentity | null>(null);
+  const [preflightStatus, setPreflightStatus] =
+    useState<DashboardSessionPreflightStatus>("idle");
+  const [recoveryState, setRecoveryState] =
+    useState<DashboardSessionRecoveryState | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,22 +53,27 @@ export function useDashboardCheckpointPreflight({
     setCheckpointHydratedSessionID(null);
     setInitialReconnectCursor(undefined);
     setPersistedSyncIdentity(null);
+    setPreflightStatus("idle");
+    setRecoveryState(null);
 
     if (
       !rawSessionID ||
       typeof window === "undefined" ||
       !checkpointRestoreEnabled
     ) {
+      setPreflightStatus("success");
       setCheckpointHydratedSessionID(rawSessionID);
       return;
     }
 
     const sessionID = rawSessionID;
+    setPreflightStatus("loading");
 
     void hydrateDashboardCheckpoint().catch(() => {
       if (cancelled) {
         return;
       }
+      setPreflightStatus("idle");
       setCheckpointHydratedSessionID(sessionID);
     });
 
@@ -102,6 +117,8 @@ export function useDashboardCheckpointPreflight({
         restoreCheckpoint(restorePlan.restoreCheckpoint);
       }
       setInitialReconnectCursor(restorePlan.reconnectCursor);
+      setPreflightStatus(restorePlan.preflightStatus);
+      setRecoveryState(restorePlan.recoveryState);
       setPersistedSyncIdentity(restorePlan.syncIdentity);
       setCheckpointHydratedSessionID(sessionID);
     }
@@ -110,6 +127,8 @@ export function useDashboardCheckpointPreflight({
   return {
     checkpointHydrated: checkpointHydratedSessionID === rawSessionID,
     initialReconnectCursor,
+    preflightStatus,
+    recoveryState,
     persistedSyncIdentity,
   };
 }
