@@ -179,7 +179,11 @@ func TestCatalogHost_Diagnostics_ProcessCrashEmitsFailureLogAndMetric(t *testing
 			if !metrics.contains(metricProcessCrash, map[string]string{
 				"managed_runtime_identity": "OMNIVOICE_Q4_K_M",
 			}) {
-				t.Fatalf("metrics = %#v, want process crash metric", metrics.metrics)
+				if time.Now().After(deadline) {
+					t.Fatalf("metrics = %#v, want process crash metric", metrics.metrics)
+				}
+				time.Sleep(10 * time.Millisecond)
+				continue
 			}
 			_ = host.ReleaseLease(context.Background(), lease.ID)
 			return
