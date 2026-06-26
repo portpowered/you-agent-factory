@@ -692,9 +692,9 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 			"Use --named with a persisted canonical factory name to resolve project-local factories before global built-ins under ~/.you-agent-factory/factories. " +
 			"Built-ins such as @you/tts and @you/goal materialize lazily into that global root on first use and stay editable on disk for later runs. " +
 			"Use --factory with a factory.json file path to run a portable factory config without guessing --dir. " +
+			"Selected factories can define custom invocation arguments; run " + cliBinaryName + " run --named <factory> --help or " + cliBinaryName + " run --factory <factory.json> --help to inspect signature-backed usage while keeping existing run-level flags available. " +
 			"In factory invocation mode, provide either trailing positional text or piped stdin text; supplying both is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. " +
-			"Packaged @you/goal invocation details live in " + cliBinaryName + " docs packaged-goal. " +
-			"Packaged @you/tts invocation details live in " + cliBinaryName + " docs packaged-tts. " +
+			"Packaged @you/fusion, @you/goal, and @you/tts invocation details live in " + cliBinaryName + " docs packaged-fusion, " + cliBinaryName + " docs packaged-goal, and " + cliBinaryName + " docs packaged-tts. " +
 			"Full invocation input and return-policy details live in " + cliBinaryName + " docs config and " + cliBinaryName + " docs sessions. " +
 			"Use --output response-stream on supported one-shot factory invocations to render live internal session response-stream progress while the CLI owns the runtime; unsupported run shapes fall back to primary-result-only output or return INVOCATION_OUTPUT_UNSUPPORTED. " +
 			"Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root. " +
@@ -728,9 +728,6 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 			if err != nil {
 				return err
 			}
-			if helpFlag := cmd.Flags().Lookup("help"); helpFlag != nil && helpFlag.Changed {
-				return cmd.Help()
-			}
 			if err := rejectDeprecatedPortFlag(cmd, nil); err != nil {
 				return err
 			}
@@ -743,6 +740,19 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 				} else {
 					cfg.MockWorkersConfigPath = ""
 				}
+			}
+			if helpFlag := cmd.Flags().Lookup("help"); helpFlag != nil && helpFlag.Changed {
+				if err := resolveRunFactorySelection(cmd, &cfg); err != nil {
+					return err
+				}
+				wroteFactoryHelp, err := runcli.WriteFactoryInvocationHelp(cmd.OutOrStdout(), cliBinaryName, cfg)
+				if err != nil {
+					return err
+				}
+				if wroteFactoryHelp {
+					return nil
+				}
+				return cmd.Help()
 			}
 			err = runFactory(cmd, cfg, promptArgs, globals, operatorDefaults, diagnostics.verboseEnabled(), diagnostics.debug)
 			if err != nil && !runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {

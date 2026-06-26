@@ -69,6 +69,12 @@ func TestRunCommand_RunCommandLongHelpDocumentsNamedFactory(t *testing.T) {
 	if !strings.Contains(runCmd.Long, "materialize lazily into that global root on first use and stay editable on disk") {
 		t.Fatal("expected run command long help text to document built-in materialization and editability")
 	}
+	if !strings.Contains(runCmd.Long, "run --named <factory> --help") || !strings.Contains(runCmd.Long, "run --factory <factory.json> --help") {
+		t.Fatal("expected run command long help text to document signature-aware factory help entry points")
+	}
+	if !strings.Contains(runCmd.Long, "existing run-level flags available") {
+		t.Fatal("expected run command long help text to explain that operational flags remain available alongside factory-defined arguments")
+	}
 	if !strings.Contains(runCmd.Example, "run --named @you/tts") {
 		t.Fatal("expected run command examples to document simplified --named run")
 	}
@@ -78,6 +84,66 @@ func TestRunCommand_RunCommandLongHelpDocumentsNamedFactory(t *testing.T) {
 	}
 	if !strings.Contains(namedFlag.Usage, "built-ins materialize there on first use and remain editable") {
 		t.Fatalf("--named usage = %q, want built-in editability guidance", namedFlag.Usage)
+	}
+}
+
+func TestRunCommand_NamedFactoryHelpRendersInvocationSignature(t *testing.T) {
+	workingDirectory := t.TempDir()
+	homeDirectory := t.TempDir()
+	originalWorkingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(workingDirectory); err != nil {
+		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
+	}
+	defer func() {
+		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
+			t.Fatalf("restore working directory: %v", chdirErr)
+		}
+	}()
+	t.Setenv("HOME", homeDirectory)
+
+	projectRoot, err := factoryconfig.DefaultProjectNamedFactoryRoot(workingDirectory)
+	if err != nil {
+		t.Fatalf("DefaultProjectNamedFactoryRoot: %v", err)
+	}
+	if _, err := factoryconfig.PersistNamedFactory(projectRoot, "alpha", portableFactoryPayloadWithInvocationSignature()); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+
+	root := NewRootCommand()
+	var stdout bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--named", "alpha", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --named alpha --help: %v", err)
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"Factory invocation help",
+		"Selected factory: portable (named factory alpha)",
+		"Usage:\n  you run --named alpha <input> [--confirm <true|false>] [--mode <value>] [--output <file-path>]",
+		"positional 1 <input>",
+		"--confirm <true|false>",
+		"Named form also accepts bare `--confirm` as `true`.",
+		"stdin",
+		"Accepted values: fast, safe.",
+		"Default: safe.",
+		"Path parameter: output",
+		"you run --named alpha 'Fix the lint issues' --mode safe --output report.md",
+		"printf '%s\\n' 'Fix the lint issues' | you run --named alpha --mode fast",
+		"Existing operational flags such as `--no-record`, `--with-mock-workers`, `--server`, and `--json` still apply.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("run --named alpha --help missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "Load workflow and run the factory engine") {
+		t.Fatalf("expected signature-aware help instead of generic Cobra help:\n%s", got)
 	}
 }
 
@@ -222,21 +288,46 @@ func portableFactoryPayloadWithInvocationSignature() []byte {
     "parameters": [
       {
         "name": "input",
-        "bindings": [{"kind": "POSITIONAL", "position": 1}]
+        "description": "Primary text input for the portable factory.",
+        "required": true,
+        "bindings": [{"kind": "POSITIONAL", "position": 1}, {"kind": "STDIN"}]
       },
       {
         "name": "mode",
+        "description": "Execution mode for the portable factory.",
+        "choices": ["fast", "safe"],
+        "defaultValue": "safe",
         "bindings": [{"kind": "NAMED"}]
       },
       {
         "name": "confirm",
         "typeHint": "BOOLEAN_STRING",
+        "description": "Request confirmation mode.",
         "bindings": [{"kind": "NAMED"}]
       },
       {
         "name": "output",
+        "description": "Optional output file path.",
         "aliases": ["out"],
+        "typeHint": "FILE_PATH",
         "bindings": [{"kind": "NAMED"}]
+      }
+    ],
+    "outputContract": {
+      "mode": "FILE",
+      "pathParameter": "output",
+      "contentType": "text/plain",
+      "fileExtension": ".txt"
+    },
+    "examples": [
+      {
+        "name": "positional-input",
+        "argv": ["Fix the lint issues", "--mode", "safe", "--output", "report.md"]
+      },
+      {
+        "name": "stdin-input",
+        "argv": ["--mode", "fast"],
+        "stdin": "Fix the lint issues"
       }
     ]
   },

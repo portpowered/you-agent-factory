@@ -555,6 +555,45 @@ Use `you docs sessions` for the session-scoped invocation API examples. Reserve
 future source categories in authored configs and client code, but do not imply
 they are implemented today.
 
+### `invocationSignature`
+
+`Factory.invocationSignature` is the public callable-argument schema shared by
+CLI, API, dashboard, packaged docs, and runtime normalization.
+
+Use it when a factory needs command-like arguments instead of one legacy
+text-only prompt. Factories that omit `invocationSignature` keep the
+compatibility text-first invocation path described above.
+
+The public signature schema includes:
+
+- `parameters` with canonical internal `name`, customer-facing `externalName`,
+  optional `aliases`, and `description`
+- String-first `typeHint` values such as `BOOLEAN_STRING`, `NUMBER_STRING`, and
+  `FILE_PATH`
+- `valueMode` for single-value, repeated, or variadic inputs
+- Positional, named, stdin, and `NAMED_REST` bindings
+- Defaults, accepted `choices`, and `required` markers
+- `unknownNamedArgumentPolicy`, `outputContract`, and signature-owned examples
+
+When a factory declares `invocationSignature`, callers should prefer the shared
+signature-aware surfaces:
+
+- `you run --named <factory> --help` or `you run --factory <factory.json> --help`
+  to inspect usage, descriptions, defaults, accepted values, and authored
+  examples
+- `InvocationRequest.args` on the session invocation API for structured inputs
+- Dashboard invocation forms derived from the same canonical signature data
+
+Compatibility behavior remains explicit:
+
+- Factories without an active `invocationSignature` accept the legacy text-first
+  invocation path and reject structured `args`
+- Factories with an active `invocationSignature` normalize positional, named,
+  alias-backed, defaulted, repeated, variadic, and stdin-routed inputs through
+  the same backend-owned argument resolver
+- Supplying both compatibility `content` and structured `args` for one API
+  request is rejected before dispatch
+
 ### `invocationReturn`
 
 `Factory.invocationReturn` is the factory-authored policy that tells CLI and API

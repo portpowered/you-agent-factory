@@ -441,6 +441,19 @@ When `args` is present, omit compatibility `content` unless you are
 intentionally exercising a source-conflict validation path. Factories without an
 active `invocationSignature` reject `args` before dispatch.
 
+`args` is the structured counterpart to CLI factory arguments:
+
+- Keys may use the parameter `name`, `externalName`, or any declared alias
+- Values must be a string or an array of strings
+- Defaults, required checks, repeated handling, alias resolution, and stdin
+  routing normalize through the same backend path used by `you run`
+- Pre-dispatch argument failures return non-2xx `ErrorResponse` payloads instead
+  of a terminal `InvocationResponse`
+
+Use `you run --named <factory> --help` or `you run --factory <factory.json> --help`
+when you want the selected factory's authored argument descriptions, defaults,
+accepted values, output hints, and examples before constructing an API request.
+
 ### Example success response
 
 ```json

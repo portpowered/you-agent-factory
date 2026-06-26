@@ -156,6 +156,16 @@ primary-result behavior.
   canonical templates, and those repairs must patch the specific legacy prompt
   files in place rather than replacing the whole materialized named-factory
   directory so customer edits survive later `you run --named` reuse.
+  `@you/fusion` factory JSON (`BuiltInFusionFactoryJSON`) is also registered from
+  `builtInNamedFactoryCatalog`.
+- `pkg/cli/run/factory_invocation_help.go` owns the factory-aware help renderer
+  for `you run --named <factory> --help` and `you run --factory <factory.json> --help`.
+  Keep usage lines, parameter descriptions, defaults, accepted values, output
+  hints, and example rendering derived from `interfaces.InvocationSignatureConfig`
+  instead of hard-coding packaged-factory argument inventories in CLI help.
+- `docs/reference/packaged-fusion.md` is the packaged `you docs packaged-fusion`
+  customer guide for `@you/fusion` invocation, signature-aware help, examples,
+  materialization, and edit-after-materialize behavior.
 - `pkg/packagedfactories/goal/` owns packaged goal factory metadata constants and
   config-load regression coverage for the authored `invocationReturn` policy that
   selects terminal `goal:complete` work content as the primary result.
