@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -572,6 +573,43 @@ func TestScriptWrapProvider_Infer_CursorPublishesTerminalCompletionMarker(t *tes
 	}
 }
 
+func TestScriptWrapProvider_Infer_CursorCompletionPublisherPreservesFinalResponse(t *testing.T) {
+	stdout := cursorpkg.SuccessStdoutJSON("Parsed assistant answer.", "cursor-session-abc")
+	req := interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-success"},
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		Model:         "gpt-5",
+		UserMessage:   "run the tests",
+	}
+
+	withoutPublisher := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{
+		result: CommandResult{Stdout: stdout},
+	}))
+	want, err := withoutPublisher.Infer(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Infer without publisher returned error: %v", err)
+	}
+
+	var published []InferenceProgressFragment
+	withPublisher := NewScriptWrapProvider(
+		WithProviderCommandRunner(&recordingProviderExec{
+			result: CommandResult{Stdout: stdout},
+		}),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) {
+			published = append(published, fragment)
+		}),
+	)
+	got, err := withPublisher.Infer(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Infer with publisher returned error: %v", err)
+	}
+
+	assertEquivalentInferenceResponse(t, got, want)
+	if len(published) != 1 || published[0].Kind != CompletedFragmentKind {
+		t.Fatalf("published fragments = %#v, want one completion marker", published)
+	}
+}
+
 func TestScriptWrapProvider_Infer_CursorMalformedJSONReturnsProviderError(t *testing.T) {
 	stdout := []byte(`{"type":"result"`)
 	stderr := []byte("cursor stderr detail")
@@ -680,6 +718,99 @@ func TestScriptWrapProvider_Infer_CursorExitFailurePublishesTerminalFailureMarke
 	}
 }
 
+func TestScriptWrapProvider_Infer_CursorFailurePublisherPreservesProviderError(t *testing.T) {
+	stdout := []byte("partial json output")
+	stderr := []byte("noise before\nERROR: unexpected status 500 from cursor upstream")
+	req := interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-cursor-failure"},
+		ModelProvider: string(interfaces.ModelProviderCursor),
+		UserMessage:   "run the tests",
+	}
+
+	withoutPublisher := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{
+		result: CommandResult{
+			Stdout:   stdout,
+			Stderr:   stderr,
+			ExitCode: 1,
+		},
+	}))
+	_, err := withoutPublisher.Infer(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected Infer without publisher to fail")
+	}
+	want, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("expected ProviderError without publisher, got %T", err)
+	}
+
+	var published []InferenceProgressFragment
+	withPublisher := NewScriptWrapProvider(
+		WithProviderCommandRunner(&recordingProviderExec{
+			result: CommandResult{
+				Stdout:   stdout,
+				Stderr:   stderr,
+				ExitCode: 1,
+			},
+		}),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) {
+			published = append(published, fragment)
+		}),
+	)
+	_, err = withPublisher.Infer(context.Background(), req)
+	if err == nil {
+		t.Fatal("expected Infer with publisher to fail")
+	}
+	got, ok := err.(*ProviderError)
+	if !ok {
+		t.Fatalf("expected ProviderError with publisher, got %T", err)
+	}
+
+	assertEquivalentProviderError(t, got, want)
+	if len(published) != 1 || published[0].Kind != FailedFragmentKind {
+		t.Fatalf("published fragments = %#v, want one failure marker", published)
+	}
+}
+
+func TestScriptWrapProvider_Infer_ClaudeCompletionPublisherPreservesFinalResponse(t *testing.T) {
+	req := interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-claude-success"},
+		ModelProvider: string(interfaces.ModelProviderClaude),
+		Model:         "claude-sonnet-4-5-20250514",
+		SessionID:     "claude-session-123",
+		UserMessage:   "fix it",
+	}
+
+	withoutPublisher := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{
+		result: CommandResult{Stdout: []byte("claude output")},
+	}))
+	want, err := withoutPublisher.Infer(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Infer without publisher returned error: %v", err)
+	}
+
+	var published []InferenceProgressFragment
+	withPublisher := NewScriptWrapProvider(
+		WithProviderCommandRunner(&recordingProviderExec{
+			result: CommandResult{Stdout: []byte("claude output")},
+		}),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) {
+			published = append(published, fragment)
+		}),
+	)
+	got, err := withPublisher.Infer(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Infer with publisher returned error: %v", err)
+	}
+
+	assertEquivalentInferenceResponse(t, got, want)
+	if len(published) != 1 || published[0].Kind != CompletedFragmentKind {
+		t.Fatalf("published fragments = %#v, want one completion marker", published)
+	}
+	if published[0].ProviderSessionRef == nil || published[0].ProviderSessionRef.ID != "claude-session-123" {
+		t.Fatalf("provider session ref = %#v, want claude-session-123", published[0].ProviderSessionRef)
+	}
+}
+
 func assertCursorFailureExcerpts(t *testing.T, diagnostics *interfaces.WorkDiagnostics, wantStdout, wantStderr string) {
 	t.Helper()
 	if diagnostics == nil || diagnostics.Provider == nil {
@@ -708,6 +839,75 @@ func assertSafeCursorFailureExcerpts(t *testing.T, diagnostics *interfaces.WorkD
 	}
 	if safe.Provider.ResponseMetadata["raw_body"] != "" {
 		t.Fatal("safe diagnostics must not include unsafe metadata keys")
+	}
+}
+
+func assertEquivalentInferenceResponse(t *testing.T, got, want interfaces.InferenceResponse) {
+	t.Helper()
+	if got.Content != want.Content {
+		t.Fatalf("content = %q, want %q", got.Content, want.Content)
+	}
+	if !reflect.DeepEqual(got.ProviderSession, want.ProviderSession) {
+		t.Fatalf("provider session = %#v, want %#v", got.ProviderSession, want.ProviderSession)
+	}
+	assertEquivalentWorkDiagnostics(t, got.Diagnostics, want.Diagnostics)
+}
+
+func assertEquivalentProviderError(t *testing.T, got, want *ProviderError) {
+	t.Helper()
+	if got.Type != want.Type {
+		t.Fatalf("error type = %q, want %q", got.Type, want.Type)
+	}
+	if got.Message != want.Message {
+		t.Fatalf("error message = %q, want %q", got.Message, want.Message)
+	}
+	if !reflect.DeepEqual(got.ProviderSession, want.ProviderSession) {
+		t.Fatalf("provider session = %#v, want %#v", got.ProviderSession, want.ProviderSession)
+	}
+	assertEquivalentWorkDiagnostics(t, got.Diagnostics, want.Diagnostics)
+}
+
+func assertEquivalentWorkDiagnostics(t *testing.T, got, want *interfaces.WorkDiagnostics) {
+	t.Helper()
+	if (got == nil) != (want == nil) {
+		t.Fatalf("diagnostics presence = %#v, want %#v", got, want)
+	}
+	if got == nil {
+		return
+	}
+	if !reflect.DeepEqual(got.Provider, want.Provider) {
+		t.Fatalf("provider diagnostics = %#v, want %#v", got.Provider, want.Provider)
+	}
+	if !reflect.DeepEqual(got.Metadata, want.Metadata) {
+		t.Fatalf("diagnostics metadata = %#v, want %#v", got.Metadata, want.Metadata)
+	}
+	if !reflect.DeepEqual(got.RenderedPrompt, want.RenderedPrompt) {
+		t.Fatalf("rendered prompt diagnostics = %#v, want %#v", got.RenderedPrompt, want.RenderedPrompt)
+	}
+	if !reflect.DeepEqual(got.Panic, want.Panic) {
+		t.Fatalf("panic diagnostics = %#v, want %#v", got.Panic, want.Panic)
+	}
+	assertEquivalentCommandDiagnostic(t, got.Command, want.Command)
+}
+
+func assertEquivalentCommandDiagnostic(t *testing.T, got, want *interfaces.CommandDiagnostic) {
+	t.Helper()
+	if (got == nil) != (want == nil) {
+		t.Fatalf("command diagnostics presence = %#v, want %#v", got, want)
+	}
+	if got == nil {
+		return
+	}
+	if got.Command != want.Command ||
+		!reflect.DeepEqual(got.Args, want.Args) ||
+		got.Stdin != want.Stdin ||
+		!reflect.DeepEqual(got.Env, want.Env) ||
+		got.Stdout != want.Stdout ||
+		got.Stderr != want.Stderr ||
+		got.ExitCode != want.ExitCode ||
+		got.TimedOut != want.TimedOut ||
+		got.WorkingDir != want.WorkingDir {
+		t.Fatalf("command diagnostics = %#v, want %#v", got, want)
 	}
 }
 
