@@ -45,6 +45,7 @@ function renderFactorySessionDetailPanel(sessionID: string) {
 }
 
 export const DispatchDrilldownStates = {
+  tags: ["test"],
   parameters: {
     dashboardApi: {
       fetchMocks: [
@@ -63,8 +64,20 @@ export const DispatchDrilldownStates = {
                   {
                     dispatchKind: "JAVASCRIPT_AGENT",
                     id: "dispatch-success",
+                    javascript: {
+                      executionMode: "live",
+                      taskKind: "AGENT",
+                      taskLabel: "Review child task",
+                    },
                     label: "Review child task",
                     orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+                    providerSessionRefs: [
+                      {
+                        id: "provider-session-1",
+                        kind: "session_id",
+                        provider: "codex",
+                      },
+                    ],
                     sessionId: storySessionID,
                     status: "COMPLETED",
                   },
@@ -231,6 +244,15 @@ export const DispatchDrilldownStates = {
       ],
       sessionID: storySessionID,
     },
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    expect(await canvas.findByText("Execution mode: live")).toBeTruthy();
+    expect(
+      await canvas.findByText(
+        "Provider session: codex / session_id / provider-session-1",
+      ),
+    ).toBeTruthy();
   },
   render: () => renderFactorySessionDetailPanel(storySessionID),
 };
