@@ -14,6 +14,10 @@ import {
   uiInteractionTimeoutMs,
 } from "./browser-test-harness.mjs";
 
+// Keep this suite bounded to one real-backend proof of the existing durable
+// session-detail experience. Fast fixture-backed panel tests and Storybook
+// coverage remain the default regression surface for broader UI permutations.
+
 async function openFactorySessionWidget(page) {
   await page
     .getByRole("heading", { level: 1, name: "U", exact: true })
