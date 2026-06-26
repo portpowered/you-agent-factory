@@ -29,6 +29,7 @@ type runtimeSessionState struct {
 	dispatchJavaScript        map[string]DispatchJavaScriptProjection
 	dispatchStatusTransitions map[string][]DispatchStatus
 	artifacts                 []ArtifactSummary
+	runtimeRecords            []workflowruntime.RuntimeRecord
 	events                    []json.RawMessage
 	runCancel                 context.CancelFunc
 }
@@ -743,6 +744,7 @@ func cloneRuntimeSessionState(state *runtimeSessionState) runtimeSessionState {
 		dispatchJavaScript:        cloneDispatchJavaScriptProjections(state.dispatchJavaScript),
 		dispatchStatusTransitions: cloneDispatchStatusTransitions(state.dispatchStatusTransitions),
 		artifacts:                 cloneArtifactSummaries(state.artifacts),
+		runtimeRecords:            cloneRuntimeRecords(state.runtimeRecords),
 	}
 	if len(state.events) > 0 {
 		cloned.events = make([]json.RawMessage, len(state.events))
@@ -835,9 +837,72 @@ func (s *JavaScriptRuntimeService) childExecutorHooks(mode string) workflowrunti
 	provider := s.provider
 	return workflowruntime.Hooks{
 		NewChildExecutor: func(sessionID string, records workflowruntime.ChildRecordSink) workflowruntime.ChildExecutor {
-			return livechild.NewProviderChildExecutor(sessionID, provider, records)
+			return livechild.NewProviderChildExecutor(
+				sessionID,
+				provider,
+				runtimeSessionChildRecordSink{
+					base: records,
+					appendRecord: func(record workflowruntime.RuntimeRecord) {
+						s.applyRunningRuntimeRecord(sessionID, record)
+					},
+				},
+			)
 		},
 	}
+}
+
+type runtimeSessionChildRecordSink struct {
+	base         workflowruntime.ChildRecordSink
+	appendRecord func(workflowruntime.RuntimeRecord)
+}
+
+func (s runtimeSessionChildRecordSink) Append(record workflowruntime.RuntimeRecord) {
+	s.base.Append(record)
+	if s.appendRecord != nil {
+		s.appendRecord(record)
+	}
+}
+
+func (s runtimeSessionChildRecordSink) AppendChildDispatch(base workflowruntime.ChildDispatchRecord, status string) {
+	record := base
+	record.Status = status
+	s.Append(workflowruntime.RuntimeRecord{
+		Kind:          workflowruntime.RecordKindChildDispatch,
+		ChildDispatch: &record,
+	})
+}
+
+func (s runtimeSessionChildRecordSink) NextChildDispatchIdentity() (dispatchID string, childIndex int) {
+	return s.base.NextChildDispatchIdentity()
+}
+
+func (s runtimeSessionChildRecordSink) NextChildArtifactID() string {
+	return s.base.NextChildArtifactID()
+}
+
+func (s *JavaScriptRuntimeService) applyRunningRuntimeRecord(sessionID string, record workflowruntime.RuntimeRecord) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	state, ok := s.sessions[sessionID]
+	if !ok {
+		return
+	}
+	preservedInterrupted := snapshotInterruptedDispatches(state)
+	state.runtimeRecords = append(state.runtimeRecords, cloneRuntimeRecord(record))
+	projection := ProjectRuntimeExecutionRecords(sessionID, state.runtimeRecords, time.Now().UTC())
+	state.dispatches = cloneDispatchSummaries(projection.Dispatches)
+	state.dispatchJavaScript = cloneDispatchJavaScriptProjections(projection.DispatchJavaScript)
+	state.dispatchStatusTransitions = cloneDispatchStatusTransitions(projection.DispatchStatusTransitions)
+	state.artifacts = cloneArtifactSummaries(projection.Artifacts)
+	if phase := strings.TrimSpace(projection.Phase); phase != "" {
+		state.session.Phase = phase
+	}
+	progress := projection.Progress
+	state.session.Progress = &progress
+	state.session.ArtifactRefs = artifactRefsFromSummaries(state.artifacts)
+	state.session.ArtifactCount = len(state.session.ArtifactRefs)
+	restoreInterruptedDispatchResultSuppression(state, preservedInterrupted)
 }
 
 func validateLiveChildExecutorConfig(mode string, provider workers.Provider) error {

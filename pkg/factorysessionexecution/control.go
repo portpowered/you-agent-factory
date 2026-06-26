@@ -577,6 +577,7 @@ func applyRuntimeAcceptedLifecycleControl(
 			interrupt.DispatchID,
 			interrupt,
 		)
+		interruptRuntime = true
 	}
 	return interruptRuntime
 }

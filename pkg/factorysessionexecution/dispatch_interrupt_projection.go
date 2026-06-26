@@ -58,6 +58,15 @@ func restoreInterruptedDispatchResultSuppression(
 		)
 	}
 	for dispatchID, preservation := range preserved {
+		if _, ok := projectedByID[dispatchID]; ok {
+			continue
+		}
+		state.dispatches = append(state.dispatches, cloneDispatchSummary(preservation.summary))
+	}
+	if state.dispatchStatusTransitions == nil {
+		state.dispatchStatusTransitions = make(map[string][]DispatchStatus, len(preserved))
+	}
+	for dispatchID, preservation := range preserved {
 		if len(preservation.statusTransitions) > 0 {
 			state.dispatchStatusTransitions[dispatchID] = cloneDispatchStatusSlice(preservation.statusTransitions)
 		}

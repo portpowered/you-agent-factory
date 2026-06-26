@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 )
 
 // RuntimeExecutionProjection carries durable dispatch, artifact, phase, and progress
@@ -210,6 +210,34 @@ func cloneDispatchJavaScriptProjections(
 	cloned := make(map[string]DispatchJavaScriptProjection, len(source))
 	for id, projection := range source {
 		cloned[id] = projection
+	}
+	return cloned
+}
+
+func cloneRuntimeRecords(records []workflowruntime.RuntimeRecord) []workflowruntime.RuntimeRecord {
+	if len(records) == 0 {
+		return nil
+	}
+	cloned := make([]workflowruntime.RuntimeRecord, len(records))
+	for i, record := range records {
+		cloned[i] = cloneRuntimeRecord(record)
+	}
+	return cloned
+}
+
+func cloneRuntimeRecord(record workflowruntime.RuntimeRecord) workflowruntime.RuntimeRecord {
+	cloned := record
+	if record.Phase != nil {
+		phase := *record.Phase
+		cloned.Phase = &phase
+	}
+	if record.Artifact != nil {
+		artifact := *record.Artifact
+		cloned.Artifact = &artifact
+	}
+	if record.ChildDispatch != nil {
+		child := *record.ChildDispatch
+		cloned.ChildDispatch = &child
 	}
 	return cloned
 }
