@@ -9,8 +9,14 @@ import {
   type LocalizedMessageCatalog,
   resolveLocalizedMessages,
 } from "../../../i18n";
+import {
+  chineseFactorySessionEventReplayMessages,
+  englishFactorySessionEventReplayMessages,
+  type FactorySessionEventReplayMessages,
+} from "./factory-session-detail.event-replay";
 
-export interface FactorySessionDetailMessages {
+export interface FactorySessionDetailMessages
+  extends FactorySessionEventReplayMessages {
   artifactLinksHeading: string;
   artifactRefActionLabel: string;
   artifactsHeading: string;
@@ -224,6 +230,7 @@ const factorySessionDetailMessagesByLocale = {
     dynamicWorkflowShorthand: "Dynamic workflow (JavaScript factory session)",
     executionModeLabel: "Execution mode",
     enabledTransitionsHeading: "Enabled transitions",
+    ...englishFactorySessionEventReplayMessages,
     errorState: "The factory session runtime could not be loaded.",
     expandDispatchDetailLabel: (dispatchID) =>
       `Expand dispatch detail for ${dispatchID}`,
@@ -300,6 +307,7 @@ const factorySessionDetailMessagesByLocale = {
     dynamicWorkflowShorthand: "动态工作流（JavaScript 工厂会话）",
     executionModeLabel: "执行模式",
     enabledTransitionsHeading: "已启用变迁",
+    ...chineseFactorySessionEventReplayMessages,
     errorState: "无法加载工厂会话运行时。",
     expandDispatchDetailLabel: (dispatchID) => `展开 ${dispatchID} 的调度详情`,
     failureDetailHeading: "失败详情",

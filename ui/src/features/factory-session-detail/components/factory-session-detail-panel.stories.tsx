@@ -1,6 +1,21 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { expect, userEvent, within } from "storybook/test";
 
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
+import {
+  awaitingReplaySessionID,
+  buildAwaitingDurableSession,
+  buildAwaitingReplayEventStream,
+  buildSuccessfulDurableSession,
+  buildSuccessfulReplayDispatchList,
+  buildSuccessfulReplayEventStream,
+  buildWarningDurableSession,
+  buildWarningReplayDispatchList,
+  buildWarningReplayEventStream,
+  successfulReplaySessionID,
+  unavailableReplaySessionID,
+  warningReplaySessionID,
+} from "../../../testing/factory-session-event-replay-fixtures";
 import { FactorySessionDetailPanel } from "./factory-session-detail-panel";
 
 const storySessionID = "session-beta";
@@ -9,6 +24,25 @@ export default {
   title: "you-agent-factory/Current Selection/Factory Session Detail Panel",
   component: FactorySessionDetailPanel,
 };
+
+function renderFactorySessionDetailPanel(sessionID: string) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        gcTime: Infinity,
+        retry: false,
+      },
+    },
+  });
+
+  return (
+    <div style={{ maxWidth: "100%", width: "960px" }}>
+      <QueryClientProvider client={queryClient}>
+        <FactorySessionDetailPanel sessionID={sessionID} />
+      </QueryClientProvider>
+    </div>
+  );
+}
 
 export const DispatchDrilldownStates = {
   parameters: {
@@ -198,22 +232,172 @@ export const DispatchDrilldownStates = {
       sessionID: storySessionID,
     },
   },
-  render: () => {
-    const queryClient = new QueryClient({
-      defaultOptions: {
-        queries: {
-          gcTime: Infinity,
-          retry: false,
-        },
-      },
-    });
+  render: () => renderFactorySessionDetailPanel(storySessionID),
+};
 
-    return (
-      <div style={{ maxWidth: "100%", width: "960px" }}>
-        <QueryClientProvider client={queryClient}>
-          <FactorySessionDetailPanel sessionID={storySessionID} />
-        </QueryClientProvider>
-      </div>
-    );
+export const DurableReplayDisclosure = {
+  tags: ["test"],
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: `/factory-sessions/${successfulReplaySessionID}`,
+          response: {
+            body: buildSuccessfulDurableSession(),
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${successfulReplaySessionID}/events`,
+          response: {
+            body: buildSuccessfulReplayEventStream(),
+            headers: {
+              "Content-Type": "text/event-stream",
+            },
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${successfulReplaySessionID}/dispatches`,
+          response: {
+            body: buildSuccessfulReplayDispatchList(),
+          },
+        },
+      ],
+      sessionID: successfulReplaySessionID,
+    },
   },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const trigger = await canvas.findByRole("button", {
+      name: "Expand Factory Event replay",
+    });
+    await userEvent.click(trigger);
+    await canvas.findByText("Showing 5 Factory Events.");
+    expect(canvas.getByText("Session completed")).toBeTruthy();
+    expect(canvas.getByText("Dispatch status completed")).toBeTruthy();
+  },
+  render: () => renderFactorySessionDetailPanel(successfulReplaySessionID),
+};
+
+export const DurableReplayDisclosureAwaitingApproval = {
+  tags: ["test"],
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: `/factory-sessions/${awaitingReplaySessionID}`,
+          response: {
+            body: buildAwaitingDurableSession(),
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${awaitingReplaySessionID}/events`,
+          response: {
+            body: buildAwaitingReplayEventStream(),
+            headers: {
+              "Content-Type": "text/event-stream",
+            },
+          },
+        },
+      ],
+      sessionID: awaitingReplaySessionID,
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const user = userEvent.setup();
+
+    const trigger = await canvas.findByRole("button", {
+      name: "Expand Factory Event replay",
+    });
+    await user.click(trigger);
+    await expect(canvas.findByText("Showing 2 Factory Events.")).resolves.toBeTruthy();
+    await expect(canvas.getByText("Session result updated")).toBeTruthy();
+  },
+  render: () => renderFactorySessionDetailPanel(awaitingReplaySessionID),
+};
+
+export const DurableReplayDisclosureWarning = {
+  tags: ["test"],
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: `/factory-sessions/${warningReplaySessionID}`,
+          response: {
+            body: buildWarningDurableSession(),
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${warningReplaySessionID}/events`,
+          response: {
+            body: buildWarningReplayEventStream(),
+            headers: {
+              "Content-Type": "text/event-stream",
+            },
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${warningReplaySessionID}/dispatches`,
+          response: {
+            body: buildWarningReplayDispatchList(),
+          },
+        },
+      ],
+      sessionID: warningReplaySessionID,
+    },
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const trigger = await canvas.findByRole("button", {
+      name: "Expand Factory Event replay",
+    });
+    await userEvent.click(trigger);
+    await canvas.findByText("Checkpoint recorded");
+    expect(canvas.getByText("Provider session timed out · Retry planned")).toBeTruthy();
+    expect(canvas.getByText("Release verification failed.")).toBeTruthy();
+  },
+  render: () => renderFactorySessionDetailPanel(warningReplaySessionID),
+};
+
+export const DurableReplayDisclosureUnavailable = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: `/factory-sessions/${unavailableReplaySessionID}`,
+          response: {
+            body: buildWarningDurableSession(unavailableReplaySessionID),
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${unavailableReplaySessionID}/events`,
+          response: {
+            status: 404,
+          },
+        },
+        {
+          method: "GET",
+          path: `/factory-sessions/${unavailableReplaySessionID}/dispatches`,
+          response: {
+            body: {
+              dispatches: [],
+              sessionId: unavailableReplaySessionID,
+            },
+          },
+        },
+      ],
+      sessionID: unavailableReplaySessionID,
+    },
+  },
+  render: () => renderFactorySessionDetailPanel(unavailableReplaySessionID),
 };
