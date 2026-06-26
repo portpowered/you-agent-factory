@@ -9,6 +9,13 @@ required:
 properties:
   orchestratorKind:
     $ref: '../data-models/FactoryOrchestratorKind.yaml'
+  streamGenerationID:
+    type: string
+    description: >-
+      Opaque invalidation token for the current live Factory Session event
+      history. Clients can compare this value across preflight reads and stream
+      handshakes to decide whether reconnect cursors and stream-derived
+      projections still belong to the same live history.
   dialect:
     type: string
     description: JavaScript workflow dialect when orchestrator.kind = JAVASCRIPT.

@@ -1278,6 +1278,8 @@ export interface components {
     };
     FactorySessionRuntime: {
       orchestratorKind: components["schemas"]["FactoryOrchestratorKind"];
+      /** @description Opaque invalidation token for the current live Factory Session event history. Clients can compare this value across preflight reads and stream handshakes to decide whether reconnect cursors and stream-derived projections still belong to the same live history. */
+      streamGenerationID?: string;
       /** @description JavaScript workflow dialect when orchestrator.kind = JAVASCRIPT. */
       dialect?: string;
       /** @description Authored JavaScript workflow source reference when applicable. */
