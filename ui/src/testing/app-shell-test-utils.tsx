@@ -354,6 +354,7 @@ export function nonPromptTemplateFetchPaths(
       !path.includes("/prompt-template-contract") &&
       !path.includes("/prompt-template-validation") &&
       path !== "/factory-sessions" &&
+      !/^\/factory-sessions\/[^/]+$/.test(path) &&
       !path.endsWith("/factory"),
   );
 }
