@@ -1684,6 +1684,92 @@ func TestReplaySessionProjection_PauseResumeLifecycleEventsDeriveStatus(t *testi
 	}
 }
 
+func TestReplaySessionProjection_LegacyPauseResumeEventsDeriveStatus(t *testing.T) {
+	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	pausedAt := time.Date(2026, 6, 11, 12, 0, 5, 0, time.UTC)
+	resumedAt := time.Date(2026, 6, 11, 12, 0, 10, 0, time.UTC)
+	sessionID := "dur-sess-replay-legacy-pause-resume-001"
+	sessionSequence := 1
+	source := canonicalEventSourceRuntimeService
+	mustMarshalEvent := func(event canonicalFactoryEvent) json.RawMessage {
+		t.Helper()
+		raw, err := json.Marshal(event)
+		if err != nil {
+			t.Fatalf("json.Marshal event: %v", err)
+		}
+		return raw
+	}
+
+	baseSession := SessionReadResult{
+		SessionID:        sessionID,
+		Status:           LifecycleStatusRunning,
+		OrchestratorKind: "JAVASCRIPT",
+		SourceHash:       "sha256:fixture",
+		Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
+		ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
+		Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+	}
+	baseResult := ResultReadResult{
+		SessionID:    sessionID,
+		ResultStatus: ResultStatusNotReady,
+	}
+
+	events := BuildCanonicalRuntimeSessionEvents(baseSession, baseResult)
+	events = append(events,
+		mustMarshalEvent(canonicalFactoryEvent{
+			SchemaVersion: "v1alpha",
+			ID:            "event-session-paused",
+			Type:          "SESSION_PAUSED",
+			Context: canonicalFactoryEventContext{
+				Sequence:        3,
+				Tick:            3,
+				EventTime:       pausedAt,
+				SessionID:       &sessionID,
+				SessionSequence: &sessionSequence,
+				Source:          &source,
+			},
+			Payload: mustMarshalPayload(map[string]any{
+				"status":   string(LifecycleStatusPaused),
+				"pausedAt": pausedAt.Format(time.RFC3339),
+			}),
+		}),
+		mustMarshalEvent(canonicalFactoryEvent{
+			SchemaVersion: "v1alpha",
+			ID:            "event-session-resumed",
+			Type:          "SESSION_RESUMED",
+			Context: canonicalFactoryEventContext{
+				Sequence:        4,
+				Tick:            4,
+				EventTime:       resumedAt,
+				SessionID:       &sessionID,
+				SessionSequence: &sessionSequence,
+				Source:          &source,
+			},
+			Payload: mustMarshalPayload(map[string]any{
+				"status":    string(LifecycleStatusRunning),
+				"resumedAt": resumedAt.Format(time.RFC3339),
+			}),
+		}),
+	)
+
+	session, result, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if session.Status != LifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", session.Status)
+	}
+	if result.SessionStatus != LifecycleStatusRunning {
+		t.Fatalf("result sessionStatus = %q, want RUNNING", result.SessionStatus)
+	}
+	if session.Lifecycle == nil || session.Lifecycle.PausedAt == nil || !session.Lifecycle.PausedAt.Equal(pausedAt) {
+		t.Fatalf("pausedAt = %#v, want %s", session.Lifecycle, pausedAt)
+	}
+	if session.Lifecycle.ResumedAt == nil || !session.Lifecycle.ResumedAt.Equal(resumedAt) {
+		t.Fatalf("resumedAt = %#v, want %s", session.Lifecycle.ResumedAt, resumedAt)
+	}
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity this regression keeps pause/resume append and no-op event immutability assertions together.
 func TestFakeService_PauseResumeAppendsLifecycleControlEventsWithoutNoOpMutation(t *testing.T) {
 	service, err := NewFakeServiceFromContractFixtures(contractFixturesPath(t))
