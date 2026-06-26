@@ -1,6 +1,6 @@
 # `@you/goal` Active PR Refresh
 
-Last updated: 2026-06-26T08:58:03Z
+Last updated: 2026-06-26T09:01:51Z
 
 This artifact tracks the current maintainer-facing refresh for the remaining
 open `@you/goal` PR batch after the recent merges.
@@ -89,7 +89,45 @@ content narrowing, or a prerequisite merge.
   client outputs, so the internal-stream boundary remains intact in the current
   active batch.
 
-## Remaining Sections
+## Concrete Merge Order And Final Verification Prerequisites
 
-The concrete merge order and final verification prerequisites for `#854`,
-`#856`, and `#859` are tracked by story `004`.
+The lowest-risk landing sequence is `#854` -> `#859` -> `#856`.
+
+This order keeps the packaged-goal topology and invocation-contract overlap on a
+single lane first, lands the isolated interrupt-dispatch contract lane second,
+and leaves the only PR with still-unresolved blocking conversation feedback
+last.
+
+| Order | PR | Why this position is lowest-risk | Current blocker to clear first | Smallest next owner action |
+| --- | --- | --- | --- | --- |
+| 1 | [#854](https://github.com/portpowered/you-agent-factory/pull/854) | `#854` and `#856` both change the built-in `@you/goal` layout plus invocation-adjacent process docs, but `#854` no longer has unresolved blocking conversation feedback. Landing it first removes one shared `pkg/config/layout.go` conflict source before the more correctness-sensitive `#856` lane is reworked. | GitHub still reports `DIRTY`, and the latest recorded failing required lane on the reviewed head was `Backend Verification` before later merges changed mergeability. | Rebase `#854` on current `main`, resolve `pkg/config/layout.go` and any nearby invocation-doc drift, rerun required checks, then merge if the rebased head stays equivalent to the already-addressed review scope. |
+| 2 | [#859](https://github.com/portpowered/you-agent-factory/pull/859) | `#859` is isolated from the packaged-goal layout/docs lanes. Its overlap is on durable session control, authored OpenAPI, and generated artifacts, so it should land once the packaged-goal conflict lane above is out of the way and without waiting on `#856`. | GitHub still reports `DIRTY`, and the latest required `Build, Lint, and API` run on the reviewed head failed before the rebased fix reply. | Rebase `#859` on the post-`#854` `main`, regenerate API outputs from the rebased authored contract if needed, rerun the full required quality gate, and merge once the rebased head reproduces the reply-commented fix. |
+| 3 | [#856](https://github.com/portpowered/you-agent-factory/pull/856) | `#856` is the only remaining lane with unresolved blocking conversation feedback, and it overlaps `#854` on built-in `@you/goal` layout and invocation-facing docs. Leaving it last avoids forcing later PRs to build on top of a branch whose product claim is still too broad for the proved behavior. | The latest blocking comment says previously materialized `@you/goal` installs still fail with `template: prompt:1:39: executing "prompt" at <.WorkID>` and `INVOCATION_PRIMARY_RESULT_UNRESOLVED`, and the PR is still merge-conflicting. | Rebase after `#854` lands, then either add an upgrade path for existing materialized built-ins or narrow the docs/tests/claim to fresh materialization only; reply in PR conversation comments with the exact path chosen and the focused verification that proves it. |
+
+### Why `P20` And `P26` Do Not Block This Order
+
+- No active PR currently exists for `P20` or `P26`, so neither item can be a
+  prerequisite merge target in the present batch.
+- For `#854`, there is no current evidence that `P20` or `P26` changes are
+  needed before final verification; the lane is blocked by ordinary rebase and
+  rerun work only.
+- For `#859`, the only plausible dependency is verification interpretation on
+  shared session-lifecycle surfaces. Treat `P20`/`P26` as post-merge follow-up
+  context for lifecycle expectations, not as hidden blockers for rebasing and
+  merging the current interrupt-dispatch head.
+- For `#856`, `P20` and `P26` are unrelated to the documented blocker. The
+  unresolved issue is specifically the persisted built-in `@you/goal` reuse
+  path, so that lane must be fixed or narrowed on its own merits.
+
+### Final Verification Prerequisites By PR
+
+- `#854`: rebase on current `main`, rerun required checks, and confirm the
+  rebased diff still preserves the structured-review and plain-review routing
+  behavior already mapped in PR conversation replies.
+- `#859`: rebase on current `main`, regenerate any affected OpenAPI outputs,
+  rerun the required CI lanes, and confirm the interrupt replay semantics still
+  match the reply-commented reconnect expectations after rebase.
+- `#856`: do not treat green-on-fresh-install evidence as sufficient. Final
+  verification must cover either the upgrade path for an already materialized
+  built-in `@you/goal` factory or a narrowed customer claim that explicitly
+  excludes that persisted path.
