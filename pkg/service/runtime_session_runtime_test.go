@@ -2803,6 +2803,141 @@ func TestFactoryService_InferenceProgressPublisher_SlowSubscriberCompactionEmits
 	assertSlowSubscriberCompactionDiagnostics(t, observed, metricsPath)
 }
 
+func TestFactoryService_InferenceProgressPublisherWithoutSubscriberDoesNotBlockExecution(t *testing.T) {
+	sessions := factorysessions.NewRegistry()
+	sessionID := "session-progress-no-subscriber"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{handle: &liveRuntimeHandle{runtime: &factoryRuntimeBundle{}}},
+		false,
+		"factory",
+	), true)
+
+	svc := &FactoryService{sessions: sessions}
+	publisher := svc.inferenceProgressPublisher(sessionID, nil)
+	if publisher == nil {
+		t.Fatal("publisher = nil, want session publisher")
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 256; i++ {
+			publisher(workerprovider.ProgressFragment("dispatch-1", nil, "phase"))
+		}
+		publisher(workerprovider.CompletedFragment("dispatch-1", nil))
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out publishing provider progress without any attached consumer")
+	}
+
+	stream := svc.sessionResponseStream(sessions.Get(sessionID), "dispatch-1")
+	if stream == nil {
+		t.Fatal("session stream = nil, want live session stream")
+	}
+	events := stream.Events()
+	if len(events) == 0 {
+		t.Fatal("stream events = empty, want retained progress or terminal marker")
+	}
+	if events[len(events)-1].Kind != responsestream.EventKindStreamCompleted {
+		t.Fatalf("last event kind = %q, want terminal completion marker", events[len(events)-1].Kind)
+	}
+}
+
+func TestFactoryService_InferenceProgressPublisherSlowConsumerFallsBehindWithoutBlockingExecution(t *testing.T) {
+	sessions := factorysessions.NewRegistry()
+	sessionID := "session-progress-slow-consumer"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{},
+		false,
+		"factory",
+	), true)
+
+	svc := &FactoryService{
+		sessions: sessions,
+		newSessionResponseStream: func() *factorysessions.SessionResponseStream {
+			return responsestream.NewSessionResponseStreamWithClock(factory.RealClock{}, responsestream.RetentionLimits{MaxEvents: 2})
+		},
+	}
+	publisher := svc.inferenceProgressPublisher(sessionID, nil)
+	if publisher == nil {
+		t.Fatal("publisher = nil, want session publisher")
+	}
+
+	publisher(workerprovider.ProgressFragment("dispatch-1", nil, "seed"))
+	stream := svc.sessionResponseStream(sessions.Get(sessionID), "dispatch-1")
+	if stream == nil {
+		t.Fatal("session stream = nil, want live session stream")
+	}
+	subscription, err := stream.Subscribe(0)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer subscription.Detach()
+
+	initial, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(initial): %v", err)
+	}
+	if len(initial.Events) != 1 || initial.Events[0].Payload != "seed" {
+		t.Fatalf("initial events = %#v, want retained seed event", initial.Events)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		publisher(workerprovider.ProgressFragment("dispatch-1", nil, "one"))
+		publisher(workerprovider.ResponseFragment("dispatch-1", nil, "two"))
+		publisher(workerprovider.ProgressFragment("dispatch-1", nil, "three"))
+		publisher(workerprovider.CompletedFragment("dispatch-1", nil))
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out publishing provider progress while consumer lagged behind")
+	}
+
+	read, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(catch-up): %v", err)
+	}
+	if !read.BehindRetainedWindow {
+		t.Fatal("behind retained window = false, want slow consumer compaction signal")
+	}
+	if read.Compaction == nil || read.Compaction.Reason != responsestream.CompactionReasonTruncated {
+		t.Fatalf("compaction = %#v, want truncated retained-window summary", read.Compaction)
+	}
+	if len(read.Events) == 0 {
+		t.Fatal("catch-up events = empty, want retained tail after truncation")
+	}
+	if read.Events[len(read.Events)-1].Kind != responsestream.EventKindCompactionSignal {
+		t.Fatalf("last retained event kind = %q, want retained-window compaction signal", read.Events[len(read.Events)-1].Kind)
+	}
+	foundCompleted := false
+	for _, event := range read.Events {
+		if event.Kind == responsestream.EventKindStreamCompleted {
+			foundCompleted = true
+			break
+		}
+	}
+	if !foundCompleted {
+		t.Fatalf("retained events = %#v, want terminal completion marker before compaction signal", read.Events)
+	}
+}
+
 func newSlowSubscriberCompactionTestHarness(t *testing.T) (*FactoryService, workerprovider.InferenceProgressPublisher, *observer.ObservedLogs, string) {
 	t.Helper()
 
