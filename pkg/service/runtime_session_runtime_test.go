@@ -11,7 +11,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,7 +21,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
@@ -30,7 +28,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
@@ -2750,7 +2747,7 @@ func TestFactoryService_InferenceProgressPublisherPreservesNormalizedCodexMetada
 		},
 	})
 
-	stream := (&FactoryService{sessions: sessions}).sessionResponseStream(sessions.Get(sessionID))
+	stream := (&FactoryService{sessions: sessions}).sessionResponseStream(sessions.Get(sessionID), "dispatch-codex-json-1")
 	events := stream.Events()
 	if len(events) != 1 {
 		t.Fatalf("stream events = %#v, want one normalized event", events)

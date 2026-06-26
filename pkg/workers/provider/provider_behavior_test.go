@@ -962,7 +962,6 @@ func TestInferenceProgressPublishingCommandRunner_WithoutPublisherPreservesExecB
 		t.Fatalf("stderr = %q, want stderr-fallback", result.Stderr)
 	}
 }
-
 func assertInferenceProgressFragment(
 	t *testing.T,
 	fragment InferenceProgressFragment,
