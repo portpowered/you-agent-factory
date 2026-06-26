@@ -2405,6 +2405,45 @@ func TestFactoryService_InferenceProgressPublisherPublishesOrderedInternalEvents
 	}
 }
 
+func TestFactoryService_InferenceProgressPublisher_DoesNotEmitCanonicalFactoryEvents(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha"},
+	})
+
+	session := harness.requireSession(t, defaultFactorySessionID)
+	runtimeFactory := liveSessionHandle(session).runtime.factory
+	before, err := runtimeFactory.GetFactoryEvents(context.Background())
+	if err != nil {
+		t.Fatalf("GetFactoryEvents(before): %v", err)
+	}
+
+	publisher := harness.svc.inferenceProgressPublisher(defaultFactorySessionID, nil)
+	if publisher == nil {
+		t.Fatal("publisher = nil, want inference progress publisher")
+	}
+	publisher(workerprovider.ResponseFragment("dispatch-private", nil, "internal-response-fragment"))
+	publisher(workerprovider.ProgressFragment("dispatch-private", nil, "internal-progress-fragment"))
+
+	after, err := runtimeFactory.GetFactoryEvents(context.Background())
+	if err != nil {
+		t.Fatalf("GetFactoryEvents(after): %v", err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("factory event count changed from %d to %d after internal stream publication", len(before), len(after))
+	}
+	for i := range before {
+		if after[i].Type != before[i].Type {
+			t.Fatalf("factory event types changed after internal stream publication: before=%v after=%v", serviceFactoryEventTypes(before), serviceFactoryEventTypes(after))
+		}
+	}
+
+	assertSessionEventsDoNotContain(t, session, "internal-response-fragment")
+	assertSessionEventsDoNotContain(t, session, "internal-progress-fragment")
+	assertSessionEventsDoNotContain(t, session, string(responsestream.EventKindResponseFragment))
+	assertSessionEventsDoNotContain(t, session, string(responsestream.EventKindProgressFragment))
+}
+
 func TestFactoryService_InferenceProgressPublisherConcurrentFirstFragmentsShareOneSessionStream(t *testing.T) {
 	sessions := factorysessions.NewRegistry()
 	sessionID := "session-progress-concurrent-first"
