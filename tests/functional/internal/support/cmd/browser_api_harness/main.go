@@ -36,6 +36,7 @@ func main() {
 	var executionBaseDir string
 	var factoryDir string
 	var requestID string
+	var startMode string
 	var workflowFixture string
 	var workflowName string
 
@@ -43,6 +44,7 @@ func main() {
 	flag.StringVar(&executionBaseDir, "execution-base-dir", "", "project root for durable workflow resolution")
 	flag.StringVar(&factoryDir, "factory-dir", "", "factory directory for the live dashboard session")
 	flag.StringVar(&requestID, "request-id", "req-browser-runtime-001", "durable session request id")
+	flag.StringVar(&startMode, "start-mode", "sync", "durable session start mode: sync or async")
 	flag.StringVar(&workflowFixture, "workflow-fixture", "", "runtime testdata workflow fixture filename")
 	flag.StringVar(&workflowName, "workflow-name", "", "workflow name exposed under .claude/workflows")
 	flag.Parse()
@@ -58,6 +60,9 @@ func main() {
 	}
 	if workflowName == "" {
 		fatalf("expected --workflow-name")
+	}
+	if startMode != "sync" && startMode != "async" {
+		fatalf("expected --start-mode to be sync or async")
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -124,21 +129,22 @@ func main() {
 
 	waitForHTTPReady(apiPort)
 
-	started, err := svc.StartDurableFactorySessionSync(ctx, factoryapi.FactorySessionExecutionRequest{
+	startRequest := factoryapi.FactorySessionExecutionRequest{
 		RequestId: requestID,
 		Source: factoryapi.FactorySessionExecutionSource{
 			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
 			WorkflowName: strPtr(workflowName),
 		},
-	})
+	}
+	sessionID, err := startSession(ctx, svc, startMode, startRequest)
 	if err != nil {
-		fatalf("StartDurableFactorySessionSync: %v", err)
+		fatalf("start durable factory session (%s): %v", startMode, err)
 	}
 
 	if err := json.NewEncoder(os.Stdout).Encode(readyPayload{
 		APIPort:   apiPort,
 		APIOrigin: fmt.Sprintf("http://127.0.0.1:%d", apiPort),
-		SessionID: started.SessionId,
+		SessionID: sessionID,
 	}); err != nil {
 		fatalf("encode ready payload: %v", err)
 	}
@@ -215,6 +221,27 @@ func waitForHTTPReady(apiPort int) {
 func fatalf(format string, args ...any) {
 	_, _ = fmt.Fprintf(os.Stderr, format+"\n", args...)
 	os.Exit(1)
+}
+
+func startSession(
+	ctx context.Context,
+	svc *service.FactoryService,
+	startMode string,
+	request factoryapi.FactorySessionExecutionRequest,
+) (string, error) {
+	if startMode == "async" {
+		started, err := svc.StartDurableFactorySessionAsync(ctx, request)
+		if err != nil {
+			return "", err
+		}
+		return started.SessionId, nil
+	}
+
+	started, err := svc.StartDurableFactorySessionSync(ctx, request)
+	if err != nil {
+		return "", err
+	}
+	return started.SessionId, nil
 }
 
 func strPtr(value string) *string {

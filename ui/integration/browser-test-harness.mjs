@@ -900,6 +900,7 @@ export async function startRealBackendBrowserHarness({
   apiPort,
   factoryDir = path.resolve(packageRoot, "..", "factory"),
   requestID = "req-browser-runtime-001",
+  startMode = "sync",
   workflowFixture,
   workflowName,
 } = {}) {
@@ -920,6 +921,8 @@ export async function startRealBackendBrowserHarness({
       factoryDir,
       "--request-id",
       requestID,
+      "--start-mode",
+      startMode,
       "--workflow-fixture",
       workflowFixture,
       "--workflow-name",

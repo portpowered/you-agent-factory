@@ -26,18 +26,27 @@ describe.sequential("durable session real backend browser integration", () => {
   });
 
   it(
-    "reaches a seeded durable JavaScript session through the dashboard factory-session detail path",
+    "shows loading and real durable summary state for a running backend session through the dashboard factory-session detail path",
     async () => {
       const backend = await startRealBackendBrowserHarness({
         apiPort: preview.apiPort,
-        workflowFixture: "simple-final.workflow.js",
-        workflowName: "simple-final",
+        startMode: "async",
+        workflowFixture: "busy-loop.workflow.js",
+        workflowName: "busy-loop",
       });
       const browserPage = await openBrowserPage({
         artifactLabel: "durable-session-real-backend",
       });
 
       try {
+        await browserPage.page.route(
+          `**/factory-sessions/${encodeURIComponent(backend.sessionID)}`,
+          async (route) => {
+            await new Promise((resolve) => setTimeout(resolve, 750));
+            await route.continue();
+          },
+          { times: 1 },
+        );
         await browserPage.page.goto(
           `${preview.previewURL}?factorySessionId=${encodeURIComponent(backend.sessionID)}`,
           {
@@ -62,10 +71,30 @@ describe.sequential("durable session real backend browser integration", () => {
           })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await browserPage.page
+          .getByRole("status")
+          .filter({ hasText: "Loading factory session runtime…" })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await browserPage.page
           .getByRole("heading", { name: "Factory session runtime" })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
         await browserPage.page
           .getByText(backend.sessionID, { exact: true })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await browserPage.page
+          .getByText("JavaScript workflow", { exact: true })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await browserPage.page
+          .getByText("Running", { exact: true })
+          .first()
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        expect(
+          await browserPage.page.getByText("Running", { exact: true }).count(),
+        ).toBeGreaterThanOrEqual(2);
+        await browserPage.page
+          .getByText("Child dispatches", { exact: true })
+          .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
+        await browserPage.page
+          .getByText("queued 0, running 0, completed 0", { exact: true })
           .waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
 
         expect(backend.sessionID.startsWith("dur-sess-")).toBe(true);
