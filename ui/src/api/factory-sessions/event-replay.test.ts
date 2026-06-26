@@ -1,7 +1,16 @@
 import { FACTORY_EVENT_TYPES } from "../events";
 import {
+  awaitingReplaySessionID,
+  buildAwaitingDurableSession,
+  buildAwaitingReplayEventStream,
+  buildSuccessfulDurableSession,
+  buildSuccessfulReplayDispatchList,
   buildSuccessfulReplayEventStream,
+  buildWarningDurableSession,
+  buildWarningReplayDispatchList,
+  buildWarningReplayEventStream,
   successfulReplaySessionID,
+  warningReplaySessionID,
 } from "../../testing/factory-session-event-replay-fixtures";
 import {
   listFactorySessionEventReplay,
@@ -85,6 +94,79 @@ describe("factory session event replay API", () => {
       listFactorySessionEventReplay(successfulReplaySessionID),
     ).rejects.toMatchObject({
       message: "The factory sessions API returned an invalid response.",
+    });
+  });
+});
+
+describe("factory session event replay shared fixtures", () => {
+  it("parses warning and awaiting durable replay fixtures into ordered Factory Events", () => {
+    expect(parseFactoryEventReplayStream(buildWarningReplayEventStream())).toEqual([
+      expect.objectContaining({
+        id: "evt-w1",
+        type: "JAVASCRIPT_CHECKPOINT_REF",
+      }),
+      expect.objectContaining({
+        id: "evt-w2",
+        type: FACTORY_EVENT_TYPES.dispatchInterrupted,
+      }),
+      expect.objectContaining({
+        id: "evt-w3",
+        type: FACTORY_EVENT_TYPES.sessionCompleted,
+      }),
+    ]);
+
+    expect(parseFactoryEventReplayStream(buildAwaitingReplayEventStream())).toEqual([
+      expect.objectContaining({
+        context: expect.objectContaining({ sessionId: awaitingReplaySessionID }),
+        id: "session-started/dur-sess-js-awaiting-001",
+        type: FACTORY_EVENT_TYPES.sessionStarted,
+      }),
+      expect.objectContaining({
+        context: expect.objectContaining({ sessionId: awaitingReplaySessionID }),
+        id: "session-result-updated/dur-sess-js-awaiting-001",
+        type: FACTORY_EVENT_TYPES.sessionResultUpdated,
+      }),
+    ]);
+  });
+
+  it("keeps the shared durable session and dispatch fixtures aligned to their session ids", () => {
+    expect(buildSuccessfulDurableSession()).toMatchObject({
+      orchestratorKind: "JAVASCRIPT",
+      progress: expect.objectContaining({ totalDispatches: 2 }),
+      sessionId: successfulReplaySessionID,
+      status: "SUCCEEDED",
+    });
+    expect(buildWarningDurableSession()).toMatchObject({
+      orchestratorKind: "JAVASCRIPT",
+      progress: expect.objectContaining({ failedDispatches: 1 }),
+      sessionId: warningReplaySessionID,
+      status: "FAILED",
+    });
+    expect(buildAwaitingDurableSession()).toMatchObject({
+      orchestratorKind: "JAVASCRIPT",
+      resultSummary: expect.objectContaining({ resultStatus: "NOT_READY" }),
+      sessionId: awaitingReplaySessionID,
+      status: "AWAITING_APPROVAL",
+    });
+    expect(buildSuccessfulReplayDispatchList()).toEqual({
+      dispatches: [
+        expect.objectContaining({
+          id: "dispatch-1",
+          phase: "review",
+          status: "COMPLETED",
+        }),
+      ],
+      sessionId: successfulReplaySessionID,
+    });
+    expect(buildWarningReplayDispatchList()).toEqual({
+      dispatches: [
+        expect.objectContaining({
+          id: "dispatch-verify",
+          phase: "verify",
+          status: "FAILED",
+        }),
+      ],
+      sessionId: warningReplaySessionID,
     });
   });
 });
