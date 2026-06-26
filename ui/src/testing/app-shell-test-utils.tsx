@@ -350,6 +350,7 @@ export function nonPromptTemplateFetchPaths(
 ) {
   return fetchCallPaths(fetchMock).filter(
     (path) =>
+      !factorySessionSyncPreflightPathPattern.test(path) &&
       !path.includes("/prompt-template-contract") &&
       !path.includes("/prompt-template-validation") &&
       path !== "/factory-sessions" &&
