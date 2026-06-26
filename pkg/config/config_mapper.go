@@ -880,6 +880,10 @@ func CloneWorkstationConfig(def interfaces.FactoryWorkstationConfig) interfaces.
 		cron := *def.Cron
 		def.Cron = &cron
 	}
+	if def.WorkPropagation != nil {
+		propagation := *def.WorkPropagation
+		def.WorkPropagation = &propagation
+	}
 	def.OnContinue = cloneIOConfigs(def.OnContinue)
 	def.OnRejection = cloneIOConfigs(def.OnRejection)
 	def.OnFailure = cloneIOConfigs(def.OnFailure)

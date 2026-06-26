@@ -401,14 +401,50 @@
   },
   {
     "schemaVersion": "agent-factory.event.v1",
-    "id": "event-session-result-updated",
-    "type": "SESSION_RESULT_UPDATED",
+    "id": "event-session-paused",
+    "type": "SESSION_PAUSED",
     "context": {
       "sequence": 16,
       "tick": 5,
       "eventTime": "2026-04-21T12:00:10Z",
       "sessionId": "session-alpha",
       "sessionSequence": 1,
+      "orchestratorKind": "JAVASCRIPT",
+      "source": "api"
+    },
+    "payload": {
+      "status": "PAUSED",
+      "pausedAt": "2026-04-21T12:00:10Z"
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-session-resumed",
+    "type": "SESSION_RESUMED",
+    "context": {
+      "sequence": 17,
+      "tick": 5,
+      "eventTime": "2026-04-21T12:00:11Z",
+      "sessionId": "session-alpha",
+      "sessionSequence": 2,
+      "orchestratorKind": "JAVASCRIPT",
+      "source": "api"
+    },
+    "payload": {
+      "status": "RUNNING",
+      "resumedAt": "2026-04-21T12:00:11Z"
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
+    "id": "event-session-result-updated",
+    "type": "SESSION_RESULT_UPDATED",
+    "context": {
+      "sequence": 18,
+      "tick": 5,
+      "eventTime": "2026-04-21T12:00:10Z",
+      "sessionId": "session-alpha",
+      "sessionSequence": 3,
       "orchestratorKind": "JAVASCRIPT",
       "phaseId": "phase-plan",
       "phaseName": "plan",
@@ -427,14 +463,36 @@
   },
   {
     "schemaVersion": "agent-factory.event.v1",
+    "id": "event-session-lifecycle-control",
+    "type": "SESSION_LIFECYCLE_CONTROL",
+    "context": {
+      "sequence": 18,
+      "tick": 6,
+      "eventTime": "2026-04-21T12:00:10Z",
+      "sessionId": "session-alpha",
+      "sessionSequence": 2,
+      "orchestratorKind": "JAVASCRIPT",
+      "source": "api"
+    },
+    "payload": {
+      "operation": "PAUSE",
+      "outcome": "ACCEPTED",
+      "previousStatus": "RUNNING",
+      "newStatus": "PAUSED",
+      "occurredAt": "2026-04-21T12:00:10Z",
+      "reason": "operator requested pause"
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.event.v1",
     "id": "event-session-completed",
     "type": "SESSION_COMPLETED",
     "context": {
-      "sequence": 17,
+      "sequence": 19,
       "tick": 6,
       "eventTime": "2026-04-21T12:00:11Z",
       "sessionId": "session-alpha",
-      "sessionSequence": 2,
+      "sessionSequence": 4,
       "orchestratorKind": "JAVASCRIPT",
       "source": "api"
     },

@@ -583,8 +583,8 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Pause one durable factory session
-     * @description Pauses one durable factory session while preserving inspectable partial results, dispatches, and artifacts. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
+     * Pause one Factory Session
+     * @description Pauses one live or durable Factory Session while preserving inspectable partial results, dispatches, artifacts, and buffered inbound submissions or completed worker results. Live workspace sessions use the same route family as durable execution sessions. Automatic progression stops until resume. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
      */
     post: operations["pauseFactorySession"];
     delete?: never;
@@ -603,8 +603,8 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Resume one durable factory session
-     * @description Resumes one paused durable factory session while preserving inspectable partial results, dispatches, and artifacts. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
+     * Resume one Factory Session
+     * @description Resumes one paused live or durable Factory Session while preserving inspectable partial results, dispatches, and artifacts. Live workspace sessions use the same route family as durable execution sessions. Wakes the runtime internally and drains ready buffered submissions and completed worker results without requiring a new external signal. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
      */
     post: operations["resumeFactorySession"];
     delete?: never;
@@ -1005,6 +1005,8 @@ export interface components {
     StatusResponse: {
       categories: components["schemas"]["StatusCategories"];
       factoryState: string;
+      /** @description Canonical Factory Session lifecycle-control status reconstructed from SESSION_PAUSED and SESSION_RESUMED events when present. Live status reads report PAUSED after a successful pause and RUNNING after a successful resume. */
+      lifecycleControlStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
       runtimeStatus: string;
       totalTokens: number;
       resources?: components["schemas"]["ResourceUsage"][];
@@ -1285,6 +1287,8 @@ export interface components {
       /** @description Stable hash of the effective orchestrator policy. */
       policyHash?: string;
       status: components["schemas"]["FactorySessionStatus"];
+      /** @description Canonical Factory Session lifecycle-control status reconstructed from SESSION_PAUSED and SESSION_RESUMED events when present. Live session inspection reads report PAUSED after a successful pause and RUNNING after a successful resume. */
+      lifecycleControlStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
       progress: components["schemas"]["FactorySessionProgress"];
       budgets?: components["schemas"]["FactorySessionBudgets"];
       usage: components["schemas"]["FactorySessionUsage"];
@@ -1587,6 +1591,8 @@ export interface components {
       relatedWorkIds?: string[];
       /** @description Artifact identifiers produced by the dispatch. */
       artifactIds?: string[];
+      /** @description Ordered durable status history observed for the dispatch. */
+      statusTransitions?: components["schemas"]["FactoryDispatchStatus"][];
       usage?: components["schemas"]["FactoryDispatchUsage"];
       warnings?: components["schemas"]["FactoryDispatchWarning"][];
       failureDetail?: components["schemas"]["FactoryDispatchFailureDetail"];
@@ -1622,6 +1628,8 @@ export interface components {
       taskKind: components["schemas"]["FactoryDispatchJavaScriptTaskKind"];
       /** @description Customer-visible label for the JavaScript workflow task. */
       taskLabel?: string;
+      /** @description Durable child execution mode recorded for the JavaScript workflow task when available. */
+      executionMode?: string;
     };
     FactoryDispatchUsage: {
       /** Format: int64 */
@@ -1755,6 +1763,40 @@ export interface components {
        * @description When durable session execution started.
        */
       startedAt: string;
+    };
+    /** @description Factory Session lifecycle pause recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only. */
+    SessionPausedEventPayload: {
+      /** @description Lifecycle status after a successful pause control. */
+      status: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+      /**
+       * Format: date-time
+       * @description When the Factory Session entered PAUSED.
+       */
+      pausedAt: string;
+    };
+    /** @description Factory Session lifecycle resume recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control-transition facts only. */
+    SessionResumedEventPayload: {
+      /** @description Lifecycle status after a successful resume control. */
+      status: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+      /**
+       * Format: date-time
+       * @description When the Factory Session returned to RUNNING.
+       */
+      resumedAt: string;
+    };
+    /** @description Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only. */
+    SessionLifecycleControlEventPayload: {
+      operation: components["schemas"]["FactorySessionLifecycleControlKind"];
+      outcome: components["schemas"]["FactorySessionLifecycleControlOutcome"];
+      previousStatus: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+      newStatus: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+      /**
+       * Format: date-time
+       * @description When the lifecycle control took effect.
+       */
+      occurredAt: string;
+      /** @description Optional operator-provided reason for the control request. */
+      reason?: string;
     };
     /** @description Partial or final session result availability on the canonical factory event stream. Identity and ordering live in FactoryEvent.context. */
     SessionResultUpdatedEventPayload: {
@@ -2734,8 +2776,11 @@ export interface components {
         | components["schemas"]["FactoryStateResponseEventPayload"]
         | components["schemas"]["RunResponseEventPayload"]
         | components["schemas"]["SessionStartedEventPayload"]
+        | components["schemas"]["SessionPausedEventPayload"]
+        | components["schemas"]["SessionResumedEventPayload"]
         | components["schemas"]["SessionResultUpdatedEventPayload"]
         | components["schemas"]["SessionCompletedEventPayload"]
+        | components["schemas"]["SessionLifecycleControlEventPayload"]
         | components["schemas"]["OrchestratorPhaseChangedEventPayload"]
         | components["schemas"]["OrchestratorCheckpointWrittenEventPayload"]
         | components["schemas"]["DispatchQueuedEventPayload"]
@@ -3717,6 +3762,8 @@ export interface components {
       outcomeFormat?: components["schemas"]["WorkstationOutcomeFormat"];
       /** @description Retry and execution ceilings applied to this workstation. */
       limits?: components["schemas"]["WorkstationLimits"];
+      /** @description Optional policy for whether downstream work uses the workstation output payload or preserves the consumed input payload. */
+      workPropagation?: components["schemas"]["WorkPropagation"];
       /** @description Inline workstation instructions or script body when authored directly in factory config. */
       body?: string;
       /** @description Cron trigger configuration for workstations whose behavior is CRON. */
@@ -3748,6 +3795,11 @@ export interface components {
       /** @description Environment variables added to the workstation execution context. */
       env?: components["schemas"]["StringMap"];
     };
+    /**
+     * @description Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+     * @enum {string}
+     */
+    WorkstationOutcomeFormat: WorkstationOutcomeFormat;
     ClassificationRoute: {
       /** @description Case-sensitive classifier label that must match the trimmed classifier output exactly. */
       label: string;
@@ -3786,6 +3838,16 @@ export interface components {
       /** @description Positive Go duration after due_at before a stale cron time token expires and can be consumed by the system expiry transition. Defaults to the duration until the next scheduled cron fire when omitted. */
       expiryWindow?: string;
     };
+    /** @description Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload. */
+    WorkPropagation: {
+      /** @description Propagation mode for downstream work payload selection after this workstation succeeds. */
+      mode: components["schemas"]["WorkPropagationMode"];
+    };
+    /**
+     * @description Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.
+     * @enum {string}
+     */
+    WorkPropagationMode: WorkPropagationMode;
     /**
      * @description Guard condition attached to a workstation or one of its specific inputs.
      * @enum {string}
@@ -4386,11 +4448,6 @@ export interface components {
       /** @description Optional claim-related configuration that v1 hosted Linear polling allows. */
       claim?: components["schemas"]["HostedLinearWorkerClaim"];
     };
-    /**
-     * @description Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
-     * @enum {string}
-     */
-    WorkstationOutcomeFormat: WorkstationOutcomeFormat;
   };
   responses: {
     /** @description Request payload or parameter was invalid. */
@@ -5927,6 +5984,8 @@ export type ErrorFamily = (typeof ErrorFamily)[keyof typeof ErrorFamily];
 export const ErrorResponseCode = {
   // Request payload or parameter validation failed.
   BAD_REQUEST: "BAD_REQUEST",
+  // Factory session discovery found a readable factory target whose config could not be loaded.
+  FACTORY_SESSION_CONFIG_LOAD_FAILED: "FACTORY_SESSION_CONFIG_LOAD_FAILED",
   // Named factory name validation failed.
   INVALID_FACTORY_NAME: "INVALID_FACTORY_NAME",
   // Submitted named factory already exists.
@@ -6200,9 +6259,9 @@ export type FactorySessionSyncExecutionOutcome =
 export const FactorySessionLifecycleControlKind = {
   // Approve requested orchestrator policy so execution can proceed.
   FactorySessionLifecycleControlKindApprove: "APPROVE",
-  // Pause active durable session scheduling while preserving inspectable state.
+  // Pause active Factory Session scheduling while preserving inspectable state and buffered work.
   FactorySessionLifecycleControlKindPause: "PAUSE",
-  // Resume a paused durable session.
+  // Resume a paused Factory Session and drain ready buffered work.
   FactorySessionLifecycleControlKindResume: "RESUME",
   // Request graceful cancellation while preserving partial results and artifacts.
   FactorySessionLifecycleControlKindCancel: "CANCEL",
@@ -6331,10 +6390,16 @@ export const FactoryEventType = {
   FactoryEventTypeRunResponse: "RUN_RESPONSE",
   // Durable factory session execution started and replay-safe session facts are available.
   FactoryEventTypeSessionStarted: "SESSION_STARTED",
+  // A Factory Session lifecycle pause control transitioned the session into PAUSED.
+  FactoryEventTypeSessionPaused: "SESSION_PAUSED",
+  // A Factory Session lifecycle resume control transitioned the session into RUNNING.
+  FactoryEventTypeSessionResumed: "SESSION_RESUMED",
   // Partial or final customer-visible session result availability was recorded.
   FactoryEventTypeSessionResultUpdated: "SESSION_RESULT_UPDATED",
   // Durable factory session execution reached a terminal lifecycle state.
   FactoryEventTypeSessionCompleted: "SESSION_COMPLETED",
+  // Durable factory session lifecycle control was applied or recorded for replay.
+  FactoryEventTypeSessionLifecycleControl: "SESSION_LIFECYCLE_CONTROL",
   // An orchestrator workflow phase transition was recorded.
   FactoryEventTypeOrchestratorPhaseChanged: "ORCHESTRATOR_PHASE_CHANGED",
   // An orchestrator checkpoint reference was recorded without exposing raw VM state.
@@ -6596,6 +6661,12 @@ export const RunnerSelectionSource = {
 } as const;
 export type RunnerSelectionSource =
   (typeof RunnerSelectionSource)[keyof typeof RunnerSelectionSource];
+export const WorkstationOutcomeFormat = {
+  // Parse agent output as a reviewer/checker decision envelope instead of stop-token routing.
+  WorkstationOutcomeFormatDecisionEnvelope: "decision-envelope",
+} as const;
+export type WorkstationOutcomeFormat =
+  (typeof WorkstationOutcomeFormat)[keyof typeof WorkstationOutcomeFormat];
 export const WorkstationKind = {
   // Schedules when its inputs are ready and emits configured outputs.
   WorkstationKindStandard: "STANDARD",
@@ -6628,6 +6699,14 @@ export const WorkstationType = {
 } as const;
 export type WorkstationType =
   (typeof WorkstationType)[keyof typeof WorkstationType];
+export const WorkPropagationMode = {
+  // Downstream work receives the workstation output payload.
+  WorkPropagationModeOutputAsPayload: "OUTPUT_AS_PAYLOAD",
+  // Downstream work keeps the consumed input payload instead of the workstation output.
+  WorkPropagationModePreserveInput: "PRESERVE_INPUT",
+} as const;
+export type WorkPropagationMode =
+  (typeof WorkPropagationMode)[keyof typeof WorkPropagationMode];
 export const GuardType = {
   // Allows or blocks work based on how many times a workstation has already handled it.
   GuardTypeVisitCount: "VISIT_COUNT",
@@ -6781,12 +6860,6 @@ export const HostedWorkerProvider = {
 } as const;
 export type HostedWorkerProvider =
   (typeof HostedWorkerProvider)[keyof typeof HostedWorkerProvider];
-export const WorkstationOutcomeFormat = {
-  // Parse agent output as a reviewer/checker decision envelope instead of stop-token routing.
-  WorkstationOutcomeFormatDecisionEnvelope: "decision-envelope",
-} as const;
-export type WorkstationOutcomeFormat =
-  (typeof WorkstationOutcomeFormat)[keyof typeof WorkstationOutcomeFormat];
 export const ComponentsParametersSortBy = {
   state_type: "state.type",
 } as const;

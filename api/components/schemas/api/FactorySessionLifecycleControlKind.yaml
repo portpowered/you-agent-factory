@@ -16,8 +16,8 @@ x-enum-varnames:
   - FactorySessionLifecycleControlKindRetryDispatch
 x-enum-descriptions:
   - Approve requested orchestrator policy so execution can proceed.
-  - Pause active durable session scheduling while preserving inspectable state.
-  - Resume a paused durable session.
+  - Pause active Factory Session scheduling while preserving inspectable state and buffered work.
+  - Resume a paused Factory Session and drain ready buffered work.
   - Request graceful cancellation while preserving partial results and artifacts.
   - Forcefully terminate a durable session while preserving inspectable state.
   - Retry one failed or interrupted dispatch within the targeted session.

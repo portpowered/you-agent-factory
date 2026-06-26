@@ -82,7 +82,7 @@ func assertUnifiedEventSchemasPresent(t *testing.T, schemas map[string]any) {
 		"DispatchResponseEventPayload", "WorkStateChangeEventPayload", "WorkStateChangeSource",
 		"FactoryStateResponseEventPayload", "RunResponseEventPayload",
 		"FactoryEventSessionResultStatus", "OrchestratorPhaseStatus", "CheckpointResumabilityStatus", "DispatchReconciliationSource",
-		"SessionStartedEventPayload", "SessionResultUpdatedEventPayload", "SessionCompletedEventPayload",
+		"SessionStartedEventPayload", "SessionPausedEventPayload", "SessionResumedEventPayload", "SessionResultUpdatedEventPayload", "SessionCompletedEventPayload",
 		"OrchestratorPhaseChangedEventPayload", "OrchestratorCheckpointWrittenEventPayload",
 		"DispatchQueuedEventPayload", "DispatchInterruptedEventPayload", "DispatchReconciledEventPayload",
 		"JavaScriptCheckpointRefEventPayload", "JavaScriptPhaseChangeEventPayload", "ArtifactCreatedEventPayload",
@@ -178,6 +178,8 @@ func assertSessionLifecyclePayloadsOmitContextIdentityFields(t *testing.T, schem
 	t.Helper()
 	for schemaName, forbidden := range map[string][]string{
 		"SessionStartedEventPayload":             {"sessionId", "orchestratorKind", "orchestratorDialect"},
+		"SessionPausedEventPayload":              {"sessionId", "orchestratorKind"},
+		"SessionResumedEventPayload":             {"sessionId", "orchestratorKind"},
 		"SessionResultUpdatedEventPayload":       {"sessionId", "orchestratorKind"},
 		"SessionCompletedEventPayload":           {"sessionId", "orchestratorKind"},
 		"OrchestratorPhaseChangedEventPayload":   {"sessionId", "phaseId", "phaseName"},

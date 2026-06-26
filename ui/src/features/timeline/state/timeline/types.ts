@@ -53,6 +53,7 @@ export interface WorldCompletion extends WorldDispatch {
   failureMessage?: string;
   failureReason?: string;
   feedback?: string;
+  feedbackTextBlobID?: string;
   selectedClassificationLabel?: string;
   inputItems: DashboardWorkItemRef[];
   outcome: string;
@@ -60,6 +61,7 @@ export interface WorldCompletion extends WorldDispatch {
   outputMutations: DashboardTraceMutation[];
   providerSession?: FactoryProviderSession;
   responseText?: string;
+  responseTextBlobID?: string;
   terminalWork?: FactoryTerminalWork;
 }
 
@@ -98,8 +100,19 @@ export interface WorldScriptResponse {
   response_time: string;
   script_request_id: string;
   stderr: string;
+  stderrTextBlobID?: string;
   stdout: string;
+  stdoutTextBlobID?: string;
   transition_id: string;
+}
+
+export interface ReplayTextBacked {
+  promptTextBlobID?: string;
+  responseTextBlobID?: string;
+}
+
+export interface ReplayTextBlobState {
+  textBlobsByID: Record<string, string>;
 }
 
 export interface PlaceOccupancy {
@@ -144,7 +157,7 @@ export interface TimelineWorldViewBase {
   failedWorkItemsByID: Record<string, FactoryWorkItem>;
   inferenceAttemptsByDispatchID: Record<
     string,
-    Record<string, DashboardInferenceAttempt>
+    Record<string, DashboardInferenceAttempt & ReplayTextBacked>
   >;
   occupancyByID: Record<string, PlaceOccupancy>;
   providerSessions: DashboardProviderSessionAttempt[];
@@ -210,6 +223,7 @@ export interface ReplayWorldState extends TimelineWorldViewBase {
   runtime: DashboardRuntime;
   sessionArtifacts: ReplaySessionArtifact[];
   sessionBracket?: DashboardSessionBracket;
+  textBlobsByID: Record<string, string>;
   tick_count: number;
   topology: ProjectedInitialStructure;
   uptime_seconds: number;

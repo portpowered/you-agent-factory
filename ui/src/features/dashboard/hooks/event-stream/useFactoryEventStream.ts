@@ -26,8 +26,10 @@ import { useDashboardStreamStore } from "../../state/dashboardStreamStore";
 
 export interface UseFactoryEventStreamOptions {
   enabled: boolean;
+  initialReconnectCursor?: FactoryEventReconnectCursor;
   locale?: string | null;
   onEvent: (event: FactoryEvent) => void;
+  onEvents?: (events: FactoryEvent[]) => void;
   openStream?: typeof openFactoryEventStream;
   refreshToken?: number;
   sessionID: string | null;
@@ -46,6 +48,7 @@ interface DashboardStreamConnectionOptions {
   debugOptions: ReturnType<typeof readFactoryTimelineDebugOptions>;
   enabled: boolean;
   flushHandleRef: RefObject<number | null>;
+  initialReconnectCursor?: FactoryEventReconnectCursor;
   flushQueuedEvents: () => void;
   openStream: typeof openFactoryEventStream;
   queryClient: ReturnType<typeof useQueryClient>;
@@ -75,6 +78,7 @@ function useDashboardStreamConnection({
   debugOptions,
   enabled,
   flushHandleRef,
+  initialReconnectCursor,
   flushQueuedEvents,
   locale,
   openStream,
@@ -139,9 +143,7 @@ function useDashboardStreamConnection({
       scheduleQueuedFlush();
     };
 
-    const openDashboardStream = (
-      reconnect?: FactoryEventReconnectCursor,
-    ) => {
+    const openDashboardStream = (reconnect?: FactoryEventReconnectCursor) => {
       streamRef.current?.close();
       const stream = openStream(
         handleStreamEvent,
@@ -167,7 +169,8 @@ function useDashboardStreamConnection({
         }
         setStreamState({
           message:
-            getDashboardSessionLifecycleMessages(locale).reconnectingStreamLabel,
+            getDashboardSessionLifecycleMessages(locale)
+              .reconnectingStreamLabel,
           status: "reconnecting",
         });
         reconnectTimeoutRef.current = window.setTimeout(() => {
@@ -178,7 +181,7 @@ function useDashboardStreamConnection({
     };
 
     reconnectCursorRef.current = undefined;
-    openDashboardStream();
+    openDashboardStream(initialReconnectCursor);
     return () => {
       clearReconnectTimeout();
       clearQueuedFlush(flushHandleRef);
@@ -190,6 +193,7 @@ function useDashboardStreamConnection({
     debugOptions,
     enabled,
     flushHandleRef,
+    initialReconnectCursor,
     flushQueuedEvents,
     locale,
     openStream,
@@ -205,8 +209,10 @@ function useDashboardStreamConnection({
 
 export function useFactoryEventStream({
   enabled,
+  initialReconnectCursor,
   locale,
   onEvent,
+  onEvents,
   openStream = openFactoryEventStream,
   refreshToken = 0,
   sessionID,
@@ -230,10 +236,14 @@ export function useFactoryEventStream({
     }
     const events = queuedEventsRef.current;
     queuedEventsRef.current = [];
+    if (onEvents) {
+      onEvents(events);
+      return;
+    }
     for (const event of events) {
       onEvent(event);
     }
-  }, [onEvent]);
+  }, [onEvent, onEvents]);
 
   const scheduleQueuedFlush = useCallback(() => {
     if (flushHandleRef.current !== null) {
@@ -260,6 +270,7 @@ export function useFactoryEventStream({
     debugOptions,
     enabled,
     flushHandleRef,
+    initialReconnectCursor,
     flushQueuedEvents,
     locale,
     openStream,

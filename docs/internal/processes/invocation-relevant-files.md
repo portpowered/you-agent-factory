@@ -25,6 +25,11 @@ primary-result behavior.
   outcomes into `InvocationResponse`; it also owns invocation boundary logs and
   optional `InvocationMetricsRecorder` counter emission for runtime outcomes.
 - `pkg/cli/run/` is the `you run --factory` CLI boundary.
+- Canonical default-path ownership for operator config
+  (`~/.you-agent-factory/config.json`) and generated live replay recording roots
+  (`~/.you-agent-factory/recordings/...`) belongs in `pkg/config/defaultpaths`;
+  `pkg/config/operatorconfig` and `pkg/cli/run` should keep only precedence,
+  filename, and reporting behavior around those defaults.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
@@ -115,6 +120,20 @@ primary-result behavior.
 - `pkg/cli/run/packaged_tts_invocation.go` logs named-factory resolution context at
   the CLI boundary without recording packaged-factory metrics or logging submitted
   text or generated artifact bodies.
+- `pkg/packagedfactories/goal/` owns packaged `@you/goal` factory metadata
+  constants (`PackagedFactoryName`, `PackagedInvokeWorkstationName`).
+- `pkg/cli/run/run_invocation_test.go` proves `@you/goal` CLI invocation input
+  sources resolve through `invocations.ResolveTextInput`, reach the shared
+  `InvocationRequest` payload shape, fail with stable
+  `INVOCATION_INPUT_SOURCE_CONFLICT` before `InvokeFactorySession`, and match the
+  session invocation API contract for the same logical text input and JSON success
+  envelopes.
+- `pkg/cli/root_run_server_test.go` proves root `you run --named @you/goal` and
+  `@you/tts` wiring for positional text, piped stdin, explicit `-` stdin forms,
+  and stable `INVOCATION_INPUT_SOURCE_CONFLICT` rejection when sources combine.
+- `pkg/api/server_factory_sessions_test.go` proves the session invocation API
+  returns the same observable request and primary-result behavior for packaged
+  `@you/goal` text input and source-conflict failures as the CLI parity tests.
 - `pkg/service/model_catalog.go` owns the session invocation wait loop, packaged TTS
   loading/completion/failure logs, and packaged-factory metrics while polling for
   primary results.

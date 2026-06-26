@@ -46,6 +46,7 @@ func TestMockWorkers_AgentRejectConfigRoutesFailureAndLogsCommandOutput(t *testi
 
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithFullWorkerPoolAndScriptWrap(),
+		testutil.WithRuntimeFileLoggingEnabled(true),
 		testutil.WithRuntimeLogDir(logDir),
 		testutil.WithRuntimeInstanceID("mock-reject"),
 		testutil.WithMockWorkersConfig(&factoryconfig.MockWorkersConfig{

@@ -26,6 +26,7 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	"github.com/portpowered/infinite-you/pkg/cli/timedisplay"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -57,7 +58,7 @@ type RunConfig struct {
 	// InvocationStdinText carries stdin text resolved before Run when root
 	// already consumed the stdin stream for one-shot factory invocation.
 	InvocationStdinText *string
-	RunnerID string
+	RunnerID            string
 	// OperatorDefaults carries resolved operator-level default worker model
 	// settings loaded at the CLI boundary.
 	OperatorDefaults operatorconfig.ResolvedDefaults
@@ -201,7 +202,6 @@ func SetBuildFactoryService(builder FactoryServiceBuilder) {
 const (
 	completedPlaceIDSuffix        = "completed"
 	failedPlaceIDSuffix           = "failed"
-	defaultRecordingsDir          = ".you-agent-factory/recordings"
 	defaultFactorySessionID       = "~default"
 	defaultRecordPathSessionToken = "__factory_session_id__"
 )
@@ -474,13 +474,8 @@ func generateDefaultLiveRunRecordPath() (string, error) {
 		now.Format("150405"),
 		defaultLiveRunRecordUUID(),
 	)
-	return filepath.Join(
-		homeDir,
-		defaultRecordingsDir,
-		now.Format("2006-01"),
-		now.Format("2006-01-02"),
-		recordingID,
-	), nil
+	recordingsDir := defaultpaths.RecordingsDatedDir(defaultpaths.RecordingsRoot(homeDir), now)
+	return filepath.Join(recordingsDir, recordingID), nil
 }
 
 func resolveDefaultSessionRecordPath(path string) string {

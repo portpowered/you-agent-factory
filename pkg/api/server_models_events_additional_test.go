@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -407,4 +408,28 @@ func assertJSONErrorResponse(t *testing.T, gotStatus int, header http.Header, bo
 	rec.HeaderMap = header
 	rec.Body.WriteString(body)
 	assertJSONError(t, rec, wantStatus, wantCode, wantMessage)
+}
+
+func TestParseCodexSessionDetails_PreservesLongMessageContent(t *testing.T) {
+	longPart := strings.Repeat("skill description ", 90) + "final-visible-tail"
+	session := strings.Join([]string{
+		`{"timestamp":"2026-06-04T10:00:00Z","type":"turn_context"}`,
+		`{"timestamp":"2026-06-04T10:00:01Z","type":"response_item","payload":{"type":"message","role":"developer","content":[{"type":"input_text","text":"permissions block"},{"type":"input_text","text":` + strconv.Quote(longPart) + `}]}}`,
+	}, "\n")
+
+	parsed, err := parseCodexSessionDetails(strings.NewReader(session))
+	if err != nil {
+		t.Fatalf("parse codex session details: %v", err)
+	}
+
+	if len(parsed.Transcript) != 1 {
+		t.Fatalf("transcript = %#v, want one developer message transcript entry", parsed.Transcript)
+	}
+	got := stringValue(parsed.Transcript[0].Text)
+	if !strings.Contains(got, "permissions block") || !strings.Contains(got, "final-visible-tail") {
+		t.Fatalf("transcript text length = %d, want full joined message content with tail; text=%q", len(got), got)
+	}
+	if strings.HasSuffix(got, "...") {
+		t.Fatalf("transcript text = %q, want no backend truncation suffix", got)
+	}
 }

@@ -2,6 +2,8 @@ package factorysessions
 
 import (
 	"github.com/google/uuid"
+
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 )
 
 // DefaultSessionID is the stable alias for the primary live factory session.
@@ -60,4 +62,30 @@ type LiveSession struct {
 // NewSessionID allocates a unique live session identifier.
 func NewSessionID() string {
 	return uuid.NewString()
+}
+
+// SessionResponseStream keeps ordered internal provider progress for one live
+// Factory Session runtime. It is separate from canonical factory event history
+// and from service-coordinator state.
+type SessionResponseStream = responsestream.SessionResponseStream
+
+// SessionResponseStreamEvent is the internal envelope for provider progress and
+// response fragments within one Factory Session runtime.
+type SessionResponseStreamEvent = responsestream.Event
+
+// SessionResponseStreamEventKind identifies internal response-stream semantics.
+type SessionResponseStreamEventKind = responsestream.EventKind
+
+// SessionResponseStreamRetentionLimits documents bounded-retention controls for
+// one internal session response stream.
+type SessionResponseStreamRetentionLimits = responsestream.RetentionLimits
+
+// SessionResponseStreamRetentionAccounting summarizes retained stream bytes,
+// event count, and oldest event timestamp for retention decisions.
+type SessionResponseStreamRetentionAccounting = responsestream.RetentionAccounting
+
+// NewSessionResponseStream allocates an empty internal response stream owned by
+// one live Factory Session runtime.
+func NewSessionResponseStream() *SessionResponseStream {
+	return responsestream.NewSessionResponseStream()
 }

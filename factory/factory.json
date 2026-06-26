@@ -550,7 +550,7 @@
     {
       "executorProvider": "SCRIPT_WRAP",
       "id": "processor",
-      "modelProvider": "CURSOR",
+      "modelProvider": "CODEX",
       "name": "processor",
       "skipPermissions": true,
       "stopToken": "\u003cCOMPLETE\u003e",

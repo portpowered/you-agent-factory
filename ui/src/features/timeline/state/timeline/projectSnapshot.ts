@@ -2,7 +2,6 @@ import {
   cloneRelationsByWorkID,
   cloneTracesByWorkID,
   cloneWorkRequestsByID,
-  cloneWorkstationDispatchRequestsByID,
 } from "./cloneTimelineSnapshot";
 import { projectRuntime } from "./projectRuntime";
 import { projectTopology } from "./projectTopology";
@@ -45,18 +44,17 @@ export function projectSnapshot(state: ReplayWorldState): WorldState {
     uptime_seconds: state.uptime_seconds,
     relationsByWorkID: cloneRelationsByWorkID(state.relationsByWorkID),
     tracesByWorkID: cloneTracesByWorkID(tracesByWorkID),
-    workstationRequestsByDispatchID: cloneWorkstationDispatchRequestsByID(
-      projectWorkstationDispatchRequestsByID({
-        activeDispatches: state.activeDispatches,
-        completedDispatches: state.completedDispatches,
-        inferenceAttemptsByDispatchID: state.inferenceAttemptsByDispatchID,
-        runtimeRequestsByDispatchID:
-          runtime.workstation_requests_by_dispatch_id ?? {},
-        scriptRequestsByDispatchID: state.scriptRequestsByDispatchID,
-        scriptResponsesByDispatchID: state.scriptResponsesByDispatchID,
-        workRequestsByID: publicWorkRequestsByID,
-      }),
-    ),
+    workstationRequestsByDispatchID: projectWorkstationDispatchRequestsByID({
+      activeDispatches: state.activeDispatches,
+      completedDispatches: state.completedDispatches,
+      inferenceAttemptsByDispatchID: state.inferenceAttemptsByDispatchID,
+      runtimeRequestsByDispatchID:
+        runtime.workstation_requests_by_dispatch_id ?? {},
+      scriptRequestsByDispatchID: state.scriptRequestsByDispatchID,
+      scriptResponsesByDispatchID: state.scriptResponsesByDispatchID,
+      textBlobsByID: state.textBlobsByID,
+      workRequestsByID: publicWorkRequestsByID,
+    }),
     workRequestsByID: publicWorkRequestsByID,
   };
 }

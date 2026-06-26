@@ -516,6 +516,7 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 		OutputSchema:          stringValue(workstation.OutputSchema),
 		OutcomeFormat:         enumStringValue(workstation.OutcomeFormat),
 		Limits:                workstationLimitsInternalFromAPI(workstation.Limits),
+		WorkPropagation:       workPropagationInternalFromAPI(workstation.WorkPropagation),
 		Cron:                  workstationCronInternalFromAPI(workstation.Cron),
 		Inputs:                inputs,
 		Outputs:               outputs,
@@ -556,6 +557,15 @@ func workstationLimitsInternalFromAPI(limits *factoryapi.WorkstationLimits) inte
 	return interfaces.WorkstationLimits{
 		MaxRetries:       intValue(limits.MaxRetries),
 		MaxExecutionTime: stringValue(limits.MaxExecutionTime),
+	}
+}
+
+func workPropagationInternalFromAPI(value *factoryapi.WorkPropagation) *interfaces.WorkPropagationConfig {
+	if value == nil {
+		return nil
+	}
+	return &interfaces.WorkPropagationConfig{
+		Mode: interfaces.WorkPropagationMode(value.Mode),
 	}
 }
 

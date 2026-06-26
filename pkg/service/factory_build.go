@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,6 +44,35 @@ import (
 	cursorprovider "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 	"go.uber.org/zap"
 )
+
+type runtimeBundleBuildInput struct {
+	dir                           string
+	folderPath                    string
+	sessionID                     string
+	cfg                           *FactoryServiceConfig
+	loadedFactoryCfg              *factoryconfig.LoadedFactoryConfig
+	baseLogger                    *zap.Logger
+	runtimeInstanceID             string
+	clock                         factory.Clock
+	recordPath                    string
+	workflowID                    string
+	providerOverride              workers.Provider
+	providerCommandRunner         workers.CommandRunner
+	commandRunnerOverride         workers.CommandRunner
+	additionalFactoryOpts         []factory.FactoryOption
+	prefetchedLocalModels         localModelDomain
+	inferenceProgressPublisher    workerprovider.InferenceProgressPublisher
+	inferenceProgressPublisherSet bool
+}
+
+type liveSessionState struct {
+	bundle                *factoryRuntimeBundle
+	handle                *liveRuntimeHandle
+	spec                  *runtimebuild.SessionBuildSpec
+	javascriptCheckpoints *factorysessions.JavaScriptCheckpointStore
+	responseStreamOnce    sync.Once
+	responseStream        *factorysessions.SessionResponseStream
+}
 
 // BuildFactoryService loads factory.json from the config directory, constructs
 // the petri net, factory runtime, file watcher, and session metrics.
@@ -326,7 +356,7 @@ func buildRuntimeBundle(
 	if err != nil {
 		return nil, err
 	}
-	logger := runtimebuild.NewSessionLogger(logSink.Logger(), sessionID, input.folderPath, input.dir)
+	logger := runtimebuild.NewSessionLogger(runtimeSessionBaseLogger(input.baseLogger, logSink), sessionID, input.folderPath, input.dir)
 	metricsSink, err := buildRuntimeMetricsSink(input.cfg, sessionID, runtimeInstanceID, input.folderPath, input.dir)
 	if err != nil {
 		logger.Warn(
@@ -391,7 +421,7 @@ func loadRuntimeBundleWorkerOptions(
 		logging.NewZapLogger(logger, input.cfg.Verbose),
 		input.cfg.SkipBuiltInRunnerPrerequisiteValidation,
 		input.providerOverride,
-		input.providerCommandRunner,
+		wrapProviderCommandRunnerForProgress(input, input.providerCommandRunner),
 		input.commandRunnerOverride,
 		eventHistory.RecordScriptEvent,
 		eventHistory.RecordInferenceEvent,
@@ -521,11 +551,35 @@ func buildRuntimeLogSink(
 	if cfg == nil {
 		return nil, runtimeInstanceID, fmt.Errorf("factory service config is required to build runtime log sink")
 	}
+	if !runtimeFileLoggingEnabled(cfg.RuntimeFileLoggingPolicy) {
+		return nil, runtimeInstanceID, nil
+	}
 	logSink, err := logging.BuildRuntimeLogger(baseLogger, runtimeInstanceID, cfg.RuntimeLogDir, cfg.RuntimeLogConfig)
 	if err != nil {
 		return nil, runtimeInstanceID, fmt.Errorf("build runtime logger: %w", err)
 	}
 	return logSink, runtimeInstanceID, nil
+}
+
+func runtimeFileLoggingEnabled(policy RuntimeFileLoggingPolicy) bool {
+	switch policy {
+	case "", RuntimeFileLoggingPolicyEnabled:
+		return true
+	case RuntimeFileLoggingPolicyDisabled:
+		return false
+	default:
+		return true
+	}
+}
+
+func runtimeSessionBaseLogger(baseLogger *zap.Logger, logSink *logging.RuntimeLogSink) *zap.Logger {
+	if logSink != nil {
+		return logSink.Logger()
+	}
+	if baseLogger != nil {
+		return baseLogger
+	}
+	return zap.NewNop()
 }
 
 func buildRuntimeMetricsSink(
@@ -1258,6 +1312,7 @@ func newRuntimeBuildService(
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	startupLocalModels *localModelDomain,
+	progressPublisherFactory inferenceProgressPublisherFactory,
 ) *runtimebuild.Service {
 	buildCfg := runtimeBuildConfigFromService(cfg)
 	return runtimebuild.New(
@@ -1281,12 +1336,36 @@ func newRuntimeBuildService(
 				commandRunnerOverride: input.CommandRunnerOverride,
 				additionalFactoryOpts: input.AdditionalFactoryOpts,
 			}
+			if progressPublisherFactory != nil {
+				bundleInput.inferenceProgressPublisher = progressPublisherFactory(bundleInput.sessionID)
+				bundleInput.inferenceProgressPublisherSet = true
+			}
 			if startupLocalModels != nil && startupLocalModels.manager != nil {
 				bundleInput.prefetchedLocalModels = *startupLocalModels
 				*startupLocalModels = localModelDomain{}
 			}
 			return buildRuntimeBundle(ctx, bundleInput)
 		},
+	)
+}
+
+func wrapProviderCommandRunnerForProgress(
+	input runtimeBundleBuildInput,
+	runner workers.CommandRunner,
+) workers.CommandRunner {
+	if !input.inferenceProgressPublisherSet || input.inferenceProgressPublisher == nil {
+		return runner
+	}
+	if runner != nil {
+		return runner
+	}
+	var logger logging.Logger = logging.NoopLogger{}
+	if input.baseLogger != nil {
+		logger = logging.NewZapLogger(input.baseLogger, input.cfg != nil && input.cfg.Verbose)
+	}
+	return workerprovider.NewInferenceProgressPublishingCommandRunner(
+		input.inferenceProgressPublisher,
+		logger,
 	)
 }
 

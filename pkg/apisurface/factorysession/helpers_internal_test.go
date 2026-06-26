@@ -181,11 +181,27 @@ func testDispatchDetailProjectionHelpers(t *testing.T) {
 		t.Fatal("dispatchJavaScriptToAPI(nil) should be nil")
 	}
 	js := dispatchJavaScriptToAPI(&factorysessionexecution.DispatchJavaScriptProjection{
-		TaskKind:  "VERIFY",
-		TaskLabel: " review ",
+		TaskKind:      "VERIFY",
+		TaskLabel:     " review ",
+		ExecutionMode: " live ",
 	})
 	if js == nil || js.TaskLabel == nil || *js.TaskLabel != "review" {
 		t.Fatalf("javascript = %#v", js)
+	}
+	if js.ExecutionMode == nil || *js.ExecutionMode != "live" {
+		t.Fatalf("javascript execution mode = %#v", js)
+	}
+
+	if dispatchStatusTransitionsToAPI(nil) != nil {
+		t.Fatal("dispatchStatusTransitionsToAPI(nil) should be nil")
+	}
+	transitions := dispatchStatusTransitionsToAPI([]factorysessionexecution.DispatchStatus{
+		factorysessionexecution.DispatchStatusQueued,
+		" RUNNING ",
+		"",
+	})
+	if transitions == nil || len(*transitions) != 2 {
+		t.Fatalf("status transitions = %#v", transitions)
 	}
 }
 

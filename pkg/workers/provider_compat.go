@@ -13,6 +13,7 @@ type ProviderErrorCorpusEntry = workerprovider.ProviderErrorCorpusEntry
 type ScriptWrapProvider = workerprovider.ScriptWrapProvider
 type ScriptWrapProviderOption = workerprovider.ScriptWrapProviderOption
 type InferenceEventRecorder = workerprovider.InferenceEventRecorder
+type InferenceProgressPublisher = workerprovider.InferenceProgressPublisher
 type RecordingProvider = workerprovider.RecordingProvider
 type RecordingProviderOption = workerprovider.RecordingProviderOption
 type MockWorkerCommandRunner = mockworker.MockWorkerCommandRunner

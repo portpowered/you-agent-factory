@@ -48,6 +48,7 @@ func Validate(cfg *interfaces.FactoryConfig) Result {
 	result.Targets = append(result.Targets, PollerRunWorkstationKindTargets(cfg)...)
 	result.Targets = append(result.Targets, WorkerWorkstationBehaviorCompatibilityTargets(cfg)...)
 	result.Targets = append(result.Targets, InvocationReturnTargets(cfg)...)
+	result.Targets = append(result.Targets, WorkPropagationTargets(cfg)...)
 	result.Targets = append(result.Targets, missingWorkTypeOutcomeStateTargets(cfg)...)
 	result.Targets = append(result.Targets, missingTerminalCompletionPathTargets(cfg)...)
 
@@ -144,6 +145,47 @@ func invocationReturnTarget(code, field, message string) Target {
 		},
 		Path: fmt.Sprintf("%s.invocationReturn.%s", validationRoot, field),
 	}
+}
+
+// WorkPropagationTargets validates authored workstation payload propagation modes.
+func WorkPropagationTargets(cfg *interfaces.FactoryConfig) []Target {
+	if cfg == nil || len(cfg.Workstations) == 0 {
+		return nil
+	}
+
+	var targets []Target
+	for workstationIndex, workstation := range cfg.Workstations {
+		if workstation.WorkPropagation == nil {
+			continue
+		}
+
+		mode := strings.TrimSpace(string(workstation.WorkPropagation.Mode))
+		switch factoryapi.WorkPropagationMode(mode) {
+		case factoryapi.WorkPropagationModeOutputAsPayload,
+			factoryapi.WorkPropagationModePreserveInput:
+			continue
+		default:
+			basePath := fmt.Sprintf("%s.workstations[%d](%s)", validationRoot, workstationIndex, workstation.Name)
+			targets = append(targets, Target{
+				Code:     CodeWorkstationUnsupportedWorkPropagationMode,
+				Severity: SeverityError,
+				Message: fmt.Sprintf(
+					"unsupported workPropagation.mode %q (supported: %q, %q)",
+					workstation.WorkPropagation.Mode,
+					factoryapi.WorkPropagationModeOutputAsPayload,
+					factoryapi.WorkPropagationModePreserveInput,
+				),
+				Subject: Subject{
+					Type:     SubjectTypeWorkstation,
+					ID:       workstation.Name,
+					Location: SubjectLocationDefinition,
+				},
+				Path: basePath + ".workPropagation.mode",
+			})
+		}
+	}
+
+	return targets
 }
 
 

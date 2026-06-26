@@ -1,14 +1,26 @@
+import type { ReactNode } from "react";
+
 import type { components } from "../../../api/generated/openapi";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 import {
   AlertPanel,
   DashboardHeading,
   DashboardLabel,
+  DashboardStatusPill,
   DashboardText,
 } from "../../../components/ui";
+import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { DetailCopy } from "../../../components/ui/widget-frame";
+import { DispatchDetailContent } from "./dispatch-detail-content";
+import { useFactorySessionDispatchDetail } from "../hooks/use-factory-session-dispatch-detail";
 import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
+import {
+  formatFactoryOrchestratorKind,
+  formatFactorySessionRuntimeStatus,
+  formatFactorySessionScriptStatus,
+} from "../messages/factory-session-runtime-display";
 import { getFactorySessionDetailMessages } from "../messages/factory-session-detail";
+import { useId, useState } from "react";
 
 type FactoryArtifact = components["schemas"]["FactoryArtifact"];
 type FactoryDispatch = components["schemas"]["FactoryDispatch"];
@@ -30,7 +42,10 @@ export function FactorySessionDetailPanel({
   }
 
   return (
-    <section aria-label={messages.selectedSessionHeading} className="grid gap-4">
+    <section
+      aria-label={messages.selectedSessionHeading}
+      className="grid gap-4"
+    >
       <DashboardHeading>{messages.selectedSessionHeading}</DashboardHeading>
       <div className="grid gap-2">
         <DashboardLabel>{messages.sessionIdLabel}</DashboardLabel>
@@ -38,15 +53,15 @@ export function FactorySessionDetailPanel({
       </div>
 
       {detailState.status === "loading" ? (
-        <DetailCopy>{messages.loadingState}</DetailCopy>
+        <StatusNotice>{messages.loadingState}</StatusNotice>
       ) : null}
       {detailState.status === "not-found" ? (
-        <DetailCopy>{messages.missingState}</DetailCopy>
+        <StatusNotice>{messages.missingState}</StatusNotice>
       ) : null}
       {detailState.status === "error" ? (
-        <AlertPanel tone="danger">
+        <StatusNotice tone="error">
           {detailState.message ?? messages.errorState}
-        </AlertPanel>
+        </StatusNotice>
       ) : null}
       {detailState.status === "success" ? (
         <FactorySessionRuntimeSections
@@ -63,6 +78,7 @@ function FactorySessionRuntimeSections({
   locale,
 }: {
   data: {
+    durableLifecycleStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
     partialResult?: components["schemas"]["FactorySessionPartialResult"];
     result?: components["schemas"]["FactorySessionLiveResult"];
     session: components["schemas"]["FactorySession"];
@@ -74,9 +90,20 @@ function FactorySessionRuntimeSections({
 
   return (
     <div className="grid gap-4">
+      <DashboardHeading>{messages.runtimeHeading}</DashboardHeading>
       <div className="grid gap-2 sm:grid-cols-2">
-        <Metric label={messages.orchestratorKindLabel} value={runtime.orchestratorKind} />
-        <Metric label={messages.statusLabel} value={runtime.status} />
+        <Metric
+          label={messages.orchestratorKindLabel}
+          value={formatFactoryOrchestratorKind(runtime.orchestratorKind, locale)}
+        />
+        <Metric
+          label={messages.statusLabel}
+          value={formatFactorySessionRuntimeStatus(
+            runtime.status,
+            data.durableLifecycleStatus,
+            locale,
+          )}
+        />
       </div>
 
       {runtime.orchestratorKind === FactoryOrchestratorKind.JAVASCRIPT ? (
@@ -111,9 +138,12 @@ function JavaScriptSessionProjection({
   result?: components["schemas"]["FactorySessionLiveResult"];
 }) {
   const messages = getFactorySessionDetailMessages(locale);
+  const [selectedDispatchID, setSelectedDispatchID] = useState<string | null>(
+    null,
+  );
 
   if (!javascript) {
-    return <DetailCopy>{messages.dynamicWorkflowShorthand}</DetailCopy>;
+    return <DetailCopy>{messages.javascriptProjectionMissingState}</DetailCopy>;
   }
 
   const warnings = (dispatches ?? []).flatMap(
@@ -122,14 +152,13 @@ function JavaScriptSessionProjection({
 
   return (
     <div className="grid gap-4">
-      <DetailCopy>{messages.dynamicWorkflowShorthand}</DetailCopy>
       <div className="grid gap-2 sm:grid-cols-2">
         {javascript.phase ? (
           <Metric label={messages.phaseLabel} value={javascript.phase} />
         ) : null}
         <Metric
           label={messages.scriptStatusLabel}
-          value={javascript.scriptStatus}
+          value={formatFactorySessionScriptStatus(javascript.scriptStatus, locale)}
         />
         <Metric
           label={messages.childDispatchCountsLabel}
@@ -137,7 +166,10 @@ function JavaScriptSessionProjection({
         />
       </div>
       {javascript.phases.length > 0 ? (
-        <Metric label={messages.phasesLabel} value={javascript.phases.join(", ")} />
+        <Metric
+          label={messages.phasesLabel}
+          value={javascript.phases.join(", ")}
+        />
       ) : null}
 
       {javascript.checkpoints && javascript.checkpoints.length > 0 ? (
@@ -148,11 +180,24 @@ function JavaScriptSessionProjection({
       ) : null}
 
       {artifacts && artifacts.length > 0 ? (
-        <ArtifactList artifacts={artifacts} heading={messages.artifactsHeading} />
+        <ArtifactList
+          artifacts={artifacts}
+          heading={messages.artifactsHeading}
+        />
       ) : null}
 
       {warnings.length > 0 ? (
         <WarningList heading={messages.warningsHeading} warnings={warnings} />
+      ) : null}
+
+      {dispatches && dispatches.length > 0 ? (
+        <DispatchSummaryList
+          dispatches={dispatches}
+          locale={locale}
+          selectedDispatchID={selectedDispatchID}
+          setSelectedDispatchID={setSelectedDispatchID}
+          sessionID={result?.sessionId ?? partialResult?.sessionId}
+        />
       ) : null}
 
       {result?.resultArtifactRef ? (
@@ -167,6 +212,158 @@ function JavaScriptSessionProjection({
           value={formatArtifactRef(partialResult.partialResultArtifactRef)}
         />
       ) : null}
+    </div>
+  );
+}
+
+function DispatchSummaryList({
+  dispatches,
+  locale,
+  selectedDispatchID,
+  sessionID,
+  setSelectedDispatchID,
+}: {
+  dispatches: FactoryDispatch[];
+  locale?: string;
+  selectedDispatchID: string | null;
+  sessionID?: string;
+  setSelectedDispatchID: (dispatchID: string | null) => void;
+}) {
+  const messages = getFactorySessionDetailMessages(locale);
+
+  return (
+    <section className="grid gap-3">
+      <DashboardLabel>{messages.dispatchesHeading}</DashboardLabel>
+      <DetailCopy>{messages.dispatchSelectionHint}</DetailCopy>
+      <div className="grid gap-3">
+        {dispatches.map((dispatch) => (
+          <DispatchSummaryRow
+            dispatch={dispatch}
+            expanded={selectedDispatchID === dispatch.id}
+            key={dispatch.id}
+            locale={locale}
+            onToggle={(expanded) =>
+              setSelectedDispatchID(expanded ? dispatch.id : null)
+            }
+            sessionID={sessionID ?? dispatch.sessionId}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DispatchSummaryRow({
+  dispatch,
+  expanded,
+  locale,
+  onToggle,
+  sessionID,
+}: {
+  dispatch: FactoryDispatch;
+  expanded: boolean;
+  locale?: string;
+  onToggle: (expanded: boolean) => void;
+  sessionID: string;
+}) {
+  const messages = getFactorySessionDetailMessages(locale);
+  const detailRegionID = useId();
+  const detailState = useFactorySessionDispatchDetail(
+    sessionID,
+    expanded ? dispatch.id : null,
+  );
+  const dispatchLabel = dispatch.label?.trim() || dispatch.id;
+
+  return (
+    <article className="grid gap-3 rounded-lg border border-outline bg-surface-container-low p-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="grid min-w-0 gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <DashboardLabel>{dispatchLabel}</DashboardLabel>
+            <DashboardStatusPill size="compact">
+              {dispatch.status}
+            </DashboardStatusPill>
+          </div>
+          <DashboardText
+            as="div"
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 text-on-surface-subtle"
+            variant="supporting"
+          >
+            <span>{dispatch.dispatchKind}</span>
+            <span>{dispatch.id}</span>
+          </DashboardText>
+        </div>
+        <ExpandablePanelTrigger
+          aria-label={
+            expanded
+              ? messages.collapseDispatchDetailLabel(dispatch.id)
+              : messages.expandDispatchDetailLabel(dispatch.id)
+          }
+          controlsID={detailRegionID}
+          expanded={expanded}
+          onClick={() => onToggle(!expanded)}
+          variant="compact"
+        >
+          {messages.dispatchDetailHeading}
+        </ExpandablePanelTrigger>
+      </div>
+
+      {expanded ? (
+        <DispatchDetailState
+          detailRegionID={detailRegionID}
+          locale={locale}
+          state={detailState}
+        />
+      ) : null}
+    </article>
+  );
+}
+
+function DispatchDetailState({
+  detailRegionID,
+  locale,
+  state,
+}: {
+  detailRegionID: string;
+  locale?: string;
+  state: ReturnType<typeof useFactorySessionDispatchDetail>;
+}) {
+  const messages = getFactorySessionDetailMessages(locale);
+
+  if (state.status === "loading") {
+    return (
+      <DetailCopy id={detailRegionID}>
+        {messages.dispatchDetailLoadingState}
+      </DetailCopy>
+    );
+  }
+
+  if (state.status === "not-found") {
+    return (
+      <DetailCopy id={detailRegionID}>
+        {messages.dispatchDetailMissingState}
+      </DetailCopy>
+    );
+  }
+
+  if (state.status === "error") {
+    return (
+      <AlertPanel id={detailRegionID} tone="danger">
+        {state.message ?? messages.dispatchDetailErrorState}
+      </AlertPanel>
+    );
+  }
+
+  if (state.status !== "success") {
+    return null;
+  }
+
+  return (
+    <div
+      className="grid gap-3 border-t border-outline pt-3"
+      id={detailRegionID}
+    >
+      <DispatchDetailContent data={state.data} locale={locale} />
     </div>
   );
 }
@@ -222,7 +419,9 @@ function CheckpointRefList({
         {checkpoints.map((checkpoint) => (
           <li key={checkpoint.id}>
             <DashboardText>
-              {checkpoint.label ? `${checkpoint.id} (${checkpoint.label})` : checkpoint.id}
+              {checkpoint.label
+                ? `${checkpoint.id} (${checkpoint.label})`
+                : checkpoint.id}
               {checkpoint.summary ? ` — ${checkpoint.summary}` : ""}
             </DashboardText>
           </li>
@@ -283,6 +482,24 @@ function Metric({ label, value }: { label: string; value: string }) {
       <DashboardLabel>{label}</DashboardLabel>
       <DashboardText>{value}</DashboardText>
     </div>
+  );
+}
+
+function StatusNotice({
+  children,
+  tone = "default",
+}: {
+  children: ReactNode;
+  tone?: "default" | "error";
+}) {
+  return (
+    <AlertPanel
+      radius="lg"
+      role={tone === "error" ? "alert" : "status"}
+      tone={tone === "error" ? "danger" : "info"}
+    >
+      {children}
+    </AlertPanel>
   );
 }
 

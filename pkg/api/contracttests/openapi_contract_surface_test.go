@@ -674,7 +674,7 @@ func assertErrorSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	if !ok {
 		t.Fatalf("components.schemas.ErrorResponse.properties.code.enum is missing")
 	}
-	for _, code := range []string{"BAD_REQUEST", "INVALID_FACTORY_NAME", "FACTORY_ALREADY_EXISTS", "INVALID_FACTORY", "FACTORY_NOT_IDLE", "EXECUTION_REQUEST_ID_CONFLICT", "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED", "NOT_FOUND", "INTERNAL_ERROR"} {
+	for _, code := range []string{"BAD_REQUEST", "FACTORY_SESSION_CONFIG_LOAD_FAILED", "INVALID_FACTORY_NAME", "FACTORY_ALREADY_EXISTS", "INVALID_FACTORY", "FACTORY_NOT_IDLE", "EXECUTION_REQUEST_ID_CONFLICT", "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED", "NOT_FOUND", "INTERNAL_ERROR"} {
 		if !containsString(codeEnum, code) {
 			t.Fatalf("components.schemas.ErrorResponse.properties.code.enum is missing %q", code)
 		}
