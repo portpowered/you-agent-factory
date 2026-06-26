@@ -330,6 +330,31 @@ func assertTextOmitsRetiredEventNames(t *testing.T, text string) {
 	}
 }
 
+func assertTextOmitsInternalResponseStreamTerms(t *testing.T, text string) {
+	t.Helper()
+
+	forbiddenTerms := []string{
+		"SessionResponseStream",
+		"SessionResponseStreamEvent",
+		"SessionResponseStreamEventKind",
+		"ExternalEventType",
+		"CompactionSummary",
+		"CompactionReason",
+		"STREAM_COMPACTION_SIGNAL",
+		"PROGRESS_FRAGMENT",
+		"RESPONSE_FRAGMENT",
+		"response.completed",
+		"response.output_text.delta",
+		"response.failed",
+		"session.created",
+	}
+	for _, forbidden := range forbiddenTerms {
+		if strings.Contains(text, forbidden) {
+			t.Fatalf("unexpected internal response-stream term %q in public artifact text", forbidden)
+		}
+	}
+}
+
 func stringPtr(value string) *string {
 	return &value
 }

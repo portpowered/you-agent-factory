@@ -88,6 +88,10 @@ type SessionResponseStreamReadResult = responsestream.ReadResult
 // stream subscribers that resume after truncation or coalescing.
 type SessionResponseStreamCompactionSummary = responsestream.CompactionSummary
 
+// SessionResponseStreamEventType identifies provider-neutral internal response
+// stream event semantics.
+type SessionResponseStreamEventType = responsestream.EventType
+
 // SessionResponseStreamRetentionLimits documents bounded-retention controls for
 // one internal session response stream.
 type SessionResponseStreamRetentionLimits = responsestream.RetentionLimits

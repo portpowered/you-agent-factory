@@ -52,6 +52,26 @@ func TestOpenAPIContract_GeneratedModelsOmitLegacyConfig(t *testing.T) {
 	}
 }
 
+func TestOpenAPIContract_PublicArtifactsOmitInternalResponseStreamTerms(t *testing.T) {
+	paths := []string{
+		"../../../api/openapi.yaml",
+		"../generated/server.gen.go",
+		"../../generatedclient/client.gen.go",
+		"../../../ui/src/api/generated/openapi.ts",
+	}
+
+	for _, path := range paths {
+		path := path
+		t.Run(path, func(t *testing.T) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read public artifact %s: %v", path, err)
+			}
+			assertTextOmitsInternalResponseStreamTerms(t, string(data))
+		})
+	}
+}
+
 func TestOpenAPIContract_RunRequestPayloadValidatesFactoryConfig(t *testing.T) {
 	doc := loadValidatedOpenAPIContract(t)
 	schema := doc.Components.Schemas["RunRequestEventPayload"].Value

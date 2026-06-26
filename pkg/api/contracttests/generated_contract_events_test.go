@@ -168,6 +168,24 @@ func TestGeneratedFactoryInferenceResponseEvent_UsesCanonicalPublicFieldsOnly(t 
 	assertJSONKeysAbsent(t, providerDiagnostics, "generated provider diagnostics payload", "providerSessionRef", "timestamp_ms", "model_call_id")
 }
 
+func TestGeneratedPublicEventArtifactsOmitInternalResponseStreamTerms(t *testing.T) {
+	paths := []string{
+		filepath.FromSlash("../testdata/canonical-event-vocabulary-stream.json"),
+		filepath.FromSlash("../../replay/testdata/inference-events.replay.json"),
+	}
+
+	for _, path := range paths {
+		path := path
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read %s: %v", path, err)
+			}
+			assertTextOmitsInternalResponseStreamTerms(t, string(data))
+		})
+	}
+}
+
 func TestGeneratedInferenceEventJSONRoundTripPreservesAttemptCorrelation(t *testing.T) {
 	event := decodeFactoryEventJSON(t, `{
 		"schemaVersion": "agent-factory.event.v1",
@@ -901,6 +919,7 @@ func assertEventPayloadJSONOmitsKeys(t *testing.T, event factoryapi.FactoryEvent
 			t.Fatalf("generated event payload must not reintroduce payload.%s: %#v", key, payloadJSON)
 		}
 	}
+	assertTextOmitsInternalResponseStreamTerms(t, string(encoded))
 }
 
 func assertGeneratedWorkRequestEventContext(t *testing.T, event factoryapi.FactoryEvent) {

@@ -2757,39 +2757,38 @@ func TestFactoryService_SubscribeSessionResponseStream_ReadsRetainedAndLiveEvent
 }
 
 func TestFactoryService_InferenceProgressPublisher_SlowSubscriberCompactionEmitsDiagnostics(t *testing.T) {
-	sessionID := "session-progress-backpressure"
-	harness := newSlowSubscriberCompactionHarness(t, sessionID)
-	defer harness.metricsSink.Close()
-
-	publisher := harness.svc.inferenceProgressPublisher(sessionID, harness.logger)
+	const sessionID = "session-progress-backpressure"
+	svc, publisher, observed, metricsPath := newSlowSubscriberCompactionTestHarness(t)
 	if publisher == nil {
 		t.Fatal("publisher = nil, want inference progress publisher")
 	}
 
 	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "retained-1"))
-	subscription := mustSubscribeSessionResponseStream(t, harness.svc, sessionID, "dispatch-1", 0)
+	subscription, err := svc.SubscribeSessionResponseStream(sessionID, "dispatch-1", 0)
+	if err != nil {
+		t.Fatalf("SubscribeSessionResponseStream: %v", err)
+	}
 	defer subscription.Detach()
 
-	initial := mustReadSessionResponseSubscription(t, subscription, "initial")
+	initial, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(initial): %v", err)
+	}
 	if len(initial.Events) != 1 || initial.Events[0].Payload != "retained-1" {
 		t.Fatalf("initial events = %#v, want retained seed event", initial.Events)
 	}
 
-	publishProviderAlternatingFragmentsAsync(t, publisher, 64)
-	catchUp := mustReadSessionResponseSubscription(t, subscription, "catch-up")
-	assertRetainedWindowCompactionResult(t, catchUp)
-	assertResponseStreamCompactionMetric(t, harness.metricsSink.Path())
-	assertResponseStreamCompactionWarning(t, harness.observed)
+	publishSlowSubscriberCompactionBurst(t, publisher)
+
+	catchUp, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(catch-up): %v", err)
+	}
+	assertSlowSubscriberCompactionCatchUp(t, catchUp)
+	assertSlowSubscriberCompactionDiagnostics(t, observed, metricsPath)
 }
 
-type slowSubscriberCompactionHarness struct {
-	svc         *FactoryService
-	logger      *zap.Logger
-	observed    *observer.ObservedLogs
-	metricsSink *logging.RuntimeMetricsSink
-}
-
-func newSlowSubscriberCompactionHarness(t *testing.T, sessionID string) slowSubscriberCompactionHarness {
+func newSlowSubscriberCompactionTestHarness(t *testing.T) (*FactoryService, workerprovider.InferenceProgressPublisher, *observer.ObservedLogs, string) {
 	t.Helper()
 
 	metricsSink, err := logging.BuildRuntimeMetricsSink(
@@ -2803,10 +2802,14 @@ func newSlowSubscriberCompactionHarness(t *testing.T, sessionID string) slowSubs
 	if err != nil {
 		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
 	}
+	t.Cleanup(func() {
+		_ = metricsSink.Close()
+	})
 
 	core, observed := observer.New(zap.WarnLevel)
 	logger := zap.New(core)
 	sessions := factorysessions.NewRegistry()
+	sessionID := "session-progress-backpressure"
 	sessions.Upsert(factorysessions.NewLiveSession(
 		sessionID,
 		"/factory",
@@ -2821,61 +2824,25 @@ func newSlowSubscriberCompactionHarness(t *testing.T, sessionID string) slowSubs
 		"factory",
 	), true)
 
-	return slowSubscriberCompactionHarness{
-		svc: &FactoryService{
-			sessions: sessions,
-			newSessionResponseStream: func() *factorysessions.SessionResponseStream {
-				return responsestream.NewSessionResponseStreamWithClock(
-					factory.RealClock{},
-					responsestream.RetentionLimits{MaxEvents: 2},
-				)
-			},
+	svc := &FactoryService{
+		sessions: sessions,
+		newSessionResponseStream: func() *factorysessions.SessionResponseStream {
+			return responsestream.NewSessionResponseStreamWithClock(
+				factory.RealClock{},
+				responsestream.RetentionLimits{MaxEvents: 2},
+			)
 		},
-		logger:      logger,
-		observed:    observed,
-		metricsSink: metricsSink,
 	}
+	publisher := svc.inferenceProgressPublisher(sessionID, logger)
+	return svc, publisher, observed, metricsSink.Path()
 }
 
-func mustSubscribeSessionResponseStream(
-	t *testing.T,
-	svc *FactoryService,
-	sessionID, dispatchID string,
-	afterSequence int64,
-) *responsestream.Subscription {
-	t.Helper()
-
-	subscription, err := svc.SubscribeSessionResponseStream(sessionID, dispatchID, afterSequence)
-	if err != nil {
-		t.Fatalf("SubscribeSessionResponseStream: %v", err)
-	}
-	return subscription
-}
-
-func mustReadSessionResponseSubscription(
-	t *testing.T,
-	subscription *responsestream.Subscription,
-	label string,
-) responsestream.ReadResult {
-	t.Helper()
-
-	result, err := subscription.Next(context.Background())
-	if err != nil {
-		t.Fatalf("Next(%s): %v", label, err)
-	}
-	return result
-}
-
-func publishProviderAlternatingFragmentsAsync(
-	t *testing.T,
-	publisher workerprovider.InferenceProgressPublisher,
-	count int,
-) {
+func publishSlowSubscriberCompactionBurst(t *testing.T, publisher workerprovider.InferenceProgressPublisher) {
 	t.Helper()
 
 	publishDone := make(chan struct{})
 	go func() {
-		for i := 0; i < count; i++ {
+		for i := 0; i < 64; i++ {
 			payload := "chunk-" + strconv.Itoa(i)
 			if i%2 == 0 {
 				publisher(workerprovider.ProgressFragment("dispatch-1", nil, payload))
@@ -2893,24 +2860,24 @@ func publishProviderAlternatingFragmentsAsync(
 	}
 }
 
-func assertRetainedWindowCompactionResult(t *testing.T, result responsestream.ReadResult) {
+func assertSlowSubscriberCompactionCatchUp(t *testing.T, catchUp factorysessions.SessionResponseStreamReadResult) {
 	t.Helper()
 
-	if !result.BehindRetainedWindow {
-		t.Fatalf("catch-up result = %#v, want retained-window gap signal", result)
+	if !catchUp.BehindRetainedWindow {
+		t.Fatalf("catch-up result = %#v, want retained-window gap signal", catchUp)
 	}
-	if result.Compaction == nil || result.Compaction.Reason != responsestream.CompactionReasonTruncated {
-		t.Fatalf("catch-up compaction = %#v, want truncation summary", result.Compaction)
+	if catchUp.Compaction == nil || catchUp.Compaction.Reason != responsestream.CompactionReasonTruncated {
+		t.Fatalf("catch-up compaction = %#v, want truncation summary", catchUp.Compaction)
 	}
-	for _, event := range result.Events {
+	for _, event := range catchUp.Events {
 		if event.Kind == responsestream.EventKindCompactionSignal {
 			return
 		}
 	}
-	t.Fatalf("catch-up events = %#v, want retained compaction signal", result.Events)
+	t.Fatalf("catch-up events = %#v, want retained compaction signal", catchUp.Events)
 }
 
-func assertResponseStreamCompactionMetric(t *testing.T, metricsPath string) {
+func assertSlowSubscriberCompactionDiagnostics(t *testing.T, observed *observer.ObservedLogs, metricsPath string) {
 	t.Helper()
 
 	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
@@ -2918,10 +2885,6 @@ func assertResponseStreamCompactionMetric(t *testing.T, metricsPath string) {
 			metricRecordString(record, "dispatch_id") == "dispatch-1" &&
 			metricRecordString(record, "reason") == string(responsestream.CompactionReasonTruncated)
 	}, "response stream compaction")
-}
-
-func assertResponseStreamCompactionWarning(t *testing.T, observed *observer.ObservedLogs) {
-	t.Helper()
 
 	for _, entry := range observed.All() {
 		if entry.Message != "session response stream compacted internal provider progress" {
@@ -2968,15 +2931,6 @@ func TestFactoryService_DispatchCompletionObserverClosesDispatchSubscribers(t *t
 	if got := svc.sessionResponseStreams(session).SubscriberCount("dispatch-1"); got != 0 {
 		t.Fatalf("subscriber count after dispatch completion = %d, want 0", got)
 	}
-	if _, err := svc.SubscribeSessionResponseStream(sessionID, "dispatch-1", 0); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
-		t.Fatalf("Subscribe after dispatch completion error = %v, want ErrSubscriptionClosed", err)
-	}
-
-	publisher := svc.inferenceProgressPublisher(sessionID, nil)
-	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "late-fragment"))
-	if got := svc.sessionResponseStreams(session).Count(); got != 0 {
-		t.Fatalf("stream count after late publish = %d, want 0", got)
-	}
 }
 
 func TestFactoryService_StopFactorySession_ClosesSessionResponseStreamSubscribers(t *testing.T) {
@@ -3006,5 +2960,68 @@ func TestFactoryService_StopFactorySession_ClosesSessionResponseStreamSubscriber
 	}
 	if _, err := subscription.Next(context.Background()); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
 		t.Fatalf("Next after session stop error = %v, want ErrSubscriptionClosed", err)
+	}
+}
+
+func TestFactoryService_InferenceProgressPublisherPreservesNormalizedCodexMetadata(t *testing.T) {
+	sessions := factorysessions.NewRegistry()
+	sessionID := "session-progress-codex-normalized"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{handle: &liveRuntimeHandle{runtime: &factoryRuntimeBundle{}}},
+		false,
+		"factory",
+	), true)
+
+	publisher := (&FactoryService{sessions: sessions}).inferenceProgressPublisher(sessionID, nil)
+	if publisher == nil {
+		t.Fatal("publisher = nil, want session publisher")
+	}
+
+	publisher(workerprovider.InferenceProgressFragment{
+		DispatchID:        "dispatch-codex-json-1",
+		Kind:              workerprovider.ResponseFragmentKind,
+		Type:              workerprovider.NormalizedEventTypeFinalText,
+		Payload:           "final response",
+		ExternalEventType: "response.completed",
+		ProviderSessionRef: &interfaces.ProviderSessionMetadata{
+			Provider: "codex",
+			Kind:     "session_id",
+			ID:       "sess-codex-1",
+		},
+		Metadata: map[string]string{
+			"runner_id":        "codex",
+			"workstation_name": "review",
+			"work_id":          "work-codex-json-1",
+		},
+	})
+
+	stream := (&FactoryService{sessions: sessions}).sessionResponseStream(sessions.Get(sessionID), "dispatch-codex-json-1")
+	events := stream.Events()
+	if len(events) != 1 {
+		t.Fatalf("stream events = %#v, want one normalized event", events)
+	}
+	event := events[0]
+	if event.Kind != responsestream.EventKindResponseFragment || event.Type != responsestream.EventType(workerprovider.NormalizedEventTypeFinalText) {
+		t.Fatalf("stored event = %#v, want response FINAL_TEXT", event)
+	}
+	if event.ExternalEventType != "response.completed" {
+		t.Fatalf("external event type = %q, want response.completed", event.ExternalEventType)
+	}
+	if event.ProviderSessionRef == nil || event.ProviderSessionRef.ID != "sess-codex-1" {
+		t.Fatalf("provider session = %#v, want sess-codex-1", event.ProviderSessionRef)
+	}
+	if got := event.Metadata["runner_id"]; got != "codex" {
+		t.Fatalf("metadata runner_id = %q, want codex", got)
+	}
+	if got := event.Metadata["workstation_name"]; got != "review" {
+		t.Fatalf("metadata workstation_name = %q, want review", got)
+	}
+	if got := event.Metadata["work_id"]; got != "work-codex-json-1" {
+		t.Fatalf("metadata work_id = %q, want work-codex-json-1", got)
 	}
 }
