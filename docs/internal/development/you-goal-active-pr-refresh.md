@@ -7,11 +7,15 @@ open `@you/goal` PR batch after the recent merges.
 
 ## Current Open PR Set
 
-The active batch is limited to the still-open `@you/goal` heads returned by
-`gh pr list --search 'you-goal in:title,head' --state open`: `#854`, `#856`,
-and `#859`. No other open PR head currently matches the remaining
-`@you/goal` lane, so this refresh does not re-add completed work to the active
-set.
+The raw source query `gh pr list --search 'you-goal in:title,head' --state
+open` currently returns four PRs: `#854`, `#856`, `#859`, and this refresh PR
+`#874`.
+
+This artifact tracks the remaining maintainer work batch rather than the
+refresh artifact PR itself, so it intentionally excludes `#874` from the table
+below. The exclusion rule is: keep the raw query result as evidence, but only
+list the still-open `@you/goal` implementation PRs whose blockers or merge
+ordering this refresh is meant to coordinate.
 
 | PR | Branch | Current merge state | Latest blocker | Recommended next action |
 | --- | --- | --- | --- | --- |
