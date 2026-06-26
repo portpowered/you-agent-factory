@@ -1146,6 +1146,29 @@ describe("worker modelProvider validation", () => {
     });
     expect(normalized.guards?.[0]?.modelProvider).toBe(modelProvider);
   });
+
+  it("accepts exact invocation placeholders for worker modelProvider when the signature declares the parameter", () => {
+    const normalized = normalizeFactoryDefinition({
+      invocationSignature: {
+        parameters: [
+          {
+            bindings: [{ kind: "NAMED" }],
+            name: "provider",
+          },
+        ],
+      },
+      name: "provider-factory",
+      workers: [
+        {
+          modelProvider: "${provider}",
+          name: "writer",
+          type: "MODEL_WORKER",
+        },
+      ],
+    });
+
+    expect(normalized.workers?.[0]?.modelProvider).toBe("${provider}");
+  });
 });
 
 describe("normalizeFactoryDefinition work type handlingBehavior", () => {

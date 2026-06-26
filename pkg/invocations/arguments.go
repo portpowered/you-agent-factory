@@ -17,6 +17,7 @@ type ArgumentSourceKind string
 const (
 	ArgumentSourceKindPositional           ArgumentSourceKind = "POSITIONAL"
 	ArgumentSourceKindNamed                ArgumentSourceKind = "NAMED"
+	ArgumentSourceKindStructured           ArgumentSourceKind = "STRUCTURED"
 	ArgumentSourceKindStdin                ArgumentSourceKind = "STDIN"
 	ArgumentSourceKindDefault              ArgumentSourceKind = "DEFAULT"
 	ArgumentSourceKindCompatibilityText    ArgumentSourceKind = "COMPATIBILITY_TEXT"
@@ -62,6 +63,7 @@ type NormalizeArgumentsInput struct {
 	Signature            *interfaces.InvocationSignatureConfig
 	PositionalArgs       []string
 	NamedArgs            []NamedArgumentInput
+	DirectArgs           []NamedArgumentInput
 	StdinText            *string
 	CompatibilityText    *string
 	CompatibilityContent []interfaces.WorkContentPart
@@ -233,6 +235,9 @@ func normalizeSignatureArguments(input NormalizeArgumentsInput) (NormalizedArgum
 		return NormalizedArguments{}, err
 	}
 	if err := applyNamedArguments(index, input.NamedArgs, &state); err != nil {
+		return NormalizedArguments{}, err
+	}
+	if err := applyDirectArguments(index, input.DirectArgs, &state); err != nil {
 		return NormalizedArguments{}, err
 	}
 	if err := applyStdinArgument(index, input.StdinText, &state); err != nil {
@@ -425,6 +430,49 @@ func applyNamedArguments(index signatureIndex, namedArgs []NamedArgumentInput, s
 				values = append(values, fmt.Sprintf("%s=%s", key, value))
 			}
 			if err := addArgumentValues(state.arguments, def, values, ArgumentSource{Kind: ArgumentSourceKindNamed, Name: key}); err != nil {
+				return err
+			}
+		default:
+			return newArgumentError(ArgumentErrorCodeInvalidActiveSignature, "invocationSignature unknownNamedArgumentPolicy is invalid", "", key)
+		}
+	}
+	return nil
+}
+
+func applyDirectArguments(index signatureIndex, directArgs []NamedArgumentInput, state *normalizationState) error {
+	for _, direct := range directArgs {
+		key := strings.TrimSpace(direct.Key)
+		if key == "" {
+			continue
+		}
+		paramName, ok := index.namedByKey[key]
+		if ok {
+			def := index.parameters[paramName]
+			if err := addArgumentValues(state.arguments, def, direct.Values, ArgumentSource{Kind: ArgumentSourceKindStructured, Name: key}); err != nil {
+				return err
+			}
+			continue
+		}
+		switch index.unknownPolicy {
+		case "", string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyReject):
+			return &ArgumentError{
+				Code:       ArgumentErrorCodeUnknownArgument,
+				Message:    fmt.Sprintf("unknown named argument %q", key),
+				Argument:   key,
+				SourceKind: ArgumentSourceKindStructured,
+			}
+		case string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyAllow):
+			state.unknown[key] = append(state.unknown[key], slices.Clone(direct.Values)...)
+		case string(factoryapi.FactoryInvocationUnknownNamedArgumentPolicyCollect):
+			def, ok := index.parameters[index.namedRest]
+			if !ok {
+				return newArgumentError(ArgumentErrorCodeInvalidActiveSignature, "invocationSignature COLLECT policy requires a NAMED_REST parameter", "", key)
+			}
+			values := make([]string, 0, len(direct.Values))
+			for _, value := range direct.Values {
+				values = append(values, fmt.Sprintf("%s=%s", key, value))
+			}
+			if err := addArgumentValues(state.arguments, def, values, ArgumentSource{Kind: ArgumentSourceKindStructured, Name: key}); err != nil {
 				return err
 			}
 		default:

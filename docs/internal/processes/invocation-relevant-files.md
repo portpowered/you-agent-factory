@@ -62,11 +62,14 @@ primary-result behavior.
   `pkg/service/model_catalog.go` (`resolveSessionInvocationInput`). Keep API
   `InvocationRequest.content` compatibility handling and
   `InvocationRequest.args` signature handling as thin adapters into
-  `pkg/invocations.NormalizeArguments`; do not duplicate required-input,
-  source-conflict, alias, or string-shape rules in HTTP handlers. When
-  signature-backed runtime behavior needs per-invocation authored-field
-  interpolation, carry the normalized argument set on runtime-only
-  `interfaces.InvocationArguments` metadata and validate it through
+  `pkg/invocations.NormalizeArguments`; API structured args should use the
+  direct structured-argument carrier rather than being reinterpreted as CLI
+  named flags, so canonical parameter-name keys still work for positional-only
+  or stdin-bound parameters. Do not duplicate required-input, source-conflict,
+  alias, or string-shape rules in HTTP handlers. When signature-backed runtime
+  behavior needs per-invocation authored-field interpolation, carry the
+  normalized argument set on runtime-only `interfaces.InvocationArguments`
+  metadata and validate it through
   `invocations.ValidateInvocationInterpolation` before submitting work. Treat
   `args: {}` as an explicit structured invocation request, not as omitted args,
   so all-optional or defaulted signatures stay transport-equivalent with CLI
@@ -293,4 +296,11 @@ primary-result behavior.
 - `docs/reference/config.md` and `docs/reference/sessions.md` are the packaged
   `you docs` reference topics for invocation input sources, return policy, and
   the session-scoped invocation API.
+- Dashboard current-factory decoding for signature-backed invocation widgets
+  lives in `ui/src/api/factory-definition/api.ts` and
+  `ui/src/api/current-factory-definition/api.test.ts`; keep exact
+  `${parameter}` placeholders accepted on invocation-interpolated enum-backed
+  authored fields when the current factory payload also declares that parameter
+  in `invocationSignature`, or live session pages will fall back to legacy UI
+  flows even when backend runtime validation already accepts the factory.
 - Managed-runtime invocation readiness gating lives in `pkg/modelhost/managed_runtime_compat.go` (`EnsureInvocationReady`) and `pkg/apisurface/managed_runtime_invocation.go`; direct model invocation wires through `pkg/service/model_catalog.go` and factory worker execution through `pkg/modelhost/execution.go` (`LeaseExecution.WrapRunner`) when a process-wide host is configured, otherwise `pkg/localmodels/runtime.go` manager fallback. `EnsureInvocationReady` consumes live host readiness via `InspectReadiness` so supervised loading and crash outcomes gate invocation. Supervised leases pass `lease.Endpoint` into `localmodels.LoadRequest.ServingEndpoint` for host-owned HTTP execution. Process-wide local-runtime ownership and lease boundaries belong in `pkg/modelhost`; keep `pkg/localmodels` as the managed-runtime catalog compatibility projection layer. Model host operator diagnostics for pull/load/lease/unload/crash paths live in `pkg/modelhost/diagnostics.go`; see `docs/architecture/model-host.md`. Focused modelhost lease coverage for INFERENCE_WORKER/INFERENCE_RUN lives in `pkg/service/inference_modelhost_test.go`.

@@ -446,11 +446,12 @@ func resolveSessionInvocationInput(
 	if err != nil {
 		return resolvedSessionInvocationInput{}, err
 	}
-	namedArgs, err := sessionInvocationNamedArgs(request)
+	directArgs, err := sessionInvocationStructuredArgs(request)
 	if err != nil {
 		return resolvedSessionInvocationInput{}, err
 	}
 	argsProvided := request.Args != nil
+	signature := invocationSignatureFromFactoryConfig(cfg)
 
 	if !argsProvided {
 		if len(content) == 0 {
@@ -475,10 +476,17 @@ func resolveSessionInvocationInput(
 			NormalizedArguments: &normalized,
 		}, nil
 	}
+	if signature == nil {
+		return resolvedSessionInvocationInput{}, &invocations.ArgumentError{
+			Code:     invocations.ArgumentErrorCodeInvalidActiveSignature,
+			Message:  "named arguments require a factory invocationSignature",
+			Argument: firstStructuredArgumentKey(directArgs),
+		}
+	}
 
 	normalized, err := invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
-		Signature:            invocationSignatureFromFactoryConfig(cfg),
-		NamedArgs:            namedArgs,
+		Signature:            signature,
+		DirectArgs:           directArgs,
 		CompatibilityContent: content,
 	})
 	if err != nil {
@@ -508,15 +516,22 @@ func sessionInvocationCompatibilityContent(request factoryapi.InvocationRequest)
 	return workcontent.PartsFromGenerated(request.Content), nil
 }
 
-func sessionInvocationNamedArgs(request factoryapi.InvocationRequest) ([]invocations.NamedArgumentInput, error) {
+func sessionInvocationStructuredArgs(request factoryapi.InvocationRequest) ([]invocations.NamedArgumentInput, error) {
 	if request.Args == nil {
 		return nil, nil
 	}
-	namedArgs, err := invocations.NamedArgumentInputsFromAnyMap(*request.Args)
+	directArgs, err := invocations.NamedArgumentInputsFromAnyMap(*request.Args)
 	if err != nil {
 		return nil, &apisurface.RequestValidationError{Message: err.Error()}
 	}
-	return namedArgs, nil
+	return directArgs, nil
+}
+
+func firstStructuredArgumentKey(arguments []invocations.NamedArgumentInput) string {
+	if len(arguments) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(arguments[0].Key)
 }
 
 func normalizeSessionInvocationError(err error) error {

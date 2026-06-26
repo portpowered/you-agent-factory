@@ -292,6 +292,7 @@ const WORKER_TYPE_VALUES = new Set<NonNullable<FactoryWorker["type"]>>([
 const WORKER_MODEL_PROVIDER_VALUES = new Set<
   NonNullable<FactoryWorker["modelProvider"]>
 >(["CLAUDE", "CODEX", "CURSOR", "GEMINI", "KIRO", "OPENCODE"]);
+const EXACT_INVOCATION_PLACEHOLDER_PATTERN = /^\$\{([A-Za-z0-9_.-]+)\}$/;
 const WORKER_PROVIDER_VALUES = new Set<
   NonNullable<FactoryWorker["executorProvider"]>
 >(["SCRIPT_WRAP"]);
@@ -400,7 +401,9 @@ function decodeFactoryDefinition(
     expectObject,
   );
   const version = readOptionalFactoryVersion(value, "version", path);
-  const workers = readOptionalArray(value, "workers", path, decodeWorker);
+  const workers = readOptionalArray(value, "workers", path, (entry, entryPath) =>
+    decodeWorker(entry, entryPath, invocationSignature),
+  );
   const workstations = readOptionalArray(
     value,
     "workstations",
@@ -728,7 +731,11 @@ function decodeResource(value: unknown, path: string): FactoryResource {
   return resource;
 }
 
-function decodeWorker(value: unknown, path: string): FactoryWorker {
+function decodeWorker(
+  value: unknown,
+  path: string,
+  invocationSignature: FactoryInvocationSignature | undefined,
+): FactoryWorker {
   const record = expectObject(value, path);
   rejectUnknownKeys(record, WORKER_KEYS, path);
 
@@ -738,11 +745,10 @@ function decodeWorker(value: unknown, path: string): FactoryWorker {
   const id = readOptionalString(record, "id", path);
   const type = readOptionalEnum(record, "type", path, WORKER_TYPE_VALUES);
   const model = readOptionalString(record, "model", path);
-  const modelProvider = readOptionalEnum(
+  const modelProvider = readOptionalWorkerModelProvider(
     record,
-    "modelProvider",
     path,
-    WORKER_MODEL_PROVIDER_VALUES,
+    invocationSignature,
   );
   const modelLocality = readOptionalEnum(
     record,
@@ -849,6 +855,47 @@ function decodeWorker(value: unknown, path: string): FactoryWorker {
   }
 
   return worker;
+}
+
+function readOptionalWorkerModelProvider(
+  value: Record<string, unknown>,
+  path: string,
+  invocationSignature: FactoryInvocationSignature | undefined,
+): FactoryWorker["modelProvider"] | undefined {
+  const modelProvider = readOptionalString(value, "modelProvider", path);
+  if (modelProvider === undefined) {
+    return undefined;
+  }
+  if (
+    WORKER_MODEL_PROVIDER_VALUES.has(
+      modelProvider as NonNullable<FactoryWorker["modelProvider"]>,
+    )
+  ) {
+    return modelProvider as FactoryWorker["modelProvider"];
+  }
+  if (isDeclaredInvocationPlaceholder(modelProvider, invocationSignature)) {
+    return modelProvider as FactoryWorker["modelProvider"];
+  }
+  throw new FactoryDefinitionAPIError(
+    `${path}.modelProvider must be one of ${Array.from(WORKER_MODEL_PROVIDER_VALUES).join(", ")}.`,
+  );
+}
+
+function isDeclaredInvocationPlaceholder(
+  value: string,
+  invocationSignature: FactoryInvocationSignature | undefined,
+): boolean {
+  if (!invocationSignature?.parameters?.length) {
+    return false;
+  }
+  const match = EXACT_INVOCATION_PLACEHOLDER_PATTERN.exec(value.trim());
+  if (!match) {
+    return false;
+  }
+  const parameterName = match[1]?.trim();
+  return invocationSignature.parameters.some(
+    (parameter) => parameter.name.trim() === parameterName,
+  );
 }
 
 function decodeFactoryLayout(value: unknown, path: string): FactoryLayout {

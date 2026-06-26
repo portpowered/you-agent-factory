@@ -43,6 +43,37 @@ func TestNormalizeArguments_SignatureCanonicalizesNamedKeysAndDefaults(t *testin
 	}
 }
 
+func TestNormalizeArguments_SignatureAcceptsStructuredArgsForPositionalAndStdinBindings(t *testing.T) {
+	stdinParameter := interfaces.InvocationParameterConfig{
+		Name: "prompt",
+		Bindings: []interfaces.InvocationParameterBindingConfig{{
+			Kind: string(factoryapi.FactoryInvocationParameterBindingKindStdin),
+		}},
+	}
+	got, err := NormalizeArguments(NormalizeArgumentsInput{
+		Signature: signatureConfig(
+			positionalParameter("input", 1, true),
+			stdinParameter,
+		),
+		DirectArgs: []NamedArgumentInput{
+			{Key: "input", Values: []string{"hello"}},
+			{Key: "prompt", Values: []string{"from api args"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NormalizeArguments: %v", err)
+	}
+
+	assertArgumentValues(t, got.Arguments, "input", []string{"hello"})
+	assertArgumentValues(t, got.Arguments, "prompt", []string{"from api args"})
+	if source := got.Arguments["input"].Sources[0]; source.Kind != ArgumentSourceKindStructured || source.Name != "input" {
+		t.Fatalf("input source = %#v, want structured canonical metadata", source)
+	}
+	if source := got.Arguments["prompt"].Sources[0]; source.Kind != ArgumentSourceKindStructured || source.Name != "prompt" {
+		t.Fatalf("prompt source = %#v, want structured canonical metadata", source)
+	}
+}
+
 func TestNormalizeArguments_SignatureSupportsRepeatedUnknownCollectionAndSensitiveRedaction(t *testing.T) {
 	got, err := NormalizeArguments(NormalizeArgumentsInput{
 		Signature: &interfaces.InvocationSignatureConfig{

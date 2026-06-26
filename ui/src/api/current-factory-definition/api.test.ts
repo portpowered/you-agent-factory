@@ -211,6 +211,51 @@ describe("current-factory-definition api", () => {
     });
   });
 
+  it("loads current-factory payloads that use declared invocation placeholders in worker modelProvider", async () => {
+    const document = await getCurrentFactoryDocument({
+      fetch: vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            invocationSignature: {
+              parameters: [
+                {
+                  bindings: [{ kind: "NAMED" }],
+                  name: "firstProvider",
+                },
+              ],
+            },
+            name: "@you/fusion",
+            workers: [
+              {
+                modelProvider: "${firstProvider}",
+                name: "fusion-drafter",
+                type: "MODEL_WORKER",
+              },
+            ],
+            workstations: [],
+            workTypes: [],
+            version: {
+              logical: "10",
+              physical: "2026-06-26T14:20:00Z",
+            },
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 200,
+            statusText: "OK",
+          },
+        ),
+      ),
+    });
+
+    expect(document.invocationSignature?.parameters?.[0]?.name).toBe(
+      "firstProvider",
+    );
+    expect(document.workers?.[0]?.modelProvider).toBe("${firstProvider}");
+  });
+
   it("uses the session-scoped editable-definition route for non-default sessions", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(

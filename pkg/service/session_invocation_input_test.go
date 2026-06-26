@@ -72,6 +72,28 @@ func TestResolveSessionInvocationInput_EmptyStructuredArgsStillUseSignature(t *t
 	}
 }
 
+func TestResolveSessionInvocationInput_StructuredArgsAcceptPositionalOnlyParameterKeys(t *testing.T) {
+	request := factoryapi.InvocationRequest{
+		Args: &map[string]any{
+			"input": "hello",
+		},
+	}
+
+	resolved, err := resolveSessionInvocationInput(positionalOnlySignatureInvocationFactoryConfig(), request)
+	if err != nil {
+		t.Fatalf("resolveSessionInvocationInput: %v", err)
+	}
+	if resolved.NormalizedArguments == nil {
+		t.Fatal("NormalizedArguments = nil, want normalized args")
+	}
+	if values := resolved.NormalizedArguments.Arguments["input"].Values; len(values) != 1 || values[0] != "hello" {
+		t.Fatalf("input values = %#v, want [hello]", values)
+	}
+	if source := resolved.NormalizedArguments.Arguments["input"].Sources[0]; source.Kind != invocations.ArgumentSourceKindStructured {
+		t.Fatalf("input source kind = %q, want %q", source.Kind, invocations.ArgumentSourceKindStructured)
+	}
+}
+
 func TestResolveSessionInvocationInput_SignatureArgsRejectCompatibilityContentMix(t *testing.T) {
 	sourceKind := factoryapi.InvocationInputSourceKindText
 	content := invocationTextContent(t, "legacy compatibility text")
@@ -85,6 +107,17 @@ func TestResolveSessionInvocationInput_SignatureArgsRejectCompatibilityContentMi
 
 	_, err := resolveSessionInvocationInput(signatureInvocationFactoryConfig(), request)
 	assertSessionInvocationArgumentErrorCode(t, err, invocations.ArgumentErrorCodeSourceConflict)
+}
+
+func TestResolveSessionInvocationInput_RejectsStructuredArgsWithoutActiveSignature(t *testing.T) {
+	request := factoryapi.InvocationRequest{
+		Args: &map[string]any{
+			"input": "hello",
+		},
+	}
+
+	_, err := resolveSessionInvocationInput(&interfaces.FactoryConfig{}, request)
+	assertSessionInvocationArgumentErrorCode(t, err, invocations.ArgumentErrorCodeInvalidActiveSignature)
 }
 
 func signatureInvocationFactoryConfig() *interfaces.FactoryConfig {
@@ -118,6 +151,21 @@ func optionalSignatureInvocationFactoryConfig() *interfaces.FactoryConfig {
 				DefaultValue: "fast",
 				Bindings: []interfaces.InvocationParameterBindingConfig{{
 					Kind: string(factoryapi.FactoryInvocationParameterBindingKindNamed),
+				}},
+			}},
+		},
+	}
+}
+
+func positionalOnlySignatureInvocationFactoryConfig() *interfaces.FactoryConfig {
+	return &interfaces.FactoryConfig{
+		InvocationSignature: &interfaces.InvocationSignatureConfig{
+			Parameters: []interfaces.InvocationParameterConfig{{
+				Name:     "input",
+				Required: true,
+				Bindings: []interfaces.InvocationParameterBindingConfig{{
+					Kind:     string(factoryapi.FactoryInvocationParameterBindingKindPositional),
+					Position: 1,
 				}},
 			}},
 		},
