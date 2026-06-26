@@ -171,6 +171,133 @@ func TestGetEvents_ReplaysHistoryThenStreamsLiveEventsInOrder(t *testing.T) {
 	assertLiveEventReplay(t, reader, liveEvents, eventTime)
 }
 
+func TestGetEventsBySessionId_JSONRecoveryProbeReturnsCursorStaleForLiveSession(t *testing.T) {
+	eventTime := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
+	sessionID := "session-alpha"
+	historical := testHistoricalFactoryEvents(t, eventTime)
+	mf := &testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			sessionID: {
+				FactoryEvents: historical,
+			},
+		},
+	}
+
+	server := httptest.NewServer(newAPITestServer(mf).Handler())
+	defer server.Close()
+
+	req, err := http.NewRequest(
+		http.MethodGet,
+		server.URL+"/factory-sessions/"+sessionID+"/events?after_event_id=missing-event-id",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET recovery probe: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, readBody(t, resp))
+	}
+
+	var recovery factoryapi.FactorySessionEventStreamRecovery
+	if err := json.NewDecoder(resp.Body).Decode(&recovery); err != nil {
+		t.Fatalf("decode recovery response: %v", err)
+	}
+	if recovery.FactorySessionId != sessionID {
+		t.Fatalf("factorySessionId = %q, want %q", recovery.FactorySessionId, sessionID)
+	}
+	if recovery.Outcome != factoryapi.FactorySessionEventStreamRecoveryOutcome("CURSOR_STALE") {
+		t.Fatalf("outcome = %q, want CURSOR_STALE", recovery.Outcome)
+	}
+	if !recovery.Retry.OmitAfterEventId || !recovery.Retry.OmitAfterSequence {
+		t.Fatalf("retry = %#v, want both omit flags true", recovery.Retry)
+	}
+}
+
+func TestGetEventsBySessionId_JSONRecoveryProbeReturnsUnknownSessionForMissingLiveSession(t *testing.T) {
+	server := httptest.NewServer(newAPITestServer(&testutil.MockFactory{}).Handler())
+	defer server.Close()
+
+	req, err := http.NewRequest(
+		http.MethodGet,
+		server.URL+"/factory-sessions/session-missing/events?after_event_id=missing-event-id",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET recovery probe: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, readBody(t, resp))
+	}
+
+	var recovery factoryapi.FactorySessionEventStreamRecovery
+	if err := json.NewDecoder(resp.Body).Decode(&recovery); err != nil {
+		t.Fatalf("decode recovery response: %v", err)
+	}
+	if recovery.FactorySessionId != "session-missing" {
+		t.Fatalf("factorySessionId = %q, want session-missing", recovery.FactorySessionId)
+	}
+	if recovery.Outcome != factoryapi.FactorySessionEventStreamRecoveryOutcome("UNKNOWN_SESSION") {
+		t.Fatalf("outcome = %q, want UNKNOWN_SESSION", recovery.Outcome)
+	}
+	if recovery.Retry.OmitAfterEventId || recovery.Retry.OmitAfterSequence {
+		t.Fatalf("retry = %#v, want omit flags false", recovery.Retry)
+	}
+}
+
+func TestGetEventsBySessionId_ValidReconnectCursorStillStreamsSSEForLiveSession(t *testing.T) {
+	eventTime := time.Date(2026, 4, 8, 12, 0, 0, 0, time.UTC)
+	sessionID := "session-alpha"
+	historical := testHistoricalFactoryEvents(t, eventTime)
+	mf := &testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			sessionID: {
+				FactoryEvents: historical,
+			},
+		},
+	}
+
+	server := httptest.NewServer(newAPITestServer(mf).Handler())
+	defer server.Close()
+
+	req, err := http.NewRequest(
+		http.MethodGet,
+		server.URL+"/factory-sessions/"+sessionID+"/events?after_event_id="+historical[1].Id,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET events: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200: %s", resp.StatusCode, readBody(t, resp))
+	}
+	if got := resp.Header.Get("Content-Type"); !strings.Contains(got, "text/event-stream") {
+		t.Fatalf("Content-Type = %q, want text/event-stream", got)
+	}
+
+	reader := bufio.NewReader(resp.Body)
+	event := readAPISSEFactoryEvent(t, reader)
+	if event.Id != historical[2].Id {
+		t.Fatalf("event id = %q, want %q", event.Id, historical[2].Id)
+	}
+}
+
 func testHistoricalFactoryEvents(t *testing.T, eventTime time.Time) []factoryapi.FactoryEvent {
 	t.Helper()
 

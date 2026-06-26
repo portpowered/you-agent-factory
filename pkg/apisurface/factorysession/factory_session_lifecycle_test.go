@@ -476,7 +476,7 @@ func TestLifecycleControlErrorResponse_MapsControlConflictAndNotFound(t *testing
 		t.Fatalf("status = %d, want 404", status)
 	}
 	errResp, ok := response.(factoryapi.ErrorResponse)
-	if !ok || errResp.Code != factoryapi.NOTFOUND {
+	if !ok || errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("response = %#v, want NOT_FOUND ErrorResponse", response)
 	}
 
@@ -491,7 +491,7 @@ func TestLifecycleControlErrorResponse_MapsControlConflictAndNotFound(t *testing
 		t.Fatalf("status = %d, want 404", status)
 	}
 	errResp, ok = response.(factoryapi.ErrorResponse)
-	if !ok || errResp.Code != factoryapi.NOTFOUND {
+	if !ok || errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("response = %#v, want NOT_FOUND ErrorResponse", response)
 	}
 }
@@ -532,7 +532,7 @@ func TestLifecycleControlErrorResponse_MapsValidationAndDispatchNotFound(t *test
 		t.Fatalf("status = %d, want 400", status)
 	}
 	errResp, ok := response.(factoryapi.ErrorResponse)
-	if !ok || errResp.Code != factoryapi.BADREQUEST {
+	if !ok || errResp.Code != factoryapi.ErrorResponseCodeBADREQUEST {
 		t.Fatalf("response = %#v, want BAD_REQUEST ErrorResponse", response)
 	}
 
@@ -547,7 +547,7 @@ func TestLifecycleControlErrorResponse_MapsValidationAndDispatchNotFound(t *test
 		t.Fatalf("status = %d, want 404", status)
 	}
 	errResp, ok = response.(factoryapi.ErrorResponse)
-	if !ok || errResp.Code != factoryapi.NOTFOUND {
+	if !ok || errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("response = %#v, want NOT_FOUND ErrorResponse", response)
 	}
 }

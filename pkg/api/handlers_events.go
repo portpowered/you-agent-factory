@@ -60,6 +60,12 @@ func (s *Server) GetEvents(w http.ResponseWriter, r *http.Request, params factor
 }
 
 func (s *Server) GetEventsBySessionId(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID, params factoryapi.GetEventsBySessionIdParams) {
+	reconnect := reconnectCursorFromParams(params.AfterEventId, params.AfterSequence)
+	if requestsJSONEventRecoveryProbe(r) {
+		s.probeFactorySessionEventStreamRecovery(w, r, string(sessionID), reconnect)
+		return
+	}
+
 	if isDurableExecutionSessionID(string(sessionID)) {
 		reader, ok := s.requireDurableSessionEventsReader(w)
 		if !ok {
@@ -92,10 +98,72 @@ func (s *Server) GetEventsBySessionId(w http.ResponseWriter, r *http.Request, se
 	if !ok {
 		return
 	}
-	reconnect := reconnectCursorFromParams(params.AfterEventId, params.AfterSequence)
 	s.getEvents(w, r, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
 		return sessionRuntime.SubscribeFactoryEventsForSession(ctx, string(sessionID), reconnect)
 	})
+}
+
+func requestsJSONEventRecoveryProbe(r *http.Request) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(r.Header.Get("Accept"))), "application/json")
+}
+
+func (s *Server) probeFactorySessionEventStreamRecovery(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID string,
+	reconnect *interfaces.FactoryEventReconnectCursor,
+) {
+	probeCtx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+
+	var err error
+	if isDurableExecutionSessionID(sessionID) {
+		reader, ok := s.requireDurableSessionEventsReader(w)
+		if !ok {
+			return
+		}
+		_, err = reader.ReadDurableFactorySessionEvents(probeCtx, sessionID, factoryapi.GetEventsBySessionIdParams{
+			AfterEventId: afterEventIDParam(reconnect),
+			AfterSequence: afterSequenceParam(reconnect),
+		})
+	} else {
+		sessionRuntime, ok := s.requireSessionRuntime(w)
+		if !ok {
+			return
+		}
+		_, err = sessionRuntime.SubscribeFactoryEventsForSession(probeCtx, sessionID, reconnect)
+	}
+	if err != nil {
+		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+			s.writeJSON(w, http.StatusOK, staleCursorRecoveryResponse(sessionID, factoryapi.FactorySessionEventStreamRecoveryOutcomeUNKNOWNSESSION, false))
+			return
+		}
+		if errors.Is(err, apisurface.ErrInvalidEventReconnectCursor) ||
+			errors.Is(err, events.ErrReconnectCursorNotFound) ||
+			errors.Is(err, factorysessionexecution.ErrReconnectCursorNotFound) {
+			s.writeJSON(w, http.StatusOK, staleCursorRecoveryResponse(sessionID, factoryapi.FactorySessionEventStreamRecoveryOutcomeCURSORSTALE, true))
+			return
+		}
+		s.logger.Error("probe factory session event recovery failed", zap.String("session_id", sessionID), zap.Error(err))
+		s.writeJSON(w, http.StatusOK, staleCursorRecoveryResponse(sessionID, factoryapi.FactorySessionEventStreamRecoveryOutcomeINTERNALERROR, false))
+		return
+	}
+	s.writeJSON(w, http.StatusOK, staleCursorRecoveryResponse(sessionID, factoryapi.FactorySessionEventStreamRecoveryOutcomeSTREAMREADY, false))
+}
+
+func staleCursorRecoveryResponse(
+	sessionID string,
+	outcome factoryapi.FactorySessionEventStreamRecoveryOutcome,
+	omitReconnectCursor bool,
+) factoryapi.FactorySessionEventStreamRecovery {
+	return factoryapi.FactorySessionEventStreamRecovery{
+		FactorySessionId: sessionID,
+		Outcome:          outcome,
+		Retry: factoryapi.FactorySessionEventStreamRecoveryRetry{
+			OmitAfterEventId:  omitReconnectCursor,
+			OmitAfterSequence: omitReconnectCursor,
+		},
+	}
 }
 
 func reconnectCursorFromParams(afterEventID *factoryapi.AfterEventId, afterSequence *factoryapi.AfterSequence) *interfaces.FactoryEventReconnectCursor {
@@ -111,6 +179,22 @@ func reconnectCursorFromParams(afterEventID *factoryapi.AfterEventId, afterSeque
 		cursor.AfterSequence = &sequence
 	}
 	return cursor
+}
+
+func afterEventIDParam(cursor *interfaces.FactoryEventReconnectCursor) *factoryapi.AfterEventId {
+	if cursor == nil || strings.TrimSpace(cursor.AfterEventID) == "" {
+		return nil
+	}
+	value := factoryapi.AfterEventId(cursor.AfterEventID)
+	return &value
+}
+
+func afterSequenceParam(cursor *interfaces.FactoryEventReconnectCursor) *factoryapi.AfterSequence {
+	if cursor == nil || cursor.AfterSequence == nil {
+		return nil
+	}
+	value := factoryapi.AfterSequence(*cursor.AfterSequence)
+	return &value
 }
 
 func (s *Server) getEvents(

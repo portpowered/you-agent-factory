@@ -1,0 +1,8 @@
+type: string
+description: Structured session event reconnect probe outcome for one session-scoped event stream.
+enum:
+  - STREAM_READY
+  - CURSOR_STALE
+  - UNKNOWN_SESSION
+  - INTERNAL_ERROR
+example: CURSOR_STALE

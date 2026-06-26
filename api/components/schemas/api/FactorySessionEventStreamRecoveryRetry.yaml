@@ -1,0 +1,15 @@
+type: object
+additionalProperties: false
+required:
+  - omitAfterEventId
+  - omitAfterSequence
+properties:
+  omitAfterEventId:
+    type: boolean
+    description: True when the next reconnect must omit after_event_id and replay from the start of the session stream.
+  omitAfterSequence:
+    type: boolean
+    description: True when the next reconnect must omit after_sequence and replay from the start of the session stream.
+example:
+  omitAfterEventId: true
+  omitAfterSequence: true

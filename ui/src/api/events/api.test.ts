@@ -1,4 +1,8 @@
-import { openFactoryEventStream } from "./api";
+import {
+  openFactoryEventStream,
+  probeFactoryEventStreamRecovery,
+} from "./api";
+import type { FactoryEventStreamRecoveryProbeError } from "./api";
 import type { FactoryEvent } from "./types";
 
 class MockEventSource {
@@ -15,7 +19,7 @@ class MockEventSource {
   public close(): void {}
 }
 
-describe("factory events API", () => {
+describe("factory events streaming API", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -115,5 +119,82 @@ describe("factory events API", () => {
 
     expect(stream).toBeInstanceOf(MockEventSource);
     expect(stream?.url).toBe("/factory-sessions/session-beta/events");
+  });
+});
+
+describe("factory events recovery probe API", () => {
+  it("probes session event recovery as structured JSON", async () => {
+    const fetchImplementation = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          factorySessionId: "session-beta",
+          outcome: "CURSOR_STALE",
+          retry: {
+            omitAfterEventId: true,
+            omitAfterSequence: true,
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+
+    await expect(
+      probeFactoryEventStreamRecovery(
+        "session-beta",
+        { afterEventId: "event-3", afterSequence: 12 },
+        { fetch: fetchImplementation },
+      ),
+    ).resolves.toEqual({
+      factorySessionId: "session-beta",
+      outcome: "CURSOR_STALE",
+      retry: {
+        omitAfterEventId: true,
+        omitAfterSequence: true,
+      },
+    });
+
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      "/factory-sessions/session-beta/events?after_event_id=event-3&after_sequence=12",
+      {
+        headers: {
+          Accept: "application/json",
+        },
+        method: "GET",
+      },
+    );
+  });
+
+  it("surfaces probe transport failures with structured error details", async () => {
+    const fetchImplementation = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          code: "INTERNAL_ERROR",
+          message: "probe failed",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 500,
+          statusText: "Internal Server Error",
+        },
+      ),
+    );
+
+    await expect(
+      probeFactoryEventStreamRecovery("session-beta", undefined, {
+        fetch: fetchImplementation,
+      }),
+    ).rejects.toMatchObject<FactoryEventStreamRecoveryProbeError>({
+      code: "INTERNAL_ERROR",
+      message: "probe failed",
+      status: 500,
+      statusText: "Internal Server Error",
+    });
   });
 });

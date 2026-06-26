@@ -367,7 +367,7 @@ func TestFactorySessionsAPI_OpenFactorySession_ValidationTargets(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
 		t.Fatalf("decode open factory session error response: %v", err)
 	}
-	if response.Code != factoryapi.BADREQUEST {
+	if response.Code != factoryapi.ErrorResponseCodeBADREQUEST {
 		t.Fatalf("open factory session error code = %q, want BAD_REQUEST", response.Code)
 	}
 	if response.Targets == nil || len(*response.Targets) != 1 {

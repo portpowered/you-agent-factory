@@ -176,7 +176,7 @@ func queryCurrentError(statusCode int, body []byte) error {
 		}
 		return unexpectedCurrentFactoryStatusError(statusCode, body)
 	}
-	if statusCode == http.StatusNotFound && errResp.Code == factoryapi.NOTFOUND {
+	if statusCode == http.StatusNotFound && errResp.Code == factoryapi.ErrorResponseCodeNOTFOUND {
 		return fmt.Errorf("%w: %s", ErrCurrentFactoryNotFound, errResp.Message)
 	}
 	return fmt.Errorf("query current factory failed (%d): %s", statusCode, errResp.Message)

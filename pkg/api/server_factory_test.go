@@ -673,7 +673,7 @@ func TestSaveCurrentFactory_ReturnsBobWorkstationOnFailureTarget(t *testing.T) {
 	srv.Handler().ServeHTTP(rec, req)
 
 	response := decodeJSONResponse[factoryapi.ErrorResponse](t, rec)
-	if rec.Code != http.StatusBadRequest || response.Code != factoryapi.INVALIDFACTORY {
+	if rec.Code != http.StatusBadRequest || response.Code != factoryapi.ErrorResponseCodeINVALIDFACTORY {
 		t.Fatalf("response = %#v status=%d", response, rec.Code)
 	}
 	if response.Targets == nil || len(*response.Targets) != 1 {

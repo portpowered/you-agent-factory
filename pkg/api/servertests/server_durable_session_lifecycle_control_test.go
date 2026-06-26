@@ -87,7 +87,7 @@ func TestCancelFactorySession_MissingDurableSessionReturnsNotFound(t *testing.T)
 	if status != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", status)
 	}
-	if errResp.Code != factoryapi.NOTFOUND {
+	if errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("code = %q, want NOT_FOUND", errResp.Code)
 	}
 }
@@ -108,7 +108,7 @@ func TestCancelFactorySession_NonDurableSessionPreservesLiveStub(t *testing.T) {
 	if status != http.StatusNotImplemented {
 		t.Fatalf("status = %d, want 501", status)
 	}
-	if errResp.Code != factoryapi.INTERNALERROR {
+	if errResp.Code != factoryapi.ErrorResponseCodeINTERNALERROR {
 		t.Fatalf("code = %q, want INTERNAL_ERROR", errResp.Code)
 	}
 }
@@ -269,7 +269,7 @@ func TestPauseFactorySession_MissingLiveSessionReturnsNotFound(t *testing.T) {
 	if status != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", status)
 	}
-	if errResp.Code != factoryapi.NOTFOUND {
+	if errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("code = %q, want NOT_FOUND", errResp.Code)
 	}
 }
@@ -363,7 +363,7 @@ func TestApproveFactorySession_NonDurableSessionPreservesLiveStub(t *testing.T) 
 	if status != http.StatusNotImplemented {
 		t.Fatalf("status = %d, want 501", status)
 	}
-	if errResp.Code != factoryapi.INTERNALERROR {
+	if errResp.Code != factoryapi.ErrorResponseCodeINTERNALERROR {
 		t.Fatalf("code = %q, want INTERNAL_ERROR", errResp.Code)
 	}
 }
@@ -383,7 +383,7 @@ func TestRetryFactorySessionDispatch_NonDurableSessionPreservesLiveStub(t *testi
 	if status != http.StatusNotImplemented {
 		t.Fatalf("status = %d, want 501", status)
 	}
-	if errResp.Code != factoryapi.INTERNALERROR {
+	if errResp.Code != factoryapi.ErrorResponseCodeINTERNALERROR {
 		t.Fatalf("code = %q, want INTERNAL_ERROR", errResp.Code)
 	}
 }
@@ -456,7 +456,7 @@ func TestRetryFactorySessionDispatch_MissingDispatchIdReturnsBadRequest(t *testi
 	if status != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", status)
 	}
-	if errResp.Code != factoryapi.BADREQUEST {
+	if errResp.Code != factoryapi.ErrorResponseCodeBADREQUEST {
 		t.Fatalf("code = %q, want BAD_REQUEST", errResp.Code)
 	}
 }
@@ -474,7 +474,7 @@ func TestRetryFactorySessionDispatch_MissingDispatchReturnsNotFound(t *testing.T
 	if status != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", status)
 	}
-	if errResp.Code != factoryapi.NOTFOUND {
+	if errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("code = %q, want NOT_FOUND", errResp.Code)
 	}
 }

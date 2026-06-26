@@ -52,18 +52,18 @@ const (
 
 // Defines values for ErrorResponseCode.
 const (
-	BADREQUEST                                 ErrorResponseCode = "BAD_REQUEST"
-	EXECUTIONREQUESTIDCONFLICT                 ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
-	FACTORYALREADYEXISTS                       ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
-	FACTORYNOTIDLE                             ErrorResponseCode = "FACTORY_NOT_IDLE"
-	FACTORYSESSIONCONFIGLOADFAILED             ErrorResponseCode = "FACTORY_SESSION_CONFIG_LOAD_FAILED"
-	FACTORYSESSIONCONTROLREQUESTALREADYAPPLIED ErrorResponseCode = "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED"
-	INTERNALERROR                              ErrorResponseCode = "INTERNAL_ERROR"
-	INVALIDFACTORY                             ErrorResponseCode = "INVALID_FACTORY"
-	INVALIDFACTORYNAME                         ErrorResponseCode = "INVALID_FACTORY_NAME"
-	MOVEWORKREQUESTALREADYAPPLIED              ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
-	NOTFOUND                                   ErrorResponseCode = "NOT_FOUND"
-	STALEFACTORYVERSION                        ErrorResponseCode = "STALE_FACTORY_VERSION"
+	ErrorResponseCodeBADREQUEST                                 ErrorResponseCode = "BAD_REQUEST"
+	ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT                 ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
+	ErrorResponseCodeFACTORYALREADYEXISTS                       ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
+	ErrorResponseCodeFACTORYNOTIDLE                             ErrorResponseCode = "FACTORY_NOT_IDLE"
+	ErrorResponseCodeFACTORYSESSIONCONFIGLOADFAILED             ErrorResponseCode = "FACTORY_SESSION_CONFIG_LOAD_FAILED"
+	ErrorResponseCodeFACTORYSESSIONCONTROLREQUESTALREADYAPPLIED ErrorResponseCode = "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED"
+	ErrorResponseCodeINTERNALERROR                              ErrorResponseCode = "INTERNAL_ERROR"
+	ErrorResponseCodeINVALIDFACTORY                             ErrorResponseCode = "INVALID_FACTORY"
+	ErrorResponseCodeINVALIDFACTORYNAME                         ErrorResponseCode = "INVALID_FACTORY_NAME"
+	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED              ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
+	ErrorResponseCodeNOTFOUND                                   ErrorResponseCode = "NOT_FOUND"
+	ErrorResponseCodeSTALEFACTORYVERSION                        ErrorResponseCode = "STALE_FACTORY_VERSION"
 )
 
 // Defines values for FactoryArtifactAuditMode.
@@ -221,6 +221,14 @@ const (
 	FactorySessionDurableLifecycleStatusSucceeded        FactorySessionDurableLifecycleStatus = "SUCCEEDED"
 	FactorySessionDurableLifecycleStatusTerminated       FactorySessionDurableLifecycleStatus = "TERMINATED"
 	FactorySessionDurableLifecycleStatusTimedOut         FactorySessionDurableLifecycleStatus = "TIMED_OUT"
+)
+
+// Defines values for FactorySessionEventStreamRecoveryOutcome.
+const (
+	FactorySessionEventStreamRecoveryOutcomeCURSORSTALE    FactorySessionEventStreamRecoveryOutcome = "CURSOR_STALE"
+	FactorySessionEventStreamRecoveryOutcomeINTERNALERROR  FactorySessionEventStreamRecoveryOutcome = "INTERNAL_ERROR"
+	FactorySessionEventStreamRecoveryOutcomeSTREAMREADY    FactorySessionEventStreamRecoveryOutcome = "STREAM_READY"
+	FactorySessionEventStreamRecoveryOutcomeUNKNOWNSESSION FactorySessionEventStreamRecoveryOutcome = "UNKNOWN_SESSION"
 )
 
 // Defines values for FactorySessionExecutionSourceKind.
@@ -1989,6 +1997,28 @@ type FactorySessionEffectivePolicy struct {
 	// PolicyHash Stable hash of the effective approved policy object when available.
 	PolicyHash           *string                `json:"policyHash,omitempty"`
 	AdditionalProperties map[string]interface{} `json:"-"`
+}
+
+// FactorySessionEventStreamRecovery defines model for FactorySessionEventStreamRecovery.
+type FactorySessionEventStreamRecovery struct {
+	// FactorySessionId Session identifier for the event stream being probed.
+	FactorySessionId string `json:"factorySessionId"`
+
+	// Outcome Structured session event reconnect probe outcome for one session-scoped event stream.
+	Outcome FactorySessionEventStreamRecoveryOutcome `json:"outcome"`
+	Retry   FactorySessionEventStreamRecoveryRetry   `json:"retry"`
+}
+
+// FactorySessionEventStreamRecoveryOutcome Structured session event reconnect probe outcome for one session-scoped event stream.
+type FactorySessionEventStreamRecoveryOutcome string
+
+// FactorySessionEventStreamRecoveryRetry defines model for FactorySessionEventStreamRecoveryRetry.
+type FactorySessionEventStreamRecoveryRetry struct {
+	// OmitAfterEventId True when the next reconnect must omit after_event_id and replay from the start of the session stream.
+	OmitAfterEventId bool `json:"omitAfterEventId"`
+
+	// OmitAfterSequence True when the next reconnect must omit after_sequence and replay from the start of the session stream.
+	OmitAfterSequence bool `json:"omitAfterSequence"`
 }
 
 // FactorySessionExecutionInlineWorkflow Inline workflow source carried directly in a durable execution request.
