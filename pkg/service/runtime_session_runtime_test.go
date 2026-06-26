@@ -1485,8 +1485,8 @@ func TestFactoryService_GetFactorySession_ProjectsLegacyPetriRuntime(t *testing.
 	if session.Runtime.OrchestratorKind != factoryapi.PETRI {
 		t.Fatalf("orchestrator kind = %q, want PETRI", session.Runtime.OrchestratorKind)
 	}
-	if session.Runtime.StreamGenerationID == nil || strings.TrimSpace(*session.Runtime.StreamGenerationID) == "" {
-		t.Fatalf("streamGenerationID = %#v, want non-empty value", session.Runtime.StreamGenerationID)
+	if session.Runtime.StreamIdentity == nil || strings.TrimSpace(session.Runtime.StreamIdentity.StreamGenerationID) == "" {
+		t.Fatalf("streamIdentity = %#v, want non-empty streamGenerationID", session.Runtime.StreamIdentity)
 	}
 	if session.Runtime.Petri == nil {
 		t.Fatal("petri projection is nil")
@@ -1941,10 +1941,10 @@ func getLiveSessionEventStreamGenerationID(t *testing.T, serverURL, sessionID st
 
 func requireLiveSessionStreamGenerationID(t *testing.T, session factoryapi.FactorySession, sessionID, label string) string {
 	t.Helper()
-	if session.Runtime.StreamGenerationID == nil || strings.TrimSpace(*session.Runtime.StreamGenerationID) == "" {
-		t.Fatalf("%s session read streamGenerationID for %s = %#v, want non-empty value", label, sessionID, session.Runtime.StreamGenerationID)
+	if session.Runtime.StreamIdentity == nil || strings.TrimSpace(session.Runtime.StreamIdentity.StreamGenerationID) == "" {
+		t.Fatalf("%s session read streamIdentity for %s = %#v, want non-empty streamGenerationID", label, sessionID, session.Runtime.StreamIdentity)
 	}
-	return strings.TrimSpace(*session.Runtime.StreamGenerationID)
+	return strings.TrimSpace(session.Runtime.StreamIdentity.StreamGenerationID)
 }
 
 func assertSessionWorkNotAtPlace(t *testing.T, svc *FactoryService, sessionID, placeID string, duration time.Duration) {

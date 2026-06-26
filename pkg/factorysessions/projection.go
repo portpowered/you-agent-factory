@@ -102,10 +102,19 @@ func projectedSessionStreamIdentity(
 		sessionID = strings.TrimSpace(ctx.Session.ID)
 	}
 	backendScopeID := strings.TrimSpace(ctx.BackendScopeID)
-	if backendScopeID == "" || sessionID == "" || lifecycle.StartedAt.IsZero() {
+	if backendScopeID == "" || sessionID == "" {
 		return nil
 	}
-	streamGenerationID := lifecycle.StartedAt.UTC().Format(time.RFC3339Nano)
+	streamGenerationID := ""
+	if ctx.Snapshot != nil {
+		streamGenerationID = strings.TrimSpace(ctx.Snapshot.StreamGenerationID)
+	}
+	if streamGenerationID == "" {
+		if lifecycle.StartedAt.IsZero() {
+			return nil
+		}
+		streamGenerationID = lifecycle.StartedAt.UTC().Format(time.RFC3339Nano)
+	}
 	return &factoryapi.FactorySessionStreamIdentity{
 		BackendScopeID:     backendScopeID,
 		FactorySessionID:   sessionID,
