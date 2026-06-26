@@ -673,12 +673,14 @@ func TestOpenAPIContract_FactoryDispatchAndArtifactSchemasExposeSharedProjection
 	schemas := loadBundledOpenAPIComponentSchemas(t)
 	runtimeSchema := schemaObject(t, schemas, "FactorySessionRuntime")
 	runtimeProperties, _ := runtimeSchema["properties"].(map[string]any)
-	streamGenerationID, ok := runtimeProperties["streamGenerationID"].(map[string]any)
+	assertSchemaPropertyRef(t, schemas, "FactorySessionRuntime", "streamIdentity", "#/components/schemas/FactorySessionStreamIdentity")
+	streamIdentityProperties := schemaProperties(t, schemaObject(t, schemas, "FactorySessionStreamIdentity"), "FactorySessionStreamIdentity")
+	streamGenerationID, ok := streamIdentityProperties["streamGenerationID"].(map[string]any)
 	if !ok {
-		t.Fatal("FactorySessionRuntime.streamGenerationID schema is missing")
+		t.Fatal("FactorySessionStreamIdentity.streamGenerationID schema is missing")
 	}
 	if got, ok := streamGenerationID["type"].(string); !ok || got != "string" {
-		t.Fatalf("FactorySessionRuntime.streamGenerationID.type = %v, want string", streamGenerationID["type"])
+		t.Fatalf("FactorySessionStreamIdentity.streamGenerationID.type = %v, want string", streamGenerationID["type"])
 	}
 	assertArrayItemRef(t, runtimeProperties, "dispatches", "#/components/schemas/FactoryDispatch")
 	assertArrayItemRef(t, runtimeProperties, "artifacts", "#/components/schemas/FactoryArtifact")
