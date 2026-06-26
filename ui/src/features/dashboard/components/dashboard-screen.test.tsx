@@ -1,7 +1,10 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { AppLocaleProvider, useAppLocale } from "../../../i18n";
+import { useDashboardBentoStore } from "../../bento/state/dashboardBentoStore";
 import { getHeaderControlsMessages } from "../../header/messages/header-controls";
+import { getDashboardRecoveryMessages } from "../messages/dashboard-recovery";
 import { DashboardScreen } from "./dashboard-screen";
 
 const EXPECTED_DASHBOARD_SHELL_CLASS = "min-h-screen overflow-x-hidden p-2";
@@ -13,6 +16,9 @@ const VIEWPORT_HEIGHT_CLAMP_CLASS_PATTERN =
 let dashboardSnapshotState: ReturnType<
   typeof import("../hooks/useDashboardSnapshot").useDashboardSnapshot
 >;
+let dashboardSnapshotResolver:
+  | ((refreshToken: number) => typeof dashboardSnapshotState)
+  | null;
 
 function StatusPanelProbe({
   detail,
@@ -61,7 +67,10 @@ vi.mock("../../header/public", () => ({
 }));
 
 vi.mock("../hooks/useDashboardSnapshot", () => ({
-  useDashboardSnapshot: vi.fn(() => dashboardSnapshotState),
+  useDashboardSnapshot: vi.fn(
+    ({ refreshToken = 0 }: { refreshToken?: number } = {}) =>
+      dashboardSnapshotResolver?.(refreshToken) ?? dashboardSnapshotState,
+  ),
 }));
 
 function expectDashboardShellContract() {
@@ -97,13 +106,23 @@ function expectNoNestedDashboardScrollOwnerBetweenBentoAndShell() {
   expectDashboardShellContract();
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: dashboard shell coverage keeps success and failure states together.
 describe("DashboardScreen", () => {
   beforeEach(() => {
+    dashboardSnapshotResolver = null;
     dashboardSnapshotState = {
       error: null,
       isInitialLoading: true,
       snapshot: null,
+      streamState: {
+        message: "Loading factory events...",
+        status: "connecting",
+      },
     };
+    useDashboardBentoStore.setState({
+      refreshToken: 0,
+      selectedTraceID: null,
+    });
   });
 
   it("uses the tighter dashboard shell spacing while loading", () => {
@@ -123,6 +142,10 @@ describe("DashboardScreen", () => {
       error: new Error("Factory API timed out."),
       isInitialLoading: false,
       snapshot: null,
+      streamState: {
+        message: "Factory event stream disconnected. Showing last event state.",
+        status: "offline",
+      },
     };
 
     render(<DashboardScreen />);
@@ -153,6 +176,10 @@ describe("DashboardScreen", () => {
       error: new Error("Factory API timed out."),
       isInitialLoading: false,
       snapshot: null,
+      streamState: {
+        message: "Factory event stream disconnected. Showing last event state.",
+        status: "offline",
+      },
     };
     rerender(
       <AppLocaleProvider initialLocale="zh-CN">
@@ -172,6 +199,10 @@ describe("DashboardScreen", () => {
       error: null,
       isInitialLoading: false,
       snapshot: {} as never,
+      streamState: {
+        message: "Factory event stream connected.",
+        status: "live",
+      },
     };
 
     render(
@@ -191,6 +222,10 @@ describe("DashboardScreen", () => {
       error: null,
       isInitialLoading: false,
       snapshot: {} as never,
+      streamState: {
+        message: "Factory event stream connected.",
+        status: "live",
+      },
     };
 
     render(<DashboardScreen />);
@@ -204,6 +239,10 @@ describe("DashboardScreen", () => {
       error: null,
       isInitialLoading: false,
       snapshot: null,
+      streamState: {
+        message: "Factory event stream connected.",
+        status: "live",
+      },
     };
 
     render(<DashboardScreen />);
@@ -222,6 +261,10 @@ describe("DashboardScreen", () => {
       error: null,
       isInitialLoading: false,
       snapshot: {} as never,
+      streamState: {
+        message: "Factory event stream connected.",
+        status: "live",
+      },
     };
 
     render(<DashboardScreen locale="zh-CN" />);
@@ -229,5 +272,55 @@ describe("DashboardScreen", () => {
     expect(screen.getByText("Dashboard header zh-CN")).toBeTruthy();
     expect(screen.getByText("Dashboard bento zh-CN")).toBeTruthy();
     expect(screen.getByText("Dashboard export dialog zh-CN")).toBeTruthy();
+  });
+
+  it("shows a recoverable replay failure state and retries the session stream", async () => {
+    const user = userEvent.setup();
+    const messages = getHeaderControlsMessages("en");
+    const recoveryMessages = getDashboardRecoveryMessages("en");
+    dashboardSnapshotResolver = (refreshToken) =>
+      refreshToken === 0
+        ? {
+            error: new Error(
+              "The dashboard could not restore this session automatically.",
+            ),
+            isInitialLoading: false,
+            snapshot: null,
+            streamState: {
+              message:
+                "The dashboard could not restore this session automatically.",
+              status: "recovery_failed",
+            },
+          }
+        : {
+            error: null,
+            isInitialLoading: true,
+            snapshot: null,
+            streamState: {
+              message: "Loading factory events...",
+              status: "connecting",
+            },
+          };
+
+    render(<DashboardScreen />);
+
+    expect(
+      screen.getByRole("heading", {
+        name: recoveryMessages.recoveryFailedTitle,
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(recoveryMessages.recoveryFailedDetail),
+    ).toBeTruthy();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: recoveryMessages.recoveryFailedRetryLabel,
+      }),
+    );
+
+    expect(
+      screen.getByRole("heading", { name: messages.loadingDashboardTitle }),
+    ).toBeTruthy();
   });
 });

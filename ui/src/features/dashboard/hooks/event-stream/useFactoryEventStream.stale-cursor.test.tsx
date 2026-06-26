@@ -58,6 +58,7 @@ function resetFactoryEventStreamStores(): void {
   useFactoryTimelineStore.getState().reset();
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: stale-cursor scenarios share one store harness and query client setup.
 describe("useFactoryEventStream stale cursor recovery", () => {
   let queryClient = createFactoryEventStreamQueryClient();
 
@@ -165,6 +166,67 @@ describe("useFactoryEventStream stale cursor recovery", () => {
     expect(
       queryClient.getQueryData(["current-factory-definition", "session-beta"]),
     ).toEqual({ workers: [{ name: "kept" }] });
+    expect(useDashboardStreamStore.getState().streamState.status).not.toBe(
+      "recovery_failed",
+    );
+  });
+
+  it("shows a recoverable stream state when replay from scratch cannot reopen the session", async () => {
+    const probeRecovery = vi.fn().mockResolvedValue({
+      factorySessionId: DEFAULT_FACTORY_SESSION_ID,
+      outcome: "CURSOR_STALE",
+      retry: {
+        omitAfterEventId: true,
+        omitAfterSequence: true,
+      },
+    });
+
+    renderHook(
+      () =>
+        useFactoryEventStream({
+          enabled: true,
+          initialReconnectCursor: {
+            afterEventId: "checkpoint-event-7",
+            afterSequence: 7,
+          },
+          locale: "en",
+          onEvent: () => {},
+          probeRecovery,
+          sessionID: DEFAULT_FACTORY_SESSION_ID,
+        }),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    const initialStream = replayHarness.getStreams()[0];
+    if (!initialStream) {
+      throw new Error("expected initial reconnect stream to be opened");
+    }
+
+    act(() => {
+      initialStream.onerror?.(new Event("error"));
+    });
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(2);
+    });
+
+    const replayStream = replayHarness.getStreams()[1];
+    if (!replayStream) {
+      throw new Error("expected replay-from-scratch stream to be opened");
+    }
+
+    act(() => {
+      replayStream.onerror?.(new Event("error"));
+    });
+
+    await waitFor(() => {
+      expect(useDashboardStreamStore.getState().streamState).toMatchObject({
+        message:
+          "The dashboard could not restore this session automatically.",
+        status: "recovery_failed",
+      });
+    });
+    expect(replayHarness.getStreams()).toHaveLength(2);
   });
 });
 

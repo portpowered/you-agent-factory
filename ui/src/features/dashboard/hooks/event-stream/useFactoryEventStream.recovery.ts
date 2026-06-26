@@ -11,6 +11,7 @@ import { getDashboardSessionLifecycleMessages } from "../../messages/dashboard-s
 import type { useDashboardStreamStore } from "../../state/dashboardStreamStore";
 
 export interface DashboardStreamConnectionRefs {
+  cursorFreeReplayPendingRef: RefObject<boolean>;
   hasOpenedStreamRef: RefObject<boolean>;
   lastSessionKeyRef: RefObject<string | null>;
   reconnectCursorRef: RefObject<FactoryEventReconnectCursor | undefined>;
@@ -21,6 +22,7 @@ export interface DashboardStreamConnectionRefs {
 }
 
 export function useDashboardStreamConnectionRefs(): DashboardStreamConnectionRefs {
+  const cursorFreeReplayPendingRef = useRef(false);
   const hasOpenedStreamRef = useRef(false);
   const lastSessionKeyRef = useRef<string | null>(null);
   const reconnectCursorRef = useRef<FactoryEventReconnectCursor | undefined>(
@@ -33,6 +35,7 @@ export function useDashboardStreamConnectionRefs(): DashboardStreamConnectionRef
 
   return useMemo(
     () => ({
+      cursorFreeReplayPendingRef,
       hasOpenedStreamRef,
       lastSessionKeyRef,
       reconnectCursorRef,
@@ -56,6 +59,14 @@ export function reconnectingStreamState(locale?: string | null) {
     message:
       getDashboardSessionLifecycleMessages(locale).reconnectingStreamLabel,
     status: "reconnecting" as const,
+  };
+}
+
+export function recoveryFailedStreamState(locale?: string | null) {
+  return {
+    message:
+      getDashboardSessionLifecycleMessages(locale).recoveryFailedStreamLabel,
+    status: "recovery_failed" as const,
   };
 }
 
@@ -89,6 +100,7 @@ async function recoverStaleCursor({
   locale,
   openDashboardStream,
   probeRecovery,
+  cursorFreeReplayPendingRef,
   queryClient,
   queuedEventsRef,
   reconnectCursorRef,
@@ -102,6 +114,7 @@ async function recoverStaleCursor({
   locale?: string | null;
   openDashboardStream: (reconnect?: FactoryEventReconnectCursor) => void;
   probeRecovery: typeof probeFactoryEventStreamRecovery;
+  cursorFreeReplayPendingRef: RefObject<boolean>;
   queryClient: QueryClient;
   queuedEventsRef: RefObject<unknown[]>;
   reconnectCursorRef: RefObject<FactoryEventReconnectCursor | undefined>;
@@ -125,6 +138,7 @@ async function recoverStaleCursor({
     }
 
     staleCursorRecoveryAttemptedRef.current = true;
+    cursorFreeReplayPendingRef.current = true;
     reconnectCursorRef.current = undefined;
     queuedEventsRef.current = [];
     recoverDashboardSessionScopedState(
@@ -181,6 +195,7 @@ export async function reconnectAfterStreamError({
         locale,
         openDashboardStream,
         probeRecovery,
+        cursorFreeReplayPendingRef: refs.cursorFreeReplayPendingRef,
         queryClient,
         queuedEventsRef,
         reconnectCursorRef: refs.reconnectCursorRef,

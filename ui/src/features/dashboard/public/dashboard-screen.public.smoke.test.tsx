@@ -65,6 +65,10 @@ describe("dashboard public barrel composition", () => {
       error: null,
       isInitialLoading: true,
       snapshot: null,
+      streamState: {
+        message: "Loading factory events...",
+        status: "connecting",
+      },
     };
   });
 
@@ -86,6 +90,10 @@ describe("dashboard public barrel composition", () => {
       error: null,
       isInitialLoading: false,
       snapshot: {} as never,
+      streamState: {
+        message: "Factory event stream connected.",
+        status: "live",
+      },
     };
 
     render(<DashboardScreen />);

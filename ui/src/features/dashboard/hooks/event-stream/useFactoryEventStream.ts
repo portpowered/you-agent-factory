@@ -29,6 +29,7 @@ import { useDashboardStreamStore } from "../../state/dashboardStreamStore";
 import {
   type DashboardStreamConnectionRefs,
   hasReconnectCursor,
+  recoveryFailedStreamState,
   reconnectAfterStreamError,
   useDashboardStreamConnectionRefs,
 } from "./useFactoryEventStream.recovery";
@@ -127,6 +128,7 @@ function useDashboardStreamConnection({
   });
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: stream setup keeps reconnect lifecycle and cleanup in one effect.
 function useDashboardStreamConnectionEffect({
   debugOptions,
   enabled,
@@ -184,6 +186,7 @@ function useDashboardStreamConnectionEffect({
       }
     };
     const handleStreamEvent = (event: FactoryEvent) => {
+      refs.cursorFreeReplayPendingRef.current = false;
       refs.staleCursorRecoveryAttemptedRef.current = false;
       refs.reconnectCursorRef.current = reconnectCursorFromEvent(event);
       syncCurrentFactoryDefinition(queryClient, event, streamSessionID);
@@ -207,9 +210,20 @@ function useDashboardStreamConnectionEffect({
       if (!stream) {
         return;
       }
+      const previousOnOpen = stream.onopen;
+      stream.onopen = (openEvent) => {
+        refs.cursorFreeReplayPendingRef.current = false;
+        previousOnOpen?.call(stream, openEvent);
+      };
       const previousOnError = stream.onerror;
       stream.onerror = (errorEvent) => {
         previousOnError?.call(stream, errorEvent);
+        if (refs.cursorFreeReplayPendingRef.current) {
+          refs.cursorFreeReplayPendingRef.current = false;
+          refs.recoveringRef.current = false;
+          setStreamState(recoveryFailedStreamState(locale));
+          return;
+        }
         const cursor = refs.reconnectCursorRef.current;
         if (
           refs.recoveringRef.current ||
@@ -235,6 +249,7 @@ function useDashboardStreamConnectionEffect({
     };
 
     refs.staleCursorRecoveryAttemptedRef.current = false;
+    refs.cursorFreeReplayPendingRef.current = false;
     refs.reconnectCursorRef.current = initialReconnectCursor;
     openDashboardStream(initialReconnectCursor);
     return () => {
