@@ -119,6 +119,8 @@ let restoreBrowserTestShims: (() => void) | null = null;
 export const baselineSnapshot = buildDashboardSnapshotFixture(
   mediumBranchingDashboardTopology,
 );
+const factorySessionSyncPreflightPathPattern =
+  /^\/factory-sessions\/([^/]+)\/sync-preflight(?:\?.*)?$/;
 
 export const terminalSnapshot = {
   ...semanticWorkflowDashboardSnapshot,
@@ -256,6 +258,24 @@ export function renderApp({
         if (path === "/factory-sessions") {
           return jsonResponse({
             sessions: factorySessions ?? [defaultFactorySessionSummary],
+          });
+        }
+
+        const syncPreflightMatch =
+          factorySessionSyncPreflightPathPattern.exec(path);
+        if (method === "GET" && syncPreflightMatch?.[1]) {
+          return jsonResponse({
+            backendScopeId: "backend-a",
+            checkpointReusable: true,
+            factorySessionId: syncPreflightMatch[1],
+            logicalSessionKeyId: "logical-default",
+            reasonCode: "ok",
+            reconnectCursor: {
+              provided: false,
+              validForStreamGeneration: true,
+            },
+            requestedSessionId: syncPreflightMatch[1],
+            streamGenerationId: "stream-default",
           });
         }
 
