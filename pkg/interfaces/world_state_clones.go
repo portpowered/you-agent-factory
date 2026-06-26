@@ -41,7 +41,32 @@ func CloneTokenColor(color TokenColor) TokenColor {
 		Relations:                cloneRelations(color.Relations),
 		Content:                  CloneWorkContentParts(color.Content),
 		Payload:                  cloneBytes(color.Payload),
+		InvocationArguments:      CloneInvocationArguments(color.InvocationArguments),
 	}
+}
+
+// CloneInvocationArguments returns a detached copy of runtime-only invocation
+// argument metadata.
+func CloneInvocationArguments(args *InvocationArguments) *InvocationArguments {
+	if args == nil || len(args.Arguments) == 0 {
+		return nil
+	}
+	clone := &InvocationArguments{
+		Arguments: make(map[string]InvocationArgument, len(args.Arguments)),
+	}
+	for name, argument := range args.Arguments {
+		next := InvocationArgument{
+			Values:    cloneStringSlice(argument.Values),
+			ValueMode: argument.ValueMode,
+			Sensitive: argument.Sensitive,
+		}
+		if len(argument.Sources) > 0 {
+			next.Sources = make([]InvocationArgumentSource, len(argument.Sources))
+			copy(next.Sources, argument.Sources)
+		}
+		clone.Arguments[name] = next
+	}
+	return clone
 }
 
 // CloneWorkContentParts returns a detached copy of canonical work content parts.

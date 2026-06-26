@@ -10,6 +10,11 @@ primary-result behavior.
   alias-backed, and compatibility fallback inputs. Transport stories should
   adapt CLI or API payloads into `NormalizeArgumentsInput` rather than
   re-implementing binding, default, or validation rules at the boundary.
+- `pkg/invocations/interpolation.go` owns runtime `${parameter}` interpolation
+  for signature-backed worker and workstation fields plus pre-dispatch
+  interpolation validation. Keep file-contents substitution, omitted-exact-field
+  behavior, and interpolation error codes there instead of duplicating
+  string-replacement rules in service or worker executors.
 - `pkg/invocations/primary_result.go` resolves invocation `primaryResult`
   against selected-tick `FactoryWorldState` using `WorkRequestsByID`,
   `TerminalWorkByID`, and payload-lineage scope rather than transport-specific
@@ -43,7 +48,11 @@ primary-result behavior.
   `InvocationRequest.content` compatibility handling and
   `InvocationRequest.args` signature handling as thin adapters into
   `pkg/invocations.NormalizeArguments`; do not duplicate required-input,
-  source-conflict, alias, or string-shape rules in HTTP handlers.
+  source-conflict, alias, or string-shape rules in HTTP handlers. When
+  signature-backed runtime behavior needs per-invocation authored-field
+  interpolation, carry the normalized argument set on runtime-only
+  `interfaces.InvocationArguments` metadata and validate it through
+  `invocations.ValidateInvocationInterpolation` before submitting work.
 - `pkg/cli/run/` is the `you run --factory` CLI boundary.
 - Canonical default-path ownership for operator config
   (`~/.you-agent-factory/config.json`) and generated live replay recording roots

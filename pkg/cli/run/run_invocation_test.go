@@ -112,6 +112,37 @@ func TestResolveFactoryInvocationRequest_NamedFactoryStdinText(t *testing.T) {
 	}
 }
 
+func TestResolveFactoryInvocationRequest_UsesNormalizedSignatureArgs(t *testing.T) {
+	request, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
+		Dir: "/tmp/signature-factory",
+		InvocationNormalizedArguments: &invocations.NormalizedArguments{
+			Arguments: map[string]invocations.NormalizedArgument{
+				"input": {Values: []string{"draft"}},
+				"mode":  {Values: []string{"fast", "review"}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("resolveFactoryInvocationRequest: %v", err)
+	}
+	if !invocationMode {
+		t.Fatal("expected invocation mode for normalized signature args")
+	}
+	if request == nil || request.Args == nil {
+		t.Fatalf("request = %#v, want args request", request)
+	}
+	if got := (*request.Args)["input"]; got != "draft" {
+		t.Fatalf("args[input] = %#v, want %q", got, "draft")
+	}
+	values, ok := (*request.Args)["mode"].([]string)
+	if !ok {
+		t.Fatalf("args[mode] = %#v, want []string", (*request.Args)["mode"])
+	}
+	if len(values) != 2 || values[0] != "fast" || values[1] != "review" {
+		t.Fatalf("args[mode] = %#v, want [fast review]", values)
+	}
+}
+
 func TestResolveFactoryInvocationRequest_NamedFactoryRejectsConflictingSources(t *testing.T) {
 	text := "from args"
 

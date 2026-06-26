@@ -347,6 +347,9 @@ func (fs *FactoryService) InvokeFactorySession(
 	if err != nil {
 		return apisurface.FactoryInvocationResult{}, err
 	}
+	if err := validateSessionInvocationInterpolation(runtimeCfg.FactoryConfig(), resolved.NormalizedArguments); err != nil {
+		return apisurface.FactoryInvocationResult{}, normalizeSessionInvocationError(err)
+	}
 
 	workTypeName, err := factoryrun.DefaultHandlingWorkTypeName(runtimeCfg.FactoryConfig())
 	if err != nil {
@@ -355,9 +358,10 @@ func (fs *FactoryService) InvokeFactorySession(
 
 	requestID := strings.TrimSpace(stringValue(request.RequestId))
 	submitRequest := interfaces.SubmitRequest{
-		RequestID:  requestID,
-		WorkTypeID: workTypeName,
-		Content:    resolved.Content,
+		RequestID:           requestID,
+		WorkTypeID:          workTypeName,
+		Content:             resolved.Content,
+		InvocationArguments: invocationArgumentsForSession(runtimeCfg.FactoryConfig(), resolved.NormalizedArguments),
 	}
 	submitResult, err := fs.SubmitWorkRequestForSession(
 		ctx,
@@ -504,6 +508,23 @@ func normalizeSessionInvocationError(err error) error {
 		}
 	}
 	return err
+}
+
+func validateSessionInvocationInterpolation(
+	cfg *interfaces.FactoryConfig,
+	normalized *invocations.NormalizedArguments,
+) error {
+	return invocations.ValidateInvocationInterpolation(cfg, invocationArgumentsForSession(cfg, normalized))
+}
+
+func invocationArgumentsForSession(
+	cfg *interfaces.FactoryConfig,
+	normalized *invocations.NormalizedArguments,
+) *interfaces.InvocationArguments {
+	if cfg == nil {
+		return nil
+	}
+	return invocations.RuntimeInvocationArguments(cfg.InvocationSignature, normalized)
 }
 
 func invocationSignatureFromFactoryConfig(cfg *interfaces.FactoryConfig) *interfaces.InvocationSignatureConfig {

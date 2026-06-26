@@ -94,6 +94,64 @@ func TestWorkstationExecutor_ModelWorkstation_RendersPromptAndDelegates(t *testi
 	}
 }
 
+func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t *testing.T) {
+	mock := &wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	we := newTestWorkstationExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"worker-a": {
+					Type:  interfaces.WorkerTypeModel,
+					Body:  "Provider ${provider}",
+					Model: "${model}",
+				},
+			},
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+				"standard": {
+					Type:             interfaces.WorkstationTypeModel,
+					PromptTemplate:   "Process ${input}",
+					WorkingDirectory: "workspace/${provider}",
+				},
+			},
+		},
+		mock,
+	)
+
+	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "d-interpolate",
+		TransitionID:    "t-interpolate",
+		WorkerType:      "worker-a",
+		WorkstationName: "standard",
+		InputTokens: InputTokens(interfaces.Token{
+			ID: "tok-1",
+			Color: interfaces.TokenColor{
+				WorkID: "work-1",
+				InvocationArguments: &interfaces.InvocationArguments{
+					Arguments: map[string]interfaces.InvocationArgument{
+						"input":    {Values: []string{"draft"}},
+						"provider": {Values: []string{"cursor"}},
+						"model":    {Values: []string{"gpt-5.5"}},
+					},
+				},
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if mock.dispatch.SystemPrompt != "Provider cursor" {
+		t.Fatalf("system prompt = %q, want interpolated worker body", mock.dispatch.SystemPrompt)
+	}
+	if mock.dispatch.UserMessage != "Process draft" {
+		t.Fatalf("user message = %q, want interpolated prompt", mock.dispatch.UserMessage)
+	}
+	if !strings.HasSuffix(mock.dispatch.WorkingDirectory, filepath.Join("workspace", "cursor")) {
+		t.Fatalf("working directory = %q, want interpolated provider path suffix", mock.dispatch.WorkingDirectory)
+	}
+}
+
 // pkgmaintcheck:ignore-cyclomatic-complexity this workstation execution contract test keeps canonical runtime field assertions together on the worker seam.
 func TestWorkstationExecutor_ModelWorkstationUsesCanonicalWorkstationRuntimeFields(t *testing.T) {
 	projectRoot := t.TempDir()

@@ -203,6 +203,9 @@ func resolveFactoryInvocationRequest(cfg RunConfig) (*factoryapi.InvocationReque
 	if factoryInvocationRoot(cfg) == "" {
 		return nil, false, nil
 	}
+	if cfg.InvocationNormalizedArguments != nil {
+		return invocationRequestFromNormalizedArguments(*cfg.InvocationNormalizedArguments), true, nil
+	}
 
 	stdinTTY := stdinIsTTY(cfg)
 	if cfg.InvocationPositionalText == nil && cfg.InvocationStdinText == nil && stdinTTY {
@@ -271,6 +274,19 @@ func invocationRequestFromResolvedInput(resolved invocations.ResolvedInput) *fac
 		SourceKind: &sourceKind,
 		Content:    &content,
 	}
+}
+
+func invocationRequestFromNormalizedArguments(normalized invocations.NormalizedArguments) *factoryapi.InvocationRequest {
+	args := make(map[string]any, len(normalized.Arguments))
+	for name, argument := range normalized.Arguments {
+		if len(argument.Values) == 1 {
+			args[name] = argument.Values[0]
+			continue
+		}
+		values := append([]string(nil), argument.Values...)
+		args[name] = values
+	}
+	return &factoryapi.InvocationRequest{Args: &args}
 }
 
 func wrapInvocationInputError(err error) error {
