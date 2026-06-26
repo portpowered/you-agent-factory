@@ -356,7 +356,7 @@ func buildRuntimeBundle(
 	if err != nil {
 		return nil, err
 	}
-	logger := runtimebuild.NewSessionLogger(logSink.Logger(), sessionID, input.folderPath, input.dir)
+	logger := runtimebuild.NewSessionLogger(runtimeSessionBaseLogger(input.baseLogger, logSink), sessionID, input.folderPath, input.dir)
 	metricsSink, err := buildRuntimeMetricsSink(input.cfg, sessionID, runtimeInstanceID, input.folderPath, input.dir)
 	if err != nil {
 		logger.Warn(
@@ -570,6 +570,16 @@ func runtimeFileLoggingEnabled(policy RuntimeFileLoggingPolicy) bool {
 	default:
 		return true
 	}
+}
+
+func runtimeSessionBaseLogger(baseLogger *zap.Logger, logSink *logging.RuntimeLogSink) *zap.Logger {
+	if logSink != nil {
+		return logSink.Logger()
+	}
+	if baseLogger != nil {
+		return baseLogger
+	}
+	return zap.NewNop()
 }
 
 func buildRuntimeMetricsSink(
