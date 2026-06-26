@@ -1007,19 +1007,24 @@ func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
 		return response, nil
 	}
 
-	session, err := fs.requireSession(sessionID)
+	resolved, err := fs.resolveSessionSyncPreflightTarget(sessionID)
 	if err != nil {
-		if errors.Is(err, apisurface.ErrFactorySessionNotFound) {
-			response.ReasonCode = factoryapi.SessionNotFound
-			return response, nil
-		}
 		return factoryapi.FactorySessionSyncPreflightResponse{}, err
 	}
+	if resolved.session == nil {
+		response.ReasonCode = factoryapi.SessionNotFound
+		return response, nil
+	}
+	session := resolved.session
 
 	response.BackendScopeId = stringPointer(factorySessionBackendScopeID(fs, session))
 	response.LogicalSessionKeyId = stringPointer(factorySessionLogicalSessionKeyID(session))
 	response.FactorySessionId = stringPointer(session.ID)
 	response.StreamGenerationId = stringPointer(factorySessionStreamGenerationID(fs, session))
+	if resolved.remapped {
+		response.ReasonCode = factoryapi.LogicalSessionRemap
+		return response, nil
+	}
 
 	if !response.ReconnectCursor.Provided {
 		response.ReasonCode = factoryapi.Ok
@@ -1049,6 +1054,53 @@ func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
 	response.CheckpointReusable = true
 	response.ReconnectCursor.ValidForStreamGeneration = true
 	return response, nil
+}
+
+type sessionSyncPreflightTarget struct {
+	session  *factorysessions.LiveSession
+	remapped bool
+}
+
+func (fs *FactoryService) resolveSessionSyncPreflightTarget(sessionID string) (sessionSyncPreflightTarget, error) {
+	if fs == nil {
+		return sessionSyncPreflightTarget{}, fmt.Errorf("factory service is required")
+	}
+	if session, err := fs.requireSession(sessionID); err == nil {
+		return sessionSyncPreflightTarget{session: session}, nil
+	} else if !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+		return sessionSyncPreflightTarget{}, err
+	}
+
+	if strings.TrimSpace(sessionID) != defaultFactorySessionID {
+		return sessionSyncPreflightTarget{}, nil
+	}
+
+	if session := fs.preflightDefaultSessionSuccessor(); session != nil {
+		return sessionSyncPreflightTarget{session: session, remapped: true}, nil
+	}
+	return sessionSyncPreflightTarget{}, nil
+}
+
+func (fs *FactoryService) preflightDefaultSessionSuccessor() *factorysessions.LiveSession {
+	if fs == nil {
+		return nil
+	}
+	if runState := fs.currentRunState(); runState != nil {
+		successorID := strings.TrimSpace(runState.sessionID)
+		if successorID != "" && successorID != defaultFactorySessionID {
+			if session, err := fs.requireSession(successorID); err == nil {
+				return session
+			}
+		}
+	}
+	current := fs.currentSession()
+	if current == nil || current.ID == defaultFactorySessionID {
+		return nil
+	}
+	if session, err := fs.requireSession(current.ID); err == nil {
+		return session
+	}
+	return nil
 }
 
 func (fs *FactoryService) buildSessionProjectionContext(

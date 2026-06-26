@@ -2545,6 +2545,46 @@ func TestFactoryService_GetFactorySessionSyncPreflight_MissingSessionReturnsType
 	}
 }
 
+func TestFactoryService_GetFactorySessionSyncPreflight_DefaultAliasRemapReturnsTypedOutcome(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha", "beta"},
+	})
+	defer harness.stop(t)
+
+	betaSessionID := harness.openFactorySession(t, "beta")
+	harness.waitIdle(t, betaSessionID, "beta runtime")
+
+	if err := harness.svc.CloseFactorySession(context.Background(), defaultFactorySessionID); err != nil {
+		t.Fatalf("CloseFactorySession(default): %v", err)
+	}
+
+	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, nil)
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(remap): %v", err)
+	}
+	if response.ReasonCode != factoryapi.LogicalSessionRemap {
+		t.Fatalf("reasonCode = %q, want %q", response.ReasonCode, factoryapi.LogicalSessionRemap)
+	}
+	if response.CheckpointReusable {
+		t.Fatal("checkpointReusable = true, want false after remap")
+	}
+	if response.FactorySessionId == nil || *response.FactorySessionId != betaSessionID {
+		t.Fatalf("factorySessionId = %#v, want promoted beta session %q", response.FactorySessionId, betaSessionID)
+	}
+	betaSession := harness.requireSession(t, betaSessionID)
+	wantLogicalSessionKeyID := factorySessionLogicalSessionKeyID(betaSession)
+	if response.LogicalSessionKeyId == nil || *response.LogicalSessionKeyId != wantLogicalSessionKeyID {
+		t.Fatalf("logicalSessionKeyId = %v, want %q", response.LogicalSessionKeyId, wantLogicalSessionKeyID)
+	}
+	if response.StreamGenerationId == nil || !strings.Contains(*response.StreamGenerationId, betaSessionID) {
+		t.Fatalf("streamGenerationId = %#v, want promoted session-scoped generation", response.StreamGenerationId)
+	}
+	if response.ReconnectCursor.Provided || response.ReconnectCursor.ValidForStreamGeneration {
+		t.Fatalf("reconnect cursor = %#v, want absent and invalid", response.ReconnectCursor)
+	}
+}
+
 func newLiveSessionStatusTestServer(t *testing.T, svc *FactoryService) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(api.NewServer(svc, 0, zap.NewNop()).Handler())
