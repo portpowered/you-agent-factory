@@ -6,6 +6,7 @@ import {
   within,
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { FactoryOrchestratorKind } from "./api/generated/openapi";
 import * as factoryPngExportModule from "./features/export/lib/factory-png-export";
 import * as factoryPngImportModule from "./features/import/lib/factory-png-import";
 import {
@@ -49,9 +50,14 @@ function buildFactorySessionGetResponse() {
         startedAt: "2026-06-26T00:00:00Z",
         updatedAt: "2026-06-26T00:00:00Z",
       },
-      orchestratorKind: "STATIC",
+      orchestratorKind: FactoryOrchestratorKind.PETRI,
       progress: {
-        categories: {},
+        categories: {
+          failed: 0,
+          initial: 0,
+          processing: 0,
+          terminal: 0,
+        },
         factoryState: "IDLE",
         inFlightCount: 0,
         totalTokens: 0,

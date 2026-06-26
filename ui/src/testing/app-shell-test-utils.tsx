@@ -9,6 +9,7 @@ import type {
   DashboardWorkstationRequest,
 } from "../api/dashboard";
 import type { FactoryEvent } from "../api/events";
+import { FactoryOrchestratorKind } from "../api/generated/openapi";
 import type {
   FactorySession,
   FactorySessionSummary,
@@ -212,9 +213,14 @@ function buildFactorySessionResponse(
         startedAt: lifecycleTimestamp,
         updatedAt: lifecycleTimestamp,
       },
-      orchestratorKind: "STATIC",
+      orchestratorKind: FactoryOrchestratorKind.PETRI,
       progress: {
-        categories: {},
+        categories: {
+          failed: 0,
+          initial: 0,
+          processing: 0,
+          terminal: 0,
+        },
         factoryState: snapshot.factory_state,
         inFlightCount: 0,
         totalTokens: 0,
