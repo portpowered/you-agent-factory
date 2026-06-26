@@ -102,6 +102,12 @@ primary-result behavior.
   shared by direct model invocation and HTTP handlers.
 - `pkg/workers/executor/model_operation_bindings.go` delegates inference binding
   resolution to `pkg/invocations`.
+- `pkg/cli/root_run_args.go` owns the `you run` manual flag split that preserves
+  known run and inherited flags while leaving unknown `--factory-arg` tokens
+  intact for signature-backed parsing; keep factory-argument normalization
+  itself in `pkg/cli/run/factory_invocation_signature_input.go` plus
+  `pkg/invocations/arguments.go` rather than re-implementing binding logic in
+  Cobra parsing.
 - `pkg/invocations/input.go` owns logical empty-text detection via
   `strings.TrimSpace` inside `ResolveTextInput` and `ResolveAPITextInputContent`;
   CLI and API adapters must not duplicate whitespace-only rejection.

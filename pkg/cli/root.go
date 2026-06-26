@@ -674,9 +674,10 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 	var invocationOutputMode string
 
 	cmd := &cobra.Command{
-		Use:           "run",
-		Short:         "Load workflow and run the factory engine",
-		SilenceErrors: true,
+		Use:                "run",
+		Short:              "Load workflow and run the factory engine",
+		DisableFlagParsing: true,
+		SilenceErrors:      true,
 		Long: "Load workflow and run the factory engine.\n\n" +
 			"For the quickest local setup, run " + cliBinaryName + " with no arguments. " +
 			"That default flow bootstraps ./factory, watches factory/inputs/task/default, " +
@@ -723,6 +724,16 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			args, err := parseRunCommandArgs(cmd, args)
+			if err != nil {
+				return err
+			}
+			if helpFlag := cmd.Flags().Lookup("help"); helpFlag != nil && helpFlag.Changed {
+				return cmd.Help()
+			}
+			if err := rejectDeprecatedPortFlag(cmd, nil); err != nil {
+				return err
+			}
 			cfg.MockWorkersEnabled = cmd.Flags().Changed("with-mock-workers")
 			promptArgs := args
 			if cfg.MockWorkersConfigPath == defaultMockWorkersConfigPathSentinel {
@@ -733,7 +744,7 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 					cfg.MockWorkersConfigPath = ""
 				}
 			}
-			err := runFactory(cmd, cfg, promptArgs, globals, operatorDefaults, diagnostics.verboseEnabled(), diagnostics.debug)
+			err = runFactory(cmd, cfg, promptArgs, globals, operatorDefaults, diagnostics.verboseEnabled(), diagnostics.debug)
 			if err != nil && !runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json) {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), err)
 			}
@@ -925,6 +936,46 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 	factoryChanged := cmd.Flags().Changed("factory")
 	namedChanged := cmd.Flags().Changed("named")
 	workChanged := cmd.Flags().Changed("work")
+
+	if !factoryChanged && !namedChanged {
+		for _, arg := range promptArgs {
+			if strings.HasPrefix(arg, "-") {
+				return fmt.Errorf("unknown flag: %s", arg)
+			}
+		}
+		input, err := runcli.ResolveFactoryInvocationInput(runcli.FactoryInvocationInputConfig{
+			PromptArgs: promptArgs,
+			Stdin:      cmd.InOrStdin(),
+		})
+		if err != nil {
+			return err
+		}
+		if input.Payload != "" {
+			return fmt.Errorf("positional prompt arguments require --factory or --named")
+		}
+		return nil
+	}
+	if len(promptArgs) == 0 && runCommandInputIsTTY(cmd.InOrStdin()) {
+		return nil
+	}
+
+	signature, err := runcli.ResolveFactoryInvocationSignature(cfg.Dir)
+	if err != nil {
+		return err
+	}
+	if signature != nil {
+		normalized, err := runcli.ResolveSignatureFactoryInvocationInput(runcli.SignatureFactoryInvocationInputConfig{
+			PromptArgs: promptArgs,
+			Signature:  signature,
+			Stdin:      cmd.InOrStdin(),
+		})
+		if err != nil {
+			return err
+		}
+		cfg.InvocationNormalizedArguments = &normalized
+		return nil
+	}
+
 	input, err := runcli.ResolveFactoryInvocationInput(runcli.FactoryInvocationInputConfig{
 		PromptArgs: promptArgs,
 		Stdin:      cmd.InOrStdin(),
@@ -933,12 +984,6 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 		return err
 	}
 
-	if !factoryChanged && !namedChanged {
-		if input.Payload != "" {
-			return fmt.Errorf("positional prompt arguments require --factory or --named")
-		}
-		return nil
-	}
 	if workChanged && input.Payload != "" {
 		return fmt.Errorf("%s cannot be used with --work", input.Source)
 	}
@@ -958,4 +1003,15 @@ func resolveRunFactoryPrompt(cmd *cobra.Command, cfg *runcli.RunConfig, promptAr
 	}
 	cfg.CleanInvocationInputSource = input.Source
 	return nil
+}
+
+func runCommandInputIsTTY(stdin io.Reader) bool {
+	if stdin != nil && stdin != os.Stdin {
+		return false
+	}
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
 }

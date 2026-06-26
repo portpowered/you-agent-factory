@@ -215,6 +215,129 @@ func portableFactoryPayloadWithDefaultHandling() []byte {
 }`)
 }
 
+func portableFactoryPayloadWithInvocationSignature() []byte {
+	return []byte(`{
+  "name": "portable",
+  "invocationSignature": {
+    "parameters": [
+      {
+        "name": "input",
+        "bindings": [{"kind": "POSITIONAL", "position": 1}]
+      },
+      {
+        "name": "mode",
+        "bindings": [{"kind": "NAMED"}]
+      },
+      {
+        "name": "confirm",
+        "typeHint": "BOOLEAN_STRING",
+        "bindings": [{"kind": "NAMED"}]
+      },
+      {
+        "name": "output",
+        "aliases": ["out"],
+        "bindings": [{"kind": "NAMED"}]
+      }
+    ]
+  },
+  "workTypes": [{
+    "name": "story",
+    "handlingBehavior": ["DEFAULT"],
+    "states": [
+      {"name": "init", "type": "INITIAL"},
+      {"name": "complete", "type": "TERMINAL"},
+      {"name": "failed", "type": "FAILED"}
+    ]
+  }],
+  "workstations": [{
+    "name": "ws",
+    "inputs": [{"workType": "story", "state": "init"}],
+    "outputs": [{"workType": "story", "state": "complete"}],
+    "onFailure": [{"workType": "story", "state": "failed"}]
+  }]
+}`)
+}
+
+func TestRunCommand_NamedFactorySignatureArgsPreserveRunFlagsAndNormalizeInputs(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	workingDirectory := t.TempDir()
+	homeDirectory := t.TempDir()
+	originalWorkingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd: %v", err)
+	}
+	if err := os.Chdir(workingDirectory); err != nil {
+		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
+	}
+	defer func() {
+		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {
+			t.Fatalf("restore working directory: %v", chdirErr)
+		}
+	}()
+	t.Setenv("HOME", homeDirectory)
+
+	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
+	if err != nil {
+		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
+	}
+	segment, err := factoryconfig.NamedFactoryNameToLayoutSegment("alpha")
+	if err != nil {
+		t.Fatalf("NamedFactoryNameToLayoutSegment(alpha): %v", err)
+	}
+	factoryDir := filepath.Join(globalRoot, segment)
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q): %v", factoryDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, interfaces.FactoryConfigFile), portableFactoryPayloadWithInvocationSignature(), 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{
+		"run",
+		"--named", "alpha",
+		"--no-record",
+		"draft",
+		"--mode", "fast",
+		"--confirm",
+		"--out=result.md",
+	})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --named alpha with signature args: %v", err)
+	}
+	if !got.DisableDefaultRecording {
+		t.Fatal("expected --no-record to remain a run-level flag")
+	}
+	if got.InvocationNormalizedArguments == nil {
+		t.Fatal("expected signature-backed invocation arguments to be normalized")
+	}
+	if values := got.InvocationNormalizedArguments.Arguments["input"].Values; len(values) != 1 || values[0] != "draft" {
+		t.Fatalf("input values = %#v, want [draft]", values)
+	}
+	if values := got.InvocationNormalizedArguments.Arguments["mode"].Values; len(values) != 1 || values[0] != "fast" {
+		t.Fatalf("mode values = %#v, want [fast]", values)
+	}
+	if values := got.InvocationNormalizedArguments.Arguments["confirm"].Values; len(values) != 1 || values[0] != "true" {
+		t.Fatalf("confirm values = %#v, want [true]", values)
+	}
+	if values := got.InvocationNormalizedArguments.Arguments["output"].Values; len(values) != 1 || values[0] != "result.md" {
+		t.Fatalf("output values = %#v, want [result.md]", values)
+	}
+}
+
 func TestRunCommand_NamedAndDirFlagsRejectConflict(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
