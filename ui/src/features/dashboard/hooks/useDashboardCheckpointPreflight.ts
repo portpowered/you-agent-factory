@@ -19,6 +19,7 @@ import {
 
 export interface UseDashboardCheckpointPreflightOptions {
   checkpointRestoreEnabled: boolean;
+  refreshToken?: number;
   rawSessionID: string | null;
   restoreCheckpoint: (checkpoint: FactoryTimelineCheckpoint) => void;
 }
@@ -33,11 +34,14 @@ export interface DashboardCheckpointPreflightState {
 
 export function useDashboardCheckpointPreflight({
   checkpointRestoreEnabled,
+  refreshToken = 0,
   rawSessionID,
   restoreCheckpoint,
 }: UseDashboardCheckpointPreflightOptions): DashboardCheckpointPreflightState {
   const queryClient = useQueryClient();
-  const [checkpointHydratedSessionID, setCheckpointHydratedSessionID] =
+  const hydrationKey =
+    rawSessionID == null ? null : `${rawSessionID}:${refreshToken}`;
+  const [checkpointHydratedKey, setCheckpointHydratedKey] =
     useState<string | null>(null);
   const [initialReconnectCursor, setInitialReconnectCursor] =
     useState<FactoryEventReconnectCursor | undefined>(undefined);
@@ -51,7 +55,7 @@ export function useDashboardCheckpointPreflight({
   useEffect(() => {
     let cancelled = false;
 
-    setCheckpointHydratedSessionID(null);
+    setCheckpointHydratedKey(null);
     setInitialReconnectCursor(undefined);
     setPersistedSyncIdentity(null);
     setPreflightStatus("idle");
@@ -63,7 +67,7 @@ export function useDashboardCheckpointPreflight({
       !checkpointRestoreEnabled
     ) {
       setPreflightStatus("success");
-      setCheckpointHydratedSessionID(rawSessionID);
+      setCheckpointHydratedKey(hydrationKey);
       return;
     }
 
@@ -78,7 +82,7 @@ export function useDashboardCheckpointPreflight({
       setRecoveryState(
         buildDashboardSessionPreflightFailureRecoveryState(sessionID),
       );
-      setCheckpointHydratedSessionID(sessionID);
+      setCheckpointHydratedKey(hydrationKey);
     });
 
     return () => {
@@ -124,12 +128,18 @@ export function useDashboardCheckpointPreflight({
       setPreflightStatus(restorePlan.preflightStatus);
       setRecoveryState(restorePlan.recoveryState);
       setPersistedSyncIdentity(restorePlan.syncIdentity);
-      setCheckpointHydratedSessionID(sessionID);
+      setCheckpointHydratedKey(hydrationKey);
     }
-  }, [checkpointRestoreEnabled, queryClient, rawSessionID, restoreCheckpoint]);
+  }, [
+    checkpointRestoreEnabled,
+    hydrationKey,
+    queryClient,
+    rawSessionID,
+    restoreCheckpoint,
+  ]);
 
   return {
-    checkpointHydrated: checkpointHydratedSessionID === rawSessionID,
+    checkpointHydrated: checkpointHydratedKey === hydrationKey,
     initialReconnectCursor,
     preflightStatus,
     recoveryState,

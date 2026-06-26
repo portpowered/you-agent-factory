@@ -63,6 +63,7 @@ export function useDashboardSnapshot({
     persistedSyncIdentity,
   } = useDashboardCheckpointPreflight({
     checkpointRestoreEnabled: !debugOptions.disableTimelineCheckpoint,
+    refreshToken,
     rawSessionID,
     restoreCheckpoint,
   });
