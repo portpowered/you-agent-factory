@@ -956,7 +956,6 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 	return factoryDir, true, nil
 }
 
-// BuiltInGoalFactoryJSON is the canonical runnable @you/goal packaged factory payload.
 var BuiltInGoalFactoryJSON = builtingoal.BuiltInGoalFactoryJSON
 
 // BuiltInTTSFactoryJSON is the canonical runnable @you/tts packaged factory payload.

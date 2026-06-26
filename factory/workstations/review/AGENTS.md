@@ -81,7 +81,10 @@ If the PR has merge conflicts, please tell the processor to fix the merge confli
 
 Return one JSON decision envelope as your final output. See
 `factory/docs/decision-envelope.md` for the full shape, accepted decision
-values, and malformed-input behavior.
+values, routing-mode differences, and malformed-input behavior. This review
+workstation uses the standard outcome vocabulary below; packaged `@you/goal`
+structured review lanes use the goal-routing labels documented in the same
+file instead.
 
 | Review outcome | `decision` value |
 | --- | --- |

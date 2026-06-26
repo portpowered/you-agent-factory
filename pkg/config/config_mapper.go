@@ -149,7 +149,7 @@ func (cm *ConfigMapper) appendInputArcs(t *petri.Transition, inputs []interfaces
 }
 
 func (cm *ConfigMapper) appendSuccessArcs(t *petri.Transition, ws interfaces.FactoryWorkstationConfig) {
-	if ws.Type == interfaces.WorkstationTypeClassify {
+	if ws.Type == interfaces.WorkstationTypeClassify || usesGoalRoutingDecisionEnvelope(ws) {
 		for _, route := range ws.ClassificationRoutes {
 			for _, output := range route.Outputs {
 				placeID := mapToID(output)
