@@ -26,12 +26,14 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -1497,6 +1499,50 @@ func TestFactoryService_GetFactorySession_ProjectsLegacyPetriRuntime(t *testing.
 	}
 	if session.Runtime.Lifecycle.UpdatedAt.Before(session.Runtime.Lifecycle.StartedAt.Add(-time.Minute)) {
 		t.Fatalf("lifecycle ordering = %#v", session.Runtime.Lifecycle)
+	}
+}
+
+func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityRemainsStableAcrossReads(t *testing.T) {
+	startedAt := time.Date(2026, 6, 26, 11, 5, 0, 0, time.UTC)
+	factoryCfg := &interfaces.FactoryConfig{
+		Name: "dynamic-workflow",
+		Orchestrator: &interfaces.FactoryOrchestratorConfig{
+			Kind: interfaces.OrchestratorKindJavaScript,
+			JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
+				Dialect:   "workflow-v1",
+				SourceRef: "factory/workflows/review.js",
+			},
+		},
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, nil, nil)
+	svc := &FactoryService{cfg: &FactoryServiceConfig{Dir: t.TempDir()}}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
+		runtimeInstanceID: "backend-scope-js",
+		startedAtUTC:      startedAt,
+		runtimeCfg:        runtimeCfg,
+		factory: &aggregateSnapshotFactory{
+			engineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+				LifecycleControlStatus: string(factoryapi.FactorySessionDurableLifecycleStatusRunning),
+			},
+		},
+	})
+
+	first, err := svc.GetFactorySession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetFactorySession first read: %v", err)
+	}
+	second, err := svc.GetFactorySession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetFactorySession second read: %v", err)
+	}
+	if first.Runtime.StreamIdentity == nil || second.Runtime.StreamIdentity == nil {
+		t.Fatalf("stream identity missing across reads: first=%#v second=%#v", first.Runtime.StreamIdentity, second.Runtime.StreamIdentity)
+	}
+	if *first.Runtime.StreamIdentity != *second.Runtime.StreamIdentity {
+		t.Fatalf("stream identity changed across reads: first=%#v second=%#v", first.Runtime.StreamIdentity, second.Runtime.StreamIdentity)
+	}
+	if first.Runtime.StreamIdentity.StreamGenerationID != startedAt.Format(time.RFC3339Nano) {
+		t.Fatalf("stream generation id = %q, want %q", first.Runtime.StreamIdentity.StreamGenerationID, startedAt.Format(time.RFC3339Nano))
 	}
 }
 

@@ -24,11 +24,12 @@ type ProjectionContext struct {
 	FactoryCfg             *interfaces.FactoryConfig
 	Snapshot               *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 	LifecycleControlStatus string
-	BackendScopeID        string
-	Enabled               []interfaces.EnabledTransition
-	JavaScript            *interfaces.FactorySessionJavaScriptRuntimeState
-	JavaScriptCheckpoints []interfaces.JavaScriptCheckpointRecord
-	Now                   time.Time
+	BackendScopeID         string
+	RuntimeStartedAt       time.Time
+	Enabled                []interfaces.EnabledTransition
+	JavaScript             *interfaces.FactorySessionJavaScriptRuntimeState
+	JavaScriptCheckpoints  []interfaces.JavaScriptCheckpointRecord
+	Now                    time.Time
 }
 
 // SessionResponse maps a live session and runtime projection to the API detail shape.
@@ -106,8 +107,8 @@ func projectedSessionStreamIdentity(
 	}
 	streamGenerationID := lifecycle.StartedAt.UTC().Format(time.RFC3339Nano)
 	return &factoryapi.FactorySessionStreamIdentity{
-		BackendScopeID:    backendScopeID,
-		FactorySessionID:  sessionID,
+		BackendScopeID:     backendScopeID,
+		FactorySessionID:   sessionID,
 		StreamGenerationID: streamGenerationID,
 	}
 }
@@ -208,6 +209,8 @@ func projectedSessionLifecycle(ctx ProjectionContext, now time.Time) factoryapi.
 	startedAt := now
 	if ctx.Snapshot != nil && ctx.Snapshot.Uptime > 0 {
 		startedAt = now.Add(-ctx.Snapshot.Uptime).UTC()
+	} else if !ctx.RuntimeStartedAt.IsZero() {
+		startedAt = ctx.RuntimeStartedAt.UTC()
 	}
 	lifecycle := factoryapi.FactorySessionLifecycle{
 		StartedAt: startedAt,

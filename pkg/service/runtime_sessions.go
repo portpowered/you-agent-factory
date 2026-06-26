@@ -1117,10 +1117,11 @@ func (fs *FactoryService) buildSessionProjectionContext(
 	}
 	factoryCfg := runtimeCfg.FactoryConfig()
 	projectionCtx := factorysessions.ProjectionContext{
-		Session:        session,
-		FactoryCfg:     factoryCfg,
-		BackendScopeID: strings.TrimSpace(liveSessionBundle(session).runtimeInstanceID),
-		Now:            time.Now().UTC(),
+		Session:          session,
+		FactoryCfg:       factoryCfg,
+		BackendScopeID:   strings.TrimSpace(liveSessionBundle(session).runtimeInstanceID),
+		RuntimeStartedAt: liveSessionBundle(session).startedAtUTC,
+		Now:              time.Now().UTC(),
 	}
 	if interfaces.IsJavaScriptOrchestratorFactory(factoryCfg) {
 		checkpointStore := fs.javascriptCheckpointStore(session)
