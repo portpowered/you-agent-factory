@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 )
 
 func TestLoadFileDefaults_MissingFileReturnsEmptyDefaults(t *testing.T) {
@@ -47,6 +49,16 @@ func TestParseFileDefaults_AcceptsWorkerModelDefaults(t *testing.T) {
 	}
 	if defaults.WorkerModel != "gpt-5-codex" {
 		t.Fatalf("model = %q, want gpt-5-codex", defaults.WorkerModel)
+	}
+}
+
+func TestDefaultConfigPathUsesCanonicalDefaultPathsPolicy(t *testing.T) {
+	t.Parallel()
+
+	homeDir := filepath.Join(string(filepath.Separator), "tmp", "operator-home")
+
+	if got, want := DefaultConfigPath(homeDir), defaultpaths.OperatorConfigPath(homeDir); got != want {
+		t.Fatalf("DefaultConfigPath() = %q, want %q", got, want)
 	}
 }
 
@@ -147,6 +159,24 @@ func TestResolve_SymbolicDefaultWithoutConcreteProviderFails(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "concrete provider") {
 		t.Fatalf("error = %q, want concrete provider guidance", err.Error())
+	}
+}
+
+func TestResolve_PreservesExplicitConfigPathOverride(t *testing.T) {
+	t.Parallel()
+
+	overridePath := filepath.Join(string(filepath.Separator), "tmp", "custom", "operator-config.json")
+	resolved, err := Resolve(ResolveInput{
+		File: Defaults{
+			WorkerModelProvider: "codex",
+			WorkerModel:         "file-model",
+		},
+	}, overridePath)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if resolved.ConfigPath != overridePath {
+		t.Fatalf("config path = %q, want %q", resolved.ConfigPath, overridePath)
 	}
 }
 

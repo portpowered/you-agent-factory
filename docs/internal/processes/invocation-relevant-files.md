@@ -25,6 +25,11 @@ primary-result behavior.
   outcomes into `InvocationResponse`; it also owns invocation boundary logs and
   optional `InvocationMetricsRecorder` counter emission for runtime outcomes.
 - `pkg/cli/run/` is the `you run --factory` CLI boundary.
+- Canonical default-path ownership for operator config
+  (`~/.you-agent-factory/config.json`) and generated live replay recording roots
+  (`~/.you-agent-factory/recordings/...`) belongs in `pkg/config/defaultpaths`;
+  `pkg/config/operatorconfig` and `pkg/cli/run` should keep only precedence,
+  filename, and reporting behavior around those defaults.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before

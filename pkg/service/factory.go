@@ -200,8 +200,9 @@ type FactoryServiceConfig struct {
 	// RuntimeInstanceID identifies this runtime process for file-backed logs.
 	// Empty generates a UUID.
 	RuntimeInstanceID string
-	// RuntimeLogDir optionally overrides the default ~/.agent-factory/logs
-	// directory. Tests use this to keep file-backed logs isolated.
+	// RuntimeLogDir optionally overrides the default
+	// ~/.you-agent-factory/logs directory. Tests use this to keep file-backed
+	// logs isolated.
 	RuntimeLogDir string
 	// RuntimeFileLoggingPolicy controls whether the service creates a runtime
 	// file sink. Empty defaults to enabled for production-facing behavior.
