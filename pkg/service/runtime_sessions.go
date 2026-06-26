@@ -1263,7 +1263,6 @@ func (fs *FactoryService) newSessionResponseStreamInstance() *factorysessions.Se
 	return factorysessions.NewSessionResponseStream()
 }
 
-<<<<<<< HEAD
 func (fs *FactoryService) newSessionResponseStreamSetInstance() *factorysessions.SessionResponseStreamSet {
 	return factorysessions.NewSessionResponseStreamSetWithFactory(func() *factorysessions.SessionResponseStream {
 		return fs.newSessionResponseStreamInstance()
