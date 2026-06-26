@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, expect, type Mock, vi } from "vitest";
+import { afterEach, beforeEach, expect, vi } from "vitest";
 import { App } from "../App";
 import type {
   DashboardSnapshot,
@@ -9,11 +9,7 @@ import type {
   DashboardWorkstationRequest,
 } from "../api/dashboard";
 import type { FactoryEvent } from "../api/events";
-import { FactoryOrchestratorKind } from "../api/generated/openapi";
-import type {
-  FactorySession,
-  FactorySessionSummary,
-} from "../api/factory-sessions/api";
+import type { FactorySessionSummary } from "../api/factory-sessions/api";
 import { DEFAULT_FACTORY_SESSION_ID } from "../api/session-routing";
 import {
   buildDashboardSnapshotFixture,
@@ -37,10 +33,16 @@ import { useExportDialogStore } from "../features/export/state/exportDialogStore
 import type { FactoryPngImportValue } from "../features/import/lib/factory-png-import";
 import { useFactoryTimelineStore } from "../features/timeline/state/factoryTimelineStore";
 import {
+  chainRenderAppFetchMock,
+  type FetchMock,
+  type RenderAppFetchOverride,
+} from "./app-shell-fetch-test-utils";
+import {
   defaultFactorySessionSummary,
   fetchRequestPath,
   MockEventSource,
 } from "./app-shell-session-stream-test-utils";
+import { handleFactorySessionPreflightRequest } from "./app-shell-session-preflight-test-utils";
 import { buildDashboardTestGraphLayout } from "./app-shell-test-graph-layout";
 import {
   seedTimelineSnapshot,
@@ -109,10 +111,6 @@ interface RenderAppOptions {
   traceFixtures?: Record<string, DashboardTrace>;
   workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
 }
-
-type FetchMock = Mock<
-  (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
->;
 
 interface RenderAppResult extends ReturnType<typeof render> {
   fetchMock: FetchMock;
@@ -196,47 +194,6 @@ export const importedFactorySnapshot = (() => {
   return snapshot;
 })();
 
-function buildFactorySessionResponse(
-  summary: FactorySessionSummary,
-  snapshot: DashboardSnapshot,
-): FactorySession {
-  const lifecycleTimestamp = "2026-06-26T00:00:00Z";
-
-  return {
-    factoryDir: summary.factoryDir,
-    folderPath: summary.folderPath,
-    id: summary.id,
-    isDefault: summary.isDefault,
-    project: summary.project,
-    runtime: {
-      lifecycle: {
-        startedAt: lifecycleTimestamp,
-        updatedAt: lifecycleTimestamp,
-      },
-      orchestratorKind: FactoryOrchestratorKind.PETRI,
-      progress: {
-        categories: {
-          failed: 0,
-          initial: 0,
-          processing: 0,
-          terminal: 0,
-        },
-        factoryState: snapshot.factory_state,
-        inFlightCount: 0,
-        totalTokens: 0,
-      },
-      status: "IDLE",
-      streamIdentity: {
-        backendScopeID: `${summary.folderPath}::test-backend`,
-        factorySessionID: summary.id,
-        streamGenerationID: lifecycleTimestamp,
-      },
-      usage: { resources: [] },
-    },
-    target: summary.target,
-  };
-}
-
 export async function settleAppShellDashboardEffects(): Promise<void> {
   await act(async () => {
     await Promise.resolve();
@@ -300,52 +257,14 @@ export function renderApp({
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const path = fetchRequestPath(input);
         const method = (init?.method ?? "GET").toUpperCase();
-
-        if (path === "/factory-sessions") {
-          return jsonResponse({
-            sessions: availableFactorySessions,
-          });
-        }
-
-        const syncPreflightMatch =
-          factorySessionSyncPreflightPathPattern.exec(path);
-        if (method === "GET" && syncPreflightMatch?.[1]) {
-          return jsonResponse({
-            backendScopeId: "backend-a",
-            checkpointReusable: true,
-            factorySessionId: syncPreflightMatch[1],
-            logicalSessionKeyId: "logical-default",
-            reasonCode: "ok",
-            reconnectCursor: {
-              provided: false,
-              validForStreamGeneration: true,
-            },
-            requestedSessionId: syncPreflightMatch[1],
-            streamGenerationId: "stream-default",
-          });
-        }
-
-        if (method === "GET" && /^\/factory-sessions\/[^/]+$/.test(path)) {
-          const requestedSessionID = decodeURIComponent(
-            path.slice("/factory-sessions/".length),
-          );
-          const sessionSummary = availableFactorySessions.find(
-            (session) => session.id === requestedSessionID,
-          );
-          if (!sessionSummary) {
-            return jsonResponse(
-              {
-                code: "FACTORY_SESSION_NOT_FOUND",
-                message: `Factory session ${requestedSessionID} was not found.`,
-              },
-              404,
-              "Not Found",
-            );
-          }
-
-          return jsonResponse(
-            buildFactorySessionResponse(sessionSummary, snapshot),
-          );
+        const preflightResponse = handleFactorySessionPreflightRequest({
+          availableFactorySessions,
+          method,
+          path,
+          snapshot,
+        });
+        if (preflightResponse) {
+          return preflightResponse;
         }
 
         if (
@@ -402,90 +321,6 @@ export async function renderAppWithDashboardShell(
   const result = renderApp(options);
   await waitForDashboardShell();
   return result;
-}
-
-export function fetchCallPaths(fetchMock: ReturnType<typeof vi.fn>) {
-  return fetchMock.mock.calls.map(([input]) =>
-    typeof input === "string"
-      ? input
-      : input instanceof URL
-        ? `${input.pathname}${input.search}`
-        : input.url,
-  );
-}
-
-export function nonPromptTemplateFetchPaths(
-  fetchMock: ReturnType<typeof vi.fn>,
-) {
-  return fetchCallPaths(fetchMock).filter(
-    (path) =>
-      !factorySessionSyncPreflightPathPattern.test(path) &&
-      !path.includes("/prompt-template-contract") &&
-      !path.includes("/prompt-template-validation") &&
-      path !== "/factory-sessions" &&
-      !/^\/factory-sessions\/[^/]+$/.test(path) &&
-      !path.endsWith("/factory"),
-  );
-}
-
-export type RenderAppFetchOverride = (
-  path: string,
-  method: string,
-  input: RequestInfo | URL,
-  init?: RequestInit,
-) => Promise<Response | undefined>;
-
-export function chainRenderAppFetchMock(
-  fetchMock: FetchMock,
-  override: RenderAppFetchOverride,
-): void {
-  const defaultHandler = fetchMock.getMockImplementation();
-  if (defaultHandler == null) {
-    throw new Error("fetchMock has no default implementation");
-  }
-
-  fetchMock.mockImplementation(async (input, init) => {
-    const path = fetchRequestPath(input);
-    const method = (init?.method ?? "GET").toUpperCase();
-    const overridden = await override(path, method, input, init);
-    if (overridden !== undefined) {
-      return overridden;
-    }
-
-    return defaultHandler(input, init);
-  });
-}
-
-export function lastFetchCallBody(
-  fetchMock: FetchMock,
-  predicate: (path: string, method: string) => boolean,
-): unknown {
-  for (let index = fetchMock.mock.calls.length - 1; index >= 0; index -= 1) {
-    const [input, init] = fetchMock.mock.calls[index] ?? [];
-    const path = fetchRequestPath(input);
-    const method = (init?.method ?? "GET").toUpperCase();
-    if (!predicate(path, method)) {
-      continue;
-    }
-
-    return JSON.parse(String(init?.body ?? "{}"));
-  }
-
-  throw new Error("No matching fetch call found");
-}
-
-export function jsonResponse(
-  body: unknown,
-  status = 200,
-  statusText?: string,
-): Response {
-  return new Response(JSON.stringify(body), {
-    headers: {
-      "Content-Type": "application/json",
-    },
-    status,
-    statusText,
-  });
 }
 
 export function createFactoryImportValue(): FactoryPngImportValue {
@@ -568,3 +403,9 @@ export function registerAppDashboardTestLifecycle(): void {
 }
 
 export { DEFAULT_FACTORY_SESSION_ID };
+export {
+  fetchCallPaths,
+  jsonResponse,
+  lastFetchCallBody,
+  nonPromptTemplateFetchPaths,
+} from "./app-shell-fetch-test-utils";
