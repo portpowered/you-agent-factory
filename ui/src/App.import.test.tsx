@@ -37,6 +37,39 @@ const incrementedSessionFactoryVersion = {
   physical: "2026-05-18T14:25:00.001Z",
 } as const;
 
+function buildFactorySessionGetResponse() {
+  return {
+    factoryDir: "/workspace/default",
+    folderPath: "/workspace",
+    id: DEFAULT_FACTORY_SESSION_ID,
+    isDefault: true,
+    project: "default",
+    runtime: {
+      lifecycle: {
+        startedAt: "2026-06-26T00:00:00Z",
+        updatedAt: "2026-06-26T00:00:00Z",
+      },
+      orchestratorKind: "STATIC",
+      progress: {
+        categories: {},
+        factoryState: "IDLE",
+        inFlightCount: 0,
+        totalTokens: 0,
+      },
+      status: "IDLE",
+      streamIdentity: {
+        backendScopeID: "/workspace::test-backend",
+        factorySessionID: DEFAULT_FACTORY_SESSION_ID,
+        streamGenerationID: "2026-06-26T00:00:00Z",
+      },
+      usage: { resources: [] },
+    },
+    target: {
+      kind: "default",
+    },
+  };
+}
+
 function expectNoRetiredDashboardBranding(): void {
   expect(screen.queryByText(/finite you/i)).toBeNull();
   expect(screen.queryByText(/Infinite You/i)).toBeNull();
@@ -126,6 +159,10 @@ describe("App shell import flows", () => {
     });
 
     chainRenderAppFetchMock(fetchMock, async (path, method) => {
+      if (path === "/factory-sessions/~default" && method === "GET") {
+        return jsonResponse(buildFactorySessionGetResponse());
+      }
+
       if (path === "/factory-sessions/~default/factory" && method === "GET") {
         return jsonResponse(currentSessionFactory);
       }
@@ -224,6 +261,10 @@ describe("App shell import flows", () => {
     });
 
     chainRenderAppFetchMock(fetchMock, async (path, method) => {
+      if (path === "/factory-sessions/~default" && method === "GET") {
+        return jsonResponse(buildFactorySessionGetResponse());
+      }
+
       if (path === "/factory-sessions/~default/factory" && method === "GET") {
         return jsonResponse(currentSessionFactory);
       }
@@ -315,6 +356,10 @@ describe("App shell import flows", () => {
     });
 
     chainRenderAppFetchMock(fetchMock, async (path, method, _input, init) => {
+      if (path === "/factory-sessions/~default" && method === "GET") {
+        return jsonResponse(buildFactorySessionGetResponse());
+      }
+
       if (path === "/factory-sessions/~default/factory" && method === "GET") {
         return jsonResponse({
           ...currentNamedFactoryExportResponse,

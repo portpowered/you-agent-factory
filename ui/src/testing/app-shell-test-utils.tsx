@@ -9,7 +9,10 @@ import type {
   DashboardWorkstationRequest,
 } from "../api/dashboard";
 import type { FactoryEvent } from "../api/events";
-import type { FactorySessionSummary } from "../api/factory-sessions/api";
+import type {
+  FactorySession,
+  FactorySessionSummary,
+} from "../api/factory-sessions/api";
 import { DEFAULT_FACTORY_SESSION_ID } from "../api/session-routing";
 import {
   buildDashboardSnapshotFixture,
@@ -192,6 +195,42 @@ export const importedFactorySnapshot = (() => {
   return snapshot;
 })();
 
+function buildFactorySessionResponse(
+  summary: FactorySessionSummary,
+  snapshot: DashboardSnapshot,
+): FactorySession {
+  const lifecycleTimestamp = "2026-06-26T00:00:00Z";
+
+  return {
+    factoryDir: summary.factoryDir,
+    folderPath: summary.folderPath,
+    id: summary.id,
+    isDefault: summary.isDefault,
+    project: summary.project,
+    runtime: {
+      lifecycle: {
+        startedAt: lifecycleTimestamp,
+        updatedAt: lifecycleTimestamp,
+      },
+      orchestratorKind: "STATIC",
+      progress: {
+        categories: {},
+        factoryState: snapshot.factory_state,
+        inFlightCount: 0,
+        totalTokens: 0,
+      },
+      status: "IDLE",
+      streamIdentity: {
+        backendScopeID: `${summary.folderPath}::test-backend`,
+        factorySessionID: summary.id,
+        streamGenerationID: lifecycleTimestamp,
+      },
+      usage: { resources: [] },
+    },
+    target: summary.target,
+  };
+}
+
 export async function settleAppShellDashboardEffects(): Promise<void> {
   await act(async () => {
     await Promise.resolve();
@@ -232,6 +271,7 @@ export function renderApp({
   traceFixtures = {},
   workstationRequestsByDispatchID = {},
 }: RenderAppOptions): RenderAppResult {
+  const availableFactorySessions = factorySessions ?? [defaultFactorySessionSummary];
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -257,7 +297,7 @@ export function renderApp({
 
         if (path === "/factory-sessions") {
           return jsonResponse({
-            sessions: factorySessions ?? [defaultFactorySessionSummary],
+            sessions: availableFactorySessions,
           });
         }
 
@@ -277,6 +317,29 @@ export function renderApp({
             requestedSessionId: syncPreflightMatch[1],
             streamGenerationId: "stream-default",
           });
+        }
+
+        if (method === "GET" && /^\/factory-sessions\/[^/]+$/.test(path)) {
+          const requestedSessionID = decodeURIComponent(
+            path.slice("/factory-sessions/".length),
+          );
+          const sessionSummary = availableFactorySessions.find(
+            (session) => session.id === requestedSessionID,
+          );
+          if (!sessionSummary) {
+            return jsonResponse(
+              {
+                code: "FACTORY_SESSION_NOT_FOUND",
+                message: `Factory session ${requestedSessionID} was not found.`,
+              },
+              404,
+              "Not Found",
+            );
+          }
+
+          return jsonResponse(
+            buildFactorySessionResponse(sessionSummary, snapshot),
+          );
         }
 
         if (

@@ -43,7 +43,7 @@ export const FACTORY_GRAPH_LAYOUT_PERFORMANCE_BUDGETS: Record<
     initialProjectionMs: 90_000,
     dragSingleNodeMs: 10,
     dragMultiNodeMs: 100,
-    saveLayoutRecomputationMs: 100,
+    saveLayoutRecomputationMs: 125,
     waypointEditMs: 10,
     waypointHistoryMs: 15,
   },
