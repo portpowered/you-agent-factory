@@ -26,6 +26,7 @@ export interface FactorySessionEventReplayMessages {
   eventReplaySessionStartedTitle: string;
   eventReplaySequenceLabel: (sequence: number) => string;
   eventReplaySummary: (visibleCount: number, totalCount: number) => string;
+  eventReplayUnavailableState: string;
   eventReplayVisibleSummary: (visibleCount: number) => string;
   eventReplayWarningCountLabel: (count: number) => string;
   eventReplayWorkLabel: (count: number) => string;
@@ -71,6 +72,8 @@ export const englishFactorySessionEventReplayMessages =
     eventReplaySequenceLabel: (sequence) => `Session event ${sequence}`,
     eventReplaySummary: (visibleCount, totalCount) =>
       `Showing the latest ${visibleCount} of ${totalCount} Factory Events.`,
+    eventReplayUnavailableState:
+      "Durable Factory Event replay is unavailable for this session.",
     eventReplayVisibleSummary: (visibleCount) =>
       `Showing ${visibleCount} Factory Event${visibleCount === 1 ? "" : "s"}.`,
     eventReplayWarningCountLabel: (count) =>
@@ -115,6 +118,7 @@ export const chineseFactorySessionEventReplayMessages =
     eventReplaySequenceLabel: (sequence) => `会话事件 ${sequence}`,
     eventReplaySummary: (visibleCount, totalCount) =>
       `显示最新 ${visibleCount} / ${totalCount} 条工厂事件。`,
+    eventReplayUnavailableState: "此会话的持久化工厂事件回放不可用。",
     eventReplayVisibleSummary: (visibleCount) => `显示 ${visibleCount} 条工厂事件。`,
     eventReplayWarningCountLabel: (count) => `${count} 条警告`,
     eventReplayWorkLabel: (count) => `${count} 个关联工作项`,

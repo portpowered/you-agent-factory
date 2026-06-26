@@ -1,11 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-
-import {
-  listFactorySessionEventReplay,
-  type FactorySessionsAPIError,
-} from "../../../api/factory-sessions";
 import type { FactoryEvent } from "../../../api/events";
+import {
+  type FactorySessionsAPIError,
+  listFactorySessionEventReplay,
+} from "../../../api/factory-sessions";
 
 export const FACTORY_SESSION_EVENT_REPLAY_QUERY_KEY = [
   "factory-session-event-replay",
@@ -14,6 +13,7 @@ export const FACTORY_SESSION_EVENT_REPLAY_QUERY_KEY = [
 export type FactorySessionEventReplayViewState =
   | { status: "idle" }
   | { status: "loading" }
+  | { status: "unavailable"; message?: string }
   | { status: "error"; message?: string }
   | { status: "success"; events: FactoryEvent[] };
 
@@ -29,8 +29,7 @@ export function useFactorySessionEventReplay(
       }
       return listFactorySessionEventReplay(sessionID);
     },
-    enabled:
-      enabled && sessionID !== null && sessionID.trim() !== "",
+    enabled: enabled && sessionID !== null && sessionID.trim() !== "",
     gcTime: 0,
     refetchOnWindowFocus: false,
     retry: false,
@@ -46,6 +45,9 @@ export function useFactorySessionEventReplay(
     }
 
     if (query.error) {
+      if (query.error.status === 404) {
+        return { status: "unavailable" };
+      }
       return { message: query.error.message, status: "error" };
     }
 

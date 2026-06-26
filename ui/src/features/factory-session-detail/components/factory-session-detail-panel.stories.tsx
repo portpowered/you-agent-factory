@@ -325,3 +325,97 @@ export const DurableReplayDisclosure = {
     );
   },
 };
+
+export const DurableReplayDisclosureUnavailable = {
+  parameters: {
+    dashboardApi: {
+      fetchMocks: [
+        {
+          method: "GET",
+          path: `/factory-sessions/dur-sess-js-unavailable-003`,
+          response: {
+            body: {
+              artifactRefs: [
+                {
+                  id: "artifact-release-verification-log",
+                  kind: "FINAL_RESULT",
+                  label: "Release verification log",
+                  visibility: "PRIVATE",
+                },
+              ],
+              dialect: "you-workflow-v1",
+              lifecycle: {
+                finishedAt: "2026-06-25T11:10:00Z",
+                startedAt: "2026-06-25T11:00:00Z",
+              },
+              orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
+              progress: {
+                completedDispatches: 0,
+                failedDispatches: 1,
+                inFlightDispatches: 0,
+                totalDispatches: 1,
+              },
+              resolvedSource: {
+                kind: "WORKFLOW_FILE",
+                sourceRef: "workflow/.claude/workflows/release-verify.yaml",
+                sourceHash: "sha256:release-verify",
+              },
+              resultSummary: {
+                artifactRefs: [
+                  {
+                    id: "artifact-release-verification-log",
+                    kind: "FINAL_RESULT",
+                    label: "Release verification log",
+                    visibility: "PRIVATE",
+                  },
+                ],
+                resultStatus: "FAILED_WITH_PARTIAL",
+                summary:
+                  "Release verification failed after checkpoint recovery.",
+              },
+              sessionId: "dur-sess-js-unavailable-003",
+              status: "FAILED",
+              usage: { resources: [] },
+            },
+          },
+        },
+        {
+          method: "GET",
+          path: "/factory-sessions/dur-sess-js-unavailable-003/events",
+          response: {
+            status: 404,
+          },
+        },
+        {
+          method: "GET",
+          path: "/factory-sessions/dur-sess-js-unavailable-003/dispatches",
+          response: {
+            body: {
+              dispatches: [],
+              sessionId: "dur-sess-js-unavailable-003",
+            },
+          },
+        },
+      ],
+      sessionID: "dur-sess-js-unavailable-003",
+    },
+  },
+  render: () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          gcTime: Infinity,
+          retry: false,
+        },
+      },
+    });
+
+    return (
+      <div style={{ maxWidth: "100%", width: "960px" }}>
+        <QueryClientProvider client={queryClient}>
+          <FactorySessionDetailPanel sessionID="dur-sess-js-unavailable-003" />
+        </QueryClientProvider>
+      </div>
+    );
+  },
+};

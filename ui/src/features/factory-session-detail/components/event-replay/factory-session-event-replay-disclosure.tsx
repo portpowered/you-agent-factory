@@ -86,6 +86,14 @@ function EventReplayState({
     );
   }
 
+  if (state.status === "unavailable") {
+    return (
+      <AlertPanel id={detailRegionID} tone="info">
+        {state.message ?? messages.eventReplayUnavailableState}
+      </AlertPanel>
+    );
+  }
+
   if (state.status !== "success") {
     return null;
   }
