@@ -9,6 +9,7 @@ import (
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 )
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this fixture regression keeps interrupt race service outcomes together on one scenario.
 func TestFakeService_InterruptDispatchRace_ObservableServiceOutcomes(t *testing.T) {
 	service := newContractFakeService(t)
 	started := startAsyncByRequestID(t, service, "req-js-run-n-001")

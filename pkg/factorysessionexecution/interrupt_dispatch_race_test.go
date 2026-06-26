@@ -66,6 +66,7 @@ func TestJavaScriptRuntimeService_InterruptAcceptedBeforeChildCompletion_Records
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this runtime regression keeps late-result suppression assertions together on one scenario.
 func TestJavaScriptRuntimeService_LateChildResultAfterInterrupt_SuppressesNormalRouting(t *testing.T) {
 	service := NewJavaScriptRuntimeService(JavaScriptRuntimeServiceConfig{ProjectRoot: t.TempDir()})
 	sessionID := "dur-sess-interrupt-late-runtime-001"
@@ -142,6 +143,7 @@ func TestJavaScriptRuntimeService_LateChildResultAfterInterrupt_SuppressesNormal
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this fake-service race regression keeps interrupt and replay assertions together on one scenario.
 func TestFakeService_InterruptAcceptedBeforeCompletion_ObservableDispatchAndEventOutcomes(t *testing.T) {
 	service := newContractFakeService(t)
 	started := startAsyncByRequestID(t, service, "req-js-run-n-001")

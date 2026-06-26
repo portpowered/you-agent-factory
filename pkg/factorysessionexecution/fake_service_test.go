@@ -1407,6 +1407,7 @@ func TestReplayDispatchProjection_DerivesInterruptedDispatchMetadata(t *testing.
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this fake-service regression keeps interrupt event payload assertions together on one scenario.
 func TestFakeService_InterruptDispatch_RecordsDispatchInterruptedEvent(t *testing.T) {
 	service := newContractFakeService(t)
 	started := startAsyncByRequestID(t, service, "req-js-run-n-001")

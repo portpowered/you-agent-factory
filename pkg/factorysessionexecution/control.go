@@ -315,6 +315,51 @@ func lookupRuntimeExtendedControlReplay(
 	return runtimeExtendedControlReplayLookup{requestID: requestID, tupleHash: tupleHash}
 }
 
+func lookupExtendedControlDispatch(
+	operation LifecycleControlKind,
+	state *runtimeSessionState,
+	retry RetryDispatchRequest,
+	interrupt InterruptDispatchRequest,
+) (DispatchSummary, error) {
+	switch operation {
+	case LifecycleControlRetryDispatch:
+		dispatchSummary, ok := findDispatchSummary(state.dispatches, retry.DispatchID)
+		if !ok {
+			return DispatchSummary{}, ErrDispatchNotFound
+		}
+		return dispatchSummary, nil
+	case LifecycleControlInterruptDispatch:
+		dispatchSummary, ok := findDispatchSummary(state.dispatches, interrupt.DispatchID)
+		if !ok {
+			return DispatchSummary{}, ErrDispatchNotFound
+		}
+		return dispatchSummary, nil
+	default:
+		return DispatchSummary{}, nil
+	}
+}
+
+func (s *JavaScriptRuntimeService) recordAcceptedRuntimeInterrupt(
+	state *runtimeSessionState,
+	dispatchSummary DispatchSummary,
+	interrupt InterruptDispatchRequest,
+) {
+	priorDispatchStatus := dispatchSummary.Status
+	if applyRuntimeAcceptedLifecycleControl(s, state, LifecycleControlInterruptDispatch, RetryDispatchRequest{}, interrupt) && state.runCancel != nil {
+		state.runCancel()
+	}
+	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+	state.events = AppendDispatchInterruptedEvent(
+		state.events,
+		state.session,
+		dispatchSummary,
+		interrupt,
+		priorDispatchStatus,
+		canonicalEventSourceRuntimeService,
+	)
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity this runtime control helper keeps dispatch-targeted lifecycle validation and replay together on one seam.
 func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 	ctx context.Context,
 	sessionID string,
@@ -361,18 +406,11 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 	}
 
 	var dispatchSummary DispatchSummary
-	switch operation {
-	case LifecycleControlRetryDispatch:
-		var ok bool
-		dispatchSummary, ok = findDispatchSummary(state.dispatches, retry.DispatchID)
-		if !ok {
-			return LifecycleControlResult{}, ErrDispatchNotFound
-		}
-	case LifecycleControlInterruptDispatch:
-		var ok bool
-		dispatchSummary, ok = findDispatchSummary(state.dispatches, interrupt.DispatchID)
-		if !ok {
-			return LifecycleControlResult{}, ErrDispatchNotFound
+	if operation == LifecycleControlRetryDispatch || operation == LifecycleControlInterruptDispatch {
+		var lookupErr error
+		dispatchSummary, lookupErr = lookupExtendedControlDispatch(operation, state, retry, interrupt)
+		if lookupErr != nil {
+			return LifecycleControlResult{}, lookupErr
 		}
 	}
 
@@ -395,24 +433,14 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 	}
 
 	if outcome == LifecycleControlOutcomeAccepted {
-		var priorDispatchStatus DispatchStatus
 		if operation == LifecycleControlInterruptDispatch {
-			priorDispatchStatus = dispatchSummary.Status
-		}
-		interruptRuntime := applyRuntimeAcceptedLifecycleControl(s, state, operation, retry, interrupt)
-		if interruptRuntime && state.runCancel != nil {
-			state.runCancel()
-		}
-		state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
-		if operation == LifecycleControlInterruptDispatch {
-			state.events = AppendDispatchInterruptedEvent(
-				state.events,
-				state.session,
-				dispatchSummary,
-				interrupt,
-				priorDispatchStatus,
-				canonicalEventSourceRuntimeService,
-			)
+			s.recordAcceptedRuntimeInterrupt(state, dispatchSummary, interrupt)
+		} else {
+			interruptRuntime := applyRuntimeAcceptedLifecycleControl(s, state, operation, retry, interrupt)
+			if interruptRuntime && state.runCancel != nil {
+				state.runCancel()
+			}
+			state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
 		}
 	}
 

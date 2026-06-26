@@ -183,6 +183,7 @@ func TestProjectResultRead_DefaultsToFinalMode(t *testing.T) {
 	}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this helper regression keeps lifecycle mutation assertions together on one scenario.
 func TestFakeService_InternalLifecycleHelpers(t *testing.T) {
 	state := &fakeSessionState{
 		session: SessionReadResult{

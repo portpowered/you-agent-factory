@@ -151,6 +151,7 @@ func Control(
 	return ToolResponse[factoryapi.FactorySessionLifecycleControlResponse]{Result: &mapped}
 }
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this MCP control router keeps lifecycle kind dispatch on one seam.
 func invokeLifecycleControl(
 	service factorysessionexecution.Service,
 	input ControlInput,
