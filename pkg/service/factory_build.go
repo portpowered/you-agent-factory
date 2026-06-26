@@ -70,8 +70,8 @@ type liveSessionState struct {
 	handle                *liveRuntimeHandle
 	spec                  *runtimebuild.SessionBuildSpec
 	javascriptCheckpoints *factorysessions.JavaScriptCheckpointStore
-	responseStreamOnce    sync.Once
-	responseStream        *factorysessions.SessionResponseStream
+	responseStreamsOnce   sync.Once
+	responseStreams       *factorysessions.SessionResponseStreamSet
 }
 
 // BuildFactoryService loads factory.json from the config directory, constructs

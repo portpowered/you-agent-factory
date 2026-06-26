@@ -1075,15 +1075,26 @@ func (fs *FactoryService) javascriptCheckpointStore(session *factorysessions.Liv
 	return state.javascriptCheckpoints
 }
 
-func (fs *FactoryService) sessionResponseStream(session *factorysessions.LiveSession) *factorysessions.SessionResponseStream {
+func (fs *FactoryService) sessionResponseStreams(session *factorysessions.LiveSession) *factorysessions.SessionResponseStreamSet {
 	state := liveSessionRuntimeState(session)
 	if state == nil {
 		return nil
 	}
-	state.responseStreamOnce.Do(func() {
-		state.responseStream = fs.newSessionResponseStreamInstance()
+	state.responseStreamsOnce.Do(func() {
+		state.responseStreams = fs.newSessionResponseStreamSetInstance()
 	})
-	return state.responseStream
+	return state.responseStreams
+}
+
+func (fs *FactoryService) sessionResponseStream(
+	session *factorysessions.LiveSession,
+	dispatchID string,
+) *factorysessions.SessionResponseStream {
+	streams := fs.sessionResponseStreams(session)
+	if streams == nil {
+		return nil
+	}
+	return streams.Stream(dispatchID)
 }
 
 func (fs *FactoryService) newSessionResponseStreamInstance() *factorysessions.SessionResponseStream {
@@ -1091,6 +1102,12 @@ func (fs *FactoryService) newSessionResponseStreamInstance() *factorysessions.Se
 		return fs.newSessionResponseStream()
 	}
 	return factorysessions.NewSessionResponseStream()
+}
+
+func (fs *FactoryService) newSessionResponseStreamSetInstance() *factorysessions.SessionResponseStreamSet {
+	return factorysessions.NewSessionResponseStreamSetWithFactory(func() *factorysessions.SessionResponseStream {
+		return fs.newSessionResponseStreamInstance()
+	})
 }
 
 func mapInferenceProgressFragment(fragment workerprovider.InferenceProgressFragment) responsestream.Event {
@@ -1136,7 +1153,7 @@ func (fs *FactoryService) inferenceProgressPublisher(
 		if session == nil && normalizedSessionID == defaultFactorySessionID {
 			session = sessions.Get(defaultFactorySessionID)
 		}
-		stream := fs.sessionResponseStream(session)
+		stream := fs.sessionResponseStream(session, fragment.DispatchID)
 		if stream == nil {
 			if logger != nil {
 				logger.Warn("session response stream unavailable; dropping internal provider progress",

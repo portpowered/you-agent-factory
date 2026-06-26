@@ -2337,20 +2337,27 @@ func TestFactoryService_SessionResponseStreamOwnedByLiveSessionRuntime(t *testin
 	}
 	svc := &FactoryService{}
 
-	first := svc.sessionResponseStream(session)
-	second := svc.sessionResponseStream(session)
-	if first == nil || second == nil {
+	first := svc.sessionResponseStream(session, "dispatch-a")
+	second := svc.sessionResponseStream(session, "dispatch-a")
+	third := svc.sessionResponseStream(session, "dispatch-b")
+	if first == nil || second == nil || third == nil {
 		t.Fatal("session response stream = nil, want live session runtime instance")
 	}
 	if first != second {
-		t.Fatal("session response stream instances differ, want one stream per live session")
+		t.Fatal("same dispatch stream instances differ, want one stream per live dispatch")
+	}
+	if first == third {
+		t.Fatal("different dispatches shared one stream, want dispatch-scoped session streams")
 	}
 
 	state := liveSessionRuntimeState(session)
-	if state == nil || state.responseStream != first {
-		t.Fatalf("live session state stream = %#v, want %p", state.responseStream, first)
+	if state == nil || state.responseStreams == nil {
+		t.Fatal("live session state stream set = nil, want session-owned stream set")
 	}
-	if svc.sessionResponseStream(nil) != nil {
+	if got := state.responseStreams.Count(); got != 2 {
+		t.Fatalf("session stream set count = %d, want 2", got)
+	}
+	if svc.sessionResponseStreams(nil) != nil {
 		t.Fatal("nil session stream = non-nil, want nil")
 	}
 }
@@ -2379,7 +2386,7 @@ func TestFactoryService_InferenceProgressPublisherPublishesOrderedInternalEvents
 	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "partial-response"))
 
 	session := sessions.Get(sessionID)
-	stream := (&FactoryService{sessions: sessions}).sessionResponseStream(session)
+	stream := (&FactoryService{sessions: sessions}).sessionResponseStream(session, "dispatch-1")
 	if stream == nil {
 		t.Fatal("session stream = nil, want live session stream")
 	}
@@ -2450,7 +2457,7 @@ func TestFactoryService_InferenceProgressPublisherConcurrentFirstFragmentsShareO
 	}
 
 	session := sessions.Get(sessionID)
-	stream := svc.sessionResponseStream(session)
+	stream := svc.sessionResponseStream(session, "dispatch-1")
 	if stream == nil {
 		t.Fatal("session stream = nil, want live session stream")
 	}
@@ -2471,5 +2478,52 @@ func TestFactoryService_InferenceProgressPublisherConcurrentFirstFragmentsShareO
 	}
 	if payloads["stderr-fragment"] != responsestream.EventKindProgressFragment {
 		t.Fatalf("stderr fragment kind = %q, want %q", payloads["stderr-fragment"], responsestream.EventKindProgressFragment)
+	}
+}
+
+func TestFactoryService_InferenceProgressPublisherSeparatesDispatchScopedStreams(t *testing.T) {
+	sessions := factorysessions.NewRegistry()
+	sessionID := "session-progress-separate-dispatches"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{},
+		false,
+		"factory",
+	), true)
+
+	publisher := (&FactoryService{sessions: sessions}).inferenceProgressPublisher(sessionID, nil)
+	if publisher == nil {
+		t.Fatal("publisher = nil, want session publisher")
+	}
+
+	publisher(workerprovider.ResponseFragment("dispatch-a", nil, "alpha-1"))
+	publisher(workerprovider.ResponseFragment("dispatch-b", nil, "beta-1"))
+	publisher(workerprovider.ProgressFragment("dispatch-a", nil, "alpha-2"))
+
+	session := sessions.Get(sessionID)
+	svc := &FactoryService{sessions: sessions}
+	alpha := svc.sessionResponseStream(session, "dispatch-a")
+	beta := svc.sessionResponseStream(session, "dispatch-b")
+	if alpha == nil || beta == nil {
+		t.Fatal("dispatch stream = nil, want allocated streams")
+	}
+	if alpha == beta {
+		t.Fatal("different dispatches shared one stream")
+	}
+
+	alphaEvents := alpha.Events()
+	betaEvents := beta.Events()
+	if len(alphaEvents) != 2 || len(betaEvents) != 1 {
+		t.Fatalf("dispatch events = (%#v, %#v), want isolated per-dispatch event windows", alphaEvents, betaEvents)
+	}
+	if alphaEvents[0].Sequence != 1 || alphaEvents[1].Sequence != 2 {
+		t.Fatalf("alpha sequences = %#v, want per-dispatch monotonic sequence", alphaEvents)
+	}
+	if betaEvents[0].Sequence != 1 {
+		t.Fatalf("beta sequences = %#v, want independent per-dispatch ordering", betaEvents)
 	}
 }

@@ -69,6 +69,10 @@ func NewSessionID() string {
 // and from service-coordinator state.
 type SessionResponseStream = responsestream.SessionResponseStream
 
+// SessionResponseStreamSet keeps the dispatch-keyed response streams owned by
+// one live Factory Session runtime.
+type SessionResponseStreamSet = responsestream.StreamSet
+
 // SessionResponseStreamEvent is the internal envelope for provider progress and
 // response fragments within one Factory Session runtime.
 type SessionResponseStreamEvent = responsestream.Event
@@ -88,4 +92,12 @@ type SessionResponseStreamRetentionAccounting = responsestream.RetentionAccounti
 // one live Factory Session runtime.
 func NewSessionResponseStream() *SessionResponseStream {
 	return responsestream.NewSessionResponseStream()
+}
+
+// NewSessionResponseStreamSetWithFactory allocates a dispatch-keyed stream set
+// using the supplied stream constructor.
+func NewSessionResponseStreamSetWithFactory(
+	newStream func() *SessionResponseStream,
+) *SessionResponseStreamSet {
+	return responsestream.NewStreamSetWithFactory(newStream)
 }
