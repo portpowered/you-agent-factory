@@ -1606,3 +1606,151 @@ func TestApplyTerminalRuntimeProjection_PreservesInterruptedDispatchAndEvents(t 
 		t.Fatalf("completedDispatches = %d, want 0", prior.session.Progress.CompletedDispatches)
 	}
 }
+
+func TestReplaySessionProjection_PauseResumeLifecycleEventsDeriveStatus(t *testing.T) {
+	startedAt := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	pausedAt := time.Date(2026, 6, 11, 12, 0, 5, 0, time.UTC)
+	resumedAt := time.Date(2026, 6, 11, 12, 0, 10, 0, time.UTC)
+	sessionID := "dur-sess-replay-pause-resume-001"
+
+	baseSession := SessionReadResult{
+		SessionID:        sessionID,
+		Status:           LifecycleStatusRunning,
+		OrchestratorKind: "JAVASCRIPT",
+		SourceHash:       "sha256:fixture",
+		Policy:           PolicyProjection{EffectiveHash: "sha256:policy"},
+		ResolvedSource:   ResolvedSource{SourceHash: "sha256:fixture"},
+		Lifecycle:        &LifecycleTimestamps{StartedAt: &startedAt},
+	}
+	baseResult := ResultReadResult{
+		SessionID:    sessionID,
+		ResultStatus: ResultStatusNotReady,
+	}
+
+	events := BuildCanonicalRuntimeSessionEvents(baseSession, baseResult)
+	events = AppendSessionLifecycleControlEvent(
+		events,
+		SessionReadResult{SessionID: sessionID, Status: LifecycleStatusPaused, OrchestratorKind: "JAVASCRIPT", Dialect: "you-workflow-v1"},
+		LifecycleStatusRunning,
+		LifecycleControlPause,
+		LifecycleControlOutcomeAccepted,
+		pausedAt,
+		canonicalEventSourceRuntimeService,
+		"",
+	)
+	events = AppendSessionLifecycleControlEvent(
+		events,
+		SessionReadResult{SessionID: sessionID, Status: LifecycleStatusRunning, OrchestratorKind: "JAVASCRIPT", Dialect: "you-workflow-v1"},
+		LifecycleStatusPaused,
+		LifecycleControlResume,
+		LifecycleControlOutcomeAccepted,
+		resumedAt,
+		canonicalEventSourceRuntimeService,
+		"",
+	)
+
+	session, result, err := ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if session.Status != LifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", session.Status)
+	}
+	if result.SessionStatus != LifecycleStatusRunning {
+		t.Fatalf("result sessionStatus = %q, want RUNNING", result.SessionStatus)
+	}
+	if session.Lifecycle == nil || session.Lifecycle.PausedAt == nil || !session.Lifecycle.PausedAt.Equal(pausedAt) {
+		t.Fatalf("pausedAt = %#v, want %s", session.Lifecycle, pausedAt)
+	}
+	if session.Lifecycle.ResumedAt == nil || !session.Lifecycle.ResumedAt.Equal(resumedAt) {
+		t.Fatalf("resumedAt = %#v, want %s", session.Lifecycle.ResumedAt, resumedAt)
+	}
+
+	var lifecycleEnvelope canonicalFactoryEvent
+	if err := json.Unmarshal(events[2], &lifecycleEnvelope); err != nil {
+		t.Fatalf("unmarshal lifecycle event: %v", err)
+	}
+	if lifecycleEnvelope.Type != "SESSION_LIFECYCLE_CONTROL" {
+		t.Fatalf("event type = %q, want SESSION_LIFECYCLE_CONTROL", lifecycleEnvelope.Type)
+	}
+}
+
+// pkgmaintcheck:ignore-cyclomatic-complexity this regression keeps pause/resume append and no-op event immutability assertions together.
+func TestFakeService_PauseResumeAppendsLifecycleControlEventsWithoutNoOpMutation(t *testing.T) {
+	service, err := NewFakeServiceFromContractFixtures(contractFixturesPath(t))
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)
+	}
+	started, err := service.StartAsync(context.Background(), StartRequest{
+		RequestID: "req-js-run-n-001",
+		Source: Source{
+			Kind:      workflowsource.KindFactoryID,
+			FactoryID: "customer-support-triage",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	beforeEvents, err := service.ReadEvents(context.Background(), started.SessionID, EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents before pause: %v", err)
+	}
+	beforeCount := len(beforeEvents.Events)
+
+	paused, err := service.Pause(context.Background(), started.SessionID, ControlRequest{RequestID: "ctrl-pause-events-001"})
+	if err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+	if paused.Outcome != LifecycleControlOutcomeAccepted || paused.Status != LifecycleStatusPaused {
+		t.Fatalf("pause = %#v, want ACCEPTED/PAUSED", paused)
+	}
+
+	afterPause, err := service.ReadEvents(context.Background(), started.SessionID, EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents after pause: %v", err)
+	}
+	if len(afterPause.Events) != beforeCount+1 {
+		t.Fatalf("event count after pause = %d, want %d", len(afterPause.Events), beforeCount+1)
+	}
+	assertCanonicalEventEnvelope(t, afterPause.Events[len(afterPause.Events)-1], "SESSION_LIFECYCLE_CONTROL", "session-lifecycle-control/"+started.SessionID+"/2")
+
+	pauseNoOp, err := service.Pause(context.Background(), started.SessionID, ControlRequest{})
+	if err != nil {
+		t.Fatalf("Pause no-op: %v", err)
+	}
+	if pauseNoOp.Outcome != LifecycleControlOutcomeNoOp {
+		t.Fatalf("pause no-op outcome = %q, want NO_OP", pauseNoOp.Outcome)
+	}
+	afterNoOp, err := service.ReadEvents(context.Background(), started.SessionID, EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents after no-op: %v", err)
+	}
+	if len(afterNoOp.Events) != len(afterPause.Events) {
+		t.Fatalf("event count after no-op = %d, want unchanged %d", len(afterNoOp.Events), len(afterPause.Events))
+	}
+
+	resumed, err := service.Resume(context.Background(), started.SessionID, ControlRequest{RequestID: "ctrl-resume-events-001"})
+	if err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+	if resumed.Outcome != LifecycleControlOutcomeAccepted || resumed.Status != LifecycleStatusRunning {
+		t.Fatalf("resume = %#v, want ACCEPTED/RUNNING", resumed)
+	}
+
+	afterResume, err := service.ReadEvents(context.Background(), started.SessionID, EventReconnectRequest{})
+	if err != nil {
+		t.Fatalf("ReadEvents after resume: %v", err)
+	}
+	if len(afterResume.Events) != len(afterPause.Events)+1 {
+		t.Fatalf("event count after resume = %d, want %d", len(afterResume.Events), len(afterPause.Events)+1)
+	}
+
+	replayed, _, err := ReplaySessionProjection(afterResume.Events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if replayed.Status != LifecycleStatusRunning {
+		t.Fatalf("replayed status = %q, want RUNNING", replayed.Status)
+	}
+}

@@ -5,6 +5,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
+const DefaultMaxRetries = 3
+
 // Workstation returns the runtime workstation definition for a transition name.
 func Workstation(transition *petri.Transition, runtimeConfig interfaces.RuntimeWorkstationLookup) (*interfaces.FactoryWorkstationConfig, bool) {
 	if transition == nil || runtimeConfig == nil {
@@ -37,5 +39,8 @@ func MaxRetries(transition *petri.Transition, runtimeConfig interfaces.RuntimeWo
 	if !ok || workstation == nil {
 		return 0
 	}
-	return workstation.Limits.MaxRetries
+	if workstation.Limits.MaxRetries > 0 {
+		return workstation.Limits.MaxRetries
+	}
+	return DefaultMaxRetries
 }

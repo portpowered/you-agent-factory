@@ -491,6 +491,7 @@ func TestEvaluateLifecycleControl_ValidTransitions(t *testing.T) {
 		{LifecycleControlPause, LifecycleStatusRunning, LifecycleControlOutcomeAccepted},
 		{LifecycleControlPause, LifecycleStatusPaused, LifecycleControlOutcomeNoOp},
 		{LifecycleControlResume, LifecycleStatusPaused, LifecycleControlOutcomeAccepted},
+		{LifecycleControlResume, LifecycleStatusRunning, LifecycleControlOutcomeNoOp},
 		{LifecycleControlCancel, LifecycleStatusRunning, LifecycleControlOutcomeAccepted},
 		{LifecycleControlCancel, LifecycleStatusCanceling, LifecycleControlOutcomeNoOp},
 		{LifecycleControlTerminate, LifecycleStatusRunning, LifecycleControlOutcomeAccepted},

@@ -134,7 +134,7 @@ func EvaluateLifecycleControl(operation LifecycleControlKind, status LifecycleSt
 		switch status {
 		case LifecycleStatusPaused:
 			return LifecycleControlOutcomeAccepted
-		case LifecycleStatusResuming:
+		case LifecycleStatusResuming, LifecycleStatusRunning:
 			return LifecycleControlOutcomeNoOp
 		default:
 			return LifecycleControlOutcomeInvalidState

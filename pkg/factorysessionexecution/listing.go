@@ -403,6 +403,7 @@ type ListSessionsResult struct {
 	LiveSessions    []LiveSessionSummary
 	DurableSessions []DurableSessionListSummary
 }
+
 // NormalizeListSessionsRequest validates and normalizes one scoped session list request.
 func NormalizeListSessionsRequest(req ListSessionsRequest) (ListSessionsRequest, error) {
 	scope := req.Scope
@@ -577,6 +578,7 @@ func buildCanonicalSessionEvents(session SessionReadResult, result ResultReadRes
 	}
 
 	events, sessionSequence = appendCanonicalPauseResumeSessionEvents(events, builder, sessionID, session.Lifecycle, sessionSequence)
+	events = synthesizeLifecycleControlEventsFromState(session, events, source)
 
 	if IsTerminalLifecycleStatus(session.Status) {
 		completedAt := eventTime
@@ -600,7 +602,8 @@ func buildCanonicalSessionEvents(session SessionReadResult, result ResultReadRes
 		if len(result.ArtifactIDs) > 0 {
 			payload["artifactIds"] = append([]string(nil), result.ArtifactIDs...)
 		}
-		events = append(events, builder.event("SESSION_COMPLETED", "session-completed/"+sessionID, sessionSequence, mustMarshalPayload(payload)))
+		completedSequence := nextCanonicalSessionEventSequence(events)
+		events = append(events, builder.event("SESSION_COMPLETED", "session-completed/"+sessionID, completedSequence, mustMarshalPayload(payload)))
 	}
 
 	return events

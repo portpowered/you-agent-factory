@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -21,27 +22,32 @@ import (
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/internal/metrics"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
 
 const (
-	defaultFactorySessionID         = factorysessions.DefaultSessionID
-	FactorySessionTargetKindDefault = factorysessions.TargetKindDefault
-	FactorySessionTargetKindNamed   = factorysessions.TargetKindNamed
+	defaultFactorySessionID                     = factorysessions.DefaultSessionID
+	FactorySessionTargetKindDefault             = factorysessions.TargetKindDefault
+	FactorySessionTargetKindNamed               = factorysessions.TargetKindNamed
+	runtimeMetricSessionResponseStreamPublished = "session_response_stream.published"
+	runtimeMetricSessionResponseStreamCompacted = "session_response_stream.compacted"
 )
 
 type (
-	FactorySessionTargetKind = factorysessions.TargetKind
-	FactorySessionTargetRef  = factorysessions.TargetRef
-	FactorySessionTarget     = factorysessions.Target
-	FactorySessionOpenResult = factorysessions.OpenResult
-	liveFactorySession       = factorysessions.LiveSession
+	FactorySessionTargetKind          = factorysessions.TargetKind
+	FactorySessionTargetRef           = factorysessions.TargetRef
+	FactorySessionTarget              = factorysessions.Target
+	FactorySessionOpenResult          = factorysessions.OpenResult
+	liveFactorySession                = factorysessions.LiveSession
+	inferenceProgressPublisherFactory func(sessionID string) workerprovider.InferenceProgressPublisher
 )
 
 // FactoryCoordinator owns session tracking and runtime lifecycle orchestration.
@@ -832,13 +838,21 @@ func (fs *FactoryService) probeFactorySessionTarget(
 	folderPath string,
 	factoryDir string,
 	ref factorysessions.TargetRef,
-) (factorysessions.Target, bool) {
+) (factorysessions.Target, bool, *factorysessions.DiscoveryFailure) {
 	if fs == nil {
-		return factorysessions.Target{}, false
+		return factorysessions.Target{}, false, nil
 	}
 	loaded, err := configload.LoadRuntimeConfigFromFactoryDir(factoryDir, fs.coordinatorPolicy().workstationLoader)
 	if err != nil {
-		return factorysessions.Target{}, false
+		if !errors.Is(err, os.ErrNotExist) && !configload.IsFactoryLayoutNotFound(err) && !configload.IsNamedFactoryNotFound(err) {
+			fs.logFactorySessionTargetProbeFailure(folderPath, factoryDir, ref, err)
+			return factorysessions.Target{}, false, &factorysessions.DiscoveryFailure{
+				FactoryDir: factoryDir,
+				Ref:        ref,
+				Summary:    err.Error(),
+			}
+		}
+		return factorysessions.Target{}, false, nil
 	}
 
 	project := ""
@@ -848,7 +862,34 @@ func (fs *FactoryService) probeFactorySessionTarget(
 			project = strings.TrimSpace(cfg.Name)
 		}
 	}
-	return factorysessions.BuildTargetFromConfig(folderPath, factoryDir, ref, project), true
+	return factorysessions.BuildTargetFromConfig(folderPath, factoryDir, ref, project), true, nil
+}
+
+func (fs *FactoryService) logFactorySessionTargetProbeFailure(
+	folderPath string,
+	factoryDir string,
+	ref factorysessions.TargetRef,
+	err error,
+) {
+	if fs == nil || err == nil {
+		return
+	}
+	logger := fs.logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	fields := []zap.Field{
+		zap.String("submitted_folder_path", folderPath),
+		zap.String("target_factory_dir", factoryDir),
+		zap.String("target_kind", string(ref.Kind)),
+		zap.String("target_display_name", factorysessions.TargetDisplayName(ref)),
+		zap.String("failure_summary", err.Error()),
+		zap.Error(err),
+	}
+	if ref.Kind == factorysessions.TargetKindNamed && strings.TrimSpace(ref.Name) != "" {
+		fields = append(fields, zap.String("target_name", strings.TrimSpace(ref.Name)))
+	}
+	logger.Error("factory session discovery target runtime config load failed", fields...)
 }
 
 func (fs *FactoryService) waitForServiceModeStartupWorkReadability(ctx context.Context, serviceMode bool) error {
@@ -896,7 +937,6 @@ func startupReadinessError(err error) error {
 	}
 	return fmt.Errorf("wait for service-mode startup work readiness: %w", err)
 }
-
 
 func (fs *FactoryService) ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error) {
 	return fs.requireCoordinator().ListFactorySessions(ctx)
@@ -1033,6 +1073,140 @@ func (fs *FactoryService) javascriptCheckpointStore(session *factorysessions.Liv
 		state.javascriptCheckpoints = factorysessions.NewJavaScriptCheckpointStore()
 	}
 	return state.javascriptCheckpoints
+}
+
+func (fs *FactoryService) sessionResponseStream(session *factorysessions.LiveSession) *factorysessions.SessionResponseStream {
+	state := liveSessionRuntimeState(session)
+	if state == nil {
+		return nil
+	}
+	state.responseStreamOnce.Do(func() {
+		state.responseStream = fs.newSessionResponseStreamInstance()
+	})
+	return state.responseStream
+}
+
+func (fs *FactoryService) newSessionResponseStreamInstance() *factorysessions.SessionResponseStream {
+	if fs != nil && fs.newSessionResponseStream != nil {
+		return fs.newSessionResponseStream()
+	}
+	return factorysessions.NewSessionResponseStream()
+}
+
+func mapInferenceProgressFragment(fragment workerprovider.InferenceProgressFragment) responsestream.Event {
+	kind := responsestream.EventKindProgressFragment
+	if fragment.Kind == workerprovider.ResponseFragmentKind {
+		kind = responsestream.EventKindResponseFragment
+	}
+	return responsestream.Event{
+		Kind:               kind,
+		DispatchID:         strings.TrimSpace(fragment.DispatchID),
+		ProviderSessionRef: fragment.ProviderSessionRef,
+		Payload:            fragment.Payload,
+	}
+}
+
+func newInferenceProgressPublisherFactory(
+	sessions *factorysessions.Registry,
+	logger *zap.Logger,
+) inferenceProgressPublisherFactory {
+	if sessions == nil {
+		return nil
+	}
+	svc := &FactoryService{sessions: sessions}
+	return func(sessionID string) workerprovider.InferenceProgressPublisher {
+		return svc.inferenceProgressPublisher(sessionID, logger)
+	}
+}
+
+func (fs *FactoryService) inferenceProgressPublisher(
+	sessionID string,
+	logger *zap.Logger,
+) workerprovider.InferenceProgressPublisher {
+	if fs == nil || fs.sessions == nil {
+		return nil
+	}
+	sessions := fs.sessions
+	normalizedSessionID := strings.TrimSpace(sessionID)
+	if normalizedSessionID == "" {
+		normalizedSessionID = defaultFactorySessionID
+	}
+	return func(fragment workerprovider.InferenceProgressFragment) {
+		session := sessions.Get(normalizedSessionID)
+		if session == nil && normalizedSessionID == defaultFactorySessionID {
+			session = sessions.Get(defaultFactorySessionID)
+		}
+		stream := fs.sessionResponseStream(session)
+		if stream == nil {
+			if logger != nil {
+				logger.Warn("session response stream unavailable; dropping internal provider progress",
+					zap.String("session_id", normalizedSessionID),
+					zap.String("dispatch_id", fragment.DispatchID),
+					zap.String("stream_kind", fragment.Kind),
+				)
+			}
+			return
+		}
+		publisher := responsestream.NewPublisher(stream, func(summary responsestream.CompactionSummary) {
+			emitSessionResponseStreamCompaction(session, normalizedSessionID, strings.TrimSpace(fragment.DispatchID), summary)
+		})
+		event := mapInferenceProgressFragment(fragment)
+		stored := publisher.Publish(event)
+		emitSessionResponseStreamPublished(session, normalizedSessionID, stored)
+	}
+}
+
+func emitSessionResponseStreamPublished(session *factorysessions.LiveSession, sessionID string, event responsestream.Event) {
+	fields := metrics.Fields{
+		DispatchID: strings.TrimSpace(event.DispatchID),
+		Reason:     string(event.Kind),
+	}
+	emitSessionResponseStreamMetric(session, sessionID, runtimeMetricSessionResponseStreamPublished, fields)
+}
+
+func emitSessionResponseStreamCompaction(
+	session *factorysessions.LiveSession,
+	sessionID string,
+	dispatchID string,
+	summary responsestream.CompactionSummary,
+) {
+	fields := metrics.Fields{
+		DispatchID: strings.TrimSpace(dispatchID),
+		Reason:     string(summary.Reason),
+	}
+	emitSessionResponseStreamMetric(session, sessionID, runtimeMetricSessionResponseStreamCompacted, fields)
+	if handle := liveSessionHandle(session); handle != nil && handle.runtime != nil && handle.runtime.logger != nil {
+		handle.runtime.logger.Warn("session response stream compacted internal provider progress",
+			zap.String("session_id", sessionID),
+			zap.String("dispatch_id", dispatchID),
+			zap.String("compaction_reason", string(summary.Reason)),
+			zap.Int("dropped_sequence_count", summary.DroppedSequenceCount),
+			zap.Int64("first_retained_sequence", summary.FirstRetainedSequence),
+			zap.Int64("last_dropped_sequence", summary.LastDroppedSequence),
+		)
+	}
+}
+
+func emitSessionResponseStreamMetric(
+	session *factorysessions.LiveSession,
+	sessionID string,
+	name string,
+	fields metrics.Fields,
+) {
+	handle := liveSessionHandle(session)
+	if handle == nil || handle.runtime == nil {
+		return
+	}
+	if fields.DispatchID == "" {
+		fields.DispatchID = sessionID
+	}
+	if err := handle.runtime.metricsEmitter().Counter(context.Background(), name, 1, fields); err != nil {
+		handle.runtime.runtimeLogger().Warn("session response stream metric emission failed",
+			zap.String("metric_name", name),
+			zap.String("session_id", sessionID),
+			zap.Error(err),
+		)
+	}
 }
 
 func sortFactorySessionSummaries(summaries []factoryapi.FactorySessionSummary) {
@@ -1317,7 +1491,7 @@ func (fs *FactoryService) RetryDurableFactorySessionDispatch(
 	if err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
-	return factorysession.LifecycleControlResponseToAPI(result), nil
+return factorysession.LifecycleControlResponseToAPI(result), nil
 }
 
 func (fs *FactoryService) InterruptDurableFactorySessionDispatch(
@@ -1335,7 +1509,6 @@ func (fs *FactoryService) InterruptDurableFactorySessionDispatch(
 	}
 	return factorysession.LifecycleControlResponseToAPI(result), nil
 }
-
 func (fs *FactoryService) PauseLiveFactorySession(
 	ctx context.Context,
 	sessionID string,
@@ -1453,6 +1626,7 @@ func (fs *FactoryService) applyLiveLifecycleControl(
 	fs.observeLiveLifecycleControl(sessionID, operation, control, outcome, resultStatus, nil)
 	return result, nil
 }
+
 const (
 	runtimeMetricLifecycleControl = "runtime.lifecycle_control"
 )
@@ -1549,4 +1723,3 @@ func (fs *FactoryService) emitLiveLifecycleControlMetric(
 		Reason:  string(operation),
 	})
 }
-

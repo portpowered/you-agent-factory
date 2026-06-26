@@ -144,6 +144,9 @@ func TestDispatchDetailResponseToAPI_MapsPetriAndJavaScriptFixtures(t *testing.T
 	if javascriptMapped.Javascript == nil || javascriptMapped.Javascript.TaskKind != factoryapi.FactoryDispatchJavaScriptTaskKindVERIFY {
 		t.Fatalf("javascript projection = %#v", javascriptMapped.Javascript)
 	}
+	if javascriptMapped.Javascript.ExecutionMode == nil || *javascriptMapped.Javascript.ExecutionMode != "live" {
+		t.Fatalf("javascript executionMode = %#v", javascriptMapped.Javascript)
+	}
 }
 
 func TestArtifactProjectionToAPI_MapsSummaryAndDetailFixtures(t *testing.T) {
@@ -206,6 +209,9 @@ func testDispatchProjectionMapsUsageWarningsAndFailure(t *testing.T) {
 	}
 	if dispatchMapped.FailureDetail == nil || dispatchMapped.FailureDetail.Reason == nil || *dispatchMapped.FailureDetail.Reason != "TEMPORARY" {
 		t.Fatalf("dispatch failure detail = %#v, want trimmed failure", dispatchMapped.FailureDetail)
+	}
+	if dispatchMapped.StatusTransitions == nil || len(*dispatchMapped.StatusTransitions) != 2 {
+		t.Fatalf("dispatch statusTransitions = %#v, want queued/failed history", dispatchMapped.StatusTransitions)
 	}
 }
 
@@ -574,8 +580,16 @@ func dispatchDetailFromFixture(dispatch map[string]any) factorysessionexecution.
 	}
 	if javascript, ok := dispatch["javascript"].(map[string]any); ok {
 		detail.JavaScript = &factorysessionexecution.DispatchJavaScriptProjection{
-			TaskKind:  stringValue(javascript, "taskKind"),
-			TaskLabel: stringValue(javascript, "taskLabel"),
+			TaskKind:      stringValue(javascript, "taskKind"),
+			TaskLabel:     stringValue(javascript, "taskLabel"),
+			ExecutionMode: stringValue(javascript, "executionMode"),
+		}
+	}
+	if transitions, ok := dispatch["statusTransitions"].([]any); ok {
+		for _, item := range transitions {
+			if value, ok := item.(string); ok {
+				detail.StatusTransitions = append(detail.StatusTransitions, factorysessionexecution.DispatchStatus(value))
+			}
 		}
 	}
 	return detail

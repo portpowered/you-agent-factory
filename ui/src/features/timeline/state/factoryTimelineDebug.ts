@@ -23,6 +23,7 @@ type HeavyPayloadKey = (typeof HEAVY_PAYLOAD_KEYS)[number];
 
 export interface FactoryTimelineDebugOptions {
   compactEventText: boolean;
+  disableTimelineCheckpoint: boolean;
   maxEventTextChars: number;
   memoryDebug: boolean;
 }
@@ -173,6 +174,9 @@ export function readFactoryTimelineDebugOptions(
 
   return {
     compactEventText: parseBooleanFlag(params.get("afCompactEventText")),
+    disableTimelineCheckpoint: parseBooleanFlag(
+      params.get("afDisableTimelineCheckpoint"),
+    ),
     maxEventTextChars:
       parsePositiveInteger(params.get("afMaxEventTextChars")) ??
       DEFAULT_MAX_EVENT_TEXT_CHARS,

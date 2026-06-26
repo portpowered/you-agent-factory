@@ -490,7 +490,9 @@ func (f *factoryImpl) Pause(_ context.Context) error {
 	}
 	f.state = interfaces.FactoryStatePaused
 	f.mu.Unlock()
-	f.recordStateChange(previousState, interfaces.FactoryStatePaused, "pause requested")
+	reason := "pause requested"
+	f.recordStateChange(previousState, interfaces.FactoryStatePaused, reason)
+	f.recordSessionLifecycleControl(previousState, interfaces.FactoryStatePaused, factoryapi.FactorySessionLifecycleControlKindPause, reason)
 	f.recordSessionLifecyclePause()
 	f.logRuntimeLifecycleControl("PAUSE", previousState, interfaces.FactoryStatePaused, "ACCEPTED")
 	return nil
@@ -510,7 +512,9 @@ func (f *factoryImpl) Resume(_ context.Context) error {
 	}
 	f.state = interfaces.FactoryStateRunning
 	f.mu.Unlock()
-	f.recordStateChange(previousState, interfaces.FactoryStateRunning, "resume requested")
+	reason := "resume requested"
+	f.recordStateChange(previousState, interfaces.FactoryStateRunning, reason)
+	f.recordSessionLifecycleControl(previousState, interfaces.FactoryStateRunning, factoryapi.FactorySessionLifecycleControlKindResume, reason)
 	f.recordSessionLifecycleResume()
 	f.markResumeDrainPending()
 	f.logRuntimeLifecycleControl("RESUME", previousState, interfaces.FactoryStateRunning, "ACCEPTED")
@@ -584,6 +588,39 @@ func (f *factoryImpl) recordStateChange(previous interfaces.FactoryState, next i
 		tick = f.engine.GetRuntimeStateSnapshot().TickCount
 	}
 	f.eventHistory.RecordFactoryStateChange(tick, previous, next, reason, f.clock.Now())
+}
+
+func (f *factoryImpl) recordSessionLifecycleControl(
+	previous interfaces.FactoryState,
+	next interfaces.FactoryState,
+	operation factoryapi.FactorySessionLifecycleControlKind,
+	reason string,
+) {
+	if f.eventHistory == nil || f.cfg == nil {
+		return
+	}
+	tick := 0
+	if f.engine != nil {
+		tick = f.engine.GetRuntimeStateSnapshot().TickCount
+	}
+	factoryCfg := factoryConfigFromFactoryConfig(f.cfg)
+	orchestratorKind := interfaces.GeneratedPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryCfg))
+	var orchestratorDialect string
+	if factoryCfg != nil && factoryCfg.Orchestrator != nil && factoryCfg.Orchestrator.JavaScript != nil {
+		orchestratorDialect = factoryCfg.Orchestrator.JavaScript.Dialect
+	}
+	f.eventHistory.RecordSessionLifecycleControl(factoryevents.SessionLifecycleControlInput{
+		SessionID:           sessionIDFromFactoryConfig(f.cfg),
+		OrchestratorKind:    orchestratorKind,
+		OrchestratorDialect: orchestratorDialect,
+		Source:              "runtime",
+		Tick:                tick,
+		Operation:           operation,
+		Outcome:             factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+		PreviousStatus:      factoryevents.FactoryStateToDurableLifecycleStatus(previous),
+		NewStatus:           factoryevents.FactoryStateToDurableLifecycleStatus(next),
+		Reason:              reason,
+	}, f.clock.Now())
 }
 
 func (f *factoryImpl) logRuntimeLifecycleControl(
@@ -696,15 +733,11 @@ func (f *factoryImpl) deriveRuntimeStatus(currentState interfaces.FactoryState, 
 		return interfaces.RuntimeStatusFinished
 	}
 
-	if snapshot.InFlightCount > 0 || len(snapshot.Dispatches) > 0 || hasNonTerminalWorkInWorldState(worldState) || hasNonTerminalWork(snapshot.Marking, f.topology) {
+	if snapshot.InFlightCount > 0 || len(snapshot.Dispatches) > 0 || hasNonTerminalWork(snapshot.Marking, f.topology) {
 		return interfaces.RuntimeStatusActive
 	}
 
 	return interfaces.RuntimeStatusIdle
-}
-
-func hasNonTerminalWorkInWorldState(worldState *interfaces.FactoryWorldState) bool {
-	return worldState != nil && len(worldState.ActiveWorkItemsByID) > 0
 }
 
 func hasNonTerminalWork(marking petri.MarkingSnapshot, topology *state.Net) bool {

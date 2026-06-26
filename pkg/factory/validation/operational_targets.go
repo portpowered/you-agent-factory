@@ -3,11 +3,12 @@ package validation
 import factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 
 const (
-	CodeFactoryPayloadInvalid     = "factory.payload.invalid"
-	CodeFactoryNameInvalid        = "factory.name.invalid"
-	CodeFactoryVersionStale       = "factory.version.stale"
-	CodeFactoryRuntimeNotIdle     = "factory.runtime.notIdle"
-	CodeFactorySessionField       = "factory.session.field"
+	CodeFactoryPayloadInvalid = "factory.payload.invalid"
+	CodeFactoryNameInvalid    = "factory.name.invalid"
+	CodeFactoryVersionStale   = "factory.version.stale"
+	CodeFactoryRuntimeNotIdle = "factory.runtime.notIdle"
+	CodeFactorySessionField   = "factory.session.field"
+	CodeFactorySessionTarget  = "factory.session.target"
 )
 
 // FormFactoryPayloadTarget reports invalid or unreadable factory request bodies.
@@ -76,6 +77,21 @@ func FactorySessionFieldTarget(reason, field, message string) factoryapi.Factory
 		Subject: factoryapi.FactoryValidationSubject{
 			Type:     factoryapi.FactoryValidationSubjectTypeFactory,
 			Id:       field,
+			Location: factoryapi.FactoryValidationSubjectLocationReference,
+		},
+	}
+}
+
+// FactorySessionTargetTarget reports discovery-time factory target failures.
+func FactorySessionTargetTarget(reason, targetID, message string) factoryapi.FactoryValidationTarget {
+	code := CodeFactorySessionTarget + "." + reason
+	return factoryapi.FactoryValidationTarget{
+		Code:     code,
+		Severity: factoryapi.FactoryValidationSeverityError,
+		Message:  message,
+		Subject: factoryapi.FactoryValidationSubject{
+			Type:     factoryapi.FactoryValidationSubjectTypeFactory,
+			Id:       targetID,
 			Location: factoryapi.FactoryValidationSubjectLocationReference,
 		},
 	}

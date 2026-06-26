@@ -97,6 +97,59 @@ func TestFactoryEventHistory_RecordSessionLifecycle_FailedRunEmitsFailedWithPart
 	}
 }
 
+func TestFactoryEventHistory_RecordSessionLifecycleControl_EmitsPauseAndResume(t *testing.T) {
+	t0 := time.Date(2026, 6, 20, 12, 0, 0, 0, time.UTC)
+	history := NewFactoryEventHistory(nil, func() time.Time { return t0 })
+	history.RecordSessionLifecycleControl(SessionLifecycleControlInput{
+		SessionID:        "session-live",
+		OrchestratorKind: factoryapi.JAVASCRIPT,
+		Source:           "runtime",
+		Tick:             3,
+		Operation:        factoryapi.FactorySessionLifecycleControlKindPause,
+		Outcome:          factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+		PreviousStatus:   factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		NewStatus:        factoryapi.FactorySessionDurableLifecycleStatusPaused,
+		Reason:           "pause requested",
+	}, t0)
+	history.RecordSessionLifecycleControl(SessionLifecycleControlInput{
+		SessionID:        "session-live",
+		OrchestratorKind: factoryapi.JAVASCRIPT,
+		Source:           "runtime",
+		Tick:             4,
+		Operation:        factoryapi.FactorySessionLifecycleControlKindResume,
+		Outcome:          factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+		PreviousStatus:   factoryapi.FactorySessionDurableLifecycleStatusPaused,
+		NewStatus:        factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		Reason:           "resume requested",
+	}, t0.Add(time.Second))
+
+	events := history.Events()
+	if len(events) != 2 {
+		t.Fatalf("events = %d, want pause and resume lifecycle controls", len(events))
+	}
+	assertSessionLifecycleEventType(t, events[0], factoryapi.FactoryEventTypeSessionLifecycleControl, "session-lifecycle-control/session-live/0")
+	assertSessionLifecycleEventType(t, events[1], factoryapi.FactoryEventTypeSessionLifecycleControl, "session-lifecycle-control/session-live/1")
+
+	pausePayload, err := events[0].Payload.AsSessionLifecycleControlEventPayload()
+	if err != nil {
+		t.Fatalf("pause payload: %v", err)
+	}
+	if pausePayload.Operation != factoryapi.FactorySessionLifecycleControlKindPause ||
+		pausePayload.PreviousStatus != factoryapi.FactorySessionDurableLifecycleStatusRunning ||
+		pausePayload.NewStatus != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("pause payload = %#v, want RUNNING->PAUSED", pausePayload)
+	}
+}
+
+func TestFactoryStateToDurableLifecycleStatus_MapsLiveFactoryStates(t *testing.T) {
+	if got := FactoryStateToDurableLifecycleStatus(interfaces.FactoryStatePaused); got != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("paused = %q, want PAUSED", got)
+	}
+	if got := FactoryStateToDurableLifecycleStatus(interfaces.FactoryStateRunning); got != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("running = %q, want RUNNING", got)
+	}
+}
+
 func assertSessionLifecycleEventType(
 	t *testing.T,
 	event factoryapi.FactoryEvent,

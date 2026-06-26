@@ -50,8 +50,8 @@ func canonicalEventReconnectCases() []eventReconnectCase {
 			name:      "artifact-inspection",
 			requestID: "req-js-paused-001",
 			sessionID: "dur-sess-js-paused-001",
-			wantCount: 2,
-			wantHash:  "sha256:4fc92b6cff30745dfe1112fcbbf1bb70fc1f132bdfec25b5b0e39128ac6f054c",
+			wantCount: 3,
+			wantHash:  "sha256:caf89d9e8075003dca69a6894a214f19d20e59105fff82fd8bedebb9f89ebc85",
 		},
 		{
 			name:      "awaiting-approval",

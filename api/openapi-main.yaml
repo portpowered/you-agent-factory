@@ -871,13 +871,14 @@ paths:
       tags:
         - Factory
       operationId: pauseFactorySession
-      summary: Pause one factory session
+      summary: Pause one Factory Session
       description: >-
-        Pauses one live or durable factory session while preserving inspectable
-        partial results, dispatches, and artifacts. Live workspace sessions use
-        the same route family as durable execution sessions. Returns the updated
-        session or a typed lifecycle-control outcome for no-op, invalid-state,
-        terminal-session, or conflict cases.
+        Pauses one live or durable Factory Session while preserving inspectable
+        partial results, dispatches, artifacts, and buffered inbound submissions
+        or completed worker results. Live workspace sessions use the same route
+        family as durable execution sessions. Automatic progression stops until
+        resume. Returns the updated session or a typed lifecycle-control
+        outcome for no-op, invalid-state, terminal-session, or conflict cases.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       requestBody:
@@ -912,11 +913,13 @@ paths:
       tags:
         - Factory
       operationId: resumeFactorySession
-      summary: Resume one factory session
+      summary: Resume one Factory Session
       description: >-
-        Resumes one paused live or durable factory session while preserving
+        Resumes one paused live or durable Factory Session while preserving
         inspectable partial results, dispatches, and artifacts. Live workspace
-        sessions use the same route family as durable execution sessions.
+        sessions use the same route family as durable execution sessions. Wakes
+        the runtime internally and drains ready buffered submissions and
+        completed worker results without requiring a new external signal.
         Returns the updated session or a typed lifecycle-control outcome for
         no-op, invalid-state, terminal-session, or conflict cases.
       parameters:
@@ -1628,6 +1631,8 @@ components:
       $ref: './components/schemas/events/payloads/SessionPausedEventPayload.yaml'
     SessionResumedEventPayload:
       $ref: './components/schemas/events/payloads/SessionResumedEventPayload.yaml'
+    SessionLifecycleControlEventPayload:
+      $ref: './components/schemas/events/payloads/SessionLifecycleControlEventPayload.yaml'
     SessionResultUpdatedEventPayload:
       $ref: './components/schemas/events/payloads/SessionResultUpdatedEventPayload.yaml'
     SessionCompletedEventPayload:
@@ -1944,6 +1949,8 @@ components:
       $ref: './components/schemas/data-models/RunnerSelectionSource.yaml'
     Workstation:
       $ref: './components/schemas/data-models/Workstation.yaml'
+    WorkstationOutcomeFormat:
+      $ref: './components/schemas/data-models/WorkstationOutcomeFormat.yaml'
     ClassificationRoute:
       $ref: './components/schemas/data-models/ClassificationRoute.yaml'
     WorkstationLimits:

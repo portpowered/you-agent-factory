@@ -11,6 +11,7 @@ import {
 test("builds stable browser integration vitest args", () => {
   expect(buildBrowserIntegrationVitestArgs()).toEqual([
     "run",
+    "--dir",
     "integration",
     "--no-file-parallelism",
     "--maxWorkers",

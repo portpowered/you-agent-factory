@@ -302,6 +302,7 @@ func assertOrderedEventSequence(t *testing.T, events []factoryapi.FactoryEvent) 
 		factoryapi.FactoryEventTypeDispatchRequest,
 		factoryapi.FactoryEventTypeDispatchResponse,
 		factoryapi.FactoryEventTypeFactoryStateResponse,
+		factoryapi.FactoryEventTypeSessionLifecycleControl,
 		factoryapi.FactoryEventTypeSessionPaused,
 	}...)
 	if len(events) != len(wantTypes) {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 )
 
 // FakeService is a deterministic in-memory implementation of Service for API, CLI,
@@ -525,7 +526,28 @@ func (s *FakeService) applyLifecycleControl(
 	}
 
 	if outcome == LifecycleControlOutcomeAccepted {
+		previousStatus := state.session.Status
 		s.mutateSessionForControl(state, operation, retry, interrupt)
+		switch operation {
+		case LifecycleControlPause, LifecycleControlResume:
+			occurredAt := time.Now().UTC()
+			if state.session.Lifecycle != nil && state.session.Lifecycle.PausedAt != nil && operation == LifecycleControlPause {
+				occurredAt = state.session.Lifecycle.PausedAt.UTC()
+			}
+			if state.session.Lifecycle != nil && state.session.Lifecycle.ResumedAt != nil && operation == LifecycleControlResume {
+				occurredAt = state.session.Lifecycle.ResumedAt.UTC()
+			}
+			state.events = AppendSessionLifecycleControlEvent(
+				state.events,
+				state.session,
+				previousStatus,
+				operation,
+				outcome,
+				occurredAt,
+				canonicalEventSourceFakeService,
+				control.Reason,
+			)
+		}
 	}
 
 	result := lifecycleControlResultFromState(state, id, operation, outcome, retry, interrupt)
@@ -545,13 +567,23 @@ func (s *FakeService) mutateSessionForControl(
 	switch operation {
 	case LifecycleControlPause:
 		if state.session.Status == LifecycleStatusRunning || state.session.Status == LifecycleStatusResuming {
+			pausedAt := time.Now().UTC()
 			state.session.Status = LifecycleStatusPaused
 			state.result.SessionStatus = LifecycleStatusPaused
+			if state.session.Lifecycle == nil {
+				state.session.Lifecycle = &LifecycleTimestamps{}
+			}
+			state.session.Lifecycle.PausedAt = &pausedAt
 		}
 	case LifecycleControlResume:
 		if state.session.Status == LifecycleStatusPaused {
+			resumedAt := time.Now().UTC()
 			state.session.Status = LifecycleStatusRunning
 			state.result.SessionStatus = LifecycleStatusRunning
+			if state.session.Lifecycle == nil {
+				state.session.Lifecycle = &LifecycleTimestamps{}
+			}
+			state.session.Lifecycle.ResumedAt = &resumedAt
 		}
 	case LifecycleControlCancel:
 		switch state.session.Status {

@@ -6,6 +6,7 @@ import type {
 } from "../../../api/factory-sessions";
 import {
   AlertPanel,
+  AlertPanelText,
   Button,
   DashboardText,
   DialogContent,
@@ -61,6 +62,10 @@ export function OpenSessionDialog({
   const showInspectSubmit =
     folderValidation.status !== "ready" &&
     folderValidation.status !== "init_ready";
+  const configLoadFailure =
+    dialogError?.code === "FACTORY_SESSION_CONFIG_LOAD_FAILED"
+      ? dialogError
+      : null;
   const validationStatusMessage =
     folderValidation.status === "ready" ||
     folderValidation.status === "init_ready"
@@ -119,7 +124,12 @@ export function OpenSessionDialog({
             {validationStatusMessage}
           </AlertPanel>
         ) : null}
-        {dialogError && folderValidation.status !== "error" ? (
+        {configLoadFailure ? (
+          <ConfigLoadFailedPanel error={configLoadFailure} />
+        ) : null}
+        {dialogError &&
+        folderValidation.status !== "error" &&
+        configLoadFailure == null ? (
           <AlertPanel role="alert" tone="danger">
             {dialogError.message}
           </AlertPanel>
@@ -155,6 +165,27 @@ export function OpenSessionDialog({
         />
       ) : null}
     </DialogContent>
+  );
+}
+
+function ConfigLoadFailedPanel({
+  error,
+}: {
+  error: FactorySessionsAPIError;
+}) {
+  return (
+    <AlertPanel role="alert" tone="danger">
+      <AlertPanelText>{error.message}</AlertPanelText>
+      {error.targets && error.targets.length > 0 ? (
+        <ul className="list-disc space-y-1 pl-5">
+          {error.targets.map((target) => (
+            <li key={`${target.code}:${target.subject?.id ?? ""}`}>
+              <AlertPanelText as="span">{target.message}</AlertPanelText>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </AlertPanel>
   );
 }
 

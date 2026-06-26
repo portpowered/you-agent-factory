@@ -32,6 +32,7 @@ var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeSessionResumed,
 	factoryapi.FactoryEventTypeSessionResultUpdated,
 	factoryapi.FactoryEventTypeSessionCompleted,
+	factoryapi.FactoryEventTypeSessionLifecycleControl,
 	factoryapi.FactoryEventTypeOrchestratorPhaseChanged,
 	factoryapi.FactoryEventTypeOrchestratorCheckpointWritten,
 	factoryapi.FactoryEventTypeDispatchQueued,
@@ -137,6 +138,10 @@ var generatedFactoryEventPayloadDecoders = map[factoryapi.FactoryEventType]func(
 		_, err := payload.AsSessionCompletedEventPayload()
 		return err
 	},
+	factoryapi.FactoryEventTypeSessionLifecycleControl: func(payload factoryapi.FactoryEvent_Payload) error {
+		_, err := payload.AsSessionLifecycleControlEventPayload()
+		return err
+	},
 	factoryapi.FactoryEventTypeOrchestratorPhaseChanged: func(payload factoryapi.FactoryEvent_Payload) error {
 		_, err := payload.AsOrchestratorPhaseChangedEventPayload()
 		return err
@@ -234,6 +239,9 @@ var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.Fac
 	},
 	reflect.TypeOf(factoryapi.SessionCompletedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromSessionCompletedEventPayload(value.(factoryapi.SessionCompletedEventPayload))
+	},
+	reflect.TypeOf(factoryapi.SessionLifecycleControlEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
+		return payload.FromSessionLifecycleControlEventPayload(value.(factoryapi.SessionLifecycleControlEventPayload))
 	},
 	reflect.TypeOf(factoryapi.OrchestratorPhaseChangedEventPayload{}): func(payload *factoryapi.FactoryEvent_Payload, value any) error {
 		return payload.FromOrchestratorPhaseChangedEventPayload(value.(factoryapi.OrchestratorPhaseChangedEventPayload))
@@ -464,11 +472,33 @@ func generatedSessionLifecycleBracketEvents(
 		},
 		{
 			SchemaVersion: factoryapi.AgentFactoryEventV1,
-			Id:            "event-session-completed",
-			Type:          factoryapi.FactoryEventTypeSessionCompleted,
+			Id:            "event-session-lifecycle-control",
+			Type:          factoryapi.FactoryEventTypeSessionLifecycleControl,
 			Context: factoryapi.FactoryEventContext{
 				Sequence:         14,
 				Tick:             7,
+				EventTime:        eventTime,
+				SessionId:        &fixture.sessionID,
+				SessionSequence:  intPtr(fixture.nextSessionSequence()),
+				OrchestratorKind: &fixture.orchestratorKind,
+				Source:           &fixture.source,
+			},
+			Payload: factoryEventPayload(t, factoryapi.SessionLifecycleControlEventPayload{
+				Operation:      factoryapi.FactorySessionLifecycleControlKindPause,
+				Outcome:        factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+				PreviousStatus: factoryapi.FactorySessionDurableLifecycleStatusRunning,
+				NewStatus:      factoryapi.FactorySessionDurableLifecycleStatusPaused,
+				OccurredAt:     eventTime,
+				Reason:         stringPtr("operator requested pause"),
+			}),
+		},
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-session-completed",
+			Type:          factoryapi.FactoryEventTypeSessionCompleted,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:         13,
+				Tick:             8,
 				EventTime:        eventTime,
 				SessionId:        &fixture.sessionID,
 				SessionSequence:  intPtr(fixture.nextSessionSequence()),

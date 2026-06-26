@@ -619,6 +619,12 @@ func lifecycleTimestampsFromFixtureMap(lifecycle map[string]any) *LifecycleTimes
 	if value := fixtureTimeValue(lifecycle, "interruptedAt"); value != nil {
 		out.InterruptedAt = value
 	}
+	if value := fixtureTimeValue(lifecycle, "pausedAt"); value != nil {
+		out.PausedAt = value
+	}
+	if value := fixtureTimeValue(lifecycle, "resumedAt"); value != nil {
+		out.ResumedAt = value
+	}
 	if value := fixtureTimeValue(lifecycle, "updatedAt"); value != nil {
 		out.UpdatedAt = value
 	}
