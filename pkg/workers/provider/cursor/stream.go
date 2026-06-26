@@ -227,7 +227,7 @@ func streamMessageText(event map[string]any) string {
 			parts = append(parts, text)
 		}
 	}
-	return strings.Join(parts, "")
+	return boundedText(strings.Join(parts, ""), PublishedTextLimit)
 }
 
 func streamToolCallName(event map[string]any) string {
@@ -237,12 +237,12 @@ func streamToolCallName(event map[string]any) string {
 	}
 	if function, _ := toolCall["function"].(map[string]any); function != nil {
 		if name := stringField(function, "name"); name != "" {
-			return name
+			return boundedTrimmedText(name, PublishedDiagnosticLimit)
 		}
 	}
 	for key := range toolCall {
 		if strings.TrimSpace(key) != "" {
-			return key
+			return boundedTrimmedText(key, PublishedDiagnosticLimit)
 		}
 	}
 	return ""
@@ -266,8 +266,6 @@ func unknownStreamEventMessage(eventType string) string {
 	if normalized == "" {
 		return "Cursor stream ignored unknown event"
 	}
-	if len(normalized) > streamUnknownEventPreviewLimit {
-		normalized = normalized[:streamUnknownEventPreviewLimit] + "..."
-	}
+	normalized = boundedTrimmedText(normalized, streamUnknownEventPreviewLimit)
 	return fmt.Sprintf("Cursor stream ignored unknown event type %q", normalized)
 }

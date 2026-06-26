@@ -17,6 +17,8 @@ const (
 
 	CommandOutputExcerptLimit    = 2048
 	CommandOutputLogPreviewLimit = 200
+	PublishedTextLimit           = 2048
+	PublishedDiagnosticLimit     = 96
 
 	ResponseMetadataStdoutExcerpt = "stdout_excerpt"
 	ResponseMetadataStderrExcerpt = "stderr_excerpt"
@@ -121,7 +123,7 @@ func ParseInferenceResult(provider string, stdout []byte) (*InferenceResult, *Pa
 func resultErrorSubtype(provider string, payload resultPayload) *ParseFailure {
 	message := fmt.Sprintf("cursor JSON output had subtype %q", payload.Subtype)
 	if strings.TrimSpace(payload.Result) != "" {
-		message += ": " + strings.TrimSpace(payload.Result)
+		message += ": " + boundedTrimmedText(payload.Result, PublishedDiagnosticLimit)
 	}
 	return &ParseFailure{
 		Type:    interfaces.WorkFailureTypeInternalServerError,
@@ -181,7 +183,13 @@ func responseMetadataFromPayload(payload resultPayload) map[string]string {
 
 // BoundedCommandOutputExcerpt returns a bounded excerpt of command output.
 func BoundedCommandOutputExcerpt(output []byte, limit int) string {
-	trimmed := strings.TrimSpace(string(output))
+	return boundedTrimmedText(string(output), limit)
+}
+
+// BoundedPublishedText trims and truncates provider-derived text before it is
+// surfaced through internal progress or safe diagnostic channels.
+func boundedTrimmedText(value string, limit int) string {
+	trimmed := strings.TrimSpace(value)
 	if trimmed == "" || limit <= 0 {
 		return ""
 	}
@@ -189,6 +197,16 @@ func BoundedCommandOutputExcerpt(output []byte, limit int) string {
 		return trimmed
 	}
 	return trimmed[:limit] + "..."
+}
+
+func boundedText(value string, limit int) string {
+	if value == "" || limit <= 0 {
+		return ""
+	}
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit] + "..."
 }
 
 // WithCommandOutputExcerpts attaches bounded stdout/stderr excerpts to provider diagnostics.

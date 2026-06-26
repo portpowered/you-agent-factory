@@ -176,11 +176,12 @@ func TestParseInferenceResult_UnexpectedType(t *testing.T) {
 }
 
 func TestParseInferenceResult_ErrorSubtype(t *testing.T) {
+	oversizedResult := strings.Repeat("x", PublishedDiagnosticLimit+20)
 	stdout := []byte(`{
 		"type": "result",
 		"subtype": "error",
 		"is_error": true,
-		"result": "rate limited",
+		"result": "` + oversizedResult + `",
 		"session_id": "sess-1"
 	}`)
 
@@ -191,6 +192,15 @@ func TestParseInferenceResult_ErrorSubtype(t *testing.T) {
 	if err.Type != interfaces.WorkFailureTypeInternalServerError {
 		t.Fatalf("error type = %q, want internal_server_error", err.Type)
 	}
+	if !strings.Contains(err.Message, `cursor JSON output had subtype "error": `) {
+		t.Fatalf("error message = %q, want subtype detail", err.Message)
+	}
+	if !strings.Contains(err.Message, "...") {
+		t.Fatalf("error message = %q, want bounded result preview", err.Message)
+	}
+	if strings.Contains(err.Message, oversizedResult) {
+		t.Fatalf("error message = %q, should not include full oversized result", err.Message)
+	}
 }
 
 func TestBoundedCommandOutputExcerpt_TruncatesWhenOverLimit(t *testing.T) {
@@ -200,6 +210,13 @@ func TestBoundedCommandOutputExcerpt_TruncatesWhenOverLimit(t *testing.T) {
 	want := "01234567..."
 	if got != want {
 		t.Fatalf("excerpt = %q, want %q", got, want)
+	}
+}
+
+func TestBoundedText_PreservesSpacingForPublishedAssistantText(t *testing.T) {
+	got := boundedText(" hi", 2)
+	if got != " h..." {
+		t.Fatalf("boundedText() = %q, want preserved leading spacing with truncation", got)
 	}
 }
 

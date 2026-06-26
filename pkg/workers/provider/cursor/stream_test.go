@@ -51,6 +51,30 @@ func TestStreamParser_EmitsTrailingAssistantDeltaOnFlush(t *testing.T) {
 	assertStreamFragment(t, fragments[0], StreamFragmentKindResponse, "tail", "cursor-session-456")
 }
 
+func TestStreamParser_BoundsLargeAssistantDeltaWithoutTrimmingSpacing(t *testing.T) {
+	var fragments []StreamFragment
+	parser := NewStreamParser(string(interfaces.ModelProviderCursor), func(fragment StreamFragment) {
+		fragments = append(fragments, fragment)
+	})
+
+	text := " " + strings.Repeat("a", PublishedTextLimit+5)
+	parser.Consume([]byte(`{"type":"assistant","timestamp_ms":7,"message":{"role":"assistant","content":[{"type":"text","text":"` + text + `"}]},"session_id":"cursor-session-456"}`))
+	parser.Flush()
+
+	if len(fragments) != 1 {
+		t.Fatalf("fragment count = %d, want 1", len(fragments))
+	}
+	if got := fragments[0].Payload; len(got) != PublishedTextLimit+3 {
+		t.Fatalf("payload len = %d, want %d with ellipsis", len(got), PublishedTextLimit+3)
+	}
+	if !strings.HasPrefix(fragments[0].Payload, " ") {
+		t.Fatalf("payload = %q, want preserved leading spacing", fragments[0].Payload)
+	}
+	if !strings.HasSuffix(fragments[0].Payload, "...") {
+		t.Fatalf("payload = %q, want truncated suffix", fragments[0].Payload)
+	}
+}
+
 func TestStreamParser_OmitsProviderSessionForInvalidSessionID(t *testing.T) {
 	var fragments []StreamFragment
 	parser := NewStreamParser(string(interfaces.ModelProviderCursor), func(fragment StreamFragment) {
@@ -107,6 +131,27 @@ func TestUnknownStreamEventMessage_BoundsEventTypePreview(t *testing.T) {
 	}
 	if !strings.HasSuffix(got, "...\"") {
 		t.Fatalf("unknownStreamEventMessage() = %q, want truncated suffix", got)
+	}
+}
+
+func TestStreamParser_BoundsToolCallNameInProgressDiagnostics(t *testing.T) {
+	var fragments []StreamFragment
+	parser := NewStreamParser(string(interfaces.ModelProviderCursor), func(fragment StreamFragment) {
+		fragments = append(fragments, fragment)
+	})
+
+	toolName := strings.Repeat("x", PublishedDiagnosticLimit+10)
+	parser.Consume([]byte(`{"type":"tool_call","subtype":"started","tool_call":{"function":{"name":"` + toolName + `"}},"session_id":"cursor-session-123"}`))
+	parser.Flush()
+
+	if len(fragments) != 1 {
+		t.Fatalf("fragment count = %d, want 1", len(fragments))
+	}
+	if !strings.Contains(fragments[0].Payload, "... started") {
+		t.Fatalf("payload = %q, want truncated tool name diagnostic", fragments[0].Payload)
+	}
+	if len(fragments[0].Payload) > len("Cursor ")+PublishedDiagnosticLimit+len(" started")+3 {
+		t.Fatalf("payload len = %d, want bounded diagnostic", len(fragments[0].Payload))
 	}
 }
 
