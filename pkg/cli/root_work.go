@@ -126,7 +126,6 @@ func newWorkMoveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 	return cmd
 }
 
-
 func newSessionCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	sessionCmd := &cobra.Command{
 		Use:   "session",
@@ -135,6 +134,8 @@ func newSessionCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 			"Subcommands:\n" +
 			"  list    list live workspace sessions or durable Factory Sessions with --scope live|persisted|all\n" +
 			"  show    show one live factory session from GET /factory-sessions/{session_id}\n" +
+			"  pause   pause one live or durable Factory Session through POST /factory-sessions/{session_id}/pause\n" +
+			"  resume  resume one paused live or durable Factory Session through POST /factory-sessions/{session_id}/resume\n" +
 			"  create  open another live session from a folder path\n" +
 			"  delete  close a live session by session id\n" +
 			"  pause   pause automatic progression for one live session\n" +
@@ -147,6 +148,12 @@ func newSessionCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 			"  " + cliBinaryName + " session list\n\n" +
 			"  # Show orchestrator-aware runtime for one live session.\n" +
 			"  " + cliBinaryName + " session show session-beta\n\n" +
+			"  # Pause and resume the default compatibility session.\n" +
+			"  " + cliBinaryName + " session pause\n" +
+			"  " + cliBinaryName + " session resume\n\n" +
+			"  # Pause and resume one named or durable Factory Session.\n" +
+			"  " + cliBinaryName + " session pause session-beta\n" +
+			"  " + cliBinaryName + " session resume dur-sess-js-run-n-001\n\n" +
 			"  # Emit API-shaped JSON for automation.\n" +
 			"  " + cliBinaryName + " session list --json\n\n" +
 			"  # Open and close sessions on a non-default port.\n" +
@@ -161,10 +168,10 @@ func newSessionCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 	sessionCmd.AddCommand(
 		newSessionListCommand(diagnostics),
 		newSessionShowCommand(globals, diagnostics),
-		newSessionCreateCommand(diagnostics),
-		newSessionDeleteCommand(diagnostics),
 		newSessionPauseCommand(globals, diagnostics),
 		newSessionResumeCommand(globals, diagnostics),
+		newSessionCreateCommand(diagnostics),
+		newSessionDeleteCommand(diagnostics),
 	)
 	return sessionCmd
 }
@@ -200,6 +207,88 @@ func newSessionShowCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 			cfg.Verbose = diagnostics.verboseEnabled()
 			cfg.Debug = diagnostics.debug
 			return showSession(cfg)
+		},
+	}
+
+	registerDeprecatedPortFlag(cmd)
+	return cmd
+}
+
+func newSessionPauseCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := sessioncli.LifecycleControlConfig{Server: globals.server}
+
+	cmd := &cobra.Command{
+		Use:   "pause [session-id]",
+		Short: "Pause one live or durable Factory Session",
+		Long: "Pause one live or durable Factory Session through POST /factory-sessions/{session_id}/pause.\n\n" +
+			"Human output reports paused, already-paused, invalid-state, not-found, or unreachable-host " +
+			"outcomes using Factory Session terminology. Omit session-id to target the default compatibility " +
+			"session (~default), pass a named live session id such as session-beta, or pass a durable " +
+			"session id from `you session list --scope all`. Use global --json for the API-shaped " +
+			"FactorySessionLifecycleControlResponse and global --server to target the same factory API base URI " +
+			"as workflow status and session show.",
+		Example: "  # Pause the default compatibility Factory Session.\n" +
+			"  " + cliBinaryName + " session pause\n\n" +
+			"  # Pause one named live Factory Session.\n" +
+			"  " + cliBinaryName + " session pause session-beta\n\n" +
+			"  # Pause one running durable Factory Session.\n" +
+			"  " + cliBinaryName + " session pause dur-sess-js-run-n-001\n\n" +
+			"  # Emit API-shaped JSON for automation.\n" +
+			"  " + cliBinaryName + " --json session pause session-beta",
+		Args:    cobra.MaximumNArgs(1),
+		PreRunE: rejectDeprecatedPortFlag,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 1 {
+				cfg.SessionID = args[0]
+			}
+			cfg.Server = globals.server
+			cfg.JSON = globals.json
+			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
+			return pauseSession(cfg)
+		},
+	}
+
+	registerDeprecatedPortFlag(cmd)
+	return cmd
+}
+
+func newSessionResumeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := sessioncli.LifecycleControlConfig{Server: globals.server}
+
+	cmd := &cobra.Command{
+		Use:   "resume [session-id]",
+		Short: "Resume one paused live or durable Factory Session",
+		Long: "Resume one paused live or durable Factory Session through POST /factory-sessions/{session_id}/resume.\n\n" +
+			"Human output reports resumed, already-running, invalid-state, not-found, or unreachable-host " +
+			"outcomes using Factory Session terminology. Omit session-id to target the default compatibility " +
+			"session (~default), pass a named live session id such as session-beta, or pass a durable " +
+			"session id from `you session list --scope all`. Use global --json for the API-shaped " +
+			"FactorySessionLifecycleControlResponse and global --server to target the same factory API base URI " +
+			"as workflow status and session show.",
+		Example: "  # Resume the default compatibility Factory Session.\n" +
+			"  " + cliBinaryName + " session resume\n\n" +
+			"  # Resume one named live Factory Session.\n" +
+			"  " + cliBinaryName + " session resume session-beta\n\n" +
+			"  # Resume one paused durable Factory Session.\n" +
+			"  " + cliBinaryName + " session resume dur-sess-js-run-n-001\n\n" +
+			"  # Emit API-shaped JSON for automation.\n" +
+			"  " + cliBinaryName + " --json session resume session-beta",
+		Args:    cobra.MaximumNArgs(1),
+		PreRunE: rejectDeprecatedPortFlag,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 1 {
+				cfg.SessionID = args[0]
+			}
+			cfg.Server = globals.server
+			cfg.JSON = globals.json
+			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
+			return resumeSession(cfg)
 		},
 	}
 
@@ -297,78 +386,6 @@ func newSessionDeleteCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command 
 
 	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
 	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit a JSON confirmation after the session closes")
-	return cmd
-}
-
-func newSessionPauseCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := sessioncli.LifecycleControlConfig{Server: globals.server}
-
-	cmd := &cobra.Command{
-		Use:   "pause [session-id]",
-		Short: "Pause one live factory session",
-		Long: "Pause one live factory session via POST /factory-sessions/{session_id}/pause.\n\n" +
-			"Pausing stops automatic progression while preserving inbound submissions and completed " +
-			"worker results until the session resumes. Omit session-id to target the default " +
-			"compatibility session (~default). Use global --json for the API-shaped lifecycle-control " +
-			"response and global --server to target the same factory API base URI as session show.",
-		Example: "  # Pause the default compatibility factory session.\n" +
-			"  " + cliBinaryName + " session pause\n\n" +
-			"  # Pause one named live session with structured output.\n" +
-			"  " + cliBinaryName + " --json session pause session-beta",
-		Args:    cobra.MaximumNArgs(1),
-		PreRunE: rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 1 {
-				cfg.SessionID = args[0]
-			}
-			cfg.Server = globals.server
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return pauseSession(cfg)
-		},
-	}
-
-	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().StringVar(&cfg.RequestID, "request-id", "", "optional client idempotency key for lifecycle controls")
-	return cmd
-}
-
-func newSessionResumeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := sessioncli.LifecycleControlConfig{Server: globals.server}
-
-	cmd := &cobra.Command{
-		Use:   "resume [session-id]",
-		Short: "Resume one paused live factory session",
-		Long: "Resume one paused live factory session via POST /factory-sessions/{session_id}/resume.\n\n" +
-			"Resume wakes the runtime and drains ready buffered submissions and worker results without " +
-			"requiring another external signal. Omit session-id to target the default compatibility " +
-			"session (~default). Use global --json for the API-shaped lifecycle-control response and " +
-			"global --server to target the same factory API base URI as session show.",
-		Example: "  # Resume the default compatibility factory session.\n" +
-			"  " + cliBinaryName + " session resume\n\n" +
-			"  # Resume one named live session with structured output.\n" +
-			"  " + cliBinaryName + " --json session resume session-beta",
-		Args:    cobra.MaximumNArgs(1),
-		PreRunE: rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 1 {
-				cfg.SessionID = args[0]
-			}
-			cfg.Server = globals.server
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return resumeSession(cfg)
-		},
-	}
-
-	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().StringVar(&cfg.RequestID, "request-id", "", "optional client idempotency key for lifecycle controls")
 	return cmd
 }
 
