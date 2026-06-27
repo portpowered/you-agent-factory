@@ -8,7 +8,10 @@ primary-result behavior.
 - `pkg/invocations/primary_result.go` resolves invocation `primaryResult`
   against selected-tick `FactoryWorldState` using `WorkRequestsByID`,
   `TerminalWorkByID`, and payload-lineage scope rather than transport-specific
-  polling logic.
+  polling logic. The same package also classifies missing-primary-result waits
+  from scoped current work state when authored workflow states such as
+  `blocked` or `needs-human` explain the stopped invocation better than the
+  generic unresolved-primary-result fallback.
 - `pkg/factory/validation/validate.go` owns factory-level `invocationReturn`
   validation shared by validate-only and save pre-check flows.
 - `pkg/config/factory_config_mapping*.go` maps `invocationReturn` between the

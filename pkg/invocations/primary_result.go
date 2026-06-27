@@ -19,6 +19,8 @@ type PrimaryResultErrorCode string
 
 const (
 	PrimaryResultErrorCodeUnresolved PrimaryResultErrorCode = "INVOCATION_PRIMARY_RESULT_UNRESOLVED"
+	PrimaryResultErrorCodeBlocked    PrimaryResultErrorCode = "INVOCATION_BLOCKED"
+	PrimaryResultErrorCodeNeedsHuman PrimaryResultErrorCode = "INVOCATION_NEEDS_HUMAN"
 )
 
 // PrimaryResultSelectionInput carries the selected-tick world state for one
@@ -172,6 +174,68 @@ func unresolvedPrimaryResultError(requestID, policy, reason string) error {
 	}
 }
 
+// ClassifyMissingPrimaryResult inspects the selected-tick world state for
+// authored non-success work states that explain why no primary result exists.
+func ClassifyMissingPrimaryResult(input PrimaryResultSelectionInput) (*PrimaryResultError, bool) {
+	requestID := strings.TrimSpace(input.RequestID)
+	if requestID == "" {
+		return nil, false
+	}
+	request, ok := input.WorldState.WorkRequestsByID[requestID]
+	if !ok || len(request.WorkItems) == 0 {
+		return nil, false
+	}
+
+	scope := invocationScopeWorkIDs(input.WorldState.PayloadLineage, request.WorkItems)
+	for _, stateName := range []string{"blocked", "needs-human"} {
+		item, found := scopedWorkItemInState(input.WorldState.WorkItemsByID, scope, stateName)
+		if !found {
+			continue
+		}
+		return classifiedPrimaryResultError(requestID, resolvedInvocationReturnPolicy(input.InvocationReturn), item), true
+	}
+	return nil, false
+}
+
+// ClassifyMissingPrimaryResultWorkItem maps one current work item onto the
+// stable blocked or needs-human invocation outcome when that state explains the
+// missing primary result.
+func ClassifyMissingPrimaryResultWorkItem(
+	requestID string,
+	invocationReturn *interfaces.InvocationReturnConfig,
+	item interfaces.FactoryWorkItem,
+) *PrimaryResultError {
+	return classifiedPrimaryResultError(requestID, resolvedInvocationReturnPolicy(invocationReturn), item)
+}
+
+func classifiedPrimaryResultError(
+	requestID string,
+	policy string,
+	item interfaces.FactoryWorkItem,
+) *PrimaryResultError {
+	stateName := currentWorkStateName(item)
+	stateLabel := workStateLabel(item)
+	workLabel := workDisplayLabel(item)
+	switch stateName {
+	case "blocked":
+		return &PrimaryResultError{
+			Code:      PrimaryResultErrorCodeBlocked,
+			RequestID: requestID,
+			Policy:    policy,
+			Message:   fmt.Sprintf("invocation blocked: work %q is waiting in state %q", workLabel, stateLabel),
+		}
+	case "needs-human":
+		return &PrimaryResultError{
+			Code:      PrimaryResultErrorCodeNeedsHuman,
+			RequestID: requestID,
+			Policy:    policy,
+			Message:   fmt.Sprintf("invocation needs human input: work %q is waiting in state %q", workLabel, stateLabel),
+		}
+	default:
+		return nil
+	}
+}
+
 func resolvedInvocationReturnPolicy(cfg *interfaces.InvocationReturnConfig) string {
 	if cfg == nil || strings.TrimSpace(cfg.Policy) == "" {
 		return invocationReturnPolicySubmittedWorkTerminal
@@ -232,6 +296,61 @@ func sortedTerminalWorkIDs(terminal map[string]interfaces.FactoryTerminalWork) [
 	}
 	sort.Strings(ids)
 	return ids
+}
+
+func scopedWorkItemInState(
+	workItems map[string]interfaces.FactoryWorkItem,
+	scope map[string]struct{},
+	wantState string,
+) (interfaces.FactoryWorkItem, bool) {
+	if len(workItems) == 0 || len(scope) == 0 {
+		return interfaces.FactoryWorkItem{}, false
+	}
+	ids := make([]string, 0, len(workItems))
+	for workID := range workItems {
+		if _, ok := scope[workID]; ok {
+			ids = append(ids, workID)
+		}
+	}
+	sort.Strings(ids)
+	for _, workID := range ids {
+		item := workItems[workID]
+		if currentWorkStateName(item) == wantState {
+			return item, true
+		}
+	}
+	return interfaces.FactoryWorkItem{}, false
+}
+
+func workDisplayLabel(item interfaces.FactoryWorkItem) string {
+	if label := strings.TrimSpace(item.DisplayName); label != "" {
+		return label
+	}
+	if label := strings.TrimSpace(item.ID); label != "" {
+		return label
+	}
+	return "submitted work"
+}
+
+func workStateLabel(item interfaces.FactoryWorkItem) string {
+	if placeID := strings.TrimSpace(item.PlaceID); placeID != "" {
+		return placeID
+	}
+	stateName := currentWorkStateName(item)
+	if workType := strings.TrimSpace(item.WorkTypeID); workType != "" && stateName != "" {
+		return workType + ":" + stateName
+	}
+	return stateName
+}
+
+func currentWorkStateName(item interfaces.FactoryWorkItem) string {
+	if placeID := strings.TrimSpace(item.PlaceID); placeID != "" {
+		if _, suffix, ok := strings.Cut(placeID, ":"); ok {
+			return suffix
+		}
+		return placeID
+	}
+	return terminalStateName(item)
 }
 
 func invocationScopeWorkIDs(

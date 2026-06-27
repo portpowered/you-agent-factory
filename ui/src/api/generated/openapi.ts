@@ -6007,6 +6007,8 @@ export const InvocationInputSourceKind = {
 export type InvocationInputSourceKind =
   (typeof InvocationInputSourceKind)[keyof typeof InvocationInputSourceKind];
 export const InvocationResponseErrorCode = {
+  INVOCATION_BLOCKED: "INVOCATION_BLOCKED",
+  INVOCATION_NEEDS_HUMAN: "INVOCATION_NEEDS_HUMAN",
   INVOCATION_PRIMARY_RESULT_UNRESOLVED: "INVOCATION_PRIMARY_RESULT_UNRESOLVED",
   INVOCATION_TIMED_OUT: "INVOCATION_TIMED_OUT",
   INVOCATION_CANCELED: "INVOCATION_CANCELED",

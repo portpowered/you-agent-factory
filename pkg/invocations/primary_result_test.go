@@ -120,9 +120,54 @@ func TestResolvePrimaryResult_UnresolvedWhenNoPrimaryOutputExists(t *testing.T) 
 	}
 }
 
+func TestClassifyMissingPrimaryResult_ReturnsBlockedForScopedWorkItem(t *testing.T) {
+	state := invocationWorldStateFixture()
+	rootInitial := invocationWorkItem("work-root", "goal", "init", "Blocked goal", "goal:init")
+	rootBlocked := invocationWorkItem("work-root", "goal", "blocked", "Blocked goal", "goal:blocked")
+	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
+	state.WorkItemsByID[rootBlocked.ID] = rootBlocked
+
+	got, ok := ClassifyMissingPrimaryResult(PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if !ok {
+		t.Fatal("expected blocked classification")
+	}
+	if got.Code != PrimaryResultErrorCodeBlocked {
+		t.Fatalf("code = %q, want %q", got.Code, PrimaryResultErrorCodeBlocked)
+	}
+	if got.Message != `invocation blocked: work "Blocked goal" is waiting in state "goal:blocked"` {
+		t.Fatalf("message = %q", got.Message)
+	}
+}
+
+func TestClassifyMissingPrimaryResult_ReturnsNeedsHumanForScopedWorkItem(t *testing.T) {
+	state := invocationWorldStateFixture()
+	rootInitial := invocationWorkItem("work-root", "goal", "init", "Needs operator input", "goal:init")
+	rootNeedsHuman := invocationWorkItem("work-root", "goal", "needs-human", "Needs operator input", "goal:needs-human")
+	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
+	state.WorkItemsByID[rootNeedsHuman.ID] = rootNeedsHuman
+
+	got, ok := ClassifyMissingPrimaryResult(PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if !ok {
+		t.Fatal("expected needs-human classification")
+	}
+	if got.Code != PrimaryResultErrorCodeNeedsHuman {
+		t.Fatalf("code = %q, want %q", got.Code, PrimaryResultErrorCodeNeedsHuman)
+	}
+	if got.Message != `invocation needs human input: work "Needs operator input" is waiting in state "goal:needs-human"` {
+		t.Fatalf("message = %q", got.Message)
+	}
+}
+
 func invocationWorldStateFixture() interfaces.FactoryWorldState {
 	return interfaces.FactoryWorldState{
 		PayloadLineage:   interfaces.WorkPayloadLineageProjection{},
+		WorkItemsByID:    make(map[string]interfaces.FactoryWorkItem),
 		WorkRequestsByID: make(map[string]interfaces.WorkRequestPayload),
 		TerminalWorkByID: make(map[string]interfaces.FactoryTerminalWork),
 	}
