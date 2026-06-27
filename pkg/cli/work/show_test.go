@@ -28,9 +28,12 @@ func TestShow_HumanOutputIncludesWorkSummary(t *testing.T) {
 			TraceId:                stringPtr("trace-legacy"),
 			CurrentChainingTraceId: stringPtr("trace-chain-1"),
 			StopSummary: &factoryapi.FactoryStopSummary{
-				SessionId: "session-beta",
-				StopKind:  factoryapi.FactoryStopKind("BLOCKED"),
-				WorkState: stringPtr("story:blocked"),
+				SessionId:                "session-beta",
+				StopKind:                 factoryapi.FactoryStopKind("BLOCKED"),
+				WorkState:                stringPtr("story:blocked"),
+				LatestResultSummary:      stringPtr("provider timeout"),
+				SuggestedRecoverySurface: stringPtr("existing work repair, work move, or follow-up submission controls"),
+				SuggestedRecoveryAction:  stringPtr("Inspect the blocked work \"Review PRD\" [work-review-1], then use the existing work repair, work move, or follow-up submission controls to unblock it."),
 				LatestDispatch: &factoryapi.FactoryStopDispatchSummary{
 					DispatchId:      "dispatch-review-1",
 					Status:          factoryapi.FactoryDispatchStatusFAILED,
@@ -63,7 +66,10 @@ func TestShow_HumanOutputIncludesWorkSummary(t *testing.T) {
 		"Trace:\ttrace-chain-1\n" +
 		"Relations:\tnone\n" +
 		"Stop summary:\tkind=BLOCKED session=session-beta state=story:blocked\n" +
-		"Stop dispatch:\tdispatch-review-1 status=FAILED kind=PETRI_TRANSITION workstation=Review\n"
+		"Stop dispatch:\tdispatch-review-1 status=FAILED kind=PETRI_TRANSITION workstation=Review\n" +
+		"Stop result:\tprovider timeout\n" +
+		"Recovery surface:\texisting work repair, work move, or follow-up submission controls\n" +
+		"Recovery action:\tInspect the blocked work \"Review PRD\" [work-review-1], then use the existing work repair, work move, or follow-up submission controls to unblock it.\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}

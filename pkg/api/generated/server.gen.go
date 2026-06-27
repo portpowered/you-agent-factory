@@ -2704,6 +2704,12 @@ type FactoryStopSummary struct {
 	// StopKind Canonical inspect classification for stopped automation on existing Factory Session and Work surfaces.
 	StopKind FactoryStopKind `json:"stopKind"`
 
+	// SuggestedRecoveryAction Human-readable next step that names the existing work or session action the operator should take to recover or continue automation.
+	SuggestedRecoveryAction *string `json:"suggestedRecoveryAction,omitempty"`
+
+	// SuggestedRecoverySurface Existing operator surface to use next, expressed with current Factory Session and Work vocabulary rather than a goal-specific control route.
+	SuggestedRecoverySurface *string `json:"suggestedRecoverySurface,omitempty"`
+
 	// WorkId Relevant work identifier when one work item best explains the stop.
 	WorkId *string `json:"workId,omitempty"`
 

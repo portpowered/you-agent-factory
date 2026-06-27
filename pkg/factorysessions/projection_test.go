@@ -273,6 +273,15 @@ func TestProjectRuntime_BlockedAndNeedsHumanSessionsIncludeStopSummary(t *testin
 			if runtime.StopSummary.LatestDispatch == nil || runtime.StopSummary.LatestDispatch.DispatchId != "dispatch-stop-1" {
 				t.Fatalf("latestDispatch = %#v, want dispatch-stop-1", runtime.StopSummary.LatestDispatch)
 			}
+			if runtime.StopSummary.LatestResultSummary == nil || *runtime.StopSummary.LatestResultSummary != tc.wantSummary {
+				t.Fatalf("latestResultSummary = %#v, want %q", runtime.StopSummary.LatestResultSummary, tc.wantSummary)
+			}
+			if runtime.StopSummary.SuggestedRecoverySurface == nil || strings.TrimSpace(*runtime.StopSummary.SuggestedRecoverySurface) == "" {
+				t.Fatalf("suggestedRecoverySurface = %#v, want operator recovery guidance", runtime.StopSummary.SuggestedRecoverySurface)
+			}
+			if runtime.StopSummary.SuggestedRecoveryAction == nil || strings.TrimSpace(*runtime.StopSummary.SuggestedRecoveryAction) == "" {
+				t.Fatalf("suggestedRecoveryAction = %#v, want operator next step", runtime.StopSummary.SuggestedRecoveryAction)
+			}
 		})
 	}
 }

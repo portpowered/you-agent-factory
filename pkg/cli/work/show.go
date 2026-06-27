@@ -190,5 +190,15 @@ func writeWorkStopSummary(output io.Writer, summary *factoryapi.FactoryStopSumma
 			return err
 		}
 	}
+	if summary.SuggestedRecoverySurface != nil && strings.TrimSpace(*summary.SuggestedRecoverySurface) != "" {
+		if _, err := fmt.Fprintf(output, "Recovery surface:\t%s\n", strings.TrimSpace(*summary.SuggestedRecoverySurface)); err != nil {
+			return err
+		}
+	}
+	if summary.SuggestedRecoveryAction != nil && strings.TrimSpace(*summary.SuggestedRecoveryAction) != "" {
+		if _, err := fmt.Fprintf(output, "Recovery action:\t%s\n", strings.TrimSpace(*summary.SuggestedRecoveryAction)); err != nil {
+			return err
+		}
+	}
 	return nil
 }

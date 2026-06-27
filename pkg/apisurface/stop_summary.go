@@ -1,6 +1,7 @@
 package apisurface
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -17,6 +18,12 @@ type stopSummaryWork struct {
 	workType string
 	state    string
 	token    *interfaces.Token
+}
+
+type stopSummaryRecovery struct {
+	resultSummary string
+	surface       string
+	action        string
 }
 
 type stopSummaryDispatch struct {
@@ -76,22 +83,23 @@ func BuildWorkStopSummary(
 	materialized := materializedPublicWork(snapshot)
 	if lifecycleStatus := strings.TrimSpace(lifecycleControlStatus(snapshot)); lifecycleStatus == string(factoryapi.FactorySessionDurableLifecycleStatusPaused) {
 		status := factoryapi.FactorySessionDurableLifecycleStatusPaused
-		return buildStopSummary(sessionID, factoryapi.FactoryStopKind("PAUSED"), &status, target, latestRelevantDispatch(target.id, snapshot), "")
+		recovery := pausedRecoverySummary(sessionID)
+		return buildStopSummary(sessionID, factoryapi.FactoryStopKind("PAUSED"), &status, target, latestRelevantDispatch(target.id, snapshot), recovery)
 	}
 
 	switch target.state {
 	case "blocked":
-		return buildStopSummary(sessionID, factoryapi.FactoryStopKind("BLOCKED"), nil, target, latestRelevantDispatch(target.id, snapshot), "")
+		return buildStopSummary(sessionID, factoryapi.FactoryStopKind("BLOCKED"), nil, target, latestRelevantDispatch(target.id, snapshot), blockedRecoverySummary(target))
 	case "needs-human":
-		return buildStopSummary(sessionID, factoryapi.FactoryStopKind("NEEDS_HUMAN"), nil, target, latestRelevantDispatch(target.id, snapshot), "")
+		return buildStopSummary(sessionID, factoryapi.FactoryStopKind("NEEDS_HUMAN"), nil, target, latestRelevantDispatch(target.id, snapshot), needsHumanRecoverySummary(target))
 	}
 
 	if matching := workByID(materialized, target.id); matching != nil && matching.state != "" {
 		switch matching.state {
 		case "blocked":
-			return buildStopSummary(sessionID, factoryapi.FactoryStopKind("BLOCKED"), nil, *matching, latestRelevantDispatch(target.id, snapshot), "")
+			return buildStopSummary(sessionID, factoryapi.FactoryStopKind("BLOCKED"), nil, *matching, latestRelevantDispatch(target.id, snapshot), blockedRecoverySummary(*matching))
 		case "needs-human":
-			return buildStopSummary(sessionID, factoryapi.FactoryStopKind("NEEDS_HUMAN"), nil, *matching, latestRelevantDispatch(target.id, snapshot), "")
+			return buildStopSummary(sessionID, factoryapi.FactoryStopKind("NEEDS_HUMAN"), nil, *matching, latestRelevantDispatch(target.id, snapshot), needsHumanRecoverySummary(*matching))
 		}
 	}
 	return nil
@@ -107,14 +115,17 @@ func buildPausedStopSummary(
 	}
 	work := latestRelevantWork(materialized, snapshotTopology(snapshot))
 	status := factoryapi.FactorySessionDurableLifecycleStatusPaused
+	recovery := pausedRecoverySummary(sessionID)
 	if work == nil {
 		return &factoryapi.FactoryStopSummary{
-			SessionId:              sessionID,
-			StopKind:               factoryapi.FactoryStopKind("PAUSED"),
-			SessionLifecycleStatus: &status,
+			SessionId:                sessionID,
+			StopKind:                 factoryapi.FactoryStopKind("PAUSED"),
+			SessionLifecycleStatus:   &status,
+			SuggestedRecoverySurface: stringPtr(recovery.surface),
+			SuggestedRecoveryAction:  stringPtr(recovery.action),
 		}
 	}
-	return buildStopSummary(sessionID, factoryapi.FactoryStopKind("PAUSED"), &status, *work, latestRelevantDispatch(work.id, snapshot), "")
+	return buildStopSummary(sessionID, factoryapi.FactoryStopKind("PAUSED"), &status, *work, latestRelevantDispatch(work.id, snapshot), recovery)
 }
 
 func buildInterruptedStopSummary(
@@ -149,13 +160,17 @@ func buildInterruptedStopSummary(
 		return nil
 	}
 	if stoppedWork == nil {
+		recovery := interruptedRecoverySummary(sessionID)
 		return &factoryapi.FactoryStopSummary{
-			SessionId:      sessionID,
-			StopKind:       factoryapi.FactoryStopKind("INTERRUPTED"),
-			LatestDispatch: projectedStopDispatch(*stoppedDispatch),
+			SessionId:                sessionID,
+			StopKind:                 factoryapi.FactoryStopKind("INTERRUPTED"),
+			LatestDispatch:           projectedStopDispatch(*stoppedDispatch),
+			LatestResultSummary:      stringPtr(interruptedResultSummary(*stoppedDispatch)),
+			SuggestedRecoverySurface: stringPtr(recovery.surface),
+			SuggestedRecoveryAction:  stringPtr(recovery.action),
 		}
 	}
-	return buildStopSummary(sessionID, factoryapi.FactoryStopKind("INTERRUPTED"), nil, *stoppedWork, stoppedDispatch, interruptedResultSummary(*stoppedDispatch))
+	return buildStopSummary(sessionID, factoryapi.FactoryStopKind("INTERRUPTED"), nil, *stoppedWork, stoppedDispatch, interruptedRecoverySummary(sessionID))
 }
 
 func buildStoppedWorkStateSummary(
@@ -169,7 +184,8 @@ func buildStoppedWorkStateSummary(
 	if work == nil {
 		return nil
 	}
-	return buildStopSummary(sessionID, stopKind, nil, *work, latestRelevantDispatch(work.id, snapshot), "")
+	recovery := stopKindRecoverySummary(stopKind, *work)
+	return buildStopSummary(sessionID, stopKind, nil, *work, latestRelevantDispatch(work.id, snapshot), recovery)
 }
 
 func buildStopSummary(
@@ -178,7 +194,7 @@ func buildStopSummary(
 	lifecycleStatus *factoryapi.FactorySessionDurableLifecycleStatus,
 	work stopSummaryWork,
 	dispatch *stopSummaryDispatch,
-	resultSummary string,
+	recovery stopSummaryRecovery,
 ) *factoryapi.FactoryStopSummary {
 	summary := &factoryapi.FactoryStopSummary{
 		SessionId: sessionID,
@@ -202,8 +218,17 @@ func buildStopSummary(
 	if dispatch != nil {
 		summary.LatestDispatch = projectedStopDispatch(*dispatch)
 	}
-	if strings.TrimSpace(resultSummary) != "" {
-		summary.LatestResultSummary = stringPtr(strings.TrimSpace(resultSummary))
+	if strings.TrimSpace(recovery.resultSummary) == "" {
+		recovery.resultSummary = defaultRecoveryResultSummary(stopKind, work, dispatch)
+	}
+	if strings.TrimSpace(recovery.resultSummary) != "" {
+		summary.LatestResultSummary = stringPtr(strings.TrimSpace(recovery.resultSummary))
+	}
+	if strings.TrimSpace(recovery.surface) != "" {
+		summary.SuggestedRecoverySurface = stringPtr(recovery.surface)
+	}
+	if strings.TrimSpace(recovery.action) != "" {
+		summary.SuggestedRecoveryAction = stringPtr(recovery.action)
 	}
 	return summary
 }
@@ -453,6 +478,118 @@ func interruptedResultSummary(dispatch stopSummaryDispatch) string {
 		return dispatch.failureReason
 	}
 	return "Latest relevant dispatch was interrupted before normal completion."
+}
+
+func stopKindRecoverySummary(stopKind factoryapi.FactoryStopKind, work stopSummaryWork) stopSummaryRecovery {
+	switch stopKind {
+	case factoryapi.FactoryStopKind("BLOCKED"):
+		return blockedRecoverySummary(work)
+	case factoryapi.FactoryStopKind("NEEDS_HUMAN"):
+		return needsHumanRecoverySummary(work)
+	case factoryapi.FactoryStopKind("INTERRUPTED"):
+		return interruptedRecoverySummary("")
+	case factoryapi.FactoryStopKind("PAUSED"):
+		return pausedRecoverySummary("")
+	default:
+		return stopSummaryRecovery{}
+	}
+}
+
+func blockedRecoverySummary(work stopSummaryWork) stopSummaryRecovery {
+	workLabel := workReferenceLabel(work)
+	return stopSummaryRecovery{
+		resultSummary: blockedReasonSummary(work),
+		surface:       "existing work repair, work move, or follow-up submission controls",
+		action:        "Inspect the blocked work " + workLabel + ", then use the existing work repair, work move, or follow-up submission controls to unblock it.",
+	}
+}
+
+func needsHumanRecoverySummary(work stopSummaryWork) stopSummaryRecovery {
+	workLabel := workReferenceLabel(work)
+	return stopSummaryRecovery{
+		resultSummary: needsHumanReasonSummary(work),
+		surface:       "existing work follow-up submission, work move, or session workflow controls",
+		action:        "Provide the requested human input, approval, or artifact review for work " + workLabel + " through the existing workflow controls, then continue the normal session flow.",
+	}
+}
+
+func pausedRecoverySummary(sessionID string) stopSummaryRecovery {
+	sessionLabel := sessionIDReference(sessionID)
+	return stopSummaryRecovery{
+		surface: "existing Factory Session resume control",
+		action:  "Resume the paused Factory Session " + sessionLabel + " with the existing session resume control, then re-check queued or buffered work.",
+	}
+}
+
+func interruptedRecoverySummary(sessionID string) stopSummaryRecovery {
+	sessionLabel := sessionIDReference(sessionID)
+	return stopSummaryRecovery{
+		surface: "existing dispatch retry, work repair, or session workflow controls",
+		action:  "Inspect the interrupted dispatch in Factory Session " + sessionLabel + ", then use the existing retry, repair, or session workflow controls to continue recovery.",
+	}
+}
+
+func blockedReasonSummary(work stopSummaryWork) string {
+	return firstNonEmpty(
+		failureMessageFromWork(work),
+		rejectionFeedbackFromWork(work),
+	)
+}
+
+func needsHumanReasonSummary(work stopSummaryWork) string {
+	return firstNonEmpty(
+		rejectionFeedbackFromWork(work),
+		failureMessageFromWork(work),
+	)
+}
+
+func defaultRecoveryResultSummary(
+	stopKind factoryapi.FactoryStopKind,
+	work stopSummaryWork,
+	dispatch *stopSummaryDispatch,
+) string {
+	if dispatch == nil {
+		return ""
+	}
+	if stopKind == factoryapi.FactoryStopKind("INTERRUPTED") {
+		return interruptedResultSummary(*dispatch)
+	}
+	return firstNonEmpty(dispatch.failureMessage, dispatch.failureReason)
+}
+
+func failureMessageFromWork(work stopSummaryWork) string {
+	if work.token == nil {
+		return ""
+	}
+	return firstNonEmpty(work.token.History.LastError, latestFailureLogMessage(work.token.History))
+}
+
+func latestFailureLogMessage(history interfaces.TokenHistory) string {
+	if len(history.FailureLog) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(history.FailureLog[len(history.FailureLog)-1].Error)
+}
+
+func rejectionFeedbackFromWork(work stopSummaryWork) string {
+	if work.token == nil || work.token.Color.Tags == nil {
+		return ""
+	}
+	return strings.TrimSpace(work.token.Color.Tags[interfaces.RejectionFeedback])
+}
+
+func workReferenceLabel(work stopSummaryWork) string {
+	if work.name != "" && work.id != "" {
+		return fmt.Sprintf("%q [%s]", work.name, work.id)
+	}
+	return fmt.Sprintf("%q", firstNonEmpty(work.name, work.id, "unknown work"))
+}
+
+func sessionIDReference(sessionID string) string {
+	if trimmed := strings.TrimSpace(sessionID); trimmed != "" {
+		return fmt.Sprintf("%q", trimmed)
+	}
+	return `"unknown session"`
 }
 
 func completedFailureReason(completed interfaces.CompletedDispatch) string {

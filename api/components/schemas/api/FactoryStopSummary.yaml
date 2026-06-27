@@ -29,3 +29,9 @@ properties:
   latestResultSummary:
     type: string
     description: Short operator-readable summary of the latest relevant result when one explains the stop better than a dispatch identifier alone.
+  suggestedRecoverySurface:
+    type: string
+    description: Existing operator surface to use next, expressed with current Factory Session and Work vocabulary rather than a goal-specific control route.
+  suggestedRecoveryAction:
+    type: string
+    description: Human-readable next step that names the existing work or session action the operator should take to recover or continue automation.

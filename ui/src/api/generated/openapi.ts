@@ -1386,6 +1386,10 @@ export interface components {
       latestDispatch?: components["schemas"]["FactoryStopDispatchSummary"];
       /** @description Short operator-readable summary of the latest relevant result when one explains the stop better than a dispatch identifier alone. */
       latestResultSummary?: string;
+      /** @description Existing operator surface to use next, expressed with current Factory Session and Work vocabulary rather than a goal-specific control route. */
+      suggestedRecoverySurface?: string;
+      /** @description Human-readable next step that names the existing work or session action the operator should take to recover or continue automation. */
+      suggestedRecoveryAction?: string;
     };
     FactorySessionStreamIdentity: {
       /** @description Stable backend process or scope identity for the current live session stream. */

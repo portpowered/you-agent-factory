@@ -304,6 +304,77 @@ func TestGetWork_IncludesStopSummaryForBlockedWork(t *testing.T) {
 	if resp.StopSummary.LatestDispatch == nil || resp.StopSummary.LatestDispatch.DispatchId != "dispatch-goal-blocked-1" {
 		t.Fatalf("latestDispatch = %#v, want dispatch-goal-blocked-1", resp.StopSummary.LatestDispatch)
 	}
+	if resp.StopSummary.LatestResultSummary == nil || *resp.StopSummary.LatestResultSummary != "provider timeout" {
+		t.Fatalf("latestResultSummary = %#v, want provider timeout", resp.StopSummary.LatestResultSummary)
+	}
+	if resp.StopSummary.SuggestedRecoverySurface == nil || *resp.StopSummary.SuggestedRecoverySurface != "existing work repair, work move, or follow-up submission controls" {
+		t.Fatalf("suggestedRecoverySurface = %#v, want blocked recovery surface", resp.StopSummary.SuggestedRecoverySurface)
+	}
+}
+
+func TestGetWork_IncludesStopSummaryForNeedsHumanWork(t *testing.T) {
+	now := time.Date(2026, 6, 27, 9, 5, 0, 0, time.UTC)
+	srv := newTestServer(&testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			"session-needs-human": {
+				EngineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+					RuntimeStatus: interfaces.RuntimeStatusIdle,
+					FactoryState:  "RUNNING",
+					Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+						"tok-goal-human": {
+							ID:      "tok-goal-human",
+							PlaceID: "goal:needs-human",
+							Color: interfaces.TokenColor{
+								Name:       "Needs approval",
+								WorkID:     "work-goal-human",
+								WorkTypeID: "goal",
+								TraceID:    "trace-goal-human",
+								Tags: map[string]string{
+									interfaces.RejectionFeedback: "Approve the release checklist artifact before continuing.",
+								},
+							},
+							CreatedAt: now.Add(-2 * time.Minute),
+							EnteredAt: now.Add(-1 * time.Minute),
+						},
+					}},
+					Topology: &state.Net{
+						Places: map[string]*petri.Place{
+							"goal:needs-human": {ID: "goal:needs-human", TypeID: "goal", State: "needs-human"},
+						},
+						WorkTypes: map[string]*state.WorkType{
+							"goal": {
+								ID: "goal",
+								States: []state.StateDefinition{
+									{Value: "needs-human", Category: state.StateCategoryProcessing},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+
+	req := httptest.NewRequest("GET", "/factory-sessions/session-needs-human/work/work-goal-human", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := decodeJSONResponse[factoryapi.Work](t, rec)
+	if resp.StopSummary == nil {
+		t.Fatal("stopSummary = nil, want needs-human summary")
+	}
+	if resp.StopSummary.StopKind != factoryapi.FactoryStopKind("NEEDS_HUMAN") {
+		t.Fatalf("stop kind = %q, want NEEDS_HUMAN", resp.StopSummary.StopKind)
+	}
+	if resp.StopSummary.LatestResultSummary == nil || *resp.StopSummary.LatestResultSummary != "Approve the release checklist artifact before continuing." {
+		t.Fatalf("latestResultSummary = %#v, want human-readable feedback", resp.StopSummary.LatestResultSummary)
+	}
+	if resp.StopSummary.SuggestedRecoverySurface == nil || *resp.StopSummary.SuggestedRecoverySurface != "existing work follow-up submission, work move, or session workflow controls" {
+		t.Fatalf("suggestedRecoverySurface = %#v, want needs-human recovery surface", resp.StopSummary.SuggestedRecoverySurface)
+	}
 }
 
 func TestTokenToResponse_CopiesOptionalTagMap(t *testing.T) {
