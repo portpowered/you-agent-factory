@@ -14,9 +14,25 @@ import {
   englishFactorySessionEventReplayMessages,
   type FactorySessionEventReplayMessages,
 } from "./factory-session-detail.event-replay";
+import {
+  chineseFactorySessionLifecycleOutcomeMessages,
+  englishFactorySessionLifecycleOutcomeMessages,
+  type FactorySessionLifecycleOutcomeMessages,
+} from "./factory-session-detail.lifecycle-outcomes";
 
 export interface FactorySessionDetailMessages
-  extends FactorySessionEventReplayMessages {
+  extends FactorySessionEventReplayMessages,
+    FactorySessionLifecycleOutcomeMessages {
+  lifecycleActionApproveLabel: string;
+  lifecycleActionCancelLabel: string;
+  lifecycleActionPauseLabel: string;
+  lifecycleActionResumeLabel: string;
+  lifecycleActionRetryDispatchLabel: string;
+  lifecycleActionTerminateLabel: string;
+  lifecycleControlsEmptyState: string;
+  lifecycleControlsHeading: string;
+  lifecycleControlsRetrySelectionHint: string;
+  lifecycleControlsSelectedDispatchLabel: (dispatchID: string) => string;
   artifactLinksHeading: string;
   artifactRefActionLabel: string;
   artifactsHeading: string;
@@ -214,6 +230,20 @@ const chineseDurableLifecycleStatusLabels = {
 
 const factorySessionDetailMessagesByLocale = {
   en: {
+    lifecycleActionApproveLabel: "Approve",
+    lifecycleActionCancelLabel: "Cancel",
+    lifecycleActionPauseLabel: "Pause",
+    lifecycleActionResumeLabel: "Resume",
+    lifecycleActionRetryDispatchLabel: "Retry dispatch",
+    lifecycleActionTerminateLabel: "Terminate",
+    ...englishFactorySessionLifecycleOutcomeMessages,
+    lifecycleControlsEmptyState:
+      "No lifecycle controls are available for this Factory Session state.",
+    lifecycleControlsHeading: "Lifecycle controls",
+    lifecycleControlsRetrySelectionHint:
+      "Select a failed dispatch to make retry available on this detail surface.",
+    lifecycleControlsSelectedDispatchLabel: (dispatchID) =>
+      `Selected dispatch: ${dispatchID}`,
     artifactLinksHeading: "Dispatch artifacts",
     artifactRefActionLabel: "Open artifact",
     artifactsHeading: "Artifacts",
@@ -297,6 +327,19 @@ const factorySessionDetailMessagesByLocale = {
     warningsHeading: "Dispatch warnings",
   },
   "zh-CN": {
+    lifecycleActionApproveLabel: "批准",
+    lifecycleActionCancelLabel: "取消",
+    lifecycleActionPauseLabel: "暂停",
+    lifecycleActionResumeLabel: "恢复",
+    lifecycleActionRetryDispatchLabel: "重试调度",
+    lifecycleActionTerminateLabel: "终止",
+    ...chineseFactorySessionLifecycleOutcomeMessages,
+    lifecycleControlsEmptyState: "当前工厂会话状态没有可用的生命周期控制。",
+    lifecycleControlsHeading: "生命周期控制",
+    lifecycleControlsRetrySelectionHint:
+      "选择失败的调度后，当前详情界面才会显示重试操作。",
+    lifecycleControlsSelectedDispatchLabel: (dispatchID) =>
+      `已选择调度：${dispatchID}`,
     artifactLinksHeading: "调度工件",
     artifactRefActionLabel: "打开工件",
     artifactsHeading: "工件",
@@ -331,7 +374,8 @@ const factorySessionDetailMessagesByLocale = {
     failureMessageLabel: "失败消息",
     failureReasonLabel: "失败原因",
     finalResultRefLabel: "最终结果引用",
-    javascriptProjectionMissingState: "此会话的 JavaScript 工作流运行时详情不可用。",
+    javascriptProjectionMissingState:
+      "此会话的 JavaScript 工作流运行时详情不可用。",
     javascriptTaskHeading: "JavaScript 任务",
     javascriptTaskKindLabel: "任务类型",
     javascriptTaskLabel: "任务标签",

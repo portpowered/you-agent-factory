@@ -16,6 +16,7 @@ import {
   listFactorySessionDispatches,
 } from "./api-durable-inspection";
 import { getFactorySessionDispatchDetail } from "./dispatch-detail";
+import { getFactorySessionSyncPreflight } from "./sync-preflight";
 
 describe("factory sessions API", () => {
   afterEach(() => {
@@ -263,6 +264,106 @@ describe("factory sessions API", () => {
         },
         method: "POST",
       }),
+    );
+  });
+
+  it("reads the sync preflight surface with reconnect cursor query parameters", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          backendScopeId: "backend-a",
+          checkpointReusable: true,
+          factorySessionId: "session-beta",
+          logicalSessionKeyId: "logical-beta",
+          reasonCode: "ok",
+          reconnectCursor: {
+            afterEventId: "event-7",
+            afterSequence: 7,
+            provided: true,
+            validForStreamGeneration: true,
+          },
+          requestedSessionId: "session-beta",
+          streamGenerationId: "stream-beta",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getFactorySessionSyncPreflight("session-beta", {
+        afterEventId: "event-7",
+        afterSequence: 7,
+      }),
+    ).resolves.toEqual({
+      backendScopeId: "backend-a",
+      checkpointReusable: true,
+      factorySessionId: "session-beta",
+      logicalSessionKeyId: "logical-beta",
+      reasonCode: "ok",
+      reconnectCursor: {
+        afterEventId: "event-7",
+        afterSequence: 7,
+        provided: true,
+        validForStreamGeneration: true,
+      },
+      requestedSessionId: "session-beta",
+      streamGenerationId: "stream-beta",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/factory-sessions/session-beta/sync-preflight?after_event_id=event-7&after_sequence=7",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("rejects partial resumable sync preflight responses that omit the identity set", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          checkpointReusable: true,
+          reasonCode: "ok",
+          reconnectCursor: {
+            provided: false,
+            validForStreamGeneration: true,
+          },
+          requestedSessionId: "session-beta",
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      getFactorySessionSyncPreflight("session-beta"),
+    ).rejects.toEqual(
+      new FactorySessionsAPIError(
+        "The factory sessions API returned an invalid response.",
+        {
+          code: "INTERNAL_ERROR",
+          responseBody: {
+            checkpointReusable: true,
+            reasonCode: "ok",
+            reconnectCursor: {
+              provided: false,
+              validForStreamGeneration: true,
+            },
+            requestedSessionId: "session-beta",
+          },
+          status: 200,
+          statusText: "OK",
+        },
+      ),
     );
   });
 

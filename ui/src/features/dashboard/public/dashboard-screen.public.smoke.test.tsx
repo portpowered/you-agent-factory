@@ -64,6 +64,8 @@ describe("dashboard public barrel composition", () => {
     dashboardSnapshotState = {
       error: null,
       isInitialLoading: true,
+      preflightRecovery: null,
+      preflightStatus: "loading",
       snapshot: null,
       streamState: {
         message: "Loading factory events...",
@@ -89,6 +91,8 @@ describe("dashboard public barrel composition", () => {
     dashboardSnapshotState = {
       error: null,
       isInitialLoading: false,
+      preflightRecovery: null,
+      preflightStatus: "success",
       snapshot: {} as never,
       streamState: {
         message: "Factory event stream connected.",

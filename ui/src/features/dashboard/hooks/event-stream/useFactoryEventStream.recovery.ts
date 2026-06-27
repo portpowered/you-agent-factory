@@ -14,6 +14,7 @@ export interface DashboardStreamConnectionRefs {
   cursorFreeReplayPendingRef: RefObject<boolean>;
   hasOpenedStreamRef: RefObject<boolean>;
   lastSessionKeyRef: RefObject<string | null>;
+  reconnectValidationAttemptRef: RefObject<number>;
   reconnectCursorRef: RefObject<FactoryEventReconnectCursor | undefined>;
   staleCursorRecoveryAttemptedRef: RefObject<boolean>;
   reconnectTimeoutRef: RefObject<number | null>;
@@ -25,6 +26,7 @@ export function useDashboardStreamConnectionRefs(): DashboardStreamConnectionRef
   const cursorFreeReplayPendingRef = useRef(false);
   const hasOpenedStreamRef = useRef(false);
   const lastSessionKeyRef = useRef<string | null>(null);
+  const reconnectValidationAttemptRef = useRef(0);
   const reconnectCursorRef = useRef<FactoryEventReconnectCursor | undefined>(
     undefined,
   );
@@ -38,6 +40,7 @@ export function useDashboardStreamConnectionRefs(): DashboardStreamConnectionRef
       cursorFreeReplayPendingRef,
       hasOpenedStreamRef,
       lastSessionKeyRef,
+      reconnectValidationAttemptRef,
       reconnectCursorRef,
       staleCursorRecoveryAttemptedRef,
       reconnectTimeoutRef,
@@ -98,6 +101,7 @@ async function recoverStaleCursor({
   cursor,
   disposed,
   locale,
+  onInvalidReconnectCursor,
   openDashboardStream,
   probeRecovery,
   cursorFreeReplayPendingRef,
@@ -112,6 +116,7 @@ async function recoverStaleCursor({
   cursor: FactoryEventReconnectCursor;
   disposed: RefObject<boolean>;
   locale?: string | null;
+  onInvalidReconnectCursor?: () => void;
   openDashboardStream: (reconnect?: FactoryEventReconnectCursor) => void;
   probeRecovery: typeof probeFactoryEventStreamRecovery;
   cursorFreeReplayPendingRef: RefObject<boolean>;
@@ -141,6 +146,7 @@ async function recoverStaleCursor({
     cursorFreeReplayPendingRef.current = true;
     reconnectCursorRef.current = undefined;
     queuedEventsRef.current = [];
+    onInvalidReconnectCursor?.();
     recoverDashboardSessionScopedState(
       queryClient,
       streamSessionID,
@@ -161,6 +167,7 @@ export async function reconnectAfterStreamError({
   cursor,
   disposed,
   locale,
+  onInvalidReconnectCursor,
   openDashboardStream,
   probeRecovery,
   queryClient,
@@ -173,6 +180,7 @@ export async function reconnectAfterStreamError({
   cursor: FactoryEventReconnectCursor;
   disposed: RefObject<boolean>;
   locale?: string | null;
+  onInvalidReconnectCursor?: () => void;
   openDashboardStream: (reconnect?: FactoryEventReconnectCursor) => void;
   probeRecovery: typeof probeFactoryEventStreamRecovery;
   queryClient: QueryClient;
@@ -193,6 +201,7 @@ export async function reconnectAfterStreamError({
         cursor,
         disposed,
         locale,
+        onInvalidReconnectCursor,
         openDashboardStream,
         probeRecovery,
         cursorFreeReplayPendingRef: refs.cursorFreeReplayPendingRef,

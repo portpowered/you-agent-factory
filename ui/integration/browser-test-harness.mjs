@@ -238,7 +238,10 @@ export const initialEditableFactoryDefinitionVersion = {
 };
 
 const sessionFactoryPathPattern = /^\/factory-sessions\/([^/]+)\/factory$/;
+const sessionSyncPreflightPathPattern =
+  /^\/factory-sessions\/([^/]+)\/sync-preflight(?:\?.*)?$/;
 const sessionEventsPathPattern = /^\/factory-sessions\/([^/]+)\/events$/;
+const factorySessionReadPathPattern = /^\/factory-sessions\/([^/]+)$/;
 const promptTemplateContractPathPattern =
   /^\/factory-sessions\/([^/]+)\/factory\/workstations\/[^/]+\/prompt-template-contract$/;
 const promptTemplateValidationPathPattern =
@@ -674,6 +677,50 @@ function ensureSessionState(
   );
 }
 
+function buildSessionSyncPreflightResponse(
+  request,
+  sessionState,
+  requestedSessionId,
+) {
+  const requestURL = new URL(request.url ?? "/", `http://${previewHost}`);
+  const afterEventID = requestURL.searchParams.get("after_event_id");
+  const afterSequenceValue = requestURL.searchParams.get("after_sequence");
+  const afterSequence =
+    afterSequenceValue != null ? Number(afterSequenceValue) : null;
+  const reconnectCursorProvided =
+    typeof afterEventID === "string" || afterSequenceValue != null;
+  const reconnectCursorValid =
+    typeof afterEventID === "string" &&
+    afterEventID.length > 0 &&
+    typeof afterSequence === "number" &&
+    Number.isFinite(afterSequence);
+  if (!sessionState) {
+    return {
+      checkpointReusable: false,
+      reasonCode: "session_not_found",
+      reconnectCursor: {
+        provided: reconnectCursorProvided,
+        validForStreamGeneration: false,
+      },
+      requestedSessionId,
+    };
+  }
+
+  return {
+    backendScopeId: "browser-test-harness",
+    checkpointReusable: reconnectCursorValid,
+    factorySessionId: sessionState.session.id,
+    logicalSessionKeyId: sessionState.session.id,
+    reasonCode: "ok",
+    reconnectCursor: {
+      provided: reconnectCursorProvided,
+      validForStreamGeneration: reconnectCursorValid,
+    },
+    requestedSessionId,
+    streamGenerationId: `browser-stream-${sessionState.version.logical}`,
+  };
+}
+
 async function createBrowserPreview() {
   const { apiPort, previewPort } = await browserPreviewPorts();
   const apiOrigin = `http://${previewHost}:${apiPort}`;
@@ -813,18 +860,20 @@ export async function openBrowserPage(options = {}) {
   );
   const state = browserProcessState();
   if (!state.browserPromise) {
-    state.browserPromise = chromium.launch({ headless: true }).then((browser) => {
-      state.browser = browser;
-      if (!state.cleanupRegistered) {
-        state.cleanupRegistered = true;
-        process.once("exit", () => {
-          if (state.browser) {
-            state.browser.close().catch(() => {});
-          }
-        });
-      }
-      return browser;
-    });
+    state.browserPromise = chromium
+      .launch({ headless: true })
+      .then((browser) => {
+        state.browser = browser;
+        if (!state.cleanupRegistered) {
+          state.cleanupRegistered = true;
+          process.once("exit", () => {
+            if (state.browser) {
+              state.browser.close().catch(() => {});
+            }
+          });
+        }
+        return browser;
+      });
   }
   const browser = await state.browserPromise;
   const context = await browser.newContext({
@@ -1093,6 +1142,53 @@ export async function startFactoryApiServer({
     };
   }
 
+  function buildFactorySessionDocument(sessionID) {
+    const sessionState = sessionRegistry.state.get(sessionID);
+    if (!sessionState) {
+      return null;
+    }
+
+    const lifecycleTimestamp = sessionState.version.physical;
+    const factoryState =
+      sessionState.eventLines.length > 0 ? "FINISHED" : "IDLE";
+
+    return {
+      factoryDir: sessionState.session.factoryDir,
+      folderPath: sessionState.session.folderPath,
+      id: sessionState.session.id,
+      isDefault: sessionState.session.isDefault,
+      project: sessionState.session.project,
+      runtime: {
+        lifecycle: {
+          startedAt: lifecycleTimestamp,
+          updatedAt: lifecycleTimestamp,
+        },
+        orchestratorKind: "PETRI",
+        progress: {
+          categories: {
+            failed: 0,
+            initial: 0,
+            processing: 0,
+            terminal: 0,
+          },
+          factoryState,
+          inFlightCount: 0,
+          totalTokens: 0,
+        },
+        status: "IDLE",
+        streamIdentity: {
+          backendScopeID: `${sessionState.session.folderPath}::browser-integration`,
+          factorySessionID: sessionState.session.id,
+          streamGenerationID: lifecycleTimestamp,
+        },
+        usage: {
+          resources: [],
+        },
+      },
+      target: sessionState.session.target,
+    };
+  }
+
   function bumpEditableFactoryDefinitionVersion(sessionID) {
     const sessionState = sessionRegistry.state.get(sessionID);
     sessionState.version = {
@@ -1173,6 +1269,35 @@ export async function startFactoryApiServer({
       return;
     }
 
+    const factorySessionReadMatch =
+      request.method === "GET"
+        ? request.url?.match(factorySessionReadPathPattern)
+        : null;
+    if (factorySessionReadMatch) {
+      const sessionID = decodeURIComponent(factorySessionReadMatch[1]);
+      const sessionDocument = buildFactorySessionDocument(sessionID);
+      if (!sessionDocument) {
+        response.writeHead(404, {
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "application/json",
+        });
+        response.end(
+          JSON.stringify({
+            code: "FACTORY_SESSION_NOT_FOUND",
+            message: `Factory session ${sessionID} was not found.`,
+          }),
+        );
+        return;
+      }
+
+      response.writeHead(200, {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      });
+      response.end(JSON.stringify(sessionDocument));
+      return;
+    }
+
     const sessionFactoryMatch = request.url?.match(sessionFactoryPathPattern);
     if (sessionFactoryMatch && request.method === "GET") {
       const sessionID = decodeURIComponent(sessionFactoryMatch[1]);
@@ -1196,6 +1321,25 @@ export async function startFactoryApiServer({
         "Content-Type": "application/json",
       });
       response.end(JSON.stringify(buildCurrentFactoryDocument(sessionID)));
+      return;
+    }
+
+    const sessionSyncPreflightMatch = request.url?.match(
+      sessionSyncPreflightPathPattern,
+    );
+    if (sessionSyncPreflightMatch && request.method === "GET") {
+      const sessionID = decodeURIComponent(sessionSyncPreflightMatch[1]);
+      const sessionState = sessionRegistry.state.get(sessionID);
+
+      response.writeHead(200, {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      });
+      response.end(
+        JSON.stringify(
+          buildSessionSyncPreflightResponse(request, sessionState, sessionID),
+        ),
+      );
       return;
     }
 

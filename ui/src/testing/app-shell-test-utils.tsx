@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, expect, type Mock, vi } from "vitest";
+import { afterEach, beforeEach, expect, vi } from "vitest";
 import { App } from "../App";
 import type {
   DashboardSnapshot,
@@ -33,10 +33,16 @@ import { useExportDialogStore } from "../features/export/state/exportDialogStore
 import type { FactoryPngImportValue } from "../features/import/lib/factory-png-import";
 import { useFactoryTimelineStore } from "../features/timeline/state/factoryTimelineStore";
 import {
+  chainRenderAppFetchMock,
+  type FetchMock,
+  type RenderAppFetchOverride,
+} from "./app-shell-fetch-test-utils";
+import {
   defaultFactorySessionSummary,
   fetchRequestPath,
   MockEventSource,
 } from "./app-shell-session-stream-test-utils";
+import { handleFactorySessionPreflightRequest } from "./app-shell-session-preflight-test-utils";
 import { buildDashboardTestGraphLayout } from "./app-shell-test-graph-layout";
 import {
   seedTimelineSnapshot,
@@ -48,6 +54,16 @@ import {
   mockGetSessionFactory,
   sessionFactoryDocumentFromSnapshot,
 } from "./session-factory-mocks";
+
+export {
+  chainRenderAppFetchMock,
+  fetchCallPaths,
+  jsonResponse,
+  lastFetchCallBody,
+  nonPromptTemplateFetchPaths,
+  type FetchMock,
+  type RenderAppFetchOverride,
+} from "./app-shell-fetch-test-utils";
 
 export {
   renderWithDashboardSessionTest,
@@ -106,10 +122,6 @@ interface RenderAppOptions {
   workstationRequestsByDispatchID?: Record<string, DashboardWorkstationRequest>;
 }
 
-type FetchMock = Mock<
-  (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
->;
-
 interface RenderAppResult extends ReturnType<typeof render> {
   fetchMock: FetchMock;
 }
@@ -119,6 +131,8 @@ let restoreBrowserTestShims: (() => void) | null = null;
 export const baselineSnapshot = buildDashboardSnapshotFixture(
   mediumBranchingDashboardTopology,
 );
+const _factorySessionSyncPreflightPathPattern =
+  /^\/factory-sessions\/([^/]+)\/sync-preflight(?:\?.*)?$/;
 
 export const terminalSnapshot = {
   ...semanticWorkflowDashboardSnapshot,
@@ -230,6 +244,7 @@ export function renderApp({
   traceFixtures = {},
   workstationRequestsByDispatchID = {},
 }: RenderAppOptions): RenderAppResult {
+  const availableFactorySessions = factorySessions ?? [defaultFactorySessionSummary];
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -252,11 +267,14 @@ export function renderApp({
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const path = fetchRequestPath(input);
         const method = (init?.method ?? "GET").toUpperCase();
-
-        if (path === "/factory-sessions") {
-          return jsonResponse({
-            sessions: factorySessions ?? [defaultFactorySessionSummary],
-          });
+        const preflightResponse = handleFactorySessionPreflightRequest({
+          availableFactorySessions,
+          method,
+          path,
+          snapshot,
+        });
+        if (preflightResponse) {
+          return preflightResponse;
         }
 
         if (
@@ -313,88 +331,6 @@ export async function renderAppWithDashboardShell(
   const result = renderApp(options);
   await waitForDashboardShell();
   return result;
-}
-
-export function fetchCallPaths(fetchMock: ReturnType<typeof vi.fn>) {
-  return fetchMock.mock.calls.map(([input]) =>
-    typeof input === "string"
-      ? input
-      : input instanceof URL
-        ? `${input.pathname}${input.search}`
-        : input.url,
-  );
-}
-
-export function nonPromptTemplateFetchPaths(
-  fetchMock: ReturnType<typeof vi.fn>,
-) {
-  return fetchCallPaths(fetchMock).filter(
-    (path) =>
-      !path.includes("/prompt-template-contract") &&
-      !path.includes("/prompt-template-validation") &&
-      path !== "/factory-sessions" &&
-      !path.endsWith("/factory"),
-  );
-}
-
-export type RenderAppFetchOverride = (
-  path: string,
-  method: string,
-  input: RequestInfo | URL,
-  init?: RequestInit,
-) => Promise<Response | undefined>;
-
-export function chainRenderAppFetchMock(
-  fetchMock: FetchMock,
-  override: RenderAppFetchOverride,
-): void {
-  const defaultHandler = fetchMock.getMockImplementation();
-  if (defaultHandler == null) {
-    throw new Error("fetchMock has no default implementation");
-  }
-
-  fetchMock.mockImplementation(async (input, init) => {
-    const path = fetchRequestPath(input);
-    const method = (init?.method ?? "GET").toUpperCase();
-    const overridden = await override(path, method, input, init);
-    if (overridden !== undefined) {
-      return overridden;
-    }
-
-    return defaultHandler(input, init);
-  });
-}
-
-export function lastFetchCallBody(
-  fetchMock: FetchMock,
-  predicate: (path: string, method: string) => boolean,
-): unknown {
-  for (let index = fetchMock.mock.calls.length - 1; index >= 0; index -= 1) {
-    const [input, init] = fetchMock.mock.calls[index] ?? [];
-    const path = fetchRequestPath(input);
-    const method = (init?.method ?? "GET").toUpperCase();
-    if (!predicate(path, method)) {
-      continue;
-    }
-
-    return JSON.parse(String(init?.body ?? "{}"));
-  }
-
-  throw new Error("No matching fetch call found");
-}
-
-export function jsonResponse(
-  body: unknown,
-  status = 200,
-  statusText?: string,
-): Response {
-  return new Response(JSON.stringify(body), {
-    headers: {
-      "Content-Type": "application/json",
-    },
-    status,
-    statusText,
-  });
 }
 
 export function createFactoryImportValue(): FactoryPngImportValue {

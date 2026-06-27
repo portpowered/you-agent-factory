@@ -306,6 +306,14 @@ const (
 	FactorySessionSyncExecutionOutcomeTimedOut     FactorySessionSyncExecutionOutcome = "TIMED_OUT"
 )
 
+// Defines values for FactorySessionSyncPreflightReasonCode.
+const (
+	CursorStale         FactorySessionSyncPreflightReasonCode = "cursor_stale"
+	LogicalSessionRemap FactorySessionSyncPreflightReasonCode = "logical_session_remap"
+	Ok                  FactorySessionSyncPreflightReasonCode = "ok"
+	SessionNotFound     FactorySessionSyncPreflightReasonCode = "session_not_found"
+)
+
 // Defines values for FactorySessionTargetRefKind.
 const (
 	FactorySessionTargetRefKindDefault FactorySessionTargetRefKind = "default"
@@ -2480,15 +2488,25 @@ type FactorySessionRuntime struct {
 	SourceRef *string `json:"sourceRef,omitempty"`
 
 	// Status Canonical lifecycle status for one live factory session runtime.
-	Status FactorySessionStatus `json:"status"`
-
-	// StreamGenerationID Opaque invalidation token for the current live Factory Session event history. Clients can compare this value across preflight reads and stream handshakes to decide whether reconnect cursors and stream-derived projections still belong to the same live history.
-	StreamGenerationID *string             `json:"streamGenerationID,omitempty"`
-	Usage              FactorySessionUsage `json:"usage"`
+	Status         FactorySessionStatus          `json:"status"`
+	StreamIdentity *FactorySessionStreamIdentity `json:"streamIdentity,omitempty"`
+	Usage          FactorySessionUsage           `json:"usage"`
 }
 
 // FactorySessionStatus Canonical lifecycle status for one live factory session runtime.
 type FactorySessionStatus string
+
+// FactorySessionStreamIdentity defines model for FactorySessionStreamIdentity.
+type FactorySessionStreamIdentity struct {
+	// BackendScopeID Stable backend process or scope identity for the current live session stream.
+	BackendScopeID string `json:"backendScopeID"`
+
+	// FactorySessionID Stable live Factory Session identifier for the current stream.
+	FactorySessionID string `json:"factorySessionID"`
+
+	// StreamGenerationID Stable generation identifier for the current live session stream incarnation.
+	StreamGenerationID string `json:"streamGenerationID"`
+}
 
 // FactorySessionSummary defines model for FactorySessionSummary.
 type FactorySessionSummary struct {
@@ -2547,6 +2565,50 @@ type FactorySessionSyncExecutionResponse struct {
 
 	// TimedOut True when syncOutcome = TIMED_OUT.
 	TimedOut *bool `json:"timedOut,omitempty"`
+}
+
+// FactorySessionSyncPreflightReasonCode Stable backend-owned session sync preflight outcome code.
+type FactorySessionSyncPreflightReasonCode string
+
+// FactorySessionSyncPreflightReconnectCursor defines model for FactorySessionSyncPreflightReconnectCursor.
+type FactorySessionSyncPreflightReconnectCursor struct {
+	// AfterEventId Optional acknowledged FactoryEvent.id supplied by the client.
+	AfterEventId *string `json:"afterEventId,omitempty"`
+
+	// AfterSequence Optional acknowledged FactoryEvent.context.sessionSequence supplied by the client.
+	AfterSequence *int64 `json:"afterSequence,omitempty"`
+
+	// Provided True when the client supplied at least one reconnect cursor field for validation.
+	Provided bool `json:"provided"`
+
+	// ValidForStreamGeneration True when the supplied reconnect cursor belongs to the current stream generation for the resolved live session.
+	ValidForStreamGeneration bool `json:"validForStreamGeneration"`
+}
+
+// FactorySessionSyncPreflightResponse Typed session sync preflight response used before restoring cached dashboard
+// checkpoint state or opening the session event stream with a reconnect cursor.
+type FactorySessionSyncPreflightResponse struct {
+	// BackendScopeId Canonical backend scope identifier for the current server-owned session cache and event history scope.
+	BackendScopeId *string `json:"backendScopeId,omitempty"`
+
+	// CheckpointReusable True when cached stream-derived checkpoint state is safe to restore for the resolved identity set.
+	CheckpointReusable bool `json:"checkpointReusable"`
+
+	// FactorySessionId Resolved live Factory Session identifier for the current preflight target. Clients must persist this value rather than treating `~default` as a durable session identifier.
+	FactorySessionId *string `json:"factorySessionId,omitempty"`
+
+	// LogicalSessionKeyId Canonical logical-session key for the resolved session target. This remains stable across live-session remaps for the same folder and target selector.
+	LogicalSessionKeyId *string `json:"logicalSessionKeyId,omitempty"`
+
+	// ReasonCode Stable backend-owned session sync preflight outcome code.
+	ReasonCode      FactorySessionSyncPreflightReasonCode      `json:"reasonCode"`
+	ReconnectCursor FactorySessionSyncPreflightReconnectCursor `json:"reconnectCursor"`
+
+	// RequestedSessionId Session selector requested by the client. This may be `~default`.
+	RequestedSessionId string `json:"requestedSessionId"`
+
+	// StreamGenerationId Canonical event-stream generation identifier for the resolved live Factory Session.
+	StreamGenerationId *string `json:"streamGenerationId,omitempty"`
 }
 
 // FactorySessionTarget defines model for FactorySessionTarget.
@@ -5301,6 +5363,15 @@ type GetFactorySessionResultsParams struct {
 	IncludeArtifacts *FactorySessionResultIncludeArtifacts `form:"includeArtifacts,omitempty" json:"includeArtifacts,omitempty"`
 }
 
+// GetFactorySessionSyncPreflightBySessionIdParams defines parameters for GetFactorySessionSyncPreflightBySessionId.
+type GetFactorySessionSyncPreflightBySessionIdParams struct {
+	// AfterEventId Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier.
+	AfterEventId *AfterEventId `form:"after_event_id,omitempty" json:"after_event_id,omitempty"`
+
+	// AfterSequence Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present.
+	AfterSequence *AfterSequence `form:"after_sequence,omitempty" json:"after_sequence,omitempty"`
+}
+
 // ListWorkBySessionIdParams defines parameters for ListWorkBySessionId.
 type ListWorkBySessionIdParams struct {
 	// MaxResults Optional positive page size. Omit to use the default page size; non-positive values fall back to the default after successful integer binding.
@@ -6822,6 +6893,9 @@ type ServerInterface interface {
 	// Get runtime status for one session
 	// (GET /factory-sessions/{session_id}/status)
 	GetStatusBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Validate cached session sync state for one session
+	// (GET /factory-sessions/{session_id}/sync-preflight)
+	GetFactorySessionSyncPreflightBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, params GetFactorySessionSyncPreflightBySessionIdParams)
 	// Terminate one durable factory session
 	// (POST /factory-sessions/{session_id}/terminate)
 	TerminateFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
@@ -7620,6 +7694,50 @@ func (siw *ServerInterfaceWrapper) GetStatusBySessionId(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// GetFactorySessionSyncPreflightBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) GetFactorySessionSyncPreflightBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetFactorySessionSyncPreflightBySessionIdParams
+
+	// ------------- Optional query parameter "after_event_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "after_event_id", r.URL.Query(), &params.AfterEventId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_event_id", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "after_sequence" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "after_sequence", r.URL.Query(), &params.AfterSequence)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_sequence", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFactorySessionSyncPreflightBySessionId(w, r, sessionId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // TerminateFactorySession operation middleware
 func (siw *ServerInterfaceWrapper) TerminateFactorySession(w http.ResponseWriter, r *http.Request) {
 
@@ -8252,6 +8370,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/retry-dispatch", wrapper.RetryFactorySessionDispatch).Methods("POST")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/status", wrapper.GetStatusBySessionId).Methods("GET")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/sync-preflight", wrapper.GetFactorySessionSyncPreflightBySessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/terminate", wrapper.TerminateFactorySession).Methods("POST")
 

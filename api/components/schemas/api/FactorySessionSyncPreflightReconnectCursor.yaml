@@ -1,0 +1,19 @@
+type: object
+additionalProperties: false
+required:
+  - provided
+  - validForStreamGeneration
+properties:
+  provided:
+    type: boolean
+    description: True when the client supplied at least one reconnect cursor field for validation.
+  validForStreamGeneration:
+    type: boolean
+    description: True when the supplied reconnect cursor belongs to the current stream generation for the resolved live session.
+  afterEventId:
+    type: string
+    description: Optional acknowledged FactoryEvent.id supplied by the client.
+  afterSequence:
+    type: integer
+    format: int64
+    description: Optional acknowledged FactoryEvent.context.sessionSequence supplied by the client.

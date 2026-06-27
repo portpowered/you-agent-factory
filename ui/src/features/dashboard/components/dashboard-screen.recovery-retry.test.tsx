@@ -3,6 +3,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { PropsWithChildren } from "react";
 
+import * as factorySessionsAPI from "../../../api/factory-sessions";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { createReplayHarness } from "../../../testing/replay-harness";
 import { useDashboardBentoStore } from "../../bento/state/dashboardBentoStore";
@@ -87,9 +88,9 @@ function installIndexedDBTestDouble() {
             records.delete(key);
           }),
         get: (key: string) => indexedDBRequest(records.get(key)),
-        put: (value: { sessionID: string }) =>
-          indexedDBRequest(value.sessionID, () => {
-            records.set(value.sessionID, value);
+        put: (value: { sessionID: string; storageKey?: string }) =>
+          indexedDBRequest(value.storageKey ?? value.sessionID, () => {
+            records.set(value.storageKey ?? value.sessionID, value);
           }),
       }),
     }),
@@ -119,8 +120,10 @@ function createWrapper(queryClient: QueryClient) {
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: the browser-visible stale-cursor retry flow shares one integration-style harness.
 describe("DashboardScreen stale-cursor retry", () => {
   let queryClient: QueryClient;
+  let getFactorySessionSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     replayHarness.install();
@@ -131,10 +134,10 @@ describe("DashboardScreen stale-cursor retry", () => {
         queries: { retry: false },
       },
     });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(
-        new Response(
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes(`/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`)) {
+        return new Response(
           JSON.stringify({
             factorySessionId: DEFAULT_FACTORY_SESSION_ID,
             outcome: "CURSOR_STALE",
@@ -149,9 +152,80 @@ describe("DashboardScreen stale-cursor retry", () => {
             },
             status: 200,
           },
-        ),
-      ),
-    );
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          session: {
+            factoryDir: "/workspace/factory",
+            folderPath: "/workspace",
+            id: DEFAULT_FACTORY_SESSION_ID,
+            isDefault: true,
+            project: "factory",
+            runtime: {
+              lifecycle: {
+                startedAt: "2026-06-26T00:00:00Z",
+                updatedAt: "2026-06-26T00:00:00Z",
+              },
+              orchestratorKind: "STATIC",
+              progress: {
+                categories: {},
+                factoryState: "IDLE",
+                inFlightCount: 0,
+                totalTokens: 0,
+              },
+              streamIdentity: {
+                backendScopeID: "backend-scope-a",
+                factorySessionID: DEFAULT_FACTORY_SESSION_ID,
+                streamGenerationID: "2026-06-26T00:00:00Z",
+              },
+              status: "IDLE",
+              usage: { resources: [] },
+            },
+            target: { kind: "default", name: DEFAULT_FACTORY_SESSION_ID },
+          },
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          status: 200,
+        },
+      );
+    }));
+    getFactorySessionSpy = vi
+      .spyOn(factorySessionsAPI, "getFactorySession")
+      .mockResolvedValue({
+        session: {
+          factoryDir: "/workspace/factory",
+          folderPath: "/workspace",
+          id: DEFAULT_FACTORY_SESSION_ID,
+          isDefault: true,
+          project: "factory",
+          runtime: {
+            lifecycle: {
+              startedAt: "2026-06-26T00:00:00Z",
+              updatedAt: "2026-06-26T00:00:00Z",
+            },
+            orchestratorKind: "STATIC",
+            progress: {
+              categories: {},
+              factoryState: "IDLE",
+              inFlightCount: 0,
+              totalTokens: 0,
+            },
+            streamIdentity: {
+              backendScopeID: "backend-scope-a",
+              factorySessionID: DEFAULT_FACTORY_SESSION_ID,
+              streamGenerationID: "2026-06-26T00:00:00Z",
+            },
+            status: "IDLE",
+            usage: { resources: [] },
+          },
+          target: { kind: "default", name: DEFAULT_FACTORY_SESSION_ID },
+        },
+      });
     useDashboardBentoStore.setState({
       refreshToken: 0,
       selectedTraceID: null,
@@ -169,6 +243,7 @@ describe("DashboardScreen stale-cursor retry", () => {
 
   afterEach(() => {
     replayHarness.reset();
+    getFactorySessionSpy.mockRestore();
     vi.unstubAllGlobals();
     useDashboardBentoStore.setState({
       refreshToken: 0,
@@ -193,6 +268,10 @@ describe("DashboardScreen stale-cursor retry", () => {
       afterSequence: 7,
       replayState: emptyReplayWorldState(7),
       selectedTick: 7,
+    }, {
+      backendScopeID: "backend-scope-a",
+      factorySessionID: DEFAULT_FACTORY_SESSION_ID,
+      streamGenerationID: "2026-06-26T00:00:00Z",
     });
 
     render(<DashboardScreen />, {

@@ -66,10 +66,19 @@ describe("useFactoryEventStream stale cursor recovery", () => {
     replayHarness.install();
     queryClient = createFactoryEventStreamQueryClient();
     seedFactoryEventStreamStores();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(null, {
+          status: 200,
+        }),
+      ),
+    );
   });
 
   afterEach(() => {
     resetFactoryEventStreamStores();
+    vi.unstubAllGlobals();
   });
 
   it("clears only the affected session checkpoint and runtime queries before replaying from scratch", async () => {
@@ -118,10 +127,14 @@ describe("useFactoryEventStream stale cursor recovery", () => {
           onEvent: () => {},
           probeRecovery,
           sessionID: DEFAULT_FACTORY_SESSION_ID,
+          validateReconnectCursor: vi.fn().mockResolvedValue({ ok: true }),
         }),
       { wrapper: createWrapper(queryClient) },
     );
 
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
     const initialStream = replayHarness.getStreams()[0];
     if (!initialStream) {
       throw new Error("expected initial reconnect stream to be opened");
@@ -193,10 +206,14 @@ describe("useFactoryEventStream stale cursor recovery", () => {
           onEvent: () => {},
           probeRecovery,
           sessionID: DEFAULT_FACTORY_SESSION_ID,
+          validateReconnectCursor: vi.fn().mockResolvedValue({ ok: true }),
         }),
       { wrapper: createWrapper(queryClient) },
     );
 
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
     const initialStream = replayHarness.getStreams()[0];
     if (!initialStream) {
       throw new Error("expected initial reconnect stream to be opened");

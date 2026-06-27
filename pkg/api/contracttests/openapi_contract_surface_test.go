@@ -162,6 +162,7 @@ func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testi
 		"/factory-sessions/{session_id}/work/{id}":                  {"get"},
 		"/factory-sessions/{session_id}/work/{id}/move":             {"post"},
 		"/factory-sessions/{session_id}/events":                     {"get"},
+		"/factory-sessions/{session_id}/sync-preflight":             {"get"},
 		"/factory-sessions/{session_id}/status":                     {"get"},
 		"/factory-sessions/{session_id}/factory":                    {"get", "put"},
 	}
@@ -197,6 +198,37 @@ func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testi
 			t.Fatalf("paths.%s must not be published for session-scoped routes", retiredPath)
 		}
 	}
+}
+
+func TestOpenAPIContract_DefinesFactorySessionSyncPreflightSurface(t *testing.T) {
+	doc := loadBundledOpenAPIDocument(t)
+	paths := doc["paths"].(map[string]any)
+	schemas := loadBundledOpenAPIComponentSchemas(t)
+
+	pathItem, ok := paths["/factory-sessions/{session_id}/sync-preflight"].(map[string]any)
+	if !ok {
+		t.Fatal("paths./factory-sessions/{session_id}/sync-preflight is missing")
+	}
+	getOp, ok := pathItem["get"].(map[string]any)
+	if !ok {
+		t.Fatal("paths./factory-sessions/{session_id}/sync-preflight.get is missing")
+	}
+	parameters, ok := getOp["parameters"].([]any)
+	if !ok || len(parameters) != 3 {
+		t.Fatalf("sync preflight parameters = %#v, want session_id plus reconnect cursor params", getOp["parameters"])
+	}
+
+	response := schemaObject(t, schemas, "FactorySessionSyncPreflightResponse")
+	assertRequiredFields(t, response, "requestedSessionId", "reasonCode", "checkpointReusable", "reconnectCursor")
+	properties := schemaProperties(t, response, "FactorySessionSyncPreflightResponse")
+	assertPropertyRef(t, properties, "reasonCode", "#/components/schemas/FactorySessionSyncPreflightReasonCode")
+	assertPropertyRef(t, properties, "reconnectCursor", "#/components/schemas/FactorySessionSyncPreflightReconnectCursor")
+
+	reasonCode := schemaObject(t, schemas, "FactorySessionSyncPreflightReasonCode")
+	assertEnumValues(t, reasonCode, "FactorySessionSyncPreflightReasonCode", []string{"ok", "cursor_stale", "session_not_found", "logical_session_remap"})
+
+	reconnectCursor := schemaObject(t, schemas, "FactorySessionSyncPreflightReconnectCursor")
+	assertRequiredFields(t, reconnectCursor, "provided", "validForStreamGeneration")
 }
 
 func TestOpenAPIContract_DefinesWorkstationRequestProjectionSlice(t *testing.T) {

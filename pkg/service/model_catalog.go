@@ -799,6 +799,7 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 		workflowContext,
 		logger,
 		fs.providerOverride(),
+		nil,
 		fs.providerCommandRunnerOverride(),
 		fs.commandRunnerOverride(),
 		nil,

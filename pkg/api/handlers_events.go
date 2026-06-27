@@ -168,6 +168,29 @@ func staleCursorRecoveryResponse(
 	}
 }
 
+func (s *Server) GetFactorySessionSyncPreflightBySessionId(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	params factoryapi.GetFactorySessionSyncPreflightBySessionIdParams,
+) {
+	sessionRuntime, ok := s.requireSessionRuntime(w)
+	if !ok {
+		return
+	}
+	response, err := sessionRuntime.GetFactorySessionSyncPreflight(
+		r.Context(),
+		string(sessionID),
+		reconnectCursorFromParams(params.AfterEventId, params.AfterSequence),
+	)
+	if err != nil {
+		s.logger.Error("get factory session sync preflight failed", zap.Error(err))
+		s.writeError(w, http.StatusInternalServerError, "failed to get factory session sync preflight", "INTERNAL_ERROR")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, response)
+}
+
 func reconnectCursorFromParams(afterEventID *factoryapi.AfterEventId, afterSequence *factoryapi.AfterSequence) *interfaces.FactoryEventReconnectCursor {
 	if afterEventID == nil && afterSequence == nil {
 		return nil

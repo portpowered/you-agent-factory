@@ -474,5 +474,4 @@ describe("FactorySessionDetailPanel", () => {
       expect(screen.getByText("dispatch boom")).toBeTruthy();
     });
   });
-
 });
