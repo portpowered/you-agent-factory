@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -174,11 +175,12 @@ func writeTestFile(t *testing.T, dir, name, content string) {
 func writeExecutableTestScript(t *testing.T, path string, content string) {
 	t.Helper()
 
-	tempPath := path + ".tmp"
-	file, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	tempDir := filepath.Dir(path)
+	file, err := os.CreateTemp(tempDir, filepath.Base(path)+".tmp-*")
 	if err != nil {
-		t.Fatalf("opening %s: %v", tempPath, err)
+		t.Fatalf("creating temp executable for %s: %v", path, err)
 	}
+	tempPath := file.Name()
 	if _, err := file.WriteString(content); err != nil {
 		_ = file.Close()
 		t.Fatalf("writing %s: %v", tempPath, err)
@@ -195,6 +197,28 @@ func writeExecutableTestScript(t *testing.T, path string, content string) {
 	}
 	if err := os.Rename(tempPath, path); err != nil {
 		t.Fatalf("renaming %s to %s: %v", tempPath, path, err)
+	}
+	syncDirectoryForExecutableRename(t, tempDir)
+}
+
+func syncDirectoryForExecutableRename(t *testing.T, dir string) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		return
+	}
+
+	directory, err := os.Open(dir)
+	if err != nil {
+		t.Fatalf("opening directory %s for sync: %v", dir, err)
+	}
+	defer func() {
+		if err := directory.Close(); err != nil {
+			t.Fatalf("closing directory %s after sync: %v", dir, err)
+		}
+	}()
+	if err := directory.Sync(); err != nil {
+		t.Fatalf("syncing directory %s after executable rename: %v", dir, err)
 	}
 }
 
