@@ -93,6 +93,32 @@ or control the same durable `FactorySession`.
   JavaScript session before attempting lifecycle-control confirmation so the
   control outcome remains observable on the same session path.
 
+#### Reusable proof artifact for this matrix
+
+Use the smallest existing regression surfaces that already prove the shipped
+durable-session slice instead of building a one-off harness:
+
+| Surface proved | Existing artifact | Command |
+|----------------|-------------------|---------|
+| Validate-first source readiness | CLI workflow validation package tests | `go test ./pkg/cli/workflow -run 'TestValidate_(ValidWorkflowNameHumanOutput|JSONOutputMatchesCanonicalValidationResult)' -count=1 -timeout 300s` |
+| Durable lifecycle-control outcome and canonical lifecycle events | Service durable-session lifecycle tests | `go test ./pkg/service -run 'TestFactoryService_(CancelDurableFactorySession_RuntimeBackedSession|LiveSessionPauseResume_HTTPReturnsTypedLifecycleControl|LiveSessionPauseResume_HTTPEmitsSessionLifecycleControlEvents)' -count=1 -timeout 300s` |
+| Website Factory Session detail against a real backend durable session | Browser-backed dashboard integration using the existing harness plus durable workflow fixtures | `cd ui && bun vitest run integration/durable-session-real-backend.integration.test.mjs` |
+
+Treat those three commands as the bounded end-to-end closeout proof for this
+operator slice:
+
+- The CLI validation tests prove the validate-first path without creating a
+  session.
+- The service lifecycle tests prove accepted durable lifecycle control and the
+  canonical `SESSION_LIFECYCLE_CONTROL` event history.
+- The browser-backed dashboard integration proves the same durable-session path
+  through the Factory Session detail surface, including one running summary
+  path and one completed dispatch or artifact drilldown path backed by the real
+  API server harness.
+
+Record the exact UTC run time and command results in the lane progress log when
+you use this proof for closeout review.
+
 ### Explicitly out of scope for this slice
 
 - Replay-resume or persistence-semantics expansion beyond the already shipped
