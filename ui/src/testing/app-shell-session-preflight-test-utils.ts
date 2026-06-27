@@ -103,6 +103,10 @@ export function handleFactorySessionPreflightRequest({
 
     const searchParams = new URLSearchParams(syncPreflightMatch[2] ?? "");
     const afterSequence = searchParams.get("after_sequence");
+    const sessionResponse = buildFactorySessionResponse(sessionSummary, snapshot);
+    const streamGenerationId =
+      sessionResponse.runtime.streamIdentity?.streamGenerationID ??
+      sessionResponse.runtime.lifecycle.updatedAt;
 
     return jsonResponse({
       backendScopeId: `${sessionSummary.folderPath}::test-backend`,
@@ -118,8 +122,7 @@ export function handleFactorySessionPreflightRequest({
         validForStreamGeneration: true,
       },
       requestedSessionId: requestedSessionID,
-      streamGenerationId: buildFactorySessionResponse(sessionSummary, snapshot)
-        .runtime.streamIdentity.streamGenerationID,
+      streamGenerationId,
     });
   }
 
