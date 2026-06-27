@@ -154,6 +154,10 @@ primary-result behavior.
   instead of submitted input text or raw audio payload bytes.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and
   invocation-return policy ownership.
+- `docs/reference/packaged-goal.md` is the customer-facing reference for
+  packaged `@you/goal` invocation behavior, including operator-visible blocked,
+  needs-human, paused, interrupted, failed, timed-out, and unresolved-primary-result
+  outcomes plus recovery through existing session/work commands.
 - `docs/reference/config.md` and `docs/reference/sessions.md` are the packaged
   `you docs` reference topics for invocation input sources, return policy, and
   the session-scoped invocation API.

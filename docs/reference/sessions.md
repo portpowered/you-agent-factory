@@ -320,8 +320,13 @@ that field is omitted, the runtime uses the documented
 |------|--------|
 | Conflicting or ambiguous input sources | HTTP `400` with stable code `INVOCATION_INPUT_SOURCE_CONFLICT` |
 | Empty selected text input | HTTP `400` with stable code `INVOCATION_INPUT_EMPTY` |
-| No primary result can be resolved | `status: FAILED`, code `INVOCATION_PRIMARY_RESULT_UNRESOLVED`, no `primaryResult` |
-| Invocation times out or is canceled | `status: TIMED_OUT` or `status: CANCELED`, no success payload |
+| Goal work routed to a blocked state | `status: FAILED`, code `INVOCATION_BLOCKED`, with `sessionId` / `workId` / `workState` recovery context when available |
+| Goal work routed to a human-input-required state | `status: FAILED`, code `INVOCATION_NEEDS_HUMAN`, with the same shared recovery context |
+| Waiting stopped because the session was paused | `status: FAILED`, code `INVOCATION_PAUSED`, no success payload |
+| Interruption metadata explains the stop | `status: FAILED`, code `INVOCATION_INTERRUPTED`, no success payload |
+| Invocation scope failed before a primary result existed | `status: FAILED`, code `INVOCATION_RUNTIME_FAILURE`, no success payload |
+| No primary result can be resolved after work settles | `status: FAILED`, code `INVOCATION_PRIMARY_RESULT_UNRESOLVED`, no `primaryResult` |
+| Invocation times out or is canceled | `status: TIMED_OUT` with `INVOCATION_TIMED_OUT`, or `status: CANCELED` with `INVOCATION_CANCELED` |
 
 The CLI `you run --factory` mode uses the same invocation contract for input
 resolution and primary-result selection; it just writes the successful
