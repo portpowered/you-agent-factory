@@ -2870,6 +2870,33 @@ func TestFactoryService_InferenceProgressPublisherWithoutSubscriberDoesNotBlockE
 }
 
 func TestFactoryService_InferenceProgressPublisherSlowConsumerFallsBehindWithoutBlockingExecution(t *testing.T) {
+	svc, publisher, stream := newSlowConsumerProgressPublisherHarness(t)
+	subscription := subscribeToSessionResponseStream(t, stream)
+	defer subscription.Detach()
+	assertInitialRetainedSeedEvent(t, subscription)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		publisher(workerprovider.ProgressFragment("dispatch-1", nil, "one"))
+		publisher(workerprovider.ResponseFragment("dispatch-1", nil, "two"))
+		publisher(workerprovider.ProgressFragment("dispatch-1", nil, "three"))
+		publisher(workerprovider.CompletedFragment("dispatch-1", nil))
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out publishing provider progress while consumer lagged behind")
+	}
+
+	assertSlowConsumerCatchupRetainsCompletedTail(t, subscription)
+	_ = svc
+}
+
+func newSlowConsumerProgressPublisherHarness(t *testing.T) (*FactoryService, workerprovider.InferenceProgressPublisher, *factorysessions.SessionResponseStream) {
+	t.Helper()
+
 	sessions := factorysessions.NewRegistry()
 	sessionID := "session-progress-slow-consumer"
 	sessions.Upsert(factorysessions.NewLiveSession(
@@ -2893,17 +2920,27 @@ func TestFactoryService_InferenceProgressPublisherSlowConsumerFallsBehindWithout
 	if publisher == nil {
 		t.Fatal("publisher = nil, want session publisher")
 	}
-
 	publisher(workerprovider.ProgressFragment("dispatch-1", nil, "seed"))
+
 	stream := svc.sessionResponseStream(sessions.Get(sessionID), "dispatch-1")
 	if stream == nil {
 		t.Fatal("session stream = nil, want live session stream")
 	}
+	return svc, publisher, stream
+}
+
+func subscribeToSessionResponseStream(t *testing.T, stream *factorysessions.SessionResponseStream) *factorysessions.SessionResponseStreamSubscription {
+	t.Helper()
+
 	subscription, err := stream.Subscribe(0)
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-	defer subscription.Detach()
+	return subscription
+}
+
+func assertInitialRetainedSeedEvent(t *testing.T, subscription *factorysessions.SessionResponseStreamSubscription) {
+	t.Helper()
 
 	initial, err := subscription.Next(context.Background())
 	if err != nil {
@@ -2912,21 +2949,13 @@ func TestFactoryService_InferenceProgressPublisherSlowConsumerFallsBehindWithout
 	if len(initial.Events) != 1 || initial.Events[0].Payload != "seed" {
 		t.Fatalf("initial events = %#v, want retained seed event", initial.Events)
 	}
+}
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		publisher(workerprovider.ProgressFragment("dispatch-1", nil, "one"))
-		publisher(workerprovider.ResponseFragment("dispatch-1", nil, "two"))
-		publisher(workerprovider.ProgressFragment("dispatch-1", nil, "three"))
-		publisher(workerprovider.CompletedFragment("dispatch-1", nil))
-	}()
-
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("timed out publishing provider progress while consumer lagged behind")
-	}
+func assertSlowConsumerCatchupRetainsCompletedTail(
+	t *testing.T,
+	subscription *factorysessions.SessionResponseStreamSubscription,
+) {
+	t.Helper()
 
 	read, err := subscription.Next(context.Background())
 	if err != nil {
@@ -2944,16 +2973,12 @@ func TestFactoryService_InferenceProgressPublisherSlowConsumerFallsBehindWithout
 	if read.Events[len(read.Events)-1].Kind != responsestream.EventKindCompactionSignal {
 		t.Fatalf("last retained event kind = %q, want retained-window compaction signal", read.Events[len(read.Events)-1].Kind)
 	}
-	foundCompleted := false
 	for _, event := range read.Events {
 		if event.Kind == responsestream.EventKindStreamCompleted {
-			foundCompleted = true
-			break
+			return
 		}
 	}
-	if !foundCompleted {
-		t.Fatalf("retained events = %#v, want terminal completion marker before compaction signal", read.Events)
-	}
+	t.Fatalf("retained events = %#v, want terminal completion marker before compaction signal", read.Events)
 }
 
 func newSlowSubscriberCompactionTestHarness(t *testing.T) (*FactoryService, workerprovider.InferenceProgressPublisher, *observer.ObservedLogs, string) {

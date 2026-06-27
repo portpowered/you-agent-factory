@@ -1288,101 +1288,21 @@ You are a helpful assistant.
 }
 
 func TestLoadWorkersFromConfig_ModelWorkerProgressPublisherLeavesCanonicalEventsUnchanged(t *testing.T) {
-	dir := t.TempDir()
-
-	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
-type: MODEL_WORKER
-model: gpt-5.4
-executorProvider: script_wrap
-modelProvider: codex
-stopToken: COMPLETE
----
-You are a helpful assistant.
-`)
-	writeWorkstationAgentsMD(t, dir, "review")
-
-	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
-		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
-	},
-		map[string]*interfaces.WorkerConfig{
-			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
-		},
-		map[string]*interfaces.FactoryWorkstationConfig{
-			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
-		},
-	)
-
-	runner := &providerCommandRunnerRecorder{
-		result: workers.CommandResult{
+	var published []workerprovider.InferenceProgressFragment
+	result, err, recorded := executeModelWorkerProgressPublisherServiceTest(t, modelWorkerProgressPublisherServiceTestOptions{
+		commandResult: workers.CommandResult{
 			Stdout: []byte("provider-output COMPLETE"),
 			Stderr: []byte(`{"event":"session.created","session_id":"sess_codex_123"}`),
 		},
-	}
-	recorded := make([]factoryapi.FactoryEvent, 0, 2)
-	recorder := func(event factoryapi.FactoryEvent) {
-		recorded = append(recorded, event)
-	}
-	var published []workerprovider.InferenceProgressFragment
-	progressPublisher := func(fragment workerprovider.InferenceProgressFragment) {
-		published = append(published, fragment)
-	}
-
-	opts, err := loadWorkersFromConfig(
-		cfg.FactoryDir(),
-		cfg.FactoryConfig(),
-		"",
-		cfg,
-		nil,
-		logging.NoopLogger{},
-		false,
-		nil,
-		progressPublisher,
-		runner,
-		nil,
-		nil,
-		recorder,
-		nil,
-		nil,
-		localModelDomain{},
-	)
-	if err != nil {
-		t.Fatalf("loadWorkersFromConfig: %v", err)
-	}
-
-	fc := &factory.FactoryConfig{}
-	for _, opt := range opts {
-		opt(fc)
-	}
-
-	exec, ok := fc.WorkerExecutors["worker-a"]
-	if !ok {
-		t.Fatal("expected worker-a executor to be registered")
-	}
-	wsExec, ok := exec.(*workers.WorkstationExecutor)
-	if !ok {
-		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
-	}
-
-	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
-		DispatchID:      "d-model-worker-provider-progress",
-		TransitionID:    "t-model-worker-provider-progress",
-		WorkerType:      "worker-a",
-		WorkstationName: "review",
-		InputTokens: workers.InputTokens(interfaces.Token{
-			ID: "tok-model-worker-provider-progress",
-			Color: interfaces.TokenColor{
-				WorkID:  "work-model-worker-provider-progress",
-				Payload: []byte("helpful input"),
-			},
-		}),
+		progressPublisher: func(fragment workerprovider.InferenceProgressFragment) {
+			published = append(published, fragment)
+		},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	assertCanonicalModelWorkerExecutionResult(t, result)
-	assertCanonicalProviderCommandRequests(t, runner.Requests())
 	assertRecordedInferenceEvents(t, recorded)
 	if len(published) != 1 {
 		t.Fatalf("published fragments = %#v, want one terminal completion marker", published)
@@ -1450,6 +1370,7 @@ type modelWorkerProgressPublisherServiceTestOptions struct {
 	commandResult            workers.CommandResult
 	commandErr               error
 	newSessionResponseStream func() *factorysessions.SessionResponseStream
+	progressPublisher        workerprovider.InferenceProgressPublisher
 	logger                   *zap.Logger
 }
 
@@ -1458,30 +1379,6 @@ func executeModelWorkerProgressPublisherServiceTest(
 	options modelWorkerProgressPublisherServiceTestOptions,
 ) (interfaces.WorkResult, error, []factoryapi.FactoryEvent) {
 	t.Helper()
-
-	dir := t.TempDir()
-	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
-type: MODEL_WORKER
-model: gpt-5.4
-executorProvider: script_wrap
-modelProvider: codex
-stopToken: COMPLETE
----
-You are a helpful assistant.
-`)
-	writeWorkstationAgentsMD(t, dir, "review")
-
-	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
-		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
-	},
-		map[string]*interfaces.WorkerConfig{
-			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
-		},
-		map[string]*interfaces.FactoryWorkstationConfig{
-			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
-		},
-	)
 
 	runner := &providerCommandRunnerRecorder{
 		result: options.commandResult,
@@ -1492,18 +1389,8 @@ You are a helpful assistant.
 		recorded = append(recorded, event)
 	}
 
-	sessions := factorysessions.NewRegistry()
-	const sessionID = "session-provider-progress-publication"
-	sessions.Upsert(factorysessions.NewLiveSession(
-		sessionID,
-		dir,
-		dir,
-		dir,
-		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
-		&liveSessionState{},
-		false,
-		filepath.Base(dir),
-	), true)
+	dir, cfg := newModelWorkerProgressPublisherServiceFixture(t)
+	sessions := newModelWorkerProgressPublisherSessions(dir)
 	svc := &FactoryService{
 		sessions:                 sessions,
 		newSessionResponseStream: options.newSessionResponseStream,
@@ -1513,7 +1400,10 @@ You are a helpful assistant.
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	progressPublisher := svc.inferenceProgressPublisher(sessionID, logger)
+	progressPublisher := options.progressPublisher
+	if progressPublisher == nil {
+		progressPublisher = svc.inferenceProgressPublisher(modelWorkerProgressPublisherSessionID, logger)
+	}
 
 	opts, err := loadWorkersFromConfig(
 		cfg.FactoryDir(),
@@ -1552,20 +1442,72 @@ You are a helpful assistant.
 	}
 
 	result, execErr := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
-		DispatchID:      "d-model-worker-provider-progress",
+		DispatchID:      modelWorkerProgressPublisherDispatchID,
 		TransitionID:    "t-model-worker-provider-progress",
 		WorkerType:      "worker-a",
 		WorkstationName: "review",
-		InputTokens: workers.InputTokens(interfaces.Token{
-			ID: "tok-model-worker-provider-progress",
-			Color: interfaces.TokenColor{
-				WorkID:  "work-model-worker-provider-progress",
-				Payload: []byte("helpful input"),
-			},
-		}),
+		InputTokens:     workers.InputTokens(modelWorkerProgressPublisherToken()),
 	})
 	assertCanonicalProviderCommandRequests(t, runner.Requests())
 	return result, execErr, recorded
+}
+
+const (
+	modelWorkerProgressPublisherSessionID  = "session-provider-progress-publication"
+	modelWorkerProgressPublisherDispatchID = "d-model-worker-provider-progress"
+)
+
+func newModelWorkerProgressPublisherServiceFixture(t *testing.T) (string, *factoryconfig.LoadedFactoryConfig) {
+	t.Helper()
+
+	dir := t.TempDir()
+	writeWorkerAgentsMDWithContent(t, dir, "worker-a", `---
+type: MODEL_WORKER
+model: gpt-5.4
+executorProvider: script_wrap
+modelProvider: codex
+stopToken: COMPLETE
+---
+You are a helpful assistant.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
+		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+	return dir, cfg
+}
+
+func newModelWorkerProgressPublisherSessions(dir string) *factorysessions.Registry {
+	sessions := factorysessions.NewRegistry()
+	sessions.Upsert(factorysessions.NewLiveSession(
+		modelWorkerProgressPublisherSessionID,
+		dir,
+		dir,
+		dir,
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{},
+		false,
+		filepath.Base(dir),
+	), true)
+	return sessions
+}
+
+func modelWorkerProgressPublisherToken() interfaces.Token {
+	return interfaces.Token{
+		ID: "tok-model-worker-provider-progress",
+		Color: interfaces.TokenColor{
+			WorkID:  "work-model-worker-provider-progress",
+			Payload: []byte("helpful input"),
+		},
+	}
 }
 
 // backendsizecheck:ignore-function this dual-locality integration test keeps the full model-invoke execution assertion path in one place.
