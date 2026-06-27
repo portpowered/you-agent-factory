@@ -1252,7 +1252,7 @@ export async function startFactoryApiServer({
       const sessionID = decodeURIComponent(sessionSyncPreflightMatch[1]);
       const sessionState = sessionRegistry.state.get(sessionID);
 
-      response.writeHead(sessionState ? 200 : 404, {
+      response.writeHead(200, {
         "Access-Control-Allow-Origin": "*",
         "Content-Type": "application/json",
       });

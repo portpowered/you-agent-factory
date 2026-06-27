@@ -131,7 +131,7 @@ describe("browser wait pattern helpers", () => {
       );
       const body = await response.json();
 
-      expect(response.status).toBe(404);
+      expect(response.status).toBe(200);
       expect(body).toEqual({
         checkpointReusable: false,
         reasonCode: "session_not_found",
