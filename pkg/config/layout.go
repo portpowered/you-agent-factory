@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -919,6 +920,7 @@ func canonicalNamedFactoryName(name string) (string, error) {
 }
 
 const legacyPromptWorkIDTemplateMarker = "{{ .WorkID }}"
+const legacyPromptWorkIDTemplateReplacement = "{{ (index .Inputs 0).WorkID }}"
 
 func resolveNamedFactoryCandidate(rootDir, name string) (string, bool, error) {
 	factoryDir, err := ResolveNamedFactoryDir(rootDir, name)
@@ -940,34 +942,78 @@ func upgradeMaterializedBuiltInNamedFactoryIfNeeded(rootDir, canonicalName, fact
 	if !ok || bytes.Contains(payload, []byte(legacyPromptWorkIDTemplateMarker)) {
 		return factoryDir, nil
 	}
-	needsUpgrade, err := materializedBuiltInUsesLegacyPromptWorkIDAlias(factoryDir)
+	upgradePaths, err := materializedBuiltInLegacyPromptWorkIDUpgradePaths(factoryDir)
 	if err != nil {
 		return "", fmt.Errorf("check materialized built-in named factory %q upgrade: %w", canonicalName, err)
 	}
-	if !needsUpgrade {
+	if len(upgradePaths) == 0 {
 		return factoryDir, nil
 	}
-	upgradedDir, err := ReplaceNamedFactory(rootDir, canonicalName, payload)
-	if err != nil {
+	if err := replaceLegacyPromptWorkIDAliasInFiles(upgradePaths); err != nil {
 		return "", fmt.Errorf("upgrade materialized built-in named factory %q in %s: %w", canonicalName, rootDir, err)
 	}
-	return upgradedDir, nil
+	return factoryDir, nil
 }
 
-func materializedBuiltInUsesLegacyPromptWorkIDAlias(factoryDir string) (bool, error) {
+func materializedBuiltInLegacyPromptWorkIDUpgradePaths(factoryDir string) ([]string, error) {
 	loaded, err := LoadRuntimeConfigFromFactoryDir(factoryDir, nil)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
+	paths := map[string]struct{}{}
 	for _, workstation := range loaded.WorkstationConfigs() {
 		if workstation == nil {
 			continue
 		}
-		if strings.Contains(workstation.Body, legacyPromptWorkIDTemplateMarker) {
-			return true, nil
+		if !strings.Contains(workstation.Body, legacyPromptWorkIDTemplateMarker) &&
+			!strings.Contains(workstation.PromptTemplate, legacyPromptWorkIDTemplateMarker) {
+			continue
+		}
+		paths[filepath.Join(factoryDir, interfaces.FactoryConfigFile)] = struct{}{}
+		segment, err := safeFactoryLayoutSegment("workstation", workstation.Name)
+		if err != nil {
+			return nil, err
+		}
+		workstationDir := filepath.Join(factoryDir, interfaces.WorkstationsDir, segment)
+		paths[filepath.Join(workstationDir, interfaces.FactoryAgentsFileName)] = struct{}{}
+		if workstation.PromptFile != "" {
+			promptPath, err := safePromptFilePath(workstationDir, workstation.PromptFile)
+			if err != nil {
+				return nil, err
+			}
+			paths[promptPath] = struct{}{}
 		}
 	}
-	return false, nil
+	if len(paths) == 0 {
+		return nil, nil
+	}
+	ordered := make([]string, 0, len(paths))
+	for path := range paths {
+		ordered = append(ordered, path)
+	}
+	sort.Strings(ordered)
+	return ordered, nil
+}
+
+func replaceLegacyPromptWorkIDAliasInFiles(paths []string) error {
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", path, err)
+		}
+		updated := strings.ReplaceAll(
+			string(data),
+			legacyPromptWorkIDTemplateMarker,
+			legacyPromptWorkIDTemplateReplacement,
+		)
+		if updated == string(data) {
+			continue
+		}
+		if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", path, err)
+		}
+	}
+	return nil
 }
 
 func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool, error) {

@@ -82,7 +82,9 @@ primary-result behavior.
   `{{ .WorkID }}` fail prompt rendering before mock-worker dispatch.
   `upgradeMaterializedBuiltInNamedFactoryIfNeeded` repairs already-materialized
   built-ins that still carry the legacy alias when the catalog payload has
-  canonical templates.
+  canonical templates, and those repairs must patch the specific legacy prompt
+  files in place rather than replacing the whole materialized named-factory
+  directory so customer edits survive later `you run --named` reuse.
 - `pkg/packagedfactories/goal/` owns packaged goal factory metadata constants and
   config-load regression coverage for the authored `invocationReturn` policy that
   selects terminal `goal:complete` work content as the primary result.

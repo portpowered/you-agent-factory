@@ -177,6 +177,73 @@ func TestNamedGoalRun_RealCLIUpgradesLegacyMaterializedBuiltinBeforeBatchInvocat
 	}
 }
 
+func TestNamedGoalRun_RealCLIPreservesCustomerEditsWhileUpgradingLegacyMaterializedBuiltin(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI named @you/goal legacy materialized preservation smoke")
+	}
+
+	goalText := fmt.Sprintf("functional-smoke-named-goal-preserve-edit-%d", time.Now().UnixNano())
+
+	port, err := reserveLocalTCPPort()
+	if err != nil {
+		t.Fatalf("reserve port: %v", err)
+	}
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+
+	homeDir := t.TempDir()
+	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "factories")
+	legacyDir, err := factoryconfig.PersistNamedFactory(globalRoot, goal.PackagedFactoryName, legacyBuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory(legacy goal): %v", err)
+	}
+	workerPath := filepath.Join(legacyDir, "workers", "goal-executor", "AGENTS.md")
+	editedWorkerBody := "customer edited worker body\n"
+	if err := os.WriteFile(workerPath, []byte(editedWorkerBody), 0o644); err != nil {
+		t.Fatalf("WriteFile(customer-edited worker): %v", err)
+	}
+
+	mockWorkersPath := writePackagedGoalBuiltinMockWorkersConfig(t)
+	binaryPath := buildYouCLIBinary(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	unrelatedWorkingDir := t.TempDir()
+	cmd := exec.CommandContext(
+		ctx,
+		binaryPath,
+		"run",
+		"--named", goal.PackagedFactoryName,
+		"--with-mock-workers",
+		"--no-record",
+		"--server", baseURL,
+		"--quiet",
+		mockWorkersPath,
+		goalText,
+	)
+	cmd.Dir = unrelatedWorkingDir
+	cmd.Env = append(os.Environ(), "HOME="+homeDir)
+
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("you run --named %s with customer-edited legacy materialized builtin: %v\nstdout:\n%s\nstderr:\n%s", goal.PackagedFactoryName, err, stdout.String(), stderr.String())
+	}
+	if got := stdout.String(); got != packagedGoalMockWorkerAcceptedSummary {
+		t.Fatalf("stdout = %q, want only primary result %q", got, packagedGoalMockWorkerAcceptedSummary)
+	}
+
+	workerBody, err := os.ReadFile(workerPath)
+	if err != nil {
+		t.Fatalf("ReadFile(customer-edited worker): %v", err)
+	}
+	if strings.TrimSpace(string(workerBody)) != strings.TrimSpace(editedWorkerBody) {
+		t.Fatalf("customer-edited worker body = %q, want preserved %q", string(workerBody), editedWorkerBody)
+	}
+}
+
 var legacyBuiltInGoalFactoryJSON = []byte(`{
   "name": "@you/goal",
   "id": "builtin-goal",

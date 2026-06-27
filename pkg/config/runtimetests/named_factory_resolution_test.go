@@ -11,6 +11,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+const legacyGoalPromptAlias = "{{ .WorkID }}"
+
 func TestResolveNamedFactoryAcrossRoots_ReturnsLocalFactory(t *testing.T) {
 	projectRoot := t.TempDir()
 	globalRoot := t.TempDir()
@@ -420,6 +422,60 @@ func TestResolveNamedFactoryAcrossRoots_UpgradesLegacyMaterializedBuiltInGoalPro
 	}
 	if workstation.Name == "execute-goal" && !strings.Contains(workstation.Body, "(index .Inputs 0).WorkID") {
 		t.Fatalf("upgraded execute-goal workstation body = %q, want WorkID template", workstation.Body)
+	}
+}
+
+func TestResolveNamedFactoryAcrossRoots_UpgradesLegacyMaterializedBuiltInGoalWithoutOverwritingCustomerEdits(t *testing.T) {
+	projectRoot := t.TempDir()
+	globalRoot := t.TempDir()
+
+	legacyDir, err := PersistNamedFactory(globalRoot, "@you/goal", legacyBuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory(legacy goal): %v", err)
+	}
+
+	workerPath := filepath.Join(legacyDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName)
+	editedBody := "Customer-edited goal executor body.\n"
+	if err := os.WriteFile(workerPath, []byte(editedBody), 0o644); err != nil {
+		t.Fatalf("WriteFile(customer-edited worker): %v", err)
+	}
+
+	resolution, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
+	if err != nil {
+		t.Fatalf("ResolveNamedFactoryAcrossRoots(upgraded goal with edit): %v", err)
+	}
+	if resolution.Source != NamedFactoryResolutionSourceGlobal {
+		t.Fatalf("resolution source = %q, want global reuse of upgraded materialized builtin", resolution.Source)
+	}
+
+	loaded, err := LoadRuntimeConfigFromFactoryDir(resolution.FactoryDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir(upgraded goal with edit): %v", err)
+	}
+
+	worker, ok := loaded.Worker("goal-executor")
+	if !ok {
+		t.Fatal("expected goal-executor worker after upgrade")
+	}
+	if worker.Body != strings.TrimSpace(editedBody) {
+		t.Fatalf("goal-executor body = %q, want preserved customer edit %q", worker.Body, strings.TrimSpace(editedBody))
+	}
+
+	workstation, ok := loaded.Workstation("execute-goal")
+	if !ok {
+		t.Fatal("expected execute-goal workstation after upgrade")
+	}
+	if strings.Contains(workstation.Body, legacyGoalPromptAlias) {
+		t.Fatalf("upgraded workstation body = %q, want canonical PromptData template", workstation.Body)
+	}
+
+	factoryConfigPath := filepath.Join(resolution.FactoryDir, interfaces.FactoryConfigFile)
+	factoryConfigBody, err := os.ReadFile(factoryConfigPath)
+	if err != nil {
+		t.Fatalf("ReadFile(factory.json): %v", err)
+	}
+	if strings.Contains(string(factoryConfigBody), legacyGoalPromptAlias) {
+		t.Fatalf("factory.json still contains legacy WorkID alias after upgrade")
 	}
 }
 
