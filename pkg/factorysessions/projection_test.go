@@ -132,6 +132,42 @@ func TestProjectRuntime_JavaScriptWorkflowSessionIncludesPhaseAndCheckpointRefs(
 	}
 }
 
+func TestProjectRuntime_JavaScriptWorkflowSessionPrefersSnapshotStreamGenerationID(t *testing.T) {
+	now := time.Date(2026, 6, 27, 7, 30, 0, 0, time.UTC)
+	startedAt := now.Add(-10 * time.Minute)
+	runtime := ProjectRuntime(ProjectionContext{
+		Session: &LiveSession{ID: "session-js", Project: "dynamic-workflow"},
+		FactoryCfg: &interfaces.FactoryConfig{
+			Name: "dynamic-workflow",
+			Orchestrator: &interfaces.FactoryOrchestratorConfig{
+				Kind: interfaces.OrchestratorKindJavaScript,
+				JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
+					Dialect:   "workflow-v1",
+					SourceRef: "factory/workflows/review.js",
+				},
+			},
+		},
+		Snapshot: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			StreamGenerationID: "stream-from-snapshot",
+		},
+		JavaScript: &interfaces.FactorySessionJavaScriptRuntimeState{
+			Phase:        "review",
+			Phases:       []string{"plan", "review"},
+			ArgsDigest:   "sha256:args-digest",
+			ScriptStatus: "RUNNING",
+		},
+		BackendScopeID:   "backend-scope-1",
+		RuntimeStartedAt: startedAt,
+		Now:              now,
+	})
+	if runtime.StreamIdentity == nil {
+		t.Fatal("stream identity = nil, want identity for javascript session")
+	}
+	if runtime.StreamIdentity.StreamGenerationID != "stream-from-snapshot" {
+		t.Fatalf("stream generation id = %q, want snapshot token", runtime.StreamIdentity.StreamGenerationID)
+	}
+}
+
 func assertJavaScriptWorkflowSessionProjection(t *testing.T, runtime factoryapi.FactorySessionRuntime) {
 	t.Helper()
 	assertJavaScriptSessionIdentity(t, runtime)

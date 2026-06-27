@@ -1546,6 +1546,60 @@ func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityRemainsStableA
 	}
 }
 
+func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityMatchesEventHandshakeSnapshotToken(t *testing.T) {
+	startedAt := time.Date(2026, 6, 27, 8, 0, 0, 0, time.UTC)
+	factoryCfg := &interfaces.FactoryConfig{
+		Name: "dynamic-workflow",
+		Orchestrator: &interfaces.FactoryOrchestratorConfig{
+			Kind: interfaces.OrchestratorKindJavaScript,
+			JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
+				Dialect:   "workflow-v1",
+				SourceRef: "factory/workflows/review.js",
+			},
+		},
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, nil, nil)
+	svc := &FactoryService{cfg: &FactoryServiceConfig{Dir: t.TempDir()}}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
+		runtimeInstanceID: "backend-scope-js",
+		startedAtUTC:      startedAt,
+		runtimeCfg:        runtimeCfg,
+		factory: &aggregateSnapshotFactory{
+			engineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+				LifecycleControlStatus: string(factoryapi.FactorySessionDurableLifecycleStatusRunning),
+				StreamGenerationID:     "snapshot-stream-token",
+			},
+		},
+	})
+	server := api.NewServer(svc, 0, zap.NewNop()).Handler()
+	sessionRecorder := httptest.NewRecorder()
+	sessionRequest := httptest.NewRequest(http.MethodGet, "/factory-sessions/"+defaultFactorySessionID, nil)
+	server.ServeHTTP(sessionRecorder, sessionRequest)
+	if sessionRecorder.Code != http.StatusOK {
+		t.Fatalf("GET /factory-sessions/%s status = %d, want 200", defaultFactorySessionID, sessionRecorder.Code)
+	}
+	var session factoryapi.FactorySession
+	if err := json.NewDecoder(sessionRecorder.Body).Decode(&session); err != nil {
+		t.Fatalf("decode factory session: %v", err)
+	}
+	streamGenerationID := requireLiveSessionStreamGenerationID(t, session, defaultFactorySessionID, "javascript session read")
+	if streamGenerationID != "snapshot-stream-token" {
+		t.Fatalf("session read stream generation id = %q, want snapshot token", streamGenerationID)
+	}
+	eventsCtx, cancelEvents := context.WithCancel(context.Background())
+	cancelEvents()
+	eventsRecorder := httptest.NewRecorder()
+	eventsRequest := httptest.NewRequest(http.MethodGet, "/factory-sessions/"+defaultFactorySessionID+"/events", nil).WithContext(eventsCtx)
+	server.ServeHTTP(eventsRecorder, eventsRequest)
+	if eventsRecorder.Code != http.StatusOK {
+		t.Fatalf("GET /factory-sessions/%s/events status = %d, want 200", defaultFactorySessionID, eventsRecorder.Code)
+	}
+	handshakeGenerationID := eventsRecorder.Header().Get("X-Factory-Session-Stream-Generation-Id")
+	if handshakeGenerationID != streamGenerationID {
+		t.Fatalf("event handshake stream generation id = %q, want session read id %q", handshakeGenerationID, streamGenerationID)
+	}
+}
+
 func TestFactoryService_ListFactorySessions_IncludesRuntimeProjection(t *testing.T) {
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
 		namedFactories: []string{"alpha"},

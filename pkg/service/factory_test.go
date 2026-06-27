@@ -270,6 +270,7 @@ type aggregateSnapshotFactory struct {
 	engineState              *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 	engineStateErr           error
 	engineStateSnapshotCalls int
+	streamGenerationID       string
 	factoryEvents            []factoryapi.FactoryEvent
 	factoryEventsErr         error
 	factoryEventsCalls       int
@@ -298,7 +299,14 @@ func (f *aggregateSnapshotFactory) SubmitWorkRequest(ctx context.Context, reques
 	return result, nil
 }
 func (f *aggregateSnapshotFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
-	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
+	streamGenerationID := strings.TrimSpace(f.streamGenerationID)
+	if streamGenerationID == "" && f.engineState != nil {
+		streamGenerationID = strings.TrimSpace(f.engineState.StreamGenerationID)
+	}
+	return &interfaces.FactoryEventStream{
+		StreamGenerationID: streamGenerationID,
+		Events:             make(chan factoryapi.FactoryEvent),
+	}, nil
 }
 func (f *aggregateSnapshotFactory) Pause(context.Context) error  { return f.pauseErr }
 func (f *aggregateSnapshotFactory) Resume(context.Context) error { return nil }

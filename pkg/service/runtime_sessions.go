@@ -1144,6 +1144,7 @@ func (fs *FactoryService) buildSessionProjectionContext(
 	if err != nil {
 		return factorysessions.ProjectionContext{}, err
 	}
+	projectionCtx.Snapshot = snapshot
 	projectionCtx.LifecycleControlStatus = snapshot.LifecycleControlStatus
 	return projectionCtx, nil
 }
@@ -1824,7 +1825,7 @@ func (fs *FactoryService) RetryDurableFactorySessionDispatch(
 	if err != nil {
 		return factoryapi.FactorySessionLifecycleControlResponse{}, err
 	}
-return factorysession.LifecycleControlResponseToAPI(result), nil
+	return factorysession.LifecycleControlResponseToAPI(result), nil
 }
 
 func (fs *FactoryService) InterruptDurableFactorySessionDispatch(
