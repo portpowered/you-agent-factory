@@ -526,6 +526,10 @@ func (fs *FactoryService) handleInvocationPrimaryResultFailure(
 
 func invocationFailureClassForPrimaryResultError(code invocations.PrimaryResultErrorCode) string {
 	switch code {
+	case invocations.PrimaryResultErrorCodePaused:
+		return "paused"
+	case invocations.PrimaryResultErrorCodeInterrupted:
+		return "interrupted"
 	case invocations.PrimaryResultErrorCodeBlocked:
 		return "blocked"
 	case invocations.PrimaryResultErrorCodeNeedsHuman:
@@ -609,8 +613,13 @@ func (fs *FactoryService) logInvocationTerminalResult(
 	case factoryapi.InvocationTerminalStatusCanceled:
 		failureClass = "cancellation"
 	case factoryapi.InvocationTerminalStatusFailed:
-		if strings.TrimSpace(result.ErrorCode) == string(invocations.PrimaryResultErrorCodeUnresolved) {
+		switch strings.TrimSpace(result.ErrorCode) {
+		case string(invocations.PrimaryResultErrorCodeUnresolved):
 			failureClass = "unresolved_primary"
+		case string(invocations.PrimaryResultErrorCodePaused):
+			failureClass = "paused"
+		case string(invocations.PrimaryResultErrorCodeInterrupted):
+			failureClass = "interrupted"
 		}
 	}
 	fs.logger.Warn(
@@ -1037,6 +1046,16 @@ func (fs *FactoryService) processInvocationWaitTick(
 			result: fs.handleInvocationPrimaryResultFailure(sessionID, input, classified),
 		}
 	}
+	if classified, ok := invocations.ClassifyInvocationControlState(sessionID, snapshot.FactoryState, invocations.PrimaryResultSelectionInput{
+		RequestID:        input.RequestID,
+		InvocationReturn: input.InvocationReturn,
+		WorldState:       worldState,
+	}); ok {
+		return invocationWaitTickResult{
+			done:   true,
+			result: fs.handleInvocationPrimaryResultFailure(sessionID, input, classified),
+		}
+	}
 	if classified, ok := invocations.ClassifyMissingPrimaryResult(invocations.PrimaryResultSelectionInput{
 		RequestID:        input.RequestID,
 		InvocationReturn: input.InvocationReturn,
@@ -1137,6 +1156,13 @@ func (fs *FactoryService) resolveInvocationWaitTerminal(
 		if _, failure := tts.ClassifyInvocationWait(worldState, input.RequestID, false); failure != nil {
 			return fs.handlePackagedTTSInvocationFailure(sessionID, input, failure)
 		}
+	}
+	if classified, ok := invocations.ClassifyInvocationControlState(sessionID, "", invocations.PrimaryResultSelectionInput{
+		RequestID:        input.RequestID,
+		InvocationReturn: input.InvocationReturn,
+		WorldState:       worldState,
+	}); ok {
+		return fs.handleInvocationPrimaryResultFailure(sessionID, input, classified)
 	}
 	if classified, ok := invocations.ClassifyMissingPrimaryResult(invocations.PrimaryResultSelectionInput{
 		RequestID:        input.RequestID,

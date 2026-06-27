@@ -153,6 +153,47 @@ func TestSessionInvocationAPI_TimeoutReturnsTimedOutStatus(t *testing.T) {
 	}
 }
 
+func TestSessionInvocationAPI_PausedSessionReturnsPausedStatus(t *testing.T) {
+	dir := scaffoldInvocationFactory(t, nil)
+	var svc *service.FactoryService
+	server := support.StartFunctionalAPIServer(t, support.FunctionalAPIServerConfig{
+		FactoryDir:                dir,
+		WaitForServiceModeRuntime: true,
+		CaptureService: func(captured *service.FactoryService) {
+			svc = captured
+		},
+		Configure: func(cfg *service.FactoryServiceConfig) {
+			cfg.RuntimeMode = interfaces.RuntimeModeService
+			cfg.ProviderCommandRunnerOverride = support.NewStaticSuccessCommandRunner("primary result COMPLETE")
+			cfg.Logger = zap.NewNop()
+		},
+	})
+	if svc == nil {
+		t.Fatal("expected functional server to capture factory service")
+	}
+	if _, err := svc.PauseLiveFactorySession(context.Background(), factorysessions.DefaultSessionID, factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
+		t.Fatalf("PauseLiveFactorySession: %v", err)
+	}
+
+	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke this", nil))
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want FAILED", response.Status)
+	}
+	if response.ErrorCode == nil || *response.ErrorCode != factoryapi.InvocationResponseErrorCode("INVOCATION_PAUSED") {
+		t.Fatalf("invocation errorCode = %#v, want INVOCATION_PAUSED", response.ErrorCode)
+	}
+	if response.Message == nil || !strings.Contains(*response.Message, `session "`+factorysessions.DefaultSessionID+`" is paused`) {
+		gotMessage := "<nil>"
+		if response.Message != nil {
+			gotMessage = *response.Message
+		}
+		t.Fatalf("invocation message = %q, want paused session detail", gotMessage)
+	}
+	if response.PrimaryResult != nil {
+		t.Fatalf("invocation primaryResult = %#v, want nil on paused output", response.PrimaryResult)
+	}
+}
+
 func TestSessionInvocationService_CanceledContextReturnsCanceledStatus(t *testing.T) {
 	dir := scaffoldInvocationFactory(t, nil)
 	blocking := newBlockingInvocationRunner()

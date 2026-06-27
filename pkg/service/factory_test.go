@@ -38,6 +38,57 @@ import (
 const servicePortableBundledScriptBody = "Write-Output 'portable script'\n"
 const serviceStreamedRecordingTimeout = 5 * time.Second
 
+func TestFactoryService_ResolveInvocationWaitTerminal_ReturnsInterruptedClassification(t *testing.T) {
+	t.Parallel()
+
+	work := interfaces.FactoryWorkItem{
+		ID:          "work-root",
+		WorkTypeID:  "goal",
+		State:       "review",
+		DisplayName: "Interrupted goal",
+		PlaceID:     "goal:review",
+	}
+	worldState := interfaces.FactoryWorldState{
+		PayloadLineage: interfaces.WorkPayloadLineageProjection{},
+		WorkRequestsByID: map[string]interfaces.WorkRequestPayload{
+			"request-1": {
+				RequestID: "request-1",
+				Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+				WorkItems: []interfaces.FactoryWorkItem{work},
+			},
+		},
+		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+			work.ID: work,
+		},
+		JavaScriptRuntime: &interfaces.FactorySessionJavaScriptRuntimeState{
+			Dispatches: []interfaces.FactorySessionDispatchState{{
+				ID:             "dispatch-1",
+				Status:         "INTERRUPTED",
+				RelatedWorkIDs: []string{work.ID},
+			}},
+		},
+	}
+
+	svc := &FactoryService{logger: zap.NewNop()}
+	result := svc.resolveInvocationWaitTerminal(
+		"session-js-1",
+		sessionInvocationWaitInput{RequestID: "request-1"},
+		worldState,
+		false,
+		nil,
+	)
+
+	if result.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("status = %q, want FAILED", result.Status)
+	}
+	if result.ErrorCode != "INVOCATION_INTERRUPTED" {
+		t.Fatalf("errorCode = %q, want INVOCATION_INTERRUPTED", result.ErrorCode)
+	}
+	if !strings.Contains(result.Message, `dispatch "dispatch-1"`) || !strings.Contains(result.Message, `work "Interrupted goal"`) {
+		t.Fatalf("message = %q, want interrupted dispatch and work detail", result.Message)
+	}
+}
+
 func serviceNamedFactoryPayload(t *testing.T, project string) []byte {
 	t.Helper()
 	return serviceNamedFactoryPayloadWithWorkType(t, project, "task")

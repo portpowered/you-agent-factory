@@ -18,9 +18,11 @@ const (
 type PrimaryResultErrorCode string
 
 const (
-	PrimaryResultErrorCodeUnresolved PrimaryResultErrorCode = "INVOCATION_PRIMARY_RESULT_UNRESOLVED"
-	PrimaryResultErrorCodeBlocked    PrimaryResultErrorCode = "INVOCATION_BLOCKED"
-	PrimaryResultErrorCodeNeedsHuman PrimaryResultErrorCode = "INVOCATION_NEEDS_HUMAN"
+	PrimaryResultErrorCodeUnresolved  PrimaryResultErrorCode = "INVOCATION_PRIMARY_RESULT_UNRESOLVED"
+	PrimaryResultErrorCodeBlocked     PrimaryResultErrorCode = "INVOCATION_BLOCKED"
+	PrimaryResultErrorCodeNeedsHuman  PrimaryResultErrorCode = "INVOCATION_NEEDS_HUMAN"
+	PrimaryResultErrorCodePaused      PrimaryResultErrorCode = "INVOCATION_PAUSED"
+	PrimaryResultErrorCodeInterrupted PrimaryResultErrorCode = "INVOCATION_INTERRUPTED"
 )
 
 // PrimaryResultSelectionInput carries the selected-tick world state for one
@@ -174,6 +176,23 @@ func unresolvedPrimaryResultError(requestID, policy, reason string) error {
 	}
 }
 
+// ClassifyInvocationControlState inspects reconstructed session and dispatch
+// lifecycle facts that explain why an invocation stopped without a primary
+// result.
+func ClassifyInvocationControlState(
+	sessionID string,
+	snapshotFactoryState string,
+	input PrimaryResultSelectionInput,
+) (*PrimaryResultError, bool) {
+	if paused := classifyPausedInvocation(sessionID, snapshotFactoryState, input); paused != nil {
+		return paused, true
+	}
+	if interrupted := classifyInterruptedInvocation(sessionID, input); interrupted != nil {
+		return interrupted, true
+	}
+	return nil, false
+}
+
 // ClassifyMissingPrimaryResult inspects the selected-tick world state for
 // authored non-success work states that explain why no primary result exists.
 func ClassifyMissingPrimaryResult(input PrimaryResultSelectionInput) (*PrimaryResultError, bool) {
@@ -234,6 +253,150 @@ func classifiedPrimaryResultError(
 	default:
 		return nil
 	}
+}
+
+func classifyPausedInvocation(
+	sessionID string,
+	snapshotFactoryState string,
+	input PrimaryResultSelectionInput,
+) *PrimaryResultError {
+	factoryState := strings.TrimSpace(snapshotFactoryState)
+	if factoryState == "" {
+		factoryState = strings.TrimSpace(input.WorldState.FactoryState)
+	}
+	if factoryState != string(interfaces.FactoryStatePaused) {
+		if bracket := input.WorldState.SessionBracket; bracket == nil || strings.TrimSpace(bracket.LifecycleControlStatus) != string(interfaces.FactoryStatePaused) {
+			return nil
+		}
+	}
+	sessionLabel := invocationSessionLabel(sessionID, input.WorldState)
+	return &PrimaryResultError{
+		Code:      PrimaryResultErrorCodePaused,
+		RequestID: strings.TrimSpace(input.RequestID),
+		Policy:    resolvedInvocationReturnPolicy(input.InvocationReturn),
+		Message:   fmt.Sprintf("invocation paused: session %q is paused; resume the session to continue waiting for primary result", sessionLabel),
+	}
+}
+
+func classifyInterruptedInvocation(
+	sessionID string,
+	input PrimaryResultSelectionInput,
+) *PrimaryResultError {
+	requestID := strings.TrimSpace(input.RequestID)
+	if requestID == "" {
+		return nil
+	}
+	request, ok := input.WorldState.WorkRequestsByID[requestID]
+	if !ok || len(request.WorkItems) == 0 {
+		return nil
+	}
+
+	scope := invocationScopeWorkIDs(input.WorldState.PayloadLineage, request.WorkItems)
+	sessionLabel := invocationSessionLabel(sessionID, input.WorldState)
+	if runtime := input.WorldState.JavaScriptRuntime; runtime != nil {
+		dispatches := append([]interfaces.FactorySessionDispatchState(nil), runtime.Dispatches...)
+		sort.Slice(dispatches, func(i, j int) bool {
+			return dispatches[i].ID < dispatches[j].ID
+		})
+		for _, dispatch := range dispatches {
+			if strings.TrimSpace(dispatch.Status) != "INTERRUPTED" {
+				continue
+			}
+			if !dispatchMatchesInvocationScope(dispatch, scope) {
+				continue
+			}
+			workLabel := interruptedDispatchWorkLabel(dispatch, input.WorldState.WorkItemsByID, scope)
+			return interruptedPrimaryResultError(
+				sessionLabel,
+				dispatch.ID,
+				workLabel,
+				requestID,
+				resolvedInvocationReturnPolicy(input.InvocationReturn),
+			)
+		}
+	}
+
+	if bracket := input.WorldState.SessionBracket; bracket != nil {
+		if strings.TrimSpace(bracket.FinalStatus) == "INTERRUPTED" || strings.TrimSpace(bracket.FailureReason) == "DISPATCH_INTERRUPTED" {
+			return &PrimaryResultError{
+				Code:      PrimaryResultErrorCodeInterrupted,
+				RequestID: requestID,
+				Policy:    resolvedInvocationReturnPolicy(input.InvocationReturn),
+				Message:   fmt.Sprintf("invocation interrupted: session %q was interrupted before a primary result was available", sessionLabel),
+			}
+		}
+	}
+
+	return nil
+}
+
+func interruptedPrimaryResultError(
+	sessionLabel string,
+	dispatchID string,
+	workLabel string,
+	requestID string,
+	policy string,
+) *PrimaryResultError {
+	message := fmt.Sprintf(
+		"invocation interrupted: session %q dispatch %q was interrupted before a primary result was available",
+		sessionLabel,
+		strings.TrimSpace(dispatchID),
+	)
+	if strings.TrimSpace(workLabel) != "" {
+		message = fmt.Sprintf(
+			"invocation interrupted: session %q dispatch %q for work %q was interrupted before a primary result was available",
+			sessionLabel,
+			strings.TrimSpace(dispatchID),
+			strings.TrimSpace(workLabel),
+		)
+	}
+	return &PrimaryResultError{
+		Code:      PrimaryResultErrorCodeInterrupted,
+		RequestID: requestID,
+		Policy:    policy,
+		Message:   message,
+	}
+}
+
+func invocationSessionLabel(sessionID string, state interfaces.FactoryWorldState) string {
+	if trimmed := strings.TrimSpace(sessionID); trimmed != "" {
+		return trimmed
+	}
+	if state.SessionBracket != nil && strings.TrimSpace(state.SessionBracket.SessionID) != "" {
+		return strings.TrimSpace(state.SessionBracket.SessionID)
+	}
+	return "unknown"
+}
+
+func dispatchMatchesInvocationScope(dispatch interfaces.FactorySessionDispatchState, scope map[string]struct{}) bool {
+	if len(scope) == 0 || len(dispatch.RelatedWorkIDs) == 0 {
+		return len(scope) == 0
+	}
+	for _, workID := range dispatch.RelatedWorkIDs {
+		if _, ok := scope[strings.TrimSpace(workID)]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func interruptedDispatchWorkLabel(
+	dispatch interfaces.FactorySessionDispatchState,
+	workItems map[string]interfaces.FactoryWorkItem,
+	scope map[string]struct{},
+) string {
+	for _, workID := range dispatch.RelatedWorkIDs {
+		trimmed := strings.TrimSpace(workID)
+		if _, ok := scope[trimmed]; !ok {
+			continue
+		}
+		item, ok := workItems[trimmed]
+		if !ok {
+			return trimmed
+		}
+		return workDisplayLabel(item)
+	}
+	return ""
 }
 
 func resolvedInvocationReturnPolicy(cfg *interfaces.InvocationReturnConfig) string {

@@ -164,6 +164,80 @@ func TestClassifyMissingPrimaryResult_ReturnsNeedsHumanForScopedWorkItem(t *test
 	}
 }
 
+func TestClassifyInvocationControlState_ReturnsPausedForPausedSession(t *testing.T) {
+	state := invocationWorldStateFixture()
+	rootInitial := invocationWorkItem("work-root", "goal", "init", "Paused goal", "goal:init")
+	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
+	state.FactoryState = string(interfaces.FactoryStatePaused)
+
+	got, ok := ClassifyInvocationControlState("session-live-1", "", PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if !ok {
+		t.Fatal("expected paused classification")
+	}
+	if got.Code != PrimaryResultErrorCodePaused {
+		t.Fatalf("code = %q, want %q", got.Code, PrimaryResultErrorCodePaused)
+	}
+	if got.Message != `invocation paused: session "session-live-1" is paused; resume the session to continue waiting for primary result` {
+		t.Fatalf("message = %q", got.Message)
+	}
+}
+
+func TestClassifyInvocationControlState_ReturnsInterruptedForScopedDispatch(t *testing.T) {
+	state := invocationWorldStateFixture()
+	rootInitial := invocationWorkItem("work-root", "goal", "init", "Interrupted goal", "goal:init")
+	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
+	state.WorkItemsByID[rootInitial.ID] = rootInitial
+	state.JavaScriptRuntime = &interfaces.FactorySessionJavaScriptRuntimeState{
+		Dispatches: []interfaces.FactorySessionDispatchState{{
+			ID:             "dispatch-1",
+			Status:         "INTERRUPTED",
+			RelatedWorkIDs: []string{rootInitial.ID},
+		}},
+	}
+
+	got, ok := ClassifyInvocationControlState("session-js-1", "", PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if !ok {
+		t.Fatal("expected interrupted classification")
+	}
+	if got.Code != PrimaryResultErrorCodeInterrupted {
+		t.Fatalf("code = %q, want %q", got.Code, PrimaryResultErrorCodeInterrupted)
+	}
+	if got.Message != `invocation interrupted: session "session-js-1" dispatch "dispatch-1" for work "Interrupted goal" was interrupted before a primary result was available` {
+		t.Fatalf("message = %q", got.Message)
+	}
+}
+
+func TestClassifyInvocationControlState_PrefersPausedOverInterrupted(t *testing.T) {
+	state := invocationWorldStateFixture()
+	rootInitial := invocationWorkItem("work-root", "goal", "init", "Paused goal", "goal:init")
+	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
+	state.FactoryState = string(interfaces.FactoryStatePaused)
+	state.JavaScriptRuntime = &interfaces.FactorySessionJavaScriptRuntimeState{
+		Dispatches: []interfaces.FactorySessionDispatchState{{
+			ID:             "dispatch-1",
+			Status:         "INTERRUPTED",
+			RelatedWorkIDs: []string{rootInitial.ID},
+		}},
+	}
+
+	got, ok := ClassifyInvocationControlState("session-live-1", "", PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if !ok {
+		t.Fatal("expected paused classification")
+	}
+	if got.Code != PrimaryResultErrorCodePaused {
+		t.Fatalf("code = %q, want %q", got.Code, PrimaryResultErrorCodePaused)
+	}
+}
+
 func invocationWorldStateFixture() interfaces.FactoryWorldState {
 	return interfaces.FactoryWorldState{
 		PayloadLineage:   interfaces.WorkPayloadLineageProjection{},

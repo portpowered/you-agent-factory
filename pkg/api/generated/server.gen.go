@@ -440,7 +440,9 @@ const (
 const (
 	INVOCATIONBLOCKED                 InvocationResponseErrorCode = "INVOCATION_BLOCKED"
 	INVOCATIONCANCELED                InvocationResponseErrorCode = "INVOCATION_CANCELED"
+	INVOCATIONINTERRUPTED             InvocationResponseErrorCode = "INVOCATION_INTERRUPTED"
 	INVOCATIONNEEDSHUMAN              InvocationResponseErrorCode = "INVOCATION_NEEDS_HUMAN"
+	INVOCATIONPAUSED                  InvocationResponseErrorCode = "INVOCATION_PAUSED"
 	INVOCATIONPRIMARYRESULTUNRESOLVED InvocationResponseErrorCode = "INVOCATION_PRIMARY_RESULT_UNRESOLVED"
 	INVOCATIONRUNTIMEFAILURE          InvocationResponseErrorCode = "INVOCATION_RUNTIME_FAILURE"
 	INVOCATIONTIMEDOUT                InvocationResponseErrorCode = "INVOCATION_TIMED_OUT"

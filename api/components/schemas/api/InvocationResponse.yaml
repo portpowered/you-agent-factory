@@ -24,7 +24,9 @@ properties:
     description: Stable machine-readable invocation failure code when status is not `COMPLETED`.
     enum:
       - INVOCATION_BLOCKED
+      - INVOCATION_INTERRUPTED
       - INVOCATION_NEEDS_HUMAN
+      - INVOCATION_PAUSED
       - INVOCATION_PRIMARY_RESULT_UNRESOLVED
       - INVOCATION_TIMED_OUT
       - INVOCATION_CANCELED
