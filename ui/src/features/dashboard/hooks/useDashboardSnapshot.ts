@@ -14,7 +14,6 @@ import {
 } from "../../timeline/public";
 import { useDashboardSession } from "../session/dashboard-session-provider";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
-import type { DashboardCheckpointPreflightState } from "./useDashboardCheckpointPreflight";
 import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
 import { useDashboardTimelineMemoryDebug } from "./useDashboardTimelineMemoryDebug";
@@ -23,6 +22,11 @@ import { useDashboardWorldView } from "./useDashboardWorldView";
 export interface UseDashboardSnapshotOptions {
   locale?: string | null;
   refreshToken?: number;
+}
+
+interface DashboardSessionRecoveryState {
+  reasonCode: string;
+  requestedSessionId: string;
 }
 
 function useGuardedTimelineCheckpointBootstrap({
@@ -276,7 +280,7 @@ export function useDashboardSnapshot({
   return useMemo(
     () => ({
       preflightRecovery:
-        null as DashboardCheckpointPreflightState["recoveryState"],
+        null as DashboardSessionRecoveryState | null,
       snapshot,
       streamState,
       isInitialLoading,
