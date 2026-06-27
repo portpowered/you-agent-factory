@@ -11,7 +11,7 @@ import {
 } from "../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { DetailCopy } from "../../../components/ui/widget-frame";
-import { DispatchDetailContent } from "./dispatch-detail-content";
+import { DispatchDetailContent } from "./dispatch-detail/dispatch-detail-content";
 import { FactorySessionEventReplayDisclosure } from "./event-replay/factory-session-event-replay-disclosure";
 import { useFactorySessionDispatchDetail } from "../hooks/use-factory-session-dispatch-detail";
 import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
