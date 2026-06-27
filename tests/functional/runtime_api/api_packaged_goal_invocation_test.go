@@ -281,6 +281,35 @@ func TestPackagedGoalBuiltInTopology_InterruptedGoalRecoversThroughExistingWorkM
 	if generatedWorkStateName(interrupted.State) != "interrupted" {
 		t.Fatalf("interrupted work = %#v, want interrupted state", interrupted)
 	}
+	session := getGeneratedFactorySession(t, server.URL())
+	if session.Runtime.StopSummary == nil {
+		t.Fatal("session.runtime.stopSummary = nil, want interrupted inspect summary before recovery")
+	}
+	if session.Runtime.StopSummary.StopKind != factoryapi.FactoryStopKind("INTERRUPTED") {
+		t.Fatalf("session.runtime.stopSummary.stopKind = %q, want INTERRUPTED", session.Runtime.StopSummary.StopKind)
+	}
+	if session.Runtime.StopSummary.WorkId == nil || *session.Runtime.StopSummary.WorkId != workID {
+		t.Fatalf("session.runtime.stopSummary.workId = %#v, want %q", session.Runtime.StopSummary.WorkId, workID)
+	}
+	if session.Runtime.StopSummary.LatestDispatch == nil {
+		t.Fatal("session.runtime.stopSummary.latestDispatch = nil, want interrupted dispatch context")
+	}
+	if session.Runtime.StopSummary.LatestResultSummary == nil || *session.Runtime.StopSummary.LatestResultSummary == "" {
+		t.Fatalf("session.runtime.stopSummary.latestResultSummary = %#v, want interrupted stop explanation", session.Runtime.StopSummary.LatestResultSummary)
+	}
+	if session.Runtime.StopSummary.SuggestedRecoverySurface == nil || *session.Runtime.StopSummary.SuggestedRecoverySurface == "" {
+		t.Fatalf("session.runtime.stopSummary.suggestedRecoverySurface = %#v, want recovery guidance", session.Runtime.StopSummary.SuggestedRecoverySurface)
+	}
+	directWork := getGeneratedWorkByID(t, server.URL(), workID)
+	if directWork.StopSummary == nil {
+		t.Fatal("work.stopSummary = nil, want interrupted work inspect summary before recovery")
+	}
+	if directWork.StopSummary.StopKind != factoryapi.FactoryStopKind("INTERRUPTED") {
+		t.Fatalf("work.stopSummary.stopKind = %q, want INTERRUPTED", directWork.StopSummary.StopKind)
+	}
+	if directWork.StopSummary.WorkId == nil || *directWork.StopSummary.WorkId != workID {
+		t.Fatalf("work.stopSummary.workId = %#v, want %q", directWork.StopSummary.WorkId, workID)
+	}
 
 	moved := postGeneratedMoveWork(t, server.URL(), workID, "review")
 	if generatedWorkStateName(moved.State) != "review" {
@@ -840,6 +869,12 @@ func submitGeneratedGoalWork(t *testing.T, baseURL, name, text string) factoryap
 		t.Fatalf("goal submit response = %#v, want work id", submitted)
 	}
 	return submitted
+}
+
+func getGeneratedFactorySession(t *testing.T, baseURL string) factoryapi.FactorySession {
+	t.Helper()
+
+	return getGeneratedJSON[factoryapi.FactorySession](t, strings.TrimSuffix(baseURL, "/")+"/factory-sessions/~default")
 }
 
 func waitForGeneratedWorkIDStateName(t *testing.T, baseURL, workID, wantState string, timeout time.Duration) factoryapi.Work {

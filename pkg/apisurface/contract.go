@@ -214,6 +214,9 @@ func BuildFactorySessionStopSummary(
 	if interruptedSummary := buildInterruptedStopSummary(sessionID, snapshot, javascript, materialized); interruptedSummary != nil {
 		return interruptedSummary
 	}
+	if interruptedWorkSummary := buildInterruptedWorkStateSummary(sessionID, snapshot, materialized); interruptedWorkSummary != nil {
+		return interruptedWorkSummary
+	}
 	if blockedSummary := buildStoppedWorkStateSummary(sessionID, snapshot, materialized, "blocked", factoryapi.FactoryStopKind("BLOCKED")); blockedSummary != nil {
 		return blockedSummary
 	}
@@ -248,6 +251,8 @@ func BuildWorkStopSummary(
 	}
 
 	switch target.state {
+	case "interrupted":
+		return buildStopSummary(sessionID, factoryapi.FactoryStopKind("INTERRUPTED"), nil, target, latestRelevantDispatch(target.id, snapshot), interruptedWorkRecoverySummary(sessionID, target))
 	case "blocked":
 		return buildStopSummary(sessionID, factoryapi.FactoryStopKind("BLOCKED"), nil, target, latestRelevantDispatch(target.id, snapshot), blockedRecoverySummary(target))
 	case "needs-human":
@@ -256,6 +261,8 @@ func BuildWorkStopSummary(
 
 	if matching := workByID(materialized, target.id); matching != nil && matching.state != "" {
 		switch matching.state {
+		case "interrupted":
+			return buildStopSummary(sessionID, factoryapi.FactoryStopKind("INTERRUPTED"), nil, *matching, latestRelevantDispatch(target.id, snapshot), interruptedWorkRecoverySummary(sessionID, *matching))
 		case "blocked":
 			return buildStopSummary(sessionID, factoryapi.FactoryStopKind("BLOCKED"), nil, *matching, latestRelevantDispatch(target.id, snapshot), blockedRecoverySummary(*matching))
 		case "needs-human":
@@ -345,6 +352,25 @@ func buildInterruptedStopSummary(
 		}
 	}
 	return buildStopSummary(sessionID, factoryapi.FactoryStopKind("INTERRUPTED"), nil, *stoppedWork, stoppedDispatch, interruptedRecoverySummary(sessionID))
+}
+
+func buildInterruptedWorkStateSummary(
+	sessionID string,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	materialized materialize.PublicWorkTokens,
+) *factoryapi.FactoryStopSummary {
+	work := latestWorkInState(materialized, snapshotTopology(snapshot), "interrupted")
+	if work == nil {
+		return nil
+	}
+	return buildStopSummary(
+		sessionID,
+		factoryapi.FactoryStopKind("INTERRUPTED"),
+		nil,
+		*work,
+		latestRelevantDispatch(work.id, snapshot),
+		interruptedWorkRecoverySummary(sessionID, *work),
+	)
 }
 
 func buildStoppedWorkStateSummary(
@@ -701,6 +727,15 @@ func interruptedRecoverySummary(sessionID string) stopSummaryRecovery {
 		surface: "existing dispatch retry, work repair, or session workflow controls",
 		action:  "Inspect the interrupted dispatch in Factory Session " + sessionLabel + ", then use the existing retry, repair, or session workflow controls to continue recovery.",
 	}
+}
+
+func interruptedWorkRecoverySummary(sessionID string, work stopSummaryWork) stopSummaryRecovery {
+	recovery := interruptedRecoverySummary(sessionID)
+	recovery.resultSummary = firstNonEmpty(
+		failureMessageFromWork(work),
+		rejectionFeedbackFromWork(work),
+	)
+	return recovery
 }
 
 func blockedReasonSummary(work stopSummaryWork) string {

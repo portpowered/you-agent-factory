@@ -221,9 +221,11 @@ func TestProjectRuntime_BlockedAndNeedsHumanSessionsIncludeStopSummary(t *testin
 		stateName   string
 		wantStop    factoryapi.FactoryStopKind
 		wantSummary string
+		lastError   string
 	}{
 		{name: "blocked", placeID: "goal:blocked", stateName: "blocked", wantStop: factoryapi.FactoryStopKind("BLOCKED"), wantSummary: "provider timeout"},
 		{name: "needs-human", placeID: "goal:needs-human", stateName: "needs-human", wantStop: factoryapi.FactoryStopKind("NEEDS_HUMAN"), wantSummary: "awaiting operator approval"},
+		{name: "interrupted", placeID: "goal:interrupted", stateName: "interrupted", wantStop: factoryapi.FactoryStopKind("INTERRUPTED"), wantSummary: "Operator interrupted review after partial output was available.", lastError: "Operator interrupted review after partial output was available."},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -238,6 +240,9 @@ func TestProjectRuntime_BlockedAndNeedsHumanSessionsIncludeStopSummary(t *testin
 				},
 				CreatedAt: now.Add(-2 * time.Minute),
 				EnteredAt: now.Add(-1 * time.Minute),
+				History: interfaces.TokenHistory{
+					LastError: tc.lastError,
+				},
 			}
 			runtime := ProjectRuntime(ProjectionContext{
 				Session: &LiveSession{ID: "session-stop"},
