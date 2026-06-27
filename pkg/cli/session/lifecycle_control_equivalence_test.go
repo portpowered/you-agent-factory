@@ -13,6 +13,7 @@ import (
 	api "github.com/portpowered/infinite-you/pkg/api"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"go.uber.org/zap"
@@ -157,6 +158,71 @@ func TestLifecycleControlPause_CLIJSONMatchesAPITerminalSessionRejection(t *test
 	assertLifecycleControlEquivalence(t, apiResponse, cliResponse)
 }
 
+func TestLifecycleControlPause_DefaultLiveSessionCLIJSONMatchesAPIResponse(t *testing.T) {
+	apiServerURL := liveLifecycleEquivalenceServerURL(t, &testutil.MockFactory{
+		State:          interfaces.FactoryStateRunning,
+		FactorySession: factoryapi.FactorySession{Id: "~default"},
+	})
+
+	apiResponse, status := postLifecycleControl(t, apiServerURL, "~default", "pause")
+	if status != 200 {
+		t.Fatalf("API pause status = %d, want 200", status)
+	}
+
+	cliServerURL := liveLifecycleEquivalenceServerURL(t, &testutil.MockFactory{
+		State:          interfaces.FactoryStateRunning,
+		FactorySession: factoryapi.FactorySession{Id: "~default"},
+	})
+
+	var cliOut bytes.Buffer
+	if err := Pause(LifecycleControlConfig{
+		Server: cliServerURL,
+		JSON:   true,
+		Output: &cliOut,
+	}); err != nil {
+		t.Fatalf("CLI default pause: %v", err)
+	}
+
+	var cliResponse factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(cliOut.Bytes(), &cliResponse); err != nil {
+		t.Fatalf("decode CLI JSON: %v\n%s", err, cliOut.String())
+	}
+	assertLifecycleControlEquivalence(t, apiResponse, cliResponse)
+}
+
+func TestLifecycleControlResume_NamedLiveSessionCLIJSONMatchesAPIResponse(t *testing.T) {
+	apiServerURL := liveLifecycleEquivalenceServerURL(t, &testutil.MockFactory{
+		State:          interfaces.FactoryStatePaused,
+		FactorySession: factoryapi.FactorySession{Id: "session-beta"},
+	})
+
+	apiResponse, status := postLifecycleControl(t, apiServerURL, "session-beta", "resume")
+	if status != 200 {
+		t.Fatalf("API resume status = %d, want 200", status)
+	}
+
+	cliServerURL := liveLifecycleEquivalenceServerURL(t, &testutil.MockFactory{
+		State:          interfaces.FactoryStatePaused,
+		FactorySession: factoryapi.FactorySession{Id: "session-beta"},
+	})
+
+	var cliOut bytes.Buffer
+	if err := Resume(LifecycleControlConfig{
+		Server:    cliServerURL,
+		SessionID: "session-beta",
+		JSON:      true,
+		Output:    &cliOut,
+	}); err != nil {
+		t.Fatalf("CLI named live resume: %v", err)
+	}
+
+	var cliResponse factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.Unmarshal(cliOut.Bytes(), &cliResponse); err != nil {
+		t.Fatalf("decode CLI JSON: %v\n%s", err, cliOut.String())
+	}
+	assertLifecycleControlEquivalence(t, apiResponse, cliResponse)
+}
+
 func newLifecycleEquivalenceFakeService(t *testing.T) *factorysessionexecution.FakeService {
 	t.Helper()
 	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(
@@ -172,6 +238,15 @@ func serverURLForLifecycleEquivalence(t *testing.T, service factorysessionexecut
 	t.Helper()
 	logger, _ := zap.NewDevelopment()
 	srv := api.NewServer(&testutil.MockFactory{DurableExecutionService: service}, 8080, logger)
+	server := httptest.NewServer(srv.Handler())
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
+func liveLifecycleEquivalenceServerURL(t *testing.T, factory *testutil.MockFactory) string {
+	t.Helper()
+	logger, _ := zap.NewDevelopment()
+	srv := api.NewServer(factory, 8080, logger)
 	server := httptest.NewServer(srv.Handler())
 	t.Cleanup(server.Close)
 	return server.URL

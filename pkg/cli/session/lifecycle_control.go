@@ -75,9 +75,6 @@ func invokeLifecycleControl(
 	if cfg.Output == nil {
 		cfg.Output = os.Stdout
 	}
-	if err := validateDurableLifecycleControlSessionID(cfg.SessionID, operationLabel); err != nil {
-		return err
-	}
 
 	endpoint, err := lifecycleControlEndpoint(cfg, operationLabel)
 	if err != nil {
@@ -246,22 +243,9 @@ func decodeLifecycleControlAPIError(resp *http.Response) (factoryapi.ErrorRespon
 }
 
 func resolvedLifecycleControlSessionID(sessionID string) string {
-	return strings.TrimSpace(sessionID)
-}
-
-func validateDurableLifecycleControlSessionID(sessionID, operationLabel string) error {
 	id := strings.TrimSpace(sessionID)
 	if id == "" {
-		return fmt.Errorf(
-			"factory session id is required: use `you session list --scope all` to find durable session ids (dur-sess-*)",
-		)
+		return sessionpath.DefaultFactorySessionID
 	}
-	if !strings.HasPrefix(id, "dur-sess-") {
-		return fmt.Errorf(
-			"factory session %q does not support %s lifecycle control: use a durable session id with the dur-sess- prefix from `you session list --scope all`",
-			id,
-			operationLabel,
-		)
-	}
-	return nil
+	return id
 }
