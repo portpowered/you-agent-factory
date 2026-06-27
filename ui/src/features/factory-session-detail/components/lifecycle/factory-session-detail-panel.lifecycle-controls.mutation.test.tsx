@@ -3,6 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FactoryOrchestratorKind } from "../../../../api/generated/openapi";
+import {
+  buildFailedPartialDurableSession,
+  buildFailedPartialReplayDispatchDetail,
+  buildFailedPartialReplayDispatchList,
+  failedPartialReplaySessionID,
+} from "../../../../testing/factory-session-lifecycle-fixtures";
 import { FactorySessionDetailPanel } from "../factory-session-detail-panel";
 import {
   createDeferred,
@@ -147,54 +153,20 @@ describe("factory session detail lifecycle submissions", () => {
       async (input, init) => {
         const url = String(input);
 
-        if (url.endsWith("/factory-sessions/dur-sess-js-failed-partial-001")) {
+        if (url.endsWith(`/factory-sessions/${failedPartialReplaySessionID}`)) {
+          return jsonResponse(buildFailedPartialDurableSession());
+        }
+
+        if (url.endsWith(`/factory-sessions/${failedPartialReplaySessionID}/dispatches`)) {
           return jsonResponse({
-            dialect: "you-workflow-v1",
-            lifecycle: {
-              finishedAt: "2026-06-08T14:05:00Z",
-              startedAt: "2026-06-08T14:00:00Z",
-            },
-            orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-            phase: "verify",
-            progress: {
-              completedDispatches: 1,
-              failedDispatches: 1,
-              inFlightDispatches: 0,
-              totalDispatches: 2,
-            },
-            resolvedSource: {
-              kind: "WORKFLOW_NAME",
-              sourceHash: "sha256:workflow-verify",
-              sourceRef: "workflow/verify",
-            },
-            sessionId: "dur-sess-js-failed-partial-001",
-            status: "FAILED",
-            usage: { resources: [] },
+            dispatches: buildFailedPartialReplayDispatchList().dispatches.slice(1),
+            sessionId: failedPartialReplaySessionID,
           });
         }
 
         if (
           url.endsWith(
-            "/factory-sessions/dur-sess-js-failed-partial-001/dispatches",
-          )
-        ) {
-          return jsonResponse({
-            dispatches: [
-              {
-                dispatchKind: "JAVASCRIPT_VERIFY",
-                id: "dispatch-failed",
-                orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-                sessionId: "dur-sess-js-failed-partial-001",
-                status: "FAILED",
-              },
-            ],
-            sessionId: "dur-sess-js-failed-partial-001",
-          });
-        }
-
-        if (
-          url.endsWith(
-            "/factory-sessions/dur-sess-js-failed-partial-001/retry-dispatch",
+            `/factory-sessions/${failedPartialReplaySessionID}/retry-dispatch`,
           ) &&
           init?.method === "POST"
         ) {
@@ -211,7 +183,7 @@ describe("factory session detail lifecycle submissions", () => {
             operation: "RETRY_DISPATCH",
             outcome: "ACCEPTED",
             retryDispatchId: "dispatch-retry-001",
-            sessionId: "dur-sess-js-failed-partial-001",
+            sessionId: failedPartialReplaySessionID,
             status: "RUNNING",
           }, 202);
         }
@@ -221,7 +193,7 @@ describe("factory session detail lifecycle submissions", () => {
     );
 
     renderWithQueryClient(
-      <FactorySessionDetailPanel sessionID="dur-sess-js-failed-partial-001" />,
+      <FactorySessionDetailPanel sessionID={failedPartialReplaySessionID} />,
     );
 
     const user = userEvent.setup();
@@ -249,7 +221,7 @@ describe("factory session detail lifecycle submissions", () => {
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        "/factory-sessions/dur-sess-js-failed-partial-001/retry-dispatch",
+        `/factory-sessions/${failedPartialReplaySessionID}/retry-dispatch`,
         expect.objectContaining({
           body: JSON.stringify({
             dispatchId: "dispatch-failed",
@@ -262,51 +234,22 @@ describe("factory session detail lifecycle submissions", () => {
     });
   });
 
-  // biome-ignore lint/complexity/noExcessiveLinesPerFunction: retry conflict coverage keeps one fetch seam readable.
   it("renders typed conflict feedback without collapsing the selected dispatch detail", async () => {
     const fetchMock = vi.mocked(globalThis.fetch).mockImplementation(
       async (input, init) => {
         const url = String(input);
 
         if (url.endsWith("/factory-sessions/dur-sess-js-failed-002")) {
-          return jsonResponse({
-            dialect: "you-workflow-v1",
-            lifecycle: {
-              finishedAt: "2026-06-08T14:04:00Z",
-              startedAt: "2026-06-08T14:00:00Z",
-              updatedAt: "2026-06-08T14:04:00Z",
-            },
-            orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-            phase: "verify",
-            progress: {
-              completedDispatches: 1,
-              failedDispatches: 1,
-              inFlightDispatches: 0,
-              totalDispatches: 2,
-            },
-            resolvedSource: {
-              kind: "WORKFLOW_NAME",
-              sourceHash: "sha256:workflow-verify",
-              sourceRef: "workflow/verify",
-            },
-            sessionId: "dur-sess-js-failed-002",
-            status: "FAILED",
-            usage: { resources: [] },
-          });
+          return jsonResponse(
+            buildFailedPartialDurableSession("dur-sess-js-failed-002"),
+          );
         }
 
         if (url.endsWith("/factory-sessions/dur-sess-js-failed-002/dispatches")) {
           return jsonResponse({
-            dispatches: [
-              {
-                dispatchKind: "JAVASCRIPT_VERIFY",
-                id: "dispatch-failed",
-                label: "Verify release manifest",
-                orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-                sessionId: "dur-sess-js-failed-002",
-                status: "FAILED",
-              },
-            ],
+            dispatches: buildFailedPartialReplayDispatchList(
+              "dur-sess-js-failed-002",
+            ).dispatches.slice(1),
             sessionId: "dur-sess-js-failed-002",
           });
         }
@@ -316,25 +259,9 @@ describe("factory session detail lifecycle submissions", () => {
             "/factory-sessions/dur-sess-js-failed-002/dispatches/dispatch-failed",
           )
         ) {
-          return jsonResponse({
-            dispatchKind: "JAVASCRIPT_VERIFY",
-            failureDetail: {
-              errorClass: "verification_error",
-              message: "Expected release manifest checksum.",
-              reason: "VERIFY_ASSERTION_FAILED",
-            },
-            id: "dispatch-failed",
-            javascript: {
-              executionMode: "live",
-              taskKind: "VERIFY",
-              taskLabel: "Verify release manifest",
-            },
-            label: "Verify release manifest",
-            orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-            sessionId: "dur-sess-js-failed-002",
-            status: "FAILED",
-            statusTransitions: ["QUEUED", "RUNNING", "FAILED"],
-          });
+          return jsonResponse(
+            buildFailedPartialReplayDispatchDetail("dur-sess-js-failed-002"),
+          );
         }
 
         if (
@@ -407,6 +334,10 @@ describe("factory session detail lifecycle submissions", () => {
       ).toBeTruthy();
       expect(screen.getByText("Failure detail")).toBeTruthy();
       expect(screen.getByText("VERIFY_ASSERTION_FAILED")).toBeTruthy();
+      expect(screen.getByText("session_id · provider-session-verify-1")).toBeTruthy();
+      expect(
+        screen.getByRole("link", { name: "artifact-failure-log" }),
+      ).toBeTruthy();
     });
   });
 });

@@ -2,6 +2,14 @@ import { screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FactoryOrchestratorKind } from "../../../../api/generated/openapi";
+import {
+  awaitingReplaySessionID,
+  buildAwaitingDurableSession,
+} from "../../../../testing/factory-session-event-replay-fixtures";
+import {
+  buildPausedDurableSession,
+  pausedReplaySessionID,
+} from "../../../../testing/factory-session-lifecycle-fixtures";
 import { FactorySessionDetailPanel } from "../factory-session-detail-panel";
 import {
   jsonResponse,
@@ -75,42 +83,20 @@ describe("paused durable session actions", () => {
   it("shows resume controls for a paused durable JavaScript session", async () => {
     vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
       const url = String(input);
-      if (url.endsWith("/factory-sessions/dur-sess-js-paused-001")) {
-        return jsonResponse({
-          dialect: "you-workflow-v1",
-          lifecycle: {
-            startedAt: "2026-06-08T14:00:00Z",
-            updatedAt: "2026-06-08T14:05:00Z",
-          },
-          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-          phase: "review",
-          progress: {
-            completedDispatches: 1,
-            failedDispatches: 0,
-            inFlightDispatches: 0,
-            totalDispatches: 1,
-          },
-          resolvedSource: {
-            kind: "WORKFLOW_NAME",
-            sourceRef: "workflow/review",
-            sourceHash: "sha256:workflow-review",
-          },
-          sessionId: "dur-sess-js-paused-001",
-          status: "PAUSED",
-          usage: { resources: [] },
-        });
+      if (url.endsWith(`/factory-sessions/${pausedReplaySessionID}`)) {
+        return jsonResponse(buildPausedDurableSession());
       }
-      if (url.endsWith("/factory-sessions/dur-sess-js-paused-001/dispatches")) {
+      if (url.endsWith(`/factory-sessions/${pausedReplaySessionID}/dispatches`)) {
         return jsonResponse({
           dispatches: [],
-          sessionId: "dur-sess-js-paused-001",
+          sessionId: pausedReplaySessionID,
         });
       }
       return new Response("not found", { status: 404 });
     });
 
     renderWithQueryClient(
-      <FactorySessionDetailPanel sessionID="dur-sess-js-paused-001" />,
+      <FactorySessionDetailPanel sessionID={pausedReplaySessionID} />,
     );
 
     await waitFor(() => {
@@ -135,36 +121,14 @@ describe("awaiting-approval durable session actions", () => {
   it("shows approve controls for an awaiting-approval durable JavaScript session", async () => {
     vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
       const url = String(input);
-      if (url.endsWith("/factory-sessions/dur-sess-js-awaiting-001")) {
-        return jsonResponse({
-          dialect: "you-workflow-v1",
-          lifecycle: {
-            queuedAt: "2026-06-08T14:00:00Z",
-            updatedAt: "2026-06-08T14:05:00Z",
-          },
-          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-          phase: "approval",
-          progress: {
-            completedDispatches: 0,
-            failedDispatches: 0,
-            inFlightDispatches: 0,
-            totalDispatches: 0,
-          },
-          resolvedSource: {
-            kind: "WORKFLOW_NAME",
-            sourceRef: "workflow/approval",
-            sourceHash: "sha256:workflow-approval",
-          },
-          sessionId: "dur-sess-js-awaiting-001",
-          status: "AWAITING_APPROVAL",
-          usage: { resources: [] },
-        });
+      if (url.endsWith(`/factory-sessions/${awaitingReplaySessionID}`)) {
+        return jsonResponse(buildAwaitingDurableSession());
       }
       return new Response("not found", { status: 404 });
     });
 
     renderWithQueryClient(
-      <FactorySessionDetailPanel sessionID="dur-sess-js-awaiting-001" />,
+      <FactorySessionDetailPanel sessionID={awaitingReplaySessionID} />,
     );
 
     await waitFor(() => {

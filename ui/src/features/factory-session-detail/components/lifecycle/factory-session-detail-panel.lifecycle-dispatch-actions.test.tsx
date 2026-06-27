@@ -3,6 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FactoryOrchestratorKind } from "../../../../api/generated/openapi";
+import {
+  buildFailedPartialDurableSession,
+  buildFailedPartialReplayDispatchList,
+  failedPartialReplaySessionID,
+} from "../../../../testing/factory-session-lifecycle-fixtures";
 import { FactorySessionDetailPanel } from "../factory-session-detail-panel";
 import {
   jsonResponse,
@@ -21,61 +26,19 @@ describe("failed dispatch retry actions", () => {
   it("shows retry dispatch only for the selected failed dispatch", async () => {
     vi.mocked(globalThis.fetch).mockImplementation(async (input) => {
       const url = String(input);
-      if (url.endsWith("/factory-sessions/dur-sess-js-failed-partial-001")) {
-        return jsonResponse({
-          dialect: "you-workflow-v1",
-          lifecycle: {
-            finishedAt: "2026-06-08T14:05:00Z",
-            startedAt: "2026-06-08T14:00:00Z",
-          },
-          orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-          phase: "verify",
-          progress: {
-            completedDispatches: 1,
-            failedDispatches: 1,
-            inFlightDispatches: 0,
-            totalDispatches: 2,
-          },
-          resolvedSource: {
-            kind: "WORKFLOW_NAME",
-            sourceRef: "workflow/verify",
-            sourceHash: "sha256:workflow-verify",
-          },
-          sessionId: "dur-sess-js-failed-partial-001",
-          status: "FAILED",
-          usage: { resources: [] },
-        });
+      if (url.endsWith(`/factory-sessions/${failedPartialReplaySessionID}`)) {
+        return jsonResponse(buildFailedPartialDurableSession());
       }
       if (
-        url.endsWith(
-          "/factory-sessions/dur-sess-js-failed-partial-001/dispatches",
-        )
+        url.endsWith(`/factory-sessions/${failedPartialReplaySessionID}/dispatches`)
       ) {
-        return jsonResponse({
-          dispatches: [
-            {
-              dispatchKind: "JAVASCRIPT_AGENT",
-              id: "dispatch-ok",
-              orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-              sessionId: "dur-sess-js-failed-partial-001",
-              status: "COMPLETED",
-            },
-            {
-              dispatchKind: "JAVASCRIPT_VERIFY",
-              id: "dispatch-failed",
-              orchestratorKind: FactoryOrchestratorKind.JAVASCRIPT,
-              sessionId: "dur-sess-js-failed-partial-001",
-              status: "FAILED",
-            },
-          ],
-          sessionId: "dur-sess-js-failed-partial-001",
-        });
+        return jsonResponse(buildFailedPartialReplayDispatchList());
       }
       return new Response("not found", { status: 404 });
     });
 
     renderWithQueryClient(
-      <FactorySessionDetailPanel sessionID="dur-sess-js-failed-partial-001" />,
+      <FactorySessionDetailPanel sessionID={failedPartialReplaySessionID} />,
     );
 
     await waitFor(() => {
