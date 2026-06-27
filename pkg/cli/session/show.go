@@ -213,6 +213,9 @@ func renderShowResult(
 	if err := writeSessionLifecycleFields(output, session.Runtime.Lifecycle); err != nil {
 		return err
 	}
+	if err := writeSessionStopSummary(output, session.Runtime.StopSummary); err != nil {
+		return err
+	}
 	if err := writeSessionDispatchLines(output, session.Runtime.Dispatches); err != nil {
 		return err
 	}
@@ -268,6 +271,53 @@ func writeSessionDispatchLines(
 			dispatch.Status,
 			dispatch.DispatchKind,
 		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func writeSessionStopSummary(output io.Writer, summary *factoryapi.FactoryStopSummary) error {
+	if summary == nil {
+		return nil
+	}
+	fields := []string{
+		fmt.Sprintf("kind=%s", summary.StopKind),
+		fmt.Sprintf("session=%s", summary.SessionId),
+	}
+	if summary.WorkName != nil && strings.TrimSpace(*summary.WorkName) != "" {
+		label := strings.TrimSpace(*summary.WorkName)
+		if summary.WorkId != nil && strings.TrimSpace(*summary.WorkId) != "" {
+			label = fmt.Sprintf("%s [%s]", label, strings.TrimSpace(*summary.WorkId))
+		}
+		fields = append(fields, "work="+label)
+	} else if summary.WorkId != nil && strings.TrimSpace(*summary.WorkId) != "" {
+		fields = append(fields, "work="+strings.TrimSpace(*summary.WorkId))
+	}
+	if summary.WorkState != nil && strings.TrimSpace(*summary.WorkState) != "" {
+		fields = append(fields, "state="+strings.TrimSpace(*summary.WorkState))
+	}
+	if summary.SessionLifecycleStatus != nil {
+		fields = append(fields, "lifecycle="+string(*summary.SessionLifecycleStatus))
+	}
+	if _, err := fmt.Fprintf(output, "Stop summary:\t%s\n", strings.Join(fields, " ")); err != nil {
+		return err
+	}
+	if summary.LatestDispatch != nil {
+		dispatchFields := []string{
+			summary.LatestDispatch.DispatchId,
+			fmt.Sprintf("status=%s", summary.LatestDispatch.Status),
+			fmt.Sprintf("kind=%s", summary.LatestDispatch.DispatchKind),
+		}
+		if summary.LatestDispatch.WorkstationName != nil && strings.TrimSpace(*summary.LatestDispatch.WorkstationName) != "" {
+			dispatchFields = append(dispatchFields, "workstation="+strings.TrimSpace(*summary.LatestDispatch.WorkstationName))
+		}
+		if _, err := fmt.Fprintf(output, "Stop dispatch:\t%s\n", strings.Join(dispatchFields, " ")); err != nil {
+			return err
+		}
+	}
+	if summary.LatestResultSummary != nil && strings.TrimSpace(*summary.LatestResultSummary) != "" {
+		if _, err := fmt.Fprintf(output, "Stop result:\t%s\n", strings.TrimSpace(*summary.LatestResultSummary)); err != nil {
 			return err
 		}
 	}

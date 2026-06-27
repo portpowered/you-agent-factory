@@ -1,0 +1,31 @@
+type: object
+additionalProperties: false
+required:
+  - stopKind
+  - sessionId
+properties:
+  stopKind:
+    $ref: './FactoryStopKind.yaml'
+  sessionId:
+    type: string
+    description: Stable Factory Session identifier that owns the stopped work.
+  workId:
+    type: string
+    description: Relevant work identifier when one work item best explains the stop.
+  workName:
+    type: string
+    description: Relevant work name when one work item best explains the stop.
+  workTypeName:
+    type: string
+    description: Relevant work type name when one work item best explains the stop.
+  workState:
+    type: string
+    description: Current authored work state label such as `goal:blocked` when one work item best explains the stop.
+  sessionLifecycleStatus:
+    $ref: './FactorySessionDurableLifecycleStatus.yaml'
+    description: Session lifecycle-control status when the stop is explained by pause or another session-level lifecycle condition.
+  latestDispatch:
+    $ref: './FactoryStopDispatchSummary.yaml'
+  latestResultSummary:
+    type: string
+    description: Short operator-readable summary of the latest relevant result when one explains the stop better than a dispatch identifier alone.

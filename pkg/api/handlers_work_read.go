@@ -19,12 +19,12 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/workquery"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/materialize"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
+	"github.com/portpowered/infinite-you/pkg/workquery"
 	"go.uber.org/zap"
 )
 
@@ -264,7 +264,7 @@ func (s *Server) GetWorkBySessionId(w http.ResponseWriter, r *http.Request, sess
 	if !ok {
 		return
 	}
-	s.getWork(w, r, id, func(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+	s.getWork(w, r, string(sessionID), id, func(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 		return sessionRuntime.GetEngineStateSnapshotForSession(ctx, string(sessionID))
 	})
 }
@@ -272,6 +272,7 @@ func (s *Server) GetWorkBySessionId(w http.ResponseWriter, r *http.Request, sess
 func (s *Server) getWork(
 	w http.ResponseWriter,
 	r *http.Request,
+	sessionID string,
 	id factoryapi.WorkOrTokenID,
 	loadSnapshot func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error),
 ) {
@@ -296,6 +297,7 @@ func (s *Server) getWork(
 	workNamesByID := publicWorkNamesByID(materialized.Tokens)
 	work := tokenToWork(token, snapshot.Topology, inFlightOnly)
 	work.Relations = generatedWorkRelations(token, work.Name, workNamesByID)
+	work.StopSummary = apisurface.BuildWorkStopSummary(sessionID, snapshot, token)
 	s.writeJSON(w, http.StatusOK, work)
 }
 

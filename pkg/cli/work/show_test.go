@@ -27,6 +27,17 @@ func TestShow_HumanOutputIncludesWorkSummary(t *testing.T) {
 			},
 			TraceId:                stringPtr("trace-legacy"),
 			CurrentChainingTraceId: stringPtr("trace-chain-1"),
+			StopSummary: &factoryapi.FactoryStopSummary{
+				SessionId: "session-beta",
+				StopKind:  factoryapi.FactoryStopKind("BLOCKED"),
+				WorkState: stringPtr("story:blocked"),
+				LatestDispatch: &factoryapi.FactoryStopDispatchSummary{
+					DispatchId:      "dispatch-review-1",
+					Status:          factoryapi.FactoryDispatchStatusFAILED,
+					DispatchKind:    factoryapi.FactoryDispatchKindPETRITRANSITION,
+					WorkstationName: stringPtr("Review"),
+				},
+			},
 		}); err != nil {
 			t.Fatalf("encode response: %v", err)
 		}
@@ -50,7 +61,9 @@ func TestShow_HumanOutputIncludesWorkSummary(t *testing.T) {
 		"State name:\treview\n" +
 		"State type:\tPROCESSING\n" +
 		"Trace:\ttrace-chain-1\n" +
-		"Relations:\tnone\n"
+		"Relations:\tnone\n" +
+		"Stop summary:\tkind=BLOCKED session=session-beta state=story:blocked\n" +
+		"Stop dispatch:\tdispatch-review-1 status=FAILED kind=PETRI_TRANSITION workstation=Review\n"
 	if got := out.String(); got != want {
 		t.Fatalf("output = %q, want %q", got, want)
 	}

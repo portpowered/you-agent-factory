@@ -1341,6 +1341,8 @@ export interface components {
       budgets?: components["schemas"]["FactorySessionBudgets"];
       usage: components["schemas"]["FactorySessionUsage"];
       lifecycle: components["schemas"]["FactorySessionLifecycle"];
+      /** @description Canonical stopped-state summary for paused, blocked, needs-human, and interrupted inspection paths on the existing Factory Session surface. */
+      stopSummary?: components["schemas"]["FactoryStopSummary"];
       /** @description Backend-authoritative identity for the current live session event stream. Clients must confirm this identity before reusing persisted reconnect cursors or timeline checkpoints. */
       streamIdentity?: components["schemas"]["FactorySessionStreamIdentity"];
       petri?: components["schemas"]["FactorySessionPetriProjection"];
@@ -1349,6 +1351,41 @@ export interface components {
       dispatches?: components["schemas"]["FactoryDispatch"][];
       /** @description Shared artifact projections for the session runtime. */
       artifacts?: components["schemas"]["FactoryArtifact"][];
+    };
+    /**
+     * @description Canonical inspect classification for stopped automation on existing Factory Session and Work surfaces.
+     * @enum {string}
+     */
+    FactoryStopKind: FactoryStopKind;
+    FactoryStopDispatchSummary: {
+      /** @description Stable dispatch identifier that most directly explains the stopped state. */
+      dispatchId: string;
+      status: components["schemas"]["FactoryDispatchStatus"];
+      dispatchKind: components["schemas"]["FactoryDispatchKind"];
+      /** @description Customer-authored workstation name when one existing workstation run explains the stop. */
+      workstationName?: string;
+      /** @description Stable failure or interruption reason when one is available from the latest relevant dispatch. */
+      failureReason?: string;
+      /** @description Human-readable failure or interruption detail from the latest relevant dispatch when available. */
+      failureMessage?: string;
+    };
+    FactoryStopSummary: {
+      stopKind: components["schemas"]["FactoryStopKind"];
+      /** @description Stable Factory Session identifier that owns the stopped work. */
+      sessionId: string;
+      /** @description Relevant work identifier when one work item best explains the stop. */
+      workId?: string;
+      /** @description Relevant work name when one work item best explains the stop. */
+      workName?: string;
+      /** @description Relevant work type name when one work item best explains the stop. */
+      workTypeName?: string;
+      /** @description Current authored work state label such as `goal:blocked` when one work item best explains the stop. */
+      workState?: string;
+      /** @description Session lifecycle-control status when the stop is explained by pause or another session-level lifecycle condition. */
+      sessionLifecycleStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+      latestDispatch?: components["schemas"]["FactoryStopDispatchSummary"];
+      /** @description Short operator-readable summary of the latest relevant result when one explains the stop better than a dispatch identifier alone. */
+      latestResultSummary?: string;
     };
     FactorySessionStreamIdentity: {
       /** @description Stable backend process or scope identity for the current live session stream. */
@@ -4347,6 +4384,8 @@ export interface components {
       tags?: components["schemas"]["StringMap"];
       /** @description Current outbound relationships attached to this listed source work item when returned by read APIs. */
       relations?: components["schemas"]["Relation"][];
+      /** @description Canonical stopped-state summary for existing work inspection reads when this work item explains paused, blocked, needs-human, or interrupted automation. */
+      stopSummary?: components["schemas"]["FactoryStopSummary"];
     };
     /** @description Ordered canonical content parts for one work item. */
     WorkContent: components["schemas"]["WorkContentPart"][];
@@ -6234,6 +6273,14 @@ export const FactorySessionTargetRefKind = {
 } as const;
 export type FactorySessionTargetRefKind =
   (typeof FactorySessionTargetRefKind)[keyof typeof FactorySessionTargetRefKind];
+export const FactoryStopKind = {
+  PAUSED: "PAUSED",
+  BLOCKED: "BLOCKED",
+  NEEDS_HUMAN: "NEEDS_HUMAN",
+  INTERRUPTED: "INTERRUPTED",
+} as const;
+export type FactoryStopKind =
+  (typeof FactoryStopKind)[keyof typeof FactoryStopKind];
 export const FactorySessionStatus = {
   // The session runtime is actively processing work.
   ACTIVE: "ACTIVE",

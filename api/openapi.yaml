@@ -2813,6 +2813,9 @@ components:
           $ref: '#/components/schemas/FactorySessionUsage'
         lifecycle:
           $ref: '#/components/schemas/FactorySessionLifecycle'
+        stopSummary:
+          $ref: '#/components/schemas/FactoryStopSummary'
+          description: Canonical stopped-state summary for paused, blocked, needs-human, and interrupted inspection paths on the existing Factory Session surface.
         streamIdentity:
           $ref: '#/components/schemas/FactorySessionStreamIdentity'
           description: Backend-authoritative identity for the current live session event stream. Clients must confirm this identity before reusing persisted reconnect cursors or timeline checkpoints.
@@ -2830,6 +2833,70 @@ components:
           items:
             $ref: '#/components/schemas/FactoryArtifact'
           description: Shared artifact projections for the session runtime.
+    FactoryStopKind:
+      type: string
+      description: Canonical inspect classification for stopped automation on existing Factory Session and Work surfaces.
+      enum:
+        - PAUSED
+        - BLOCKED
+        - NEEDS_HUMAN
+        - INTERRUPTED
+    FactoryStopDispatchSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - dispatchId
+        - status
+        - dispatchKind
+      properties:
+        dispatchId:
+          type: string
+          description: Stable dispatch identifier that most directly explains the stopped state.
+        status:
+          $ref: '#/components/schemas/FactoryDispatchStatus'
+        dispatchKind:
+          $ref: '#/components/schemas/FactoryDispatchKind'
+        workstationName:
+          type: string
+          description: Customer-authored workstation name when one existing workstation run explains the stop.
+        failureReason:
+          type: string
+          description: Stable failure or interruption reason when one is available from the latest relevant dispatch.
+        failureMessage:
+          type: string
+          description: Human-readable failure or interruption detail from the latest relevant dispatch when available.
+    FactoryStopSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - stopKind
+        - sessionId
+      properties:
+        stopKind:
+          $ref: '#/components/schemas/FactoryStopKind'
+        sessionId:
+          type: string
+          description: Stable Factory Session identifier that owns the stopped work.
+        workId:
+          type: string
+          description: Relevant work identifier when one work item best explains the stop.
+        workName:
+          type: string
+          description: Relevant work name when one work item best explains the stop.
+        workTypeName:
+          type: string
+          description: Relevant work type name when one work item best explains the stop.
+        workState:
+          type: string
+          description: Current authored work state label such as `goal:blocked` when one work item best explains the stop.
+        sessionLifecycleStatus:
+          $ref: '#/components/schemas/FactorySessionDurableLifecycleStatus'
+          description: Session lifecycle-control status when the stop is explained by pause or another session-level lifecycle condition.
+        latestDispatch:
+          $ref: '#/components/schemas/FactoryStopDispatchSummary'
+        latestResultSummary:
+          type: string
+          description: Short operator-readable summary of the latest relevant result when one explains the stop better than a dispatch identifier alone.
     FactorySessionStreamIdentity:
       type: object
       additionalProperties: false
@@ -8498,6 +8565,9 @@ components:
           description: Current outbound relationships attached to this listed source work item when returned by read APIs.
           items:
             $ref: '#/components/schemas/Relation'
+        stopSummary:
+          $ref: '#/components/schemas/FactoryStopSummary'
+          description: Canonical stopped-state summary for existing work inspection reads when this work item explains paused, blocked, needs-human, or interrupted automation.
     WorkContent:
       type: array
       description: Ordered canonical content parts for one work item.

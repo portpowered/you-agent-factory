@@ -338,6 +338,14 @@ const (
 	FactoryStateRunning   FactoryState = "RUNNING"
 )
 
+// Defines values for FactoryStopKind.
+const (
+	BLOCKED     FactoryStopKind = "BLOCKED"
+	INTERRUPTED FactoryStopKind = "INTERRUPTED"
+	NEEDSHUMAN  FactoryStopKind = "NEEDS_HUMAN"
+	PAUSED      FactoryStopKind = "PAUSED"
+)
+
 // Defines values for FactoryValidationSeverity.
 const (
 	FactoryValidationSeverityError   FactoryValidationSeverity = "error"
@@ -2493,6 +2501,7 @@ type FactorySessionRuntime struct {
 
 	// Status Canonical lifecycle status for one live factory session runtime.
 	Status         FactorySessionStatus          `json:"status"`
+	StopSummary    *FactoryStopSummary           `json:"stopSummary,omitempty"`
 	StreamIdentity *FactorySessionStreamIdentity `json:"streamIdentity,omitempty"`
 	Usage          FactorySessionUsage           `json:"usage"`
 }
@@ -2653,6 +2662,59 @@ type FactoryStateResponseEventPayload struct {
 
 	// State Lifecycle state of the running factory.
 	State FactoryState `json:"state"`
+}
+
+// FactoryStopDispatchSummary defines model for FactoryStopDispatchSummary.
+type FactoryStopDispatchSummary struct {
+	// DispatchId Stable dispatch identifier that most directly explains the stopped state.
+	DispatchId string `json:"dispatchId"`
+
+	// DispatchKind Canonical dispatch kind shared across Petri transitions and JavaScript workflow tasks.
+	DispatchKind FactoryDispatchKind `json:"dispatchKind"`
+
+	// FailureMessage Human-readable failure or interruption detail from the latest relevant dispatch when available.
+	FailureMessage *string `json:"failureMessage,omitempty"`
+
+	// FailureReason Stable failure or interruption reason when one is available from the latest relevant dispatch.
+	FailureReason *string `json:"failureReason,omitempty"`
+
+	// Status Canonical dispatch lifecycle status shared across orchestrators.
+	Status FactoryDispatchStatus `json:"status"`
+
+	// WorkstationName Customer-authored workstation name when one existing workstation run explains the stop.
+	WorkstationName *string `json:"workstationName,omitempty"`
+}
+
+// FactoryStopKind Canonical inspect classification for stopped automation on existing Factory Session and Work surfaces.
+type FactoryStopKind string
+
+// FactoryStopSummary defines model for FactoryStopSummary.
+type FactoryStopSummary struct {
+	LatestDispatch *FactoryStopDispatchSummary `json:"latestDispatch,omitempty"`
+
+	// LatestResultSummary Short operator-readable summary of the latest relevant result when one explains the stop better than a dispatch identifier alone.
+	LatestResultSummary *string `json:"latestResultSummary,omitempty"`
+
+	// SessionId Stable Factory Session identifier that owns the stopped work.
+	SessionId string `json:"sessionId"`
+
+	// SessionLifecycleStatus Durable factory-session lifecycle status returned by execution start routes and later session read models. Live-session runtime statuses remain separate on the existing FactorySessionStatus schema.
+	SessionLifecycleStatus *FactorySessionDurableLifecycleStatus `json:"sessionLifecycleStatus,omitempty"`
+
+	// StopKind Canonical inspect classification for stopped automation on existing Factory Session and Work surfaces.
+	StopKind FactoryStopKind `json:"stopKind"`
+
+	// WorkId Relevant work identifier when one work item best explains the stop.
+	WorkId *string `json:"workId,omitempty"`
+
+	// WorkName Relevant work name when one work item best explains the stop.
+	WorkName *string `json:"workName,omitempty"`
+
+	// WorkState Current authored work state label such as `goal:blocked` when one work item best explains the stop.
+	WorkState *string `json:"workState,omitempty"`
+
+	// WorkTypeName Relevant work type name when one work item best explains the stop.
+	WorkTypeName *string `json:"workTypeName,omitempty"`
 }
 
 // FactoryValidationResult defines model for FactoryValidationResult.
@@ -4589,8 +4651,9 @@ type Work struct {
 	RequestId *string `json:"requestId,omitempty"`
 
 	// State A lifecycle state that a work item can occupy inside one work type.
-	State *WorkState `json:"state,omitempty"`
-	Tags  *StringMap `json:"tags,omitempty"`
+	State       *WorkState          `json:"state,omitempty"`
+	StopSummary *FactoryStopSummary `json:"stopSummary,omitempty"`
+	Tags        *StringMap          `json:"tags,omitempty"`
 
 	// TraceId Legacy trace identifier retained for compatibility; prefer currentChainingTraceId.
 	TraceId *string `json:"traceId,omitempty"`

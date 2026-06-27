@@ -232,6 +232,80 @@ func TestGetWork_OmitsEmptyOptionalCollections(t *testing.T) {
 	}
 }
 
+func TestGetWork_IncludesStopSummaryForBlockedWork(t *testing.T) {
+	now := time.Date(2026, 6, 27, 9, 0, 0, 0, time.UTC)
+	srv := newTestServer(&testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			"session-blocked": {
+				EngineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+					RuntimeStatus: interfaces.RuntimeStatusIdle,
+					FactoryState:  "RUNNING",
+					Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+						"tok-goal-blocked": {
+							ID:      "tok-goal-blocked",
+							PlaceID: "goal:blocked",
+							Color: interfaces.TokenColor{
+								Name:       "Blocked goal",
+								WorkID:     "work-goal-blocked",
+								WorkTypeID: "goal",
+								TraceID:    "trace-goal-blocked",
+							},
+							CreatedAt: now.Add(-2 * time.Minute),
+							EnteredAt: now.Add(-1 * time.Minute),
+						},
+					}},
+					Topology: &state.Net{
+						Places: map[string]*petri.Place{
+							"goal:blocked": {ID: "goal:blocked", TypeID: "goal", State: "blocked"},
+						},
+						WorkTypes: map[string]*state.WorkType{
+							"goal": {
+								ID: "goal",
+								States: []state.StateDefinition{
+									{Value: "blocked", Category: state.StateCategoryProcessing},
+								},
+							},
+						},
+					},
+					DispatchHistory: []interfaces.CompletedDispatch{{
+						DispatchID:      "dispatch-goal-blocked-1",
+						TransitionID:    "execute-goal",
+						WorkstationName: "execute-goal",
+						Outcome:         interfaces.OutcomeFailed,
+						Reason:          "provider timeout",
+						EndTime:         now,
+						ConsumedTokens:  []interfaces.Token{{Color: interfaces.TokenColor{WorkID: "work-goal-blocked"}}},
+					}},
+				},
+			},
+		},
+	})
+
+	req := httptest.NewRequest("GET", "/factory-sessions/session-blocked/work/work-goal-blocked", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := decodeJSONResponse[factoryapi.Work](t, rec)
+	if resp.StopSummary == nil {
+		t.Fatal("stopSummary = nil, want blocked summary")
+	}
+	if resp.StopSummary.StopKind != factoryapi.FactoryStopKind("BLOCKED") {
+		t.Fatalf("stop kind = %q, want BLOCKED", resp.StopSummary.StopKind)
+	}
+	if resp.StopSummary.SessionId != "session-blocked" {
+		t.Fatalf("sessionId = %q, want session-blocked", resp.StopSummary.SessionId)
+	}
+	if resp.StopSummary.WorkState == nil || *resp.StopSummary.WorkState != "goal:blocked" {
+		t.Fatalf("workState = %#v, want goal:blocked", resp.StopSummary.WorkState)
+	}
+	if resp.StopSummary.LatestDispatch == nil || resp.StopSummary.LatestDispatch.DispatchId != "dispatch-goal-blocked-1" {
+		t.Fatalf("latestDispatch = %#v, want dispatch-goal-blocked-1", resp.StopSummary.LatestDispatch)
+	}
+}
+
 func TestTokenToResponse_CopiesOptionalTagMap(t *testing.T) {
 	token := &interfaces.Token{
 		ID:      "tok-prd-copy",
