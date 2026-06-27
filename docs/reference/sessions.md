@@ -53,6 +53,46 @@ always a `FactorySession`.
   inspection nouns across CLI, API, dashboard, and MCP surfaces. Do not
   introduce a separate workflow-run object model when comparing outputs.
 
+### Bounded operator verification matrix
+
+Use one durable JavaScript session id for the runtime checks below. The validate
+step comes first and does not create a session; every later row should inspect
+or control the same durable `FactorySession`.
+
+| Step | Surface | Check | Expected observable outcome |
+|------|---------|-------|-----------------------------|
+| 1 | CLI or API preview | Run `you workflow validate` or `POST /factories/preview` against the target JavaScript workflow source. | Validation succeeds without creating a session id, confirming the source and effective policy are ready for durable execution. |
+| 2 | CLI start plus durable status read | Start one durable JavaScript session with `you workflow run` or `you workflow start`, then read it with `you workflow status`. | One durable `FactorySession` id is returned and subsequent status reads show the same id, JavaScript lifecycle status, and progress for that session. |
+| 3 | Durable inspection reads | Read `you workflow dispatches`, `you workflow artifacts`, and `you workflow events` for that same session id. | The shared `Dispatch`, `FactoryArtifact`, and `FactoryEvent` outputs all point back to the same `FactorySession`, and the event history shows the lifecycle and child-work facts that explain the dispatch or artifact state. |
+| 4 | Website Factory Session detail | Open the dashboard Factory Session detail surface for the same session id. | The website shows the same session identity, JavaScript phase, checkpoint refs, dispatch counts, artifact visibility, and lifecycle banner state already observed through CLI or API reads. |
+| 5 | Lifecycle control on the same session | Apply the supported lifecycle control route for that session, then re-read status or events. | Pause, resume, cancel, or terminate outcomes are reflected by the session status read and by canonical `SESSION_LIFECYCLE_CONTROL` facts on the same durable session event stream. |
+
+#### What to compare across those checks
+
+- Session identity: the durable `FactorySession` id returned at start should
+  match the status, dispatch, artifact, event, and website detail reads.
+- Status and phase: lifecycle state, JavaScript phase, and progress should stay
+  aligned between `you workflow status`, durable API reads, and the dashboard
+  detail surface.
+- Child work evidence: dispatch counts, child dispatch summaries, artifact refs,
+  and any final or partial result refs should all describe the same session
+  history rather than different per-surface models.
+- Lifecycle control evidence: after a supported control is accepted, confirm the
+  new status through a durable session read and the matching
+  `SESSION_LIFECYCLE_CONTROL` event in the canonical event history.
+
+#### Scope guardrails for this matrix
+
+- Keep the matrix narrow. It is meant to revalidate one already supported
+  durable JavaScript session path, not to inventory every route or dashboard
+  widget.
+- Do not treat replay-resume, broader live-provider bridge parity, or broader
+  MCP host parity as required outcomes for this proof. Those remain explicit
+  follow-up scope outside the shipped operator slice.
+- If the chosen session is already terminal, start another supported durable
+  JavaScript session before attempting lifecycle-control confirmation so the
+  control outcome remains observable on the same session path.
+
 ### Explicitly out of scope for this slice
 
 - Replay-resume or persistence-semantics expansion beyond the already shipped
