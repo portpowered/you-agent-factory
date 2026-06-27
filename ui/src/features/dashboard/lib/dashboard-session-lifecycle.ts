@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 
+import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { resetSelectionHistoryStore } from "../../current-selection/base/public";
 
@@ -37,5 +38,17 @@ export function resetDashboardSessionScopedState(
   queryClient.removeQueries({
     queryKey: [CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX],
     exact: false,
+  });
+}
+
+export function clearDashboardSessionScopedQueries(
+  queryClient: QueryClient,
+  sessionID: string | null,
+): void {
+  const normalizedSessionID = sessionID ?? DEFAULT_FACTORY_SESSION_ID;
+
+  queryClient.removeQueries({
+    predicate: (query) =>
+      query.queryKey.some((entry) => entry === normalizedSessionID),
   });
 }

@@ -1,6 +1,6 @@
 import {
   DispatchDrilldownStates as dispatchDrilldownStatesStory,
-} from "../lib/factory-session-detail-panel.story-definitions.stories.shared";
+} from "../../lib/factory-session-detail-panel.story-definitions.stories.shared";
 import {
   DurableReplayDisclosure as durableReplayDisclosureStory,
   DurableReplayDisclosureAwaitingApproval as durableReplayDisclosureAwaitingApprovalStory,
@@ -8,8 +8,8 @@ import {
   DurableReplayDisclosureWarning as durableReplayDisclosureWarningStory,
   SessionError as sessionErrorStory,
   SessionUnavailable as sessionUnavailableStory,
-} from "../lib/factory-session-detail-panel.replay-story-definitions.stories.shared";
-import { FactorySessionDetailPanel } from "./factory-session-detail-panel";
+} from "../../lib/factory-session-detail-panel.replay-story-definitions.stories.shared";
+import { FactorySessionDetailPanel } from "../factory-session-detail-panel";
 
 export default {
   title: "you-agent-factory/Current Selection/Factory Session Detail Panel",

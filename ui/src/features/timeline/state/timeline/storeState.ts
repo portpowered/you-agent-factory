@@ -27,11 +27,19 @@ export interface FactoryTimelineState {
   setCurrentMode: () => void;
 }
 
+export interface FactoryTimelineSyncIdentity {
+  backendScopeId: string;
+  factorySessionId: string;
+  logicalSessionKeyId: string;
+  streamGenerationId: string;
+}
+
 export interface FactoryTimelineCheckpoint {
   afterEventId?: string;
   afterSequence?: number;
   replayState: ReplayWorldState;
   selectedTick: number;
+  syncIdentity?: FactoryTimelineSyncIdentity;
 }
 
 interface TimelineCheckpointProjection {

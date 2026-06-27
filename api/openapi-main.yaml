@@ -293,6 +293,26 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/sync-preflight:
+    get:
+      tags:
+        - Runtime
+      operationId: getFactorySessionSyncPreflightBySessionId
+      summary: Validate cached session sync state for one session
+      description: Returns the canonical backend-owned session sync identity set and validates an optional reconnect cursor before the dashboard restores cached checkpoint state or opens the event stream. This route accepts `~default` as a session selector, but clients must persist the returned `factorySessionId` field rather than treating `~default` as a durable live-session identifier.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/AfterEventId'
+        - $ref: '#/components/parameters/AfterSequence'
+      responses:
+        '200':
+          description: Typed session sync preflight outcome for the targeted session selector.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionSyncPreflightResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /status:
     get:
       tags:
@@ -1568,6 +1588,12 @@ components:
       $ref: './components/schemas/api/FactorySessionJavaScriptScriptStatus.yaml'
     FactorySessionJavaScriptChildDispatchCounts:
       $ref: './components/schemas/api/FactorySessionJavaScriptChildDispatchCounts.yaml'
+    FactorySessionSyncPreflightResponse:
+      $ref: './components/schemas/api/FactorySessionSyncPreflightResponse.yaml'
+    FactorySessionSyncPreflightReasonCode:
+      $ref: './components/schemas/api/FactorySessionSyncPreflightReasonCode.yaml'
+    FactorySessionSyncPreflightReconnectCursor:
+      $ref: './components/schemas/api/FactorySessionSyncPreflightReconnectCursor.yaml'
     FactorySessionLiveResult:
       $ref: './components/schemas/api/FactorySessionLiveResult.yaml'
     FactorySessionResult:

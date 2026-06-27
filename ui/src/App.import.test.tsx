@@ -17,6 +17,7 @@ import {
 } from "./testing/app-shell-export-test-utils";
 import {
   baselineSnapshot,
+  chainRenderAppFetchMock,
   createFactoryImportValue,
   createFileDropTransfer,
   importedFactorySnapshot,
@@ -124,22 +125,17 @@ describe("App shell import flows", () => {
       snapshot: importedFactorySnapshot,
     });
 
-    fetchMock.mockImplementation(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        const path = resolveFetchPath(input);
-        const method = resolveFetchMethod(input, init);
+    chainRenderAppFetchMock(fetchMock, async (path, method) => {
+      if (path === "/factory-sessions/~default/factory" && method === "GET") {
+        return jsonResponse(currentSessionFactory);
+      }
 
-        if (path === "/factory-sessions/~default/factory" && method === "GET") {
-          return jsonResponse(currentSessionFactory);
-        }
+      if (path === "/factory-sessions/~default/factory" && method === "PUT") {
+        return activationDeferred.promise;
+      }
 
-        if (path === "/factory-sessions/~default/factory" && method === "PUT") {
-          return activationDeferred.promise;
-        }
-
-        throw new Error(`unexpected fetch for ${path} (${method})`);
-      },
-    );
+      return undefined;
+    });
 
     const viewport = await screen.findByRole("region", {
       name: "Work graph viewport",
@@ -227,29 +223,24 @@ describe("App shell import flows", () => {
       snapshot: importedFactorySnapshot,
     });
 
-    fetchMock.mockImplementation(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        const path = resolveFetchPath(input);
-        const method = resolveFetchMethod(input, init);
+    chainRenderAppFetchMock(fetchMock, async (path, method) => {
+      if (path === "/factory-sessions/~default/factory" && method === "GET") {
+        return jsonResponse(currentSessionFactory);
+      }
 
-        if (path === "/factory-sessions/~default/factory" && method === "GET") {
-          return jsonResponse(currentSessionFactory);
-        }
+      if (path === "/factory-sessions/~default/factory" && method === "PUT") {
+        return jsonResponse({
+          name: "Dropped Factory",
+          ...importValue.factory,
+          version: {
+            logical: "1",
+            physical: "2026-05-18T14:41:00Z",
+          },
+        });
+      }
 
-        if (path === "/factory-sessions/~default/factory" && method === "PUT") {
-          return jsonResponse({
-            name: "Dropped Factory",
-            ...importValue.factory,
-            version: {
-              logical: "1",
-              physical: "2026-05-18T14:41:00Z",
-            },
-          });
-        }
-
-        throw new Error(`unexpected fetch for ${path} (${method})`);
-      },
-    );
+      return undefined;
+    });
 
     const viewport = await screen.findByRole("region", {
       name: "Work graph viewport",
@@ -323,28 +314,23 @@ describe("App shell import flows", () => {
       timelineEvents: exportTimelineEvents,
     });
 
-    fetchMock.mockImplementation(
-      async (input: RequestInfo | URL, init?: RequestInit) => {
-        const path = resolveFetchPath(input);
-        const method = resolveFetchMethod(input, init);
+    chainRenderAppFetchMock(fetchMock, async (path, method, _input, init) => {
+      if (path === "/factory-sessions/~default/factory" && method === "GET") {
+        return jsonResponse({
+          ...currentNamedFactoryExportResponse,
+          version: defaultSessionFactoryVersion,
+        });
+      }
 
-        if (path === "/factory-sessions/~default/factory" && method === "GET") {
-          return jsonResponse({
-            ...currentNamedFactoryExportResponse,
-            version: defaultSessionFactoryVersion,
-          });
-        }
+      if (path === "/factory-sessions/~default/factory" && method === "PUT") {
+        const parsed = JSON.parse(String(init?.body)) as {
+          factory?: typeof currentNamedFactoryExportResponse;
+        };
+        return jsonResponse(parsed.factory ?? parsed);
+      }
 
-        if (path === "/factory-sessions/~default/factory" && method === "PUT") {
-          const parsed = JSON.parse(String(init?.body)) as {
-            factory?: typeof currentNamedFactoryExportResponse;
-          };
-          return jsonResponse(parsed.factory ?? parsed);
-        }
-
-        throw new Error(`unexpected fetch for ${path} (${method})`);
-      },
-    );
+      return undefined;
+    });
 
     const viewport = await screen.findByRole("region", {
       name: "Work graph viewport",

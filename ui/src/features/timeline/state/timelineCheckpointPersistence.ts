@@ -19,6 +19,7 @@ interface PersistedTimelineCheckpoint {
   afterSequence?: number;
   replayState: ReplayWorldState;
   selectedTick: number;
+  syncIdentity?: FactoryTimelineCheckpoint["syncIdentity"];
 }
 
 interface IndexedDBLike {
@@ -130,6 +131,7 @@ function buildPersistedCheckpoint(
     afterSequence: checkpoint.afterSequence,
     replayState: compactReplayState(checkpoint.replayState),
     selectedTick: checkpoint.selectedTick,
+    syncIdentity: checkpoint.syncIdentity,
   };
 }
 
@@ -141,6 +143,7 @@ function hydrateCheckpoint(
     afterSequence: checkpoint.afterSequence,
     replayState: checkpoint.replayState,
     selectedTick: checkpoint.selectedTick,
+    syncIdentity: checkpoint.syncIdentity,
   };
 }
 
@@ -178,6 +181,17 @@ export async function persistTimelineCheckpoint(
   } catch {
     await deleteIndexedCheckpoint(indexedDB, sessionID).catch(() => {});
   }
+}
+
+export async function clearTimelineCheckpoint(
+  indexedDB: IndexedDBLike | undefined,
+  sessionID: string | null,
+): Promise<void> {
+  if (!indexedDB || !sessionID) {
+    return;
+  }
+
+  await deleteIndexedCheckpoint(indexedDB, sessionID).catch(() => {});
 }
 
 export async function readTimelineCheckpoint(

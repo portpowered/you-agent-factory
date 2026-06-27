@@ -238,6 +238,8 @@ export const initialEditableFactoryDefinitionVersion = {
 };
 
 const sessionFactoryPathPattern = /^\/factory-sessions\/([^/]+)\/factory$/;
+const sessionSyncPreflightPathPattern =
+  /^\/factory-sessions\/([^/]+)\/sync-preflight(?:\?.*)?$/;
 const sessionEventsPathPattern = /^\/factory-sessions\/([^/]+)\/events$/;
 const promptTemplateContractPathPattern =
   /^\/factory-sessions\/([^/]+)\/factory\/workstations\/[^/]+\/prompt-template-contract$/;
@@ -672,6 +674,50 @@ function ensureSessionState(
   sessionRegistry.sessions = sessionRegistry.sessions.map((existingSession) =>
     existingSession.id === session.id ? session : existingSession,
   );
+}
+
+function buildSessionSyncPreflightResponse(
+  request,
+  sessionState,
+  requestedSessionId,
+) {
+  const requestURL = new URL(request.url ?? "/", `http://${previewHost}`);
+  const afterEventID = requestURL.searchParams.get("after_event_id");
+  const afterSequenceValue = requestURL.searchParams.get("after_sequence");
+  const afterSequence =
+    afterSequenceValue != null ? Number(afterSequenceValue) : null;
+  const reconnectCursorProvided =
+    typeof afterEventID === "string" || afterSequenceValue != null;
+  const reconnectCursorValid =
+    typeof afterEventID === "string" &&
+    afterEventID.length > 0 &&
+    typeof afterSequence === "number" &&
+    Number.isFinite(afterSequence);
+  if (!sessionState) {
+    return {
+      checkpointReusable: false,
+      reasonCode: "session_not_found",
+      reconnectCursor: {
+        provided: reconnectCursorProvided,
+        validForStreamGeneration: false,
+      },
+      requestedSessionId,
+    };
+  }
+
+  return {
+    backendScopeId: "browser-test-harness",
+    checkpointReusable: reconnectCursorValid,
+    factorySessionId: sessionState.session.id,
+    logicalSessionKeyId: sessionState.session.id,
+    reasonCode: "ok",
+    reconnectCursor: {
+      provided: reconnectCursorProvided,
+      validForStreamGeneration: reconnectCursorValid,
+    },
+    requestedSessionId,
+    streamGenerationId: `browser-stream-${sessionState.version.logical}`,
+  };
 }
 
 async function createBrowserPreview() {
@@ -1196,6 +1242,25 @@ export async function startFactoryApiServer({
         "Content-Type": "application/json",
       });
       response.end(JSON.stringify(buildCurrentFactoryDocument(sessionID)));
+      return;
+    }
+
+    const sessionSyncPreflightMatch = request.url?.match(
+      sessionSyncPreflightPathPattern,
+    );
+    if (sessionSyncPreflightMatch && request.method === "GET") {
+      const sessionID = decodeURIComponent(sessionSyncPreflightMatch[1]);
+      const sessionState = sessionRegistry.state.get(sessionID);
+
+      response.writeHead(200, {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      });
+      response.end(
+        JSON.stringify(
+          buildSessionSyncPreflightResponse(request, sessionState, sessionID),
+        ),
+      );
       return;
     }
 

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { emptyReplayWorldState } from "../timeline/replayWorldStateSupport";
 import type { FactoryTimelineCheckpoint } from "../timeline/storeState";
 import {
+  clearTimelineCheckpoint,
   persistTimelineCheckpoint,
   readTimelineCheckpoint,
   reconnectCursorFromCheckpoint,
@@ -124,6 +125,12 @@ function checkpointFixture(): FactoryTimelineCheckpoint {
     afterSequence: 42,
     replayState,
     selectedTick: 7,
+    syncIdentity: {
+      backendScopeId: "backend-a",
+      factorySessionId: "session-a",
+      logicalSessionKeyId: "logical-a",
+      streamGenerationId: "stream-a",
+    },
   };
 }
 
@@ -144,6 +151,12 @@ describe("timeline checkpoint persistence", () => {
       "[checkpoint truncated 88 chars]",
     );
     expect(restored?.replayState.textBlobsByID.long.length).toBeLessThan(600);
+    expect(restored?.syncIdentity).toEqual({
+      backendScopeId: "backend-a",
+      factorySessionId: "session-a",
+      logicalSessionKeyId: "logical-a",
+      streamGenerationId: "stream-a",
+    });
   });
 
   it("drops invalid stored checkpoints and ignores missing persistence inputs", async () => {
@@ -209,6 +222,23 @@ describe("timeline checkpoint persistence", () => {
     await expect(
       readTimelineCheckpoint(readFailure.indexedDB, "session-a"),
     ).resolves.toBe(null);
+  });
+
+  it("clears a persisted checkpoint without touching missing inputs", async () => {
+    const { indexedDB } = createIndexedDBTestDouble();
+
+    await persistTimelineCheckpoint(indexedDB, "session-a", checkpointFixture());
+    await clearTimelineCheckpoint(indexedDB, "session-a");
+
+    await expect(readTimelineCheckpoint(indexedDB, "session-a")).resolves.toBe(
+      null,
+    );
+    await expect(clearTimelineCheckpoint(undefined, "session-a")).resolves.toBe(
+      undefined,
+    );
+    await expect(clearTimelineCheckpoint(indexedDB, null)).resolves.toBe(
+      undefined,
+    );
   });
 
   it("builds reconnect cursors only when checkpoint cursor data exists", () => {

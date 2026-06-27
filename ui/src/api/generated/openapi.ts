@@ -168,6 +168,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/sync-preflight": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Validate cached session sync state for one session
+     * @description Returns the canonical backend-owned session sync identity set and validates an optional reconnect cursor before the dashboard restores cached checkpoint state or opens the event stream. This route accepts `~default` as a session selector, but clients must persist the returned `factorySessionId` field rather than treating `~default` as a durable live-session identifier.
+     */
+    get: operations["getFactorySessionSyncPreflightBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/status": {
     parameters: {
       query?: never;
@@ -1413,6 +1433,44 @@ export interface components {
       running: number;
       /** @description Child dispatches that have completed. */
       completed: number;
+    };
+    /**
+     * @description Typed session sync preflight response used before restoring cached dashboard
+     *     checkpoint state or opening the session event stream with a reconnect cursor.
+     */
+    FactorySessionSyncPreflightResponse: {
+      /** @description Session selector requested by the client. This may be `~default`. */
+      requestedSessionId: string;
+      reasonCode: components["schemas"]["FactorySessionSyncPreflightReasonCode"];
+      /** @description Canonical backend scope identifier for the current server-owned session cache and event history scope. */
+      backendScopeId?: string;
+      /** @description Canonical logical-session key for the resolved session target. This remains stable across live-session remaps for the same folder and target selector. */
+      logicalSessionKeyId?: string;
+      /** @description Resolved live Factory Session identifier for the current preflight target. Clients must persist this value rather than treating `~default` as a durable session identifier. */
+      factorySessionId?: string;
+      /** @description Canonical event-stream generation identifier for the resolved live Factory Session. */
+      streamGenerationId?: string;
+      /** @description True when cached stream-derived checkpoint state is safe to restore for the resolved identity set. */
+      checkpointReusable: boolean;
+      reconnectCursor: components["schemas"]["FactorySessionSyncPreflightReconnectCursor"];
+    };
+    /**
+     * @description Stable backend-owned session sync preflight outcome code.
+     * @enum {string}
+     */
+    FactorySessionSyncPreflightReasonCode: FactorySessionSyncPreflightReasonCode;
+    FactorySessionSyncPreflightReconnectCursor: {
+      /** @description True when the client supplied at least one reconnect cursor field for validation. */
+      provided: boolean;
+      /** @description True when the supplied reconnect cursor belongs to the current stream generation for the resolved live session. */
+      validForStreamGeneration: boolean;
+      /** @description Optional acknowledged FactoryEvent.id supplied by the client. */
+      afterEventId?: string;
+      /**
+       * Format: int64
+       * @description Optional acknowledged FactoryEvent.context.sessionSequence supplied by the client.
+       */
+      afterSequence?: number;
     };
     FactorySessionLiveResult: {
       /** @description Live factory session identifier for this result read. */
@@ -4912,6 +4970,35 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  getFactorySessionSyncPreflightBySessionId: {
+    parameters: {
+      query?: {
+        /** @description Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. */
+        after_event_id?: components["parameters"]["AfterEventId"];
+        /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
+        after_sequence?: components["parameters"]["AfterSequence"];
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Typed session sync preflight outcome for the targeted session selector. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionSyncPreflightResponse"];
+        };
+      };
+      500: components["responses"]["InternalError"];
+    };
+  };
   getStatus: {
     parameters: {
       query?: never;
@@ -6116,6 +6203,14 @@ export const FactorySessionJavaScriptScriptStatus = {
 } as const;
 export type FactorySessionJavaScriptScriptStatus =
   (typeof FactorySessionJavaScriptScriptStatus)[keyof typeof FactorySessionJavaScriptScriptStatus];
+export const FactorySessionSyncPreflightReasonCode = {
+  ok: "ok",
+  cursor_stale: "cursor_stale",
+  session_not_found: "session_not_found",
+  logical_session_remap: "logical_session_remap",
+} as const;
+export type FactorySessionSyncPreflightReasonCode =
+  (typeof FactorySessionSyncPreflightReasonCode)[keyof typeof FactorySessionSyncPreflightReasonCode];
 export const FactorySessionResultMode = {
   FactorySessionResultModeFinal: "final",
   FactorySessionResultModePartial: "partial",
