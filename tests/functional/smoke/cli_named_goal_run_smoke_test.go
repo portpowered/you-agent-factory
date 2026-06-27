@@ -14,6 +14,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 )
 
+const packagedGoalMockWorkerAcceptedSummary = "mock worker accepted"
+
 func TestNamedGoalRun_RealCLICompletesBatchInvocationWithPrimaryResultOnStdout(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow CLI named @you/goal batch run smoke")
@@ -28,7 +30,7 @@ func TestNamedGoalRun_RealCLICompletesBatchInvocationWithPrimaryResultOnStdout(t
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 	homeDir := t.TempDir()
-	mockWorkersPath := writeDefaultMockWorkersConfig(t)
+	mockWorkersPath := writePackagedGoalBuiltinMockWorkersConfig(t)
 	binaryPath := buildYouCLIBinary(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -57,8 +59,11 @@ func TestNamedGoalRun_RealCLICompletesBatchInvocationWithPrimaryResultOnStdout(t
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("you run --named %s: %v\nstdout:\n%s\nstderr:\n%s", goal.PackagedFactoryName, err, stdout.String(), stderr.String())
 	}
-	if got := stdout.String(); got != goalText {
-		t.Fatalf("stdout = %q, want only primary result %q", got, goalText)
+	if got := stdout.String(); got != packagedGoalMockWorkerAcceptedSummary {
+		t.Fatalf("stdout = %q, want only primary result %q", got, packagedGoalMockWorkerAcceptedSummary)
+	}
+	if strings.Contains(stdout.String(), goalText) {
+		t.Fatalf("stdout echoed submitted goal text %q", goalText)
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("stderr = %q, want empty stderr on successful batch invocation", stderr.String())
@@ -79,7 +84,7 @@ func TestNamedGoalRun_RealCLIExitsAfterBatchCompletionWithoutContinuousMode(t *t
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 	homeDir := t.TempDir()
-	mockWorkersPath := writeDefaultMockWorkersConfig(t)
+	mockWorkersPath := writePackagedGoalBuiltinMockWorkersConfig(t)
 	binaryPath := buildYouCLIBinary(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
@@ -135,7 +140,7 @@ func TestNamedGoalRun_RealCLIUpgradesLegacyMaterializedBuiltinBeforeBatchInvocat
 		t.Fatalf("PersistNamedFactory(legacy goal): %v", err)
 	}
 
-	mockWorkersPath := writeDefaultMockWorkersConfig(t)
+	mockWorkersPath := writePackagedGoalBuiltinMockWorkersConfig(t)
 	binaryPath := buildYouCLIBinary(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -164,8 +169,11 @@ func TestNamedGoalRun_RealCLIUpgradesLegacyMaterializedBuiltinBeforeBatchInvocat
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("you run --named %s with legacy materialized builtin: %v\nstdout:\n%s\nstderr:\n%s", goal.PackagedFactoryName, err, stdout.String(), stderr.String())
 	}
-	if got := stdout.String(); got != goalText {
-		t.Fatalf("stdout = %q, want only primary result %q", got, goalText)
+	if got := stdout.String(); got != packagedGoalMockWorkerAcceptedSummary {
+		t.Fatalf("stdout = %q, want only primary result %q", got, packagedGoalMockWorkerAcceptedSummary)
+	}
+	if strings.Contains(stdout.String(), goalText) {
+		t.Fatalf("stdout echoed submitted goal text %q", goalText)
 	}
 }
 

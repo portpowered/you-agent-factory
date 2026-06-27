@@ -115,7 +115,7 @@ func TestRunModeCompat_RealCLINamedGoalBatchStdoutDoesNotIncludeOperatorChatter(
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 	homeDir := t.TempDir()
-	mockWorkersPath := writeDefaultMockWorkersConfig(t)
+	mockWorkersPath := writePackagedGoalBuiltinMockWorkersConfig(t)
 	binaryPath := buildYouCLIBinary(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -143,5 +143,5 @@ func TestRunModeCompat_RealCLINamedGoalBatchStdoutDoesNotIncludeOperatorChatter(
 	if err := cmd.Run(); err != nil {
 		t.Fatalf("you run --named %s: %v\nstdout:\n%s\nstderr:\n%s", goal.PackagedFactoryName, err, stdout.String(), stderr.String())
 	}
-	assertFactoryPromptCleanInvocationStdout(t, stdout.String(), goalText)
+	assertFactoryPromptCleanInvocationStdout(t, stdout.String(), packagedGoalMockWorkerAcceptedSummary)
 }

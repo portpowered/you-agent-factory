@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/testpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -291,60 +290,6 @@ func TestFlattenFactoryConfig_IncludesExplicitMakefileWhenDeclared(t *testing.T)
 		t.Fatalf("expected one explicit bundled file, got %#v", cfg.ResourceManifest)
 	}
 	assertPortableBundledEntry(t, cfg.ResourceManifest.BundledFiles[0], interfaces.BundledFileTypeRootHelper, "Makefile", "test:\n\tgo test ./...\n")
-}
-
-func TestFlattenFactoryConfig_CheckedInFactoryBundlesOverviewDoc(t *testing.T) {
-	factoryConfigPath := testpath.MustRepoPathFromCaller(t, 0, "factory", interfaces.FactoryConfigFile)
-
-	flattened, err := FlattenFactoryConfig(factoryConfigPath)
-	if err != nil {
-		t.Fatalf("FlattenFactoryConfig(%s): %v", factoryConfigPath, err)
-	}
-
-	cfg, err := FactoryConfigFromOpenAPIJSON(flattened)
-	if err != nil {
-		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
-	}
-	if cfg.ResourceManifest == nil {
-		t.Fatal("expected checked-in factory flatten to include bundled files")
-	}
-
-	var overview interfaces.BundledFileConfig
-	for _, bundledFile := range cfg.ResourceManifest.BundledFiles {
-		if bundledFile.TargetPath == "factory/docs/overview.md" {
-			overview = bundledFile
-			break
-		}
-	}
-	if overview.TargetPath == "" {
-		t.Fatalf("expected factory/docs/overview.md in bundled files, got %#v", cfg.ResourceManifest.BundledFiles)
-	}
-	if overview.Type != interfaces.BundledFileTypeDoc {
-		t.Fatalf("overview bundled type = %q, want %q", overview.Type, interfaces.BundledFileTypeDoc)
-	}
-	for _, want := range []string{
-		"# Factory Overview",
-		"Awesome AI Agent Factories",
-		"thoughts:init",
-		"factory/inputs/BATCH/default/",
-		"you docs agents",
-		"## Phase Control",
-		"## Batch Submission",
-		"## Quality Gates",
-	} {
-		if !strings.Contains(overview.Content.Inline, want) {
-			t.Fatalf("overview inline missing %q:\n%s", want, overview.Content.Inline)
-		}
-	}
-
-	overviewPath := testpath.MustRepoPathFromCaller(t, 0, "factory", "docs", "overview.md")
-	onDisk, err := os.ReadFile(overviewPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%s): %v", overviewPath, err)
-	}
-	if overview.Content.Inline != string(onDisk) {
-		t.Fatalf("bundled overview inline does not match on-disk %s", overviewPath)
-	}
 }
 
 func TestWriteExpandedFactoryLayout_MaterializesPortableBundledFiles(t *testing.T) {

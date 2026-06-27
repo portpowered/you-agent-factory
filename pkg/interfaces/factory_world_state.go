@@ -245,6 +245,9 @@ type FactoryWorldSessionBracketState struct {
 	PolicyHash          string                              `json:"policy_hash,omitempty"`
 	ArgsDigest          string                              `json:"args_digest,omitempty"`
 	StartedAt           time.Time                           `json:"started_at,omitempty"`
+	LifecycleControlStatus string                           `json:"lifecycle_control_status,omitempty"`
+	PausedAt            time.Time                           `json:"paused_at,omitempty"`
+	ResumedAt           time.Time                           `json:"resumed_at,omitempty"`
 	ResultStatus        string                              `json:"result_status,omitempty"`
 	ResultSummary       []WorkContentPart                   `json:"result_summary,omitempty"`
 	ArtifactIDs         []string                            `json:"artifact_ids,omitempty"`
@@ -267,6 +270,9 @@ type FactoryWorldSessionBracketProjection struct {
 	FactoryID           string            `json:"factory_id,omitempty"`
 	SourceRef           string            `json:"source_ref,omitempty"`
 	StartedAt           time.Time         `json:"started_at,omitempty"`
+	LifecycleControlStatus string         `json:"lifecycle_control_status,omitempty"`
+	PausedAt            time.Time         `json:"paused_at,omitempty"`
+	ResumedAt           time.Time         `json:"resumed_at,omitempty"`
 	ResultStatus        string            `json:"result_status,omitempty"`
 	ResultSummary       []WorkContentPart `json:"result_summary,omitempty"`
 	ArtifactIDs         []string          `json:"artifact_ids,omitempty"`

@@ -270,6 +270,8 @@ func (r *factoryWorldReducer) dispatchOutputWorkItem(
 			item.PlaceID = derivedPlaceID
 		} else if payload.Outcome == factoryapi.WorkOutcomeContinue || payload.Outcome == factoryapi.WorkOutcomeRejected {
 			item.PlaceID = previousPlaceID
+		} else if item.State != "" {
+			item.PlaceID = r.placeForWorkTypeState(item.WorkTypeID, item.State)
 		}
 	}
 	return item

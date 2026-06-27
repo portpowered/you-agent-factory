@@ -720,6 +720,18 @@ func (fs *FactoryService) Pause(ctx context.Context) error {
 	return nil
 }
 
+// Resume resumes the current runtime instance and wakes buffered work.
+func (fs *FactoryService) Resume(ctx context.Context) error {
+	activeFactory := fs.currentFactory()
+	if activeFactory == nil {
+		return fmt.Errorf("factory service runtime is not available")
+	}
+	if err := activeFactory.Resume(ctx); err != nil {
+		return fmt.Errorf("resume factory: %w", err)
+	}
+	return nil
+}
+
 // GetFactoryEvents returns the canonical factory event history.
 func (fs *FactoryService) GetFactoryEvents(ctx context.Context) ([]factoryapi.FactoryEvent, error) {
 	activeFactory := fs.currentFactory()

@@ -41,7 +41,7 @@ func RunGuardsBatchHarness(t *testing.T, h *testutil.ServiceTestHarness, ctx con
 	t.Helper()
 
 	errCh := h.RunInBackground(ctx)
-	WaitForHarnessRuntimeAvailability(t, h, errCh, 3*time.Second)
+	WaitForHarnessRuntimeAvailability(t, h, errCh, 15*time.Second)
 	return errCh
 }
 

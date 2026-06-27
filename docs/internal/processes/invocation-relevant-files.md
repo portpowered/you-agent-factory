@@ -48,17 +48,37 @@ primary-result behavior.
   invocation input-source rules and the canonical pointers into packaged docs.
   `runInvocationModes` and `resolveRunFactoryPrompt` also treat `you run --named`
   as an invocation factory selector for positional/stdin text.
-- `pkg/config/layout.go` owns the built-in `@you/tts` factory JSON (`BuiltInTTSFactoryJSON`)
-  and `@you/goal` factory JSON (`BuiltInGoalFactoryJSON`) registered from
+- `pkg/config/layout.go` owns the built-in `@you/goal` and `@you/tts` factory JSON
+  (`BuiltInGoalFactoryJSON`, `BuiltInTTSFactoryJSON`) registered from
   `builtInNamedFactoryCatalog` in `pkg/config/layout.go`. Packaged workstation
   `body` templates must use canonical `PromptData` roots such as
   `(index .Inputs 0).Payload`; legacy top-level aliases like `{{ .WorkID }}`
-  fail prompt rendering before mock-worker dispatch.
-- `pkg/packagedfactories/goal/` owns packaged goal metadata constants
-  (`PackagedFactoryName`, `PackagedInvokeWorkstationName`) for the built-in
-  `@you/goal` factory. Behavioral proof for named goal batch invocation lives
-  in `tests/functional/smoke/cli_named_goal_run_smoke_test.go` using the real
-  `you run --named @you/goal` CLI path with `--with-mock-workers`.
+  fail prompt rendering before mock-worker dispatch. `upgradeMaterializedBuiltInNamedFactoryIfNeeded`
+  repairs already-materialized built-ins that still carry the legacy alias when
+  the catalog payload has canonical templates.
+- `pkg/packagedfactories/goal/` owns packaged goal factory metadata constants and
+  config-load regression coverage for the authored `invocationReturn` policy that
+  selects terminal `goal:complete` work content as the primary result.
+  `summary.go` shapes terminal `execute-goal` work content from worker output so
+  EXPLICIT primary-result selection returns the final summary instead of
+  submitted goal input text; classifier `review-goal` output is a route label
+  and must preserve carried summary content. `primary_result_test.go` covers both
+  successful EXPLICIT selection and unresolved failure when `goal:complete` is
+  absent from terminal work in scope.
+- `pkg/packagedfactories/goal/decision_envelope.go` owns the canonical
+  reviewer/checker JSON envelope and its mapping onto `interfaces.WorkResult`.
+- `pkg/workers/executor/agent.go` routes `review` workstation agent output through
+  `goal.WorkResultFromDecisionEnvelopeJSONOrFailed` instead of stop-token parsing.
+- `factory/docs/decision-envelope.md` is the packaged-authoring guide for the
+  reviewer/checker envelope shape, accepted decision values, and malformed-input
+  behavior used by `factory/workstations/review/AGENTS.md`.
+- `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged goal
+  invocation summary shaping on `execute-goal` workstations alongside packaged
+  TTS metadata shaping.
+- Behavioral proof for named goal batch invocation lives in
+  `tests/functional/smoke/cli_named_goal_run_smoke_test.go` using the real
+  `you run --named @you/goal` CLI path with `--with-mock-workers`, including a
+  legacy-materialized upgrade smoke case.
 - `tests/functional/smoke/cli_run_mode_compat_smoke_test.go` holds focused
   regression coverage for adjacent `you run` modes after packaged-goal changes:
   operator-oriented continuous startup output without `--quiet`, factory text
@@ -85,6 +105,20 @@ primary-result behavior.
 - `pkg/cli/run/packaged_tts_invocation.go` logs named-factory resolution context at
   the CLI boundary without recording packaged-factory metrics or logging submitted
   text or generated artifact bodies.
+- `pkg/packagedfactories/goal/` owns packaged `@you/goal` factory metadata
+  constants (`PackagedFactoryName`, `PackagedInvokeWorkstationName`).
+- `pkg/cli/run/run_invocation_test.go` proves `@you/goal` CLI invocation input
+  sources resolve through `invocations.ResolveTextInput`, reach the shared
+  `InvocationRequest` payload shape, fail with stable
+  `INVOCATION_INPUT_SOURCE_CONFLICT` before `InvokeFactorySession`, and match the
+  session invocation API contract for the same logical text input and JSON success
+  envelopes.
+- `pkg/cli/root_run_server_test.go` proves root `you run --named @you/goal` and
+  `@you/tts` wiring for positional text, piped stdin, explicit `-` stdin forms,
+  and stable `INVOCATION_INPUT_SOURCE_CONFLICT` rejection when sources combine.
+- `pkg/api/server_factory_sessions_test.go` proves the session invocation API
+  returns the same observable request and primary-result behavior for packaged
+  `@you/goal` text input and source-conflict failures as the CLI parity tests.
 - `pkg/service/model_catalog.go` owns the session invocation wait loop, packaged TTS
   loading/completion/failure logs, and packaged-factory metrics while polling for
   primary results.

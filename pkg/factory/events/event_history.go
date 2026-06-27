@@ -593,6 +593,10 @@ func factoryEventPayload(payload any) factoryapi.FactoryEvent_Payload {
 		err = out.FromSessionResultUpdatedEventPayload(typed)
 	case factoryapi.SessionCompletedEventPayload:
 		err = out.FromSessionCompletedEventPayload(typed)
+	case factoryapi.SessionPausedEventPayload:
+		err = out.FromSessionPausedEventPayload(typed)
+	case factoryapi.SessionResumedEventPayload:
+		err = out.FromSessionResumedEventPayload(typed)
 	default:
 		encoded, marshalErr := json.Marshal(typed)
 		if marshalErr != nil {
@@ -771,6 +775,7 @@ func workItemFromToken(token interfaces.Token) interfaces.FactoryWorkItem {
 	if currentChainingTraceID == "" {
 		currentChainingTraceID = token.Color.TraceID
 	}
+	_, stateValue := splitPlaceID(token.PlaceID)
 	return interfaces.FactoryWorkItem{
 		ID:                       token.Color.WorkID,
 		WorkTypeID:               token.Color.WorkTypeID,
@@ -781,6 +786,7 @@ func workItemFromToken(token interfaces.Token) interfaces.FactoryWorkItem {
 		TraceID:                  token.Color.TraceID,
 		Content:                  append([]interfaces.WorkContentPart(nil), token.Color.Content...),
 		ParentID:                 token.Color.ParentID,
+		State:                    stateValue,
 		PlaceID:                  token.PlaceID,
 		Tags:                     cloneStringMap(token.Color.Tags),
 	}

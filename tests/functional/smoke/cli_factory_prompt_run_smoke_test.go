@@ -21,6 +21,92 @@ import (
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
+func TestPackagedGoalRun_RealCLIWritesSummaryPrimaryResult(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow CLI packaged goal invocation smoke")
+	}
+
+	dir := scaffoldPackagedGoalInvocationFactoryForSmoke(t)
+	factoryPath := filepath.Join(dir, interfaces.FactoryConfigFile)
+	submittedGoal := fmt.Sprintf("functional-smoke-packaged-goal-%d", time.Now().UnixNano())
+	wantSummary := "mock worker accepted"
+
+	port, err := reserveLocalTCPPort()
+	if err != nil {
+		t.Fatalf("reserve port: %v", err)
+	}
+	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+
+	mockWorkersPath := writeDefaultMockWorkersConfig(t)
+	binaryPath := buildYouCLIBinary(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(
+		ctx,
+		binaryPath,
+		"run",
+		"--factory", factoryPath,
+		"--with-mock-workers",
+		"--no-record",
+		"--server", baseURL,
+		"--quiet",
+		mockWorkersPath,
+		submittedGoal,
+	)
+	cmd.Dir = dir
+
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("you run --factory packaged goal: %v\nstdout:\n%s\nstderr:\n%s", err, stdout.String(), stderr.String())
+	}
+	if got := stdout.String(); got != wantSummary {
+		t.Fatalf("stdout = %q, want summary %q", got, wantSummary)
+	}
+	if strings.Contains(stdout.String(), submittedGoal) {
+		t.Fatalf("stdout echoed submitted goal text %q", submittedGoal)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty stderr on successful invocation", stderr.String())
+	}
+}
+
+func scaffoldPackagedGoalInvocationFactoryForSmoke(t *testing.T) string {
+	t.Helper()
+
+	cfg := factoryPromptRunSmokeConfig()
+	cfg["name"] = "@you/goal"
+	cfg["invocationReturn"] = map[string]any{
+		"policy":        "EXPLICIT",
+		"workTypeName":  "goal",
+		"terminalState": "complete",
+	}
+	workTypes := cfg["workTypes"].([]map[string]any)
+	workTypes[0]["name"] = "goal"
+	workstations := cfg["workstations"].([]map[string]any)
+	workstations[0]["name"] = "execute-goal"
+	workstations[0]["worker"] = "goal-executor"
+	for _, ioKey := range []string{"inputs", "outputs", "onFailure"} {
+		ios := workstations[0][ioKey].([]map[string]string)
+		for i := range ios {
+			ios[i]["workType"] = "goal"
+		}
+	}
+	cfg["workers"] = []map[string]string{{"name": "goal-executor"}}
+
+	dir := support.ScaffoldFactory(t, cfg)
+	support.WriteAgentConfig(
+		t,
+		dir,
+		"goal-executor",
+		support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"),
+	)
+	return dir
+}
+
 func TestFactoryPromptRun_RealCLIWritesPrimaryResultFromPositionalText(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow CLI factory prompt run smoke")
@@ -486,6 +572,40 @@ func writeDefaultMockWorkersConfig(t *testing.T) string {
 	path := filepath.Join(t.TempDir(), "mock-workers.json")
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("write mock-workers config: %v", err)
+	}
+	return path
+}
+
+func writePackagedGoalBuiltinMockWorkersConfig(t *testing.T) string {
+	t.Helper()
+
+	cfg := factoryconfig.MockWorkersConfig{
+		MockWorkers: []factoryconfig.MockWorkerConfig{
+			{
+				WorkerName: "goal-checker",
+				RunType:    factoryconfig.MockWorkerRunTypeScript,
+				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+					Command: "/bin/echo",
+					Args:    []string{"goal-check-ok"},
+				},
+			},
+			{
+				WorkerName: "goal-reviewer",
+				RunType:    factoryconfig.MockWorkerRunTypeScript,
+				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+					Command: "/bin/echo",
+					Args:    []string{"accepted"},
+				},
+			},
+		},
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal packaged goal mock-workers config: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "mock-workers-packaged-goal.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write packaged goal mock-workers config: %v", err)
 	}
 	return path
 }

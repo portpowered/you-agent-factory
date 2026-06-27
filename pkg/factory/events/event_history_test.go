@@ -405,6 +405,59 @@ func TestFactoryEventHistory_RecordDispatchCompletion_PreservesSelectedClassific
 	}
 }
 
+func TestFactoryEventHistory_RecordDispatchCompletion_PreservesOutputWorkStateFromTokenPlace(t *testing.T) {
+	history := NewFactoryEventHistory(
+		eventHistoryProjectionNet(),
+		func() time.Time { return time.Unix(0, 0).UTC() },
+	)
+
+	result := interfaces.WorkResult{
+		DispatchID:   "dispatch-1",
+		TransitionID: "t-review",
+		Outcome:      interfaces.OutcomeAccepted,
+	}
+	completed := interfaces.CompletedDispatch{
+		DispatchID:   "dispatch-1",
+		TransitionID: "t-review",
+		Outcome:      interfaces.OutcomeAccepted,
+		ConsumedTokens: []interfaces.Token{{
+			ID: "token-1",
+			Color: interfaces.TokenColor{WorkID: "work-1", WorkTypeID: "task", TraceID: "trace-1"},
+		}},
+		OutputMutations: []interfaces.TokenMutationRecord{{
+			Type: interfaces.MutationMove,
+			Token: &interfaces.Token{
+				ID:      "token-terminal",
+				PlaceID: "task:complete",
+				Color: interfaces.TokenColor{
+					WorkID:     "work-1",
+					WorkTypeID: "task",
+					Name:       "Write docs",
+					TraceID:    "trace-1",
+				},
+			},
+		}},
+	}
+
+	history.RecordWorkstationResponse(3, result, completed)
+
+	events := history.Events()
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	payload, err := events[0].Payload.AsDispatchResponseEventPayload()
+	if err != nil {
+		t.Fatalf("dispatch response payload: %v", err)
+	}
+	if payload.OutputWork == nil || len(*payload.OutputWork) != 1 {
+		t.Fatalf("output work = %#v, want one generated output work item", payload.OutputWork)
+	}
+	state := (*payload.OutputWork)[0].State
+	if state == nil || state.Name != "complete" {
+		t.Fatalf("output work state = %#v, want complete derived from task:complete", state)
+	}
+}
+
 func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdentity(t *testing.T) {
 	eventTime := time.Date(2026, 4, 22, 16, 0, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })

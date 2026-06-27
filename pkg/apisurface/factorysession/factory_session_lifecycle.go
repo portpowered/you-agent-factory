@@ -2,10 +2,12 @@ package factorysession
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -409,6 +411,18 @@ func lifecycleControlLinksToAPI(links factorysessionexecution.LifecycleControlLi
 	}
 	return response
 }
+// LiveLifecycleControlLinksForSession builds post-control inspection links for one
+// live workspace factory session.
+func LiveLifecycleControlLinksForSession(sessionID string) factorysessionexecution.LifecycleControlLinks {
+	base := fmt.Sprintf("/factory-sessions/%s", strings.TrimSpace(sessionID))
+	return factorysessionexecution.LifecycleControlLinks{
+		Session: base,
+		Status:  base,
+		Results: base + "/result",
+		Events:  base + "/events",
+	}
+}
+
 // LifecycleControlSuccessStatus maps one accepted lifecycle-control result to the
 // HTTP success status for the public durable control routes.
 func LifecycleControlSuccessStatus(result factorysessionexecution.LifecycleControlResult) int {
@@ -438,7 +452,8 @@ func LifecycleControlErrorResponse(sessionID string, err error) (int, any, bool)
 		return http.StatusConflict, ControlErrorToAPI(sessionID, controlErr), true
 	}
 
-	if errors.Is(err, factorysessionexecution.ErrSessionNotFound) {
+	if errors.Is(err, factorysessionexecution.ErrSessionNotFound) ||
+		errors.Is(err, apisurface.ErrFactorySessionNotFound) {
 		return http.StatusNotFound, factoryapi.ErrorResponse{
 			Message: "factory session not found",
 			Family:  factoryapi.ErrorFamilyNotFound,

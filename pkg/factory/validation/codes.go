@@ -22,6 +22,7 @@ const (
 	CodeInvocationReturnMissingTerminalState    = "factory.invocationReturn.missingTerminalState"
 	CodeInvocationReturnUnknownWorkTypeName     = "factory.invocationReturn.unknownWorkTypeName"
 	CodeInvocationReturnInvalidTerminalState    = "factory.invocationReturn.invalidTerminalState"
+	CodeWorkstationUnsupportedWorkPropagationMode = "factory.workstation.unsupportedWorkPropagationMode"
 	CodeManagedRuntimeUnsupportedIdentity       = "factory.managedRuntime.unsupportedIdentity"
 	CodeManagedRuntimeInvalidBackend            = "factory.managedRuntime.invalidBackend"
 	CodeManagedRuntimeInvalidLoadPolicy         = "factory.managedRuntime.invalidLoadPolicy"

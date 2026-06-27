@@ -279,17 +279,20 @@ This precedence is selection-only: the CLI chooses exactly one matching named
 factory directory and never merges a project-local definition with a global
 definition of the same canonical name.
 
-First-party built-ins such as `@you/goal` and `@you/tts` also use the named-factory path:
+First-party built-ins such as `@you/goal` and `@you/tts` also use the
+named-factory path:
 
 ```bash
 you run --named @you/goal "Ship the login fix by Friday"
 you run --named @you/tts
 ```
 
-See `you docs packaged-goal` for the packaged goal batch workflow, stdout
-primary result, and the supported headless operator-interaction scope.
-
-See `you docs packaged-tts` for the full packaged TTS workflow, default
+Start with `@you/goal` when you want a goal-oriented factory you can run
+immediately and customize on disk instead of authoring `factory.json` from
+scratch. Start with `@you/tts` when you need the inference-oriented packaged
+TTS example. See `you docs packaged-goal` for the goal batch workflow, stdout
+primary result, supported headless operator-interaction scope, and
+`you docs packaged-tts` for the full packaged TTS workflow, default
 metadata result, materialization path, and edit-after-materialize behavior.
 
 On the first invocation the CLI materializes the built-in into

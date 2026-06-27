@@ -79,13 +79,31 @@ If the PR has merge conflicts, please tell the processor to fix the merge confli
 
 ### Step 7 - respond back
 
-To terminate the review loop, please respond exactly with
+Return one JSON decision envelope as your final output. See
+`factory/docs/decision-envelope.md` for the full shape, accepted decision
+values, and malformed-input behavior.
 
-"<COMPLETE>": if you think the PR was completed, and you have merged the PR. 
+| Review outcome | `decision` value |
+| --- | --- |
+| PR is complete and merged | `ACCEPTED` |
+| More executor work is required | `CONTINUE` |
+| PR is not complete | `REJECTED` |
 
-"<REJECTED>": if you think the PR was not completed.
+Put your review summary and acceptance-criteria checklist in `feedback`. Use
+optional `output` for a short final summary and optional `recorded_output_work`
+when you need to record work items that should advance with the decision.
 
-If CI is still pending or in progress and you have no concrete independent review findings to report yet, respond `"<REJECTED>"` without posting a new PR comment so the workflow waits silently instead of creating premature review noise.
+Example:
+
+```json
+{
+  "decision": "REJECTED",
+  "feedback": "BLOCKING: make test failed on pkg/foo. Acceptance criterion 2 is FAIL."
+}
+```
+
+If CI is still pending or in progress and you have no concrete independent
+review findings to report yet, respond with `{"decision":"REJECTED","feedback":"Waiting for required CI on the current PR head."}` without posting a new PR comment so the workflow waits silently instead of creating premature review noise.
 
   When starting local servers for verification:
   - Never use a shared default port such as 3000 without first checking whether it is already occupied.
