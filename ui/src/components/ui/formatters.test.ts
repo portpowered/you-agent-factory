@@ -109,6 +109,18 @@ describe("formatGraphDurationMillis", () => {
     expect(
       formatGraphDurationMillis(100 * 365 * 24 * 60 * 60 * 1000, "ko"),
     ).toBe("1세기");
+    expect(
+      formatGraphDurationMillis(10_000 * 365 * 24 * 60 * 60 * 1000, "en"),
+    ).toBe("1q");
+    expect(
+      formatGraphDurationMillis(10_000 * 365 * 24 * 60 * 60 * 1000, "zh-CN"),
+    ).toBe("1万");
+    expect(
+      formatGraphDurationMillis(10_000 * 365 * 24 * 60 * 60 * 1000, "ja"),
+    ).toBe("1万");
+    expect(
+      formatGraphDurationMillis(10_000 * 365 * 24 * 60 * 60 * 1000, "ko"),
+    ).toBe("1만");
   });
 
   it("shows zero seconds for sub-second durations", () => {

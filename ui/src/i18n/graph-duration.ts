@@ -1,4 +1,5 @@
 type GraphDurationUnit =
+  | "myriadYear"
   | "millennium"
   | "century"
   | "year"
@@ -10,6 +11,7 @@ type GraphDurationUnit =
 
 const GRAPH_DURATION_LABELS: Record<string, Record<GraphDurationUnit, string>> = {
   en: {
+    myriadYear: "q",
     millennium: "ky",
     century: "c",
     year: "y",
@@ -20,6 +22,7 @@ const GRAPH_DURATION_LABELS: Record<string, Record<GraphDurationUnit, string>> =
     second: "s",
   },
   "zh-CN": {
+    myriadYear: "万",
     millennium: "千年",
     century: "世纪",
     year: "年",
@@ -30,6 +33,7 @@ const GRAPH_DURATION_LABELS: Record<string, Record<GraphDurationUnit, string>> =
     second: "秒",
   },
   ja: {
+    myriadYear: "万",
     millennium: "千年",
     century: "世紀",
     year: "年",
@@ -40,6 +44,7 @@ const GRAPH_DURATION_LABELS: Record<string, Record<GraphDurationUnit, string>> =
     second: "秒",
   },
   ko: {
+    myriadYear: "만",
     millennium: "천년",
     century: "세기",
     year: "년",
@@ -52,6 +57,7 @@ const GRAPH_DURATION_LABELS: Record<string, Record<GraphDurationUnit, string>> =
 };
 
 const GRAPH_DURATION_UNITS: ReadonlyArray<{ millis: number; unit: GraphDurationUnit }> = [
+  { unit: "myriadYear", millis: 10_000 * 365 * 24 * 60 * 60 * 1000 },
   { unit: "millennium", millis: 1000 * 365 * 24 * 60 * 60 * 1000 },
   { unit: "century", millis: 100 * 365 * 24 * 60 * 60 * 1000 },
   { unit: "year", millis: 365 * 24 * 60 * 60 * 1000 },

@@ -143,6 +143,26 @@ describe("shared locale duration and relative-time formatters", () => {
         style: "graph",
       }),
     ).toBe("1세기");
+    expect(
+      formatDuration(10_000 * 365 * 24 * 60 * 60 * 1000, "en", {
+        style: "graph",
+      }),
+    ).toBe("1q");
+    expect(
+      formatDuration(10_000 * 365 * 24 * 60 * 60 * 1000, "zh-CN", {
+        style: "graph",
+      }),
+    ).toBe("1万");
+    expect(
+      formatDuration(10_000 * 365 * 24 * 60 * 60 * 1000, "ja", {
+        style: "graph",
+      }),
+    ).toBe("1万");
+    expect(
+      formatDuration(10_000 * 365 * 24 * 60 * 60 * 1000, "ko", {
+        style: "graph",
+      }),
+    ).toBe("1만");
   });
 });
 
