@@ -154,10 +154,16 @@ function JavaScriptSessionProjection({
   const [selectedDispatchID, setSelectedDispatchID] = useState<string | null>(
     null,
   );
+  const isDurableSession = isDurableJavaScriptSession(
+    sessionID,
+    FactoryOrchestratorKind.JAVASCRIPT,
+    durableLifecycleStatus,
+  );
   const lifecycleActionAvailability =
     resolveFactorySessionLifecycleActionAvailability({
       durableLifecycleStatus,
       dispatches,
+      isDurableSession,
       selectedDispatchID,
     });
   const lifecycleControl = useFactorySessionLifecycleControl({
@@ -171,11 +177,6 @@ function JavaScriptSessionProjection({
 
   const warnings = (dispatches ?? []).flatMap(
     (dispatch) => dispatch.warnings ?? [],
-  );
-  const supportsEventReplay = isDurableJavaScriptSession(
-    sessionID,
-    FactoryOrchestratorKind.JAVASCRIPT,
-    durableLifecycleStatus,
   );
 
   return (
@@ -196,13 +197,15 @@ function JavaScriptSessionProjection({
           value={`queued ${javascript.childDispatchCounts.queued}, running ${javascript.childDispatchCounts.running}, completed ${javascript.childDispatchCounts.completed}`}
         />
       </div>
-      <LifecycleActionSection
-        availability={lifecycleActionAvailability}
-        feedback={lifecycleControl.feedback}
-        locale={locale}
-        onAction={lifecycleControl.submitLifecycleAction}
-        pendingActionID={lifecycleControl.pendingActionID}
-      />
+      {isDurableSession ? (
+        <LifecycleActionSection
+          availability={lifecycleActionAvailability}
+          feedback={lifecycleControl.feedback}
+          locale={locale}
+          onAction={lifecycleControl.submitLifecycleAction}
+          pendingActionID={lifecycleControl.pendingActionID}
+        />
+      ) : null}
       {javascript.phases.length > 0 ? (
         <Metric
           label={messages.phasesLabel}
@@ -217,7 +220,7 @@ function JavaScriptSessionProjection({
         />
       ) : null}
 
-      {supportsEventReplay ? (
+      {isDurableSession ? (
         <FactorySessionEventReplayDisclosure
           locale={locale}
           sessionID={sessionID}

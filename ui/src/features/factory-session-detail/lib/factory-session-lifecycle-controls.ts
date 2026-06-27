@@ -41,9 +41,18 @@ const SESSION_TERMINATABLE_STATUSES =
 export function resolveFactorySessionLifecycleActionAvailability(input: {
   durableLifecycleStatus?: FactorySessionDurableLifecycleStatus;
   dispatches?: FactoryDispatch[];
+  isDurableSession: boolean;
   selectedDispatchID: string | null;
 }): FactorySessionLifecycleActionAvailability {
   const actions: FactorySessionLifecycleActionID[] = [];
+  if (!input.isDurableSession) {
+    return {
+      actions,
+      showDispatchSelectionHint: false,
+      showEmptyState: false,
+    };
+  }
+
   const selectedDispatch = input.dispatches?.find(
     (dispatch) => dispatch.id === input.selectedDispatchID,
   );

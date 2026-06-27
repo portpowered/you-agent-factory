@@ -16,6 +16,7 @@ describe("factory session lifecycle action availability", () => {
   it("shows pause, cancel, and terminate for a running durable session", () => {
     const availability = resolveFactorySessionLifecycleActionAvailability({
       durableLifecycleStatus: "RUNNING",
+      isDurableSession: true,
       selectedDispatchID: null,
     });
 
@@ -27,6 +28,7 @@ describe("factory session lifecycle action availability", () => {
   it("shows resume, cancel, and terminate for a paused durable session", () => {
     const availability = resolveFactorySessionLifecycleActionAvailability({
       durableLifecycleStatus: "PAUSED",
+      isDurableSession: true,
       selectedDispatchID: null,
     });
 
@@ -36,6 +38,7 @@ describe("factory session lifecycle action availability", () => {
   it("shows approve, cancel, and terminate for an awaiting-approval durable session", () => {
     const availability = resolveFactorySessionLifecycleActionAvailability({
       durableLifecycleStatus: "AWAITING_APPROVAL",
+      isDurableSession: true,
       selectedDispatchID: null,
     });
 
@@ -54,6 +57,7 @@ describe("factory session lifecycle action availability", () => {
           status: "FAILED",
         },
       ],
+      isDurableSession: true,
       selectedDispatchID: "dispatch-failed",
     });
 
@@ -74,6 +78,7 @@ describe("factory session lifecycle action availability", () => {
           status: "FAILED",
         },
       ],
+      isDurableSession: true,
       selectedDispatchID: null,
     });
 
@@ -85,10 +90,31 @@ describe("factory session lifecycle action availability", () => {
   it("shows no lifecycle actions for a terminal durable session without a failed dispatch selection", () => {
     const availability = resolveFactorySessionLifecycleActionAvailability({
       durableLifecycleStatus: "SUCCEEDED",
+      isDurableSession: true,
       selectedDispatchID: null,
     });
 
     expectActions(availability.actions, []);
     expect(availability.showEmptyState).toBe(true);
+  });
+
+  it("shows no lifecycle actions or empty-state copy for non-durable javascript sessions", () => {
+    const availability = resolveFactorySessionLifecycleActionAvailability({
+      dispatches: [
+        {
+          dispatchKind: "JAVASCRIPT_AGENT",
+          id: "dispatch-failed",
+          orchestratorKind: "JAVASCRIPT",
+          sessionId: "session-beta",
+          status: "FAILED",
+        },
+      ],
+      isDurableSession: false,
+      selectedDispatchID: "dispatch-failed",
+    });
+
+    expectActions(availability.actions, []);
+    expect(availability.showDispatchSelectionHint).toBe(false);
+    expect(availability.showEmptyState).toBe(false);
   });
 });
