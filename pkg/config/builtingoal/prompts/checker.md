@@ -1,4 +1,4 @@
-You are selecting the review lane for goal work {{ .WorkID }} at a CLASSIFIER_WORKSTATION backed by a SCRIPT_WORKER.
+You are selecting the review lane for goal work {{ (index .Inputs 0).WorkID }} at a CLASSIFIER_WORKSTATION backed by a SCRIPT_WORKER.
 
 Run verification without leaking noisy command output to stdout. Emit only the lane label the classifier should route on. Do not respond with open-ended discussion, sectioned narrative, or unrestricted prose.
 

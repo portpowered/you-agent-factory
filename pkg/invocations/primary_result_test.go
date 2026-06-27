@@ -53,6 +53,38 @@ func TestResolvePrimaryResult_ExplicitPolicyReturnsConfiguredTerminalContentInIn
 	assertPrimaryResultSelection(t, got, invocationReturnPolicyExplicit, summaryTerminal)
 }
 
+func TestResolvePrimaryResult_ExplicitPolicyFallsBackToInvocationTraceWhenScopeWorkIDChanges(t *testing.T) {
+	state := invocationWorldStateFixture()
+	traceID := "trace-goal-invocation"
+	rootInitial := invocationWorkItem("work-root", "goal", "init", "root", "goal:init")
+	rootInitial.TraceID = traceID
+	goalComplete := invocationWorkItem("work-derived-complete", "goal", "complete", "root", "goal:complete")
+	goalComplete.TraceID = traceID
+	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
+	state.WorkRequestsByID["request-1"] = interfaces.WorkRequestPayload{
+		RequestID: "request-1",
+		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		TraceID:   traceID,
+		WorkItems: []interfaces.FactoryWorkItem{rootInitial},
+	}
+	state.TerminalWorkByID[goalComplete.ID] = interfaces.FactoryTerminalWork{WorkItem: goalComplete, Status: "TERMINAL"}
+
+	got, err := ResolvePrimaryResult(PrimaryResultSelectionInput{
+		RequestID: "request-1",
+		InvocationReturn: &interfaces.InvocationReturnConfig{
+			Policy:        invocationReturnPolicyExplicit,
+			WorkTypeName:  "goal",
+			TerminalState: "complete",
+		},
+		WorldState: state,
+	})
+	if err != nil {
+		t.Fatalf("ResolvePrimaryResult: %v", err)
+	}
+
+	assertPrimaryResultSelection(t, got, invocationReturnPolicyExplicit, goalComplete)
+}
+
 func TestResolvePrimaryResult_FallbackDoesNotCrossTalkAcrossInvocationScopes(t *testing.T) {
 	state := invocationWorldStateFixture()
 	requestOneRoot := invocationWorkItem("work-root-1", "task", "draft", "root-1", "task:init")

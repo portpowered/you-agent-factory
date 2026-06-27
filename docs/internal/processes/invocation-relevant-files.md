@@ -77,6 +77,14 @@ primary-result behavior.
   Retry exhaustion is authored separately for `review-goal` and
   `structured-review-goal`, each with its own guarded loop-breaker from `goal:plan`
   to `goal:failed`.
+  Packaged workstation `body` templates must use canonical `PromptData` roots
+  such as `(index .Inputs 0).Payload`; legacy top-level aliases like
+  `{{ .WorkID }}` fail prompt rendering before mock-worker dispatch.
+  `upgradeMaterializedBuiltInNamedFactoryIfNeeded` repairs already-materialized
+  built-ins that still carry the legacy alias when the catalog payload has
+  canonical templates, and those repairs must patch the specific legacy prompt
+  files in place rather than replacing the whole materialized named-factory
+  directory so customer edits survive later `you run --named` reuse.
 - `pkg/packagedfactories/goal/` owns packaged goal factory metadata constants and
   config-load regression coverage for the authored `invocationReturn` policy that
   selects terminal `goal:complete` work content as the primary result.
@@ -118,11 +126,25 @@ primary-result behavior.
   than mocked lane-label output. The same file proves repeated structured
   `needs_changes` rework trips the structured loop-breaker instead of retrying
   forever.
+- Behavioral proof for named goal batch invocation lives in
+  `tests/functional/smoke/cli_named_goal_run_smoke_test.go` using the real
+  `you run --named @you/goal` CLI path with `--with-mock-workers`, including a
+  legacy-materialized upgrade smoke case.
+- `tests/functional/smoke/cli_run_mode_compat_smoke_test.go` holds focused
+  regression coverage for adjacent `you run` modes after packaged-goal changes:
+  operator-oriented continuous startup output without `--quiet`, factory text
+  invocation stdout that suppresses operator chatter, and named-goal batch
+  stdout that stays primary-result-only. Reuse helpers from
+  `cli_factory_prompt_run_smoke_test.go` when extending these regressions.
 - `pkg/packagedfactories/tts/` owns packaged TTS invocation metadata shaping
   helpers used when `INFERENCE_RUN` (or legacy `MODEL_INVOKE`) work completes on the `execute-tts` workstation.
   `metadata.go` derives the `backend` metadata field from the loaded on-disk
   worker model so customer edits to materialized `factory.json` affect the next
   invocation result.
+- `docs/reference/packaged-goal.md` is the packaged `you docs packaged-goal`
+  customer guide for `@you/goal` batch invocation, stdout primary result, and
+  the supported headless operator-interaction scope without widening localhost
+  listener promises.
 - `docs/reference/packaged-tts.md` is the packaged `you docs packaged-tts`
   customer guide for `@you/tts` invocation, materialization, metadata result,
   edit-after-materialize behavior, and raw-artifact streaming scope. Prefer

@@ -136,16 +136,12 @@ func resolveExplicitPrimaryResult(
 	cfg *interfaces.InvocationReturnConfig,
 ) (PrimaryResultSelection, error) {
 	scope := invocationScopeWorkIDs(state.PayloadLineage, submitted)
-	matches := make([]interfaces.FactoryWorkItem, 0, len(state.TerminalWorkByID))
-	for _, terminalWorkID := range sortedTerminalWorkIDs(state.TerminalWorkByID) {
-		terminal := state.TerminalWorkByID[terminalWorkID]
-		if _, ok := scope[terminal.WorkItem.ID]; !ok {
-			continue
-		}
-		if !explicitPrimaryResultMatches(terminal.WorkItem, cfg) {
-			continue
-		}
-		matches = append(matches, terminal.WorkItem)
+	matches := collectExplicitPrimaryResultMatches(state, scope, cfg)
+	if len(matches) == 0 {
+		matches = collectExplicitPrimaryResultMatchesForInvocationTrace(state, requestID, submitted, cfg)
+	}
+	if len(matches) == 0 {
+		matches = collectUniqueExplicitTerminalMatches(state, cfg)
 	}
 
 	switch len(matches) {
@@ -164,6 +160,84 @@ func resolveExplicitPrimaryResult(
 			fmt.Sprintf("explicit invocation return policy matched %d terminal outputs in scope", len(matches)),
 		)
 	}
+}
+
+func collectExplicitPrimaryResultMatches(
+	state interfaces.FactoryWorldState,
+	scope map[string]struct{},
+	cfg *interfaces.InvocationReturnConfig,
+) []interfaces.FactoryWorkItem {
+	matches := make([]interfaces.FactoryWorkItem, 0, len(state.TerminalWorkByID))
+	for _, terminalWorkID := range sortedTerminalWorkIDs(state.TerminalWorkByID) {
+		terminal := state.TerminalWorkByID[terminalWorkID]
+		if _, ok := scope[terminal.WorkItem.ID]; !ok {
+			continue
+		}
+		if !explicitPrimaryResultMatches(terminal.WorkItem, cfg) {
+			continue
+		}
+		matches = append(matches, terminal.WorkItem)
+	}
+	return matches
+}
+
+func collectExplicitPrimaryResultMatchesForInvocationTrace(
+	state interfaces.FactoryWorldState,
+	requestID string,
+	submitted []interfaces.FactoryWorkItem,
+	cfg *interfaces.InvocationReturnConfig,
+) []interfaces.FactoryWorkItem {
+	traceIDs := invocationTraceIDs(state, requestID, submitted)
+	if len(traceIDs) == 0 {
+		return nil
+	}
+
+	matches := make([]interfaces.FactoryWorkItem, 0, 1)
+	for _, terminalWorkID := range sortedTerminalWorkIDs(state.TerminalWorkByID) {
+		terminal := state.TerminalWorkByID[terminalWorkID]
+		if _, ok := traceIDs[strings.TrimSpace(terminal.WorkItem.TraceID)]; !ok {
+			continue
+		}
+		if !explicitPrimaryResultMatches(terminal.WorkItem, cfg) {
+			continue
+		}
+		matches = append(matches, terminal.WorkItem)
+	}
+	return matches
+}
+
+func invocationTraceIDs(
+	state interfaces.FactoryWorldState,
+	requestID string,
+	submitted []interfaces.FactoryWorkItem,
+) map[string]struct{} {
+	traceIDs := make(map[string]struct{})
+	if request, ok := state.WorkRequestsByID[requestID]; ok {
+		if traceID := strings.TrimSpace(request.TraceID); traceID != "" {
+			traceIDs[traceID] = struct{}{}
+		}
+	}
+	for _, item := range submitted {
+		if traceID := strings.TrimSpace(item.TraceID); traceID != "" {
+			traceIDs[traceID] = struct{}{}
+		}
+	}
+	return traceIDs
+}
+
+func collectUniqueExplicitTerminalMatches(
+	state interfaces.FactoryWorldState,
+	cfg *interfaces.InvocationReturnConfig,
+) []interfaces.FactoryWorkItem {
+	matches := make([]interfaces.FactoryWorkItem, 0, 1)
+	for _, terminalWorkID := range sortedTerminalWorkIDs(state.TerminalWorkByID) {
+		terminal := state.TerminalWorkByID[terminalWorkID]
+		if !explicitPrimaryResultMatches(terminal.WorkItem, cfg) {
+			continue
+		}
+		matches = append(matches, terminal.WorkItem)
+	}
+	return matches
 }
 
 func selectedPrimaryResult(requestID, policy string, item interfaces.FactoryWorkItem) PrimaryResultSelection {

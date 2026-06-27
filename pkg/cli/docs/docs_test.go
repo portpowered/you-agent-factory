@@ -194,7 +194,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"`workers` - Worker types",
 		"`resources` - Resource capacity",
 		"`models` - Local and hosted model setup",
-		"`packaged-goal` - Packaged @you/goal invocation",
+		"`packaged-goal` - Packaged @you/goal batch invocation",
 		"`packaged-tts` - Packaged @you/tts invocation",
 		"`batch-inputs` - Batch input files",
 		"`templates` - Prompt template variables",
@@ -768,6 +768,7 @@ func TestMarkdown_RecordReplayReturnsRawAuthoredMarkdown(t *testing.T) {
 		}
 	}
 }
+
 
 func TestMarkdown_MCPReturnsRawAuthoredMarkdown(t *testing.T) {
 	t.Parallel()

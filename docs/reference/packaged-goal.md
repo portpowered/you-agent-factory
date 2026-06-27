@@ -1,17 +1,16 @@
 # Packaged Goal (`@you/goal`)
 
 Use this guide when you want the first-party packaged goal factory: invoke it by
-name, inspect the materialized factory on disk, and customize it like any other
-named factory.
+name from the terminal, read the primary result on stdout, inspect the
+materialized factory on disk, and customize it like any other named factory.
 
 `you docs authoring-factories` owns the broader factory-authoring workflow.
 `you docs config` and `you docs sessions` own the shared invocation input and
 return-policy contract. This guide focuses on the `@you/goal` packaged factory
 workflow.
 
-The default `@you/goal` factory is a minimal goal-oriented example: one
-`MODEL_WORKER` plus one `MODEL_WORKSTATION` that executes a single bounded task
-through the shared model-worker runtime. Use it as a runnable starting point
+The default `@you/goal` factory is a goal-oriented example with planner,
+executor, checker, and reviewer workstations. Use it as a runnable starting point
 before authoring a custom factory from scratch.
 
 ## Quick start
@@ -38,6 +37,46 @@ echo "Ship the login bugfix" | you run --named @you/goal
 Supplying both positional text and piped stdin for the same invocation is
 rejected with `INVOCATION_INPUT_SOURCE_CONFLICT` before runtime work starts.
 
+## Batch success without browser or dashboard interaction
+
+Normal `you run --named @you/goal` uses the default batch run mode (no
+`--continuously`). For the standard success path you do not need to open the
+operator dashboard or interact with a browser session:
+
+- The CLI submits the goal through the real named packaged-factory path.
+- The run completes when the submitted work reaches terminal success or the
+  factory goes idle.
+- The process exits after that terminal completion or idle instead of staying
+  open for later operator submissions.
+- Successful stdout carries the configured `primaryResult` from the shared
+  invocation-return contract.
+
+Use `--quiet` for scripted or CI-oriented runs when you want to suppress
+dashboard startup output. That flag affects operator chatter only; it does not
+change invocation input resolution or primary-result selection.
+
+This guide documents the supported headless **operator-interaction** claim for
+the normal batch success path. It does **not** promise that batch invocation
+avoids binding a localhost API listener. Listener behavior belongs to the shared
+`you run` service startup contract and may differ across run modes; see
+`you docs sessions` for operator-oriented modes that keep a service alive for
+later submissions.
+
+## Default invocation result
+
+Successful `@you/goal` invocations print the packaged factory's primary result
+on stdout using the existing invocation-result contract. The built-in factory
+sets an explicit `invocationReturn` policy that selects terminal `goal:complete`
+work content as `primaryResult`.
+
+On the CLI, that successful `primaryResult` is written directly to stdout. You
+do not need to reconstruct the answer from logs, event history, or dashboard
+state.
+
+The equivalent API path is `POST /factory-sessions/{session_id}/invocations`
+with the same text input and return-policy semantics. Transport code adapts its
+carrier; it does not invent separate primary-output rules.
+
 ## What to expect after you run it
 
 `you run --named @you/goal` resolves the named factory, materializes it on first
@@ -48,11 +87,14 @@ Customers should expect:
 
 - The CLI selects exactly one named-factory directory and loads the split
   `factory.json`, `workers/`, and `workstations/` layout from that directory.
-- The default factory runs one `task` work type from `init` through
-  `execute-goal` to `complete`, or to `failed` when the workstation reports a
-  failure.
+- The default factory runs the `goal` work type from `init` through plan,
+  execute, check, and review to `complete`, or to `failed` when a workstation
+  reports a failure.
 - Later invocations reuse the materialized on-disk copy instead of overwriting
   customer edits with pristine embedded content.
+- Legacy materialized copies that still use broken top-level `{{ .WorkID }}`
+  prompt templates are upgraded automatically on the next resolution when the
+  current built-in catalog provides canonical `PromptData` templates.
 
 ## Non-success outcomes and recovery
 
@@ -113,8 +155,8 @@ you factory list --dir ~/.you-agent-factory/factories
 ```
 
 The directory contains `factory.json`, split `workers/` and `workstations/`
-files, and the default `goal-executor` worker plus `execute-goal` workstation
-prompts needed for the packaged workflow.
+files, and the default goal planner, executor, checker, and reviewer prompts
+needed for the packaged workflow.
 
 ## Customer edits affect the next run
 
@@ -145,6 +187,7 @@ repository root.
 - `you docs authoring-factories` — named-factory resolution, factory layout,
   and when to start from a packaged example instead of authoring from scratch
 - `you docs config` — invocation input sources and `invocationReturn` policy
-- `you docs sessions` — session-scoped invocation API and runtime discovery
-- `you docs workstations` — `MODEL_WORKSTATION` authoring fields
-- `you docs workers` — `MODEL_WORKER` authoring fields
+- `you docs sessions` — session-scoped invocation API, dashboard URL, and run modes
+- `you docs workstations` — workstation kinds and authoring fields
+- `you docs workers` — worker kinds and authoring fields
+- `you docs mock-workers` — deterministic local testing with `--with-mock-workers`

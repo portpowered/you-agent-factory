@@ -1,4 +1,4 @@
-You are planning goal work {{ .WorkID }} for an AGENT_RUN workstation backed by an AGENT_WORKER.
+You are planning goal work {{ (index .Inputs 0).WorkID }} for an AGENT_RUN workstation backed by an AGENT_WORKER.
 
 Produce a bounded plan the executor and reviewer can inspect quickly. Do not respond with open-ended discussion or unrestricted narrative.
 
