@@ -77,7 +77,53 @@ export function handleFactorySessionPreflightRequest({
     });
   }
 
-  if (method !== "GET" || !/^\/factory-sessions\/[^/]+$/.test(path)) {
+  if (method !== "GET") {
+    return undefined;
+  }
+
+  const syncPreflightMatch = path.match(
+    /^\/factory-sessions\/([^/]+)\/sync-preflight(?:\?(.*))?$/,
+  );
+  if (syncPreflightMatch) {
+    const requestedSessionID = decodeURIComponent(syncPreflightMatch[1] ?? "");
+    const sessionSummary = availableFactorySessions.find(
+      (session) => session.id === requestedSessionID,
+    );
+
+    if (!sessionSummary) {
+      return jsonResponse(
+        {
+          code: "FACTORY_SESSION_NOT_FOUND",
+          message: `Factory session ${requestedSessionID} was not found.`,
+        },
+        404,
+        "Not Found",
+      );
+    }
+
+    const searchParams = new URLSearchParams(syncPreflightMatch[2] ?? "");
+    const afterSequence = searchParams.get("after_sequence");
+
+    return jsonResponse({
+      backendScopeId: `${sessionSummary.folderPath}::test-backend`,
+      checkpointReusable: true,
+      factorySessionId: sessionSummary.id,
+      logicalSessionKeyId: `${sessionSummary.folderPath}::${sessionSummary.id}`,
+      reasonCode: "ok",
+      reconnectCursor: {
+        afterEventId: searchParams.get("after_event_id") ?? undefined,
+        afterSequence:
+          afterSequence == null ? undefined : Number.parseInt(afterSequence, 10),
+        provided: searchParams.has("after_event_id") || afterSequence != null,
+        validForStreamGeneration: true,
+      },
+      requestedSessionId: requestedSessionID,
+      streamGenerationId: buildFactorySessionResponse(sessionSummary, snapshot)
+        .runtime.streamIdentity.streamGenerationID,
+    });
+  }
+
+  if (!/^\/factory-sessions\/[^/]+$/.test(path)) {
     return undefined;
   }
 
