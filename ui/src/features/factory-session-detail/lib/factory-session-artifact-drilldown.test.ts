@@ -37,6 +37,29 @@ describe("normalizeFactorySessionArtifactDrilldown", () => {
     ]);
   });
 
+  it("normalizes durable output_text preview parts into canonical text content", () => {
+    const normalized = normalizeFactorySessionArtifactDrilldown({
+      auditMode: "OFF",
+      content: [{ text: "review output body", type: "output_text" }],
+      id: "artifact-preview-output-text",
+      kind: "CHILD_RESULT",
+      sessionId: "session-preview-output-text",
+      visibility: "CUSTOMER",
+    } as FactorySessionArtifactDetail);
+
+    expect(normalized.preview.kind).toBe("inline");
+    if (normalized.preview.kind !== "inline") {
+      throw new Error("Expected inline preview content.");
+    }
+
+    expect(normalized.preview.content).toEqual([
+      {
+        text: "review output body",
+        type: "text",
+      },
+    ]);
+  });
+
   it("normalizes content-ref durable artifacts into download metadata", () => {
     const normalized = normalizeFactorySessionArtifactDrilldown(
       artifactFixture.downloadOnly as FactorySessionArtifactDetail,

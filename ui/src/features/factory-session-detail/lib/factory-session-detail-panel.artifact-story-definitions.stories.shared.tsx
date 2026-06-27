@@ -200,6 +200,8 @@ export const ArtifactDrilldown = {
     await userEvent.click(previewToggle);
     await expect(canvas.getByText("Artifact detail")).toBeTruthy();
     await expect(canvas.getByText("Captured during review")).toBeTruthy();
+    await expect(canvas.getByText("review output body")).toBeTruthy();
+    await expect(canvas.queryByText("output_text")).toBeNull();
 
     const downloadToggle = canvas.getByRole("button", {
       name: "View artifact artifact-download",

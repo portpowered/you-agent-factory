@@ -175,7 +175,8 @@ describe("FactorySessionDetailPanel artifact drilldown", () => {
     expect(screen.getByText("Artifact detail")).toBeTruthy();
     expect(screen.getByText("CHILD_RESULT")).toBeTruthy();
     expect(screen.getByText("review output")).toBeTruthy();
-    expect(screen.getByText("output_text")).toBeTruthy();
+    expect(screen.getByText("review output body")).toBeTruthy();
+    expect(screen.queryByText("output_text")).toBeNull();
     expect(screen.getByText("text/plain")).toBeTruthy();
     expect(screen.getByText("sha256:artifact-preview-1")).toBeTruthy();
     expect(screen.queryByText("rawCheckpointBody")).toBeNull();

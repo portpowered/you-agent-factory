@@ -147,7 +147,7 @@ function normalizeArtifactPreview(
 ): FactorySessionArtifactDrilldownPreview {
   if (Array.isArray(artifact.content) && artifact.content.length > 0) {
     return {
-      content: artifact.content,
+      content: normalizeArtifactInlineContent(artifact.content),
       kind: "inline",
     };
   }
@@ -162,6 +162,30 @@ function normalizeArtifactPreview(
   return {
     kind: "unavailable",
   };
+}
+
+function normalizeArtifactInlineContent(content: WorkContent): WorkContent {
+  return content.map((part) => {
+    if (!isOutputTextPart(part)) {
+      return part;
+    }
+
+    return {
+      ...(part as Record<string, unknown>),
+      type: "text",
+    } as WorkContent[number];
+  });
+}
+
+function isOutputTextPart(part: unknown): part is { text: string; type: "output_text" } {
+  return (
+    typeof part === "object" &&
+    part !== null &&
+    "type" in part &&
+    part.type === "output_text" &&
+    "text" in part &&
+    typeof part.text === "string"
+  );
 }
 
 function isFactorySessionsAPIError(
