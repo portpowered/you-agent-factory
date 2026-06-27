@@ -11,10 +11,17 @@ import (
 )
 
 // TargetProbe loads metadata for one discovered factory session target.
-type TargetProbe func(folderPath string, factoryDir string, ref TargetRef) (Target, bool)
+type TargetProbe func(folderPath string, factoryDir string, ref TargetRef) (Target, bool, *DiscoveryFailure)
+
+// DiscoveryFailure captures one target that looked like a factory but failed to load.
+type DiscoveryFailure struct {
+	FactoryDir string
+	Ref        TargetRef
+	Summary    string
+}
 
 // DiscoverTargets lists runnable factory targets under folderPath.
-func DiscoverTargets(folderPath string, probe TargetProbe) ([]Target, error) {
+func DiscoverTargets(folderPath string, probe func(folderPath string, factoryDir string, ref TargetRef) (Target, bool, *DiscoveryFailure)) ([]Target, error) {
 	resolvedFolder, err := ResolveSessionFolder(folderPath)
 	if err != nil {
 		return nil, err
@@ -23,23 +30,49 @@ func DiscoverTargets(folderPath string, probe TargetProbe) ([]Target, error) {
 		return nil, fmt.Errorf("factory session target probe is required")
 	}
 
-	targets := make([]Target, 0, 4)
-	if target, ok := probe(resolvedFolder, resolvedFolder, TargetRef{
-		Kind: TargetKindDefault,
-	}); ok {
-		targets = append(targets, target)
+	targets, loadFailures, err := collectDiscoveredTargets(resolvedFolder, probe)
+	if err != nil {
+		return nil, err
 	}
 
-	childEntries, err := os.ReadDir(resolvedFolder)
+	sort.Slice(targets, func(i, j int) bool {
+		left := targets[i]
+		right := targets[j]
+		if left.Ref.Kind != right.Ref.Kind {
+			return left.Ref.Kind == TargetKindDefault
+		}
+		return left.Ref.Name < right.Ref.Name
+	})
+	if len(targets) == 0 {
+		if len(loadFailures) > 0 {
+			return nil, NewConfigLoadFailedError(loadFailures)
+		}
+		return nil, NewValidationError(
+			validationReasonNotRunnable,
+			"folderPath",
+			fmt.Errorf("folder %q does not expose any runnable factory targets", resolvedFolder),
+		)
+	}
+	return targets, nil
+}
+
+func collectDiscoveredTargets(folderPath string, probe TargetProbe) ([]Target, []DiscoveryFailure, error) {
+	targets := make([]Target, 0, 4)
+	loadFailures := make([]DiscoveryFailure, 0, 2)
+	appendProbedTarget(&targets, &loadFailures, probe, folderPath, folderPath, TargetRef{
+		Kind: TargetKindDefault,
+	})
+
+	childEntries, err := os.ReadDir(folderPath)
 	if err != nil {
 		if os.IsPermission(err) {
-			return nil, NewValidationError(
+			return nil, nil, NewValidationError(
 				validationReasonUnreadable,
 				"folderPath",
-				fmt.Errorf("read factory session folder %s: %w", resolvedFolder, err),
+				fmt.Errorf("read factory session folder %s: %w", folderPath, err),
 			)
 		}
-		return nil, fmt.Errorf("read factory session folder %s: %w", resolvedFolder, err)
+		return nil, nil, fmt.Errorf("read factory session folder %s: %w", folderPath, err)
 	}
 	for _, entry := range childEntries {
 		if !entry.IsDir() {
@@ -52,32 +85,23 @@ func DiscoverTargets(folderPath string, probe TargetProbe) ([]Target, error) {
 		if err := factoryconfig.ValidateNamedFactoryName(name); err != nil {
 			continue
 		}
-		targetDir := filepath.Join(resolvedFolder, name)
-		target, ok := probe(resolvedFolder, targetDir, TargetRef{
+		appendProbedTarget(&targets, &loadFailures, probe, folderPath, filepath.Join(folderPath, name), TargetRef{
 			Kind: TargetKindNamed,
 			Name: name,
 		})
-		if ok {
-			targets = append(targets, target)
-		}
 	}
+	return targets, loadFailures, nil
+}
 
-	sort.Slice(targets, func(i, j int) bool {
-		left := targets[i]
-		right := targets[j]
-		if left.Ref.Kind != right.Ref.Kind {
-			return left.Ref.Kind == TargetKindDefault
-		}
-		return left.Ref.Name < right.Ref.Name
-	})
-	if len(targets) == 0 {
-		return nil, NewValidationError(
-			validationReasonNotRunnable,
-			"folderPath",
-			fmt.Errorf("folder %q does not expose any runnable factory targets", resolvedFolder),
-		)
+func appendProbedTarget(targets *[]Target, failures *[]DiscoveryFailure, probe TargetProbe, folderPath string, factoryDir string, ref TargetRef) {
+	target, ok, failure := probe(folderPath, factoryDir, ref)
+	if ok {
+		*targets = append(*targets, target)
+		return
 	}
-	return targets, nil
+	if failure != nil {
+		*failures = append(*failures, *failure)
+	}
 }
 
 // SelectTarget chooses a discovered target from an optional explicit ref.

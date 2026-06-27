@@ -150,7 +150,6 @@ func TestCatalogHost_Diagnostics_ReadinessTimeoutEmitsFailureLogAndMetric(t *tes
 
 func TestCatalogHost_Diagnostics_ProcessCrashEmitsFailureLogAndMetric(t *testing.T) {
 	exitCh := make(chan error, 1)
-	exitCh <- errors.New("server exited")
 
 	logger := &capturingDiagnosticsLogger{}
 	metrics := &capturingMetricsRecorder{}
@@ -168,6 +167,7 @@ func TestCatalogHost_Diagnostics_ProcessCrashEmitsFailureLogAndMetric(t *testing
 	if err != nil {
 		t.Fatalf("AcquireLease: %v", err)
 	}
+	exitCh <- errors.New("server exited")
 
 	deadline := time.Now().Add(2 * time.Second)
 	for {
@@ -179,7 +179,11 @@ func TestCatalogHost_Diagnostics_ProcessCrashEmitsFailureLogAndMetric(t *testing
 			if !metrics.contains(metricProcessCrash, map[string]string{
 				"managed_runtime_identity": "OMNIVOICE_Q4_K_M",
 			}) {
-				t.Fatalf("metrics = %#v, want process crash metric", metrics.metrics)
+				if time.Now().After(deadline) {
+					t.Fatalf("metrics = %#v, want process crash metric", metrics.metrics)
+				}
+				time.Sleep(10 * time.Millisecond)
+				continue
 			}
 			_ = host.ReleaseLease(context.Background(), lease.ID)
 			return

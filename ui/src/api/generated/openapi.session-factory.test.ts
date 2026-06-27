@@ -54,6 +54,8 @@ describe("generated session factory OpenAPI types", () => {
       factory;
     const invalidName: components["schemas"]["ErrorResponse"]["code"] =
       "INVALID_FACTORY_NAME";
+    const configLoadFailed: components["schemas"]["ErrorResponse"]["code"] =
+      "FACTORY_SESSION_CONFIG_LOAD_FAILED";
     const invalidFactory: components["schemas"]["ErrorResponse"]["code"] =
       "INVALID_FACTORY";
     const duplicateName: components["schemas"]["ErrorResponse"]["code"] =
@@ -79,8 +81,15 @@ describe("generated session factory OpenAPI types", () => {
     expect(current.workstations?.[0]?.worker).toBe("planner");
     expect(currentNotFound.code).toBe("NOT_FOUND");
     expect(currentNotFound.family).toBe("NOT_FOUND");
-    expect([invalidName, invalidFactory, duplicateName, runtimeBusy]).toEqual([
+    expect([
+      invalidName,
+      configLoadFailed,
+      invalidFactory,
+      duplicateName,
+      runtimeBusy,
+    ]).toEqual([
       "INVALID_FACTORY_NAME",
+      "FACTORY_SESSION_CONFIG_LOAD_FAILED",
       "INVALID_FACTORY",
       "FACTORY_ALREADY_EXISTS",
       "FACTORY_NOT_IDLE",

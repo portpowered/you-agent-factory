@@ -3,7 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { FactoryEvent } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
 import { projectRuntime } from "./projectRuntime";
-import { reconstructWorldState } from "./replayWorldState";
+import {
+  advanceWorldStateFromCheckpoint,
+  reconstructWorldState,
+} from "./replayWorldState";
 
 const eventTime = "2026-05-30T12:00:00.000Z";
 
@@ -164,6 +167,24 @@ function workStateChangeEvent(
 }
 
 describe("reconstructWorldState WORK_STATE_CHANGE", () => {
+  it("advances an owned checkpoint in place for incremental current replay", () => {
+    const checkpoint = reconstructWorldState(
+      [initialStructureRequest, workRequestEvent(1, "work-a")],
+      1,
+    );
+
+    const advanced = advanceWorldStateFromCheckpoint(
+      checkpoint,
+      [workRequestEvent(2, "work-b")],
+      2,
+    );
+
+    expect(advanced).toBe(checkpoint);
+    expect(advanced.tick_count).toBe(2);
+    expect(advanced.workItemsByID["work-a"]).toBeDefined();
+    expect(advanced.workItemsByID["work-b"]).toBeDefined();
+  });
+
   it("moves work from failed to in-progress at a later tick while retaining failure details", () => {
     const workID = "work-recover";
     const events: FactoryEvent[] = [

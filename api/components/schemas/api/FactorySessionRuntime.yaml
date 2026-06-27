@@ -38,6 +38,12 @@ properties:
     $ref: './FactorySessionUsage.yaml'
   lifecycle:
     $ref: './FactorySessionLifecycle.yaml'
+  streamIdentity:
+    $ref: './FactorySessionStreamIdentity.yaml'
+    description: >-
+      Backend-authoritative identity for the current live session event stream.
+      Clients must confirm this identity before reusing persisted reconnect
+      cursors or timeline checkpoints.
   petri:
     $ref: './FactorySessionPetriProjection.yaml'
   javascript:

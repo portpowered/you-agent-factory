@@ -52,13 +52,14 @@ func ReconstructFactoryWorldState(events []factoryapi.FactoryEvent, selectedTick
 }
 
 type factoryWorldReducer struct {
-	stateValue   interfaces.FactoryWorldState
-	placeTokens  map[string]map[string]struct{}
-	tokenPlaces  map[string]string
-	tokenWorkIDs map[string]string
-	tokenKinds   map[string]string
-	placeCats    map[string]string
-	workPlaces   map[string]string
+	stateValue              interfaces.FactoryWorldState
+	placeTokens             map[string]map[string]struct{}
+	tokenPlaces             map[string]string
+	tokenWorkIDs            map[string]string
+	tokenKinds              map[string]string
+	placeCats               map[string]string
+	workPlaces              map[string]string
+	interruptedDispatchIDs  map[string]struct{}
 }
 
 func newFactoryWorldReducer(selectedTick int) *factoryWorldReducer {
@@ -85,8 +86,9 @@ func newFactoryWorldReducer(selectedTick int) *factoryWorldReducer {
 		tokenPlaces:  make(map[string]string),
 		tokenWorkIDs: make(map[string]string),
 		tokenKinds:   make(map[string]string),
-		placeCats:    make(map[string]string),
-		workPlaces:   make(map[string]string),
+		placeCats:              make(map[string]string),
+		workPlaces:             make(map[string]string),
+		interruptedDispatchIDs: make(map[string]struct{}),
 	}
 }
 

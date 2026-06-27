@@ -193,7 +193,7 @@ func TestCircuitBreaker_MaxRetries_DoesNotUseTransitionIDFallback(t *testing.T) 
 	}
 }
 
-func TestCircuitBreaker_MissingRuntimeRetryLimitSkipsPerWorkstationExhaustion(t *testing.T) {
+func TestCircuitBreaker_MissingRuntimeRetryLimitUsesDefaultPerWorkstationExhaustion(t *testing.T) {
 	n := buildTestNet()
 	n.Transitions["coding"] = &petri.Transition{
 		ID:   "coding",
@@ -222,8 +222,11 @@ func TestCircuitBreaker_MissingRuntimeRetryLimitSkipsPerWorkstationExhaustion(t 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != nil {
-		t.Fatalf("expected no mutation without runtime-config retry limit, got %+v", result)
+	if result == nil || len(result.Mutations) != 1 {
+		t.Fatalf("expected 1 mutation from default retry limit, got %+v", result)
+	}
+	if result.Mutations[0].ToPlace != "task:failed" {
+		t.Errorf("expected task:failed, got %s", result.Mutations[0].ToPlace)
 	}
 }
 

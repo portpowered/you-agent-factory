@@ -2985,8 +2985,12 @@ describe("factory timeline reconstruction request state", () => {
       workstation_name: "Review",
       workstation_node_id: "review",
     });
-    expect(successfulRequest.inference_attempts).toHaveLength(1);
-    expect(successfulRequest.inference_attempts[0]).toMatchObject({
+    expect(successfulRequest.inference_attempts).toHaveLength(0);
+    const successfulAttempt =
+      successfulProjected.runtime.inference_attempts_by_dispatch_id?.[
+        "dispatch-1"
+      ]?.["dispatch-1/inference-request/1"];
+    expect(successfulAttempt).toMatchObject({
       diagnostics: {
         provider: {
           model: "gpt-5.4",
@@ -3036,9 +3040,11 @@ describe("factory timeline reconstruction request state", () => {
       ],
     });
     expect(
-      successfulProjected.workstationRequestsByDispatchID[
-        "dispatch-1"
-      ].inference_attempts.map((attempt) => attempt.inference_request_id),
+      Object.keys(
+        successfulProjected.runtime.inference_attempts_by_dispatch_id?.[
+          "dispatch-1"
+        ] ?? {},
+      ),
     ).toEqual(["dispatch-1/inference-request/1"]);
 
     const rejectedProjected = buildFactoryTimelineSnapshot(
@@ -3085,8 +3091,12 @@ describe("factory timeline reconstruction request state", () => {
         ],
       },
     });
-    expect(rejectedProjection.inference_attempts).toHaveLength(1);
-    expect(rejectedProjection.inference_attempts[0]).toMatchObject({
+    expect(rejectedProjection.inference_attempts).toHaveLength(0);
+    expect(
+      rejectedProjected.runtime.inference_attempts_by_dispatch_id?.[
+        "dispatch-rejected"
+      ]?.["dispatch-rejected/inference-request/1"],
+    ).toMatchObject({
       prompt: "Review the story and explain why it needs more work.",
       response: "The story needs another pass before approval.",
       working_directory: "/work/rejected",
@@ -3158,14 +3168,17 @@ describe("factory timeline reconstruction request state", () => {
         failure_reason: "throttled",
         outcome: "FAILED",
       },
-      inference_attempts: [
-        expect.objectContaining({
-          prompt: "Retry the blocked story.",
-          error_class: "rate_limited",
-          working_directory: "/work/error",
-          worktree: "/work/error/.worktrees/story",
-        }),
-      ],
+      inference_attempts: [],
+    });
+    expect(
+      failedProjected.runtime.inference_attempts_by_dispatch_id?.[
+        "dispatch-failed"
+      ]?.["dispatch-failed/inference-request/1"],
+    ).toMatchObject({
+      prompt: "Retry the blocked story.",
+      error_class: "rate_limited",
+      working_directory: "/work/error",
+      worktree: "/work/error/.worktrees/story",
     });
   });
 });

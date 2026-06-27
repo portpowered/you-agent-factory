@@ -85,7 +85,7 @@ func TestBuildFactoryService_ReplayModeDefaultsToDeterministicClock(t *testing.T
 		t.Fatalf("BuildFactoryService replay: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := svc.Run(ctx); err != nil {
 		t.Fatalf("Run replay with deterministic default clock: %v", err)

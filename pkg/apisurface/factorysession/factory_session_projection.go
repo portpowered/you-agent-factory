@@ -126,6 +126,9 @@ func DispatchDetailResponseToAPI(result factorysessionexecution.DispatchDetail) 
 	if ids := stringSlicePtr(result.ArtifactIDs); ids != nil {
 		response.ArtifactIds = ids
 	}
+	if transitions := dispatchStatusTransitionsToAPI(result.StatusTransitions); transitions != nil {
+		response.StatusTransitions = transitions
+	}
 	if usage := dispatchUsageToAPI(result.Usage); usage != nil {
 		response.Usage = usage
 	}
@@ -283,6 +286,9 @@ func dispatchSummaryToAPI(dispatch factorysessionexecution.DispatchSummary) fact
 	if failure := dispatchFailureToAPI(dispatch.FailureDetail); failure != nil {
 		response.FailureDetail = failure
 	}
+	if javascript := dispatchJavaScriptToAPI(dispatch.JavaScript); javascript != nil {
+		response.Javascript = javascript
+	}
 	return response
 }
 
@@ -378,6 +384,26 @@ func dispatchUsageToAPI(usage *factorysessionexecution.DispatchUsage) *factoryap
 	return out
 }
 
+func dispatchStatusTransitionsToAPI(
+	transitions []factorysessionexecution.DispatchStatus,
+) *[]factoryapi.FactoryDispatchStatus {
+	if len(transitions) == 0 {
+		return nil
+	}
+	out := make([]factoryapi.FactoryDispatchStatus, 0, len(transitions))
+	for _, transition := range transitions {
+		status := strings.TrimSpace(string(transition))
+		if status == "" {
+			continue
+		}
+		out = append(out, factoryapi.FactoryDispatchStatus(status))
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return &out
+}
+
 func dispatchWarningsToAPI(warnings []factorysessionexecution.DispatchWarning) *[]factoryapi.FactoryDispatchWarning {
 	if len(warnings) == 0 {
 		return nil
@@ -438,6 +464,9 @@ func dispatchJavaScriptToAPI(javascript *factorysessionexecution.DispatchJavaScr
 	}
 	if label := strings.TrimSpace(javascript.TaskLabel); label != "" {
 		out.TaskLabel = &label
+	}
+	if mode := strings.TrimSpace(javascript.ExecutionMode); mode != "" {
+		out.ExecutionMode = &mode
 	}
 	return &out
 }

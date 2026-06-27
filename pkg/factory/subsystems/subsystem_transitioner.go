@@ -18,7 +18,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
@@ -303,11 +302,22 @@ func completedDispatchReason(result resolvedWorkResult) string {
 
 func (t *TransitionerSubsystem) calculateArcsForResolvedResult(currentTransition *petri.Transition, resolved resolvedWorkResult) ([]petri.Arc, resolvedWorkResult, error) {
 	workstation, ok := workstationconfig.Workstation(currentTransition, t.runtimeConfig)
+	if ok && workstation != nil && goal.UsesGoalRoutingDecisionEnvelope(workstation) {
+		if resolved.outcome == interfaces.OutcomeAccepted {
+			return matchClassificationLabelArcs(currentTransition, resolved.selectedClassificationLabel, resolved, "decision %q did not match any authored routing route")
+		}
+		arcs, err := calculateArcs(currentTransition, resolved.outcome)
+		return arcs, resolved, err
+	}
 	if !ok || workstation == nil || workstation.Type != interfaces.WorkstationTypeClassify || resolved.outcome != interfaces.OutcomeAccepted {
 		arcs, err := calculateArcs(currentTransition, resolved.outcome)
 		return arcs, resolved, err
 	}
 
+	return matchClassificationLabelArcs(currentTransition, resolved.output, resolved, "classifier label %q did not match any authored classification route")
+}
+
+func matchClassificationLabelArcs(currentTransition *petri.Transition, label string, resolved resolvedWorkResult, unknownLabelFmt string) ([]petri.Arc, resolvedWorkResult, error) {
 	matchedArcs := make([]petri.Arc, 0, len(currentTransition.OutputArcs))
 	matchedRoute := false
 	for _, arc := range currentTransition.OutputArcs {
@@ -315,18 +325,22 @@ func (t *TransitionerSubsystem) calculateArcsForResolvedResult(currentTransition
 			matchedArcs = append(matchedArcs, arc)
 			continue
 		}
-		if arc.ClassificationLabel == resolved.output {
+		if arc.ClassificationLabel == label {
 			matchedRoute = true
 			matchedArcs = append(matchedArcs, arc)
 		}
 	}
 	if matchedRoute {
-		resolved.selectedClassificationLabel = resolved.output
+		resolved.selectedClassificationLabel = label
 		return matchedArcs, resolved, nil
 	}
 
 	resolved.outcome = interfaces.OutcomeFailed
-	resolved.err = fmt.Sprintf("classifier label %q did not match any authored classification route", resolved.output)
+	if label == "" {
+		resolved.err = "decision envelope: routing label is required"
+	} else {
+		resolved.err = fmt.Sprintf(unknownLabelFmt, label)
+	}
 	resolved.selectedClassificationLabel = ""
 	arcs, err := calculateArcs(currentTransition, resolved.outcome)
 	return arcs, resolved, err
@@ -428,15 +442,16 @@ func cloneRuntimeTokenColors(colors []interfaces.TokenColor) []interfaces.TokenC
 
 func resolveWorkResult(transition *petri.Transition, result *interfaces.WorkResult, runtimeConfig interfaces.RuntimeWorkstationLookup) resolvedWorkResult {
 	resolved := resolvedWorkResult{
-		dispatchID:         result.DispatchID,
-		transitionID:       result.TransitionID,
-		outcome:            result.Outcome,
-		output:             result.Output,
-		spawnedWork:        cloneRuntimeTokenColors(result.SpawnedWork),
-		recordedOutputWork: cloneFactoryWorkItems(result.RecordedOutputWork),
-		err:                result.Error,
-		feedback:           result.Feedback,
-		failureMetadata:    result.FailureMetadata,
+		dispatchID:                  result.DispatchID,
+		transitionID:                result.TransitionID,
+		outcome:                     result.Outcome,
+		output:                      result.Output,
+		selectedClassificationLabel: result.SelectedClassificationLabel,
+		spawnedWork:                 cloneRuntimeTokenColors(result.SpawnedWork),
+		recordedOutputWork:          cloneFactoryWorkItems(result.RecordedOutputWork),
+		err:                         result.Error,
+		feedback:                    result.Feedback,
+		failureMetadata:             result.FailureMetadata,
 	}
 	if workstation, ok := workstationconfig.Workstation(transition, runtimeConfig); ok && workstation != nil && len(workstation.StopWords) > 0 {
 		resolved.outcome = evaluateStopWords(workstation.StopWords, result.Output)
@@ -917,85 +932,4 @@ func tokenColorsFromTokens(tokens []interfaces.Token) []interfaces.TokenColor {
 		colors[i] = token.Color
 	}
 	return colors
-}
-
-func firstNonResourceInput(inputs []interfaces.TokenColor) *interfaces.TokenColor {
-	for i := range inputs {
-		if inputs[i].DataType != interfaces.DataTypeResource && inputs[i].WorkTypeID != interfaces.SystemTimeWorkTypeID {
-			return &inputs[i]
-		}
-	}
-	for i := range inputs {
-		if inputs[i].DataType != interfaces.DataTypeResource {
-			return &inputs[i]
-		}
-	}
-	return nil
-}
-
-func applyPackagedTTSInvocationMetadata(
-	token *interfaces.Token,
-	workstation *interfaces.FactoryWorkstationConfig,
-	workerOutput string,
-	inputColors []interfaces.TokenColor,
-	runtimeConfig interfaces.RuntimeWorkstationLookup,
-) error {
-	if token == nil || !tts.ShouldFormatInvocationMetadata(workstation) {
-		return nil
-	}
-
-	traceID := ""
-	if source := firstNonResourceInput(inputColors); source != nil {
-		traceID = strings.TrimSpace(source.TraceID)
-	}
-
-	backendLabel := ""
-	if workstation != nil && runtimeConfig != nil {
-		if lookup, ok := runtimeConfig.(interfaces.RuntimeDefinitionLookup); ok {
-			if worker, ok := lookup.Worker(strings.TrimSpace(workstation.WorkerTypeName)); ok && worker != nil {
-				backendLabel = tts.BackendLabelFromWorker(worker)
-			}
-		}
-	}
-
-	metadataContent, err := tts.MetadataContentFromWorkerOutput(workerOutput, traceID, "", backendLabel)
-	if err != nil {
-		return fmt.Errorf("shape packaged tts invocation metadata: %w", err)
-	}
-
-	token.Color.Content = metadataContent
-	token.Color.Payload = nil
-	return nil
-}
-
-func applyPackagedGoalInvocationSummary(
-	token *interfaces.Token,
-	workstation *interfaces.FactoryWorkstationConfig,
-	workerOutput string,
-	runtimeConfig interfaces.RuntimeWorkstationLookup,
-) error {
-	if token == nil || !goal.ShouldFormatInvocationSummary(workstation) {
-		return nil
-	}
-	if strings.TrimSpace(workerOutput) == "" {
-		return nil
-	}
-
-	stopToken := ""
-	if workstation != nil && runtimeConfig != nil {
-		if lookup, ok := runtimeConfig.(interfaces.RuntimeDefinitionLookup); ok {
-			if worker, ok := lookup.Worker(strings.TrimSpace(workstation.WorkerTypeName)); ok && worker != nil {
-				stopToken = strings.TrimSpace(worker.StopToken)
-			}
-		}
-	}
-
-	summaryContent, err := goal.SummaryContentFromWorkerOutput(workerOutput, stopToken)
-	if err != nil {
-		return fmt.Errorf("shape packaged goal invocation summary: %w", err)
-	}
-
-	token.Color.Content = summaryContent
-	token.Color.Payload = nil
-	return nil
 }

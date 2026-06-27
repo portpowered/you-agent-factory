@@ -1,3 +1,5 @@
+// pkgmaintcheck:ignore-file-lines consolidated same-package factory-session and provider-session transport tests remain together until pkg/api package-count pressure is relieved.
+// backendsizecheck:ignore-file consolidated same-package factory-session and provider-session transport tests remain together until pkg/api package-count pressure is relieved.
 package api
 
 import (
@@ -66,6 +68,7 @@ func newSessionScopedMockFactory(
 		},
 		Net: sessionScopedStateNet(),
 		FactoryEventStream: &interfaces.FactoryEventStream{
+			StreamGenerationID: "stream-gen-" + factoryName,
 			History: []factoryapi.FactoryEvent{{Id: historyEventID, Type: factoryapi.FactoryEventTypeWorkRequest}},
 			Events:  make(chan factoryapi.FactoryEvent),
 		},
@@ -182,6 +185,9 @@ func assertScopedSessionEvents(t *testing.T, serverURL string, wantEventID strin
 	if response.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(response.Body)
 		t.Fatalf("GET /factory-sessions/session-beta/events status = %d, want 200: %s", response.StatusCode, string(body))
+	}
+	if got := response.Header.Get(sessionEventStreamGenerationHeader); got != "stream-gen-beta" {
+		t.Fatalf("%s = %q, want stream-gen-beta", sessionEventStreamGenerationHeader, got)
 	}
 
 	streamed := readSSEFactoryEvent(t, bufio.NewReader(response.Body))
@@ -380,6 +386,52 @@ func TestFactorySessionsAPI_OpenFactorySession_ValidationTargets(t *testing.T) {
 	}
 }
 
+func TestFactorySessionsAPI_OpenFactorySession_ConfigLoadFailureTargets(t *testing.T) {
+	mf := &testutil.MockFactory{
+		OpenFactorySessionErr: apiTestSessionValidationError{
+			message: "factory configuration could not be loaded from the selected folder",
+			code:    "FACTORY_SESSION_CONFIG_LOAD_FAILED",
+			targets: []factoryapi.FactoryValidationTarget{
+				factoryvalidation.FactorySessionTargetTarget(
+					"config_load_failed",
+					"default",
+					`Factory target "default" at "/workspace/fleet" could not be loaded: unexpected end of JSON input`,
+				),
+			},
+		},
+	}
+	srv := newTestServer(mf)
+
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions", bytes.NewBufferString(`{"folderPath":"/workspace/fleet","validateOnly":true}`))
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST /factory-sessions config-load failure status = %d, want 400: %s", rec.Code, rec.Body.String())
+	}
+
+	var response factoryapi.ErrorResponse
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("decode open factory session config-load error response: %v", err)
+	}
+	if response.Code != "FACTORY_SESSION_CONFIG_LOAD_FAILED" {
+		t.Fatalf("open factory session config-load error code = %q, want FACTORY_SESSION_CONFIG_LOAD_FAILED", response.Code)
+	}
+	if response.Message != "factory configuration could not be loaded from the selected folder" {
+		t.Fatalf("open factory session config-load error message = %q, want safe summary", response.Message)
+	}
+	if response.Targets == nil || len(*response.Targets) != 1 {
+		t.Fatalf("open factory session config-load error targets = %#v, want one target", response.Targets)
+	}
+	target := (*response.Targets)[0]
+	if target.Code != "factory.session.target.config_load_failed" ||
+		target.Subject.Type != factoryapi.FactoryValidationSubjectTypeFactory ||
+		target.Subject.Id != "default" ||
+		target.Subject.Location != factoryapi.FactoryValidationSubjectLocationReference {
+		t.Fatalf("open factory session config-load error target = %#v, want structured config-load target", target)
+	}
+}
+
 func TestFactorySessionsAPI_CloseFactorySession(t *testing.T) {
 	mf := &testutil.MockFactory{}
 	srv := newTestServer(mf)
@@ -398,6 +450,7 @@ func TestFactorySessionsAPI_CloseFactorySession(t *testing.T) {
 
 type apiTestSessionValidationError struct {
 	message string
+	code    string
 	targets []factoryapi.FactoryValidationTarget
 }
 
@@ -407,6 +460,13 @@ func (e apiTestSessionValidationError) Error() string {
 
 func (e apiTestSessionValidationError) ErrorTargets() []factoryapi.FactoryValidationTarget {
 	return e.targets
+}
+
+func (e apiTestSessionValidationError) ErrorCode() string {
+	if e.code == "" {
+		return "BAD_REQUEST"
+	}
+	return e.code
 }
 
 func TestFactorySessionsAPI_CloseFactorySession_NotFound(t *testing.T) {
@@ -509,6 +569,77 @@ func TestCurrentFactoryBySessionId_UnknownSessionReturnsNotFound(t *testing.T) {
 	putRec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(putRec, putReq)
 	assertJSONError(t, putRec, http.StatusNotFound, "NOT_FOUND", "factory session not found")
+}
+
+func TestFactorySessionsAPI_InvokeFactorySession(t *testing.T) {
+	const namedGoalParityText = "Plan the sprint from CLI and API parity coverage"
+
+	tests := []struct {
+		name           string
+		body           string
+		result         apisurface.FactoryInvocationResult
+		wantSubmitText string
+	}{
+		{
+			name: "default text input",
+			body: `{"sourceKind":"text","content":[{"type":"text","text":"invoke this"}]}`,
+			result: apisurface.FactoryInvocationResult{
+				RequestID:     "invoke-1",
+				TraceID:       "trace-invoke-1",
+				Status:        factoryapi.InvocationTerminalStatusCompleted,
+				PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "primary output"}},
+			},
+		},
+		{
+			name: "named goal parity text",
+			body: `{"sourceKind":"text","content":[{"type":"text","text":"` + namedGoalParityText + `"}]}`,
+			result: apisurface.FactoryInvocationResult{
+				RequestID: "request-goal-parity-success",
+				TraceID:   "trace-goal-parity-success",
+				Status:    factoryapi.InvocationTerminalStatusCompleted,
+				PrimaryResult: []interfaces.WorkContentPart{{
+					Type: interfaces.WorkContentPartTypeText,
+					Text: "goal parity completed",
+				}},
+			},
+			wantSubmitText: namedGoalParityText,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := &testutil.MockFactory{
+				SessionFactories: map[string]*testutil.MockFactory{
+					"~default": {},
+				},
+				InvokeFactoryResult: tc.result,
+			}
+			assertFactorySessionInvocation(t, mock, tc.body, tc.result, tc.wantSubmitText)
+		})
+	}
+}
+
+func TestFactorySessionsAPI_InvokeFactorySession_InputConflictReturnsStableBadRequest(t *testing.T) {
+	const namedGoalParityText = "Plan the sprint from CLI and API parity coverage"
+	conflictMessage := "invocation input sources conflict: positional_text, stdin_text"
+
+	srv := newTestServer(&testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			"~default": {},
+		},
+		InvokeFactoryErr: &invocations.InputError{
+			Code:    invocations.InputErrorCodeSourceConflict,
+			Message: conflictMessage,
+		},
+	})
+
+	body := `{"sourceKind":"text","content":[{"type":"text","text":"` + namedGoalParityText + `"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/invocations", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+
+	assertJSONError(t, rec, http.StatusBadRequest, string(invocations.InputErrorCodeSourceConflict), conflictMessage)
 }
 
 func TestParseCodexSessionSummary_ExtractsDiagnosticDetails(t *testing.T) {
@@ -922,75 +1053,4 @@ func TestGetProviderSessionDetails_RejectsSessionSymlinkOutsideConfiguredRootEve
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "provider session must be a codex session_id identifier without path separators")
-}
-
-func TestFactorySessionsAPI_InvokeFactorySession(t *testing.T) {
-	const namedGoalParityText = "Plan the sprint from CLI and API parity coverage"
-
-	tests := []struct {
-		name           string
-		body           string
-		result         apisurface.FactoryInvocationResult
-		wantSubmitText string
-	}{
-		{
-			name: "default text input",
-			body: `{"sourceKind":"text","content":[{"type":"text","text":"invoke this"}]}`,
-			result: apisurface.FactoryInvocationResult{
-				RequestID:     "invoke-1",
-				TraceID:       "trace-invoke-1",
-				Status:        factoryapi.InvocationTerminalStatusCompleted,
-				PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "primary output"}},
-			},
-		},
-		{
-			name: "named goal parity text",
-			body: `{"sourceKind":"text","content":[{"type":"text","text":"` + namedGoalParityText + `"}]}`,
-			result: apisurface.FactoryInvocationResult{
-				RequestID: "request-goal-parity-success",
-				TraceID:   "trace-goal-parity-success",
-				Status:    factoryapi.InvocationTerminalStatusCompleted,
-				PrimaryResult: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeText,
-					Text: "goal parity completed",
-				}},
-			},
-			wantSubmitText: namedGoalParityText,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			mock := &testutil.MockFactory{
-				SessionFactories: map[string]*testutil.MockFactory{
-					"~default": {},
-				},
-				InvokeFactoryResult: tc.result,
-			}
-			assertFactorySessionInvocation(t, mock, tc.body, tc.result, tc.wantSubmitText)
-		})
-	}
-}
-
-func TestFactorySessionsAPI_InvokeFactorySession_InputConflictReturnsStableBadRequest(t *testing.T) {
-	const namedGoalParityText = "Plan the sprint from CLI and API parity coverage"
-	conflictMessage := "invocation input sources conflict: positional_text, stdin_text"
-
-	srv := newTestServer(&testutil.MockFactory{
-		SessionFactories: map[string]*testutil.MockFactory{
-			"~default": {},
-		},
-		InvokeFactoryErr: &invocations.InputError{
-			Code:    invocations.InputErrorCodeSourceConflict,
-			Message: conflictMessage,
-		},
-	})
-
-	body := `{"sourceKind":"text","content":[{"type":"text","text":"` + namedGoalParityText + `"}]}`
-	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/invocations", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	srv.Handler().ServeHTTP(rec, req)
-
-	assertJSONError(t, rec, http.StatusBadRequest, string(invocations.InputErrorCodeSourceConflict), conflictMessage)
 }

@@ -24,6 +24,7 @@ import {
 } from "./testing/app-shell-export-test-utils";
 import {
   baselineSnapshot,
+  chainRenderAppFetchMock,
   fetchCallPaths,
   jsonResponse,
   nonPromptTemplateFetchPaths,
@@ -40,9 +41,16 @@ describe("App shell export dialog flows", () => {
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse(currentSessionFactoryExportAPIResponse),
-    );
+    chainRenderAppFetchMock(fetchMock, async (path, method) => {
+      if (
+        method === "GET" &&
+        path === "/factory-sessions/~default/factory"
+      ) {
+        return jsonResponse(currentSessionFactoryExportAPIResponse);
+      }
+
+      return undefined;
+    });
 
     try {
       fireEvent.click(
@@ -137,16 +145,12 @@ describe("App shell export dialog flows", () => {
     });
     let currentFactoryFetchCount = 0;
 
-    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
-      const path =
-        typeof input === "string"
-          ? input
-          : input instanceof URL
-            ? `${input.pathname}${input.search}`
-            : input.url;
-
-      if (path !== `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/factory`) {
-        throw new Error(`unexpected fetch for ${path}`);
+    chainRenderAppFetchMock(fetchMock, async (path, method) => {
+      if (
+        method !== "GET" ||
+        path !== `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/factory`
+      ) {
+        return undefined;
       }
 
       currentFactoryFetchCount += 1;
@@ -250,9 +254,16 @@ describe("App shell export dialog flows", () => {
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse(currentSessionFactoryExportAPIResponse),
-    );
+    chainRenderAppFetchMock(fetchMock, async (path, method) => {
+      if (
+        method === "GET" &&
+        path === "/factory-sessions/~default/factory"
+      ) {
+        return jsonResponse(currentSessionFactoryExportAPIResponse);
+      }
+
+      return undefined;
+    });
 
     try {
       fireEvent.click(

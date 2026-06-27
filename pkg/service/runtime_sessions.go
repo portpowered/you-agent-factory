@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -20,28 +21,36 @@ import (
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/internal/metrics"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
 
 const (
-	defaultFactorySessionID         = factorysessions.DefaultSessionID
-	FactorySessionTargetKindDefault = factorysessions.TargetKindDefault
-	FactorySessionTargetKindNamed   = factorysessions.TargetKindNamed
+	defaultFactorySessionID                     = factorysessions.DefaultSessionID
+	FactorySessionTargetKindDefault             = factorysessions.TargetKindDefault
+	FactorySessionTargetKindNamed               = factorysessions.TargetKindNamed
+	runtimeMetricSessionResponseStreamPublished = "session_response_stream.published"
+	runtimeMetricSessionResponseStreamCompacted = "session_response_stream.compacted"
+	runtimeMetricSessionResponseStreamDegraded  = "session_response_stream.degraded"
 )
 
 type (
-	FactorySessionTargetKind = factorysessions.TargetKind
-	FactorySessionTargetRef  = factorysessions.TargetRef
-	FactorySessionTarget     = factorysessions.Target
-	FactorySessionOpenResult = factorysessions.OpenResult
-	liveFactorySession       = factorysessions.LiveSession
+	FactorySessionTargetKind          = factorysessions.TargetKind
+	FactorySessionTargetRef           = factorysessions.TargetRef
+	FactorySessionTarget              = factorysessions.Target
+	FactorySessionOpenResult          = factorysessions.OpenResult
+	liveFactorySession                = factorysessions.LiveSession
+	inferenceProgressPublisherFactory func(sessionID string) workerprovider.InferenceProgressPublisher
+	dispatchCompletionObserverFactory func(sessionID string) func(dispatchID string)
 )
 
 // FactoryCoordinator owns session tracking and runtime lifecycle orchestration.
@@ -49,6 +58,7 @@ type FactoryCoordinator interface {
 	ActivateNamedFactory(context.Context, string) error
 	ListFactorySessions(context.Context) (factoryapi.ListFactorySessionsResponse, error)
 	GetFactorySession(context.Context, string) (factoryapi.FactorySession, error)
+	GetFactorySessionSyncPreflight(context.Context, string, *interfaces.FactoryEventReconnectCursor) (factoryapi.FactorySessionSyncPreflightResponse, error)
 	GetFactorySessionResult(context.Context, string) (factoryapi.FactorySessionLiveResult, error)
 	GetFactorySessionPartialResult(context.Context, string) (factoryapi.FactorySessionPartialResult, error)
 	OpenFactorySession(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
@@ -227,6 +237,7 @@ func (fs *FactoryService) unregisterLiveSession(sessionID string) {
 	if fs == nil || fs.sessions == nil {
 		return
 	}
+	fs.closeSessionResponseStreams(fs.sessionByID(sessionID))
 	fs.sessions.Remove(sessionID)
 }
 
@@ -789,6 +800,7 @@ func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
 			executionBaseDir = runtimeBaseDir
 		}
 	}
+	fs.closeSessionResponseStreams(session)
 	fs.sessions.Upsert(factorysessions.NewLiveSession(
 		session.ID,
 		replacement.dir,
@@ -832,13 +844,21 @@ func (fs *FactoryService) probeFactorySessionTarget(
 	folderPath string,
 	factoryDir string,
 	ref factorysessions.TargetRef,
-) (factorysessions.Target, bool) {
+) (factorysessions.Target, bool, *factorysessions.DiscoveryFailure) {
 	if fs == nil {
-		return factorysessions.Target{}, false
+		return factorysessions.Target{}, false, nil
 	}
 	loaded, err := configload.LoadRuntimeConfigFromFactoryDir(factoryDir, fs.coordinatorPolicy().workstationLoader)
 	if err != nil {
-		return factorysessions.Target{}, false
+		if !errors.Is(err, os.ErrNotExist) && !configload.IsFactoryLayoutNotFound(err) && !configload.IsNamedFactoryNotFound(err) {
+			fs.logFactorySessionTargetProbeFailure(folderPath, factoryDir, ref, err)
+			return factorysessions.Target{}, false, &factorysessions.DiscoveryFailure{
+				FactoryDir: factoryDir,
+				Ref:        ref,
+				Summary:    err.Error(),
+			}
+		}
+		return factorysessions.Target{}, false, nil
 	}
 
 	project := ""
@@ -848,7 +868,34 @@ func (fs *FactoryService) probeFactorySessionTarget(
 			project = strings.TrimSpace(cfg.Name)
 		}
 	}
-	return factorysessions.BuildTargetFromConfig(folderPath, factoryDir, ref, project), true
+	return factorysessions.BuildTargetFromConfig(folderPath, factoryDir, ref, project), true, nil
+}
+
+func (fs *FactoryService) logFactorySessionTargetProbeFailure(
+	folderPath string,
+	factoryDir string,
+	ref factorysessions.TargetRef,
+	err error,
+) {
+	if fs == nil || err == nil {
+		return
+	}
+	logger := fs.logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	fields := []zap.Field{
+		zap.String("submitted_folder_path", folderPath),
+		zap.String("target_factory_dir", factoryDir),
+		zap.String("target_kind", string(ref.Kind)),
+		zap.String("target_display_name", factorysessions.TargetDisplayName(ref)),
+		zap.String("failure_summary", err.Error()),
+		zap.Error(err),
+	}
+	if ref.Kind == factorysessions.TargetKindNamed && strings.TrimSpace(ref.Name) != "" {
+		fields = append(fields, zap.String("target_name", strings.TrimSpace(ref.Name)))
+	}
+	logger.Error("factory session discovery target runtime config load failed", fields...)
 }
 
 func (fs *FactoryService) waitForServiceModeStartupWorkReadability(ctx context.Context, serviceMode bool) error {
@@ -897,7 +944,6 @@ func startupReadinessError(err error) error {
 	return fmt.Errorf("wait for service-mode startup work readiness: %w", err)
 }
 
-
 func (fs *FactoryService) ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error) {
 	return fs.requireCoordinator().ListFactorySessions(ctx)
 }
@@ -929,6 +975,14 @@ func (fs *FactoryService) GetFactorySession(ctx context.Context, sessionID strin
 	return fs.requireCoordinator().GetFactorySession(ctx, sessionID)
 }
 
+func (fs *FactoryService) GetFactorySessionSyncPreflight(
+	ctx context.Context,
+	sessionID string,
+	reconnect *interfaces.FactoryEventReconnectCursor,
+) (factoryapi.FactorySessionSyncPreflightResponse, error) {
+	return fs.requireCoordinator().GetFactorySessionSyncPreflight(ctx, sessionID, reconnect)
+}
+
 func (c *runtimeFactoryCoordinator) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
 	fs := c.service
 	session, err := fs.requireSession(sessionID)
@@ -940,6 +994,114 @@ func (c *runtimeFactoryCoordinator) GetFactorySession(ctx context.Context, sessi
 		return factoryapi.FactorySession{}, err
 	}
 	return factorysessions.SessionResponse(projectionCtx), nil
+}
+
+func (c *runtimeFactoryCoordinator) GetFactorySessionSyncPreflight(
+	_ context.Context,
+	sessionID string,
+	reconnect *interfaces.FactoryEventReconnectCursor,
+) (factoryapi.FactorySessionSyncPreflightResponse, error) {
+	fs := c.service
+	response := newFactorySessionSyncPreflightResponse(sessionID, reconnect)
+	if strings.HasPrefix(sessionID, "dur-sess-") {
+		response.ReasonCode = factoryapi.SessionNotFound
+		return response, nil
+	}
+
+	resolved, err := fs.resolveSessionSyncPreflightTarget(sessionID)
+	if err != nil {
+		return factoryapi.FactorySessionSyncPreflightResponse{}, err
+	}
+	if resolved.session == nil {
+		response.ReasonCode = factoryapi.SessionNotFound
+		return response, nil
+	}
+	session := resolved.session
+
+	response.BackendScopeId = stringPointer(factorySessionBackendScopeID(fs, session))
+	response.LogicalSessionKeyId = stringPointer(factorySessionLogicalSessionKeyID(session))
+	response.FactorySessionId = stringPointer(session.ID)
+	response.StreamGenerationId = stringPointer(factorySessionStreamGenerationID(fs, session))
+	if resolved.remapped {
+		response.ReasonCode = factoryapi.LogicalSessionRemap
+		return response, nil
+	}
+
+	if !response.ReconnectCursor.Provided {
+		response.ReasonCode = factoryapi.Ok
+		response.CheckpointReusable = true
+		return response, nil
+	}
+
+	eventHistory := liveSessionHandle(session).runtime.eventHistory
+	eventsSnapshot := []factoryapi.FactoryEvent(nil)
+	if eventHistory != nil {
+		eventsSnapshot = eventHistory.Events()
+	}
+	_, err = events.BuildReconnectReplay(
+		eventsSnapshot,
+		*reconnect,
+		interfaces.FactoryEventReconnectScope{SessionID: session.ID},
+	)
+	if err != nil {
+		if errors.Is(err, events.ErrReconnectCursorNotFound) {
+			response.ReasonCode = factoryapi.CursorStale
+			return response, nil
+		}
+		return factoryapi.FactorySessionSyncPreflightResponse{}, err
+	}
+
+	response.ReasonCode = factoryapi.Ok
+	response.CheckpointReusable = true
+	response.ReconnectCursor.ValidForStreamGeneration = true
+	return response, nil
+}
+
+type sessionSyncPreflightTarget struct {
+	session  *factorysessions.LiveSession
+	remapped bool
+}
+
+func (fs *FactoryService) resolveSessionSyncPreflightTarget(sessionID string) (sessionSyncPreflightTarget, error) {
+	if fs == nil {
+		return sessionSyncPreflightTarget{}, fmt.Errorf("factory service is required")
+	}
+	if session, err := fs.requireSession(sessionID); err == nil {
+		return sessionSyncPreflightTarget{session: session}, nil
+	} else if !errors.Is(err, apisurface.ErrFactorySessionNotFound) {
+		return sessionSyncPreflightTarget{}, err
+	}
+
+	if strings.TrimSpace(sessionID) != defaultFactorySessionID {
+		return sessionSyncPreflightTarget{}, nil
+	}
+
+	if session := fs.preflightDefaultSessionSuccessor(); session != nil {
+		return sessionSyncPreflightTarget{session: session, remapped: true}, nil
+	}
+	return sessionSyncPreflightTarget{}, nil
+}
+
+func (fs *FactoryService) preflightDefaultSessionSuccessor() *factorysessions.LiveSession {
+	if fs == nil {
+		return nil
+	}
+	if runState := fs.currentRunState(); runState != nil {
+		successorID := strings.TrimSpace(runState.sessionID)
+		if successorID != "" && successorID != defaultFactorySessionID {
+			if session, err := fs.requireSession(successorID); err == nil {
+				return session
+			}
+		}
+	}
+	current := fs.currentSession()
+	if current == nil || current.ID == defaultFactorySessionID {
+		return nil
+	}
+	if session, err := fs.requireSession(current.ID); err == nil {
+		return session
+	}
+	return nil
 }
 
 func (fs *FactoryService) buildSessionProjectionContext(
@@ -955,9 +1117,11 @@ func (fs *FactoryService) buildSessionProjectionContext(
 	}
 	factoryCfg := runtimeCfg.FactoryConfig()
 	projectionCtx := factorysessions.ProjectionContext{
-		Session:    session,
-		FactoryCfg: factoryCfg,
-		Now:        time.Now().UTC(),
+		Session:          session,
+		FactoryCfg:       factoryCfg,
+		BackendScopeID:   strings.TrimSpace(liveSessionBundle(session).runtimeInstanceID),
+		RuntimeStartedAt: liveSessionBundle(session).startedAtUTC,
+		Now:              time.Now().UTC(),
 	}
 	if interfaces.IsJavaScriptOrchestratorFactory(factoryCfg) {
 		checkpointStore := fs.javascriptCheckpointStore(session)
@@ -980,6 +1144,7 @@ func (fs *FactoryService) buildSessionProjectionContext(
 	if err != nil {
 		return factorysessions.ProjectionContext{}, err
 	}
+	projectionCtx.Snapshot = snapshot
 	projectionCtx.LifecycleControlStatus = snapshot.LifecycleControlStatus
 	return projectionCtx, nil
 }
@@ -1033,6 +1198,349 @@ func (fs *FactoryService) javascriptCheckpointStore(session *factorysessions.Liv
 		state.javascriptCheckpoints = factorysessions.NewJavaScriptCheckpointStore()
 	}
 	return state.javascriptCheckpoints
+}
+
+func (fs *FactoryService) sessionResponseStreams(session *factorysessions.LiveSession) *factorysessions.SessionResponseStreamSet {
+	state := liveSessionRuntimeState(session)
+	if state == nil {
+		return nil
+	}
+	state.responseStreamsOnce.Do(func() {
+		state.responseStreams = fs.newSessionResponseStreamSetInstance()
+	})
+	return state.responseStreams
+}
+
+func (fs *FactoryService) closeSessionResponseStreams(session *factorysessions.LiveSession) {
+	streams := fs.sessionResponseStreams(session)
+	if streams == nil {
+		return
+	}
+	streams.Close()
+}
+
+func (fs *FactoryService) closeSessionResponseStreamDispatch(
+	session *factorysessions.LiveSession,
+	dispatchID string,
+) bool {
+	streams := fs.sessionResponseStreams(session)
+	if streams == nil {
+		return false
+	}
+	return streams.CloseDispatch(dispatchID)
+}
+
+func (fs *FactoryService) sessionResponseStream(
+	session *factorysessions.LiveSession,
+	dispatchID string,
+) *factorysessions.SessionResponseStream {
+	streams := fs.sessionResponseStreams(session)
+	if streams == nil {
+		return nil
+	}
+	return streams.Stream(dispatchID)
+}
+
+func (fs *FactoryService) SubscribeSessionResponseStream(
+	sessionID string,
+	dispatchID string,
+	afterSequence int64,
+) (*factorysessions.SessionResponseStreamSubscription, error) {
+	if fs == nil {
+		return nil, fmt.Errorf("factory service is required")
+	}
+	session, err := fs.requireSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	streams := fs.sessionResponseStreams(session)
+	if streams == nil {
+		return nil, responsestream.ErrSubscriptionClosed
+	}
+	return streams.Subscribe(dispatchID, afterSequence)
+}
+
+func (fs *FactoryService) newSessionResponseStreamInstance() *factorysessions.SessionResponseStream {
+	if fs != nil && fs.newSessionResponseStream != nil {
+		return fs.newSessionResponseStream()
+	}
+	return factorysessions.NewSessionResponseStream()
+}
+
+func (fs *FactoryService) newSessionResponseStreamSetInstance() *factorysessions.SessionResponseStreamSet {
+	return factorysessions.NewSessionResponseStreamSetWithFactory(func() *factorysessions.SessionResponseStream {
+		return fs.newSessionResponseStreamInstance()
+	})
+}
+
+func newFactorySessionSyncPreflightResponse(
+	sessionID string,
+	reconnect *interfaces.FactoryEventReconnectCursor,
+) factoryapi.FactorySessionSyncPreflightResponse {
+	response := factoryapi.FactorySessionSyncPreflightResponse{
+		RequestedSessionId: strings.TrimSpace(sessionID),
+		ReasonCode:         factoryapi.SessionNotFound,
+		ReconnectCursor: factoryapi.FactorySessionSyncPreflightReconnectCursor{
+			Provided: reconnect != nil && (strings.TrimSpace(reconnect.AfterEventID) != "" || reconnect.AfterSequence != nil),
+		},
+	}
+	if reconnect == nil {
+		return response
+	}
+	if afterEventID := strings.TrimSpace(reconnect.AfterEventID); afterEventID != "" {
+		response.ReconnectCursor.AfterEventId = &afterEventID
+	}
+	if reconnect.AfterSequence != nil {
+		value := int64(*reconnect.AfterSequence)
+		response.ReconnectCursor.AfterSequence = &value
+	}
+	return response
+}
+
+func factorySessionBackendScopeID(fs *FactoryService, session *factorysessions.LiveSession) string {
+	if fs != nil && fs.cfg != nil {
+		if runtimeInstanceID := strings.TrimSpace(fs.cfg.RuntimeInstanceID); runtimeInstanceID != "" {
+			return runtimeInstanceID
+		}
+	}
+	return ""
+}
+
+func factorySessionLogicalSessionKeyID(session *factorysessions.LiveSession) string {
+	if session == nil {
+		return ""
+	}
+	folderPath := filepath.Clean(strings.TrimSpace(session.FolderPath))
+	if folderPath == "." {
+		folderPath = ""
+	}
+	targetKind := strings.TrimSpace(string(session.Target.Kind))
+	targetName := strings.TrimSpace(session.Target.Name)
+	if targetKind == "" {
+		targetKind = string(factorysessions.TargetKindDefault)
+	}
+	return strings.Join([]string{folderPath, targetKind, targetName}, "::")
+}
+
+func factorySessionStreamGenerationID(fs *FactoryService, session *factorysessions.LiveSession) string {
+	factorySessionID := ""
+	if session != nil {
+		factorySessionID = strings.TrimSpace(session.ID)
+	}
+	backendScopeID := factorySessionBackendScopeID(fs, session)
+	switch {
+	case backendScopeID != "" && factorySessionID != "":
+		return backendScopeID + "::" + factorySessionID
+	case factorySessionID != "":
+		return factorySessionID
+	default:
+		return backendScopeID
+	}
+}
+
+func stringPointer(value string) *string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+func mapInferenceProgressFragment(fragment workerprovider.InferenceProgressFragment) responsestream.Event {
+	kind := responsestream.EventKindProgressFragment
+	switch fragment.Kind {
+	case workerprovider.ResponseFragmentKind:
+		kind = responsestream.EventKindResponseFragment
+	case workerprovider.CompletedFragmentKind:
+		kind = responsestream.EventKindStreamCompleted
+	case workerprovider.FailedFragmentKind:
+		kind = responsestream.EventKindStreamFailed
+	}
+	return responsestream.Event{
+		Kind:               kind,
+		Type:               responsestream.EventType(strings.TrimSpace(fragment.Type)),
+		DispatchID:         strings.TrimSpace(fragment.DispatchID),
+		ProviderSessionRef: interfaces.CloneProviderSessionMetadata(fragment.ProviderSessionRef),
+		Payload:            fragment.Payload,
+		ExternalEventType:  strings.TrimSpace(fragment.ExternalEventType),
+		Metadata:           cloneStringMap(fragment.Metadata),
+	}
+}
+
+func cloneStringMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	clone := make(map[string]string, len(values))
+	for key, value := range values {
+		clone[key] = value
+	}
+	return clone
+}
+
+func newInferenceProgressPublisherFactory(
+	sessions *factorysessions.Registry,
+	logger *zap.Logger,
+) inferenceProgressPublisherFactory {
+	if sessions == nil {
+		return nil
+	}
+	svc := &FactoryService{sessions: sessions}
+	return func(sessionID string) workerprovider.InferenceProgressPublisher {
+		return svc.inferenceProgressPublisher(sessionID, logger)
+	}
+}
+
+func newSessionDispatchCompletionObserverFactory(
+	sessions *factorysessions.Registry,
+) dispatchCompletionObserverFactory {
+	if sessions == nil {
+		return nil
+	}
+	svc := &FactoryService{sessions: sessions}
+	return func(sessionID string) func(string) {
+		normalizedSessionID := strings.TrimSpace(sessionID)
+		if normalizedSessionID == "" {
+			normalizedSessionID = defaultFactorySessionID
+		}
+		return func(dispatchID string) {
+			session := sessions.Get(normalizedSessionID)
+			if session == nil && normalizedSessionID == defaultFactorySessionID {
+				session = sessions.Get(defaultFactorySessionID)
+			}
+			svc.closeSessionResponseStreamDispatch(session, dispatchID)
+		}
+	}
+}
+
+func (fs *FactoryService) inferenceProgressPublisher(
+	sessionID string,
+	logger *zap.Logger,
+) workerprovider.InferenceProgressPublisher {
+	if fs == nil || fs.sessions == nil {
+		return nil
+	}
+	sessions := fs.sessions
+	normalizedSessionID := strings.TrimSpace(sessionID)
+	if normalizedSessionID == "" {
+		normalizedSessionID = defaultFactorySessionID
+	}
+	return func(fragment workerprovider.InferenceProgressFragment) {
+		dispatchID := strings.TrimSpace(fragment.DispatchID)
+		var session *factorysessions.LiveSession
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				emitSessionResponseStreamDegraded(
+					session,
+					normalizedSessionID,
+					dispatchID,
+					"PUBLISH_PANIC",
+					logger,
+					fmt.Errorf("panic during internal provider progress publication: %v", recovered),
+				)
+			}
+		}()
+		session = sessions.Get(normalizedSessionID)
+		if session == nil && normalizedSessionID == defaultFactorySessionID {
+			session = sessions.Get(defaultFactorySessionID)
+		}
+		stream := fs.sessionResponseStream(session, fragment.DispatchID)
+		if stream == nil {
+			emitSessionResponseStreamDegraded(session, normalizedSessionID, dispatchID, "STREAM_UNAVAILABLE", logger, nil)
+			return
+		}
+		publisher := responsestream.NewPublisher(stream, func(summary responsestream.CompactionSummary) {
+			emitSessionResponseStreamCompaction(session, normalizedSessionID, dispatchID, summary)
+		})
+		event := mapInferenceProgressFragment(fragment)
+		stored := publisher.Publish(event)
+		emitSessionResponseStreamPublished(session, normalizedSessionID, stored)
+	}
+}
+
+func emitSessionResponseStreamPublished(session *factorysessions.LiveSession, sessionID string, event responsestream.Event) {
+	fields := metrics.Fields{
+		DispatchID: strings.TrimSpace(event.DispatchID),
+		Reason:     string(event.Kind),
+	}
+	emitSessionResponseStreamMetric(session, sessionID, runtimeMetricSessionResponseStreamPublished, fields)
+}
+
+func emitSessionResponseStreamCompaction(
+	session *factorysessions.LiveSession,
+	sessionID string,
+	dispatchID string,
+	summary responsestream.CompactionSummary,
+) {
+	fields := metrics.Fields{
+		DispatchID: strings.TrimSpace(dispatchID),
+		Reason:     string(summary.Reason),
+	}
+	emitSessionResponseStreamMetric(session, sessionID, runtimeMetricSessionResponseStreamCompacted, fields)
+	if handle := liveSessionHandle(session); handle != nil && handle.runtime != nil && handle.runtime.logger != nil {
+		handle.runtime.logger.Warn("session response stream compacted internal provider progress",
+			zap.String("session_id", sessionID),
+			zap.String("dispatch_id", dispatchID),
+			zap.String("compaction_reason", string(summary.Reason)),
+			zap.Int("dropped_sequence_count", summary.DroppedSequenceCount),
+			zap.Int64("first_retained_sequence", summary.FirstRetainedSequence),
+			zap.Int64("last_dropped_sequence", summary.LastDroppedSequence),
+		)
+	}
+}
+
+func emitSessionResponseStreamDegraded(
+	session *factorysessions.LiveSession,
+	sessionID string,
+	dispatchID string,
+	reason string,
+	fallbackLogger *zap.Logger,
+	err error,
+) {
+	fields := metrics.Fields{
+		DispatchID: strings.TrimSpace(dispatchID),
+		Reason:     strings.TrimSpace(reason),
+	}
+	emitSessionResponseStreamMetric(session, sessionID, runtimeMetricSessionResponseStreamDegraded, fields)
+
+	log := fallbackLogger
+	if handle := liveSessionHandle(session); handle != nil && handle.runtime != nil && handle.runtime.logger != nil {
+		log = handle.runtime.logger
+	}
+	if log == nil {
+		return
+	}
+	logFields := []zap.Field{
+		zap.String("session_id", sessionID),
+		zap.String("dispatch_id", strings.TrimSpace(dispatchID)),
+		zap.String("reason", strings.TrimSpace(reason)),
+	}
+	if err != nil {
+		logFields = append(logFields, zap.Error(err))
+	}
+	log.Warn("internal provider progress publication degraded", logFields...)
+}
+
+func emitSessionResponseStreamMetric(
+	session *factorysessions.LiveSession,
+	sessionID string,
+	name string,
+	fields metrics.Fields,
+) {
+	handle := liveSessionHandle(session)
+	if handle == nil || handle.runtime == nil {
+		return
+	}
+	if fields.DispatchID == "" {
+		fields.DispatchID = sessionID
+	}
+	if err := handle.runtime.metricsEmitter().Counter(context.Background(), name, 1, fields); err != nil {
+		handle.runtime.runtimeLogger().Warn("session response stream metric emission failed",
+			zap.String("metric_name", name),
+			zap.String("session_id", sessionID),
+			zap.Error(err),
+		)
+	}
 }
 
 func sortFactorySessionSummaries(summaries []factoryapi.FactorySessionSummary) {
@@ -1320,6 +1828,21 @@ func (fs *FactoryService) RetryDurableFactorySessionDispatch(
 	return factorysession.LifecycleControlResponseToAPI(result), nil
 }
 
+func (fs *FactoryService) InterruptDurableFactorySessionDispatch(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.FactorySessionInterruptDispatchRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	interrupt, err := factorysession.InterruptDispatchRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := fs.durableExecutionService().InterruptDispatch(ctx, sessionID, interrupt)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
+}
 func (fs *FactoryService) PauseLiveFactorySession(
 	ctx context.Context,
 	sessionID string,
@@ -1437,6 +1960,7 @@ func (fs *FactoryService) applyLiveLifecycleControl(
 	fs.observeLiveLifecycleControl(sessionID, operation, control, outcome, resultStatus, nil)
 	return result, nil
 }
+
 const (
 	runtimeMetricLifecycleControl = "runtime.lifecycle_control"
 )

@@ -51,10 +51,11 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 	readyCh := make(chan struct{})
 
 	serviceCfg := &service.FactoryServiceConfig{
-		Dir:          cfg.FactoryDir,
-		Port:         1,
-		Logger:       zap.NewNop(),
-		ExtraOptions: cfg.ExtraOptions,
+		Dir:                      cfg.FactoryDir,
+		Port:                     1,
+		Logger:                   zap.NewNop(),
+		RuntimeFileLoggingPolicy: service.RuntimeFileLoggingPolicyDisabled,
+		ExtraOptions:             cfg.ExtraOptions,
 		APIServerStarter: func(ctx context.Context, surface apisurface.APISurface, port int, l *zap.Logger) error {
 			if cfg.CaptureAPISurface != nil {
 				cfg.CaptureAPISurface(surface)

@@ -3,8 +3,10 @@ import {
   completionToProviderSession,
   completionToTraceDispatch,
 } from "./replayCompletion";
+import { storeTextBlob } from "./text-blobs/timelineTextBlobs";
 import {
   emptyWorldRuntime,
+  type ReplayTextBacked,
   type ReplayWorldState,
   type WorldScriptRequest,
   type WorldScriptResponse,
@@ -27,6 +29,7 @@ export function emptyReplayWorldState(tick: number): ReplayWorldState {
     scriptRequestsByDispatchID: {},
     scriptResponsesByDispatchID: {},
     terminalWorkByID: {},
+    textBlobsByID: {},
     tick_count: tick,
     topology: {},
     tracesByID: {},
@@ -43,12 +46,13 @@ export function emptyReplayWorldState(tick: number): ReplayWorldState {
 export function inferenceAttemptsForDispatch(
   state: ReplayWorldState,
   dispatchID: string,
-): Record<string, DashboardInferenceAttempt> {
+): Record<string, DashboardInferenceAttempt & ReplayTextBacked> {
   const existing = state.inferenceAttemptsByDispatchID[dispatchID];
   if (existing) {
     return existing;
   }
-  const attempts: Record<string, DashboardInferenceAttempt> = {};
+  const attempts: Record<string, DashboardInferenceAttempt & ReplayTextBacked> =
+    {};
   state.inferenceAttemptsByDispatchID[dispatchID] = attempts;
   return attempts;
 }
@@ -212,8 +216,18 @@ export function applyScriptResponse(
     outcome: payload.outcome,
     response_time: event.context.eventTime,
     script_request_id: payload.scriptRequestId,
-    stderr: payload.stderr,
-    stdout: payload.stdout,
+    stderr: "",
+    stderrTextBlobID: storeTextBlob(
+      state,
+      `script:${payload.scriptRequestId}:stderr`,
+      payload.stderr,
+    ),
+    stdout: "",
+    stdoutTextBlobID: storeTextBlob(
+      state,
+      `script:${payload.scriptRequestId}:stdout`,
+      payload.stdout,
+    ),
     transition_id: payload.transitionId,
   };
 }

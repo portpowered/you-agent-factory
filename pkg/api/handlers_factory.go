@@ -13,8 +13,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"go.uber.org/zap"
@@ -316,6 +316,15 @@ func (s *Server) GetFactorySessionPartialResult(w http.ResponseWriter, r *http.R
 	s.writeJSON(w, http.StatusOK, response)
 }
 
+func (s *Server) InterruptFactorySessionDispatch(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
+	s.handleDurableInterruptDispatchControl(w, r, sessionID, func(
+		lifecycle apisurface.DurableSessionLifecycleAPI,
+		req factoryapi.FactorySessionInterruptDispatchRequest,
+	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+		return lifecycle.InterruptDurableFactorySessionDispatch(r.Context(), string(sessionID), req)
+	})
+}
+
 func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 	sessionRuntime, ok := s.requireSessionRuntime(w)
 	if !ok {
@@ -343,11 +352,18 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 			error
 			ErrorTargets() []factoryapi.FactoryValidationTarget
 		}
+		code := "BAD_REQUEST"
+		var codedErr interface {
+			ErrorCode() string
+		}
+		if errors.As(err, &codedErr) {
+			code = codedErr.ErrorCode()
+		}
 		if errors.As(err, &targetedErr) {
-			s.writeErrorWithTargets(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST", targetedErr.ErrorTargets())
+			s.writeErrorWithTargets(w, http.StatusBadRequest, err.Error(), code, targetedErr.ErrorTargets())
 			return
 		}
-		s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
+		s.writeError(w, http.StatusBadRequest, err.Error(), code)
 		return
 	}
 	s.writeJSON(w, http.StatusOK, response)

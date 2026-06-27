@@ -8,7 +8,15 @@ primary-result behavior.
 - `pkg/invocations/primary_result.go` resolves invocation `primaryResult`
   against selected-tick `FactoryWorldState` using `WorkRequestsByID`,
   `TerminalWorkByID`, and payload-lineage scope rather than transport-specific
-  polling logic.
+  polling logic. The same package also classifies missing-primary-result waits
+  from scoped current work state when authored workflow states such as
+  `blocked` or `needs-human` explain the stopped invocation better than the
+  generic unresolved-primary-result fallback, classifies terminal failed work
+  in invocation scope before that unresolved fallback, and classifies
+  invocation control-state outcomes such as paused sessions or interrupted
+  dispatches from reconstructed session and dispatch lifecycle facts. Stable
+  non-success context for `sessionId`, `workId`, `workName`, and `workState`
+  also originates here so CLI and API stay aligned on the same recovery facts.
 - `pkg/factory/validation/validate.go` owns factory-level `invocationReturn`
   validation shared by validate-only and save pre-check flows.
 - `pkg/config/factory_config_mapping*.go` maps `invocationReturn` between the
@@ -18,13 +26,19 @@ primary-result behavior.
 - `pkg/workcontent/` translates between generated OpenAPI `WorkContent` and the
   backend-owned `interfaces.WorkContentPart` shape.
 - `pkg/api/handlers_work_write.go` includes the session invocation HTTP
-  boundary alongside other session work-write handlers.
+  boundary alongside other session work-write handlers, including projection of
+  shared invocation non-success context into the public `InvocationResponse`.
 - `pkg/service/runtime_sessions.go` owns the session-scoped invocation
   orchestration that resolves API input, submits the default handling work
   item, polls selected-tick world state, and maps timeout/cancel/unresolved
   outcomes into `InvocationResponse`; it also owns invocation boundary logs and
   optional `InvocationMetricsRecorder` counter emission for runtime outcomes.
 - `pkg/cli/run/` is the `you run --factory` CLI boundary.
+- Canonical default-path ownership for operator config
+  (`~/.you-agent-factory/config.json`) and generated live replay recording roots
+  (`~/.you-agent-factory/recordings/...`) belongs in `pkg/config/defaultpaths`;
+  `pkg/config/operatorconfig` and `pkg/cli/run` should keep only precedence,
+  filename, and reporting behavior around those defaults.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
@@ -34,7 +48,10 @@ primary-result behavior.
   shared `pkg/invocations` contract, then runs the local service in
   invocation-only service mode so stdout stays reserved for primary-result
   output instead of startup or dashboard noise; CLI-only source conflicts are
-  logged and counted there before the service runtime exists.
+  logged and counted there before the service runtime exists. `RunConfig.JSONOutput`
+  must stay aligned with the shared `InvocationResponse` envelope for both
+  successful and non-success invocation results rather than becoming a
+  success-only CLI fork.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin
   bytes into `invocations.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
   from the shared resolver instead of pre-trimming or short-circuiting with
@@ -48,14 +65,24 @@ primary-result behavior.
   invocation input-source rules and the canonical pointers into packaged docs.
   `runInvocationModes` and `resolveRunFactoryPrompt` also treat `you run --named`
   as an invocation factory selector for positional/stdin text.
-- `pkg/config/layout.go` owns the built-in `@you/goal` and `@you/tts` factory JSON
+-   `pkg/config/layout.go` owns the built-in `@you/goal` and `@you/tts` factory JSON
   (`BuiltInGoalFactoryJSON`, `BuiltInTTSFactoryJSON`) registered from
-  `builtInNamedFactoryCatalog` in `pkg/config/layout.go`. Packaged workstation
-  `body` templates must use canonical `PromptData` roots such as
-  `(index .Inputs 0).Payload`; legacy top-level aliases like `{{ .WorkID }}`
-  fail prompt rendering before mock-worker dispatch. `upgradeMaterializedBuiltInNamedFactoryIfNeeded`
-  repairs already-materialized built-ins that still carry the legacy alias when
-  the catalog payload has canonical templates.
+  `builtInNamedFactoryCatalog` in `pkg/config/layout.go`. Packaged `@you/goal`
+  routes review mode from `check-goal` (`plain` -> `goal:review`, `structured` ->
+  `goal:structured-review`) so plain classifier and structured envelope lanes are
+  both reachable without competing logical advances from `goal:check`. The built-in
+  `goal-checker` script worker must emit only the lane label on stdout after
+  verification (`plain` by default, opt-in `structured` via
+  `YOU_GOAL_REVIEW_MODE`) because `check-goal` is a `CLASSIFIER_WORKSTATION`.
+  Retry exhaustion is authored separately for `review-goal` and
+  `structured-review-goal`, each with its own guarded loop-breaker from `goal:plan`
+  to `goal:failed`.
+  Packaged workstation `body` templates must use canonical `PromptData` roots
+  such as `(index .Inputs 0).Payload`; legacy top-level aliases like
+  `{{ .WorkID }}` fail prompt rendering before mock-worker dispatch.
+  `upgradeMaterializedBuiltInNamedFactoryIfNeeded` repairs already-materialized
+  built-ins that still carry the legacy alias when the catalog payload has
+  canonical templates.
 - `pkg/packagedfactories/goal/` owns packaged goal factory metadata constants and
   config-load regression coverage for the authored `invocationReturn` policy that
   selects terminal `goal:complete` work content as the primary result.
@@ -67,14 +94,36 @@ primary-result behavior.
   absent from terminal work in scope.
 - `pkg/packagedfactories/goal/decision_envelope.go` owns the canonical
   reviewer/checker JSON envelope and its mapping onto `interfaces.WorkResult`.
+  Goal routing envelopes with authored `classificationRoutes` map parsed
+  `decision` labels onto `SelectedClassificationLabel` while preserving
+  `Feedback`, optional `Output`, and `RecordedOutputWork`.
 - `pkg/workers/executor/agent.go` routes `review` workstation agent output through
   `goal.WorkResultFromDecisionEnvelopeJSONOrFailed` instead of stop-token parsing.
+  Workstations with `outcomeFormat: decision-envelope` and authored
+  `classificationRoutes` use `goal.WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed`.
 - `factory/docs/decision-envelope.md` is the packaged-authoring guide for the
-  reviewer/checker envelope shape, accepted decision values, and malformed-input
-  behavior used by `factory/workstations/review/AGENTS.md`.
+  reviewer/checker envelope shape, the standard outcome vocabulary, the
+  packaged-goal goal-routing decision vocabulary used when
+  `classificationRoutes` are present, and malformed-input behavior used by
+  `factory/workstations/review/AGENTS.md`.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged goal
   invocation summary shaping on `execute-goal` workstations alongside packaged
-  TTS metadata shaping.
+  TTS metadata shaping. `pkg/factory/subsystems/goalroutingtests/transitioner_goal_routing_test.go`
+  proves each authored `review-goal` classifier label routes to the expected goal place
+  through the mapped runtime net and proves structured `structured-review-goal`
+  envelopes route from parsed decision labels while preserving mapped
+  `WorkResult` fields. The same file also proves malformed JSON and unknown
+  decisions route to `goal:failed` with actionable failure text instead of
+  misrouting to complete, rework, or escalation states.
+- `pkg/packagedfactories/goal/factory_test.go` proves `goal:execute` schedules
+  the `check-goal` review-mode classifier in the mapped runtime net.
+- `tests/functional/runtime_api/api_packaged_goal_invocation_test.go` proves the
+  materialized built-in goal topology dispatches `review-goal` when
+  `check-goal` returns `plain` and `structured-review-goal` when `check-goal`
+  returns `structured`, using the real authored `goal-checker` contract rather
+  than mocked lane-label output. The same file proves repeated structured
+  `needs_changes` rework trips the structured loop-breaker instead of retrying
+  forever.
 - Behavioral proof for named goal batch invocation lives in
   `tests/functional/smoke/cli_named_goal_run_smoke_test.go` using the real
   `you run --named @you/goal` CLI path with `--with-mock-workers`, including a
@@ -128,6 +177,10 @@ primary-result behavior.
   instead of submitted input text or raw audio payload bytes.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and
   invocation-return policy ownership.
+- `docs/reference/packaged-goal.md` is the customer-facing reference for
+  packaged `@you/goal` invocation behavior, including operator-visible blocked,
+  needs-human, paused, interrupted, failed, timed-out, and unresolved-primary-result
+  outcomes plus recovery through existing session/work commands.
 - `docs/reference/config.md` and `docs/reference/sessions.md` are the packaged
   `you docs` reference topics for invocation input sources, return policy, and
   the session-scoped invocation API.

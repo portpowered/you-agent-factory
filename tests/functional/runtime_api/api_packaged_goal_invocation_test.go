@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -79,58 +80,116 @@ func TestSessionInvocationAPI_PackagedGoalUnresolvedPrimaryResultReturnsFailedSt
 	}
 }
 
-func TestSessionInvocationAPI_BuiltInCatalogMaterializedGoalReturnsSummaryPrimaryResult(t *testing.T) {
-	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
-	if err != nil {
-		t.Fatalf("PersistNamedFactory: %v", err)
-	}
+func TestSessionInvocationAPI_PackagedGoalBlockedReturnsBlockedStatusDetails(t *testing.T) {
+	server := startPackagedGoalBuiltInTopologyInvocationServer(t, "blocked")
 
-	server := startFunctionalServerWithConfig(t, factoryDir, true, func(cfg *service.FactoryServiceConfig) {
-		cfg.RuntimeMode = interfaces.RuntimeModeService
-		cfg.MockWorkersConfig = packagedGoalBuiltinMockWorkersConfig()
-	})
-
-	submitted := "customer goal request text"
-	response := postInvocation(t, server.URL(), textInvocationRequest(t, submitted, nil))
-	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
-		errorCode := ""
-		if response.ErrorCode != nil {
-			errorCode = string(*response.ErrorCode)
-		}
-		message := ""
-		if response.Message != nil {
-			message = *response.Message
-		}
-		t.Fatalf("invocation status = %q, want COMPLETED (errorCode=%q message=%q)", response.Status, errorCode, message)
+	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke packaged goal", nil))
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want FAILED", response.Status)
 	}
-	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
-		t.Fatalf("invocation primaryResult = %#v, want one text part", response.PrimaryResult)
+	if response.ErrorCode == nil || *response.ErrorCode != factoryapi.InvocationResponseErrorCode("INVOCATION_BLOCKED") {
+		t.Fatalf("invocation errorCode = %#v, want INVOCATION_BLOCKED", response.ErrorCode)
 	}
-	part, err := (*response.PrimaryResult)[0].AsWorkTextContentPart()
-	if err != nil {
-		t.Fatalf("primaryResult[0] as text part: %v", err)
+	if response.Message == nil || !strings.Contains(*response.Message, `state "goal:blocked"`) {
+		t.Fatalf("invocation message = %#v, want goal:blocked state detail", response.Message)
 	}
-	if part.Text != "mock worker accepted" {
-		t.Fatalf("primaryResult text = %q, want mock worker summary", part.Text)
+	if response.SessionId == nil || *response.SessionId != "~default" {
+		t.Fatalf("invocation sessionId = %#v, want ~default", response.SessionId)
 	}
-	if part.Text == submitted {
-		t.Fatal("primaryResult echoed submitted goal text")
+	if response.WorkId == nil || *response.WorkId == "" {
+		t.Fatalf("invocation workId = %#v, want populated work id", response.WorkId)
+	}
+	if response.WorkName == nil || *response.WorkName == "" {
+		t.Fatalf("invocation workName = %#v, want populated work name", response.WorkName)
+	}
+	if response.WorkState == nil || *response.WorkState != "goal:blocked" {
+		t.Fatalf("invocation workState = %#v, want goal:blocked", response.WorkState)
+	}
+	if response.PrimaryResult != nil {
+		t.Fatalf("invocation primaryResult = %#v, want nil on blocked output", response.PrimaryResult)
 	}
 }
 
-func TestPackagedGoalBuiltInCatalogMaterialized_CompletesWithPackagedGoalMockWorkers(t *testing.T) {
-	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+func TestSessionInvocationAPI_PackagedGoalNeedsHumanReturnsNeedsHumanStatusDetails(t *testing.T) {
+	server := startPackagedGoalBuiltInTopologyInvocationServer(t, "needs_human")
+
+	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke packaged goal", nil))
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want FAILED", response.Status)
+	}
+	if response.ErrorCode == nil || *response.ErrorCode != factoryapi.InvocationResponseErrorCode("INVOCATION_NEEDS_HUMAN") {
+		t.Fatalf("invocation errorCode = %#v, want INVOCATION_NEEDS_HUMAN", response.ErrorCode)
+	}
+	if response.Message == nil || !strings.Contains(*response.Message, "needs human input") || !strings.Contains(*response.Message, `state "goal:needs-human"`) {
+		t.Fatalf("invocation message = %#v, want needs-human explanation", response.Message)
+	}
+	if response.SessionId == nil || *response.SessionId != "~default" {
+		t.Fatalf("invocation sessionId = %#v, want ~default", response.SessionId)
+	}
+	if response.WorkId == nil || *response.WorkId == "" {
+		t.Fatalf("invocation workId = %#v, want populated work id", response.WorkId)
+	}
+	if response.WorkName == nil || *response.WorkName == "" {
+		t.Fatalf("invocation workName = %#v, want populated work name", response.WorkName)
+	}
+	if response.WorkState == nil || *response.WorkState != "goal:needs-human" {
+		t.Fatalf("invocation workState = %#v, want goal:needs-human", response.WorkState)
+	}
+	if response.PrimaryResult != nil {
+		t.Fatalf("invocation primaryResult = %#v, want nil on needs-human output", response.PrimaryResult)
+	}
+}
+
+func TestSessionInvocationAPI_PackagedGoalFailedReturnsFailedStatusDetails(t *testing.T) {
+	dir, _ := scaffoldPackagedGoalBuiltInTopologyFactory(t)
+	server := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.MockWorkersConfig = packagedGoalBuiltInTopologyMockWorkersConfigForRealChecker(
+			goal.PackagedReviewWorkstationName,
+			"failed",
+		)
+	})
+
+	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke packaged goal", nil))
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want FAILED", response.Status)
+	}
+	if response.ErrorCode == nil || *response.ErrorCode != factoryapi.InvocationResponseErrorCode("INVOCATION_RUNTIME_FAILURE") {
+		gotCode := "<nil>"
+		if response.ErrorCode != nil {
+			gotCode = string(*response.ErrorCode)
+		}
+		t.Fatalf("invocation errorCode = %q, want INVOCATION_RUNTIME_FAILURE", gotCode)
+	}
+	if response.Message == nil || !strings.Contains(*response.Message, "invocation failed") || !strings.Contains(*response.Message, `state "goal:failed"`) {
+		t.Fatalf("invocation message = %#v, want failed goal explanation", response.Message)
+	}
+	if response.PrimaryResult != nil {
+		t.Fatalf("invocation primaryResult = %#v, want nil on failed output", response.PrimaryResult)
+	}
+}
+
+func TestPackagedGoalBuiltInTopology_PlainReviewLaneEndToEnd(t *testing.T) {
+	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}
+	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(dir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
+	}
+	writePackagedGoalBuiltInTopologyFixtureFiles(t, dir, loaded.FactoryConfig())
 
-	h := testutil.NewServiceTestHarness(t, factoryDir,
+	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithRunAsync(),
-		testutil.WithMockWorkersConfig(packagedGoalBuiltinMockWorkersConfig()),
+		testutil.WithMockWorkersConfig(packagedGoalBuiltInTopologyMockWorkersConfigForRealChecker(
+			goal.PackagedReviewWorkstationName,
+			"accepted",
+		)),
 	)
 	if err := h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
 		WorkTypeID: goal.PackagedGoalWorkTypeName,
-		TraceID:    "builtin-goal-catalog-harness",
+		TraceID:    "goal-plain-review-trace",
 		Content: []interfaces.WorkContentPart{{
 			Type: interfaces.WorkContentPartTypeText,
 			Text: "customer goal request text",
@@ -140,28 +199,128 @@ func TestPackagedGoalBuiltInCatalogMaterialized_CompletesWithPackagedGoalMockWor
 	}
 	h.RunUntilComplete(t, 30*time.Second)
 	h.Assert().HasTokenInPlace("goal:complete")
+
+	snapshot, err := h.GetEngineStateSnapshot()
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	var reviewDispatches int
+	for _, dispatch := range snapshot.DispatchHistory {
+		switch dispatch.WorkstationName {
+		case goal.PackagedReviewWorkstationName:
+			reviewDispatches++
+		case goal.PackagedStructuredReviewWorkstationName:
+			t.Fatalf("structured review %q dispatched from plain review-mode run", dispatch.WorkstationName)
+		}
+	}
+	if reviewDispatches != 1 {
+		t.Fatalf("plain review dispatch count = %d, want 1", reviewDispatches)
+	}
 }
 
-func packagedGoalBuiltinMockWorkersConfig() *factoryconfig.MockWorkersConfig {
-	return &factoryconfig.MockWorkersConfig{
-		MockWorkers: []factoryconfig.MockWorkerConfig{
-			{
-				WorkerName: "goal-checker",
-				RunType:    factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
-					Command: "/bin/echo",
-					Args:    []string{"goal-check-ok"},
-				},
-			},
-			{
-				WorkerName: "goal-reviewer",
-				RunType:    factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
-					Command: "/bin/echo",
-					Args:    []string{"accepted"},
-				},
-			},
-		},
+func TestPackagedGoalBuiltInTopology_StructuredReviewLaneEndToEnd(t *testing.T) {
+	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(dir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
+	}
+	writePackagedGoalBuiltInTopologyFixtureFiles(t, dir, loaded.FactoryConfig())
+	writePackagedGoalCheckWorkstationReviewMode(t, dir, goal.PackagedReviewModeStructuredLabel)
+
+	envelope := `{"decision":"accepted","feedback":"review ok","output":"mock worker accepted"}`
+	h := testutil.NewServiceTestHarness(t, dir,
+		testutil.WithRunAsync(),
+		testutil.WithMockWorkersConfig(packagedGoalBuiltInTopologyMockWorkersConfigForRealChecker(
+			goal.PackagedStructuredReviewWorkstationName,
+			envelope,
+		)),
+	)
+	if err := h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+		WorkTypeID: goal.PackagedGoalWorkTypeName,
+		TraceID:    "goal-structured-review-trace",
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "customer goal request text",
+		}},
+	}}); err != nil {
+		t.Fatalf("SubmitFull: %v", err)
+	}
+	h.RunUntilComplete(t, 30*time.Second)
+	h.Assert().HasTokenInPlace("goal:complete")
+
+	snapshot, err := h.GetEngineStateSnapshot()
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	var structuredReviewDispatches int
+	for _, dispatch := range snapshot.DispatchHistory {
+		switch dispatch.WorkstationName {
+		case goal.PackagedStructuredReviewWorkstationName:
+			structuredReviewDispatches++
+		case goal.PackagedReviewWorkstationName:
+			t.Fatalf("plain classifier %q dispatched from structured review-mode run", dispatch.WorkstationName)
+		}
+	}
+	if structuredReviewDispatches != 1 {
+		t.Fatalf("structured review dispatch count = %d, want 1", structuredReviewDispatches)
+	}
+}
+
+func TestPackagedGoalBuiltInTopology_StructuredReworkTripsLoopBreaker(t *testing.T) {
+	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(dir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
+	}
+	writePackagedGoalBuiltInTopologyFixtureFiles(t, dir, loaded.FactoryConfig())
+	writePackagedGoalCheckWorkstationReviewMode(t, dir, goal.PackagedReviewModeStructuredLabel)
+
+	envelope := `{"decision":"needs_changes","feedback":"retry with more detail"}`
+	h := testutil.NewServiceTestHarness(t, dir,
+		testutil.WithRunAsync(),
+		testutil.WithMockWorkersConfig(packagedGoalBuiltInTopologyMockWorkersConfigForRealChecker(
+			goal.PackagedStructuredReviewWorkstationName,
+			envelope,
+		)),
+	)
+	if err := h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+		WorkTypeID: goal.PackagedGoalWorkTypeName,
+		TraceID:    "goal-structured-loop-breaker-trace",
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "customer goal request text",
+		}},
+	}}); err != nil {
+		t.Fatalf("SubmitFull: %v", err)
+	}
+	h.RunUntilComplete(t, 30*time.Second)
+	h.Assert().HasTokenInPlace("goal:failed")
+
+	snapshot, err := h.GetEngineStateSnapshot()
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	var structuredReviewDispatches int
+	var structuredLoopBreakerDispatches int
+	for _, dispatch := range snapshot.DispatchHistory {
+		switch dispatch.WorkstationName {
+		case goal.PackagedStructuredReviewWorkstationName:
+			structuredReviewDispatches++
+		case goal.PackagedStructuredLoopBreakerWorkstationName:
+			structuredLoopBreakerDispatches++
+		}
+	}
+	if structuredReviewDispatches < 5 {
+		t.Fatalf("structured review dispatch count = %d, want at least 5 before exhaustion", structuredReviewDispatches)
+	}
+	if structuredLoopBreakerDispatches != 1 {
+		t.Fatalf("structured loop breaker dispatch count = %d, want 1", structuredLoopBreakerDispatches)
 	}
 }
 
@@ -171,7 +330,7 @@ func TestPackagedGoalBuiltInTopologyScaffold_PrimaryResultIsExecutionSummaryNotR
 
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithRunAsync(),
-		testutil.WithMockWorkersConfig(packagedGoalReviewClassifierMockWorkersConfig()),
+		testutil.WithMockWorkersConfig(packagedGoalReviewClassifierMockWorkersConfig("accepted")),
 	)
 	if err := h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
 		WorkTypeID: goal.PackagedGoalWorkTypeName,
@@ -323,16 +482,82 @@ func writePackagedGoalBuiltInTopologyFixtureFiles(t *testing.T, dir string, cfg 
 			support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"),
 		)
 	}
-	support.WriteAgentConfig(t, dir, "goal-checker", `---
+	checker := goalCheckerWorkerConfig(cfg)
+	if checker != nil && checker.Command != "" {
+		support.WriteAgentConfig(t, dir, "goal-checker", "You are the @you/goal checker worker.\n")
+	} else {
+		support.WriteAgentConfig(t, dir, "goal-checker", `---
 type: SCRIPT_WORKER
 command: echo
 args:
   - "goal-check-ok"
 ---
 `)
+	}
+	writePackagedGoalVerificationMakefile(t, dir)
 }
 
-func packagedGoalReviewClassifierMockWorkersConfig() *factoryconfig.MockWorkersConfig {
+func writePackagedGoalCheckWorkstationReviewMode(t *testing.T, dir, reviewMode string) {
+	t.Helper()
+
+	support.WriteWorkstationConfig(t, dir, goal.PackagedCheckWorkstationName, `---
+type: CLASSIFIER_WORKSTATION
+env:
+  `+goal.PackagedCheckReviewModeEnvVar+`: "`+reviewMode+`"
+---
+Review packaged goal work.
+`)
+}
+
+func writePackagedGoalVerificationMakefile(t *testing.T, dir string) {
+	t.Helper()
+
+	const makefile = ".PHONY: test\n\ntest:\n\t@:\n"
+	if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte(makefile), 0o644); err != nil {
+		t.Fatalf("write packaged goal verification Makefile: %v", err)
+	}
+}
+
+func packagedGoalBuiltInTopologyMockWorkersConfigForRealChecker(reviewerWorkstation, reviewerOutput string) *factoryconfig.MockWorkersConfig {
+	return &factoryconfig.MockWorkersConfig{
+		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []factoryconfig.MockWorkerConfig{
+			{
+				WorkerName:      "goal-planner",
+				WorkstationName: goal.PackagedPlanWorkstationName,
+				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+			},
+			{
+				WorkerName:      "goal-executor",
+				WorkstationName: goal.PackagedExecuteWorkstationName,
+				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+			},
+			{
+				WorkerName:      "goal-reviewer",
+				WorkstationName: reviewerWorkstation,
+				RunType:         factoryconfig.MockWorkerRunTypeScript,
+				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+					Command: "/bin/echo",
+					Args:    []string{reviewerOutput},
+				},
+			},
+		},
+	}
+}
+
+func goalCheckerWorkerConfig(cfg *interfaces.FactoryConfig) *interfaces.WorkerConfig {
+	if cfg == nil {
+		return nil
+	}
+	for i := range cfg.Workers {
+		if cfg.Workers[i].Name == "goal-checker" {
+			return &cfg.Workers[i]
+		}
+	}
+	return nil
+}
+
+func packagedGoalReviewClassifierMockWorkersConfig(label string) *factoryconfig.MockWorkersConfig {
 	return &factoryconfig.MockWorkersConfig{
 		MockWorkers: []factoryconfig.MockWorkerConfig{{
 			WorkerName:      "goal-reviewer",
@@ -340,10 +565,32 @@ func packagedGoalReviewClassifierMockWorkersConfig() *factoryconfig.MockWorkersC
 			RunType:         factoryconfig.MockWorkerRunTypeScript,
 			ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
 				Command: "/bin/echo",
-				Args:    []string{"accepted"},
+				Args:    []string{label},
 			},
 		}},
 	}
+}
+
+func startPackagedGoalBuiltInTopologyInvocationServer(t *testing.T, reviewerOutput string) *functionalAPIServer {
+	t.Helper()
+
+	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(dir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
+	}
+	writePackagedGoalBuiltInTopologyFixtureFiles(t, dir, loaded.FactoryConfig())
+
+	return startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.MockWorkersConfig = packagedGoalBuiltInTopologyMockWorkersConfigForRealChecker(
+			goal.PackagedReviewWorkstationName,
+			reviewerOutput,
+		)
+	})
 }
 
 func scaffoldPackagedGoalInvocationFactory(t *testing.T) string {

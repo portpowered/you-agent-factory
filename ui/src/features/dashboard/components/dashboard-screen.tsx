@@ -1,6 +1,8 @@
+import { Button } from "../../../components/ui";
 import { useAppLocale } from "../../../i18n";
 import { DashboardBento } from "../../bento/public";
 import { useDashboardBentoStore } from "../../bento/state/dashboardBentoStore";
+import { getDashboardRecoveryMessages } from "../messages/dashboard-recovery";
 import { getHeaderControlsMessages } from "../../header/messages/header-controls";
 import {
   DashboardExportDialog,
@@ -27,13 +29,18 @@ export function DashboardScreen({ locale }: DashboardScreenProps = {}) {
 
 function DashboardScreenContent({ locale }: DashboardScreenProps = {}) {
   const { locale: resolvedLocale } = useAppLocale(locale);
+  const incrementRefreshToken = useDashboardBentoStore(
+    (state) => state.incrementRefreshToken,
+  );
   const refreshToken = useDashboardBentoStore((state) => state.refreshToken);
-  const { snapshot, isInitialLoading, error } = useDashboardSnapshot({
-    locale: resolvedLocale,
-    refreshToken,
-  });
+  const { snapshot, isInitialLoading, error, preflightRecovery } =
+    useDashboardSnapshot({
+      locale: resolvedLocale,
+      refreshToken,
+    });
   useDashboardWorldView();
   const messages = getHeaderControlsMessages(resolvedLocale);
+  const recoveryMessages = getDashboardRecoveryMessages(resolvedLocale);
 
   if (isInitialLoading) {
     return (
@@ -41,6 +48,34 @@ function DashboardScreenContent({ locale }: DashboardScreenProps = {}) {
         <DashboardStatusPanel
           locale={resolvedLocale}
           title={messages.loadingDashboardTitle}
+        />
+      </main>
+    );
+  }
+
+  if (preflightRecovery) {
+    const recoveryCopy = copyForPreflightRecovery(
+      preflightRecovery,
+      recoveryMessages,
+    );
+
+    return (
+      <main className={DASHBOARD_SHELL_CLASS}>
+        <DashboardHeader locale={locale} />
+        <DashboardStatusPanel
+          actions={
+            <Button
+              aria-label={recoveryMessages.preflightRetryAction}
+              onClick={incrementRefreshToken}
+              tone="outline"
+            >
+              {recoveryMessages.preflightRetryAction}
+            </Button>
+          }
+          detail={recoveryCopy.detail}
+          locale={resolvedLocale}
+          title={recoveryCopy.title}
+          tone="error"
         />
       </main>
     );
@@ -79,4 +114,26 @@ function DashboardScreenContent({ locale }: DashboardScreenProps = {}) {
       <DashboardExportDialog locale={locale} />
     </main>
   );
+}
+
+function copyForPreflightRecovery(
+  recovery: NonNullable<
+    ReturnType<typeof useDashboardSnapshot>["preflightRecovery"]
+  >,
+  messages: ReturnType<typeof getDashboardRecoveryMessages>,
+): { detail: string; title: string } {
+  if (recovery.reasonCode === "session_not_found") {
+    return {
+      detail: messages.sessionNotFoundDetailTemplate.replace(
+        "{{sessionId}}",
+        recovery.requestedSessionId,
+      ),
+      title: messages.sessionNotFoundTitle,
+    };
+  }
+
+  return {
+    detail: messages.unknownRecoveryDetail,
+    title: messages.unknownRecoveryTitle,
+  };
 }

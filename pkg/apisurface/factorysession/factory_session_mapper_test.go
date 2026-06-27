@@ -779,6 +779,11 @@ func assertDispatchListFieldsPreserved(t *testing.T, fixture map[string]any, map
 		if mapped.Dispatches[index].ProviderSessionRefs == nil || len(*mapped.Dispatches[index].ProviderSessionRefs) != len(refs) {
 			t.Fatalf("dispatch[%d] providerSessionRefs = %#v, want %d refs", index, mapped.Dispatches[index].ProviderSessionRefs, len(refs))
 		}
+		if fixtureJavaScript, ok := fixtureRow["javascript"].(map[string]any); ok && fixtureJavaScript["executionMode"] != nil {
+			if mapped.Dispatches[index].Javascript == nil || mapped.Dispatches[index].Javascript.ExecutionMode == nil || *mapped.Dispatches[index].Javascript.ExecutionMode != stringValue(fixtureJavaScript, "executionMode") {
+				t.Fatalf("dispatch[%d] javascript.executionMode = %#v, want %q", index, mapped.Dispatches[index].Javascript, stringValue(fixtureJavaScript, "executionMode"))
+			}
+		}
 	}
 }
 
@@ -789,6 +794,16 @@ func assertDispatchDetailFieldsPreserved(t *testing.T, fixture map[string]any, m
 	}
 	if string(mapped.Status) != stringValue(fixture, "status") {
 		t.Fatalf("status = %q, want %q", mapped.Status, stringValue(fixture, "status"))
+	}
+	if fixtureJavaScript, ok := fixture["javascript"].(map[string]any); ok && fixtureJavaScript["executionMode"] != nil {
+		if mapped.Javascript == nil || mapped.Javascript.ExecutionMode == nil || *mapped.Javascript.ExecutionMode != stringValue(fixtureJavaScript, "executionMode") {
+			t.Fatalf("javascript.executionMode = %#v, want %q", mapped.Javascript, stringValue(fixtureJavaScript, "executionMode"))
+		}
+	}
+	if fixtureTransitions, ok := fixture["statusTransitions"].([]any); ok {
+		if mapped.StatusTransitions == nil || len(*mapped.StatusTransitions) != len(fixtureTransitions) {
+			t.Fatalf("statusTransitions = %#v, want %d entries", mapped.StatusTransitions, len(fixtureTransitions))
+		}
 	}
 }
 

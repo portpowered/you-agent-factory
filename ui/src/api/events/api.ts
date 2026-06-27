@@ -24,6 +24,14 @@ export interface FactoryEventReconnectCursor {
   afterSequence?: number;
 }
 
+export type FactoryEventReconnectValidationResult =
+  | { ok: true }
+  | {
+      message: string;
+      ok: false;
+      reason: "stale_cursor" | "unavailable";
+    };
+
 export type FactoryEventStreamStatus =
   | "connecting"
   | "live"
@@ -44,6 +52,49 @@ function buildFactoryEventStreamURL(
   }
   const query = params.toString();
   return factoryAPIURL(query ? `${basePath}?${query}` : basePath);
+}
+
+export async function validateFactoryEventReconnectCursor(
+  sessionID?: string | null,
+  reconnect?: FactoryEventReconnectCursor,
+  fetchImpl: typeof fetch = fetch,
+): Promise<FactoryEventReconnectValidationResult> {
+  if (reconnect == null) {
+    return { ok: true };
+  }
+
+  try {
+    const response = await fetchImpl(
+      buildFactoryEventStreamURL(sessionID, reconnect),
+      {
+        headers: {
+          Accept: "text/event-stream",
+        },
+      },
+    );
+    void response.body?.cancel().catch(() => {});
+    if (response.ok) {
+      return { ok: true };
+    }
+    if (response.status === 400) {
+      // hardcoded-ui-copy-exception: non-product-diagnostic
+      const message =
+        "Factory event replay cursor no longer matches the current session history.";
+      return {
+        message,
+        ok: false,
+        reason: "stale_cursor",
+      };
+    }
+    return {
+      // hardcoded-ui-copy-exception: non-product-diagnostic
+      message: "Factory event stream unavailable.",
+      ok: false,
+      reason: "unavailable",
+    };
+  } catch {
+    return { ok: true };
+  }
 }
 
 export function openFactoryEventStream(

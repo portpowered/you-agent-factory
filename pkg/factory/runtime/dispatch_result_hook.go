@@ -157,6 +157,18 @@ func (h *workerPoolDispatchResultHook) HasPendingResults() bool {
 	return len(h.results) > 0
 }
 
+func (h *workerPoolDispatchResultHook) HasBufferedResults() bool {
+	return h.HasPendingResults()
+}
+
+func (h *workerPoolDispatchResultHook) SignalBufferedResults() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.results) > 0 {
+		h.signalWaitLocked()
+	}
+}
+
 func (h *workerPoolDispatchResultHook) Start(ctx context.Context) {
 	go func() {
 		for {

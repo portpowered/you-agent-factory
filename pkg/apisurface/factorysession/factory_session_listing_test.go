@@ -183,6 +183,7 @@ func sessionActionsFromFixture(actions map[string]any) factorysessionexecution.S
 		CanCancel:        boolValue(actions, "canCancel"),
 		CanTerminate:     boolValue(actions, "canTerminate"),
 		CanApprove:       boolValue(actions, "canApprove"),
-		CanRetryDispatch: boolValue(actions, "canRetryDispatch"),
+		CanRetryDispatch:     boolValue(actions, "canRetryDispatch"),
+		CanInterruptDispatch: boolValue(actions, "canInterruptDispatch"),
 	}
 }

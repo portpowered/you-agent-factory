@@ -582,16 +582,28 @@ func writePackagedGoalBuiltinMockWorkersConfig(t *testing.T) string {
 	cfg := factoryconfig.MockWorkersConfig{
 		MockWorkers: []factoryconfig.MockWorkerConfig{
 			{
-				WorkerName: "goal-checker",
-				RunType:    factoryconfig.MockWorkerRunTypeScript,
+				WorkerName:      "goal-planner",
+				WorkstationName: "plan-goal",
+				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+			},
+			{
+				WorkerName:      "goal-executor",
+				WorkstationName: "execute-goal",
+				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+			},
+			{
+				WorkerName:      "goal-checker",
+				WorkstationName: "check-goal",
+				RunType:         factoryconfig.MockWorkerRunTypeScript,
 				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
 					Command: "/bin/echo",
-					Args:    []string{"goal-check-ok"},
+					Args:    []string{"plain"},
 				},
 			},
 			{
-				WorkerName: "goal-reviewer",
-				RunType:    factoryconfig.MockWorkerRunTypeScript,
+				WorkerName:      "goal-reviewer",
+				WorkstationName: "review-goal",
+				RunType:         factoryconfig.MockWorkerRunTypeScript,
 				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
 					Command: "/bin/echo",
 					Args:    []string{"accepted"},
