@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useId, useState } from "react";
 
+import { isDurableJavaScriptSession } from "../../../api/factory-sessions/normalize-durable-inspection";
 import type { components } from "../../../api/generated/openapi";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 import {
@@ -11,18 +12,19 @@ import {
 } from "../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { DetailCopy } from "../../../components/ui/widget-frame";
-import { DispatchDetailContent } from "./dispatch-detail/dispatch-detail-content";
-import { FactorySessionEventReplayDisclosure } from "./event-replay/factory-session-event-replay-disclosure";
-import { useFactorySessionDispatchDetail } from "../hooks/use-factory-session-dispatch-detail";
 import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
+import { useFactorySessionLifecycleControl } from "../hooks/use-factory-session-lifecycle-control";
+import { useFactorySessionDispatchDetail } from "../hooks/use-factory-session-dispatch-detail";
+import { resolveFactorySessionLifecycleActionAvailability } from "../lib/factory-session-lifecycle-controls";
+import { getFactorySessionDetailMessages } from "../messages/factory-session-detail";
 import {
   formatFactoryOrchestratorKind,
   formatFactorySessionRuntimeStatus,
   formatFactorySessionScriptStatus,
 } from "../messages/factory-session-runtime-display";
-import { getFactorySessionDetailMessages } from "../messages/factory-session-detail";
-import { useId, useState } from "react";
-import { isDurableJavaScriptSession } from "../../../api/factory-sessions/normalize-durable-inspection";
+import { DispatchDetailContent } from "./dispatch-detail/dispatch-detail-content";
+import { FactorySessionEventReplayDisclosure } from "./event-replay/factory-session-event-replay-disclosure";
+import { LifecycleActionSection } from "./lifecycle/lifecycle-action-section";
 
 type FactoryArtifact = components["schemas"]["FactoryArtifact"];
 type FactoryDispatch = components["schemas"]["FactoryDispatch"];
@@ -96,7 +98,10 @@ function FactorySessionRuntimeSections({
       <div className="grid gap-2 sm:grid-cols-2">
         <Metric
           label={messages.orchestratorKindLabel}
-          value={formatFactoryOrchestratorKind(runtime.orchestratorKind, locale)}
+          value={formatFactoryOrchestratorKind(
+            runtime.orchestratorKind,
+            locale,
+          )}
         />
         <Metric
           label={messages.statusLabel}
@@ -149,6 +154,22 @@ function JavaScriptSessionProjection({
   const [selectedDispatchID, setSelectedDispatchID] = useState<string | null>(
     null,
   );
+  const isDurableSession = isDurableJavaScriptSession(
+    sessionID,
+    FactoryOrchestratorKind.JAVASCRIPT,
+    durableLifecycleStatus,
+  );
+  const lifecycleActionAvailability =
+    resolveFactorySessionLifecycleActionAvailability({
+      durableLifecycleStatus,
+      dispatches,
+      isDurableSession,
+      selectedDispatchID,
+    });
+  const lifecycleControl = useFactorySessionLifecycleControl({
+    selectedDispatchID: lifecycleActionAvailability.selectedDispatch?.id ?? null,
+    sessionID,
+  });
 
   if (!javascript) {
     return <DetailCopy>{messages.javascriptProjectionMissingState}</DetailCopy>;
@@ -156,11 +177,6 @@ function JavaScriptSessionProjection({
 
   const warnings = (dispatches ?? []).flatMap(
     (dispatch) => dispatch.warnings ?? [],
-  );
-  const supportsEventReplay = isDurableJavaScriptSession(
-    sessionID,
-    FactoryOrchestratorKind.JAVASCRIPT,
-    durableLifecycleStatus,
   );
 
   return (
@@ -171,13 +187,25 @@ function JavaScriptSessionProjection({
         ) : null}
         <Metric
           label={messages.scriptStatusLabel}
-          value={formatFactorySessionScriptStatus(javascript.scriptStatus, locale)}
+          value={formatFactorySessionScriptStatus(
+            javascript.scriptStatus,
+            locale,
+          )}
         />
         <Metric
           label={messages.childDispatchCountsLabel}
           value={`queued ${javascript.childDispatchCounts.queued}, running ${javascript.childDispatchCounts.running}, completed ${javascript.childDispatchCounts.completed}`}
         />
       </div>
+      {isDurableSession ? (
+        <LifecycleActionSection
+          availability={lifecycleActionAvailability}
+          feedback={lifecycleControl.feedback}
+          locale={locale}
+          onAction={lifecycleControl.submitLifecycleAction}
+          pendingActionID={lifecycleControl.pendingActionID}
+        />
+      ) : null}
       {javascript.phases.length > 0 ? (
         <Metric
           label={messages.phasesLabel}
@@ -192,7 +220,7 @@ function JavaScriptSessionProjection({
         />
       ) : null}
 
-      {supportsEventReplay ? (
+      {isDurableSession ? (
         <FactorySessionEventReplayDisclosure
           locale={locale}
           sessionID={sessionID}
