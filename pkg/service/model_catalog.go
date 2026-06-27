@@ -502,6 +502,10 @@ func (fs *FactoryService) handleInvocationPrimaryResultFailure(
 		Status:    factoryapi.InvocationTerminalStatusFailed,
 		ErrorCode: string(primaryErr.Code),
 		Message:   primaryErr.Message,
+		SessionID: primaryErr.Context.SessionID,
+		WorkID:    primaryErr.Context.WorkID,
+		WorkName:  primaryErr.Context.WorkName,
+		WorkState: primaryErr.Context.WorkState,
 	}
 	fs.recordInvocationMetric(invocationMetricFailure, inputMetricLabels(input.InputSource))
 	failureClass := invocationFailureClassForPrimaryResultError(primaryErr.Code)
@@ -1044,7 +1048,7 @@ func (fs *FactoryService) processInvocationWaitTick(
 		return invocationWaitTickResult{done: true, err: selectionErr}
 	}
 
-	if classified := classifyInvocationMissingPrimaryResultFromSnapshot(snapshot, input); classified != nil {
+	if classified := classifyInvocationMissingPrimaryResultFromSnapshot(sessionID, snapshot, input); classified != nil {
 		return invocationWaitTickResult{
 			done:   true,
 			result: fs.handleInvocationPrimaryResultFailure(sessionID, input, classified),
@@ -1082,6 +1086,7 @@ func (fs *FactoryService) processInvocationWaitTick(
 }
 
 func classifyInvocationMissingPrimaryResultFromSnapshot(
+	sessionID string,
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
 	input sessionInvocationWaitInput,
 ) *invocations.PrimaryResultError {
@@ -1125,6 +1130,7 @@ func classifyInvocationMissingPrimaryResultFromSnapshot(
 					DisplayName: token.Color.Name,
 					PlaceID:     token.PlaceID,
 				},
+				sessionID,
 			)
 		}
 	}

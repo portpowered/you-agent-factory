@@ -46,12 +46,22 @@ type PrimaryResultSelection struct {
 	PrimaryResult []interfaces.WorkContentPart
 }
 
+// InvocationFailureContext carries sanitized session and work identifiers that
+// help operators recover from non-success invocation outcomes.
+type InvocationFailureContext struct {
+	SessionID string
+	WorkID    string
+	WorkName  string
+	WorkState string
+}
+
 // PrimaryResultError describes a stable primary-result selection failure.
 type PrimaryResultError struct {
 	Code      PrimaryResultErrorCode
 	Message   string
 	RequestID string
 	Policy    string
+	Context   InvocationFailureContext
 }
 
 func (e *PrimaryResultError) Error() string {
@@ -224,8 +234,13 @@ func ClassifyMissingPrimaryResultWorkItem(
 	requestID string,
 	invocationReturn *interfaces.InvocationReturnConfig,
 	item interfaces.FactoryWorkItem,
+	sessionID string,
 ) *PrimaryResultError {
-	return classifiedPrimaryResultError(requestID, resolvedInvocationReturnPolicy(invocationReturn), item)
+	result := classifiedPrimaryResultError(requestID, resolvedInvocationReturnPolicy(invocationReturn), item)
+	if result != nil {
+		result.Context.SessionID = strings.TrimSpace(sessionID)
+	}
+	return result
 }
 
 // ClassifyFailedInvocation inspects scoped failed work or failed session
@@ -266,6 +281,7 @@ func ClassifyFailedInvocation(
 			RequestID: requestID,
 			Policy:    resolvedInvocationReturnPolicy(input.InvocationReturn),
 			Message:   fmt.Sprintf("invocation failed: session %q reached a failed state before a primary result was available", sessionLabel),
+			Context:   invocationFailureContextFromScopedWork(sessionID, input),
 		}, true
 	}
 	if bracket := input.WorldState.SessionBracket; bracket != nil && strings.TrimSpace(bracket.FinalStatus) == string(interfaces.FactoryStateFailed) {
@@ -275,6 +291,7 @@ func ClassifyFailedInvocation(
 			RequestID: requestID,
 			Policy:    resolvedInvocationReturnPolicy(input.InvocationReturn),
 			Message:   fmt.Sprintf("invocation failed: session %q reached a failed state before a primary result was available", sessionLabel),
+			Context:   invocationFailureContextFromScopedWork(sessionID, input),
 		}, true
 	}
 
@@ -289,6 +306,7 @@ func classifiedPrimaryResultError(
 	stateName := currentWorkStateName(item)
 	stateLabel := workStateLabel(item)
 	workLabel := workDisplayLabel(item)
+	context := invocationFailureContextFromWorkItem("", item)
 	switch stateName {
 	case "blocked":
 		return &PrimaryResultError{
@@ -296,6 +314,7 @@ func classifiedPrimaryResultError(
 			RequestID: requestID,
 			Policy:    policy,
 			Message:   fmt.Sprintf("invocation blocked: work %q is waiting in state %q", workLabel, stateLabel),
+			Context:   context,
 		}
 	case "needs-human":
 		return &PrimaryResultError{
@@ -303,6 +322,7 @@ func classifiedPrimaryResultError(
 			RequestID: requestID,
 			Policy:    policy,
 			Message:   fmt.Sprintf("invocation needs human input: work %q is waiting in state %q", workLabel, stateLabel),
+			Context:   context,
 		}
 	default:
 		return nil
@@ -319,6 +339,7 @@ func failedPrimaryResultError(
 		RequestID: requestID,
 		Policy:    policy,
 		Message:   fmt.Sprintf("invocation failed: work %q reached failed state %q before a primary result was available", workDisplayLabel(item), workStateLabel(item)),
+		Context:   invocationFailureContextFromWorkItem("", item),
 	}
 }
 
@@ -337,11 +358,13 @@ func classifyPausedInvocation(
 		}
 	}
 	sessionLabel := invocationSessionLabel(sessionID, input.WorldState)
+	context := invocationFailureContextFromScopedWork(sessionID, input)
 	return &PrimaryResultError{
 		Code:      PrimaryResultErrorCodePaused,
 		RequestID: strings.TrimSpace(input.RequestID),
 		Policy:    resolvedInvocationReturnPolicy(input.InvocationReturn),
 		Message:   fmt.Sprintf("invocation paused: session %q is paused; resume the session to continue waiting for primary result", sessionLabel),
+		Context:   context,
 	}
 }
 
@@ -372,11 +395,13 @@ func classifyInterruptedInvocation(
 			if !dispatchMatchesInvocationScope(dispatch, scope) {
 				continue
 			}
-			workLabel := interruptedDispatchWorkLabel(dispatch, input.WorldState.WorkItemsByID, scope)
+			work, workLabel := interruptedDispatchWorkItem(dispatch, input.WorldState.WorkItemsByID, scope)
 			return interruptedPrimaryResultError(
 				sessionLabel,
 				dispatch.ID,
+				work,
 				workLabel,
+				sessionID,
 				requestID,
 				resolvedInvocationReturnPolicy(input.InvocationReturn),
 			)
@@ -390,6 +415,7 @@ func classifyInterruptedInvocation(
 				RequestID: requestID,
 				Policy:    resolvedInvocationReturnPolicy(input.InvocationReturn),
 				Message:   fmt.Sprintf("invocation interrupted: session %q was interrupted before a primary result was available", sessionLabel),
+				Context:   invocationFailureContextFromScopedWork(sessionID, input),
 			}
 		}
 	}
@@ -400,7 +426,9 @@ func classifyInterruptedInvocation(
 func interruptedPrimaryResultError(
 	sessionLabel string,
 	dispatchID string,
+	work interfaces.FactoryWorkItem,
 	workLabel string,
+	sessionID string,
 	requestID string,
 	policy string,
 ) *PrimaryResultError {
@@ -422,6 +450,7 @@ func interruptedPrimaryResultError(
 		RequestID: requestID,
 		Policy:    policy,
 		Message:   message,
+		Context:   invocationFailureContextFromWorkItem(sessionID, work),
 	}
 }
 
@@ -447,11 +476,11 @@ func dispatchMatchesInvocationScope(dispatch interfaces.FactorySessionDispatchSt
 	return false
 }
 
-func interruptedDispatchWorkLabel(
+func interruptedDispatchWorkItem(
 	dispatch interfaces.FactorySessionDispatchState,
 	workItems map[string]interfaces.FactoryWorkItem,
 	scope map[string]struct{},
-) string {
+) (interfaces.FactoryWorkItem, string) {
 	for _, workID := range dispatch.RelatedWorkIDs {
 		trimmed := strings.TrimSpace(workID)
 		if _, ok := scope[trimmed]; !ok {
@@ -459,11 +488,65 @@ func interruptedDispatchWorkLabel(
 		}
 		item, ok := workItems[trimmed]
 		if !ok {
-			return trimmed
+			return interfaces.FactoryWorkItem{ID: trimmed}, trimmed
 		}
-		return workDisplayLabel(item)
+		return item, workDisplayLabel(item)
 	}
-	return ""
+	return interfaces.FactoryWorkItem{}, ""
+}
+
+func invocationFailureContextFromScopedWork(
+	sessionID string,
+	input PrimaryResultSelectionInput,
+) InvocationFailureContext {
+	context := InvocationFailureContext{SessionID: strings.TrimSpace(sessionID)}
+	requestID := strings.TrimSpace(input.RequestID)
+	if requestID == "" {
+		return context
+	}
+	request, ok := input.WorldState.WorkRequestsByID[requestID]
+	if !ok || len(request.WorkItems) == 0 {
+		return context
+	}
+
+	scope := invocationScopeWorkIDs(input.WorldState.PayloadLineage, request.WorkItems)
+	if item, found := scopedCurrentWorkItem(input.WorldState.WorkItemsByID, scope); found {
+		return invocationFailureContextFromWorkItem(sessionID, item)
+	}
+	return invocationFailureContextFromWorkItem(sessionID, request.WorkItems[0])
+}
+
+func invocationFailureContextFromWorkItem(sessionID string, item interfaces.FactoryWorkItem) InvocationFailureContext {
+	return InvocationFailureContext{
+		SessionID: strings.TrimSpace(sessionID),
+		WorkID:    strings.TrimSpace(item.ID),
+		WorkName:  strings.TrimSpace(workDisplayLabel(item)),
+		WorkState: strings.TrimSpace(workStateLabel(item)),
+	}
+}
+
+func scopedCurrentWorkItem(
+	workItems map[string]interfaces.FactoryWorkItem,
+	scope map[string]struct{},
+) (interfaces.FactoryWorkItem, bool) {
+	if len(workItems) == 0 || len(scope) == 0 {
+		return interfaces.FactoryWorkItem{}, false
+	}
+	workIDs := make([]string, 0, len(workItems))
+	for workID := range workItems {
+		if _, ok := scope[workID]; ok {
+			workIDs = append(workIDs, workID)
+		}
+	}
+	sort.Strings(workIDs)
+	for _, workID := range workIDs {
+		item := workItems[workID]
+		if strings.TrimSpace(workID) == "" {
+			continue
+		}
+		return item, true
+	}
+	return interfaces.FactoryWorkItem{}, false
 }
 
 func resolvedInvocationReturnPolicy(cfg *interfaces.InvocationReturnConfig) string {

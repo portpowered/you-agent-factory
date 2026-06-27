@@ -14,7 +14,9 @@ primary-result behavior.
   generic unresolved-primary-result fallback, classifies terminal failed work
   in invocation scope before that unresolved fallback, and classifies
   invocation control-state outcomes such as paused sessions or interrupted
-  dispatches from reconstructed session and dispatch lifecycle facts.
+  dispatches from reconstructed session and dispatch lifecycle facts. Stable
+  non-success context for `sessionId`, `workId`, `workName`, and `workState`
+  also originates here so CLI and API stay aligned on the same recovery facts.
 - `pkg/factory/validation/validate.go` owns factory-level `invocationReturn`
   validation shared by validate-only and save pre-check flows.
 - `pkg/config/factory_config_mapping*.go` maps `invocationReturn` between the
@@ -24,7 +26,8 @@ primary-result behavior.
 - `pkg/workcontent/` translates between generated OpenAPI `WorkContent` and the
   backend-owned `interfaces.WorkContentPart` shape.
 - `pkg/api/handlers_work_write.go` includes the session invocation HTTP
-  boundary alongside other session work-write handlers.
+  boundary alongside other session work-write handlers, including projection of
+  shared invocation non-success context into the public `InvocationResponse`.
 - `pkg/service/runtime_sessions.go` owns the session-scoped invocation
   orchestration that resolves API input, submits the default handling work
   item, polls selected-tick world state, and maps timeout/cancel/unresolved

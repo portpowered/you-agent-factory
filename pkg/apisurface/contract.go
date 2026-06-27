@@ -127,6 +127,10 @@ type FactoryInvocationResult struct {
 	PrimaryResult []interfaces.WorkContentPart
 	ErrorCode     string
 	Message       string
+	SessionID     string
+	WorkID        string
+	WorkName      string
+	WorkState     string
 }
 
 // RequestValidationError reports a stable client-side validation failure that

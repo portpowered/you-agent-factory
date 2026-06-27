@@ -93,6 +93,18 @@ func TestSessionInvocationAPI_PackagedGoalBlockedReturnsBlockedStatusDetails(t *
 	if response.Message == nil || !strings.Contains(*response.Message, `state "goal:blocked"`) {
 		t.Fatalf("invocation message = %#v, want goal:blocked state detail", response.Message)
 	}
+	if response.SessionId == nil || *response.SessionId != "~default" {
+		t.Fatalf("invocation sessionId = %#v, want ~default", response.SessionId)
+	}
+	if response.WorkId == nil || *response.WorkId == "" {
+		t.Fatalf("invocation workId = %#v, want populated work id", response.WorkId)
+	}
+	if response.WorkName == nil || *response.WorkName == "" {
+		t.Fatalf("invocation workName = %#v, want populated work name", response.WorkName)
+	}
+	if response.WorkState == nil || *response.WorkState != "goal:blocked" {
+		t.Fatalf("invocation workState = %#v, want goal:blocked", response.WorkState)
+	}
 	if response.PrimaryResult != nil {
 		t.Fatalf("invocation primaryResult = %#v, want nil on blocked output", response.PrimaryResult)
 	}
@@ -110,6 +122,18 @@ func TestSessionInvocationAPI_PackagedGoalNeedsHumanReturnsNeedsHumanStatusDetai
 	}
 	if response.Message == nil || !strings.Contains(*response.Message, "needs human input") || !strings.Contains(*response.Message, `state "goal:needs-human"`) {
 		t.Fatalf("invocation message = %#v, want needs-human explanation", response.Message)
+	}
+	if response.SessionId == nil || *response.SessionId != "~default" {
+		t.Fatalf("invocation sessionId = %#v, want ~default", response.SessionId)
+	}
+	if response.WorkId == nil || *response.WorkId == "" {
+		t.Fatalf("invocation workId = %#v, want populated work id", response.WorkId)
+	}
+	if response.WorkName == nil || *response.WorkName == "" {
+		t.Fatalf("invocation workName = %#v, want populated work name", response.WorkName)
+	}
+	if response.WorkState == nil || *response.WorkState != "goal:needs-human" {
+		t.Fatalf("invocation workState = %#v, want goal:needs-human", response.WorkState)
 	}
 	if response.PrimaryResult != nil {
 		t.Fatalf("invocation primaryResult = %#v, want nil on needs-human output", response.PrimaryResult)

@@ -901,6 +901,14 @@ export interface components {
       errorCode?: InvocationResponseErrorCode;
       /** @description Human-readable failure summary when status is not `COMPLETED`. */
       message?: string;
+      /** @description Session identifier for the invocation outcome when non-success context needs to point operators at the relevant factory session. */
+      sessionId?: string;
+      /** @description Relevant work identifier for a non-success invocation outcome when one scoped work item explains the stop condition. */
+      workId?: string;
+      /** @description Relevant work name for a non-success invocation outcome when one scoped work item explains the stop condition. */
+      workName?: string;
+      /** @description Current authored work state that best explains the non-success invocation outcome when one scoped work item is available. */
+      workState?: string;
     };
     /**
      * @description Terminal status for a factory-session invocation.

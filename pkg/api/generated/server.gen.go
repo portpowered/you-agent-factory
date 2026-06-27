@@ -3054,11 +3054,23 @@ type InvocationResponse struct {
 	// RequestId Stable invocation request identifier assigned or accepted by the server.
 	RequestId string `json:"requestId"`
 
+	// SessionId Session identifier for the invocation outcome when non-success context needs to point operators at the relevant factory session.
+	SessionId *string `json:"sessionId,omitempty"`
+
 	// Status Terminal status for a factory-session invocation.
 	Status InvocationTerminalStatus `json:"status"`
 
 	// TraceId Trace identifier for the work submitted by this invocation.
 	TraceId string `json:"traceId"`
+
+	// WorkId Relevant work identifier for a non-success invocation outcome when one scoped work item explains the stop condition.
+	WorkId *string `json:"workId,omitempty"`
+
+	// WorkName Relevant work name for a non-success invocation outcome when one scoped work item explains the stop condition.
+	WorkName *string `json:"workName,omitempty"`
+
+	// WorkState Current authored work state that best explains the non-success invocation outcome when one scoped work item is available.
+	WorkState *string `json:"workState,omitempty"`
 }
 
 // InvocationResponseErrorCode Stable machine-readable invocation failure code when status is not `COMPLETED`.

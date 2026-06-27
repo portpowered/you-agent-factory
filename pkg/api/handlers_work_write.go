@@ -72,6 +72,18 @@ func (s *Server) InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.
 	if message := strings.TrimSpace(result.Message); message != "" {
 		response.Message = &message
 	}
+	if sessionID := strings.TrimSpace(result.SessionID); sessionID != "" {
+		response.SessionId = &sessionID
+	}
+	if workID := strings.TrimSpace(result.WorkID); workID != "" {
+		response.WorkId = &workID
+	}
+	if workName := strings.TrimSpace(result.WorkName); workName != "" {
+		response.WorkName = &workName
+	}
+	if workState := strings.TrimSpace(result.WorkState); workState != "" {
+		response.WorkState = &workState
+	}
 	s.writeJSON(w, http.StatusOK, response)
 }
 

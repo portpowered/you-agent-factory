@@ -189,6 +189,9 @@ func TestSessionInvocationAPI_PausedSessionReturnsPausedStatus(t *testing.T) {
 		}
 		t.Fatalf("invocation message = %q, want paused session detail", gotMessage)
 	}
+	if response.SessionId == nil || *response.SessionId != factorysessions.DefaultSessionID {
+		t.Fatalf("invocation sessionId = %#v, want %q", response.SessionId, factorysessions.DefaultSessionID)
+	}
 	if response.PrimaryResult != nil {
 		t.Fatalf("invocation primaryResult = %#v, want nil on paused output", response.PrimaryResult)
 	}

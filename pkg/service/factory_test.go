@@ -87,6 +87,9 @@ func TestFactoryService_ResolveInvocationWaitTerminal_ReturnsInterruptedClassifi
 	if !strings.Contains(result.Message, `dispatch "dispatch-1"`) || !strings.Contains(result.Message, `work "Interrupted goal"`) {
 		t.Fatalf("message = %q, want interrupted dispatch and work detail", result.Message)
 	}
+	if result.SessionID != "session-js-1" || result.WorkID != "work-root" || result.WorkName != "Interrupted goal" || result.WorkState != "goal:review" {
+		t.Fatalf("result context = %#v, want session/work context populated", result)
+	}
 }
 
 func TestFactoryService_ResolveInvocationWaitTerminal_ReturnsFailedClassification(t *testing.T) {

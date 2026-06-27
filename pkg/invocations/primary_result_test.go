@@ -140,6 +140,11 @@ func TestClassifyMissingPrimaryResult_ReturnsBlockedForScopedWorkItem(t *testing
 	if got.Message != `invocation blocked: work "Blocked goal" is waiting in state "goal:blocked"` {
 		t.Fatalf("message = %q", got.Message)
 	}
+	assertInvocationFailureContext(t, got.Context, InvocationFailureContext{
+		WorkID:    "work-root",
+		WorkName:  "Blocked goal",
+		WorkState: "goal:blocked",
+	})
 }
 
 func TestClassifyMissingPrimaryResult_ReturnsNeedsHumanForScopedWorkItem(t *testing.T) {
@@ -162,6 +167,11 @@ func TestClassifyMissingPrimaryResult_ReturnsNeedsHumanForScopedWorkItem(t *test
 	if got.Message != `invocation needs human input: work "Needs operator input" is waiting in state "goal:needs-human"` {
 		t.Fatalf("message = %q", got.Message)
 	}
+	assertInvocationFailureContext(t, got.Context, InvocationFailureContext{
+		WorkID:    "work-root",
+		WorkName:  "Needs operator input",
+		WorkState: "goal:needs-human",
+	})
 }
 
 func TestClassifyFailedInvocation_ReturnsFailedForScopedFailedWorkItem(t *testing.T) {
@@ -185,6 +195,11 @@ func TestClassifyFailedInvocation_ReturnsFailedForScopedFailedWorkItem(t *testin
 	if got.Message != `invocation failed: work "Failed goal" reached failed state "goal:failed" before a primary result was available` {
 		t.Fatalf("message = %q", got.Message)
 	}
+	assertInvocationFailureContext(t, got.Context, InvocationFailureContext{
+		WorkID:    "work-root",
+		WorkName:  "Failed goal",
+		WorkState: "goal:failed",
+	})
 }
 
 func TestClassifyFailedInvocation_MatchesFailedWorkBySubmittedTrace(t *testing.T) {
@@ -209,6 +224,11 @@ func TestClassifyFailedInvocation_MatchesFailedWorkBySubmittedTrace(t *testing.T
 	if got.Message != `invocation failed: work "Failed goal child" reached failed state "goal:failed" before a primary result was available` {
 		t.Fatalf("message = %q", got.Message)
 	}
+	assertInvocationFailureContext(t, got.Context, InvocationFailureContext{
+		WorkID:    "work-failed-child",
+		WorkName:  "Failed goal child",
+		WorkState: "goal:failed",
+	})
 }
 
 func TestClassifyFailedInvocation_MatchesFailedWorkByRequestStateChange(t *testing.T) {
@@ -238,6 +258,11 @@ func TestClassifyFailedInvocation_MatchesFailedWorkByRequestStateChange(t *testi
 	if got.Message != `invocation failed: work "Failed goal child" reached failed state "goal:failed" before a primary result was available` {
 		t.Fatalf("message = %q", got.Message)
 	}
+	assertInvocationFailureContext(t, got.Context, InvocationFailureContext{
+		WorkID:    "work-failed-child",
+		WorkName:  "Failed goal child",
+		WorkState: "goal:failed",
+	})
 }
 
 func TestClassifyFailedInvocation_FallsBackToFailedSessionState(t *testing.T) {
@@ -259,6 +284,12 @@ func TestClassifyFailedInvocation_FallsBackToFailedSessionState(t *testing.T) {
 	if got.Message != `invocation failed: session "session-1" reached a failed state before a primary result was available` {
 		t.Fatalf("message = %q", got.Message)
 	}
+	assertInvocationFailureContext(t, got.Context, InvocationFailureContext{
+		SessionID: "session-1",
+		WorkID:    "work-root",
+		WorkName:  "Failed goal",
+		WorkState: "goal:init",
+	})
 }
 
 func TestClassifyInvocationControlState_ReturnsPausedForPausedSession(t *testing.T) {
@@ -280,6 +311,12 @@ func TestClassifyInvocationControlState_ReturnsPausedForPausedSession(t *testing
 	if got.Message != `invocation paused: session "session-live-1" is paused; resume the session to continue waiting for primary result` {
 		t.Fatalf("message = %q", got.Message)
 	}
+	assertInvocationFailureContext(t, got.Context, InvocationFailureContext{
+		SessionID: "session-live-1",
+		WorkID:    "work-root",
+		WorkName:  "Paused goal",
+		WorkState: "goal:init",
+	})
 }
 
 func TestClassifyInvocationControlState_ReturnsInterruptedForScopedDispatch(t *testing.T) {
@@ -308,6 +345,12 @@ func TestClassifyInvocationControlState_ReturnsInterruptedForScopedDispatch(t *t
 	if got.Message != `invocation interrupted: session "session-js-1" dispatch "dispatch-1" for work "Interrupted goal" was interrupted before a primary result was available` {
 		t.Fatalf("message = %q", got.Message)
 	}
+	assertInvocationFailureContext(t, got.Context, InvocationFailureContext{
+		SessionID: "session-js-1",
+		WorkID:    "work-root",
+		WorkName:  "Interrupted goal",
+		WorkState: "goal:init",
+	})
 }
 
 func TestClassifyInvocationControlState_PrefersPausedOverInterrupted(t *testing.T) {
@@ -358,6 +401,23 @@ func invocationWorkItem(workID, workTypeName, stateName, name, placeID string) i
 			Type: interfaces.WorkContentPartTypeText,
 			Text: workID + "-content",
 		}},
+	}
+}
+
+func assertInvocationFailureContext(t *testing.T, got, want InvocationFailureContext) {
+	t.Helper()
+
+	if got.SessionID != want.SessionID {
+		t.Fatalf("context.sessionID = %q, want %q", got.SessionID, want.SessionID)
+	}
+	if got.WorkID != want.WorkID {
+		t.Fatalf("context.workID = %q, want %q", got.WorkID, want.WorkID)
+	}
+	if got.WorkName != want.WorkName {
+		t.Fatalf("context.workName = %q, want %q", got.WorkName, want.WorkName)
+	}
+	if got.WorkState != want.WorkState {
+		t.Fatalf("context.workState = %q, want %q", got.WorkState, want.WorkState)
 	}
 }
 

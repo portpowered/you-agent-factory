@@ -394,6 +394,18 @@ func writeInvocationSuccess(cfg RunConfig, result apisurface.FactoryInvocationRe
 		if content := workcontent.GeneratedPtrFromParts(result.PrimaryResult); content != nil {
 			response.PrimaryResult = content
 		}
+		if sessionID := strings.TrimSpace(result.SessionID); sessionID != "" {
+			response.SessionId = &sessionID
+		}
+		if workID := strings.TrimSpace(result.WorkID); workID != "" {
+			response.WorkId = &workID
+		}
+		if workName := strings.TrimSpace(result.WorkName); workName != "" {
+			response.WorkName = &workName
+		}
+		if workState := strings.TrimSpace(result.WorkState); workState != "" {
+			response.WorkState = &workState
+		}
 		encoded, err := json.Marshal(response)
 		if err != nil {
 			return fmt.Errorf("marshal invocation response: %w", err)
