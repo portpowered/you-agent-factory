@@ -168,6 +168,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/sync-preflight": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Validate cached session sync state for one session
+     * @description Returns the canonical backend-owned session sync identity set and validates an optional reconnect cursor before the dashboard restores cached checkpoint state or opens the event stream. This route accepts `~default` as a session selector, but clients must persist the returned `factorySessionId` field rather than treating `~default` as a durable live-session identifier.
+     */
+    get: operations["getFactorySessionSyncPreflightBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/status": {
     parameters: {
       query?: never;
@@ -583,8 +603,8 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Pause one factory session
-     * @description Pauses one live or durable factory session while preserving inspectable partial results, dispatches, and artifacts. Live workspace sessions use the same route family as durable execution sessions. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
+     * Pause one Factory Session
+     * @description Pauses one live or durable Factory Session while preserving inspectable partial results, dispatches, artifacts, and buffered inbound submissions or completed worker results. Live workspace sessions use the same route family as durable execution sessions. Automatic progression stops until resume. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
      */
     post: operations["pauseFactorySession"];
     delete?: never;
@@ -603,8 +623,8 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * Resume one factory session
-     * @description Resumes one paused live or durable factory session while preserving inspectable partial results, dispatches, and artifacts. Live workspace sessions use the same route family as durable execution sessions. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
+     * Resume one Factory Session
+     * @description Resumes one paused live or durable Factory Session while preserving inspectable partial results, dispatches, and artifacts. Live workspace sessions use the same route family as durable execution sessions. Wakes the runtime internally and drains ready buffered submissions and completed worker results without requiring a new external signal. Returns the updated session or a typed lifecycle-control outcome for no-op, invalid-state, terminal-session, or conflict cases.
      */
     post: operations["resumeFactorySession"];
     delete?: never;
@@ -667,6 +687,26 @@ export interface paths {
      * @description Retries one failed or interrupted dispatch within the targeted durable factory session. The response links the retry to the session and dispatch state and preserves inspectable partial results, dispatches, and artifacts after the control operation.
      */
     post: operations["retryFactorySessionDispatch"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/factory-sessions/{session_id}/interrupt-dispatch": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Interrupt one active durable factory session dispatch
+     * @description Interrupts one active dispatch within the targeted durable factory session. The response links the interruption to the session and dispatch state and preserves inspectable partial results, dispatches, and artifacts after the control operation.
+     */
+    post: operations["interruptFactorySessionDispatch"];
     delete?: never;
     options?: never;
     head?: never;
@@ -861,6 +901,14 @@ export interface components {
       errorCode?: InvocationResponseErrorCode;
       /** @description Human-readable failure summary when status is not `COMPLETED`. */
       message?: string;
+      /** @description Session identifier for the invocation outcome when non-success context needs to point operators at the relevant factory session. */
+      sessionId?: string;
+      /** @description Relevant work identifier for a non-success invocation outcome when one scoped work item explains the stop condition. */
+      workId?: string;
+      /** @description Relevant work name for a non-success invocation outcome when one scoped work item explains the stop condition. */
+      workName?: string;
+      /** @description Current authored work state that best explains the non-success invocation outcome when one scoped work item is available. */
+      workState?: string;
     };
     /**
      * @description Terminal status for a factory-session invocation.
@@ -1293,12 +1341,22 @@ export interface components {
       budgets?: components["schemas"]["FactorySessionBudgets"];
       usage: components["schemas"]["FactorySessionUsage"];
       lifecycle: components["schemas"]["FactorySessionLifecycle"];
+      /** @description Backend-authoritative identity for the current live session event stream. Clients must confirm this identity before reusing persisted reconnect cursors or timeline checkpoints. */
+      streamIdentity?: components["schemas"]["FactorySessionStreamIdentity"];
       petri?: components["schemas"]["FactorySessionPetriProjection"];
       javascript?: components["schemas"]["FactorySessionJavaScriptProjection"];
       /** @description Shared dispatch projections for the session runtime. */
       dispatches?: components["schemas"]["FactoryDispatch"][];
       /** @description Shared artifact projections for the session runtime. */
       artifacts?: components["schemas"]["FactoryArtifact"][];
+    };
+    FactorySessionStreamIdentity: {
+      /** @description Stable backend process or scope identity for the current live session stream. */
+      backendScopeID: string;
+      /** @description Stable live Factory Session identifier for the current stream. */
+      factorySessionID: string;
+      /** @description Stable generation identifier for the current live session stream incarnation. */
+      streamGenerationID: string;
     };
     /**
      * @description Canonical lifecycle status for one live factory session runtime.
@@ -1392,6 +1450,44 @@ export interface components {
       /** @description Child dispatches that have completed. */
       completed: number;
     };
+    /**
+     * @description Typed session sync preflight response used before restoring cached dashboard
+     *     checkpoint state or opening the session event stream with a reconnect cursor.
+     */
+    FactorySessionSyncPreflightResponse: {
+      /** @description Session selector requested by the client. This may be `~default`. */
+      requestedSessionId: string;
+      reasonCode: components["schemas"]["FactorySessionSyncPreflightReasonCode"];
+      /** @description Canonical backend scope identifier for the current server-owned session cache and event history scope. */
+      backendScopeId?: string;
+      /** @description Canonical logical-session key for the resolved session target. This remains stable across live-session remaps for the same folder and target selector. */
+      logicalSessionKeyId?: string;
+      /** @description Resolved live Factory Session identifier for the current preflight target. Clients must persist this value rather than treating `~default` as a durable session identifier. */
+      factorySessionId?: string;
+      /** @description Canonical event-stream generation identifier for the resolved live Factory Session. */
+      streamGenerationId?: string;
+      /** @description True when cached stream-derived checkpoint state is safe to restore for the resolved identity set. */
+      checkpointReusable: boolean;
+      reconnectCursor: components["schemas"]["FactorySessionSyncPreflightReconnectCursor"];
+    };
+    /**
+     * @description Stable backend-owned session sync preflight outcome code.
+     * @enum {string}
+     */
+    FactorySessionSyncPreflightReasonCode: FactorySessionSyncPreflightReasonCode;
+    FactorySessionSyncPreflightReconnectCursor: {
+      /** @description True when the client supplied at least one reconnect cursor field for validation. */
+      provided: boolean;
+      /** @description True when the supplied reconnect cursor belongs to the current stream generation for the resolved live session. */
+      validForStreamGeneration: boolean;
+      /** @description Optional acknowledged FactoryEvent.id supplied by the client. */
+      afterEventId?: string;
+      /**
+       * Format: int64
+       * @description Optional acknowledged FactoryEvent.context.sessionSequence supplied by the client.
+       */
+      afterSequence?: number;
+    };
     FactorySessionLiveResult: {
       /** @description Live factory session identifier for this result read. */
       sessionId: string;
@@ -1436,7 +1532,7 @@ export interface components {
       /** @description Whether polling or a later retry may return a ready result. */
       retryable?: boolean;
     };
-    /** @description Durable factory-session dispatch summary for list responses. Exposes neutral dispatch fields without requiring orchestrator-specific projections. */
+    /** @description Durable factory-session dispatch summary for list responses. Exposes shared dispatch fields plus bounded orchestrator-specific inspection data when available. */
     FactorySessionDispatchSummary: {
       /** @description Stable dispatch identifier. */
       id: string;
@@ -1464,6 +1560,7 @@ export interface components {
       /** @description Artifact identifiers produced by the dispatch. */
       outputArtifactIds?: string[];
       failureDetail?: components["schemas"]["FactoryDispatchFailureDetail"];
+      javascript?: components["schemas"]["FactoryDispatchJavaScriptProjection"];
     };
     ListFactorySessionDispatchesResponse: {
       /** @description Stable factory-session identifier that owns the listed dispatches. */
@@ -1591,6 +1688,8 @@ export interface components {
       relatedWorkIds?: string[];
       /** @description Artifact identifiers produced by the dispatch. */
       artifactIds?: string[];
+      /** @description Ordered durable status history observed for the dispatch. */
+      statusTransitions?: components["schemas"]["FactoryDispatchStatus"][];
       usage?: components["schemas"]["FactoryDispatchUsage"];
       warnings?: components["schemas"]["FactoryDispatchWarning"][];
       failureDetail?: components["schemas"]["FactoryDispatchFailureDetail"];
@@ -1626,6 +1725,8 @@ export interface components {
       taskKind: components["schemas"]["FactoryDispatchJavaScriptTaskKind"];
       /** @description Customer-visible label for the JavaScript workflow task. */
       taskLabel?: string;
+      /** @description Durable child execution mode recorded for the JavaScript workflow task when available. */
+      executionMode?: string;
     };
     FactoryDispatchUsage: {
       /** Format: int64 */
@@ -1779,6 +1880,20 @@ export interface components {
        * @description When the Factory Session returned to RUNNING.
        */
       resumedAt: string;
+    };
+    /** @description Durable Factory Session lifecycle control recorded on the canonical factory event stream. Session identity lives in FactoryEvent.context; this payload carries replay-safe control facts only. */
+    SessionLifecycleControlEventPayload: {
+      operation: components["schemas"]["FactorySessionLifecycleControlKind"];
+      outcome: components["schemas"]["FactorySessionLifecycleControlOutcome"];
+      previousStatus: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+      newStatus: components["schemas"]["FactorySessionDurableLifecycleStatus"];
+      /**
+       * Format: date-time
+       * @description When the lifecycle control took effect.
+       */
+      occurredAt: string;
+      /** @description Optional operator-provided reason for the control request. */
+      reason?: string;
     };
     /** @description Partial or final session result availability on the canonical factory event stream. Identity and ordering live in FactoryEvent.context. */
     SessionResultUpdatedEventPayload: {
@@ -2064,6 +2179,8 @@ export interface components {
       canApprove?: boolean;
       /** @description True when retry-dispatch is currently valid for the session status. */
       canRetryDispatch?: boolean;
+      /** @description True when interrupt-dispatch is currently valid for the session status. */
+      canInterruptDispatch?: boolean;
     };
     FactorySessionDurableResultSummary: {
       resultStatus: components["schemas"]["FactorySessionResultStatus"];
@@ -2369,6 +2486,15 @@ export interface components {
        * @default false
        */
       resetAttemptCount: boolean;
+    };
+    /** @description Interrupt request for one active durable factory-session dispatch. */
+    FactorySessionInterruptDispatchRequest: {
+      /** @description Optional idempotency key for one lifecycle control request. Replaying the same requestId with the same operation and target must return the prior control outcome instead of applying a second mutation. */
+      requestId?: string;
+      /** @description Optional operator-provided reason for audit and diagnostics. */
+      reason?: string;
+      /** @description Stable dispatch identifier to interrupt within the targeted session. */
+      dispatchId: string;
     };
     FactorySessionLifecycleControlResponse: {
       /** @description Stable durable factory-session identifier. */
@@ -2762,6 +2888,7 @@ export interface components {
         | components["schemas"]["SessionResumedEventPayload"]
         | components["schemas"]["SessionResultUpdatedEventPayload"]
         | components["schemas"]["SessionCompletedEventPayload"]
+        | components["schemas"]["SessionLifecycleControlEventPayload"]
         | components["schemas"]["OrchestratorPhaseChangedEventPayload"]
         | components["schemas"]["OrchestratorCheckpointWrittenEventPayload"]
         | components["schemas"]["DispatchQueuedEventPayload"]
@@ -3776,6 +3903,11 @@ export interface components {
       /** @description Environment variables added to the workstation execution context. */
       env?: components["schemas"]["StringMap"];
     };
+    /**
+     * @description Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
+     * @enum {string}
+     */
+    WorkstationOutcomeFormat: WorkstationOutcomeFormat;
     ClassificationRoute: {
       /** @description Case-sensitive classifier label that must match the trimmed classifier output exactly. */
       label: string;
@@ -4424,11 +4556,6 @@ export interface components {
       /** @description Optional claim-related configuration that v1 hosted Linear polling allows. */
       claim?: components["schemas"]["HostedLinearWorkerClaim"];
     };
-    /**
-     * @description Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
-     * @enum {string}
-     */
-    WorkstationOutcomeFormat: WorkstationOutcomeFormat;
   };
   responses: {
     /** @description Request payload or parameter was invalid. */
@@ -4846,6 +4973,8 @@ export interface operations {
       /** @description Factory event stream for the targeted session. */
       200: {
         headers: {
+          /** @description Opaque invalidation token for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `streamGenerationID` values before reusing reconnect cursors or stream-derived projections. */
+          "X-Factory-Session-Stream-Generation-Id"?: string;
           [name: string]: unknown;
         };
         content: {
@@ -4854,6 +4983,35 @@ export interface operations {
       };
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getFactorySessionSyncPreflightBySessionId: {
+    parameters: {
+      query?: {
+        /** @description Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. */
+        after_event_id?: components["parameters"]["AfterEventId"];
+        /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
+        after_sequence?: components["parameters"]["AfterSequence"];
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Typed session sync preflight outcome for the targeted session selector. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionSyncPreflightResponse"];
+        };
+      };
       500: components["responses"]["InternalError"];
     };
   };
@@ -5618,6 +5776,46 @@ export interface operations {
       500: components["responses"]["InternalError"];
     };
   };
+  interruptFactorySessionDispatch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["FactorySessionInterruptDispatchRequest"];
+      };
+    };
+    responses: {
+      /** @description Interrupt dispatch applied immediately or produced a typed no-op outcome. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionLifecycleControlResponse"];
+        };
+      };
+      /** @description Interrupt-dispatch control request accepted asynchronously. */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["FactorySessionLifecycleControlResponse"];
+        };
+      };
+      400: components["responses"]["BadRequest"];
+      404: components["responses"]["NotFound"];
+      409: components["responses"]["FactorySessionLifecycleControlConflict"];
+      500: components["responses"]["InternalError"];
+    };
+  };
   getFactorySessionPartialResult: {
     parameters: {
       query?: never;
@@ -5817,6 +6015,10 @@ export const InvocationInputSourceKind = {
 export type InvocationInputSourceKind =
   (typeof InvocationInputSourceKind)[keyof typeof InvocationInputSourceKind];
 export const InvocationResponseErrorCode = {
+  INVOCATION_BLOCKED: "INVOCATION_BLOCKED",
+  INVOCATION_INTERRUPTED: "INVOCATION_INTERRUPTED",
+  INVOCATION_NEEDS_HUMAN: "INVOCATION_NEEDS_HUMAN",
+  INVOCATION_PAUSED: "INVOCATION_PAUSED",
   INVOCATION_PRIMARY_RESULT_UNRESOLVED: "INVOCATION_PRIMARY_RESULT_UNRESOLVED",
   INVOCATION_TIMED_OUT: "INVOCATION_TIMED_OUT",
   INVOCATION_CANCELED: "INVOCATION_CANCELED",
@@ -5965,6 +6167,8 @@ export type ErrorFamily = (typeof ErrorFamily)[keyof typeof ErrorFamily];
 export const ErrorResponseCode = {
   // Request payload or parameter validation failed.
   BAD_REQUEST: "BAD_REQUEST",
+  // Factory session discovery found a readable factory target whose config could not be loaded.
+  FACTORY_SESSION_CONFIG_LOAD_FAILED: "FACTORY_SESSION_CONFIG_LOAD_FAILED",
   // Named factory name validation failed.
   INVALID_FACTORY_NAME: "INVALID_FACTORY_NAME",
   // Submitted named factory already exists.
@@ -6019,6 +6223,14 @@ export const FactorySessionJavaScriptScriptStatus = {
 } as const;
 export type FactorySessionJavaScriptScriptStatus =
   (typeof FactorySessionJavaScriptScriptStatus)[keyof typeof FactorySessionJavaScriptScriptStatus];
+export const FactorySessionSyncPreflightReasonCode = {
+  ok: "ok",
+  cursor_stale: "cursor_stale",
+  session_not_found: "session_not_found",
+  logical_session_remap: "logical_session_remap",
+} as const;
+export type FactorySessionSyncPreflightReasonCode =
+  (typeof FactorySessionSyncPreflightReasonCode)[keyof typeof FactorySessionSyncPreflightReasonCode];
 export const FactorySessionResultMode = {
   FactorySessionResultModeFinal: "final",
   FactorySessionResultModePartial: "partial",
@@ -6057,6 +6269,8 @@ export const FactoryDispatchStatus = {
   FactoryDispatchStatusCOMPLETED: "COMPLETED",
   // Dispatch failed or was rejected.
   FactoryDispatchStatusFAILED: "FAILED",
+  // Dispatch was interrupted before normal completion.
+  FactoryDispatchStatusINTERRUPTED: "INTERRUPTED",
 } as const;
 export type FactoryDispatchStatus =
   (typeof FactoryDispatchStatus)[keyof typeof FactoryDispatchStatus];
@@ -6238,9 +6452,9 @@ export type FactorySessionSyncExecutionOutcome =
 export const FactorySessionLifecycleControlKind = {
   // Approve requested orchestrator policy so execution can proceed.
   FactorySessionLifecycleControlKindApprove: "APPROVE",
-  // Pause active durable session scheduling while preserving inspectable state.
+  // Pause active Factory Session scheduling while preserving inspectable state and buffered work.
   FactorySessionLifecycleControlKindPause: "PAUSE",
-  // Resume a paused durable session.
+  // Resume a paused Factory Session and drain ready buffered work.
   FactorySessionLifecycleControlKindResume: "RESUME",
   // Request graceful cancellation while preserving partial results and artifacts.
   FactorySessionLifecycleControlKindCancel: "CANCEL",
@@ -6248,6 +6462,8 @@ export const FactorySessionLifecycleControlKind = {
   FactorySessionLifecycleControlKindTerminate: "TERMINATE",
   // Retry one failed or interrupted dispatch within the targeted session.
   FactorySessionLifecycleControlKindRetryDispatch: "RETRY_DISPATCH",
+  // Interrupt one active dispatch within the targeted session.
+  FactorySessionLifecycleControlKindInterruptDispatch: "INTERRUPT_DISPATCH",
 } as const;
 export type FactorySessionLifecycleControlKind =
   (typeof FactorySessionLifecycleControlKind)[keyof typeof FactorySessionLifecycleControlKind];
@@ -6377,6 +6593,8 @@ export const FactoryEventType = {
   FactoryEventTypeSessionResultUpdated: "SESSION_RESULT_UPDATED",
   // Durable factory session execution reached a terminal lifecycle state.
   FactoryEventTypeSessionCompleted: "SESSION_COMPLETED",
+  // Durable factory session lifecycle control was applied or recorded for replay.
+  FactoryEventTypeSessionLifecycleControl: "SESSION_LIFECYCLE_CONTROL",
   // An orchestrator workflow phase transition was recorded.
   FactoryEventTypeOrchestratorPhaseChanged: "ORCHESTRATOR_PHASE_CHANGED",
   // An orchestrator checkpoint reference was recorded without exposing raw VM state.
@@ -6638,6 +6856,12 @@ export const RunnerSelectionSource = {
 } as const;
 export type RunnerSelectionSource =
   (typeof RunnerSelectionSource)[keyof typeof RunnerSelectionSource];
+export const WorkstationOutcomeFormat = {
+  // Parse agent output as a reviewer/checker decision envelope instead of stop-token routing.
+  WorkstationOutcomeFormatDecisionEnvelope: "decision-envelope",
+} as const;
+export type WorkstationOutcomeFormat =
+  (typeof WorkstationOutcomeFormat)[keyof typeof WorkstationOutcomeFormat];
 export const WorkstationKind = {
   // Schedules when its inputs are ready and emits configured outputs.
   WorkstationKindStandard: "STANDARD",
@@ -6831,12 +7055,6 @@ export const HostedWorkerProvider = {
 } as const;
 export type HostedWorkerProvider =
   (typeof HostedWorkerProvider)[keyof typeof HostedWorkerProvider];
-export const WorkstationOutcomeFormat = {
-  // Parse agent output as a reviewer/checker decision envelope instead of stop-token routing.
-  WorkstationOutcomeFormatDecisionEnvelope: "decision-envelope",
-} as const;
-export type WorkstationOutcomeFormat =
-  (typeof WorkstationOutcomeFormat)[keyof typeof WorkstationOutcomeFormat];
 export const ComponentsParametersSortBy = {
   state_type: "state.type",
 } as const;

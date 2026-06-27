@@ -92,6 +92,14 @@ func WithProviderCommandRunner(runner CommandRunner) ScriptWrapProviderOption {
 	}
 }
 
+// WithInferenceProgressPublisher injects the internal session-stream publisher
+// used for additive provider progress and terminal stream markers.
+func WithInferenceProgressPublisher(publisher InferenceProgressPublisher) ScriptWrapProviderOption {
+	return func(p *ScriptWrapProvider) {
+		p.progressPublisher = publisher
+	}
+}
+
 // WithMaterializeOptions configures dispatch-time content URL materialization (used by Codex image args).
 func WithMaterializeOptions(opts *materialize.Options) ScriptWrapProviderOption {
 	return func(p *ScriptWrapProvider) {
@@ -111,6 +119,8 @@ type ScriptWrapProvider struct {
 	// Logger is the structured logger for inference diagnostics. Nil disables logging.
 	Logger logging.Logger
 	exec   CommandRunner
+
+	progressPublisher InferenceProgressPublisher
 }
 
 func (p *ScriptWrapProvider) commandExec() CommandRunner {
@@ -195,19 +205,23 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 		logger.Error("inferencer: request failed",
 			cursorFailureLogFields(req, cursorProvider, result,
 				"error", err.Error())...)
-		return interfaces.InferenceResponse{}, normalizeProviderExecutionError(
+		providerErr := normalizeProviderExecutionError(
 			req.ModelProvider, result, err, providerSession,
 			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
 		)
+		p.publishFailureFragment(req.Dispatch.DispatchID, providerSession, providerErr)
+		return interfaces.InferenceResponse{}, providerErr
 	}
 	if result.ExitCode != 0 {
 		logger.Error("inferencer: request failed",
 			cursorFailureLogFields(req, cursorProvider, result,
 				"exit_code", result.ExitCode)...)
-		return interfaces.InferenceResponse{}, normalizeProviderExitFailure(
+		providerErr := normalizeProviderExitFailure(
 			req.ModelProvider, result, providerSession,
 			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
 		)
+		p.publishFailureFragment(req.Dispatch.DispatchID, providerSession, providerErr)
+		return interfaces.InferenceResponse{}, providerErr
 	}
 
 	if cursorProvider {
@@ -221,6 +235,7 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 		workLogFields(req.Dispatch.Execution,
 			"dispatcher", string(req.ModelProvider),
 			"output_len", len(content))...)
+	p.publishCompletedFragment(req.Dispatch.DispatchID, providerSession)
 
 	return interfaces.InferenceResponse{
 		Content:         content,
@@ -365,13 +380,15 @@ func (p *ScriptWrapProvider) completeCursorInference(
 			cursorFailureLogFields(req, true, result,
 				"error", parseErr.Message)...)
 		failureDiagnostics := cursorpkg.WithCommandOutputExcerpts(commandDiagnostics, result.Stdout, result.Stderr)
-		return interfaces.InferenceResponse{}, newProviderErrorWithDiagnostics(
+		providerErr := newProviderErrorWithDiagnostics(
 			parseErr.Type,
 			parseErr.Message,
 			parseErr.Cause,
 			effectiveProviderSession(req, result),
 			failureDiagnostics,
 		)
+		p.publishFailureFragment(req.Dispatch.DispatchID, effectiveProviderSession(req, result), providerErr)
+		return interfaces.InferenceResponse{}, providerErr
 	}
 	diagnostics := cursorpkg.WithResponseMetadata(commandDiagnostics, parsed.ResponseMetadata)
 	logger.Debug("inference results:",
@@ -381,11 +398,34 @@ func (p *ScriptWrapProvider) completeCursorInference(
 			"dispatcher", string(req.ModelProvider),
 			"output_len", len(parsed.Content),
 			"session_id", parsed.ProviderSession.ID)...)
+	p.publishCompletedFragment(req.Dispatch.DispatchID, parsed.ProviderSession)
 	return interfaces.InferenceResponse{
 		Content:         parsed.Content,
 		ProviderSession: parsed.ProviderSession,
 		Diagnostics:     diagnostics,
 	}, nil
+}
+
+func (p *ScriptWrapProvider) publishCompletedFragment(dispatchID string, providerSession *interfaces.ProviderSessionMetadata) {
+	if p == nil || p.progressPublisher == nil {
+		return
+	}
+	p.progressPublisher(CompletedFragment(dispatchID, providerSession))
+}
+
+func (p *ScriptWrapProvider) publishFailureFragment(dispatchID string, providerSession *interfaces.ProviderSessionMetadata, err error) {
+	if p == nil || p.progressPublisher == nil {
+		return
+	}
+	message := ""
+	var providerErr *ProviderError
+	if errors.As(err, &providerErr) {
+		message = strings.TrimSpace(providerErr.Message)
+	}
+	if message == "" && err != nil {
+		message = strings.TrimSpace(err.Error())
+	}
+	p.progressPublisher(FailedFragment(dispatchID, providerSession, message))
 }
 
 func formatProviderCommandFailure(provider string, result CommandResult, err error) string {

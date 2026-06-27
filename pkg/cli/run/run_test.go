@@ -12,10 +12,11 @@ import (
 	"testing"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
@@ -413,21 +414,19 @@ func TestGenerateDefaultLiveRunRecordPath_UsesRecordingsHierarchyAndSessionTempl
 		t.Fatalf("generateDefaultLiveRunRecordPath: %v", err)
 	}
 
+	recordingsDir := defaultpaths.RecordingsDatedDir(
+		defaultpaths.RecordingsRoot(homeDir),
+		time.Date(2026, time.May, 23, 18, 45, 12, 0, time.FixedZone("ICT", 7*60*60)),
+	)
 	want := filepath.Join(
-		homeDir,
-		defaultRecordingsDir,
-		"2026-05",
-		"2026-05-23",
+		recordingsDir,
 		"factory-session-"+defaultRecordPathSessionToken+"-184512-uuid-1.json",
 	)
 	if path != want {
 		t.Fatalf("generated path = %q, want %q", path, want)
 	}
 	if got := resolveDefaultSessionRecordPath(path); got != filepath.Join(
-		homeDir,
-		defaultRecordingsDir,
-		"2026-05",
-		"2026-05-23",
+		recordingsDir,
 		"factory-session-"+defaultFactorySessionID+"-184512-uuid-1.json",
 	) {
 		t.Fatalf("resolved default-session path = %q", got)
@@ -725,7 +724,36 @@ func assertInvocationResponseMatchesFactoryResult(
 	if response.Status != result.Status {
 		t.Fatalf("status = %q, want %q", response.Status, result.Status)
 	}
-	assertGeneratedWorkContentPartsFromResponse(t, response.PrimaryResult, result.PrimaryResult)
+	if len(result.PrimaryResult) == 0 {
+		if response.PrimaryResult != nil {
+			t.Fatalf("primary result = %#v, want none", response.PrimaryResult)
+		}
+	} else {
+		assertGeneratedWorkContentPartsFromResponse(t, response.PrimaryResult, result.PrimaryResult)
+	}
+	assertOptionalStringPointerEquals(t, "errorCode", response.ErrorCode, result.ErrorCode)
+	assertOptionalStringPointerEquals(t, "message", response.Message, result.Message)
+	assertOptionalStringPointerEquals(t, "sessionId", response.SessionId, result.SessionID)
+	assertOptionalStringPointerEquals(t, "workId", response.WorkId, result.WorkID)
+	assertOptionalStringPointerEquals(t, "workName", response.WorkName, result.WorkName)
+	assertOptionalStringPointerEquals(t, "workState", response.WorkState, result.WorkState)
+}
+
+func assertOptionalStringPointerEquals[T ~string](t *testing.T, field string, got *T, want string) {
+	t.Helper()
+
+	if want == "" {
+		if got != nil {
+			t.Fatalf("%s = %#v, want nil", field, *got)
+		}
+		return
+	}
+	if got == nil {
+		t.Fatalf("%s = nil, want %q", field, want)
+	}
+	if string(*got) != want {
+		t.Fatalf("%s = %q, want %q", field, string(*got), want)
+	}
 }
 
 func assertGeneratedWorkContentPartsFromResponse(

@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
@@ -301,11 +302,22 @@ func completedDispatchReason(result resolvedWorkResult) string {
 
 func (t *TransitionerSubsystem) calculateArcsForResolvedResult(currentTransition *petri.Transition, resolved resolvedWorkResult) ([]petri.Arc, resolvedWorkResult, error) {
 	workstation, ok := workstationconfig.Workstation(currentTransition, t.runtimeConfig)
+	if ok && workstation != nil && goal.UsesGoalRoutingDecisionEnvelope(workstation) {
+		if resolved.outcome == interfaces.OutcomeAccepted {
+			return matchClassificationLabelArcs(currentTransition, resolved.selectedClassificationLabel, resolved, "decision %q did not match any authored routing route")
+		}
+		arcs, err := calculateArcs(currentTransition, resolved.outcome)
+		return arcs, resolved, err
+	}
 	if !ok || workstation == nil || workstation.Type != interfaces.WorkstationTypeClassify || resolved.outcome != interfaces.OutcomeAccepted {
 		arcs, err := calculateArcs(currentTransition, resolved.outcome)
 		return arcs, resolved, err
 	}
 
+	return matchClassificationLabelArcs(currentTransition, resolved.output, resolved, "classifier label %q did not match any authored classification route")
+}
+
+func matchClassificationLabelArcs(currentTransition *petri.Transition, label string, resolved resolvedWorkResult, unknownLabelFmt string) ([]petri.Arc, resolvedWorkResult, error) {
 	matchedArcs := make([]petri.Arc, 0, len(currentTransition.OutputArcs))
 	matchedRoute := false
 	for _, arc := range currentTransition.OutputArcs {
@@ -313,18 +325,22 @@ func (t *TransitionerSubsystem) calculateArcsForResolvedResult(currentTransition
 			matchedArcs = append(matchedArcs, arc)
 			continue
 		}
-		if arc.ClassificationLabel == resolved.output {
+		if arc.ClassificationLabel == label {
 			matchedRoute = true
 			matchedArcs = append(matchedArcs, arc)
 		}
 	}
 	if matchedRoute {
-		resolved.selectedClassificationLabel = resolved.output
+		resolved.selectedClassificationLabel = label
 		return matchedArcs, resolved, nil
 	}
 
 	resolved.outcome = interfaces.OutcomeFailed
-	resolved.err = fmt.Sprintf("classifier label %q did not match any authored classification route", resolved.output)
+	if label == "" {
+		resolved.err = "decision envelope: routing label is required"
+	} else {
+		resolved.err = fmt.Sprintf(unknownLabelFmt, label)
+	}
 	resolved.selectedClassificationLabel = ""
 	arcs, err := calculateArcs(currentTransition, resolved.outcome)
 	return arcs, resolved, err
@@ -426,15 +442,16 @@ func cloneRuntimeTokenColors(colors []interfaces.TokenColor) []interfaces.TokenC
 
 func resolveWorkResult(transition *petri.Transition, result *interfaces.WorkResult, runtimeConfig interfaces.RuntimeWorkstationLookup) resolvedWorkResult {
 	resolved := resolvedWorkResult{
-		dispatchID:         result.DispatchID,
-		transitionID:       result.TransitionID,
-		outcome:            result.Outcome,
-		output:             result.Output,
-		spawnedWork:        cloneRuntimeTokenColors(result.SpawnedWork),
-		recordedOutputWork: cloneFactoryWorkItems(result.RecordedOutputWork),
-		err:                result.Error,
-		feedback:           result.Feedback,
-		failureMetadata:    result.FailureMetadata,
+		dispatchID:                  result.DispatchID,
+		transitionID:                result.TransitionID,
+		outcome:                     result.Outcome,
+		output:                      result.Output,
+		selectedClassificationLabel: result.SelectedClassificationLabel,
+		spawnedWork:                 cloneRuntimeTokenColors(result.SpawnedWork),
+		recordedOutputWork:          cloneFactoryWorkItems(result.RecordedOutputWork),
+		err:                         result.Error,
+		feedback:                    result.Feedback,
+		failureMetadata:             result.FailureMetadata,
 	}
 	if workstation, ok := workstationconfig.Workstation(transition, runtimeConfig); ok && workstation != nil && len(workstation.StopWords) > 0 {
 		resolved.outcome = evaluateStopWords(workstation.StopWords, result.Output)
@@ -909,3 +926,10 @@ func (t *TransitionerSubsystem) createSpawnedTokens(spawnColor *interfaces.Token
 	}}
 }
 
+func tokenColorsFromTokens(tokens []interfaces.Token) []interfaces.TokenColor {
+	colors := make([]interfaces.TokenColor, len(tokens))
+	for i, token := range tokens {
+		colors[i] = token.Color
+	}
+	return colors
+}

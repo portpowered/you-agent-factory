@@ -13,6 +13,7 @@ export const browserIntegrationPhaseName = "Browser integration Vitest pass";
 export function buildBrowserIntegrationVitestArgs() {
   return [
     "run",
+    "--dir",
     "integration",
     "--no-file-parallelism",
     "--maxWorkers",

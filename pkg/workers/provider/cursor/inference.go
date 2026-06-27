@@ -3,6 +3,7 @@ package cursor
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -16,6 +17,8 @@ const (
 
 	CommandOutputExcerptLimit    = 2048
 	CommandOutputLogPreviewLimit = 200
+	PublishedTextLimit           = 2048
+	PublishedDiagnosticLimit     = 96
 
 	ResponseMetadataStdoutExcerpt = "stdout_excerpt"
 	ResponseMetadataStderrExcerpt = "stderr_excerpt"
@@ -30,6 +33,8 @@ const (
 
 	ProviderSessionKindSessionID = "session_id"
 )
+
+var safeCursorProviderSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 type resultPayload struct {
 	Type          string       `json:"type"`
@@ -71,7 +76,8 @@ func (f *ParseFailure) Error() string {
 	return f.Message
 }
 
-// ParseInferenceResult parses Cursor --output-format json success stdout.
+// ParseInferenceResult parses Cursor success stdout from either terminal json
+// or stream-json output.
 func ParseInferenceResult(provider string, stdout []byte) (*InferenceResult, *ParseFailure) {
 	trimmed := strings.TrimSpace(string(stdout))
 	if trimmed == "" {
@@ -80,15 +86,17 @@ func ParseInferenceResult(provider string, stdout []byte) (*InferenceResult, *Pa
 
 	var payload resultPayload
 	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
+		if strings.Contains(trimmed, "\n") {
+			return ParseInferenceStreamResult(provider, stdout)
+		}
 		return nil, resultParseFailure(provider, fmt.Sprintf("cursor JSON output was not valid JSON: %v", err), err)
 	}
 
 	if payload.Type != ResultTypeResult {
-		return nil, resultParseFailure(
-			provider,
-			fmt.Sprintf("cursor JSON output had unexpected type %q, want %q", payload.Type, ResultTypeResult),
-			nil,
-		)
+		if strings.Contains(trimmed, "\n") {
+			return ParseInferenceStreamResult(provider, stdout)
+		}
+		return nil, resultParseFailure(provider, fmt.Sprintf("cursor JSON output had unexpected type %q, want %q", payload.Type, ResultTypeResult), nil)
 	}
 	if payload.Subtype != ResultSubtypeSuccess {
 		return nil, resultErrorSubtype(provider, payload)
@@ -100,18 +108,14 @@ func ParseInferenceResult(provider string, stdout []byte) (*InferenceResult, *Pa
 		}
 	}
 
-	sessionID := strings.TrimSpace(payload.SessionID)
-	if sessionID == "" {
-		return nil, resultParseFailure(provider, "cursor JSON success result is missing session_id", nil)
+	session := canonicalProviderSession(provider, payload.SessionID)
+	if session == nil {
+		return nil, resultParseFailure(provider, "cursor JSON success result is missing or invalid session_id", nil)
 	}
 
 	return &InferenceResult{
-		Content: payload.Result,
-		ProviderSession: &interfaces.ProviderSessionMetadata{
-			Provider: interfaces.CanonicalProviderSessionProvider(provider),
-			Kind:     ProviderSessionKindSessionID,
-			ID:       sessionID,
-		},
+		Content:          payload.Result,
+		ProviderSession:  session,
 		ResponseMetadata: responseMetadataFromPayload(payload),
 	}, nil
 }
@@ -119,7 +123,7 @@ func ParseInferenceResult(provider string, stdout []byte) (*InferenceResult, *Pa
 func resultErrorSubtype(provider string, payload resultPayload) *ParseFailure {
 	message := fmt.Sprintf("cursor JSON output had subtype %q", payload.Subtype)
 	if strings.TrimSpace(payload.Result) != "" {
-		message += ": " + strings.TrimSpace(payload.Result)
+		message += ": " + boundedTrimmedText(payload.Result, PublishedDiagnosticLimit)
 	}
 	return &ParseFailure{
 		Type:    interfaces.WorkFailureTypeInternalServerError,
@@ -133,6 +137,18 @@ func resultParseFailure(provider, message string, cause error) *ParseFailure {
 		Type:    interfaces.WorkFailureTypePermanentBadRequest,
 		Message: message,
 		Cause:   cause,
+	}
+}
+
+func canonicalProviderSession(provider, sessionID string) *interfaces.ProviderSessionMetadata {
+	normalized := strings.TrimSpace(sessionID)
+	if normalized == "" || !safeCursorProviderSessionIDPattern.MatchString(normalized) {
+		return nil
+	}
+	return &interfaces.ProviderSessionMetadata{
+		Provider: interfaces.CanonicalProviderSessionProvider(provider),
+		Kind:     ProviderSessionKindSessionID,
+		ID:       normalized,
 	}
 }
 
@@ -167,7 +183,13 @@ func responseMetadataFromPayload(payload resultPayload) map[string]string {
 
 // BoundedCommandOutputExcerpt returns a bounded excerpt of command output.
 func BoundedCommandOutputExcerpt(output []byte, limit int) string {
-	trimmed := strings.TrimSpace(string(output))
+	return boundedTrimmedText(string(output), limit)
+}
+
+// BoundedPublishedText trims and truncates provider-derived text before it is
+// surfaced through internal progress or safe diagnostic channels.
+func boundedTrimmedText(value string, limit int) string {
+	trimmed := strings.TrimSpace(value)
 	if trimmed == "" || limit <= 0 {
 		return ""
 	}
@@ -175,6 +197,16 @@ func BoundedCommandOutputExcerpt(output []byte, limit int) string {
 		return trimmed
 	}
 	return trimmed[:limit] + "..."
+}
+
+func boundedText(value string, limit int) string {
+	if value == "" || limit <= 0 {
+		return ""
+	}
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit] + "..."
 }
 
 // WithCommandOutputExcerpts attaches bounded stdout/stderr excerpts to provider diagnostics.

@@ -221,6 +221,9 @@ func (e *FactoryEngine) wakeForPendingProcessing() {
 	case e.submitSignal <- struct{}{}:
 	default:
 	}
+	if hook, ok := e.dispatchHook.(factory.DispatchResultHookWakeSignaler); ok && hook.HasBufferedResults() {
+		hook.SignalBufferedResults()
+	}
 }
 
 func (e *FactoryEngine) hasBufferedInputs() bool {

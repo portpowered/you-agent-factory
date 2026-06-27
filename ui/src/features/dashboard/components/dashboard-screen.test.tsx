@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 
 import { AppLocaleProvider, useAppLocale } from "../../../i18n";
 import { getHeaderControlsMessages } from "../../header/messages/header-controls";
@@ -15,9 +16,11 @@ let dashboardSnapshotState: ReturnType<
 >;
 
 function StatusPanelProbe({
+  actions,
   detail,
   title,
 }: {
+  actions?: ReactNode;
   detail?: string;
   title: string;
 }) {
@@ -27,6 +30,7 @@ function StatusPanelProbe({
     <section data-locale={locale}>
       <h1>{title}</h1>
       {detail ? <p>{detail}</p> : null}
+      {actions}
     </section>
   );
 }
@@ -52,12 +56,14 @@ vi.mock("../../header/public", () => ({
     return <header>Dashboard header {resolvedLocale}</header>;
   },
   DashboardStatusPanel: ({
+    actions,
     detail,
     title,
   }: {
+    actions?: ReactNode;
     detail?: string;
     title: string;
-  }) => <StatusPanelProbe detail={detail} title={title} />,
+  }) => <StatusPanelProbe actions={actions} detail={detail} title={title} />,
 }));
 
 vi.mock("../hooks/useDashboardSnapshot", () => ({
@@ -97,11 +103,13 @@ function expectNoNestedDashboardScrollOwnerBetweenBentoAndShell() {
   expectDashboardShellContract();
 }
 
-describe("DashboardScreen", () => {
+describe("DashboardScreen loading and error states", () => {
   beforeEach(() => {
     dashboardSnapshotState = {
       error: null,
       isInitialLoading: true,
+      preflightRecovery: null,
+      preflightStatus: "loading",
       snapshot: null,
     };
   });
@@ -122,6 +130,8 @@ describe("DashboardScreen", () => {
     dashboardSnapshotState = {
       error: new Error("Factory API timed out."),
       isInitialLoading: false,
+      preflightRecovery: null,
+      preflightStatus: "success",
       snapshot: null,
     };
 
@@ -152,6 +162,8 @@ describe("DashboardScreen", () => {
     dashboardSnapshotState = {
       error: new Error("Factory API timed out."),
       isInitialLoading: false,
+      preflightRecovery: null,
+      preflightStatus: "success",
       snapshot: null,
     };
     rerender(
@@ -166,11 +178,25 @@ describe("DashboardScreen", () => {
       }),
     ).toBeTruthy();
   });
+});
+
+describe("DashboardScreen content states", () => {
+  beforeEach(() => {
+    dashboardSnapshotState = {
+      error: null,
+      isInitialLoading: true,
+      preflightRecovery: null,
+      preflightStatus: "loading",
+      snapshot: null,
+    };
+  });
 
   it("renders the dashboard content inside the tighter shell spacing on success", () => {
     dashboardSnapshotState = {
       error: null,
       isInitialLoading: false,
+      preflightRecovery: null,
+      preflightStatus: "success",
       snapshot: {} as never,
     };
 
@@ -190,6 +216,8 @@ describe("DashboardScreen", () => {
     dashboardSnapshotState = {
       error: null,
       isInitialLoading: false,
+      preflightRecovery: null,
+      preflightStatus: "success",
       snapshot: {} as never,
     };
 
@@ -203,6 +231,8 @@ describe("DashboardScreen", () => {
     dashboardSnapshotState = {
       error: null,
       isInitialLoading: false,
+      preflightRecovery: null,
+      preflightStatus: "success",
       snapshot: null,
     };
 
@@ -221,6 +251,8 @@ describe("DashboardScreen", () => {
     dashboardSnapshotState = {
       error: null,
       isInitialLoading: false,
+      preflightRecovery: null,
+      preflightStatus: "success",
       snapshot: {} as never,
     };
 
@@ -229,5 +261,45 @@ describe("DashboardScreen", () => {
     expect(screen.getByText("Dashboard header zh-CN")).toBeTruthy();
     expect(screen.getByText("Dashboard bento zh-CN")).toBeTruthy();
     expect(screen.getByText("Dashboard export dialog zh-CN")).toBeTruthy();
+  });
+});
+
+describe("DashboardScreen recovery states", () => {
+  beforeEach(() => {
+    dashboardSnapshotState = {
+      error: null,
+      isInitialLoading: true,
+      preflightRecovery: null,
+      preflightStatus: "loading",
+      snapshot: null,
+    };
+  });
+
+  it("renders a recoverable preflight reset state instead of the generic offline error", () => {
+    dashboardSnapshotState = {
+      error: null,
+      isInitialLoading: false,
+      preflightRecovery: {
+        reasonCode: "session_not_found",
+        requestedSessionId: "session-review",
+      },
+      preflightStatus: "non-recoverable",
+      snapshot: null,
+    };
+
+    render(<DashboardScreen />);
+
+    expectDashboardShellContract();
+    expect(screen.getByText("Dashboard header en")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: "Session recovery required" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/could not resolve the live session for "session-review"/i),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Retry clean replay" }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Dashboard bento en")).toBeNull();
   });
 });

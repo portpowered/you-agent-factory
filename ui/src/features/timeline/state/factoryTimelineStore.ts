@@ -1,11 +1,17 @@
 import { create } from "zustand";
 
 import type { FactoryEvent } from "../../../api/events";
-import { buildFactoryTimelineSnapshot as buildProjectedTimelineSnapshot } from "./timeline/buildSnapshot";
+import {
+  buildFactoryTimelineProjection as buildProjectedTimelineProjection,
+  buildFactoryTimelineSnapshot as buildProjectedTimelineSnapshot,
+} from "./timeline/buildSnapshot";
 
 export { resolveConfiguredWorkTypeName } from "./timeline/projectTopology";
 
-import { reconstructWorldState } from "./timeline/replayWorldState";
+import {
+  advanceWorldStateFromCheckpoint,
+  reconstructWorldState,
+} from "./timeline/replayWorldState";
 import { orderedEvents } from "./timeline/shared";
 
 export type { WorldState } from "./timeline/types";
@@ -13,15 +19,21 @@ export type { WorldState } from "./timeline/types";
 import {
   appendTimelineEvents,
   emptyTimelineState,
+  type FactoryTimelineCheckpoint,
   type FactoryTimelineState,
   replaceTimelineEvents,
+  restoreTimelineCheckpoint,
   selectTimelineTick,
   setTimelineCurrentMode,
   type TimelineStoreStateDeps,
 } from "./timeline/storeState";
 import type { WorldState } from "./timeline/types";
 
-export type { FactoryTimelineMode } from "./timeline/storeState";
+export type {
+  FactoryTimelineCheckpoint,
+  FactoryTimelineMode,
+  FactoryTimelineSyncIdentity,
+} from "./timeline/storeState";
 
 export function buildFactoryTimelineSnapshot(
   events: FactoryEvent[],
@@ -35,6 +47,19 @@ export function buildFactoryTimelineSnapshot(
 }
 
 const timelineStoreStateDeps: TimelineStoreStateDeps = {
+  buildFactoryTimelineProjection: (events, selectedTick, checkpoint) =>
+    buildProjectedTimelineProjection(
+      events,
+      selectedTick,
+      checkpoint
+        ? (nextEvents, nextSelectedTick) =>
+            advanceWorldStateFromCheckpoint(
+              checkpoint.replayState,
+              nextEvents,
+              nextSelectedTick,
+            )
+        : reconstructWorldState,
+    ),
   buildFactoryTimelineSnapshot,
   orderedEvents,
 };
@@ -56,6 +81,9 @@ export const useFactoryTimelineStore = create<FactoryTimelineState>((set) => ({
   },
   reset: () => {
     set(emptyTimelineState());
+  },
+  restoreCheckpoint: (checkpoint: FactoryTimelineCheckpoint) => {
+    set(restoreTimelineCheckpoint(checkpoint));
   },
   selectTick: (tick) => {
     set((current) => selectTimelineTick(current, tick, timelineStoreStateDeps));

@@ -109,6 +109,27 @@ func TestOpenAPIContract_FactoryOperationsPublishMachineReadableErrors(t *testin
 	assertFactoryResponseExamples(t, responses)
 }
 
+func TestOpenAPIContract_CursorStreamParserDetailsRemainInternal(t *testing.T) {
+	schemas := loadBundledOpenAPIComponentSchemas(t)
+	assertSchemaNamesPresent(t, schemas, bundledFactoryEventContractSchemaNames)
+
+	inferenceResponseProperties := schemaProperties(t, schemaObject(t, schemas, "InferenceResponseEventPayload"), "InferenceResponseEventPayload")
+	assertSchemaPropertiesPresent(t, inferenceResponseProperties, "InferenceResponseEventPayload", "inferenceRequestId", "attempt", "outcome", "response", "durationMillis", "providerSession", "diagnostics", "exitCode", "errorClass")
+	assertPropertiesAbsent(t, inferenceResponseProperties, "InferenceResponseEventPayload", "kind", "payload", "providerSessionRef", "timestamp_ms", "model_call_id")
+
+	providerSessionProperties := schemaProperties(t, schemaObject(t, schemas, "ProviderSessionMetadata"), "ProviderSessionMetadata")
+	assertSchemaPropertiesPresent(t, providerSessionProperties, "ProviderSessionMetadata", "provider", "kind", "id")
+	assertPropertiesAbsent(t, providerSessionProperties, "ProviderSessionMetadata", "providerSessionRef", "session_id", "timestamp_ms", "model_call_id")
+
+	safeDiagnosticsProperties := schemaProperties(t, schemaObject(t, schemas, "SafeWorkDiagnostics"), "SafeWorkDiagnostics")
+	assertSchemaPropertiesPresent(t, safeDiagnosticsProperties, "SafeWorkDiagnostics", "renderedPrompt", "provider")
+	assertPropertiesAbsent(t, safeDiagnosticsProperties, "SafeWorkDiagnostics", "kind", "payload", "rawEvent", "streamJson")
+
+	providerDiagnosticProperties := schemaProperties(t, schemaObject(t, schemas, "ProviderDiagnostic"), "ProviderDiagnostic")
+	assertSchemaPropertiesPresent(t, providerDiagnosticProperties, "ProviderDiagnostic", "provider", "model", "requestMetadata", "responseMetadata")
+	assertPropertiesAbsent(t, providerDiagnosticProperties, "ProviderDiagnostic", "kind", "payload", "timestamp_ms", "model_call_id")
+}
+
 func TestOpenAPIContract_PersistedFactoryRoutesUseCanonicalPluralVocabulary(t *testing.T) {
 	doc := loadBundledOpenAPIDocument(t)
 	paths, ok := doc["paths"].(map[string]any)
@@ -141,6 +162,7 @@ func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testi
 		"/factory-sessions/{session_id}/work/{id}":                  {"get"},
 		"/factory-sessions/{session_id}/work/{id}/move":             {"post"},
 		"/factory-sessions/{session_id}/events":                     {"get"},
+		"/factory-sessions/{session_id}/sync-preflight":             {"get"},
 		"/factory-sessions/{session_id}/status":                     {"get"},
 		"/factory-sessions/{session_id}/factory":                    {"get", "put"},
 	}
@@ -176,6 +198,37 @@ func TestOpenAPIContract_SessionScopedRoutesUseFactorySessionVocabulary(t *testi
 			t.Fatalf("paths.%s must not be published for session-scoped routes", retiredPath)
 		}
 	}
+}
+
+func TestOpenAPIContract_DefinesFactorySessionSyncPreflightSurface(t *testing.T) {
+	doc := loadBundledOpenAPIDocument(t)
+	paths := doc["paths"].(map[string]any)
+	schemas := loadBundledOpenAPIComponentSchemas(t)
+
+	pathItem, ok := paths["/factory-sessions/{session_id}/sync-preflight"].(map[string]any)
+	if !ok {
+		t.Fatal("paths./factory-sessions/{session_id}/sync-preflight is missing")
+	}
+	getOp, ok := pathItem["get"].(map[string]any)
+	if !ok {
+		t.Fatal("paths./factory-sessions/{session_id}/sync-preflight.get is missing")
+	}
+	parameters, ok := getOp["parameters"].([]any)
+	if !ok || len(parameters) != 3 {
+		t.Fatalf("sync preflight parameters = %#v, want session_id plus reconnect cursor params", getOp["parameters"])
+	}
+
+	response := schemaObject(t, schemas, "FactorySessionSyncPreflightResponse")
+	assertRequiredFields(t, response, "requestedSessionId", "reasonCode", "checkpointReusable", "reconnectCursor")
+	properties := schemaProperties(t, response, "FactorySessionSyncPreflightResponse")
+	assertPropertyRef(t, properties, "reasonCode", "#/components/schemas/FactorySessionSyncPreflightReasonCode")
+	assertPropertyRef(t, properties, "reconnectCursor", "#/components/schemas/FactorySessionSyncPreflightReconnectCursor")
+
+	reasonCode := schemaObject(t, schemas, "FactorySessionSyncPreflightReasonCode")
+	assertEnumValues(t, reasonCode, "FactorySessionSyncPreflightReasonCode", []string{"ok", "cursor_stale", "session_not_found", "logical_session_remap"})
+
+	reconnectCursor := schemaObject(t, schemas, "FactorySessionSyncPreflightReconnectCursor")
+	assertRequiredFields(t, reconnectCursor, "provided", "validForStreamGeneration")
 }
 
 func TestOpenAPIContract_DefinesWorkstationRequestProjectionSlice(t *testing.T) {
@@ -473,7 +526,7 @@ func assertInvocationSurfaceSchemas(t *testing.T, schemas map[string]any, paths 
 	responseProperties := schemaProperties(t, responseSchema, "InvocationResponse")
 	assertPropertyRef(t, responseProperties, "status", "#/components/schemas/InvocationTerminalStatus")
 	assertPropertyRef(t, responseProperties, "primaryResult", "#/components/schemas/WorkContent")
-	assertSchemaPropertiesPresent(t, responseProperties, "InvocationResponse", "requestId", "traceId", "status", "primaryResult", "errorCode", "message")
+	assertSchemaPropertiesPresent(t, responseProperties, "InvocationResponse", "requestId", "traceId", "status", "primaryResult", "errorCode", "message", "sessionId", "workId", "workName", "workState")
 
 	factorySchema := schemaObject(t, schemas, "Factory")
 	factoryProperties := schemaProperties(t, factorySchema, "Factory")
@@ -674,7 +727,7 @@ func assertErrorSurfaceSchemas(t *testing.T, schemas map[string]any) {
 	if !ok {
 		t.Fatalf("components.schemas.ErrorResponse.properties.code.enum is missing")
 	}
-	for _, code := range []string{"BAD_REQUEST", "INVALID_FACTORY_NAME", "FACTORY_ALREADY_EXISTS", "INVALID_FACTORY", "FACTORY_NOT_IDLE", "EXECUTION_REQUEST_ID_CONFLICT", "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED", "NOT_FOUND", "INTERNAL_ERROR"} {
+	for _, code := range []string{"BAD_REQUEST", "FACTORY_SESSION_CONFIG_LOAD_FAILED", "INVALID_FACTORY_NAME", "FACTORY_ALREADY_EXISTS", "INVALID_FACTORY", "FACTORY_NOT_IDLE", "EXECUTION_REQUEST_ID_CONFLICT", "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED", "NOT_FOUND", "INTERNAL_ERROR"} {
 		if !containsString(codeEnum, code) {
 			t.Fatalf("components.schemas.ErrorResponse.properties.code.enum is missing %q", code)
 		}

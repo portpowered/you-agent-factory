@@ -21,3 +21,6 @@ properties:
   canRetryDispatch:
     type: boolean
     description: True when retry-dispatch is currently valid for the session status.
+  canInterruptDispatch:
+    type: boolean
+    description: True when interrupt-dispatch is currently valid for the session status.

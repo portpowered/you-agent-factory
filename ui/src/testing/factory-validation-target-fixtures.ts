@@ -94,3 +94,20 @@ export function factorySessionFieldTarget(
     },
   };
 }
+
+export function factorySessionTargetTarget(
+  reason: string,
+  targetID: string,
+  message: string,
+): FactoryValidationTarget {
+  return {
+    code: `factory.session.target.${reason}`,
+    message,
+    severity: "error",
+    subject: {
+      id: targetID,
+      location: "REFERENCE",
+      type: "FACTORY",
+    },
+  };
+}

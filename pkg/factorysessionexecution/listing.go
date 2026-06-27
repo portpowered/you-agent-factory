@@ -36,12 +36,13 @@ func IsRecoverableSession(status LifecycleStatus, staleLease bool) bool {
 // for one durable session status.
 func DeriveSessionActionAvailability(status LifecycleStatus) SessionActionAvailability {
 	return SessionActionAvailability{
-		CanPause:         EvaluateLifecycleControl(LifecycleControlPause, status) == LifecycleControlOutcomeAccepted,
-		CanResume:        EvaluateLifecycleControl(LifecycleControlResume, status) == LifecycleControlOutcomeAccepted,
-		CanCancel:        EvaluateLifecycleControl(LifecycleControlCancel, status) == LifecycleControlOutcomeAccepted,
-		CanTerminate:     EvaluateLifecycleControl(LifecycleControlTerminate, status) == LifecycleControlOutcomeAccepted,
-		CanApprove:       status == LifecycleStatusAwaitingApproval,
-		CanRetryDispatch: AllowsRetryDispatchOnTerminal(status),
+		CanPause:              EvaluateLifecycleControl(LifecycleControlPause, status) == LifecycleControlOutcomeAccepted,
+		CanResume:             EvaluateLifecycleControl(LifecycleControlResume, status) == LifecycleControlOutcomeAccepted,
+		CanCancel:             EvaluateLifecycleControl(LifecycleControlCancel, status) == LifecycleControlOutcomeAccepted,
+		CanTerminate:          EvaluateLifecycleControl(LifecycleControlTerminate, status) == LifecycleControlOutcomeAccepted,
+		CanApprove:            status == LifecycleStatusAwaitingApproval,
+		CanRetryDispatch:      AllowsRetryDispatchOnTerminal(status),
+		CanInterruptDispatch:  AllowsInterruptDispatchOnSession(status),
 	}
 }
 
@@ -370,7 +371,8 @@ type SessionActionAvailability struct {
 	CanCancel        bool
 	CanTerminate     bool
 	CanApprove       bool
-	CanRetryDispatch bool
+	CanRetryDispatch     bool
+	CanInterruptDispatch bool
 }
 
 // DurableSessionListSummary is the shared durable session list row with enough
@@ -401,6 +403,7 @@ type ListSessionsResult struct {
 	LiveSessions    []LiveSessionSummary
 	DurableSessions []DurableSessionListSummary
 }
+
 // NormalizeListSessionsRequest validates and normalizes one scoped session list request.
 func NormalizeListSessionsRequest(req ListSessionsRequest) (ListSessionsRequest, error) {
 	scope := req.Scope
@@ -491,6 +494,7 @@ type canonicalFactoryEventContext struct {
 	OrchestratorDialect *string   `json:"orchestratorDialect,omitempty"`
 	PhaseID             *string   `json:"phaseId,omitempty"`
 	PhaseName           *string   `json:"phaseName,omitempty"`
+	DispatchID          *string   `json:"dispatchId,omitempty"`
 	Source              *string   `json:"source,omitempty"`
 }
 
@@ -574,6 +578,7 @@ func buildCanonicalSessionEvents(session SessionReadResult, result ResultReadRes
 	}
 
 	events, sessionSequence = appendCanonicalPauseResumeSessionEvents(events, builder, sessionID, session.Lifecycle, sessionSequence)
+	events = synthesizeLifecycleControlEventsFromState(session, events, source)
 
 	if IsTerminalLifecycleStatus(session.Status) {
 		completedAt := eventTime
@@ -597,7 +602,8 @@ func buildCanonicalSessionEvents(session SessionReadResult, result ResultReadRes
 		if len(result.ArtifactIDs) > 0 {
 			payload["artifactIds"] = append([]string(nil), result.ArtifactIDs...)
 		}
-		events = append(events, builder.event("SESSION_COMPLETED", "session-completed/"+sessionID, sessionSequence, mustMarshalPayload(payload)))
+		completedSequence := nextCanonicalSessionEventSequence(events)
+		events = append(events, builder.event("SESSION_COMPLETED", "session-completed/"+sessionID, completedSequence, mustMarshalPayload(payload)))
 	}
 
 	return events

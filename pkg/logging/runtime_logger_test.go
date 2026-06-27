@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"go.uber.org/zap"
 )
 
@@ -31,7 +32,7 @@ func newRuntimeLogHomeFixture(t *testing.T) runtimeLogHomeFixture {
 }
 
 func (f runtimeLogHomeFixture) canonicalLogDir() string {
-	return filepath.Join(f.homeDir, ".you-agent-factory", "logs")
+	return defaultpaths.RuntimeLogsRoot(f.homeDir)
 }
 
 func (f runtimeLogHomeFixture) canonicalLogPath(name string) string {

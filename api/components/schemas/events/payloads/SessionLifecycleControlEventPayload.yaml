@@ -1,0 +1,28 @@
+type: object
+additionalProperties: false
+description: >-
+  Durable Factory Session lifecycle control recorded on the canonical factory
+  event stream. Session identity lives in FactoryEvent.context; this payload
+  carries replay-safe control facts only.
+required:
+  - operation
+  - outcome
+  - previousStatus
+  - newStatus
+  - occurredAt
+properties:
+  operation:
+    $ref: '../../api/FactorySessionLifecycleControlKind.yaml'
+  outcome:
+    $ref: '../../api/FactorySessionLifecycleControlOutcome.yaml'
+  previousStatus:
+    $ref: '../../api/FactorySessionDurableLifecycleStatus.yaml'
+  newStatus:
+    $ref: '../../api/FactorySessionDurableLifecycleStatus.yaml'
+  occurredAt:
+    type: string
+    format: date-time
+    description: When the lifecycle control took effect.
+  reason:
+    type: string
+    description: Optional operator-provided reason for the control request.

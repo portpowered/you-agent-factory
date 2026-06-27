@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
@@ -19,6 +19,7 @@ var SessionProjectionEventKinds = []string{
 	"SESSION_PAUSED",
 	"SESSION_RESUMED",
 	"SESSION_RESULT_UPDATED",
+	"SESSION_LIFECYCLE_CONTROL",
 	"SESSION_COMPLETED",
 	"ORCHESTRATOR_PHASE_CHANGED",
 	"ORCHESTRATOR_CHECKPOINT_WRITTEN",
@@ -149,7 +150,7 @@ type ResultAvailabilityDetail struct {
 // CLI, MCP, and UI transports.
 type ResultReadResult struct {
 	SessionID        string
-	ResultStatus       ResultStatus
+	ResultStatus     ResultStatus
 	SessionStatus    LifecycleStatus
 	Mode             ResultMode
 	IncludeArtifacts bool
@@ -164,13 +165,14 @@ type ResultReadResult struct {
 type DispatchStatus string
 
 const (
-	DispatchStatusQueued    DispatchStatus = "QUEUED"
-	DispatchStatusRunning   DispatchStatus = "RUNNING"
-	DispatchStatusCompleted DispatchStatus = "COMPLETED"
-	DispatchStatusFailed    DispatchStatus = "FAILED"
-	DispatchStatusCanceled  DispatchStatus = "CANCELED"
-	DispatchStatusTimedOut  DispatchStatus = "TIMED_OUT"
-	DispatchStatusSkipped   DispatchStatus = "SKIPPED"
+	DispatchStatusQueued      DispatchStatus = "QUEUED"
+	DispatchStatusRunning     DispatchStatus = "RUNNING"
+	DispatchStatusCompleted   DispatchStatus = "COMPLETED"
+	DispatchStatusFailed      DispatchStatus = "FAILED"
+	DispatchStatusCanceled    DispatchStatus = "CANCELED"
+	DispatchStatusTimedOut    DispatchStatus = "TIMED_OUT"
+	DispatchStatusSkipped     DispatchStatus = "SKIPPED"
+	DispatchStatusInterrupted DispatchStatus = "INTERRUPTED"
 )
 
 // DispatchUsage summarizes one dispatch execution.
@@ -233,17 +235,18 @@ type DispatchSummary struct {
 	Usage               *DispatchUsage
 	Warnings            []DispatchWarning
 	FailureDetail       *DispatchFailureDetail
+	JavaScript          *DispatchJavaScriptProjection
 }
 
 // DispatchDetail is the shared durable dispatch read projection.
 type DispatchDetail struct {
 	DispatchSummary
-	SessionID          string
-	OrchestratorKind   string
-	ArtifactIDs        []string
-	StatusTransitions  []DispatchStatus
-	Petri              *DispatchPetriProjection
-	JavaScript         *DispatchJavaScriptProjection
+	SessionID         string
+	OrchestratorKind  string
+	ArtifactIDs       []string
+	StatusTransitions []DispatchStatus
+	Petri             *DispatchPetriProjection
+	JavaScript        *DispatchJavaScriptProjection
 }
 
 // ListDispatchesResult is the shared durable dispatch list outcome.
@@ -307,6 +310,7 @@ type EventReadResult struct {
 	SessionID string
 	Events    []json.RawMessage
 }
+
 // NormalizeResultRequest validates and normalizes one durable result read request.
 func NormalizeResultRequest(req ResultRequest) (ResultRequest, error) {
 	mode := req.Mode
@@ -373,6 +377,8 @@ func (r *sessionProjectionReducer) apply(raw json.RawMessage) error {
 		return r.applySessionResumed(envelope)
 	case "SESSION_RESULT_UPDATED":
 		return r.applySessionResultUpdated(envelope)
+	case "SESSION_LIFECYCLE_CONTROL":
+		return r.applySessionLifecycleControl(envelope)
 	case "SESSION_COMPLETED":
 		return r.applySessionCompleted(envelope)
 	default:
@@ -494,6 +500,43 @@ func (r *sessionProjectionReducer) applySessionResultUpdated(envelope canonicalF
 			Message:   strings.TrimSpace(payload.Availability.Message),
 			Retryable: payload.Availability.Retryable,
 		}
+	}
+	return nil
+}
+
+func (r *sessionProjectionReducer) applySessionLifecycleControl(envelope canonicalFactoryEvent) error {
+	var payload struct {
+		Operation      string `json:"operation"`
+		Outcome        string `json:"outcome"`
+		PreviousStatus string `json:"previousStatus"`
+		NewStatus      string `json:"newStatus"`
+		OccurredAt     string `json:"occurredAt"`
+	}
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		return fmt.Errorf("unmarshal SESSION_LIFECYCLE_CONTROL payload: %w", err)
+	}
+	if strings.TrimSpace(payload.Outcome) != string(LifecycleControlOutcomeAccepted) {
+		return nil
+	}
+	r.mergeSessionIdentity(envelope.Context)
+
+	newStatus := strings.TrimSpace(payload.NewStatus)
+	if newStatus != "" {
+		r.session.Status = LifecycleStatus(newStatus)
+	}
+	occurredAt, err := time.Parse(time.RFC3339, strings.TrimSpace(payload.OccurredAt))
+	if err != nil {
+		return fmt.Errorf("parse occurredAt: %w", err)
+	}
+	if r.session.Lifecycle == nil {
+		r.session.Lifecycle = &LifecycleTimestamps{}
+	}
+	operation := strings.TrimSpace(payload.Operation)
+	switch operation {
+	case string(LifecycleControlPause):
+		r.session.Lifecycle.PausedAt = timePtr(occurredAt.UTC())
+	case string(LifecycleControlResume):
+		r.session.Lifecycle.ResumedAt = timePtr(occurredAt.UTC())
 	}
 	return nil
 }
@@ -677,6 +720,27 @@ func applyRuntimeSessionFields(target *runtimeSessionState, source runtimeSessio
 	target.events = source.events
 }
 
+func applyTerminalRuntimeProjection(
+	state *runtimeSessionState,
+	terminal runtimeSessionState,
+	outcome workflowruntime.Outcome,
+) {
+	priorSession := cloneSessionRead(state.session)
+	priorResult := cloneResultRead(state.result)
+	preserved := snapshotInterruptedDispatches(state)
+	preservedEvents := extractDispatchInterruptedEvents(state.events)
+	applyRuntimeSessionFields(state, terminal)
+	if len(preserved) == 0 {
+		return
+	}
+	restoreInterruptedDispatchResultSuppression(state, preserved)
+	finalizeInterruptedTerminalSession(state, priorSession, priorResult)
+	state.events = mergePreservedDispatchInterruptedEvents(
+		BuildCanonicalRuntimeSessionEvents(state.session, state.result),
+		preservedEvents,
+	)
+}
+
 func applyRuntimeExecutionRecordProjection(
 	state *runtimeSessionState,
 	sessionID string,
@@ -751,6 +815,92 @@ func projectRuntimeSuccessResult(
 		Summary:      resultSummaryTextFromParts(parts),
 	}
 	return result, summary, nil
+}
+
+func finalizeInterruptedTerminalSession(
+	state *runtimeSessionState,
+	priorSession SessionReadResult,
+	priorResult ResultReadResult,
+) {
+	if state == nil {
+		return
+	}
+	interruptedAt := interruptedTerminalTimestamp(state.session, priorSession)
+	if state.session.Lifecycle == nil {
+		state.session.Lifecycle = &LifecycleTimestamps{}
+	}
+	if interruptedAt != nil {
+		state.session.Lifecycle.InterruptedAt = timePtr(*interruptedAt)
+		if state.session.Lifecycle.FinishedAt == nil {
+			state.session.Lifecycle.FinishedAt = timePtr(*interruptedAt)
+		}
+	}
+	state.session.Status = LifecycleStatusInterrupted
+	state.session.Failure = nil
+
+	canonicalStatus := canonicalResultStatus(priorResult, priorSession)
+	switch canonicalStatus {
+	case ResultStatusPartial, ResultStatusFailedWithPartial:
+		if priorSession.ResultSummary != nil {
+			summary := *priorSession.ResultSummary
+			state.session.ResultSummary = &summary
+		} else {
+			state.session.ResultSummary = nil
+		}
+		if state.session.ResultSummary == nil {
+			state.session.ResultSummary = &ResultSummary{ResultStatus: string(ResultStatusPartial)}
+		} else {
+			state.session.ResultSummary.ResultStatus = string(ResultStatusPartial)
+		}
+		state.result = cloneResultRead(priorResult)
+		state.result.ResultStatus = ResultStatusPartial
+		state.result.SessionStatus = LifecycleStatusInterrupted
+		state.result.Mode = ResultModeFinal
+		state.result.Availability = nil
+	case ResultStatusFinal:
+		fallthrough
+	case ResultStatusNotReady, ResultStatusUnavailable:
+		fallthrough
+	default:
+		state.session.ResultSummary = &ResultSummary{ResultStatus: string(ResultStatusUnavailable)}
+		state.result = ResultReadResult{
+			SessionID:     state.session.SessionID,
+			ResultStatus:  ResultStatusUnavailable,
+			SessionStatus: LifecycleStatusInterrupted,
+			Mode:          ResultModeFinal,
+			Availability: &ResultAvailabilityDetail{
+				Reason:    "SESSION_INTERRUPTED",
+				Message:   "Session was interrupted before a final result was available.",
+				Retryable: false,
+			},
+		}
+	}
+}
+
+func interruptedTerminalTimestamp(session, prior SessionReadResult) *time.Time {
+	if session.Lifecycle != nil {
+		if session.Lifecycle.InterruptedAt != nil {
+			return timePtr(session.Lifecycle.InterruptedAt.UTC())
+		}
+		if session.Lifecycle.FinishedAt != nil {
+			return timePtr(session.Lifecycle.FinishedAt.UTC())
+		}
+		if session.Lifecycle.UpdatedAt != nil {
+			return timePtr(session.Lifecycle.UpdatedAt.UTC())
+		}
+	}
+	if prior.Lifecycle != nil {
+		if prior.Lifecycle.InterruptedAt != nil {
+			return timePtr(prior.Lifecycle.InterruptedAt.UTC())
+		}
+		if prior.Lifecycle.UpdatedAt != nil {
+			return timePtr(prior.Lifecycle.UpdatedAt.UTC())
+		}
+		if prior.Lifecycle.StartedAt != nil {
+			return timePtr(prior.Lifecycle.StartedAt.UTC())
+		}
+	}
+	return nil
 }
 
 func workContentJSONFromParts(parts []interfaces.WorkContentPart) json.RawMessage {

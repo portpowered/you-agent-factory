@@ -137,6 +137,62 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_TimeoutInterruptsProviderInf
 	waitForInferContextHonored(t, provider, 2*time.Second)
 }
 
+func TestJavaScriptRuntimeService_AgentRunLiveChild_StartAsyncProjectsRunningDispatchForInterrupt(t *testing.T) {
+	provider := newBlockingFixtureProvider()
+	projectRoot := setupRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
+	service := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
+		ProjectRoot:       projectRoot,
+		ChildExecutorMode: fse.ChildExecutorModeLive,
+		Provider:          provider,
+	})
+
+	started, err := service.StartAsync(context.Background(), fse.StartRequest{
+		RequestID: "req-runtime-agent-run-live-child-interrupt",
+		Source: fse.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "agent-run-fake-child",
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+		},
+		Runtime: &fse.RuntimeOptions{
+			ChildExecutorMode: fse.ChildExecutorModeLive,
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	provider.waitForInferStart(t)
+	dispatch := waitForListedDispatch(t, service, started.SessionID, "dispatch-1", 2*time.Second)
+	if dispatch.Status != fse.DispatchStatusRunning {
+		t.Fatalf("dispatch status before interrupt = %q, want RUNNING", dispatch.Status)
+	}
+
+	interruptResult, err := service.InterruptDispatch(context.Background(), started.SessionID, fse.InterruptDispatchRequest{
+		ControlRequest: fse.ControlRequest{Reason: "operator stop"},
+		DispatchID:     "dispatch-1",
+	})
+	if err != nil {
+		t.Fatalf("InterruptDispatch: %v", err)
+	}
+	if interruptResult.Outcome != fse.LifecycleControlOutcomeAccepted {
+		t.Fatalf("interrupt outcome = %q, want ACCEPTED", interruptResult.Outcome)
+	}
+
+	waitForInferContextHonored(t, provider, 2*time.Second)
+	detail, err := service.GetDispatch(context.Background(), started.SessionID, "dispatch-1")
+	if err != nil {
+		t.Fatalf("GetDispatch after interrupt: %v", err)
+	}
+	if detail.Status != fse.DispatchStatusInterrupted {
+		t.Fatalf("dispatch status after interrupt = %q, want INTERRUPTED", detail.Status)
+	}
+	if detail.FailureDetail == nil || detail.FailureDetail.Message != "operator stop" {
+		t.Fatalf("failureDetail = %#v, want operator stop", detail.FailureDetail)
+	}
+}
+
 type blockingFixtureProvider struct {
 	mu              sync.Mutex
 	inferStarted    chan struct{}
@@ -190,6 +246,31 @@ func waitForInferContextHonored(t *testing.T, provider *blockingFixtureProvider,
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatal("provider Infer did not observe timed-out workflow context")
+}
+
+func waitForListedDispatch(
+	t *testing.T,
+	service *fse.JavaScriptRuntimeService,
+	sessionID string,
+	dispatchID string,
+	timeout time.Duration,
+) fse.DispatchSummary {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		listed, err := service.ListDispatches(context.Background(), sessionID)
+		if err != nil {
+			t.Fatalf("ListDispatches: %v", err)
+		}
+		for _, dispatch := range listed.Dispatches {
+			if dispatch.ID == dispatchID {
+				return dispatch
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("dispatch %q did not appear in ListDispatches before timeout", dispatchID)
+	return fse.DispatchSummary{}
 }
 
 func TestJavaScriptRuntimeService_ParallelLiveChildFailure_ProjectsTypedFailureAndPreservesSiblings(t *testing.T) {

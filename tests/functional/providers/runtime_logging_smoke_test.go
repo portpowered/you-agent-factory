@@ -136,6 +136,7 @@ func runRuntimeLoggingSmoke(t *testing.T, runner workers.CommandRunner, rollingC
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 		testutil.WithCommandRunner(runner),
 		testutil.WithRecordPath(recordPath),
+		testutil.WithRuntimeFileLoggingEnabled(true),
 		testutil.WithRuntimeLogDir(logDir),
 		testutil.WithRuntimeInstanceID(runtimeInstanceID),
 		testutil.WithRuntimeLogConfig(rollingConfig),

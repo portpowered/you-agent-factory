@@ -2,6 +2,8 @@ package factorysessions
 
 import (
 	"github.com/google/uuid"
+
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 )
 
 // DefaultSessionID is the stable alias for the primary live factory session.
@@ -61,3 +63,57 @@ type LiveSession struct {
 func NewSessionID() string {
 	return uuid.NewString()
 }
+
+// SessionResponseStream keeps ordered internal provider progress for one live
+// Factory Session runtime. It is separate from canonical factory event history
+// and from service-coordinator state.
+type SessionResponseStream = responsestream.SessionResponseStream
+
+// SessionResponseStreamSet keeps the dispatch-keyed response streams owned by
+// one live Factory Session runtime.
+type SessionResponseStreamSet = responsestream.StreamSet
+
+// SessionResponseStreamEvent is the internal envelope for provider progress and
+// response fragments within one Factory Session runtime.
+type SessionResponseStreamEvent = responsestream.Event
+
+// SessionResponseStreamEventKind identifies internal response-stream semantics.
+type SessionResponseStreamEventKind = responsestream.EventKind
+
+// SessionResponseStreamReadResult is the internal bounded catch-up view for
+// one response-stream subscriber resume point.
+type SessionResponseStreamReadResult = responsestream.ReadResult
+
+// SessionResponseStreamCompactionSummary records bounded fidelity loss for
+// stream subscribers that resume after truncation or coalescing.
+type SessionResponseStreamCompactionSummary = responsestream.CompactionSummary
+
+// SessionResponseStreamEventType identifies provider-neutral internal response
+// stream event semantics.
+type SessionResponseStreamEventType = responsestream.EventType
+
+// SessionResponseStreamRetentionLimits documents bounded-retention controls for
+// one internal session response stream.
+type SessionResponseStreamRetentionLimits = responsestream.RetentionLimits
+
+// SessionResponseStreamRetentionAccounting summarizes retained stream bytes,
+// event count, and oldest event timestamp for retention decisions.
+type SessionResponseStreamRetentionAccounting = responsestream.RetentionAccounting
+
+// NewSessionResponseStream allocates an empty internal response stream owned by
+// one live Factory Session runtime.
+func NewSessionResponseStream() *SessionResponseStream {
+	return responsestream.NewSessionResponseStream()
+}
+
+// NewSessionResponseStreamSetWithFactory allocates a dispatch-keyed stream set
+// using the supplied stream constructor.
+func NewSessionResponseStreamSetWithFactory(
+	newStream func() *SessionResponseStream,
+) *SessionResponseStreamSet {
+	return responsestream.NewStreamSetWithFactory(newStream)
+}
+
+// SessionResponseStreamSubscription is an internal live-session response-stream
+// cursor that can read retained and live dispatch progress.
+type SessionResponseStreamSubscription = responsestream.Subscription

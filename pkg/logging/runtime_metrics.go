@@ -12,13 +12,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/internal/metrics"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 const (
-	runtimeMetricsSubdirName = "metrics"
-
 	metricsMetricTypeCounter = "counter"
 	metricsMetricTypeGauge   = "gauge"
 	metricsMetricTypeSample  = "sample"
@@ -262,13 +261,7 @@ func runtimeMetricsPath(rootDir, sessionID, runtimeInstanceID string, startTime 
 		safeRuntimeLogPathComponent(uniqueID),
 		runtimeLogExtension,
 	)
-	return filepath.Join(
-		rootDir,
-		startTime.Format("2006"),
-		startTime.Format("01"),
-		startTime.Format("02"),
-		filename,
-	)
+	return filepath.Join(defaultpaths.RuntimeMetricsDatedDir(rootDir, startTime), filename)
 }
 
 func normalizeRuntimeMetricsConfig(config RuntimeMetricsConfig) RuntimeMetricsConfig {
@@ -280,7 +273,7 @@ func defaultRuntimeMetricsDir() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve user home for runtime metrics: %w", err)
 	}
-	return filepath.Join(home, defaultRuntimeLogDirName, runtimeMetricsSubdirName), nil
+	return defaultpaths.RuntimeMetricsRoot(home), nil
 }
 
 var _ metrics.MetricsEmitter = (*RuntimeMetricsSink)(nil)

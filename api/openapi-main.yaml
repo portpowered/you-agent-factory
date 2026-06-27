@@ -276,6 +276,11 @@ paths:
       responses:
         '200':
           description: Factory event stream for the targeted session.
+          headers:
+            X-Factory-Session-Stream-Generation-Id:
+              description: Opaque invalidation token for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `streamGenerationID` values before reusing reconnect cursors or stream-derived projections.
+              schema:
+                type: string
           content:
             text/event-stream:
               schema:
@@ -286,6 +291,26 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/sync-preflight:
+    get:
+      tags:
+        - Runtime
+      operationId: getFactorySessionSyncPreflightBySessionId
+      summary: Validate cached session sync state for one session
+      description: Returns the canonical backend-owned session sync identity set and validates an optional reconnect cursor before the dashboard restores cached checkpoint state or opens the event stream. This route accepts `~default` as a session selector, but clients must persist the returned `factorySessionId` field rather than treating `~default` as a durable live-session identifier.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/AfterEventId'
+        - $ref: '#/components/parameters/AfterSequence'
+      responses:
+        '200':
+          description: Typed session sync preflight outcome for the targeted session selector.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionSyncPreflightResponse'
         '500':
           $ref: '#/components/responses/InternalError'
   /status:
@@ -871,13 +896,14 @@ paths:
       tags:
         - Factory
       operationId: pauseFactorySession
-      summary: Pause one factory session
+      summary: Pause one Factory Session
       description: >-
-        Pauses one live or durable factory session while preserving inspectable
-        partial results, dispatches, and artifacts. Live workspace sessions use
-        the same route family as durable execution sessions. Returns the updated
-        session or a typed lifecycle-control outcome for no-op, invalid-state,
-        terminal-session, or conflict cases.
+        Pauses one live or durable Factory Session while preserving inspectable
+        partial results, dispatches, artifacts, and buffered inbound submissions
+        or completed worker results. Live workspace sessions use the same route
+        family as durable execution sessions. Automatic progression stops until
+        resume. Returns the updated session or a typed lifecycle-control
+        outcome for no-op, invalid-state, terminal-session, or conflict cases.
       parameters:
         - $ref: '#/components/parameters/SessionID'
       requestBody:
@@ -912,11 +938,13 @@ paths:
       tags:
         - Factory
       operationId: resumeFactorySession
-      summary: Resume one factory session
+      summary: Resume one Factory Session
       description: >-
-        Resumes one paused live or durable factory session while preserving
+        Resumes one paused live or durable Factory Session while preserving
         inspectable partial results, dispatches, and artifacts. Live workspace
-        sessions use the same route family as durable execution sessions.
+        sessions use the same route family as durable execution sessions. Wakes
+        the runtime internally and drains ready buffered submissions and
+        completed worker results without requiring a new external signal.
         Returns the updated session or a typed lifecycle-control outcome for
         no-op, invalid-state, terminal-session, or conflict cases.
       parameters:
@@ -1056,6 +1084,46 @@ paths:
                 $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
         '202':
           description: Retry-dispatch control request accepted asynchronously.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/FactorySessionLifecycleControlConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/interrupt-dispatch:
+    post:
+      tags:
+        - Factory
+      operationId: interruptFactorySessionDispatch
+      summary: Interrupt one active durable factory session dispatch
+      description: >-
+        Interrupts one active dispatch within the targeted durable factory
+        session. The response links the interruption to the session and dispatch
+        state and preserves inspectable partial results, dispatches, and
+        artifacts after the control operation.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FactorySessionInterruptDispatchRequest'
+      responses:
+        '200':
+          description: Interrupt dispatch applied immediately or produced a typed no-op outcome.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionLifecycleControlResponse'
+        '202':
+          description: Interrupt-dispatch control request accepted asynchronously.
           content:
             application/json:
               schema:
@@ -1498,6 +1566,8 @@ components:
       $ref: './components/schemas/api/FactorySession.yaml'
     FactorySessionRuntime:
       $ref: './components/schemas/api/FactorySessionRuntime.yaml'
+    FactorySessionStreamIdentity:
+      $ref: './components/schemas/api/FactorySessionStreamIdentity.yaml'
     FactorySessionStatus:
       $ref: './components/schemas/api/FactorySessionStatus.yaml'
     FactorySessionProgress:
@@ -1520,6 +1590,12 @@ components:
       $ref: './components/schemas/api/FactorySessionJavaScriptScriptStatus.yaml'
     FactorySessionJavaScriptChildDispatchCounts:
       $ref: './components/schemas/api/FactorySessionJavaScriptChildDispatchCounts.yaml'
+    FactorySessionSyncPreflightResponse:
+      $ref: './components/schemas/api/FactorySessionSyncPreflightResponse.yaml'
+    FactorySessionSyncPreflightReasonCode:
+      $ref: './components/schemas/api/FactorySessionSyncPreflightReasonCode.yaml'
+    FactorySessionSyncPreflightReconnectCursor:
+      $ref: './components/schemas/api/FactorySessionSyncPreflightReconnectCursor.yaml'
     FactorySessionLiveResult:
       $ref: './components/schemas/api/FactorySessionLiveResult.yaml'
     FactorySessionResult:
@@ -1588,6 +1664,8 @@ components:
       $ref: './components/schemas/events/payloads/SessionPausedEventPayload.yaml'
     SessionResumedEventPayload:
       $ref: './components/schemas/events/payloads/SessionResumedEventPayload.yaml'
+    SessionLifecycleControlEventPayload:
+      $ref: './components/schemas/events/payloads/SessionLifecycleControlEventPayload.yaml'
     SessionResultUpdatedEventPayload:
       $ref: './components/schemas/events/payloads/SessionResultUpdatedEventPayload.yaml'
     SessionCompletedEventPayload:
@@ -1676,6 +1754,8 @@ components:
       $ref: './components/schemas/api/FactorySessionApproveRequest.yaml'
     FactorySessionRetryDispatchRequest:
       $ref: './components/schemas/api/FactorySessionRetryDispatchRequest.yaml'
+    FactorySessionInterruptDispatchRequest:
+      $ref: './components/schemas/api/FactorySessionInterruptDispatchRequest.yaml'
     FactorySessionLifecycleControlResponse:
       $ref: './components/schemas/api/FactorySessionLifecycleControlResponse.yaml'
     LoadableProviderSessionRef:
@@ -1902,6 +1982,8 @@ components:
       $ref: './components/schemas/data-models/RunnerSelectionSource.yaml'
     Workstation:
       $ref: './components/schemas/data-models/Workstation.yaml'
+    WorkstationOutcomeFormat:
+      $ref: './components/schemas/data-models/WorkstationOutcomeFormat.yaml'
     ClassificationRoute:
       $ref: './components/schemas/data-models/ClassificationRoute.yaml'
     WorkstationLimits:

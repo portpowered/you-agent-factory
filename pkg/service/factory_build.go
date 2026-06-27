@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -43,6 +44,36 @@ import (
 	cursorprovider "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 	"go.uber.org/zap"
 )
+
+type runtimeBundleBuildInput struct {
+	dir                           string
+	folderPath                    string
+	sessionID                     string
+	cfg                           *FactoryServiceConfig
+	loadedFactoryCfg              *factoryconfig.LoadedFactoryConfig
+	baseLogger                    *zap.Logger
+	runtimeInstanceID             string
+	clock                         factory.Clock
+	recordPath                    string
+	workflowID                    string
+	providerOverride              workers.Provider
+	providerCommandRunner         workers.CommandRunner
+	commandRunnerOverride         workers.CommandRunner
+	additionalFactoryOpts         []factory.FactoryOption
+	prefetchedLocalModels         localModelDomain
+	inferenceProgressPublisher    workerprovider.InferenceProgressPublisher
+	inferenceProgressPublisherSet bool
+	dispatchCompleted             func(string)
+}
+
+type liveSessionState struct {
+	bundle                *factoryRuntimeBundle
+	handle                *liveRuntimeHandle
+	spec                  *runtimebuild.SessionBuildSpec
+	javascriptCheckpoints *factorysessions.JavaScriptCheckpointStore
+	responseStreamsOnce   sync.Once
+	responseStreams       *factorysessions.SessionResponseStreamSet
+}
 
 // BuildFactoryService loads factory.json from the config directory, constructs
 // the petri net, factory runtime, file watcher, and session metrics.
@@ -326,7 +357,7 @@ func buildRuntimeBundle(
 	if err != nil {
 		return nil, err
 	}
-	logger := runtimebuild.NewSessionLogger(logSink.Logger(), sessionID, input.folderPath, input.dir)
+	logger := runtimebuild.NewSessionLogger(runtimeSessionBaseLogger(input.baseLogger, logSink), sessionID, input.folderPath, input.dir)
 	metricsSink, err := buildRuntimeMetricsSink(input.cfg, sessionID, runtimeInstanceID, input.folderPath, input.dir)
 	if err != nil {
 		logger.Warn(
@@ -391,7 +422,8 @@ func loadRuntimeBundleWorkerOptions(
 		logging.NewZapLogger(logger, input.cfg.Verbose),
 		input.cfg.SkipBuiltInRunnerPrerequisiteValidation,
 		input.providerOverride,
-		input.providerCommandRunner,
+		input.inferenceProgressPublisher,
+		wrapProviderCommandRunnerForProgress(input, input.providerCommandRunner),
 		input.commandRunnerOverride,
 		eventHistory.RecordScriptEvent,
 		eventHistory.RecordInferenceEvent,
@@ -455,6 +487,8 @@ func assembleRuntimeBundle(
 	bundle := &factoryRuntimeBundle{
 		dir:               input.dir,
 		folderPath:        input.folderPath,
+		runtimeInstanceID: input.runtimeInstanceID,
+		startedAtUTC:      input.clock.Now().UTC(),
 		eventHistory:      eventHistory,
 		net:               net,
 		runtimeCfg:        input.loadedFactoryCfg,
@@ -469,6 +503,7 @@ func assembleRuntimeBundle(
 		metricsSink:       metricsSink,
 		recording:         recording,
 		recordPath:        input.recordPath,
+		dispatchCompleted: input.dispatchCompleted,
 	}
 	opts := []factory.FactoryOption{
 		factory.WithNet(net),
@@ -521,11 +556,35 @@ func buildRuntimeLogSink(
 	if cfg == nil {
 		return nil, runtimeInstanceID, fmt.Errorf("factory service config is required to build runtime log sink")
 	}
+	if !runtimeFileLoggingEnabled(cfg.RuntimeFileLoggingPolicy) {
+		return nil, runtimeInstanceID, nil
+	}
 	logSink, err := logging.BuildRuntimeLogger(baseLogger, runtimeInstanceID, cfg.RuntimeLogDir, cfg.RuntimeLogConfig)
 	if err != nil {
 		return nil, runtimeInstanceID, fmt.Errorf("build runtime logger: %w", err)
 	}
 	return logSink, runtimeInstanceID, nil
+}
+
+func runtimeFileLoggingEnabled(policy RuntimeFileLoggingPolicy) bool {
+	switch policy {
+	case "", RuntimeFileLoggingPolicyEnabled:
+		return true
+	case RuntimeFileLoggingPolicyDisabled:
+		return false
+	default:
+		return true
+	}
+}
+
+func runtimeSessionBaseLogger(baseLogger *zap.Logger, logSink *logging.RuntimeLogSink) *zap.Logger {
+	if logSink != nil {
+		return logSink.Logger()
+	}
+	if baseLogger != nil {
+		return baseLogger
+	}
+	return zap.NewNop()
 }
 
 func buildRuntimeMetricsSink(
@@ -596,6 +655,9 @@ func (r *factoryRuntimeBundle) recordCompletionMetrics(record interfaces.Factory
 		r.emitMetricSample(runtimeMetricDispatchCost, record.Result.Metrics.Cost, "usd", metricFields)
 	}
 	r.emitWorkerBoundaryCompletionMetrics(record.Result, metricFields)
+	if r.dispatchCompleted != nil {
+		r.dispatchCompleted(record.DispatchID)
+	}
 }
 
 func runtimeDispatchMetricFields(dispatch interfaces.WorkDispatch) metrics.Fields {
@@ -1002,6 +1064,7 @@ func loadWorkersFromConfig(
 	logger logging.Logger,
 	skipBuiltInRunnerPrerequisiteValidation bool,
 	providerOverride workerprovider.Provider,
+	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 	providerCommandRunner workers.CommandRunner,
 	cmdRunner workers.CommandRunner,
 	scriptRecorder workers.ScriptEventRecorder,
@@ -1029,7 +1092,7 @@ func loadWorkersFromConfig(
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workerexecutor.NoopExecutor{}))
 			continue
 		}
-		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, workflowContext, logger, providerOverride, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, now, modelDomain)
+		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, workflowContext, logger, providerOverride, inferenceProgressPublisher, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, now, modelDomain)
 		if executor != nil {
 			logger.Info("loaded worker", "worker", workerCfg.Name)
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, executor))
@@ -1085,6 +1148,7 @@ func buildWorkerExecutor(
 	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,
 	providerOverride workerprovider.Provider,
+	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 	providerCommandRunner workers.CommandRunner,
 	cmdRunner workers.CommandRunner,
 	scriptRecorder workers.ScriptEventRecorder,
@@ -1100,64 +1164,178 @@ func buildWorkerExecutor(
 
 	switch def.Type {
 	case interfaces.WorkerTypeModel, interfaces.WorkerTypeAgent:
-		var runner workers.Runner
-		if providerOverride != nil {
-			runner = workers.RunnerFromProvider(providerOverride)
-		} else {
-			var providerOpts []workerprovider.ScriptWrapProviderOption
-			providerOpts = append(providerOpts, workerprovider.WithSkipPermissions(def.SkipPermissions))
-			providerOpts = append(providerOpts, workerprovider.WithProviderLogger(logger))
-			if providerCommandRunner != nil {
-				providerOpts = append(providerOpts, workerprovider.WithProviderCommandRunner(providerCommandRunner))
-			}
-			runner = workerprovider.NewScriptWrapProvider(providerOpts...)
-		}
-		if inferenceRecorder != nil {
-			if providerOverride != nil {
-				provider := workerprovider.NewRecordingProvider(
-					providerOverride,
-					inferenceRecorder,
-					workerprovider.WithRecordingProviderClock(now),
-				)
-				runner = workers.RunnerFromProvider(provider)
-			} else if providerRunner, ok := runner.(*workerprovider.ScriptWrapProvider); ok {
-				provider := workerprovider.NewRecordingProvider(
-					providerRunner,
-					inferenceRecorder,
-					workerprovider.WithRecordingProviderClock(now),
-				)
-				runner = workers.RunnerFromProvider(provider)
-			}
-		}
-
-		agentOpts := []workerexecutor.AgentExecutorOption{
-			workerexecutor.WithLogger(logger),
-		}
-		runner = wrapLocalModelRunner(runner, runtimeCfg, factoryCfg, def, modelDomain)
-		runner = modelDomain.resources.WrapRunner(runner, factoryCfg, def)
-		runner = newRecordingModelRunner(runner, factoryCfg, def, modelRecorder, now)
-		agentExec := workerexecutor.NewAgentExecutorWithRunner(runtimeCfg, runner, agentOpts...)
-		return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, agentExec, logger)
+		return buildProviderBackedWorkerExecutor(
+			runtimeCfg,
+			factoryCfg,
+			def,
+			factoryRunnerID,
+			workflowContext,
+			logger,
+			providerOverride,
+			inferenceProgressPublisher,
+			providerCommandRunner,
+			inferenceRecorder,
+			modelRecorder,
+			now,
+			modelDomain,
+		)
 	case interfaces.WorkstationTypeLogical:
 		return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, nil, logger)
 	case interfaces.WorkerTypeScript:
-		var scriptOpts []workerexecutor.ScriptExecutorOption
-		if runtimeCfg != nil && runtimeCfg.FactoryDir() != "" {
-			scriptOpts = append(scriptOpts, workerexecutor.WithScriptFactoryDir(runtimeCfg.FactoryDir()))
-		}
-		if scriptRecorder != nil {
-			scriptOpts = append(scriptOpts, workerexecutor.WithScriptEventRecorder(scriptRecorder))
-		}
-		var scriptExec workers.WorkstationRequestExecutor
-		if cmdRunner != nil {
-			scriptExec = workerexecutor.NewScriptExecutorWithRunner(def, cmdRunner, logger, scriptOpts...)
-		} else {
-			scriptExec = workerexecutor.NewScriptExecutor(def, logger, scriptOpts...)
-		}
-		return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, scriptExec, logger)
+		return buildScriptWorkerExecutor(
+			runtimeCfg,
+			def,
+			factoryRunnerID,
+			workflowContext,
+			logger,
+			cmdRunner,
+			scriptRecorder,
+		)
 	default:
 		return nil
 	}
+}
+
+func buildProviderBackedWorkerExecutor(
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	factoryCfg *interfaces.FactoryConfig,
+	def *interfaces.WorkerConfig,
+	factoryRunnerID string,
+	workflowContext *factory_context.FactoryContext,
+	logger logging.Logger,
+	providerOverride workerprovider.Provider,
+	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
+	providerCommandRunner workers.CommandRunner,
+	inferenceRecorder workerprovider.InferenceEventRecorder,
+	modelRecorder modelEventRecorder,
+	now func() time.Time,
+	modelDomain localModelDomain,
+) workers.WorkerExecutor {
+	runner := providerBackedRunner(
+		def,
+		logger,
+		providerOverride,
+		inferenceProgressPublisher,
+		providerCommandRunner,
+		inferenceRecorder,
+		now,
+	)
+	runner = wrapLocalModelRunner(runner, runtimeCfg, factoryCfg, def, modelDomain)
+	runner = modelDomain.resources.WrapRunner(runner, factoryCfg, def)
+	runner = newRecordingModelRunner(runner, factoryCfg, def, modelRecorder, now)
+	agentExec := workerexecutor.NewAgentExecutorWithRunner(
+		runtimeCfg,
+		runner,
+		workerexecutor.WithLogger(logger),
+	)
+	return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, agentExec, logger)
+}
+
+func providerBackedRunner(
+	def *interfaces.WorkerConfig,
+	logger logging.Logger,
+	providerOverride workerprovider.Provider,
+	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
+	providerCommandRunner workers.CommandRunner,
+	inferenceRecorder workerprovider.InferenceEventRecorder,
+	now func() time.Time,
+) workers.Runner {
+	runner := newProviderRunner(def, logger, providerOverride, inferenceProgressPublisher, providerCommandRunner)
+	if inferenceRecorder == nil {
+		return runner
+	}
+	return wrapRecordingProviderRunner(runner, providerOverride, inferenceRecorder, now)
+}
+
+func newProviderRunner(
+	def *interfaces.WorkerConfig,
+	logger logging.Logger,
+	providerOverride workerprovider.Provider,
+	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
+	providerCommandRunner workers.CommandRunner,
+) workers.Runner {
+	if providerOverride != nil {
+		return workers.RunnerFromProvider(providerOverride)
+	}
+	return workerprovider.NewScriptWrapProvider(providerRunnerOptions(
+		def,
+		logger,
+		inferenceProgressPublisher,
+		providerCommandRunner,
+	)...)
+}
+
+func providerRunnerOptions(
+	def *interfaces.WorkerConfig,
+	logger logging.Logger,
+	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
+	providerCommandRunner workers.CommandRunner,
+) []workerprovider.ScriptWrapProviderOption {
+	opts := []workerprovider.ScriptWrapProviderOption{
+		workerprovider.WithSkipPermissions(def.SkipPermissions),
+		workerprovider.WithProviderLogger(logger),
+	}
+	if inferenceProgressPublisher != nil {
+		opts = append(opts, workerprovider.WithInferenceProgressPublisher(inferenceProgressPublisher))
+	}
+	if providerCommandRunner != nil {
+		opts = append(opts, workerprovider.WithProviderCommandRunner(providerCommandRunner))
+	}
+	return opts
+}
+
+func wrapRecordingProviderRunner(
+	runner workers.Runner,
+	providerOverride workerprovider.Provider,
+	inferenceRecorder workerprovider.InferenceEventRecorder,
+	now func() time.Time,
+) workers.Runner {
+	recordingClock := workerprovider.WithRecordingProviderClock(now)
+	if providerOverride != nil {
+		return workers.RunnerFromProvider(
+			workerprovider.NewRecordingProvider(providerOverride, inferenceRecorder, recordingClock),
+		)
+	}
+	providerRunner, ok := runner.(*workerprovider.ScriptWrapProvider)
+	if !ok {
+		return runner
+	}
+	return workers.RunnerFromProvider(
+		workerprovider.NewRecordingProvider(providerRunner, inferenceRecorder, recordingClock),
+	)
+}
+
+func buildScriptWorkerExecutor(
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	def *interfaces.WorkerConfig,
+	factoryRunnerID string,
+	workflowContext *factory_context.FactoryContext,
+	logger logging.Logger,
+	cmdRunner workers.CommandRunner,
+	scriptRecorder workers.ScriptEventRecorder,
+) workers.WorkerExecutor {
+	scriptOpts := scriptExecutorOptions(runtimeCfg, scriptRecorder)
+	var scriptExec workers.WorkstationRequestExecutor
+	if cmdRunner != nil {
+		scriptExec = workerexecutor.NewScriptExecutorWithRunner(def, cmdRunner, logger, scriptOpts...)
+	} else {
+		scriptExec = workerexecutor.NewScriptExecutor(def, logger, scriptOpts...)
+	}
+	return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, scriptExec, logger)
+}
+
+func scriptExecutorOptions(
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	scriptRecorder workers.ScriptEventRecorder,
+) []workerexecutor.ScriptExecutorOption {
+	var scriptOpts []workerexecutor.ScriptExecutorOption
+	if runtimeCfg != nil && runtimeCfg.FactoryDir() != "" {
+		scriptOpts = append(scriptOpts, workerexecutor.WithScriptFactoryDir(runtimeCfg.FactoryDir()))
+	}
+	if scriptRecorder != nil {
+		scriptOpts = append(scriptOpts, workerexecutor.WithScriptEventRecorder(scriptRecorder))
+	}
+	return scriptOpts
 }
 
 func validateConfiguredWorkstationRunners(factoryCfg *interfaces.FactoryConfig, factoryRunnerID string, runtimeCfg interfaces.RuntimeConfigLookup, preflight runnerSelectionPreflight) error {
@@ -1258,6 +1436,8 @@ func newRuntimeBuildService(
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	startupLocalModels *localModelDomain,
+	progressPublisherFactory inferenceProgressPublisherFactory,
+	dispatchCompletionFactory dispatchCompletionObserverFactory,
 ) *runtimebuild.Service {
 	buildCfg := runtimeBuildConfigFromService(cfg)
 	return runtimebuild.New(
@@ -1281,12 +1461,39 @@ func newRuntimeBuildService(
 				commandRunnerOverride: input.CommandRunnerOverride,
 				additionalFactoryOpts: input.AdditionalFactoryOpts,
 			}
+			if progressPublisherFactory != nil {
+				bundleInput.inferenceProgressPublisher = progressPublisherFactory(bundleInput.sessionID)
+				bundleInput.inferenceProgressPublisherSet = true
+			}
+			if dispatchCompletionFactory != nil {
+				bundleInput.dispatchCompleted = dispatchCompletionFactory(bundleInput.sessionID)
+			}
 			if startupLocalModels != nil && startupLocalModels.manager != nil {
 				bundleInput.prefetchedLocalModels = *startupLocalModels
 				*startupLocalModels = localModelDomain{}
 			}
 			return buildRuntimeBundle(ctx, bundleInput)
 		},
+	)
+}
+
+func wrapProviderCommandRunnerForProgress(
+	input runtimeBundleBuildInput,
+	runner workers.CommandRunner,
+) workers.CommandRunner {
+	if !input.inferenceProgressPublisherSet || input.inferenceProgressPublisher == nil {
+		return runner
+	}
+	if runner != nil {
+		return runner
+	}
+	var logger logging.Logger = logging.NoopLogger{}
+	if input.baseLogger != nil {
+		logger = logging.NewZapLogger(input.baseLogger, input.cfg != nil && input.cfg.Verbose)
+	}
+	return workerprovider.NewInferenceProgressPublishingCommandRunner(
+		input.inferenceProgressPublisher,
+		logger,
 	)
 }
 
