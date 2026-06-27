@@ -1722,6 +1722,10 @@ components:
           type: string
           description: Stable machine-readable invocation failure code when status is not `COMPLETED`.
           enum:
+            - INVOCATION_BLOCKED
+            - INVOCATION_INTERRUPTED
+            - INVOCATION_NEEDS_HUMAN
+            - INVOCATION_PAUSED
             - INVOCATION_PRIMARY_RESULT_UNRESOLVED
             - INVOCATION_TIMED_OUT
             - INVOCATION_CANCELED
@@ -1731,6 +1735,18 @@ components:
         message:
           type: string
           description: Human-readable failure summary when status is not `COMPLETED`.
+        sessionId:
+          type: string
+          description: Session identifier for the invocation outcome when non-success context needs to point operators at the relevant factory session.
+        workId:
+          type: string
+          description: Relevant work identifier for a non-success invocation outcome when one scoped work item explains the stop condition.
+        workName:
+          type: string
+          description: Relevant work name for a non-success invocation outcome when one scoped work item explains the stop condition.
+        workState:
+          type: string
+          description: Current authored work state that best explains the non-success invocation outcome when one scoped work item is available.
     InvocationTerminalStatus:
       type: string
       description: Terminal status for a factory-session invocation.

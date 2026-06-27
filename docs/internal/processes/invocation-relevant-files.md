@@ -8,7 +8,15 @@ primary-result behavior.
 - `pkg/invocations/primary_result.go` resolves invocation `primaryResult`
   against selected-tick `FactoryWorldState` using `WorkRequestsByID`,
   `TerminalWorkByID`, and payload-lineage scope rather than transport-specific
-  polling logic.
+  polling logic. The same package also classifies missing-primary-result waits
+  from scoped current work state when authored workflow states such as
+  `blocked` or `needs-human` explain the stopped invocation better than the
+  generic unresolved-primary-result fallback, classifies terminal failed work
+  in invocation scope before that unresolved fallback, and classifies
+  invocation control-state outcomes such as paused sessions or interrupted
+  dispatches from reconstructed session and dispatch lifecycle facts. Stable
+  non-success context for `sessionId`, `workId`, `workName`, and `workState`
+  also originates here so CLI and API stay aligned on the same recovery facts.
 - `pkg/factory/validation/validate.go` owns factory-level `invocationReturn`
   validation shared by validate-only and save pre-check flows.
 - `pkg/config/factory_config_mapping*.go` maps `invocationReturn` between the
@@ -18,7 +26,8 @@ primary-result behavior.
 - `pkg/workcontent/` translates between generated OpenAPI `WorkContent` and the
   backend-owned `interfaces.WorkContentPart` shape.
 - `pkg/api/handlers_work_write.go` includes the session invocation HTTP
-  boundary alongside other session work-write handlers.
+  boundary alongside other session work-write handlers, including projection of
+  shared invocation non-success context into the public `InvocationResponse`.
 - `pkg/service/runtime_sessions.go` owns the session-scoped invocation
   orchestration that resolves API input, submits the default handling work
   item, polls selected-tick world state, and maps timeout/cancel/unresolved
@@ -39,7 +48,10 @@ primary-result behavior.
   shared `pkg/invocations` contract, then runs the local service in
   invocation-only service mode so stdout stays reserved for primary-result
   output instead of startup or dashboard noise; CLI-only source conflicts are
-  logged and counted there before the service runtime exists.
+  logged and counted there before the service runtime exists. `RunConfig.JSONOutput`
+  must stay aligned with the shared `InvocationResponse` envelope for both
+  successful and non-success invocation results rather than becoming a
+  success-only CLI fork.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin
   bytes into `invocations.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
   from the shared resolver instead of pre-trimming or short-circuiting with
@@ -145,6 +157,10 @@ primary-result behavior.
   instead of submitted input text or raw audio payload bytes.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and
   invocation-return policy ownership.
+- `docs/reference/packaged-goal.md` is the customer-facing reference for
+  packaged `@you/goal` invocation behavior, including operator-visible blocked,
+  needs-human, paused, interrupted, failed, timed-out, and unresolved-primary-result
+  outcomes plus recovery through existing session/work commands.
 - `docs/reference/config.md` and `docs/reference/sessions.md` are the packaged
   `you docs` reference topics for invocation input sources, return policy, and
   the session-scoped invocation API.

@@ -724,7 +724,36 @@ func assertInvocationResponseMatchesFactoryResult(
 	if response.Status != result.Status {
 		t.Fatalf("status = %q, want %q", response.Status, result.Status)
 	}
-	assertGeneratedWorkContentPartsFromResponse(t, response.PrimaryResult, result.PrimaryResult)
+	if len(result.PrimaryResult) == 0 {
+		if response.PrimaryResult != nil {
+			t.Fatalf("primary result = %#v, want none", response.PrimaryResult)
+		}
+	} else {
+		assertGeneratedWorkContentPartsFromResponse(t, response.PrimaryResult, result.PrimaryResult)
+	}
+	assertOptionalStringPointerEquals(t, "errorCode", response.ErrorCode, result.ErrorCode)
+	assertOptionalStringPointerEquals(t, "message", response.Message, result.Message)
+	assertOptionalStringPointerEquals(t, "sessionId", response.SessionId, result.SessionID)
+	assertOptionalStringPointerEquals(t, "workId", response.WorkId, result.WorkID)
+	assertOptionalStringPointerEquals(t, "workName", response.WorkName, result.WorkName)
+	assertOptionalStringPointerEquals(t, "workState", response.WorkState, result.WorkState)
+}
+
+func assertOptionalStringPointerEquals[T ~string](t *testing.T, field string, got *T, want string) {
+	t.Helper()
+
+	if want == "" {
+		if got != nil {
+			t.Fatalf("%s = %#v, want nil", field, *got)
+		}
+		return
+	}
+	if got == nil {
+		t.Fatalf("%s = nil, want %q", field, want)
+	}
+	if string(*got) != want {
+		t.Fatalf("%s = %q, want %q", field, string(*got), want)
+	}
 }
 
 func assertGeneratedWorkContentPartsFromResponse(

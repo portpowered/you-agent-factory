@@ -901,6 +901,14 @@ export interface components {
       errorCode?: InvocationResponseErrorCode;
       /** @description Human-readable failure summary when status is not `COMPLETED`. */
       message?: string;
+      /** @description Session identifier for the invocation outcome when non-success context needs to point operators at the relevant factory session. */
+      sessionId?: string;
+      /** @description Relevant work identifier for a non-success invocation outcome when one scoped work item explains the stop condition. */
+      workId?: string;
+      /** @description Relevant work name for a non-success invocation outcome when one scoped work item explains the stop condition. */
+      workName?: string;
+      /** @description Current authored work state that best explains the non-success invocation outcome when one scoped work item is available. */
+      workState?: string;
     };
     /**
      * @description Terminal status for a factory-session invocation.
@@ -6007,6 +6015,10 @@ export const InvocationInputSourceKind = {
 export type InvocationInputSourceKind =
   (typeof InvocationInputSourceKind)[keyof typeof InvocationInputSourceKind];
 export const InvocationResponseErrorCode = {
+  INVOCATION_BLOCKED: "INVOCATION_BLOCKED",
+  INVOCATION_INTERRUPTED: "INVOCATION_INTERRUPTED",
+  INVOCATION_NEEDS_HUMAN: "INVOCATION_NEEDS_HUMAN",
+  INVOCATION_PAUSED: "INVOCATION_PAUSED",
   INVOCATION_PRIMARY_RESULT_UNRESOLVED: "INVOCATION_PRIMARY_RESULT_UNRESOLVED",
   INVOCATION_TIMED_OUT: "INVOCATION_TIMED_OUT",
   INVOCATION_CANCELED: "INVOCATION_CANCELED",

@@ -11,6 +11,11 @@ Use this map when changing the public REST contract.
 
 - `api/openapi-main.yaml` is the authored OpenAPI entrypoint. Register new component fragments under `components.schemas` here.
 - `api/components/schemas/api/` contains API request/response fragments.
+- `api/components/schemas/api/InvocationResponse.yaml` owns the shared session
+  invocation response contract. When non-success invocation outcomes expose new
+  recovery context such as `sessionId`, `workId`, `workName`, or `workState`,
+  author that shape here first, then regenerate and update the session
+  invocation handler plus contract tests.
 - `api/components/schemas/data-models/` contains customer-facing factory and work data model fragments.
 - When replacing a public API field with a nested contract, remove the deprecated field from the authored fragment under `api/components/schemas/api/` instead of patching generated files; `make generate-api` and `make api-smoke` will keep reintroducing the stale field until the source fragment is corrected.
 - Canonical default-path ownership for operator config, default recordings, runtime log roots, runtime metrics roots, and their dated subdirectory policy belongs in `pkg/config/defaultpaths`; consumer packages such as `pkg/config/operatorconfig`, `pkg/cli/run`, and `pkg/logging` should keep only artifact-family-specific filename or legacy-migration behavior locally.

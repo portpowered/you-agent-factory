@@ -54,6 +54,39 @@ Customers should expect:
 - Later invocations reuse the materialized on-disk copy instead of overwriting
   customer edits with pristine embedded content.
 
+## Non-success outcomes and recovery
+
+`@you/goal` uses the shared invocation path that powers both
+`you run --named @you/goal` and `POST /factory-sessions/{session_id}/invocations`.
+When no primary result exists yet, the returned non-success code tells you why
+the goal stopped:
+
+| Outcome | Stable code | Meaning | What to do next |
+|---------|-------------|---------|-----------------|
+| Blocked authored goal state | `INVOCATION_BLOCKED` | Routed goal work reached `goal:blocked` before a complete primary result existed. | Inspect the session and blocked work, then unblock it with the existing session/work surfaces. |
+| Human input required authored goal state | `INVOCATION_NEEDS_HUMAN` | Routed goal work reached `goal:needs-human` before a complete primary result existed. | Inspect the session and relevant work, then provide the needed operator input through the existing workflow. |
+| Session paused | `INVOCATION_PAUSED` | Waiting stopped because the live Factory Session was paused. | Resume the session with `you session resume <session-id>` and then re-check progress. |
+| Dispatch or session interrupted | `INVOCATION_INTERRUPTED` | Existing interruption metadata explains the stop better than a generic failure. | Inspect the session and dispatch context to decide whether to resume, retry, or rerun. |
+| Runtime failure | `INVOCATION_RUNTIME_FAILURE` | The invocation scope failed before producing the configured primary result. | Inspect failed work and session status to find the failing step. |
+| Wait deadline expired | `INVOCATION_TIMED_OUT` | The invocation was still running when the wait window expired. | Check session status and work progress, then wait longer or rerun with a different operator workflow. |
+| No primary result resolved | `INVOCATION_PRIMARY_RESULT_UNRESOLVED` | Work settled, but the configured `invocationReturn` target never produced a primary result. | Inspect the session/work state and the authored `invocationReturn` contract. |
+
+Blocked and needs-human are authored routed goal states. Paused and interrupted
+come from shared session lifecycle or dispatch interruption context. They are
+reported distinctly so operators do not need a goal-specific endpoint or raw
+provider payload inspection to understand what happened.
+
+The non-success response also includes shared recovery context such as
+`sessionId`, `workId`, `workName`, and `workState` when one work item explains
+the outcome. Use that context with the existing commands:
+
+```bash
+you session show <session-id>
+you work show <work-id> --session <session-id>
+you work list --session <session-id>
+you session resume <session-id>
+```
+
 For broader session discovery, status inspection, and work submission after the
 factory is running, use `you docs sessions`, `you docs work`, and
 `you docs batch-inputs`.
@@ -101,6 +134,11 @@ immediately. No reinstall, cache clear, or special reload step is required.
 If the materialized factory becomes invalid or incomplete, invocation fails
 with a clear packaged-factory load error instead of silently falling back to
 embedded behavior.
+
+### Maintainer verification
+
+After editing this reference topic, run `make docs-reference-smoke` from the
+repository root.
 
 ## Related topics
 
