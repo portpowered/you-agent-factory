@@ -258,6 +258,41 @@ func TestPackagedGoalBuiltInTopology_BlockedGoalRecoversThroughExistingWorkMoveC
 	}
 }
 
+func TestPackagedGoalBuiltInTopology_InterruptedGoalRecoversThroughExistingWorkMoveControl(t *testing.T) {
+	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(dir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
+	}
+	writePackagedGoalBuiltInTopologyFixtureFiles(t, dir, loaded.FactoryConfig())
+
+	server := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.MockWorkersConfig = packagedGoalBuiltInTopologySequencedReviewerMockWorkersConfig(t, dir, "interrupted", "accepted")
+	})
+
+	submitted := submitGeneratedGoalWork(t, server.URL(), "interrupted-goal-submit", "customer goal request text")
+	workID := stringPointerValue(submitted.WorkId)
+	waitForGeneratedWorkIDsAtState(t, server.URL(), []string{workID}, "interrupted", 15*time.Second)
+	interrupted := requireGeneratedWorkByID(t, server.URL(), workID)
+	if generatedWorkStateName(interrupted.State) != "interrupted" {
+		t.Fatalf("interrupted work = %#v, want interrupted state", interrupted)
+	}
+
+	moved := postGeneratedMoveWork(t, server.URL(), workID, "review")
+	if generatedWorkStateName(moved.State) != "review" {
+		t.Fatalf("moved goal work = %#v, want review state", moved)
+	}
+
+	completed := waitForGeneratedWorkIDStateName(t, server.URL(), workID, "complete", 15*time.Second)
+	if generatedWorkStateName(completed.State) != "complete" {
+		t.Fatalf("completed work = %#v, want interrupted goal to complete after move", completed)
+	}
+}
+
 func TestPackagedGoalBuiltInTopology_PlainReviewLaneEndToEnd(t *testing.T) {
 	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
 	if err != nil {

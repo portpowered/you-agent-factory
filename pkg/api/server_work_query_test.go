@@ -378,16 +378,29 @@ func TestGetWork_IncludesStopSummaryForNeedsHumanWork(t *testing.T) {
 }
 
 func TestGetWork_ReusesInterruptedSessionStopSummaryForMatchingWork(t *testing.T) {
-	now := time.Date(2026, 6, 27, 9, 10, 0, 0, time.UTC)
+	stopResult, recoverySurface, workID := interruptedStopSummaryFixtureValues()
+	srv := newInterruptedStopSummaryServer(t, stopResult, recoverySurface, workID)
+	resp := getWorkResponse(t, srv, "/factory-sessions/session-interrupted/work/work-goal-interrupted")
+	assertInterruptedStopSummary(t, resp, stopResult, recoverySurface, workID)
+}
+
+func interruptedStopSummaryFixtureValues() (string, string, string) {
 	stopResult := "Operator interrupted the dispatch"
 	recoverySurface := "existing dispatch retry, work repair, or session workflow controls"
-	recoveryAction := "Inspect the interrupted dispatch in Factory Session \"session-interrupted\", then use the existing retry, repair, or session workflow controls to continue recovery."
 	workID := "work-goal-interrupted"
+	return stopResult, recoverySurface, workID
+}
+
+func newInterruptedStopSummaryServer(t *testing.T, stopResult, recoverySurface, workID string) *Server {
+	t.Helper()
+
+	now := time.Date(2026, 6, 27, 9, 10, 0, 0, time.UTC)
+	recoveryAction := "Inspect the interrupted dispatch in Factory Session \"session-interrupted\", then use the existing retry, repair, or session workflow controls to continue recovery."
 	workName := "Interrupted goal"
 	workState := "goal:review"
 	workstationName := "review child"
 	failureReason := "operator_interrupt"
-	srv := newTestServer(&testutil.MockFactory{
+	return newTestServer(&testutil.MockFactory{
 		SessionFactories: map[string]*testutil.MockFactory{
 			"session-interrupted": {
 				FactorySession: factoryapi.FactorySession{
@@ -447,15 +460,26 @@ func TestGetWork_ReusesInterruptedSessionStopSummaryForMatchingWork(t *testing.T
 			},
 		},
 	})
+}
 
-	req := httptest.NewRequest("GET", "/factory-sessions/session-interrupted/work/work-goal-interrupted", nil)
+func getWorkResponse(t *testing.T, srv *Server, path string) factoryapi.Work {
+	t.Helper()
+	req := httptest.NewRequest("GET", path, nil)
 	rec := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
+	return decodeJSONResponse[factoryapi.Work](t, rec)
+}
 
-	resp := decodeJSONResponse[factoryapi.Work](t, rec)
+func assertInterruptedStopSummary(
+	t *testing.T,
+	resp factoryapi.Work,
+	stopResult, recoverySurface, workID string,
+) {
+	t.Helper()
+
 	if resp.StopSummary == nil {
 		t.Fatal("stopSummary = nil, want interrupted summary")
 	}

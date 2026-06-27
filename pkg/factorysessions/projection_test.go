@@ -345,6 +345,68 @@ func TestProjectRuntime_InterruptedSessionIncludesStopSummary(t *testing.T) {
 	}
 }
 
+func TestProjectRuntime_InterruptedSessionWithoutMatchingRelatedWorkLeavesWorkContextEmpty(t *testing.T) {
+	now := time.Date(2026, 6, 27, 9, 0, 0, 0, time.UTC)
+	token := &interfaces.Token{
+		ID:      "tok-goal-review",
+		PlaceID: "goal:review",
+		Color: interfaces.TokenColor{
+			Name:       "Nearby goal",
+			WorkID:     "work-goal-review",
+			WorkTypeID: "goal",
+		},
+		CreatedAt: now.Add(-2 * time.Minute),
+		EnteredAt: now.Add(-1 * time.Minute),
+	}
+	runtime := ProjectRuntime(ProjectionContext{
+		Session: &LiveSession{ID: "session-interrupted-unmatched"},
+		FactoryCfg: &interfaces.FactoryConfig{
+			Name: "goal",
+			Orchestrator: &interfaces.FactoryOrchestratorConfig{
+				Kind: interfaces.OrchestratorKindJavaScript,
+				JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
+					Dialect:   "workflow-v1",
+					SourceRef: "factory/workflows/goal.js",
+				},
+			},
+		},
+		Snapshot: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			Marking:  petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{"tok-goal-review": token}},
+			Topology: &state.Net{Places: map[string]*petri.Place{"goal:review": {ID: "goal:review", TypeID: "goal", State: "review"}}},
+		},
+		JavaScript: &interfaces.FactorySessionJavaScriptRuntimeState{
+			ScriptStatus: "INTERRUPTED",
+			Dispatches: []interfaces.FactorySessionDispatchState{{
+				ID:             "dispatch-js-unmatched",
+				Status:         "INTERRUPTED",
+				DispatchKind:   string(factoryapi.FactoryDispatchKindJAVASCRIPTAGENT),
+				Label:          "review child",
+				RelatedWorkIDs: []string{"work-missing"},
+				FailureDetail: &interfaces.FactorySessionDispatchFailureDetail{
+					Reason:  "operator_interrupt",
+					Message: "Operator interrupted the dispatch",
+				},
+			}},
+		},
+		Now: now,
+	})
+	if runtime.StopSummary == nil {
+		t.Fatal("stopSummary = nil, want interrupted summary")
+	}
+	if runtime.StopSummary.StopKind != factoryapi.FactoryStopKind("INTERRUPTED") {
+		t.Fatalf("stop kind = %q, want INTERRUPTED", runtime.StopSummary.StopKind)
+	}
+	if runtime.StopSummary.WorkId != nil {
+		t.Fatalf("stopSummary.workId = %#v, want nil when related work cannot be matched", runtime.StopSummary.WorkId)
+	}
+	if runtime.StopSummary.WorkName != nil {
+		t.Fatalf("stopSummary.workName = %#v, want nil when related work cannot be matched", runtime.StopSummary.WorkName)
+	}
+	if runtime.StopSummary.WorkState != nil {
+		t.Fatalf("stopSummary.workState = %#v, want nil when related work cannot be matched", runtime.StopSummary.WorkState)
+	}
+}
+
 func assertJavaScriptWorkflowSessionProjection(t *testing.T, runtime factoryapi.FactorySessionRuntime) {
 	t.Helper()
 	assertJavaScriptSessionIdentity(t, runtime)
