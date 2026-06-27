@@ -11,9 +11,10 @@ primary-result behavior.
   polling logic. The same package also classifies missing-primary-result waits
   from scoped current work state when authored workflow states such as
   `blocked` or `needs-human` explain the stopped invocation better than the
-  generic unresolved-primary-result fallback, and classifies invocation
-  control-state outcomes such as paused sessions or interrupted dispatches from
-  reconstructed session and dispatch lifecycle facts.
+  generic unresolved-primary-result fallback, classifies terminal failed work
+  in invocation scope before that unresolved fallback, and classifies
+  invocation control-state outcomes such as paused sessions or interrupted
+  dispatches from reconstructed session and dispatch lifecycle facts.
 - `pkg/factory/validation/validate.go` owns factory-level `invocationReturn`
   validation shared by validate-only and save pre-check flows.
 - `pkg/config/factory_config_mapping*.go` maps `invocationReturn` between the

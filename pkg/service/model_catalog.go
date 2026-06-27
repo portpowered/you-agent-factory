@@ -526,6 +526,8 @@ func (fs *FactoryService) handleInvocationPrimaryResultFailure(
 
 func invocationFailureClassForPrimaryResultError(code invocations.PrimaryResultErrorCode) string {
 	switch code {
+	case invocations.PrimaryResultErrorCodeFailed:
+		return "failed"
 	case invocations.PrimaryResultErrorCodePaused:
 		return "paused"
 	case invocations.PrimaryResultErrorCodeInterrupted:
@@ -614,6 +616,8 @@ func (fs *FactoryService) logInvocationTerminalResult(
 		failureClass = "cancellation"
 	case factoryapi.InvocationTerminalStatusFailed:
 		switch strings.TrimSpace(result.ErrorCode) {
+		case string(invocations.PrimaryResultErrorCodeFailed):
+			failureClass = "failed"
 		case string(invocations.PrimaryResultErrorCodeUnresolved):
 			failureClass = "unresolved_primary"
 		case string(invocations.PrimaryResultErrorCodePaused):
@@ -1158,6 +1162,13 @@ func (fs *FactoryService) resolveInvocationWaitTerminal(
 		}
 	}
 	if classified, ok := invocations.ClassifyInvocationControlState(sessionID, "", invocations.PrimaryResultSelectionInput{
+		RequestID:        input.RequestID,
+		InvocationReturn: input.InvocationReturn,
+		WorldState:       worldState,
+	}); ok {
+		return fs.handleInvocationPrimaryResultFailure(sessionID, input, classified)
+	}
+	if classified, ok := invocations.ClassifyFailedInvocation(sessionID, invocations.PrimaryResultSelectionInput{
 		RequestID:        input.RequestID,
 		InvocationReturn: input.InvocationReturn,
 		WorldState:       worldState,

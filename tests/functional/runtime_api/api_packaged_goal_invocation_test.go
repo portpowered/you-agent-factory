@@ -116,6 +116,35 @@ func TestSessionInvocationAPI_PackagedGoalNeedsHumanReturnsNeedsHumanStatusDetai
 	}
 }
 
+func TestSessionInvocationAPI_PackagedGoalFailedReturnsFailedStatusDetails(t *testing.T) {
+	dir, _ := scaffoldPackagedGoalBuiltInTopologyFactory(t)
+	server := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.MockWorkersConfig = packagedGoalBuiltInTopologyMockWorkersConfigForRealChecker(
+			goal.PackagedReviewWorkstationName,
+			"failed",
+		)
+	})
+
+	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke packaged goal", nil))
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want FAILED", response.Status)
+	}
+	if response.ErrorCode == nil || *response.ErrorCode != factoryapi.InvocationResponseErrorCode("INVOCATION_RUNTIME_FAILURE") {
+		gotCode := "<nil>"
+		if response.ErrorCode != nil {
+			gotCode = string(*response.ErrorCode)
+		}
+		t.Fatalf("invocation errorCode = %q, want INVOCATION_RUNTIME_FAILURE", gotCode)
+	}
+	if response.Message == nil || !strings.Contains(*response.Message, "invocation failed") || !strings.Contains(*response.Message, `state "goal:failed"`) {
+		t.Fatalf("invocation message = %#v, want failed goal explanation", response.Message)
+	}
+	if response.PrimaryResult != nil {
+		t.Fatalf("invocation primaryResult = %#v, want nil on failed output", response.PrimaryResult)
+	}
+}
+
 func TestPackagedGoalBuiltInTopology_PlainReviewLaneEndToEnd(t *testing.T) {
 	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
 	if err != nil {

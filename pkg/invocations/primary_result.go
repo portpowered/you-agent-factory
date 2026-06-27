@@ -19,6 +19,7 @@ type PrimaryResultErrorCode string
 
 const (
 	PrimaryResultErrorCodeUnresolved  PrimaryResultErrorCode = "INVOCATION_PRIMARY_RESULT_UNRESOLVED"
+	PrimaryResultErrorCodeFailed      PrimaryResultErrorCode = "INVOCATION_RUNTIME_FAILURE"
 	PrimaryResultErrorCodeBlocked     PrimaryResultErrorCode = "INVOCATION_BLOCKED"
 	PrimaryResultErrorCodeNeedsHuman  PrimaryResultErrorCode = "INVOCATION_NEEDS_HUMAN"
 	PrimaryResultErrorCodePaused      PrimaryResultErrorCode = "INVOCATION_PAUSED"
@@ -227,6 +228,59 @@ func ClassifyMissingPrimaryResultWorkItem(
 	return classifiedPrimaryResultError(requestID, resolvedInvocationReturnPolicy(invocationReturn), item)
 }
 
+// ClassifyFailedInvocation inspects scoped failed work or failed session
+// lifecycle facts that explain why no primary result was produced.
+func ClassifyFailedInvocation(
+	sessionID string,
+	input PrimaryResultSelectionInput,
+) (*PrimaryResultError, bool) {
+	requestID := strings.TrimSpace(input.RequestID)
+	if requestID == "" {
+		return nil, false
+	}
+	request, ok := input.WorldState.WorkRequestsByID[requestID]
+	if !ok || len(request.WorkItems) == 0 {
+		return nil, false
+	}
+
+	scope := invocationScopeWorkIDs(input.WorldState.PayloadLineage, request.WorkItems)
+	if item, found := scopedFailedWorkItem(input.WorldState, scope, request.WorkItems); found {
+		return failedPrimaryResultError(
+			requestID,
+			resolvedInvocationReturnPolicy(input.InvocationReturn),
+			item,
+		), true
+	}
+	if item, found := requestMatchedFailedWorkItem(input.WorldState, requestID); found {
+		return failedPrimaryResultError(
+			requestID,
+			resolvedInvocationReturnPolicy(input.InvocationReturn),
+			item,
+		), true
+	}
+
+	if strings.TrimSpace(input.WorldState.FactoryState) == string(interfaces.FactoryStateFailed) {
+		sessionLabel := invocationSessionLabel(sessionID, input.WorldState)
+		return &PrimaryResultError{
+			Code:      PrimaryResultErrorCodeFailed,
+			RequestID: requestID,
+			Policy:    resolvedInvocationReturnPolicy(input.InvocationReturn),
+			Message:   fmt.Sprintf("invocation failed: session %q reached a failed state before a primary result was available", sessionLabel),
+		}, true
+	}
+	if bracket := input.WorldState.SessionBracket; bracket != nil && strings.TrimSpace(bracket.FinalStatus) == string(interfaces.FactoryStateFailed) {
+		sessionLabel := invocationSessionLabel(sessionID, input.WorldState)
+		return &PrimaryResultError{
+			Code:      PrimaryResultErrorCodeFailed,
+			RequestID: requestID,
+			Policy:    resolvedInvocationReturnPolicy(input.InvocationReturn),
+			Message:   fmt.Sprintf("invocation failed: session %q reached a failed state before a primary result was available", sessionLabel),
+		}, true
+	}
+
+	return nil, false
+}
+
 func classifiedPrimaryResultError(
 	requestID string,
 	policy string,
@@ -252,6 +306,19 @@ func classifiedPrimaryResultError(
 		}
 	default:
 		return nil
+	}
+}
+
+func failedPrimaryResultError(
+	requestID string,
+	policy string,
+	item interfaces.FactoryWorkItem,
+) *PrimaryResultError {
+	return &PrimaryResultError{
+		Code:      PrimaryResultErrorCodeFailed,
+		RequestID: requestID,
+		Policy:    policy,
+		Message:   fmt.Sprintf("invocation failed: work %q reached failed state %q before a primary result was available", workDisplayLabel(item), workStateLabel(item)),
 	}
 }
 
@@ -483,6 +550,115 @@ func scopedWorkItemInState(
 		}
 	}
 	return interfaces.FactoryWorkItem{}, false
+}
+
+func scopedFailedWorkItem(
+	state interfaces.FactoryWorldState,
+	scope map[string]struct{},
+	submitted []interfaces.FactoryWorkItem,
+) (interfaces.FactoryWorkItem, bool) {
+	if item, ok := scopedWorkItemInState(state.FailedWorkItemsByID, scope, "failed"); ok {
+		return item, true
+	}
+	terminalIDs := sortedTerminalWorkIDs(state.TerminalWorkByID)
+	for _, workID := range terminalIDs {
+		if _, ok := scope[workID]; !ok {
+			continue
+		}
+		terminal := state.TerminalWorkByID[workID]
+		if strings.TrimSpace(terminal.Status) != "FAILED" {
+			continue
+		}
+		return terminal.WorkItem, true
+	}
+	traceIDs := submittedTraceIDs(submitted)
+	if len(traceIDs) == 0 {
+		return interfaces.FactoryWorkItem{}, false
+	}
+	return traceMatchedFailedWorkItem(state.FailedWorkItemsByID, traceIDs)
+}
+
+func submittedTraceIDs(submitted []interfaces.FactoryWorkItem) map[string]struct{} {
+	traceIDs := make(map[string]struct{}, len(submitted))
+	for _, item := range submitted {
+		traceID := strings.TrimSpace(item.TraceID)
+		if traceID == "" {
+			continue
+		}
+		traceIDs[traceID] = struct{}{}
+	}
+	return traceIDs
+}
+
+func traceMatchedFailedWorkItem(
+	workItems map[string]interfaces.FactoryWorkItem,
+	traceIDs map[string]struct{},
+) (interfaces.FactoryWorkItem, bool) {
+	if len(workItems) == 0 || len(traceIDs) == 0 {
+		return interfaces.FactoryWorkItem{}, false
+	}
+	ids := make([]string, 0, len(workItems))
+	for workID := range workItems {
+		ids = append(ids, workID)
+	}
+	sort.Strings(ids)
+	for _, workID := range ids {
+		item := workItems[workID]
+		if _, ok := traceIDs[strings.TrimSpace(item.TraceID)]; ok {
+			return item, true
+		}
+	}
+	return interfaces.FactoryWorkItem{}, false
+}
+
+func requestMatchedFailedWorkItem(
+	state interfaces.FactoryWorldState,
+	requestID string,
+) (interfaces.FactoryWorkItem, bool) {
+	trimmedRequestID := strings.TrimSpace(requestID)
+	if trimmedRequestID == "" || len(state.WorkStateChangesByWorkID) == 0 {
+		return interfaces.FactoryWorkItem{}, false
+	}
+	workIDs := make([]string, 0, len(state.WorkStateChangesByWorkID))
+	for workID := range state.WorkStateChangesByWorkID {
+		workIDs = append(workIDs, workID)
+	}
+	sort.Strings(workIDs)
+	for _, workID := range workIDs {
+		records := state.WorkStateChangesByWorkID[workID]
+		for _, record := range records {
+			if strings.TrimSpace(record.RequestID) != trimmedRequestID {
+				continue
+			}
+			if strings.TrimSpace(record.ToState) != "failed" && placeStateName(record.ToPlaceID) != "failed" {
+				continue
+			}
+			if item, ok := state.FailedWorkItemsByID[workID]; ok {
+				return item, true
+			}
+			if item, ok := state.WorkItemsByID[workID]; ok {
+				return item, true
+			}
+			return interfaces.FactoryWorkItem{
+				ID:         workID,
+				WorkTypeID: strings.TrimSpace(record.WorkTypeName),
+				State:      "failed",
+				PlaceID:    strings.TrimSpace(record.ToPlaceID),
+			}, true
+		}
+	}
+	return interfaces.FactoryWorkItem{}, false
+}
+
+func placeStateName(placeID string) string {
+	trimmed := strings.TrimSpace(placeID)
+	if trimmed == "" {
+		return ""
+	}
+	if _, suffix, ok := strings.Cut(trimmed, ":"); ok {
+		return suffix
+	}
+	return trimmed
 }
 
 func workDisplayLabel(item interfaces.FactoryWorkItem) string {

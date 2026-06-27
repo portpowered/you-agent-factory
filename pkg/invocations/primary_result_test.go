@@ -164,6 +164,103 @@ func TestClassifyMissingPrimaryResult_ReturnsNeedsHumanForScopedWorkItem(t *test
 	}
 }
 
+func TestClassifyFailedInvocation_ReturnsFailedForScopedFailedWorkItem(t *testing.T) {
+	state := invocationWorldStateFixture()
+	rootInitial := invocationWorkItem("work-root", "goal", "init", "Failed goal", "goal:init")
+	rootFailed := invocationWorkItem("work-root", "goal", "failed", "Failed goal", "goal:failed")
+	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
+	state.FailedWorkItemsByID[rootFailed.ID] = rootFailed
+	state.TerminalWorkByID[rootFailed.ID] = interfaces.FactoryTerminalWork{WorkItem: rootFailed, Status: "FAILED"}
+
+	got, ok := ClassifyFailedInvocation("session-1", PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if !ok {
+		t.Fatal("expected failed classification")
+	}
+	if got.Code != PrimaryResultErrorCodeFailed {
+		t.Fatalf("code = %q, want %q", got.Code, PrimaryResultErrorCodeFailed)
+	}
+	if got.Message != `invocation failed: work "Failed goal" reached failed state "goal:failed" before a primary result was available` {
+		t.Fatalf("message = %q", got.Message)
+	}
+}
+
+func TestClassifyFailedInvocation_MatchesFailedWorkBySubmittedTrace(t *testing.T) {
+	state := invocationWorldStateFixture()
+	rootInitial := invocationWorkItem("work-root", "goal", "init", "Failed goal", "goal:init")
+	rootInitial.TraceID = "trace-shared"
+	failedChild := invocationWorkItem("work-failed-child", "goal", "failed", "Failed goal child", "goal:failed")
+	failedChild.TraceID = "trace-shared"
+	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
+	state.FailedWorkItemsByID[failedChild.ID] = failedChild
+
+	got, ok := ClassifyFailedInvocation("session-1", PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if !ok {
+		t.Fatal("expected failed classification")
+	}
+	if got.Code != PrimaryResultErrorCodeFailed {
+		t.Fatalf("code = %q, want %q", got.Code, PrimaryResultErrorCodeFailed)
+	}
+	if got.Message != `invocation failed: work "Failed goal child" reached failed state "goal:failed" before a primary result was available` {
+		t.Fatalf("message = %q", got.Message)
+	}
+}
+
+func TestClassifyFailedInvocation_MatchesFailedWorkByRequestStateChange(t *testing.T) {
+	state := invocationWorldStateFixture()
+	rootInitial := invocationWorkItem("work-root", "goal", "init", "Failed goal", "goal:init")
+	failedChild := invocationWorkItem("work-failed-child", "goal", "failed", "Failed goal child", "goal:failed")
+	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
+	state.WorkStateChangesByWorkID[failedChild.ID] = []interfaces.FactoryWorldWorkStateChangeRecord{{
+		WorkID:       failedChild.ID,
+		WorkTypeName: failedChild.WorkTypeID,
+		ToState:      "failed",
+		ToPlaceID:    failedChild.PlaceID,
+		RequestID:    "request-1",
+	}}
+	state.FailedWorkItemsByID[failedChild.ID] = failedChild
+
+	got, ok := ClassifyFailedInvocation("session-1", PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if !ok {
+		t.Fatal("expected failed classification")
+	}
+	if got.Code != PrimaryResultErrorCodeFailed {
+		t.Fatalf("code = %q, want %q", got.Code, PrimaryResultErrorCodeFailed)
+	}
+	if got.Message != `invocation failed: work "Failed goal child" reached failed state "goal:failed" before a primary result was available` {
+		t.Fatalf("message = %q", got.Message)
+	}
+}
+
+func TestClassifyFailedInvocation_FallsBackToFailedSessionState(t *testing.T) {
+	state := invocationWorldStateFixture()
+	rootInitial := invocationWorkItem("work-root", "goal", "init", "Failed goal", "goal:init")
+	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
+	state.FactoryState = string(interfaces.FactoryStateFailed)
+
+	got, ok := ClassifyFailedInvocation("session-1", PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if !ok {
+		t.Fatal("expected failed classification")
+	}
+	if got.Code != PrimaryResultErrorCodeFailed {
+		t.Fatalf("code = %q, want %q", got.Code, PrimaryResultErrorCodeFailed)
+	}
+	if got.Message != `invocation failed: session "session-1" reached a failed state before a primary result was available` {
+		t.Fatalf("message = %q", got.Message)
+	}
+}
+
 func TestClassifyInvocationControlState_ReturnsPausedForPausedSession(t *testing.T) {
 	state := invocationWorldStateFixture()
 	rootInitial := invocationWorkItem("work-root", "goal", "init", "Paused goal", "goal:init")
@@ -240,10 +337,12 @@ func TestClassifyInvocationControlState_PrefersPausedOverInterrupted(t *testing.
 
 func invocationWorldStateFixture() interfaces.FactoryWorldState {
 	return interfaces.FactoryWorldState{
-		PayloadLineage:   interfaces.WorkPayloadLineageProjection{},
-		WorkItemsByID:    make(map[string]interfaces.FactoryWorkItem),
-		WorkRequestsByID: make(map[string]interfaces.WorkRequestPayload),
-		TerminalWorkByID: make(map[string]interfaces.FactoryTerminalWork),
+		PayloadLineage:           interfaces.WorkPayloadLineageProjection{},
+		WorkItemsByID:            make(map[string]interfaces.FactoryWorkItem),
+		WorkRequestsByID:         make(map[string]interfaces.WorkRequestPayload),
+		TerminalWorkByID:         make(map[string]interfaces.FactoryTerminalWork),
+		FailedWorkItemsByID:      make(map[string]interfaces.FactoryWorkItem),
+		WorkStateChangesByWorkID: make(map[string][]interfaces.FactoryWorldWorkStateChangeRecord),
 	}
 }
 

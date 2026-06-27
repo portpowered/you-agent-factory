@@ -89,6 +89,62 @@ func TestFactoryService_ResolveInvocationWaitTerminal_ReturnsInterruptedClassifi
 	}
 }
 
+func TestFactoryService_ResolveInvocationWaitTerminal_ReturnsFailedClassification(t *testing.T) {
+	t.Parallel()
+
+	work := interfaces.FactoryWorkItem{
+		ID:          "work-root",
+		WorkTypeID:  "goal",
+		State:       "failed",
+		DisplayName: "Failed goal",
+		PlaceID:     "goal:failed",
+	}
+	worldState := interfaces.FactoryWorldState{
+		PayloadLineage: interfaces.WorkPayloadLineageProjection{},
+		WorkRequestsByID: map[string]interfaces.WorkRequestPayload{
+			"request-1": {
+				RequestID: "request-1",
+				Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+				WorkItems: []interfaces.FactoryWorkItem{{
+					ID:          "work-root",
+					WorkTypeID:  "goal",
+					State:       "init",
+					DisplayName: "Failed goal",
+					PlaceID:     "goal:init",
+				}},
+			},
+		},
+		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+			work.ID: work,
+		},
+		FailedWorkItemsByID: map[string]interfaces.FactoryWorkItem{
+			work.ID: work,
+		},
+		TerminalWorkByID: map[string]interfaces.FactoryTerminalWork{
+			work.ID: {WorkItem: work, Status: "FAILED"},
+		},
+	}
+
+	svc := &FactoryService{logger: zap.NewNop()}
+	result := svc.resolveInvocationWaitTerminal(
+		"session-failed-1",
+		sessionInvocationWaitInput{RequestID: "request-1"},
+		worldState,
+		false,
+		nil,
+	)
+
+	if result.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("status = %q, want FAILED", result.Status)
+	}
+	if result.ErrorCode != "INVOCATION_RUNTIME_FAILURE" {
+		t.Fatalf("errorCode = %q, want INVOCATION_RUNTIME_FAILURE", result.ErrorCode)
+	}
+	if !strings.Contains(result.Message, `work "Failed goal"`) || !strings.Contains(result.Message, `state "goal:failed"`) {
+		t.Fatalf("message = %q, want failed work and state detail", result.Message)
+	}
+}
+
 func serviceNamedFactoryPayload(t *testing.T, project string) []byte {
 	t.Helper()
 	return serviceNamedFactoryPayloadWithWorkType(t, project, "task")
