@@ -270,6 +270,7 @@ type aggregateSnapshotFactory struct {
 	engineState              *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 	engineStateErr           error
 	engineStateSnapshotCalls int
+	streamGenerationID       string
 	factoryEvents            []factoryapi.FactoryEvent
 	factoryEventsErr         error
 	factoryEventsCalls       int
@@ -298,7 +299,14 @@ func (f *aggregateSnapshotFactory) SubmitWorkRequest(ctx context.Context, reques
 	return result, nil
 }
 func (f *aggregateSnapshotFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
-	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
+	streamGenerationID := strings.TrimSpace(f.streamGenerationID)
+	if streamGenerationID == "" && f.engineState != nil {
+		streamGenerationID = strings.TrimSpace(f.engineState.StreamGenerationID)
+	}
+	return &interfaces.FactoryEventStream{
+		StreamGenerationID: streamGenerationID,
+		Events:             make(chan factoryapi.FactoryEvent),
+	}, nil
 }
 func (f *aggregateSnapshotFactory) Pause(context.Context) error  { return f.pauseErr }
 func (f *aggregateSnapshotFactory) Resume(context.Context) error { return nil }
@@ -4237,6 +4245,30 @@ func TestFactoryService_RuntimeLogDiagnostics_ReportsRuntimeArtifacts(t *testing
 	}
 	if !diagnostics.StartTimeUTC.Equal(logSink.StartTimeUTC()) || !diagnostics.MetricsStartTimeUTC.Equal(metricsSink.StartTimeUTC()) {
 		t.Fatalf("diagnostic start times = %#v", diagnostics)
+	}
+}
+
+func TestRuntimeSessionBaseLogger_PreservesBaseLoggerWhenFileLoggingDisabled(t *testing.T) {
+	t.Parallel()
+
+	core, observed := observer.New(zap.InfoLevel)
+	logger := runtimebuild.NewSessionLogger(runtimeSessionBaseLogger(zap.New(core), nil), "session-1", "/tmp/folder", "/tmp/factory")
+
+	logger.Info("session logger still active")
+
+	entries := observed.FilterMessage("session logger still active").All()
+	if len(entries) != 1 {
+		t.Fatalf("session logger entry count = %d, want 1", len(entries))
+	}
+	fields := entries[0].ContextMap()
+	if got := fields["session_id"]; got != "session-1" {
+		t.Fatalf("session_id = %#v, want session-1", got)
+	}
+	if got := fields["folder_path"]; got != "/tmp/folder" {
+		t.Fatalf("folder_path = %#v, want /tmp/folder", got)
+	}
+	if got := fields["factory_dir"]; got != "/tmp/factory" {
+		t.Fatalf("factory_dir = %#v, want /tmp/factory", got)
 	}
 }
 

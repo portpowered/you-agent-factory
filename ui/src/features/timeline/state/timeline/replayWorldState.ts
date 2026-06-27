@@ -1,3 +1,4 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: Replay projection is intentionally centralized until checkpoint replay can be split safely.
 import type { FactoryEvent, FactoryRelation } from "../../../../api/events";
 import { FACTORY_EVENT_TYPES } from "../../../../api/events";
 import {
@@ -8,6 +9,7 @@ import {
   recordFailedCompletion,
   responseCompletion,
 } from "./replayCompletion";
+import { applyDispatchLifecycleEvent } from "./replayDispatchLifecycle";
 import {
   eventWorkTypeID,
   factoryWorkStateName,
@@ -32,6 +34,8 @@ import {
   resourceTokenID,
   traceToken,
 } from "./replayGraphState";
+import { applyOrchestratorProgressEvent } from "./replayOrchestratorProgress";
+import { applySessionLifecycleEvent } from "./replaySessionLifecycle";
 import {
   dispatchInputWorkItems,
   recordDispatchConsumedInputPayloadLineage,
@@ -61,12 +65,10 @@ import type {
   WorkRequestEvent,
   WorkStateChangeEvent,
 } from "./replayWorldStateTypes";
-import { applyDispatchLifecycleEvent } from "./replayDispatchLifecycle";
-import { applyOrchestratorProgressEvent } from "./replayOrchestratorProgress";
-import { applySessionLifecycleEvent } from "./replaySessionLifecycle";
 import { applyWorkStateChange } from "./replayWorldStateWorkStateChange";
 import { orderedEvents, uniqueSorted } from "./shared";
 import { dashboardTransitionID, isSystemTimeWorkItem } from "./systemTime";
+import { storeTextBlob } from "./text-blobs/timelineTextBlobs";
 import type { ReplayWorldState } from "./types";
 import { workItemRef } from "./workItemRef";
 
@@ -89,13 +91,35 @@ export function reconstructWorldState(
   const state = emptyReplayWorldState(selectedTick);
   for (const event of orderedEvents(events)) {
     if (event.context.tick <= selectedTick) {
-      applyEvent(state, event);
+      applyReplayEvent(state, event);
     }
   }
   return state;
 }
 
-function applyEvent(state: ReplayWorldState, event: FactoryEvent): void {
+export function advanceWorldStateFromCheckpoint(
+  checkpoint: ReplayWorldState,
+  events: FactoryEvent[],
+  selectedTick: number,
+): ReplayWorldState {
+  const checkpointTick = checkpoint.tick_count;
+  const state = checkpoint;
+  state.tick_count = selectedTick;
+  for (const event of orderedEvents(events)) {
+    if (
+      event.context.tick > checkpointTick &&
+      event.context.tick <= selectedTick
+    ) {
+      applyReplayEvent(state, event);
+    }
+  }
+  return state;
+}
+
+export function applyReplayEvent(
+  state: ReplayWorldState,
+  event: FactoryEvent,
+): void {
   switch (event.type) {
     case FACTORY_EVENT_TYPES.runRequest:
       state.factory = structuredClone(
@@ -325,7 +349,12 @@ function applyInferenceRequest(
     attempt: payload.attempt,
     dispatch_id: dispatchID,
     inference_request_id: payload.inferenceRequestId,
-    prompt: payload.prompt,
+    prompt: "",
+    promptTextBlobID: storeTextBlob(
+      state,
+      `inference:${payload.inferenceRequestId}:prompt`,
+      payload.prompt,
+    ),
     request_time: event.context.eventTime,
     transition_id: dashboardTransitionID(transitionID),
     working_directory: payload.workingDirectory,
@@ -360,9 +389,15 @@ function applyInferenceResponse(
     inference_request_id: payload.inferenceRequestId,
     outcome: payload.outcome,
     prompt: current?.prompt ?? "",
+    promptTextBlobID: current?.promptTextBlobID,
     provider_session: payload.providerSession,
     request_time: current?.request_time ?? "",
-    response: payload.response,
+    response: undefined,
+    responseTextBlobID: storeTextBlob(
+      state,
+      `inference:${payload.inferenceRequestId}:response`,
+      payload.response,
+    ),
     response_time: event.context.eventTime,
     transition_id: dashboardTransitionID(transitionID),
   };

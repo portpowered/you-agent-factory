@@ -149,11 +149,19 @@ describe("reconstructWorldState inference success", () => {
         dispatch_id: dispatchID,
         inference_request_id: inferenceRequestID,
         outcome: "SUCCEEDED",
-        prompt: "Review the story.",
-        response: "Looks good.",
+        prompt: "",
+        promptTextBlobID: `inference:${inferenceRequestID}:prompt`,
+        response: undefined,
+        responseTextBlobID: `inference:${inferenceRequestID}:response`,
         transition_id: "review",
       }),
     );
+    expect(state.textBlobsByID[`inference:${inferenceRequestID}:prompt`]).toBe(
+      "Review the story.",
+    );
+    expect(
+      state.textBlobsByID[`inference:${inferenceRequestID}:response`],
+    ).toBe("Looks good.");
   });
 });
 

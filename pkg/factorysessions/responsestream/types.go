@@ -18,10 +18,30 @@ const (
 	// EventKindResponseFragment carries partial provider response text before
 	// terminal workstation completion.
 	EventKindResponseFragment EventKind = "RESPONSE_FRAGMENT"
+	// EventKindStreamCompleted marks provider-stream terminal success for one
+	// dispatch without changing final WorkResult routing.
+	EventKindStreamCompleted EventKind = "STREAM_COMPLETED"
+	// EventKindStreamFailed marks provider-stream terminal failure for one
+	// dispatch without changing final WorkResult routing.
+	EventKindStreamFailed EventKind = "STREAM_FAILED"
 	// EventKindCompactionSignal records bounded-fidelity degradation such as
 	// truncation, coalescing, or age eviction for downstream consumers. At most
 	// one compaction signal is retained; later compactions replace it at the tail.
 	EventKindCompactionSignal EventKind = "STREAM_COMPACTION_SIGNAL"
+)
+
+// EventType identifies the provider-neutral semantic shape carried by one
+// internal response-stream event.
+type EventType string
+
+const (
+	EventTypeUnknown   EventType = "UNKNOWN"
+	EventTypeStarted   EventType = "STARTED"
+	EventTypeProgress  EventType = "PROGRESS"
+	EventTypeTextDelta EventType = "TEXT_DELTA"
+	EventTypeFinalText EventType = "FINAL_TEXT"
+	EventTypeFailed    EventType = "FAILED"
+	EventTypeCanceled  EventType = "CANCELED"
 )
 
 // CompactionReason classifies why retained stream fidelity was reduced.
@@ -58,16 +78,16 @@ func DefaultRetentionLimits() RetentionLimits {
 // RetentionAccounting summarizes the current retained window for byte-size,
 // event-count, and age-based retention decisions.
 type RetentionAccounting struct {
-	EventCount       int
+	EventCount        int
 	TotalPayloadBytes int
-	OldestRecordedAt time.Time
+	OldestRecordedAt  time.Time
 }
 
 // ReadResult is the bounded catch-up view for one consumer resume point.
 type ReadResult struct {
-	Events              []Event
-	BehindRetainedWindow bool
-	Compaction          *CompactionSummary
+	Events                []Event
+	BehindRetainedWindow  bool
+	Compaction            *CompactionSummary
 	FirstRetainedSequence int64
 }
 
@@ -101,6 +121,9 @@ type Event struct {
 	// compaction signals.
 	Kind EventKind
 
+	// Type records the provider-neutral semantic meaning of the event.
+	Type EventType
+
 	// DispatchID correlates one stream record with a workstation dispatch when set.
 	DispatchID string
 
@@ -110,6 +133,15 @@ type Event struct {
 
 	// Payload carries the transient progress or response fragment body.
 	Payload string
+
+	// ExternalEventType preserves the original provider event name for
+	// maintainer diagnostics without promoting provider-native schemas into
+	// public contracts.
+	ExternalEventType string
+
+	// Metadata carries provider-boundary diagnostic identifiers such as runner,
+	// workstation, or work ids that stay local to the internal stream.
+	Metadata map[string]string
 
 	// Compaction summarizes fidelity loss when Kind is EventKindCompactionSignal.
 	Compaction *CompactionSummary

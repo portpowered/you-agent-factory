@@ -3,9 +3,9 @@ import {
   DashboardDescriptionList,
   DashboardLabel,
   DashboardText,
-} from "../../../components/ui";
-import type { FactorySessionDispatchDrilldownModel } from "../lib/factory-session-dispatch-detail";
-import { getFactorySessionDetailMessages } from "../messages/factory-session-detail";
+} from "../../../../components/ui";
+import type { FactorySessionDispatchDrilldownModel } from "../../lib/factory-session-dispatch-detail";
+import { getFactorySessionDetailMessages } from "../../messages/factory-session-detail";
 import type { ReactNode } from "react";
 
 export function DispatchDetailContent({

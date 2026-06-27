@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -386,6 +388,61 @@ func hashText(value string) string {
 	}
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:])
+}
+
+func looksLikeStructuredCodexPayload(raw string, fallbackEventType string) bool {
+	if strings.TrimSpace(fallbackEventType) != "" {
+		return true
+	}
+	trimmed := strings.TrimSpace(raw)
+	return strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")
+}
+
+func malformedCodexStructuredEvent(raw string, fallbackEventType string, diagnosticClass string, hasher hash.Hash) InferenceProgressFragment {
+	return InferenceProgressFragment{
+		Kind:              ProgressFragmentKind,
+		Type:              NormalizedEventTypeUnknown,
+		Payload:           "codex event omitted",
+		ExternalEventType: strings.TrimSpace(fallbackEventType),
+		Metadata:          codexRawDiagnosticMetadata(raw, diagnosticClass, hasher),
+	}
+}
+
+func annotateBoundedPayloadMetadata(metadata map[string]string, original string, bounded string) map[string]string {
+	trimmedOriginal := strings.TrimSpace(original)
+	if trimmedOriginal == "" {
+		return metadata
+	}
+	annotated := cloneStringMap(metadata)
+	if annotated == nil {
+		annotated = map[string]string{}
+	}
+	annotated[codexMetadataTextBytesKey] = strconv.Itoa(len([]byte(trimmedOriginal)))
+	if len([]byte(bounded)) < len([]byte(trimmedOriginal)) {
+		annotated[codexMetadataTruncatedKey] = "true"
+	}
+	return annotated
+}
+
+func codexRawDiagnosticMetadata(raw string, diagnosticClass string, hasher hash.Hash) map[string]string {
+	metadata := map[string]string{
+		codexMetadataDiagnosticKey: strings.TrimSpace(diagnosticClass),
+	}
+	trimmed := strings.TrimSpace(raw)
+	if trimmed != "" {
+		metadata[codexMetadataRawBytesKey] = strconv.Itoa(len([]byte(trimmed)))
+		metadata[codexMetadataRawSHA256Key] = sha256Digest(trimmed, hasher)
+	}
+	return metadata
+}
+
+func sha256Digest(raw string, hasher hash.Hash) string {
+	if hasher == nil {
+		hasher = sha256.New()
+	}
+	hasher.Reset()
+	_, _ = hasher.Write([]byte(raw))
+	return fmt.Sprintf("%x", hasher.Sum(nil))
 }
 
 func workerEventExitCode(exitCode int, present bool, includeZero bool) *int {

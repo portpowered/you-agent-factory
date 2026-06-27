@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,14 +22,18 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
+	"github.com/portpowered/infinite-you/pkg/logging"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -781,6 +786,121 @@ func TestFactoryService_ActivateNamedFactory_ReplacesOnlyActiveSession(t *testin
 	assertFactoryName(t, betaCurrent.Name, "beta", "beta current factory after default named activation")
 }
 
+func TestFactoryService_ActivateNamedFactory_ReplacesOnlyTargetSessionStreamGenerationID(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha", "beta", "gamma"},
+	})
+	defer harness.stop(t)
+
+	betaSessionID := harness.openFactorySession(t, "beta")
+	harness.waitIdle(t, defaultFactorySessionID, "default runtime")
+	harness.waitIdle(t, betaSessionID, "beta runtime")
+
+	defaultSnapshotBefore, err := harness.svc.GetEngineStateSnapshotForSession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshotForSession(default before): %v", err)
+	}
+	defaultStreamBefore, err := harness.svc.SubscribeFactoryEventsForSession(context.Background(), defaultFactorySessionID, nil)
+	if err != nil {
+		t.Fatalf("SubscribeFactoryEventsForSession(default before): %v", err)
+	}
+	betaSnapshotBefore, err := harness.svc.GetEngineStateSnapshotForSession(context.Background(), betaSessionID)
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshotForSession(beta before): %v", err)
+	}
+
+	if defaultSnapshotBefore.StreamGenerationID == "" {
+		t.Fatal("default snapshot stream generation id is empty")
+	}
+	if defaultStreamBefore.StreamGenerationID != defaultSnapshotBefore.StreamGenerationID {
+		t.Fatalf("default stream generation id = %q, want snapshot id %q", defaultStreamBefore.StreamGenerationID, defaultSnapshotBefore.StreamGenerationID)
+	}
+	if betaSnapshotBefore.StreamGenerationID == "" {
+		t.Fatal("beta snapshot stream generation id is empty")
+	}
+
+	if err := harness.svc.ActivateNamedFactory(context.Background(), "gamma"); err != nil {
+		t.Fatalf("ActivateNamedFactory(gamma): %v", err)
+	}
+
+	defaultSnapshotAfter, err := harness.svc.GetEngineStateSnapshotForSession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshotForSession(default after): %v", err)
+	}
+	defaultStreamAfter, err := harness.svc.SubscribeFactoryEventsForSession(context.Background(), defaultFactorySessionID, nil)
+	if err != nil {
+		t.Fatalf("SubscribeFactoryEventsForSession(default after): %v", err)
+	}
+	betaSnapshotAfter, err := harness.svc.GetEngineStateSnapshotForSession(context.Background(), betaSessionID)
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshotForSession(beta after): %v", err)
+	}
+
+	if defaultSnapshotAfter.StreamGenerationID == defaultSnapshotBefore.StreamGenerationID {
+		t.Fatalf("default stream generation id after activation = %q, want distinct from %q", defaultSnapshotAfter.StreamGenerationID, defaultSnapshotBefore.StreamGenerationID)
+	}
+	if defaultStreamAfter.StreamGenerationID != defaultSnapshotAfter.StreamGenerationID {
+		t.Fatalf("default stream generation id after activation = %q, want snapshot id %q", defaultStreamAfter.StreamGenerationID, defaultSnapshotAfter.StreamGenerationID)
+	}
+	if betaSnapshotAfter.StreamGenerationID != betaSnapshotBefore.StreamGenerationID {
+		t.Fatalf("beta stream generation id after default replacement = %q, want unchanged %q", betaSnapshotAfter.StreamGenerationID, betaSnapshotBefore.StreamGenerationID)
+	}
+}
+
+func TestFactoryService_ActivateNamedFactory_RefreshesLiveSessionIdentityAcrossReadAndHandshake(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha", "beta", "gamma"},
+	})
+	defer harness.stop(t)
+
+	betaSessionID := harness.openFactorySession(t, "beta")
+	harness.waitIdle(t, defaultFactorySessionID, "default runtime")
+	harness.waitIdle(t, betaSessionID, "beta runtime")
+
+	server := httptest.NewServer(api.NewServer(harness.svc, 0, zap.NewNop()).Handler())
+	defer server.Close()
+
+	defaultSessionBefore := getLiveFactorySession(t, server.URL, defaultFactorySessionID)
+	defaultIDBefore := requireLiveSessionStreamGenerationID(t, defaultSessionBefore, defaultFactorySessionID, "before activation")
+	defaultHandshakeBefore := getLiveSessionEventStreamGenerationID(t, server.URL, defaultFactorySessionID)
+	if defaultHandshakeBefore != defaultIDBefore {
+		t.Fatalf("default handshake stream generation id before activation = %q, want session read id %q", defaultHandshakeBefore, defaultIDBefore)
+	}
+
+	betaSessionBefore := getLiveFactorySession(t, server.URL, betaSessionID)
+	betaIDBefore := requireLiveSessionStreamGenerationID(t, betaSessionBefore, betaSessionID, "before activation")
+	betaHandshakeBefore := getLiveSessionEventStreamGenerationID(t, server.URL, betaSessionID)
+	if betaHandshakeBefore != betaIDBefore {
+		t.Fatalf("beta handshake stream generation id before activation = %q, want session read id %q", betaHandshakeBefore, betaIDBefore)
+	}
+
+	if err := harness.svc.ActivateNamedFactory(context.Background(), "gamma"); err != nil {
+		t.Fatalf("ActivateNamedFactory(gamma): %v", err)
+	}
+
+	defaultSessionAfter := getLiveFactorySession(t, server.URL, defaultFactorySessionID)
+	defaultIDAfter := requireLiveSessionStreamGenerationID(t, defaultSessionAfter, defaultFactorySessionID, "after activation")
+	if defaultIDAfter == defaultIDBefore {
+		t.Fatalf("default session stream generation id after activation = %q, want distinct from %q", defaultIDAfter, defaultIDBefore)
+	}
+	defaultHandshakeAfter := getLiveSessionEventStreamGenerationID(t, server.URL, defaultFactorySessionID)
+	if defaultHandshakeAfter != defaultIDAfter {
+		t.Fatalf("default handshake stream generation id after activation = %q, want session read id %q", defaultHandshakeAfter, defaultIDAfter)
+	}
+
+	betaSessionAfter := getLiveFactorySession(t, server.URL, betaSessionID)
+	betaIDAfter := requireLiveSessionStreamGenerationID(t, betaSessionAfter, betaSessionID, "after activation")
+	if betaIDAfter != betaIDBefore {
+		t.Fatalf("beta session stream generation id after default replacement = %q, want unchanged %q", betaIDAfter, betaIDBefore)
+	}
+	betaHandshakeAfter := getLiveSessionEventStreamGenerationID(t, server.URL, betaSessionID)
+	if betaHandshakeAfter != betaIDAfter {
+		t.Fatalf("beta handshake stream generation id after default replacement = %q, want session read id %q", betaHandshakeAfter, betaIDAfter)
+	}
+}
+
 func TestFactoryService_SaveCurrentFactoryForSession_ReplacesOnlyTargetedSession(t *testing.T) {
 	harness := startRunningSessionService(t, runningSessionServiceOptions{
 		defaultFactory: "alpha",
@@ -1365,6 +1485,9 @@ func TestFactoryService_GetFactorySession_ProjectsLegacyPetriRuntime(t *testing.
 	if session.Runtime.OrchestratorKind != factoryapi.PETRI {
 		t.Fatalf("orchestrator kind = %q, want PETRI", session.Runtime.OrchestratorKind)
 	}
+	if session.Runtime.StreamIdentity == nil || strings.TrimSpace(session.Runtime.StreamIdentity.StreamGenerationID) == "" {
+		t.Fatalf("streamIdentity = %#v, want non-empty streamGenerationID", session.Runtime.StreamIdentity)
+	}
 	if session.Runtime.Petri == nil {
 		t.Fatal("petri projection is nil")
 	}
@@ -1376,6 +1499,104 @@ func TestFactoryService_GetFactorySession_ProjectsLegacyPetriRuntime(t *testing.
 	}
 	if session.Runtime.Lifecycle.UpdatedAt.Before(session.Runtime.Lifecycle.StartedAt.Add(-time.Minute)) {
 		t.Fatalf("lifecycle ordering = %#v", session.Runtime.Lifecycle)
+	}
+}
+
+func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityRemainsStableAcrossReads(t *testing.T) {
+	startedAt := time.Date(2026, 6, 26, 11, 5, 0, 0, time.UTC)
+	factoryCfg := &interfaces.FactoryConfig{
+		Name: "dynamic-workflow",
+		Orchestrator: &interfaces.FactoryOrchestratorConfig{
+			Kind: interfaces.OrchestratorKindJavaScript,
+			JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
+				Dialect:   "workflow-v1",
+				SourceRef: "factory/workflows/review.js",
+			},
+		},
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, nil, nil)
+	svc := &FactoryService{cfg: &FactoryServiceConfig{Dir: t.TempDir()}}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
+		runtimeInstanceID: "backend-scope-js",
+		startedAtUTC:      startedAt,
+		runtimeCfg:        runtimeCfg,
+		factory: &aggregateSnapshotFactory{
+			engineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+				LifecycleControlStatus: string(factoryapi.FactorySessionDurableLifecycleStatusRunning),
+			},
+		},
+	})
+
+	first, err := svc.GetFactorySession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetFactorySession first read: %v", err)
+	}
+	second, err := svc.GetFactorySession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetFactorySession second read: %v", err)
+	}
+	if first.Runtime.StreamIdentity == nil || second.Runtime.StreamIdentity == nil {
+		t.Fatalf("stream identity missing across reads: first=%#v second=%#v", first.Runtime.StreamIdentity, second.Runtime.StreamIdentity)
+	}
+	if *first.Runtime.StreamIdentity != *second.Runtime.StreamIdentity {
+		t.Fatalf("stream identity changed across reads: first=%#v second=%#v", first.Runtime.StreamIdentity, second.Runtime.StreamIdentity)
+	}
+	if first.Runtime.StreamIdentity.StreamGenerationID != startedAt.Format(time.RFC3339Nano) {
+		t.Fatalf("stream generation id = %q, want %q", first.Runtime.StreamIdentity.StreamGenerationID, startedAt.Format(time.RFC3339Nano))
+	}
+}
+
+func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityMatchesEventHandshakeSnapshotToken(t *testing.T) {
+	startedAt := time.Date(2026, 6, 27, 8, 0, 0, 0, time.UTC)
+	factoryCfg := &interfaces.FactoryConfig{
+		Name: "dynamic-workflow",
+		Orchestrator: &interfaces.FactoryOrchestratorConfig{
+			Kind: interfaces.OrchestratorKindJavaScript,
+			JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
+				Dialect:   "workflow-v1",
+				SourceRef: "factory/workflows/review.js",
+			},
+		},
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, nil, nil)
+	svc := &FactoryService{cfg: &FactoryServiceConfig{Dir: t.TempDir()}}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
+		runtimeInstanceID: "backend-scope-js",
+		startedAtUTC:      startedAt,
+		runtimeCfg:        runtimeCfg,
+		factory: &aggregateSnapshotFactory{
+			engineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+				LifecycleControlStatus: string(factoryapi.FactorySessionDurableLifecycleStatusRunning),
+				StreamGenerationID:     "snapshot-stream-token",
+			},
+		},
+	})
+	server := api.NewServer(svc, 0, zap.NewNop()).Handler()
+	sessionRecorder := httptest.NewRecorder()
+	sessionRequest := httptest.NewRequest(http.MethodGet, "/factory-sessions/"+defaultFactorySessionID, nil)
+	server.ServeHTTP(sessionRecorder, sessionRequest)
+	if sessionRecorder.Code != http.StatusOK {
+		t.Fatalf("GET /factory-sessions/%s status = %d, want 200", defaultFactorySessionID, sessionRecorder.Code)
+	}
+	var session factoryapi.FactorySession
+	if err := json.NewDecoder(sessionRecorder.Body).Decode(&session); err != nil {
+		t.Fatalf("decode factory session: %v", err)
+	}
+	streamGenerationID := requireLiveSessionStreamGenerationID(t, session, defaultFactorySessionID, "javascript session read")
+	if streamGenerationID != "snapshot-stream-token" {
+		t.Fatalf("session read stream generation id = %q, want snapshot token", streamGenerationID)
+	}
+	eventsCtx, cancelEvents := context.WithCancel(context.Background())
+	cancelEvents()
+	eventsRecorder := httptest.NewRecorder()
+	eventsRequest := httptest.NewRequest(http.MethodGet, "/factory-sessions/"+defaultFactorySessionID+"/events", nil).WithContext(eventsCtx)
+	server.ServeHTTP(eventsRecorder, eventsRequest)
+	if eventsRecorder.Code != http.StatusOK {
+		t.Fatalf("GET /factory-sessions/%s/events status = %d, want 200", defaultFactorySessionID, eventsRecorder.Code)
+	}
+	handshakeGenerationID := eventsRecorder.Header().Get("X-Factory-Session-Stream-Generation-Id")
+	if handshakeGenerationID != streamGenerationID {
+		t.Fatalf("event handshake stream generation id = %q, want session read id %q", handshakeGenerationID, streamGenerationID)
 	}
 }
 
@@ -1755,6 +1976,31 @@ func getLiveFactorySession(t *testing.T, serverURL, sessionID string) factoryapi
 	return session
 }
 
+func getLiveSessionEventStreamGenerationID(t *testing.T, serverURL, sessionID string) string {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, serverURL+"/factory-sessions/"+sessionID+"/events", nil)
+	if err != nil {
+		t.Fatalf("new GET /factory-sessions/%s/events request: %v", sessionID, err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /factory-sessions/%s/events: %v", sessionID, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET /factory-sessions/%s/events status = %d, want 200", sessionID, resp.StatusCode)
+	}
+	return resp.Header.Get("X-Factory-Session-Stream-Generation-Id")
+}
+
+func requireLiveSessionStreamGenerationID(t *testing.T, session factoryapi.FactorySession, sessionID, label string) string {
+	t.Helper()
+	if session.Runtime.StreamIdentity == nil || strings.TrimSpace(session.Runtime.StreamIdentity.StreamGenerationID) == "" {
+		t.Fatalf("%s session read streamIdentity for %s = %#v, want non-empty streamGenerationID", label, sessionID, session.Runtime.StreamIdentity)
+	}
+	return strings.TrimSpace(session.Runtime.StreamIdentity.StreamGenerationID)
+}
+
 func assertSessionWorkNotAtPlace(t *testing.T, svc *FactoryService, sessionID, placeID string, duration time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(duration)
@@ -2076,6 +2322,17 @@ func findLifecycleControlLog(t *testing.T, observed *observer.ObservedLogs, mess
 	return observer.LoggedEntry{}
 }
 
+func findObservedLog(t *testing.T, observed *observer.ObservedLogs, message string) observer.LoggedEntry {
+	t.Helper()
+	for _, entry := range observed.All() {
+		if entry.Message == message {
+			return entry
+		}
+	}
+	t.Fatalf("log %q not found in %#v", message, observed.All())
+	return observer.LoggedEntry{}
+}
+
 func assertLogField(t *testing.T, entry observer.LoggedEntry, key, want string) {
 	t.Helper()
 	for _, field := range entry.Context {
@@ -2320,6 +2577,139 @@ func TestGetFactorySession_MissingLiveSessionReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestFactoryService_GetFactorySessionSyncPreflight_ValidatesReconnectCursor(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	session := harness.requireSession(t, defaultFactorySessionID)
+	eventHistory := liveSessionHandle(session).runtime.eventHistory
+	recorded := eventHistory.Events()
+	if len(recorded) == 0 {
+		t.Fatal("event history = empty, want initial structure event")
+	}
+
+	valid, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, &interfaces.FactoryEventReconnectCursor{
+		AfterEventID: recorded[0].Id,
+	})
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(valid): %v", err)
+	}
+	assertSyncPreflightReasonCode(t, valid, factoryapi.Ok, "valid")
+	assertSyncPreflightCheckpointReusable(t, valid, true, "valid")
+	assertSyncPreflightCursorState(t, valid, true, true, "valid")
+	assertSyncPreflightDefaultSessionIdentity(t, valid)
+
+	stale, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, &interfaces.FactoryEventReconnectCursor{
+		AfterEventID: "factory-event/missing-preflight-cursor",
+	})
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(stale): %v", err)
+	}
+	assertSyncPreflightReasonCode(t, stale, factoryapi.CursorStale, "stale")
+	assertSyncPreflightCheckpointReusable(t, stale, false, "stale")
+	assertSyncPreflightCursorState(t, stale, true, false, "stale")
+}
+
+func TestFactoryService_GetFactorySessionSyncPreflight_MissingSessionReturnsTypedOutcome(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), "live-session-missing-001", nil)
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(missing): %v", err)
+	}
+	if response.ReasonCode != factoryapi.SessionNotFound {
+		t.Fatalf("reasonCode = %q, want %q", response.ReasonCode, factoryapi.SessionNotFound)
+	}
+	if response.CheckpointReusable {
+		t.Fatal("checkpointReusable = true, want false")
+	}
+	if response.BackendScopeId != nil || response.FactorySessionId != nil || response.StreamGenerationId != nil {
+		t.Fatalf("missing-session identity fields = %#v, want nil", response)
+	}
+}
+
+func TestFactoryService_GetFactorySessionSyncPreflight_DefaultAliasRemapReturnsTypedOutcome(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha", "beta"},
+	})
+	defer harness.stop(t)
+
+	betaSessionID := harness.openFactorySession(t, "beta")
+	harness.waitIdle(t, betaSessionID, "beta runtime")
+
+	if err := harness.svc.CloseFactorySession(context.Background(), defaultFactorySessionID); err != nil {
+		t.Fatalf("CloseFactorySession(default): %v", err)
+	}
+
+	response, err := harness.svc.GetFactorySessionSyncPreflight(context.Background(), defaultFactorySessionID, nil)
+	if err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight(remap): %v", err)
+	}
+	if response.ReasonCode != factoryapi.LogicalSessionRemap {
+		t.Fatalf("reasonCode = %q, want %q", response.ReasonCode, factoryapi.LogicalSessionRemap)
+	}
+	if response.CheckpointReusable {
+		t.Fatal("checkpointReusable = true, want false after remap")
+	}
+	if response.FactorySessionId == nil || *response.FactorySessionId != betaSessionID {
+		t.Fatalf("factorySessionId = %#v, want promoted beta session %q", response.FactorySessionId, betaSessionID)
+	}
+	betaSession := harness.requireSession(t, betaSessionID)
+	wantLogicalSessionKeyID := factorySessionLogicalSessionKeyID(betaSession)
+	if response.LogicalSessionKeyId == nil || *response.LogicalSessionKeyId != wantLogicalSessionKeyID {
+		t.Fatalf("logicalSessionKeyId = %v, want %q", response.LogicalSessionKeyId, wantLogicalSessionKeyID)
+	}
+	if response.StreamGenerationId == nil || !strings.Contains(*response.StreamGenerationId, betaSessionID) {
+		t.Fatalf("streamGenerationId = %#v, want promoted session-scoped generation", response.StreamGenerationId)
+	}
+	if response.ReconnectCursor.Provided || response.ReconnectCursor.ValidForStreamGeneration {
+		t.Fatalf("reconnect cursor = %#v, want absent and invalid", response.ReconnectCursor)
+	}
+}
+
+func assertSyncPreflightReasonCode(t *testing.T, response factoryapi.FactorySessionSyncPreflightResponse, want factoryapi.FactorySessionSyncPreflightReasonCode, label string) {
+	t.Helper()
+	if response.ReasonCode != want {
+		t.Fatalf("%s reasonCode = %q, want %q", label, response.ReasonCode, want)
+	}
+}
+
+func assertSyncPreflightCheckpointReusable(t *testing.T, response factoryapi.FactorySessionSyncPreflightResponse, want bool, label string) {
+	t.Helper()
+	if response.CheckpointReusable != want {
+		t.Fatalf("%s checkpointReusable = %t, want %t", label, response.CheckpointReusable, want)
+	}
+}
+
+func assertSyncPreflightCursorState(t *testing.T, response factoryapi.FactorySessionSyncPreflightResponse, wantProvided bool, wantValid bool, label string) {
+	t.Helper()
+	if response.ReconnectCursor.Provided != wantProvided || response.ReconnectCursor.ValidForStreamGeneration != wantValid {
+		t.Fatalf("%s reconnect cursor = %#v, want provided=%t valid=%t", label, response.ReconnectCursor, wantProvided, wantValid)
+	}
+}
+
+func assertSyncPreflightDefaultSessionIdentity(t *testing.T, response factoryapi.FactorySessionSyncPreflightResponse) {
+	t.Helper()
+	if response.BackendScopeId == nil || strings.TrimSpace(*response.BackendScopeId) == "" {
+		t.Fatalf("backendScopeId = %#v, want non-empty", response.BackendScopeId)
+	}
+	if response.FactorySessionId == nil || *response.FactorySessionId != defaultFactorySessionID {
+		t.Fatalf("factorySessionId = %#v, want %q", response.FactorySessionId, defaultFactorySessionID)
+	}
+	if response.LogicalSessionKeyId == nil || !strings.Contains(*response.LogicalSessionKeyId, "::default::") {
+		t.Fatalf("logicalSessionKeyId = %#v, want default target key", response.LogicalSessionKeyId)
+	}
+	if response.StreamGenerationId == nil || !strings.Contains(*response.StreamGenerationId, defaultFactorySessionID) {
+		t.Fatalf("streamGenerationId = %#v, want session-scoped generation", response.StreamGenerationId)
+	}
+}
+
 func newLiveSessionStatusTestServer(t *testing.T, svc *FactoryService) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(api.NewServer(svc, 0, zap.NewNop()).Handler())
@@ -2337,20 +2727,27 @@ func TestFactoryService_SessionResponseStreamOwnedByLiveSessionRuntime(t *testin
 	}
 	svc := &FactoryService{}
 
-	first := svc.sessionResponseStream(session)
-	second := svc.sessionResponseStream(session)
-	if first == nil || second == nil {
+	first := svc.sessionResponseStream(session, "dispatch-a")
+	second := svc.sessionResponseStream(session, "dispatch-a")
+	third := svc.sessionResponseStream(session, "dispatch-b")
+	if first == nil || second == nil || third == nil {
 		t.Fatal("session response stream = nil, want live session runtime instance")
 	}
 	if first != second {
-		t.Fatal("session response stream instances differ, want one stream per live session")
+		t.Fatal("same dispatch stream instances differ, want one stream per live dispatch")
+	}
+	if first == third {
+		t.Fatal("different dispatches shared one stream, want dispatch-scoped session streams")
 	}
 
 	state := liveSessionRuntimeState(session)
-	if state == nil || state.responseStream != first {
-		t.Fatalf("live session state stream = %#v, want %p", state.responseStream, first)
+	if state == nil || state.responseStreams == nil {
+		t.Fatal("live session state stream set = nil, want session-owned stream set")
 	}
-	if svc.sessionResponseStream(nil) != nil {
+	if got := state.responseStreams.Count(); got != 2 {
+		t.Fatalf("session stream set count = %d, want 2", got)
+	}
+	if svc.sessionResponseStreams(nil) != nil {
 		t.Fatal("nil session stream = non-nil, want nil")
 	}
 }
@@ -2364,7 +2761,7 @@ func TestFactoryService_InferenceProgressPublisherPublishesOrderedInternalEvents
 		"/factory",
 		"/factory",
 		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
-		&liveSessionState{},
+		&liveSessionState{handle: &liveRuntimeHandle{runtime: &factoryRuntimeBundle{}}},
 		false,
 		"factory",
 	), true)
@@ -2377,15 +2774,37 @@ func TestFactoryService_InferenceProgressPublisherPublishesOrderedInternalEvents
 
 	publisher(workerprovider.ProgressFragment("dispatch-1", nil, "phase=planning"))
 	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "partial-response"))
+	publisher(workerprovider.CompletedFragment("dispatch-1", &interfaces.ProviderSessionMetadata{
+		Provider: "cursor",
+		Kind:     "session_id",
+		ID:       "cursor-session-1",
+	}))
+	publisher(workerprovider.FailedFragment("dispatch-2", nil, "normalized provider failure"))
 
 	session := sessions.Get(sessionID)
-	stream := (&FactoryService{sessions: sessions}).sessionResponseStream(session)
+	svc := &FactoryService{sessions: sessions}
+	stream := svc.sessionResponseStream(session, "dispatch-1")
 	if stream == nil {
-		t.Fatal("session stream = nil, want live session stream")
+		t.Fatal("dispatch-1 stream = nil, want live session stream")
 	}
 	events := stream.Events()
-	if len(events) != 2 || events[0].Sequence != 1 || events[1].Sequence != 2 {
+	if len(events) != 3 || events[0].Sequence != 1 || events[2].Sequence != 3 {
 		t.Fatalf("stream events = %#v, want ascending internal sequences", events)
+	}
+	if events[2].Kind != responsestream.EventKindStreamCompleted {
+		t.Fatalf("completion kind = %q, want %q", events[2].Kind, responsestream.EventKindStreamCompleted)
+	}
+	if events[2].ProviderSessionRef == nil || events[2].ProviderSessionRef.ID != "cursor-session-1" {
+		t.Fatalf("completion provider session = %#v, want cursor-session-1", events[2].ProviderSessionRef)
+	}
+
+	failedStream := svc.sessionResponseStream(session, "dispatch-2")
+	if failedStream == nil {
+		t.Fatal("dispatch-2 stream = nil, want live session stream")
+	}
+	failedEvents := failedStream.Events()
+	if len(failedEvents) != 1 || failedEvents[0].Kind != responsestream.EventKindStreamFailed || failedEvents[0].Payload != "normalized provider failure" {
+		t.Fatalf("failure events = %#v, want one terminal failed marker", failedEvents)
 	}
 
 	var factoryEventType factoryapi.FactoryEventType
@@ -2393,6 +2812,45 @@ func TestFactoryService_InferenceProgressPublisherPublishesOrderedInternalEvents
 	if string(events[0].Kind) == string(factoryapi.FactoryEventTypeInferenceResponse) {
 		t.Fatal("internal stream event must not alias canonical inference response events")
 	}
+}
+
+func TestFactoryService_InferenceProgressPublisher_DoesNotEmitCanonicalFactoryEvents(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha"},
+	})
+
+	session := harness.requireSession(t, defaultFactorySessionID)
+	runtimeFactory := liveSessionHandle(session).runtime.factory
+	before, err := runtimeFactory.GetFactoryEvents(context.Background())
+	if err != nil {
+		t.Fatalf("GetFactoryEvents(before): %v", err)
+	}
+
+	publisher := harness.svc.inferenceProgressPublisher(defaultFactorySessionID, nil)
+	if publisher == nil {
+		t.Fatal("publisher = nil, want inference progress publisher")
+	}
+	publisher(workerprovider.ResponseFragment("dispatch-private", nil, "internal-response-fragment"))
+	publisher(workerprovider.ProgressFragment("dispatch-private", nil, "internal-progress-fragment"))
+
+	after, err := runtimeFactory.GetFactoryEvents(context.Background())
+	if err != nil {
+		t.Fatalf("GetFactoryEvents(after): %v", err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("factory event count changed from %d to %d after internal stream publication", len(before), len(after))
+	}
+	for i := range before {
+		if after[i].Type != before[i].Type {
+			t.Fatalf("factory event types changed after internal stream publication: before=%v after=%v", serviceFactoryEventTypes(before), serviceFactoryEventTypes(after))
+		}
+	}
+
+	assertSessionEventsDoNotContain(t, session, "internal-response-fragment")
+	assertSessionEventsDoNotContain(t, session, "internal-progress-fragment")
+	assertSessionEventsDoNotContain(t, session, string(responsestream.EventKindResponseFragment))
+	assertSessionEventsDoNotContain(t, session, string(responsestream.EventKindProgressFragment))
 }
 
 func TestFactoryService_InferenceProgressPublisherConcurrentFirstFragmentsShareOneSessionStream(t *testing.T) {
@@ -2404,7 +2862,7 @@ func TestFactoryService_InferenceProgressPublisherConcurrentFirstFragmentsShareO
 		"/factory",
 		"/factory",
 		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
-		&liveSessionState{},
+		&liveSessionState{handle: &liveRuntimeHandle{runtime: &factoryRuntimeBundle{}}},
 		false,
 		"factory",
 	), true)
@@ -2450,7 +2908,7 @@ func TestFactoryService_InferenceProgressPublisherConcurrentFirstFragmentsShareO
 	}
 
 	session := sessions.Get(sessionID)
-	stream := svc.sessionResponseStream(session)
+	stream := svc.sessionResponseStream(session, "dispatch-1")
 	if stream == nil {
 		t.Fatal("session stream = nil, want live session stream")
 	}
@@ -2472,4 +2930,559 @@ func TestFactoryService_InferenceProgressPublisherConcurrentFirstFragmentsShareO
 	if payloads["stderr-fragment"] != responsestream.EventKindProgressFragment {
 		t.Fatalf("stderr fragment kind = %q, want %q", payloads["stderr-fragment"], responsestream.EventKindProgressFragment)
 	}
+}
+
+func TestFactoryService_InferenceProgressPublisherSeparatesDispatchScopedStreams(t *testing.T) {
+	sessions := factorysessions.NewRegistry()
+	sessionID := "session-progress-separate-dispatches"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{handle: &liveRuntimeHandle{runtime: &factoryRuntimeBundle{}}},
+		false,
+		"factory",
+	), true)
+
+	publisher := (&FactoryService{sessions: sessions}).inferenceProgressPublisher(sessionID, nil)
+	if publisher == nil {
+		t.Fatal("publisher = nil, want session publisher")
+	}
+
+	publisher(workerprovider.ResponseFragment("dispatch-a", nil, "alpha-1"))
+	publisher(workerprovider.ResponseFragment("dispatch-b", nil, "beta-1"))
+	publisher(workerprovider.ProgressFragment("dispatch-a", nil, "alpha-2"))
+
+	session := sessions.Get(sessionID)
+	svc := &FactoryService{sessions: sessions}
+	alpha := svc.sessionResponseStream(session, "dispatch-a")
+	beta := svc.sessionResponseStream(session, "dispatch-b")
+	if alpha == nil || beta == nil {
+		t.Fatal("dispatch stream = nil, want allocated streams")
+	}
+	if alpha == beta {
+		t.Fatal("different dispatches shared one stream")
+	}
+
+	alphaEvents := alpha.Events()
+	betaEvents := beta.Events()
+	if len(alphaEvents) != 2 || len(betaEvents) != 1 {
+		t.Fatalf("dispatch events = (%#v, %#v), want isolated per-dispatch event windows", alphaEvents, betaEvents)
+	}
+	if alphaEvents[0].Sequence != 1 || alphaEvents[1].Sequence != 2 {
+		t.Fatalf("alpha sequences = %#v, want per-dispatch monotonic sequence", alphaEvents)
+	}
+	if betaEvents[0].Sequence != 1 {
+		t.Fatalf("beta sequences = %#v, want independent per-dispatch ordering", betaEvents)
+	}
+}
+
+func TestFactoryService_SubscribeSessionResponseStream_ReadsRetainedAndLiveEvents(t *testing.T) {
+	sessions := factorysessions.NewRegistry()
+	sessionID := "session-progress-subscribe"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{handle: &liveRuntimeHandle{runtime: &factoryRuntimeBundle{}}},
+		false,
+		"factory",
+	), true)
+
+	svc := &FactoryService{sessions: sessions}
+	publisher := svc.inferenceProgressPublisher(sessionID, nil)
+	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "retained-1"))
+	publisher(workerprovider.ProgressFragment("dispatch-1", nil, "retained-2"))
+
+	subscription, err := svc.SubscribeSessionResponseStream(sessionID, "dispatch-1", 0)
+	if err != nil {
+		t.Fatalf("SubscribeSessionResponseStream: %v", err)
+	}
+	defer subscription.Detach()
+
+	initial, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(initial): %v", err)
+	}
+	if len(initial.Events) != 2 {
+		t.Fatalf("initial event count = %d, want 2", len(initial.Events))
+	}
+
+	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "live-3"))
+	live, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(live): %v", err)
+	}
+	if len(live.Events) != 1 || live.Events[0].Payload != "live-3" {
+		t.Fatalf("live events = %#v, want one live event", live.Events)
+	}
+}
+
+func TestFactoryService_InferenceProgressPublisher_SlowSubscriberCompactionEmitsDiagnostics(t *testing.T) {
+	const sessionID = "session-progress-backpressure"
+	svc, publisher, observed, metricsPath := newSlowSubscriberCompactionTestHarness(t)
+	if publisher == nil {
+		t.Fatal("publisher = nil, want inference progress publisher")
+	}
+
+	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "retained-1"))
+	subscription, err := svc.SubscribeSessionResponseStream(sessionID, "dispatch-1", 0)
+	if err != nil {
+		t.Fatalf("SubscribeSessionResponseStream: %v", err)
+	}
+	defer subscription.Detach()
+
+	initial, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(initial): %v", err)
+	}
+	if len(initial.Events) != 1 || initial.Events[0].Payload != "retained-1" {
+		t.Fatalf("initial events = %#v, want retained seed event", initial.Events)
+	}
+
+	publishSlowSubscriberCompactionBurst(t, publisher)
+
+	catchUp, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(catch-up): %v", err)
+	}
+	assertSlowSubscriberCompactionCatchUp(t, catchUp)
+	assertSlowSubscriberCompactionDiagnostics(t, observed, metricsPath)
+}
+
+func TestFactoryService_InferenceProgressPublisherWithoutSubscriberDoesNotBlockExecution(t *testing.T) {
+	sessions := factorysessions.NewRegistry()
+	sessionID := "session-progress-no-subscriber"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{handle: &liveRuntimeHandle{runtime: &factoryRuntimeBundle{}}},
+		false,
+		"factory",
+	), true)
+
+	svc := &FactoryService{sessions: sessions}
+	publisher := svc.inferenceProgressPublisher(sessionID, nil)
+	if publisher == nil {
+		t.Fatal("publisher = nil, want session publisher")
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 256; i++ {
+			publisher(workerprovider.ProgressFragment("dispatch-1", nil, "phase"))
+		}
+		publisher(workerprovider.CompletedFragment("dispatch-1", nil))
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out publishing provider progress without any attached consumer")
+	}
+
+	stream := svc.sessionResponseStream(sessions.Get(sessionID), "dispatch-1")
+	if stream == nil {
+		t.Fatal("session stream = nil, want live session stream")
+	}
+	events := stream.Events()
+	if len(events) == 0 {
+		t.Fatal("stream events = empty, want retained progress or terminal marker")
+	}
+	if events[len(events)-1].Kind != responsestream.EventKindStreamCompleted {
+		t.Fatalf("last event kind = %q, want terminal completion marker", events[len(events)-1].Kind)
+	}
+}
+
+func TestFactoryService_InferenceProgressPublisherSlowConsumerFallsBehindWithoutBlockingExecution(t *testing.T) {
+	svc, publisher, stream := newSlowConsumerProgressPublisherHarness(t)
+	subscription := subscribeToSessionResponseStream(t, stream)
+	defer subscription.Detach()
+	assertInitialRetainedSeedEvent(t, subscription)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		publisher(workerprovider.ProgressFragment("dispatch-1", nil, "one"))
+		publisher(workerprovider.ResponseFragment("dispatch-1", nil, "two"))
+		publisher(workerprovider.ProgressFragment("dispatch-1", nil, "three"))
+		publisher(workerprovider.CompletedFragment("dispatch-1", nil))
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out publishing provider progress while consumer lagged behind")
+	}
+
+	assertSlowConsumerCatchupRetainsCompletedTail(t, subscription)
+	_ = svc
+}
+
+func newSlowConsumerProgressPublisherHarness(t *testing.T) (*FactoryService, workerprovider.InferenceProgressPublisher, *factorysessions.SessionResponseStream) {
+	t.Helper()
+
+	sessions := factorysessions.NewRegistry()
+	sessionID := "session-progress-slow-consumer"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{},
+		false,
+		"factory",
+	), true)
+
+	svc := &FactoryService{
+		sessions: sessions,
+		newSessionResponseStream: func() *factorysessions.SessionResponseStream {
+			return responsestream.NewSessionResponseStreamWithClock(factory.RealClock{}, responsestream.RetentionLimits{MaxEvents: 2})
+		},
+	}
+	publisher := svc.inferenceProgressPublisher(sessionID, nil)
+	if publisher == nil {
+		t.Fatal("publisher = nil, want session publisher")
+	}
+	publisher(workerprovider.ProgressFragment("dispatch-1", nil, "seed"))
+
+	stream := svc.sessionResponseStream(sessions.Get(sessionID), "dispatch-1")
+	if stream == nil {
+		t.Fatal("session stream = nil, want live session stream")
+	}
+	return svc, publisher, stream
+}
+
+func subscribeToSessionResponseStream(t *testing.T, stream *factorysessions.SessionResponseStream) *factorysessions.SessionResponseStreamSubscription {
+	t.Helper()
+
+	subscription, err := stream.Subscribe(0)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	return subscription
+}
+
+func assertInitialRetainedSeedEvent(t *testing.T, subscription *factorysessions.SessionResponseStreamSubscription) {
+	t.Helper()
+
+	initial, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(initial): %v", err)
+	}
+	if len(initial.Events) != 1 || initial.Events[0].Payload != "seed" {
+		t.Fatalf("initial events = %#v, want retained seed event", initial.Events)
+	}
+}
+
+func assertSlowConsumerCatchupRetainsCompletedTail(
+	t *testing.T,
+	subscription *factorysessions.SessionResponseStreamSubscription,
+) {
+	t.Helper()
+
+	read, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(catch-up): %v", err)
+	}
+	if !read.BehindRetainedWindow {
+		t.Fatal("behind retained window = false, want slow consumer compaction signal")
+	}
+	if read.Compaction == nil || read.Compaction.Reason != responsestream.CompactionReasonTruncated {
+		t.Fatalf("compaction = %#v, want truncated retained-window summary", read.Compaction)
+	}
+	if len(read.Events) == 0 {
+		t.Fatal("catch-up events = empty, want retained tail after truncation")
+	}
+	if read.Events[len(read.Events)-1].Kind != responsestream.EventKindCompactionSignal {
+		t.Fatalf("last retained event kind = %q, want retained-window compaction signal", read.Events[len(read.Events)-1].Kind)
+	}
+	for _, event := range read.Events {
+		if event.Kind == responsestream.EventKindStreamCompleted {
+			return
+		}
+	}
+	t.Fatalf("retained events = %#v, want terminal completion marker before compaction signal", read.Events)
+}
+
+func newSlowSubscriberCompactionTestHarness(t *testing.T) (*FactoryService, workerprovider.InferenceProgressPublisher, *observer.ObservedLogs, string) {
+	t.Helper()
+
+	metricsSink, err := logging.BuildRuntimeMetricsSink(
+		"session-progress-backpressure",
+		"runtime-progress-backpressure",
+		"/factory",
+		"/factory",
+		t.TempDir(),
+		logging.RuntimeMetricsConfig{},
+	)
+	if err != nil {
+		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = metricsSink.Close()
+	})
+
+	core, observed := observer.New(zap.WarnLevel)
+	logger := zap.New(core)
+	sessions := factorysessions.NewRegistry()
+	sessionID := "session-progress-backpressure"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{handle: &liveRuntimeHandle{runtime: &factoryRuntimeBundle{
+			logger:      logger,
+			metricsSink: metricsSink,
+		}}},
+		false,
+		"factory",
+	), true)
+
+	svc := &FactoryService{
+		sessions: sessions,
+		newSessionResponseStream: func() *factorysessions.SessionResponseStream {
+			return responsestream.NewSessionResponseStreamWithClock(
+				factory.RealClock{},
+				responsestream.RetentionLimits{MaxEvents: 2},
+			)
+		},
+	}
+	publisher := svc.inferenceProgressPublisher(sessionID, logger)
+	return svc, publisher, observed, metricsSink.Path()
+}
+
+func publishSlowSubscriberCompactionBurst(t *testing.T, publisher workerprovider.InferenceProgressPublisher) {
+	t.Helper()
+
+	publishDone := make(chan struct{})
+	go func() {
+		for i := 0; i < 64; i++ {
+			payload := "chunk-" + strconv.Itoa(i)
+			if i%2 == 0 {
+				publisher(workerprovider.ProgressFragment("dispatch-1", nil, payload))
+				continue
+			}
+			publisher(workerprovider.ResponseFragment("dispatch-1", nil, payload))
+		}
+		close(publishDone)
+	}()
+
+	select {
+	case <-publishDone:
+	case <-time.After(time.Second):
+		t.Fatal("publishing stalled behind a slow subscriber")
+	}
+}
+
+func assertSlowSubscriberCompactionCatchUp(t *testing.T, catchUp factorysessions.SessionResponseStreamReadResult) {
+	t.Helper()
+
+	if !catchUp.BehindRetainedWindow {
+		t.Fatalf("catch-up result = %#v, want retained-window gap signal", catchUp)
+	}
+	if catchUp.Compaction == nil || catchUp.Compaction.Reason != responsestream.CompactionReasonTruncated {
+		t.Fatalf("catch-up compaction = %#v, want truncation summary", catchUp.Compaction)
+	}
+	for _, event := range catchUp.Events {
+		if event.Kind == responsestream.EventKindCompactionSignal {
+			return
+		}
+	}
+	t.Fatalf("catch-up events = %#v, want retained compaction signal", catchUp.Events)
+}
+
+func assertSlowSubscriberCompactionDiagnostics(t *testing.T, observed *observer.ObservedLogs, metricsPath string) {
+	t.Helper()
+
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricSessionResponseStreamCompacted, 1) &&
+			metricRecordString(record, "dispatch_id") == "dispatch-1" &&
+			metricRecordString(record, "reason") == string(responsestream.CompactionReasonTruncated)
+	}, "response stream compaction")
+
+	for _, entry := range observed.All() {
+		if entry.Message != "session response stream compacted internal provider progress" {
+			continue
+		}
+		if entry.ContextMap()["dispatch_id"] == "dispatch-1" &&
+			entry.ContextMap()["compaction_reason"] == string(responsestream.CompactionReasonTruncated) {
+			return
+		}
+	}
+	t.Fatalf("compaction warning log not found in %#v", observed.All())
+}
+
+func TestFactoryService_DispatchCompletionObserverClosesDispatchSubscribers(t *testing.T) {
+	sessions := factorysessions.NewRegistry()
+	sessionID := "session-progress-complete"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{handle: &liveRuntimeHandle{runtime: &factoryRuntimeBundle{}}},
+		false,
+		"factory",
+	), true)
+
+	svc := &FactoryService{sessions: sessions}
+	subscription, err := svc.SubscribeSessionResponseStream(sessionID, "dispatch-1", 0)
+	if err != nil {
+		t.Fatalf("SubscribeSessionResponseStream: %v", err)
+	}
+
+	observerFactory := newSessionDispatchCompletionObserverFactory(sessions)
+	if observerFactory == nil {
+		t.Fatal("observer factory = nil, want dispatch completion observer")
+	}
+	observerFactory(sessionID)("dispatch-1")
+
+	if _, err := subscription.Next(context.Background()); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
+		t.Fatalf("Next after dispatch completion error = %v, want ErrSubscriptionClosed", err)
+	}
+	session := sessions.Get(sessionID)
+	if got := svc.sessionResponseStreams(session).SubscriberCount("dispatch-1"); got != 0 {
+		t.Fatalf("subscriber count after dispatch completion = %d, want 0", got)
+	}
+}
+
+func TestFactoryService_StopFactorySession_ClosesSessionResponseStreamSubscribers(t *testing.T) {
+	sessionID := "session-progress-stop"
+	svc := &FactoryService{sessions: factorysessions.NewRegistry()}
+	runDone := make(chan struct{})
+	close(runDone)
+	handle := &liveRuntimeHandle{runDone: runDone, runtime: &factoryRuntimeBundle{}}
+	svc.sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{handle: handle, responseStreams: factorysessions.NewSessionResponseStreamSetWithFactory(factorysessions.NewSessionResponseStream)},
+		false,
+		"factory",
+	), true)
+
+	subscription, err := svc.SubscribeSessionResponseStream(sessionID, "dispatch-1", 0)
+	if err != nil {
+		t.Fatalf("SubscribeSessionResponseStream: %v", err)
+	}
+
+	if err := svc.stopFactorySession(sessionID); err != nil {
+		t.Fatalf("stopFactorySession: %v", err)
+	}
+	if _, err := subscription.Next(context.Background()); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
+		t.Fatalf("Next after session stop error = %v, want ErrSubscriptionClosed", err)
+	}
+}
+
+func TestFactoryService_InferenceProgressPublisherPreservesNormalizedCodexMetadata(t *testing.T) {
+	sessions := factorysessions.NewRegistry()
+	sessionID := "session-progress-codex-normalized"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{handle: &liveRuntimeHandle{runtime: &factoryRuntimeBundle{}}},
+		false,
+		"factory",
+	), true)
+
+	publisher := (&FactoryService{sessions: sessions}).inferenceProgressPublisher(sessionID, nil)
+	if publisher == nil {
+		t.Fatal("publisher = nil, want session publisher")
+	}
+
+	publisher(workerprovider.InferenceProgressFragment{
+		DispatchID:        "dispatch-codex-json-1",
+		Kind:              workerprovider.ResponseFragmentKind,
+		Type:              workerprovider.NormalizedEventTypeFinalText,
+		Payload:           "final response",
+		ExternalEventType: "response.completed",
+		ProviderSessionRef: &interfaces.ProviderSessionMetadata{
+			Provider: "codex",
+			Kind:     "session_id",
+			ID:       "sess-codex-1",
+		},
+		Metadata: map[string]string{
+			"runner_id":        "codex",
+			"workstation_name": "review",
+			"work_id":          "work-codex-json-1",
+		},
+	})
+
+	stream := (&FactoryService{sessions: sessions}).sessionResponseStream(sessions.Get(sessionID), "dispatch-codex-json-1")
+	events := stream.Events()
+	if len(events) != 1 {
+		t.Fatalf("stream events = %#v, want one normalized event", events)
+	}
+	event := events[0]
+	if event.Kind != responsestream.EventKindResponseFragment || event.Type != responsestream.EventType(workerprovider.NormalizedEventTypeFinalText) {
+		t.Fatalf("stored event = %#v, want response FINAL_TEXT", event)
+	}
+	if event.ExternalEventType != "response.completed" {
+		t.Fatalf("external event type = %q, want response.completed", event.ExternalEventType)
+	}
+	if event.ProviderSessionRef == nil || event.ProviderSessionRef.ID != "sess-codex-1" {
+		t.Fatalf("provider session = %#v, want sess-codex-1", event.ProviderSessionRef)
+	}
+	if got := event.Metadata["runner_id"]; got != "codex" {
+		t.Fatalf("metadata runner_id = %q, want codex", got)
+	}
+	if got := event.Metadata["workstation_name"]; got != "review" {
+		t.Fatalf("metadata workstation_name = %q, want review", got)
+	}
+	if got := event.Metadata["work_id"]; got != "work-codex-json-1" {
+		t.Fatalf("metadata work_id = %q, want work-codex-json-1", got)
+	}
+}
+
+func TestFactoryService_InferenceProgressPublisherUnavailableStreamEmitsDegradedDiagnostics(t *testing.T) {
+	core, observed := observer.New(zap.WarnLevel)
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	session := harness.svc.sessionByID(defaultFactorySessionID)
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.metricsSink == nil {
+		t.Fatal("live session runtime metrics sink is required")
+	}
+	liveSessionHandle(session).runtime.logger = zap.New(core)
+	harness.svc.newSessionResponseStream = func() *factorysessions.SessionResponseStream {
+		return nil
+	}
+
+	publisher := harness.svc.inferenceProgressPublisher(defaultFactorySessionID, zap.NewNop())
+	if publisher == nil {
+		t.Fatal("publisher = nil, want session publisher")
+	}
+	publisher(workerprovider.ProgressFragment("dispatch-unavailable", nil, "phase"))
+
+	metricsPath := liveSessionHandle(session).runtime.metricsSink.Path()
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricSessionResponseStreamDegraded, 1) &&
+			metricRecordString(record, "dispatch_id") == "dispatch-unavailable" &&
+			metricRecordString(record, "reason") == "STREAM_UNAVAILABLE"
+	}, "degraded internal provider progress publication")
+
+	entry := findObservedLog(t, observed, "internal provider progress publication degraded")
+	assertLogField(t, entry, "session_id", defaultFactorySessionID)
+	assertLogField(t, entry, "dispatch_id", "dispatch-unavailable")
+	assertLogField(t, entry, "reason", "STREAM_UNAVAILABLE")
 }

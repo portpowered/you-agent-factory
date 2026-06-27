@@ -1,0 +1,16 @@
+type: object
+additionalProperties: false
+required:
+  - backendScopeID
+  - factorySessionID
+  - streamGenerationID
+properties:
+  backendScopeID:
+    type: string
+    description: Stable backend process or scope identity for the current live session stream.
+  factorySessionID:
+    type: string
+    description: Stable live Factory Session identifier for the current stream.
+  streamGenerationID:
+    type: string
+    description: Stable generation identifier for the current live session stream incarnation.

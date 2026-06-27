@@ -38,7 +38,7 @@ func TestCursorProviderCommand_DispatchesAgentWithRenderedPrompt(t *testing.T) {
 		t.Fatalf("command = %q, want %q", req.Command, interfaces.ModelProviderCursor)
 	}
 	support.AssertArgsContainSequence(t, req.Args, []string{"-p"})
-	support.AssertArgsContainSequence(t, req.Args, []string{"--output-format", "json"})
+	support.AssertArgsContainSequence(t, req.Args, []string{"--output-format", "stream-json", "--stream-partial-output"})
 	support.AssertArgsContainSequence(t, req.Args, []string{"--model", "test-cursor-model"})
 	assertProviderArgsPrompt(t, req, cursorMergedPrompt("Process the input task.", "Do the work."))
 	assertProviderStdin(t, req, "")
@@ -67,7 +67,7 @@ func TestCursorProviderCommand_SkipPermissionsPassesForceFlag(t *testing.T) {
 		t.Fatalf("command = %q, want %q", req.Command, interfaces.ModelProviderCursor)
 	}
 	support.AssertArgsContainSequence(t, req.Args, []string{"-f", "-p"})
-	support.AssertArgsContainSequence(t, req.Args, []string{"--output-format", "json"})
+	support.AssertArgsContainSequence(t, req.Args, []string{"--output-format", "stream-json", "--stream-partial-output"})
 	assertProviderArgsPrompt(t, req, cursorMergedPrompt("Process the input task.", "Do the work."))
 }
 
@@ -97,7 +97,7 @@ Process the input task.
 		t.Fatalf("command = %q, want %q", req.Command, interfaces.ModelProviderCursor)
 	}
 	support.AssertArgsContainSequence(t, req.Args, []string{"-p", "--model", "test-cursor-model"})
-	support.AssertArgsContainSequence(t, req.Args, []string{"--output-format", "json"})
+	support.AssertArgsContainSequence(t, req.Args, []string{"--output-format", "stream-json", "--stream-partial-output"})
 }
 
 func submitCursorProviderSmokeWork(t *testing.T, h *testutil.ServiceTestHarness) {

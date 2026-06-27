@@ -68,6 +68,7 @@ func newSessionScopedMockFactory(
 		},
 		Net: sessionScopedStateNet(),
 		FactoryEventStream: &interfaces.FactoryEventStream{
+			StreamGenerationID: "stream-gen-" + factoryName,
 			History: []factoryapi.FactoryEvent{{Id: historyEventID, Type: factoryapi.FactoryEventTypeWorkRequest}},
 			Events:  make(chan factoryapi.FactoryEvent),
 		},
@@ -184,6 +185,9 @@ func assertScopedSessionEvents(t *testing.T, serverURL string, wantEventID strin
 	if response.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(response.Body)
 		t.Fatalf("GET /factory-sessions/session-beta/events status = %d, want 200: %s", response.StatusCode, string(body))
+	}
+	if got := response.Header.Get(sessionEventStreamGenerationHeader); got != "stream-gen-beta" {
+		t.Fatalf("%s = %q, want stream-gen-beta", sessionEventStreamGenerationHeader, got)
 	}
 
 	streamed := readSSEFactoryEvent(t, bufio.NewReader(response.Body))

@@ -31,6 +31,7 @@ import {
   isSystemTimeWorkItem,
   SYSTEM_TIME_EXPIRY_TRANSITION_ID,
 } from "./systemTime";
+import { storeTextBlob } from "./text-blobs/timelineTextBlobs";
 import type { ReplayWorldState, WorldCompletion, WorldDispatch } from "./types";
 import { workItemRef } from "./workItemRef";
 
@@ -109,6 +110,7 @@ function terminalWorkFromItems(
   return undefined;
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: Dispatch completion projection keeps related lifecycle fields together.
 export function responseCompletion(
   state: ReplayWorldState,
   event: FactoryEvent<DispatchResponsePayload>,
@@ -180,8 +182,18 @@ export function responseCompletion(
     dispatchID,
     durationMillis: event.payload.durationMillis ?? 0,
     endTime: event.context.eventTime,
-    feedback: event.payload.feedback,
-    responseText: event.payload.output,
+    feedback: undefined,
+    feedbackTextBlobID: storeTextBlob(
+      state,
+      `dispatch:${dispatchID}:feedback`,
+      event.payload.feedback,
+    ),
+    responseText: undefined,
+    responseTextBlobID: storeTextBlob(
+      state,
+      `dispatch:${dispatchID}:response`,
+      event.payload.output,
+    ),
     selectedClassificationLabel: event.payload.selectedClassificationLabel,
     failureMessage: event.payload.failureMessage,
     failureReason: event.payload.failureReason,

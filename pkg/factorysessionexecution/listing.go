@@ -36,12 +36,13 @@ func IsRecoverableSession(status LifecycleStatus, staleLease bool) bool {
 // for one durable session status.
 func DeriveSessionActionAvailability(status LifecycleStatus) SessionActionAvailability {
 	return SessionActionAvailability{
-		CanPause:         EvaluateLifecycleControl(LifecycleControlPause, status) == LifecycleControlOutcomeAccepted,
-		CanResume:        EvaluateLifecycleControl(LifecycleControlResume, status) == LifecycleControlOutcomeAccepted,
-		CanCancel:        EvaluateLifecycleControl(LifecycleControlCancel, status) == LifecycleControlOutcomeAccepted,
-		CanTerminate:     EvaluateLifecycleControl(LifecycleControlTerminate, status) == LifecycleControlOutcomeAccepted,
-		CanApprove:       status == LifecycleStatusAwaitingApproval,
-		CanRetryDispatch: AllowsRetryDispatchOnTerminal(status),
+		CanPause:              EvaluateLifecycleControl(LifecycleControlPause, status) == LifecycleControlOutcomeAccepted,
+		CanResume:             EvaluateLifecycleControl(LifecycleControlResume, status) == LifecycleControlOutcomeAccepted,
+		CanCancel:             EvaluateLifecycleControl(LifecycleControlCancel, status) == LifecycleControlOutcomeAccepted,
+		CanTerminate:          EvaluateLifecycleControl(LifecycleControlTerminate, status) == LifecycleControlOutcomeAccepted,
+		CanApprove:            status == LifecycleStatusAwaitingApproval,
+		CanRetryDispatch:      AllowsRetryDispatchOnTerminal(status),
+		CanInterruptDispatch:  AllowsInterruptDispatchOnSession(status),
 	}
 }
 
@@ -370,7 +371,8 @@ type SessionActionAvailability struct {
 	CanCancel        bool
 	CanTerminate     bool
 	CanApprove       bool
-	CanRetryDispatch bool
+	CanRetryDispatch     bool
+	CanInterruptDispatch bool
 }
 
 // DurableSessionListSummary is the shared durable session list row with enough
@@ -492,6 +494,7 @@ type canonicalFactoryEventContext struct {
 	OrchestratorDialect *string   `json:"orchestratorDialect,omitempty"`
 	PhaseID             *string   `json:"phaseId,omitempty"`
 	PhaseName           *string   `json:"phaseName,omitempty"`
+	DispatchID          *string   `json:"dispatchId,omitempty"`
 	Source              *string   `json:"source,omitempty"`
 }
 

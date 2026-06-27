@@ -36,6 +36,7 @@ type FactorySaveAPI interface {
 type SessionAPI interface {
 	ListFactorySessions(ctx context.Context) (factoryapi.ListFactorySessionsResponse, error)
 	GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error)
+	GetFactorySessionSyncPreflight(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (factoryapi.FactorySessionSyncPreflightResponse, error)
 	GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error)
 	GetFactorySessionPartialResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionPartialResult, error)
 	OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
@@ -68,6 +69,7 @@ type DurableSessionLifecycleAPI interface {
 	TerminateDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 	ApproveDurableFactorySession(ctx context.Context, sessionID string, request factoryapi.FactorySessionApproveRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 	RetryDurableFactorySessionDispatch(ctx context.Context, sessionID string, request factoryapi.FactorySessionRetryDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	InterruptDurableFactorySessionDispatch(ctx context.Context, sessionID string, request factoryapi.FactorySessionInterruptDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 }
 
 // DurableSessionExecutionAPI is the shared durable factory-session execution start
@@ -220,12 +222,12 @@ type ModelPullDownloadedFile struct {
 // ModelPullResult carries the service-owned result of pulling one model into
 // the managed local cache.
 type ModelPullResult struct {
-	ModelName        string
-	ProviderLocality string
-	Outcome          string
-	CachePath        string
-	Revision         string
-	DownloadedFiles  []ModelPullDownloadedFile
+	ModelName          string
+	ProviderLocality   string
+	Outcome            string
+	CachePath          string
+	Revision           string
+	DownloadedFiles    []ModelPullDownloadedFile
 	ManagedPullOutcome string
 	ReadinessState     string
 	LifecycleState     string

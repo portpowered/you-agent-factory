@@ -1,4 +1,7 @@
-import { openFactoryEventStream } from "./api";
+import {
+  openFactoryEventStream,
+  validateFactoryEventReconnectCursor,
+} from "./api";
 import type { FactoryEvent } from "./types";
 
 class MockEventSource {
@@ -15,7 +18,7 @@ class MockEventSource {
   public close(): void {}
 }
 
-describe("factory events API", () => {
+describe("factory events stream API", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -115,5 +118,56 @@ describe("factory events API", () => {
 
     expect(stream).toBeInstanceOf(MockEventSource);
     expect(stream?.url).toBe("/factory-sessions/session-beta/events");
+  });
+});
+
+describe("factory events reconnect validation", () => {
+  it("treats a 400 reconnect probe as a stale cursor", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      body: {
+        cancel: vi.fn().mockResolvedValue(undefined),
+      },
+      ok: false,
+      status: 400,
+    });
+
+    await expect(
+      validateFactoryEventReconnectCursor(
+        "session-beta",
+        { afterEventId: "event-3", afterSequence: 12 },
+        fetchSpy,
+      ),
+    ).resolves.toEqual({
+      message:
+        "Factory event replay cursor no longer matches the current session history.",
+      ok: false,
+      reason: "stale_cursor",
+    });
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/factory-sessions/session-beta/events?after_event_id=event-3&after_sequence=12",
+      {
+        headers: {
+          Accept: "text/event-stream",
+        },
+      },
+    );
+  });
+
+  it("treats a successful reconnect probe as reusable", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      body: {
+        cancel: vi.fn().mockResolvedValue(undefined),
+      },
+      ok: true,
+      status: 200,
+    });
+
+    await expect(
+      validateFactoryEventReconnectCursor(
+        "session-beta",
+        { afterEventId: "event-3", afterSequence: 12 },
+        fetchSpy,
+      ),
+    ).resolves.toEqual({ ok: true });
   });
 });

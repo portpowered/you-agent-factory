@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { DashboardHeading } from "../../../components/ui";
 import { DashboardPanelShell } from "../../../components/ui/dashboard-shell";
 import { DetailCopy } from "../../../components/ui/widget-frame";
@@ -5,6 +7,7 @@ import { useAppLocale } from "../../../i18n";
 import { DashboardBrandLockup } from "./dashboard-brand-lockup";
 
 interface DashboardStatusPanelProps {
+  actions?: ReactNode;
   detail?: string;
   locale?: string;
   title: string;
@@ -12,6 +15,7 @@ interface DashboardStatusPanelProps {
 }
 
 export function DashboardStatusPanel({
+  actions,
   detail,
   locale,
   title,
@@ -36,6 +40,7 @@ export function DashboardStatusPanel({
       {detail ? (
         <DetailCopy className={detailClassName}>{detail}</DetailCopy>
       ) : null}
+      {actions ? <div className="mt-4">{actions}</div> : null}
     </DashboardPanelShell>
   );
 }

@@ -5,6 +5,7 @@ import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-f
 import {
   registerAppDashboardTestLifecycle,
   renderApp,
+  waitForDashboardShell,
 } from "./testing/app-shell-test-utils";
 
 function requireValue<T>(value: T | null | undefined, message: string): T {
@@ -16,12 +17,11 @@ function requireValue<T>(value: T | null | undefined, message: string): T {
 }
 
 async function selectReviewRequest(dispatchID: string): Promise<void> {
-  const reviewWorkstationButton = screen.queryByRole("button", {
+  await waitForDashboardShell();
+  const reviewWorkstationButton = await screen.findByRole("button", {
     name: "Select Review workstation",
   });
-  if (reviewWorkstationButton) {
-    fireEvent.click(reviewWorkstationButton);
-  }
+  fireEvent.click(reviewWorkstationButton);
 
   const workstationSelection = await screen.findByRole("article", {
     name: "Current selection",
@@ -40,7 +40,7 @@ async function selectReviewRequest(dispatchID: string): Promise<void> {
     }),
   );
   fireEvent.click(
-    within(resolvedRequestHistorySection).getByRole("button", {
+    await within(resolvedRequestHistorySection).findByRole("button", {
       name: `Select workstation request ${dispatchID}`,
     }),
   );

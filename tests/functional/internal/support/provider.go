@@ -36,18 +36,27 @@ func CursorProviderSuccessStdout(result string) []byte {
 	if result == "" {
 		result = "Done. COMPLETE"
 	}
-	payload := map[string]any{
+	systemPayload := map[string]any{
+		"type":       "system",
+		"subtype":    "init",
+		"session_id": "cursor-functional-test-session",
+	}
+	resultPayload := map[string]any{
 		"type":       "result",
 		"subtype":    "success",
 		"is_error":   false,
 		"result":     result,
 		"session_id": "cursor-functional-test-session",
 	}
-	encoded, err := json.Marshal(payload)
+	systemEncoded, err := json.Marshal(systemPayload)
 	if err != nil {
 		panic(err)
 	}
-	return encoded
+	resultEncoded, err := json.Marshal(resultPayload)
+	if err != nil {
+		panic(err)
+	}
+	return append(append(systemEncoded, '\n'), resultEncoded...)
 }
 
 func AcceptedCommandResults(count int) []workers.CommandResult {

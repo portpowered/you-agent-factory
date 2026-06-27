@@ -14,20 +14,22 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 // ProjectionContext carries the runtime inputs needed to project one live session.
 type ProjectionContext struct {
-	Session               *LiveSession
-	FactoryCfg            *interfaces.FactoryConfig
-	Snapshot              *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+	Session                *LiveSession
+	FactoryCfg             *interfaces.FactoryConfig
+	Snapshot               *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 	LifecycleControlStatus string
-	Enabled               []interfaces.EnabledTransition
-	JavaScript            *interfaces.FactorySessionJavaScriptRuntimeState
-	JavaScriptCheckpoints []interfaces.JavaScriptCheckpointRecord
-	Now                   time.Time
+	BackendScopeID         string
+	RuntimeStartedAt       time.Time
+	Enabled                []interfaces.EnabledTransition
+	JavaScript             *interfaces.FactorySessionJavaScriptRuntimeState
+	JavaScriptCheckpoints  []interfaces.JavaScriptCheckpointRecord
+	Now                    time.Time
 }
 
 // SessionResponse maps a live session and runtime projection to the API detail shape.
@@ -67,6 +69,9 @@ func ProjectRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {
 		Usage:            projectedSessionUsage(ctx),
 		Lifecycle:        projectedSessionLifecycle(ctx, now),
 	}
+	if streamIdentity := projectedSessionStreamIdentity(ctx, runtime.Lifecycle); streamIdentity != nil {
+		runtime.StreamIdentity = streamIdentity
+	}
 	if lifecycleControlStatus := projectedSessionLifecycleControlStatus(ctx); lifecycleControlStatus != "" {
 		status := factoryapi.FactorySessionDurableLifecycleStatus(lifecycleControlStatus)
 		runtime.LifecycleControlStatus = &status
@@ -86,6 +91,35 @@ func ProjectRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {
 		runtime.Artifacts = artifacts
 	}
 	return runtime
+}
+
+func projectedSessionStreamIdentity(
+	ctx ProjectionContext,
+	lifecycle factoryapi.FactorySessionLifecycle,
+) *factoryapi.FactorySessionStreamIdentity {
+	sessionID := ""
+	if ctx.Session != nil {
+		sessionID = strings.TrimSpace(ctx.Session.ID)
+	}
+	backendScopeID := strings.TrimSpace(ctx.BackendScopeID)
+	if backendScopeID == "" || sessionID == "" {
+		return nil
+	}
+	streamGenerationID := ""
+	if ctx.Snapshot != nil {
+		streamGenerationID = strings.TrimSpace(ctx.Snapshot.StreamGenerationID)
+	}
+	if streamGenerationID == "" {
+		if lifecycle.StartedAt.IsZero() {
+			return nil
+		}
+		streamGenerationID = lifecycle.StartedAt.UTC().Format(time.RFC3339Nano)
+	}
+	return &factoryapi.FactorySessionStreamIdentity{
+		BackendScopeID:     backendScopeID,
+		FactorySessionID:   sessionID,
+		StreamGenerationID: streamGenerationID,
+	}
 }
 
 func projectedSessionDispatchArtifacts(
@@ -184,6 +218,8 @@ func projectedSessionLifecycle(ctx ProjectionContext, now time.Time) factoryapi.
 	startedAt := now
 	if ctx.Snapshot != nil && ctx.Snapshot.Uptime > 0 {
 		startedAt = now.Add(-ctx.Snapshot.Uptime).UTC()
+	} else if !ctx.RuntimeStartedAt.IsZero() {
+		startedAt = ctx.RuntimeStartedAt.UTC()
 	}
 	lifecycle := factoryapi.FactorySessionLifecycle{
 		StartedAt: startedAt,
@@ -508,7 +544,6 @@ func firstNonEmptyString(values ...string) string {
 	}
 	return ""
 }
-
 
 // EnabledTransitionsForSnapshot evaluates Petri enablement for one engine snapshot.
 func EnabledTransitionsForSnapshot(

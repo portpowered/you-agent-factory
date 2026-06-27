@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useId, useState } from "react";
 
+import { isDurableJavaScriptSession } from "../../../api/factory-sessions/normalize-durable-inspection";
 import type { components } from "../../../api/generated/openapi";
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 import {
@@ -12,16 +13,19 @@ import {
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { DetailCopy } from "../../../components/ui/widget-frame";
 import { FactorySessionArtifactList } from "./artifact-drilldown/factory-session-artifact-list";
-import { DispatchDetailContent } from "./dispatch-detail-content";
-import { useFactorySessionDispatchDetail } from "../hooks/use-factory-session-dispatch-detail";
 import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
+import { useFactorySessionLifecycleControl } from "../hooks/use-factory-session-lifecycle-control";
+import { useFactorySessionDispatchDetail } from "../hooks/use-factory-session-dispatch-detail";
+import { resolveFactorySessionLifecycleActionAvailability } from "../lib/factory-session-lifecycle-controls";
+import { getFactorySessionDetailMessages } from "../messages/factory-session-detail";
 import {
   formatFactoryOrchestratorKind,
   formatFactorySessionRuntimeStatus,
   formatFactorySessionScriptStatus,
 } from "../messages/factory-session-runtime-display";
-import { getFactorySessionDetailMessages } from "../messages/factory-session-detail";
-import { useId, useState } from "react";
+import { DispatchDetailContent } from "./dispatch-detail/dispatch-detail-content";
+import { FactorySessionEventReplayDisclosure } from "./event-replay/factory-session-event-replay-disclosure";
+import { LifecycleActionSection } from "./lifecycle/lifecycle-action-section";
 
 type FactoryArtifact = components["schemas"]["FactoryArtifact"];
 type FactoryDispatch = components["schemas"]["FactoryDispatch"];
@@ -95,7 +99,10 @@ function FactorySessionRuntimeSections({
       <div className="grid gap-2 sm:grid-cols-2">
         <Metric
           label={messages.orchestratorKindLabel}
-          value={formatFactoryOrchestratorKind(runtime.orchestratorKind, locale)}
+          value={formatFactoryOrchestratorKind(
+            runtime.orchestratorKind,
+            locale,
+          )}
         />
         <Metric
           label={messages.statusLabel}
@@ -110,6 +117,7 @@ function FactorySessionRuntimeSections({
       {runtime.orchestratorKind === FactoryOrchestratorKind.JAVASCRIPT ? (
         <JavaScriptSessionProjection
           artifacts={runtime.artifacts}
+          durableLifecycleStatus={data.durableLifecycleStatus}
           dispatches={runtime.dispatches}
           javascript={runtime.javascript}
           locale={locale}
@@ -126,6 +134,7 @@ function FactorySessionRuntimeSections({
 
 function JavaScriptSessionProjection({
   artifacts,
+  durableLifecycleStatus,
   dispatches,
   javascript,
   locale,
@@ -134,6 +143,7 @@ function JavaScriptSessionProjection({
   sessionID,
 }: {
   artifacts?: FactoryArtifact[];
+  durableLifecycleStatus?: components["schemas"]["FactorySessionDurableLifecycleStatus"];
   dispatches?: FactoryDispatch[];
   javascript?: components["schemas"]["FactorySessionJavaScriptProjection"];
   locale?: string;
@@ -145,6 +155,22 @@ function JavaScriptSessionProjection({
   const [selectedDispatchID, setSelectedDispatchID] = useState<string | null>(
     null,
   );
+  const isDurableSession = isDurableJavaScriptSession(
+    sessionID,
+    FactoryOrchestratorKind.JAVASCRIPT,
+    durableLifecycleStatus,
+  );
+  const lifecycleActionAvailability =
+    resolveFactorySessionLifecycleActionAvailability({
+      durableLifecycleStatus,
+      dispatches,
+      isDurableSession,
+      selectedDispatchID,
+    });
+  const lifecycleControl = useFactorySessionLifecycleControl({
+    selectedDispatchID: lifecycleActionAvailability.selectedDispatch?.id ?? null,
+    sessionID,
+  });
 
   if (!javascript) {
     return <DetailCopy>{messages.javascriptProjectionMissingState}</DetailCopy>;
@@ -162,13 +188,25 @@ function JavaScriptSessionProjection({
         ) : null}
         <Metric
           label={messages.scriptStatusLabel}
-          value={formatFactorySessionScriptStatus(javascript.scriptStatus, locale)}
+          value={formatFactorySessionScriptStatus(
+            javascript.scriptStatus,
+            locale,
+          )}
         />
         <Metric
           label={messages.childDispatchCountsLabel}
           value={`queued ${javascript.childDispatchCounts.queued}, running ${javascript.childDispatchCounts.running}, completed ${javascript.childDispatchCounts.completed}`}
         />
       </div>
+      {isDurableSession ? (
+        <LifecycleActionSection
+          availability={lifecycleActionAvailability}
+          feedback={lifecycleControl.feedback}
+          locale={locale}
+          onAction={lifecycleControl.submitLifecycleAction}
+          pendingActionID={lifecycleControl.pendingActionID}
+        />
+      ) : null}
       {javascript.phases.length > 0 ? (
         <Metric
           label={messages.phasesLabel}
@@ -180,6 +218,13 @@ function JavaScriptSessionProjection({
         <CheckpointRefList
           checkpoints={javascript.checkpoints}
           heading={messages.checkpointRefsHeading}
+        />
+      ) : null}
+
+      {isDurableSession ? (
+        <FactorySessionEventReplayDisclosure
+          locale={locale}
+          sessionID={sessionID}
         />
       ) : null}
 
@@ -279,6 +324,7 @@ function DispatchSummaryRow({
     expanded ? dispatch.id : null,
   );
   const dispatchLabel = dispatch.label?.trim() || dispatch.id;
+  const summaryDetails = getDispatchSummaryDetails(dispatch, messages);
 
   return (
     <article className="grid gap-3 rounded-lg border border-outline bg-surface-container-low p-3">
@@ -298,6 +344,17 @@ function DispatchSummaryRow({
             <span>{dispatch.dispatchKind}</span>
             <span>{dispatch.id}</span>
           </DashboardText>
+          {summaryDetails.length > 0 ? (
+            <DashboardText
+              as="div"
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-on-surface-subtle"
+              variant="supporting"
+            >
+              {summaryDetails.map((detail) => (
+                <span key={detail}>{detail}</span>
+              ))}
+            </DashboardText>
+          ) : null}
         </div>
         <ExpandablePanelTrigger
           aria-label={
@@ -489,4 +546,28 @@ function formatArtifactRef(
   artifactRef: components["schemas"]["FactoryArtifactRef"],
 ): string {
   return `${artifactRef.id} · ${artifactRef.kind}`;
+}
+
+function getDispatchSummaryDetails(
+  dispatch: FactoryDispatch,
+  messages: ReturnType<typeof getFactorySessionDetailMessages>,
+): string[] {
+  const details: string[] = [];
+  const executionMode = dispatch.javascript?.executionMode?.trim();
+  if (executionMode) {
+    details.push(messages.dispatchExecutionModeSummary(executionMode));
+  }
+
+  const firstProviderSessionRef = dispatch.providerSessionRefs?.[0];
+  if (firstProviderSessionRef) {
+    details.push(
+      messages.dispatchProviderSessionSummary({
+        id: firstProviderSessionRef.id,
+        kind: firstProviderSessionRef.kind,
+        provider: firstProviderSessionRef.provider?.trim() || undefined,
+      }),
+    );
+  }
+
+  return details;
 }

@@ -229,6 +229,7 @@ func TestLoadWorkersFromConfig_LocalModelWorkerUsesManagedRuntimePath(t *testing
 		nil,
 		nil,
 		nil,
+		nil,
 		localModelDomain{
 			resources: newLocalModelResourceLimiter(),
 			assets: staticModelAssetPuller{
@@ -356,6 +357,7 @@ func TestLoadWorkersFromConfig_LocalModelWorkerDetachesClonedWorkerRequestsFromL
 		nil,
 		logging.NoopLogger{},
 		true,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -507,7 +509,7 @@ func localModelExecutionRecorderFixture(t *testing.T, eventTime time.Time) (*wor
 		},
 	})
 	history := factoryevents.NewFactoryEventHistory(nil, func() time.Time { return eventTime }, runtimeCfg)
-	opts, err := loadWorkersFromConfig("", factoryCfg, "", runtimeCfg, nil, logging.NoopLogger{}, true, nil, nil, nil, nil, nil, history.RecordModelEvent, func() time.Time { return eventTime }, localModelDomain{
+	opts, err := loadWorkersFromConfig("", factoryCfg, "", runtimeCfg, nil, logging.NoopLogger{}, true, nil, nil, nil, nil, nil, nil, history.RecordModelEvent, func() time.Time { return eventTime }, localModelDomain{
 		resources: newLocalModelResourceLimiter(),
 		assets:    staticModelAssetPuller{cache: cache},
 		runtime:   runtime,

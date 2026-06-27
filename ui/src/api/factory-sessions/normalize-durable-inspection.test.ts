@@ -19,6 +19,11 @@ describe("normalize durable inspection helpers", () => {
           {
             attempt: 1,
             dispatchKind: "JAVASCRIPT_VERIFY",
+            javascript: {
+              executionMode: "live",
+              taskKind: "VERIFY",
+              taskLabel: "verify-release",
+            },
             id: "disp-js-success-002",
             label: "verify-docs",
             outputArtifactIds: ["art-js-success-001"],
@@ -36,6 +41,11 @@ describe("normalize durable inspection helpers", () => {
       expect.objectContaining({
         artifactIds: ["art-js-success-001"],
         id: "disp-js-success-002",
+        javascript: {
+          executionMode: "live",
+          taskKind: "VERIFY",
+          taskLabel: "verify-release",
+        },
         label: "verify-docs",
         sessionId: "dur-sess-js-success-002",
         status: "COMPLETED",

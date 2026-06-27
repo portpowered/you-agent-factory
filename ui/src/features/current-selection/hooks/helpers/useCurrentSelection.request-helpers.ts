@@ -27,11 +27,16 @@ export function resolveProjectedWorkstationRequestsByDispatchID(
     | Record<string, DashboardWorkstationRequest>
     | undefined,
 ): Record<string, DashboardWorkstationRequest> | undefined {
+  const inferenceAttemptsByDispatchID =
+    snapshot?.runtime.inference_attempts_by_dispatch_id;
   if (
     workstationRequestsByDispatchID &&
     Object.keys(workstationRequestsByDispatchID).length > 0
   ) {
-    return workstationRequestsByDispatchID;
+    return hydrateProjectedInferenceAttempts(
+      workstationRequestsByDispatchID,
+      inferenceAttemptsByDispatchID,
+    );
   }
 
   if (!snapshot?.runtime.workstation_requests_by_dispatch_id) {
@@ -44,11 +49,44 @@ export function resolveProjectedWorkstationRequestsByDispatchID(
         dispatchID,
         toDashboardWorkstationRequest(
           request,
-          snapshot.runtime.inference_attempts_by_dispatch_id?.[dispatchID],
+          inferenceAttemptsByDispatchID?.[dispatchID],
         ),
       ],
     ),
   );
+}
+
+function hydrateProjectedInferenceAttempts(
+  workstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest>,
+  inferenceAttemptsByDispatchID:
+    | Record<string, Record<string, DashboardInferenceAttempt>>
+    | undefined,
+): Record<string, DashboardWorkstationRequest> {
+  if (!inferenceAttemptsByDispatchID) {
+    return workstationRequestsByDispatchID;
+  }
+
+  let hydrated = false;
+  const entries = Object.entries(workstationRequestsByDispatchID).map(
+    ([dispatchID, request]) => {
+      const attempts = inferenceAttemptsByDispatchID[dispatchID];
+      if (request.inference_attempts.length > 0 || !attempts) {
+        return [dispatchID, request] as const;
+      }
+      hydrated = true;
+      return [
+        dispatchID,
+        {
+          ...request,
+          inference_attempts: sortInferenceAttempts(attempts),
+        },
+      ] as const;
+    },
+  );
+
+  return hydrated
+    ? Object.fromEntries(entries)
+    : workstationRequestsByDispatchID;
 }
 
 export function filterProviderSessionAttempts(

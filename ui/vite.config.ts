@@ -7,6 +7,9 @@ import { coverageConfigDefaults } from "vitest/config";
 const apiOrigin =
   process.env.AGENT_FACTORY_API_ORIGIN ?? "http://127.0.0.1:7437";
 const isCoverageRun = process.argv.includes("--coverage");
+const profileSourceMaps =
+  process.env.AGENT_FACTORY_PROFILE_SOURCEMAPS === "true" ||
+  process.env.AGENT_FACTORY_PROFILE_SOURCEMAPS === "1";
 const isVitestRun =
   process.argv.includes("vitest") || process.env.VITEST === "true";
 const monacoEditorPlugin =
@@ -78,6 +81,7 @@ export default defineConfig({
         entryFileNames: "assets/[name].js",
       },
     },
+    sourcemap: profileSourceMaps,
   },
   esbuild: {
     jsxDev: false,

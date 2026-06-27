@@ -62,6 +62,24 @@ func TestWorkstationPrefersTransitionName(t *testing.T) {
 	}
 }
 
+func TestMaxRetriesUsesDefaultWhenRuntimeWorkstationOmitsLimit(t *testing.T) {
+	t.Parallel()
+
+	runtimeConfig := runtimefixtures.RuntimeWorkstationLookupFixture{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			"coding": {
+				Name: "coding",
+			},
+		},
+	}
+
+	transition := &petri.Transition{Name: "coding"}
+
+	if got := MaxRetries(transition, runtimeConfig); got != DefaultMaxRetries {
+		t.Fatalf("MaxRetries(omitted-limit) = %d, want default %d", got, DefaultMaxRetries)
+	}
+}
+
 func TestWorkstationReturnsFalseWhenNameEmptyEvenIfIDMatchesRuntimeConfig(t *testing.T) {
 	t.Parallel()
 

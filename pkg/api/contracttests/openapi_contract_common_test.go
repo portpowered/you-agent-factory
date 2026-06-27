@@ -833,6 +833,33 @@ func assertEventStreamSchemaRef(t *testing.T, operation map[string]any, wantRef 
 	}
 }
 
+func assertResponseHeaderString(t *testing.T, operation map[string]any, status string, headerName string) {
+	t.Helper()
+	responses, ok := operation["responses"].(map[string]any)
+	if !ok {
+		t.Fatalf("operation.responses is missing")
+	}
+	response, ok := responses[status].(map[string]any)
+	if !ok {
+		t.Fatalf("operation.responses.%s is missing", status)
+	}
+	headers, ok := response["headers"].(map[string]any)
+	if !ok {
+		t.Fatalf("operation.responses.%s.headers is missing", status)
+	}
+	header, ok := headers[headerName].(map[string]any)
+	if !ok {
+		t.Fatalf("operation.responses.%s.headers.%s is missing", status, headerName)
+	}
+	schema, ok := header["schema"].(map[string]any)
+	if !ok {
+		t.Fatalf("operation.responses.%s.headers.%s.schema is missing", status, headerName)
+	}
+	if got, ok := schema["type"].(string); !ok || got != "string" {
+		t.Fatalf("operation.responses.%s.headers.%s.schema.type = %v, want string", status, headerName, schema["type"])
+	}
+}
+
 func assertResponseSchemaRef(t *testing.T, operation map[string]any, status string, wantRef string) {
 	t.Helper()
 	responses, ok := operation["responses"].(map[string]any)
@@ -949,4 +976,3 @@ func assertResponseExampleCodeFamilies(t *testing.T, responses map[string]any, r
 		}
 	}
 }
-
