@@ -1318,8 +1318,6 @@ export interface components {
     };
     FactorySessionRuntime: {
       orchestratorKind: components["schemas"]["FactoryOrchestratorKind"];
-      /** @description Opaque invalidation token for the current live Factory Session event history. Clients can compare this value across preflight reads and stream handshakes to decide whether reconnect cursors and stream-derived projections still belong to the same live history. */
-      streamGenerationID?: string;
       /** @description JavaScript workflow dialect when orchestrator.kind = JAVASCRIPT. */
       dialect?: string;
       /** @description Authored JavaScript workflow source reference when applicable. */
@@ -1335,12 +1333,22 @@ export interface components {
       budgets?: components["schemas"]["FactorySessionBudgets"];
       usage: components["schemas"]["FactorySessionUsage"];
       lifecycle: components["schemas"]["FactorySessionLifecycle"];
+      /** @description Backend-authoritative identity for the current live session event stream. Clients must confirm this identity before reusing persisted reconnect cursors or timeline checkpoints. */
+      streamIdentity?: components["schemas"]["FactorySessionStreamIdentity"];
       petri?: components["schemas"]["FactorySessionPetriProjection"];
       javascript?: components["schemas"]["FactorySessionJavaScriptProjection"];
       /** @description Shared dispatch projections for the session runtime. */
       dispatches?: components["schemas"]["FactoryDispatch"][];
       /** @description Shared artifact projections for the session runtime. */
       artifacts?: components["schemas"]["FactoryArtifact"][];
+    };
+    FactorySessionStreamIdentity: {
+      /** @description Stable backend process or scope identity for the current live session stream. */
+      backendScopeID: string;
+      /** @description Stable live Factory Session identifier for the current stream. */
+      factorySessionID: string;
+      /** @description Stable generation identifier for the current live session stream incarnation. */
+      streamGenerationID: string;
     };
     /**
      * @description Canonical lifecycle status for one live factory session runtime.

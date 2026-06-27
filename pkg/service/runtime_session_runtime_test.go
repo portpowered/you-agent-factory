@@ -26,12 +26,14 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -1483,8 +1485,8 @@ func TestFactoryService_GetFactorySession_ProjectsLegacyPetriRuntime(t *testing.
 	if session.Runtime.OrchestratorKind != factoryapi.PETRI {
 		t.Fatalf("orchestrator kind = %q, want PETRI", session.Runtime.OrchestratorKind)
 	}
-	if session.Runtime.StreamGenerationID == nil || strings.TrimSpace(*session.Runtime.StreamGenerationID) == "" {
-		t.Fatalf("streamGenerationID = %#v, want non-empty value", session.Runtime.StreamGenerationID)
+	if session.Runtime.StreamIdentity == nil || strings.TrimSpace(session.Runtime.StreamIdentity.StreamGenerationID) == "" {
+		t.Fatalf("streamIdentity = %#v, want non-empty streamGenerationID", session.Runtime.StreamIdentity)
 	}
 	if session.Runtime.Petri == nil {
 		t.Fatal("petri projection is nil")
@@ -1497,6 +1499,104 @@ func TestFactoryService_GetFactorySession_ProjectsLegacyPetriRuntime(t *testing.
 	}
 	if session.Runtime.Lifecycle.UpdatedAt.Before(session.Runtime.Lifecycle.StartedAt.Add(-time.Minute)) {
 		t.Fatalf("lifecycle ordering = %#v", session.Runtime.Lifecycle)
+	}
+}
+
+func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityRemainsStableAcrossReads(t *testing.T) {
+	startedAt := time.Date(2026, 6, 26, 11, 5, 0, 0, time.UTC)
+	factoryCfg := &interfaces.FactoryConfig{
+		Name: "dynamic-workflow",
+		Orchestrator: &interfaces.FactoryOrchestratorConfig{
+			Kind: interfaces.OrchestratorKindJavaScript,
+			JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
+				Dialect:   "workflow-v1",
+				SourceRef: "factory/workflows/review.js",
+			},
+		},
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, nil, nil)
+	svc := &FactoryService{cfg: &FactoryServiceConfig{Dir: t.TempDir()}}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
+		runtimeInstanceID: "backend-scope-js",
+		startedAtUTC:      startedAt,
+		runtimeCfg:        runtimeCfg,
+		factory: &aggregateSnapshotFactory{
+			engineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+				LifecycleControlStatus: string(factoryapi.FactorySessionDurableLifecycleStatusRunning),
+			},
+		},
+	})
+
+	first, err := svc.GetFactorySession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetFactorySession first read: %v", err)
+	}
+	second, err := svc.GetFactorySession(context.Background(), defaultFactorySessionID)
+	if err != nil {
+		t.Fatalf("GetFactorySession second read: %v", err)
+	}
+	if first.Runtime.StreamIdentity == nil || second.Runtime.StreamIdentity == nil {
+		t.Fatalf("stream identity missing across reads: first=%#v second=%#v", first.Runtime.StreamIdentity, second.Runtime.StreamIdentity)
+	}
+	if *first.Runtime.StreamIdentity != *second.Runtime.StreamIdentity {
+		t.Fatalf("stream identity changed across reads: first=%#v second=%#v", first.Runtime.StreamIdentity, second.Runtime.StreamIdentity)
+	}
+	if first.Runtime.StreamIdentity.StreamGenerationID != startedAt.Format(time.RFC3339Nano) {
+		t.Fatalf("stream generation id = %q, want %q", first.Runtime.StreamIdentity.StreamGenerationID, startedAt.Format(time.RFC3339Nano))
+	}
+}
+
+func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityMatchesEventHandshakeSnapshotToken(t *testing.T) {
+	startedAt := time.Date(2026, 6, 27, 8, 0, 0, 0, time.UTC)
+	factoryCfg := &interfaces.FactoryConfig{
+		Name: "dynamic-workflow",
+		Orchestrator: &interfaces.FactoryOrchestratorConfig{
+			Kind: interfaces.OrchestratorKindJavaScript,
+			JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
+				Dialect:   "workflow-v1",
+				SourceRef: "factory/workflows/review.js",
+			},
+		},
+	}
+	runtimeCfg := newLoadedFactoryConfigForServiceTest(t, "", factoryCfg, nil, nil)
+	svc := &FactoryService{cfg: &FactoryServiceConfig{Dir: t.TempDir()}}
+	bindServiceStartupRuntime(svc, &factoryRuntimeBundle{
+		runtimeInstanceID: "backend-scope-js",
+		startedAtUTC:      startedAt,
+		runtimeCfg:        runtimeCfg,
+		factory: &aggregateSnapshotFactory{
+			engineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+				LifecycleControlStatus: string(factoryapi.FactorySessionDurableLifecycleStatusRunning),
+				StreamGenerationID:     "snapshot-stream-token",
+			},
+		},
+	})
+	server := api.NewServer(svc, 0, zap.NewNop()).Handler()
+	sessionRecorder := httptest.NewRecorder()
+	sessionRequest := httptest.NewRequest(http.MethodGet, "/factory-sessions/"+defaultFactorySessionID, nil)
+	server.ServeHTTP(sessionRecorder, sessionRequest)
+	if sessionRecorder.Code != http.StatusOK {
+		t.Fatalf("GET /factory-sessions/%s status = %d, want 200", defaultFactorySessionID, sessionRecorder.Code)
+	}
+	var session factoryapi.FactorySession
+	if err := json.NewDecoder(sessionRecorder.Body).Decode(&session); err != nil {
+		t.Fatalf("decode factory session: %v", err)
+	}
+	streamGenerationID := requireLiveSessionStreamGenerationID(t, session, defaultFactorySessionID, "javascript session read")
+	if streamGenerationID != "snapshot-stream-token" {
+		t.Fatalf("session read stream generation id = %q, want snapshot token", streamGenerationID)
+	}
+	eventsCtx, cancelEvents := context.WithCancel(context.Background())
+	cancelEvents()
+	eventsRecorder := httptest.NewRecorder()
+	eventsRequest := httptest.NewRequest(http.MethodGet, "/factory-sessions/"+defaultFactorySessionID+"/events", nil).WithContext(eventsCtx)
+	server.ServeHTTP(eventsRecorder, eventsRequest)
+	if eventsRecorder.Code != http.StatusOK {
+		t.Fatalf("GET /factory-sessions/%s/events status = %d, want 200", defaultFactorySessionID, eventsRecorder.Code)
+	}
+	handshakeGenerationID := eventsRecorder.Header().Get("X-Factory-Session-Stream-Generation-Id")
+	if handshakeGenerationID != streamGenerationID {
+		t.Fatalf("event handshake stream generation id = %q, want session read id %q", handshakeGenerationID, streamGenerationID)
 	}
 }
 
@@ -1895,10 +1995,10 @@ func getLiveSessionEventStreamGenerationID(t *testing.T, serverURL, sessionID st
 
 func requireLiveSessionStreamGenerationID(t *testing.T, session factoryapi.FactorySession, sessionID, label string) string {
 	t.Helper()
-	if session.Runtime.StreamGenerationID == nil || strings.TrimSpace(*session.Runtime.StreamGenerationID) == "" {
-		t.Fatalf("%s session read streamGenerationID for %s = %#v, want non-empty value", label, sessionID, session.Runtime.StreamGenerationID)
+	if session.Runtime.StreamIdentity == nil || strings.TrimSpace(session.Runtime.StreamIdentity.StreamGenerationID) == "" {
+		t.Fatalf("%s session read streamIdentity for %s = %#v, want non-empty streamGenerationID", label, sessionID, session.Runtime.StreamIdentity)
 	}
-	return strings.TrimSpace(*session.Runtime.StreamGenerationID)
+	return strings.TrimSpace(session.Runtime.StreamIdentity.StreamGenerationID)
 }
 
 func assertSessionWorkNotAtPlace(t *testing.T, svc *FactoryService, sessionID, placeID string, duration time.Duration) {

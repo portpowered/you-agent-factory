@@ -81,6 +81,7 @@ func TestProjectRuntime_LegacyPetriSessionIncludesMarkingAndEnabledTransitions(t
 
 func TestProjectRuntime_JavaScriptWorkflowSessionIncludesPhaseAndCheckpointRefs(t *testing.T) {
 	now := time.Date(2026, 6, 8, 14, 5, 0, 0, time.UTC)
+	startedAt := now.Add(-5 * time.Minute)
 	argsSchema := json.RawMessage(`{"type":"object","properties":{"topic":{"type":"string"}}}`)
 	defaultPolicy := json.RawMessage(`{"maxAgents":3}`)
 	runtime := ProjectRuntime(ProjectionContext{
@@ -113,11 +114,57 @@ func TestProjectRuntime_JavaScriptWorkflowSessionIncludesPhaseAndCheckpointRefs(
 			RunningDispatches:   2,
 			CompletedDispatches: 4,
 		},
-		Now: now,
+		BackendScopeID:   "backend-scope-1",
+		RuntimeStartedAt: startedAt,
+		Now:              now,
 	})
 	assertJavaScriptWorkflowSessionProjection(t, runtime)
 	if runtime.Budgets == nil || runtime.Budgets.MaxAgents == nil || *runtime.Budgets.MaxAgents != 3 {
 		t.Fatalf("budgets = %#v, want maxAgents=3", runtime.Budgets)
+	}
+	if runtime.StreamIdentity == nil {
+		t.Fatal("stream identity = nil, want identity for javascript session")
+	}
+	if runtime.StreamIdentity.BackendScopeID != "backend-scope-1" ||
+		runtime.StreamIdentity.FactorySessionID != "session-js" ||
+		runtime.StreamIdentity.StreamGenerationID != startedAt.Format(time.RFC3339Nano) {
+		t.Fatalf("stream identity = %#v, want stable backend/session/start tuple", runtime.StreamIdentity)
+	}
+}
+
+func TestProjectRuntime_JavaScriptWorkflowSessionPrefersSnapshotStreamGenerationID(t *testing.T) {
+	now := time.Date(2026, 6, 27, 7, 30, 0, 0, time.UTC)
+	startedAt := now.Add(-10 * time.Minute)
+	runtime := ProjectRuntime(ProjectionContext{
+		Session: &LiveSession{ID: "session-js", Project: "dynamic-workflow"},
+		FactoryCfg: &interfaces.FactoryConfig{
+			Name: "dynamic-workflow",
+			Orchestrator: &interfaces.FactoryOrchestratorConfig{
+				Kind: interfaces.OrchestratorKindJavaScript,
+				JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{
+					Dialect:   "workflow-v1",
+					SourceRef: "factory/workflows/review.js",
+				},
+			},
+		},
+		Snapshot: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+			StreamGenerationID: "stream-from-snapshot",
+		},
+		JavaScript: &interfaces.FactorySessionJavaScriptRuntimeState{
+			Phase:        "review",
+			Phases:       []string{"plan", "review"},
+			ArgsDigest:   "sha256:args-digest",
+			ScriptStatus: "RUNNING",
+		},
+		BackendScopeID:   "backend-scope-1",
+		RuntimeStartedAt: startedAt,
+		Now:              now,
+	})
+	if runtime.StreamIdentity == nil {
+		t.Fatal("stream identity = nil, want identity for javascript session")
+	}
+	if runtime.StreamIdentity.StreamGenerationID != "stream-from-snapshot" {
+		t.Fatalf("stream generation id = %q, want snapshot token", runtime.StreamIdentity.StreamGenerationID)
 	}
 }
 
@@ -242,7 +289,7 @@ func TestProjectRuntime_JavaScriptChildAgentDispatchAndArtifactProjection(t *tes
 			},
 		},
 		JavaScript: &interfaces.FactorySessionJavaScriptRuntimeState{
-			Phase:      "review",
+			Phase:        "review",
 			ScriptStatus: "RUNNING",
 			Dispatches: []interfaces.FactorySessionDispatchState{{
 				ID:           "dispatch-agent-1",
@@ -261,14 +308,14 @@ func TestProjectRuntime_JavaScriptChildAgentDispatchAndArtifactProjection(t *tes
 				},
 			}},
 			Artifacts: []interfaces.FactorySessionArtifactState{{
-				ID:         "artifact-child-1",
-				Kind:       string(factoryapi.FactoryArtifactKindCHILDRESULT),
-				Visibility: string(factoryapi.FactoryArtifactVisibilityPUBLIC),
-				Label:      "Child result",
-				Summary:    "Agent output summary",
-				AuditMode:  string(factoryapi.FactoryArtifactAuditModeREDACTED),
+				ID:          "artifact-child-1",
+				Kind:        string(factoryapi.FactoryArtifactKindCHILDRESULT),
+				Visibility:  string(factoryapi.FactoryArtifactVisibilityPUBLIC),
+				Label:       "Child result",
+				Summary:     "Agent output summary",
+				AuditMode:   string(factoryapi.FactoryArtifactAuditModeREDACTED),
 				ContentHash: "sha256:child-result",
-				SizeBytes:  128,
+				SizeBytes:   128,
 				RedactionCounts: map[string]int{
 					"secrets": 1,
 				},
