@@ -64,7 +64,7 @@ describe("shared locale date and time formatters", () => {
 });
 
 describe("shared locale duration and relative-time formatters", () => {
-  it("formats count-sensitive labels, durations, and relative values", () => {
+  it("formats count-sensitive labels and compact durations", () => {
     expect(
       formatCount(
         1,
@@ -98,6 +98,9 @@ describe("shared locale duration and relative-time formatters", () => {
     expect(formatDuration(192_000, "zh-CN")).toBe("3分 12秒");
     expect(formatDuration(192_000, "ja")).toBe("3分 12秒");
     expect(formatDuration(192_000, "ko")).toBe("3분 12초");
+  });
+
+  it("formats graph durations with truthful overflow behavior", () => {
     expect(formatDuration(10_000, "en", { style: "graph" })).toBe("10s");
     expect(formatDuration(780_000, "en", { style: "graph" })).toBe("13m");
     expect(formatDuration(3_600_000, "en", { style: "graph" })).toBe("1h");
@@ -120,6 +123,31 @@ describe("shared locale duration and relative-time formatters", () => {
     );
     expect(formatDuration(360_000_000, "ja", { style: "graph" })).toBe("4日");
     expect(formatDuration(360_000_000, "ko", { style: "graph" })).toBe("4일");
+    expect(
+      formatDuration(100 * 365 * 24 * 60 * 60 * 1000, "en", {
+        style: "graph",
+      }),
+    ).toBe("1c");
+    expect(
+      formatDuration(100 * 365 * 24 * 60 * 60 * 1000, "zh-CN", {
+        style: "graph",
+      }),
+    ).toBe("1世纪");
+    expect(
+      formatDuration(100 * 365 * 24 * 60 * 60 * 1000, "ja", {
+        style: "graph",
+      }),
+    ).toBe("1世紀");
+    expect(
+      formatDuration(100 * 365 * 24 * 60 * 60 * 1000, "ko", {
+        style: "graph",
+      }),
+    ).toBe("1세기");
+  });
+});
+
+describe("shared locale verbose duration and fallback behavior", () => {
+  it("formats verbose durations and relative values", () => {
     expect(
       formatDuration(7_440_000, "en", {
         style: "verbose",

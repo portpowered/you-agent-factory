@@ -97,6 +97,18 @@ describe("formatGraphDurationMillis", () => {
     expect(formatGraphDurationMillis(360_000_000, "zh-CN")).toBe("4天");
     expect(formatGraphDurationMillis(360_000_000, "ja")).toBe("4日");
     expect(formatGraphDurationMillis(360_000_000, "ko")).toBe("4일");
+    expect(formatGraphDurationMillis(100 * 365 * 24 * 60 * 60 * 1000)).toBe(
+      "1c",
+    );
+    expect(
+      formatGraphDurationMillis(100 * 365 * 24 * 60 * 60 * 1000, "zh-CN"),
+    ).toBe("1世纪");
+    expect(
+      formatGraphDurationMillis(100 * 365 * 24 * 60 * 60 * 1000, "ja"),
+    ).toBe("1世紀");
+    expect(
+      formatGraphDurationMillis(100 * 365 * 24 * 60 * 60 * 1000, "ko"),
+    ).toBe("1세기");
   });
 
   it("shows zero seconds for sub-second durations", () => {

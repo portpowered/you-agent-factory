@@ -1,10 +1,10 @@
+import { formatGraphDurationToken } from "./graph-duration";
 import { resolveSupportedLocale } from "./locales";
 
 type DateInput = Date | number | string;
 type DateLikeInput = DateInput | null | undefined;
 type RelativeTimeValue = number | null | undefined;
 type DurationUnit = "hour" | "minute" | "second" | "millisecond";
-type GraphDurationUnit = "year" | "week" | "day" | "hour" | "minute" | "second";
 
 type DateTimeFormatterOptions = Intl.DateTimeFormatOptions & {
   fallback?: string;
@@ -203,75 +203,11 @@ interface DurationUnits {
 }
 
 const COMPACT_DURATION_LABELS: Record<string, Record<DurationUnit, string>> = {
-  en: {
-    hour: "h",
-    minute: "m",
-    second: "s",
-    millisecond: "ms",
-  },
-  "zh-CN": {
-    hour: "小时",
-    minute: "分",
-    second: "秒",
-    millisecond: "毫秒",
-  },
-  ja: {
-    hour: "時間",
-    minute: "分",
-    second: "秒",
-    millisecond: "ミリ秒",
-  },
-  ko: {
-    hour: "시간",
-    minute: "분",
-    second: "초",
-    millisecond: "밀리초",
-  },
+  en: { hour: "h", minute: "m", second: "s", millisecond: "ms" },
+  "zh-CN": { hour: "小时", minute: "分", second: "秒", millisecond: "毫秒" },
+  ja: { hour: "時間", minute: "分", second: "秒", millisecond: "ミリ秒" },
+  ko: { hour: "시간", minute: "분", second: "초", millisecond: "밀리초" },
 };
-
-const GRAPH_DURATION_LABELS: Record<string, Record<GraphDurationUnit, string>> = {
-  en: {
-    year: "y",
-    week: "w",
-    day: "d",
-    hour: "h",
-    minute: "m",
-    second: "s",
-  },
-  "zh-CN": {
-    year: "年",
-    week: "周",
-    day: "天",
-    hour: "时",
-    minute: "分",
-    second: "秒",
-  },
-  ja: {
-    year: "年",
-    week: "週",
-    day: "日",
-    hour: "時",
-    minute: "分",
-    second: "秒",
-  },
-  ko: {
-    year: "년",
-    week: "주",
-    day: "일",
-    hour: "시",
-    minute: "분",
-    second: "초",
-  },
-};
-
-const GRAPH_DURATION_UNITS: ReadonlyArray<{ millis: number; unit: GraphDurationUnit }> = [
-  { unit: "year", millis: 365 * 24 * 60 * 60 * 1000 },
-  { unit: "week", millis: 7 * 24 * 60 * 60 * 1000 },
-  { unit: "day", millis: 24 * 60 * 60 * 1000 },
-  { unit: "hour", millis: 60 * 60 * 1000 },
-  { unit: "minute", millis: 60 * 1000 },
-  { unit: "second", millis: 1000 },
-];
 
 const VERBOSE_DURATION_LABELS: Record<
   string,
@@ -351,82 +287,6 @@ function formatCompactDurationParts(
   return getDurationParts(units)
     .map(({ unit, value }) => formatCompactDurationPart(value, unit, locale))
     .join(" ");
-}
-
-function formatGraphDurationToken(
-  durationMillis: number,
-  locale: string,
-): string {
-  const baseGraphUnit = getBaseGraphDurationUnit(durationMillis);
-  const fittingGraphUnit = getFittingGraphDurationUnit(
-    durationMillis,
-    baseGraphUnit,
-    locale,
-  );
-  const graphValue = Math.floor(durationMillis / fittingGraphUnit.millis);
-
-  return formatGraphDurationPart(graphValue, fittingGraphUnit.unit, locale);
-}
-
-function formatGraphDurationPart(
-  value: number,
-  unit: GraphDurationUnit,
-  locale: string,
-): string {
-  const unitLabel = getGraphDurationLabel(unit, locale);
-  return `${formatNumber(value, locale)}${unitLabel}`;
-}
-
-function getBaseGraphDurationUnit(durationMillis: number): {
-  millis: number;
-  unit: GraphDurationUnit;
-} {
-  for (const graphUnit of GRAPH_DURATION_UNITS.slice(3)) {
-    if (durationMillis >= graphUnit.millis) {
-      return graphUnit;
-    }
-  }
-
-  return GRAPH_DURATION_UNITS.at(-1) ?? { unit: "second", millis: 1000 };
-}
-
-function getFittingGraphDurationUnit(
-  durationMillis: number,
-  baseUnit: { millis: number; unit: GraphDurationUnit },
-  locale: string,
-): { millis: number; unit: GraphDurationUnit } {
-  const baseUnitIndex = GRAPH_DURATION_UNITS.findIndex(
-    ({ unit }) => unit === baseUnit.unit,
-  );
-
-  for (let index = baseUnitIndex; index >= 0; index -= 1) {
-    const graphUnit = GRAPH_DURATION_UNITS[index];
-    if (!graphUnit) {
-      continue;
-    }
-    const graphValue = Math.floor(durationMillis / graphUnit.millis);
-    if (graphValue <= getMaxGraphDurationValue(graphUnit.unit, locale)) {
-      return graphUnit;
-    }
-  }
-
-  return GRAPH_DURATION_UNITS[0];
-}
-
-function getMaxGraphDurationValue(
-  unit: GraphDurationUnit,
-  locale: string,
-): number {
-  const unitLabel = getGraphDurationLabel(unit, locale);
-  const maxDigits = Math.max(1, 3 - unitLabel.length);
-
-  return 10 ** maxDigits - 1;
-}
-
-function getGraphDurationLabel(unit: GraphDurationUnit, locale: string): string {
-  return (
-    GRAPH_DURATION_LABELS[locale]?.[unit] ?? GRAPH_DURATION_LABELS.en[unit]
-  );
 }
 
 function formatVerboseDurationParts(
