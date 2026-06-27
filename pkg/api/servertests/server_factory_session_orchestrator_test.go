@@ -26,6 +26,7 @@ func stringPointerForFactorySessionTest(value string) *string {
 
 func TestFactorySessionsAPI_GetFactorySession(t *testing.T) {
 	phase := "review"
+	backendScopeID := "backend-scope-live"
 	streamGenerationID := "stream-gen-live-001"
 	srv := newMockFactorySessionTestServer(&testutil.MockFactory{
 		FactorySession: factoryapi.FactorySession{
@@ -38,9 +39,13 @@ func TestFactorySessionsAPI_GetFactorySession(t *testing.T) {
 				Name: stringPointerForFactorySessionTest("beta"),
 			},
 			Runtime: factoryapi.FactorySessionRuntime{
-				OrchestratorKind:   factoryapi.JAVASCRIPT,
-				StreamGenerationID: &streamGenerationID,
-				Status:             factoryapi.FactorySessionStatusIDLE,
+				OrchestratorKind: factoryapi.JAVASCRIPT,
+				StreamIdentity: &factoryapi.FactorySessionStreamIdentity{
+					BackendScopeID:     backendScopeID,
+					FactorySessionID:   "session-beta",
+					StreamGenerationID: streamGenerationID,
+				},
+				Status: factoryapi.FactorySessionStatusIDLE,
 				Progress: factoryapi.FactorySessionProgress{
 					FactoryState:  "UNKNOWN",
 					Categories:    factoryapi.StatusCategories{},
@@ -76,8 +81,17 @@ func TestFactorySessionsAPI_GetFactorySession(t *testing.T) {
 	if response.Runtime.OrchestratorKind != factoryapi.JAVASCRIPT {
 		t.Fatalf("orchestrator kind = %q, want JAVASCRIPT", response.Runtime.OrchestratorKind)
 	}
-	if response.Runtime.StreamGenerationID == nil || *response.Runtime.StreamGenerationID != streamGenerationID {
-		t.Fatalf("streamGenerationID = %#v, want %q", response.Runtime.StreamGenerationID, streamGenerationID)
+	if response.Runtime.StreamIdentity == nil {
+		t.Fatal("streamIdentity = nil, want populated identity")
+	}
+	if response.Runtime.StreamIdentity.BackendScopeID != backendScopeID {
+		t.Fatalf("streamIdentity.backendScopeID = %q, want %q", response.Runtime.StreamIdentity.BackendScopeID, backendScopeID)
+	}
+	if response.Runtime.StreamIdentity.FactorySessionID != "session-beta" {
+		t.Fatalf("streamIdentity.factorySessionID = %q, want session-beta", response.Runtime.StreamIdentity.FactorySessionID)
+	}
+	if response.Runtime.StreamIdentity.StreamGenerationID != streamGenerationID {
+		t.Fatalf("streamIdentity.streamGenerationID = %q, want %q", response.Runtime.StreamIdentity.StreamGenerationID, streamGenerationID)
 	}
 	if response.Runtime.Javascript == nil || response.Runtime.Javascript.Phase == nil || *response.Runtime.Javascript.Phase != "review" {
 		t.Fatalf("javascript projection = %#v", response.Runtime.Javascript)

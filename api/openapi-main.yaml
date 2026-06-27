@@ -1566,6 +1566,8 @@ components:
       $ref: './components/schemas/api/FactorySession.yaml'
     FactorySessionRuntime:
       $ref: './components/schemas/api/FactorySessionRuntime.yaml'
+    FactorySessionStreamIdentity:
+      $ref: './components/schemas/api/FactorySessionStreamIdentity.yaml'
     FactorySessionStatus:
       $ref: './components/schemas/api/FactorySessionStatus.yaml'
     FactorySessionProgress:

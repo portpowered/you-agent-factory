@@ -2458,15 +2458,25 @@ type FactorySessionRuntime struct {
 	SourceRef *string `json:"sourceRef,omitempty"`
 
 	// Status Canonical lifecycle status for one live factory session runtime.
-	Status FactorySessionStatus `json:"status"`
-
-	// StreamGenerationID Opaque invalidation token for the current live Factory Session event history. Clients can compare this value across preflight reads and stream handshakes to decide whether reconnect cursors and stream-derived projections still belong to the same live history.
-	StreamGenerationID *string             `json:"streamGenerationID,omitempty"`
-	Usage              FactorySessionUsage `json:"usage"`
+	Status         FactorySessionStatus          `json:"status"`
+	StreamIdentity *FactorySessionStreamIdentity `json:"streamIdentity,omitempty"`
+	Usage          FactorySessionUsage           `json:"usage"`
 }
 
 // FactorySessionStatus Canonical lifecycle status for one live factory session runtime.
 type FactorySessionStatus string
+
+// FactorySessionStreamIdentity defines model for FactorySessionStreamIdentity.
+type FactorySessionStreamIdentity struct {
+	// BackendScopeID Stable backend process or scope identity for the current live session stream.
+	BackendScopeID string `json:"backendScopeID"`
+
+	// FactorySessionID Stable live Factory Session identifier for the current stream.
+	FactorySessionID string `json:"factorySessionID"`
+
+	// StreamGenerationID Stable generation identifier for the current live session stream incarnation.
+	StreamGenerationID string `json:"streamGenerationID"`
+}
 
 // FactorySessionSummary defines model for FactorySessionSummary.
 type FactorySessionSummary struct {

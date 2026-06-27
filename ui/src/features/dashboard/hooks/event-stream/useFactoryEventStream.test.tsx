@@ -392,6 +392,50 @@ describe("useFactoryEventStream stream reconnect", () => {
       `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
     );
   });
+
+  it("clears the stale reconnect cursor and retries once from scratch", async () => {
+    const onInvalidReconnectCursor = vi.fn();
+    const validateReconnectCursor = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: "Factory event replay cursor no longer matches the current session history.",
+        ok: false,
+        reason: "stale_cursor",
+      })
+      .mockResolvedValueOnce({ ok: true });
+
+    renderHook(
+      () =>
+        useFactoryEventStream({
+          enabled: true,
+          initialReconnectCursor: {
+            afterEventId: "checkpoint-event-7",
+            afterSequence: 7,
+          },
+          onEvent: () => {},
+          onInvalidReconnectCursor,
+          sessionID: DEFAULT_FACTORY_SESSION_ID,
+          validateReconnectCursor,
+        }),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    expect(onInvalidReconnectCursor).toHaveBeenCalledTimes(1);
+    expect(validateReconnectCursor).toHaveBeenNthCalledWith(
+      1,
+      DEFAULT_FACTORY_SESSION_ID,
+      {
+        afterEventId: "checkpoint-event-7",
+        afterSequence: 7,
+      },
+    );
+    expect(replayHarness.getStreams()[0]?.url).toBe(
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+    );
+  });
 });
 
 function createWrapper(queryClient: QueryClient) {

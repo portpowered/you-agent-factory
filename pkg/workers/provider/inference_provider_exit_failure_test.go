@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -115,9 +114,7 @@ func TestInferenceProgressPublishingCommandRunner_NormalizesCodexStructuredEvent
 		"printf '%s\\n' '{\"type\":\"response.output_text.delta\",\"delta\":\"hello from delta\"}'\n" +
 		"printf '%s\\n' '{\"type\":\"response.completed\",\"response\":{\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"hello final\"}]}]}}'\n" +
 		"printf '%s\\n' 'planning update' 1>&2\n"
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatalf("write script: %v", err)
-	}
+	writeExecutableTestScript(t, scriptPath, script)
 
 	var published []InferenceProgressFragment
 	var publishedMu sync.Mutex
@@ -172,9 +169,7 @@ func TestInferenceProgressPublishingCommandRunner_MapsUnknownAndMalformedCodexEv
 		"printf 'event: response.output_text.delta\\n'\n" +
 		"printf 'data: {\"delta\":\"hello after malformed frames\"}\\n'\n" +
 		"printf '\\n'\n"
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatalf("write script: %v", err)
-	}
+	writeExecutableTestScript(t, scriptPath, script)
 
 	var published []InferenceProgressFragment
 	var publishedMu sync.Mutex
@@ -229,9 +224,7 @@ func TestInferenceProgressPublishingCommandRunner_MapsFailureCancelAndTruncation
 		"printf '%s\\n' '{\"type\":\"response.completed\",\"response\":{\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"" + finalPayload + "\"}]}]}}'\n" +
 		"printf '%s\\n' '{\"type\":\"response.failed\",\"error\":\"" + failurePayload + "\"}'\n" +
 		"printf '%s\\n' '{\"type\":\"response.canceled\",\"status\":\"" + cancelPayload + "\"}'\n"
-	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
-		t.Fatalf("write script: %v", err)
-	}
+	writeExecutableTestScript(t, scriptPath, script)
 
 	var published []InferenceProgressFragment
 	var publishedMu sync.Mutex

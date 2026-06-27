@@ -22,7 +22,7 @@ import {
   formatFactorySessionRuntimeStatus,
   formatFactorySessionScriptStatus,
 } from "../messages/factory-session-runtime-display";
-import { DispatchDetailContent } from "./dispatch-detail-content";
+import { DispatchDetailContent } from "./dispatch-detail/dispatch-detail-content";
 import { FactorySessionEventReplayDisclosure } from "./event-replay/factory-session-event-replay-disclosure";
 import { LifecycleActionSection } from "./lifecycle/lifecycle-action-section";
 

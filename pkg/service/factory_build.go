@@ -487,6 +487,8 @@ func assembleRuntimeBundle(
 	bundle := &factoryRuntimeBundle{
 		dir:               input.dir,
 		folderPath:        input.folderPath,
+		runtimeInstanceID: input.runtimeInstanceID,
+		startedAtUTC:      input.clock.Now().UTC(),
 		eventHistory:      eventHistory,
 		net:               net,
 		runtimeCfg:        input.loadedFactoryCfg,
