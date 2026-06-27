@@ -323,7 +323,7 @@ func runFactoryInvocation(
 		return runErr
 	}
 	if result.Status != factoryapi.InvocationTerminalStatusCompleted {
-		return invocationResultFailure(result)
+		return writeInvocationFailure(cfg, result)
 	}
 	return writeInvocationSuccess(cfg, result)
 }
@@ -357,68 +357,93 @@ func waitForInvocationSessionReady(
 }
 
 type invocationCLIError struct {
-	Code    string
-	Message string
+	Code      string
+	Message   string
+	SessionID string
+	WorkID    string
+	WorkName  string
+	WorkState string
 }
 
 func (e invocationCLIError) Error() string {
+	contextSuffix := e.contextSuffix()
 	switch {
 	case strings.TrimSpace(e.Code) == "":
-		return strings.TrimSpace(e.Message)
+		return strings.TrimSpace(e.Message) + contextSuffix
 	case strings.TrimSpace(e.Message) == "":
-		return strings.TrimSpace(e.Code)
+		return strings.TrimSpace(e.Code) + contextSuffix
 	default:
-		return strings.TrimSpace(e.Code) + ": " + strings.TrimSpace(e.Message)
+		return strings.TrimSpace(e.Code) + ": " + strings.TrimSpace(e.Message) + contextSuffix
 	}
+}
+
+func (e invocationCLIError) contextSuffix() string {
+	fields := make([]string, 0, 4)
+	if sessionID := strings.TrimSpace(e.SessionID); sessionID != "" {
+		fields = append(fields, "session="+sessionID)
+	}
+	if workID := strings.TrimSpace(e.WorkID); workID != "" {
+		fields = append(fields, "workId="+workID)
+	}
+	if workName := strings.TrimSpace(e.WorkName); workName != "" {
+		fields = append(fields, "workName="+workName)
+	}
+	if workState := strings.TrimSpace(e.WorkState); workState != "" {
+		fields = append(fields, "workState="+workState)
+	}
+	if len(fields) == 0 {
+		return ""
+	}
+	return " [" + strings.Join(fields, " ") + "]"
 }
 
 func invocationResultFailure(result apisurface.FactoryInvocationResult) error {
 	return invocationCLIError{
-		Code:    strings.TrimSpace(result.ErrorCode),
-		Message: strings.TrimSpace(result.Message),
+		Code:      strings.TrimSpace(result.ErrorCode),
+		Message:   strings.TrimSpace(result.Message),
+		SessionID: strings.TrimSpace(result.SessionID),
+		WorkID:    strings.TrimSpace(result.WorkID),
+		WorkName:  strings.TrimSpace(result.WorkName),
+		WorkState: strings.TrimSpace(result.WorkState),
 	}
 }
 
-func writeInvocationSuccess(cfg RunConfig, result apisurface.FactoryInvocationResult) error {
-	output := cfg.Output
-	if output == nil {
-		output = os.Stdout
-	}
-
+func writeInvocationFailure(cfg RunConfig, result apisurface.FactoryInvocationResult) error {
 	if cfg.JSONOutput {
-		response := factoryapi.InvocationResponse{
-			RequestId: result.RequestID,
-			TraceId:   result.TraceID,
-			Status:    result.Status,
+		if err := writeInvocationJSON(cfg, result); err != nil {
+			return err
 		}
-		if content := workcontent.GeneratedPtrFromParts(result.PrimaryResult); content != nil {
-			response.PrimaryResult = content
-		}
-		if sessionID := strings.TrimSpace(result.SessionID); sessionID != "" {
-			response.SessionId = &sessionID
-		}
-		if workID := strings.TrimSpace(result.WorkID); workID != "" {
-			response.WorkId = &workID
-		}
-		if workName := strings.TrimSpace(result.WorkName); workName != "" {
-			response.WorkName = &workName
-		}
-		if workState := strings.TrimSpace(result.WorkState); workState != "" {
-			response.WorkState = &workState
-		}
-		encoded, err := json.Marshal(response)
-		if err != nil {
-			return fmt.Errorf("marshal invocation response: %w", err)
-		}
-		_, err = fmt.Fprintln(output, string(encoded))
-		return err
+	}
+	return invocationResultFailure(result)
+}
+
+func writeInvocationSuccess(cfg RunConfig, result apisurface.FactoryInvocationResult) error {
+	if cfg.JSONOutput {
+		return writeInvocationJSON(cfg, result)
 	}
 
 	text, err := invocationPrimaryResultText(result.PrimaryResult)
 	if err != nil {
 		return err
 	}
+	output := cfg.Output
+	if output == nil {
+		output = os.Stdout
+	}
 	_, err = fmt.Fprint(output, text)
+	return err
+}
+
+func writeInvocationJSON(cfg RunConfig, result apisurface.FactoryInvocationResult) error {
+	output := cfg.Output
+	if output == nil {
+		output = os.Stdout
+	}
+	encoded, err := json.Marshal(apisurface.InvocationResponseFromResult(result))
+	if err != nil {
+		return fmt.Errorf("marshal invocation response: %w", err)
+	}
+	_, err = fmt.Fprintln(output, string(encoded))
 	return err
 }
 

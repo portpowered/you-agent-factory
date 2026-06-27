@@ -57,33 +57,7 @@ func (s *Server) InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.
 		return
 	}
 
-	response := factoryapi.InvocationResponse{
-		RequestId: result.RequestID,
-		TraceId:   result.TraceID,
-		Status:    result.Status,
-	}
-	if content := workcontent.GeneratedPtrFromParts(result.PrimaryResult); content != nil {
-		response.PrimaryResult = content
-	}
-	if code := strings.TrimSpace(result.ErrorCode); code != "" {
-		value := factoryapi.InvocationResponseErrorCode(code)
-		response.ErrorCode = &value
-	}
-	if message := strings.TrimSpace(result.Message); message != "" {
-		response.Message = &message
-	}
-	if sessionID := strings.TrimSpace(result.SessionID); sessionID != "" {
-		response.SessionId = &sessionID
-	}
-	if workID := strings.TrimSpace(result.WorkID); workID != "" {
-		response.WorkId = &workID
-	}
-	if workName := strings.TrimSpace(result.WorkName); workName != "" {
-		response.WorkName = &workName
-	}
-	if workState := strings.TrimSpace(result.WorkState); workState != "" {
-		response.WorkState = &workState
-	}
+	response := apisurface.InvocationResponseFromResult(result)
 	s.writeJSON(w, http.StatusOK, response)
 }
 

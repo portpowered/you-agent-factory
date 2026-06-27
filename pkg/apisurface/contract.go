@@ -3,12 +3,14 @@ package apisurface
 import (
 	"context"
 	"errors"
+	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
 )
 
 // ModelAPI is the model catalog and direct-invocation seam for API handlers and
@@ -131,6 +133,39 @@ type FactoryInvocationResult struct {
 	WorkID        string
 	WorkName      string
 	WorkState     string
+}
+
+// InvocationResponseFromResult maps a shared invocation result onto the public
+// invocation response contract used by both API and CLI JSON surfaces.
+func InvocationResponseFromResult(result FactoryInvocationResult) factoryapi.InvocationResponse {
+	response := factoryapi.InvocationResponse{
+		RequestId: result.RequestID,
+		TraceId:   result.TraceID,
+		Status:    result.Status,
+	}
+	if content := workcontent.GeneratedPtrFromParts(result.PrimaryResult); content != nil {
+		response.PrimaryResult = content
+	}
+	if code := strings.TrimSpace(result.ErrorCode); code != "" {
+		value := factoryapi.InvocationResponseErrorCode(code)
+		response.ErrorCode = &value
+	}
+	if message := strings.TrimSpace(result.Message); message != "" {
+		response.Message = &message
+	}
+	if sessionID := strings.TrimSpace(result.SessionID); sessionID != "" {
+		response.SessionId = &sessionID
+	}
+	if workID := strings.TrimSpace(result.WorkID); workID != "" {
+		response.WorkId = &workID
+	}
+	if workName := strings.TrimSpace(result.WorkName); workName != "" {
+		response.WorkName = &workName
+	}
+	if workState := strings.TrimSpace(result.WorkState); workState != "" {
+		response.WorkState = &workState
+	}
+	return response
 }
 
 // RequestValidationError reports a stable client-side validation failure that

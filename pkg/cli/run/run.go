@@ -124,8 +124,8 @@ type RunConfig struct {
 	// StdinIsTTY reports whether stdin is an interactive TTY. Nil inspects
 	// os.Stdin directly.
 	StdinIsTTY func() bool
-	// JSONOutput emits the API-shaped InvocationResponse on successful factory
-	// invocation instead of only the primary text result.
+	// JSONOutput emits the API-shaped InvocationResponse for factory invocation
+	// results, including non-success outcomes that return recovery context.
 	JSONOutput bool
 	// InvocationMetricsRecorder receives invocation counter emissions from the
 	// CLI boundary, including pre-runtime source conflicts.

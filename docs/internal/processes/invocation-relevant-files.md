@@ -48,7 +48,10 @@ primary-result behavior.
   shared `pkg/invocations` contract, then runs the local service in
   invocation-only service mode so stdout stays reserved for primary-result
   output instead of startup or dashboard noise; CLI-only source conflicts are
-  logged and counted there before the service runtime exists.
+  logged and counted there before the service runtime exists. `RunConfig.JSONOutput`
+  must stay aligned with the shared `InvocationResponse` envelope for both
+  successful and non-success invocation results rather than becoming a
+  success-only CLI fork.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin
   bytes into `invocations.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
   from the shared resolver instead of pre-trimming or short-circuiting with
