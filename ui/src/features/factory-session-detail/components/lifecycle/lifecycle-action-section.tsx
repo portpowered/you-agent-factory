@@ -1,15 +1,22 @@
 import {
+  AlertPanel,
+  AlertPanelText,
   DashboardActionButton,
   DashboardActionRow,
   DashboardLabel,
+  DashboardStatusPill,
   DashboardText,
-} from "../../../components/ui";
-import { DetailCopy } from "../../../components/ui/widget-frame";
-import type { FactorySessionLifecycleActionID } from "../lib/factory-session-lifecycle-controls";
+} from "../../../../components/ui";
+import { DetailCopy } from "../../../../components/ui/widget-frame";
 import {
-  type FactorySessionDetailMessages,
+  type LifecycleControlFeedbackState,
+  getFactorySessionLifecycleActionLabel,
+  resolveFactorySessionLifecycleFeedbackDisplay,
+} from "../../lib/lifecycle/factory-session-lifecycle-feedback";
+import type { FactorySessionLifecycleActionID } from "../../lib/factory-session-lifecycle-controls";
+import {
   getFactorySessionDetailMessages,
-} from "../messages/factory-session-detail";
+} from "../../messages/factory-session-detail";
 
 interface LifecycleActionSectionProps {
   availability: {
@@ -18,6 +25,7 @@ interface LifecycleActionSectionProps {
     showDispatchSelectionHint: boolean;
     showEmptyState: boolean;
   };
+  feedback: LifecycleControlFeedbackState | null;
   locale?: string;
   onAction: (action: FactorySessionLifecycleActionID) => void;
   pendingActionID: FactorySessionLifecycleActionID | null;
@@ -25,6 +33,7 @@ interface LifecycleActionSectionProps {
 
 export function LifecycleActionSection({
   availability,
+  feedback,
   locale,
   onAction,
   pendingActionID,
@@ -44,10 +53,13 @@ export function LifecycleActionSection({
             }}
             type="button"
           >
-            {lifecycleActionLabel(action, messages)}
+            {getFactorySessionLifecycleActionLabel(action, messages)}
           </DashboardActionButton>
         ))}
       />
+      {feedback ? (
+        <LifecycleControlFeedback feedback={feedback} locale={locale} />
+      ) : null}
       {availability.selectedDispatch ? (
         <DashboardText variant="supporting">
           {messages.lifecycleControlsSelectedDispatchLabel(
@@ -65,22 +77,30 @@ export function LifecycleActionSection({
   );
 }
 
-function lifecycleActionLabel(
-  action: FactorySessionLifecycleActionID,
-  messages: FactorySessionDetailMessages,
-) {
-  switch (action) {
-    case "approve":
-      return messages.lifecycleActionApproveLabel;
-    case "cancel":
-      return messages.lifecycleActionCancelLabel;
-    case "pause":
-      return messages.lifecycleActionPauseLabel;
-    case "resume":
-      return messages.lifecycleActionResumeLabel;
-    case "retry-dispatch":
-      return messages.lifecycleActionRetryDispatchLabel;
-    case "terminate":
-      return messages.lifecycleActionTerminateLabel;
-  }
+function LifecycleControlFeedback({
+  feedback,
+  locale,
+}: {
+  feedback: LifecycleControlFeedbackState;
+  locale?: string;
+}) {
+  const messages = getFactorySessionDetailMessages(locale);
+  const display = resolveFactorySessionLifecycleFeedbackDisplay(
+    feedback,
+    messages,
+  );
+
+  return (
+    <AlertPanel role={display.role} tone={display.tone}>
+      <div className="flex flex-wrap items-center gap-2">
+        <DashboardStatusPill role="status" size="compact" tone={display.tone}>
+          {display.outcomeLabel}
+        </DashboardStatusPill>
+        <AlertPanelText as="span">{display.title}</AlertPanelText>
+      </div>
+      {display.detail ? (
+        <AlertPanelText variant="supporting">{display.detail}</AlertPanelText>
+      ) : null}
+    </AlertPanel>
+  );
 }

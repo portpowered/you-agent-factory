@@ -24,7 +24,7 @@ import {
 } from "../messages/factory-session-runtime-display";
 import { DispatchDetailContent } from "./dispatch-detail-content";
 import { FactorySessionEventReplayDisclosure } from "./event-replay/factory-session-event-replay-disclosure";
-import { LifecycleActionSection } from "./lifecycle-action-section";
+import { LifecycleActionSection } from "./lifecycle/lifecycle-action-section";
 
 type FactoryArtifact = components["schemas"]["FactoryArtifact"];
 type FactoryDispatch = components["schemas"]["FactoryDispatch"];
@@ -154,6 +154,16 @@ function JavaScriptSessionProjection({
   const [selectedDispatchID, setSelectedDispatchID] = useState<string | null>(
     null,
   );
+  const lifecycleActionAvailability =
+    resolveFactorySessionLifecycleActionAvailability({
+      durableLifecycleStatus,
+      dispatches,
+      selectedDispatchID,
+    });
+  const lifecycleControl = useFactorySessionLifecycleControl({
+    selectedDispatchID: lifecycleActionAvailability.selectedDispatch?.id ?? null,
+    sessionID,
+  });
 
   if (!javascript) {
     return <DetailCopy>{messages.javascriptProjectionMissingState}</DetailCopy>;
@@ -167,16 +177,6 @@ function JavaScriptSessionProjection({
     FactoryOrchestratorKind.JAVASCRIPT,
     durableLifecycleStatus,
   );
-  const lifecycleActionAvailability =
-    resolveFactorySessionLifecycleActionAvailability({
-      durableLifecycleStatus,
-      dispatches,
-      selectedDispatchID,
-    });
-  const lifecycleControl = useFactorySessionLifecycleControl({
-    selectedDispatchID: lifecycleActionAvailability.selectedDispatch?.id ?? null,
-    sessionID,
-  });
 
   return (
     <div className="grid gap-4">
@@ -198,6 +198,7 @@ function JavaScriptSessionProjection({
       </div>
       <LifecycleActionSection
         availability={lifecycleActionAvailability}
+        feedback={lifecycleControl.feedback}
         locale={locale}
         onAction={lifecycleControl.submitLifecycleAction}
         pendingActionID={lifecycleControl.pendingActionID}

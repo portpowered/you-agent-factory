@@ -14,9 +14,15 @@ import {
   englishFactorySessionEventReplayMessages,
   type FactorySessionEventReplayMessages,
 } from "./factory-session-detail.event-replay";
+import {
+  chineseFactorySessionLifecycleOutcomeMessages,
+  englishFactorySessionLifecycleOutcomeMessages,
+  type FactorySessionLifecycleOutcomeMessages,
+} from "./factory-session-detail.lifecycle-outcomes";
 
 export interface FactorySessionDetailMessages
-  extends FactorySessionEventReplayMessages {
+  extends FactorySessionEventReplayMessages,
+    FactorySessionLifecycleOutcomeMessages {
   lifecycleActionApproveLabel: string;
   lifecycleActionCancelLabel: string;
   lifecycleActionPauseLabel: string;
@@ -230,6 +236,7 @@ const factorySessionDetailMessagesByLocale = {
     lifecycleActionResumeLabel: "Resume",
     lifecycleActionRetryDispatchLabel: "Retry dispatch",
     lifecycleActionTerminateLabel: "Terminate",
+    ...englishFactorySessionLifecycleOutcomeMessages,
     lifecycleControlsEmptyState:
       "No lifecycle controls are available for this Factory Session state.",
     lifecycleControlsHeading: "Lifecycle controls",
@@ -326,6 +333,7 @@ const factorySessionDetailMessagesByLocale = {
     lifecycleActionResumeLabel: "恢复",
     lifecycleActionRetryDispatchLabel: "重试调度",
     lifecycleActionTerminateLabel: "终止",
+    ...chineseFactorySessionLifecycleOutcomeMessages,
     lifecycleControlsEmptyState: "当前工厂会话状态没有可用的生命周期控制。",
     lifecycleControlsHeading: "生命周期控制",
     lifecycleControlsRetrySelectionHint:

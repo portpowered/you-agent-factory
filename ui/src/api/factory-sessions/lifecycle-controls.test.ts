@@ -6,6 +6,7 @@ import {
   retryFactorySessionDispatch,
 } from "./lifecycle-controls";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: lifecycle route coverage shares one transport seam harness.
 describe("factory session lifecycle controls API", () => {
   afterEach(() => {
     vi.unstubAllGlobals();

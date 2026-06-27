@@ -51,7 +51,7 @@ export function useFactorySessionDetail(
       return { status: "idle" };
     }
 
-    if (query.isPending || query.isFetching) {
+    if (query.isPending || (query.isFetching && !query.data)) {
       return { status: "loading" };
     }
 

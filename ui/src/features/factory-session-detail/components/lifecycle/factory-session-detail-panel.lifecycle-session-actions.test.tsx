@@ -1,12 +1,12 @@
 import { screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
-import { FactorySessionDetailPanel } from "./factory-session-detail-panel";
+import { FactoryOrchestratorKind } from "../../../../api/generated/openapi";
+import { FactorySessionDetailPanel } from "../factory-session-detail-panel";
 import {
   jsonResponse,
   renderWithQueryClient,
-} from "./factory-session-detail-panel.test-helpers";
+} from "../factory-session-detail-panel.test-helpers";
 
 describe("running durable session actions", () => {
   beforeEach(() => {

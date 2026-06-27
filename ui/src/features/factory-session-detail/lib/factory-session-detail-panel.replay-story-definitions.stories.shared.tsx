@@ -79,34 +79,98 @@ export const DurableReplayDisclosure = {
 export const DurableReplayDisclosureAwaitingApproval = {
   tags: ["test"],
   parameters: {
-    dashboardApi: {
-      fetchMocks: [
-        {
-          method: "GET",
-          path: `/factory-sessions/${awaitingReplaySessionID}`,
-          response: { body: buildAwaitingDurableSession() },
-        },
-        {
-          method: "GET",
-          path: `/factory-sessions/${awaitingReplaySessionID}/events`,
-          response: {
-            body: buildAwaitingReplayEventStream(),
-            headers: { "Content-Type": "text/event-stream" },
+    dashboardApi: (() => {
+      let approved = false;
+
+      return {
+        fetchMocks: [
+          {
+            method: "GET",
+            path: `/factory-sessions/${awaitingReplaySessionID}`,
+            response: () => ({
+              body: approved
+                ? {
+                    ...buildAwaitingDurableSession(),
+                    lifecycle: {
+                      startedAt: "2026-06-08T15:00:05Z",
+                      updatedAt: "2026-06-08T15:00:05Z",
+                    },
+                    progress: {
+                      completedDispatches: 0,
+                      failedDispatches: 0,
+                      inFlightDispatches: 1,
+                      totalDispatches: 1,
+                    },
+                    resultSummary: {
+                      resultStatus: "NOT_READY",
+                      summary: "Execution resumed after approval.",
+                    },
+                    status: "RUNNING",
+                  }
+                : buildAwaitingDurableSession(),
+            }),
           },
-        },
-      ],
-      sessionID: awaitingReplaySessionID,
-    },
+          {
+            method: "POST",
+            path: `/factory-sessions/${awaitingReplaySessionID}/approve`,
+            response: () => {
+              approved = true;
+
+              return {
+                body: {
+                  detail: "Approval request was accepted.",
+                  operation: "APPROVE",
+                  outcome: "ACCEPTED",
+                  sessionId: awaitingReplaySessionID,
+                  session: {
+                    ...buildAwaitingDurableSession(),
+                    lifecycle: {
+                      startedAt: "2026-06-08T15:00:05Z",
+                      updatedAt: "2026-06-08T15:00:05Z",
+                    },
+                    progress: {
+                      completedDispatches: 0,
+                      failedDispatches: 0,
+                      inFlightDispatches: 1,
+                      totalDispatches: 1,
+                    },
+                    resultSummary: {
+                      resultStatus: "NOT_READY",
+                      summary: "Execution resumed after approval.",
+                    },
+                    status: "RUNNING",
+                  },
+                  status: "RUNNING",
+                },
+                status: 202,
+              };
+            },
+          },
+          {
+            method: "GET",
+            path: `/factory-sessions/${awaitingReplaySessionID}/events`,
+            response: {
+              body: buildAwaitingReplayEventStream(),
+              headers: { "Content-Type": "text/event-stream" },
+            },
+          },
+        ],
+        sessionID: awaitingReplaySessionID,
+      };
+    })(),
   },
   play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     const user = userEvent.setup();
-    const trigger = await canvas.findByRole("button", {
-      name: "Expand Factory Event replay",
-    });
-    await user.click(trigger);
-    await expect(canvas.findByText("Showing 2 Factory Events.")).resolves.toBeTruthy();
-    await expect(canvas.getByText("Session result updated")).toBeTruthy();
+    await user.click(await canvas.findByRole("button", { name: "Approve" }));
+    await expect(canvas.findByText("Accepted")).resolves.toBeTruthy();
+    await expect(canvas.findByText("Approve accepted")).resolves.toBeTruthy();
+    await expect(
+      canvas.findByText(
+        "Approval request was accepted. Current durable status: Running.",
+      ),
+    ).resolves.toBeTruthy();
+    await expect(canvas.findByRole("button", { name: "Pause" })).resolves.toBeTruthy();
   },
   render: () => renderFactorySessionDetailPanel(awaitingReplaySessionID),
 };

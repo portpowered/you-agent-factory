@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { getFactorySessionDetailMessages } from "./factory-session-detail";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: locale coverage stays in one shared catalog assertion file.
 describe("factory session detail messages", () => {
   it("formats english replay and dispatch detail labels through the shared catalog", () => {
     const messages = getFactorySessionDetailMessages("en");
@@ -53,6 +54,15 @@ describe("factory session detail messages", () => {
       "Collapse dispatch detail for dispatch-9",
     );
     expect(messages.lifecycleActionRetryDispatchLabel).toBe("Retry dispatch");
+    expect(messages.lifecycleOutcomeAcceptedTitle("Pause")).toBe(
+      "Pause accepted",
+    );
+    expect(messages.lifecycleOutcomeConflictTitle("Pause")).toBe(
+      "Pause is blocked by another lifecycle change.",
+    );
+    expect(messages.lifecycleOutcomeCurrentStatusDetail("Paused")).toBe(
+      "Current durable status: Paused.",
+    );
     expect(messages.lifecycleControlsSelectedDispatchLabel("dispatch-9")).toBe(
       "Selected dispatch: dispatch-9",
     );
@@ -99,6 +109,15 @@ describe("factory session detail messages", () => {
       "收起 dispatch-9 的调度详情",
     );
     expect(messages.lifecycleActionRetryDispatchLabel).toBe("重试调度");
+    expect(messages.lifecycleOutcomeAcceptedTitle("暂停")).toBe(
+      "已接受“暂停”请求",
+    );
+    expect(messages.lifecycleOutcomeConflictTitle("暂停")).toBe(
+      "“暂停”被另一个生命周期变更阻塞。",
+    );
+    expect(messages.lifecycleOutcomeCurrentStatusDetail("已暂停")).toBe(
+      "当前持久化状态：已暂停。",
+    );
     expect(messages.lifecycleControlsSelectedDispatchLabel("dispatch-9")).toBe(
       "已选择调度：dispatch-9",
     );
