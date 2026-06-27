@@ -263,6 +263,58 @@ class SetupWorkspaceWorktreeTest(unittest.TestCase):
         self.assertIn("A  staged.txt", git(["status", "--porcelain"], local_repo).stdout)
         self.assertIn("?? dirty.txt", git(["status", "--porcelain"], local_repo).stdout)
 
+    def test_reused_worktree_stashes_local_changes_before_syncing_upstream(self):
+        bare_remote = self.repo_path / "remote.git"
+        bare_remote.mkdir()
+        git(["init", "--bare", "-b", "main"], bare_remote)
+
+        upstream = self.repo_path / "upstream"
+        upstream.mkdir()
+        init_local_repo(upstream)
+        git(["remote", "add", "origin", str(bare_remote)], upstream)
+        git(["push", "-u", "origin", "main"], upstream)
+
+        local_repo = self.repo_path / "local"
+        git(["clone", str(bare_remote), str(local_repo.name)], self.repo_path)
+
+        prd_name = "dirty-worktree-sync-prd"
+        write_prd(local_repo, prd_name)
+        git(["checkout", "-b", prd_name], local_repo)
+        (local_repo / "seed.txt").write_text("seed\n", encoding="utf-8")
+        git(["add", "seed.txt"], local_repo)
+        git(["commit", "-m", "seed branch"], local_repo)
+        git(["push", "-u", "origin", prd_name], local_repo)
+        git(["checkout", "main"], local_repo)
+
+        first = run_setup_workspace(local_repo, prd_name)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        worktree_path = Path(json.loads(first.stdout)["worktree"])
+
+        dirty_file = worktree_path / "local-dirty.txt"
+        dirty_file.write_text("keep me dirty\n", encoding="utf-8")
+
+        git(["fetch", "origin"], upstream)
+        git(["checkout", "-B", prd_name, f"origin/{prd_name}"], upstream)
+        (upstream / "remote-only.txt").write_text("remote advance\n", encoding="utf-8")
+        git(["add", "remote-only.txt"], upstream)
+        git(["commit", "-m", "advance remote branch"], upstream)
+        git(["push", "origin", prd_name], upstream)
+        git(["fetch", "origin"], local_repo)
+
+        second = run_setup_workspace(local_repo, prd_name)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertIn("stashed local changes", second.stderr.lower())
+        self.assertIn("?? local-dirty.txt", git(["status", "--porcelain"], worktree_path).stdout)
+        self.assertEqual(
+            dirty_file.read_text(encoding="utf-8"),
+            "keep me dirty\n",
+        )
+        self.assertTrue((worktree_path / "remote-only.txt").exists())
+        self.assertEqual(
+            git(["rev-parse", "HEAD"], worktree_path).stdout.strip(),
+            git(["rev-parse", f"origin/{prd_name}"], worktree_path).stdout.strip(),
+        )
+
     def test_creates_worktree_when_branch_has_no_upstream(self):
         init_local_repo(self.repo_path)
         prd_name = "no-upstream-create-prd"
