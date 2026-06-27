@@ -10,6 +10,30 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+func assertJSONField(t *testing.T, object map[string]any, field string, want any) {
+	t.Helper()
+	got, ok := object[field]
+	if !ok {
+		t.Fatalf("missing JSON field %q in %#v", field, object)
+	}
+	if got != want {
+		t.Fatalf("JSON field %q = %#v, want %#v", field, got, want)
+	}
+}
+
+func assertJSONObject(t *testing.T, object map[string]any, field string) map[string]any {
+	t.Helper()
+	got, ok := object[field]
+	if !ok {
+		t.Fatalf("missing JSON object field %q in %#v", field, object)
+	}
+	value, ok := got.(map[string]any)
+	if !ok {
+		t.Fatalf("JSON field %q = %#v, want object", field, got)
+	}
+	return value
+}
+
 func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdentity(t *testing.T) {
 	eventTime := time.Date(2026, 4, 22, 16, 0, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
