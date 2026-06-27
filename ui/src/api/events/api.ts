@@ -32,9 +32,6 @@ export interface FactoryEventReconnectCursor {
 export type FactorySessionEventStreamRecovery =
   components["schemas"]["FactorySessionEventStreamRecovery"];
 
-export type FactorySessionEventStreamRecoveryOutcome =
-  components["schemas"]["FactorySessionEventStreamRecoveryOutcome"];
-
 export interface ProbeFactoryEventStreamRecoveryOptions {
   fetch?: typeof globalThis.fetch;
 }
