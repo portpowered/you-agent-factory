@@ -13,6 +13,7 @@ import {
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { DetailCopy } from "../../../components/ui/widget-frame";
 import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
+import { useFactorySessionLifecycleControl } from "../hooks/use-factory-session-lifecycle-control";
 import { useFactorySessionDispatchDetail } from "../hooks/use-factory-session-dispatch-detail";
 import { resolveFactorySessionLifecycleActionAvailability } from "../lib/factory-session-lifecycle-controls";
 import { getFactorySessionDetailMessages } from "../messages/factory-session-detail";
@@ -172,6 +173,10 @@ function JavaScriptSessionProjection({
       dispatches,
       selectedDispatchID,
     });
+  const lifecycleControl = useFactorySessionLifecycleControl({
+    selectedDispatchID: lifecycleActionAvailability.selectedDispatch?.id ?? null,
+    sessionID,
+  });
 
   return (
     <div className="grid gap-4">
@@ -194,6 +199,8 @@ function JavaScriptSessionProjection({
       <LifecycleActionSection
         availability={lifecycleActionAvailability}
         locale={locale}
+        onAction={lifecycleControl.submitLifecycleAction}
+        pendingActionID={lifecycleControl.pendingActionID}
       />
       {javascript.phases.length > 0 ? (
         <Metric

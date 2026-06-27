@@ -19,11 +19,15 @@ interface LifecycleActionSectionProps {
     showEmptyState: boolean;
   };
   locale?: string;
+  onAction: (action: FactorySessionLifecycleActionID) => void;
+  pendingActionID: FactorySessionLifecycleActionID | null;
 }
 
 export function LifecycleActionSection({
   availability,
   locale,
+  onAction,
+  pendingActionID,
 }: LifecycleActionSectionProps) {
   const messages = getFactorySessionDetailMessages(locale);
 
@@ -32,7 +36,14 @@ export function LifecycleActionSection({
       <DashboardLabel>{messages.lifecycleControlsHeading}</DashboardLabel>
       <DashboardActionRow
         actions={availability.actions.map((action) => (
-          <DashboardActionButton disabled key={action} type="button">
+          <DashboardActionButton
+            executing={pendingActionID === action}
+            key={action}
+            onClick={() => {
+              void onAction(action);
+            }}
+            type="button"
+          >
             {lifecycleActionLabel(action, messages)}
           </DashboardActionButton>
         ))}
