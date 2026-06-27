@@ -133,6 +133,7 @@ you use this proof for closeout review.
 | Need | Use |
 |------|-----|
 | Validate JavaScript source before durable execution | [Durable JavaScript Factory Session Path](#durable-javascript-factory-session-path) and `you docs orchestrators` |
+| Recover a stopped `@you/goal` run through existing session and work controls | [Stopped goal inspect and recovery](#stopped-goal-inspect-and-recovery) and `you docs packaged-goal` |
 | Confirm anything is listening before `you submit` or `POST /factory-sessions/{session_id}/work` | [Session list](#session-list) |
 | Read the active factory name and directory on a live host | [Factory query](#factory-query) |
 | Inspect lifecycle phase, engine activity, and token buckets | [Session status API](#session-status-api) |
@@ -217,6 +218,32 @@ show marking token counts and enabled transitions. JavaScript sessions show
 phase, checkpoint refs, child dispatch counts, and dynamic workflow shorthand
 only as JavaScript terminology. See `you docs orchestrators` for the accepted
 alias rules.
+
+## Stopped goal inspect and recovery
+
+Use this path when a shared invocation or one-shot `you run --named @you/goal`
+returns stopped-state recovery context instead of a primary result. Keep the
+operator flow on the existing `FactorySession`, `Work`, and `Dispatch`
+surfaces.
+
+1. Inspect the `FactorySession` with `you session show <session-id>` or
+   `GET /factory-sessions/{session_id}`.
+2. Inspect the affected `Work` with `you work show <work-id> --session <session-id>`
+   when the response or session stop summary identifies one work item.
+3. Read the stop summary fields to distinguish a paused session lifecycle from
+   blocked work, needs-human work, or an interrupted dispatch.
+4. Apply the existing lifecycle or work control that matches that stop reason,
+   then re-read the same session and work surfaces to confirm progress.
+
+| Stop reason | What to confirm during inspect | Existing next step |
+|-------------|--------------------------------|--------------------|
+| Paused `FactorySession` | Session lifecycle is paused; buffered work remains attached to the same session. | `you session resume <session-id>` |
+| Blocked `Work` | Work id, work state, latest dispatch or result summary, and suggested recovery surface. | Existing work repair, work move, or follow-up submission controls |
+| Needs-human `Work` | The human input, approval, or artifact review required for that work item. | Existing human-input, approval, or repair step in the current workflow |
+| Interrupted `Dispatch` or session | Interruption status and latest dispatch or result summary. | Existing dispatch retry, work repair, or session workflow controls |
+
+For the `@you/goal` packaged-factory examples and invocation-specific failure
+codes, use `you docs packaged-goal`.
 
 ## Session pause and resume
 

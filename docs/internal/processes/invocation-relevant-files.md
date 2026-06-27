@@ -182,7 +182,11 @@ primary-result behavior.
 - `docs/reference/packaged-goal.md` is the customer-facing reference for
   packaged `@you/goal` invocation behavior, including operator-visible blocked,
   needs-human, paused, interrupted, failed, timed-out, and unresolved-primary-result
-  outcomes plus recovery through existing session/work commands.
+  outcomes plus recovery through existing session/work commands. Keep the
+  `@you/goal`-specific inspect-first recovery sequence there, but keep the
+  shared `FactorySession`/`Work` control vocabulary and command ownership in
+  `docs/reference/sessions.md` so future goal lanes extend one operator flow
+  instead of inventing route- or factory-specific recovery docs.
 - `docs/reference/config.md` and `docs/reference/sessions.md` are the packaged
   `you docs` reference topics for invocation input sources, return policy, and
   the session-scoped invocation API.
