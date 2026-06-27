@@ -182,6 +182,28 @@ func TestScriptWrapProvider_Infer_CommandEnvironmentIncludesAutomationDefaults(t
 	assertProviderAutomationDefaults(t, fakeExec.request.Env)
 }
 
+func TestSupportedModelProviders_BuildCommandRequest_UsesCLICommand(t *testing.T) {
+	for _, provider := range interfaces.SupportedModelProviders() {
+		t.Run(string(provider), func(t *testing.T) {
+			behavior := providerBehaviorFor(string(provider), logging.NoopLogger{})
+			req := interfaces.ProviderInferenceRequest{
+				ModelProvider: string(provider),
+				UserMessage:   "run dispatch verification",
+			}
+
+			args, err := behavior.BuildArgs(context.Background(), req, false, nil)
+			if err != nil {
+				t.Fatalf("BuildArgs: %v", err)
+			}
+
+			commandReq := behavior.BuildCommandRequest(req, args)
+			if commandReq.Command != string(provider) {
+				t.Fatalf("command = %q, want %q", commandReq.Command, provider)
+			}
+		})
+	}
+}
+
 func TestScriptWrapProvider_Infer_CommandCanObserveAutomationDefaultsInEnvironment(t *testing.T) {
 	fakeExec := &envPrintingProviderExec{}
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
