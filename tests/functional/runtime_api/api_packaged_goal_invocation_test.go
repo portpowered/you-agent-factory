@@ -79,6 +79,92 @@ func TestSessionInvocationAPI_PackagedGoalUnresolvedPrimaryResultReturnsFailedSt
 	}
 }
 
+func TestSessionInvocationAPI_BuiltInCatalogMaterializedGoalReturnsSummaryPrimaryResult(t *testing.T) {
+	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+
+	server := startFunctionalServerWithConfig(t, factoryDir, true, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.MockWorkersConfig = packagedGoalBuiltinMockWorkersConfig()
+	})
+
+	submitted := "customer goal request text"
+	response := postInvocation(t, server.URL(), textInvocationRequest(t, submitted, nil))
+	if response.Status != factoryapi.InvocationTerminalStatusCompleted {
+		errorCode := ""
+		if response.ErrorCode != nil {
+			errorCode = string(*response.ErrorCode)
+		}
+		message := ""
+		if response.Message != nil {
+			message = *response.Message
+		}
+		t.Fatalf("invocation status = %q, want COMPLETED (errorCode=%q message=%q)", response.Status, errorCode, message)
+	}
+	if response.PrimaryResult == nil || len(*response.PrimaryResult) != 1 {
+		t.Fatalf("invocation primaryResult = %#v, want one text part", response.PrimaryResult)
+	}
+	part, err := (*response.PrimaryResult)[0].AsWorkTextContentPart()
+	if err != nil {
+		t.Fatalf("primaryResult[0] as text part: %v", err)
+	}
+	if part.Text != "mock worker accepted" {
+		t.Fatalf("primaryResult text = %q, want mock worker summary", part.Text)
+	}
+	if part.Text == submitted {
+		t.Fatal("primaryResult echoed submitted goal text")
+	}
+}
+
+func TestPackagedGoalBuiltInCatalogMaterialized_CompletesWithPackagedGoalMockWorkers(t *testing.T) {
+	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+
+	h := testutil.NewServiceTestHarness(t, factoryDir,
+		testutil.WithRunAsync(),
+		testutil.WithMockWorkersConfig(packagedGoalBuiltinMockWorkersConfig()),
+	)
+	if err := h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+		WorkTypeID: goal.PackagedGoalWorkTypeName,
+		TraceID:    "builtin-goal-catalog-harness",
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "customer goal request text",
+		}},
+	}}); err != nil {
+		t.Fatalf("SubmitFull: %v", err)
+	}
+	h.RunUntilComplete(t, 30*time.Second)
+	h.Assert().HasTokenInPlace("goal:complete")
+}
+
+func packagedGoalBuiltinMockWorkersConfig() *factoryconfig.MockWorkersConfig {
+	return &factoryconfig.MockWorkersConfig{
+		MockWorkers: []factoryconfig.MockWorkerConfig{
+			{
+				WorkerName: "goal-checker",
+				RunType:    factoryconfig.MockWorkerRunTypeScript,
+				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+					Command: "/bin/echo",
+					Args:    []string{"goal-check-ok"},
+				},
+			},
+			{
+				WorkerName: "goal-reviewer",
+				RunType:    factoryconfig.MockWorkerRunTypeScript,
+				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+					Command: "/bin/echo",
+					Args:    []string{"accepted"},
+				},
+			},
+		},
+	}
+}
+
 func TestPackagedGoalBuiltInTopologyScaffold_PrimaryResultIsExecutionSummaryNotReviewLabel(t *testing.T) {
 	dir, _ := scaffoldPackagedGoalBuiltInTopologyFactory(t)
 	wantSummary := "mock worker accepted"
