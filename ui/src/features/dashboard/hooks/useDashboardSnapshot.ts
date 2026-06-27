@@ -42,7 +42,10 @@ export function useDashboardSnapshot({
     useState<string | null>(null);
   const [persistedCheckpoint, setPersistedCheckpoint] =
     useState<FactoryTimelineCheckpoint | null>(null);
-
+  const checkpointHydrationKey = useMemo(
+    () => (rawSessionID == null ? null : `${rawSessionID}::${refreshToken}`),
+    [rawSessionID, refreshToken],
+  );
   queuedAppendRef.current = appendEvents;
 
   useDashboardSessionLifecycle({
@@ -51,7 +54,8 @@ export function useDashboardSnapshot({
     sessionID: rawSessionID,
   });
 
-  const checkpointHydrated = checkpointHydratedSessionID === rawSessionID;
+  const checkpointHydrated =
+    checkpointHydratedSessionID === checkpointHydrationKey;
   const initialReconnectCursor = useMemo(
     () => reconnectCursorFromCheckpoint(persistedCheckpoint),
     [persistedCheckpoint],
@@ -68,7 +72,7 @@ export function useDashboardSnapshot({
       typeof window === "undefined" ||
       debugOptions.disableTimelineCheckpoint
     ) {
-      setCheckpointHydratedSessionID(rawSessionID);
+      setCheckpointHydratedSessionID(checkpointHydrationKey);
       return;
     }
 
@@ -81,14 +85,19 @@ export function useDashboardSnapshot({
           restoreCheckpoint(checkpoint);
         }
         setPersistedCheckpoint(checkpoint);
-        setCheckpointHydratedSessionID(rawSessionID);
+        setCheckpointHydratedSessionID(checkpointHydrationKey);
       },
     );
 
     return () => {
       cancelled = true;
     };
-  }, [debugOptions.disableTimelineCheckpoint, rawSessionID, restoreCheckpoint]);
+  }, [
+    checkpointHydrationKey,
+    debugOptions.disableTimelineCheckpoint,
+    rawSessionID,
+    restoreCheckpoint,
+  ]);
 
   useEffect(() => {
     if (
@@ -132,10 +141,7 @@ export function useDashboardSnapshot({
     sessionID: rawSessionID,
   });
 
-  useDashboardTimelineMemoryDebug({
-    debugOptions,
-    eventCount,
-  });
+  useDashboardTimelineMemoryDebug({ debugOptions, eventCount });
 
   return useMemo(
     () => ({
