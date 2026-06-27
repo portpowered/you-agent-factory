@@ -2222,6 +2222,17 @@ func findLifecycleControlLog(t *testing.T, observed *observer.ObservedLogs, mess
 	return observer.LoggedEntry{}
 }
 
+func findObservedLog(t *testing.T, observed *observer.ObservedLogs, message string) observer.LoggedEntry {
+	t.Helper()
+	for _, entry := range observed.All() {
+		if entry.Message == message {
+			return entry
+		}
+	}
+	t.Fatalf("log %q not found in %#v", message, observed.All())
+	return observer.LoggedEntry{}
+}
+
 func assertLogField(t *testing.T, entry observer.LoggedEntry, key, want string) {
 	t.Helper()
 	for _, field := range entry.Context {
@@ -2530,15 +2541,37 @@ func TestFactoryService_InferenceProgressPublisherPublishesOrderedInternalEvents
 
 	publisher(workerprovider.ProgressFragment("dispatch-1", nil, "phase=planning"))
 	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "partial-response"))
+	publisher(workerprovider.CompletedFragment("dispatch-1", &interfaces.ProviderSessionMetadata{
+		Provider: "cursor",
+		Kind:     "session_id",
+		ID:       "cursor-session-1",
+	}))
+	publisher(workerprovider.FailedFragment("dispatch-2", nil, "normalized provider failure"))
 
 	session := sessions.Get(sessionID)
-	stream := (&FactoryService{sessions: sessions}).sessionResponseStream(session, "dispatch-1")
+	svc := &FactoryService{sessions: sessions}
+	stream := svc.sessionResponseStream(session, "dispatch-1")
 	if stream == nil {
-		t.Fatal("session stream = nil, want live session stream")
+		t.Fatal("dispatch-1 stream = nil, want live session stream")
 	}
 	events := stream.Events()
-	if len(events) != 2 || events[0].Sequence != 1 || events[1].Sequence != 2 {
+	if len(events) != 3 || events[0].Sequence != 1 || events[2].Sequence != 3 {
 		t.Fatalf("stream events = %#v, want ascending internal sequences", events)
+	}
+	if events[2].Kind != responsestream.EventKindStreamCompleted {
+		t.Fatalf("completion kind = %q, want %q", events[2].Kind, responsestream.EventKindStreamCompleted)
+	}
+	if events[2].ProviderSessionRef == nil || events[2].ProviderSessionRef.ID != "cursor-session-1" {
+		t.Fatalf("completion provider session = %#v, want cursor-session-1", events[2].ProviderSessionRef)
+	}
+
+	failedStream := svc.sessionResponseStream(session, "dispatch-2")
+	if failedStream == nil {
+		t.Fatal("dispatch-2 stream = nil, want live session stream")
+	}
+	failedEvents := failedStream.Events()
+	if len(failedEvents) != 1 || failedEvents[0].Kind != responsestream.EventKindStreamFailed || failedEvents[0].Payload != "normalized provider failure" {
+		t.Fatalf("failure events = %#v, want one terminal failed marker", failedEvents)
 	}
 
 	var factoryEventType factoryapi.FactoryEventType
@@ -2788,6 +2821,166 @@ func TestFactoryService_InferenceProgressPublisher_SlowSubscriberCompactionEmits
 	assertSlowSubscriberCompactionDiagnostics(t, observed, metricsPath)
 }
 
+func TestFactoryService_InferenceProgressPublisherWithoutSubscriberDoesNotBlockExecution(t *testing.T) {
+	sessions := factorysessions.NewRegistry()
+	sessionID := "session-progress-no-subscriber"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{handle: &liveRuntimeHandle{runtime: &factoryRuntimeBundle{}}},
+		false,
+		"factory",
+	), true)
+
+	svc := &FactoryService{sessions: sessions}
+	publisher := svc.inferenceProgressPublisher(sessionID, nil)
+	if publisher == nil {
+		t.Fatal("publisher = nil, want session publisher")
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 256; i++ {
+			publisher(workerprovider.ProgressFragment("dispatch-1", nil, "phase"))
+		}
+		publisher(workerprovider.CompletedFragment("dispatch-1", nil))
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out publishing provider progress without any attached consumer")
+	}
+
+	stream := svc.sessionResponseStream(sessions.Get(sessionID), "dispatch-1")
+	if stream == nil {
+		t.Fatal("session stream = nil, want live session stream")
+	}
+	events := stream.Events()
+	if len(events) == 0 {
+		t.Fatal("stream events = empty, want retained progress or terminal marker")
+	}
+	if events[len(events)-1].Kind != responsestream.EventKindStreamCompleted {
+		t.Fatalf("last event kind = %q, want terminal completion marker", events[len(events)-1].Kind)
+	}
+}
+
+func TestFactoryService_InferenceProgressPublisherSlowConsumerFallsBehindWithoutBlockingExecution(t *testing.T) {
+	svc, publisher, stream := newSlowConsumerProgressPublisherHarness(t)
+	subscription := subscribeToSessionResponseStream(t, stream)
+	defer subscription.Detach()
+	assertInitialRetainedSeedEvent(t, subscription)
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		publisher(workerprovider.ProgressFragment("dispatch-1", nil, "one"))
+		publisher(workerprovider.ResponseFragment("dispatch-1", nil, "two"))
+		publisher(workerprovider.ProgressFragment("dispatch-1", nil, "three"))
+		publisher(workerprovider.CompletedFragment("dispatch-1", nil))
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("timed out publishing provider progress while consumer lagged behind")
+	}
+
+	assertSlowConsumerCatchupRetainsCompletedTail(t, subscription)
+	_ = svc
+}
+
+func newSlowConsumerProgressPublisherHarness(t *testing.T) (*FactoryService, workerprovider.InferenceProgressPublisher, *factorysessions.SessionResponseStream) {
+	t.Helper()
+
+	sessions := factorysessions.NewRegistry()
+	sessionID := "session-progress-slow-consumer"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{},
+		false,
+		"factory",
+	), true)
+
+	svc := &FactoryService{
+		sessions: sessions,
+		newSessionResponseStream: func() *factorysessions.SessionResponseStream {
+			return responsestream.NewSessionResponseStreamWithClock(factory.RealClock{}, responsestream.RetentionLimits{MaxEvents: 2})
+		},
+	}
+	publisher := svc.inferenceProgressPublisher(sessionID, nil)
+	if publisher == nil {
+		t.Fatal("publisher = nil, want session publisher")
+	}
+	publisher(workerprovider.ProgressFragment("dispatch-1", nil, "seed"))
+
+	stream := svc.sessionResponseStream(sessions.Get(sessionID), "dispatch-1")
+	if stream == nil {
+		t.Fatal("session stream = nil, want live session stream")
+	}
+	return svc, publisher, stream
+}
+
+func subscribeToSessionResponseStream(t *testing.T, stream *factorysessions.SessionResponseStream) *factorysessions.SessionResponseStreamSubscription {
+	t.Helper()
+
+	subscription, err := stream.Subscribe(0)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	return subscription
+}
+
+func assertInitialRetainedSeedEvent(t *testing.T, subscription *factorysessions.SessionResponseStreamSubscription) {
+	t.Helper()
+
+	initial, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(initial): %v", err)
+	}
+	if len(initial.Events) != 1 || initial.Events[0].Payload != "seed" {
+		t.Fatalf("initial events = %#v, want retained seed event", initial.Events)
+	}
+}
+
+func assertSlowConsumerCatchupRetainsCompletedTail(
+	t *testing.T,
+	subscription *factorysessions.SessionResponseStreamSubscription,
+) {
+	t.Helper()
+
+	read, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next(catch-up): %v", err)
+	}
+	if !read.BehindRetainedWindow {
+		t.Fatal("behind retained window = false, want slow consumer compaction signal")
+	}
+	if read.Compaction == nil || read.Compaction.Reason != responsestream.CompactionReasonTruncated {
+		t.Fatalf("compaction = %#v, want truncated retained-window summary", read.Compaction)
+	}
+	if len(read.Events) == 0 {
+		t.Fatal("catch-up events = empty, want retained tail after truncation")
+	}
+	if read.Events[len(read.Events)-1].Kind != responsestream.EventKindCompactionSignal {
+		t.Fatalf("last retained event kind = %q, want retained-window compaction signal", read.Events[len(read.Events)-1].Kind)
+	}
+	for _, event := range read.Events {
+		if event.Kind == responsestream.EventKindStreamCompleted {
+			return
+		}
+	}
+	t.Fatalf("retained events = %#v, want terminal completion marker before compaction signal", read.Events)
+}
+
 func newSlowSubscriberCompactionTestHarness(t *testing.T) (*FactoryService, workerprovider.InferenceProgressPublisher, *observer.ObservedLogs, string) {
 	t.Helper()
 
@@ -3024,4 +3217,39 @@ func TestFactoryService_InferenceProgressPublisherPreservesNormalizedCodexMetada
 	if got := event.Metadata["work_id"]; got != "work-codex-json-1" {
 		t.Fatalf("metadata work_id = %q, want work-codex-json-1", got)
 	}
+}
+
+func TestFactoryService_InferenceProgressPublisherUnavailableStreamEmitsDegradedDiagnostics(t *testing.T) {
+	core, observed := observer.New(zap.WarnLevel)
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+	})
+	defer harness.stop(t)
+
+	session := harness.svc.sessionByID(defaultFactorySessionID)
+	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).runtime == nil || liveSessionHandle(session).runtime.metricsSink == nil {
+		t.Fatal("live session runtime metrics sink is required")
+	}
+	liveSessionHandle(session).runtime.logger = zap.New(core)
+	harness.svc.newSessionResponseStream = func() *factorysessions.SessionResponseStream {
+		return nil
+	}
+
+	publisher := harness.svc.inferenceProgressPublisher(defaultFactorySessionID, zap.NewNop())
+	if publisher == nil {
+		t.Fatal("publisher = nil, want session publisher")
+	}
+	publisher(workerprovider.ProgressFragment("dispatch-unavailable", nil, "phase"))
+
+	metricsPath := liveSessionHandle(session).runtime.metricsSink.Path()
+	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
+		return runtimeMetricNameAndValue(record, runtimeMetricSessionResponseStreamDegraded, 1) &&
+			metricRecordString(record, "dispatch_id") == "dispatch-unavailable" &&
+			metricRecordString(record, "reason") == "STREAM_UNAVAILABLE"
+	}, "degraded internal provider progress publication")
+
+	entry := findObservedLog(t, observed, "internal provider progress publication degraded")
+	assertLogField(t, entry, "session_id", defaultFactorySessionID)
+	assertLogField(t, entry, "dispatch_id", "dispatch-unavailable")
+	assertLogField(t, entry, "reason", "STREAM_UNAVAILABLE")
 }
