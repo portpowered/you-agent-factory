@@ -264,9 +264,18 @@ func (s *Server) GetWorkBySessionId(w http.ResponseWriter, r *http.Request, sess
 	if !ok {
 		return
 	}
-	s.getWork(w, r, string(sessionID), id, func(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-		return sessionRuntime.GetEngineStateSnapshotForSession(ctx, string(sessionID))
-	})
+	s.getWork(
+		w,
+		r,
+		string(sessionID),
+		id,
+		func(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
+			return sessionRuntime.GetEngineStateSnapshotForSession(ctx, string(sessionID))
+		},
+		func(ctx context.Context) (factoryapi.FactorySession, error) {
+			return sessionRuntime.GetFactorySession(ctx, string(sessionID))
+		},
+	)
 }
 
 func (s *Server) getWork(
@@ -275,6 +284,7 @@ func (s *Server) getWork(
 	sessionID string,
 	id factoryapi.WorkOrTokenID,
 	loadSnapshot func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error),
+	loadSession func(context.Context) (factoryapi.FactorySession, error),
 ) {
 	snapshot, err := loadSnapshot(r.Context())
 	if err != nil {
@@ -297,8 +307,26 @@ func (s *Server) getWork(
 	workNamesByID := publicWorkNamesByID(materialized.Tokens)
 	work := tokenToWork(token, snapshot.Topology, inFlightOnly)
 	work.Relations = generatedWorkRelations(token, work.Name, workNamesByID)
-	work.StopSummary = apisurface.BuildWorkStopSummary(sessionID, snapshot, token)
+	work.StopSummary = apisurface.BuildWorkStopSummary(sessionID, snapshot, token, loadSessionStopSummary(r.Context(), loadSession))
 	s.writeJSON(w, http.StatusOK, work)
+}
+
+func loadSessionStopSummary(
+	ctx context.Context,
+	loadSession func(context.Context) (factoryapi.FactorySession, error),
+) *factoryapi.FactoryStopSummary {
+	if loadSession == nil {
+		return nil
+	}
+	session, err := loadSession(ctx)
+	if err != nil {
+		return nil
+	}
+	if session.Runtime.StopSummary == nil {
+		return nil
+	}
+	summary := *session.Runtime.StopSummary
+	return &summary
 }
 
 func findPublicWorkToken(materialized materialize.PublicWorkTokens, id string) (*interfaces.Token, bool, bool) {

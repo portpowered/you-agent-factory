@@ -70,6 +70,7 @@ func BuildWorkStopSummary(
 	sessionID string,
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
 	token *interfaces.Token,
+	sessionStopSummary *factoryapi.FactoryStopSummary,
 ) *factoryapi.FactoryStopSummary {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" || token == nil {
@@ -102,7 +103,24 @@ func BuildWorkStopSummary(
 			return buildStopSummary(sessionID, factoryapi.FactoryStopKind("NEEDS_HUMAN"), nil, *matching, latestRelevantDispatch(target.id, snapshot), needsHumanRecoverySummary(*matching))
 		}
 	}
+	if interruptedSummary := interruptedWorkStopSummary(target.id, sessionStopSummary); interruptedSummary != nil {
+		return interruptedSummary
+	}
 	return nil
+}
+
+func interruptedWorkStopSummary(
+	workID string,
+	sessionStopSummary *factoryapi.FactoryStopSummary,
+) *factoryapi.FactoryStopSummary {
+	if sessionStopSummary == nil || sessionStopSummary.StopKind != factoryapi.FactoryStopKind("INTERRUPTED") {
+		return nil
+	}
+	if sessionStopSummary.WorkId == nil || strings.TrimSpace(*sessionStopSummary.WorkId) != strings.TrimSpace(workID) {
+		return nil
+	}
+	summary := *sessionStopSummary
+	return &summary
 }
 
 func buildPausedStopSummary(
