@@ -18,9 +18,9 @@ describe("factory session detail messages", () => {
     expect(messages.eventReplayDispatchLabel("dispatch-9")).toBe(
       "Dispatch dispatch-9",
     );
-    expect(messages.eventReplayDispatchStatusDetail("FAILED_WITH_PARTIAL")).toBe(
-      "Dispatch status failed with partial",
-    );
+    expect(
+      messages.eventReplayDispatchStatusDetail("FAILED_WITH_PARTIAL"),
+    ).toBe("Dispatch status failed with partial");
     expect(messages.eventReplayLifecycleStatusDetail("AWAITING_APPROVAL")).toBe(
       "Lifecycle status awaiting approval",
     );
@@ -52,6 +52,10 @@ describe("factory session detail messages", () => {
     expect(messages.collapseDispatchDetailLabel("dispatch-9")).toBe(
       "Collapse dispatch detail for dispatch-9",
     );
+    expect(messages.lifecycleActionRetryDispatchLabel).toBe("Retry dispatch");
+    expect(messages.lifecycleControlsSelectedDispatchLabel("dispatch-9")).toBe(
+      "Selected dispatch: dispatch-9",
+    );
   });
 
   it("formats zh-CN replay and dispatch detail labels through the shared catalog", () => {
@@ -67,9 +71,9 @@ describe("factory session detail messages", () => {
     expect(messages.eventReplayDispatchLabel("dispatch-9")).toBe(
       "调度 dispatch-9",
     );
-    expect(messages.eventReplayDispatchStatusDetail("FAILED_WITH_PARTIAL")).toBe(
-      "调度状态 failed with partial",
-    );
+    expect(
+      messages.eventReplayDispatchStatusDetail("FAILED_WITH_PARTIAL"),
+    ).toBe("调度状态 failed with partial");
     expect(messages.eventReplayLifecycleStatusDetail("AWAITING_APPROVAL")).toBe(
       "生命周期状态 awaiting approval",
     );
@@ -93,6 +97,10 @@ describe("factory session detail messages", () => {
     );
     expect(messages.collapseDispatchDetailLabel("dispatch-9")).toBe(
       "收起 dispatch-9 的调度详情",
+    );
+    expect(messages.lifecycleActionRetryDispatchLabel).toBe("重试调度");
+    expect(messages.lifecycleControlsSelectedDispatchLabel("dispatch-9")).toBe(
+      "已选择调度：dispatch-9",
     );
   });
 });
