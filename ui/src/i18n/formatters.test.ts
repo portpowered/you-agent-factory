@@ -114,6 +114,12 @@ describe("shared locale duration and relative-time formatters", () => {
     expect(formatDuration(36_000_000, "ko", { style: "graph" })).toBe("10시");
     expect(formatDuration(780_000, "ko", { style: "graph" })).toBe("13분");
     expect(formatDuration(10_000, "ko", { style: "graph" })).toBe("10초");
+    expect(formatDuration(360_000_000, "en", { style: "graph" })).toBe("4d");
+    expect(formatDuration(360_000_000, "zh-CN", { style: "graph" })).toBe(
+      "4天",
+    );
+    expect(formatDuration(360_000_000, "ja", { style: "graph" })).toBe("4日");
+    expect(formatDuration(360_000_000, "ko", { style: "graph" })).toBe("4일");
     expect(
       formatDuration(7_440_000, "en", {
         style: "verbose",

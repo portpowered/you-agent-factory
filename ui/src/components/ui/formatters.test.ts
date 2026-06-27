@@ -92,6 +92,13 @@ describe("formatGraphDurationMillis", () => {
     expect(formatGraphDurationMillis(10_000, "ko")).toBe("10초");
   });
 
+  it("rolls up long graph durations to a larger truthful unit instead of clamping", () => {
+    expect(formatGraphDurationMillis(360_000_000, "en")).toBe("4d");
+    expect(formatGraphDurationMillis(360_000_000, "zh-CN")).toBe("4天");
+    expect(formatGraphDurationMillis(360_000_000, "ja")).toBe("4日");
+    expect(formatGraphDurationMillis(360_000_000, "ko")).toBe("4일");
+  });
+
   it("shows zero seconds for sub-second durations", () => {
     expect(formatGraphDurationMillis(450)).toBe("0s");
   });
