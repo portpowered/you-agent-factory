@@ -45,7 +45,7 @@ func TestFactoryTransformation_CreateNamedFactoryReadbackAndWorkSurface(t *testi
 	legacyResp := submitWorkAndExpectStatus(t, server.URL(), "alpha-task", "alpha", http.StatusBadRequest)
 	var legacyErr factoryapi.ErrorResponse
 	decodeJSONResponse(t, legacyResp, &legacyErr, "decode alpha-task error response")
-	if legacyErr.Code != factoryapi.BADREQUEST {
+	if legacyErr.Code != factoryapi.ErrorResponseCodeBADREQUEST {
 		t.Fatalf("alpha-task error code = %q, want BAD_REQUEST", legacyErr.Code)
 	}
 }
@@ -101,7 +101,7 @@ func TestFactoryTransformation_CreateNamedFactory_ReturnsBobOnFailureTarget(t *t
 	resp := createNamedFactoryExpectStatus(t, server.URL(), body, http.StatusBadRequest)
 	var errResp factoryapi.ErrorResponse
 	decodeJSONResponse(t, resp, &errResp, "decode invalid named factory create response")
-	if errResp.Code != factoryapi.INVALIDFACTORY {
+	if errResp.Code != factoryapi.ErrorResponseCodeINVALIDFACTORY {
 		t.Fatalf("error code = %q, want INVALID_FACTORY", errResp.Code)
 	}
 	if errResp.Family != factoryapi.ErrorFamilyBadRequest {
@@ -147,7 +147,7 @@ func TestFactoryTransformation_CreateNamedFactory_ReturnsMultipleTopologyValidat
 	resp := createNamedFactoryExpectStatus(t, server.URL(), body, http.StatusBadRequest)
 	var errResp factoryapi.ErrorResponse
 	decodeJSONResponse(t, resp, &errResp, "decode invalid named factory create response")
-	if errResp.Code != factoryapi.INVALIDFACTORY {
+	if errResp.Code != factoryapi.ErrorResponseCodeINVALIDFACTORY {
 		t.Fatalf("error code = %q, want INVALID_FACTORY", errResp.Code)
 	}
 	if errResp.Targets == nil || len(*errResp.Targets) < 2 {

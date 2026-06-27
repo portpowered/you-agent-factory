@@ -175,33 +175,28 @@ func writeTestFile(t *testing.T, dir, name, content string) {
 func writeExecutableTestScript(t *testing.T, path string, content string) {
 	t.Helper()
 
-	tempDir := filepath.Dir(path)
-	file, err := os.CreateTemp(tempDir, filepath.Base(path)+".tmp-*")
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
 	if err != nil {
-		t.Fatalf("creating temp executable for %s: %v", path, err)
+		t.Fatalf("creating executable %s: %v", path, err)
 	}
-	tempPath := file.Name()
 	if _, err := file.WriteString(content); err != nil {
 		_ = file.Close()
-		t.Fatalf("writing %s: %v", tempPath, err)
+		t.Fatalf("writing %s: %v", path, err)
 	}
 	if err := file.Sync(); err != nil {
 		_ = file.Close()
-		t.Fatalf("syncing %s: %v", tempPath, err)
+		t.Fatalf("syncing %s: %v", path, err)
 	}
 	if err := file.Close(); err != nil {
-		t.Fatalf("closing %s: %v", tempPath, err)
+		t.Fatalf("closing %s: %v", path, err)
 	}
-	if err := os.Chmod(tempPath, 0o755); err != nil {
-		t.Fatalf("chmod %s: %v", tempPath, err)
+	if err := os.Chmod(path, 0o755); err != nil {
+		t.Fatalf("chmod %s: %v", path, err)
 	}
-	if err := os.Rename(tempPath, path); err != nil {
-		t.Fatalf("renaming %s to %s: %v", tempPath, path, err)
-	}
-	syncDirectoryForExecutableRename(t, tempDir)
+	syncDirectoryForExecutableWrite(t, filepath.Dir(path))
 }
 
-func syncDirectoryForExecutableRename(t *testing.T, dir string) {
+func syncDirectoryForExecutableWrite(t *testing.T, dir string) {
 	t.Helper()
 
 	if runtime.GOOS == "windows" {
@@ -214,11 +209,11 @@ func syncDirectoryForExecutableRename(t *testing.T, dir string) {
 	}
 	defer func() {
 		if err := directory.Close(); err != nil {
-			t.Fatalf("closing directory %s after sync: %v", dir, err)
+			t.Fatalf("closing directory %s after executable write sync: %v", dir, err)
 		}
 	}()
 	if err := directory.Sync(); err != nil {
-		t.Fatalf("syncing directory %s after executable rename: %v", dir, err)
+		t.Fatalf("syncing directory %s after executable write: %v", dir, err)
 	}
 }
 

@@ -126,7 +126,7 @@ func TestGetFactorySession_RuntimeBackedMissingSessionReturnsNotFound(t *testing
 	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
-	if errResp.Code != factoryapi.NOTFOUND {
+	if errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("code = %q, want NOT_FOUND", errResp.Code)
 	}
 }

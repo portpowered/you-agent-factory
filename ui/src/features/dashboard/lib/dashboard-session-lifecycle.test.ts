@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
 import {
+  clearDashboardSessionRuntimeQueries,
   dashboardSessionKey,
+  recoverDashboardSessionScopedState,
   resetDashboardSessionScopedState,
   shouldResetDashboardSessionScopedState,
 } from "./dashboard-session-lifecycle";
@@ -99,5 +101,55 @@ describe("resetDashboardSessionScopedState", () => {
 
     expect(resetStreamState).toHaveBeenCalledWith(undefined);
     expect(queryClient.removeQueries).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("clearDashboardSessionRuntimeQueries", () => {
+  it("removes only runtime queries for the affected session", () => {
+    const queryClient = {
+      removeQueries: vi.fn(),
+    };
+
+    clearDashboardSessionRuntimeQueries(queryClient as never, "session-beta");
+
+    expect(queryClient.removeQueries).toHaveBeenCalledTimes(2);
+    expect(queryClient.removeQueries).toHaveBeenNthCalledWith(1, {
+      queryKey: ["current-factory-definition", "session-beta"],
+      exact: false,
+    });
+    expect(queryClient.removeQueries).toHaveBeenNthCalledWith(2, {
+      queryKey: ["factory-session-detail", "session-beta"],
+      exact: false,
+    });
+  });
+});
+
+describe("recoverDashboardSessionScopedState", () => {
+  it("resets timeline, selection state, and only the affected session runtime queries", () => {
+    const queryClient = {
+      removeQueries: vi.fn(),
+    };
+    const resetTimeline = vi.fn();
+
+    recoverDashboardSessionScopedState(
+      queryClient as never,
+      "session-beta",
+      resetTimeline,
+    );
+
+    expect(resetTimeline).toHaveBeenCalledTimes(1);
+    expect(queryClient.removeQueries).toHaveBeenCalledTimes(3);
+    expect(queryClient.removeQueries).toHaveBeenNthCalledWith(1, {
+      queryKey: ["current-factory-definition", "session-beta"],
+      exact: false,
+    });
+    expect(queryClient.removeQueries).toHaveBeenNthCalledWith(2, {
+      queryKey: ["factory-session-detail", "session-beta"],
+      exact: false,
+    });
+    expect(queryClient.removeQueries).toHaveBeenNthCalledWith(3, {
+      queryKey: ["current-factory-definition", "session-beta", "document"],
+      exact: true,
+    });
   });
 });

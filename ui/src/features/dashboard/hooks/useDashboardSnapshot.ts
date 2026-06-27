@@ -29,43 +29,51 @@ interface DashboardSessionRecoveryState {
   requestedSessionId: string;
 }
 
+type DashboardPreflightStatus = "loading" | "non-recoverable" | "success";
+
 function useGuardedTimelineCheckpointBootstrap({
+  checkpointHydrationKey,
   checkpointsDisabled,
   rawSessionID,
   restoreCheckpoint,
 }: {
+  checkpointHydrationKey: string | null;
   checkpointsDisabled: boolean;
   rawSessionID: string | null;
   restoreCheckpoint: (checkpoint: FactoryTimelineCheckpoint) => void;
 }) {
   const setStreamState = useDashboardStreamStore((state) => state.setStreamState);
-  const [checkpointHydratedSessionID, setCheckpointHydratedSessionID] =
+  const [checkpointHydratedKey, setCheckpointHydratedKey] =
     useState<string | null>(null);
   const [persistedCheckpoint, setPersistedCheckpoint] =
     useState<FactoryTimelineCheckpoint | null>(null);
-  const [preflightReadySessionID, setPreflightReadySessionID] =
-    useState<string | null>(null);
+  const [preflightReadyKey, setPreflightReadyKey] = useState<string | null>(
+    null,
+  );
+  const [preflightError, setPreflightError] = useState<Error | null>(null);
   const [streamIdentity, setStreamIdentity] =
     useState<TimelineCheckpointStreamIdentity | null>(null);
 
-  const checkpointHydrated = checkpointHydratedSessionID === rawSessionID;
-  const preflightReady = preflightReadySessionID === rawSessionID;
+  const checkpointHydrated = checkpointHydratedKey === checkpointHydrationKey;
+  const preflightReady = preflightReadyKey === checkpointHydrationKey;
 
   useEffect(() => {
     let cancelled = false;
 
-    setCheckpointHydratedSessionID(null);
+    setCheckpointHydratedKey(null);
     setPersistedCheckpoint(null);
-    setPreflightReadySessionID(null);
+    setPreflightError(null);
+    setPreflightReadyKey(null);
     setStreamIdentity(null);
 
     if (
+      checkpointHydrationKey == null ||
       !rawSessionID ||
       typeof window === "undefined" ||
       checkpointsDisabled
     ) {
-      setPreflightReadySessionID(rawSessionID);
-      setCheckpointHydratedSessionID(rawSessionID);
+      setPreflightReadyKey(checkpointHydrationKey);
+      setCheckpointHydratedKey(checkpointHydrationKey);
       return;
     }
 
@@ -78,7 +86,7 @@ function useGuardedTimelineCheckpointBootstrap({
           response.session,
         );
         setStreamIdentity(checkpointStreamIdentity);
-        setPreflightReadySessionID(rawSessionID);
+        setPreflightReadyKey(checkpointHydrationKey);
         const checkpoint = await readTimelineCheckpoint(
           window.indexedDB,
           rawSessionID,
@@ -91,7 +99,7 @@ function useGuardedTimelineCheckpointBootstrap({
           restoreCheckpoint(checkpoint);
         }
         setPersistedCheckpoint(checkpoint);
-        setCheckpointHydratedSessionID(rawSessionID);
+        setCheckpointHydratedKey(checkpointHydrationKey);
       })
       .catch((preflightError: unknown) => {
         if (cancelled) {
@@ -101,20 +109,28 @@ function useGuardedTimelineCheckpointBootstrap({
           preflightError instanceof Error && preflightError.message.trim() !== ""
             ? preflightError.message
             : "The dashboard could not load the selected session.";
+        setPreflightError(new Error(message));
         setStreamState({
           message,
           status: "offline",
         });
-        setCheckpointHydratedSessionID(rawSessionID);
+        setCheckpointHydratedKey(checkpointHydrationKey);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [checkpointsDisabled, rawSessionID, restoreCheckpoint, setStreamState]);
+  }, [
+    checkpointHydrationKey,
+    checkpointsDisabled,
+    rawSessionID,
+    restoreCheckpoint,
+    setStreamState,
+  ]);
 
   return {
     checkpointHydrated,
+    preflightError,
     persistedCheckpoint,
     preflightReady,
     streamIdentity,
@@ -178,6 +194,7 @@ function streamIdentityFromSessionResponse(session: {
   };
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: snapshot composition keeps preflight, checkpoint hydration, and stream wiring in one hook.
 export function useDashboardSnapshot({
   locale,
   refreshToken = 0,
@@ -195,6 +212,10 @@ export function useDashboardSnapshot({
     useDashboardWorldView();
   const { isPaused, rawSessionID } = useDashboardSession();
   const debugOptions = useMemo(() => readFactoryTimelineDebugOptions(), []);
+  const checkpointHydrationKey = useMemo(
+    () => (rawSessionID == null ? null : `${rawSessionID}::${refreshToken}`),
+    [rawSessionID, refreshToken],
+  );
   const invalidatedReconnectCursorRef = useRef(false);
   const lastPersistedCheckpointRef =
     useRef<FactoryTimelineCheckpoint | null>(null);
@@ -212,14 +233,17 @@ export function useDashboardSnapshot({
 
   const {
     checkpointHydrated,
+    preflightError,
     persistedCheckpoint,
     preflightReady,
     streamIdentity,
   } = useGuardedTimelineCheckpointBootstrap({
+    checkpointHydrationKey,
     checkpointsDisabled: debugOptions.disableTimelineCheckpoint,
     rawSessionID,
     restoreCheckpoint,
   });
+
   if (
     lastPersistedCheckpointRef.current !== persistedCheckpoint ||
     lastSessionIDRef.current !== rawSessionID
@@ -228,6 +252,7 @@ export function useDashboardSnapshot({
     lastPersistedCheckpointRef.current = persistedCheckpoint;
     lastSessionIDRef.current = rawSessionID;
   }
+
   const initialReconnectCursor = useMemo(
     () =>
       invalidatedReconnectCursorRef.current
@@ -235,6 +260,7 @@ export function useDashboardSnapshot({
         : reconnectCursorFromCheckpoint(persistedCheckpoint),
     [persistedCheckpoint],
   );
+
   const handleInvalidReconnectCursor = useCallback(() => {
     invalidatedReconnectCursorRef.current = true;
     resetTimeline();
@@ -249,7 +275,6 @@ export function useDashboardSnapshot({
   });
 
   const handleStreamEvent = useCallback((event: FactoryEvent) => {
-    // Fallback for stream-hook callers that do not provide a batched callback.
     queuedAppendRef.current([event]);
   }, []);
 
@@ -272,20 +297,31 @@ export function useDashboardSnapshot({
     sessionID: rawSessionID,
   });
 
-  useDashboardTimelineMemoryDebug({
-    debugOptions,
-    eventCount,
-  });
+  useDashboardTimelineMemoryDebug({ debugOptions, eventCount });
+
+  const preflightStatus: DashboardPreflightStatus =
+    preflightError != null
+      ? "non-recoverable"
+      : checkpointHydrated && preflightReady
+        ? "success"
+        : "loading";
 
   return useMemo(
     () => ({
-      preflightRecovery:
-        null as DashboardSessionRecoveryState | null,
+      error: preflightError ?? error,
+      isInitialLoading: preflightError == null && isInitialLoading,
+      preflightRecovery: null as DashboardSessionRecoveryState | null,
+      preflightStatus,
       snapshot,
       streamState,
-      isInitialLoading,
-      error,
     }),
-    [error, snapshot, streamState, isInitialLoading],
+    [
+      error,
+      isInitialLoading,
+      preflightError,
+      preflightStatus,
+      snapshot,
+      streamState,
+    ],
   );
 }

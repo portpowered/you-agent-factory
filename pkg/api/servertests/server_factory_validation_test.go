@@ -298,7 +298,7 @@ func TestSaveCurrentFactory_ReturnsMultipleTopologyValidationTargets(t *testing.
 	assertErrorResponsePreservesLegacyFields(
 		t,
 		response,
-		factoryapi.INVALIDFACTORY,
+		factoryapi.ErrorResponseCodeINVALIDFACTORY,
 		factoryapi.ErrorFamilyBadRequest,
 		"Factory payload is not a valid Agent Factory definition.",
 	)
@@ -341,7 +341,7 @@ func TestUpsertNamedFactory_ReturnsTopologyValidationTargets(t *testing.T) {
 	assertErrorResponsePreservesLegacyFields(
 		t,
 		response,
-		factoryapi.INVALIDFACTORY,
+		factoryapi.ErrorResponseCodeINVALIDFACTORY,
 		factoryapi.ErrorFamilyBadRequest,
 		"Factory payload is not a valid Agent Factory definition.",
 	)
@@ -373,7 +373,7 @@ func TestUpsertNamedFactory_RejectsInvalidFactoryPayloadWithTargets(t *testing.T
 	assertErrorResponsePreservesLegacyFields(
 		t,
 		response,
-		factoryapi.INVALIDFACTORY,
+		factoryapi.ErrorResponseCodeINVALIDFACTORY,
 		factoryapi.ErrorFamilyBadRequest,
 		"Factory payload is not a valid Agent Factory definition.",
 	)
@@ -413,7 +413,7 @@ func TestSaveCurrentFactory_ReturnsBobWorkstationOnFailureTarget(t *testing.T) {
 	assertErrorResponsePreservesLegacyFields(
 		t,
 		response,
-		factoryapi.INVALIDFACTORY,
+		factoryapi.ErrorResponseCodeINVALIDFACTORY,
 		factoryapi.ErrorFamilyBadRequest,
 		"Factory payload is not a valid Agent Factory definition.",
 	)
@@ -463,7 +463,7 @@ func TestUpsertNamedFactory_ReturnsBobWorkstationOnFailureTarget(t *testing.T) {
 	assertErrorResponsePreservesLegacyFields(
 		t,
 		response,
-		factoryapi.INVALIDFACTORY,
+		factoryapi.ErrorResponseCodeINVALIDFACTORY,
 		factoryapi.ErrorFamilyBadRequest,
 		"Factory payload is not a valid Agent Factory definition.",
 	)

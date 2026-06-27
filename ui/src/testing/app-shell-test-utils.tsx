@@ -131,7 +131,7 @@ let restoreBrowserTestShims: (() => void) | null = null;
 export const baselineSnapshot = buildDashboardSnapshotFixture(
   mediumBranchingDashboardTopology,
 );
-const factorySessionSyncPreflightPathPattern =
+const _factorySessionSyncPreflightPathPattern =
   /^\/factory-sessions\/([^/]+)\/sync-preflight(?:\?.*)?$/;
 
 export const terminalSnapshot = {

@@ -12,7 +12,7 @@ import { FactorySessionDetailPanel } from "../factory-session-detail-panel";
 import {
   jsonResponse,
   renderWithQueryClient,
-} from "../factory-session-detail-panel.test-helpers";
+} from "../test-support/factory-session-detail-panel.test-helpers";
 
 describe("failed dispatch retry actions", () => {
   beforeEach(() => {

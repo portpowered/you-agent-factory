@@ -372,7 +372,7 @@ func TestExecutionErrorResponse_MapsValidationAndConflictErrors(t *testing.T) {
 	if status != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", status)
 	}
-	if response.Code != factoryapi.BADREQUEST {
+	if response.Code != factoryapi.ErrorResponseCodeBADREQUEST {
 		t.Fatalf("code = %q, want BAD_REQUEST", response.Code)
 	}
 
@@ -385,7 +385,7 @@ func TestExecutionErrorResponse_MapsValidationAndConflictErrors(t *testing.T) {
 	if status != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", status)
 	}
-	if response.Code != factoryapi.EXECUTIONREQUESTIDCONFLICT {
+	if response.Code != factoryapi.ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT {
 		t.Fatalf("code = %q, want EXECUTION_REQUEST_ID_CONFLICT", response.Code)
 	}
 }
@@ -397,7 +397,7 @@ func TestExecutionErrorResponse_MapsRequestValidationError(t *testing.T) {
 	if !ok {
 		t.Fatal("ExecutionErrorResponse = false, want true")
 	}
-	if status != http.StatusBadRequest || response.Code != factoryapi.BADREQUEST {
+	if status != http.StatusBadRequest || response.Code != factoryapi.ErrorResponseCodeBADREQUEST {
 		t.Fatalf("response = %#v, want 400 BAD_REQUEST", response)
 	}
 }

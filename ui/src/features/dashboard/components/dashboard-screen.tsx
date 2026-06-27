@@ -2,15 +2,15 @@ import { Button } from "../../../components/ui";
 import { useAppLocale } from "../../../i18n";
 import { DashboardBento } from "../../bento/public";
 import { useDashboardBentoStore } from "../../bento/state/dashboardBentoStore";
-import { getDashboardRecoveryMessages } from "../messages/dashboard-recovery";
-import { getHeaderControlsMessages } from "../../header/messages/header-controls";
 import {
   DashboardExportDialog,
   DashboardHeader,
   DashboardStatusPanel,
 } from "../../header/public";
+import { getHeaderControlsMessages } from "../../header/messages/header-controls";
 import { useDashboardSnapshot } from "../hooks/useDashboardSnapshot";
 import { useDashboardWorldView } from "../hooks/useDashboardWorldView";
+import { getDashboardRecoveryMessages } from "../messages/dashboard-recovery";
 import { DashboardSessionProvider } from "../session/dashboard-session-provider";
 
 const DASHBOARD_SHELL_CLASS = "min-h-screen overflow-x-hidden p-2";
@@ -33,7 +33,7 @@ function DashboardScreenContent({ locale }: DashboardScreenProps = {}) {
     (state) => state.incrementRefreshToken,
   );
   const refreshToken = useDashboardBentoStore((state) => state.refreshToken);
-  const { snapshot, isInitialLoading, error, preflightRecovery } =
+  const { snapshot, isInitialLoading, error, preflightRecovery, streamState } =
     useDashboardSnapshot({
       locale: resolvedLocale,
       refreshToken,
@@ -82,6 +82,31 @@ function DashboardScreenContent({ locale }: DashboardScreenProps = {}) {
   }
 
   if (error instanceof Error) {
+    if (streamState.status === "recovery_failed") {
+      return (
+        <main className={DASHBOARD_SHELL_CLASS}>
+          <DashboardStatusPanel
+            detail={recoveryMessages.recoveryFailedDetail}
+            locale={resolvedLocale}
+            title={recoveryMessages.recoveryFailedTitle}
+            tone="error"
+          />
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={incrementRefreshToken}>
+              {recoveryMessages.recoveryFailedRetryLabel}
+            </Button>
+            <Button
+              onClick={() => {
+                window.location.reload();
+              }}
+              tone="outline"
+            >
+              {recoveryMessages.recoveryFailedRefreshLabel}
+            </Button>
+          </div>
+        </main>
+      );
+    }
     return (
       <main className={DASHBOARD_SHELL_CLASS}>
         <DashboardStatusPanel
@@ -109,7 +134,6 @@ function DashboardScreenContent({ locale }: DashboardScreenProps = {}) {
   return (
     <main className={DASHBOARD_SHELL_CLASS}>
       <DashboardHeader locale={locale} />
-
       <DashboardBento locale={locale} />
       <DashboardExportDialog locale={locale} />
     </main>
