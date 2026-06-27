@@ -78,7 +78,7 @@ export function useDashboardCheckpointPreflight({
       if (cancelled) {
         return;
       }
-      void clearTimelineCheckpoint(window.indexedDB, sessionID)
+      void clearTimelineCheckpoint(window.indexedDB, null)
         .catch(() => {})
         .finally(() => {
           if (cancelled) {
@@ -101,6 +101,7 @@ export function useDashboardCheckpointPreflight({
       const checkpoint = await readTimelineCheckpoint(
         window.indexedDB,
         sessionID,
+        null,
       );
       const preflight = await getFactorySessionSyncPreflight(
         sessionID,
@@ -121,7 +122,7 @@ export function useDashboardCheckpointPreflight({
         preflight,
       );
       if (restorePlan.clearCheckpoint) {
-        await clearTimelineCheckpoint(window.indexedDB, sessionID);
+        await clearTimelineCheckpoint(window.indexedDB, null);
       }
       if (cancelled) {
         return;

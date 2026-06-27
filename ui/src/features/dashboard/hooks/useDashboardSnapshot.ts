@@ -14,6 +14,7 @@ import {
 } from "../../timeline/public";
 import { useDashboardSession } from "../session/dashboard-session-provider";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
+import type { DashboardCheckpointPreflightState } from "./useDashboardCheckpointPreflight";
 import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
 import { useDashboardTimelineMemoryDebug } from "./useDashboardTimelineMemoryDebug";
@@ -274,6 +275,8 @@ export function useDashboardSnapshot({
 
   return useMemo(
     () => ({
+      preflightRecovery:
+        null as DashboardCheckpointPreflightState["recoveryState"],
       snapshot,
       streamState,
       isInitialLoading,

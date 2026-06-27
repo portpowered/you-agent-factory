@@ -267,17 +267,6 @@ export async function persistTimelineCheckpoint(
   }
 }
 
-export async function clearTimelineCheckpoint(
-  indexedDB: IndexedDBLike | undefined,
-  sessionID: string | null,
-): Promise<void> {
-  if (!indexedDB || !sessionID) {
-    return;
-  }
-
-  await deleteIndexedCheckpoint(indexedDB, sessionID).catch(() => {});
-}
-
 export async function readTimelineCheckpoint(
   indexedDB: IndexedDBLike | undefined,
   sessionID: string | null,

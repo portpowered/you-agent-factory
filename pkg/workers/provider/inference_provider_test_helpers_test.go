@@ -669,7 +669,8 @@ func (e *codexMixedImageAssertExec) Run(ctx context.Context, req CommandRequest)
 func TestInferenceProgressPublishingCommandRunner_PublishesOrderedFragments(t *testing.T) {
 	t.Parallel()
 
-	scriptPath := writeExecutableTestScript(t, "stream.sh", "#!/bin/sh\necho stdout-chunk\necho stderr-chunk 1>&2\n")
+	scriptPath := filepath.Join(t.TempDir(), "stream.sh")
+	writeExecutableTestScript(t, scriptPath, "#!/bin/sh\necho stdout-chunk\necho stderr-chunk 1>&2\n")
 
 	var publishedMu sync.Mutex
 	var published []InferenceProgressFragment
@@ -766,7 +767,8 @@ func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndL
 func TestInferenceProgressPublishingCommandRunner_WithoutPublisherPreservesExecBehavior(t *testing.T) {
 	t.Parallel()
 
-	scriptPath := writeExecutableTestScript(t, "nostream.sh", "#!/bin/sh\necho stdout-fallback\necho stderr-fallback 1>&2\nexit 7\n")
+	scriptPath := filepath.Join(t.TempDir(), "nostream.sh")
+	writeExecutableTestScript(t, scriptPath, "#!/bin/sh\necho stdout-fallback\necho stderr-fallback 1>&2\nexit 7\n")
 
 	runner := NewInferenceProgressPublishingCommandRunner(nil, nil)
 	result, err := runner.Run(context.Background(), CommandRequest{
@@ -784,35 +786,6 @@ func TestInferenceProgressPublishingCommandRunner_WithoutPublisherPreservesExecB
 	if !strings.Contains(string(result.Stderr), "stderr-fallback") {
 		t.Fatalf("stderr = %q, want stderr-fallback", result.Stderr)
 	}
-}
-
-func writeExecutableTestScript(t *testing.T, name string, contents string) string {
-	t.Helper()
-
-	scriptDir := t.TempDir()
-	scriptPath := filepath.Join(scriptDir, name)
-	tempPath := scriptPath + ".tmp"
-
-	file, err := os.OpenFile(tempPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
-	if err != nil {
-		t.Fatalf("open temp script: %v", err)
-	}
-	if _, err := file.WriteString(contents); err != nil {
-		file.Close()
-		t.Fatalf("write temp script: %v", err)
-	}
-	if err := file.Sync(); err != nil {
-		file.Close()
-		t.Fatalf("sync temp script: %v", err)
-	}
-	if err := file.Close(); err != nil {
-		t.Fatalf("close temp script: %v", err)
-	}
-	if err := os.Rename(tempPath, scriptPath); err != nil {
-		t.Fatalf("rename temp script: %v", err)
-	}
-
-	return scriptPath
 }
 
 func assertInferenceProgressFragment(
