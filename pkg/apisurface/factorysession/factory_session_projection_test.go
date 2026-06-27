@@ -128,6 +128,9 @@ func TestListDispatchesResponseToAPI_MapsQueuedRunningAndFailedFixtures(t *testi
 	if failedMapped.Dispatches[1].FailureDetail == nil {
 		t.Fatal("failed dispatch failureDetail missing")
 	}
+	if failedMapped.Dispatches[1].Javascript == nil || failedMapped.Dispatches[1].Javascript.ExecutionMode == nil || *failedMapped.Dispatches[1].Javascript.ExecutionMode != "live" {
+		t.Fatalf("failed dispatch javascript = %#v", failedMapped.Dispatches[1].Javascript)
+	}
 }
 
 func TestDispatchDetailResponseToAPI_MapsPetriAndJavaScriptFixtures(t *testing.T) {
@@ -552,6 +555,13 @@ func dispatchSummaryFromFixture(dispatch map[string]any) factorysessionexecution
 			Reason:     stringValue(failure, "reason"),
 			Message:    stringValue(failure, "message"),
 			ErrorClass: stringValue(failure, "errorClass"),
+		}
+	}
+	if javascript, ok := dispatch["javascript"].(map[string]any); ok {
+		summary.JavaScript = &factorysessionexecution.DispatchJavaScriptProjection{
+			TaskKind:      stringValue(javascript, "taskKind"),
+			TaskLabel:     stringValue(javascript, "taskLabel"),
+			ExecutionMode: stringValue(javascript, "executionMode"),
 		}
 	}
 	return summary

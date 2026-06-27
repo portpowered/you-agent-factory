@@ -15,8 +15,26 @@ const (
 	PackagedCheckWorkstationName = "check-goal"
 	// PackagedReviewWorkstationName is the workstation that classifies review outcomes.
 	PackagedReviewWorkstationName = "review-goal"
+	// PackagedStructuredReviewStateName is the goal state for structured envelope review.
+	PackagedStructuredReviewStateName = "structured-review"
+	// PackagedReviewModePlainLabel selects the classifier-driven plain review lane.
+	PackagedReviewModePlainLabel = "plain"
+	// PackagedReviewModeStructuredLabel selects the structured envelope review lane.
+	PackagedReviewModeStructuredLabel = "structured"
+	// PackagedCheckReviewModeEnvVar lets the built-in checker opt into the structured
+	// review lane while defaulting to the plain classifier lane.
+	PackagedCheckReviewModeEnvVar = "YOU_GOAL_REVIEW_MODE"
+	// PackagedAdvanceStructuredReviewWorkstationName is retained for factories that
+	// still advance checked work through a dedicated logical move.
+	PackagedAdvanceStructuredReviewWorkstationName = "advance-goal-structured-review"
+	// PackagedStructuredReviewWorkstationName routes richer reviewer envelopes through
+	// parsed goal decision labels.
+	PackagedStructuredReviewWorkstationName = "structured-review-goal"
 	// PackagedLoopBreakerWorkstationName is the guarded loop breaker for review retries.
 	PackagedLoopBreakerWorkstationName = "goal-loop-breaker"
+	// PackagedStructuredLoopBreakerWorkstationName is the guarded loop breaker for
+	// structured review retries.
+	PackagedStructuredLoopBreakerWorkstationName = "goal-structured-loop-breaker"
 	// PackagedInvokeWorkstationName aliases the execute workstation for simplified
 	// invocation-primary-result scaffolds and legacy references.
 	PackagedInvokeWorkstationName = PackagedExecuteWorkstationName

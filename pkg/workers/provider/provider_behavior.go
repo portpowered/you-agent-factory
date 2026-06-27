@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
+	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
 
 const (
@@ -347,7 +348,7 @@ func (b cursorProviderBehavior) BuildArgs(_ context.Context, req interfaces.Prov
 	if req.WorkingDirectory != "" {
 		args = append(args, "--workspace", req.WorkingDirectory)
 	}
-	args = append(args, "--output-format", "json")
+	args = append(args, "--output-format", cursorpkg.CursorOutputFormatStreamJSON, "--stream-partial-output")
 	prompt := strings.TrimSpace(req.UserMessage)
 	if systemPrompt := strings.TrimSpace(req.SystemPrompt); systemPrompt != "" {
 		prompt = buildKiroPrompt(req)

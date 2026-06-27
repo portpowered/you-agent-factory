@@ -63,6 +63,7 @@ type runtimeBundleBuildInput struct {
 	prefetchedLocalModels         localModelDomain
 	inferenceProgressPublisher    workerprovider.InferenceProgressPublisher
 	inferenceProgressPublisherSet bool
+	dispatchCompleted             func(string)
 }
 
 type liveSessionState struct {
@@ -70,8 +71,8 @@ type liveSessionState struct {
 	handle                *liveRuntimeHandle
 	spec                  *runtimebuild.SessionBuildSpec
 	javascriptCheckpoints *factorysessions.JavaScriptCheckpointStore
-	responseStreamOnce    sync.Once
-	responseStream        *factorysessions.SessionResponseStream
+	responseStreamsOnce   sync.Once
+	responseStreams       *factorysessions.SessionResponseStreamSet
 }
 
 // BuildFactoryService loads factory.json from the config directory, constructs
@@ -499,6 +500,7 @@ func assembleRuntimeBundle(
 		metricsSink:       metricsSink,
 		recording:         recording,
 		recordPath:        input.recordPath,
+		dispatchCompleted: input.dispatchCompleted,
 	}
 	opts := []factory.FactoryOption{
 		factory.WithNet(net),
@@ -650,6 +652,9 @@ func (r *factoryRuntimeBundle) recordCompletionMetrics(record interfaces.Factory
 		r.emitMetricSample(runtimeMetricDispatchCost, record.Result.Metrics.Cost, "usd", metricFields)
 	}
 	r.emitWorkerBoundaryCompletionMetrics(record.Result, metricFields)
+	if r.dispatchCompleted != nil {
+		r.dispatchCompleted(record.DispatchID)
+	}
 }
 
 func runtimeDispatchMetricFields(dispatch interfaces.WorkDispatch) metrics.Fields {
@@ -1313,6 +1318,7 @@ func newRuntimeBuildService(
 	baseLogger *zap.Logger,
 	startupLocalModels *localModelDomain,
 	progressPublisherFactory inferenceProgressPublisherFactory,
+	dispatchCompletionFactory dispatchCompletionObserverFactory,
 ) *runtimebuild.Service {
 	buildCfg := runtimeBuildConfigFromService(cfg)
 	return runtimebuild.New(
@@ -1339,6 +1345,9 @@ func newRuntimeBuildService(
 			if progressPublisherFactory != nil {
 				bundleInput.inferenceProgressPublisher = progressPublisherFactory(bundleInput.sessionID)
 				bundleInput.inferenceProgressPublisherSet = true
+			}
+			if dispatchCompletionFactory != nil {
+				bundleInput.dispatchCompleted = dispatchCompletionFactory(bundleInput.sessionID)
 			}
 			if startupLocalModels != nil && startupLocalModels.manager != nil {
 				bundleInput.prefetchedLocalModels = *startupLocalModels

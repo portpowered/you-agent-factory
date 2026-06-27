@@ -77,6 +77,9 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request interfaces.Worksta
 	}
 	diagnostics = withInferenceResponseDiagnostics(diagnostics, resp, retryCount)
 
+	if goal.UsesGoalRoutingDecisionEnvelope(workstationDef) {
+		return goalRoutingEnvelopeWorkResult(request, resp, diagnostics, retryCount, start), nil
+	}
 	if goal.UsesDecisionEnvelopeOutcome(workstationDef) {
 		return decisionEnvelopeWorkResult(request, resp, diagnostics, retryCount, start), nil
 	}
@@ -93,6 +96,24 @@ func decisionEnvelopeWorkResult(
 	start time.Time,
 ) interfaces.WorkResult {
 	result := goal.WorkResultFromDecisionEnvelopeJSONOrFailed(
+		request.Dispatch.DispatchID,
+		request.Dispatch.TransitionID,
+		resp.Content,
+	)
+	result.ProviderSession = interfaces.CloneProviderSessionMetadata(resp.ProviderSession)
+	result.Diagnostics = diagnostics
+	result.Metrics = agentWorkMetrics(start, retryCount)
+	return result
+}
+
+func goalRoutingEnvelopeWorkResult(
+	request interfaces.WorkstationExecutionRequest,
+	resp interfaces.InferenceResponse,
+	diagnostics *interfaces.WorkDiagnostics,
+	retryCount int,
+	start time.Time,
+) interfaces.WorkResult {
+	result := goal.WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed(
 		request.Dispatch.DispatchID,
 		request.Dispatch.TransitionID,
 		resp.Content,

@@ -191,6 +191,9 @@ func DispatchSummaryFromAPI(response factoryapi.FactorySessionDispatchSummary) f
 	if response.FailureDetail != nil {
 		summary.FailureDetail = dispatchFailureFromAPI(*response.FailureDetail)
 	}
+	if response.Javascript != nil {
+		summary.JavaScript = dispatchJavaScriptFromAPI(*response.Javascript)
+	}
 	return summary
 }
 
@@ -696,6 +699,19 @@ func dispatchFailureFromAPI(failure factoryapi.FactoryDispatchFailureDetail) *fa
 	}
 	if failure.ErrorClass != nil {
 		out.ErrorClass = strings.TrimSpace(*failure.ErrorClass)
+	}
+	return out
+}
+
+func dispatchJavaScriptFromAPI(javascript factoryapi.FactoryDispatchJavaScriptProjection) *factorysessionexecution.DispatchJavaScriptProjection {
+	out := &factorysessionexecution.DispatchJavaScriptProjection{
+		TaskKind: strings.TrimSpace(string(javascript.TaskKind)),
+	}
+	if javascript.TaskLabel != nil {
+		out.TaskLabel = strings.TrimSpace(*javascript.TaskLabel)
+	}
+	if javascript.ExecutionMode != nil {
+		out.ExecutionMode = strings.TrimSpace(*javascript.ExecutionMode)
 	}
 	return out
 }

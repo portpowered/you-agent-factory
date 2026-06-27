@@ -17,6 +17,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const sessionEventStreamGenerationHeader = "X-Factory-Session-Stream-Generation-Id"
+
 // GetStatus handles GET /status as the supported runtime status read model.
 func (s *Server) GetStatus(w http.ResponseWriter, r *http.Request) {
 	s.getStatus(w, r, s.runtime.GetEngineStateSnapshot)
@@ -54,7 +56,7 @@ func (s *Server) getStatus(
 // GetEvents handles GET /events as a canonical factory event SSE stream.
 func (s *Server) GetEvents(w http.ResponseWriter, r *http.Request, params factoryapi.GetEventsParams) {
 	reconnect := reconnectCursorFromParams(params.AfterEventId, params.AfterSequence)
-	s.getEvents(w, r, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
+	s.getEvents(w, r, false, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
 		return s.runtime.SubscribeFactoryEvents(ctx, reconnect, interfaces.FactoryEventReconnectScope{})
 	})
 }
@@ -88,7 +90,7 @@ func (s *Server) GetEventsBySessionId(w http.ResponseWriter, r *http.Request, se
 			s.writeError(w, http.StatusInternalServerError, "failed to subscribe to factory events", "INTERNAL_ERROR")
 			return
 		}
-		s.getEvents(w, r, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
+		s.getEvents(w, r, false, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
 			return stream, nil
 		})
 		return
@@ -98,7 +100,7 @@ func (s *Server) GetEventsBySessionId(w http.ResponseWriter, r *http.Request, se
 	if !ok {
 		return
 	}
-	s.getEvents(w, r, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
+	s.getEvents(w, r, true, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
 		return sessionRuntime.SubscribeFactoryEventsForSession(ctx, string(sessionID), reconnect)
 	})
 }
@@ -200,6 +202,7 @@ func afterSequenceParam(cursor *interfaces.FactoryEventReconnectCursor) *factory
 func (s *Server) getEvents(
 	w http.ResponseWriter,
 	r *http.Request,
+	includeSessionHandshake bool,
 	subscribe func(context.Context) (*interfaces.FactoryEventStream, error),
 ) {
 	flusher, ok := w.(http.Flusher)
@@ -227,6 +230,11 @@ func (s *Server) getEvents(
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
+	if includeSessionHandshake {
+		if streamGenerationID := strings.TrimSpace(stream.StreamGenerationID); streamGenerationID != "" {
+			w.Header().Set(sessionEventStreamGenerationHeader, streamGenerationID)
+		}
+	}
 
 	for _, event := range stream.History {
 		if err := s.writeSSEDataJSON(w, event); err != nil {

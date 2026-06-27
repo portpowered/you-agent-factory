@@ -57,6 +57,51 @@ func TestParseInferenceResult_Success(t *testing.T) {
 	})
 }
 
+func TestParseInferenceResult_StreamJSONSuccess(t *testing.T) {
+	stdout := []byte(
+		"{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"cursor-stream-session\"}\n" +
+			"{\"type\":\"assistant\",\"timestamp_ms\":1,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Plan \"}]},\"session_id\":\"cursor-stream-session\"}\n" +
+			"{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":1234,\"duration_api_ms\":1100,\"result\":\"Plan done\",\"session_id\":\"cursor-stream-session\",\"request_id\":\"req-stream-123\",\"usage\":{\"inputTokens\":12,\"outputTokens\":34}}\n",
+	)
+
+	parsed, err := ParseInferenceResult(string(interfaces.ModelProviderCursor), stdout)
+	if err != nil {
+		t.Fatalf("ParseInferenceResult returned error: %v", err)
+	}
+	if parsed.Content != "Plan done" {
+		t.Fatalf("content = %q, want stream result text", parsed.Content)
+	}
+	if parsed.ProviderSession == nil || parsed.ProviderSession.Provider != "cursor" || parsed.ProviderSession.ID != "cursor-stream-session" {
+		t.Fatalf("provider session = %#v, want canonical cursor stream session", parsed.ProviderSession)
+	}
+	assertResponseMetadata(t, parsed.ResponseMetadata, map[string]string{
+		ResponseMetadataRequestID:     "req-stream-123",
+		ResponseMetadataDurationMS:    "1234",
+		ResponseMetadataDurationAPIMS: "1100",
+		ResponseMetadataInputTokens:   "12",
+		ResponseMetadataOutputTokens:  "34",
+	})
+}
+
+func TestParseInferenceResult_StreamJSONIgnoresMalformedAndUnknownLinesBeforeResult(t *testing.T) {
+	stdout := []byte(
+		"{not json}\n" +
+			"{\"type\":\"mystery\"}\n" +
+			"{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"Plan done\",\"session_id\":\"cursor-stream-session\"}\n",
+	)
+
+	parsed, err := ParseInferenceResult(string(interfaces.ModelProviderCursor), stdout)
+	if err != nil {
+		t.Fatalf("ParseInferenceResult returned error: %v", err)
+	}
+	if parsed.Content != "Plan done" {
+		t.Fatalf("content = %q, want stream result text", parsed.Content)
+	}
+	if parsed.ProviderSession == nil || parsed.ProviderSession.ID != "cursor-stream-session" {
+		t.Fatalf("provider session = %#v, want canonical cursor stream session", parsed.ProviderSession)
+	}
+}
+
 func TestParseInferenceResult_MissingSessionID(t *testing.T) {
 	stdout := []byte(`{
 		"type": "result",
@@ -69,6 +114,39 @@ func TestParseInferenceResult_MissingSessionID(t *testing.T) {
 	_, err := ParseInferenceResult(string(interfaces.ModelProviderCursor), stdout)
 	if err == nil {
 		t.Fatal("expected parse error for missing session_id")
+	}
+	if err.Type != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("error type = %q, want permanent_bad_request", err.Type)
+	}
+}
+
+func TestParseInferenceResult_InvalidSessionID(t *testing.T) {
+	stdout := []byte(`{
+		"type": "result",
+		"subtype": "success",
+		"is_error": false,
+		"result": "done",
+		"session_id": "../cursor-session"
+	}`)
+
+	_, err := ParseInferenceResult(string(interfaces.ModelProviderCursor), stdout)
+	if err == nil {
+		t.Fatal("expected parse error for invalid session_id")
+	}
+	if err.Type != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("error type = %q, want permanent_bad_request", err.Type)
+	}
+}
+
+func TestParseInferenceResult_StreamJSONInvalidSessionID(t *testing.T) {
+	stdout := []byte(
+		"{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"cursor-stream-session\"}\n" +
+			"{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"Plan done\",\"session_id\":\"../cursor-stream-session\"}\n",
+	)
+
+	_, err := ParseInferenceResult(string(interfaces.ModelProviderCursor), stdout)
+	if err == nil {
+		t.Fatal("expected parse error for invalid stream session_id")
 	}
 	if err.Type != interfaces.WorkFailureTypePermanentBadRequest {
 		t.Fatalf("error type = %q, want permanent_bad_request", err.Type)
@@ -98,11 +176,12 @@ func TestParseInferenceResult_UnexpectedType(t *testing.T) {
 }
 
 func TestParseInferenceResult_ErrorSubtype(t *testing.T) {
+	oversizedResult := strings.Repeat("x", PublishedDiagnosticLimit+20)
 	stdout := []byte(`{
 		"type": "result",
 		"subtype": "error",
 		"is_error": true,
-		"result": "rate limited",
+		"result": "` + oversizedResult + `",
 		"session_id": "sess-1"
 	}`)
 
@@ -113,6 +192,15 @@ func TestParseInferenceResult_ErrorSubtype(t *testing.T) {
 	if err.Type != interfaces.WorkFailureTypeInternalServerError {
 		t.Fatalf("error type = %q, want internal_server_error", err.Type)
 	}
+	if !strings.Contains(err.Message, `cursor JSON output had subtype "error": `) {
+		t.Fatalf("error message = %q, want subtype detail", err.Message)
+	}
+	if !strings.Contains(err.Message, "...") {
+		t.Fatalf("error message = %q, want bounded result preview", err.Message)
+	}
+	if strings.Contains(err.Message, oversizedResult) {
+		t.Fatalf("error message = %q, should not include full oversized result", err.Message)
+	}
 }
 
 func TestBoundedCommandOutputExcerpt_TruncatesWhenOverLimit(t *testing.T) {
@@ -122,6 +210,13 @@ func TestBoundedCommandOutputExcerpt_TruncatesWhenOverLimit(t *testing.T) {
 	want := "01234567..."
 	if got != want {
 		t.Fatalf("excerpt = %q, want %q", got, want)
+	}
+}
+
+func TestBoundedText_PreservesSpacingForPublishedAssistantText(t *testing.T) {
+	got := boundedText(" hi", 2)
+	if got != " h..." {
+		t.Fatalf("boundedText() = %q, want preserved leading spacing with truncation", got)
 	}
 }
 

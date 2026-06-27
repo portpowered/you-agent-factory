@@ -516,6 +516,12 @@ func decodeOptionalRetryDispatchRequest(body io.Reader) (factoryapi.FactorySessi
 	})
 }
 
+func decodeOptionalInterruptDispatchRequest(body io.Reader) (factoryapi.FactorySessionInterruptDispatchRequest, error) {
+	return decodeOptionalJSONRequest(body, func() factoryapi.FactorySessionInterruptDispatchRequest {
+		return factoryapi.FactorySessionInterruptDispatchRequest{}
+	})
+}
+
 func decodeOptionalJSONRequest[T any](body io.Reader, zero func() T) (T, error) {
 	data, err := io.ReadAll(body)
 	if err != nil {
@@ -620,6 +626,7 @@ func (s *Server) handleDurableRetryDispatchControl(
 
 	s.writeJSON(w, http.StatusOK, response)
 }
+
 func (s *Server) ApproveFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
 	s.handleDurableApproveControl(w, r, sessionID, func(
 		lifecycle apisurface.DurableSessionLifecycleAPI,
@@ -690,4 +697,46 @@ func (s *Server) RetryFactorySessionDispatch(w http.ResponseWriter, r *http.Requ
 	) (factoryapi.FactorySessionLifecycleControlResponse, error) {
 		return lifecycle.RetryDurableFactorySessionDispatch(r.Context(), string(sessionID), req)
 	})
+}
+
+func (s *Server) handleDurableInterruptDispatchControl(
+	w http.ResponseWriter,
+	r *http.Request,
+	sessionID factoryapi.SessionID,
+	invoke func(apisurface.DurableSessionLifecycleAPI, factoryapi.FactorySessionInterruptDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error),
+) {
+	if !isDurableExecutionSessionID(string(sessionID)) {
+		s.writeError(w, http.StatusNotImplemented, "durable factory session interrupt-dispatch is not implemented", "INTERNAL_ERROR")
+		return
+	}
+
+	lifecycle, ok := s.requireDurableSessionLifecycleAPI(w)
+	if !ok {
+		return
+	}
+
+	req, err := decodeOptionalInterruptDispatchRequest(r.Body)
+	if err != nil {
+		if message, ok := requestFieldValidationMessage(err); ok {
+			s.writeError(w, http.StatusBadRequest, message, "BAD_REQUEST")
+			return
+		}
+		s.writeError(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST")
+		return
+	}
+
+	response, err := invoke(lifecycle, req)
+	if err != nil {
+		if s.writeDurableLifecycleControlError(w, string(sessionID), err) {
+			return
+		}
+		s.logger.Error("durable factory session interrupt-dispatch failed",
+			zap.Error(err),
+			zap.String("session_id", string(sessionID)),
+		)
+		s.writeError(w, http.StatusInternalServerError, "durable factory session interrupt-dispatch failed", "INTERNAL_ERROR")
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, response)
 }

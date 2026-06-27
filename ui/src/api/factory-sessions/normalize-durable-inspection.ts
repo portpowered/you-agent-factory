@@ -133,6 +133,7 @@ export function dispatchSummariesToFactoryDispatches(
     status: summary.status,
     usage: summary.usage,
     warnings: summary.warnings,
+    javascript: summary.javascript,
   }));
 }
 

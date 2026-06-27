@@ -11,9 +11,9 @@ import (
 )
 
 type durableSessionContractFixtureCatalog struct {
-	Scenarios        []durableSessionContractScenario       `json:"scenarios"`
+	Scenarios        []durableSessionContractScenario      `json:"scenarios"`
 	IdempotentReplay durableSessionIdempotentReplayFixture `json:"idempotentReplay"`
-	ListResponse     map[string]any                         `json:"listResponse"`
+	ListResponse     map[string]any                        `json:"listResponse"`
 }
 
 type durableSessionContractScenario struct {
@@ -41,8 +41,8 @@ type durableSessionContractTags struct {
 }
 
 type durableSessionIdempotentReplayFixture struct {
-	ExecutionRequest   map[string]any `json:"executionRequest"`
-	AsyncResponse      map[string]any `json:"asyncResponse"`
+	ExecutionRequest    map[string]any `json:"executionRequest"`
+	AsyncResponse       map[string]any `json:"asyncResponse"`
 	ReplayAsyncResponse map[string]any `json:"replayAsyncResponse"`
 }
 
@@ -709,11 +709,12 @@ func assertDurableSessionDispatchArtifactSurfaceSchemas(t *testing.T, schemas ma
 	assertPropertyRef(t, dispatchSummaryProperties, "dispatchKind", "#/components/schemas/FactoryDispatchKind")
 	assertPropertyRef(t, dispatchSummaryProperties, "usage", "#/components/schemas/FactoryDispatchUsage")
 	assertPropertyRef(t, dispatchSummaryProperties, "failureDetail", "#/components/schemas/FactoryDispatchFailureDetail")
+	assertPropertyRef(t, dispatchSummaryProperties, "javascript", "#/components/schemas/FactoryDispatchJavaScriptProjection")
 	assertArrayItemRef(t, dispatchSummaryProperties, "providerSessionRefs", "#/components/schemas/LoadableProviderSessionRef")
 	assertArrayItemRef(t, dispatchSummaryProperties, "warnings", "#/components/schemas/FactoryDispatchWarning")
 	assertSchemaPropertiesPresent(t, dispatchSummaryProperties, "FactorySessionDispatchSummary",
 		"id", "status", "dispatchKind", "phase", "label", "attempt", "runnerId", "model", "provider",
-		"providerSessionRefs", "usage", "warnings", "outputArtifactIds", "failureDetail")
+		"providerSessionRefs", "usage", "warnings", "outputArtifactIds", "failureDetail", "javascript")
 
 	dispatchDetailSchema := schemaObject(t, schemas, "FactoryDispatch")
 	dispatchDetailProperties := schemaProperties(t, dispatchDetailSchema, "FactoryDispatch")
@@ -764,6 +765,7 @@ func assertDurableSessionLifecycleControlSurfaceSchemas(t *testing.T, schemas ma
 		{"/factory-sessions/{session_id}/cancel", "cancelFactorySession", "#/components/schemas/FactorySessionLifecycleControlRequest", false},
 		{"/factory-sessions/{session_id}/terminate", "terminateFactorySession", "#/components/schemas/FactorySessionLifecycleControlRequest", false},
 		{"/factory-sessions/{session_id}/retry-dispatch", "retryFactorySessionDispatch", "#/components/schemas/FactorySessionRetryDispatchRequest", true},
+		{"/factory-sessions/{session_id}/interrupt-dispatch", "interruptFactorySessionDispatch", "#/components/schemas/FactorySessionInterruptDispatchRequest", true},
 	}
 	for _, route := range lifecycleRoutes {
 		operation := pathOperation(t, paths, route.path, "post")
@@ -783,6 +785,11 @@ func assertDurableSessionLifecycleControlSurfaceSchemas(t *testing.T, schemas ma
 	assertRequestSchemaRef(t, retryOperation, "#/components/schemas/FactorySessionRetryDispatchRequest")
 	retryRequestSchema := schemaObject(t, schemas, "FactorySessionRetryDispatchRequest")
 	assertRequiredFields(t, retryRequestSchema, "dispatchId")
+
+	interruptOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/interrupt-dispatch", "post")
+	assertRequestSchemaRef(t, interruptOperation, "#/components/schemas/FactorySessionInterruptDispatchRequest")
+	interruptRequestSchema := schemaObject(t, schemas, "FactorySessionInterruptDispatchRequest")
+	assertRequiredFields(t, interruptRequestSchema, "dispatchId")
 
 	controlResponseSchema := schemaObject(t, schemas, "FactorySessionLifecycleControlResponse")
 	assertRequiredFields(t, controlResponseSchema, "sessionId", "operation", "outcome", "status")
@@ -807,7 +814,7 @@ func assertDurableSessionLifecycleControlSurfaceSchemas(t *testing.T, schemas ma
 		"session", "results", "dispatches", "artifacts", "events", "status")
 
 	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionLifecycleControlKind"), "FactorySessionLifecycleControlKind", []string{
-		"APPROVE", "PAUSE", "RESUME", "CANCEL", "TERMINATE", "RETRY_DISPATCH",
+		"APPROVE", "PAUSE", "RESUME", "CANCEL", "TERMINATE", "RETRY_DISPATCH", "INTERRUPT_DISPATCH",
 	})
 	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionLifecycleControlOutcome"), "FactorySessionLifecycleControlOutcome", []string{
 		"ACCEPTED", "NO_OP", "INVALID_STATE", "TERMINAL_SESSION", "CONFLICT",
@@ -894,6 +901,7 @@ func assertRealBackendSessionAPISliceRoutes(t *testing.T, paths map[string]any) 
 		"/factory-sessions/{session_id}/cancel":                     {"post"},
 		"/factory-sessions/{session_id}/terminate":                  {"post"},
 		"/factory-sessions/{session_id}/retry-dispatch":             {"post"},
+		"/factory-sessions/{session_id}/interrupt-dispatch":         {"post"},
 	}
 	for path, methods := range requiredRoutes {
 		pathItem, ok := paths[path].(map[string]any)
@@ -936,6 +944,7 @@ func assertDeferredRealBackendSessionRouteFamilies(t *testing.T, paths map[strin
 		"/factory-sessions/{session_id}/cancel":                     {},
 		"/factory-sessions/{session_id}/terminate":                  {},
 		"/factory-sessions/{session_id}/retry-dispatch":             {},
+		"/factory-sessions/{session_id}/interrupt-dispatch":         {},
 	}
 
 	for path, methods := range deferredRoutes {

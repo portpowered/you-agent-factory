@@ -141,6 +141,71 @@ func TestRetryDispatchRequestFromAPI_NormalizesDispatchAndFlags(t *testing.T) {
 	}
 }
 
+func TestInterruptDispatchRequestFromAPI_RequiresDispatchID(t *testing.T) {
+	_, err := factorysession.InterruptDispatchRequestFromAPI(factoryapi.FactorySessionInterruptDispatchRequest{})
+	if err == nil {
+		t.Fatal("error = nil, want validation error")
+	}
+	var validationErr *factorysessionexecution.ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("error = %T, want ValidationError", err)
+	}
+}
+
+func TestInterruptDispatchRequestFromAPI_NormalizesDispatchAndMetadata(t *testing.T) {
+	requestID := "req-interrupt-001"
+	reason := "operator stop"
+	mapped, err := factorysession.InterruptDispatchRequestFromAPI(factoryapi.FactorySessionInterruptDispatchRequest{
+		RequestId:  &requestID,
+		DispatchId: "disp-001",
+		Reason:     &reason,
+	})
+	if err != nil {
+		t.Fatalf("InterruptDispatchRequestFromAPI: %v", err)
+	}
+	if mapped.DispatchID != "disp-001" || mapped.RequestID != requestID || mapped.Reason != reason {
+		t.Fatalf("mapped = %#v", mapped)
+	}
+}
+
+func TestEvaluateInterruptDispatchControlFromServiceSpec(t *testing.T) {
+	accepted := factorysessionexecution.EvaluateInterruptDispatchControl(
+		factorysessionexecution.LifecycleStatusRunning,
+		factorysessionexecution.DispatchStatusRunning,
+	)
+	if accepted != factorysessionexecution.LifecycleControlOutcomeAccepted {
+		t.Fatalf("accepted outcome = %q, want ACCEPTED", accepted)
+	}
+	queued := factorysessionexecution.EvaluateInterruptDispatchControl(
+		factorysessionexecution.LifecycleStatusRunning,
+		factorysessionexecution.DispatchStatusQueued,
+	)
+	if queued != factorysessionexecution.LifecycleControlOutcomeInvalidState {
+		t.Fatalf("queued outcome = %q, want INVALID_STATE", queued)
+	}
+	noop := factorysessionexecution.EvaluateInterruptDispatchControl(
+		factorysessionexecution.LifecycleStatusRunning,
+		factorysessionexecution.DispatchStatusInterrupted,
+	)
+	if noop != factorysessionexecution.LifecycleControlOutcomeNoOp {
+		t.Fatalf("noop outcome = %q, want NO_OP", noop)
+	}
+	invalid := factorysessionexecution.EvaluateInterruptDispatchControl(
+		factorysessionexecution.LifecycleStatusRunning,
+		factorysessionexecution.DispatchStatusCompleted,
+	)
+	if invalid != factorysessionexecution.LifecycleControlOutcomeInvalidState {
+		t.Fatalf("invalid outcome = %q, want INVALID_STATE", invalid)
+	}
+	terminal := factorysessionexecution.EvaluateInterruptDispatchControl(
+		factorysessionexecution.LifecycleStatusSucceeded,
+		factorysessionexecution.DispatchStatusRunning,
+	)
+	if terminal != factorysessionexecution.LifecycleControlOutcomeTerminalSession {
+		t.Fatalf("terminal outcome = %q, want TERMINAL_SESSION", terminal)
+	}
+}
+
 func TestEvaluateLifecycleControlFromServiceSpec_MatchesRetryTerminalFixture(t *testing.T) {
 	outcome := factorysessionexecution.EvaluateLifecycleControl(
 		factorysessionexecution.LifecycleControlRetryDispatch,

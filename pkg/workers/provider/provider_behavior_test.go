@@ -321,7 +321,7 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 				ModelProvider: string(interfaces.ModelProviderCursor),
 				UserMessage:   "summarize the workspace",
 			},
-			want: []string{"-p", "--output-format", "json", "summarize the workspace"},
+			want: []string{"-p", "--output-format", "stream-json", "--stream-partial-output", "summarize the workspace"},
 		},
 		{
 			name: "WithModelSessionAndForce",
@@ -332,7 +332,7 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 				UserMessage:   "run the tests",
 			},
 			skipPermissions: true,
-			want:            []string{"-f", "-p", "--model", "gpt-5", "--resume", "cursor-session-123", "--output-format", "json", "run the tests"},
+			want:            []string{"-f", "-p", "--model", "gpt-5", "--resume", "cursor-session-123", "--output-format", "stream-json", "--stream-partial-output", "run the tests"},
 		},
 		{
 			name: "WithWorkspace",
@@ -341,7 +341,7 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 				WorkingDirectory: "/tmp/project",
 				UserMessage:      "inspect the repo",
 			},
-			want: []string{"-p", "--workspace", "/tmp/project", "--output-format", "json", "inspect the repo"},
+			want: []string{"-p", "--workspace", "/tmp/project", "--output-format", "stream-json", "--stream-partial-output", "inspect the repo"},
 		},
 	}
 
@@ -802,14 +802,12 @@ func assertProviderExitFailureClassification(t *testing.T, behavior providerBeha
 
 func TestWorkDiagnosticsForInferenceRequest_IncludesOpenCodeAgentWhenConfigured(t *testing.T) {
 	t.Parallel()
-
 	diagnostics := workDiagnosticsForInferenceRequest(interfaces.ProviderInferenceRequest{
 		ModelProvider: string(interfaces.ModelProviderOpenCode),
 		Model:         "openai/gpt-5",
 		OpenCodeAgent: "implementer",
 		WorkerType:    interfaces.WorkerTypeModel,
 	})
-
 	if got := diagnostics.Provider.RequestMetadata["opencode_agent"]; got != "implementer" {
 		t.Fatalf("opencode_agent = %q, want implementer", got)
 	}
@@ -817,13 +815,11 @@ func TestWorkDiagnosticsForInferenceRequest_IncludesOpenCodeAgentWhenConfigured(
 
 func TestWorkDiagnosticsForInferenceRequest_OmitsOpenCodeAgentWhenUnset(t *testing.T) {
 	t.Parallel()
-
 	diagnostics := workDiagnosticsForInferenceRequest(interfaces.ProviderInferenceRequest{
 		ModelProvider: string(interfaces.ModelProviderOpenCode),
 		Model:         "openai/gpt-5",
 		WorkerType:    interfaces.WorkerTypeModel,
 	})
-
 	if _, ok := diagnostics.Provider.RequestMetadata["opencode_agent"]; ok {
 		t.Fatalf("request metadata = %#v, want opencode_agent omitted", diagnostics.Provider.RequestMetadata)
 	}
@@ -831,13 +827,11 @@ func TestWorkDiagnosticsForInferenceRequest_OmitsOpenCodeAgentWhenUnset(t *testi
 
 func TestWorkDiagnosticsForInferenceRequest_SafeProjectionPreservesOpenCodeAgent(t *testing.T) {
 	t.Parallel()
-
 	diagnostics := workDiagnosticsForInferenceRequest(interfaces.ProviderInferenceRequest{
 		ModelProvider: string(interfaces.ModelProviderOpenCode),
 		OpenCodeAgent: "implementer",
 	})
 	safe := interfaces.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics)
-
 	if got := safe.Provider.RequestMetadata["opencode_agent"]; got != "implementer" {
 		t.Fatalf("safe opencode_agent = %q, want implementer", got)
 	}
@@ -893,5 +887,109 @@ func TestInferenceProgressPublishingCommandRunner_PublishesOrderedFragments(t *t
 	}
 	if !sawResponse || !sawProgress {
 		t.Fatalf("published fragments = %#v, want both response and progress kinds", published)
+	}
+}
+func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndLaterValidEventsInOrder(t *testing.T) {
+	scriptDir := t.TempDir()
+	scriptPath := filepath.Join(scriptDir, string(interfaces.ModelProviderCursor))
+	script := "#!/bin/sh\n" +
+		"printf '%s\\n' '{not json}'\n" +
+		"printf '%s\\n' '{\"type\":\"mystery\"}'\n" +
+		"printf '%s\\n' '{\"type\":\"assistant\",\"timestamp_ms\":1,\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"Plan \"}]},\"session_id\":\"cursor-session-123\"}'\n" +
+		"printf '%s\\n' '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"Plan done\",\"session_id\":\"cursor-session-123\"}'\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+	t.Setenv("PATH", scriptDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	var publishedMu sync.Mutex
+	var published []InferenceProgressFragment
+	runner := NewInferenceProgressPublishingCommandRunner(func(fragment InferenceProgressFragment) {
+		publishedMu.Lock()
+		published = append(published, fragment)
+		publishedMu.Unlock()
+	}, nil)
+
+	result, err := runner.Run(context.Background(), CommandRequest{
+		Command:    string(interfaces.ModelProviderCursor),
+		DispatchID: "dispatch-stream-cursor",
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	publishedMu.Lock()
+	defer publishedMu.Unlock()
+	if len(published) != 4 {
+		t.Fatalf("published fragments = %#v, want 4 ordered fragments; result=%#v", published, result)
+	}
+	assertInferenceProgressFragment(t, published[0], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored malformed JSON record", nil)
+	assertInferenceProgressFragment(t, published[1], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored unknown event type \"mystery\"", nil)
+	assertInferenceProgressFragment(t, published[2], "dispatch-stream-cursor", ResponseFragmentKind, "Plan ", &interfaces.ProviderSessionMetadata{
+		Provider: "cursor",
+		Kind:     "session_id",
+		ID:       "cursor-session-123",
+	})
+	assertInferenceProgressFragment(t, published[3], "dispatch-stream-cursor", ResponseFragmentKind, "done", &interfaces.ProviderSessionMetadata{
+		Provider: "cursor",
+		Kind:     "session_id",
+		ID:       "cursor-session-123",
+	})
+}
+func TestInferenceProgressPublishingCommandRunner_WithoutPublisherPreservesExecBehavior(t *testing.T) {
+	t.Parallel()
+
+	scriptPath := filepath.Join(t.TempDir(), "nostream.sh")
+	script := "#!/bin/sh\necho stdout-fallback\necho stderr-fallback 1>&2\nexit 7\n"
+	if err := os.WriteFile(scriptPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+
+	runner := NewInferenceProgressPublishingCommandRunner(nil, nil)
+	result, err := runner.Run(context.Background(), CommandRequest{
+		Command: scriptPath,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if result.ExitCode != 7 {
+		t.Fatalf("exit code = %d, want 7", result.ExitCode)
+	}
+	if !strings.Contains(string(result.Stdout), "stdout-fallback") {
+		t.Fatalf("stdout = %q, want stdout-fallback", result.Stdout)
+	}
+	if !strings.Contains(string(result.Stderr), "stderr-fallback") {
+		t.Fatalf("stderr = %q, want stderr-fallback", result.Stderr)
+	}
+}
+func assertInferenceProgressFragment(
+	t *testing.T,
+	fragment InferenceProgressFragment,
+	wantDispatchID string,
+	wantKind string,
+	wantPayload string,
+	wantSession *interfaces.ProviderSessionMetadata,
+) {
+	t.Helper()
+	if fragment.DispatchID != wantDispatchID {
+		t.Fatalf("dispatch = %q, want %q", fragment.DispatchID, wantDispatchID)
+	}
+	if fragment.Kind != wantKind {
+		t.Fatalf("kind = %q, want %q", fragment.Kind, wantKind)
+	}
+	if fragment.Payload != wantPayload {
+		t.Fatalf("payload = %q, want %q", fragment.Payload, wantPayload)
+	}
+	if wantSession == nil {
+		if fragment.ProviderSessionRef != nil {
+			t.Fatalf("provider session = %#v, want nil", fragment.ProviderSessionRef)
+		}
+		return
+	}
+	if fragment.ProviderSessionRef == nil {
+		t.Fatal("provider session = nil, want canonical session")
+	}
+	if *fragment.ProviderSessionRef != *wantSession {
+		t.Fatalf("provider session = %#v, want %#v", fragment.ProviderSessionRef, wantSession)
 	}
 }

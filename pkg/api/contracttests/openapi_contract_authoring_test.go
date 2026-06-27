@@ -65,59 +65,59 @@ func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 	doc := loadAuthoredOpenAPIDoc(t)
 	schemas := componentSchemas(t, doc)
 	expectedRefs := map[string]string{
-		"FactoryEvent":                          "./components/schemas/events/FactoryEvent.yaml",
-		"FactoryEventType":                      "./components/schemas/events/FactoryEventType.yaml",
-		"FactoryEventContext":                   "./components/schemas/events/FactoryEventContext.yaml",
-		"DispatchConsumedWorkRef":               "./components/schemas/events/DispatchConsumedWorkRef.yaml",
-		"DispatchRequestEventMetadata":          "./components/schemas/events/DispatchRequestEventMetadata.yaml",
-		"RunRequestEventPayload":                "./components/schemas/events/payloads/RunRequestEventPayload.yaml",
-		"InitialStructureRequestEventPayload":   "./components/schemas/events/payloads/InitialStructureRequestEventPayload.yaml",
-		"FactoryChangeEventPayload":             "./components/schemas/events/payloads/FactoryChangeEventPayload.yaml",
-		"WorkRequestEventPayload":               "./components/schemas/events/payloads/WorkRequestEventPayload.yaml",
-		"RelationshipChangeRequestEventPayload": "./components/schemas/events/payloads/RelationshipChangeRequestEventPayload.yaml",
-		"DispatchRequestEventPayload":           "./components/schemas/events/payloads/DispatchRequestEventPayload.yaml",
-		"ModelRequestEventPayload":              "./components/schemas/events/payloads/ModelRequestEventPayload.yaml",
-		"ModelResponseEventPayload":             "./components/schemas/events/payloads/ModelResponseEventPayload.yaml",
-		"InferenceRequestEventPayload":          "./components/schemas/events/payloads/InferenceRequestEventPayload.yaml",
-		"InferenceResponseEventPayload":         "./components/schemas/events/payloads/InferenceResponseEventPayload.yaml",
-		"ScriptRequestEventPayload":             "./components/schemas/events/payloads/ScriptRequestEventPayload.yaml",
-		"ScriptResponseEventPayload":            "./components/schemas/events/payloads/ScriptResponseEventPayload.yaml",
-		"DispatchResponseEventPayload":          "./components/schemas/events/payloads/DispatchResponseEventPayload.yaml",
-		"WorkStateChangeEventPayload":           "./components/schemas/events/payloads/WorkStateChangeEventPayload.yaml",
-		"WorkStateChangeSource":                 "./components/schemas/events/WorkStateChangeSource.yaml",
-		"FactoryStateResponseEventPayload":      "./components/schemas/events/payloads/FactoryStateResponseEventPayload.yaml",
-		"RunResponseEventPayload":               "./components/schemas/events/payloads/RunResponseEventPayload.yaml",
-		"FactoryEventSessionResultStatus":       "./components/schemas/events/FactoryEventSessionResultStatus.yaml",
-		"OrchestratorPhaseStatus":               "./components/schemas/events/OrchestratorPhaseStatus.yaml",
-		"CheckpointResumabilityStatus":          "./components/schemas/events/CheckpointResumabilityStatus.yaml",
-		"DispatchReconciliationSource":          "./components/schemas/events/DispatchReconciliationSource.yaml",
-		"SessionStartedEventPayload":            "./components/schemas/events/payloads/SessionStartedEventPayload.yaml",
-		"SessionPausedEventPayload":             "./components/schemas/events/payloads/SessionPausedEventPayload.yaml",
-		"SessionResumedEventPayload":            "./components/schemas/events/payloads/SessionResumedEventPayload.yaml",
-		"SessionResultUpdatedEventPayload":      "./components/schemas/events/payloads/SessionResultUpdatedEventPayload.yaml",
-		"SessionCompletedEventPayload":          "./components/schemas/events/payloads/SessionCompletedEventPayload.yaml",
-		"OrchestratorPhaseChangedEventPayload":  "./components/schemas/events/payloads/OrchestratorPhaseChangedEventPayload.yaml",
+		"FactoryEvent":                              "./components/schemas/events/FactoryEvent.yaml",
+		"FactoryEventType":                          "./components/schemas/events/FactoryEventType.yaml",
+		"FactoryEventContext":                       "./components/schemas/events/FactoryEventContext.yaml",
+		"DispatchConsumedWorkRef":                   "./components/schemas/events/DispatchConsumedWorkRef.yaml",
+		"DispatchRequestEventMetadata":              "./components/schemas/events/DispatchRequestEventMetadata.yaml",
+		"RunRequestEventPayload":                    "./components/schemas/events/payloads/RunRequestEventPayload.yaml",
+		"InitialStructureRequestEventPayload":       "./components/schemas/events/payloads/InitialStructureRequestEventPayload.yaml",
+		"FactoryChangeEventPayload":                 "./components/schemas/events/payloads/FactoryChangeEventPayload.yaml",
+		"WorkRequestEventPayload":                   "./components/schemas/events/payloads/WorkRequestEventPayload.yaml",
+		"RelationshipChangeRequestEventPayload":     "./components/schemas/events/payloads/RelationshipChangeRequestEventPayload.yaml",
+		"DispatchRequestEventPayload":               "./components/schemas/events/payloads/DispatchRequestEventPayload.yaml",
+		"ModelRequestEventPayload":                  "./components/schemas/events/payloads/ModelRequestEventPayload.yaml",
+		"ModelResponseEventPayload":                 "./components/schemas/events/payloads/ModelResponseEventPayload.yaml",
+		"InferenceRequestEventPayload":              "./components/schemas/events/payloads/InferenceRequestEventPayload.yaml",
+		"InferenceResponseEventPayload":             "./components/schemas/events/payloads/InferenceResponseEventPayload.yaml",
+		"ScriptRequestEventPayload":                 "./components/schemas/events/payloads/ScriptRequestEventPayload.yaml",
+		"ScriptResponseEventPayload":                "./components/schemas/events/payloads/ScriptResponseEventPayload.yaml",
+		"DispatchResponseEventPayload":              "./components/schemas/events/payloads/DispatchResponseEventPayload.yaml",
+		"WorkStateChangeEventPayload":               "./components/schemas/events/payloads/WorkStateChangeEventPayload.yaml",
+		"WorkStateChangeSource":                     "./components/schemas/events/WorkStateChangeSource.yaml",
+		"FactoryStateResponseEventPayload":          "./components/schemas/events/payloads/FactoryStateResponseEventPayload.yaml",
+		"RunResponseEventPayload":                   "./components/schemas/events/payloads/RunResponseEventPayload.yaml",
+		"FactoryEventSessionResultStatus":           "./components/schemas/events/FactoryEventSessionResultStatus.yaml",
+		"OrchestratorPhaseStatus":                   "./components/schemas/events/OrchestratorPhaseStatus.yaml",
+		"CheckpointResumabilityStatus":              "./components/schemas/events/CheckpointResumabilityStatus.yaml",
+		"DispatchReconciliationSource":              "./components/schemas/events/DispatchReconciliationSource.yaml",
+		"SessionStartedEventPayload":                "./components/schemas/events/payloads/SessionStartedEventPayload.yaml",
+		"SessionPausedEventPayload":                 "./components/schemas/events/payloads/SessionPausedEventPayload.yaml",
+		"SessionResumedEventPayload":                "./components/schemas/events/payloads/SessionResumedEventPayload.yaml",
+		"SessionResultUpdatedEventPayload":          "./components/schemas/events/payloads/SessionResultUpdatedEventPayload.yaml",
+		"SessionCompletedEventPayload":              "./components/schemas/events/payloads/SessionCompletedEventPayload.yaml",
+		"OrchestratorPhaseChangedEventPayload":      "./components/schemas/events/payloads/OrchestratorPhaseChangedEventPayload.yaml",
 		"OrchestratorCheckpointWrittenEventPayload": "./components/schemas/events/payloads/OrchestratorCheckpointWrittenEventPayload.yaml",
-		"DispatchQueuedEventPayload":            "./components/schemas/events/payloads/DispatchQueuedEventPayload.yaml",
-		"DispatchInterruptedEventPayload":       "./components/schemas/events/payloads/DispatchInterruptedEventPayload.yaml",
-		"DispatchReconciledEventPayload":        "./components/schemas/events/payloads/DispatchReconciledEventPayload.yaml",
-		"JavaScriptCheckpointRefEventPayload":   "./components/schemas/events/payloads/JavaScriptCheckpointRefEventPayload.yaml",
-		"InferenceOutcome":                      "./components/schemas/events/InferenceOutcome.yaml",
-		"ScriptExecutionOutcome":                "./components/schemas/events/ScriptExecutionOutcome.yaml",
-		"ScriptFailureType":                     "./components/schemas/events/ScriptFailureType.yaml",
-		"FactoryState":                          "./components/schemas/events/FactoryState.yaml",
-		"WorkOutcome":                           "./components/schemas/events/WorkOutcome.yaml",
-		"WorkFailureFamily":                     "./components/schemas/events/WorkFailureFamily.yaml",
-		"WorkFailureType":                       "./components/schemas/events/WorkFailureType.yaml",
-		"ProviderFailureMetadata":               "./components/schemas/events/ProviderFailureMetadata.yaml",
-		"ProviderSessionMetadata":               "./components/schemas/events/ProviderSessionMetadata.yaml",
-		"WorkMetrics":                           "./components/schemas/events/WorkMetrics.yaml",
-		"WorkDiagnostics":                       "./components/schemas/events/WorkDiagnostics.yaml",
-		"RenderedPromptDiagnostic":              "./components/schemas/events/RenderedPromptDiagnostic.yaml",
-		"ProviderDiagnostic":                    "./components/schemas/events/ProviderDiagnostic.yaml",
-		"Diagnostics":                           "./components/schemas/events/Diagnostics.yaml",
-		"SafeWorkDiagnostics":                   "./components/schemas/events/SafeWorkDiagnostics.yaml",
-		"WallClock":                             "./components/schemas/events/WallClock.yaml",
+		"DispatchQueuedEventPayload":                "./components/schemas/events/payloads/DispatchQueuedEventPayload.yaml",
+		"DispatchInterruptedEventPayload":           "./components/schemas/events/payloads/DispatchInterruptedEventPayload.yaml",
+		"DispatchReconciledEventPayload":            "./components/schemas/events/payloads/DispatchReconciledEventPayload.yaml",
+		"JavaScriptCheckpointRefEventPayload":       "./components/schemas/events/payloads/JavaScriptCheckpointRefEventPayload.yaml",
+		"InferenceOutcome":                          "./components/schemas/events/InferenceOutcome.yaml",
+		"ScriptExecutionOutcome":                    "./components/schemas/events/ScriptExecutionOutcome.yaml",
+		"ScriptFailureType":                         "./components/schemas/events/ScriptFailureType.yaml",
+		"FactoryState":                              "./components/schemas/events/FactoryState.yaml",
+		"WorkOutcome":                               "./components/schemas/events/WorkOutcome.yaml",
+		"WorkFailureFamily":                         "./components/schemas/events/WorkFailureFamily.yaml",
+		"WorkFailureType":                           "./components/schemas/events/WorkFailureType.yaml",
+		"ProviderFailureMetadata":                   "./components/schemas/events/ProviderFailureMetadata.yaml",
+		"ProviderSessionMetadata":                   "./components/schemas/events/ProviderSessionMetadata.yaml",
+		"WorkMetrics":                               "./components/schemas/events/WorkMetrics.yaml",
+		"WorkDiagnostics":                           "./components/schemas/events/WorkDiagnostics.yaml",
+		"RenderedPromptDiagnostic":                  "./components/schemas/events/RenderedPromptDiagnostic.yaml",
+		"ProviderDiagnostic":                        "./components/schemas/events/ProviderDiagnostic.yaml",
+		"Diagnostics":                               "./components/schemas/events/Diagnostics.yaml",
+		"SafeWorkDiagnostics":                       "./components/schemas/events/SafeWorkDiagnostics.yaml",
+		"WallClock":                                 "./components/schemas/events/WallClock.yaml",
 	}
 	for schemaName, wantRef := range expectedRefs {
 		assertSchemaRef(t, schemas, schemaName, wantRef)
@@ -568,10 +568,25 @@ func TestOpenAPIContract_FactorySessionExposesRuntimeProjectionSchema(t *testing
 	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionStatus"), "FactorySessionStatus", []string{"ACTIVE", "IDLE", "FINISHED"})
 }
 
+func TestOpenAPIContract_SessionEventStreamHandshakeExposesStreamGenerationHeader(t *testing.T) {
+	doc := loadBundledOpenAPIDocument(t)
+	paths, ok := doc["paths"].(map[string]any)
+	if !ok {
+		t.Fatal("bundled OpenAPI paths are missing")
+	}
+	assertResponseHeaderString(
+		t,
+		pathOperation(t, paths, "/factory-sessions/{session_id}/events", "get"),
+		"200",
+		"X-Factory-Session-Stream-Generation-Id",
+	)
+}
+
 func TestGeneratedFactorySessionContracts_RuntimeTypesAgreeWithOpenAPI(t *testing.T) {
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySession{}), "Runtime", reflect.TypeOf(factoryapi.FactorySessionRuntime{}))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionSummary{}), "Runtime", reflect.TypeOf((*factoryapi.FactorySessionRuntime)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "OrchestratorKind", reflect.TypeOf(factoryapi.FactoryOrchestratorKind("")))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "StreamGenerationID", reflect.TypeOf((*string)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "Petri", reflect.TypeOf((*factoryapi.FactorySessionPetriProjection)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionRuntime{}), "Javascript", reflect.TypeOf((*factoryapi.FactorySessionJavaScriptProjection)(nil)))
 }
@@ -603,10 +618,10 @@ func TestGeneratedFactorySessionContracts_JavaScriptRuntimeRoundTrip(t *testing.
 				UpdatedAt: time.Date(2026, 6, 8, 14, 0, 0, 0, time.UTC),
 			},
 			Javascript: &factoryapi.FactorySessionJavaScriptProjection{
-				Phase:      &phase,
-				Phases:     []string{"plan", "review"},
-				ArgsDigest: &argsDigest,
-				Checkpoints: &checkpoints,
+				Phase:        &phase,
+				Phases:       []string{"plan", "review"},
+				ArgsDigest:   &argsDigest,
+				Checkpoints:  &checkpoints,
 				ScriptStatus: factoryapi.FactorySessionJavaScriptScriptStatusRUNNING,
 				ChildDispatchCounts: factoryapi.FactorySessionJavaScriptChildDispatchCounts{
 					Queued: 1, Running: 0, Completed: 2,
@@ -657,6 +672,13 @@ func TestOpenAPIContract_FactoryDispatchAndArtifactSchemasExposeSharedProjection
 	schemas := loadBundledOpenAPIComponentSchemas(t)
 	runtimeSchema := schemaObject(t, schemas, "FactorySessionRuntime")
 	runtimeProperties, _ := runtimeSchema["properties"].(map[string]any)
+	streamGenerationID, ok := runtimeProperties["streamGenerationID"].(map[string]any)
+	if !ok {
+		t.Fatal("FactorySessionRuntime.streamGenerationID schema is missing")
+	}
+	if got, ok := streamGenerationID["type"].(string); !ok || got != "string" {
+		t.Fatalf("FactorySessionRuntime.streamGenerationID.type = %v, want string", streamGenerationID["type"])
+	}
 	assertArrayItemRef(t, runtimeProperties, "dispatches", "#/components/schemas/FactoryDispatch")
 	assertArrayItemRef(t, runtimeProperties, "artifacts", "#/components/schemas/FactoryArtifact")
 	assertSchemaPropertyRef(t, schemas, "FactoryDispatch", "orchestratorKind", "#/components/schemas/FactoryOrchestratorKind")
@@ -677,7 +699,7 @@ func TestOpenAPIContract_FactoryDispatchAndArtifactSchemasExposeSharedProjection
 		"JAVASCRIPT_SYSTEM",
 	})
 	assertEnumValues(t, schemaObject(t, schemas, "FactoryDispatchStatus"), "FactoryDispatchStatus", []string{
-		"QUEUED", "RUNNING", "COMPLETED", "FAILED",
+		"QUEUED", "RUNNING", "COMPLETED", "FAILED", "INTERRUPTED",
 	})
 	assertEnumValues(t, schemaObject(t, schemas, "FactoryArtifactKind"), "FactoryArtifactKind", []string{
 		"FINAL_RESULT",
@@ -704,6 +726,7 @@ func TestGeneratedDispatchArtifactContracts_SessionReadListDetailTypesAgreeWithO
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.ListFactorySessionArtifactsResponse{}), "Artifacts", reflect.TypeOf([]factoryapi.FactorySessionArtifactSummary{}))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionDispatchSummary{}), "Status", reflect.TypeOf(factoryapi.FactoryDispatchStatus("")))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionDispatchSummary{}), "DispatchKind", reflect.TypeOf(factoryapi.FactoryDispatchKind("")))
+	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionDispatchSummary{}), "Javascript", reflect.TypeOf((*factoryapi.FactoryDispatchJavaScriptProjection)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionArtifactSummary{}), "Kind", reflect.TypeOf(factoryapi.FactoryArtifactKind("")))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionArtifactSummary{}), "Visibility", reflect.TypeOf(factoryapi.FactoryArtifactVisibility("")))
 	assertGeneratedFieldType(t, reflect.TypeOf(factoryapi.FactorySessionArtifactDetail{}), "ContentRef", reflect.TypeOf((*factoryapi.FactorySessionArtifactRetrievalRef)(nil)))
@@ -750,8 +773,8 @@ func TestGeneratedDispatchArtifactContracts_PetriAndJavaScriptRoundTrip(t *testi
 			InFlightCount: 0,
 			TotalTokens:   0,
 		},
-		Usage:     factoryapi.FactorySessionUsage{Resources: []factoryapi.ResourceUsage{}},
-		Lifecycle: factoryapi.FactorySessionLifecycle{StartedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()},
+		Usage:      factoryapi.FactorySessionUsage{Resources: []factoryapi.ResourceUsage{}},
+		Lifecycle:  factoryapi.FactorySessionLifecycle{StartedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()},
 		Dispatches: &dispatches,
 		Artifacts:  &artifacts,
 	}

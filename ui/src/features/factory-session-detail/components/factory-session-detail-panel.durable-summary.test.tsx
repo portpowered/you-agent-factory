@@ -6,7 +6,7 @@ import { FactorySessionDetailPanel } from "./factory-session-detail-panel";
 import {
   jsonResponse,
   renderWithQueryClient,
-} from "./factory-session-detail-panel.test-helpers";
+} from "./test-support/factory-session-detail-panel.test-helpers";
 
 describe("FactorySessionDetailPanel durable summary", () => {
   beforeEach(() => {

@@ -228,6 +228,26 @@ func (m *MockFactory) RetryDurableFactorySessionDispatch(
 	return factorysession.LifecycleControlResponseToAPI(result), nil
 }
 
+func (m *MockFactory) InterruptDurableFactorySessionDispatch(
+	ctx context.Context,
+	sessionID string,
+	request factoryapi.FactorySessionInterruptDispatchRequest,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	service, err := m.requireDurableExecutionService()
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	interrupt, err := factorysession.InterruptDispatchRequestFromAPI(request)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	result, err := service.InterruptDispatch(ctx, sessionID, interrupt)
+	if err != nil {
+		return factoryapi.FactorySessionLifecycleControlResponse{}, err
+	}
+	return factorysession.LifecycleControlResponseToAPI(result), nil
+}
+
 func (m *MockFactory) ListDurableFactorySessions(
 	ctx context.Context,
 	params factoryapi.ListFactorySessionsParams,
@@ -559,7 +579,11 @@ func (m *MockFactory) SubscribeFactoryEvents(ctx context.Context, reconnect *int
 		history = replayed
 	}
 	if m.FactoryEventStream != nil {
-		return &interfaces.FactoryEventStream{History: history, Events: m.FactoryEventStream.Events}, nil
+		return &interfaces.FactoryEventStream{
+			StreamGenerationID: m.FactoryEventStream.StreamGenerationID,
+			History:            history,
+			Events:             m.FactoryEventStream.Events,
+		}, nil
 	}
 	ch := make(chan factoryapi.FactoryEvent)
 	return &interfaces.FactoryEventStream{History: history, Events: ch}, nil

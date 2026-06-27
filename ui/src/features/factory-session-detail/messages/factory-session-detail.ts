@@ -9,8 +9,14 @@ import {
   type LocalizedMessageCatalog,
   resolveLocalizedMessages,
 } from "../../../i18n";
+import {
+  chineseFactorySessionEventReplayMessages,
+  englishFactorySessionEventReplayMessages,
+  type FactorySessionEventReplayMessages,
+} from "./factory-session-detail.event-replay";
 
-export interface FactorySessionDetailMessages {
+export interface FactorySessionDetailMessages
+  extends FactorySessionEventReplayMessages {
   artifactLinksHeading: string;
   artifactRefActionLabel: string;
   artifactsHeading: string;
@@ -22,8 +28,14 @@ export interface FactorySessionDetailMessages {
   dispatchDetailHeading: string;
   dispatchDetailMissingState: string;
   dispatchDetailLoadingState: string;
+  dispatchExecutionModeSummary: (mode: string) => string;
   dispatchKindLabel: string;
   dispatchLabelField: string;
+  dispatchProviderSessionSummary: (input: {
+    id: string;
+    kind: string;
+    provider?: string;
+  }) => string;
   dispatchSelectionHint: string;
   dispatchStatusLabel: string;
   dispatchesHeading: string;
@@ -214,8 +226,13 @@ const factorySessionDetailMessagesByLocale = {
     dispatchDetailHeading: "Dispatch detail",
     dispatchDetailLoadingState: "Loading dispatch detail…",
     dispatchDetailMissingState: "This dispatch detail is no longer available.",
+    dispatchExecutionModeSummary: (mode) => `Execution mode: ${mode}`,
     dispatchKindLabel: "Dispatch kind",
     dispatchLabelField: "Dispatch label",
+    dispatchProviderSessionSummary: ({ id, kind, provider }) =>
+      provider
+        ? `Provider session: ${provider} / ${kind} / ${id}`
+        : `Provider session: ${kind} / ${id}`,
     dispatchSelectionHint:
       "Select a dispatch to inspect bounded durable detail.",
     dispatchStatusLabel: "Dispatch status",
@@ -224,6 +241,7 @@ const factorySessionDetailMessagesByLocale = {
     dynamicWorkflowShorthand: "Dynamic workflow (JavaScript factory session)",
     executionModeLabel: "Execution mode",
     enabledTransitionsHeading: "Enabled transitions",
+    ...englishFactorySessionEventReplayMessages,
     errorState: "The factory session runtime could not be loaded.",
     expandDispatchDetailLabel: (dispatchID) =>
       `Expand dispatch detail for ${dispatchID}`,
@@ -291,8 +309,13 @@ const factorySessionDetailMessagesByLocale = {
     dispatchDetailHeading: "调度详情",
     dispatchDetailLoadingState: "正在加载调度详情…",
     dispatchDetailMissingState: "此调度详情已不可用。",
+    dispatchExecutionModeSummary: (mode) => `执行模式：${mode}`,
     dispatchKindLabel: "调度类型",
     dispatchLabelField: "调度标签",
+    dispatchProviderSessionSummary: ({ id, kind, provider }) =>
+      provider
+        ? `Provider session：${provider} / ${kind} / ${id}`
+        : `Provider session：${kind} / ${id}`,
     dispatchSelectionHint: "选择一个调度以检查受限的持久化详情。",
     dispatchStatusLabel: "调度状态",
     dispatchesHeading: "调度",
@@ -300,6 +323,7 @@ const factorySessionDetailMessagesByLocale = {
     dynamicWorkflowShorthand: "动态工作流（JavaScript 工厂会话）",
     executionModeLabel: "执行模式",
     enabledTransitionsHeading: "已启用变迁",
+    ...chineseFactorySessionEventReplayMessages,
     errorState: "无法加载工厂会话运行时。",
     expandDispatchDetailLabel: (dispatchID) => `展开 ${dispatchID} 的调度详情`,
     failureDetailHeading: "失败详情",

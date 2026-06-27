@@ -14,20 +14,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
 // ProjectionContext carries the runtime inputs needed to project one live session.
 type ProjectionContext struct {
-	Session               *LiveSession
-	FactoryCfg            *interfaces.FactoryConfig
-	Snapshot              *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
+	Session                *LiveSession
+	FactoryCfg             *interfaces.FactoryConfig
+	Snapshot               *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 	LifecycleControlStatus string
-	Enabled               []interfaces.EnabledTransition
-	JavaScript            *interfaces.FactorySessionJavaScriptRuntimeState
-	JavaScriptCheckpoints []interfaces.JavaScriptCheckpointRecord
-	Now                   time.Time
+	Enabled                []interfaces.EnabledTransition
+	JavaScript             *interfaces.FactorySessionJavaScriptRuntimeState
+	JavaScriptCheckpoints  []interfaces.JavaScriptCheckpointRecord
+	Now                    time.Time
 }
 
 // SessionResponse maps a live session and runtime projection to the API detail shape.
@@ -66,6 +66,10 @@ func ProjectRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {
 		Progress:         projectedSessionProgress(ctx),
 		Usage:            projectedSessionUsage(ctx),
 		Lifecycle:        projectedSessionLifecycle(ctx, now),
+	}
+	if ctx.Snapshot != nil && strings.TrimSpace(ctx.Snapshot.StreamGenerationID) != "" {
+		streamGenerationID := strings.TrimSpace(ctx.Snapshot.StreamGenerationID)
+		runtime.StreamGenerationID = &streamGenerationID
 	}
 	if lifecycleControlStatus := projectedSessionLifecycleControlStatus(ctx); lifecycleControlStatus != "" {
 		status := factoryapi.FactorySessionDurableLifecycleStatus(lifecycleControlStatus)
@@ -508,7 +512,6 @@ func firstNonEmptyString(values ...string) string {
 	}
 	return ""
 }
-
 
 // EnabledTransitionsForSnapshot evaluates Petri enablement for one engine snapshot.
 func EnabledTransitionsForSnapshot(
