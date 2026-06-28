@@ -1786,6 +1786,62 @@ func TestFactoryService_TerminateDurableFactorySession_HTTPUsesProductionRuntime
 	}
 }
 
+func TestFactoryService_ResumeDurableFactorySession_HTTPUsesProductionRuntime(t *testing.T) {
+	t.Parallel()
+
+	fs := newFactoryServiceForDurableLifecycleTest(t, "busy-loop.workflow.js", "busy-loop")
+	server := httptest.NewServer(api.NewServer(fs, 0, zap.NewNop()).Handler())
+	defer server.Close()
+
+	started, err := fs.StartDurableFactorySessionAsync(context.Background(), factoryapi.FactorySessionExecutionRequest{
+		RequestId: "req-factory-service-lifecycle-http-resume-start-001",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
+			WorkflowName: strPtr("busy-loop"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartDurableFactorySessionAsync: %v", err)
+	}
+
+	sessionPath := "/factory-sessions/" + started.SessionId
+	pauseURL := server.URL + sessionPath + "/pause"
+	pauseResp, err := http.Post(pauseURL, "application/json", bytes.NewReader(nil))
+	if err != nil {
+		t.Fatalf("POST %s: %v", pauseURL, err)
+	}
+	pauseResp.Body.Close()
+	if pauseResp.StatusCode != http.StatusOK {
+		t.Fatalf("pause status = %d, want 200", pauseResp.StatusCode)
+	}
+
+	resumeURL := server.URL + sessionPath + "/resume"
+	resp, err := http.Post(resumeURL, "application/json", bytes.NewReader(nil))
+	if err != nil {
+		t.Fatalf("POST %s: %v", resumeURL, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var response factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		t.Fatalf("decode lifecycle control response: %v", err)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindResume {
+		t.Fatalf("operation = %q, want RESUME", response.Operation)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", response.Status)
+	}
+	if response.Links == nil || response.Links.Session == nil || *response.Links.Session != sessionPath {
+		t.Fatalf("links = %#v, want session %q", response.Links, sessionPath)
+	}
+}
+
 func newFactoryServiceForDurableLifecycleTest(t *testing.T, fixtureName, workflowName string) *FactoryService {
 	t.Helper()
 	projectRoot := setupDurableLifecycleWorkflowFixture(t, fixtureName, workflowName)

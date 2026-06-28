@@ -161,6 +161,47 @@ func TestResumeFactorySession_RuntimeBackedDurableSessionReturnsTypedLifecycleCo
 	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
 		t.Fatalf("status = %q, want RUNNING", response.Status)
 	}
+	if response.Links == nil || response.Links.Session == nil || *response.Links.Session == "" {
+		t.Fatalf("links = %#v, want session inspection link", response.Links)
+	}
+}
+
+func TestResumeFactorySession_RuntimeBackedRunningSessionReturnsTypedNoOp(t *testing.T) {
+	service := newAPILifecycleRuntimeService(t, "busy-loop.workflow.js", "busy-loop")
+	started := startRuntimeBackedDurableSession(t, service)
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	if _, status := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "pause", nil); status != http.StatusOK {
+		t.Fatalf("pause status = %d, want 200", status)
+	}
+	if _, status := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "resume", nil); status != http.StatusOK {
+		t.Fatalf("first resume status = %d, want 200", status)
+	}
+
+	response, status := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "resume", nil)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindResume {
+		t.Fatalf("operation = %q, want RESUME", response.Operation)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeNoOp {
+		t.Fatalf("outcome = %q, want NO_OP", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", response.Status)
+	}
+
+	read, err := service.GetSession(context.Background(), started.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if read.Status != factorysessionexecution.LifecycleStatusRunning {
+		t.Fatalf("session status = %q, want RUNNING unchanged", read.Status)
+	}
 }
 
 func TestPauseFactorySession_TerminalSessionReturnsTypedConflict(t *testing.T) {
