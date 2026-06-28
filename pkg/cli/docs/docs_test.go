@@ -809,6 +809,43 @@ func TestMarkdown_MCPReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
+func TestMarkdown_ModelsDocumentsInferenceBehavior(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("models")
+	if err != nil {
+		t.Fatalf("Markdown(models) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Models And Model Operations",
+		"INFERENCE_RUN",
+		"INFERENCE_WORKER",
+		"MODEL_INVOKE",
+		"MODEL_WORKER",
+		"## Local Managed Runtime Execution",
+		"model host",
+		"lease",
+		"WorkContent",
+		"OMNIVOICE_Q4_K_M",
+		"you models invoke",
+		"`you docs workers`",
+		"`you docs workstations`",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(models) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs models`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(models) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
 func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
 	t.Parallel()
 

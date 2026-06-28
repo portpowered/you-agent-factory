@@ -281,12 +281,15 @@ func testInvokeModelRuntimeErrors(t *testing.T) {
 			wantMsg:    "model invocation operation is not supported",
 		},
 		{
-			name:       "provider_execution_failure",
+			name:       "provider_execution_timeout",
 			body:       validBody,
-			invokeErr:  errors.New("provider execution failed: upstream timeout"),
-			wantStatus: http.StatusInternalServerError,
-			wantCode:   "INTERNAL_ERROR",
-			wantMsg:    "provider execution failed: upstream timeout",
+			invokeErr: &apisurface.InferenceFailure{
+				Class:   apisurface.InferenceFailureClassTimeout,
+				Message: "inference timed out for model \"OMNIVOICE_Q4_K_M\" operation \"TTS\": wait and retry the request",
+			},
+			wantStatus: http.StatusGatewayTimeout,
+			wantCode:   "MODEL_INFERENCE_TIMEOUT",
+			wantMsg:    "inference timed out for model \"OMNIVOICE_Q4_K_M\" operation \"TTS\": wait and retry the request",
 		},
 		{
 			name:       "fallback_bad_request",

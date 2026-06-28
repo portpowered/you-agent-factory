@@ -64,11 +64,15 @@ func TestInvokeModel_ReturnsModelNotAvailableWhenManagedCacheIsMissing(t *testin
 	if err == nil || !apisurface.IsManagedRuntimeMissing(err) {
 		t.Fatalf("InvokeModel error = %v, want managed runtime missing", err)
 	}
-	var readinessErr *apisurface.ManagedRuntimeInvocationError
-	if !errors.As(err, &readinessErr) {
-		t.Fatalf("InvokeModel error = %T, want *ManagedRuntimeInvocationError", err)
+	failure, ok := apisurface.AsInferenceFailure(err)
+	if !ok || failure.Class != apisurface.InferenceFailureClassMissingModel {
+		t.Fatalf("InvokeModel error = %T, want missing_model InferenceFailure", err)
 	}
-	if readinessErr.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING {
+	var readinessErr *apisurface.ManagedRuntimeInvocationError
+	if !errors.As(err, &readinessErr) && !errors.Is(err, apisurface.ErrManagedRuntimeMissing) {
+		t.Fatalf("InvokeModel error = %v, want managed runtime missing cause", err)
+	}
+	if readinessErr != nil && readinessErr.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING {
 		t.Fatalf("readinessState = %s, want MISSING", readinessErr.ReadinessState)
 	}
 }

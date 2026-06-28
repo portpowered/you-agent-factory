@@ -1163,7 +1163,7 @@ func buildWorkerExecutor(
 	}
 
 	switch def.Type {
-	case interfaces.WorkerTypeModel, interfaces.WorkerTypeAgent:
+	case interfaces.WorkerTypeModel, interfaces.WorkerTypeAgent, interfaces.WorkerTypeInference:
 		return buildProviderBackedWorkerExecutor(
 			runtimeCfg,
 			factoryCfg,

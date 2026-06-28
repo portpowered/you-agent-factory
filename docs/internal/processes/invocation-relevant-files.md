@@ -58,6 +58,17 @@ primary-result behavior.
   transport-specific empty-stdin errors. When `Stdin` is overridden away from
   `os.Stdin` (cobra `SetIn`, tests, or programmatic callers), treat it as piped
   input even if the process-level `os.Stdin` is still a TTY.
+- `pkg/invocations/inference.go` resolves inference-run operation bindings,
+  maps direct invocation request bindings, builds the provider-neutral inference
+  request envelope, and shapes inference responses into ordered canonical
+  `WorkContentPart` output shared by direct model invocation and factory-session
+  execution paths.
+- `pkg/apisurface/inference_failure.go` classifies inference readiness and
+  execution failures into actionable customer-facing outcomes for missing model,
+  loading model, unsupported operation, timeout, and runtime failure cases
+  shared by direct model invocation and HTTP handlers.
+- `pkg/workers/executor/model_operation_bindings.go` delegates inference binding
+  resolution to `pkg/invocations`.
 - `pkg/invocations/input.go` owns logical empty-text detection via
   `strings.TrimSpace` inside `ResolveTextInput` and `ResolveAPITextInputContent`;
   CLI and API adapters must not duplicate whitespace-only rejection.
@@ -145,6 +156,9 @@ primary-result behavior.
   customer guide for `@you/goal` batch invocation, stdout primary result, and
   the supported headless operator-interaction scope without widening localhost
   listener promises.
+- `docs/reference/models.md` is the customer guide for `INFERENCE_RUN`,
+  `INFERENCE_WORKER`, managed-runtime `/models` surfaces, local modelhost lease
+  execution, and legacy `MODEL_INVOKE` / `MODEL_WORKER` migration aliases.
 - `docs/reference/packaged-tts.md` is the packaged `you docs packaged-tts`
   customer guide for `@you/tts` invocation, materialization, metadata result,
   edit-after-materialize behavior, and raw-artifact streaming scope. Prefer
@@ -190,4 +204,4 @@ primary-result behavior.
 - `docs/reference/config.md` and `docs/reference/sessions.md` are the packaged
   `you docs` reference topics for invocation input sources, return policy, and
   the session-scoped invocation API.
-- Managed-runtime invocation readiness gating lives in `pkg/modelhost/managed_runtime_compat.go` (`EnsureInvocationReady`) and `pkg/apisurface/managed_runtime_invocation.go`; direct model invocation wires through `pkg/service/model_catalog.go` and factory worker execution through `pkg/modelhost/execution.go` (`LeaseExecution.WrapRunner`) when a process-wide host is configured, otherwise `pkg/localmodels/runtime.go` manager fallback. `EnsureInvocationReady` consumes live host readiness via `InspectReadiness` so supervised loading and crash outcomes gate invocation. Supervised leases pass `lease.Endpoint` into `localmodels.LoadRequest.ServingEndpoint` for host-owned HTTP execution. Process-wide local-runtime ownership and lease boundaries belong in `pkg/modelhost`; keep `pkg/localmodels` as the managed-runtime catalog compatibility projection layer. Model host operator diagnostics for pull/load/lease/unload/crash paths live in `pkg/modelhost/diagnostics.go`; see `docs/architecture/model-host.md`.
+- Managed-runtime invocation readiness gating lives in `pkg/modelhost/managed_runtime_compat.go` (`EnsureInvocationReady`) and `pkg/apisurface/managed_runtime_invocation.go`; direct model invocation wires through `pkg/service/model_catalog.go` and factory worker execution through `pkg/modelhost/execution.go` (`LeaseExecution.WrapRunner`) when a process-wide host is configured, otherwise `pkg/localmodels/runtime.go` manager fallback. `EnsureInvocationReady` consumes live host readiness via `InspectReadiness` so supervised loading and crash outcomes gate invocation. Supervised leases pass `lease.Endpoint` into `localmodels.LoadRequest.ServingEndpoint` for host-owned HTTP execution. Process-wide local-runtime ownership and lease boundaries belong in `pkg/modelhost`; keep `pkg/localmodels` as the managed-runtime catalog compatibility projection layer. Model host operator diagnostics for pull/load/lease/unload/crash paths live in `pkg/modelhost/diagnostics.go`; see `docs/architecture/model-host.md`. Focused modelhost lease coverage for INFERENCE_WORKER/INFERENCE_RUN lives in `pkg/service/inference_modelhost_test.go`.
