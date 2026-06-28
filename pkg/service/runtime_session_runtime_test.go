@@ -29,6 +29,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -1840,6 +1841,128 @@ func TestFactoryService_ResumeDurableFactorySession_HTTPUsesProductionRuntime(t 
 	if response.Links == nil || response.Links.Session == nil || *response.Links.Session != sessionPath {
 		t.Fatalf("links = %#v, want session %q", response.Links, sessionPath)
 	}
+}
+
+func TestFactoryService_RetryDurableFactorySessionDispatch_RuntimeBackedFailedSession(t *testing.T) {
+	t.Parallel()
+
+	fs, sessionID, dispatchID := newFactoryServiceForDurableRetryDispatchTest(t)
+	ctx := context.Background()
+
+	response, err := fs.RetryDurableFactorySessionDispatch(ctx, sessionID, factoryapi.FactorySessionRetryDispatchRequest{
+		DispatchId: dispatchID,
+	})
+	if err != nil {
+		t.Fatalf("RetryDurableFactorySessionDispatch: %v", err)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindRetryDispatch {
+		t.Fatalf("operation = %q, want RETRY_DISPATCH", response.Operation)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", response.Status)
+	}
+	if response.RetryDispatchId == nil || *response.RetryDispatchId != dispatchID {
+		t.Fatalf("retryDispatchId = %#v, want %q", response.RetryDispatchId, dispatchID)
+	}
+}
+
+func TestFactoryService_RetryDurableFactorySessionDispatch_HTTPUsesProductionRuntime(t *testing.T) {
+	t.Parallel()
+
+	fs, sessionID, dispatchID := newFactoryServiceForDurableRetryDispatchTest(t)
+	server := httptest.NewServer(api.NewServer(fs, 0, zap.NewNop()).Handler())
+	defer server.Close()
+
+	url := server.URL + "/factory-sessions/" + sessionID + "/retry-dispatch"
+	body, err := json.Marshal(factoryapi.FactorySessionRetryDispatchRequest{DispatchId: dispatchID})
+	if err != nil {
+		t.Fatalf("marshal retry-dispatch request: %v", err)
+	}
+	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var response factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		t.Fatalf("decode lifecycle control response: %v", err)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindRetryDispatch {
+		t.Fatalf("operation = %q, want RETRY_DISPATCH", response.Operation)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", response.Status)
+	}
+	if response.RetryDispatchId == nil || *response.RetryDispatchId != dispatchID {
+		t.Fatalf("retryDispatchId = %#v, want %q", response.RetryDispatchId, dispatchID)
+	}
+}
+
+type durableRetryDispatchFailingChildProvider struct{}
+
+func (durableRetryDispatchFailingChildProvider) Infer(
+	_ context.Context,
+	_ interfaces.ProviderInferenceRequest,
+) (interfaces.InferenceResponse, error) {
+	return interfaces.InferenceResponse{}, workerprovider.NewProviderError(
+		interfaces.WorkFailureTypePermanentBadRequest,
+		"simulated live child error",
+		nil,
+	)
+}
+
+func newFactoryServiceForDurableRetryDispatchTest(t *testing.T) (*FactoryService, string, string) {
+	t.Helper()
+	const dispatchID = "dispatch-1"
+
+	projectRoot := setupDurableLifecycleWorkflowFixture(t, "agent-run-live-child-failure.workflow.js", "agent-run-live-child-failure")
+	fs := &FactoryService{
+		cfg: &FactoryServiceConfig{
+			Dir: projectRoot,
+		},
+		factoryRootDir: projectRoot,
+	}
+	fs.durableExecution = factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot:       projectRoot,
+		ChildExecutorMode: factorysessionexecution.ChildExecutorModeLive,
+		Provider:          durableRetryDispatchFailingChildProvider{},
+	})
+
+	completed, err := fs.StartDurableFactorySessionSync(context.Background(), factoryapi.FactorySessionExecutionRequest{
+		RequestId: "req-factory-service-retry-dispatch-start-001",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
+			WorkflowName: strPtr("agent-run-live-child-failure"),
+		},
+		Args: &map[string]any{
+			"subject": "workflows",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartDurableFactorySessionSync: %v", err)
+	}
+	if completed.SessionId == "" {
+		t.Fatal("session id unexpectedly empty")
+	}
+
+	read, err := fs.durableExecution.GetSession(context.Background(), completed.SessionId)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if read.Status != factorysessionexecution.LifecycleStatusFailed {
+		t.Fatalf("session status = %q, want FAILED", read.Status)
+	}
+
+	return fs, completed.SessionId, dispatchID
 }
 
 func newFactoryServiceForDurableLifecycleTest(t *testing.T, fixtureName, workflowName string) *FactoryService {
