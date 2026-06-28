@@ -665,9 +665,7 @@ func (s *JavaScriptRuntimeService) runAsyncSession(
 		if state.session.Status == LifecycleStatusInterrupted {
 			state.checkpointSummary = latestCheckpointSummaryFromRuntime(sessionID, state, state.runtimeRecords)
 		}
-		persistState := cloneRuntimeSessionState(state)
-		s.mu.Unlock()
-		_ = s.persistSessionSnapshot(persistState)
+		s.unlockRuntimeSessionAfterPersistence(state)
 		return
 	}
 
@@ -677,9 +675,15 @@ func (s *JavaScriptRuntimeService) runAsyncSession(
 	if state.session.Status == LifecycleStatusInterrupted {
 		state.checkpointSummary = latestCheckpointSummaryFromRuntime(sessionID, state, state.runtimeRecords)
 	}
+	s.unlockRuntimeSessionAfterPersistence(state)
+}
+
+func (s *JavaScriptRuntimeService) unlockRuntimeSessionAfterPersistence(state *runtimeSessionState) {
 	persistState := cloneRuntimeSessionState(state)
+	if shouldPersistSessionSnapshot(persistState) {
+		_ = s.persistSessionSnapshot(persistState)
+	}
 	s.mu.Unlock()
-	_ = s.persistSessionSnapshot(persistState)
 }
 
 func (s *JavaScriptRuntimeService) applyTerminalRuntimeState(

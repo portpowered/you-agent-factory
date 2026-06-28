@@ -2,11 +2,14 @@ package fixtures_test
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
@@ -66,6 +69,10 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_ReconstructsFromCheck
 	interrupted := waitUntilSessionStatus(t, initial, started.SessionID, fse.LifecycleStatusInterrupted, 5*time.Second)
 	if interrupted.Status != fse.LifecycleStatusInterrupted {
 		t.Fatalf("session status = %q, want INTERRUPTED", interrupted.Status)
+	}
+	snapshotPath := filepath.Join(runtimepersist.DirForProjectRoot(projectRoot), started.SessionID+".json")
+	if _, err := os.Stat(snapshotPath); err != nil {
+		t.Fatalf("interrupted snapshot must be durable before cross-instance resume: %v", err)
 	}
 
 	firstDispatchBeforeResume, err := initial.GetDispatch(context.Background(), started.SessionID, "dispatch-1")

@@ -275,9 +275,7 @@ func (s *JavaScriptRuntimeService) runResumedAsyncSession(
 		}
 		terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, failureOutcome, startedAt)
 		s.applyTerminalRuntimeState(state, terminal, failureOutcome, startedAt)
-		persistState := cloneRuntimeSessionState(state)
-		s.mu.Unlock()
-		_ = s.persistSessionSnapshot(persistState)
+		s.unlockRuntimeSessionAfterPersistence(state)
 		return
 	}
 
@@ -286,9 +284,7 @@ func (s *JavaScriptRuntimeService) runResumedAsyncSession(
 	if state.checkpointSummary == nil {
 		state.checkpointSummary = latestCheckpointSummaryFromRuntime(sessionID, state, state.runtimeRecords)
 	}
-	persistState := cloneRuntimeSessionState(state)
-	s.mu.Unlock()
-	_ = s.persistSessionSnapshot(persistState)
+	s.unlockRuntimeSessionAfterPersistence(state)
 }
 
 func (s *JavaScriptRuntimeService) invokeWorkflowRuntimeWithResume(
