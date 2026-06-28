@@ -144,6 +144,50 @@ func TestMarshalCanonicalFactoryConfig_PrefersPollerRunOnRoundTrip(t *testing.T)
 	}
 }
 
+func TestGeneratedFactoryFromOpenAPIJSON_PreservesExplicitInferenceRunOnSaveRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	cfgJSON := []byte(`{
+		"name":"explicit-inference-run",
+		"workTypes":[{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers":[{"name":"executor","type":"INFERENCE_WORKER","model":"omnivoice","modelProvider":"CLAUDE"}],
+		"workstations":[{"name":"invoke-story","type":"INFERENCE_RUN","worker":"executor","operation":"TTS","inputs":[{"workType":"story","state":"init"}],"outputs":[{"workType":"story","state":"complete"}],"onFailure":[{"workType":"story","state":"failed"}]}]
+	}`)
+
+	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+	workstation := (*generated.Workstations)[0]
+	if workstation.Type == nil || string(*workstation.Type) != interfaces.WorkstationTypeInference {
+		t.Fatalf("generated workstation type = %#v, want %s", workstation.Type, interfaces.WorkstationTypeInference)
+	}
+
+	runtimeCfg, err := FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+	canonical, err := MarshalCanonicalFactoryConfig(&runtimeCfg)
+	if err != nil {
+		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
+	}
+	if strings.Contains(string(canonical), `"type":"MODEL_INVOKE"`) {
+		t.Fatalf("canonical save output downgraded explicit inference run, got %s", string(canonical))
+	}
+	if !strings.Contains(string(canonical), `"type":"INFERENCE_RUN"`) {
+		t.Fatalf("canonical save output missing INFERENCE_RUN, got %s", string(canonical))
+	}
+
+	regenerated, err := GeneratedFactoryFromOpenAPIJSON(canonical)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON round trip: %v", err)
+	}
+	regeneratedWorkstation := (*regenerated.Workstations)[0]
+	if regeneratedWorkstation.Type == nil || string(*regeneratedWorkstation.Type) != interfaces.WorkstationTypeInference {
+		t.Fatalf("round-tripped workstation type = %#v, want %s", regeneratedWorkstation.Type, interfaces.WorkstationTypeInference)
+	}
+}
+
 func TestMarshalCanonicalFactoryConfig_PrefersNewWorkstationTaxonomyOnRoundTrip(t *testing.T) {
 	t.Parallel()
 
