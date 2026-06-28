@@ -6,6 +6,7 @@ import { GraphNodeButton } from "../../graphs/public";
 import { getWorkflowActivityShellMessages } from "../../workflow-activity/messages/activity-shell";
 import { currentActivityGraphNodeHoverClassName } from "../lib/current-activity-graph-hover";
 import { getActivityGraphMessages } from "../messages/activity-graph";
+import { activityGraphNodeSurfaceClassName } from "./current-activity-node-chrome";
 import type { ActivityGraphNodeHandle } from "./current-activity-node-shell";
 import { ActivityGraphNodeShell } from "./current-activity-node-shell";
 import { GraphSemanticIcon } from "./graph-semantic-icon";
@@ -43,7 +44,8 @@ export function WorkerNodeView({ data }: NodeProps<CurrentActivityWorkerNode>) {
   return (
     <ActivityGraphNodeShell
       className={cn(
-        "justify-center border-af-worker-border bg-tertiary-container text-left text-on-surface",
+        activityGraphNodeSurfaceClassName("info"),
+        "justify-center text-left text-on-surface",
         currentActivityGraphNodeHoverClassName({
           activeFlow: data.activeFlow,
           muted: data.muted,
@@ -109,13 +111,13 @@ function WorkerNodeContent({
     >
       <span className="sr-only">{label}</span>
       <GraphSemanticIcon
-        className="h-3.5 w-3.5 shrink-0 text-tertiary"
+        className="h-3.5 w-3.5 shrink-0 text-info"
         kind="worker"
         label={workerLabel}
         locale={locale}
       />
       <span className="grid min-w-0 gap-px overflow-hidden">
-        <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-on-tertiary-container">
+        <span className="block min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.62rem] font-bold uppercase leading-none text-info">
           {workerLabel}
         </span>
         <strong className="block min-w-0 truncate whitespace-nowrap font-mono text-[0.8rem] font-bold leading-tight text-on-surface">

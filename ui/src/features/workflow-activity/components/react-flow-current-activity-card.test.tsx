@@ -2598,16 +2598,22 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
     expect(screen.getByText("worker:reviewer")).toBeTruthy();
     expect(screen.getByLabelText("2 resource tokens")).toBeTruthy();
     expect(screen.getByText("Active Story")).toBeTruthy();
+    const reviewWorkstationButton = screen.getByRole("button", {
+      name: "Select Review workstation",
+    });
     expect(
-      within(screen.getByRole("button", { name: "Select Review workstation" }))
+      within(reviewWorkstationButton)
         .getByRole("img", { name: "Repeater workstation" })
         .getAttribute("data-graph-semantic-icon"),
     ).toBe("repeater");
     expect(
-      within(screen.getByRole("button", { name: "Select Review workstation" }))
-        .getByRole("img", { name: "Active" })
-        .getAttribute("data-graph-semantic-icon"),
-    ).toBe("active-work");
+      reviewWorkstationButton
+        .closest("[data-current-activity-node-type='workstation']")
+        ?.className.includes("border-af-success-border"),
+    ).toBe(true);
+    expect(
+      within(reviewWorkstationButton).queryByRole("img", { name: "Active" }),
+    ).toBeNull();
     expect(await getStateNodeArticle("story:implemented")).toBeTruthy();
     expect(
       (await getStateNodeArticle("story:documented"))
@@ -2811,10 +2817,13 @@ describe("ReactFlowCurrentActivityCard graph semantics", () => {
         .getAttribute("data-graph-semantic-icon"),
     ).toBe("repeater");
     expect(
-      within(reviewButton)
-        .getByRole("img", { name: "Active" })
-        .getAttribute("data-graph-semantic-icon"),
-    ).toBe("active-work");
+      reviewButton
+        .closest("[data-current-activity-node-type='workstation']")
+        ?.className.includes("border-af-success-border"),
+    ).toBe(true);
+    expect(
+      within(reviewButton).queryByRole("img", { name: "Active" }),
+    ).toBeNull();
     expect(await getStateNodeArticle("story:documented")).toBeTruthy();
     expect(screen.getByText("Active Story")).toBeTruthy();
     expect(screen.queryByText("dispatch-review-active")).toBeNull();
