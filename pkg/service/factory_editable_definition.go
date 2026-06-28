@@ -178,7 +178,7 @@ func (fs *FactoryService) serializeNamedFactory(
 		if err != nil {
 			return factoryapi.Factory{}, fmt.Errorf("clone named factory config: %w", err)
 		}
-		if err := factoryconfig.ApplySupportedPortableBundledFiles(current.FactoryDir(), clonedFactoryCfg, true, false); err != nil {
+		if err := factoryconfig.ApplySupportedPortableBundledFiles(current.FactoryDir(), clonedFactoryCfg, true, true); err != nil {
 			return factoryapi.Factory{}, fmt.Errorf("inline named factory bundled files: %w", err)
 		}
 		if err := factoryconfig.ApplySharedFactoryStarterWork(current.FactoryDir(), clonedFactoryCfg); err != nil {
@@ -212,7 +212,7 @@ func (fs *FactoryService) serializeNamedFactoryUpsertResponse(
 		if err != nil {
 			return factoryapi.Factory{}, fmt.Errorf("clone named factory config: %w", err)
 		}
-		if err := factoryconfig.ApplySupportedPortableBundledFiles(current.FactoryDir(), clonedFactoryCfg, false, false); err != nil {
+		if err := factoryconfig.ApplySupportedPortableBundledFiles(current.FactoryDir(), clonedFactoryCfg, false, true); err != nil {
 			return factoryapi.Factory{}, fmt.Errorf("merge named factory portable bundled files: %w", err)
 		}
 		if err := factoryconfig.ApplySharedFactoryStarterWork(current.FactoryDir(), clonedFactoryCfg); err != nil {
