@@ -43,5 +43,14 @@ func ExecutionErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 		}, true
 	}
 
+	var resumeErr *factorysessionexecution.ResumeError
+	if errors.As(err, &resumeErr) {
+		return http.StatusBadRequest, factoryapi.ErrorResponse{
+			Message: resumeErr.Error(),
+			Family:  factoryapi.ErrorFamilyBadRequest,
+			Code:    factoryapi.ErrorResponseCodeBADREQUEST,
+		}, true
+	}
+
 	return 0, factoryapi.ErrorResponse{}, false
 }

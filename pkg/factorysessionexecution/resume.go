@@ -3,12 +3,14 @@ package factorysessionexecution
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"strings"
 	"time"
 
-	jsstore "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
+	jsstore "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store"
 )
 
 // ResumeInterruptedSession reconstructs one interrupted checkpointed session from
@@ -29,23 +31,12 @@ func (s *JavaScriptRuntimeService) ResumeInterruptedSession(
 		return AsyncStartResult{}, NewValidationError("requestId", "requestId is required")
 	}
 
-	state, err := s.snapshotSessionState(id)
+	state, err := s.loadResumeSessionState(id)
 	if err != nil {
 		return AsyncStartResult{}, err
 	}
-	if state.session.Status != LifecycleStatusInterrupted {
-		return AsyncStartResult{}, &ControlError{
-			Operation: LifecycleControlResume,
-			Outcome:   LifecycleControlOutcomeInvalidState,
-			Status:    state.session.Status,
-			Message:   "session is not interrupted and cannot be resumed from checkpoint summaries",
-		}
-	}
-	if state.checkpointSummary == nil {
-		return AsyncStartResult{}, NewValidationError("checkpointSummary", "persisted checkpoint summary is required to resume an interrupted session")
-	}
-	if state.startRequest == nil || strings.TrimSpace(state.sourceContent) == "" {
-		return AsyncStartResult{}, NewValidationError("session", "persisted start metadata is required to resume an interrupted session")
+	if err := validateResumeSessionState(id, state); err != nil {
+		return AsyncStartResult{}, err
 	}
 
 	s.mu.Lock()
@@ -102,6 +93,126 @@ func (s *JavaScriptRuntimeService) ResumeInterruptedSession(
 		return AsyncStartResult{}, err
 	}
 	return s.asyncStartFromState(snapshot), nil
+}
+
+func (s *JavaScriptRuntimeService) loadResumeSessionState(sessionID string) (runtimeSessionState, error) {
+	s.mu.RLock()
+	if state, ok := s.sessions[sessionID]; ok {
+		cloned := cloneRuntimeSessionState(state)
+		s.mu.RUnlock()
+		return cloned, nil
+	}
+	persistDir := s.sessionPersistDir
+	s.mu.RUnlock()
+
+	if persistDir == "" {
+		return runtimeSessionState{}, ErrSessionNotFound
+	}
+
+	snapshot, err := runtimepersist.LoadBytes(persistDir, sessionID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return runtimeSessionState{}, ErrSessionNotFound
+		}
+		return runtimeSessionState{}, &ResumeError{
+			Outcome:   ResumeOutcomeCorruptedPersistence,
+			SessionID: sessionID,
+			Message:   "persisted session snapshot could not be read",
+		}
+	}
+	var persisted PersistedRuntimeSessionState
+	if err := json.Unmarshal(snapshot, &persisted); err != nil {
+		return runtimeSessionState{}, &ResumeError{
+			Outcome:   ResumeOutcomeCorruptedPersistence,
+			SessionID: sessionID,
+			Message:   "persisted session snapshot is corrupted and cannot be resumed",
+		}
+	}
+	loaded := runtimeStateFromPersistedSnapshot(persisted)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if existing, ok := s.sessions[sessionID]; ok {
+		return cloneRuntimeSessionState(existing), nil
+	}
+	cached := loaded
+	s.sessions[sessionID] = &cached
+	return cloneRuntimeSessionState(&cached), nil
+}
+
+func validateResumeSessionState(sessionID string, state runtimeSessionState) error {
+	if state.session.Status != LifecycleStatusInterrupted {
+		return &ResumeError{
+			Outcome:   ResumeOutcomeInvalidState,
+			Status:    state.session.Status,
+			SessionID: sessionID,
+			Message:   "session is not interrupted and cannot be resumed from checkpoint summaries",
+		}
+	}
+	if state.checkpointSummary == nil {
+		return &ResumeError{
+			Outcome:   ResumeOutcomeMissingCheckpoint,
+			Field:     "checkpointSummary",
+			SessionID: sessionID,
+			Message:   "persisted checkpoint summary is required to resume an interrupted session",
+		}
+	}
+	if err := validateCheckpointSummaryForResume(state.checkpointSummary, sessionID); err != nil {
+		return err
+	}
+	if state.startRequest == nil || strings.TrimSpace(state.sourceContent) == "" {
+		return &ResumeError{
+			Outcome:   ResumeOutcomeInvalidState,
+			Field:     "session",
+			SessionID: sessionID,
+			Message:   "persisted start metadata is required to resume an interrupted session",
+		}
+	}
+	return nil
+}
+
+func validateCheckpointSummaryForResume(summary *jsstore.CheckpointSummary, sessionID string) error {
+	if summary == nil {
+		return &ResumeError{
+			Outcome:   ResumeOutcomeMissingCheckpoint,
+			Field:     "checkpointSummary",
+			SessionID: sessionID,
+			Message:   "persisted checkpoint summary is required to resume an interrupted session",
+		}
+	}
+	if kind := strings.TrimSpace(summary.Kind); kind != "" && kind != jsstore.CheckpointSummaryKind {
+		return &ResumeError{
+			Outcome:   ResumeOutcomeInvalidState,
+			Field:     "checkpointSummary.kind",
+			SessionID: sessionID,
+			Message:   "persisted checkpoint summary has an invalid kind",
+		}
+	}
+	if summary.SchemaVersion != 0 && summary.SchemaVersion != jsstore.CheckpointSummarySchemaVersion {
+		return &ResumeError{
+			Outcome:   ResumeOutcomeInvalidState,
+			Field:     "checkpointSummary.schemaVersion",
+			SessionID: sessionID,
+			Message:   "persisted checkpoint summary has an unsupported schema version",
+		}
+	}
+	if strings.TrimSpace(summary.CheckpointID) == "" {
+		return &ResumeError{
+			Outcome:   ResumeOutcomeInvalidState,
+			Field:     "checkpointSummary.checkpointId",
+			SessionID: sessionID,
+			Message:   "persisted checkpoint summary is missing checkpointId",
+		}
+	}
+	if persistedSessionID := strings.TrimSpace(summary.SessionID); persistedSessionID != "" && persistedSessionID != sessionID {
+		return &ResumeError{
+			Outcome:   ResumeOutcomeInvalidState,
+			Field:     "checkpointSummary.sessionId",
+			SessionID: sessionID,
+			Message:   "persisted checkpoint summary sessionId does not match the interrupted session",
+		}
+	}
+	return nil
 }
 
 func (s *JavaScriptRuntimeService) runResumedAsyncSession(

@@ -192,3 +192,38 @@ func NewValidationError(field, message string) *ValidationError {
 		Message: message,
 	}
 }
+
+// ResumeOutcome identifies one typed restart-resume failure class.
+type ResumeOutcome string
+
+const (
+	// ResumeOutcomeMissingCheckpoint reports that no persisted checkpoint summary
+	// exists for the interrupted session.
+	ResumeOutcomeMissingCheckpoint ResumeOutcome = "MISSING_CHECKPOINT"
+	// ResumeOutcomeInvalidState reports corrupted resume metadata or a session that
+	// is not eligible for restart-resume reconstruction.
+	ResumeOutcomeInvalidState ResumeOutcome = "INVALID_RESUME_STATE"
+	// ResumeOutcomeCorruptedPersistence reports unreadable or invalid persisted
+	// session snapshots required for restart-resume.
+	ResumeOutcomeCorruptedPersistence ResumeOutcome = "CORRUPTED_PERSISTENCE"
+)
+
+// ResumeError carries a typed restart-resume failure surfaced by durable session
+// execution when checkpoint summaries or persisted resume state are missing or invalid.
+type ResumeError struct {
+	Outcome   ResumeOutcome
+	Status    LifecycleStatus
+	Field     string
+	Message   string
+	SessionID string
+}
+
+func (e *ResumeError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Message != "" {
+		return e.Message
+	}
+	return string(e.Outcome)
+}

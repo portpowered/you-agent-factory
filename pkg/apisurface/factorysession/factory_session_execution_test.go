@@ -388,6 +388,20 @@ func TestExecutionErrorResponse_MapsValidationAndConflictErrors(t *testing.T) {
 	if response.Code != factoryapi.ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT {
 		t.Fatalf("code = %q, want EXECUTION_REQUEST_ID_CONFLICT", response.Code)
 	}
+
+	status, response, ok = factorysession.ExecutionErrorResponse(
+		&factorysessionexecution.ResumeError{
+			Outcome: factorysessionexecution.ResumeOutcomeMissingCheckpoint,
+			Field:   "checkpointSummary",
+			Message: "persisted checkpoint summary is required to resume an interrupted session",
+		},
+	)
+	if !ok {
+		t.Fatal("ExecutionErrorResponse = false, want true for ResumeError")
+	}
+	if status != http.StatusBadRequest || response.Code != factoryapi.ErrorResponseCodeBADREQUEST {
+		t.Fatalf("resume error response = %#v, want 400 BAD_REQUEST", response)
+	}
 }
 
 func TestExecutionErrorResponse_MapsRequestValidationError(t *testing.T) {
