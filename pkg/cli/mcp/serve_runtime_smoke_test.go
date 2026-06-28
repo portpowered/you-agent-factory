@@ -13,6 +13,7 @@ import (
 )
 
 const runtimeSmokeSimpleFinalWorkflowSource = `// Runtime-backed MCP serve smoke fixture: terminal async completion.
+// runtimeSmokeProjectRoot removes persisted factory state before t.TempDir cleanup.
 return {
   label: meta.name,
   description: meta.description,
