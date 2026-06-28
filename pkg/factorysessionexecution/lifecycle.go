@@ -596,7 +596,7 @@ func filterArtifactsSuppressingInterruptedLateResults(
 			filtered = append(filtered, artifact)
 			continue
 		}
-		if _, interrupted := preserved[dispatchID]; interrupted && artifact.Kind == "CHILD_OUTPUT" {
+		if _, interrupted := preserved[dispatchID]; interrupted && artifact.Kind == "CHILD_RESULT" {
 			continue
 		}
 		filtered = append(filtered, artifact)

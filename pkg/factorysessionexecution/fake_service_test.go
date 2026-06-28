@@ -1522,7 +1522,7 @@ func TestRestoreInterruptedDispatchResultSuppression_LateCompletionDoesNotReacti
 		t.Fatalf("completedDispatches = %d, want 0 after suppression", state.session.Progress.CompletedDispatches)
 	}
 	for _, artifact := range state.artifacts {
-		if artifact.DispatchID == "disp-js-002" && artifact.Kind == "CHILD_OUTPUT" {
+		if artifact.DispatchID == "disp-js-002" && artifact.Kind == "CHILD_RESULT" {
 			t.Fatalf("artifact = %#v, want late child output suppressed", artifact)
 		}
 	}

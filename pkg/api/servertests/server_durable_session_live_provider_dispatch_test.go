@@ -2,6 +2,8 @@ package apiserver_test
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"sync"
 	"testing"
@@ -9,8 +11,8 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
@@ -88,6 +90,80 @@ func TestLiveProviderChildDispatch_RuntimeBackedAPIProjectsQueuedRunningComplete
 		(*dispatchDetail.ArtifactIds)[0] != "child-artifact-1" {
 		t.Fatalf("dispatch artifactIds = %#v, want [child-artifact-1]", dispatchDetail.ArtifactIds)
 	}
+
+	assertAPILiveProviderProviderSessionRef(t, dispatchSummary.ProviderSessionRefs)
+	assertAPILiveProviderArtifactLineage(t, server.URL, completed.SessionID, dispatchSummary, dispatchDetail)
+}
+
+func TestLiveProviderAndFakeChildSessions_APIPreserveDistinctProviderAndArtifactProjections(t *testing.T) {
+	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
+
+	fakeService := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
+	})
+	fakeCompleted, err := fakeService.StartSync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-api-live-provider-fake-child-coexist-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "agent-run-fake-child",
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+		},
+	})
+	if err != nil {
+		t.Fatalf("fake StartSync: %v", err)
+	}
+
+	liveService := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot:       projectRoot,
+		ChildExecutorMode: factorysessionexecution.ChildExecutorModeLive,
+		Provider:          factorysessionexecution.SmokeLiveChildProvider(),
+	})
+	liveCompleted, err := liveService.StartSync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-api-live-provider-live-child-coexist-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "agent-run-fake-child",
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+		},
+		Runtime: &factorysessionexecution.RuntimeOptions{
+			ChildExecutorMode: factorysessionexecution.ChildExecutorModeLive,
+		},
+	})
+	if err != nil {
+		t.Fatalf("live StartSync: %v", err)
+	}
+
+	fakeServer := httptest.NewServer(newAPITestServer(&testutil.MockFactory{DurableExecutionService: fakeService}).Handler())
+	defer fakeServer.Close()
+	liveServer := httptest.NewServer(newAPITestServer(&testutil.MockFactory{DurableExecutionService: liveService}).Handler())
+	defer liveServer.Close()
+
+	fakeDispatch := getDurableDispatchList(t, fakeServer.URL, fakeCompleted.SessionID).Dispatches[0]
+	if fakeDispatch.Javascript == nil || fakeDispatch.Javascript.ExecutionMode == nil ||
+		*fakeDispatch.Javascript.ExecutionMode != factorysessionexecution.ChildExecutorModeFake {
+		t.Fatalf("fake dispatch executionMode = %#v, want fake", fakeDispatch.Javascript)
+	}
+	if fakeDispatch.ProviderSessionRefs == nil || len(*fakeDispatch.ProviderSessionRefs) != 1 ||
+		(*fakeDispatch.ProviderSessionRefs)[0].Id != "fake-provider-session-1" {
+		t.Fatalf("fake providerSessionRefs = %#v", fakeDispatch.ProviderSessionRefs)
+	}
+	fakeArtifact := getDurableArtifactList(t, fakeServer.URL, fakeCompleted.SessionID).Artifacts[0]
+	if fakeArtifact.DispatchId == nil || *fakeArtifact.DispatchId != "dispatch-1" {
+		t.Fatalf("fake artifact dispatchId = %#v, want dispatch-1", fakeArtifact.DispatchId)
+	}
+
+	liveDispatch := getDurableDispatchList(t, liveServer.URL, liveCompleted.SessionID).Dispatches[0]
+	if liveDispatch.Javascript == nil || liveDispatch.Javascript.ExecutionMode == nil ||
+		*liveDispatch.Javascript.ExecutionMode != factorysessionexecution.ChildExecutorModeLive {
+		t.Fatalf("live dispatch executionMode = %#v, want live-provider", liveDispatch.Javascript)
+	}
+	assertAPILiveProviderProviderSessionRef(t, liveDispatch.ProviderSessionRefs)
+	liveDispatchDetail := getDurableDispatchDetail(t, liveServer.URL, liveCompleted.SessionID, "dispatch-1")
+	assertAPILiveProviderArtifactLineage(t, liveServer.URL, liveCompleted.SessionID, liveDispatch, liveDispatchDetail)
 }
 
 func TestLiveProviderChildDispatch_RuntimeBackedAPIProjectsRunningDispatchBeforeCompletion(t *testing.T) {
@@ -254,6 +330,97 @@ func waitForAPIDispatchStatus(
 	}
 	t.Fatalf("dispatch %q did not reach status %q before timeout", dispatchID, want)
 	return factoryapi.FactorySessionDispatchSummary{}
+}
+
+func assertAPILiveProviderProviderSessionRef(
+	t *testing.T,
+	refs *[]factoryapi.LoadableProviderSessionRef,
+) {
+	t.Helper()
+	if refs == nil || len(*refs) != 1 {
+		t.Fatalf("providerSessionRefs = %#v, want one ref", refs)
+	}
+	ref := (*refs)[0]
+	if ref.Id != "live-provider-session-1" {
+		t.Fatalf("providerSessionRef id = %q, want live-provider-session-1", ref.Id)
+	}
+	if ref.Provider != "mock" {
+		t.Fatalf("providerSessionRef provider = %q, want mock", ref.Provider)
+	}
+	if ref.Kind != factoryapi.LoadableProviderSessionKindSessionID {
+		t.Fatalf("providerSessionRef kind = %q, want session_id", ref.Kind)
+	}
+}
+
+func assertAPILiveProviderArtifactLineage(
+	t *testing.T,
+	serverURL, sessionID string,
+	dispatchSummary factoryapi.FactorySessionDispatchSummary,
+	dispatchDetail factoryapi.FactoryDispatch,
+) {
+	t.Helper()
+
+	sessionRead := getDurableFactorySession(t, serverURL, sessionID)
+	if sessionRead.ArtifactRefs == nil || len(*sessionRead.ArtifactRefs) != 1 ||
+		(*sessionRead.ArtifactRefs)[0].Id != "child-artifact-1" {
+		t.Fatalf("session artifactRefs = %#v, want child-artifact-1", sessionRead.ArtifactRefs)
+	}
+
+	artifactList := getDurableArtifactList(t, serverURL, sessionID)
+	if len(artifactList.Artifacts) != 1 {
+		t.Fatalf("artifact list = %#v, want one artifact", artifactList.Artifacts)
+	}
+	artifactSummary := artifactList.Artifacts[0]
+	if artifactSummary.Id != "child-artifact-1" {
+		t.Fatalf("artifact id = %q, want child-artifact-1", artifactSummary.Id)
+	}
+	if artifactSummary.Kind != factoryapi.FactoryArtifactKindCHILDRESULT {
+		t.Fatalf("artifact kind = %q, want CHILD_RESULT", artifactSummary.Kind)
+	}
+	if artifactSummary.DispatchId == nil || *artifactSummary.DispatchId != "dispatch-1" {
+		t.Fatalf("artifact dispatchId = %#v, want dispatch-1", artifactSummary.DispatchId)
+	}
+	wantHref := "/factory-sessions/" + sessionID + "/artifacts/child-artifact-1"
+	if artifactSummary.RetrievalRef == nil || artifactSummary.RetrievalRef.Href != wantHref {
+		t.Fatalf("artifact retrievalRef = %#v, want %q", artifactSummary.RetrievalRef, wantHref)
+	}
+
+	artifactDetail := getDurableArtifactDetail(t, serverURL, sessionID, "child-artifact-1")
+	if artifactDetail.DispatchId == nil || *artifactDetail.DispatchId != "dispatch-1" {
+		t.Fatalf("artifact detail dispatchId = %#v, want dispatch-1", artifactDetail.DispatchId)
+	}
+	if artifactDetail.Kind != factoryapi.FactoryArtifactKindCHILDRESULT {
+		t.Fatalf("artifact detail kind = %q, want CHILD_RESULT", artifactDetail.Kind)
+	}
+	if artifactDetail.ContentRef == nil || artifactDetail.ContentRef.Href != wantHref {
+		t.Fatalf("artifact detail contentRef = %#v, want %q", artifactDetail.ContentRef, wantHref)
+	}
+
+	if dispatchSummary.OutputArtifactIds == nil || len(*dispatchSummary.OutputArtifactIds) != 1 ||
+		(*dispatchSummary.OutputArtifactIds)[0] != "child-artifact-1" {
+		t.Fatalf("dispatch outputArtifactIds = %#v, want [child-artifact-1]", dispatchSummary.OutputArtifactIds)
+	}
+	if dispatchDetail.ArtifactIds == nil || len(*dispatchDetail.ArtifactIds) != 1 ||
+		(*dispatchDetail.ArtifactIds)[0] != "child-artifact-1" {
+		t.Fatalf("dispatch detail artifactIds = %#v, want [child-artifact-1]", dispatchDetail.ArtifactIds)
+	}
+}
+
+func getDurableArtifactDetail(t *testing.T, serverURL, sessionID, artifactID string) factoryapi.FactorySessionArtifactDetail {
+	t.Helper()
+	resp, err := http.Get(serverURL + "/factory-sessions/" + sessionID + "/artifacts/" + artifactID)
+	if err != nil {
+		t.Fatalf("GET artifact detail: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("artifact detail status = %d, want 200: %s", resp.StatusCode, readBody(t, resp))
+	}
+	var response factoryapi.FactorySessionArtifactDetail
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		t.Fatalf("decode artifact detail: %v", err)
+	}
+	return response
 }
 
 func assertAPIDispatchStatusTransitions(

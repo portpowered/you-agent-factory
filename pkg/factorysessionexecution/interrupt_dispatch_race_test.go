@@ -146,7 +146,7 @@ func TestJavaScriptRuntimeService_LateChildResultAfterInterrupt_SuppressesNormal
 		t.Fatalf("ListArtifacts: %v", err)
 	}
 	for _, artifact := range artifacts.Artifacts {
-		if artifact.DispatchID == dispatchID && artifact.Kind == "CHILD_OUTPUT" {
+		if artifact.DispatchID == dispatchID && artifact.Kind == "CHILD_RESULT" {
 			t.Fatalf("artifact = %#v, want late child output suppressed", artifact)
 		}
 	}

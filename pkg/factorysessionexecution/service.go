@@ -321,7 +321,7 @@ func childArtifactFromDispatch(
 	}
 	return ArtifactSummary{
 		ID:           parsed.ArtifactID,
-		Kind:         "CHILD_OUTPUT",
+		Kind:         "CHILD_RESULT",
 		Visibility:   "WORKFLOW_RUNTIME",
 		Label:        child.Label,
 		DispatchID:   child.DispatchID,
@@ -352,7 +352,7 @@ func dispatchSummaryFromChildRecord(currentPhase string, child workflowruntime.C
 		summary.Provider = provider
 		summary.ProviderSessionRefs = []ProviderSessionRef{{
 			Provider: provider,
-			Kind:     "AGENT",
+			Kind:     "session_id",
 			ID:       ref,
 		}}
 	}
