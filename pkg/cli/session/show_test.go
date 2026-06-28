@@ -50,6 +50,11 @@ func TestShow_HumanOutputRendersJavaScriptFactorySession(t *testing.T) {
 		"Factory session:\tsession-beta",
 		"Orchestrator kind:\tJAVASCRIPT",
 		"Session started:\t",
+		"Stop summary:\tkind=INTERRUPTED session=session-beta work=Review child [work-review-1] state=goal:review",
+		"Stop dispatch:\tdispatch-1 status=INTERRUPTED kind=JAVASCRIPT_AGENT workstation=review child",
+		"Stop result:\tDispatch interrupted while waiting for review output",
+		"Recovery surface:\texisting dispatch retry, work repair, or session workflow controls",
+		"Recovery action:\tInspect the interrupted dispatch in Factory Session \"session-beta\", then use the existing retry, repair, or session workflow controls to continue recovery.",
 		"Dispatch:\tdispatch-1 (review child) status=RECONCILED kind=JAVASCRIPT_AGENT",
 		"Artifact ref:\tartifact-1 (review output) kind=CHILD_RESULT visibility=PUBLIC",
 		"Partial result ref:\tartifact-partial (FINDING)",
@@ -193,6 +198,12 @@ func sampleFactorySession() factoryapi.FactorySession {
 	label := "plan"
 	dispatchLabel := "review child"
 	artifactLabel := "review output"
+	workName := "Review child"
+	workID := "work-review-1"
+	workState := "goal:review"
+	stopResult := "Dispatch interrupted while waiting for review output"
+	recoverySurface := "existing dispatch retry, work repair, or session workflow controls"
+	recoveryAction := "Inspect the interrupted dispatch in Factory Session \"session-beta\", then use the existing retry, repair, or session workflow controls to continue recovery."
 	startedAt := time.Date(2026, 6, 8, 14, 0, 0, 0, time.UTC)
 	updatedAt := time.Date(2026, 6, 8, 14, 5, 0, 0, time.UTC)
 	return factoryapi.FactorySession{
@@ -210,6 +221,22 @@ func sampleFactorySession() factoryapi.FactorySession {
 			Lifecycle: factoryapi.FactorySessionLifecycle{
 				StartedAt: startedAt,
 				UpdatedAt: updatedAt,
+			},
+			StopSummary: &factoryapi.FactoryStopSummary{
+				SessionId:                "session-beta",
+				StopKind:                 factoryapi.FactoryStopKind("INTERRUPTED"),
+				WorkId:                   &workID,
+				WorkName:                 &workName,
+				WorkState:                &workState,
+				LatestResultSummary:      &stopResult,
+				SuggestedRecoverySurface: &recoverySurface,
+				SuggestedRecoveryAction:  &recoveryAction,
+				LatestDispatch: &factoryapi.FactoryStopDispatchSummary{
+					DispatchId:      "dispatch-1",
+					Status:          factoryapi.FactoryDispatchStatusINTERRUPTED,
+					DispatchKind:    factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
+					WorkstationName: &dispatchLabel,
+				},
 			},
 			Artifacts: &[]factoryapi.FactoryArtifact{{
 				Id:         "artifact-1",
@@ -231,8 +258,8 @@ func sampleFactorySession() factoryapi.FactorySession {
 			},
 			Usage: factoryapi.FactorySessionUsage{Resources: []factoryapi.ResourceUsage{}},
 			Javascript: &factoryapi.FactorySessionJavaScriptProjection{
-				Phase:  &phase,
-				Phases: []string{"plan", "review"},
+				Phase:        &phase,
+				Phases:       []string{"plan", "review"},
 				ScriptStatus: factoryapi.FactorySessionJavaScriptScriptStatusIDLE,
 				ChildDispatchCounts: factoryapi.FactorySessionJavaScriptChildDispatchCounts{
 					Queued:    1,

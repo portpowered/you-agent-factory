@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
@@ -140,6 +141,67 @@ func TestMoveWork_DoesNotRecordDispatchEvents(t *testing.T) {
 	}
 	if len(eng.runtimeState.Dispatches) != 0 {
 		t.Fatalf("active dispatches = %#v, want none", eng.runtimeState.Dispatches)
+	}
+}
+
+func TestMoveWork_WakesRunLoopWithoutBufferedInputs(t *testing.T) {
+	net := buildTestNet()
+	marking := petri.NewMarking("test-wf")
+	marking.AddToken(newMoveTestToken("tok-1", "work-1", "task:failed"))
+
+	dispatched := make(chan struct{}, 1)
+	dispatchSub := &mockSubsystem{
+		group: subsystems.Dispatcher,
+		execFn: func(_ context.Context, snap *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
+			for _, token := range snap.Marking.TokensInPlace("task:init") {
+				if token.Color.WorkID != "work-1" {
+					continue
+				}
+				return &interfaces.TickResult{
+					Dispatches: []interfaces.DispatchRecord{{
+						Dispatch: interfaces.WorkDispatch{
+							DispatchID:   "dispatch-after-move",
+							TransitionID: "transition-after-move",
+							WorkerType:   "worker-a",
+						},
+						Mutations: []interfaces.MarkingMutation{{
+							Type:      interfaces.MutationConsume,
+							TokenID:   token.ID,
+							FromPlace: "task:init",
+						}},
+					}},
+				}, nil
+			}
+			return nil, nil
+		},
+	}
+	eng := NewFactoryEngine(net, marking, []subsystems.Subsystem{dispatchSub}, WithDispatchHandler(func(dispatch interfaces.WorkDispatch) {
+		if dispatch.DispatchID == "dispatch-after-move" {
+			select {
+			case dispatched <- struct{}{}:
+			default:
+			}
+		}
+	}))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	runErr := make(chan error, 1)
+	go func() {
+		runErr <- eng.Run(ctx)
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+	if _, err := eng.MoveWork(context.Background(), "work-1", "init"); err != nil {
+		t.Fatalf("MoveWork: %v", err)
+	}
+
+	select {
+	case <-dispatched:
+	case err := <-runErr:
+		t.Fatalf("Run returned before moved work redispatched: %v", err)
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("timed out waiting for moved work to redispatch")
 	}
 }
 

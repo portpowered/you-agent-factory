@@ -90,7 +90,15 @@ func ProjectRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {
 	if artifacts != nil {
 		runtime.Artifacts = artifacts
 	}
+	runtime.StopSummary = apisurface.BuildFactorySessionStopSummary(sessionIDFromProjectionContext(ctx), ctx.Snapshot, ctx.JavaScript)
 	return runtime
+}
+
+func sessionIDFromProjectionContext(ctx ProjectionContext) string {
+	if ctx.Session == nil {
+		return ""
+	}
+	return strings.TrimSpace(ctx.Session.ID)
 }
 
 func projectedSessionStreamIdentity(

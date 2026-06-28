@@ -232,6 +232,287 @@ func TestGetWork_OmitsEmptyOptionalCollections(t *testing.T) {
 	}
 }
 
+func TestGetWork_IncludesStopSummaryForBlockedWork(t *testing.T) {
+	now := time.Date(2026, 6, 27, 9, 0, 0, 0, time.UTC)
+	srv := newTestServer(&testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			"session-blocked": {
+				EngineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+					RuntimeStatus: interfaces.RuntimeStatusIdle,
+					FactoryState:  "RUNNING",
+					Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+						"tok-goal-blocked": {
+							ID:      "tok-goal-blocked",
+							PlaceID: "goal:blocked",
+							Color: interfaces.TokenColor{
+								Name:       "Blocked goal",
+								WorkID:     "work-goal-blocked",
+								WorkTypeID: "goal",
+								TraceID:    "trace-goal-blocked",
+							},
+							CreatedAt: now.Add(-2 * time.Minute),
+							EnteredAt: now.Add(-1 * time.Minute),
+						},
+					}},
+					Topology: &state.Net{
+						Places: map[string]*petri.Place{
+							"goal:blocked": {ID: "goal:blocked", TypeID: "goal", State: "blocked"},
+						},
+						WorkTypes: map[string]*state.WorkType{
+							"goal": {
+								ID: "goal",
+								States: []state.StateDefinition{
+									{Value: "blocked", Category: state.StateCategoryProcessing},
+								},
+							},
+						},
+					},
+					DispatchHistory: []interfaces.CompletedDispatch{{
+						DispatchID:      "dispatch-goal-blocked-1",
+						TransitionID:    "execute-goal",
+						WorkstationName: "execute-goal",
+						Outcome:         interfaces.OutcomeFailed,
+						Reason:          "provider timeout",
+						EndTime:         now,
+						ConsumedTokens:  []interfaces.Token{{Color: interfaces.TokenColor{WorkID: "work-goal-blocked"}}},
+					}},
+				},
+			},
+		},
+	})
+
+	req := httptest.NewRequest("GET", "/factory-sessions/session-blocked/work/work-goal-blocked", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := decodeJSONResponse[factoryapi.Work](t, rec)
+	if resp.StopSummary == nil {
+		t.Fatal("stopSummary = nil, want blocked summary")
+	}
+	if resp.StopSummary.StopKind != factoryapi.FactoryStopKind("BLOCKED") {
+		t.Fatalf("stop kind = %q, want BLOCKED", resp.StopSummary.StopKind)
+	}
+	if resp.StopSummary.SessionId != "session-blocked" {
+		t.Fatalf("sessionId = %q, want session-blocked", resp.StopSummary.SessionId)
+	}
+	if resp.StopSummary.WorkState == nil || *resp.StopSummary.WorkState != "goal:blocked" {
+		t.Fatalf("workState = %#v, want goal:blocked", resp.StopSummary.WorkState)
+	}
+	if resp.StopSummary.LatestDispatch == nil || resp.StopSummary.LatestDispatch.DispatchId != "dispatch-goal-blocked-1" {
+		t.Fatalf("latestDispatch = %#v, want dispatch-goal-blocked-1", resp.StopSummary.LatestDispatch)
+	}
+	if resp.StopSummary.LatestResultSummary == nil || *resp.StopSummary.LatestResultSummary != "provider timeout" {
+		t.Fatalf("latestResultSummary = %#v, want provider timeout", resp.StopSummary.LatestResultSummary)
+	}
+	if resp.StopSummary.SuggestedRecoverySurface == nil || *resp.StopSummary.SuggestedRecoverySurface != "existing work repair, work move, or follow-up submission controls" {
+		t.Fatalf("suggestedRecoverySurface = %#v, want blocked recovery surface", resp.StopSummary.SuggestedRecoverySurface)
+	}
+}
+
+func TestGetWork_IncludesStopSummaryForNeedsHumanWork(t *testing.T) {
+	now := time.Date(2026, 6, 27, 9, 5, 0, 0, time.UTC)
+	srv := newTestServer(&testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			"session-needs-human": {
+				EngineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+					RuntimeStatus: interfaces.RuntimeStatusIdle,
+					FactoryState:  "RUNNING",
+					Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+						"tok-goal-human": {
+							ID:      "tok-goal-human",
+							PlaceID: "goal:needs-human",
+							Color: interfaces.TokenColor{
+								Name:       "Needs approval",
+								WorkID:     "work-goal-human",
+								WorkTypeID: "goal",
+								TraceID:    "trace-goal-human",
+								Tags: map[string]string{
+									interfaces.RejectionFeedback: "Approve the release checklist artifact before continuing.",
+								},
+							},
+							CreatedAt: now.Add(-2 * time.Minute),
+							EnteredAt: now.Add(-1 * time.Minute),
+						},
+					}},
+					Topology: &state.Net{
+						Places: map[string]*petri.Place{
+							"goal:needs-human": {ID: "goal:needs-human", TypeID: "goal", State: "needs-human"},
+						},
+						WorkTypes: map[string]*state.WorkType{
+							"goal": {
+								ID: "goal",
+								States: []state.StateDefinition{
+									{Value: "needs-human", Category: state.StateCategoryProcessing},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+
+	req := httptest.NewRequest("GET", "/factory-sessions/session-needs-human/work/work-goal-human", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	resp := decodeJSONResponse[factoryapi.Work](t, rec)
+	if resp.StopSummary == nil {
+		t.Fatal("stopSummary = nil, want needs-human summary")
+	}
+	if resp.StopSummary.StopKind != factoryapi.FactoryStopKind("NEEDS_HUMAN") {
+		t.Fatalf("stop kind = %q, want NEEDS_HUMAN", resp.StopSummary.StopKind)
+	}
+	if resp.StopSummary.LatestResultSummary == nil || *resp.StopSummary.LatestResultSummary != "Approve the release checklist artifact before continuing." {
+		t.Fatalf("latestResultSummary = %#v, want human-readable feedback", resp.StopSummary.LatestResultSummary)
+	}
+	if resp.StopSummary.SuggestedRecoverySurface == nil || *resp.StopSummary.SuggestedRecoverySurface != "existing work follow-up submission, work move, or session workflow controls" {
+		t.Fatalf("suggestedRecoverySurface = %#v, want needs-human recovery surface", resp.StopSummary.SuggestedRecoverySurface)
+	}
+}
+
+func TestGetWork_ReusesInterruptedSessionStopSummaryForMatchingWork(t *testing.T) {
+	stopResult, recoverySurface, workID := interruptedStopSummaryFixtureValues()
+	srv := newInterruptedStopSummaryServer(t, stopResult, recoverySurface, workID, "goal:review", "review")
+	resp := getWorkResponse(t, srv, "/factory-sessions/session-interrupted/work/work-goal-interrupted")
+	assertInterruptedStopSummary(t, resp, stopResult, recoverySurface, workID)
+}
+
+func TestGetWork_ReusesInterruptedSessionStopSummaryForInterruptedWorkState(t *testing.T) {
+	stopResult, recoverySurface, workID := interruptedStopSummaryFixtureValues()
+	srv := newInterruptedStopSummaryServer(t, stopResult, recoverySurface, workID, "goal:interrupted", "interrupted")
+	resp := getWorkResponse(t, srv, "/factory-sessions/session-interrupted/work/work-goal-interrupted")
+	assertInterruptedStopSummary(t, resp, stopResult, recoverySurface, workID)
+}
+
+func interruptedStopSummaryFixtureValues() (string, string, string) {
+	stopResult := "Operator interrupted the dispatch"
+	recoverySurface := "existing dispatch retry, work repair, or session workflow controls"
+	workID := "work-goal-interrupted"
+	return stopResult, recoverySurface, workID
+}
+
+func newInterruptedStopSummaryServer(
+	t *testing.T,
+	stopResult, recoverySurface, workID, placeID, placeState string,
+) *Server {
+	t.Helper()
+
+	now := time.Date(2026, 6, 27, 9, 10, 0, 0, time.UTC)
+	recoveryAction := "Inspect the interrupted dispatch in Factory Session \"session-interrupted\", then use the existing retry, repair, or session workflow controls to continue recovery."
+	workName := "Interrupted goal"
+	workState := "goal:review"
+	workstationName := "review child"
+	failureReason := "operator_interrupt"
+	return newTestServer(&testutil.MockFactory{
+		SessionFactories: map[string]*testutil.MockFactory{
+			"session-interrupted": {
+				FactorySession: factoryapi.FactorySession{
+					Id: "session-interrupted",
+					Runtime: factoryapi.FactorySessionRuntime{
+						StopSummary: &factoryapi.FactoryStopSummary{
+							SessionId:                "session-interrupted",
+							StopKind:                 factoryapi.FactoryStopKind("INTERRUPTED"),
+							WorkId:                   &workID,
+							WorkName:                 &workName,
+							WorkState:                &workState,
+							LatestResultSummary:      &stopResult,
+							SuggestedRecoverySurface: &recoverySurface,
+							SuggestedRecoveryAction:  &recoveryAction,
+							LatestDispatch: &factoryapi.FactoryStopDispatchSummary{
+								DispatchId:      "dispatch-js-1",
+								Status:          factoryapi.FactoryDispatchStatusINTERRUPTED,
+								DispatchKind:    factoryapi.FactoryDispatchKindJAVASCRIPTAGENT,
+								WorkstationName: &workstationName,
+								FailureReason:   &failureReason,
+								FailureMessage:  &stopResult,
+							},
+						},
+					},
+				},
+				EngineState: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+					RuntimeStatus: interfaces.RuntimeStatusIdle,
+					FactoryState:  "RUNNING",
+					Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+						"tok-goal-interrupted": {
+							ID:      "tok-goal-interrupted",
+							PlaceID: placeID,
+							Color: interfaces.TokenColor{
+								Name:       "Interrupted goal",
+								WorkID:     workID,
+								WorkTypeID: "goal",
+								TraceID:    "trace-goal-interrupted",
+							},
+							CreatedAt: now.Add(-2 * time.Minute),
+							EnteredAt: now.Add(-1 * time.Minute),
+						},
+					}},
+					Topology: &state.Net{
+						Places: map[string]*petri.Place{
+							placeID: {ID: placeID, TypeID: "goal", State: placeState},
+						},
+						WorkTypes: map[string]*state.WorkType{
+							"goal": {
+								ID: "goal",
+								States: []state.StateDefinition{
+									{Value: placeState, Category: state.StateCategoryProcessing},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+}
+
+func getWorkResponse(t *testing.T, srv *Server, path string) factoryapi.Work {
+	t.Helper()
+	req := httptest.NewRequest("GET", path, nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	return decodeJSONResponse[factoryapi.Work](t, rec)
+}
+
+func assertInterruptedStopSummary(
+	t *testing.T,
+	resp factoryapi.Work,
+	stopResult, recoverySurface, workID string,
+) {
+	t.Helper()
+
+	if resp.StopSummary == nil {
+		t.Fatal("stopSummary = nil, want interrupted summary")
+	}
+	if resp.StopSummary.StopKind != factoryapi.FactoryStopKind("INTERRUPTED") {
+		t.Fatalf("stop kind = %q, want INTERRUPTED", resp.StopSummary.StopKind)
+	}
+	if resp.StopSummary.WorkId == nil || *resp.StopSummary.WorkId != workID {
+		t.Fatalf("workId = %#v, want %s", resp.StopSummary.WorkId, workID)
+	}
+	if resp.StopSummary.LatestDispatch == nil || resp.StopSummary.LatestDispatch.DispatchId != "dispatch-js-1" {
+		t.Fatalf("latestDispatch = %#v, want dispatch-js-1", resp.StopSummary.LatestDispatch)
+	}
+	if resp.StopSummary.LatestDispatch.Status != factoryapi.FactoryDispatchStatusINTERRUPTED {
+		t.Fatalf("dispatch status = %q, want INTERRUPTED", resp.StopSummary.LatestDispatch.Status)
+	}
+	if resp.StopSummary.LatestResultSummary == nil || *resp.StopSummary.LatestResultSummary != stopResult {
+		t.Fatalf("latestResultSummary = %#v, want %q", resp.StopSummary.LatestResultSummary, stopResult)
+	}
+	if resp.StopSummary.SuggestedRecoverySurface == nil || *resp.StopSummary.SuggestedRecoverySurface != recoverySurface {
+		t.Fatalf("suggestedRecoverySurface = %#v, want interrupted recovery surface", resp.StopSummary.SuggestedRecoverySurface)
+	}
+}
+
 func TestTokenToResponse_CopiesOptionalTagMap(t *testing.T) {
 	token := &interfaces.Token{
 		ID:      "tok-prd-copy",

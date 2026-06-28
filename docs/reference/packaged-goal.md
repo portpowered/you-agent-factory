@@ -129,6 +129,38 @@ you work list --session <session-id>
 you session resume <session-id>
 ```
 
+## Inspect-first recovery flow
+
+Use the same inspect-first sequence for every stopped `@you/goal` run. The
+public nouns stay the same across CLI and API: `FactorySession`, `Work`, and
+`Dispatch`.
+
+1. Start from the shared recovery context on the non-success invocation
+   response: `sessionId`, `workId`, `workName`, and `workState` when present.
+2. Inspect the live `FactorySession` with `you session show <session-id>` or
+   `GET /factory-sessions/{session_id}` to confirm whether automation is paused,
+   blocked on work state, needs human input, or interrupted during a dispatch.
+3. Inspect the affected `Work` with `you work show <work-id> --session <session-id>`
+   or `GET /factory-sessions/{session_id}/work/{work_id}` to read the stop
+   summary, latest dispatch or result summary, and suggested recovery surface.
+4. Apply the existing session or work control that matches that stop reason.
+   Do not look for `@you/goal`-specific resume or inspect routes.
+5. Re-run `you session show` and `you work show` to confirm the same
+   `FactorySession` and `Work` moved forward through the normal goal flow.
+
+### Recovery by stop reason
+
+| Stop reason | What inspect should tell you | Existing control to use next |
+|-------------|------------------------------|------------------------------|
+| Paused `FactorySession` | The session lifecycle is paused while buffered work stays attached to the same session. | Resume with `you session resume <session-id>`, then re-check the same session and work. |
+| Blocked `Work` state such as `goal:blocked` | The blocked work item, its current state, and the latest relevant dispatch or result summary. | Use existing work repair, work move, or follow-up submission controls for that work item. |
+| Needs-human `Work` state such as `goal:needs-human` | The work item that needs operator input, approval, or artifact review before progress can continue. | Provide the required human input or approval through the existing workflow, then re-inspect the same work item. |
+| Interrupted `Dispatch` or session | The interrupted dispatch/result summary and the affected session/work context. | Use existing dispatch retry, work repair, or session workflow controls after inspecting the interruption context. |
+
+This flow intentionally reuses the shared session and work inspection surfaces.
+`@you/goal` does not add `/goal/inspect`, `/goal/resume`, or another goal-only
+public recovery route.
+
 For broader session discovery, status inspection, and work submission after the
 factory is running, use `you docs sessions`, `you docs work`, and
 `you docs batch-inputs`.

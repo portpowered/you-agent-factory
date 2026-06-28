@@ -48,3 +48,6 @@ properties:
     description: Current outbound relationships attached to this listed source work item when returned by read APIs.
     items:
       $ref: './Relation.yaml'
+  stopSummary:
+    $ref: '../api/FactoryStopSummary.yaml'
+    description: Canonical stopped-state summary for existing work inspection reads when this work item explains paused, blocked, needs-human, or interrupted automation.
