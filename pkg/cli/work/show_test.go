@@ -140,6 +140,59 @@ func TestShow_HumanOutputIncludesInterruptedStopSummary(t *testing.T) {
 	}
 }
 
+func TestShow_HumanOutputIncludesPausedLifecycleStopSummary(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/factory-sessions/session-paused/work/work-review-1" {
+			t.Fatalf("path = %q, want /factory-sessions/session-paused/work/work-review-1", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		lifecycle := factoryapi.FactorySessionDurableLifecycleStatusPaused
+		if err := json.NewEncoder(w).Encode(factoryapi.Work{
+			Name:         "Review child",
+			WorkId:       stringPtr("work-review-1"),
+			WorkTypeName: stringPtr("goal"),
+			State: &factoryapi.WorkState{
+				Name: "review",
+				Type: factoryapi.WorkStateTypePROCESSING,
+			},
+			TraceId: stringPtr("trace-review-1"),
+			StopSummary: &factoryapi.FactoryStopSummary{
+				SessionId:              "session-paused",
+				StopKind:               factoryapi.FactoryStopKind("PAUSED"),
+				WorkState:              stringPtr("goal:review"),
+				SessionLifecycleStatus: &lifecycle,
+			},
+		}); err != nil {
+			t.Fatalf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	var out bytes.Buffer
+	err := Show(ShowConfig{
+		Server:    serverBase(t, srv),
+		SessionID: "session-paused",
+		WorkID:    "work-review-1",
+		Output:    &out,
+	})
+	if err != nil {
+		t.Fatalf("Show: %v", err)
+	}
+
+	want := "" +
+		"Work ID:\twork-review-1\n" +
+		"Name:\tReview child\n" +
+		"Work type:\tgoal\n" +
+		"State name:\treview\n" +
+		"State type:\tPROCESSING\n" +
+		"Trace:\ttrace-review-1\n" +
+		"Relations:\tnone\n" +
+		"Stop summary:\tkind=PAUSED session=session-paused state=goal:review lifecycle=PAUSED\n"
+	if got := out.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
 func TestShow_JSONOutputEmitsWorkObject(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

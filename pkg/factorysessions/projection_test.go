@@ -216,16 +216,17 @@ func TestProjectRuntime_PausedSessionIncludesStopSummary(t *testing.T) {
 func TestProjectRuntime_BlockedAndNeedsHumanSessionsIncludeStopSummary(t *testing.T) {
 	now := time.Date(2026, 6, 27, 8, 30, 0, 0, time.UTC)
 	testCases := []struct {
-		name        string
-		placeID     string
-		stateName   string
-		wantStop    factoryapi.FactoryStopKind
-		wantSummary string
-		lastError   string
+		name               string
+		placeID            string
+		stateName          string
+		wantStop           factoryapi.FactoryStopKind
+		wantSummary        string
+		wantDispatchStatus factoryapi.FactoryDispatchStatus
+		lastError          string
 	}{
-		{name: "blocked", placeID: "goal:blocked", stateName: "blocked", wantStop: factoryapi.FactoryStopKind("BLOCKED"), wantSummary: "provider timeout"},
-		{name: "needs-human", placeID: "goal:needs-human", stateName: "needs-human", wantStop: factoryapi.FactoryStopKind("NEEDS_HUMAN"), wantSummary: "awaiting operator approval"},
-		{name: "interrupted", placeID: "goal:interrupted", stateName: "interrupted", wantStop: factoryapi.FactoryStopKind("INTERRUPTED"), wantSummary: "Operator interrupted review after partial output was available.", lastError: "Operator interrupted review after partial output was available."},
+		{name: "blocked", placeID: "goal:blocked", stateName: "blocked", wantStop: factoryapi.FactoryStopKind("BLOCKED"), wantSummary: "provider timeout", wantDispatchStatus: factoryapi.FactoryDispatchStatusFAILED},
+		{name: "needs-human", placeID: "goal:needs-human", stateName: "needs-human", wantStop: factoryapi.FactoryStopKind("NEEDS_HUMAN"), wantSummary: "awaiting operator approval", wantDispatchStatus: factoryapi.FactoryDispatchStatusFAILED},
+		{name: "interrupted", placeID: "goal:interrupted", stateName: "interrupted", wantStop: factoryapi.FactoryStopKind("INTERRUPTED"), wantSummary: "Operator interrupted review after partial output was available.", wantDispatchStatus: factoryapi.FactoryDispatchStatusINTERRUPTED, lastError: "Operator interrupted review after partial output was available."},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -269,25 +270,41 @@ func TestProjectRuntime_BlockedAndNeedsHumanSessionsIncludeStopSummary(t *testin
 			if runtime.StopSummary == nil {
 				t.Fatal("stopSummary = nil, want work-level stop summary")
 			}
-			if runtime.StopSummary.StopKind != tc.wantStop {
-				t.Fatalf("stop kind = %q, want %q", runtime.StopSummary.StopKind, tc.wantStop)
-			}
-			if runtime.StopSummary.WorkState == nil || *runtime.StopSummary.WorkState != tc.placeID {
-				t.Fatalf("stopSummary.workState = %#v, want %s", runtime.StopSummary.WorkState, tc.placeID)
-			}
-			if runtime.StopSummary.LatestDispatch == nil || runtime.StopSummary.LatestDispatch.DispatchId != "dispatch-stop-1" {
-				t.Fatalf("latestDispatch = %#v, want dispatch-stop-1", runtime.StopSummary.LatestDispatch)
-			}
-			if runtime.StopSummary.LatestResultSummary == nil || *runtime.StopSummary.LatestResultSummary != tc.wantSummary {
-				t.Fatalf("latestResultSummary = %#v, want %q", runtime.StopSummary.LatestResultSummary, tc.wantSummary)
-			}
-			if runtime.StopSummary.SuggestedRecoverySurface == nil || strings.TrimSpace(*runtime.StopSummary.SuggestedRecoverySurface) == "" {
-				t.Fatalf("suggestedRecoverySurface = %#v, want operator recovery guidance", runtime.StopSummary.SuggestedRecoverySurface)
-			}
-			if runtime.StopSummary.SuggestedRecoveryAction == nil || strings.TrimSpace(*runtime.StopSummary.SuggestedRecoveryAction) == "" {
-				t.Fatalf("suggestedRecoveryAction = %#v, want operator next step", runtime.StopSummary.SuggestedRecoveryAction)
-			}
+			assertWorkStateStopSummary(t, runtime.StopSummary, tc.placeID, tc.wantStop, tc.wantDispatchStatus, tc.wantSummary)
 		})
+	}
+}
+
+func assertWorkStateStopSummary(
+	t *testing.T,
+	summary *factoryapi.FactoryStopSummary,
+	wantPlaceID string,
+	wantStop factoryapi.FactoryStopKind,
+	wantDispatchStatus factoryapi.FactoryDispatchStatus,
+	wantSummary string,
+) {
+	t.Helper()
+
+	if summary.StopKind != wantStop {
+		t.Fatalf("stop kind = %q, want %q", summary.StopKind, wantStop)
+	}
+	if summary.WorkState == nil || *summary.WorkState != wantPlaceID {
+		t.Fatalf("stopSummary.workState = %#v, want %s", summary.WorkState, wantPlaceID)
+	}
+	if summary.LatestDispatch == nil || summary.LatestDispatch.DispatchId != "dispatch-stop-1" {
+		t.Fatalf("latestDispatch = %#v, want dispatch-stop-1", summary.LatestDispatch)
+	}
+	if summary.LatestDispatch.Status != wantDispatchStatus {
+		t.Fatalf("latestDispatch.status = %q, want %q", summary.LatestDispatch.Status, wantDispatchStatus)
+	}
+	if summary.LatestResultSummary == nil || *summary.LatestResultSummary != wantSummary {
+		t.Fatalf("latestResultSummary = %#v, want %q", summary.LatestResultSummary, wantSummary)
+	}
+	if summary.SuggestedRecoverySurface == nil || strings.TrimSpace(*summary.SuggestedRecoverySurface) == "" {
+		t.Fatalf("suggestedRecoverySurface = %#v, want operator recovery guidance", summary.SuggestedRecoverySurface)
+	}
+	if summary.SuggestedRecoveryAction == nil || strings.TrimSpace(*summary.SuggestedRecoveryAction) == "" {
+		t.Fatalf("suggestedRecoveryAction = %#v, want operator next step", summary.SuggestedRecoveryAction)
 	}
 }
 

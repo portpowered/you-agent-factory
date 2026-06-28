@@ -294,6 +294,9 @@ func TestPackagedGoalBuiltInTopology_InterruptedGoalRecoversThroughExistingWorkM
 	if session.Runtime.StopSummary.LatestDispatch == nil {
 		t.Fatal("session.runtime.stopSummary.latestDispatch = nil, want interrupted dispatch context")
 	}
+	if session.Runtime.StopSummary.LatestDispatch.Status != factoryapi.FactoryDispatchStatusINTERRUPTED {
+		t.Fatalf("session.runtime.stopSummary.latestDispatch.status = %q, want INTERRUPTED", session.Runtime.StopSummary.LatestDispatch.Status)
+	}
 	if session.Runtime.StopSummary.LatestResultSummary == nil || *session.Runtime.StopSummary.LatestResultSummary == "" {
 		t.Fatalf("session.runtime.stopSummary.latestResultSummary = %#v, want interrupted stop explanation", session.Runtime.StopSummary.LatestResultSummary)
 	}
@@ -309,6 +312,18 @@ func TestPackagedGoalBuiltInTopology_InterruptedGoalRecoversThroughExistingWorkM
 	}
 	if directWork.StopSummary.WorkId == nil || *directWork.StopSummary.WorkId != workID {
 		t.Fatalf("work.stopSummary.workId = %#v, want %q", directWork.StopSummary.WorkId, workID)
+	}
+	if directWork.StopSummary.LatestDispatch == nil {
+		t.Fatal("work.stopSummary.latestDispatch = nil, want interrupted dispatch context on direct work inspect")
+	}
+	if directWork.StopSummary.LatestDispatch.Status != factoryapi.FactoryDispatchStatusINTERRUPTED {
+		t.Fatalf("work.stopSummary.latestDispatch.status = %q, want INTERRUPTED", directWork.StopSummary.LatestDispatch.Status)
+	}
+	if directWork.StopSummary.LatestResultSummary == nil || *directWork.StopSummary.LatestResultSummary == "" {
+		t.Fatalf("work.stopSummary.latestResultSummary = %#v, want interrupted stop explanation", directWork.StopSummary.LatestResultSummary)
+	}
+	if directWork.StopSummary.SuggestedRecoverySurface == nil || *directWork.StopSummary.SuggestedRecoverySurface == "" {
+		t.Fatalf("work.stopSummary.suggestedRecoverySurface = %#v, want recovery guidance", directWork.StopSummary.SuggestedRecoverySurface)
 	}
 
 	moved := postGeneratedMoveWork(t, server.URL(), workID, "review")

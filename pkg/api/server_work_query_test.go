@@ -379,7 +379,14 @@ func TestGetWork_IncludesStopSummaryForNeedsHumanWork(t *testing.T) {
 
 func TestGetWork_ReusesInterruptedSessionStopSummaryForMatchingWork(t *testing.T) {
 	stopResult, recoverySurface, workID := interruptedStopSummaryFixtureValues()
-	srv := newInterruptedStopSummaryServer(t, stopResult, recoverySurface, workID)
+	srv := newInterruptedStopSummaryServer(t, stopResult, recoverySurface, workID, "goal:review", "review")
+	resp := getWorkResponse(t, srv, "/factory-sessions/session-interrupted/work/work-goal-interrupted")
+	assertInterruptedStopSummary(t, resp, stopResult, recoverySurface, workID)
+}
+
+func TestGetWork_ReusesInterruptedSessionStopSummaryForInterruptedWorkState(t *testing.T) {
+	stopResult, recoverySurface, workID := interruptedStopSummaryFixtureValues()
+	srv := newInterruptedStopSummaryServer(t, stopResult, recoverySurface, workID, "goal:interrupted", "interrupted")
 	resp := getWorkResponse(t, srv, "/factory-sessions/session-interrupted/work/work-goal-interrupted")
 	assertInterruptedStopSummary(t, resp, stopResult, recoverySurface, workID)
 }
@@ -391,7 +398,10 @@ func interruptedStopSummaryFixtureValues() (string, string, string) {
 	return stopResult, recoverySurface, workID
 }
 
-func newInterruptedStopSummaryServer(t *testing.T, stopResult, recoverySurface, workID string) *Server {
+func newInterruptedStopSummaryServer(
+	t *testing.T,
+	stopResult, recoverySurface, workID, placeID, placeState string,
+) *Server {
 	t.Helper()
 
 	now := time.Date(2026, 6, 27, 9, 10, 0, 0, time.UTC)
@@ -432,7 +442,7 @@ func newInterruptedStopSummaryServer(t *testing.T, stopResult, recoverySurface, 
 					Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
 						"tok-goal-interrupted": {
 							ID:      "tok-goal-interrupted",
-							PlaceID: "goal:review",
+							PlaceID: placeID,
 							Color: interfaces.TokenColor{
 								Name:       "Interrupted goal",
 								WorkID:     workID,
@@ -445,13 +455,13 @@ func newInterruptedStopSummaryServer(t *testing.T, stopResult, recoverySurface, 
 					}},
 					Topology: &state.Net{
 						Places: map[string]*petri.Place{
-							"goal:review": {ID: "goal:review", TypeID: "goal", State: "review"},
+							placeID: {ID: placeID, TypeID: "goal", State: placeState},
 						},
 						WorkTypes: map[string]*state.WorkType{
 							"goal": {
 								ID: "goal",
 								States: []state.StateDefinition{
-									{Value: "review", Category: state.StateCategoryProcessing},
+									{Value: placeState, Category: state.StateCategoryProcessing},
 								},
 							},
 						},
