@@ -99,4 +99,29 @@ describe("buildCurrentActivityGraphLayoutFromFactory docs", () => {
       (docNode?.x ?? 0) + CURRENT_ACTIVITY_DOC_NODE_WIDTH,
     );
   });
+
+  it("includes nested bundled docs under factory/docs subdirectories", async () => {
+    const layout = await buildCurrentActivityGraphLayoutFromFactory(
+      factoryWithSupportingFiles({
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Review standards" },
+            targetPath: "factory/docs/standards/review.md",
+            type: "DOC",
+          },
+        ],
+      }),
+    );
+    const docNode = layout.nodes.find(
+      (node) => node.nodeId === "doc:factory/docs/standards/review.md",
+    );
+
+    expect(docNode).toMatchObject({
+      displayLabel: "review.md",
+      height: CURRENT_ACTIVITY_DOC_NODE_HEIGHT,
+      nodeKind: "doc",
+      targetPath: "factory/docs/standards/review.md",
+      width: CURRENT_ACTIVITY_DOC_NODE_WIDTH,
+    });
+  });
 });

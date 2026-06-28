@@ -41,6 +41,8 @@ const timelineFactory = normalizeFactoryDefinition({
   ],
 });
 
+const nestedStandardsDocPath = "factory/docs/standards/review.md";
+
 const savedFactoryDocument = normalizeFactoryDefinition({
   ...timelineFactory,
   supportingFiles: {
@@ -53,6 +55,11 @@ const savedFactoryDocument = normalizeFactoryDefinition({
       {
         content: { encoding: "utf-8", inline: "# Planning" },
         targetPath: "factory/docs/planning.md",
+        type: "DOC",
+      },
+      {
+        content: { encoding: "utf-8", inline: "# Review standards" },
+        targetPath: nestedStandardsDocPath,
         type: "DOC",
       },
     ],
@@ -118,6 +125,7 @@ describe("observe-mode live doc projection", () => {
     expect(listFactoryBundledDocs(displayFactory)).toEqual([
       expect.objectContaining({ targetPath: "factory/docs/overview.md" }),
       expect.objectContaining({ targetPath: "factory/docs/planning.md" }),
+      expect.objectContaining({ targetPath: nestedStandardsDocPath }),
     ]);
   });
 
@@ -136,6 +144,7 @@ describe("observe-mode live doc projection", () => {
     expect(listFactoryBundledDocs(displayFactory)).toEqual([
       expect.objectContaining({ targetPath: "factory/docs/overview.md" }),
       expect.objectContaining({ targetPath: "factory/docs/planning.md" }),
+      expect.objectContaining({ targetPath: nestedStandardsDocPath }),
     ]);
   });
 
@@ -219,6 +228,7 @@ describe("observe-mode live doc projection", () => {
     ).toEqual([
       expect.objectContaining({ targetPath: "factory/docs/overview.md" }),
       expect.objectContaining({ targetPath: "factory/docs/planning.md" }),
+      expect.objectContaining({ targetPath: nestedStandardsDocPath }),
     ]);
   });
 });

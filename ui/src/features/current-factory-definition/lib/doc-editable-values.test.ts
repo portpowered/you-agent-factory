@@ -124,6 +124,26 @@ describe("doc-editable-values", () => {
     expect(resolveEditableDocValues(factoryWithBundledFiles(undefined), "factory/docs/missing.md")).toBeNull();
   });
 
+  it("resolves editable values for nested bundled DOC entries", () => {
+    const nestedDocPath = "factory/docs/standards/review.md";
+    const factory = factoryWithBundledFiles({
+      bundledFiles: [
+        {
+          content: { encoding: "utf-8", inline: "# Review standards\n" },
+          targetPath: nestedDocPath,
+          type: "DOC",
+        },
+      ],
+    });
+
+    expect(resolveEditableDocValues(factory, nestedDocPath)).toEqual({
+      fileName: "standards/review.md",
+      inlineContent: "# Review standards\n",
+      targetPath: nestedDocPath,
+    });
+    expect(listFactoryDocTargetPaths(factory)).toEqual([nestedDocPath]);
+  });
+
   it("lists doc target paths and rejects invalid apply targets", () => {
     const factory = factoryWithBundledFiles({
       bundledFiles: [

@@ -1376,6 +1376,41 @@ function registerCurrentActivityCardEditorChromeTests(): void {
     ).toBeNull();
   });
 
+  it("renders nested bundled docs as observe-mode graph nodes from the saved factory document", async () => {
+    const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
+    refreshFactoryFromTopology(snapshot);
+    const nestedDocPath = "factory/docs/standards/review.md";
+    const savedDocument = {
+      ...currentFactoryDocumentFromSnapshot(snapshot),
+      supportingFiles: {
+        bundledFiles: [
+          {
+            content: { encoding: "utf-8", inline: "# Overview" },
+            targetPath: "factory/docs/overview.md",
+            type: "DOC",
+          },
+          {
+            content: { encoding: "utf-8", inline: "# Review standards" },
+            targetPath: nestedDocPath,
+            type: "DOC",
+          },
+        ],
+      },
+    };
+    snapshot.factory = savedDocument;
+
+    renderCurrentActivity({
+      snapshot,
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Select review.md doc" }),
+      ).toBeTruthy();
+    });
+    expect(screen.getByText(nestedDocPath)).toBeTruthy();
+  });
+
   it("renders bundled docs as observe-mode graph nodes from the saved factory document", async () => {
     const snapshot = structuredClone(semanticWorkflowDashboardSnapshot);
     refreshFactoryFromTopology(snapshot);
