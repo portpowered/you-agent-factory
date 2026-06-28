@@ -2979,6 +2979,34 @@ func TestFactoryService_InferenceProgressPublisherSeparatesDispatchScopedStreams
 	}
 }
 
+func TestFactoryService_SessionResponseStreamDispatchIDs(t *testing.T) {
+	sessions := factorysessions.NewRegistry()
+	sessionID := "session-response-stream-dispatch-ids"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{handle: &liveRuntimeHandle{runtime: &factoryRuntimeBundle{}}},
+		false,
+		"factory",
+	), true)
+
+	svc := &FactoryService{sessions: sessions}
+	publisher := svc.inferenceProgressPublisher(sessionID, nil)
+	publisher(workerprovider.ResponseFragment("dispatch-a", nil, "alpha"))
+	publisher(workerprovider.ProgressFragment("dispatch-b", nil, "beta"))
+
+	got, err := svc.SessionResponseStreamDispatchIDs(sessionID)
+	if err != nil {
+		t.Fatalf("SessionResponseStreamDispatchIDs: %v", err)
+	}
+	if len(got) != 2 || got[0] != "dispatch-a" || got[1] != "dispatch-b" {
+		t.Fatalf("dispatch IDs = %#v, want [dispatch-a dispatch-b]", got)
+	}
+}
+
 func TestFactoryService_SubscribeSessionResponseStream_ReadsRetainedAndLiveEvents(t *testing.T) {
 	sessions := factorysessions.NewRegistry()
 	sessionID := "session-progress-subscribe"

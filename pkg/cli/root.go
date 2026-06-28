@@ -670,6 +670,7 @@ func newInitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOption
 
 func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions) *cobra.Command {
 	cfg := defaultcmd.ExplicitRunConfig()
+	var invocationOutputMode string
 
 	cmd := &cobra.Command{
 		Use:           "run",
@@ -693,6 +694,7 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 			"Packaged @you/goal invocation details live in " + cliBinaryName + " docs packaged-goal. " +
 			"Packaged @you/tts invocation details live in " + cliBinaryName + " docs packaged-tts. " +
 			"Full invocation input and return-policy details live in " + cliBinaryName + " docs config and " + cliBinaryName + " docs sessions. " +
+			"Use --output response-stream on supported one-shot factory invocations to render live internal session response-stream progress while the CLI owns the runtime; unsupported run shapes fall back to primary-result-only output or return INVOCATION_OUTPUT_UNSUPPORTED. " +
 			"Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root. " +
 			"Runtime metrics are a separate structured JSONL operational channel with their own rolling files and do not replace runtime logs. " +
 			"Environment details are record-channel diagnostics only, and system logs include command stdout/stderr only on command failures.",
@@ -705,8 +707,20 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 			"  # Run a persisted named factory from any working directory.\n" +
 			"  " + cliBinaryName + " run --named @you/tts\n\n" +
 			"  # Run a portable factory.json with a one-shot prompt (see handlingBehavior DEFAULT).\n" +
-			"  " + cliBinaryName + " run --factory ./factory.json \"Fix the lint issues\"",
-		PreRunE: rejectDeprecatedPortFlag,
+			"  " + cliBinaryName + " run --factory ./factory.json \"Fix the lint issues\"\n\n" +
+			"  # Render live internal response-stream progress for a named goal invocation.\n" +
+			"  " + cliBinaryName + " run --named @you/goal --output response-stream \"Ship the login bugfix\"",
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			if err := rejectDeprecatedPortFlag(cmd, args); err != nil {
+				return err
+			}
+			normalized, err := runcli.NormalizeInvocationOutputMode(invocationOutputMode)
+			if err != nil {
+				return err
+			}
+			cfg.InvocationOutputMode = normalized
+			return nil
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.MockWorkersEnabled = cmd.Flags().Changed("with-mock-workers")
 			promptArgs := args
@@ -749,6 +763,7 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 	cmd.Flags().StringVar(&cfg.MockWorkersConfigPath, "with-mock-workers", "", "enable mock-worker execution with an optional mock-workers JSON config path")
 	cmd.Flags().Lookup("with-mock-workers").NoOptDefVal = defaultMockWorkersConfigPathSentinel
 	cmd.Flags().BoolVar(&cfg.SuppressDashboardRendering, "quiet", false, "suppress dashboard output for quiet or CI-oriented runs")
+	cmd.Flags().StringVar(&invocationOutputMode, "output", "", "invocation stdout mode: primary (default) or response-stream for live internal session progress on supported one-shot factory runs")
 	return cmd
 }
 

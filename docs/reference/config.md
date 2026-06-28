@@ -835,6 +835,29 @@ declares `handlingBehavior: ["DEFAULT"]`.
 - Clean invocation never adds startup banners, dashboard URLs, runtime-log
   paths, simple-dashboard snapshots, or recording-path notices to stdout.
 
+#### Response-stream stdout mode
+
+Supported one-shot factory invocations accept `--output response-stream` to
+attach the CLI to internal `SessionResponseStream` progress while the local
+runtime is owned by the same `you run` process:
+
+```bash
+you run --named @you/goal --output response-stream "Ship the login bugfix"
+```
+
+This mode is valid only for supported one-shot invocation runs such as
+`you run --named` or `you run --factory` with positional text or piped stdin.
+It is rejected for `--continuously`, replay mode, `--work` batch runs, and
+other non-invocation `you run` shapes with `INVOCATION_OUTPUT_UNSUPPORTED`.
+Combining `--output response-stream` with global `--json` is rejected with
+`INVOCATION_OUTPUT_INCOMPATIBLE` until a structured JSON response-stream
+renderer is documented separately.
+
+When the CLI can safely attach to the live internal stream, it subscribes to
+session-owned response-stream events instead of provider stdout. When no
+internal stream is available on the invocation path, stdout falls back to the
+existing primary-result-only contract after completion.
+
 Text success example:
 
 ```bash

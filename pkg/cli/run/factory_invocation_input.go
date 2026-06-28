@@ -191,6 +191,11 @@ type sessionInvocationRunner interface {
 	GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error)
 }
 
+type sessionResponseStreamInvocationRunner interface {
+	sessionInvocationRunner
+	sessionResponseStreamAttachable
+}
+
 func resolveFactoryInvocationRequest(cfg RunConfig) (*factoryapi.InvocationRequest, bool, error) {
 	if strings.TrimSpace(cfg.WorkFile) != "" {
 		return nil, false, nil
@@ -311,6 +316,19 @@ func runFactoryInvocation(
 
 	if err := waitForInvocationSessionReady(runCtx, invoker, runErrCh); err != nil {
 		return err
+	}
+
+	var streamAttachment *responseStreamAttachment
+	if isResponseStreamOutputMode(cfg.InvocationOutputMode) {
+		if streamInvoker, ok := invoker.(sessionResponseStreamInvocationRunner); ok {
+			streamAttachment = startResponseStreamAttachment(
+				runCtx,
+				streamInvoker,
+				factorysessions.DefaultSessionID,
+				discardResponseStreamSink{},
+			)
+			defer streamAttachment.stop()
+		}
 	}
 
 	result, err := invoker.InvokeFactorySession(runCtx, factorysessions.DefaultSessionID, request)

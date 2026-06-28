@@ -51,7 +51,14 @@ primary-result behavior.
   logged and counted there before the service runtime exists. `RunConfig.JSONOutput`
   must stay aligned with the shared `InvocationResponse` envelope for both
   successful and non-success invocation results rather than becoming a
-  success-only CLI fork.
+  success-only CLI fork. `RunConfig.InvocationOutputMode` and `you run --output`
+  select primary-result-only versus internal `SessionResponseStream` attachment
+  for supported one-shot factory invocations; keep mode validation, unsupported
+  run-shape rejection, and fallback behavior in `pkg/cli/run/invocation_output.go`,
+  stream attachment in `pkg/cli/run/response_stream_attachment.go`, and invocation
+  wiring in `pkg/cli/run/factory_invocation_input.go`. Internal stream listing for
+  CLI attachment belongs on `FactoryService.SessionResponseStreamDispatchIDs` in
+  `pkg/service/runtime_sessions.go` alongside `SubscribeSessionResponseStream`.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin
   bytes into `invocations.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
   from the shared resolver instead of pre-trimming or short-circuiting with
