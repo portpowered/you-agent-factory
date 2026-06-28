@@ -652,6 +652,7 @@ func SelectInvocationWorker(
 	}
 
 	var modelMatched bool
+	var matchedWorkerName string
 	for _, worker := range runtimeCfg.FactoryConfig().Workers {
 		workerDef, ok := runtimeCfg.Worker(worker.Name)
 		if !ok || workerDef == nil || !interfaces.IsInferenceWorkerType(workerDef.Type) {
@@ -661,6 +662,7 @@ func SelectInvocationWorker(
 			continue
 		}
 		modelMatched = true
+		matchedWorkerName = workerDef.Name
 		for _, operation := range workerDef.Operations {
 			if strings.TrimSpace(operation.Name) == operationName {
 				return workerDef, operation, nil
@@ -668,7 +670,7 @@ func SelectInvocationWorker(
 		}
 	}
 	if modelMatched {
-		return nil, interfaces.ModelOperation{}, fmt.Errorf("%w: model %q does not support operation %q", apisurface.ErrModelInvocationUnsupportedOperation, modelName, operationName)
+		return nil, interfaces.ModelOperation{}, fmt.Errorf("%w: worker %q for model %q does not support operation %q", apisurface.ErrModelInvocationUnsupportedOperation, matchedWorkerName, modelName, operationName)
 	}
 	return nil, interfaces.ModelOperation{}, fmt.Errorf("%w: %s", apisurface.ErrModelNotFound, modelName)
 }

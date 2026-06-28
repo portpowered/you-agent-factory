@@ -207,12 +207,24 @@ func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string,
 	}
 
 	workerDef, operation, err := localmodels.SelectInvocationWorker(runtimeCfg, modelName, request.Operation)
+	failureContext := apisurface.InferenceFailureContext{
+		ModelName: strings.TrimSpace(modelName),
+		Operation: strings.TrimSpace(request.Operation),
+	}
 	if err != nil {
+		if failure, ok := apisurface.ClassifyInferenceFailure(err, failureContext); ok {
+			return apisurface.ModelInvocationResult{}, failure
+		}
 		return apisurface.ModelInvocationResult{}, err
 	}
+	failureContext.WorkerName = workerDef.Name
+	failureContext.ModelName = workerDef.Model
 	managed, readinessErr := modelhost.EnsureInvocationReady(ctx, s.modelHost(), runtimeCfg, workerDef.Model)
 	s.recordManagedRuntimeInvocationReadiness(modelName, managed, readinessErr)
 	if readinessErr != nil {
+		if failure, ok := apisurface.ClassifyInferenceFailure(readinessErr, failureContext); ok {
+			return apisurface.ModelInvocationResult{}, failure
+		}
 		return apisurface.ModelInvocationResult{}, readinessErr
 	}
 
@@ -258,9 +270,15 @@ func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string,
 
 	result, err := executor.Execute(ctx, workstationRequest)
 	if err != nil {
-		return apisurface.ModelInvocationResult{}, fmt.Errorf("provider execution failed: %w", err)
+		if failure, ok := apisurface.ClassifyInferenceFailure(err, failureContext); ok {
+			return apisurface.ModelInvocationResult{}, failure
+		}
+		return apisurface.ModelInvocationResult{}, err
 	}
 	if result.Outcome == interfaces.OutcomeFailed {
+		if failure, ok := apisurface.ClassifyInferenceWorkResultFailure(result, failureContext); ok {
+			return apisurface.ModelInvocationResult{}, failure
+		}
 		return apisurface.ModelInvocationResult{}, fmt.Errorf("provider execution failed: %s", strings.TrimSpace(result.Error))
 	}
 

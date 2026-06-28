@@ -63,6 +63,10 @@ primary-result behavior.
   request envelope, and shapes inference responses into ordered canonical
   `WorkContentPart` output shared by direct model invocation and factory-session
   execution paths.
+- `pkg/apisurface/inference_failure.go` classifies inference readiness and
+  execution failures into actionable customer-facing outcomes for missing model,
+  loading model, unsupported operation, timeout, and runtime failure cases
+  shared by direct model invocation and HTTP handlers.
 - `pkg/workers/executor/model_operation_bindings.go` delegates inference binding
   resolution to `pkg/invocations`.
 - `pkg/invocations/input.go` owns logical empty-text detection via
