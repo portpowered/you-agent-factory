@@ -11,8 +11,8 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
@@ -227,6 +227,81 @@ func TestLiveProviderChildDispatch_RuntimeBackedAPIProjectsRunningDispatchBefore
 	})
 }
 
+func TestLiveProviderChildDispatch_RuntimeBackedAPIProjectsFailedBridgedChildWithTypedFailureDetail(t *testing.T) {
+	service := newAPILifecycleFailingChildRuntimeService(t)
+	sessionID, dispatchID := startRuntimeBackedFailedSessionWithDispatch(t, service)
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	snapshot := captureDurableSessionInspectionSnapshot(t, server.URL, sessionID)
+
+	if snapshot.read.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("session status = %q, want FAILED", snapshot.read.Status)
+	}
+	if snapshot.read.Progress == nil ||
+		snapshot.read.Progress.TotalDispatches == nil || *snapshot.read.Progress.TotalDispatches != 1 ||
+		snapshot.read.Progress.FailedDispatches == nil || *snapshot.read.Progress.FailedDispatches != 1 {
+		t.Fatalf("session progress = %#v, want one failed dispatch", snapshot.read.Progress)
+	}
+	if snapshot.read.Failure == nil || snapshot.read.Failure.Reason == nil ||
+		*snapshot.read.Failure.Reason == "" {
+		t.Fatalf("session failure = %#v, want typed workflow failure", snapshot.read.Failure)
+	}
+
+	if len(snapshot.dispatches.Dispatches) != 1 {
+		t.Fatalf("dispatch list = %#v, want one dispatch", snapshot.dispatches.Dispatches)
+	}
+	dispatchSummary := snapshot.dispatches.Dispatches[0]
+	if dispatchSummary.Id != dispatchID {
+		t.Fatalf("dispatch id = %q, want %q", dispatchSummary.Id, dispatchID)
+	}
+	if dispatchSummary.Status != factoryapi.FactoryDispatchStatusFAILED {
+		t.Fatalf("dispatch status = %q, want FAILED", dispatchSummary.Status)
+	}
+	if dispatchSummary.Javascript == nil || dispatchSummary.Javascript.ExecutionMode == nil ||
+		*dispatchSummary.Javascript.ExecutionMode != factorysessionexecution.ChildExecutorModeLive {
+		t.Fatalf("dispatch executionMode = %#v, want live-provider", dispatchSummary.Javascript)
+	}
+	assertAPILiveProviderDispatchFailureDetail(t, dispatchSummary.FailureDetail)
+
+	dispatchDetail := getDurableDispatchDetail(t, server.URL, sessionID, dispatchID)
+	if dispatchDetail.Status != factoryapi.FactoryDispatchStatusFAILED {
+		t.Fatalf("dispatch detail status = %q, want FAILED", dispatchDetail.Status)
+	}
+	if dispatchDetail.Javascript == nil || dispatchDetail.Javascript.ExecutionMode == nil ||
+		*dispatchDetail.Javascript.ExecutionMode != factorysessionexecution.ChildExecutorModeLive {
+		t.Fatalf("dispatch detail executionMode = %#v, want live-provider", dispatchDetail.Javascript)
+	}
+	assertAPILiveProviderDispatchFailureDetail(t, dispatchDetail.FailureDetail)
+	assertAPIDispatchStatusTransitions(t, dispatchDetail.StatusTransitions, []factoryapi.FactoryDispatchStatus{
+		factoryapi.FactoryDispatchStatusQUEUED,
+		factoryapi.FactoryDispatchStatusRUNNING,
+		factoryapi.FactoryDispatchStatusFAILED,
+	})
+	if dispatchDetail.ArtifactIds != nil && len(*dispatchDetail.ArtifactIds) != 0 {
+		t.Fatalf("dispatch artifactIds = %#v, want none for failed child", dispatchDetail.ArtifactIds)
+	}
+	if dispatchSummary.OutputArtifactIds != nil && len(*dispatchSummary.OutputArtifactIds) != 0 {
+		t.Fatalf("dispatch outputArtifactIds = %#v, want none for failed child", dispatchSummary.OutputArtifactIds)
+	}
+
+	artifactList := getDurableArtifactList(t, server.URL, sessionID)
+	if len(artifactList.Artifacts) != 0 {
+		t.Fatalf("artifact list = %#v, want none for failed child", artifactList.Artifacts)
+	}
+	if snapshot.read.ArtifactRefs != nil && len(*snapshot.read.ArtifactRefs) != 0 {
+		t.Fatalf("session artifactRefs = %#v, want none for failed child", snapshot.read.ArtifactRefs)
+	}
+
+	assertPostControlEventsAlignWithStatus(t, sessionID, snapshot.events, snapshot.read.Status)
+	if snapshot.result.SessionStatus == nil ||
+		*snapshot.result.SessionStatus != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("result sessionStatus = %#v, want FAILED", snapshot.result.SessionStatus)
+	}
+}
+
 func newAPILiveProviderRuntimeService(t *testing.T) factorysessionexecution.Service {
 	t.Helper()
 	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
@@ -421,6 +496,25 @@ func getDurableArtifactDetail(t *testing.T, serverURL, sessionID, artifactID str
 		t.Fatalf("decode artifact detail: %v", err)
 	}
 	return response
+}
+
+func assertAPILiveProviderDispatchFailureDetail(
+	t *testing.T,
+	failure *factoryapi.FactoryDispatchFailureDetail,
+) {
+	t.Helper()
+	if failure == nil || failure.Reason == nil {
+		t.Fatalf("failureDetail = %#v, want typed provider failure", failure)
+	}
+	if *failure.Reason != string(interfaces.WorkFailureTypePermanentBadRequest) {
+		t.Fatalf("failure reason = %q, want %q", *failure.Reason, interfaces.WorkFailureTypePermanentBadRequest)
+	}
+	if failure.Message == nil || *failure.Message != "simulated live child error" {
+		t.Fatalf("failure message = %#v, want simulated live child error", failure.Message)
+	}
+	if failure.ErrorClass == nil || *failure.ErrorClass != string(interfaces.WorkFailureFamilyTerminal) {
+		t.Fatalf("failure errorClass = %#v, want %q", failure.ErrorClass, interfaces.WorkFailureFamilyTerminal)
+	}
 }
 
 func assertAPIDispatchStatusTransitions(
