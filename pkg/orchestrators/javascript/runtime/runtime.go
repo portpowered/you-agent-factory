@@ -39,10 +39,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 	vm := goja.New()
 	records := newRecordCollector()
 	sessionID := strings.TrimSpace(req.SessionID)
-	childExecutor := childExecutorForRun(sessionID, records, hooks)
-	if req.Resume != nil {
-		childExecutor = NewResumingChildExecutor(childExecutor, *req.Resume)
-	}
+	childExecutor := childExecutorForRequest(sessionID, records, hooks, req.Resume)
 	globals := &runtimeGlobals{
 		vm:            vm,
 		policy:        policy,
@@ -140,6 +137,14 @@ func childExecutorForRun(sessionID string, records *recordCollector, hooks Hooks
 		return hooks.NewChildExecutor(sessionID, childRecordSinkFromCollector(records))
 	}
 	return NewFakeChildExecutor(sessionID, childRecordSinkFromCollector(records))
+}
+
+func childExecutorForRequest(sessionID string, records *recordCollector, hooks Hooks, resume *ResumeContext) ChildExecutor {
+	childExecutor := childExecutorForRun(sessionID, records, hooks)
+	if resume != nil {
+		childExecutor = NewResumingChildExecutor(childExecutor, *resume)
+	}
+	return childExecutor
 }
 
 func watchContext(ctx context.Context, vm *goja.Runtime, done <-chan struct{}) {

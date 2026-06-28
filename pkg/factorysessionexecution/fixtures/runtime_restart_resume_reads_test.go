@@ -8,68 +8,23 @@ import (
 	"time"
 
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
 func TestJavaScriptRuntimeService_ResumeInterruptedSession_ExposesReadSurfacesAndEventLineage(t *testing.T) {
-	provider := newSequentialBlockingProvider()
-	projectRoot := setupRuntimeWorkflowFixture(
-		t,
-		"resumable-two-step-fake-children.workflow.js",
-		"resumable-two-step-fake-children",
-	)
-	initial := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:       projectRoot,
-		ChildExecutorMode: fse.ChildExecutorModeLive,
-		Provider:          provider,
-		PersistSessions:   true,
-	})
-
-	started, err := initial.StartAsync(context.Background(), fse.StartRequest{
-		RequestID: "req-runtime-resume-reads-001",
-		Source: fse.Source{
-			Kind:         workflowsource.KindWorkflowName,
-			WorkflowName: "resumable-two-step-fake-children",
-		},
-		Args: map[string]any{"subject": "workflows"},
-		Runtime: &fse.RuntimeOptions{
-			ChildExecutorMode: fse.ChildExecutorModeLive,
-		},
-	})
-	if err != nil {
-		t.Fatalf("StartAsync: %v", err)
+	harness := startInterruptedResumableSession(t, "req-runtime-resume-reads-001")
+	if harness.interrupted.Lifecycle == nil || harness.interrupted.Lifecycle.InterruptedAt == nil {
+		t.Fatalf("interrupted lifecycle = %#v, want interruptedAt", harness.interrupted.Lifecycle)
 	}
 
-	waitForDispatchStatus(t, initial, started.SessionID, "dispatch-1", fse.DispatchStatusCompleted, 3*time.Second)
-	waitForDispatchStatus(t, initial, started.SessionID, "dispatch-2", fse.DispatchStatusRunning, 3*time.Second)
-
-	_, err = initial.InterruptDispatch(context.Background(), started.SessionID, fse.InterruptDispatchRequest{
-		ControlRequest: fse.ControlRequest{Reason: "process restart simulation"},
-		DispatchID:     "dispatch-2",
-	})
-	if err != nil {
-		t.Fatalf("InterruptDispatch: %v", err)
-	}
-	provider.waitForCanceledInfer(t, 3*time.Second)
-	interrupted := waitUntilSessionStatus(t, initial, started.SessionID, fse.LifecycleStatusInterrupted, 5*time.Second)
-	if interrupted.Lifecycle == nil || interrupted.Lifecycle.InterruptedAt == nil {
-		t.Fatalf("interrupted lifecycle = %#v, want interruptedAt", interrupted.Lifecycle)
-	}
-
-	resumedService := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
-		ProjectRoot:       projectRoot,
-		ChildExecutorMode: fse.ChildExecutorModeLive,
-		Provider:          provider,
-		PersistSessions:   true,
-	})
-	_, err = resumedService.ResumeInterruptedSession(context.Background(), started.SessionID, fse.ResumeSessionRequest{
+	resumedService := newResumedRuntimeService(harness)
+	_, err := resumedService.ResumeInterruptedSession(context.Background(), harness.sessionID, fse.ResumeSessionRequest{
 		RequestID: "req-runtime-resume-reads-resume-001",
 	})
 	if err != nil {
 		t.Fatalf("ResumeInterruptedSession: %v", err)
 	}
 
-	success := waitUntilSessionStatus(t, resumedService, started.SessionID, fse.LifecycleStatusSucceeded, 5*time.Second)
+	success := waitUntilSessionStatus(t, resumedService, harness.sessionID, fse.LifecycleStatusSucceeded, 5*time.Second)
 	if success.Lifecycle == nil || success.Lifecycle.InterruptedAt == nil || success.Lifecycle.ResumedAt == nil {
 		t.Fatalf("resumed lifecycle = %#v, want interruptedAt and resumedAt", success.Lifecycle)
 	}
@@ -83,7 +38,7 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_ExposesReadSurfacesAn
 		t.Fatalf("resultSummary = %#v, want FINAL", success.ResultSummary)
 	}
 
-	result, err := resumedService.GetResult(context.Background(), started.SessionID, fse.ResultRequest{
+	result, err := resumedService.GetResult(context.Background(), harness.sessionID, fse.ResultRequest{
 		Mode: fse.ResultModeFinal,
 	})
 	if err != nil {
@@ -93,7 +48,7 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_ExposesReadSurfacesAn
 		t.Fatalf("result = %#v, want FINAL/SUCCEEDED", result)
 	}
 
-	dispatches, err := resumedService.ListDispatches(context.Background(), started.SessionID)
+	dispatches, err := resumedService.ListDispatches(context.Background(), harness.sessionID)
 	if err != nil {
 		t.Fatalf("ListDispatches: %v", err)
 	}
@@ -106,11 +61,11 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_ExposesReadSurfacesAn
 		}
 	}
 
-	events, err := resumedService.ReadEvents(context.Background(), started.SessionID, fse.EventReconnectRequest{})
+	events, err := resumedService.ReadEvents(context.Background(), harness.sessionID, fse.EventReconnectRequest{})
 	if err != nil {
 		t.Fatalf("ReadEvents: %v", err)
 	}
-	assertResumeEventLineage(t, events.Events, started.SessionID)
+	assertResumeEventLineage(t, events.Events, harness.sessionID)
 
 	replayedSession, replayedResult, err := fse.ReplaySessionProjection(events.Events)
 	if err != nil {
@@ -126,7 +81,7 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_ExposesReadSurfacesAn
 		t.Fatalf("replayed lifecycle = %#v, want resumedAt", replayedSession.Lifecycle)
 	}
 
-	reconnect, err := resumedService.ReadEvents(context.Background(), started.SessionID, reconnectAfterFirstEvent(t, events.Events))
+	reconnect, err := resumedService.ReadEvents(context.Background(), harness.sessionID, reconnectAfterFirstEvent(t, events.Events))
 	if err != nil {
 		t.Fatalf("ReadEvents reconnect: %v", err)
 	}
