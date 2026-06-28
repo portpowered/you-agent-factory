@@ -205,6 +205,131 @@ func TestResumeFactorySession_RuntimeBackedRunningSessionReturnsTypedNoOp(t *tes
 	}
 }
 
+func TestPauseFactorySession_RuntimeBackedPausedSessionReturnsTypedNoOp(t *testing.T) {
+	service := newAPILifecycleRuntimeService(t, "busy-loop.workflow.js", "busy-loop")
+	started := startRuntimeBackedDurableSession(t, service)
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	if _, status := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "pause", nil); status != http.StatusOK {
+		t.Fatalf("pause status = %d, want 200", status)
+	}
+
+	response, status := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "pause", nil)
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindPause {
+		t.Fatalf("operation = %q, want PAUSE", response.Operation)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeNoOp {
+		t.Fatalf("outcome = %q, want NO_OP", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("status = %q, want PAUSED", response.Status)
+	}
+}
+
+func TestPauseFactorySession_RuntimeBackedIdempotentRequestIdReplayReturnsSameOutcome(t *testing.T) {
+	service := newAPILifecycleRuntimeService(t, "busy-loop.workflow.js", "busy-loop")
+	started := startRuntimeBackedDurableSession(t, service)
+	serverURL := serverURLForLifecycle(t, service)
+
+	requestID := "ctrl-api-runtime-lifecycle-replay-001"
+	body := &factoryapi.FactorySessionLifecycleControlRequest{RequestId: &requestID}
+
+	first, status := postFactorySessionLifecycleControl(t, serverURL, started.SessionID, "pause", body)
+	if status != http.StatusOK {
+		t.Fatalf("first status = %d, want 200", status)
+	}
+	second, status := postFactorySessionLifecycleControl(t, serverURL, started.SessionID, "pause", body)
+	if status != http.StatusOK {
+		t.Fatalf("replay status = %d, want 200", status)
+	}
+	if first.Outcome != second.Outcome || first.Status != second.Status || first.Operation != second.Operation {
+		t.Fatalf("replay drift: first=%#v second=%#v", first, second)
+	}
+}
+
+func TestPauseFactorySession_RuntimeBackedConflictingRequestIdReturnsTypedConflict(t *testing.T) {
+	service := newAPILifecycleRuntimeService(t, "busy-loop.workflow.js", "busy-loop")
+	started := startRuntimeBackedDurableSession(t, service)
+	serverURL := serverURLForLifecycle(t, service)
+
+	requestID := "ctrl-api-runtime-lifecycle-conflict-001"
+	if _, status := postFactorySessionLifecycleControl(t, serverURL, started.SessionID, "pause", &factoryapi.FactorySessionLifecycleControlRequest{
+		RequestId: &requestID,
+	}); status != http.StatusOK {
+		t.Fatalf("pause status = %d, want 200", status)
+	}
+
+	response, status := postFactorySessionLifecycleControl(t, serverURL, started.SessionID, "resume", &factoryapi.FactorySessionLifecycleControlRequest{
+		RequestId: &requestID,
+	})
+	if status != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", status)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeConflict {
+		t.Fatalf("outcome = %q, want CONFLICT", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("status = %q, want PAUSED unchanged", response.Status)
+	}
+
+	read, err := service.GetSession(context.Background(), started.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession: %v", err)
+	}
+	if read.Status != factorysessionexecution.LifecycleStatusPaused {
+		t.Fatalf("session status = %q, want PAUSED unchanged", read.Status)
+	}
+}
+
+func TestCancelFactorySession_RuntimeBackedTerminalSessionReturnsTypedConflict(t *testing.T) {
+	service := newAPILifecycleRuntimeService(t, "simple-final.workflow.js", "simple-final")
+	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-api-cancel-terminal-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "simple-final",
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+			"count":   2,
+			"prefix":  "you",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		read, readErr := service.GetSession(context.Background(), started.SessionID)
+		if readErr != nil {
+			t.Fatalf("GetSession: %v", readErr)
+		}
+		if read.Status == factorysessionexecution.LifecycleStatusSucceeded {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	response, status := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "cancel", nil)
+	if status != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", status)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeTerminalSession {
+		t.Fatalf("outcome = %q, want TERMINAL_SESSION", response.Outcome)
+	}
+}
+
 func TestPauseFactorySession_TerminalSessionReturnsTypedConflict(t *testing.T) {
 	service := newAPILifecycleRuntimeService(t, "simple-final.workflow.js", "simple-final")
 	started, err := service.StartAsync(context.Background(), factorysessionexecution.StartRequest{

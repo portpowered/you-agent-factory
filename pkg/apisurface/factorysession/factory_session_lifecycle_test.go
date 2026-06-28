@@ -577,6 +577,14 @@ func TestLifecycleControlSuccessStatus_MapsAcceptedCancelAndTerminate(t *testing
 	if terminateStatus != http.StatusOK {
 		t.Fatalf("terminate status = %d, want 200", terminateStatus)
 	}
+
+	noOpStatus := factorysession.LifecycleControlSuccessStatus(factorysessionexecution.LifecycleControlResult{
+		Outcome: factorysessionexecution.LifecycleControlOutcomeNoOp,
+		Status:  factorysessionexecution.LifecycleStatusRunning,
+	})
+	if noOpStatus != http.StatusOK {
+		t.Fatalf("no-op status = %d, want 200", noOpStatus)
+	}
 }
 
 func TestLifecycleControlErrorResponse_ReturnsFalseForUnknownErrors(t *testing.T) {
