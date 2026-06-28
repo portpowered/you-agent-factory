@@ -469,8 +469,14 @@ func (r *sessionProjectionReducer) applySessionResumed(envelope canonicalFactory
 	if err != nil {
 		return fmt.Errorf("parse resumedAt: %w", err)
 	}
-	r.session.Status = LifecycleStatusRunning
-	r.result.SessionStatus = LifecycleStatusRunning
+	switch strings.TrimSpace(payload.Status) {
+	case string(LifecycleStatusResuming):
+		r.session.Status = LifecycleStatusResuming
+		r.result.SessionStatus = LifecycleStatusResuming
+	default:
+		r.session.Status = LifecycleStatusRunning
+		r.result.SessionStatus = LifecycleStatusRunning
+	}
 	if r.session.Lifecycle == nil {
 		r.session.Lifecycle = &LifecycleTimestamps{}
 	}
@@ -729,6 +735,7 @@ type preservedRuntimeResumeState struct {
 	startRequest      *StartRequest
 	resolvedSource    ResolvedSource
 	sourceContent     string
+	lifecycle         *LifecycleTimestamps
 }
 
 func preserveRuntimeResumeState(state runtimeSessionState) preservedRuntimeResumeState {
@@ -738,6 +745,7 @@ func preserveRuntimeResumeState(state runtimeSessionState) preservedRuntimeResum
 		startRequest:      cloneStartRequestPtr(state.startRequest),
 		resolvedSource:    state.resolvedSource,
 		sourceContent:     state.sourceContent,
+		lifecycle:         cloneLifecycleTimestamps(state.session.Lifecycle),
 	}
 }
 
@@ -758,6 +766,63 @@ func restoreRuntimeResumeState(state *runtimeSessionState, preserved preservedRu
 	if preserved.sourceContent != "" {
 		state.sourceContent = preserved.sourceContent
 	}
+	mergeResumeLifecycleLineage(state, preserved.lifecycle)
+}
+
+func cloneLifecycleTimestamps(lifecycle *LifecycleTimestamps) *LifecycleTimestamps {
+	if lifecycle == nil {
+		return nil
+	}
+	cloned := &LifecycleTimestamps{}
+	if lifecycle.QueuedAt != nil {
+		cloned.QueuedAt = timePtr(lifecycle.QueuedAt.UTC())
+	}
+	if lifecycle.AwaitingApprovalAt != nil {
+		cloned.AwaitingApprovalAt = timePtr(lifecycle.AwaitingApprovalAt.UTC())
+	}
+	if lifecycle.StartedAt != nil {
+		cloned.StartedAt = timePtr(lifecycle.StartedAt.UTC())
+	}
+	if lifecycle.PausedAt != nil {
+		cloned.PausedAt = timePtr(lifecycle.PausedAt.UTC())
+	}
+	if lifecycle.ResumedAt != nil {
+		cloned.ResumedAt = timePtr(lifecycle.ResumedAt.UTC())
+	}
+	if lifecycle.FinishedAt != nil {
+		cloned.FinishedAt = timePtr(lifecycle.FinishedAt.UTC())
+	}
+	if lifecycle.InterruptedAt != nil {
+		cloned.InterruptedAt = timePtr(lifecycle.InterruptedAt.UTC())
+	}
+	if lifecycle.TerminatedAt != nil {
+		cloned.TerminatedAt = timePtr(lifecycle.TerminatedAt.UTC())
+	}
+	if lifecycle.UpdatedAt != nil {
+		cloned.UpdatedAt = timePtr(lifecycle.UpdatedAt.UTC())
+	}
+	return cloned
+}
+
+func mergeResumeLifecycleLineage(state *runtimeSessionState, preserved *LifecycleTimestamps) {
+	if state == nil || preserved == nil {
+		return
+	}
+	if state.session.Lifecycle == nil {
+		state.session.Lifecycle = &LifecycleTimestamps{}
+	}
+	if preserved.StartedAt != nil {
+		state.session.Lifecycle.StartedAt = timePtr(preserved.StartedAt.UTC())
+	}
+	if preserved.InterruptedAt != nil {
+		state.session.Lifecycle.InterruptedAt = timePtr(preserved.InterruptedAt.UTC())
+	}
+	if preserved.ResumedAt != nil {
+		state.session.Lifecycle.ResumedAt = timePtr(preserved.ResumedAt.UTC())
+	}
+	if preserved.PausedAt != nil {
+		state.session.Lifecycle.PausedAt = timePtr(preserved.PausedAt.UTC())
+	}
 }
 
 func applyTerminalRuntimeProjection(
@@ -775,6 +840,11 @@ func applyTerminalRuntimeProjection(
 		return
 	}
 	if outcome.OK && priorStatus == LifecycleStatusResuming {
+		state.session.StaleLease = false
+		state.events = mergePreservedDispatchInterruptedEvents(
+			rebuildRuntimeSessionCanonicalEvents(state),
+			preservedEvents,
+		)
 		return
 	}
 	restoreInterruptedDispatchResultSuppression(state, preserved)

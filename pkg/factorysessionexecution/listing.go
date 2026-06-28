@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
@@ -417,6 +418,7 @@ type canonicalFactoryEventContext struct {
 	OrchestratorDialect *string   `json:"orchestratorDialect,omitempty"`
 	PhaseID             *string   `json:"phaseId,omitempty"`
 	PhaseName           *string   `json:"phaseName,omitempty"`
+	CheckpointID        *string   `json:"checkpointId,omitempty"`
 	DispatchID          *string   `json:"dispatchId,omitempty"`
 	Source              *string   `json:"source,omitempty"`
 }
@@ -451,13 +453,20 @@ func BuildCanonicalRuntimeSessionEvents(
 	dispatch ...RuntimeDispatchEventInput,
 ) []json.RawMessage {
 	events := buildCanonicalSessionEvents(session, result, canonicalEventSourceRuntimeService)
-	if len(dispatch) == 0 || len(dispatch[0].Dispatches) == 0 {
+	if len(dispatch) == 0 {
+		return events
+	}
+	input := dispatch[0]
+	if len(input.CheckpointEvents) > 0 {
+		events = appendCanonicalOrchestratorCheckpointEvents(events, session, input.CheckpointEvents, canonicalEventSourceRuntimeService)
+	}
+	if len(input.Dispatches) == 0 {
 		return events
 	}
 	return appendCanonicalRuntimeDispatchLifecycleEvents(
 		events,
 		session,
-		dispatch[0],
+		input,
 		canonicalEventSourceRuntimeService,
 	)
 }
@@ -565,12 +574,16 @@ func appendCanonicalPauseResumeSessionEvents(
 		sessionSequence++
 	}
 	if lifecycle.ResumedAt != nil {
+		resumeStatus := string(LifecycleStatusRunning)
+		if lifecycle.InterruptedAt != nil && lifecycle.InterruptedAt.Before(lifecycle.ResumedAt.UTC()) {
+			resumeStatus = string(LifecycleStatusResuming)
+		}
 		events = append(events, builder.event(
 			"SESSION_RESUMED",
 			"session-resumed/"+sessionID,
 			sessionSequence,
 			mustMarshalPayload(map[string]any{
-				"status":    string(LifecycleStatusRunning),
+				"status":    resumeStatus,
 				"resumedAt": lifecycle.ResumedAt.UTC().Format(time.RFC3339),
 			}),
 		))
@@ -631,6 +644,15 @@ type canonicalSessionEventBuilder struct {
 }
 
 func (b canonicalSessionEventBuilder) event(eventType, id string, sessionSequence int, payload json.RawMessage) json.RawMessage {
+	return b.eventWithCheckpoint(eventType, id, sessionSequence, nil, payload)
+}
+
+func (b canonicalSessionEventBuilder) eventWithCheckpoint(
+	eventType, id string,
+	sessionSequence int,
+	checkpointID *string,
+	payload json.RawMessage,
+) json.RawMessage {
 	sequence := sessionSequence + 1
 	context := canonicalFactoryEventContext{
 		Sequence:        sequence,
@@ -651,6 +673,9 @@ func (b canonicalSessionEventBuilder) event(eventType, id string, sessionSequenc
 	}
 	if b.phaseName != nil {
 		context.PhaseName = b.phaseName
+	}
+	if checkpointID != nil && strings.TrimSpace(*checkpointID) != "" {
+		context.CheckpointID = checkpointID
 	}
 	encoded, err := json.Marshal(canonicalFactoryEvent{
 		SchemaVersion: canonicalFactoryEventSchemaVersion,
@@ -712,6 +737,18 @@ type RuntimeDispatchEventInput struct {
 	DispatchStatusTransitions map[string][]DispatchStatus
 	DispatchJavaScript        map[string]DispatchJavaScriptProjection
 	Artifacts                 []ArtifactSummary
+	CheckpointEvents          []RuntimeCheckpointEventProjection
+}
+
+// RuntimeCheckpointEventProjection carries replay-safe checkpoint lineage for one
+// ORCHESTRATOR_CHECKPOINT_WRITTEN event.
+type RuntimeCheckpointEventProjection struct {
+	CheckpointID       string
+	Label              string
+	Summary            string
+	SourceHash         string
+	ResumabilityStatus string
+	Timestamp          time.Time
 }
 
 func runtimeDispatchEventInputFromState(state *runtimeSessionState) RuntimeDispatchEventInput {
@@ -723,7 +760,106 @@ func runtimeDispatchEventInputFromState(state *runtimeSessionState) RuntimeDispa
 		DispatchStatusTransitions: state.dispatchStatusTransitions,
 		DispatchJavaScript:        state.dispatchJavaScript,
 		Artifacts:                 state.artifacts,
+		CheckpointEvents:          checkpointEventsFromRuntimeState(state),
 	}
+}
+
+func checkpointEventsFromRuntimeState(state *runtimeSessionState) []RuntimeCheckpointEventProjection {
+	if state == nil {
+		return nil
+	}
+	resumability := "UNKNOWN"
+	if state.checkpointSummary != nil {
+		resumability = "RESUMABLE"
+	}
+	sourceHash := strings.TrimSpace(state.session.SourceHash)
+	events := make([]RuntimeCheckpointEventProjection, 0)
+	for _, record := range state.runtimeRecords {
+		if record.Kind != workflowruntime.RecordKindCheckpoint || record.Checkpoint == nil {
+			continue
+		}
+		checkpoint := record.Checkpoint
+		projection := RuntimeCheckpointEventProjection{
+			CheckpointID:       strings.TrimSpace(checkpoint.ID),
+			Label:              strings.TrimSpace(checkpoint.Label),
+			Summary:            strings.TrimSpace(checkpoint.Summary),
+			SourceHash:         sourceHash,
+			ResumabilityStatus: resumability,
+		}
+		if state.checkpointSummary != nil && !state.checkpointSummary.CreatedAt.IsZero() {
+			projection.Timestamp = state.checkpointSummary.CreatedAt.UTC()
+		}
+		events = append(events, projection)
+	}
+	return events
+}
+
+func appendCanonicalOrchestratorCheckpointEvents(
+	events []json.RawMessage,
+	session SessionReadResult,
+	checkpoints []RuntimeCheckpointEventProjection,
+	source string,
+) []json.RawMessage {
+	if len(checkpoints) == 0 {
+		return events
+	}
+	eventTime := canonicalSessionEventTime(session)
+	sessionID := session.SessionID
+	orchestratorKind := string(session.OrchestratorKind)
+	var orchestratorDialect *string
+	if dialect := strings.TrimSpace(session.Dialect); dialect != "" {
+		orchestratorDialect = &dialect
+	}
+	var phaseID *string
+	var phaseName *string
+	if phase := strings.TrimSpace(session.Phase); phase != "" {
+		phaseID = &phase
+		phaseName = &phase
+	}
+	builder := canonicalSessionEventBuilder{
+		sessionID:           sessionID,
+		orchestratorKind:    orchestratorKind,
+		orchestratorDialect: orchestratorDialect,
+		phaseID:             phaseID,
+		phaseName:           phaseName,
+		source:              source,
+		eventTime:           eventTime,
+	}
+	checkpointEvents := make([]json.RawMessage, 0, len(checkpoints))
+	for index, checkpoint := range checkpoints {
+		checkpointID := strings.TrimSpace(checkpoint.CheckpointID)
+		if checkpointID == "" {
+			continue
+		}
+		payload := map[string]any{
+			"label":              checkpoint.Label,
+			"resumabilityStatus": checkpoint.ResumabilityStatus,
+		}
+		if summary := strings.TrimSpace(checkpoint.Summary); summary != "" {
+			payload["summary"] = summary
+		}
+		if sourceHash := strings.TrimSpace(checkpoint.SourceHash); sourceHash != "" {
+			payload["sourceHash"] = sourceHash
+		}
+		timestamp := checkpoint.Timestamp
+		if timestamp.IsZero() {
+			timestamp = eventTime.Add(time.Duration(index+1) * time.Second)
+		}
+		payload["timestamp"] = timestamp.UTC().Format(time.RFC3339)
+		sequence := nextCanonicalSessionEventSequence(events) + len(checkpointEvents)
+		id := fmt.Sprintf("orchestrator-checkpoint-written/%s/%s", sessionID, checkpointID)
+		checkpointEvents = append(checkpointEvents, builder.eventWithCheckpoint(
+			"ORCHESTRATOR_CHECKPOINT_WRITTEN",
+			id,
+			sequence,
+			&checkpointID,
+			mustMarshalPayload(payload),
+		))
+	}
+	if len(checkpointEvents) == 0 {
+		return events
+	}
+	return insertEventsBeforeSessionCompleted(events, checkpointEvents)
 }
 
 func rebuildRuntimeSessionCanonicalEvents(state *runtimeSessionState) []json.RawMessage {

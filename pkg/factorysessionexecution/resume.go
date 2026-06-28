@@ -66,6 +66,7 @@ func (s *JavaScriptRuntimeService) ResumeInterruptedSession(
 	}
 	state.session.Lifecycle.ResumedAt = &resumingAt
 	resumed := cloneRuntimeSessionState(&state)
+	resumed.events = rebuildRuntimeSessionCanonicalEvents(&resumed)
 	s.sessions[id] = &resumed
 	s.mu.Unlock()
 
