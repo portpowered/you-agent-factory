@@ -248,25 +248,7 @@ func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string,
 	if err != nil {
 		return apisurface.ModelInvocationResult{}, err
 	}
-	selection := interfaces.ResolveRunnerSelection("", s.factoryRunnerID(), workerDef.ModelProvider)
-	workstationRequest := interfaces.WorkstationExecutionRequest{
-		Dispatch: interfaces.WorkDispatch{
-			DispatchID:      directModelInvocationTransitionID,
-			TransitionID:    directModelInvocationTransitionID,
-			WorkerType:      workerDef.Name,
-			WorkstationName: directModelInvocationTransitionID,
-			InputTokens:     workers.InputTokens(inputTokens...),
-		},
-		WorkerType:            workerDef.Name,
-		WorkstationType:       directModelInvocationTransitionID,
-		RunnerID:              selection.RunnerID,
-		RunnerSelectionSource: selection.Source,
-		InputTokens:           workers.InputTokens(inputTokens...),
-		ModelOperation:        strings.TrimSpace(request.Operation),
-		ModelBindings:         resolvedBindings,
-		SystemPrompt:          workerDef.Body,
-		UserMessage:           invocations.InferenceOperationUserMessage(request.Operation, inputContent, resolvedBindings),
-	}
+	workstationRequest := directModelInvocationWorkstationRequest(workerDef, request, inputTokens, resolvedBindings, s.factoryRunnerID())
 
 	result, err := executor.Execute(ctx, workstationRequest)
 	if err != nil {
@@ -301,6 +283,35 @@ func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string,
 		StreamFile:        streamFile,
 		StreamContentType: streamContentType,
 	}, nil
+}
+
+func directModelInvocationWorkstationRequest(
+	workerDef *interfaces.WorkerConfig,
+	request factoryapi.ModelInvocationRequest,
+	inputTokens []interfaces.Token,
+	resolvedBindings []interfaces.ResolvedModelOperationBinding,
+	factoryRunnerID string,
+) interfaces.WorkstationExecutionRequest {
+	selection := interfaces.ResolveRunnerSelection("", factoryRunnerID, workerDef.ModelProvider)
+	inputContent := workcontent.PartsFromGenerated(request.Content)
+	return interfaces.WorkstationExecutionRequest{
+		Dispatch: interfaces.WorkDispatch{
+			DispatchID:      directModelInvocationTransitionID,
+			TransitionID:    directModelInvocationTransitionID,
+			WorkerType:      workerDef.Name,
+			WorkstationName: directModelInvocationTransitionID,
+			InputTokens:     workers.InputTokens(inputTokens...),
+		},
+		WorkerType:            workerDef.Name,
+		WorkstationType:       directModelInvocationTransitionID,
+		RunnerID:              selection.RunnerID,
+		RunnerSelectionSource: selection.Source,
+		InputTokens:           workers.InputTokens(inputTokens...),
+		ModelOperation:        strings.TrimSpace(request.Operation),
+		ModelBindings:         resolvedBindings,
+		SystemPrompt:          workerDef.Body,
+		UserMessage:           invocations.InferenceOperationUserMessage(request.Operation, inputContent, resolvedBindings),
+	}
 }
 
 type sessionInvocationWaitInput struct {

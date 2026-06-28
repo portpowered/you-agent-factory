@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+// pkgmaintcheck:ignore-cyclomatic-complexity this binding-alignment test keeps legacy and inference workstation assertions together on one contract surface.
 func TestResolveInferenceOperationBindings_InferenceAndLegacyWorkstationTypesAlign(t *testing.T) {
 	worker := inferenceBindingWorkerFixture()
 	inputTokens := []interfaces.Token{{
