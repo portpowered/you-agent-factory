@@ -13,6 +13,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/testutil"
@@ -801,5 +802,173 @@ func TestRealBackendFactorySessionRoutes_LifecycleControlsAreImplemented(t *test
 	}
 	if control.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
 		t.Fatalf("outcome = %q, want ACCEPTED", control.Outcome)
+	}
+}
+
+func TestFakeChildDurableSessionReads_APIPreservesShippedTransportSemantics(t *testing.T) {
+	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
+	})
+	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-api-fake-child-transport-regression-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "agent-run-fake-child",
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	before := captureDurableSessionInspectionSnapshot(t, server.URL, completed.SessionID)
+	assertAPIFakeChildInspectionSnapshot(t, before)
+
+	_, pauseStatus := postFactorySessionLifecycleControl(t, server.URL, completed.SessionID, "pause", nil)
+	if pauseStatus != http.StatusConflict {
+		t.Fatalf("pause on terminal session status = %d, want 409", pauseStatus)
+	}
+
+	after := captureDurableSessionInspectionSnapshot(t, server.URL, completed.SessionID)
+	assertDurableSessionReadUnchanged(t, before.read, after.read)
+	assertDurableSessionResultUnchanged(t, before.result, after.result)
+	assertDispatchListUnchanged(t, before.dispatches, after.dispatches)
+	assertArtifactListUnchanged(t, before.artifacts, after.artifacts)
+	assertLifecycleEventsNonDecreasing(t, before.events, after.events)
+	assertPostControlEventsAlignWithStatus(t, completed.SessionID, after.events, after.read.Status)
+
+	dispatchDetail := getDurableDispatchDetail(t, server.URL, completed.SessionID, "dispatch-1")
+	assertAPIFakeChildDispatchDetail(t, dispatchDetail)
+	assertAPIInspectionResponsesExcludeLiveProviderMarkers(t, before, dispatchDetail)
+}
+
+func TestSimpleFinalDurableSessionReads_APIPreservesFinalResultWithoutChildDispatches(t *testing.T) {
+	projectRoot := setupAPIRuntimeWorkflowFixture(t, "simple-final.workflow.js", "simple-final")
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
+	})
+	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-api-simple-final-transport-regression-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "simple-final",
+		},
+		Args: map[string]any{
+			"subject": "api",
+			"count":   2,
+			"prefix":  "you",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	snapshot := captureDurableSessionInspectionSnapshot(t, server.URL, completed.SessionID)
+	if snapshot.read.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("session status = %q, want SUCCEEDED", snapshot.read.Status)
+	}
+	if snapshot.result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("result status = %q, want FINAL", snapshot.result.ResultStatus)
+	}
+	if len(snapshot.dispatches.Dispatches) != 0 {
+		t.Fatalf("dispatch list = %#v, want empty for simple-final", snapshot.dispatches.Dispatches)
+	}
+	if len(snapshot.artifacts.Artifacts) != 0 {
+		t.Fatalf("artifact list = %#v, want empty for simple-final", snapshot.artifacts.Artifacts)
+	}
+	assertPostControlEventsAlignWithStatus(t, completed.SessionID, snapshot.events, snapshot.read.Status)
+	assertAPIInspectionResponsesExcludeLiveProviderMarkers(t, snapshot, factoryapi.FactoryDispatch{})
+}
+
+func assertAPIFakeChildInspectionSnapshot(
+	t *testing.T,
+	snapshot durableSessionInspectionSnapshot,
+) {
+	t.Helper()
+	if snapshot.read.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("session status = %q, want SUCCEEDED", snapshot.read.Status)
+	}
+	if snapshot.read.Progress == nil ||
+		snapshot.read.Progress.TotalDispatches == nil || *snapshot.read.Progress.TotalDispatches != 1 ||
+		snapshot.read.Progress.CompletedDispatches == nil || *snapshot.read.Progress.CompletedDispatches != 1 {
+		t.Fatalf("session progress = %#v, want one completed dispatch", snapshot.read.Progress)
+	}
+	if snapshot.result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
+		t.Fatalf("result status = %q, want FINAL", snapshot.result.ResultStatus)
+	}
+	if len(snapshot.dispatches.Dispatches) != 1 {
+		t.Fatalf("dispatch list = %#v, want one dispatch", snapshot.dispatches.Dispatches)
+	}
+	dispatchSummary := snapshot.dispatches.Dispatches[0]
+	if dispatchSummary.Javascript == nil || dispatchSummary.Javascript.ExecutionMode == nil ||
+		*dispatchSummary.Javascript.ExecutionMode != factorysessionexecution.ChildExecutorModeFake {
+		t.Fatalf("dispatch executionMode = %#v, want fake", dispatchSummary.Javascript)
+	}
+	if dispatchSummary.ProviderSessionRefs == nil || len(*dispatchSummary.ProviderSessionRefs) != 1 ||
+		(*dispatchSummary.ProviderSessionRefs)[0].Id != "fake-provider-session-1" {
+		t.Fatalf("providerSessionRefs = %#v, want fake-provider-session-1", dispatchSummary.ProviderSessionRefs)
+	}
+	if len(snapshot.artifacts.Artifacts) != 1 {
+		t.Fatalf("artifact list = %#v, want one artifact", snapshot.artifacts.Artifacts)
+	}
+	if snapshot.artifacts.Artifacts[0].DispatchId == nil || *snapshot.artifacts.Artifacts[0].DispatchId != "dispatch-1" {
+		t.Fatalf("artifact dispatchId = %#v, want dispatch-1", snapshot.artifacts.Artifacts[0].DispatchId)
+	}
+}
+
+func assertAPIFakeChildDispatchDetail(t *testing.T, dispatchDetail factoryapi.FactoryDispatch) {
+	t.Helper()
+	if dispatchDetail.Javascript == nil || dispatchDetail.Javascript.ExecutionMode == nil ||
+		*dispatchDetail.Javascript.ExecutionMode != factorysessionexecution.ChildExecutorModeFake {
+		t.Fatalf("dispatch detail executionMode = %#v, want fake", dispatchDetail.Javascript)
+	}
+	if dispatchDetail.Provider == nil || *dispatchDetail.Provider != "fake" {
+		t.Fatalf("dispatch provider = %#v, want fake", dispatchDetail.Provider)
+	}
+}
+
+func assertAPIInspectionResponsesExcludeLiveProviderMarkers(
+	t *testing.T,
+	snapshot durableSessionInspectionSnapshot,
+	dispatchDetail factoryapi.FactoryDispatch,
+) {
+	t.Helper()
+	encoded, err := json.Marshal(struct {
+		Read       factoryapi.FactorySessionDurableReadModel
+		Result     factoryapi.FactorySessionResult
+		Dispatches factoryapi.ListFactorySessionDispatchesResponse
+		Artifacts  factoryapi.ListFactorySessionArtifactsResponse
+		Events     []factoryapi.FactoryEvent
+		Dispatch   factoryapi.FactoryDispatch
+	}{
+		Read:       snapshot.read,
+		Result:     snapshot.result,
+		Dispatches: snapshot.dispatches,
+		Artifacts:  snapshot.artifacts,
+		Events:     snapshot.events,
+		Dispatch:   dispatchDetail,
+	})
+	if err != nil {
+		t.Fatalf("marshal inspection snapshot: %v", err)
+	}
+	responseText := string(encoded)
+	if strings.Contains(responseText, "live-provider-session-1") {
+		t.Fatalf("fake-child inspection leaked live-provider session ref:\n%s", responseText)
+	}
+	for _, term := range fixtures.ForbiddenFixtureVocabularyTerms() {
+		if strings.Contains(responseText, term) {
+			t.Fatalf("inspection response contained forbidden vocabulary %q:\n%s", term, responseText)
+		}
 	}
 }

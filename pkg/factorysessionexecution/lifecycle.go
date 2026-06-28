@@ -824,284 +824,84 @@ type LifecycleControlResult struct {
 	Links               LifecycleControlLinks
 }
 
-const (
-	dispatchQueuedEventIDPrefix      = "factory-event/dispatch-queued"
-	dispatchReconciledEventIDPrefix  = "factory-event/dispatch-reconciled"
-	dispatchReconciliationSourceProviderSession   = "PROVIDER_SESSION"
-	dispatchReconciliationSourceRuntimeReconciler = "RUNTIME_RECONCILER"
-)
-
-// RuntimeDispatchEventInput carries durable dispatch projection inputs used to
-// synthesize canonical DISPATCH_* events for runtime-backed sessions.
-type RuntimeDispatchEventInput struct {
-	Dispatches                []DispatchSummary
-	DispatchStatusTransitions map[string][]DispatchStatus
-	DispatchJavaScript        map[string]DispatchJavaScriptProjection
-	Artifacts                 []ArtifactSummary
+type parsedCanonicalEvent struct {
+	ID              string
+	Sequence        int
+	SessionSequence *int
 }
 
-func runtimeDispatchEventInputFromState(state *runtimeSessionState) RuntimeDispatchEventInput {
-	if state == nil {
-		return RuntimeDispatchEventInput{}
+// FilterEventsAfterReconnect returns only events after the requested reconnect cursor.
+// When both AfterEventID and AfterSequence are set, AfterEventID wins.
+func FilterEventsAfterReconnect(events []json.RawMessage, req EventReconnectRequest, sessionID string) ([]json.RawMessage, error) {
+	if len(events) == 0 {
+		return nil, nil
 	}
-	return RuntimeDispatchEventInput{
-		Dispatches:                state.dispatches,
-		DispatchStatusTransitions: state.dispatchStatusTransitions,
-		DispatchJavaScript:        state.dispatchJavaScript,
-		Artifacts:                 state.artifacts,
-	}
-}
-
-func rebuildRuntimeSessionCanonicalEvents(state *runtimeSessionState) []json.RawMessage {
-	if state == nil {
-		return nil
-	}
-	preserved := extractDispatchInterruptedEvents(state.events)
-	projected := BuildCanonicalRuntimeSessionEvents(
-		state.session,
-		state.result,
-		runtimeDispatchEventInputFromState(state),
-	)
-	return mergePreservedDispatchInterruptedEvents(projected, preserved)
-}
-
-type dispatchQueuedEventPayload struct {
-	DispatchKind  string `json:"dispatchKind"`
-	Label         string `json:"label,omitempty"`
-	RunnerID      string `json:"runnerId,omitempty"`
-	Model         string `json:"model,omitempty"`
-	Provider      string `json:"provider,omitempty"`
-	QueuePosition *int   `json:"queuePosition,omitempty"`
-}
-
-type dispatchReconciledEventPayload struct {
-	ReconciledStatus     string                       `json:"reconciledStatus"`
-	ReconciliationSource string                       `json:"reconciliationSource"`
-	Replayed             bool                         `json:"replayed"`
-	ArtifactIDs          []string                     `json:"artifactIds,omitempty"`
-	FailureDetail        *dispatchFailureEventPayload `json:"failureDetail,omitempty"`
-}
-
-type dispatchFailureEventPayload struct {
-	Reason     string `json:"reason,omitempty"`
-	Message    string `json:"message,omitempty"`
-	ErrorClass string `json:"errorClass,omitempty"`
-}
-
-func appendCanonicalRuntimeDispatchLifecycleEvents(
-	events []json.RawMessage,
-	session SessionReadResult,
-	input RuntimeDispatchEventInput,
-	source string,
-) []json.RawMessage {
-	if len(input.Dispatches) == 0 {
-		return events
-	}
-	dispatchEvents := make([]json.RawMessage, 0, len(input.Dispatches)*2)
-	for index, dispatch := range input.Dispatches {
-		if strings.TrimSpace(dispatch.ID) == "" {
-			continue
-		}
-		if dispatch.Status == DispatchStatusInterrupted {
-			continue
-		}
-		dispatchEvents = append(dispatchEvents, buildDispatchQueuedEvent(events, dispatchEvents, session, dispatch, source, index)...)
-		if isReconciledDispatchStatus(dispatch.Status) {
-			dispatchEvents = append(dispatchEvents, buildDispatchReconciledEvent(events, dispatchEvents, session, dispatch, source)...)
-		}
-	}
-	if len(dispatchEvents) == 0 {
-		return events
-	}
-	return insertEventsBeforeSessionCompleted(events, dispatchEvents)
-}
-
-func buildDispatchQueuedEvent(
-	baseEvents []json.RawMessage,
-	pending []json.RawMessage,
-	session SessionReadResult,
-	dispatch DispatchSummary,
-	source string,
-	queueIndex int,
-) []json.RawMessage {
-	dispatchKind := strings.TrimSpace(dispatch.DispatchKind)
-	if dispatchKind == "" {
-		dispatchKind = "JAVASCRIPT_AGENT"
-	}
-	payload := dispatchQueuedEventPayload{DispatchKind: dispatchKind}
-	if label := strings.TrimSpace(dispatch.Label); label != "" {
-		payload.Label = label
-	}
-	if runnerID := strings.TrimSpace(dispatch.RunnerID); runnerID != "" {
-		payload.RunnerID = runnerID
-	}
-	if model := strings.TrimSpace(dispatch.Model); model != "" {
-		payload.Model = model
-	}
-	if provider := strings.TrimSpace(dispatch.Provider); provider != "" {
-		payload.Provider = provider
-	}
-	position := queueIndex
-	payload.QueuePosition = &position
-
-	encodedPayload, err := json.Marshal(payload)
-	if err != nil {
-		return pending
-	}
-	return append(pending, dispatchLifecycleEvent(
-		baseEvents,
-		pending,
-		"DISPATCH_QUEUED",
-		fmt.Sprintf("%s/%s", dispatchQueuedEventIDPrefix, dispatch.ID),
-		session,
-		dispatch,
-		source,
-		encodedPayload,
-	))
-}
-
-func buildDispatchReconciledEvent(
-	baseEvents []json.RawMessage,
-	pending []json.RawMessage,
-	session SessionReadResult,
-	dispatch DispatchSummary,
-	source string,
-) []json.RawMessage {
-	payload := dispatchReconciledEventPayload{
-		ReconciledStatus:     string(dispatch.Status),
-		ReconciliationSource: dispatchReconciliationSource(dispatch),
-		Replayed:             false,
-	}
-	if len(dispatch.OutputArtifactIDs) > 0 {
-		payload.ArtifactIDs = append([]string(nil), dispatch.OutputArtifactIDs...)
-	}
-	if dispatch.FailureDetail != nil {
-		payload.FailureDetail = &dispatchFailureEventPayload{
-			Reason:     strings.TrimSpace(dispatch.FailureDetail.Reason),
-			Message:    strings.TrimSpace(dispatch.FailureDetail.Message),
-			ErrorClass: strings.TrimSpace(dispatch.FailureDetail.ErrorClass),
-		}
-	}
-	encodedPayload, err := json.Marshal(payload)
-	if err != nil {
-		return pending
-	}
-	return append(pending, dispatchLifecycleEvent(
-		baseEvents,
-		pending,
-		"DISPATCH_RECONCILED",
-		fmt.Sprintf("%s/%s", dispatchReconciledEventIDPrefix, dispatch.ID),
-		session,
-		dispatch,
-		source,
-		encodedPayload,
-	))
-}
-
-func dispatchReconciliationSource(dispatch DispatchSummary) string {
-	if len(dispatch.ProviderSessionRefs) > 0 {
-		return dispatchReconciliationSourceProviderSession
-	}
-	return dispatchReconciliationSourceRuntimeReconciler
-}
-
-func isReconciledDispatchStatus(status DispatchStatus) bool {
-	switch status {
-	case DispatchStatusCompleted,
-		DispatchStatusFailed,
-		DispatchStatusCanceled,
-		DispatchStatusTimedOut,
-		DispatchStatusSkipped:
-		return true
-	default:
-		return false
-	}
-}
-
-func dispatchLifecycleEvent(
-	baseEvents []json.RawMessage,
-	pending []json.RawMessage,
-	eventType, id string,
-	session SessionReadResult,
-	dispatch DispatchSummary,
-	source string,
-	payload json.RawMessage,
-) json.RawMessage {
-	sequence, sessionSequence := nextCanonicalEventSequence(append(baseEvents, append(pending, json.RawMessage("{}"))...))
-	eventTime := canonicalSessionEventTime(session).Add(time.Duration(sessionSequence) * time.Second)
-
-	sessionID := session.SessionID
-	orchestratorKind := strings.ToUpper(strings.TrimSpace(session.OrchestratorKind))
-	var orchestratorDialect *string
-	if dialect := strings.TrimSpace(session.Dialect); dialect != "" {
-		orchestratorDialect = &dialect
-	}
-	var phaseID *string
-	var phaseName *string
-	if phase := strings.TrimSpace(dispatch.Phase); phase != "" {
-		phaseID = &phase
-		phaseName = &phase
-	} else if phase := strings.TrimSpace(session.Phase); phase != "" {
-		phaseID = &phase
-		phaseName = &phase
-	}
-	dispatchID := dispatch.ID
-
-	context := canonicalFactoryEventContext{
-		Sequence:        sequence,
-		Tick:            sequence,
-		EventTime:       eventTime,
-		SessionID:       &sessionID,
-		SessionSequence: intPtr(sessionSequence),
-		Source:          &source,
-		DispatchID:      &dispatchID,
-	}
-	if orchestratorKind != "" {
-		context.OrchestratorKind = &orchestratorKind
-	}
-	if orchestratorDialect != nil {
-		context.OrchestratorDialect = orchestratorDialect
-	}
-	if phaseID != nil {
-		context.PhaseID = phaseID
-	}
-	if phaseName != nil {
-		context.PhaseName = phaseName
+	if strings.TrimSpace(req.AfterEventID) == "" && req.AfterSequence == nil {
+		return append([]json.RawMessage(nil), events...), nil
 	}
 
-	encoded, err := json.Marshal(canonicalFactoryEvent{
-		SchemaVersion: canonicalFactoryEventSchemaVersion,
-		ID:            id,
-		Type:          eventType,
-		Context:       context,
-		Payload:       payload,
-	})
-	if err != nil {
-		return json.RawMessage("{}")
-	}
-	return encoded
-}
-
-func insertEventsBeforeSessionCompleted(events, insertion []json.RawMessage) []json.RawMessage {
-	if len(insertion) == 0 {
-		return events
-	}
-	completedIndex := len(events)
+	parsed := make([]parsedCanonicalEvent, len(events))
 	for index, raw := range events {
-		var envelope struct {
-			Type string `json:"type"`
+		event, err := parseCanonicalEvent(raw)
+		if err != nil {
+			return nil, fmt.Errorf("parse event %d: %w", index, err)
 		}
-		if err := json.Unmarshal(raw, &envelope); err != nil {
-			continue
-		}
-		if strings.TrimSpace(envelope.Type) == "SESSION_COMPLETED" {
-			completedIndex = index
-			break
+		parsed[index] = event
+	}
+
+	if afterID := strings.TrimSpace(req.AfterEventID); afterID != "" {
+		return filterEventsAfterEventID(events, parsed, afterID)
+	}
+	if req.AfterSequence == nil {
+		return append([]json.RawMessage(nil), events...), nil
+	}
+	return filterEventsAfterSequence(events, parsed, *req.AfterSequence, sessionID)
+}
+
+func filterEventsAfterEventID(events []json.RawMessage, parsed []parsedCanonicalEvent, afterID string) ([]json.RawMessage, error) {
+	for index, event := range parsed {
+		if event.ID == afterID {
+			return append([]json.RawMessage(nil), events[index+1:]...), nil
 		}
 	}
-	merged := make([]json.RawMessage, 0, len(events)+len(insertion))
-	merged = append(merged, events[:completedIndex]...)
-	merged = append(merged, insertion...)
-	merged = append(merged, events[completedIndex:]...)
-	return merged
+	return nil, fmt.Errorf("%w: after_event_id %q", ErrReconnectCursorNotFound, afterID)
+}
+
+func filterEventsAfterSequence(events []json.RawMessage, parsed []parsedCanonicalEvent, ackSequence int, sessionID string) ([]json.RawMessage, error) {
+	if sessionID != "" {
+		for index := len(parsed) - 1; index >= 0; index-- {
+			event := parsed[index]
+			if event.SessionSequence != nil && *event.SessionSequence == ackSequence {
+				return append([]json.RawMessage(nil), events[index+1:]...), nil
+			}
+		}
+		return nil, fmt.Errorf("%w: after_sequence %d for session %q", ErrReconnectCursorNotFound, ackSequence, sessionID)
+	}
+	for index := len(parsed) - 1; index >= 0; index-- {
+		if parsed[index].Sequence == ackSequence {
+			return append([]json.RawMessage(nil), events[index+1:]...), nil
+		}
+	}
+	return nil, fmt.Errorf("%w: after_sequence %d", ErrReconnectCursorNotFound, ackSequence)
+}
+
+func parseCanonicalEvent(raw json.RawMessage) (parsedCanonicalEvent, error) {
+	var envelope struct {
+		ID      string `json:"id"`
+		Context struct {
+			Sequence        int  `json:"sequence"`
+			SessionSequence *int `json:"sessionSequence"`
+		} `json:"context"`
+	}
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return parsedCanonicalEvent{}, err
+	}
+	if strings.TrimSpace(envelope.ID) == "" {
+		return parsedCanonicalEvent{}, fmt.Errorf("event id is required")
+	}
+	return parsedCanonicalEvent{
+		ID:              envelope.ID,
+		Sequence:        envelope.Context.Sequence,
+		SessionSequence: envelope.Context.SessionSequence,
+	}, nil
 }

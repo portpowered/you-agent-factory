@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"time"
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -377,5 +379,339 @@ func assertFactoryEventsJSONEqual(t *testing.T, want, got []factoryapi.FactoryEv
 	}
 	if string(wantJSON) != string(gotJSON) {
 		t.Fatalf("API events JSON diverged from EventReadResponseToAPI projection:\nwant %s\ngot  %s", wantJSON, gotJSON)
+	}
+}
+
+func newAPILiveProviderRuntimeService(t *testing.T) factorysessionexecution.Service {
+	t.Helper()
+	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
+	return factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot:       projectRoot,
+		ChildExecutorMode: factorysessionexecution.ChildExecutorModeLive,
+		Provider:          factorysessionexecution.SmokeLiveChildProvider(),
+	})
+}
+
+func newAPILiveProviderBlockingRuntimeService(t *testing.T) (
+	*factorysessionexecution.JavaScriptRuntimeService,
+	*apiLiveProviderBlockingFixtureProvider,
+) {
+	t.Helper()
+	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
+	provider := &apiLiveProviderBlockingFixtureProvider{}
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot:       projectRoot,
+		ChildExecutorMode: factorysessionexecution.ChildExecutorModeLive,
+		Provider:          provider,
+	})
+	return service, provider
+}
+
+type apiLiveProviderBlockingFixtureProvider struct {
+	mu           sync.Mutex
+	inferStarted chan struct{}
+	release      chan struct{}
+}
+
+func (p *apiLiveProviderBlockingFixtureProvider) Infer(ctx context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+	p.mu.Lock()
+	if p.inferStarted == nil {
+		p.inferStarted = make(chan struct{})
+	}
+	if p.release == nil {
+		p.release = make(chan struct{})
+	}
+	started := p.inferStarted
+	release := p.release
+	p.mu.Unlock()
+
+	close(started)
+	select {
+	case <-ctx.Done():
+		return interfaces.InferenceResponse{}, ctx.Err()
+	case <-release:
+		return interfaces.InferenceResponse{
+			Content: `{"text":"live:agent-run-fake-child:summarize-findings:summarize workflows:workflows"}`,
+			ProviderSession: &interfaces.ProviderSessionMetadata{
+				Provider: "mock",
+				Kind:     "session_id",
+				ID:       "live-provider-session-1",
+			},
+		}, nil
+	}
+}
+
+func (p *apiLiveProviderBlockingFixtureProvider) waitForInferStart(t *testing.T) {
+	t.Helper()
+	p.mu.Lock()
+	if p.inferStarted == nil {
+		p.inferStarted = make(chan struct{})
+	}
+	started := p.inferStarted
+	p.mu.Unlock()
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("provider Infer did not start before timeout")
+	}
+}
+
+func (p *apiLiveProviderBlockingFixtureProvider) releaseInfer() {
+	p.mu.Lock()
+	if p.release == nil {
+		p.release = make(chan struct{})
+	}
+	release := p.release
+	p.mu.Unlock()
+	close(release)
+}
+
+func waitForAPIDispatchStatus(
+	t *testing.T,
+	serverURL, sessionID, dispatchID string,
+	want factoryapi.FactoryDispatchStatus,
+	timeout time.Duration,
+) factoryapi.FactorySessionDispatchSummary {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		dispatchList := getDurableDispatchList(t, serverURL, sessionID)
+		for _, dispatch := range dispatchList.Dispatches {
+			if dispatch.Id == dispatchID && dispatch.Status == want {
+				return dispatch
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("dispatch %q did not reach status %q before timeout", dispatchID, want)
+	return factoryapi.FactorySessionDispatchSummary{}
+}
+
+func assertAPILiveProviderProviderSessionRef(
+	t *testing.T,
+	refs *[]factoryapi.LoadableProviderSessionRef,
+) {
+	t.Helper()
+	if refs == nil || len(*refs) != 1 {
+		t.Fatalf("providerSessionRefs = %#v, want one ref", refs)
+	}
+	ref := (*refs)[0]
+	if ref.Id != "live-provider-session-1" {
+		t.Fatalf("providerSessionRef id = %q, want live-provider-session-1", ref.Id)
+	}
+	if ref.Provider != "mock" {
+		t.Fatalf("providerSessionRef provider = %q, want mock", ref.Provider)
+	}
+	if ref.Kind != factoryapi.LoadableProviderSessionKindSessionID {
+		t.Fatalf("providerSessionRef kind = %q, want session_id", ref.Kind)
+	}
+}
+
+func assertAPILiveProviderArtifactLineage(
+	t *testing.T,
+	serverURL, sessionID string,
+	dispatchSummary factoryapi.FactorySessionDispatchSummary,
+	dispatchDetail factoryapi.FactoryDispatch,
+) {
+	t.Helper()
+
+	sessionRead := getDurableFactorySession(t, serverURL, sessionID)
+	if sessionRead.ArtifactRefs == nil || len(*sessionRead.ArtifactRefs) != 1 ||
+		(*sessionRead.ArtifactRefs)[0].Id != "child-artifact-1" {
+		t.Fatalf("session artifactRefs = %#v, want child-artifact-1", sessionRead.ArtifactRefs)
+	}
+
+	artifactList := getDurableArtifactList(t, serverURL, sessionID)
+	if len(artifactList.Artifacts) != 1 {
+		t.Fatalf("artifact list = %#v, want one artifact", artifactList.Artifacts)
+	}
+	artifactSummary := artifactList.Artifacts[0]
+	if artifactSummary.Id != "child-artifact-1" {
+		t.Fatalf("artifact id = %q, want child-artifact-1", artifactSummary.Id)
+	}
+	if artifactSummary.Kind != factoryapi.FactoryArtifactKindCHILDRESULT {
+		t.Fatalf("artifact kind = %q, want CHILD_RESULT", artifactSummary.Kind)
+	}
+	if artifactSummary.DispatchId == nil || *artifactSummary.DispatchId != "dispatch-1" {
+		t.Fatalf("artifact dispatchId = %#v, want dispatch-1", artifactSummary.DispatchId)
+	}
+	wantHref := "/factory-sessions/" + sessionID + "/artifacts/child-artifact-1"
+	if artifactSummary.RetrievalRef == nil || artifactSummary.RetrievalRef.Href != wantHref {
+		t.Fatalf("artifact retrievalRef = %#v, want %q", artifactSummary.RetrievalRef, wantHref)
+	}
+
+	artifactDetail := getDurableArtifactDetail(t, serverURL, sessionID, "child-artifact-1")
+	if artifactDetail.DispatchId == nil || *artifactDetail.DispatchId != "dispatch-1" {
+		t.Fatalf("artifact detail dispatchId = %#v, want dispatch-1", artifactDetail.DispatchId)
+	}
+	if artifactDetail.Kind != factoryapi.FactoryArtifactKindCHILDRESULT {
+		t.Fatalf("artifact detail kind = %q, want CHILD_RESULT", artifactDetail.Kind)
+	}
+	if artifactDetail.ContentRef == nil || artifactDetail.ContentRef.Href != wantHref {
+		t.Fatalf("artifact detail contentRef = %#v, want %q", artifactDetail.ContentRef, wantHref)
+	}
+
+	if dispatchSummary.OutputArtifactIds == nil || len(*dispatchSummary.OutputArtifactIds) != 1 ||
+		(*dispatchSummary.OutputArtifactIds)[0] != "child-artifact-1" {
+		t.Fatalf("dispatch outputArtifactIds = %#v, want [child-artifact-1]", dispatchSummary.OutputArtifactIds)
+	}
+	if dispatchDetail.ArtifactIds == nil || len(*dispatchDetail.ArtifactIds) != 1 ||
+		(*dispatchDetail.ArtifactIds)[0] != "child-artifact-1" {
+		t.Fatalf("dispatch detail artifactIds = %#v, want [child-artifact-1]", dispatchDetail.ArtifactIds)
+	}
+}
+
+func getDurableArtifactDetail(t *testing.T, serverURL, sessionID, artifactID string) factoryapi.FactorySessionArtifactDetail {
+	t.Helper()
+	resp, err := http.Get(serverURL + "/factory-sessions/" + sessionID + "/artifacts/" + artifactID)
+	if err != nil {
+		t.Fatalf("GET artifact detail: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("artifact detail status = %d, want 200: %s", resp.StatusCode, readBody(t, resp))
+	}
+	var response factoryapi.FactorySessionArtifactDetail
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		t.Fatalf("decode artifact detail: %v", err)
+	}
+	return response
+}
+
+func assertAPILiveProviderDispatchLifecycleEventsAlignWithReads(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	dispatchID string,
+	summary factoryapi.FactorySessionDispatchSummary,
+	detail factoryapi.FactoryDispatch,
+) {
+	t.Helper()
+
+	queued := findAPIFactoryEventByType(events, "DISPATCH_QUEUED", dispatchID)
+	if queued == nil {
+		t.Fatalf("events = %#v, want DISPATCH_QUEUED for %q", events, dispatchID)
+	}
+	if queued.Context.DispatchId == nil || *queued.Context.DispatchId != dispatchID {
+		t.Fatalf("DISPATCH_QUEUED dispatchId = %#v, want %q", queued.Context.DispatchId, dispatchID)
+	}
+	payload, err := json.Marshal(queued.Payload)
+	if err != nil {
+		t.Fatalf("marshal DISPATCH_QUEUED payload: %v", err)
+	}
+	var queuedBody struct {
+		DispatchKind string `json:"dispatchKind"`
+	}
+	if err := json.Unmarshal(payload, &queuedBody); err != nil {
+		t.Fatalf("unmarshal DISPATCH_QUEUED payload: %v", err)
+	}
+	if queuedBody.DispatchKind != string(factoryapi.FactoryDispatchKindJAVASCRIPTAGENT) {
+		t.Fatalf("DISPATCH_QUEUED dispatchKind = %q, want JAVASCRIPT_AGENT", queuedBody.DispatchKind)
+	}
+
+	if !isTerminalFactoryDispatchStatus(detail.Status) {
+		return
+	}
+
+	reconciled := findAPIFactoryEventByType(events, "DISPATCH_RECONCILED", dispatchID)
+	if reconciled == nil {
+		t.Fatalf("events = %#v, want DISPATCH_RECONCILED for %q", events, dispatchID)
+	}
+	if reconciled.Context.DispatchId == nil || *reconciled.Context.DispatchId != dispatchID {
+		t.Fatalf("DISPATCH_RECONCILED dispatchId = %#v, want %q", reconciled.Context.DispatchId, dispatchID)
+	}
+	reconciledPayload, err := json.Marshal(reconciled.Payload)
+	if err != nil {
+		t.Fatalf("marshal DISPATCH_RECONCILED payload: %v", err)
+	}
+	var reconciledBody struct {
+		ReconciledStatus     factoryapi.FactoryDispatchStatus            `json:"reconciledStatus"`
+		ReconciliationSource factoryapi.DispatchReconciliationSource     `json:"reconciliationSource"`
+		ArtifactIds          *[]string                                   `json:"artifactIds"`
+		FailureDetail        *factoryapi.FactoryDispatchFailureDetail    `json:"failureDetail"`
+	}
+	if err := json.Unmarshal(reconciledPayload, &reconciledBody); err != nil {
+		t.Fatalf("unmarshal DISPATCH_RECONCILED payload: %v", err)
+	}
+	if reconciledBody.ReconciledStatus != detail.Status {
+		t.Fatalf("DISPATCH_RECONCILED reconciledStatus = %q, want %q", reconciledBody.ReconciledStatus, detail.Status)
+	}
+	if detail.Status == factoryapi.FactoryDispatchStatusCOMPLETED {
+		if reconciledBody.ReconciliationSource != factoryapi.PROVIDERSESSION {
+			t.Fatalf("reconciliationSource = %q, want PROVIDER_SESSION", reconciledBody.ReconciliationSource)
+		}
+		if summary.OutputArtifactIds == nil || reconciledBody.ArtifactIds == nil ||
+			len(*summary.OutputArtifactIds) != len(*reconciledBody.ArtifactIds) {
+			t.Fatalf("artifactIds = %#v, want %#v", reconciledBody.ArtifactIds, summary.OutputArtifactIds)
+		}
+	}
+	if detail.Status == factoryapi.FactoryDispatchStatusFAILED {
+		assertAPILiveProviderDispatchFailureDetail(t, reconciledBody.FailureDetail)
+		assertAPILiveProviderDispatchFailureDetail(t, detail.FailureDetail)
+	}
+}
+
+func findAPIFactoryEventByType(
+	events []factoryapi.FactoryEvent,
+	eventType, dispatchID string,
+) *factoryapi.FactoryEvent {
+	for index := range events {
+		event := &events[index]
+		if string(event.Type) != eventType {
+			continue
+		}
+		if event.Context.DispatchId == nil || *event.Context.DispatchId != dispatchID {
+			continue
+		}
+		return event
+	}
+	return nil
+}
+
+func isTerminalFactoryDispatchStatus(status factoryapi.FactoryDispatchStatus) bool {
+	switch status {
+	case factoryapi.FactoryDispatchStatusCOMPLETED,
+		factoryapi.FactoryDispatchStatusFAILED,
+		factoryapi.FactoryDispatchStatusINTERRUPTED:
+		return true
+	default:
+		return false
+	}
+}
+
+func assertAPILiveProviderDispatchFailureDetail(
+	t *testing.T,
+	failure *factoryapi.FactoryDispatchFailureDetail,
+) {
+	t.Helper()
+	if failure == nil || failure.Reason == nil {
+		t.Fatalf("failureDetail = %#v, want typed provider failure", failure)
+	}
+	if *failure.Reason != string(interfaces.WorkFailureTypePermanentBadRequest) {
+		t.Fatalf("failure reason = %q, want %q", *failure.Reason, interfaces.WorkFailureTypePermanentBadRequest)
+	}
+	if failure.Message == nil || *failure.Message != "simulated live child error" {
+		t.Fatalf("failure message = %#v, want simulated live child error", failure.Message)
+	}
+	if failure.ErrorClass == nil || *failure.ErrorClass != string(interfaces.WorkFailureFamilyTerminal) {
+		t.Fatalf("failure errorClass = %#v, want %q", failure.ErrorClass, interfaces.WorkFailureFamilyTerminal)
+	}
+}
+
+func assertAPIDispatchStatusTransitions(
+	t *testing.T,
+	got *[]factoryapi.FactoryDispatchStatus,
+	want []factoryapi.FactoryDispatchStatus,
+) {
+	t.Helper()
+	if got == nil {
+		t.Fatalf("statusTransitions = nil, want %#v", want)
+	}
+	if len(*got) != len(want) {
+		t.Fatalf("statusTransitions = %#v, want %#v", *got, want)
+	}
+	for index, status := range *got {
+		if status != want[index] {
+			t.Fatalf("statusTransitions[%d] = %q, want %q", index, status, want[index])
+		}
 	}
 }
