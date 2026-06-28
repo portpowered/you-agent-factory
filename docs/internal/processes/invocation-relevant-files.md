@@ -156,6 +156,9 @@ primary-result behavior.
   customer guide for `@you/goal` batch invocation, stdout primary result, and
   the supported headless operator-interaction scope without widening localhost
   listener promises.
+- `docs/reference/models.md` is the customer guide for `INFERENCE_RUN`,
+  `INFERENCE_WORKER`, managed-runtime `/models` surfaces, local modelhost lease
+  execution, and legacy `MODEL_INVOKE` / `MODEL_WORKER` migration aliases.
 - `docs/reference/packaged-tts.md` is the packaged `you docs packaged-tts`
   customer guide for `@you/tts` invocation, materialization, metadata result,
   edit-after-materialize behavior, and raw-artifact streaming scope. Prefer

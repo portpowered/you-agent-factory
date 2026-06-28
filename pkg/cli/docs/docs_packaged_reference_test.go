@@ -104,6 +104,9 @@ func TestMarkdown_PackagedTTSReturnsRawAuthoredMarkdown(t *testing.T) {
 	for _, want := range []string{
 		"# Packaged TTS (`@you/tts`)",
 		"you run --named @you/tts",
+		"INFERENCE_WORKER",
+		"INFERENCE_RUN",
+		"does not use agent-loop fields",
 		"~/.you-agent-factory/factories",
 		"@you%2Ftts",
 		"artifactPath",
