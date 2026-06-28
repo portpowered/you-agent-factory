@@ -57,6 +57,12 @@ func TestStreamSet_StreamFactoryRunsOncePerDispatch(t *testing.T) {
 
 func TestStreamSet_CloseDispatchDetachesSubscribersAndRetainsStream(t *testing.T) {
 	set := responsestream.NewStreamSet()
+	assertLiveSubscriberClosedOnDispatchComplete(t, set)
+	assertLateSubscriberDrainsRetainedDispatch(t, set)
+}
+
+func assertLiveSubscriberClosedOnDispatchComplete(t *testing.T, set *responsestream.StreamSet) {
+	t.Helper()
 
 	liveSubscription, err := set.Subscribe("dispatch-1", 0)
 	if err != nil {
@@ -74,6 +80,10 @@ func TestStreamSet_CloseDispatchDetachesSubscribersAndRetainsStream(t *testing.T
 	if _, err := liveSubscription.Next(context.Background()); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
 		t.Fatalf("Next after dispatch close error = %v, want ErrSubscriptionClosed", err)
 	}
+}
+
+func assertLateSubscriberDrainsRetainedDispatch(t *testing.T, set *responsestream.StreamSet) {
+	t.Helper()
 
 	stream := set.Stream("dispatch-2")
 	if stream == nil {
