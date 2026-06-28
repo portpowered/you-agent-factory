@@ -47,12 +47,17 @@ func (s *StreamSet) Stream(dispatchID string) *SessionResponseStream {
 	s.mu.RLock()
 	stream := s.streams[key]
 	closed := s.closed
-	_, dispatchClosed := s.closedDispatches[key]
 	s.mu.RUnlock()
 	if stream != nil {
 		return stream
 	}
-	if closed || dispatchClosed {
+	if closed {
+		return nil
+	}
+	s.mu.RLock()
+	_, dispatchClosed := s.closedDispatches[key]
+	s.mu.RUnlock()
+	if dispatchClosed {
 		return nil
 	}
 
@@ -109,8 +114,9 @@ func (s *StreamSet) DispatchIDs() []string {
 	return ids
 }
 
-// CloseDispatch detaches subscribers and removes one dispatch-scoped stream
-// from the set.
+// CloseDispatch detaches live subscribers, stops further publication for one
+// dispatch, and retains the buffered stream so late consumers can still
+// discover and drain ordered progress until the session stream set closes.
 func (s *StreamSet) CloseDispatch(dispatchID string) bool {
 	if s == nil {
 		return false
@@ -122,13 +128,13 @@ func (s *StreamSet) CloseDispatch(dispatchID string) bool {
 		return false
 	}
 	stream := s.streams[key]
-	delete(s.streams, key)
-	s.closedDispatches[key] = struct{}{}
-	s.mu.Unlock()
 	if stream == nil {
+		s.mu.Unlock()
 		return false
 	}
-	stream.Close()
+	s.closedDispatches[key] = struct{}{}
+	s.mu.Unlock()
+	stream.CompleteDispatch()
 	return true
 }
 

@@ -274,9 +274,26 @@ func TestValidateInvocationOutputMode_AllowsJSONResponseStream(t *testing.T) {
 }
 
 type recordingResponseStreamAttachable struct {
+	set            *responsestream.StreamSet
 	subscribeCalls []responseStreamSubscribeCall
-	dispatchIDs    []string
-	stream         *factorysessions.SessionResponseStream
+}
+
+func newRecordingResponseStreamAttachable() *recordingResponseStreamAttachable {
+	return &recordingResponseStreamAttachable{
+		set: responsestream.NewStreamSet(),
+	}
+}
+
+func (r *recordingResponseStreamAttachable) ensureDispatch(dispatchID string) {
+	r.set.Stream(dispatchID)
+}
+
+func (r *recordingResponseStreamAttachable) stream(dispatchID string) *factorysessions.SessionResponseStream {
+	return r.set.Stream(dispatchID)
+}
+
+func (r *recordingResponseStreamAttachable) closeDispatch(dispatchID string) {
+	r.set.CloseDispatch(dispatchID)
 }
 
 type responseStreamSubscribeCall struct {
@@ -293,22 +310,18 @@ func (r *recordingResponseStreamAttachable) SubscribeSessionResponseStream(
 		sessionID:  sessionID,
 		dispatchID: dispatchID,
 	})
-	if r.stream == nil {
-		r.stream = responsestream.NewSessionResponseStream()
-	}
-	return r.stream.Subscribe(afterSequence)
+	return r.set.Subscribe(dispatchID, afterSequence)
 }
 
 func (r *recordingResponseStreamAttachable) SessionResponseStreamDispatchIDs(string) ([]string, error) {
-	return append([]string(nil), r.dispatchIDs...), nil
+	return r.set.DispatchIDs(), nil
 }
 
 func TestResponseStreamAttachment_SubscribesWhenDispatchAppears(t *testing.T) {
 	t.Parallel()
 
-	attachable := &recordingResponseStreamAttachable{
-		dispatchIDs: []string{"dispatch-1"},
-	}
+	attachable := newRecordingResponseStreamAttachable()
+	attachable.ensureDispatch("dispatch-1")
 	sink := &countingResponseStreamSink{}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -330,7 +343,7 @@ func TestResponseStreamAttachment_SubscribesWhenDispatchAppears(t *testing.T) {
 		t.Fatal("expected internal response-stream subscription")
 	}
 
-	attachable.stream.Append(responsestream.Event{
+	attachable.stream("dispatch-1").Append(responsestream.Event{
 		Kind:    responsestream.EventKindProgressFragment,
 		Type:    responsestream.EventTypeProgress,
 		Payload: "working",
@@ -424,9 +437,8 @@ func TestRun_FactoryInvocationResponseStreamAttachesWhenRunnerSupportsInternalSt
 
 	text := "goal completed"
 	var output strings.Builder
-	attachable := &recordingResponseStreamAttachable{
-		dispatchIDs: []string{"dispatch-goal-1"},
-	}
+	attachable := newRecordingResponseStreamAttachable()
+	attachable.ensureDispatch("dispatch-goal-1")
 	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
 		return stubResponseStreamInvocationService{
 			stubInvocationService: stubInvocationService{
@@ -442,14 +454,15 @@ func TestRun_FactoryInvocationResponseStreamAttachesWhenRunnerSupportsInternalSt
 						}
 						time.Sleep(10 * time.Millisecond)
 					}
-					if attachable.stream != nil {
-						attachable.stream.Append(responsestream.Event{
+					stream := attachable.stream("dispatch-goal-1")
+					if stream != nil {
+						stream.Append(responsestream.Event{
 							Kind:       responsestream.EventKindProgressFragment,
 							Type:       responsestream.EventTypeProgress,
 							DispatchID: "dispatch-goal-1",
 							Payload:    "planning",
 						})
-						attachable.stream.Append(responsestream.Event{
+						stream.Append(responsestream.Event{
 							Kind:       responsestream.EventKindResponseFragment,
 							Type:       responsestream.EventTypeTextDelta,
 							DispatchID: "dispatch-goal-1",
@@ -499,14 +512,78 @@ func TestRun_FactoryInvocationResponseStreamAttachesWhenRunnerSupportsInternalSt
 	}
 }
 
+func TestRun_FactoryInvocationResponseStreamRendersShortLivedDispatch(t *testing.T) {
+	preserveRunGlobals(t)
+
+	text := "goal completed"
+	var output strings.Builder
+	attachable := newRecordingResponseStreamAttachable()
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubResponseStreamInvocationService{
+			stubInvocationService: stubInvocationService{
+				run: func(ctx context.Context) error {
+					<-ctx.Done()
+					return nil
+				},
+				invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+					stream := attachable.stream("dispatch-short")
+					stream.Append(responsestream.Event{
+						Kind:       responsestream.EventKindProgressFragment,
+						Type:       responsestream.EventTypeProgress,
+						DispatchID: "dispatch-short",
+						Payload:    "planning",
+					})
+					attachable.closeDispatch("dispatch-short")
+					return apisurface.FactoryInvocationResult{
+						RequestID: "req-1",
+						TraceID:   "trace-1",
+						Status:    factoryapi.InvocationTerminalStatusCompleted,
+						PrimaryResult: []interfaces.WorkContentPart{
+							{Type: interfaces.WorkContentPartTypeText, Text: text},
+						},
+					}, nil
+				},
+			},
+			attachable: attachable,
+		}, nil
+	}
+
+	err := Run(context.Background(), RunConfig{
+		FactoryConfigPath:        "/tmp/factory.json",
+		InvocationPositionalText: &text,
+		InvocationOutputMode:     InvocationOutputResponseStream,
+		StdinIsTTY:               func() bool { return true },
+		Output:                   &output,
+		Port:                     7437,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	got := output.String()
+	if !strings.Contains(got, "[you:progress] planning") {
+		t.Fatalf("output missing retained short-lived dispatch progress:\n%s", got)
+	}
+	if !strings.Contains(got, responseStreamPrimaryResultHeader) {
+		t.Fatalf("output missing primary-result header:\n%s", got)
+	}
+	if !strings.HasSuffix(got, text) {
+		t.Fatalf("output = %q, want suffix primary result %q", got, text)
+	}
+	if len(attachable.subscribeCalls) == 0 {
+		t.Fatal("expected internal response-stream subscription for retained short-lived dispatch")
+	}
+	if attachable.subscribeCalls[0].dispatchID != "dispatch-short" {
+		t.Fatalf("dispatchID = %q, want dispatch-short", attachable.subscribeCalls[0].dispatchID)
+	}
+}
+
 func TestRun_FactoryInvocationResponseStreamJSONEmitsStructuredRecords(t *testing.T) {
 	preserveRunGlobals(t)
 
 	text := "goal completed"
 	var output strings.Builder
-	attachable := &recordingResponseStreamAttachable{
-		dispatchIDs: []string{"dispatch-goal-1"},
-	}
+	attachable := newRecordingResponseStreamAttachable()
+	attachable.ensureDispatch("dispatch-goal-1")
 	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
 		return stubResponseStreamInvocationService{
 			stubInvocationService: stubInvocationService{
@@ -522,8 +599,9 @@ func TestRun_FactoryInvocationResponseStreamJSONEmitsStructuredRecords(t *testin
 						}
 						time.Sleep(10 * time.Millisecond)
 					}
-					if attachable.stream != nil {
-						attachable.stream.Append(responsestream.Event{
+					stream := attachable.stream("dispatch-goal-1")
+					if stream != nil {
+						stream.Append(responsestream.Event{
 							Kind:       responsestream.EventKindProgressFragment,
 							Type:       responsestream.EventTypeProgress,
 							DispatchID: "dispatch-goal-1",
@@ -718,9 +796,8 @@ func runResponseStreamTerminalOutcomeSubtest(t *testing.T, tc responseStreamTerm
 	text := "Plan the sprint"
 	var output strings.Builder
 	result := tc.result
-	attachable := &recordingResponseStreamAttachable{
-		dispatchIDs: []string{"dispatch-goal-1"},
-	}
+	attachable := newRecordingResponseStreamAttachable()
+	attachable.ensureDispatch("dispatch-goal-1")
 	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
 		return stubResponseStreamInvocationService{
 			stubInvocationService: stubInvocationService{
@@ -736,8 +813,9 @@ func runResponseStreamTerminalOutcomeSubtest(t *testing.T, tc responseStreamTerm
 						}
 						time.Sleep(10 * time.Millisecond)
 					}
-					if attachable.stream != nil {
-						attachable.stream.Append(responsestream.Event{
+					stream := attachable.stream("dispatch-goal-1")
+					if stream != nil {
+						stream.Append(responsestream.Event{
 							Kind:       responsestream.EventKindProgressFragment,
 							Type:       responsestream.EventTypeProgress,
 							DispatchID: "dispatch-goal-1",
@@ -799,7 +877,7 @@ func slowStdoutResponseStreamInvoke(
 ) func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 	return func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 		waitForResponseStreamSubscribe(attachable, 2*time.Second)
-		floodResponseStreamProgressEvents(attachable.stream, "dispatch-goal-1", "working")
+		floodResponseStreamProgressEvents(attachable.stream("dispatch-goal-1"), "dispatch-goal-1", "working")
 		eventsFlooded <- struct{}{}
 		return apisurface.FactoryInvocationResult{
 			RequestID: "req-1",
@@ -891,9 +969,8 @@ func TestRun_FactoryInvocationResponseStreamCompletesWithSlowStdout(t *testing.T
 	output := &gatedResponseStreamWriter{}
 	output.block()
 	eventsFlooded := make(chan struct{}, 1)
-	attachable := &recordingResponseStreamAttachable{
-		dispatchIDs: []string{"dispatch-goal-1"},
-	}
+	attachable := newRecordingResponseStreamAttachable()
+	attachable.ensureDispatch("dispatch-goal-1")
 	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
 		return stubResponseStreamInvocationService{
 			stubInvocationService: stubInvocationService{

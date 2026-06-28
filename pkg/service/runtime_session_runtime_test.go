@@ -3387,6 +3387,62 @@ func TestFactoryService_DispatchCompletionObserverClosesDispatchSubscribers(t *t
 	}
 }
 
+func TestFactoryService_SubscribeSessionResponseStreamAfterDispatchCompletionReadsRetainedEvents(t *testing.T) {
+	sessions := factorysessions.NewRegistry()
+	sessionID := "session-progress-late-subscribe"
+	sessions.Upsert(factorysessions.NewLiveSession(
+		sessionID,
+		"/factory",
+		"/factory",
+		"/factory",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		&liveSessionState{handle: &liveRuntimeHandle{runtime: &factoryRuntimeBundle{}}},
+		false,
+		"factory",
+	), true)
+
+	svc := &FactoryService{sessions: sessions}
+	publisher := svc.inferenceProgressPublisher(sessionID, nil)
+	if publisher == nil {
+		t.Fatal("publisher = nil, want session publisher")
+	}
+	publisher(workerprovider.InferenceProgressFragment{
+		DispatchID: "dispatch-1",
+		Kind:       workerprovider.ProgressFragmentKind,
+		Type:       workerprovider.NormalizedEventTypeProgress,
+		Payload:    "planning",
+	})
+
+	observerFactory := newSessionDispatchCompletionObserverFactory(sessions)
+	if observerFactory == nil {
+		t.Fatal("observer factory = nil, want dispatch completion observer")
+	}
+	observerFactory(sessionID)("dispatch-1")
+
+	dispatchIDs, err := svc.SessionResponseStreamDispatchIDs(sessionID)
+	if err != nil {
+		t.Fatalf("SessionResponseStreamDispatchIDs: %v", err)
+	}
+	if len(dispatchIDs) != 1 || dispatchIDs[0] != "dispatch-1" {
+		t.Fatalf("dispatch ids after completion = %#v, want retained dispatch-1", dispatchIDs)
+	}
+
+	subscription, err := svc.SubscribeSessionResponseStream(sessionID, "dispatch-1", 0)
+	if err != nil {
+		t.Fatalf("SubscribeSessionResponseStream after dispatch completion: %v", err)
+	}
+	result, err := subscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next after late subscribe: %v", err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Payload != "planning" {
+		t.Fatalf("late subscribe events = %#v, want retained planning progress", result.Events)
+	}
+	if _, err := subscription.Next(context.Background()); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
+		t.Fatalf("Next after drained retained window error = %v, want ErrSubscriptionClosed", err)
+	}
+}
+
 func TestFactoryService_StopFactorySession_ClosesSessionResponseStreamSubscribers(t *testing.T) {
 	sessionID := "session-progress-stop"
 	svc := &FactoryService{sessions: factorysessions.NewRegistry()}

@@ -15,12 +15,13 @@ type SessionResponseStream struct {
 	clock  factory.Clock
 	limits RetentionLimits
 
-	nextSequence int64
-	events       []Event
-	totalBytes   int
-	closed       bool
-	nextSubID    int64
-	subscribers  map[int64]*streamSubscriber
+	nextSequence      int64
+	events            []Event
+	totalBytes        int
+	closed            bool
+	dispatchCompleted bool
+	nextSubID         int64
+	subscribers       map[int64]*streamSubscriber
 }
 
 // NewSessionResponseStream allocates an empty internal response stream with
@@ -80,7 +81,7 @@ func (s *SessionResponseStream) Append(event Event) (Event, *CompactionSummary) 
 		return event, nil
 	}
 	s.mu.Lock()
-	if s.closed {
+	if s.closed || s.dispatchCompleted {
 		s.mu.Unlock()
 		return event, nil
 	}

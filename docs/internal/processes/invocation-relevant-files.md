@@ -67,6 +67,9 @@ primary-result behavior.
   `primary_result` NDJSON record. Internal stream listing for
   CLI attachment belongs on `FactoryService.SessionResponseStreamDispatchIDs` in
   `pkg/service/runtime_sessions.go` alongside `SubscribeSessionResponseStream`.
+  `responsestream.StreamSet.CloseDispatch` retains completed dispatch streams so
+  late CLI pollers can still subscribe and drain retained progress until session
+  teardown.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin
   bytes into `invocations.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
   from the shared resolver instead of pre-trimming or short-circuiting with

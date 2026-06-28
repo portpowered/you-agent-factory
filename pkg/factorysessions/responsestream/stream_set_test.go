@@ -55,36 +55,61 @@ func TestStreamSet_StreamFactoryRunsOncePerDispatch(t *testing.T) {
 	}
 }
 
-func TestStreamSet_CloseDispatchDetachesSubscribersAndRemovesStream(t *testing.T) {
+func TestStreamSet_CloseDispatchDetachesSubscribersAndRetainsStream(t *testing.T) {
 	set := responsestream.NewStreamSet()
-	subscription, err := set.Subscribe("dispatch-1", 0)
+
+	liveSubscription, err := set.Subscribe("dispatch-1", 0)
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
-
 	if got := set.SubscriberCount("dispatch-1"); got != 1 {
 		t.Fatalf("subscriber count = %d, want 1", got)
 	}
 	if closed := set.CloseDispatch("dispatch-1"); !closed {
-		t.Fatal("CloseDispatch returned false, want stream closed")
+		t.Fatal("CloseDispatch returned false, want dispatch completed")
 	}
 	if got := set.SubscriberCount("dispatch-1"); got != 0 {
 		t.Fatalf("subscriber count after close = %d, want 0", got)
 	}
-	if got := set.Count(); got != 0 {
-		t.Fatalf("stream count after close = %d, want 0", got)
-	}
-	if _, err := subscription.Next(context.Background()); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
+	if _, err := liveSubscription.Next(context.Background()); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
 		t.Fatalf("Next after dispatch close error = %v, want ErrSubscriptionClosed", err)
 	}
-	if stream := set.Stream("dispatch-1"); stream != nil {
-		t.Fatal("Stream after dispatch close = non-nil, want terminal dispatch tombstone")
+
+	stream := set.Stream("dispatch-2")
+	if stream == nil {
+		t.Fatal("Stream = nil, want allocated dispatch stream")
 	}
-	if _, err := set.Subscribe("dispatch-1", 0); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
-		t.Fatalf("Subscribe after dispatch close error = %v, want ErrSubscriptionClosed", err)
+	stream.Append(responsestream.Event{
+		Kind:    responsestream.EventKindProgressFragment,
+		Type:    responsestream.EventTypeProgress,
+		Payload: "planning",
+	})
+	if closed := set.CloseDispatch("dispatch-2"); !closed {
+		t.Fatal("CloseDispatch for retained dispatch returned false")
 	}
-	if got := set.Count(); got != 0 {
-		t.Fatalf("stream count after post-close subscribe = %d, want 0", got)
+	if got := set.Count(); got != 2 {
+		t.Fatalf("stream count after retained close = %d, want both dispatch streams", got)
+	}
+	if retained := set.Stream("dispatch-2"); retained == nil {
+		t.Fatal("Stream after dispatch close = nil, want retained dispatch stream")
+	}
+
+	lateSubscription, err := set.Subscribe("dispatch-2", 0)
+	if err != nil {
+		t.Fatalf("Subscribe after dispatch close: %v", err)
+	}
+	result, err := lateSubscription.Next(context.Background())
+	if err != nil {
+		t.Fatalf("Next after late subscribe: %v", err)
+	}
+	if len(result.Events) != 1 || result.Events[0].Payload != "planning" {
+		t.Fatalf("late subscribe events = %#v, want retained planning progress", result.Events)
+	}
+	if _, err := lateSubscription.Next(context.Background()); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
+		t.Fatalf("Next after drained retained window error = %v, want ErrSubscriptionClosed", err)
+	}
+	if newStream := set.Stream("dispatch-3"); newStream == nil {
+		t.Fatal("Stream for unrelated dispatch = nil, want new dispatch stream")
 	}
 }
 

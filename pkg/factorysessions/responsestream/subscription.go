@@ -91,6 +91,25 @@ func (s *SessionResponseStream) SubscriberCount() int {
 	return len(s.subscribers)
 }
 
+// CompleteDispatch detaches live subscribers and stops further publication
+// while retaining the buffered window so late consumers can still subscribe
+// and drain ordered progress until the stream is fully closed.
+func (s *SessionResponseStream) CompleteDispatch() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	if s.closed || s.dispatchCompleted {
+		s.mu.Unlock()
+		return
+	}
+	s.dispatchCompleted = true
+	subscribers := s.subscribersSnapshotLocked()
+	s.subscribers = make(map[int64]*streamSubscriber)
+	s.mu.Unlock()
+	closeSubscribers(subscribers)
+}
+
 // Close detaches all subscribers and prevents further publication or
 // subscription on the stream.
 func (s *SessionResponseStream) Close() {
@@ -171,7 +190,14 @@ func (s *SessionResponseStream) readForSubscriber(afterSequence int64) (ReadResu
 	if s.closed {
 		return ReadResult{}, true
 	}
-	return s.eventsAfterLocked(afterSequence), false
+	result := s.eventsAfterLocked(afterSequence)
+	if s.dispatchCompleted &&
+		len(result.Events) == 0 &&
+		!result.BehindRetainedWindow &&
+		result.Compaction == nil {
+		return ReadResult{}, true
+	}
+	return result, false
 }
 
 func (s *SessionResponseStream) detachSubscriber(id int64) {
