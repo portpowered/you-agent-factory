@@ -57,7 +57,10 @@ primary-result behavior.
   run-shape rejection, and fallback behavior in `pkg/cli/run/invocation_output.go`,
   stream attachment in `pkg/cli/run/response_stream_attachment.go`, human and JSON
   progress rendering in `pkg/cli/run/response_stream_renderer.go`, and invocation
-  wiring in `pkg/cli/run/factory_invocation_input.go`. Internal stream listing for
+  wiring in `pkg/cli/run/factory_invocation_input.go`. Human response-stream
+  terminal outcomes use `--- invocation outcome ---` with structured status/error
+  fields; JSON response-stream terminal outcomes stay on the final
+  `primary_result` NDJSON record. Internal stream listing for
   CLI attachment belongs on `FactoryService.SessionResponseStreamDispatchIDs` in
   `pkg/service/runtime_sessions.go` alongside `SubscribeSessionResponseStream`.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin

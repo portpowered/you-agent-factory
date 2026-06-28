@@ -47,6 +47,7 @@ func TestHumanResponseStreamRenderer_RendersOrderedProgressAndSeparatesPrimaryRe
 	})
 
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+		Status: factoryapi.InvocationTerminalStatusCompleted,
 		PrimaryResult: []interfaces.WorkContentPart{
 			{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
 		},
@@ -144,11 +145,148 @@ func TestHumanResponseStreamRenderer_NoHeaderWithoutProgress(t *testing.T) {
 		PrimaryResult: []interfaces.WorkContentPart{
 			{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
 		},
+		Status: factoryapi.InvocationTerminalStatusCompleted,
 	}); err != nil {
 		t.Fatalf("writeFinalInvocationResult: %v", err)
 	}
 	if got := output.String(); got != "goal completed" {
 		t.Fatalf("output = %q, want plain primary result", got)
+	}
+}
+
+func TestHumanResponseStreamRenderer_WritesInvocationOutcomeForBlockedFailure(t *testing.T) {
+	t.Parallel()
+
+	var output strings.Builder
+	renderer := newHumanResponseStreamRenderer(&output)
+	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+		RequestID: "req-blocked",
+		TraceID:   "trace-blocked",
+		Status:    factoryapi.InvocationTerminalStatusFailed,
+		ErrorCode: "INVOCATION_BLOCKED",
+		Message:   `goal invocation blocked while work "Review plan" is in state goal:blocked`,
+		SessionID: "session-1",
+		WorkID:    "work-review-plan",
+		WorkName:  "Review plan",
+		WorkState: "goal:blocked",
+	}); err != nil {
+		t.Fatalf("writeFinalInvocationResult: %v", err)
+	}
+
+	got := output.String()
+	for _, want := range []string{
+		responseStreamInvocationOutcomeHeader,
+		"status: FAILED",
+		"error: INVOCATION_BLOCKED",
+		`message: goal invocation blocked while work "Review plan" is in state goal:blocked`,
+		"session: session-1",
+		"workId: work-review-plan",
+		"workName: Review plan",
+		"workState: goal:blocked",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, responseStreamPrimaryResultHeader) {
+		t.Fatalf("failure output must not use primary-result header:\n%s", got)
+	}
+}
+
+func TestHumanResponseStreamRenderer_WritesInvocationOutcomeAfterProgress(t *testing.T) {
+	t.Parallel()
+
+	var output strings.Builder
+	renderer := newHumanResponseStreamRenderer(&output)
+	renderer.onStreamSegment(responsestream.ReadResult{
+		Events: []responsestream.Event{
+			{
+				Sequence:   1,
+				Kind:       responsestream.EventKindProgressFragment,
+				Type:       responsestream.EventTypeProgress,
+				DispatchID: "dispatch-1",
+				Payload:    "waiting for review",
+			},
+		},
+	})
+	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+		Status:    factoryapi.InvocationTerminalStatusTimedOut,
+		ErrorCode: "INVOCATION_TIMED_OUT",
+		Message:   "invocation timed out while waiting for primary result",
+		SessionID: "session-1",
+	}); err != nil {
+		t.Fatalf("writeFinalInvocationResult: %v", err)
+	}
+
+	got := output.String()
+	if !strings.Contains(got, "[you:progress] waiting for review") {
+		t.Fatalf("output missing progress:\n%s", got)
+	}
+	if !strings.Contains(got, responseStreamInvocationOutcomeHeader) {
+		t.Fatalf("output missing outcome header:\n%s", got)
+	}
+	if !strings.Contains(got, "status: TIMED_OUT") || !strings.Contains(got, "error: INVOCATION_TIMED_OUT") {
+		t.Fatalf("output missing timed-out outcome:\n%s", got)
+	}
+}
+
+func TestHumanResponseStreamRenderer_WritesUnresolvedPrimaryResultOutcome(t *testing.T) {
+	t.Parallel()
+
+	var output strings.Builder
+	renderer := newHumanResponseStreamRenderer(&output)
+	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+		Status:    factoryapi.InvocationTerminalStatusFailed,
+		ErrorCode: "INVOCATION_PRIMARY_RESULT_UNRESOLVED",
+		Message:   "primary result could not be resolved",
+	}); err != nil {
+		t.Fatalf("writeFinalInvocationResult: %v", err)
+	}
+
+	got := output.String()
+	if !strings.Contains(got, "error: INVOCATION_PRIMARY_RESULT_UNRESOLVED") {
+		t.Fatalf("output = %q, want unresolved-primary-result outcome", got)
+	}
+}
+
+func TestJSONResponseStreamRenderer_EmitsPrimaryResultRecordForFailedOutcome(t *testing.T) {
+	t.Parallel()
+
+	var output strings.Builder
+	renderer := newJSONResponseStreamRenderer(&output)
+	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+		RequestID: "req-interrupted",
+		TraceID:   "trace-interrupted",
+		Status:    factoryapi.InvocationTerminalStatusFailed,
+		ErrorCode: "INVOCATION_INTERRUPTED",
+		Message:   "dispatch was interrupted before primary result resolved",
+		SessionID: "session-1",
+		WorkID:    "work-1",
+		WorkState: "goal:review",
+	}); err != nil {
+		t.Fatalf("writeFinalInvocationResult: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 NDJSON line, got %d:\n%s", len(lines), output.String())
+	}
+
+	var finalRecord responseStreamJSONPrimaryResultRecord
+	if err := json.Unmarshal([]byte(lines[0]), &finalRecord); err != nil {
+		t.Fatalf("unmarshal primary result line: %v", err)
+	}
+	if finalRecord.RecordType != responseStreamJSONRecordPrimaryResult {
+		t.Fatalf("record type = %q", finalRecord.RecordType)
+	}
+	if finalRecord.Invocation.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("status = %q, want FAILED", finalRecord.Invocation.Status)
+	}
+	if finalRecord.Invocation.ErrorCode == nil || *finalRecord.Invocation.ErrorCode != "INVOCATION_INTERRUPTED" {
+		t.Fatalf("errorCode = %#v, want INVOCATION_INTERRUPTED", finalRecord.Invocation.ErrorCode)
+	}
+	if finalRecord.Invocation.PrimaryResult != nil {
+		t.Fatalf("primaryResult = %#v, want nil on failure", finalRecord.Invocation.PrimaryResult)
 	}
 }
 

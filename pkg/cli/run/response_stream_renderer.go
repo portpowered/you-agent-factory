@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	responseStreamProgressPrefix      = "[you:progress] "
-	responseStreamPrimaryResultHeader = "--- primary result ---"
-	maxHumanProgressLineBytes         = 1024
+	responseStreamProgressPrefix        = "[you:progress] "
+	responseStreamPrimaryResultHeader   = "--- primary result ---"
+	responseStreamInvocationOutcomeHeader = "--- invocation outcome ---"
+	maxHumanProgressLineBytes           = 1024
 
 	responseStreamJSONRecordProgress      = "progress"
 	responseStreamJSONRecordStreamGap     = "stream_gap"
@@ -94,11 +95,65 @@ func (r *humanResponseStreamRenderer) writeFinalInvocationResult(
 	if r == nil {
 		return fmt.Errorf("response-stream renderer is nil")
 	}
-	text, err := invocationPrimaryResultText(result.PrimaryResult)
-	if err != nil {
+	if result.Status == factoryapi.InvocationTerminalStatusCompleted {
+		text, err := invocationPrimaryResultText(result.PrimaryResult)
+		if err != nil {
+			return err
+		}
+		return r.writePrimaryResult(text)
+	}
+	return r.writeInvocationOutcome(result)
+}
+
+func (r *humanResponseStreamRenderer) writeInvocationOutcome(
+	result apisurface.FactoryInvocationResult,
+) error {
+	if r == nil {
+		return fmt.Errorf("response-stream renderer is nil")
+	}
+	lines := formatHumanInvocationOutcomeLines(result)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.progressSeen {
+		if _, err := fmt.Fprintln(r.output); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprintln(r.output, responseStreamInvocationOutcomeHeader); err != nil {
 		return err
 	}
-	return r.writePrimaryResult(text)
+	for _, line := range lines {
+		if _, err := fmt.Fprintln(r.output, line); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func formatHumanInvocationOutcomeLines(result apisurface.FactoryInvocationResult) []string {
+	lines := []string{
+		"status: " + string(result.Status),
+	}
+	if code := strings.TrimSpace(result.ErrorCode); code != "" {
+		lines = append(lines, "error: "+code)
+	}
+	if message := strings.TrimSpace(result.Message); message != "" {
+		lines = append(lines, "message: "+message)
+	}
+	if sessionID := strings.TrimSpace(result.SessionID); sessionID != "" {
+		lines = append(lines, "session: "+sessionID)
+	}
+	if workID := strings.TrimSpace(result.WorkID); workID != "" {
+		lines = append(lines, "workId: "+workID)
+	}
+	if workName := strings.TrimSpace(result.WorkName); workName != "" {
+		lines = append(lines, "workName: "+workName)
+	}
+	if workState := strings.TrimSpace(result.WorkState); workState != "" {
+		lines = append(lines, "workState: "+workState)
+	}
+	return lines
 }
 
 func (r *humanResponseStreamRenderer) writePrimaryResult(text string) error {

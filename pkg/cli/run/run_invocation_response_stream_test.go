@@ -2,6 +2,7 @@ package run
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -461,5 +462,202 @@ func TestPrepareRunConfig_ResponseStreamRejectsReplay(t *testing.T) {
 	var invocationErr *InvocationError
 	if !errors.As(err, &invocationErr) || invocationErr.Code != "INVOCATION_OUTPUT_UNSUPPORTED" {
 		t.Fatalf("error = %v, want INVOCATION_OUTPUT_UNSUPPORTED", err)
+	}
+}
+
+func TestRun_FactoryInvocationResponseStreamRendersTerminalOutcomes(t *testing.T) {
+	text := "Plan the sprint"
+
+	tests := []struct {
+		name         string
+		result       apisurface.FactoryInvocationResult
+		jsonMode     bool
+		wantErrCode  string
+		wantContains []string
+		wantAbsent   []string
+	}{
+		{
+			name: "blocked human",
+			result: apisurface.FactoryInvocationResult{
+				RequestID: "req-blocked",
+				TraceID:   "trace-blocked",
+				Status:    factoryapi.InvocationTerminalStatusFailed,
+				ErrorCode: "INVOCATION_BLOCKED",
+				Message:   `goal invocation blocked while work "Review plan" is in state goal:blocked`,
+				SessionID: factorysessions.DefaultSessionID,
+				WorkID:    "work-review-plan",
+				WorkName:  "Review plan",
+				WorkState: "goal:blocked",
+			},
+			wantErrCode: "INVOCATION_BLOCKED",
+			wantContains: []string{
+				"[you:progress] planning",
+				responseStreamInvocationOutcomeHeader,
+				"status: FAILED",
+				"error: INVOCATION_BLOCKED",
+				"workState: goal:blocked",
+			},
+			wantAbsent: []string{responseStreamPrimaryResultHeader},
+		},
+		{
+			name: "needs-human json",
+			result: apisurface.FactoryInvocationResult{
+				RequestID: "req-needs-human",
+				TraceID:   "trace-needs-human",
+				Status:    factoryapi.InvocationTerminalStatusFailed,
+				ErrorCode: "INVOCATION_NEEDS_HUMAN",
+				Message:   `goal invocation needs human input while work "Review plan" is in state goal:needs-human`,
+				SessionID: factorysessions.DefaultSessionID,
+				WorkID:    "work-review-plan",
+				WorkName:  "Review plan",
+				WorkState: "goal:needs-human",
+			},
+			jsonMode:    true,
+			wantErrCode: "INVOCATION_NEEDS_HUMAN",
+			wantContains: []string{
+				`"recordType":"progress"`,
+				`"recordType":"primary_result"`,
+				`"status":"FAILED"`,
+				`"errorCode":"INVOCATION_NEEDS_HUMAN"`,
+			},
+			wantAbsent: []string{responseStreamInvocationOutcomeHeader},
+		},
+		{
+			name: "runtime failure human",
+			result: apisurface.FactoryInvocationResult{
+				RequestID: "req-failed",
+				TraceID:   "trace-failed",
+				Status:    factoryapi.InvocationTerminalStatusFailed,
+				ErrorCode: "INVOCATION_RUNTIME_FAILURE",
+				Message:   "goal execution failed before primary result resolved",
+				SessionID: factorysessions.DefaultSessionID,
+				WorkID:    "work-failed",
+				WorkState: "goal:failed",
+			},
+			wantErrCode: "INVOCATION_RUNTIME_FAILURE",
+			wantContains: []string{
+				responseStreamInvocationOutcomeHeader,
+				"error: INVOCATION_RUNTIME_FAILURE",
+				"workState: goal:failed",
+			},
+		},
+		{
+			name: "timed out json",
+			result: apisurface.FactoryInvocationResult{
+				RequestID: "req-timed-out",
+				TraceID:   "trace-timed-out",
+				Status:    factoryapi.InvocationTerminalStatusTimedOut,
+				ErrorCode: "INVOCATION_TIMED_OUT",
+				Message:   "invocation timed out while waiting for primary result",
+				SessionID: factorysessions.DefaultSessionID,
+			},
+			jsonMode:    true,
+			wantErrCode: "INVOCATION_TIMED_OUT",
+			wantContains: []string{
+				`"recordType":"primary_result"`,
+				`"status":"TIMED_OUT"`,
+				`"errorCode":"INVOCATION_TIMED_OUT"`,
+			},
+		},
+		{
+			name: "unresolved primary result human",
+			result: apisurface.FactoryInvocationResult{
+				RequestID: "req-unresolved",
+				TraceID:   "trace-unresolved",
+				Status:    factoryapi.InvocationTerminalStatusFailed,
+				ErrorCode: "INVOCATION_PRIMARY_RESULT_UNRESOLVED",
+				Message:   "primary result could not be resolved",
+				SessionID: factorysessions.DefaultSessionID,
+			},
+			wantErrCode: "INVOCATION_PRIMARY_RESULT_UNRESOLVED",
+			wantContains: []string{
+				responseStreamInvocationOutcomeHeader,
+				"error: INVOCATION_PRIMARY_RESULT_UNRESOLVED",
+				"message: primary result could not be resolved",
+			},
+			wantAbsent: []string{responseStreamPrimaryResultHeader},
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			preserveRunGlobals(t)
+
+			var output strings.Builder
+			result := tc.result
+			attachable := &recordingResponseStreamAttachable{
+				dispatchIDs: []string{"dispatch-goal-1"},
+			}
+			buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+				return stubResponseStreamInvocationService{
+					stubInvocationService: stubInvocationService{
+						run: func(ctx context.Context) error {
+							<-ctx.Done()
+							return nil
+						},
+						invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+							deadline := time.Now().Add(2 * time.Second)
+							for time.Now().Before(deadline) {
+								if len(attachable.subscribeCalls) > 0 {
+									break
+								}
+								time.Sleep(10 * time.Millisecond)
+							}
+							if attachable.stream != nil {
+								attachable.stream.Append(responsestream.Event{
+									Kind:       responsestream.EventKindProgressFragment,
+									Type:       responsestream.EventTypeProgress,
+									DispatchID: "dispatch-goal-1",
+									Payload:    "planning",
+								})
+							}
+							return result, nil
+						},
+					},
+					attachable: attachable,
+				}, nil
+			}
+
+			err := Run(context.Background(), RunConfig{
+				FactoryConfigPath:        "/tmp/factory.json",
+				InvocationPositionalText: &text,
+				InvocationOutputMode:     InvocationOutputResponseStream,
+				JSONOutput:               tc.jsonMode,
+				StdinIsTTY:               func() bool { return true },
+				Output:                   &output,
+				Port:                     7437,
+			})
+			if err == nil {
+				t.Fatal("expected invocation failure")
+			}
+			if !strings.Contains(err.Error(), tc.wantErrCode) {
+				t.Fatalf("error = %q, want code %q", err.Error(), tc.wantErrCode)
+			}
+
+			got := output.String()
+			for _, want := range tc.wantContains {
+				if !strings.Contains(got, want) {
+					t.Fatalf("output missing %q:\n%s", want, got)
+				}
+			}
+			for _, absent := range tc.wantAbsent {
+				if strings.Contains(got, absent) {
+					t.Fatalf("output must not contain %q:\n%s", absent, got)
+				}
+			}
+
+			if tc.jsonMode {
+				lines := strings.Split(strings.TrimSpace(got), "\n")
+				if len(lines) < 1 {
+					t.Fatalf("expected NDJSON output, got empty stdout")
+				}
+				var finalRecord responseStreamJSONPrimaryResultRecord
+				if err := json.Unmarshal([]byte(lines[len(lines)-1]), &finalRecord); err != nil {
+					t.Fatalf("unmarshal final primary_result record: %v\n%s", err, lines[len(lines)-1])
+				}
+				assertInvocationResponseMatchesFactoryResult(t, finalRecord.Invocation, result)
+			}
+		})
 	}
 }

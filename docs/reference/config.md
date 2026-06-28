@@ -869,6 +869,14 @@ JSON records to stdout:
 - `primary_result` records wrap the shared `InvocationResponse` envelope for the
   final invocation outcome.
 
+Non-success invocation outcomes still exit non-zero with the same stable CLI
+error codes as primary-result-only mode. Human-readable response-stream mode
+prints a distinct `--- invocation outcome ---` section with `status`, `error`,
+`message`, and any available `session` / `workId` / `workName` / `workState`
+context instead of implying success or replaying a missing `primaryResult` as
+progress. JSON response-stream mode emits the same final `primary_result` record
+shape with the shared `InvocationResponse` failure envelope.
+
 When no internal stream is available on the invocation path, stdout falls back to
 the existing primary-result-only contract after completion (human text or a
 single `primary_result` JSON record).
