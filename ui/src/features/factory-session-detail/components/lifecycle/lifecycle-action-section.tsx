@@ -39,6 +39,7 @@ export function LifecycleActionSection({
   pendingActionID,
 }: LifecycleActionSectionProps) {
   const messages = getFactorySessionDetailMessages(locale);
+  const isLifecycleRequestPending = pendingActionID !== null;
 
   return (
     <section className="grid gap-2">
@@ -46,6 +47,9 @@ export function LifecycleActionSection({
       <DashboardActionRow
         actions={availability.actions.map((action) => (
           <DashboardActionButton
+            disabled={
+              isLifecycleRequestPending && pendingActionID !== action
+            }
             executing={pendingActionID === action}
             key={action}
             onClick={() => {

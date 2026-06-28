@@ -17,7 +17,7 @@ import {
 } from "../../../testing/factory-session-event-replay-fixtures";
 import { FactorySessionDetailPanel } from "../components/factory-session-detail-panel";
 
-function renderFactorySessionDetailPanel(sessionID: string) {
+function renderFactorySessionDetailPanel(sessionID: string, width = "960px") {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -28,7 +28,7 @@ function renderFactorySessionDetailPanel(sessionID: string) {
   });
 
   return (
-    <div style={{ maxWidth: "100%", width: "960px" }}>
+    <div style={{ maxWidth: "100%", width }}>
       <QueryClientProvider client={queryClient}>
         <FactorySessionDetailPanel sessionID={sessionID} />
       </QueryClientProvider>
@@ -173,6 +173,30 @@ export const DurableReplayDisclosureAwaitingApproval = {
     await expect(canvas.findByRole("button", { name: "Pause" })).resolves.toBeTruthy();
   },
   render: () => renderFactorySessionDetailPanel(awaitingReplaySessionID),
+};
+
+export const DurableReplayDisclosureAwaitingApprovalMobile = {
+  tags: ["test"],
+  parameters: {
+    ...DurableReplayDisclosureAwaitingApproval.parameters,
+    viewport: {
+      defaultViewport: "mobile1",
+    },
+  },
+  play: async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const user = userEvent.setup();
+    await expect(canvas.findByText("Lifecycle controls")).resolves.toBeTruthy();
+    await expect(canvas.findByRole("button", { name: "Approve" })).resolves.toBeTruthy();
+    await expect(canvas.findByText("Runtime")).resolves.toBeTruthy();
+    await user.click(await canvas.findByRole("button", { name: "Approve" }));
+    await expect(canvas.findByText("Accepted")).resolves.toBeTruthy();
+    await expect(canvas.findByRole("button", { name: "Pause" })).resolves.toBeTruthy();
+    await expect(
+      canvas.findByRole("button", { name: "Expand Factory Event replay" }),
+    ).resolves.toBeTruthy();
+  },
+  render: () => renderFactorySessionDetailPanel(awaitingReplaySessionID, "375px"),
 };
 
 export const DurableReplayDisclosureWarning = {
