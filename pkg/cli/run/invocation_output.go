@@ -9,6 +9,9 @@ const (
 	// InvocationOutputPrimaryResult is the default one-shot invocation stdout
 	// contract: primary-result-only output with no live progress rendering.
 	InvocationOutputPrimaryResult = ""
+	// invocationOutputPrimaryLiteral is the documented spelling for the default
+	// primary-result-only output mode.
+	invocationOutputPrimaryLiteral = "primary"
 	// InvocationOutputResponseStream enables live internal SessionResponseStream
 	// progress rendering for supported one-shot factory invocations.
 	InvocationOutputResponseStream = "response-stream"
@@ -21,7 +24,7 @@ func NormalizeInvocationOutputMode(raw string) (string, error) {
 func normalizeInvocationOutputMode(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	switch trimmed {
-	case InvocationOutputPrimaryResult:
+	case InvocationOutputPrimaryResult, invocationOutputPrimaryLiteral:
 		return InvocationOutputPrimaryResult, nil
 	case InvocationOutputResponseStream:
 		return InvocationOutputResponseStream, nil

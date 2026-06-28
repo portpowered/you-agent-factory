@@ -31,6 +31,11 @@ func TestNormalizeInvocationOutputMode(t *testing.T) {
 			want: InvocationOutputPrimaryResult,
 		},
 		{
+			name: "primary literal accepted",
+			raw:  "primary",
+			want: InvocationOutputPrimaryResult,
+		},
+		{
 			name: "response-stream accepted",
 			raw:  "response-stream",
 			want: InvocationOutputResponseStream,
@@ -466,16 +471,24 @@ func TestPrepareRunConfig_ResponseStreamRejectsReplay(t *testing.T) {
 }
 
 func TestRun_FactoryInvocationResponseStreamRendersTerminalOutcomes(t *testing.T) {
-	text := "Plan the sprint"
+	for _, tc := range responseStreamTerminalOutcomeCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			runResponseStreamTerminalOutcomeSubtest(t, tc)
+		})
+	}
+}
 
-	tests := []struct {
-		name         string
-		result       apisurface.FactoryInvocationResult
-		jsonMode     bool
-		wantErrCode  string
-		wantContains []string
-		wantAbsent   []string
-	}{
+type responseStreamTerminalOutcomeCase struct {
+	name         string
+	result       apisurface.FactoryInvocationResult
+	jsonMode     bool
+	wantErrCode  string
+	wantContains []string
+	wantAbsent   []string
+}
+
+var responseStreamTerminalOutcomeCases = []responseStreamTerminalOutcomeCase{
 		{
 			name: "blocked human",
 			result: apisurface.FactoryInvocationResult{
@@ -575,90 +588,88 @@ func TestRun_FactoryInvocationResponseStreamRendersTerminalOutcomes(t *testing.T
 				"error: INVOCATION_PRIMARY_RESULT_UNRESOLVED",
 				"message: primary result could not be resolved",
 			},
-			wantAbsent: []string{responseStreamPrimaryResultHeader},
-		},
+		wantAbsent: []string{responseStreamPrimaryResultHeader},
+	},
+}
+
+func runResponseStreamTerminalOutcomeSubtest(t *testing.T, tc responseStreamTerminalOutcomeCase) {
+	t.Helper()
+	preserveRunGlobals(t)
+
+	text := "Plan the sprint"
+	var output strings.Builder
+	result := tc.result
+	attachable := &recordingResponseStreamAttachable{
+		dispatchIDs: []string{"dispatch-goal-1"},
+	}
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubResponseStreamInvocationService{
+			stubInvocationService: stubInvocationService{
+				run: func(ctx context.Context) error {
+					<-ctx.Done()
+					return nil
+				},
+				invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+					deadline := time.Now().Add(2 * time.Second)
+					for time.Now().Before(deadline) {
+						if len(attachable.subscribeCalls) > 0 {
+							break
+						}
+						time.Sleep(10 * time.Millisecond)
+					}
+					if attachable.stream != nil {
+						attachable.stream.Append(responsestream.Event{
+							Kind:       responsestream.EventKindProgressFragment,
+							Type:       responsestream.EventTypeProgress,
+							DispatchID: "dispatch-goal-1",
+							Payload:    "planning",
+						})
+					}
+					return result, nil
+				},
+			},
+			attachable: attachable,
+		}, nil
 	}
 
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			preserveRunGlobals(t)
+	err := Run(context.Background(), RunConfig{
+		FactoryConfigPath:        "/tmp/factory.json",
+		InvocationPositionalText: &text,
+		InvocationOutputMode:     InvocationOutputResponseStream,
+		JSONOutput:               tc.jsonMode,
+		StdinIsTTY:               func() bool { return true },
+		Output:                   &output,
+		Port:                     7437,
+	})
+	if err == nil {
+		t.Fatal("expected invocation failure")
+	}
+	if !strings.Contains(err.Error(), tc.wantErrCode) {
+		t.Fatalf("error = %q, want code %q", err.Error(), tc.wantErrCode)
+	}
 
-			var output strings.Builder
-			result := tc.result
-			attachable := &recordingResponseStreamAttachable{
-				dispatchIDs: []string{"dispatch-goal-1"},
-			}
-			buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
-				return stubResponseStreamInvocationService{
-					stubInvocationService: stubInvocationService{
-						run: func(ctx context.Context) error {
-							<-ctx.Done()
-							return nil
-						},
-						invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
-							deadline := time.Now().Add(2 * time.Second)
-							for time.Now().Before(deadline) {
-								if len(attachable.subscribeCalls) > 0 {
-									break
-								}
-								time.Sleep(10 * time.Millisecond)
-							}
-							if attachable.stream != nil {
-								attachable.stream.Append(responsestream.Event{
-									Kind:       responsestream.EventKindProgressFragment,
-									Type:       responsestream.EventTypeProgress,
-									DispatchID: "dispatch-goal-1",
-									Payload:    "planning",
-								})
-							}
-							return result, nil
-						},
-					},
-					attachable: attachable,
-				}, nil
-			}
+	got := output.String()
+	for _, want := range tc.wantContains {
+		if !strings.Contains(got, want) {
+			t.Fatalf("output missing %q:\n%s", want, got)
+		}
+	}
+	for _, absent := range tc.wantAbsent {
+		if strings.Contains(got, absent) {
+			t.Fatalf("output must not contain %q:\n%s", absent, got)
+		}
+	}
 
-			err := Run(context.Background(), RunConfig{
-				FactoryConfigPath:        "/tmp/factory.json",
-				InvocationPositionalText: &text,
-				InvocationOutputMode:     InvocationOutputResponseStream,
-				JSONOutput:               tc.jsonMode,
-				StdinIsTTY:               func() bool { return true },
-				Output:                   &output,
-				Port:                     7437,
-			})
-			if err == nil {
-				t.Fatal("expected invocation failure")
-			}
-			if !strings.Contains(err.Error(), tc.wantErrCode) {
-				t.Fatalf("error = %q, want code %q", err.Error(), tc.wantErrCode)
-			}
-
-			got := output.String()
-			for _, want := range tc.wantContains {
-				if !strings.Contains(got, want) {
-					t.Fatalf("output missing %q:\n%s", want, got)
-				}
-			}
-			for _, absent := range tc.wantAbsent {
-				if strings.Contains(got, absent) {
-					t.Fatalf("output must not contain %q:\n%s", absent, got)
-				}
-			}
-
-			if tc.jsonMode {
-				lines := strings.Split(strings.TrimSpace(got), "\n")
-				if len(lines) < 1 {
-					t.Fatalf("expected NDJSON output, got empty stdout")
-				}
-				var finalRecord responseStreamJSONPrimaryResultRecord
-				if err := json.Unmarshal([]byte(lines[len(lines)-1]), &finalRecord); err != nil {
-					t.Fatalf("unmarshal final primary_result record: %v\n%s", err, lines[len(lines)-1])
-				}
-				assertInvocationResponseMatchesFactoryResult(t, finalRecord.Invocation, result)
-			}
-		})
+	if tc.jsonMode {
+		lines := strings.Split(strings.TrimSpace(got), "\n")
+		if len(lines) < 1 {
+			t.Fatalf("expected NDJSON output, got empty stdout")
+		}
+		var finalRecord responseStreamJSONPrimaryResultRecord
+		if err := json.Unmarshal([]byte(lines[len(lines)-1]), &finalRecord); err != nil {
+			t.Fatalf("unmarshal final primary_result record: %v\n%s", err, lines[len(lines)-1])
+		}
+		assertInvocationResponseMatchesFactoryResult(t, finalRecord.Invocation, result)
 	}
 }
 
@@ -668,6 +679,7 @@ func TestRun_FactoryInvocationResponseStreamCompletesWithSlowStdout(t *testing.T
 	text := "goal completed"
 	output := &gatedResponseStreamWriter{}
 	output.block()
+	eventsFlooded := make(chan struct{}, 1)
 	attachable := &recordingResponseStreamAttachable{
 		dispatchIDs: []string{"dispatch-goal-1"},
 	}
@@ -696,6 +708,7 @@ func TestRun_FactoryInvocationResponseStreamCompletesWithSlowStdout(t *testing.T
 							})
 						}
 					}
+					eventsFlooded <- struct{}{}
 					return apisurface.FactoryInvocationResult{
 						RequestID: "req-1",
 						TraceID:   "trace-1",
@@ -723,9 +736,22 @@ func TestRun_FactoryInvocationResponseStreamCompletesWithSlowStdout(t *testing.T
 	}()
 
 	select {
+	case <-eventsFlooded:
 	case err := <-done:
-		t.Fatalf("Run completed before stdout was released: %v", err)
-	case <-time.After(750 * time.Millisecond):
+		t.Fatalf("Run completed before progress events were flooded: %v", err)
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for response-stream progress flood")
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if output.blockedWriteAttemptsCount() > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if output.blockedWriteAttemptsCount() == 0 {
+		t.Fatal("expected progress writer to block on slow stdout before release")
 	}
 
 	output.release()

@@ -3,14 +3,16 @@ package run
 import (
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
 type gatedResponseStreamWriter struct {
-	mu      sync.Mutex
-	blocked bool
-	buf     strings.Builder
+	mu                   sync.Mutex
+	blocked              bool
+	buf                  strings.Builder
+	blockedWriteAttempts atomic.Int64
 }
 
 func (w *gatedResponseStreamWriter) block() {
@@ -33,12 +35,20 @@ func (w *gatedResponseStreamWriter) Write(p []byte) (int, error) {
 		if !blocked {
 			return w.buf.Write(p)
 		}
+		w.blockedWriteAttempts.Add(1)
 		time.Sleep(1 * time.Millisecond)
 	}
 }
 
 func (w *gatedResponseStreamWriter) String() string {
 	return w.buf.String()
+}
+
+func (w *gatedResponseStreamWriter) blockedWriteAttemptsCount() int64 {
+	if w == nil {
+		return 0
+	}
+	return w.blockedWriteAttempts.Load()
 }
 
 func TestResponseStreamProgressWriter_EnqueueDoesNotBlockWhenOutputSlow(t *testing.T) {
