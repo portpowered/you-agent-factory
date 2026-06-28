@@ -3,6 +3,7 @@ package mcpcli_test
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -23,7 +24,7 @@ return {
 
 // pkgmaintcheck:ignore-cyclomatic-complexity runtime smoke keeps discovery, async start, polling, and result assertions on one documented stdio path.
 func TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult(t *testing.T) {
-	projectRoot := t.TempDir()
+	projectRoot := runtimeSmokeProjectRoot(t)
 	client, stdinWrite, cancelServe, serveErr := startRunServeRuntimeSmokeServer(t, projectRoot)
 	assertInstallSmokeInitialize(t, client)
 	assertInstallSmokeDiscovery(t, client)
@@ -32,6 +33,15 @@ func TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult(t *testing.T) {
 	assertRuntimeSmokePollObservesRunningOrTerminal(t, client, sessionID)
 	cancelServe()
 	closeRunServeSmokeServer(t, stdinWrite, serveErr)
+}
+
+func runtimeSmokeProjectRoot(t *testing.T) string {
+	t.Helper()
+	projectRoot := t.TempDir()
+	t.Cleanup(func() {
+		_ = os.RemoveAll(filepath.Join(projectRoot, ".you-agent-factory"))
+	})
+	return projectRoot
 }
 
 func startRunServeRuntimeSmokeServer(
