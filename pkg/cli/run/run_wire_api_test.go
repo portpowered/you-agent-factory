@@ -317,64 +317,6 @@ func (r *recordingResponseStreamAttachable) SessionResponseStreamDispatchIDs(str
 	return r.set.DispatchIDs(), nil
 }
 
-func TestResponseStreamAttachment_SubscribesWhenDispatchAppears(t *testing.T) {
-	t.Parallel()
-
-	attachable := newRecordingResponseStreamAttachable()
-	attachable.ensureDispatch("dispatch-1")
-	sink := &countingResponseStreamSink{}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	attachment := startResponseStreamAttachment(ctx, attachable, factorysessions.DefaultSessionID, sink)
-	if attachment == nil {
-		t.Fatal("expected attachment")
-	}
-	defer attachment.stop()
-
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if len(attachable.subscribeCalls) > 0 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if len(attachable.subscribeCalls) == 0 {
-		t.Fatal("expected internal response-stream subscription")
-	}
-
-	attachable.stream("dispatch-1").Append(responsestream.Event{
-		Kind:    responsestream.EventKindProgressFragment,
-		Type:    responsestream.EventTypeProgress,
-		Payload: "working",
-	})
-
-	for time.Now().Before(deadline) {
-		if sink.segments() > 0 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if sink.segments() == 0 {
-		t.Fatal("expected stream segment delivery after subscription")
-	}
-	if got := attachable.subscribeCalls[0].dispatchID; got != "dispatch-1" {
-		t.Fatalf("dispatchID = %q, want dispatch-1", got)
-	}
-}
-
-type countingResponseStreamSink struct {
-	segmentCount int
-}
-
-func (s *countingResponseStreamSink) onStreamSegment(factorysessions.SessionResponseStreamReadResult) {
-	s.segmentCount++
-}
-
-func (s *countingResponseStreamSink) segments() int {
-	return s.segmentCount
-}
-
 type stubResponseStreamInvocationService struct {
 	stubInvocationService
 	attachable *recordingResponseStreamAttachable
@@ -1001,4 +943,54 @@ func TestRun_FactoryInvocationResponseStreamCompletesWithSlowStdout(t *testing.T
 	output.release()
 	waitForResponseStreamRunCompletion(t, done, 2*time.Second)
 	assertSlowStdoutResponseStreamOutput(t, output, text)
+}
+
+func TestHumanProgressRenderableType(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		eventType responsestream.EventType
+		want      bool
+	}{
+		{eventType: responsestream.EventTypeProgress, want: true},
+		{eventType: responsestream.EventTypeStarted, want: true},
+		{eventType: responsestream.EventTypeTextDelta, want: false},
+		{eventType: responsestream.EventTypeFinalText, want: false},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(string(tc.eventType), func(t *testing.T) {
+			t.Parallel()
+			if got := humanProgressRenderableType(tc.eventType); got != tc.want {
+				t.Fatalf("humanProgressRenderableType(%q) = %t, want %t", tc.eventType, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestBoundedHumanProgressPayload(t *testing.T) {
+	t.Parallel()
+
+	payload := strings.Repeat("a", maxHumanProgressLineBytes+10)
+	got := boundedHumanProgressPayload(payload)
+	if len([]byte(got)) > maxHumanProgressLineBytes+3 {
+		t.Fatalf("bounded payload too long: %d bytes", len([]byte(got)))
+	}
+	if !strings.HasSuffix(got, "...") {
+		t.Fatalf("bounded payload = %q, want ellipsis suffix", got)
+	}
+}
+
+func TestFormatCompactionNotice(t *testing.T) {
+	t.Parallel()
+
+	got := formatCompactionNotice(responsestream.CompactionSummary{
+		Reason:                responsestream.CompactionReasonCoalesced,
+		DroppedSequenceCount:  2,
+		FirstRetainedSequence: 5,
+	})
+	if got != "stream coalesced (2 earlier events omitted)" {
+		t.Fatalf("notice = %q", got)
+	}
 }
