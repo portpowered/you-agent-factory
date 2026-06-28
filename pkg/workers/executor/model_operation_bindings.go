@@ -12,14 +12,3 @@ func resolveModelOperationBindings(
 ) ([]interfaces.ResolvedModelOperationBinding, error) {
 	return invocations.ResolveInferenceOperationBindings(workstationDef, workerDef, inputTokens)
 }
-
-// ResolveModelOperationBindings resolves one MODEL_INVOKE-style slot binding
-// set against ordered runtime input content using the same rules as workstation
-// execution.
-func ResolveModelOperationBindings(
-	workstationDef *interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
-	inputTokens []interfaces.Token,
-) ([]interfaces.ResolvedModelOperationBinding, error) {
-	return invocations.ResolveInferenceOperationBindings(workstationDef, workerDef, inputTokens)
-}
