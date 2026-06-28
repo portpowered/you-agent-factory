@@ -1702,6 +1702,90 @@ func TestFactoryService_CancelDurableFactorySession_HTTPUsesProductionRuntime(t 
 	}
 }
 
+func TestFactoryService_PauseDurableFactorySession_HTTPUsesProductionRuntime(t *testing.T) {
+	t.Parallel()
+
+	fs := newFactoryServiceForDurableLifecycleTest(t, "busy-loop.workflow.js", "busy-loop")
+	server := httptest.NewServer(api.NewServer(fs, 0, zap.NewNop()).Handler())
+	defer server.Close()
+
+	started, err := fs.StartDurableFactorySessionAsync(context.Background(), factoryapi.FactorySessionExecutionRequest{
+		RequestId: "req-factory-service-lifecycle-http-pause-start-001",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
+			WorkflowName: strPtr("busy-loop"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartDurableFactorySessionAsync: %v", err)
+	}
+
+	url := server.URL + "/factory-sessions/" + started.SessionId + "/pause"
+	resp, err := http.Post(url, "application/json", bytes.NewReader(nil))
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var response factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		t.Fatalf("decode lifecycle control response: %v", err)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindPause {
+		t.Fatalf("operation = %q, want PAUSE", response.Operation)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("status = %q, want PAUSED", response.Status)
+	}
+}
+
+func TestFactoryService_TerminateDurableFactorySession_HTTPUsesProductionRuntime(t *testing.T) {
+	t.Parallel()
+
+	fs := newFactoryServiceForDurableLifecycleTest(t, "busy-loop.workflow.js", "busy-loop")
+	server := httptest.NewServer(api.NewServer(fs, 0, zap.NewNop()).Handler())
+	defer server.Close()
+
+	started, err := fs.StartDurableFactorySessionAsync(context.Background(), factoryapi.FactorySessionExecutionRequest{
+		RequestId: "req-factory-service-lifecycle-http-terminate-start-001",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
+			WorkflowName: strPtr("busy-loop"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartDurableFactorySessionAsync: %v", err)
+	}
+
+	url := server.URL + "/factory-sessions/" + started.SessionId + "/terminate"
+	resp, err := http.Post(url, "application/json", bytes.NewReader(nil))
+	if err != nil {
+		t.Fatalf("POST %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	var response factoryapi.FactorySessionLifecycleControlResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		t.Fatalf("decode lifecycle control response: %v", err)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindTerminate {
+		t.Fatalf("operation = %q, want TERMINATE", response.Operation)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusTerminated {
+		t.Fatalf("status = %q, want TERMINATED", response.Status)
+	}
+}
+
 func newFactoryServiceForDurableLifecycleTest(t *testing.T, fixtureName, workflowName string) *FactoryService {
 	t.Helper()
 	projectRoot := setupDurableLifecycleWorkflowFixture(t, fixtureName, workflowName)

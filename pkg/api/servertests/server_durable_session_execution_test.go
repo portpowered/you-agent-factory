@@ -418,6 +418,47 @@ func TestLifecycleControls_CancelPreservesReadSurfaces(t *testing.T) {
 	}
 }
 
+func TestLifecycleControls_TerminatePreservesReadSurfaces(t *testing.T) {
+	service := newAPILifecycleRuntimeService(t, "busy-loop.workflow.js", "busy-loop")
+	started := startRuntimeBackedDurableSession(t, service)
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	beforeRead := getDurableFactorySession(t, server.URL, started.SessionID)
+	assertDurableSessionInspectionLinks(t, started.SessionID, beforeRead.Links)
+	beforeEvents := getDurableFactorySessionEvents(t, server.URL, started.SessionID, "")
+
+	terminateResp, terminateStatus := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "terminate", nil)
+	if terminateStatus != http.StatusOK {
+		t.Fatalf("terminate status = %d, want 200", terminateStatus)
+	}
+	if terminateResp.Status != factoryapi.FactorySessionDurableLifecycleStatusTerminated {
+		t.Fatalf("control status = %q, want TERMINATED", terminateResp.Status)
+	}
+	assertLifecycleControlPreservesInspectionLinks(t, started.SessionID, terminateResp.Links)
+	assertReadSurfacesReachableAfterLifecycle(t, server.URL, started.SessionID)
+
+	read := getDurableFactorySession(t, server.URL, started.SessionID)
+	assertDurableSessionInspectionLinks(t, started.SessionID, read.Links)
+	if read.Status != factoryapi.FactorySessionDurableLifecycleStatusTerminated &&
+		read.Status != factoryapi.FactorySessionDurableLifecycleStatusCanceled {
+		t.Fatalf("status after terminate = %q, want TERMINATED or CANCELED", read.Status)
+	}
+	if read.SessionId != started.SessionID {
+		t.Fatalf("session id after terminate = %q, want %q", read.SessionId, started.SessionID)
+	}
+
+	getDurableFactorySessionResult(t, server.URL, started.SessionID, "")
+	getFactorySessionList(t, server.URL, "persisted")
+
+	afterEvents := getDurableFactorySessionEvents(t, server.URL, started.SessionID, "")
+	if len(afterEvents) < len(beforeEvents) {
+		t.Fatalf("event count after terminate = %d, want at least %d", len(afterEvents), len(beforeEvents))
+	}
+}
+
 func assertDurableSessionInspectionLinks(
 	t *testing.T,
 	sessionID string,

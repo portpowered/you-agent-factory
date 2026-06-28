@@ -274,6 +274,29 @@ func TestPauseFactorySession_MissingLiveSessionReturnsNotFound(t *testing.T) {
 	}
 }
 
+func TestApproveFactorySession_RuntimeBackedRunningSessionReturnsTypedInvalidState(t *testing.T) {
+	service := newAPILifecycleRuntimeService(t, "busy-loop.workflow.js", "busy-loop")
+	started := startRuntimeBackedDurableSession(t, service)
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	response, status := postFactorySessionApprove(t, server.URL, started.SessionID, nil)
+	if status != http.StatusConflict {
+		t.Fatalf("status = %d, want 409", status)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindApprove {
+		t.Fatalf("operation = %q, want APPROVE", response.Operation)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeInvalidState {
+		t.Fatalf("outcome = %q, want INVALID_STATE", response.Outcome)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("status = %q, want RUNNING", response.Status)
+	}
+}
+
 func TestApproveFactorySession_FixtureBackedAwaitingApprovalReturnsTypedLifecycleControl(t *testing.T) {
 	service := newAPILifecycleFakeService(t)
 	startAPIAwaitingApprovalSession(t, service)
