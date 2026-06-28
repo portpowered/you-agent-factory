@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { DetailCopy } from "../../../components/ui/widget-frame";
 import { DashboardWidgetFrame } from "../../bento/public";
-import { readFactorySessionIDSearchParam } from "../lib/factory-session-search-param";
+import { readFactorySessionIDSearchParam } from "../lib/search-param/factory-session-search-param";
 import { getFactorySessionWidgetMessages } from "../messages/factory-session-widget";
 import { FactorySessionDetailPanel } from "./factory-session-detail-panel";
 

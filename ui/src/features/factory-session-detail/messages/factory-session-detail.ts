@@ -10,6 +10,11 @@ import {
   resolveLocalizedMessages,
 } from "../../../i18n";
 import {
+  chineseFactorySessionArtifactDetailMessages,
+  englishFactorySessionArtifactDetailMessages,
+  type FactorySessionArtifactDetailMessages,
+} from "./factory-session-detail.artifacts";
+import {
   chineseFactorySessionEventReplayMessages,
   englishFactorySessionEventReplayMessages,
   type FactorySessionEventReplayMessages,
@@ -21,7 +26,8 @@ import {
 } from "./factory-session-detail.lifecycle-outcomes";
 
 export interface FactorySessionDetailMessages
-  extends FactorySessionEventReplayMessages,
+  extends FactorySessionArtifactDetailMessages,
+    FactorySessionEventReplayMessages,
     FactorySessionLifecycleOutcomeMessages {
   lifecycleActionApproveLabel: string;
   lifecycleActionCancelLabel: string;
@@ -33,9 +39,6 @@ export interface FactorySessionDetailMessages
   lifecycleControlsHeading: string;
   lifecycleControlsRetrySelectionHint: string;
   lifecycleControlsSelectedDispatchLabel: (dispatchID: string) => string;
-  artifactLinksHeading: string;
-  artifactRefActionLabel: string;
-  artifactsHeading: string;
   checkpointRefsHeading: string;
   childDispatchCountsLabel: string;
   collapseDispatchDetailLabel: (dispatchID: string) => string;
@@ -230,6 +233,7 @@ const chineseDurableLifecycleStatusLabels = {
 
 const factorySessionDetailMessagesByLocale = {
   en: {
+    ...englishFactorySessionArtifactDetailMessages,
     lifecycleActionApproveLabel: "Approve",
     lifecycleActionCancelLabel: "Cancel",
     lifecycleActionPauseLabel: "Pause",
@@ -244,9 +248,6 @@ const factorySessionDetailMessagesByLocale = {
       "Select a failed dispatch to make retry available on this detail surface.",
     lifecycleControlsSelectedDispatchLabel: (dispatchID) =>
       `Selected dispatch: ${dispatchID}`,
-    artifactLinksHeading: "Dispatch artifacts",
-    artifactRefActionLabel: "Open artifact",
-    artifactsHeading: "Artifacts",
     checkpointRefsHeading: "Checkpoint refs",
     collapseDispatchDetailLabel: (dispatchID) =>
       `Collapse dispatch detail for ${dispatchID}`,
@@ -327,6 +328,7 @@ const factorySessionDetailMessagesByLocale = {
     warningsHeading: "Dispatch warnings",
   },
   "zh-CN": {
+    ...chineseFactorySessionArtifactDetailMessages,
     lifecycleActionApproveLabel: "批准",
     lifecycleActionCancelLabel: "取消",
     lifecycleActionPauseLabel: "暂停",
@@ -340,9 +342,6 @@ const factorySessionDetailMessagesByLocale = {
       "选择失败的调度后，当前详情界面才会显示重试操作。",
     lifecycleControlsSelectedDispatchLabel: (dispatchID) =>
       `已选择调度：${dispatchID}`,
-    artifactLinksHeading: "调度工件",
-    artifactRefActionLabel: "打开工件",
-    artifactsHeading: "工件",
     checkpointRefsHeading: "检查点引用",
     collapseDispatchDetailLabel: (dispatchID) =>
       `收起 ${dispatchID} 的调度详情`,

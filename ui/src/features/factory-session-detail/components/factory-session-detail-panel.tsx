@@ -12,6 +12,7 @@ import {
 } from "../../../components/ui";
 import { ExpandablePanelTrigger } from "../../../components/ui/expandable-panel-trigger";
 import { DetailCopy } from "../../../components/ui/widget-frame";
+import { FactorySessionArtifactList } from "./artifact-drilldown/factory-session-artifact-list";
 import { useFactorySessionDetail } from "../hooks/use-factory-session-detail";
 import { useFactorySessionLifecycleControl } from "../hooks/use-factory-session-lifecycle-control";
 import { useFactorySessionDispatchDetail } from "../hooks/use-factory-session-dispatch-detail";
@@ -228,9 +229,11 @@ function JavaScriptSessionProjection({
       ) : null}
 
       {artifacts && artifacts.length > 0 ? (
-        <ArtifactList
+        <FactorySessionArtifactList
           artifacts={artifacts}
           heading={messages.artifactsHeading}
+          locale={locale}
+          sessionID={sessionID}
         />
       ) : null}
 
@@ -483,30 +486,6 @@ function CheckpointRefList({
                 ? `${checkpoint.id} (${checkpoint.label})`
                 : checkpoint.id}
               {checkpoint.summary ? ` — ${checkpoint.summary}` : ""}
-            </DashboardText>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function ArtifactList({
-  artifacts,
-  heading,
-}: {
-  artifacts: FactoryArtifact[];
-  heading: string;
-}) {
-  return (
-    <div className="grid gap-2">
-      <DashboardLabel>{heading}</DashboardLabel>
-      <ul className="grid gap-1">
-        {artifacts.map((artifact) => (
-          <li key={artifact.id}>
-            <DashboardText>
-              {artifact.kind}
-              {artifact.label ? ` — ${artifact.label}` : ""}
             </DashboardText>
           </li>
         ))}

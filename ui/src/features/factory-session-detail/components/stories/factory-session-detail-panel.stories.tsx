@@ -1,6 +1,7 @@
 import {
   DispatchDrilldownStates as dispatchDrilldownStatesStory,
 } from "../../lib/factory-session-detail-panel.story-definitions.stories.shared";
+import { ArtifactDrilldown as artifactDrilldownStory } from "../../lib/factory-session-detail-panel.artifact-story-definitions.stories.shared";
 import {
   DurableReplayDisclosure as durableReplayDisclosureStory,
   DurableReplayDisclosureAwaitingApproval as durableReplayDisclosureAwaitingApprovalStory,
@@ -17,6 +18,7 @@ export default {
 };
 
 export const DispatchDrilldownStates = { ...dispatchDrilldownStatesStory };
+export const ArtifactDrilldown = { ...artifactDrilldownStory };
 export const DurableReplayDisclosure = { ...durableReplayDisclosureStory };
 export const DurableReplayDisclosureAwaitingApproval = {
   ...durableReplayDisclosureAwaitingApprovalStory,
