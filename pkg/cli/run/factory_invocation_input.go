@@ -319,19 +319,23 @@ func runFactoryInvocation(
 	}
 
 	var streamAttachment *responseStreamAttachment
+	var streamRenderer *humanResponseStreamRenderer
 	if isResponseStreamOutputMode(cfg.InvocationOutputMode) {
+		streamRenderer = newHumanResponseStreamRenderer(cfg.Output)
 		if streamInvoker, ok := invoker.(sessionResponseStreamInvocationRunner); ok {
 			streamAttachment = startResponseStreamAttachment(
-				runCtx,
+				ctx,
 				streamInvoker,
 				factorysessions.DefaultSessionID,
-				discardResponseStreamSink{},
+				streamRenderer,
 			)
-			defer streamAttachment.stop()
 		}
 	}
 
 	result, err := invoker.InvokeFactorySession(runCtx, factorysessions.DefaultSessionID, request)
+	if streamAttachment != nil {
+		streamAttachment.stop()
+	}
 	cancel()
 	runErr := <-runErrCh
 	if err != nil {
@@ -343,7 +347,7 @@ func runFactoryInvocation(
 	if result.Status != factoryapi.InvocationTerminalStatusCompleted {
 		return writeInvocationFailure(cfg, result)
 	}
-	return writeInvocationSuccess(cfg, result)
+	return writeInvocationSuccess(cfg, result, streamRenderer)
 }
 
 func waitForInvocationSessionReady(
@@ -435,7 +439,11 @@ func writeInvocationFailure(cfg RunConfig, result apisurface.FactoryInvocationRe
 	return invocationResultFailure(result)
 }
 
-func writeInvocationSuccess(cfg RunConfig, result apisurface.FactoryInvocationResult) error {
+func writeInvocationSuccess(
+	cfg RunConfig,
+	result apisurface.FactoryInvocationResult,
+	streamRenderer *humanResponseStreamRenderer,
+) error {
 	if cfg.JSONOutput {
 		return writeInvocationJSON(cfg, result)
 	}
@@ -443,6 +451,9 @@ func writeInvocationSuccess(cfg RunConfig, result apisurface.FactoryInvocationRe
 	text, err := invocationPrimaryResultText(result.PrimaryResult)
 	if err != nil {
 		return err
+	}
+	if streamRenderer != nil && streamRenderer.renderedProgress() {
+		return streamRenderer.writePrimaryResult(text)
 	}
 	output := cfg.Output
 	if output == nil {

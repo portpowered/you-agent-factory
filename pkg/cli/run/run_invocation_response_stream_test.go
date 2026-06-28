@@ -306,6 +306,13 @@ func TestRun_FactoryInvocationResponseStreamAttachesWhenRunnerSupportsInternalSt
 					return nil
 				},
 				invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+					deadline := time.Now().Add(2 * time.Second)
+					for time.Now().Before(deadline) {
+						if len(attachable.subscribeCalls) > 0 {
+							break
+						}
+						time.Sleep(10 * time.Millisecond)
+					}
 					if attachable.stream != nil {
 						attachable.stream.Append(responsestream.Event{
 							Kind:       responsestream.EventKindProgressFragment,
@@ -313,13 +320,19 @@ func TestRun_FactoryInvocationResponseStreamAttachesWhenRunnerSupportsInternalSt
 							DispatchID: "dispatch-goal-1",
 							Payload:    "planning",
 						})
+						attachable.stream.Append(responsestream.Event{
+							Kind:       responsestream.EventKindResponseFragment,
+							Type:       responsestream.EventTypeTextDelta,
+							DispatchID: "dispatch-goal-1",
+							Payload:    text,
+						})
 					}
 					return apisurface.FactoryInvocationResult{
 						RequestID: "req-1",
 						TraceID:   "trace-1",
 						Status:    factoryapi.InvocationTerminalStatusCompleted,
 						PrimaryResult: []interfaces.WorkContentPart{
-							{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
+							{Type: interfaces.WorkContentPartTypeText, Text: text},
 						},
 					}, nil
 				},
@@ -339,8 +352,18 @@ func TestRun_FactoryInvocationResponseStreamAttachesWhenRunnerSupportsInternalSt
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if got := output.String(); got != text {
-		t.Fatalf("output = %q, want final primary result %q", got, text)
+	got := output.String()
+	if !strings.Contains(got, "[you:progress] planning") {
+		t.Fatalf("output missing progress rendering:\n%s", got)
+	}
+	if strings.Contains(got, "[you:progress] goal completed") {
+		t.Fatalf("response fragment leaked into progress output:\n%s", got)
+	}
+	if !strings.Contains(got, responseStreamPrimaryResultHeader) {
+		t.Fatalf("output missing primary-result header:\n%s", got)
+	}
+	if !strings.HasSuffix(got, text) {
+		t.Fatalf("output = %q, want suffix primary result %q", got, text)
 	}
 	if len(attachable.subscribeCalls) == 0 {
 		t.Fatal("expected internal response-stream subscription during invocation")

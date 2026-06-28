@@ -2,6 +2,7 @@ package run
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -21,13 +22,10 @@ type responseStreamEventSink interface {
 	onStreamSegment(factorysessions.SessionResponseStreamReadResult)
 }
 
-type discardResponseStreamSink struct{}
-
-func (discardResponseStreamSink) onStreamSegment(factorysessions.SessionResponseStreamReadResult) {}
-
 type responseStreamAttachment struct {
-	cancel context.CancelFunc
-	done   chan struct{}
+	cancel    context.CancelFunc
+	done      chan struct{}
+	consumers sync.WaitGroup
 }
 
 func startResponseStreamAttachment(
@@ -41,14 +39,15 @@ func startResponseStreamAttachment(
 	}
 	attachCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		runResponseStreamAttachment(attachCtx, attachable, sessionID, sink)
-	}()
-	return &responseStreamAttachment{
+	attachment := &responseStreamAttachment{
 		cancel: cancel,
 		done:   done,
 	}
+	go func() {
+		defer close(done)
+		runResponseStreamAttachment(attachCtx, attachable, sessionID, sink, &attachment.consumers)
+	}()
+	return attachment
 }
 
 func (a *responseStreamAttachment) stop() {
@@ -57,6 +56,7 @@ func (a *responseStreamAttachment) stop() {
 	}
 	a.cancel()
 	<-a.done
+	a.consumers.Wait()
 }
 
 func runResponseStreamAttachment(
@@ -64,16 +64,10 @@ func runResponseStreamAttachment(
 	attachable sessionResponseStreamAttachable,
 	sessionID string,
 	sink responseStreamEventSink,
+	consumers *sync.WaitGroup,
 ) {
 	subscribed := make(map[string]*factorysessions.SessionResponseStreamSubscription)
 	var subscribedMu sync.Mutex
-	defer func() {
-		subscribedMu.Lock()
-		defer subscribedMu.Unlock()
-		for _, subscription := range subscribed {
-			subscription.Detach()
-		}
-	}()
 
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
@@ -96,7 +90,11 @@ func runResponseStreamAttachment(
 			subscribedMu.Lock()
 			subscribed[dispatchID] = subscription
 			subscribedMu.Unlock()
-			go consumeResponseStreamSubscription(ctx, subscription, sink)
+			consumers.Add(1)
+			go func() {
+				defer consumers.Done()
+				consumeResponseStreamSubscription(ctx, subscription, sink)
+			}()
 		}
 
 		select {
@@ -116,6 +114,27 @@ func consumeResponseStreamSubscription(
 	for {
 		result, err := subscription.Next(ctx)
 		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				drainResponseStreamSubscription(subscription, sink)
+			}
+			return
+		}
+		sink.onStreamSegment(result)
+	}
+}
+
+func drainResponseStreamSubscription(
+	subscription *factorysessions.SessionResponseStreamSubscription,
+	sink responseStreamEventSink,
+) {
+	drainCtx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+	for {
+		result, err := subscription.Next(drainCtx)
+		if err != nil {
+			return
+		}
+		if len(result.Events) == 0 && !result.BehindRetainedWindow && result.Compaction == nil {
 			return
 		}
 		sink.onStreamSegment(result)

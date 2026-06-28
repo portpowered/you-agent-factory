@@ -854,9 +854,13 @@ Combining `--output response-stream` with global `--json` is rejected with
 renderer is documented separately.
 
 When the CLI can safely attach to the live internal stream, it subscribes to
-session-owned response-stream events instead of provider stdout. When no
-internal stream is available on the invocation path, stdout falls back to the
-existing primary-result-only contract after completion.
+session-owned response-stream events instead of provider stdout. Progress lines
+are prefixed with `[you:progress]` and kept separate from the final
+`primaryResult`, which is printed under a `--- primary result ---` header after
+progress completes. Response fragments that mirror the final answer are not
+replayed as ordinary progress. When no internal stream is available on the
+invocation path, stdout falls back to the existing primary-result-only contract
+after completion.
 
 Text success example:
 
