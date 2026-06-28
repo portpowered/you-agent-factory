@@ -422,9 +422,14 @@ func NewResumingChildExecutor(base ChildExecutor, resume ResumeContext) *Resumin
 	if base == nil {
 		base = NewFakeChildExecutor("", childRecordSinkFromCollector(newRecordCollector()))
 	}
+	next := 0
+	if len(resume.CheckpointState) > 0 {
+		next = len(resume.CompletedDispatchIDs)
+	}
 	return &ResumingChildExecutor{
 		base:   base,
 		resume: resume,
+		next:   next,
 	}
 }
 

@@ -761,6 +761,94 @@ func TestResumingChildExecutor_ReplaysCompletedDispatchWithoutCallingBase(t *tes
 	}
 }
 
+func TestRun_ResumeStateIsUndefinedOnFreshRun(t *testing.T) {
+	source := readFixture(t, "resumable-checkpoint-state-branch.workflow.js")
+	req := workflowruntime.Request{
+		Source:    source,
+		SourceRef: "resumable-checkpoint-state-branch.workflow.js",
+		SessionID: "session-resume-state-fresh",
+		Args:      marshalArgs(t, map[string]any{}),
+		Metadata:  map[string]string{"name": "resumable-checkpoint-state-branch"},
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	}
+
+	outcome := runSuccessful(t, req)
+	projected := projectPrimaryJSON(t, req.SessionID, outcome.Value)
+	if projected["path"] != "fresh" {
+		t.Fatalf("projected path = %#v, want fresh", projected["path"])
+	}
+}
+
+func TestRun_ResumeStateRehydratesCheckpointFactsForControlFlow(t *testing.T) {
+	source := readFixture(t, "resumable-checkpoint-state-branch.workflow.js")
+	req := workflowruntime.Request{
+		Source:    source,
+		SourceRef: "resumable-checkpoint-state-branch.workflow.js",
+		SessionID: "session-resume-state-rehydrated",
+		Args:      marshalArgs(t, map[string]any{}),
+		Metadata:  map[string]string{"name": "resumable-checkpoint-state-branch"},
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+		Resume: &workflowruntime.ResumeContext{
+			CompletedDispatchIDs: []string{"dispatch-1"},
+			CompletedChildResults: map[string]workflowruntime.ChildExecutionResult{
+				"dispatch-1": {
+					DispatchID:    "dispatch-1",
+					ChildIndex:    1,
+					Status:        workflowruntime.ChildDispatchStatusCompleted,
+					ExecutionMode: workflowruntime.ChildExecutionModeFake,
+					Output: map[string]any{
+						"text":  "cached:first",
+						"label": "step-one",
+					},
+				},
+			},
+			CheckpointState: map[string]any{
+				"step":       float64(1),
+				"firstLabel": "step-one",
+			},
+		},
+	}
+
+	outcome := runSuccessful(t, req)
+	projected := projectPrimaryJSON(t, req.SessionID, outcome.Value)
+	if projected["path"] != "from-checkpoint" {
+		t.Fatalf("projected path = %#v, want from-checkpoint", projected["path"])
+	}
+	if projected["step"] != float64(1) {
+		t.Fatalf("projected step = %#v, want 1", projected["step"])
+	}
+	if projected["firstLabel"] != "step-one" {
+		t.Fatalf("projected firstLabel = %#v, want step-one", projected["firstLabel"])
+	}
+}
+
+func TestResumingChildExecutor_StartsAtNextPendingDispatchWhenCheckpointStatePresent(t *testing.T) {
+	base := &countingChildExecutor{}
+	resume := workflowruntime.ResumeContext{
+		CompletedDispatchIDs: []string{"dispatch-1"},
+		CompletedChildResults: map[string]workflowruntime.ChildExecutionResult{
+			"dispatch-1": {
+				DispatchID: "dispatch-1",
+				Status:     workflowruntime.ChildDispatchStatusCompleted,
+				Output:     map[string]any{"text": "cached:first"},
+			},
+		},
+		CheckpointState: map[string]any{"step": float64(1)},
+	}
+	executor := workflowruntime.NewResumingChildExecutor(base, resume)
+
+	result, err := executor.Execute(context.Background(), workflowruntime.ChildExecutionRequest{Label: "step-two"})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if result.DispatchID != "dispatch-2" {
+		t.Fatalf("dispatchId = %q, want dispatch-2", result.DispatchID)
+	}
+	if base.calls != 1 {
+		t.Fatalf("base calls = %d, want 1 fresh pending dispatch", base.calls)
+	}
+}
+
 type countingChildExecutor struct {
 	calls int
 }

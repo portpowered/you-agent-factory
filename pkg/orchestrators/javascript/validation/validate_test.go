@@ -74,6 +74,19 @@ func TestValidate_RejectsForbiddenHostAccess(t *testing.T) {
 	}
 }
 
+func TestValidate_AllowsLocalBindingMemberAccessAndResumeState(t *testing.T) {
+	result := workflowvalidation.Validate(workflowvalidation.Request{
+		Source: `(function(){
+const resumed = workflow.resumeState();
+return resumed && resumed.step >= 1;
+})();`,
+		SourceRef: "inline",
+	})
+	if result.HasIssues() {
+		t.Fatalf("validation issues = %#v, want none for local binding member access", result.Issues)
+	}
+}
+
 func TestValidate_RejectsDynamicImportHostAccess(t *testing.T) {
 	result := workflowvalidation.Validate(workflowvalidation.Request{
 		Source:    `import("fs");`,

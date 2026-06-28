@@ -29,6 +29,41 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_ReconstructsFromCheck
 	assertFinalResult(t, resumedService, harness.sessionID)
 }
 
+func TestJavaScriptRuntimeService_ResumeInterruptedSession_RehydratesCheckpointStateForControlFlow(t *testing.T) {
+	harness := startInterruptedCheckpointStateBranchSession(t, "req-runtime-resume-checkpoint-state-001")
+	assertInterruptedResumePreconditions(t, harness)
+
+	resumedService := resumeInterruptedHarness(t, harness, "req-runtime-resume-checkpoint-state-resume-001")
+	waitUntilSessionStatus(t, resumedService, harness.sessionID, fse.LifecycleStatusSucceeded, 5*time.Second)
+
+	assertProviderCallCount(t, harness.provider, 3)
+	assertResumedCheckpointStateBranchResult(t, resumedService, harness.sessionID)
+}
+
+func assertResumedCheckpointStateBranchResult(t *testing.T, service *fse.JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+	result, err := service.GetResult(context.Background(), sessionID, fse.ResultRequest{
+		Mode: fse.ResultModeFinal,
+	})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	projected := decodePrimaryResultMap(t, result.PrimaryResult)
+	if projected["path"] != "from-checkpoint" {
+		t.Fatalf("projected path = %#v, want from-checkpoint", projected["path"])
+	}
+	if projected["step"] != float64(1) {
+		t.Fatalf("projected step = %#v, want 1", projected["step"])
+	}
+	if projected["firstLabel"] != "step-one" {
+		t.Fatalf("projected firstLabel = %#v, want step-one", projected["firstLabel"])
+	}
+	second, ok := projected["second"].(map[string]any)
+	if !ok || second["label"] != "step-two" {
+		t.Fatalf("projected second = %#v, want step-two label", projected["second"])
+	}
+}
+
 func assertInterruptedResumePreconditions(t *testing.T, harness interruptedResumableHarness) {
 	t.Helper()
 	if harness.provider.CallCount() < 2 {

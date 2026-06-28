@@ -49,6 +49,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 		childExecutor: childExecutor,
 		onArtifact:    hooks.OnArtifact,
 	}
+	globals.bindResumeCheckpointState(req.Resume)
 	if err := globals.bindWorkflowAPI(); err != nil {
 		return Outcome{}, err
 	}

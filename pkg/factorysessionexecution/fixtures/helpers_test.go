@@ -3,6 +3,7 @@ package fixtures_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -472,13 +473,34 @@ type interruptedResumableHarness struct {
 
 func startInterruptedResumableSession(t *testing.T, requestID string) interruptedResumableHarness {
 	t.Helper()
-
-	provider := newSequentialBlockingProvider()
-	projectRoot := setupRuntimeWorkflowFixture(
+	return startInterruptedResumableSessionForWorkflow(
 		t,
+		requestID,
 		"resumable-two-step-fake-children.workflow.js",
 		"resumable-two-step-fake-children",
 	)
+}
+
+func startInterruptedCheckpointStateBranchSession(t *testing.T, requestID string) interruptedResumableHarness {
+	t.Helper()
+	return startInterruptedResumableSessionForWorkflow(
+		t,
+		requestID,
+		"resumable-checkpoint-state-branch.workflow.js",
+		"resumable-checkpoint-state-branch",
+	)
+}
+
+func startInterruptedResumableSessionForWorkflow(
+	t *testing.T,
+	requestID string,
+	workflowFile string,
+	workflowName string,
+) interruptedResumableHarness {
+	t.Helper()
+
+	provider := newSequentialBlockingProviderForWorkflow(workflowName)
+	projectRoot := setupRuntimeWorkflowFixture(t, workflowFile, workflowName)
 	initial := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
 		ProjectRoot:       projectRoot,
 		ChildExecutorMode: fse.ChildExecutorModeLive,
@@ -490,7 +512,7 @@ func startInterruptedResumableSession(t *testing.T, requestID string) interrupte
 		RequestID: requestID,
 		Source: fse.Source{
 			Kind:         workflowsource.KindWorkflowName,
-			WorkflowName: "resumable-two-step-fake-children",
+			WorkflowName: workflowName,
 		},
 		Args: map[string]any{
 			"subject": "workflows",
@@ -641,10 +663,15 @@ type sequentialBlockingProvider struct {
 	calls           int
 	blockedOnce     bool
 	contextCanceled int
+	workflowName    string
 }
 
 func newSequentialBlockingProvider() *sequentialBlockingProvider {
-	return &sequentialBlockingProvider{}
+	return &sequentialBlockingProvider{workflowName: "resumable-two-step-fake-children"}
+}
+
+func newSequentialBlockingProviderForWorkflow(workflowName string) *sequentialBlockingProvider {
+	return &sequentialBlockingProvider{workflowName: workflowName}
 }
 
 func (p *sequentialBlockingProvider) Infer(ctx context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
@@ -656,7 +683,7 @@ func (p *sequentialBlockingProvider) Infer(ctx context.Context, _ interfaces.Pro
 
 	if call == 1 {
 		return interfaces.InferenceResponse{
-			Content: `{"text":"live:resumable-two-step-fake-children:step-one:step-one:workflows","label":"step-one"}`,
+			Content: fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
 			ProviderSession: &interfaces.ProviderSessionMetadata{
 				Provider: "mock",
 				Kind:     "session_id",
@@ -678,7 +705,7 @@ func (p *sequentialBlockingProvider) Infer(ctx context.Context, _ interfaces.Pro
 	}
 
 	return interfaces.InferenceResponse{
-		Content: `{"text":"live:resumable-two-step-fake-children:step-two:step-two:workflows","label":"step-two"}`,
+		Content: fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
 		ProviderSession: &interfaces.ProviderSessionMetadata{
 			Provider: "mock",
 			Kind:     "session_id",

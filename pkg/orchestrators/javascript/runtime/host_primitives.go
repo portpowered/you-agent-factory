@@ -22,10 +22,11 @@ func (g *runtimeGlobals) bindHostPrimitives() error {
 
 func (g *runtimeGlobals) bindExtendedWorkflowAPI(workflow *goja.Object) error {
 	members := map[string]func(goja.FunctionCall) goja.Value{
-		"log":        g.hostWorkflowLog,
-		"artifact":   g.hostWorkflowArtifact,
-		"checkpoint": g.hostWorkflowCheckpoint,
-		"budget":     g.hostWorkflowBudget,
+		"log":         g.hostWorkflowLog,
+		"artifact":    g.hostWorkflowArtifact,
+		"checkpoint":  g.hostWorkflowCheckpoint,
+		"resumeState": g.hostWorkflowResumeState,
+		"budget":      g.hostWorkflowBudget,
 	}
 	for name, fn := range members {
 		if err := workflow.Set(name, fn); err != nil {
@@ -117,6 +118,16 @@ func (g *runtimeGlobals) hostWorkflowArtifact(call goja.FunctionCall) goja.Value
 		Artifact: &record,
 	})
 	return g.vm.ToValue(uri)
+}
+
+func (g *runtimeGlobals) hostWorkflowResumeState(call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) > 0 && !goja.IsUndefined(call.Arguments[0]) {
+		panic(g.vm.NewTypeError("workflow.resumeState() does not accept arguments"))
+	}
+	if len(g.resumeCheckpointState) == 0 {
+		return goja.Undefined()
+	}
+	return g.vm.ToValue(g.resumeCheckpointState)
 }
 
 func (g *runtimeGlobals) hostWorkflowCheckpoint(call goja.FunctionCall) goja.Value {

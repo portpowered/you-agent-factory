@@ -12,11 +12,12 @@ var supportedRootGlobals = map[string]struct{}{
 }
 
 var supportedWorkflowMembers = map[string]struct{}{
-	"log":        {},
-	"artifact":   {},
-	"checkpoint": {},
-	"budget":     {},
-	"final":      {},
+	"log":         {},
+	"artifact":    {},
+	"checkpoint":  {},
+	"resumeState": {},
+	"budget":      {},
+	"final":       {},
 }
 
 var supportedAgentMembers = map[string]struct{}{

@@ -8,11 +8,12 @@ import (
 )
 
 type sourceAnalyzer struct {
-	source string
-	ref    string
-	path   string
-	issues []Issue
-	seen   map[string]struct{}
+	source        string
+	ref           string
+	path          string
+	issues        []Issue
+	seen          map[string]struct{}
+	localBindings map[string]struct{}
 }
 
 func analyzeJavaScriptSource(req Request) []Issue {
@@ -36,7 +37,14 @@ func (a *sourceAnalyzer) Enter(n js.INode) js.IVisitor {
 		a.inspectCall(node)
 	case *js.DotExpr:
 		a.inspectDot(node)
+	case *js.FuncDecl:
+		a.recordParams(node.Params)
+	case *js.ArrowFunc:
+		a.recordParams(node.Params)
 	case *js.Var:
+		if node.Decl != js.NoDecl {
+			a.recordLocalBinding(string(node.Name()))
+		}
 		a.inspectIdentifierUse(node)
 	}
 	return a
@@ -93,11 +101,11 @@ func (a *sourceAnalyzer) inspectDot(dot *js.DotExpr) {
 	if !ok {
 		return
 	}
-	if msg, forbidden := forbiddenRootGlobals[root]; forbidden {
-		a.addIssue(CodeForbiddenHostAccess, msg+" via "+root+"."+member, dot)
+	if a.isLocalBinding(root) {
 		return
 	}
-	if rootVar, ok := dot.X.(*js.Var); ok && rootVar.Decl != js.NoDecl {
+	if msg, forbidden := forbiddenRootGlobals[root]; forbidden {
+		a.addIssue(CodeForbiddenHostAccess, msg+" via "+root+"."+member, dot)
 		return
 	}
 	switch root {
@@ -109,6 +117,40 @@ func (a *sourceAnalyzer) inspectDot(dot *js.DotExpr) {
 		}
 		a.addIssue(CodeForbiddenHostAccess, fmt.Sprintf("unsupported host member access %s.%s", root, member), dot)
 	}
+}
+
+func (a *sourceAnalyzer) recordParams(params js.Params) {
+	for _, element := range params.List {
+		a.recordBinding(element.Binding)
+	}
+	a.recordBinding(params.Rest)
+}
+
+func (a *sourceAnalyzer) recordBinding(binding js.IBinding) {
+	if binding == nil {
+		return
+	}
+	if variable, ok := binding.(*js.Var); ok {
+		a.recordLocalBinding(string(variable.Name()))
+	}
+}
+
+func (a *sourceAnalyzer) recordLocalBinding(name string) {
+	if name == "" {
+		return
+	}
+	if a.localBindings == nil {
+		a.localBindings = make(map[string]struct{})
+	}
+	a.localBindings[name] = struct{}{}
+}
+
+func (a *sourceAnalyzer) isLocalBinding(name string) bool {
+	if a.localBindings == nil {
+		return false
+	}
+	_, ok := a.localBindings[name]
+	return ok
 }
 
 func (a *sourceAnalyzer) inspectIdentifierUse(v *js.Var) {
