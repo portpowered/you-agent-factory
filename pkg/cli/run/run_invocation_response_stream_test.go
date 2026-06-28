@@ -661,3 +661,88 @@ func TestRun_FactoryInvocationResponseStreamRendersTerminalOutcomes(t *testing.T
 		})
 	}
 }
+
+func TestRun_FactoryInvocationResponseStreamCompletesWithSlowStdout(t *testing.T) {
+	preserveRunGlobals(t)
+
+	text := "goal completed"
+	output := &gatedResponseStreamWriter{}
+	output.block()
+	attachable := &recordingResponseStreamAttachable{
+		dispatchIDs: []string{"dispatch-goal-1"},
+	}
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubResponseStreamInvocationService{
+			stubInvocationService: stubInvocationService{
+				run: func(ctx context.Context) error {
+					<-ctx.Done()
+					return nil
+				},
+				invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+					deadline := time.Now().Add(2 * time.Second)
+					for time.Now().Before(deadline) {
+						if len(attachable.subscribeCalls) > 0 {
+							break
+						}
+						time.Sleep(10 * time.Millisecond)
+					}
+					if attachable.stream != nil {
+						for i := 0; i < defaultResponseStreamProgressQueueCapacity+4; i++ {
+							attachable.stream.Append(responsestream.Event{
+								Kind:       responsestream.EventKindProgressFragment,
+								Type:       responsestream.EventTypeProgress,
+								DispatchID: "dispatch-goal-1",
+								Payload:    "working",
+							})
+						}
+					}
+					return apisurface.FactoryInvocationResult{
+						RequestID: "req-1",
+						TraceID:   "trace-1",
+						Status:    factoryapi.InvocationTerminalStatusCompleted,
+						PrimaryResult: []interfaces.WorkContentPart{
+							{Type: interfaces.WorkContentPartTypeText, Text: text},
+						},
+					}, nil
+				},
+			},
+			attachable: attachable,
+		}, nil
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(context.Background(), RunConfig{
+			FactoryConfigPath:        "/tmp/factory.json",
+			InvocationPositionalText: &text,
+			InvocationOutputMode:     InvocationOutputResponseStream,
+			StdinIsTTY:               func() bool { return true },
+			Output:                   output,
+			Port:                     7437,
+		})
+	}()
+
+	select {
+	case err := <-done:
+		t.Fatalf("Run completed before stdout was released: %v", err)
+	case <-time.After(750 * time.Millisecond):
+	}
+
+	output.release()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run blocked after stdout was released")
+	}
+
+	got := output.String()
+	if !strings.Contains(got, "[you:progress] terminal output backlog") {
+		t.Fatalf("output missing terminal backlog notice:\n%s", got)
+	}
+	if !strings.HasSuffix(strings.TrimSpace(got), text) {
+		t.Fatalf("output missing final primary result:\n%s", got)
+	}
+}

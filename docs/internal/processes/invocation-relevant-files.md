@@ -56,8 +56,9 @@ primary-result behavior.
   for supported one-shot factory invocations; keep mode validation, unsupported
   run-shape rejection, and fallback behavior in `pkg/cli/run/invocation_output.go`,
   stream attachment in `pkg/cli/run/response_stream_attachment.go`, human and JSON
-  progress rendering in `pkg/cli/run/response_stream_renderer.go`, and invocation
-  wiring in `pkg/cli/run/factory_invocation_input.go`. Human response-stream
+  progress rendering in `pkg/cli/run/response_stream_renderer.go`, bounded async
+  progress stdout draining in `pkg/cli/run/response_stream_progress_writer.go`,
+  and invocation wiring in `pkg/cli/run/factory_invocation_input.go`. Human response-stream
   terminal outcomes use `--- invocation outcome ---` with structured status/error
   fields; JSON response-stream terminal outcomes stay on the final
   `primary_result` NDJSON record. Internal stream listing for

@@ -856,7 +856,10 @@ session-owned response-stream events instead of provider stdout.
 Human-readable mode prefixes progress with `[you:progress]` and keeps the final
 `primaryResult` separate under a `--- primary result ---` header after progress
 completes. Response fragments that mirror the final answer are not replayed as
-ordinary progress.
+ordinary progress. When terminal stdout is slower than internal stream delivery,
+the CLI keeps provider dispatch non-blocking by queueing progress locally and
+prints a `[you:progress] terminal output backlog (...)` notice if render-queue
+pressure drops progress lines.
 
 JSON mode (`--json` with `--output response-stream`) emits newline-delimited
 JSON records to stdout:
@@ -864,6 +867,9 @@ JSON records to stdout:
 - `progress` records carry ordered internal stream events (`sequence`,
   `dispatchId`, `kind`, `eventType`, `payload`).
 - `stream_gap` records report resumed consumption behind the retained window.
+- `stream_gap` records with `reason: "terminal_output_backlog"` report CLI
+  rendering backlog when stdout consumption is slower than internal stream
+  delivery and progress lines were dropped from the bounded render queue.
 - `compaction` records report truncation, coalescing, or age eviction with
   dropped-sequence counts.
 - `primary_result` records wrap the shared `InvocationResponse` envelope for the

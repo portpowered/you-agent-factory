@@ -106,6 +106,7 @@ func TestHumanResponseStreamRenderer_SkipsDuplicateSequencesAndBoundsPayload(t *
 		},
 	})
 
+	renderer.stopProgressRendering()
 	got := output.String()
 	if strings.Count(got, "[you:progress]") != 1 {
 		t.Fatalf("expected one progress line, got:\n%s", got)
@@ -130,6 +131,7 @@ func TestHumanResponseStreamRenderer_SurfacesCompactionNotice(t *testing.T) {
 		},
 	})
 
+	renderer.stopProgressRendering()
 	got := output.String()
 	if !strings.Contains(got, "[you:progress] stream truncated (3 earlier events omitted)") {
 		t.Fatalf("compaction notice = %q", got)
@@ -431,6 +433,7 @@ func TestJSONResponseStreamRenderer_SurfacesCompactionAndStreamGapRecords(t *tes
 		},
 	})
 
+	renderer.stopProgressRendering()
 	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
 	if len(lines) != 2 {
 		t.Fatalf("expected 2 NDJSON lines, got %d:\n%s", len(lines), output.String())
@@ -450,6 +453,65 @@ func TestJSONResponseStreamRenderer_SurfacesCompactionAndStreamGapRecords(t *tes
 	}
 	if compaction.RecordType != responseStreamJSONRecordCompaction || compaction.DroppedSequenceCount != 3 {
 		t.Fatalf("compaction = %#v", compaction)
+	}
+}
+
+func TestHumanResponseStreamRenderer_SurfacesTerminalOutputBacklog(t *testing.T) {
+	t.Parallel()
+
+	output := &gatedResponseStreamWriter{}
+	output.block()
+	renderer := newHumanResponseStreamRenderer(output)
+	for i := 0; i < defaultResponseStreamProgressQueueCapacity+4; i++ {
+		renderer.onStreamSegment(responsestream.ReadResult{
+			Events: []responsestream.Event{
+				{
+					Sequence:   int64(i + 1),
+					Kind:       responsestream.EventKindProgressFragment,
+					Type:       responsestream.EventTypeProgress,
+					DispatchID: "dispatch-1",
+					Payload:    "working",
+				},
+			},
+		})
+	}
+
+	output.release()
+	renderer.stopProgressRendering()
+	got := output.String()
+	if !strings.Contains(got, "[you:progress] terminal output backlog") {
+		t.Fatalf("output missing terminal backlog notice:\n%s", got)
+	}
+}
+
+func TestJSONResponseStreamRenderer_SurfacesTerminalOutputBacklogRecord(t *testing.T) {
+	t.Parallel()
+
+	output := &gatedResponseStreamWriter{}
+	output.block()
+	renderer := newJSONResponseStreamRenderer(output)
+	for i := 0; i < defaultResponseStreamProgressQueueCapacity+4; i++ {
+		renderer.onStreamSegment(responsestream.ReadResult{
+			Events: []responsestream.Event{
+				{
+					Sequence:   int64(i + 1),
+					Kind:       responsestream.EventKindProgressFragment,
+					Type:       responsestream.EventTypeProgress,
+					DispatchID: "dispatch-1",
+					Payload:    "working",
+				},
+			},
+		})
+	}
+
+	output.release()
+	renderer.stopProgressRendering()
+	got := output.String()
+	if !strings.Contains(got, `"reason":"terminal_output_backlog"`) {
+		t.Fatalf("output missing terminal backlog record:\n%s", got)
+	}
+	if !strings.Contains(got, `"recordType":"stream_gap"`) {
+		t.Fatalf("output missing stream_gap record:\n%s", got)
 	}
 }
 

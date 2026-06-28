@@ -24,6 +24,8 @@ const (
 	responseStreamJSONRecordStreamGap     = "stream_gap"
 	responseStreamJSONRecordCompaction    = "compaction"
 	responseStreamJSONRecordPrimaryResult = "primary_result"
+
+	responseStreamTerminalBacklogReason = "terminal_output_backlog"
 )
 
 // responseStreamRenderer consumes internal SessionResponseStream segments and
@@ -31,6 +33,7 @@ const (
 type responseStreamRenderer interface {
 	responseStreamEventSink
 	renderedProgress() bool
+	stopProgressRendering()
 	writeFinalInvocationResult(result apisurface.FactoryInvocationResult) error
 }
 
@@ -45,11 +48,13 @@ func newResponseStreamRenderer(output io.Writer, jsonMode bool) responseStreamRe
 // progress to stdout and keeps the final invocation primary result visually
 // separate from transient progress output.
 type humanResponseStreamRenderer struct {
-	mu             sync.Mutex
-	output         io.Writer
-	lastSequence   map[string]int64
-	progressLines  int
-	progressSeen   bool
+	mu               sync.Mutex
+	output           io.Writer
+	progress         *responseStreamProgressWriter
+	lastSequence     map[string]int64
+	progressLines    int
+	progressSeen     bool
+	backlogNotified  bool
 }
 
 func newHumanResponseStreamRenderer(output io.Writer) *humanResponseStreamRenderer {
@@ -58,8 +63,16 @@ func newHumanResponseStreamRenderer(output io.Writer) *humanResponseStreamRender
 	}
 	return &humanResponseStreamRenderer{
 		output:       output,
+		progress:     newResponseStreamProgressWriter(output),
 		lastSequence: make(map[string]int64),
 	}
+}
+
+func (r *humanResponseStreamRenderer) stopProgressRendering() {
+	if r == nil {
+		return
+	}
+	r.progress.stopAndDrain()
 }
 
 func (r *humanResponseStreamRenderer) onStreamSegment(result factorysessions.SessionResponseStreamReadResult) {
@@ -95,6 +108,7 @@ func (r *humanResponseStreamRenderer) writeFinalInvocationResult(
 	if r == nil {
 		return fmt.Errorf("response-stream renderer is nil")
 	}
+	r.stopProgressRendering()
 	if result.Status == factoryapi.InvocationTerminalStatusCompleted {
 		text, err := invocationPrimaryResultText(result.PrimaryResult)
 		if err != nil {
@@ -253,18 +267,43 @@ func (r *humanResponseStreamRenderer) writeProgressLineLocked(payload string) {
 	if strings.TrimSpace(payload) == "" {
 		return
 	}
+	line := responseStreamProgressPrefix + payload
+	if !r.progress.enqueue([]byte(line)) {
+		r.emitTerminalBacklogNoticeLocked()
+		return
+	}
 	r.progressSeen = true
 	r.progressLines++
-	_, _ = fmt.Fprintf(r.output, "%s%s\n", responseStreamProgressPrefix, payload)
+}
+
+func (r *humanResponseStreamRenderer) emitTerminalBacklogNoticeLocked() {
+	if r.backlogNotified {
+		return
+	}
+	r.backlogNotified = true
+	dropped := r.progress.droppedProgressLines()
+	if dropped <= 0 {
+		dropped = 1
+	}
+	notice := fmt.Sprintf(
+		"%s%s (%d progress lines dropped)",
+		responseStreamProgressPrefix,
+		"terminal output backlog",
+		dropped,
+	)
+	r.progress.enqueueNotice([]byte(notice))
+	r.progressSeen = true
 }
 
 // jsonResponseStreamRenderer emits newline-delimited JSON records for internal
 // SessionResponseStream progress and the final invocation result.
 type jsonResponseStreamRenderer struct {
-	mu           sync.Mutex
-	output       io.Writer
-	lastSequence map[string]int64
-	progressSeen bool
+	mu              sync.Mutex
+	output          io.Writer
+	progress        *responseStreamProgressWriter
+	lastSequence    map[string]int64
+	progressSeen    bool
+	backlogNotified bool
 }
 
 func newJSONResponseStreamRenderer(output io.Writer) *jsonResponseStreamRenderer {
@@ -273,8 +312,16 @@ func newJSONResponseStreamRenderer(output io.Writer) *jsonResponseStreamRenderer
 	}
 	return &jsonResponseStreamRenderer{
 		output:       output,
+		progress:     newResponseStreamProgressWriter(output),
 		lastSequence: make(map[string]int64),
 	}
+}
+
+func (r *jsonResponseStreamRenderer) stopProgressRendering() {
+	if r == nil {
+		return
+	}
+	r.progress.stopAndDrain()
 }
 
 func (r *jsonResponseStreamRenderer) onStreamSegment(result factorysessions.SessionResponseStreamReadResult) {
@@ -313,6 +360,7 @@ func (r *jsonResponseStreamRenderer) writeFinalInvocationResult(
 	if r == nil {
 		return fmt.Errorf("response-stream renderer is nil")
 	}
+	r.stopProgressRendering()
 	return r.writeRecord(responseStreamJSONPrimaryResultRecord{
 		RecordType:  responseStreamJSONRecordPrimaryResult,
 		Invocation:  apisurface.InvocationResponseFromResult(result),
@@ -382,11 +430,37 @@ func (r *jsonResponseStreamRenderer) writeRecordLocked(record any) error {
 	if err != nil {
 		return fmt.Errorf("marshal response-stream JSON record: %w", err)
 	}
-	if r.progressSeen || recordTypeOf(record) != responseStreamJSONRecordPrimaryResult {
-		r.progressSeen = true
+	if recordTypeOf(record) == responseStreamJSONRecordPrimaryResult {
+		_, err = fmt.Fprintln(r.output, string(encoded))
+		return err
 	}
-	_, err = fmt.Fprintln(r.output, string(encoded))
-	return err
+	if !r.progress.enqueue(encoded) {
+		r.emitTerminalBacklogNoticeLocked()
+		return nil
+	}
+	r.progressSeen = true
+	return nil
+}
+
+func (r *jsonResponseStreamRenderer) emitTerminalBacklogNoticeLocked() {
+	if r.backlogNotified {
+		return
+	}
+	r.backlogNotified = true
+	dropped := r.progress.droppedProgressLines()
+	if dropped <= 0 {
+		dropped = 1
+	}
+	encoded, err := json.Marshal(responseStreamJSONStreamGapRecord{
+		RecordType:           responseStreamJSONRecordStreamGap,
+		Reason:               responseStreamTerminalBacklogReason,
+		DroppedProgressLines: dropped,
+	})
+	if err != nil {
+		return
+	}
+	r.progress.enqueueNotice(encoded)
+	r.progressSeen = true
 }
 
 func recordTypeOf(record any) string {
@@ -414,8 +488,9 @@ type responseStreamJSONProgressRecord struct {
 }
 
 type responseStreamJSONStreamGapRecord struct {
-	RecordType string `json:"recordType"`
-	Reason     string `json:"reason"`
+	RecordType           string `json:"recordType"`
+	Reason               string `json:"reason"`
+	DroppedProgressLines int    `json:"droppedProgressLines,omitempty"`
 }
 
 type responseStreamJSONCompactionRecord struct {

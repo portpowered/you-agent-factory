@@ -336,6 +336,9 @@ func runFactoryInvocation(
 	if streamAttachment != nil {
 		streamAttachment.stop()
 	}
+	if streamRenderer != nil {
+		streamRenderer.stopProgressRendering()
+	}
 	cancel()
 	runErr := <-runErrCh
 	if err != nil {
