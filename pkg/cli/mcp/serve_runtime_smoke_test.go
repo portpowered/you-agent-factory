@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,14 +27,15 @@ return {
 // pkgmaintcheck:ignore-cyclomatic-complexity runtime smoke keeps discovery, async start, polling, and result assertions on one documented stdio path.
 func TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult(t *testing.T) {
 	projectRoot := runtimeSmokeProjectRoot(t)
-	client, stdinWrite, cancelServe, serveErr := startRunServeRuntimeSmokeServer(t, projectRoot)
+	client, shutdown, serveErr := startRunServeRuntimeSmokeServer(t, projectRoot)
 	assertInstallSmokeInitialize(t, client)
 	assertInstallSmokeDiscovery(t, client)
 
 	sessionID := assertRuntimeSmokeAsyncStart(t, client)
 	assertRuntimeSmokePollObservesRunningOrTerminal(t, client, sessionID)
-	cancelServe()
-	closeRunServeSmokeServer(t, stdinWrite, serveErr)
+	waitRuntimeSmokeTerminalCompletion(t, client, sessionID)
+	shutdown()
+	closeRunServeSmokeServer(t, nil, serveErr)
 }
 
 func runtimeSmokeProjectRoot(t *testing.T) string {
@@ -48,7 +50,7 @@ func runtimeSmokeProjectRoot(t *testing.T) string {
 func startRunServeRuntimeSmokeServer(
 	t *testing.T,
 	projectRoot string,
-) (*stdioMCPClient, *os.File, context.CancelFunc, <-chan error) {
+) (*stdioMCPClient, func(), <-chan error) {
 	t.Helper()
 	stdinRead, stdinWrite, err := os.Pipe()
 	if err != nil {
@@ -76,7 +78,37 @@ func startRunServeRuntimeSmokeServer(
 			Stdout:        stdoutWrite,
 		})
 	}()
-	return newStdioMCPClient(t, stdinWrite, stdoutRead), stdinWrite, cancel, serveErr
+
+	var shutdownOnce sync.Once
+	shutdown := func() {
+		shutdownOnce.Do(func() {
+			cancel()
+			_ = stdinWrite.Close()
+		})
+	}
+	t.Cleanup(shutdown)
+
+	return newStdioMCPClient(t, stdinWrite, stdoutRead), shutdown, serveErr
+}
+
+func waitRuntimeSmokeTerminalCompletion(t *testing.T, client *stdioMCPClient, sessionID string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	mode := factoryapi.FactorySessionResultModeFinal
+	for time.Now().Before(deadline) {
+		status := runtimeSmokeSessionStatus(t, client, sessionID)
+		switch status {
+		case factoryapi.FactorySessionDurableLifecycleStatusSucceeded:
+			assertRuntimeSmokeTerminalResult(t, client, sessionID, mode)
+			return
+		case factoryapi.FactorySessionDurableLifecycleStatusRunning:
+			time.Sleep(10 * time.Millisecond)
+			continue
+		default:
+			t.Fatalf("get status = %q, want RUNNING or SUCCEEDED before runtime smoke shutdown", status)
+		}
+	}
+	t.Fatalf("session %s did not reach SUCCEEDED within 5s before runtime smoke shutdown", sessionID)
 }
 
 func assertRuntimeSmokeAsyncStart(t *testing.T, client *stdioMCPClient) string {

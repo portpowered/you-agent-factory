@@ -32,6 +32,7 @@ func TestOpenAPIContract_ContainsCoveredJSONOperations(t *testing.T) {
 	assertDeferredRealBackendSessionRouteFamilies(t, paths)
 	assertWorkRequestSurfaceSchemas(t, schemas)
 	assertWorkContentSurfaceSchemas(t, schemas)
+	assertWorkerSurfaceSchemas(t, schemas)
 	assertWorkstationSurfaceSchemas(t, schemas)
 	assertErrorSurfaceSchemas(t, schemas)
 }
@@ -668,6 +669,22 @@ func assertSchemaAllOfVariant(t *testing.T, schemas map[string]any, schemaName s
 		combinedProperties[key] = value
 	}
 	assertSchemaPropertiesPresent(t, combinedProperties, schemaName, requiredFields...)
+}
+
+func assertWorkerSurfaceSchemas(t *testing.T, schemas map[string]any) {
+	t.Helper()
+
+	workerSchema := schemaObject(t, schemas, "Worker")
+	workerProperties := schemaProperties(t, workerSchema, "Worker")
+	assertPropertyRef(t, workerProperties, "type", "#/components/schemas/WorkerType")
+	assertEnumValues(t, schemaObject(t, schemas, "WorkerType"), "WorkerType", []string{
+		"INFERENCE_WORKER",
+		"AGENT_WORKER",
+		"SCRIPT_WORKER",
+		"POLLER_WORKER",
+		"MODEL_WORKER",
+		"HOSTED_WORKER",
+	})
 }
 
 func assertWorkstationSurfaceSchemas(t *testing.T, schemas map[string]any) {

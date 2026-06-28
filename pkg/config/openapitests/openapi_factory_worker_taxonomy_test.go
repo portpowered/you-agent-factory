@@ -140,6 +140,50 @@ func TestMarshalCanonicalFactoryConfig_PrefersNewWorkerTaxonomyOnRoundTrip(t *te
 	}
 }
 
+func TestGeneratedFactoryFromOpenAPIJSON_PreservesExplicitInferenceWorkerOnSaveRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	cfgJSON := []byte(`{
+		"name":"explicit-inference-worker",
+		"workTypes":[{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers":[{"name":"executor","type":"INFERENCE_WORKER","model":"omnivoice","modelProvider":"CLAUDE"}],
+		"workstations":[{"name":"invoke-story","type":"INFERENCE_RUN","worker":"executor","operation":"TTS","inputs":[{"workType":"story","state":"init"}],"outputs":[{"workType":"story","state":"complete"}],"onFailure":[{"workType":"story","state":"failed"}]}]
+	}`)
+
+	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+	worker := (*generated.Workers)[0]
+	if worker.Type == nil || string(*worker.Type) != interfaces.WorkerTypeInference {
+		t.Fatalf("generated worker type = %#v, want %s", worker.Type, interfaces.WorkerTypeInference)
+	}
+
+	runtimeCfg, err := FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+	canonical, err := MarshalCanonicalFactoryConfig(&runtimeCfg)
+	if err != nil {
+		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
+	}
+	if strings.Contains(string(canonical), `"type":"MODEL_WORKER"`) {
+		t.Fatalf("canonical save output downgraded explicit inference worker, got %s", string(canonical))
+	}
+	if !strings.Contains(string(canonical), `"type":"INFERENCE_WORKER"`) {
+		t.Fatalf("canonical save output missing INFERENCE_WORKER, got %s", string(canonical))
+	}
+
+	regenerated, err := GeneratedFactoryFromOpenAPIJSON(canonical)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON round trip: %v", err)
+	}
+	regeneratedWorker := (*regenerated.Workers)[0]
+	if regeneratedWorker.Type == nil || string(*regeneratedWorker.Type) != interfaces.WorkerTypeInference {
+		t.Fatalf("round-tripped worker type = %#v, want %s", regeneratedWorker.Type, interfaces.WorkerTypeInference)
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_PreservesMixedLegacyModelWorkerOnSaveRoundTrip(t *testing.T) {
 	t.Parallel()
 

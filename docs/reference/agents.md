@@ -160,6 +160,11 @@ provider calls.
 | **Planner / scheduler** | Chooses the next work item, prepares batch or single-work JSON, enqueues via `you submit` or `you submit batch` without executing workstation prompts | Batch JSON files, unary `you submit` flags and payloads |
 | **Executor** | Runs when a token reaches a workstation input place; loads worker + workstation `AGENTS.md`, calls the configured worker backend, returns accept, continue, reject, or failure | Workstation and worker `AGENTS.md`, rendered templates (`you docs templates`) |
 
+`INFERENCE_RUN` workstations execute one bounded model operation through an
+`INFERENCE_WORKER` backend. They are harnessless inference steps, not agent
+loops. Use `you docs models` and `you docs packaged-tts` for OmniVoice TTS and
+other typed inference authoring.
+
 Planners should read factory-local overview docs and `you docs config` before submitting.
 Executors should read the workstation and worker `AGENTS.md` for the active step before
 changing repository files. Prompt composition rules live in `docs/reference/authoring-agents-md.md`
@@ -183,7 +188,8 @@ changing repository files. Prompt composition rules live in `docs/reference/auth
 | Workstation routing and runtime fields | `you docs workstations` |
 | Worker types and providers | `you docs workers` |
 | Resource capacity | `you docs resources` |
-| Model setup | `you docs models` |
+| Harnessless model operations (`INFERENCE_WORKER`, `INFERENCE_RUN`, TTS) | `you docs models` |
+| Packaged OmniVoice TTS (`@you/tts`) | `you docs packaged-tts` |
 | Batch ingress and inbox layout | `you docs batch-inputs` (alias: `you docs batch-work`) |
 | Prompt template variables | `you docs templates` |
 

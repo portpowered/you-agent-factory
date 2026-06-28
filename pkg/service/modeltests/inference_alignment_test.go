@@ -1,0 +1,109 @@
+package modeltests
+
+import (
+	"context"
+	"path/filepath"
+	"testing"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
+	"github.com/portpowered/infinite-you/pkg/service"
+)
+
+func TestInvokeModel_UsesSharedInferenceBindingAndOutputShaping(t *testing.T) {
+	audioPath := filepath.Join(t.TempDir(), "speech.wav")
+	providerRaw := mustMarshalAudioContentResponse(t, audioPath)
+	provider := &providerCallRecorder{
+		responses: []interfaces.InferenceResponse{{Content: providerRaw}},
+	}
+	svc := buildModelCatalogServiceWithOptions(t, cloudModelInvocationConfig(), service.FactoryServiceConfig{
+		ProviderOverride: provider,
+	})
+
+	mode := factoryapi.AUDIOSTREAM
+	result, err := svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{
+		Operation: "TTS",
+		Content: &factoryapi.WorkContent{
+			mustGeneratedServiceTextPart(t, "hello world"),
+		},
+		Options: &factoryapi.ModelInvocationOptions{ResponseMode: &mode},
+	})
+	if err != nil {
+		t.Fatalf("InvokeModel: %v", err)
+	}
+
+	operation := interfaces.ModelOperation{
+		Name: "TTS",
+		Outputs: []interfaces.ModelOperationSlot{{
+			Name:         "audio",
+			ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+		}},
+	}
+	shaped, err := invocations.WorkContentFromInferenceOutput(providerRaw, operation)
+	if err != nil {
+		t.Fatalf("WorkContentFromInferenceOutput: %v", err)
+	}
+	if len(result.Content) != len(shaped) || result.Content[0].File != shaped[0].File {
+		t.Fatalf("InvokeModel content = %#v, want shared shaping %#v", result.Content, shaped)
+	}
+	if len(provider.Calls()) != 1 || len(provider.Calls()[0].ModelBindings) != 1 {
+		t.Fatalf("provider call = %#v, want one resolved binding", provider.Calls())
+	}
+}
+
+func TestInvokeModel_InferenceAndLegacyBindingFixturesStayAligned(t *testing.T) {
+	worker := inferenceBindingWorkerFixture()
+	inputTokens := []interfaces.Token{{
+		ID: "token-tts",
+		Color: interfaces.TokenColor{
+			Content: []interfaces.WorkContentPart{{
+				Type: interfaces.WorkContentPartTypeText,
+				Slot: "text",
+				Text: "hello world",
+			}},
+		},
+	}}
+
+	inferenceBindings, err := invocations.ResolveInferenceOperationBindings(
+		invocations.DirectInferenceWorkstationConfig("TTS", nil),
+		worker,
+		inputTokens,
+	)
+	if err != nil {
+		t.Fatalf("ResolveInferenceOperationBindings inference run: %v", err)
+	}
+	legacyBindings, err := invocations.ResolveInferenceOperationBindings(
+		&interfaces.FactoryWorkstationConfig{
+			Type:      interfaces.WorkstationTypeInvoke,
+			Operation: "TTS",
+		},
+		worker,
+		inputTokens,
+	)
+	if err != nil {
+		t.Fatalf("ResolveInferenceOperationBindings legacy model invoke: %v", err)
+	}
+	if len(inferenceBindings) != len(legacyBindings) || inferenceBindings[0].Content[0].Text != legacyBindings[0].Content[0].Text {
+		t.Fatalf("inference = %#v legacy = %#v, want aligned binding resolution", inferenceBindings, legacyBindings)
+	}
+}
+
+func inferenceBindingWorkerFixture() *interfaces.WorkerConfig {
+	return &interfaces.WorkerConfig{
+		Name: "tts-worker",
+		Type: interfaces.WorkerTypeInference,
+		Operations: []interfaces.ModelOperation{{
+			Name: "TTS",
+			Inputs: []interfaces.ModelOperationSlot{{
+				Name:         "text",
+				ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+				Required:     true,
+			}},
+			Outputs: []interfaces.ModelOperationSlot{{
+				Name:         "audio",
+				ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+			}},
+		}},
+	}
+}

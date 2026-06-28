@@ -56,6 +56,15 @@ func (s *Server) InvokeModel(w http.ResponseWriter, r *http.Request, modelName s
 
 	result, err := s.runtime.InvokeModel(r.Context(), modelName, req)
 	if err != nil {
+		if failure, ok := apisurface.AsInferenceFailure(err); ok {
+			s.writeError(
+				w,
+				apisurface.InferenceFailureHTTPStatus(failure),
+				failure.Error(),
+				apisurface.InferenceFailureErrorCode(failure),
+			)
+			return
+		}
 		switch {
 		case errors.Is(err, apisurface.ErrModelNotFound):
 			s.writeError(w, http.StatusNotFound, "model not found", "NOT_FOUND")
@@ -71,10 +80,6 @@ func (s *Server) InvokeModel(w http.ResponseWriter, r *http.Request, modelName s
 			s.writeError(w, http.StatusBadRequest, err.Error(), "BAD_REQUEST")
 		default:
 			errText := strings.TrimSpace(err.Error())
-			if strings.HasPrefix(errText, "provider execution failed:") {
-				s.writeError(w, http.StatusInternalServerError, errText, "INTERNAL_ERROR")
-				return
-			}
 			s.writeError(w, http.StatusBadRequest, errText, "BAD_REQUEST")
 		}
 		return
