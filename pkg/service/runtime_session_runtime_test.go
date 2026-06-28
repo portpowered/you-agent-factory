@@ -1843,6 +1843,94 @@ func TestFactoryService_ResumeDurableFactorySession_HTTPUsesProductionRuntime(t 
 	}
 }
 
+func TestFactoryService_LifecycleControls_PreserveReadSurfacesAfterPauseResume_HTTPUsesProductionRuntime(t *testing.T) {
+	t.Parallel()
+
+	fs := newFactoryServiceForDurableLifecycleTest(t, "busy-loop.workflow.js", "busy-loop")
+	server := httptest.NewServer(api.NewServer(fs, 0, zap.NewNop()).Handler())
+	defer server.Close()
+
+	started, err := fs.StartDurableFactorySessionAsync(context.Background(), factoryapi.FactorySessionExecutionRequest{
+		RequestId: "req-factory-service-lifecycle-read-parity-start-001",
+		Source: factoryapi.FactorySessionExecutionSource{
+			Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
+			WorkflowName: strPtr("busy-loop"),
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartDurableFactorySessionAsync: %v", err)
+	}
+
+	ctx := context.Background()
+	sessionID := started.SessionId
+	beforeEvents, err := fs.ReadDurableFactorySessionEvents(ctx, sessionID, factoryapi.GetEventsBySessionIdParams{})
+	if err != nil {
+		t.Fatalf("ReadDurableFactorySessionEvents before controls: %v", err)
+	}
+	beforeEventCount := len(beforeEvents.History)
+
+	sessionPath := "/factory-sessions/" + sessionID
+	pauseURL := server.URL + sessionPath + "/pause"
+	pauseResp, err := http.Post(pauseURL, "application/json", bytes.NewReader(nil))
+	if err != nil {
+		t.Fatalf("POST %s: %v", pauseURL, err)
+	}
+	pauseResp.Body.Close()
+	if pauseResp.StatusCode != http.StatusOK {
+		t.Fatalf("pause status = %d, want 200", pauseResp.StatusCode)
+	}
+
+	assertProductionDurableReadSurfacesReachable(t, server.URL, sessionID)
+
+	resumeURL := server.URL + sessionPath + "/resume"
+	resp, err := http.Post(resumeURL, "application/json", bytes.NewReader(nil))
+	if err != nil {
+		t.Fatalf("POST %s: %v", resumeURL, err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("resume status = %d, want 200", resp.StatusCode)
+	}
+
+	assertProductionDurableReadSurfacesReachable(t, server.URL, sessionID)
+
+	afterEvents, err := fs.ReadDurableFactorySessionEvents(ctx, sessionID, factoryapi.GetEventsBySessionIdParams{})
+	if err != nil {
+		t.Fatalf("ReadDurableFactorySessionEvents after controls: %v", err)
+	}
+	if len(afterEvents.History) < beforeEventCount {
+		t.Fatalf("event count after lifecycle controls = %d, want at least %d", len(afterEvents.History), beforeEventCount)
+	}
+
+	read, err := fs.GetDurableFactorySession(ctx, sessionID)
+	if err != nil {
+		t.Fatalf("GetDurableFactorySession: %v", err)
+	}
+	if read.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("session status after resume = %q, want RUNNING", read.Status)
+	}
+}
+
+func assertProductionDurableReadSurfacesReachable(t *testing.T, serverURL, sessionID string) {
+	t.Helper()
+	base := serverURL + "/factory-sessions/" + sessionID
+	for _, path := range []string{
+		base,
+		base + "/results",
+		base + "/dispatches",
+		base + "/artifacts",
+	} {
+		resp, err := http.Get(path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET %s status = %d, want 200", path, resp.StatusCode)
+		}
+	}
+}
+
 func TestFactoryService_RetryDurableFactorySessionDispatch_RuntimeBackedFailedSession(t *testing.T) {
 	t.Parallel()
 
