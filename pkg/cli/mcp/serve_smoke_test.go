@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -164,7 +165,7 @@ func closeRunServeSmokeServer(t *testing.T, stdinWrite *os.File, serveErr <-chan
 	_ = stdinWrite.Close()
 	select {
 	case err := <-serveErr:
-		if err != nil && err != io.EOF && !strings.Contains(err.Error(), "file already closed") {
+		if err != nil && err != io.EOF && !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "file already closed") {
 			t.Fatalf("RunServe: %v", err)
 		}
 	case <-time.After(2 * time.Second):
