@@ -2709,6 +2709,129 @@ func TestFactoryService_GetCurrentFactory_CollectsSupportedPortableBundledFilesF
 	assertServiceBundledFactoryEntry(t, bundledFiles[1], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
 }
 
+func TestFactoryService_GetCurrentFactory_CollectsNestedFactoryDocsFromDisk(t *testing.T) {
+	const nestedDocPath = "factory/docs/standards/review.md"
+	const nestedDocBody = "# Review standards\n"
+
+	rootDir := t.TempDir()
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	alphaDir := filepath.Join(rootDir, "alpha")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "docs", "README.md"), "# Portable factory\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "docs", "standards", "review.md"), nestedDocBody)
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "scripts", "execute-story.ps1"), servicePortableBundledScriptBody)
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	current, err := svc.GetCurrentFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentFactory: %v", err)
+	}
+
+	got := serviceBundledFilesByTarget(t, current)
+	if entry, ok := got[nestedDocPath]; !ok {
+		t.Fatalf("current factory bundled files = %#v, want nested doc %q", got, nestedDocPath)
+	} else {
+		assertServiceBundledFactoryEntry(t, entry, factoryapi.BundledFileTypeDOC, nestedDocPath, nestedDocBody)
+	}
+	assertServiceBundledFactoryEntry(t, got["factory/docs/README.md"], factoryapi.BundledFileTypeDOC, "factory/docs/README.md", "# Portable factory\n")
+}
+
+func TestFactoryService_GetCurrentFactory_ManifestAuthoritativeDocsExcludeUnlistedTopLevelOrphans(t *testing.T) {
+	const nestedDocPath = "factory/docs/standards/review.md"
+	const nestedDocBody = "# Review standards\n"
+	const orphanDocPath = "factory/docs/orphan.md"
+
+	rootDir := t.TempDir()
+	payload, err := json.Marshal(map[string]any{
+		"name": "alpha",
+		"id":   "alpha",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name":          "worker-a",
+			"type":          "MODEL_WORKER",
+			"modelProvider": "CODEX",
+			"model":         "gpt-5-codex",
+			"body":          "You are worker alpha.",
+		}},
+		"workstations": []map[string]any{{
+			"name":      "process",
+			"worker":    "worker-a",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+			"type":      "MODEL_WORKSTATION",
+			"body":      "Do the alpha work.",
+		}},
+		"supportingFiles": map[string]any{
+			"bundledFiles": []map[string]any{{
+				"type":       "DOC",
+				"targetPath": "factory/docs/README.md",
+				"content": map[string]any{
+					"encoding": string(factoryapi.BundledFileContentEncodingUtf8),
+					"inline":   "# Portable factory\n",
+				},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal named factory payload: %v", err)
+	}
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", payload); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	alphaDir := filepath.Join(rootDir, "alpha")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "docs", "README.md"), "# Portable factory\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "docs", "orphan.md"), "orphan content\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "docs", "standards", "review.md"), nestedDocBody)
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	current, err := svc.GetCurrentFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentFactory: %v", err)
+	}
+
+	got := serviceBundledFilesByTarget(t, current)
+	if _, ok := got[orphanDocPath]; ok {
+		t.Fatalf("current factory bundled files = %#v, want unlisted top-level orphan doc excluded", got)
+	}
+	assertServiceBundledFactoryEntry(t, got["factory/docs/README.md"], factoryapi.BundledFileTypeDOC, "factory/docs/README.md", "# Portable factory\n")
+	assertServiceBundledFactoryEntry(t, got[nestedDocPath], factoryapi.BundledFileTypeDOC, nestedDocPath, nestedDocBody)
+}
+
 func TestFactoryService_GetCurrentFactory_InlinesPortableFilesAndStarterInputs(t *testing.T) {
 	rootDir := t.TempDir()
 
