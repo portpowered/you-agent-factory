@@ -319,9 +319,9 @@ func runFactoryInvocation(
 	}
 
 	var streamAttachment *responseStreamAttachment
-	var streamRenderer *humanResponseStreamRenderer
+	var streamRenderer responseStreamRenderer
 	if isResponseStreamOutputMode(cfg.InvocationOutputMode) {
-		streamRenderer = newHumanResponseStreamRenderer(cfg.Output)
+		streamRenderer = newResponseStreamRenderer(cfg.Output, cfg.JSONOutput)
 		if streamInvoker, ok := invoker.(sessionResponseStreamInvocationRunner); ok {
 			streamAttachment = startResponseStreamAttachment(
 				ctx,
@@ -345,7 +345,7 @@ func runFactoryInvocation(
 		return runErr
 	}
 	if result.Status != factoryapi.InvocationTerminalStatusCompleted {
-		return writeInvocationFailure(cfg, result)
+		return writeInvocationFailure(cfg, result, streamRenderer)
 	}
 	return writeInvocationSuccess(cfg, result, streamRenderer)
 }
@@ -430,8 +430,16 @@ func invocationResultFailure(result apisurface.FactoryInvocationResult) error {
 	}
 }
 
-func writeInvocationFailure(cfg RunConfig, result apisurface.FactoryInvocationResult) error {
-	if cfg.JSONOutput {
+func writeInvocationFailure(
+	cfg RunConfig,
+	result apisurface.FactoryInvocationResult,
+	streamRenderer responseStreamRenderer,
+) error {
+	if streamRenderer != nil {
+		if err := streamRenderer.writeFinalInvocationResult(result); err != nil {
+			return err
+		}
+	} else if cfg.JSONOutput {
 		if err := writeInvocationJSON(cfg, result); err != nil {
 			return err
 		}
@@ -442,8 +450,11 @@ func writeInvocationFailure(cfg RunConfig, result apisurface.FactoryInvocationRe
 func writeInvocationSuccess(
 	cfg RunConfig,
 	result apisurface.FactoryInvocationResult,
-	streamRenderer *humanResponseStreamRenderer,
+	streamRenderer responseStreamRenderer,
 ) error {
+	if streamRenderer != nil {
+		return streamRenderer.writeFinalInvocationResult(result)
+	}
 	if cfg.JSONOutput {
 		return writeInvocationJSON(cfg, result)
 	}
@@ -451,9 +462,6 @@ func writeInvocationSuccess(
 	text, err := invocationPrimaryResultText(result.PrimaryResult)
 	if err != nil {
 		return err
-	}
-	if streamRenderer != nil && streamRenderer.renderedProgress() {
-		return streamRenderer.writePrimaryResult(text)
 	}
 	output := cfg.Output
 	if output == nil {

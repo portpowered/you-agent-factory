@@ -100,16 +100,6 @@ func TestValidateInvocationOutputMode_RejectsUnsupportedRunShapes(t *testing.T) 
 			invocationMode: false,
 			wantCode:       "INVOCATION_OUTPUT_UNSUPPORTED",
 		},
-		{
-			name: "json incompatible",
-			cfg: RunConfig{
-				InvocationOutputMode:     InvocationOutputResponseStream,
-				JSONOutput:               true,
-				InvocationPositionalText: &text,
-			},
-			invocationMode: true,
-			wantCode:       "INVOCATION_OUTPUT_INCOMPATIBLE",
-		},
 	}
 
 	for _, tc := range tests {
@@ -141,6 +131,20 @@ func TestValidateInvocationOutputMode_AllowsSupportedInvocation(t *testing.T) {
 	}, true)
 	if err != nil {
 		t.Fatalf("validateInvocationOutputMode: %v", err)
+	}
+}
+
+func TestValidateInvocationOutputMode_AllowsJSONResponseStream(t *testing.T) {
+	t.Parallel()
+
+	text := "Plan the sprint"
+	err := validateInvocationOutputMode(RunConfig{
+		InvocationOutputMode:     InvocationOutputResponseStream,
+		JSONOutput:               true,
+		InvocationPositionalText: &text,
+	}, true)
+	if err != nil {
+		t.Fatalf("validateInvocationOutputMode with JSON: %v", err)
 	}
 }
 
@@ -367,6 +371,76 @@ func TestRun_FactoryInvocationResponseStreamAttachesWhenRunnerSupportsInternalSt
 	}
 	if len(attachable.subscribeCalls) == 0 {
 		t.Fatal("expected internal response-stream subscription during invocation")
+	}
+}
+
+func TestRun_FactoryInvocationResponseStreamJSONEmitsStructuredRecords(t *testing.T) {
+	preserveRunGlobals(t)
+
+	text := "goal completed"
+	var output strings.Builder
+	attachable := &recordingResponseStreamAttachable{
+		dispatchIDs: []string{"dispatch-goal-1"},
+	}
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubResponseStreamInvocationService{
+			stubInvocationService: stubInvocationService{
+				run: func(ctx context.Context) error {
+					<-ctx.Done()
+					return nil
+				},
+				invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+					deadline := time.Now().Add(2 * time.Second)
+					for time.Now().Before(deadline) {
+						if len(attachable.subscribeCalls) > 0 {
+							break
+						}
+						time.Sleep(10 * time.Millisecond)
+					}
+					if attachable.stream != nil {
+						attachable.stream.Append(responsestream.Event{
+							Kind:       responsestream.EventKindProgressFragment,
+							Type:       responsestream.EventTypeProgress,
+							DispatchID: "dispatch-goal-1",
+							Payload:    "planning",
+						})
+					}
+					return apisurface.FactoryInvocationResult{
+						RequestID: "req-1",
+						TraceID:   "trace-1",
+						Status:    factoryapi.InvocationTerminalStatusCompleted,
+						PrimaryResult: []interfaces.WorkContentPart{
+							{Type: interfaces.WorkContentPartTypeText, Text: text},
+						},
+					}, nil
+				},
+			},
+			attachable: attachable,
+		}, nil
+	}
+
+	err := Run(context.Background(), RunConfig{
+		FactoryConfigPath:        "/tmp/factory.json",
+		InvocationPositionalText: &text,
+		InvocationOutputMode:     InvocationOutputResponseStream,
+		JSONOutput:               true,
+		StdinIsTTY:               func() bool { return true },
+		Output:                   &output,
+		Port:                     7437,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 NDJSON lines, got %d:\n%s", len(lines), output.String())
+	}
+	if !strings.Contains(lines[0], `"recordType":"progress"`) || !strings.Contains(lines[0], `"payload":"planning"`) {
+		t.Fatalf("progress line = %q", lines[0])
+	}
+	if !strings.Contains(lines[1], `"recordType":"primary_result"`) || !strings.Contains(lines[1], `"requestId":"req-1"`) {
+		t.Fatalf("primary result line = %q", lines[1])
 	}
 }
 

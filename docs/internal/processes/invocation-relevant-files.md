@@ -55,9 +55,9 @@ primary-result behavior.
   select primary-result-only versus internal `SessionResponseStream` attachment
   for supported one-shot factory invocations; keep mode validation, unsupported
   run-shape rejection, and fallback behavior in `pkg/cli/run/invocation_output.go`,
-  stream attachment in `pkg/cli/run/response_stream_attachment.go`, human progress
-  rendering in `pkg/cli/run/response_stream_renderer.go`, and invocation wiring in
-  `pkg/cli/run/factory_invocation_input.go`. Internal stream listing for
+  stream attachment in `pkg/cli/run/response_stream_attachment.go`, human and JSON
+  progress rendering in `pkg/cli/run/response_stream_renderer.go`, and invocation
+  wiring in `pkg/cli/run/factory_invocation_input.go`. Internal stream listing for
   CLI attachment belongs on `FactoryService.SessionResponseStreamDispatchIDs` in
   `pkg/service/runtime_sessions.go` alongside `SubscribeSessionResponseStream`.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin

@@ -1,12 +1,15 @@
 package run
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"sync"
 
+	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 )
@@ -15,7 +18,27 @@ const (
 	responseStreamProgressPrefix      = "[you:progress] "
 	responseStreamPrimaryResultHeader = "--- primary result ---"
 	maxHumanProgressLineBytes         = 1024
+
+	responseStreamJSONRecordProgress      = "progress"
+	responseStreamJSONRecordStreamGap     = "stream_gap"
+	responseStreamJSONRecordCompaction    = "compaction"
+	responseStreamJSONRecordPrimaryResult = "primary_result"
 )
+
+// responseStreamRenderer consumes internal SessionResponseStream segments and
+// writes ordered progress output followed by the final invocation result.
+type responseStreamRenderer interface {
+	responseStreamEventSink
+	renderedProgress() bool
+	writeFinalInvocationResult(result apisurface.FactoryInvocationResult) error
+}
+
+func newResponseStreamRenderer(output io.Writer, jsonMode bool) responseStreamRenderer {
+	if jsonMode {
+		return newJSONResponseStreamRenderer(output)
+	}
+	return newHumanResponseStreamRenderer(output)
+}
 
 // humanResponseStreamRenderer prints ordered internal SessionResponseStream
 // progress to stdout and keeps the final invocation primary result visually
@@ -63,6 +86,19 @@ func (r *humanResponseStreamRenderer) renderedProgress() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.progressSeen
+}
+
+func (r *humanResponseStreamRenderer) writeFinalInvocationResult(
+	result apisurface.FactoryInvocationResult,
+) error {
+	if r == nil {
+		return fmt.Errorf("response-stream renderer is nil")
+	}
+	text, err := invocationPrimaryResultText(result.PrimaryResult)
+	if err != nil {
+		return err
+	}
+	return r.writePrimaryResult(text)
 }
 
 func (r *humanResponseStreamRenderer) writePrimaryResult(text string) error {
@@ -165,4 +201,177 @@ func (r *humanResponseStreamRenderer) writeProgressLineLocked(payload string) {
 	r.progressSeen = true
 	r.progressLines++
 	_, _ = fmt.Fprintf(r.output, "%s%s\n", responseStreamProgressPrefix, payload)
+}
+
+// jsonResponseStreamRenderer emits newline-delimited JSON records for internal
+// SessionResponseStream progress and the final invocation result.
+type jsonResponseStreamRenderer struct {
+	mu           sync.Mutex
+	output       io.Writer
+	lastSequence map[string]int64
+	progressSeen bool
+}
+
+func newJSONResponseStreamRenderer(output io.Writer) *jsonResponseStreamRenderer {
+	if output == nil {
+		output = os.Stdout
+	}
+	return &jsonResponseStreamRenderer{
+		output:       output,
+		lastSequence: make(map[string]int64),
+	}
+}
+
+func (r *jsonResponseStreamRenderer) onStreamSegment(result factorysessions.SessionResponseStreamReadResult) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if result.BehindRetainedWindow {
+		r.writeRecordLocked(responseStreamJSONStreamGapRecord{
+			RecordType: responseStreamJSONRecordStreamGap,
+			Reason:     "behind_retained_window",
+		})
+	}
+	if result.Compaction != nil {
+		r.writeCompactionLocked(*result.Compaction)
+	}
+	for _, event := range result.Events {
+		r.renderEventLocked(event)
+	}
+}
+
+func (r *jsonResponseStreamRenderer) renderedProgress() bool {
+	if r == nil {
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.progressSeen
+}
+
+func (r *jsonResponseStreamRenderer) writeFinalInvocationResult(
+	result apisurface.FactoryInvocationResult,
+) error {
+	if r == nil {
+		return fmt.Errorf("response-stream renderer is nil")
+	}
+	return r.writeRecord(responseStreamJSONPrimaryResultRecord{
+		RecordType:  responseStreamJSONRecordPrimaryResult,
+		Invocation:  apisurface.InvocationResponseFromResult(result),
+	})
+}
+
+func (r *jsonResponseStreamRenderer) renderEventLocked(event responsestream.Event) {
+	switch event.Kind {
+	case responsestream.EventKindCompactionSignal:
+		if event.Compaction != nil {
+			r.writeCompactionLocked(*event.Compaction)
+		}
+		return
+	case responsestream.EventKindStreamCompleted, responsestream.EventKindStreamFailed:
+		return
+	case responsestream.EventKindResponseFragment:
+		return
+	case responsestream.EventKindProgressFragment:
+		if !humanProgressRenderableType(event.Type) {
+			return
+		}
+		if strings.TrimSpace(event.Payload) == "" {
+			return
+		}
+		dispatchKey := strings.TrimSpace(event.DispatchID)
+		if dispatchKey == "" {
+			dispatchKey = "_"
+		}
+		if event.Sequence > 0 && event.Sequence <= r.lastSequence[dispatchKey] {
+			return
+		}
+		if event.Sequence > 0 {
+			r.lastSequence[dispatchKey] = event.Sequence
+		}
+		record := responseStreamJSONProgressRecord{
+			RecordType: responseStreamJSONRecordProgress,
+			Sequence:   event.Sequence,
+			Kind:       string(event.Kind),
+			EventType:  string(event.Type),
+			Payload:    event.Payload,
+		}
+		if dispatchID := strings.TrimSpace(event.DispatchID); dispatchID != "" {
+			record.DispatchID = &dispatchID
+		}
+		r.writeRecordLocked(record)
+	}
+}
+
+func (r *jsonResponseStreamRenderer) writeCompactionLocked(summary responsestream.CompactionSummary) {
+	r.writeRecordLocked(responseStreamJSONCompactionRecord{
+		RecordType:            responseStreamJSONRecordCompaction,
+		Reason:                string(summary.Reason),
+		DroppedSequenceCount:  summary.DroppedSequenceCount,
+		FirstRetainedSequence: summary.FirstRetainedSequence,
+		LastDroppedSequence:   summary.LastDroppedSequence,
+	})
+}
+
+func (r *jsonResponseStreamRenderer) writeRecord(record any) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.writeRecordLocked(record)
+}
+
+func (r *jsonResponseStreamRenderer) writeRecordLocked(record any) error {
+	encoded, err := json.Marshal(record)
+	if err != nil {
+		return fmt.Errorf("marshal response-stream JSON record: %w", err)
+	}
+	if r.progressSeen || recordTypeOf(record) != responseStreamJSONRecordPrimaryResult {
+		r.progressSeen = true
+	}
+	_, err = fmt.Fprintln(r.output, string(encoded))
+	return err
+}
+
+func recordTypeOf(record any) string {
+	switch typed := record.(type) {
+	case responseStreamJSONProgressRecord:
+		return typed.RecordType
+	case responseStreamJSONStreamGapRecord:
+		return typed.RecordType
+	case responseStreamJSONCompactionRecord:
+		return typed.RecordType
+	case responseStreamJSONPrimaryResultRecord:
+		return typed.RecordType
+	default:
+		return ""
+	}
+}
+
+type responseStreamJSONProgressRecord struct {
+	RecordType string  `json:"recordType"`
+	Sequence   int64   `json:"sequence,omitempty"`
+	DispatchID *string `json:"dispatchId,omitempty"`
+	Kind       string  `json:"kind"`
+	EventType  string  `json:"eventType"`
+	Payload    string  `json:"payload"`
+}
+
+type responseStreamJSONStreamGapRecord struct {
+	RecordType string `json:"recordType"`
+	Reason     string `json:"reason"`
+}
+
+type responseStreamJSONCompactionRecord struct {
+	RecordType            string `json:"recordType"`
+	Reason                string `json:"reason"`
+	DroppedSequenceCount  int    `json:"droppedSequenceCount,omitempty"`
+	FirstRetainedSequence int64  `json:"firstRetainedSequence,omitempty"`
+	LastDroppedSequence   int64  `json:"lastDroppedSequence,omitempty"`
+}
+
+type responseStreamJSONPrimaryResultRecord struct {
+	RecordType string                         `json:"recordType"`
+	Invocation factoryapi.InvocationResponse `json:"invocation"`
 }

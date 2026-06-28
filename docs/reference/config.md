@@ -849,18 +849,29 @@ This mode is valid only for supported one-shot invocation runs such as
 `you run --named` or `you run --factory` with positional text or piped stdin.
 It is rejected for `--continuously`, replay mode, `--work` batch runs, and
 other non-invocation `you run` shapes with `INVOCATION_OUTPUT_UNSUPPORTED`.
-Combining `--output response-stream` with global `--json` is rejected with
-`INVOCATION_OUTPUT_INCOMPATIBLE` until a structured JSON response-stream
-renderer is documented separately.
 
 When the CLI can safely attach to the live internal stream, it subscribes to
-session-owned response-stream events instead of provider stdout. Progress lines
-are prefixed with `[you:progress]` and kept separate from the final
-`primaryResult`, which is printed under a `--- primary result ---` header after
-progress completes. Response fragments that mirror the final answer are not
-replayed as ordinary progress. When no internal stream is available on the
-invocation path, stdout falls back to the existing primary-result-only contract
-after completion.
+session-owned response-stream events instead of provider stdout.
+
+Human-readable mode prefixes progress with `[you:progress]` and keeps the final
+`primaryResult` separate under a `--- primary result ---` header after progress
+completes. Response fragments that mirror the final answer are not replayed as
+ordinary progress.
+
+JSON mode (`--json` with `--output response-stream`) emits newline-delimited
+JSON records to stdout:
+
+- `progress` records carry ordered internal stream events (`sequence`,
+  `dispatchId`, `kind`, `eventType`, `payload`).
+- `stream_gap` records report resumed consumption behind the retained window.
+- `compaction` records report truncation, coalescing, or age eviction with
+  dropped-sequence counts.
+- `primary_result` records wrap the shared `InvocationResponse` envelope for the
+  final invocation outcome.
+
+When no internal stream is available on the invocation path, stdout falls back to
+the existing primary-result-only contract after completion (human text or a
+single `primary_result` JSON record).
 
 Text success example:
 

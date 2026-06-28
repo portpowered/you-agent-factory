@@ -1,10 +1,14 @@
 package run
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestHumanResponseStreamRenderer_RendersOrderedProgressAndSeparatesPrimaryResult(t *testing.T) {
@@ -42,8 +46,12 @@ func TestHumanResponseStreamRenderer_RendersOrderedProgressAndSeparatesPrimaryRe
 		},
 	})
 
-	if err := renderer.writePrimaryResult("goal completed"); err != nil {
-		t.Fatalf("writePrimaryResult: %v", err)
+	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+		PrimaryResult: []interfaces.WorkContentPart{
+			{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
+		},
+	}); err != nil {
+		t.Fatalf("writeFinalInvocationResult: %v", err)
 	}
 
 	got := output.String()
@@ -132,8 +140,12 @@ func TestHumanResponseStreamRenderer_NoHeaderWithoutProgress(t *testing.T) {
 
 	var output strings.Builder
 	renderer := newHumanResponseStreamRenderer(&output)
-	if err := renderer.writePrimaryResult("goal completed"); err != nil {
-		t.Fatalf("writePrimaryResult: %v", err)
+	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+		PrimaryResult: []interfaces.WorkContentPart{
+			{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
+		},
+	}); err != nil {
+		t.Fatalf("writeFinalInvocationResult: %v", err)
 	}
 	if got := output.String(); got != "goal completed" {
 		t.Fatalf("output = %q, want plain primary result", got)
@@ -187,5 +199,141 @@ func TestFormatCompactionNotice(t *testing.T) {
 	})
 	if got != "stream coalesced (2 earlier events omitted)" {
 		t.Fatalf("notice = %q", got)
+	}
+}
+
+func TestJSONResponseStreamRenderer_EmitsOrderedProgressAndPrimaryResultRecords(t *testing.T) {
+	t.Parallel()
+
+	var output strings.Builder
+	renderer := newJSONResponseStreamRenderer(&output)
+	renderer.onStreamSegment(responsestream.ReadResult{
+		Events: []responsestream.Event{
+			{
+				Sequence:   1,
+				Kind:       responsestream.EventKindProgressFragment,
+				Type:       responsestream.EventTypeProgress,
+				DispatchID: "dispatch-1",
+				Payload:    "planning",
+			},
+			{
+				Sequence:   2,
+				Kind:       responsestream.EventKindProgressFragment,
+				Type:       responsestream.EventTypeProgress,
+				DispatchID: "dispatch-1",
+				Payload:    "reviewing",
+			},
+		},
+	})
+	renderer.onStreamSegment(responsestream.ReadResult{
+		Events: []responsestream.Event{
+			{
+				Sequence:   3,
+				Kind:       responsestream.EventKindResponseFragment,
+				Type:       responsestream.EventTypeTextDelta,
+				DispatchID: "dispatch-1",
+				Payload:    "goal completed",
+			},
+		},
+	})
+	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+		RequestID: "req-1",
+		TraceID:   "trace-1",
+		Status:    factoryapi.InvocationTerminalStatusCompleted,
+		PrimaryResult: []interfaces.WorkContentPart{
+			{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
+		},
+	}); err != nil {
+		t.Fatalf("writeFinalInvocationResult: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 NDJSON lines, got %d:\n%s", len(lines), output.String())
+	}
+
+	var progress1 responseStreamJSONProgressRecord
+	if err := json.Unmarshal([]byte(lines[0]), &progress1); err != nil {
+		t.Fatalf("unmarshal progress line 1: %v", err)
+	}
+	if progress1.RecordType != responseStreamJSONRecordProgress || progress1.Payload != "planning" {
+		t.Fatalf("progress line 1 = %#v", progress1)
+	}
+
+	var progress2 responseStreamJSONProgressRecord
+	if err := json.Unmarshal([]byte(lines[1]), &progress2); err != nil {
+		t.Fatalf("unmarshal progress line 2: %v", err)
+	}
+	if progress2.RecordType != responseStreamJSONRecordProgress || progress2.Payload != "reviewing" {
+		t.Fatalf("progress line 2 = %#v", progress2)
+	}
+
+	var finalRecord responseStreamJSONPrimaryResultRecord
+	if err := json.Unmarshal([]byte(lines[2]), &finalRecord); err != nil {
+		t.Fatalf("unmarshal primary result line: %v", err)
+	}
+	if finalRecord.RecordType != responseStreamJSONRecordPrimaryResult {
+		t.Fatalf("final record type = %q", finalRecord.RecordType)
+	}
+	if finalRecord.Invocation.RequestId != "req-1" {
+		t.Fatalf("invocation = %#v", finalRecord.Invocation)
+	}
+}
+
+func TestJSONResponseStreamRenderer_SurfacesCompactionAndStreamGapRecords(t *testing.T) {
+	t.Parallel()
+
+	var output strings.Builder
+	renderer := newJSONResponseStreamRenderer(&output)
+	renderer.onStreamSegment(responsestream.ReadResult{
+		BehindRetainedWindow: true,
+		Compaction: &responsestream.CompactionSummary{
+			Reason:               responsestream.CompactionReasonTruncated,
+			DroppedSequenceCount: 3,
+		},
+	})
+
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 NDJSON lines, got %d:\n%s", len(lines), output.String())
+	}
+
+	var gap responseStreamJSONStreamGapRecord
+	if err := json.Unmarshal([]byte(lines[0]), &gap); err != nil {
+		t.Fatalf("unmarshal stream gap: %v", err)
+	}
+	if gap.RecordType != responseStreamJSONRecordStreamGap || gap.Reason != "behind_retained_window" {
+		t.Fatalf("gap = %#v", gap)
+	}
+
+	var compaction responseStreamJSONCompactionRecord
+	if err := json.Unmarshal([]byte(lines[1]), &compaction); err != nil {
+		t.Fatalf("unmarshal compaction: %v", err)
+	}
+	if compaction.RecordType != responseStreamJSONRecordCompaction || compaction.DroppedSequenceCount != 3 {
+		t.Fatalf("compaction = %#v", compaction)
+	}
+}
+
+func TestJSONResponseStreamRenderer_EmitsOnlyPrimaryResultWithoutProgress(t *testing.T) {
+	t.Parallel()
+
+	var output strings.Builder
+	renderer := newJSONResponseStreamRenderer(&output)
+	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+		Status: factoryapi.InvocationTerminalStatusCompleted,
+		PrimaryResult: []interfaces.WorkContentPart{
+			{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
+		},
+	}); err != nil {
+		t.Fatalf("writeFinalInvocationResult: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 NDJSON line, got %d:\n%s", len(lines), output.String())
+	}
+	if !strings.Contains(lines[0], `"recordType":"primary_result"`) {
+		t.Fatalf("output = %q", lines[0])
 	}
 }

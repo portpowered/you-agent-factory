@@ -41,12 +41,6 @@ func validateInvocationOutputMode(cfg RunConfig, invocationMode bool) error {
 	if !isResponseStreamOutputMode(cfg.InvocationOutputMode) {
 		return nil
 	}
-	if cfg.JSONOutput || cfg.JSON {
-		return &InvocationError{
-			Code:    "INVOCATION_OUTPUT_INCOMPATIBLE",
-			Message: "response-stream output cannot be combined with --json",
-		}
-	}
 	if strings.TrimSpace(cfg.ReplayPath) != "" {
 		return &InvocationError{
 			Code:    "INVOCATION_OUTPUT_UNSUPPORTED",
