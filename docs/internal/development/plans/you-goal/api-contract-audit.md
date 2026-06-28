@@ -7,16 +7,16 @@ change posture, and follow-on verification expectations.
 **Status:** complete (all stories `you-goal-p11-api-contract-audit-001` through
 `you-goal-p11-api-contract-audit-003`)
 
-**Last updated:** 2026-06-20 UTC
+**Last updated:** 2026-06-29 UTC
 
 ## Context
 
 The `@you/goal` planning direction is intentionally narrow: reuse existing
 public Factory Session invocation, lifecycle, and dispatch contracts; keep
-response-stream progress internal to runtime/session models; and limit the
-expected public OpenAPI delta to `Workstation.workPropagation`. This document is
-the single reviewer-verifiable artifact maintainers should cite before widening
-API scope in follow-on PRs.
+response-stream progress internal to runtime/session models; and treat
+`Workstation.workPropagation` as the landed public factory-configuration delta
+for this slice. This document is the single reviewer-verifiable artifact
+maintainers should cite before widening API scope in follow-on PRs.
 
 Canonical public vocabulary: `docs/architecture/data-model.md` (`Factory`,
 `Factory Session`, `Work`, `Work Request`, dispatch lifecycle, invocation
@@ -101,11 +101,20 @@ the session invocation wait completes. Unresolved selection surfaces as
 `INVOCATION_PRIMARY_RESULT_UNRESOLVED` and no `primaryResult`, matching the
 documented OpenAPI contract.
 
-The built-in `@you/goal` factory payload (`pkg/config/layout.go`,
-`BuiltInGoalFactoryJSON`) does not currently declare `invocationReturn`; runtime
-behavior therefore uses the documented `SUBMITTED_WORK_TERMINAL` default until
-an authored policy is added through normal factory configuration — not through
-new API routes.
+The built-in `@you/goal` factory payload (`pkg/config/builtingoal/factory.json`,
+embedded through `pkg/config/layout.go` as `BuiltInGoalFactoryJSON`) already
+declares an explicit `invocationReturn` policy:
+
+| Field | Built-in value |
+|-------|----------------|
+| `policy` | `EXPLICIT` |
+| `workTypeName` | `goal` |
+| `terminalState` | `complete` |
+
+Terminal `goal:complete` work content is therefore the configured
+`InvocationResponse.primaryResult` for `@you/goal` invocations. Maintainer
+follow-on work must preserve this authored policy through normal factory
+configuration and materialization — not through new API routes.
 
 ### CLI adapter reuse requirements
 
@@ -313,7 +322,7 @@ verify:
 
 | Evidence | What it proves |
 |----------|----------------|
-| This section + story 003 public OpenAPI delta | Response streams stay internal; only `Workstation.workPropagation` may change OpenAPI |
+| This section + landed public OpenAPI delta | Response streams stay internal; `Workstation.workPropagation` is the landed public factory-configuration delta |
 | `api/components/schemas/events/FactoryEventType.yaml` | No new public event types for streaming chunks |
 | `pkg/api/handlers_events.go` | Public SSE exposes only `FactoryEvent`; no response-stream branch |
 | `pkg/factory/events/event_history_dispatch_lifecycle.go` | Interrupt facts use `DISPATCH_INTERRUPTED` emission path |
@@ -325,26 +334,86 @@ verify:
 **Follow-on implementation PRs** for internal `SessionResponseStream` work
 should add runtime/session unit and integration tests near the implementing
 packages. They must **not** require `make generate-api`, OpenAPI fragment
-changes, or contract smoke updates unless story 003's public delta
-(`Workstation.workPropagation`) is also in scope.
+changes, or contract smoke updates for stream-only diffs.
 
-## Public OpenAPI delta and generated-client expectations
+## Merged packaged goal factory contract
 
-`@you/goal` follow-on API work may change **one** public factory-configuration
-field on the existing `Workstation` schema. Everything else in this slice —
-invocation routes, event vocabulary, lifecycle routes, internal response streams,
-and CLI invocation adapters — reuses or repairs existing public surfaces without
-new OpenAPI route families or generated-client churn.
+The built-in `@you/goal` factory (`pkg/config/builtingoal/factory.json`) and
+its materialized on-disk layout already encode the merged goal slice. Maintainer
+docs must describe this behavior as present — not as follow-on work.
 
-### Only expected public OpenAPI change
+### Decision-envelope parsing is explicit
+
+Workstations that need structured reviewer/checker JSON must set
+`outcomeFormat: "decision-envelope"` in factory JSON. The runtime routes agent
+output through the envelope parser only when that field is authored; it does
+**not** infer decision envelopes from arbitrary JSON in worker output.
+
+| Workstation | Parsing mode | Routing |
+|-------------|--------------|---------|
+| `structured-review-goal` | `outcomeFormat: "decision-envelope"` | `classificationRoutes` on goal-routing labels such as `accepted`, `needs_changes`, `blocked`, `needs_human`, and `interrupted` |
+| `review-goal` | stop-token / classifier routing (no `outcomeFormat`) | `classificationRoutes` on plain classifier labels from reviewer output |
+
+Authoritative envelope shape and vocabulary:
+`factory/docs/decision-envelope.md`, `pkg/packagedfactories/goal/decision_envelope.go`,
+and `pkg/workers/executor/agent.go`.
+
+### Decision routing, non-success states, and recovery
+
+The packaged goal topology routes review outcomes to authored goal states
+without goal-specific public endpoints:
+
+| Routed state | Meaning | Public recovery surface |
+|--------------|---------|-------------------------|
+| `goal:complete` | Terminal success; `invocationReturn` selects this as `primaryResult` | Successful `InvocationResponse` |
+| `goal:blocked` | Review routed to blocked | `INVOCATION_BLOCKED` plus existing session/work inspection |
+| `goal:needs-human` | Review routed to human escalation | `INVOCATION_NEEDS_HUMAN` plus existing session/work inspection |
+| `goal:interrupted` | Review or dispatch interruption routed stop | `INVOCATION_INTERRUPTED` plus dispatch/session inspection |
+| `goal:failed` | Workstation failure or guard exhaustion | `INVOCATION_RUNTIME_FAILURE` or unresolved primary result |
+
+Pause, resume, inspect, and batch/headless behavior reuse existing Factory
+Session, work, and dispatch surfaces:
+
+- **Batch/headless:** default `you run --named @you/goal` batch mode completes
+  without browser or dashboard interaction for the normal success path; see
+  `docs/reference/packaged-goal.md`.
+- **Pause/resume:** `POST /factory-sessions/{session_id}/pause` and `/resume`
+  plus `you session resume <session-id>`; no `/goal/...` control routes.
+- **Inspect-first recovery:** `you session show`, `you work show`, and matching
+  REST reads before applying existing work/session controls.
+- **Interrupt:** dispatch lifecycle facts (`DISPATCH_INTERRUPTED`) and shared
+  invocation non-success codes; no goal-named interrupt endpoint.
+
+Customer-facing wording for these flows lives in `docs/reference/packaged-goal.md`.
+Maintainer process maps: `docs/internal/processes/invocation-relevant-files.md`
+and `docs/internal/processes/api-relevant-files.md`.
+
+
+`@you/goal` landed its expected public factory-configuration delta on the
+existing `Workstation` schema through the merged `you-goal-p07-define-work-propagation-config`
+work. Everything else in this slice — invocation routes, event vocabulary,
+lifecycle routes, internal response streams, and CLI invocation adapters —
+reuses or repairs existing public surfaces without new OpenAPI route families or
+generated-client churn.
+
+### Landed public OpenAPI delta
 
 | Surface | Current state | @you/goal posture | Follow-on verification |
 |---------|---------------|-------------------|------------------------|
-| `Workstation.workPropagation` | **Not yet in OpenAPI** — planned optional field on `api/components/schemas/data-models/Workstation.yaml` | **Add in follow-on PR** — sole expected public contract delta for this slice | `make generate-api`; `make api-smoke`; factory config load/save round-trip tests; dashboard factory-definition decode if the field is authorable in UI |
-| `WorkPropagationMode` | **Not yet in OpenAPI** — planned enum referenced by `workPropagation` | **Add in follow-on PR** — companion schema fragment under `api/components/schemas/data-models/` | Same as `workPropagation`; enum normalization in `pkg/interfaces/public_factory_enums.go` if runtime projection is required |
+| `Workstation.workPropagation` | **Present in OpenAPI** — optional object field on `api/components/schemas/data-models/Workstation.yaml` referencing `WorkPropagation.yaml` | **Reuse as-is** — landed public contract for this slice | `make generate-api`; `make api-smoke`; factory config load/save round-trip tests; dashboard factory-definition decode when the field is authorable in UI |
+| `WorkPropagationMode` | **Present in OpenAPI** — enum on `api/components/schemas/data-models/WorkPropagationMode.yaml` with values `OUTPUT_AS_PAYLOAD` and `PRESERVE_INPUT` only | **Reuse as-is** — companion enum for `workPropagation.mode` | Same as `workPropagation`; enum normalization in `pkg/interfaces/public_factory_enums.go` when runtime projection changes |
 | All other `Workstation` fields | Present in `Workstation.yaml` | **Reuse as-is** — no goal-prefixed duplicates | Existing factory validation and topology tests |
 | `Factory`, `FactorySession`, invocation, event, lifecycle schemas | Present | **Reuse as-is** — stories 001–002 lock reuse posture | Existing contract and servertests only |
 | `SessionResponseStream` / `SessionResponseStreamEvent` | Internal runtime models (not in OpenAPI) | **Internal-only** — must not appear in authored OpenAPI fragments | Runtime/session tests near implementing packages; **no** `make generate-api` |
+
+Factory JSON uses the structured object syntax:
+
+```json
+"workPropagation": { "mode": "PRESERVE_INPUT" }
+```
+
+Omit `workPropagation` to use the default `OUTPUT_AS_PAYLOAD` behavior. Only
+`OUTPUT_AS_PAYLOAD` and `PRESERVE_INPUT` are supported modes.
 
 No other public OpenAPI additions are in scope for `@you/goal` in this slice:
 no new routes, no new `FactoryEventType` values, no response-stream endpoints,
@@ -367,9 +436,9 @@ fragments, backend config mapping, CLI/API adapters, and generated clients:
 - Docs and planning artifacts use `Workstation.workPropagation` (schema-qualified)
   when referring to the public field; use `workPropagation` only when describing
   JSON/YAML on disk.
-- OpenAPI `x-enum-varnames` for `WorkPropagationMode` should follow existing
-  workstation enum style (for example `WorkPropagationModeImmediate` — exact
-  enum members are defined in the follow-on implementation PR, not this audit).
+- OpenAPI `x-enum-varnames` for `WorkPropagationMode` follow the landed enum
+  members `WorkPropagationModeOutputAsPayload` and
+  `WorkPropagationModePreserveInput`.
 - Go internal structs may use idiomatic Go field names (`WorkPropagation`) but
   JSON tags and OpenAPI property names must remain `workPropagation`.
 - TypeScript factory-definition decoders must read the generated OpenAPI
@@ -388,7 +457,7 @@ response-stream work must not touch them.
 | Add or modify `Workstation.workPropagation` / `WorkPropagationMode` in authored OpenAPI | **Yes** — run `make generate-api` | `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, `pkg/generatedclient/client.gen.go`, `ui/src/api/generated/openapi.ts` must match authored fragments; run `make api-smoke` when feasible |
 | Internal `SessionResponseStream` / `SessionResponseStreamEvent` implementation | **No** | Package-local runtime/session tests; reject PRs that regenerate public clients for stream-only diffs |
 | Invocation reuse, lifecycle behavioral repair, dispatch vocabulary reuse | **No** — unless an unrelated public schema also changes | Extend existing API/CLI/servertests from stories 001–002 |
-| Dashboard factory editor exposing `workPropagation` | **Yes** — only after OpenAPI field exists | UI decoders in `ui/src/api/factory-definition/` aligned with generated `Workstation`; `make ui-test` / `make verify-fast` for affected modules |
+| Dashboard factory editor exposing `workPropagation` | **Yes** — when authored OpenAPI or editor behavior changes | UI decoders in `ui/src/api/factory-definition/` aligned with generated `Workstation`; `make ui-test` / `make verify-fast` for affected modules |
 
 **Generation pipeline (public contract changes only):**
 
@@ -416,13 +485,13 @@ response-stream work must not touch them.
 
 | Artifact | Role | @you/goal posture |
 |----------|------|-------------------|
-| `api/openapi-main.yaml` + `api/components/` | Authored public contract | Change only for `Workstation.workPropagation` / `WorkPropagationMode` |
+| `api/openapi-main.yaml` + `api/components/` | Authored public contract | `Workstation.workPropagation` already present; avoid unrelated goal OpenAPI churn |
 | `api/openapi.yaml` | Bundled contract | Regenerated; never hand-edited |
 | `pkg/api/generated/server.gen.go` | Go server types | Regenerated only on public OpenAPI change |
 | `pkg/generatedclient/client.gen.go` | Go HTTP client | Regenerated only on public OpenAPI change |
 | `ui/src/api/generated/openapi.ts` | TypeScript API types | Regenerated only on public OpenAPI change |
 | `pkg/api/contracttests/` | Contract smoke and authoring guards | Extend when `Workstation` schema changes; no new inventory tests for streams |
-| `pkg/config/layout.go` (`BuiltInGoalFactoryJSON`) | Built-in factory payload | May set `workPropagation` in follow-on PR without new routes; still no `make generate-api` until OpenAPI field lands |
+| `pkg/config/builtingoal/factory.json` (`BuiltInGoalFactoryJSON`) | Built-in factory payload | Carries explicit `invocationReturn` and goal routing; may author `workPropagation` through normal factory JSON without new routes |
 | Internal response-stream packages | Runtime/session plumbing | New Go packages only; zero OpenAPI footprint |
 
 ### Reviewer evidence for this boundary
@@ -431,7 +500,7 @@ Maintainers reviewing `@you/goal` public-contract follow-on PRs should verify:
 
 | Evidence | What it proves |
 |----------|----------------|
-| This section + stories 001–002 | Only `Workstation.workPropagation` may change OpenAPI; streams stay internal |
+| This section + stories 001–002 | `Workstation.workPropagation` is the landed public delta; streams stay internal |
 | `api/components/schemas/data-models/Workstation.yaml` | Field and enum fragments use `workPropagation` / `WorkPropagationMode` naming |
 | `make generate-api` diff | Generated artifacts change only when authored OpenAPI changes |
 | `make api-smoke` | Bundled contract, drift checks, and integration smoke pass after public delta |
@@ -442,7 +511,7 @@ Maintainers reviewing `@you/goal` public-contract follow-on PRs should verify:
 
 **Follow-on implementation PRs** that add only internal `SessionResponseStream`
 behavior should cite stories 001–002 and prove runtime behavior with focused
-tests. They must **not** include generated OpenAPI client diffs. PRs that add
-`Workstation.workPropagation` must include the full generation and
-`make api-smoke` verification path above and use the locked terminology table
-in this section.
+tests. They must **not** include generated OpenAPI client diffs. PRs that change
+authored `Workstation.workPropagation` or companion enum fragments must include
+the full generation and `make api-smoke` verification path above and use the
+locked terminology table in this section.

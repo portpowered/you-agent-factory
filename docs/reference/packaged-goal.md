@@ -87,14 +87,49 @@ Customers should expect:
 
 - The CLI selects exactly one named-factory directory and loads the split
   `factory.json`, `workers/`, and `workstations/` layout from that directory.
-- The default factory runs the `goal` work type from `init` through plan,
-  execute, check, and review to `complete`, or to `failed` when a workstation
-  reports a failure.
+- The default factory runs the `goal` work type through the multi-stage flow
+  described below, ending at terminal `goal:complete` on success or at a
+  non-success goal state when routing or workstation failure stops progress.
 - Later invocations reuse the materialized on-disk copy instead of overwriting
   customer edits with pristine embedded content.
 - Legacy materialized copies that still use broken top-level `{{ .WorkID }}`
   prompt templates are upgraded automatically on the next resolution when the
   current built-in catalog provides canonical `PromptData` templates.
+
+## Goal flow topology
+
+The packaged `@you/goal` factory models one `goal` work type that moves through
+planning, execution, checking, review, and completion stages. Each stage is a
+normal workstation transition on submitted work; there is no goal-specific public
+route or endpoint for any stage.
+
+| Stage | Customer-facing role | Typical work state | Workstation |
+|-------|----------------------|--------------------|-------------|
+| Planning | Turn submitted goal text into an executable plan | `goal:init` → `goal:plan` | `plan-goal` |
+| Execution | Implement the plan | `goal:plan` → `goal:execute` | `execute-goal` |
+| Checking | Verify execution output and choose review mode | `goal:execute` → review path | `check-goal` |
+| Review | Evaluate results and decide whether to finish or loop | `goal:review` or `goal:structured-review` | `review-goal` or `structured-review-goal` |
+| Completion | Terminal success for the invocation | `goal:complete` | — |
+
+After checking, the factory routes to either plain review (`review-goal`) or
+structured review (`structured-review-goal`). Accepted review outcomes advance
+work to `goal:complete`. Review can also loop back to planning when changes or
+test failures require another pass.
+
+Non-success goal states are part of the same topology rather than separate
+public routes:
+
+- `goal:blocked` and `goal:needs-human` — authored routed states when review
+  decides the goal cannot proceed without operator action.
+- `goal:interrupted` — routed when review or dispatch interruption metadata
+  indicates an interrupted stop.
+- `goal:failed` — workstation failure, guard exhaustion, or another terminal
+  failure path before `goal:complete`.
+
+When a batch invocation stops before `goal:complete`, use the shared recovery
+codes and inspect-first flow in the sections below. Those surfaces explain
+whether the stop came from a routed goal state, a paused session, or an
+interrupted dispatch.
 
 ## Non-success outcomes and recovery
 
@@ -186,9 +221,29 @@ Inspect the materialized factory:
 you factory list --dir ~/.you-agent-factory/factories
 ```
 
-The directory contains `factory.json`, split `workers/` and `workstations/`
-files, and the default goal planner, executor, checker, and reviewer prompts
-needed for the packaged workflow.
+The materialized directory uses the standard split factory layout customers edit
+after first use:
+
+```text
+factory.json
+workers/
+  goal-planner/AGENTS.md
+  goal-executor/AGENTS.md
+  goal-checker/AGENTS.md
+  goal-reviewer/AGENTS.md
+workstations/
+  plan-goal/AGENTS.md
+  execute-goal/AGENTS.md
+  check-goal/AGENTS.md
+  review-goal/AGENTS.md
+  structured-review-goal/AGENTS.md
+```
+
+On first materialization, the CLI expands the built-in catalog into that layout:
+`factory.json` carries topology, routing, and `invocationReturn`, while worker
+and workstation prompt bodies land in the split `AGENTS.md` files. Later
+`you run --named @you/goal` invocations load this on-disk copy as-is, so edits
+to prompts or factory settings persist without reinstalling the packaged factory.
 
 ## Customer edits affect the next run
 
