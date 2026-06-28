@@ -2,6 +2,7 @@ package fixtures_test
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"testing"
 	"time"
@@ -88,6 +89,101 @@ func newResumedRuntimeService(harness interruptedResumableHarness) *fse.JavaScri
 		Provider:          harness.provider,
 		PersistSessions:   true,
 	})
+}
+
+func resumeInterruptedHarness(t *testing.T, harness interruptedResumableHarness, requestID string) *fse.JavaScriptRuntimeService {
+	t.Helper()
+	resumedService := newResumedRuntimeService(harness)
+	resumed, err := resumedService.ResumeInterruptedSession(context.Background(), harness.sessionID, fse.ResumeSessionRequest{
+		RequestID: requestID,
+	})
+	if err != nil {
+		t.Fatalf("ResumeInterruptedSession: %v", err)
+	}
+	if resumed.SessionID != harness.sessionID {
+		t.Fatalf("resumed sessionId = %q, want %q", resumed.SessionID, harness.sessionID)
+	}
+	if resumed.Status != string(fse.LifecycleStatusResuming) {
+		t.Fatalf("resumed start status = %q, want RESUMING", resumed.Status)
+	}
+	return resumedService
+}
+
+func assertInterruptedLifecycleHasTimestamp(t *testing.T, lifecycle *fse.LifecycleTimestamps) {
+	t.Helper()
+	if lifecycle == nil || lifecycle.InterruptedAt == nil {
+		t.Fatalf("interrupted lifecycle = %#v, want interruptedAt", lifecycle)
+	}
+}
+
+func assertResumedSessionReadSurfaces(t *testing.T, success fse.SessionReadResult) {
+	t.Helper()
+	if success.Lifecycle == nil || success.Lifecycle.InterruptedAt == nil || success.Lifecycle.ResumedAt == nil {
+		t.Fatalf("resumed lifecycle = %#v, want interruptedAt and resumedAt", success.Lifecycle)
+	}
+	if success.Lifecycle.FinishedAt == nil {
+		t.Fatal("expected finishedAt on succeeded resumed session")
+	}
+	if success.Progress == nil || success.Progress.CompletedDispatches != 2 {
+		t.Fatalf("progress = %#v, want 2 completed dispatches", success.Progress)
+	}
+	if success.ResultSummary == nil || success.ResultSummary.ResultStatus != string(fse.ResultStatusFinal) {
+		t.Fatalf("resultSummary = %#v, want FINAL", success.ResultSummary)
+	}
+}
+
+func assertResumedResultAndDispatches(t *testing.T, service *fse.JavaScriptRuntimeService, sessionID string) {
+	t.Helper()
+	result, err := service.GetResult(context.Background(), sessionID, fse.ResultRequest{
+		Mode: fse.ResultModeFinal,
+	})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	if result.ResultStatus != fse.ResultStatusFinal || result.SessionStatus != fse.LifecycleStatusSucceeded {
+		t.Fatalf("result = %#v, want FINAL/SUCCEEDED", result)
+	}
+
+	dispatches, err := service.ListDispatches(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("ListDispatches: %v", err)
+	}
+	if len(dispatches.Dispatches) != 2 {
+		t.Fatalf("dispatch count = %d, want 2", len(dispatches.Dispatches))
+	}
+	for _, dispatch := range dispatches.Dispatches {
+		if dispatch.Status != fse.DispatchStatusCompleted {
+			t.Fatalf("dispatch %s = %#v, want COMPLETED", dispatch.ID, dispatch)
+		}
+	}
+}
+
+func assertResumedReplayProjection(t *testing.T, events []json.RawMessage) {
+	t.Helper()
+	replayedSession, replayedResult, err := fse.ReplaySessionProjection(events)
+	if err != nil {
+		t.Fatalf("ReplaySessionProjection: %v", err)
+	}
+	if replayedSession.Status != fse.LifecycleStatusSucceeded {
+		t.Fatalf("replayed status = %q, want SUCCEEDED", replayedSession.Status)
+	}
+	if replayedResult.ResultStatus != fse.ResultStatusFinal {
+		t.Fatalf("replayed result = %q, want FINAL", replayedResult.ResultStatus)
+	}
+	if replayedSession.Lifecycle == nil || replayedSession.Lifecycle.ResumedAt == nil {
+		t.Fatalf("replayed lifecycle = %#v, want resumedAt", replayedSession.Lifecycle)
+	}
+}
+
+func assertResumedReconnectEvents(t *testing.T, service *fse.JavaScriptRuntimeService, sessionID string, events []json.RawMessage) {
+	t.Helper()
+	reconnect, err := service.ReadEvents(context.Background(), sessionID, reconnectAfterFirstEvent(t, events))
+	if err != nil {
+		t.Fatalf("ReadEvents reconnect: %v", err)
+	}
+	if len(reconnect.Events) == 0 {
+		t.Fatal("expected reconnect-filtered events after first event id")
+	}
 }
 
 type sequentialBlockingProvider struct {

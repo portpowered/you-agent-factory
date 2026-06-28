@@ -102,30 +102,55 @@ func LatestCheckpointSummaryFromRecords(input CheckpointSummaryInput) *Checkpoin
 }
 
 func dispatchAndArtifactIDsFromRecords(records []workflowruntime.RuntimeRecord) (completed, pending, artifacts []string) {
+	dispatchStatus, artifactSet := collectDispatchAndArtifactState(records)
+	completed, pending = classifyDispatchIDs(dispatchStatus)
+	return completed, pending, sortedStringSet(artifactSet)
+}
+
+func collectDispatchAndArtifactState(records []workflowruntime.RuntimeRecord) (map[string]string, map[string]struct{}) {
 	dispatchStatus := make(map[string]string)
 	artifactSet := make(map[string]struct{})
 	for _, record := range records {
 		switch record.Kind {
 		case workflowruntime.RecordKindArtifact:
-			if record.Artifact != nil && strings.TrimSpace(record.Artifact.ID) != "" {
-				artifactSet[record.Artifact.ID] = struct{}{}
-			}
+			rememberArtifactRecord(record, artifactSet)
 		case workflowruntime.RecordKindChildDispatch:
-			if record.ChildDispatch == nil {
-				continue
-			}
-			dispatchID := strings.TrimSpace(record.ChildDispatch.DispatchID)
-			if dispatchID == "" {
-				continue
-			}
-			dispatchStatus[dispatchID] = strings.TrimSpace(record.ChildDispatch.Status)
-			if ref := strings.TrimSpace(record.ChildDispatch.ArtifactRef); ref != "" {
-				if parsed, issues := parseArtifactIDFromURI(ref); len(issues) == 0 && parsed != "" {
-					artifactSet[parsed] = struct{}{}
-				}
-			}
+			rememberChildDispatchRecord(record, dispatchStatus, artifactSet)
 		}
 	}
+	return dispatchStatus, artifactSet
+}
+
+func rememberArtifactRecord(record workflowruntime.RuntimeRecord, artifactSet map[string]struct{}) {
+	if record.Artifact == nil {
+		return
+	}
+	if artifactID := strings.TrimSpace(record.Artifact.ID); artifactID != "" {
+		artifactSet[artifactID] = struct{}{}
+	}
+}
+
+func rememberChildDispatchRecord(
+	record workflowruntime.RuntimeRecord,
+	dispatchStatus map[string]string,
+	artifactSet map[string]struct{},
+) {
+	if record.ChildDispatch == nil {
+		return
+	}
+	dispatchID := strings.TrimSpace(record.ChildDispatch.DispatchID)
+	if dispatchID == "" {
+		return
+	}
+	dispatchStatus[dispatchID] = strings.TrimSpace(record.ChildDispatch.Status)
+	if ref := strings.TrimSpace(record.ChildDispatch.ArtifactRef); ref != "" {
+		if parsed, issues := parseArtifactIDFromURI(ref); len(issues) == 0 && parsed != "" {
+			artifactSet[parsed] = struct{}{}
+		}
+	}
+}
+
+func classifyDispatchIDs(dispatchStatus map[string]string) (completed, pending []string) {
 	dispatchIDs := make([]string, 0, len(dispatchStatus))
 	for dispatchID := range dispatchStatus {
 		dispatchIDs = append(dispatchIDs, dispatchID)
@@ -139,15 +164,19 @@ func dispatchAndArtifactIDsFromRecords(records []workflowruntime.RuntimeRecord) 
 			pending = append(pending, dispatchID)
 		}
 	}
-	if len(artifactSet) == 0 {
-		return completed, pending, nil
+	return completed, pending
+}
+
+func sortedStringSet(values map[string]struct{}) []string {
+	if len(values) == 0 {
+		return nil
 	}
-	artifacts = make([]string, 0, len(artifactSet))
-	for artifactID := range artifactSet {
+	artifacts := make([]string, 0, len(values))
+	for artifactID := range values {
 		artifacts = append(artifacts, artifactID)
 	}
 	sort.Strings(artifacts)
-	return completed, pending, artifacts
+	return artifacts
 }
 
 func cloneCheckpointState(state map[string]any) map[string]any {
