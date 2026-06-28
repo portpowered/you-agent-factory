@@ -475,7 +475,7 @@ func LifecycleControlErrorResponse(sessionID string, err error) (int, any, bool)
 		return http.StatusNotFound, factoryapi.ErrorResponse{
 			Message: "factory session not found",
 			Family:  factoryapi.ErrorFamilyNotFound,
-			Code:    factoryapi.NOTFOUND,
+			Code:    factoryapi.ErrorResponseCodeNOTFOUND,
 		}, true
 	}
 
@@ -483,7 +483,7 @@ func LifecycleControlErrorResponse(sessionID string, err error) (int, any, bool)
 		return http.StatusNotFound, factoryapi.ErrorResponse{
 			Message: "dispatch not found",
 			Family:  factoryapi.ErrorFamilyNotFound,
-			Code:    factoryapi.NOTFOUND,
+			Code:    factoryapi.ErrorResponseCodeNOTFOUND,
 		}, true
 	}
 
@@ -492,7 +492,7 @@ func LifecycleControlErrorResponse(sessionID string, err error) (int, any, bool)
 		return http.StatusBadRequest, factoryapi.ErrorResponse{
 			Message: validationErr.Message,
 			Family:  factoryapi.ErrorFamilyBadRequest,
-			Code:    factoryapi.BADREQUEST,
+			Code:    factoryapi.ErrorResponseCodeBADREQUEST,
 		}, true
 	}
 

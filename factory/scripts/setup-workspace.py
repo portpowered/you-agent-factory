@@ -39,6 +39,61 @@ def get_repo_root():
     return Path(result.stdout.strip())
 
 
+def current_branch(repo_path):
+    """Return the currently checked-out branch name, or empty when detached."""
+    return run_git(
+        "branch", "--show-current", cwd=repo_path, check=False,
+    ).stdout.strip()
+
+
+def working_tree_has_local_changes(repo_path):
+    """True when the working tree has staged, unstaged, or untracked changes."""
+    status = run_git("status", "--porcelain", cwd=repo_path, check=False)
+    return bool(status.stdout.strip())
+
+
+def stash_local_changes(repo_path, label):
+    """Stash local changes and return the top stash ref, or None when clean."""
+    if not working_tree_has_local_changes(repo_path):
+        return None
+
+    result = run_git(
+        "stash", "push", "--include-untracked", "--message", label,
+        cwd=repo_path, check=False,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            "failed to stash local changes: "
+            f"{(result.stderr or result.stdout).strip()}"
+        )
+
+    return "stash@{0}"
+
+
+def restore_stashed_changes(repo_path, stash_ref, scope_label):
+    """Restore a stashed worktree and keep the stash entry on failure."""
+    if stash_ref is None:
+        return
+
+    apply_result = run_git(
+        "stash", "apply", "--index", stash_ref,
+        cwd=repo_path, check=False,
+    )
+    if apply_result.returncode != 0:
+        raise RuntimeError(
+            f"{scope_label} sync succeeded, but restoring stashed changes failed; "
+            f"{stash_ref} was preserved: "
+            f"{(apply_result.stderr or apply_result.stdout).strip()}"
+        )
+
+    drop_result = run_git("stash", "drop", stash_ref, cwd=repo_path, check=False)
+    if drop_result.returncode != 0:
+        raise RuntimeError(
+            f"{scope_label} sync restored local changes, but failed to drop "
+            f"{stash_ref}: {(drop_result.stderr or drop_result.stdout).strip()}"
+        )
+
+
 def read_prd(prd_path):
     """Read and parse a PRD JSON file. Returns the parsed dict."""
     with open(prd_path, "r", encoding="utf-8") as f:
@@ -100,17 +155,6 @@ def resolve_remote_main_sha(repo_root, fetch_succeeded):
     return stale_origin_main_sha(repo_root)
 
 
-def is_main_checked_out_with_local_changes(repo_root):
-    """True when main is checked out and the working tree has local changes."""
-    current = run_git(
-        "branch", "--show-current", cwd=repo_root, check=False,
-    ).stdout.strip()
-    if current != "main":
-        return False
-    status = run_git("status", "--porcelain", cwd=repo_root, check=False)
-    return bool(status.stdout.strip())
-
-
 def can_fast_forward_main(repo_root, local_sha, remote_sha):
     """True when remote_sha is a strict fast-forward of local_sha."""
     if local_sha == remote_sha:
@@ -120,6 +164,37 @@ def can_fast_forward_main(repo_root, local_sha, remote_sha):
         cwd=repo_root, check=False,
     )
     return merge_base.returncode == 0 and merge_base.stdout.strip() == local_sha
+
+
+def confirm_ref_matches(repo_path, ref_name, expected_sha):
+    """Raise when ref_name does not resolve to expected_sha."""
+    resolved_sha = run_git("rev-parse", ref_name, cwd=repo_path).stdout.strip()
+    if resolved_sha != expected_sha:
+        raise RuntimeError(
+            f"{ref_name} resolved to {resolved_sha[:8]}, expected {expected_sha[:8]}"
+        )
+
+
+def sync_checked_out_main_with_stash(repo_root, remote_sha):
+    """Temporarily stash local changes, sync main, then restore the stash."""
+    stash_ref = stash_local_changes(
+        repo_root,
+        "setup-workspace root sync",
+    )
+    try:
+        pull_result = run_git("pull", "--ff-only", cwd=repo_root, check=False)
+        if pull_result.returncode != 0:
+            run_git("fetch", "origin", cwd=repo_root)
+            run_git("reset", "--hard", remote_sha, cwd=repo_root)
+        confirm_ref_matches(repo_root, "HEAD", remote_sha)
+        confirm_ref_matches(repo_root, "refs/heads/main", remote_sha)
+    finally:
+        restore_stashed_changes(repo_root, stash_ref, "root main")
+
+    return (
+        f"stashed local changes, synced checked-out main to {remote_sha[:8]}, "
+        "then restored the stash"
+    )
 
 
 def sync_main(repo_root):
@@ -163,14 +238,11 @@ def sync_main(repo_root):
     if local_sha == remote_sha:
         return "already up to date"
 
-    if is_main_checked_out_with_local_changes(repo_root):
-        return (
-            "skipped (main checked out with local changes; "
-            "did not run git pull or fast-forward refs/heads/main)"
-        )
-
     if not can_fast_forward_main(repo_root, local_sha, remote_sha):
         return "skipped (local main is not a fast-forward behind origin/main)"
+
+    if current_branch(repo_root) == "main" and working_tree_has_local_changes(repo_root):
+        return sync_checked_out_main_with_stash(repo_root, remote_sha)
 
     run_git("update-ref", "refs/heads/main", remote_sha, cwd=repo_root)
     return (
@@ -229,6 +301,13 @@ def branch_upstream_ref(git_dir, branch):
     return upstream or None
 
 
+def confirm_worktree_upstream_head(worktree_path, branch, upstream_ref):
+    """Raise when branch or HEAD does not match the resolved upstream sha."""
+    upstream_sha = run_git("rev-parse", upstream_ref, cwd=worktree_path).stdout.strip()
+    confirm_ref_matches(worktree_path, "HEAD", upstream_sha)
+    confirm_ref_matches(worktree_path, f"refs/heads/{branch}", upstream_sha)
+
+
 def sync_reused_worktree_branch(repo_root, worktree_path, branch):
     """Checkout branch in a reused worktree and fast-forward when safe.
 
@@ -244,18 +323,40 @@ def sync_reused_worktree_branch(repo_root, worktree_path, branch):
     if not branch_exists_on_remote(repo_root, branch):
         return "skipped (branch has no origin ref)"
 
-    pull_result = run_git("pull", "--ff-only", cwd=worktree_path, check=False)
-    if pull_result.returncode == 0:
-        return "fast-forwarded from upstream"
-
-    stderr = pull_result.stderr.strip()
-    lowered = stderr.lower()
-    if "no tracking information" in lowered:
-        return "skipped (no upstream configured)"
-
-    raise RuntimeError(
-        f"worktree branch update failed for {branch}: {stderr}"
+    upstream_ref = branch_upstream_ref(worktree_path, branch)
+    stash_ref = stash_local_changes(
+        worktree_path,
+        f"setup-workspace worktree sync {branch}",
     )
+    try:
+        pull_result = run_git("pull", "--ff-only", cwd=worktree_path, check=False)
+        if pull_result.returncode == 0:
+            confirm_worktree_upstream_head(worktree_path, branch, upstream_ref)
+            if stash_ref is not None:
+                return "stashed local changes, fast-forwarded from upstream, then restored the stash"
+            return "fast-forwarded from upstream"
+
+        stderr = pull_result.stderr.strip()
+        lowered = stderr.lower()
+        if "no tracking information" in lowered:
+            return "skipped (no upstream configured)"
+
+        run_git("fetch", "origin", cwd=worktree_path)
+        local_sha = run_git("rev-parse", f"refs/heads/{branch}", cwd=worktree_path).stdout.strip()
+        upstream_sha = run_git("rev-parse", upstream_ref, cwd=worktree_path).stdout.strip()
+        if not can_fast_forward_main(worktree_path, local_sha, upstream_sha):
+            raise RuntimeError(
+                f"worktree branch update failed for {branch}: {stderr}"
+            )
+
+        run_git("reset", "--hard", upstream_ref, cwd=worktree_path)
+        confirm_worktree_upstream_head(worktree_path, branch, upstream_ref)
+        return (
+            "stashed local changes, then fetch/reset --hard to upstream "
+            "after pull --ff-only failed"
+        )
+    finally:
+        restore_stashed_changes(worktree_path, stash_ref, f"worktree branch {branch}")
 
 
 def create_or_reuse_worktree(repo_root, branch, worktree_path):

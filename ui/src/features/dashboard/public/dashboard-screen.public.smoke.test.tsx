@@ -67,6 +67,10 @@ describe("dashboard public barrel composition", () => {
       preflightRecovery: null,
       preflightStatus: "loading",
       snapshot: null,
+      streamState: {
+        message: "Loading factory events...",
+        status: "connecting",
+      },
     };
   });
 
@@ -90,6 +94,10 @@ describe("dashboard public barrel composition", () => {
       preflightRecovery: null,
       preflightStatus: "success",
       snapshot: {} as never,
+      streamState: {
+        message: "Factory event stream connected.",
+        status: "live",
+      },
     };
 
     render(<DashboardScreen />);

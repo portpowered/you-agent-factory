@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -76,6 +77,95 @@ func TestSessionInvocationAPI_PackagedGoalUnresolvedPrimaryResultReturnsFailedSt
 	}
 	if response.PrimaryResult != nil {
 		t.Fatalf("invocation primaryResult = %#v, want nil on unresolved output", response.PrimaryResult)
+	}
+}
+
+func TestSessionInvocationAPI_PackagedGoalBlockedReturnsBlockedStatusDetails(t *testing.T) {
+	server := startPackagedGoalBuiltInTopologyInvocationServer(t, "blocked")
+
+	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke packaged goal", nil))
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want FAILED", response.Status)
+	}
+	if response.ErrorCode == nil || *response.ErrorCode != factoryapi.InvocationResponseErrorCode("INVOCATION_BLOCKED") {
+		t.Fatalf("invocation errorCode = %#v, want INVOCATION_BLOCKED", response.ErrorCode)
+	}
+	if response.Message == nil || !strings.Contains(*response.Message, `state "goal:blocked"`) {
+		t.Fatalf("invocation message = %#v, want goal:blocked state detail", response.Message)
+	}
+	if response.SessionId == nil || *response.SessionId != "~default" {
+		t.Fatalf("invocation sessionId = %#v, want ~default", response.SessionId)
+	}
+	if response.WorkId == nil || *response.WorkId == "" {
+		t.Fatalf("invocation workId = %#v, want populated work id", response.WorkId)
+	}
+	if response.WorkName == nil || *response.WorkName == "" {
+		t.Fatalf("invocation workName = %#v, want populated work name", response.WorkName)
+	}
+	if response.WorkState == nil || *response.WorkState != "goal:blocked" {
+		t.Fatalf("invocation workState = %#v, want goal:blocked", response.WorkState)
+	}
+	if response.PrimaryResult != nil {
+		t.Fatalf("invocation primaryResult = %#v, want nil on blocked output", response.PrimaryResult)
+	}
+}
+
+func TestSessionInvocationAPI_PackagedGoalNeedsHumanReturnsNeedsHumanStatusDetails(t *testing.T) {
+	server := startPackagedGoalBuiltInTopologyInvocationServer(t, "needs_human")
+
+	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke packaged goal", nil))
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want FAILED", response.Status)
+	}
+	if response.ErrorCode == nil || *response.ErrorCode != factoryapi.InvocationResponseErrorCode("INVOCATION_NEEDS_HUMAN") {
+		t.Fatalf("invocation errorCode = %#v, want INVOCATION_NEEDS_HUMAN", response.ErrorCode)
+	}
+	if response.Message == nil || !strings.Contains(*response.Message, "needs human input") || !strings.Contains(*response.Message, `state "goal:needs-human"`) {
+		t.Fatalf("invocation message = %#v, want needs-human explanation", response.Message)
+	}
+	if response.SessionId == nil || *response.SessionId != "~default" {
+		t.Fatalf("invocation sessionId = %#v, want ~default", response.SessionId)
+	}
+	if response.WorkId == nil || *response.WorkId == "" {
+		t.Fatalf("invocation workId = %#v, want populated work id", response.WorkId)
+	}
+	if response.WorkName == nil || *response.WorkName == "" {
+		t.Fatalf("invocation workName = %#v, want populated work name", response.WorkName)
+	}
+	if response.WorkState == nil || *response.WorkState != "goal:needs-human" {
+		t.Fatalf("invocation workState = %#v, want goal:needs-human", response.WorkState)
+	}
+	if response.PrimaryResult != nil {
+		t.Fatalf("invocation primaryResult = %#v, want nil on needs-human output", response.PrimaryResult)
+	}
+}
+
+func TestSessionInvocationAPI_PackagedGoalFailedReturnsFailedStatusDetails(t *testing.T) {
+	dir, _ := scaffoldPackagedGoalBuiltInTopologyFactory(t)
+	server := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.MockWorkersConfig = packagedGoalBuiltInTopologyMockWorkersConfigForRealChecker(
+			goal.PackagedReviewWorkstationName,
+			"failed",
+		)
+	})
+
+	response := postInvocation(t, server.URL(), textInvocationRequest(t, "invoke packaged goal", nil))
+	if response.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("invocation status = %q, want FAILED", response.Status)
+	}
+	if response.ErrorCode == nil || *response.ErrorCode != factoryapi.InvocationResponseErrorCode("INVOCATION_RUNTIME_FAILURE") {
+		gotCode := "<nil>"
+		if response.ErrorCode != nil {
+			gotCode = string(*response.ErrorCode)
+		}
+		t.Fatalf("invocation errorCode = %q, want INVOCATION_RUNTIME_FAILURE", gotCode)
+	}
+	if response.Message == nil || !strings.Contains(*response.Message, "invocation failed") || !strings.Contains(*response.Message, `state "goal:failed"`) {
+		t.Fatalf("invocation message = %#v, want failed goal explanation", response.Message)
+	}
+	if response.PrimaryResult != nil {
+		t.Fatalf("invocation primaryResult = %#v, want nil on failed output", response.PrimaryResult)
 	}
 }
 
@@ -479,6 +569,28 @@ func packagedGoalReviewClassifierMockWorkersConfig(label string) *factoryconfig.
 			},
 		}},
 	}
+}
+
+func startPackagedGoalBuiltInTopologyInvocationServer(t *testing.T, reviewerOutput string) *functionalAPIServer {
+	t.Helper()
+
+	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(dir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir: %v", err)
+	}
+	writePackagedGoalBuiltInTopologyFixtureFiles(t, dir, loaded.FactoryConfig())
+
+	return startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.MockWorkersConfig = packagedGoalBuiltInTopologyMockWorkersConfigForRealChecker(
+			goal.PackagedReviewWorkstationName,
+			reviewerOutput,
+		)
+	})
 }
 
 func scaffoldPackagedGoalInvocationFactory(t *testing.T) string {

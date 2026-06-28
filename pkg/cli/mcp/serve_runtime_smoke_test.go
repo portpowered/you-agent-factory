@@ -24,19 +24,20 @@ return {
 // pkgmaintcheck:ignore-cyclomatic-complexity runtime smoke keeps discovery, async start, polling, and result assertions on one documented stdio path.
 func TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult(t *testing.T) {
 	projectRoot := t.TempDir()
-	client, stdinWrite, serveErr := startRunServeRuntimeSmokeServer(t, projectRoot)
+	client, stdinWrite, cancelServe, serveErr := startRunServeRuntimeSmokeServer(t, projectRoot)
 	assertInstallSmokeInitialize(t, client)
 	assertInstallSmokeDiscovery(t, client)
 
 	sessionID := assertRuntimeSmokeAsyncStart(t, client)
 	assertRuntimeSmokePollObservesRunningOrTerminal(t, client, sessionID)
+	cancelServe()
 	closeRunServeSmokeServer(t, stdinWrite, serveErr)
 }
 
 func startRunServeRuntimeSmokeServer(
 	t *testing.T,
 	projectRoot string,
-) (*stdioMCPClient, *os.File, <-chan error) {
+) (*stdioMCPClient, *os.File, context.CancelFunc, <-chan error) {
 	t.Helper()
 	stdinRead, stdinWrite, err := os.Pipe()
 	if err != nil {
@@ -54,7 +55,6 @@ func startRunServeRuntimeSmokeServer(
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
 
 	serveErr := make(chan error, 1)
 	go func() {
@@ -65,7 +65,7 @@ func startRunServeRuntimeSmokeServer(
 			Stdout:        stdoutWrite,
 		})
 	}()
-	return newStdioMCPClient(t, stdinWrite, stdoutRead), stdinWrite, serveErr
+	return newStdioMCPClient(t, stdinWrite, stdoutRead), stdinWrite, cancel, serveErr
 }
 
 func assertRuntimeSmokeAsyncStart(t *testing.T, client *stdioMCPClient) string {

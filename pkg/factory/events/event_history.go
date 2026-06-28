@@ -796,6 +796,7 @@ func workItemFromToken(token interfaces.Token) interfaces.FactoryWorkItem {
 	if currentChainingTraceID == "" {
 		currentChainingTraceID = token.Color.TraceID
 	}
+	_, stateValue := splitPlaceID(token.PlaceID)
 	return interfaces.FactoryWorkItem{
 		ID:                       token.Color.WorkID,
 		WorkTypeID:               token.Color.WorkTypeID,
@@ -806,6 +807,7 @@ func workItemFromToken(token interfaces.Token) interfaces.FactoryWorkItem {
 		TraceID:                  token.Color.TraceID,
 		Content:                  append([]interfaces.WorkContentPart(nil), token.Color.Content...),
 		ParentID:                 token.Color.ParentID,
+		State:                    stateValue,
 		PlaceID:                  token.PlaceID,
 		Tags:                     cloneStringMap(token.Color.Tags),
 	}

@@ -248,12 +248,12 @@ func assertGeneratedNamedFactoryContracts(t *testing.T, namedFactory factoryapi.
 	saveRequest := factoryapi.SaveFactoryForSessionRequest{Factory: namedFactory}
 	current := namedFactory
 	badRequest := factoryapi.CreateFactoryBadRequest{
-		Code:    factoryapi.INVALIDFACTORYNAME,
+		Code:    factoryapi.ErrorResponseCodeINVALIDFACTORYNAME,
 		Family:  factoryapi.ErrorFamilyBadRequest,
 		Message: "factory name must use lowercase letters, numbers, and hyphens",
 	}
 	conflict := factoryapi.CreateFactoryConflict{
-		Code:    factoryapi.FACTORYALREADYEXISTS,
+		Code:    factoryapi.ErrorResponseCodeFACTORYALREADYEXISTS,
 		Family:  factoryapi.ErrorFamilyConflict,
 		Message: "factory already exists",
 	}
@@ -264,11 +264,11 @@ func assertGeneratedNamedFactoryContracts(t *testing.T, namedFactory factoryapi.
 	if current.Name == "" || current.Workstations == nil {
 		t.Fatal("generated current named-factory response type should be usable")
 	}
-	if badRequest.Code != factoryapi.INVALIDFACTORYNAME || badRequest.Family != factoryapi.ErrorFamilyBadRequest {
-		t.Fatalf("generated bad-request contract = %#v, want code %q and family %q", badRequest, factoryapi.INVALIDFACTORYNAME, factoryapi.ErrorFamilyBadRequest)
+	if badRequest.Code != factoryapi.ErrorResponseCodeINVALIDFACTORYNAME || badRequest.Family != factoryapi.ErrorFamilyBadRequest {
+		t.Fatalf("generated bad-request contract = %#v, want code %q and family %q", badRequest, factoryapi.ErrorResponseCodeINVALIDFACTORYNAME, factoryapi.ErrorFamilyBadRequest)
 	}
-	if conflict.Code != factoryapi.FACTORYALREADYEXISTS || conflict.Family != factoryapi.ErrorFamilyConflict {
-		t.Fatalf("generated conflict contract = %#v, want code %q and family %q", conflict, factoryapi.FACTORYALREADYEXISTS, factoryapi.ErrorFamilyConflict)
+	if conflict.Code != factoryapi.ErrorResponseCodeFACTORYALREADYEXISTS || conflict.Family != factoryapi.ErrorFamilyConflict {
+		t.Fatalf("generated conflict contract = %#v, want code %q and family %q", conflict, factoryapi.ErrorResponseCodeFACTORYALREADYEXISTS, factoryapi.ErrorFamilyConflict)
 	}
 }
 
@@ -347,12 +347,12 @@ func assertGeneratedCurrentFactoryNotFoundJSON(t *testing.T) {
 	t.Helper()
 
 	notFound := factoryapi.CurrentFactoryNotFound{
-		Code:    factoryapi.NOTFOUND,
+		Code:    factoryapi.ErrorResponseCodeNOTFOUND,
 		Family:  factoryapi.ErrorFamilyNotFound,
 		Message: "current factory not found",
 	}
-	if notFound.Code != factoryapi.NOTFOUND || notFound.Family != factoryapi.ErrorFamilyNotFound {
-		t.Fatalf("generated not-found contract = %#v, want code %q and family %q", notFound, factoryapi.NOTFOUND, factoryapi.ErrorFamilyNotFound)
+	if notFound.Code != factoryapi.ErrorResponseCodeNOTFOUND || notFound.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("generated not-found contract = %#v, want code %q and family %q", notFound, factoryapi.ErrorResponseCodeNOTFOUND, factoryapi.ErrorFamilyNotFound)
 	}
 
 	encoded, err := json.Marshal(notFound)

@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import { FactoryOrchestratorKind } from "./api/generated/openapi";
 import * as factoryPngExportModule from "./features/export/lib/factory-png-export";
 import * as factoryPngImportModule from "./features/import/lib/factory-png-import";
+import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
 import {
   createDeferredPromise,
   currentNamedFactoryExportResponse,
@@ -21,6 +22,7 @@ import {
   chainRenderAppFetchMock,
   createFactoryImportValue,
   createFileDropTransfer,
+  DEFAULT_FACTORY_SESSION_ID,
   importedFactorySnapshot,
   jsonResponse,
   MockEventSource,
@@ -420,7 +422,13 @@ describe("App shell import flows", () => {
     });
     expectNoPostFactoriesActivation(fetchMock);
     await waitFor(() => {
-      expect(MockEventSource.instances.length).toBeGreaterThan(0);
+      const sessionFetchCount = fetchMock.mock.calls.filter(([url, init]) => {
+        return (
+          resolveFetchPath(url) === "/factory-sessions/~default" &&
+          resolveFetchMethod(url, init) === "GET"
+        );
+      }).length;
+      expect(sessionFetchCount).toBeGreaterThanOrEqual(2);
     });
 
     const refreshedStream = MockEventSource.instances.at(-1);
@@ -432,10 +440,12 @@ describe("App shell import flows", () => {
       refreshedStream.emit("snapshot", importedFactorySnapshot);
     });
 
-    expect(
-      await screen.findByRole("button", {
-        name: "Select Review workstation",
-      }),
-    ).toBeTruthy();
+    await waitFor(() => {
+      const state = useFactoryTimelineStore.getState();
+      expect(state.selectedTick).toBe(importedFactorySnapshot.tick_count);
+      expect(state.worldViewCache[state.selectedTick]?.factory_state).toBe(
+        importedFactorySnapshot.factory_state,
+      );
+    });
   });
 });

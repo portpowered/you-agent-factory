@@ -65,6 +65,14 @@ describe("useFactoryEventStream transport", () => {
 
   beforeEach(() => {
     replayHarness.install();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(null, {
+          status: 200,
+        }),
+      ),
+    );
     receivedEvents.length = 0;
     queryClient = createFactoryEventStreamQueryClient();
     seedFactoryEventStreamStores();
@@ -72,6 +80,7 @@ describe("useFactoryEventStream transport", () => {
 
   afterEach(() => {
     resetFactoryEventStreamStores();
+    vi.unstubAllGlobals();
   });
 
   it("opens the session-scoped events stream and delivers compacted events to onEvent", async () => {
@@ -211,12 +220,21 @@ describe("useFactoryEventStream query side effects", () => {
 
   beforeEach(() => {
     replayHarness.install();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(null, {
+          status: 200,
+        }),
+      ),
+    );
     queryClient = createFactoryEventStreamQueryClient();
     seedFactoryEventStreamStores();
   });
 
   afterEach(() => {
     resetFactoryEventStreamStores();
+    vi.unstubAllGlobals();
   });
 
   it("updates factory definition queries from FACTORY_CHANGE events without invalidating document reads", async () => {
@@ -308,17 +326,26 @@ describe("useFactoryEventStream query side effects", () => {
   });
 });
 
-describe("useFactoryEventStream stream reconnect", () => {
+describe("useFactoryEventStream generic reconnect", () => {
   let queryClient = createFactoryEventStreamQueryClient();
 
   beforeEach(() => {
     replayHarness.install();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(null, {
+          status: 200,
+        }),
+      ),
+    );
     queryClient = createFactoryEventStreamQueryClient();
     seedFactoryEventStreamStores();
   });
 
   afterEach(() => {
     resetFactoryEventStreamStores();
+    vi.unstubAllGlobals();
   });
 
   it("surfaces offline stream state when the connection fails before the first event", async () => {
@@ -377,9 +404,11 @@ describe("useFactoryEventStream stream reconnect", () => {
       stream.onerror?.(new Event("error"));
     });
 
-    expect(useDashboardStreamStore.getState().streamState).toMatchObject({
-      message: "Reconnecting event stream",
-      status: "reconnecting",
+    await waitFor(() => {
+      expect(useDashboardStreamStore.getState().streamState).toMatchObject({
+        message: "Reconnecting event stream",
+        status: "reconnecting",
+      });
     });
 
     await waitFor(

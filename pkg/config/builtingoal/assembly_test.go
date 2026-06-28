@@ -23,6 +23,12 @@ func TestAuthoredRolePrompt_RejectsUnknownRole(t *testing.T) {
 	}
 }
 
+func TestBuiltInGoalFactoryJSON_DoesNotUseLegacyTopLevelWorkIDTemplateAlias(t *testing.T) {
+	if strings.Contains(string(BuiltInGoalFactoryJSON), "{{ .WorkID }}") {
+		t.Fatal("BuiltInGoalFactoryJSON still contains legacy top-level WorkID template alias")
+	}
+}
+
 func TestAssembleBuiltInGoalFactoryJSON_RejectsMalformedWorkstations(t *testing.T) {
 	t.Run("workers not array", func(t *testing.T) {
 		root := map[string]any{

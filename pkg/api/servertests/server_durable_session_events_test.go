@@ -142,7 +142,7 @@ func TestGetFactorySessionEvents_RuntimeBackedUnknownCursorReturnsBadRequest(t *
 	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
-	if errResp.Code != factoryapi.BADREQUEST {
+	if errResp.Code != factoryapi.ErrorResponseCodeBADREQUEST {
 		t.Fatalf("code = %q, want BAD_REQUEST", errResp.Code)
 	}
 }

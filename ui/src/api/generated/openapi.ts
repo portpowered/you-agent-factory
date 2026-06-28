@@ -157,7 +157,7 @@ export interface paths {
     };
     /**
      * Stream factory events for one session
-     * @description Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+     * @description Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. When the request asks for application/json, the same route acts as a reconnect probe and returns a structured recovery outcome instead of opening Server-Sent Events. Probe responses classify cursor_stale separately from unknown-session failures and tell the dashboard when the next retry must omit after_event_id and after_sequence. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
      */
     get: operations["getEventsBySessionId"];
     put?: never;
@@ -901,6 +901,14 @@ export interface components {
       errorCode?: InvocationResponseErrorCode;
       /** @description Human-readable failure summary when status is not `COMPLETED`. */
       message?: string;
+      /** @description Session identifier for the invocation outcome when non-success context needs to point operators at the relevant factory session. */
+      sessionId?: string;
+      /** @description Relevant work identifier for a non-success invocation outcome when one scoped work item explains the stop condition. */
+      workId?: string;
+      /** @description Relevant work name for a non-success invocation outcome when one scoped work item explains the stop condition. */
+      workName?: string;
+      /** @description Current authored work state that best explains the non-success invocation outcome when one scoped work item is available. */
+      workState?: string;
     };
     /**
      * @description Terminal status for a factory-session invocation.
@@ -2294,6 +2302,40 @@ export interface components {
      * @enum {string}
      */
     FactorySessionExecutionSourceKind: FactorySessionExecutionSourceKind;
+    /**
+     * @example {
+     *       "factorySessionId": "session-alpha",
+     *       "outcome": "CURSOR_STALE",
+     *       "retry": {
+     *         "omitAfterEventId": true,
+     *         "omitAfterSequence": true
+     *       }
+     *     }
+     */
+    FactorySessionEventStreamRecovery: {
+      /** @description Session identifier for the event stream being probed. */
+      factorySessionId: string;
+      outcome: components["schemas"]["FactorySessionEventStreamRecoveryOutcome"];
+      retry: components["schemas"]["FactorySessionEventStreamRecoveryRetry"];
+    };
+    /**
+     * @description Structured session event reconnect probe outcome for one session-scoped event stream.
+     * @example CURSOR_STALE
+     * @enum {string}
+     */
+    FactorySessionEventStreamRecoveryOutcome: FactorySessionEventStreamRecoveryOutcome;
+    /**
+     * @example {
+     *       "omitAfterEventId": true,
+     *       "omitAfterSequence": true
+     *     }
+     */
+    FactorySessionEventStreamRecoveryRetry: {
+      /** @description True when the next reconnect must omit after_event_id and replay from the start of the session stream. */
+      omitAfterEventId: boolean;
+      /** @description True when the next reconnect must omit after_sequence and replay from the start of the session stream. */
+      omitAfterSequence: boolean;
+    };
     /** @description Inline workflow source carried directly in a durable execution request. */
     FactorySessionExecutionInlineWorkflow: {
       /** @description Optional JavaScript workflow dialect label for the inline source. */
@@ -4962,7 +5004,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Factory event stream for the targeted session. */
+      /** @description Factory event stream for the targeted session, or a JSON reconnect recovery probe result when Accept includes application/json. */
       200: {
         headers: {
           /** @description Opaque invalidation token for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `streamGenerationID` values before reusing reconnect cursors or stream-derived projections. */
@@ -4971,6 +5013,7 @@ export interface operations {
         };
         content: {
           "text/event-stream": string;
+          "application/json": components["schemas"]["FactorySessionEventStreamRecovery"];
         };
       };
       400: components["responses"]["BadRequest"];
@@ -6007,6 +6050,10 @@ export const InvocationInputSourceKind = {
 export type InvocationInputSourceKind =
   (typeof InvocationInputSourceKind)[keyof typeof InvocationInputSourceKind];
 export const InvocationResponseErrorCode = {
+  INVOCATION_BLOCKED: "INVOCATION_BLOCKED",
+  INVOCATION_INTERRUPTED: "INVOCATION_INTERRUPTED",
+  INVOCATION_NEEDS_HUMAN: "INVOCATION_NEEDS_HUMAN",
+  INVOCATION_PAUSED: "INVOCATION_PAUSED",
   INVOCATION_PRIMARY_RESULT_UNRESOLVED: "INVOCATION_PRIMARY_RESULT_UNRESOLVED",
   INVOCATION_TIMED_OUT: "INVOCATION_TIMED_OUT",
   INVOCATION_CANCELED: "INVOCATION_CANCELED",
@@ -6392,6 +6439,14 @@ export const FactorySessionExecutionSourceKind = {
 } as const;
 export type FactorySessionExecutionSourceKind =
   (typeof FactorySessionExecutionSourceKind)[keyof typeof FactorySessionExecutionSourceKind];
+export const FactorySessionEventStreamRecoveryOutcome = {
+  STREAM_READY: "STREAM_READY",
+  CURSOR_STALE: "CURSOR_STALE",
+  UNKNOWN_SESSION: "UNKNOWN_SESSION",
+  INTERNAL_ERROR: "INTERNAL_ERROR",
+} as const;
+export type FactorySessionEventStreamRecoveryOutcome =
+  (typeof FactorySessionEventStreamRecoveryOutcome)[keyof typeof FactorySessionEventStreamRecoveryOutcome];
 export const FactorySessionWorkflowSourceResolutionOrder = {
   // Search project-local `.claude/workflows` first for workflow file and name sources.
   FactorySessionWorkflowSourceResolutionOrderProjectClaudeWorkflows:

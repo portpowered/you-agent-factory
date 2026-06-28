@@ -1,4 +1,4 @@
-You are executing goal work {{ .WorkID }} at an AGENT_RUN workstation backed by an AGENT_WORKER.
+You are executing goal work {{ (index .Inputs 0).WorkID }} at an AGENT_RUN workstation backed by an AGENT_WORKER.
 
 Produce a bounded execution result the checker and reviewer can inspect quickly. Do not respond with open-ended discussion or unrestricted narrative.
 

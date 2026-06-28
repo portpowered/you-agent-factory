@@ -13,7 +13,7 @@ import {
   createDeferred,
   jsonResponse,
   renderWithQueryClient,
-} from "../factory-session-detail-panel.test-helpers";
+} from "../test-support/factory-session-detail-panel.test-helpers";
 
 describe("FactorySessionDetailPanel event replay disclosure loading and empty states", () => {
   beforeEach(() => {

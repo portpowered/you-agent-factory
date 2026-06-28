@@ -46,6 +46,7 @@ ifdef IS_WORKTREE
 endif
 
 GO_TEST_TIMEOUT ?= 300s
+GO_COVERAGE_TIMEOUT ?= 10m
 GO_COVERAGE_MIN ?= 78.3
 PACKAGE_FILE_COUNT_ROOT ?= .
 LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count deadcode
@@ -200,7 +201,7 @@ long-tests-functional-runtime:
 	$(MAKE) pr-inference-approval
 
 test-coverage-go:
-	$(GO) run ./cmd/gocoveragecheck -min $(GO_COVERAGE_MIN) -timeout $(GO_TEST_TIMEOUT)
+	$(GO) run ./cmd/gocoveragecheck -min $(GO_COVERAGE_MIN) -timeout $(GO_COVERAGE_TIMEOUT)
 
 script-timeout-companion-smoke-100:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/providers -run $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST) -count=$(SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT) -timeout $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT)

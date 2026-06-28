@@ -2,16 +2,12 @@ package cli
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/cli/session"
 	"github.com/portpowered/infinite-you/pkg/cli/workflow"
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
@@ -24,10 +20,10 @@ func TestSessionCommand_RegistersSubcommands(t *testing.T) {
 	for _, path := range [][]string{
 		{"session", "list"},
 		{"session", "show"},
-		{"session", "create"},
-		{"session", "delete"},
 		{"session", "pause"},
 		{"session", "resume"},
+		{"session", "create"},
+		{"session", "delete"},
 	} {
 		if _, _, err := root.Find(path); err != nil {
 			t.Fatalf("find %v: %v", path, err)
@@ -50,10 +46,10 @@ func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	for _, want := range []string{
 		"list",
 		"show",
-		"create",
-		"delete",
 		"pause",
 		"resume",
+		"create",
+		"delete",
 		"you session list",
 		"you session show",
 		"you session pause",
@@ -69,121 +65,151 @@ func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	}
 }
 
-func TestSessionPauseCommand_ServerFlagExecutesLifecycleControl(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/factory-sessions/session-beta/pause" {
-			t.Fatalf("request = %s %s, want POST /factory-sessions/session-beta/pause", r.Method, r.URL.Path)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(factoryapi.FactorySessionLifecycleControlResponse{
-			SessionId: "session-beta",
-			Operation: factoryapi.FactorySessionLifecycleControlKindPause,
-			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
-			Status:    factoryapi.FactorySessionDurableLifecycleStatusPaused,
-		}); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
-	defer srv.Close()
-
+func TestSessionPauseCommand_HelpDocumentsOperatorControls(t *testing.T) {
 	var out bytes.Buffer
 	root := NewRootCommand()
 	root.SetOut(&out)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{
-		"session", "pause", "session-beta",
-		"--server", strings.TrimSuffix(srv.URL, "/"),
-	})
+	root.SetArgs([]string{"session", "pause", "--help"})
 
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute session pause --server: %v", err)
+		t.Fatalf("execute session pause --help: %v", err)
 	}
-	if got := out.String(); got != "Paused factory session session-beta\n" {
-		t.Fatalf("output = %q", got)
+
+	help := out.String()
+	for _, want := range []string{
+		"pause [session-id]",
+		"~default",
+		"session-beta",
+		"you session list --scope all",
+		"already-paused",
+		"invalid-state",
+		"not-found",
+		"unreachable-host",
+		"Factory Session",
+		"you session pause",
+		"--json",
+	} {
+		if !strings.Contains(help, want) {
+			t.Fatalf("session pause help missing %q:\n%s", want, help)
+		}
 	}
 }
 
-func TestSessionResumeCommand_JSONEmitsLifecycleControlResponse(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/factory-sessions/~default/resume" {
-			t.Fatalf("request = %s %s, want POST /factory-sessions/~default/resume", r.Method, r.URL.Path)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		if err := json.NewEncoder(w).Encode(factoryapi.FactorySessionLifecycleControlResponse{
-			SessionId: "~default",
-			Operation: factoryapi.FactorySessionLifecycleControlKindResume,
-			Outcome:   factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
-			Status:    factoryapi.FactorySessionDurableLifecycleStatusRunning,
-		}); err != nil {
-			t.Fatalf("encode response: %v", err)
-		}
-	}))
-	defer srv.Close()
+func TestSessionPauseCommand_GlobalJSONMapsToConfig(t *testing.T) {
+	originalPauseSession := pauseSession
+	defer func() {
+		pauseSession = originalPauseSession
+	}()
 
-	var out bytes.Buffer
-	root := NewRootCommand()
-	root.SetOut(&out)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{
-		"--json", "--server", strings.TrimSuffix(srv.URL, "/"),
-		"session", "resume",
-	})
-
-	if err := root.Execute(); err != nil {
-		t.Fatalf("execute session resume --json --server: %v", err)
+	var got session.LifecycleControlConfig
+	pauseSession = func(cfg session.LifecycleControlConfig) error {
+		got = cfg
+		return nil
 	}
 
-	var got factoryapi.FactorySessionLifecycleControlResponse
-	if err := json.Unmarshal(out.Bytes(), &got); err != nil {
-		t.Fatalf("decode JSON: %v\n%s", err, out.String())
-	}
-	if got.SessionId != "~default" || got.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
-		t.Fatalf("response = %#v", got)
-	}
-}
-
-func TestSessionPauseCommand_PortFlagRejected(t *testing.T) {
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"session", "pause", "--port", "9090"})
+	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "pause"})
 
-	if execErr := root.Execute(); execErr == nil {
-		t.Fatal("expected --port rejection")
-	} else if !strings.Contains(execErr.Error(), "--server") {
-		t.Fatalf("error = %v, want --server guidance", execErr)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session pause with global --json: %v", err)
+	}
+	if !got.JSON {
+		t.Fatal("expected global --json to map to LifecycleControlConfig.JSON")
+	}
+	if got.Server != "http://127.0.0.1:9090" {
+		t.Fatalf("server = %q, want http://127.0.0.1:9090", got.Server)
+	}
+	if got.SessionID != "" {
+		t.Fatalf("sessionId = %q, want omitted-session default routing", got.SessionID)
 	}
 }
 
-func TestSessionPauseCommand_HelpDocumentsBufferedWorkSemantics(t *testing.T) {
-	root := NewRootCommand()
-	pauseCmd, _, err := root.Find([]string{"session", "pause"})
-	if err != nil {
-		t.Fatalf("find session pause: %v", err)
-	}
-	resumeCmd, _, err := root.Find([]string{"session", "resume"})
-	if err != nil {
-		t.Fatalf("find session resume: %v", err)
+func TestSessionResumeCommand_GlobalJSONMapsToConfig(t *testing.T) {
+	originalResumeSession := resumeSession
+	defer func() {
+		resumeSession = originalResumeSession
+	}()
+
+	var got session.LifecycleControlConfig
+	resumeSession = func(cfg session.LifecycleControlConfig) error {
+		got = cfg
+		return nil
 	}
 
-	for _, want := range []string{
-		"POST /factory-sessions/{session_id}/pause",
-		"preserving inbound submissions",
-		"~default",
-		"--json",
-		"--server",
-	} {
-		if !strings.Contains(pauseCmd.Long, want) {
-			t.Fatalf("pause long help missing %q:\n%s", want, pauseCmd.Long)
-		}
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"--json", "--server", "http://127.0.0.1:9090", "session", "resume", "session-beta"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session resume with global --json: %v", err)
 	}
+	if !got.JSON {
+		t.Fatal("expected global --json to map to LifecycleControlConfig.JSON")
+	}
+	if got.Server != "http://127.0.0.1:9090" {
+		t.Fatalf("server = %q, want http://127.0.0.1:9090", got.Server)
+	}
+	if got.SessionID != "session-beta" {
+		t.Fatalf("sessionId = %q, want session-beta", got.SessionID)
+	}
+}
+
+func TestSessionPauseCommand_AllowsOmittedSessionID(t *testing.T) {
+	originalPauseSession := pauseSession
+	defer func() {
+		pauseSession = originalPauseSession
+	}()
+
+	var got session.LifecycleControlConfig
+	pauseSession = func(cfg session.LifecycleControlConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"session", "pause"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session pause without session id: %v", err)
+	}
+	if got.SessionID != "" {
+		t.Fatalf("sessionId = %q, want omitted-session default routing", got.SessionID)
+	}
+}
+
+func TestSessionResumeCommand_HelpDocumentsOperatorControls(t *testing.T) {
+	var out bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&out)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"session", "resume", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session resume --help: %v", err)
+	}
+
+	help := out.String()
 	for _, want := range []string{
-		"POST /factory-sessions/{session_id}/resume",
-		"drains ready buffered submissions",
-		"without requiring another external signal",
+		"resume [session-id]",
+		"~default",
+		"session-beta",
+		"you session list --scope all",
+		"already-running",
+		"invalid-state",
+		"not-found",
+		"unreachable-host",
+		"Factory Session",
+		"you session resume",
+		"--json",
 	} {
-		if !strings.Contains(resumeCmd.Long, want) {
-			t.Fatalf("resume long help missing %q:\n%s", want, resumeCmd.Long)
+		if !strings.Contains(help, want) {
+			t.Fatalf("session resume help missing %q:\n%s", want, help)
 		}
 	}
 }

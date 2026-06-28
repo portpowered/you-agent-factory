@@ -636,6 +636,21 @@ func (r *factoryWorldReducer) failedPlaceForWorkType(workTypeID string) string {
 	return ""
 }
 
+func (r *factoryWorldReducer) placeForWorkTypeState(workTypeID string, stateValue string) string {
+	for _, place := range r.stateValue.Topology.Places {
+		if !placeMatchesWorkType(place, workTypeID) {
+			continue
+		}
+		if place.State == stateValue {
+			return place.ID
+		}
+	}
+	if workTypeID != "" && stateValue != "" {
+		return workTypeID + ":" + stateValue
+	}
+	return ""
+}
+
 func placeMatchesWorkType(place interfaces.FactoryPlace, workTypeID string) bool {
 	if place.TypeID == workTypeID {
 		return true

@@ -52,18 +52,18 @@ const (
 
 // Defines values for ErrorResponseCode.
 const (
-	BADREQUEST                                 ErrorResponseCode = "BAD_REQUEST"
-	EXECUTIONREQUESTIDCONFLICT                 ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
-	FACTORYALREADYEXISTS                       ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
-	FACTORYNOTIDLE                             ErrorResponseCode = "FACTORY_NOT_IDLE"
-	FACTORYSESSIONCONFIGLOADFAILED             ErrorResponseCode = "FACTORY_SESSION_CONFIG_LOAD_FAILED"
-	FACTORYSESSIONCONTROLREQUESTALREADYAPPLIED ErrorResponseCode = "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED"
-	INTERNALERROR                              ErrorResponseCode = "INTERNAL_ERROR"
-	INVALIDFACTORY                             ErrorResponseCode = "INVALID_FACTORY"
-	INVALIDFACTORYNAME                         ErrorResponseCode = "INVALID_FACTORY_NAME"
-	MOVEWORKREQUESTALREADYAPPLIED              ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
-	NOTFOUND                                   ErrorResponseCode = "NOT_FOUND"
-	STALEFACTORYVERSION                        ErrorResponseCode = "STALE_FACTORY_VERSION"
+	ErrorResponseCodeBADREQUEST                                 ErrorResponseCode = "BAD_REQUEST"
+	ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT                 ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
+	ErrorResponseCodeFACTORYALREADYEXISTS                       ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
+	ErrorResponseCodeFACTORYNOTIDLE                             ErrorResponseCode = "FACTORY_NOT_IDLE"
+	ErrorResponseCodeFACTORYSESSIONCONFIGLOADFAILED             ErrorResponseCode = "FACTORY_SESSION_CONFIG_LOAD_FAILED"
+	ErrorResponseCodeFACTORYSESSIONCONTROLREQUESTALREADYAPPLIED ErrorResponseCode = "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED"
+	ErrorResponseCodeINTERNALERROR                              ErrorResponseCode = "INTERNAL_ERROR"
+	ErrorResponseCodeINVALIDFACTORY                             ErrorResponseCode = "INVALID_FACTORY"
+	ErrorResponseCodeINVALIDFACTORYNAME                         ErrorResponseCode = "INVALID_FACTORY_NAME"
+	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED              ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
+	ErrorResponseCodeNOTFOUND                                   ErrorResponseCode = "NOT_FOUND"
+	ErrorResponseCodeSTALEFACTORYVERSION                        ErrorResponseCode = "STALE_FACTORY_VERSION"
 )
 
 // Defines values for FactoryArtifactAuditMode.
@@ -222,6 +222,14 @@ const (
 	FactorySessionDurableLifecycleStatusSucceeded        FactorySessionDurableLifecycleStatus = "SUCCEEDED"
 	FactorySessionDurableLifecycleStatusTerminated       FactorySessionDurableLifecycleStatus = "TERMINATED"
 	FactorySessionDurableLifecycleStatusTimedOut         FactorySessionDurableLifecycleStatus = "TIMED_OUT"
+)
+
+// Defines values for FactorySessionEventStreamRecoveryOutcome.
+const (
+	FactorySessionEventStreamRecoveryOutcomeCURSORSTALE    FactorySessionEventStreamRecoveryOutcome = "CURSOR_STALE"
+	FactorySessionEventStreamRecoveryOutcomeINTERNALERROR  FactorySessionEventStreamRecoveryOutcome = "INTERNAL_ERROR"
+	FactorySessionEventStreamRecoveryOutcomeSTREAMREADY    FactorySessionEventStreamRecoveryOutcome = "STREAM_READY"
+	FactorySessionEventStreamRecoveryOutcomeUNKNOWNSESSION FactorySessionEventStreamRecoveryOutcome = "UNKNOWN_SESSION"
 )
 
 // Defines values for FactorySessionExecutionSourceKind.
@@ -438,7 +446,11 @@ const (
 
 // Defines values for InvocationResponseErrorCode.
 const (
+	INVOCATIONBLOCKED                 InvocationResponseErrorCode = "INVOCATION_BLOCKED"
 	INVOCATIONCANCELED                InvocationResponseErrorCode = "INVOCATION_CANCELED"
+	INVOCATIONINTERRUPTED             InvocationResponseErrorCode = "INVOCATION_INTERRUPTED"
+	INVOCATIONNEEDSHUMAN              InvocationResponseErrorCode = "INVOCATION_NEEDS_HUMAN"
+	INVOCATIONPAUSED                  InvocationResponseErrorCode = "INVOCATION_PAUSED"
 	INVOCATIONPRIMARYRESULTUNRESOLVED InvocationResponseErrorCode = "INVOCATION_PRIMARY_RESULT_UNRESOLVED"
 	INVOCATIONRUNTIMEFAILURE          InvocationResponseErrorCode = "INVOCATION_RUNTIME_FAILURE"
 	INVOCATIONTIMEDOUT                InvocationResponseErrorCode = "INVOCATION_TIMED_OUT"
@@ -2005,6 +2017,28 @@ type FactorySessionEffectivePolicy struct {
 	AdditionalProperties map[string]interface{} `json:"-"`
 }
 
+// FactorySessionEventStreamRecovery defines model for FactorySessionEventStreamRecovery.
+type FactorySessionEventStreamRecovery struct {
+	// FactorySessionId Session identifier for the event stream being probed.
+	FactorySessionId string `json:"factorySessionId"`
+
+	// Outcome Structured session event reconnect probe outcome for one session-scoped event stream.
+	Outcome FactorySessionEventStreamRecoveryOutcome `json:"outcome"`
+	Retry   FactorySessionEventStreamRecoveryRetry   `json:"retry"`
+}
+
+// FactorySessionEventStreamRecoveryOutcome Structured session event reconnect probe outcome for one session-scoped event stream.
+type FactorySessionEventStreamRecoveryOutcome string
+
+// FactorySessionEventStreamRecoveryRetry defines model for FactorySessionEventStreamRecoveryRetry.
+type FactorySessionEventStreamRecoveryRetry struct {
+	// OmitAfterEventId True when the next reconnect must omit after_event_id and replay from the start of the session stream.
+	OmitAfterEventId bool `json:"omitAfterEventId"`
+
+	// OmitAfterSequence True when the next reconnect must omit after_sequence and replay from the start of the session stream.
+	OmitAfterSequence bool `json:"omitAfterSequence"`
+}
+
 // FactorySessionExecutionInlineWorkflow Inline workflow source carried directly in a durable execution request.
 type FactorySessionExecutionInlineWorkflow struct {
 	// Dialect Optional JavaScript workflow dialect label for the inline source.
@@ -3050,11 +3084,23 @@ type InvocationResponse struct {
 	// RequestId Stable invocation request identifier assigned or accepted by the server.
 	RequestId string `json:"requestId"`
 
+	// SessionId Session identifier for the invocation outcome when non-success context needs to point operators at the relevant factory session.
+	SessionId *string `json:"sessionId,omitempty"`
+
 	// Status Terminal status for a factory-session invocation.
 	Status InvocationTerminalStatus `json:"status"`
 
 	// TraceId Trace identifier for the work submitted by this invocation.
 	TraceId string `json:"traceId"`
+
+	// WorkId Relevant work identifier for a non-success invocation outcome when one scoped work item explains the stop condition.
+	WorkId *string `json:"workId,omitempty"`
+
+	// WorkName Relevant work name for a non-success invocation outcome when one scoped work item explains the stop condition.
+	WorkName *string `json:"workName,omitempty"`
+
+	// WorkState Current authored work state that best explains the non-success invocation outcome when one scoped work item is available.
+	WorkState *string `json:"workState,omitempty"`
 }
 
 // InvocationResponseErrorCode Stable machine-readable invocation failure code when status is not `COMPLETED`.

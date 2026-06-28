@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FactoryOrchestratorKind } from "../../../api/generated/openapi";
 import { FactorySessionDetailPanel } from "./factory-session-detail-panel";
-import { jsonResponse, renderWithQueryClient } from "./factory-session-detail-panel.test-helpers";
+import { jsonResponse, renderWithQueryClient } from "./test-support/factory-session-detail-panel.test-helpers";
 
 const failedDispatchSummaryFixture = {
   dispatchKind: "JAVASCRIPT_VERIFY",

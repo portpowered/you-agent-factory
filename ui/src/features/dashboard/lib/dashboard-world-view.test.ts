@@ -12,6 +12,11 @@ const OFFLINE_STREAM = {
   message: "Factory event stream disconnected. Showing last event state.",
 };
 
+const RECOVERY_FAILED_STREAM = {
+  status: "recovery_failed" as const,
+  message: "The dashboard could not restore this session automatically.",
+};
+
 describe("deriveDashboardWorldViewShellState", () => {
   it("reports initial loading while a session is selected and the stream is still connecting", () => {
     expect(
@@ -82,5 +87,18 @@ describe("deriveDashboardWorldViewShellState", () => {
       hasEvents: false,
       isInitialLoading: false,
     });
+  });
+
+  it("treats replay recovery failure as a shell error before the first event", () => {
+    const errored = deriveDashboardWorldViewShellState({
+      eventCount: 0,
+      rawSessionID: "session-alpha",
+      selectedTick: 0,
+      streamState: RECOVERY_FAILED_STREAM,
+    });
+
+    expect(errored.isInitialLoading).toBe(false);
+    expect(errored.error?.message).toBe(RECOVERY_FAILED_STREAM.message);
+    expect(errored.hasEvents).toBe(false);
   });
 });

@@ -24,11 +24,14 @@ export function deriveDashboardWorldViewShellState({
   const isInitialLoading =
     rawSessionID != null &&
     hasNoStreamedSnapshot &&
-    streamState.status !== "offline" && streamState.status !== "reconnecting";
+    streamState.status !== "offline" &&
+    streamState.status !== "reconnecting" &&
+    streamState.status !== "recovery_failed";
   const error =
     rawSessionID != null &&
     hasNoStreamedSnapshot &&
-    streamState.status === "offline"
+    (streamState.status === "offline" ||
+      streamState.status === "recovery_failed")
       ? new Error(streamState.message)
       : null;
 

@@ -526,7 +526,7 @@ func assertInvocationSurfaceSchemas(t *testing.T, schemas map[string]any, paths 
 	responseProperties := schemaProperties(t, responseSchema, "InvocationResponse")
 	assertPropertyRef(t, responseProperties, "status", "#/components/schemas/InvocationTerminalStatus")
 	assertPropertyRef(t, responseProperties, "primaryResult", "#/components/schemas/WorkContent")
-	assertSchemaPropertiesPresent(t, responseProperties, "InvocationResponse", "requestId", "traceId", "status", "primaryResult", "errorCode", "message")
+	assertSchemaPropertiesPresent(t, responseProperties, "InvocationResponse", "requestId", "traceId", "status", "primaryResult", "errorCode", "message", "sessionId", "workId", "workName", "workState")
 
 	factorySchema := schemaObject(t, schemas, "Factory")
 	factoryProperties := schemaProperties(t, factorySchema, "Factory")

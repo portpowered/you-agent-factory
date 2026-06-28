@@ -1,0 +1,20 @@
+type: object
+additionalProperties: false
+required:
+  - factorySessionId
+  - outcome
+  - retry
+properties:
+  factorySessionId:
+    type: string
+    description: Session identifier for the event stream being probed.
+  outcome:
+    $ref: './FactorySessionEventStreamRecoveryOutcome.yaml'
+  retry:
+    $ref: './FactorySessionEventStreamRecoveryRetry.yaml'
+example:
+  factorySessionId: session-alpha
+  outcome: CURSOR_STALE
+  retry:
+    omitAfterEventId: true
+    omitAfterSequence: true

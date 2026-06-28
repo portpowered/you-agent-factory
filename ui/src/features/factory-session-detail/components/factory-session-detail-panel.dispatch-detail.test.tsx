@@ -7,7 +7,7 @@ import { FactorySessionDetailPanel } from "./factory-session-detail-panel";
 import {
   jsonResponse,
   renderWithQueryClient,
-} from "./factory-session-detail-panel.test-helpers";
+} from "./test-support/factory-session-detail-panel.test-helpers";
 
 const SESSION_ID = "session-beta";
 const PRIMARY_PROVIDER_SESSION =

@@ -81,7 +81,7 @@ func TestStartDurableFactorySessionAsync_RequestIDConflictReturnsTypedError(t *t
 	if status != http.StatusConflict {
 		t.Fatalf("status = %d, want 409", status)
 	}
-	if errResp.Code != factoryapi.EXECUTIONREQUESTIDCONFLICT {
+	if errResp.Code != factoryapi.ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT {
 		t.Fatalf("code = %q, want EXECUTION_REQUEST_ID_CONFLICT", errResp.Code)
 	}
 }
@@ -101,7 +101,7 @@ func TestStartDurableFactorySessionAsync_InvalidSourceDoesNotCreateSession(t *te
 	if status != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", status)
 	}
-	if errResp.Code != factoryapi.BADREQUEST {
+	if errResp.Code != factoryapi.ErrorResponseCodeBADREQUEST {
 		t.Fatalf("code = %q, want BAD_REQUEST", errResp.Code)
 	}
 
@@ -127,7 +127,7 @@ func TestStartDurableFactorySessionAsync_MissingRequestIDReturnsValidationError(
 	if status != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", status)
 	}
-	if errResp.Code != factoryapi.BADREQUEST {
+	if errResp.Code != factoryapi.ErrorResponseCodeBADREQUEST {
 		t.Fatalf("code = %q, want BAD_REQUEST", errResp.Code)
 	}
 	if !strings.Contains(errResp.Message, "requestId") {

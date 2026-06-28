@@ -8,7 +8,15 @@ primary-result behavior.
 - `pkg/invocations/primary_result.go` resolves invocation `primaryResult`
   against selected-tick `FactoryWorldState` using `WorkRequestsByID`,
   `TerminalWorkByID`, and payload-lineage scope rather than transport-specific
-  polling logic.
+  polling logic. The same package also classifies missing-primary-result waits
+  from scoped current work state when authored workflow states such as
+  `blocked` or `needs-human` explain the stopped invocation better than the
+  generic unresolved-primary-result fallback, classifies terminal failed work
+  in invocation scope before that unresolved fallback, and classifies
+  invocation control-state outcomes such as paused sessions or interrupted
+  dispatches from reconstructed session and dispatch lifecycle facts. Stable
+  non-success context for `sessionId`, `workId`, `workName`, and `workState`
+  also originates here so CLI and API stay aligned on the same recovery facts.
 - `pkg/factory/validation/validate.go` owns factory-level `invocationReturn`
   validation shared by validate-only and save pre-check flows.
 - `pkg/config/factory_config_mapping*.go` maps `invocationReturn` between the
@@ -18,7 +26,8 @@ primary-result behavior.
 - `pkg/workcontent/` translates between generated OpenAPI `WorkContent` and the
   backend-owned `interfaces.WorkContentPart` shape.
 - `pkg/api/handlers_work_write.go` includes the session invocation HTTP
-  boundary alongside other session work-write handlers.
+  boundary alongside other session work-write handlers, including projection of
+  shared invocation non-success context into the public `InvocationResponse`.
 - `pkg/service/runtime_sessions.go` owns the session-scoped invocation
   orchestration that resolves API input, submits the default handling work
   item, polls selected-tick world state, and maps timeout/cancel/unresolved
@@ -39,7 +48,10 @@ primary-result behavior.
   shared `pkg/invocations` contract, then runs the local service in
   invocation-only service mode so stdout stays reserved for primary-result
   output instead of startup or dashboard noise; CLI-only source conflicts are
-  logged and counted there before the service runtime exists.
+  logged and counted there before the service runtime exists. `RunConfig.JSONOutput`
+  must stay aligned with the shared `InvocationResponse` envelope for both
+  successful and non-success invocation results rather than becoming a
+  success-only CLI fork.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin
   bytes into `invocations.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
   from the shared resolver instead of pre-trimming or short-circuiting with
@@ -65,6 +77,14 @@ primary-result behavior.
   Retry exhaustion is authored separately for `review-goal` and
   `structured-review-goal`, each with its own guarded loop-breaker from `goal:plan`
   to `goal:failed`.
+  Packaged workstation `body` templates must use canonical `PromptData` roots
+  such as `(index .Inputs 0).Payload`; legacy top-level aliases like
+  `{{ .WorkID }}` fail prompt rendering before mock-worker dispatch.
+  `upgradeMaterializedBuiltInNamedFactoryIfNeeded` repairs already-materialized
+  built-ins that still carry the legacy alias when the catalog payload has
+  canonical templates, and those repairs must patch the specific legacy prompt
+  files in place rather than replacing the whole materialized named-factory
+  directory so customer edits survive later `you run --named` reuse.
 - `pkg/packagedfactories/goal/` owns packaged goal factory metadata constants and
   config-load regression coverage for the authored `invocationReturn` policy that
   selects terminal `goal:complete` work content as the primary result.
@@ -106,11 +126,25 @@ primary-result behavior.
   than mocked lane-label output. The same file proves repeated structured
   `needs_changes` rework trips the structured loop-breaker instead of retrying
   forever.
+- Behavioral proof for named goal batch invocation lives in
+  `tests/functional/smoke/cli_named_goal_run_smoke_test.go` using the real
+  `you run --named @you/goal` CLI path with `--with-mock-workers`, including a
+  legacy-materialized upgrade smoke case.
+- `tests/functional/smoke/cli_run_mode_compat_smoke_test.go` holds focused
+  regression coverage for adjacent `you run` modes after packaged-goal changes:
+  operator-oriented continuous startup output without `--quiet`, factory text
+  invocation stdout that suppresses operator chatter, and named-goal batch
+  stdout that stays primary-result-only. Reuse helpers from
+  `cli_factory_prompt_run_smoke_test.go` when extending these regressions.
 - `pkg/packagedfactories/tts/` owns packaged TTS invocation metadata shaping
   helpers used when `INFERENCE_RUN` (or legacy `MODEL_INVOKE`) work completes on the `execute-tts` workstation.
   `metadata.go` derives the `backend` metadata field from the loaded on-disk
   worker model so customer edits to materialized `factory.json` affect the next
   invocation result.
+- `docs/reference/packaged-goal.md` is the packaged `you docs packaged-goal`
+  customer guide for `@you/goal` batch invocation, stdout primary result, and
+  the supported headless operator-interaction scope without widening localhost
+  listener promises.
 - `docs/reference/packaged-tts.md` is the packaged `you docs packaged-tts`
   customer guide for `@you/tts` invocation, materialization, metadata result,
   edit-after-materialize behavior, and raw-artifact streaming scope. Prefer
@@ -145,6 +179,10 @@ primary-result behavior.
   instead of submitted input text or raw audio payload bytes.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and
   invocation-return policy ownership.
+- `docs/reference/packaged-goal.md` is the customer-facing reference for
+  packaged `@you/goal` invocation behavior, including operator-visible blocked,
+  needs-human, paused, interrupted, failed, timed-out, and unresolved-primary-result
+  outcomes plus recovery through existing session/work commands.
 - `docs/reference/config.md` and `docs/reference/sessions.md` are the packaged
   `you docs` reference topics for invocation input sources, return policy, and
   the session-scoped invocation API.
