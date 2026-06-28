@@ -20,7 +20,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -87,7 +86,7 @@ func TestInvokeModelHTTP_UsesManagedLocalModelRuntimePath(t *testing.T) {
 		},
 	}
 
-	server, shutdown := startLocalModelHTTPTestServer(t, runtime)
+	server, launcher, _, shutdown := startLocalModelInferenceTestServer(t, runtime)
 	defer shutdown()
 	defer server.Close()
 
@@ -111,8 +110,14 @@ func TestInvokeModelHTTP_UsesManagedLocalModelRuntimePath(t *testing.T) {
 	}
 	decoded := invokeLocalModelHTTP(t, server, body)
 	assertLocalModelHTTPInvocationResponse(t, decoded, audioPath)
+	if launcher.startCount() != 1 {
+		t.Fatalf("supervised process start count = %d, want 1 shared host runtime", launcher.startCount())
+	}
 	if runtime.loadCount() != 1 || runtime.invocationCount() != 1 {
 		t.Fatalf("runtime load/invoke counts = %d/%d, want 1/1", runtime.loadCount(), runtime.invocationCount())
+	}
+	if got := runtime.lastLoadServingEndpoint(); got != launcher.healthEndpoint {
+		t.Fatalf("serving endpoint = %q, want supervised lease endpoint %q", got, launcher.healthEndpoint)
 	}
 }
 
@@ -181,7 +186,10 @@ func TestBuildHostedWorkersConfig_DelegatesServiceConfigFields(t *testing.T) {
 	}
 }
 
-func startLocalModelHTTPTestServer(t *testing.T, runtime *fakeLocalModelRuntime) (*httptest.Server, func()) {
+func startLocalModelInferenceTestServer(
+	t *testing.T,
+	runtime *fakeLocalModelRuntime,
+) (*httptest.Server, *serviceTestFakeProcessLauncher, *FactoryService, func()) {
 	t.Helper()
 	healthServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -190,35 +198,62 @@ func startLocalModelHTTPTestServer(t *testing.T, runtime *fakeLocalModelRuntime)
 	dir := scaffoldLocalModelLongTestFactoryDir(t, localModelLongTestFactoryConfigWithHealthEndpoint(healthServer.URL))
 	writeLocalModelLongTestWorkerConfig(t, dir)
 	writeLocalModelLongTestWorkstationConfig(t, dir)
+
+	puller := staticModelAssetPuller{cache: localModelTestCacheLayout(t)}
+	domain := modelHostBackedLocalModelDomain(t, puller, launcher, runtime)
+
 	ctx, cancel := context.WithCancel(context.Background())
-	svc, err := BuildFactoryService(ctx, &FactoryServiceConfig{
+	cfg := &FactoryServiceConfig{
 		Dir:                                     dir,
 		RuntimeMode:                             interfaces.RuntimeModeService,
 		Port:                                    1,
 		Logger:                                  zap.NewNop(),
 		LocalModelRuntimeOverride:               runtime,
+		ModelAssets:                             puller,
 		SkipBuiltInRunnerPrerequisiteValidation: true,
-	})
+	}
+	root, err := ResolveFactoryServiceRoot(cfg)
 	if err != nil {
 		cancel()
 		healthServer.Close()
-		t.Fatalf("BuildFactoryService: %v", err)
+		t.Fatalf("ResolveFactoryServiceRoot: %v", err)
 	}
-	puller := staticModelAssetPuller{cache: localModelTestCacheLayout(t)}
-	svc.modelAssets = puller
-	host := newServiceTestSupervisedModelHost(t, puller, launcher)
-	leaseExec := modelhost.NewLeaseExecution(host, puller, runtime, localModelHooks())
-	if svc.core != nil {
-		svc.core.collaborators.LocalModels.host = host
-		svc.core.collaborators.LocalModels.assets = puller
+	load, err := LoadFactoryConfigForCompose(cfg, root)
+	if err != nil {
+		cancel()
+		healthServer.Close()
+		t.Fatalf("LoadFactoryConfigForCompose: %v", err)
 	}
-	if bundle := liveSessionBundle(svc.defaultSession()); bundle != nil {
-		bundle.modelAssets = puller
-		bundle.localModelRuntime = runtime
-		bundle.localModels = newManagedLocalModelManager(puller, runtime)
-		bundle.modelHost = host
-		bundle.leaseExecution = leaseExec
+	clock := ServiceClockForCompose(cfg, load)
+	sessions := NewFactorySessionsRegistry()
+	startupLocalModels := domain
+	collaborators := FactoryServiceCollaborators{
+		Sessions:    sessions,
+		LocalModels: domain,
+		RuntimeBuild: newRuntimeBuildService(
+			cfg,
+			clock,
+			root.BaseLogger,
+			&startupLocalModels,
+			newInferenceProgressPublisherFactory(sessions, root.BaseLogger),
+			newSessionDispatchCompletionObserverFactory(sessions),
+		),
 	}
+	shell, err := ComposeFactoryService(
+		ctx,
+		cfg,
+		root,
+		collaborators,
+		load,
+		clock,
+		buildHostedWorkersConfig(cfg, root.BaseLogger, clock),
+	)
+	if err != nil {
+		cancel()
+		healthServer.Close()
+		t.Fatalf("ComposeFactoryService: %v", err)
+	}
+	svc := AttachFactorySaveCollaborator(shell, ProvideFactorySaveCollaborator(shell, cfg))
 
 	runErrCh := make(chan error, 1)
 	go func() { runErrCh <- svc.Run(ctx) }()
@@ -232,7 +267,7 @@ func startLocalModelHTTPTestServer(t *testing.T, runtime *fakeLocalModelRuntime)
 		}
 		healthServer.Close()
 	}
-	return server, shutdown
+	return server, launcher, svc, shutdown
 }
 
 func invokeLocalModelHTTP(t *testing.T, server *httptest.Server, body []byte) factoryapi.ModelInvocationResponse {
@@ -302,7 +337,8 @@ func localModelLongTestFactoryConfigWithHealthEndpoint(healthEndpoint string) *i
 	cfg := &interfaces.FactoryConfig{
 		Name: "omnivoice-local-model-test",
 		WorkTypes: []interfaces.WorkTypeConfig{{
-			Name: "speech",
+			Name:             "speech",
+			HandlingBehavior: []string{interfaces.WorkTypeHandlingBehaviorDefault},
 			States: []interfaces.StateConfig{
 				{Name: "init", Type: interfaces.StateTypeInitial},
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
@@ -319,7 +355,7 @@ func localModelLongTestFactoryConfigWithHealthEndpoint(healthEndpoint string) *i
 		}},
 		Workers: []interfaces.WorkerConfig{{
 			Name:          "tts-worker",
-			Type:          interfaces.WorkerTypeModel,
+			Type:          interfaces.WorkerTypeInference,
 			Model:         "OMNIVOICE_Q4_K_M",
 			ModelProvider: interfaces.RunnerIDCodex,
 			ModelLocality: interfaces.ModelLocalityLocal,
@@ -343,7 +379,7 @@ func localModelLongTestFactoryConfigWithHealthEndpoint(healthEndpoint string) *i
 		}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "speak",
-			Type:           interfaces.WorkstationTypeInvoke,
+			Type:           interfaces.WorkstationTypeInference,
 			WorkerTypeName: "tts-worker",
 			Operation:      "TTS",
 			OperationBindings: []interfaces.ModelOperationBinding{{
