@@ -385,7 +385,6 @@ const (
 // writes ordered progress output followed by the final invocation result.
 type responseStreamRenderer interface {
 	responseStreamEventSink
-	renderedProgress() bool
 	stopProgressRendering()
 	writeFinalInvocationResult(result apisurface.FactoryInvocationResult) error
 }
@@ -444,15 +443,6 @@ func (r *humanResponseStreamRenderer) onStreamSegment(result factorysessions.Ses
 	for _, event := range result.Events {
 		r.renderEventLocked(event)
 	}
-}
-
-func (r *humanResponseStreamRenderer) renderedProgress() bool {
-	if r == nil {
-		return false
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.progressSeen
 }
 
 func (r *humanResponseStreamRenderer) writeFinalInvocationResult(
@@ -696,15 +686,6 @@ func (r *jsonResponseStreamRenderer) onStreamSegment(result factorysessions.Sess
 	for _, event := range result.Events {
 		r.renderEventLocked(event)
 	}
-}
-
-func (r *jsonResponseStreamRenderer) renderedProgress() bool {
-	if r == nil {
-		return false
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.progressSeen
 }
 
 func (r *jsonResponseStreamRenderer) writeFinalInvocationResult(

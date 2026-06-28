@@ -54,11 +54,14 @@ primary-result behavior.
   success-only CLI fork. `RunConfig.InvocationOutputMode` and `you run --output`
   select primary-result-only versus internal `SessionResponseStream` attachment
   for supported one-shot factory invocations; keep mode validation, unsupported
-  run-shape rejection, and fallback behavior in `pkg/cli/run/invocation_output.go`,
-  stream attachment in `pkg/cli/run/response_stream_attachment.go`, human and JSON
-  progress rendering in `pkg/cli/run/response_stream_renderer.go`, bounded async
-  progress stdout draining in `pkg/cli/run/response_stream_progress_writer.go`,
-  and invocation wiring in `pkg/cli/run/factory_invocation_input.go`. Human response-stream
+  run-shape rejection, and fallback behavior in `pkg/cli/run/invocation_error.go`,
+  stream attachment and bounded async progress stdout draining in
+  `pkg/cli/run/invocation_observability.go`, human and JSON progress rendering in
+  `pkg/cli/run/run_clean_invocation.go`, response-stream unit tests in
+  `pkg/cli/run/run_config_test.go`, response-stream CLI integration tests in
+  `pkg/cli/run/run_wire_api_test.go`, and invocation wiring in
+  `pkg/cli/run/factory_invocation_input.go`. The `pkg/cli/run` package is at the
+  15-file limit; extend existing files instead of adding new ones. Human response-stream
   terminal outcomes use `--- invocation outcome ---` with structured status/error
   fields; JSON response-stream terminal outcomes stay on the final
   `primary_result` NDJSON record. Internal stream listing for
