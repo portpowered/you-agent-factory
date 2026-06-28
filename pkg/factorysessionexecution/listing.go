@@ -524,9 +524,24 @@ func BuildCanonicalSessionEvents(session SessionReadResult, result ResultReadRes
 }
 
 // BuildCanonicalRuntimeSessionEvents synthesizes canonical FactoryEvent documents
-// for one runtime-backed durable session read and result projection pair.
-func BuildCanonicalRuntimeSessionEvents(session SessionReadResult, result ResultReadResult) []json.RawMessage {
-	return buildCanonicalSessionEvents(session, result, canonicalEventSourceRuntimeService)
+// for one runtime-backed durable session read and result projection pair. When
+// dispatch projection input is provided, runtime-backed child dispatches also
+// emit DISPATCH_QUEUED and terminal DISPATCH_RECONCILED lifecycle events.
+func BuildCanonicalRuntimeSessionEvents(
+	session SessionReadResult,
+	result ResultReadResult,
+	dispatch ...RuntimeDispatchEventInput,
+) []json.RawMessage {
+	events := buildCanonicalSessionEvents(session, result, canonicalEventSourceRuntimeService)
+	if len(dispatch) == 0 || len(dispatch[0].Dispatches) == 0 {
+		return events
+	}
+	return appendCanonicalRuntimeDispatchLifecycleEvents(
+		events,
+		session,
+		dispatch[0],
+		canonicalEventSourceRuntimeService,
+	)
 }
 
 func buildCanonicalSessionEvents(session SessionReadResult, result ResultReadResult, source string) []json.RawMessage {

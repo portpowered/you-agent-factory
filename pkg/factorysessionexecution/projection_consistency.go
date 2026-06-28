@@ -736,7 +736,11 @@ func applyTerminalRuntimeProjection(
 	restoreInterruptedDispatchResultSuppression(state, preserved)
 	finalizeInterruptedTerminalSession(state, priorSession, priorResult)
 	state.events = mergePreservedDispatchInterruptedEvents(
-		BuildCanonicalRuntimeSessionEvents(state.session, state.result),
+		BuildCanonicalRuntimeSessionEvents(
+			state.session,
+			state.result,
+			runtimeDispatchEventInputFromState(state),
+		),
 		preservedEvents,
 	)
 }
