@@ -84,7 +84,7 @@ func TestListFactorySessionDispatches_RuntimeBackedMissingSessionReturnsNotFound
 	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
-	if errResp.Code != factoryapi.NOTFOUND {
+	if errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("code = %q, want NOT_FOUND", errResp.Code)
 	}
 }
@@ -199,7 +199,7 @@ func TestGetFactorySessionDispatch_RuntimeBackedUnknownDispatchReturnsNotFound(t
 	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
-	if errResp.Code != factoryapi.NOTFOUND {
+	if errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("code = %q, want NOT_FOUND", errResp.Code)
 	}
 }
@@ -225,7 +225,7 @@ func TestGetFactorySessionDispatch_RuntimeBackedMissingSessionReturnsNotFound(t 
 	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
-	if errResp.Code != factoryapi.NOTFOUND {
+	if errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("code = %q, want NOT_FOUND", errResp.Code)
 	}
 }
@@ -372,7 +372,7 @@ func TestListFactorySessionArtifacts_RuntimeBackedMissingSessionReturnsNotFound(
 	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
-	if errResp.Code != factoryapi.NOTFOUND {
+	if errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("code = %q, want NOT_FOUND", errResp.Code)
 	}
 }
@@ -485,7 +485,7 @@ func TestGetFactorySessionArtifact_RuntimeBackedUnknownArtifactReturnsNotFound(t
 	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
-	if errResp.Code != factoryapi.NOTFOUND {
+	if errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("code = %q, want NOT_FOUND", errResp.Code)
 	}
 }
@@ -511,7 +511,7 @@ func TestGetFactorySessionArtifact_RuntimeBackedMissingSessionReturnsNotFound(t 
 	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
 		t.Fatalf("decode error response: %v", err)
 	}
-	if errResp.Code != factoryapi.NOTFOUND {
+	if errResp.Code != factoryapi.ErrorResponseCodeNOTFOUND {
 		t.Fatalf("code = %q, want NOT_FOUND", errResp.Code)
 	}
 }

@@ -89,8 +89,8 @@ func TestMoveWork_Returns409ForDuplicateRequestId(t *testing.T) {
 		t.Fatalf("second move status = %d, want 409: %s", rec.Code, rec.Body.String())
 	}
 	resp := decodeJSONResponse[factoryapi.ErrorResponse](t, rec)
-	if resp.Code != factoryapi.MOVEWORKREQUESTALREADYAPPLIED {
-		t.Fatalf("error code = %q, want %q", resp.Code, factoryapi.MOVEWORKREQUESTALREADYAPPLIED)
+	if resp.Code != factoryapi.ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED {
+		t.Fatalf("error code = %q, want %q", resp.Code, factoryapi.ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED)
 	}
 }
 

@@ -38,6 +38,116 @@ import (
 const servicePortableBundledScriptBody = "Write-Output 'portable script'\n"
 const serviceStreamedRecordingTimeout = 5 * time.Second
 
+func TestFactoryService_ResolveInvocationWaitTerminal_ReturnsInterruptedClassification(t *testing.T) {
+	t.Parallel()
+
+	work := interfaces.FactoryWorkItem{
+		ID:          "work-root",
+		WorkTypeID:  "goal",
+		State:       "review",
+		DisplayName: "Interrupted goal",
+		PlaceID:     "goal:review",
+	}
+	worldState := interfaces.FactoryWorldState{
+		PayloadLineage: interfaces.WorkPayloadLineageProjection{},
+		WorkRequestsByID: map[string]interfaces.WorkRequestPayload{
+			"request-1": {
+				RequestID: "request-1",
+				Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+				WorkItems: []interfaces.FactoryWorkItem{work},
+			},
+		},
+		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+			work.ID: work,
+		},
+		JavaScriptRuntime: &interfaces.FactorySessionJavaScriptRuntimeState{
+			Dispatches: []interfaces.FactorySessionDispatchState{{
+				ID:             "dispatch-1",
+				Status:         "INTERRUPTED",
+				RelatedWorkIDs: []string{work.ID},
+			}},
+		},
+	}
+
+	svc := &FactoryService{logger: zap.NewNop()}
+	result := svc.resolveInvocationWaitTerminal(
+		"session-js-1",
+		sessionInvocationWaitInput{RequestID: "request-1"},
+		worldState,
+		false,
+		nil,
+	)
+
+	if result.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("status = %q, want FAILED", result.Status)
+	}
+	if result.ErrorCode != "INVOCATION_INTERRUPTED" {
+		t.Fatalf("errorCode = %q, want INVOCATION_INTERRUPTED", result.ErrorCode)
+	}
+	if !strings.Contains(result.Message, `dispatch "dispatch-1"`) || !strings.Contains(result.Message, `work "Interrupted goal"`) {
+		t.Fatalf("message = %q, want interrupted dispatch and work detail", result.Message)
+	}
+	if result.SessionID != "session-js-1" || result.WorkID != "work-root" || result.WorkName != "Interrupted goal" || result.WorkState != "goal:review" {
+		t.Fatalf("result context = %#v, want session/work context populated", result)
+	}
+}
+
+func TestFactoryService_ResolveInvocationWaitTerminal_ReturnsFailedClassification(t *testing.T) {
+	t.Parallel()
+
+	work := interfaces.FactoryWorkItem{
+		ID:          "work-root",
+		WorkTypeID:  "goal",
+		State:       "failed",
+		DisplayName: "Failed goal",
+		PlaceID:     "goal:failed",
+	}
+	worldState := interfaces.FactoryWorldState{
+		PayloadLineage: interfaces.WorkPayloadLineageProjection{},
+		WorkRequestsByID: map[string]interfaces.WorkRequestPayload{
+			"request-1": {
+				RequestID: "request-1",
+				Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+				WorkItems: []interfaces.FactoryWorkItem{{
+					ID:          "work-root",
+					WorkTypeID:  "goal",
+					State:       "init",
+					DisplayName: "Failed goal",
+					PlaceID:     "goal:init",
+				}},
+			},
+		},
+		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+			work.ID: work,
+		},
+		FailedWorkItemsByID: map[string]interfaces.FactoryWorkItem{
+			work.ID: work,
+		},
+		TerminalWorkByID: map[string]interfaces.FactoryTerminalWork{
+			work.ID: {WorkItem: work, Status: "FAILED"},
+		},
+	}
+
+	svc := &FactoryService{logger: zap.NewNop()}
+	result := svc.resolveInvocationWaitTerminal(
+		"session-failed-1",
+		sessionInvocationWaitInput{RequestID: "request-1"},
+		worldState,
+		false,
+		nil,
+	)
+
+	if result.Status != factoryapi.InvocationTerminalStatusFailed {
+		t.Fatalf("status = %q, want FAILED", result.Status)
+	}
+	if result.ErrorCode != "INVOCATION_RUNTIME_FAILURE" {
+		t.Fatalf("errorCode = %q, want INVOCATION_RUNTIME_FAILURE", result.ErrorCode)
+	}
+	if !strings.Contains(result.Message, `work "Failed goal"`) || !strings.Contains(result.Message, `state "goal:failed"`) {
+		t.Fatalf("message = %q, want failed work and state detail", result.Message)
+	}
+}
+
 func serviceNamedFactoryPayload(t *testing.T, project string) []byte {
 	t.Helper()
 	return serviceNamedFactoryPayloadWithWorkType(t, project, "task")
@@ -2597,6 +2707,129 @@ func TestFactoryService_GetCurrentFactory_CollectsSupportedPortableBundledFilesF
 	bundledFiles := *current.SupportingFiles.BundledFiles
 	assertServiceBundledFactoryEntry(t, bundledFiles[0], factoryapi.BundledFileTypeDOC, "factory/docs/README.md", "# Portable factory\n")
 	assertServiceBundledFactoryEntry(t, bundledFiles[1], factoryapi.BundledFileTypeSCRIPT, "factory/scripts/execute-story.ps1", servicePortableBundledScriptBody)
+}
+
+func TestFactoryService_GetCurrentFactory_CollectsNestedFactoryDocsFromDisk(t *testing.T) {
+	const nestedDocPath = "factory/docs/standards/review.md"
+	const nestedDocBody = "# Review standards\n"
+
+	rootDir := t.TempDir()
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", serviceNamedFactoryPayload(t, "alpha")); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	alphaDir := filepath.Join(rootDir, "alpha")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "docs", "README.md"), "# Portable factory\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "docs", "standards", "review.md"), nestedDocBody)
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "scripts", "execute-story.ps1"), servicePortableBundledScriptBody)
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	current, err := svc.GetCurrentFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentFactory: %v", err)
+	}
+
+	got := serviceBundledFilesByTarget(t, current)
+	if entry, ok := got[nestedDocPath]; !ok {
+		t.Fatalf("current factory bundled files = %#v, want nested doc %q", got, nestedDocPath)
+	} else {
+		assertServiceBundledFactoryEntry(t, entry, factoryapi.BundledFileTypeDOC, nestedDocPath, nestedDocBody)
+	}
+	assertServiceBundledFactoryEntry(t, got["factory/docs/README.md"], factoryapi.BundledFileTypeDOC, "factory/docs/README.md", "# Portable factory\n")
+}
+
+func TestFactoryService_GetCurrentFactory_ManifestAuthoritativeDocsExcludeUnlistedTopLevelOrphans(t *testing.T) {
+	const nestedDocPath = "factory/docs/standards/review.md"
+	const nestedDocBody = "# Review standards\n"
+	const orphanDocPath = "factory/docs/orphan.md"
+
+	rootDir := t.TempDir()
+	payload, err := json.Marshal(map[string]any{
+		"name": "alpha",
+		"id":   "alpha",
+		"workTypes": []map[string]any{{
+			"name": "task",
+			"states": []map[string]string{
+				{"name": "init", "type": "INITIAL"},
+				{"name": "complete", "type": "TERMINAL"},
+				{"name": "failed", "type": "FAILED"},
+			},
+		}},
+		"workers": []map[string]any{{
+			"name":          "worker-a",
+			"type":          "MODEL_WORKER",
+			"modelProvider": "CODEX",
+			"model":         "gpt-5-codex",
+			"body":          "You are worker alpha.",
+		}},
+		"workstations": []map[string]any{{
+			"name":      "process",
+			"worker":    "worker-a",
+			"inputs":    []map[string]string{{"workType": "task", "state": "init"}},
+			"outputs":   []map[string]string{{"workType": "task", "state": "complete"}},
+			"onFailure": []map[string]string{{"workType": "task", "state": "failed"}},
+			"type":      "MODEL_WORKSTATION",
+			"body":      "Do the alpha work.",
+		}},
+		"supportingFiles": map[string]any{
+			"bundledFiles": []map[string]any{{
+				"type":       "DOC",
+				"targetPath": "factory/docs/README.md",
+				"content": map[string]any{
+					"encoding": string(factoryapi.BundledFileContentEncodingUtf8),
+					"inline":   "# Portable factory\n",
+				},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal named factory payload: %v", err)
+	}
+
+	if _, err := config.PersistNamedFactory(rootDir, "alpha", payload); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	alphaDir := filepath.Join(rootDir, "alpha")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "docs", "README.md"), "# Portable factory\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "docs", "orphan.md"), "orphan content\n")
+	writePortableServiceBundledFile(t, filepath.Join(alphaDir, "docs", "standards", "review.md"), nestedDocBody)
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+		Logger:            zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+
+	current, err := svc.GetCurrentFactory(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentFactory: %v", err)
+	}
+
+	got := serviceBundledFilesByTarget(t, current)
+	if _, ok := got[orphanDocPath]; ok {
+		t.Fatalf("current factory bundled files = %#v, want unlisted top-level orphan doc excluded", got)
+	}
+	assertServiceBundledFactoryEntry(t, got["factory/docs/README.md"], factoryapi.BundledFileTypeDOC, "factory/docs/README.md", "# Portable factory\n")
+	assertServiceBundledFactoryEntry(t, got[nestedDocPath], factoryapi.BundledFileTypeDOC, nestedDocPath, nestedDocBody)
 }
 
 func TestFactoryService_GetCurrentFactory_InlinesPortableFilesAndStarterInputs(t *testing.T) {

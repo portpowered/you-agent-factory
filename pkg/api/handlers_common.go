@@ -410,6 +410,17 @@ func (s *Server) writeDurableLifecycleControlError(w http.ResponseWriter, sessio
 	return false
 }
 
+func (s *Server) writeLifecycleControlSuccess(
+	w http.ResponseWriter,
+	response factoryapi.FactorySessionLifecycleControlResponse,
+) {
+	s.writeJSON(
+		w,
+		factorysession.LifecycleControlSuccessStatus(factorysession.LifecycleControlResultFromAPI(response)),
+		response,
+	)
+}
+
 func (s *Server) handleDurableLifecycleControl(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -451,12 +462,7 @@ func (s *Server) handleDurableLifecycleControl(
 		return
 	}
 
-	status := http.StatusOK
-	if response.Outcome == factoryapi.FactorySessionLifecycleControlOutcomeAccepted &&
-		response.Status == factoryapi.FactorySessionDurableLifecycleStatusCanceling {
-		status = http.StatusAccepted
-	}
-	s.writeJSON(w, status, response)
+	s.writeLifecycleControlSuccess(w, response)
 }
 
 func (s *Server) handleLiveLifecycleControl(
@@ -495,7 +501,7 @@ func (s *Server) handleLiveLifecycleControl(
 		return
 	}
 
-	s.writeJSON(w, factorysession.LifecycleControlSuccessStatus(factorysession.LifecycleControlResultFromAPI(response)), response)
+	s.writeLifecycleControlSuccess(w, response)
 }
 
 func decodeOptionalLifecycleControlRequest(body io.Reader) (factoryapi.FactorySessionLifecycleControlRequest, error) {
@@ -582,7 +588,7 @@ func (s *Server) handleDurableApproveControl(
 		return
 	}
 
-	s.writeJSON(w, http.StatusOK, response)
+	s.writeLifecycleControlSuccess(w, response)
 }
 
 func (s *Server) handleDurableRetryDispatchControl(
@@ -624,7 +630,7 @@ func (s *Server) handleDurableRetryDispatchControl(
 		return
 	}
 
-	s.writeJSON(w, http.StatusOK, response)
+	s.writeLifecycleControlSuccess(w, response)
 }
 
 func (s *Server) ApproveFactorySession(w http.ResponseWriter, r *http.Request, sessionID factoryapi.SessionID) {
@@ -738,5 +744,5 @@ func (s *Server) handleDurableInterruptDispatchControl(
 		return
 	}
 
-	s.writeJSON(w, http.StatusOK, response)
+	s.writeLifecycleControlSuccess(w, response)
 }

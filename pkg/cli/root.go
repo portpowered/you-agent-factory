@@ -43,10 +43,10 @@ var showWork = workcli.Show
 var moveWork = workcli.Move
 var listSessions = sessioncli.List
 var showSession = sessioncli.Show
-var createSession = sessioncli.Create
-var deleteSession = sessioncli.Delete
 var pauseSession = sessioncli.Pause
 var resumeSession = sessioncli.Resume
+var createSession = sessioncli.Create
+var deleteSession = sessioncli.Delete
 var queryFactory = factorycli.Query
 var listFactories = factorycli.List
 var validateFactory = factorycli.Validate
@@ -687,9 +687,10 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 			"Use --with-mock-workers with an optional JSON config path to test workflows with deterministic mock worker outcomes. " +
 			"Use --quiet to suppress dashboard output for scripted or CI-oriented runs. " +
 			"Use --named with a persisted canonical factory name to resolve project-local factories before global built-ins under ~/.you-agent-factory/factories. " +
-			"Built-ins such as @you/tts materialize lazily into that global root on first use and stay editable on disk for later runs. " +
+			"Built-ins such as @you/tts and @you/goal materialize lazily into that global root on first use and stay editable on disk for later runs. " +
 			"Use --factory with a factory.json file path to run a portable factory config without guessing --dir. " +
 			"In factory invocation mode, provide either trailing positional text or piped stdin text; supplying both is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. " +
+			"Packaged @you/goal invocation details live in " + cliBinaryName + " docs packaged-goal. " +
 			"Packaged @you/tts invocation details live in " + cliBinaryName + " docs packaged-tts. " +
 			"Full invocation input and return-policy details live in " + cliBinaryName + " docs config and " + cliBinaryName + " docs sessions. " +
 			"Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root. " +

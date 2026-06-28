@@ -706,9 +706,12 @@ func (m *MockFactory) ListFactorySessions(_ context.Context) (factoryapi.ListFac
 	return m.FactorySessions, nil
 }
 
-func (m *MockFactory) GetFactorySession(_ context.Context, _ string) (factoryapi.FactorySession, error) {
+func (m *MockFactory) GetFactorySession(_ context.Context, sessionID string) (factoryapi.FactorySession, error) {
 	if m.GetFactorySessionErr != nil {
 		return factoryapi.FactorySession{}, m.GetFactorySessionErr
+	}
+	if session, err := m.sessionFactory(sessionID); err == nil && session != nil {
+		return session.FactorySession, nil
 	}
 	return m.FactorySession, nil
 }

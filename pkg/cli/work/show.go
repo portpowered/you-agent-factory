@@ -139,6 +139,9 @@ func renderShowResult(output io.Writer, work factoryapi.Work) error {
 			return err
 		}
 	}
+	if err := writeWorkStopSummary(output, work.StopSummary); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -150,4 +153,74 @@ func primaryWorkTrace(work factoryapi.Work) string {
 		return strings.TrimSpace(*work.TraceId)
 	}
 	return ""
+}
+
+func writeWorkStopSummary(output io.Writer, summary *factoryapi.FactoryStopSummary) error {
+	if summary == nil {
+		return nil
+	}
+	fields := workStopSummaryFields(summary)
+	if summary.SessionLifecycleStatus != nil {
+		fields = append(fields, "lifecycle="+string(*summary.SessionLifecycleStatus))
+	}
+	if _, err := fmt.Fprintf(output, "Stop summary:\t%s\n", strings.Join(fields, " ")); err != nil {
+		return err
+	}
+	return writeStopSummaryDetailLines(output, summary)
+}
+
+func workStopSummaryFields(summary *factoryapi.FactoryStopSummary) []string {
+	fields := []string{
+		fmt.Sprintf("kind=%s", summary.StopKind),
+		fmt.Sprintf("session=%s", summary.SessionId),
+	}
+	if stateField := trimmedString(summary.WorkState); stateField != "" {
+		fields = append(fields, "state="+stateField)
+	}
+	return fields
+}
+
+func writeStopSummaryDetailLines(output io.Writer, summary *factoryapi.FactoryStopSummary) error {
+	if err := writeStopDispatchLine(output, summary.LatestDispatch); err != nil {
+		return err
+	}
+	if err := writeOptionalStopSummaryLine(output, "Stop result", summary.LatestResultSummary); err != nil {
+		return err
+	}
+	if err := writeOptionalStopSummaryLine(output, "Recovery surface", summary.SuggestedRecoverySurface); err != nil {
+		return err
+	}
+	return writeOptionalStopSummaryLine(output, "Recovery action", summary.SuggestedRecoveryAction)
+}
+
+func writeStopDispatchLine(output io.Writer, dispatch *factoryapi.FactoryStopDispatchSummary) error {
+	if dispatch == nil {
+		return nil
+	}
+	dispatchFields := []string{
+		dispatch.DispatchId,
+		fmt.Sprintf("status=%s", dispatch.Status),
+		fmt.Sprintf("kind=%s", dispatch.DispatchKind),
+	}
+	if workstation := trimmedString(dispatch.WorkstationName); workstation != "" {
+		dispatchFields = append(dispatchFields, "workstation="+workstation)
+	}
+	_, err := fmt.Fprintf(output, "Stop dispatch:\t%s\n", strings.Join(dispatchFields, " "))
+	return err
+}
+
+func writeOptionalStopSummaryLine(output io.Writer, label string, value *string) error {
+	text := trimmedString(value)
+	if text == "" {
+		return nil
+	}
+	_, err := fmt.Fprintf(output, "%s:\t%s\n", label, text)
+	return err
+}
+
+func trimmedString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(*value)
 }

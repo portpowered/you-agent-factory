@@ -19,7 +19,7 @@ import { FactorySessionDetailPanel } from "../factory-session-detail-panel";
 import {
   jsonResponse,
   renderWithQueryClient,
-} from "../factory-session-detail-panel.test-helpers";
+} from "../test-support/factory-session-detail-panel.test-helpers";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: focused event replay coverage keeps one fetch harness and assertion seam.
 describe("FactorySessionDetailPanel event replay disclosure", () => {

@@ -416,7 +416,7 @@ export interface DashboardSnapshot {
 }
 
 export interface DashboardStreamState {
-  status: "connecting" | "live" | "offline" | "reconnecting";
+  status: "connecting" | "live" | "offline" | "reconnecting" | "recovery_failed";
   message: string;
 }
 

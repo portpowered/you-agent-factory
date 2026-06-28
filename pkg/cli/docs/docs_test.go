@@ -194,7 +194,7 @@ func TestIndexMarkdown_ListsSupportedTopicsWithCommands(t *testing.T) {
 		"`workers` - Worker types",
 		"`resources` - Resource capacity",
 		"`models` - Local and hosted model setup",
-		"`packaged-goal` - Packaged @you/goal invocation",
+		"`packaged-goal` - Packaged @you/goal batch invocation",
 		"`packaged-tts` - Packaged @you/tts invocation",
 		"`batch-inputs` - Batch input files",
 		"`templates` - Prompt template variables",
@@ -769,6 +769,7 @@ func TestMarkdown_RecordReplayReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
+
 func TestMarkdown_MCPReturnsRawAuthoredMarkdown(t *testing.T) {
 	t.Parallel()
 
@@ -844,8 +845,16 @@ func TestMarkdown_SessionsReturnsRawAuthoredMarkdown(t *testing.T) {
 		"POST /factory-sessions/{session_id}/invocations",
 		"INVOCATION_INPUT_SOURCE_CONFLICT",
 		"INVOCATION_INPUT_EMPTY",
+		"INVOCATION_BLOCKED",
+		"INVOCATION_NEEDS_HUMAN",
+		"INVOCATION_PAUSED",
+		"INVOCATION_INTERRUPTED",
+		"INVOCATION_RUNTIME_FAILURE",
+		"INVOCATION_TIMED_OUT",
+		"INVOCATION_CANCELED",
 		"INVOCATION_PRIMARY_RESULT_UNRESOLVED",
 		"status: TIMED_OUT",
+		"status: CANCELED",
 		"`primaryResult`",
 		`"sourceKind": "text"`,
 		`"primaryResult": [`,

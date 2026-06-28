@@ -55,6 +55,29 @@ export function formatDurationFromISO(
   return formatDurationMillis(now - startedAtMs, locale);
 }
 
+export function formatGraphDurationMillis(
+  durationMillis: number,
+  locale?: string | null,
+): string {
+  return formatDuration(durationMillis, locale, {
+    style: "graph",
+  });
+}
+
+export function formatGraphDurationFromISO(
+  startedAt: string,
+  now: number,
+  locale?: string | null,
+  fallback = "Unavailable",
+): string {
+  const startedAtMs = Date.parse(startedAt);
+  if (Number.isNaN(startedAtMs)) {
+    return fallback;
+  }
+
+  return formatGraphDurationMillis(now - startedAtMs, locale);
+}
+
 export function formatRelativeTimeFromISO(
   timestamp: string,
   now: number,

@@ -200,7 +200,7 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
             )
         )
 
-    def test_sync_main_skips_fast_forward_when_main_is_checked_out_dirty(self):
+    def test_sync_main_stashes_and_restores_dirty_checked_out_main(self):
         local_repo = self.repo_path / "local"
         setup_repo_with_origin_main_ahead(local_repo, self.repo_path)
         git(["checkout", "main"], local_repo)
@@ -228,9 +228,9 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
 
         self.assertEqual(
             git(["rev-parse", "refs/heads/main"], local_repo).stdout.strip(),
-            local_main_sha_before,
+            origin_main_sha,
         )
-        self.assertEqual(git(["rev-parse", "HEAD"], local_repo).stdout.strip(), head_before)
+        self.assertEqual(git(["rev-parse", "HEAD"], local_repo).stdout.strip(), origin_main_sha)
         self.assertEqual(
             git(["branch", "--show-current"], local_repo).stdout.strip(),
             branch_before,
@@ -246,6 +246,11 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
                 for args in recorded
             )
         )
+        self.assertTrue(any(args[:2] == ("stash", "push") for args in recorded))
+        self.assertTrue(any(args[:2] == ("stash", "apply") for args in recorded))
+        self.assertTrue(any(args[:2] == ("stash", "drop") for args in recorded))
+        self.assertTrue(any(args[:2] == ("pull", "--ff-only") for args in recorded))
+        self.assertEqual(head_before, local_main_sha_before)
 
     def test_sync_main_fast_forwards_main_without_pull_on_dirty_tree(self):
         local_repo = self.repo_path / "local"
@@ -395,7 +400,7 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
         self.assertTrue((worktree_path / "prd.json").exists())
         self.assertIn("Root sync:", result.stderr)
 
-    def test_setup_workspace_reports_sync_skip_on_dirty_main_checkout(self):
+    def test_setup_workspace_reports_stashed_sync_on_dirty_main_checkout(self):
         local_repo = self.repo_path / "local"
         setup_repo_with_origin_main_ahead(local_repo, self.repo_path)
         git(["checkout", "main"], local_repo)
@@ -422,8 +427,12 @@ class SetupWorkspaceSyncTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Root sync:", result.stderr)
-        self.assertIn("local changes", result.stderr.lower())
+        self.assertIn("stashed local changes", result.stderr.lower())
         self.assertIn("?? dirty-main.txt", git(["status", "--porcelain"], local_repo).stdout)
+        self.assertEqual(
+            git(["rev-parse", "refs/heads/main"], local_repo).stdout.strip(),
+            git(["rev-parse", "refs/remotes/origin/main"], local_repo).stdout.strip(),
+        )
 
 
 if __name__ == "__main__":

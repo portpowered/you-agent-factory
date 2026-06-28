@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
@@ -238,7 +239,7 @@ func TestRun_NamedFactoryModelNotReadyKeepsStdoutEmpty(t *testing.T) {
 		StdinIsTTY:               func() bool { return true },
 		Output:                   &output,
 		Port:                     7437,
-		Logger: zap.New(core),
+		Logger:                   zap.New(core),
 	})
 	if err == nil {
 		t.Fatal("expected model-not-ready invocation failure")
@@ -810,6 +811,113 @@ func TestRun_NamedGoalInvocationSuccessParityAcrossCLIAndAPIEnvelope(t *testing.
 		t.Fatalf("decode CLI invocation response: %v\n%s", err, jsonOutput.String())
 	}
 	assertInvocationResponseMatchesFactoryResult(t, cliResponse, sharedResult)
+}
+
+func TestRun_NamedGoalInvocationBlockedFailureParityAcrossCLIAndAPIEnvelope(t *testing.T) {
+	preserveRunGlobals(t)
+
+	sharedResult := apisurface.FactoryInvocationResult{
+		RequestID: "request-goal-blocked",
+		TraceID:   "trace-goal-blocked",
+		Status:    factoryapi.InvocationTerminalStatusFailed,
+		ErrorCode: "INVOCATION_BLOCKED",
+		Message:   "goal invocation blocked while work \"Review plan\" is in state goal:blocked",
+		SessionID: defaultFactorySessionID,
+		WorkID:    "work-review-plan",
+		WorkName:  "Review plan",
+		WorkState: "goal:blocked",
+	}
+
+	var jsonOutput bytes.Buffer
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubInvocationService{
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			},
+			invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				return sharedResult, nil
+			},
+		}, nil
+	}
+
+	err := Run(context.Background(), withRunOutput(RunConfig{
+		Dir:                      "/tmp/builtin-goal",
+		NamedFactoryName:         goal.PackagedFactoryName,
+		InvocationPositionalText: stringPtr(namedGoalParityText),
+		StdinIsTTY:               func() bool { return true },
+		Port:                     7437,
+		JSONOutput:               true,
+	}, &jsonOutput))
+	if err == nil {
+		t.Fatal("expected blocked invocation failure")
+	}
+	if !strings.Contains(err.Error(), "INVOCATION_BLOCKED") {
+		t.Fatalf("error = %q, want INVOCATION_BLOCKED", err.Error())
+	}
+
+	var cliResponse factoryapi.InvocationResponse
+	if decodeErr := json.Unmarshal(bytes.TrimSpace(jsonOutput.Bytes()), &cliResponse); decodeErr != nil {
+		t.Fatalf("decode CLI invocation response: %v\n%s", decodeErr, jsonOutput.String())
+	}
+	assertInvocationResponseMatchesFactoryResult(t, cliResponse, sharedResult)
+}
+
+func TestRun_FactoryInvocationPausedFailureIncludesCLIContext(t *testing.T) {
+	preserveRunGlobals(t)
+
+	text := "pause the session"
+	var output bytes.Buffer
+
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubInvocationService{
+			run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			},
+			invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				return apisurface.FactoryInvocationResult{
+					RequestID: "request-paused",
+					TraceID:   "trace-paused",
+					Status:    factoryapi.InvocationTerminalStatusFailed,
+					ErrorCode: "INVOCATION_PAUSED",
+					Message:   "factory session is paused; resume the session to continue waiting for the primary result",
+					SessionID: defaultFactorySessionID,
+					WorkID:    "work-paused",
+					WorkName:  "Paused goal",
+					WorkState: "goal:review",
+				}, nil
+			},
+		}, nil
+	}
+
+	err := Run(context.Background(), RunConfig{
+		FactoryConfigPath:        "/tmp/factory.json",
+		InvocationPositionalText: &text,
+		StdinIsTTY:               func() bool { return true },
+		Output:                   &output,
+		Port:                     7437,
+	})
+	if err == nil {
+		t.Fatal("expected paused invocation failure")
+	}
+	if output.Len() != 0 {
+		t.Fatalf("stdout = %q, want empty on text invocation failure", output.String())
+	}
+
+	var cliErr invocationCLIError
+	if !errors.As(err, &cliErr) {
+		t.Fatalf("error type = %T, want invocationCLIError", err)
+	}
+	if cliErr.SessionID != defaultFactorySessionID || cliErr.WorkID != "work-paused" || cliErr.WorkName != "Paused goal" || cliErr.WorkState != "goal:review" {
+		t.Fatalf("cli error context = %#v", cliErr)
+	}
+	if !strings.Contains(err.Error(), "session="+defaultFactorySessionID) {
+		t.Fatalf("error = %q, want session context", err.Error())
+	}
+	if !strings.Contains(err.Error(), "workState=goal:review") {
+		t.Fatalf("error = %q, want work-state context", err.Error())
+	}
 }
 
 func TestNamedGoalInvocationSourceConflictParityAcrossCLIAndAPIContract(t *testing.T) {

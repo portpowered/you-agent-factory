@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { emptyReplayWorldState } from "../timeline/replayWorldStateSupport";
 import type { FactoryTimelineCheckpoint } from "../timeline/storeState";
 import {
-  clearTimelineCheckpoint,
   persistTimelineCheckpoint,
   readTimelineCheckpoint,
   reconnectCursorFromCheckpoint,

@@ -19,12 +19,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
+	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
@@ -489,7 +491,7 @@ func (fs *FactoryService) handleInvocationSelectionSuccess(
 	return result
 }
 
-func (fs *FactoryService) handleInvocationUnresolvedPrimary(
+func (fs *FactoryService) handleInvocationPrimaryResultFailure(
 	sessionID string,
 	input sessionInvocationWaitInput,
 	primaryErr *invocations.PrimaryResultError,
@@ -500,9 +502,16 @@ func (fs *FactoryService) handleInvocationUnresolvedPrimary(
 		Status:    factoryapi.InvocationTerminalStatusFailed,
 		ErrorCode: string(primaryErr.Code),
 		Message:   primaryErr.Message,
+		SessionID: primaryErr.Context.SessionID,
+		WorkID:    primaryErr.Context.WorkID,
+		WorkName:  primaryErr.Context.WorkName,
+		WorkState: primaryErr.Context.WorkState,
 	}
 	fs.recordInvocationMetric(invocationMetricFailure, inputMetricLabels(input.InputSource))
-	fs.recordInvocationMetric(invocationMetricUnresolvedPrimary, inputMetricLabels(input.InputSource))
+	failureClass := invocationFailureClassForPrimaryResultError(primaryErr.Code)
+	if primaryErr.Code == invocations.PrimaryResultErrorCodeUnresolved {
+		fs.recordInvocationMetric(invocationMetricUnresolvedPrimary, inputMetricLabels(input.InputSource))
+	}
 	fs.logger.Warn(
 		"factory session invocation failed",
 		invocationLogFields(
@@ -513,10 +522,27 @@ func (fs *FactoryService) handleInvocationUnresolvedPrimary(
 			zap.String("trace_id", input.TraceID),
 			zap.String("status", string(result.Status)),
 			zap.String("error_code", result.ErrorCode),
-			zap.String("failure_class", "unresolved_primary"),
+			zap.String("failure_class", failureClass),
 		)...,
 	)
 	return result
+}
+
+func invocationFailureClassForPrimaryResultError(code invocations.PrimaryResultErrorCode) string {
+	switch code {
+	case invocations.PrimaryResultErrorCodeFailed:
+		return "failed"
+	case invocations.PrimaryResultErrorCodePaused:
+		return "paused"
+	case invocations.PrimaryResultErrorCodeInterrupted:
+		return "interrupted"
+	case invocations.PrimaryResultErrorCodeBlocked:
+		return "blocked"
+	case invocations.PrimaryResultErrorCodeNeedsHuman:
+		return "needs_human"
+	default:
+		return "unresolved_primary"
+	}
 }
 
 func (fs *FactoryService) sessionInvocationWorldState(
@@ -593,8 +619,15 @@ func (fs *FactoryService) logInvocationTerminalResult(
 	case factoryapi.InvocationTerminalStatusCanceled:
 		failureClass = "cancellation"
 	case factoryapi.InvocationTerminalStatusFailed:
-		if strings.TrimSpace(result.ErrorCode) == string(invocations.PrimaryResultErrorCodeUnresolved) {
+		switch strings.TrimSpace(result.ErrorCode) {
+		case string(invocations.PrimaryResultErrorCodeFailed):
+			failureClass = "failed"
+		case string(invocations.PrimaryResultErrorCodeUnresolved):
 			failureClass = "unresolved_primary"
+		case string(invocations.PrimaryResultErrorCodePaused):
+			failureClass = "paused"
+		case string(invocations.PrimaryResultErrorCodeInterrupted):
+			failureClass = "interrupted"
 		}
 	}
 	fs.logger.Warn(
@@ -1015,6 +1048,33 @@ func (fs *FactoryService) processInvocationWaitTick(
 		return invocationWaitTickResult{done: true, err: selectionErr}
 	}
 
+	if classified := classifyInvocationMissingPrimaryResultFromSnapshot(sessionID, snapshot, input); classified != nil {
+		return invocationWaitTickResult{
+			done:   true,
+			result: fs.handleInvocationPrimaryResultFailure(sessionID, input, classified),
+		}
+	}
+	if classified, ok := invocations.ClassifyInvocationControlState(sessionID, snapshot.FactoryState, invocations.PrimaryResultSelectionInput{
+		RequestID:        input.RequestID,
+		InvocationReturn: input.InvocationReturn,
+		WorldState:       worldState,
+	}); ok {
+		return invocationWaitTickResult{
+			done:   true,
+			result: fs.handleInvocationPrimaryResultFailure(sessionID, input, classified),
+		}
+	}
+	if classified, ok := invocations.ClassifyMissingPrimaryResult(invocations.PrimaryResultSelectionInput{
+		RequestID:        input.RequestID,
+		InvocationReturn: input.InvocationReturn,
+		WorldState:       worldState,
+	}); ok {
+		return invocationWaitTickResult{
+			done:   true,
+			result: fs.handleInvocationPrimaryResultFailure(sessionID, input, classified),
+		}
+	}
+
 	if _, exists := worldState.WorkRequestsByID[input.RequestID]; exists && !activeWork {
 		return invocationWaitTickResult{
 			done:   true,
@@ -1023,6 +1083,76 @@ func (fs *FactoryService) processInvocationWaitTick(
 	}
 
 	return invocationWaitTickResult{loggedLoading: loggedPackagedLoading}
+}
+
+func classifyInvocationMissingPrimaryResultFromSnapshot(
+	sessionID string,
+	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
+	input sessionInvocationWaitInput,
+) *invocations.PrimaryResultError {
+	if snapshot == nil || strings.TrimSpace(input.RequestID) == "" {
+		return nil
+	}
+	tokens := make([]*interfaces.Token, 0, len(snapshot.Marking.Tokens))
+	for _, token := range snapshot.Marking.Tokens {
+		tokens = append(tokens, token)
+	}
+	sort.Slice(tokens, func(i, j int) bool {
+		leftID, rightID := "", ""
+		if tokens[i] != nil {
+			leftID = tokens[i].Color.WorkID
+		}
+		if tokens[j] != nil {
+			rightID = tokens[j].Color.WorkID
+		}
+		if leftID == rightID {
+			return tokenPlaceID(tokens[i]) < tokenPlaceID(tokens[j])
+		}
+		return leftID < rightID
+	})
+	for _, wantState := range []string{"blocked", "needs-human"} {
+		for _, token := range tokens {
+			if token == nil || token.Color.DataType == interfaces.DataTypeResource {
+				continue
+			}
+			if strings.TrimSpace(token.Color.RequestID) != strings.TrimSpace(input.RequestID) {
+				continue
+			}
+			if tokenStateName(token.PlaceID) != wantState {
+				continue
+			}
+			return invocations.ClassifyMissingPrimaryResultWorkItem(
+				input.RequestID,
+				input.InvocationReturn,
+				interfaces.FactoryWorkItem{
+					ID:          token.Color.WorkID,
+					WorkTypeID:  token.Color.WorkTypeID,
+					DisplayName: token.Color.Name,
+					PlaceID:     token.PlaceID,
+				},
+				sessionID,
+			)
+		}
+	}
+	return nil
+}
+
+func tokenStateName(placeID string) string {
+	trimmed := strings.TrimSpace(placeID)
+	if trimmed == "" {
+		return ""
+	}
+	if _, suffix, ok := strings.Cut(trimmed, ":"); ok {
+		return suffix
+	}
+	return trimmed
+}
+
+func tokenPlaceID(token *interfaces.Token) string {
+	if token == nil {
+		return ""
+	}
+	return token.PlaceID
 }
 
 func (fs *FactoryService) resolveInvocationWaitTerminal(
@@ -1037,7 +1167,28 @@ func (fs *FactoryService) resolveInvocationWaitTerminal(
 			return fs.handlePackagedTTSInvocationFailure(sessionID, input, failure)
 		}
 	}
-	return fs.handleInvocationUnresolvedPrimary(sessionID, input, primaryErr)
+	if classified, ok := invocations.ClassifyInvocationControlState(sessionID, "", invocations.PrimaryResultSelectionInput{
+		RequestID:        input.RequestID,
+		InvocationReturn: input.InvocationReturn,
+		WorldState:       worldState,
+	}); ok {
+		return fs.handleInvocationPrimaryResultFailure(sessionID, input, classified)
+	}
+	if classified, ok := invocations.ClassifyFailedInvocation(sessionID, invocations.PrimaryResultSelectionInput{
+		RequestID:        input.RequestID,
+		InvocationReturn: input.InvocationReturn,
+		WorldState:       worldState,
+	}); ok {
+		return fs.handleInvocationPrimaryResultFailure(sessionID, input, classified)
+	}
+	if classified, ok := invocations.ClassifyMissingPrimaryResult(invocations.PrimaryResultSelectionInput{
+		RequestID:        input.RequestID,
+		InvocationReturn: input.InvocationReturn,
+		WorldState:       worldState,
+	}); ok {
+		return fs.handleInvocationPrimaryResultFailure(sessionID, input, classified)
+	}
+	return fs.handleInvocationPrimaryResultFailure(sessionID, input, primaryErr)
 }
 
 func (fs *FactoryService) invocationWaitTimedOut(

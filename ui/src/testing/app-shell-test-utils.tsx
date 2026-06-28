@@ -131,9 +131,6 @@ let restoreBrowserTestShims: (() => void) | null = null;
 export const baselineSnapshot = buildDashboardSnapshotFixture(
   mediumBranchingDashboardTopology,
 );
-const factorySessionSyncPreflightPathPattern =
-  /^\/factory-sessions\/([^/]+)\/sync-preflight(?:\?.*)?$/;
-
 export const terminalSnapshot = {
   ...semanticWorkflowDashboardSnapshot,
   tick_count: 4,

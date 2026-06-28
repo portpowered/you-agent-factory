@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
@@ -918,15 +919,101 @@ func canonicalNamedFactoryName(name string) (string, error) {
 	return NamedFactoryLayoutSegmentToName(segment)
 }
 
+const legacyPromptWorkIDTemplateMarker = "{{ .WorkID }}"
+const legacyPromptWorkIDTemplateReplacement = "{{ (index .Inputs 0).WorkID }}"
+
 func resolveNamedFactoryCandidate(rootDir, name string) (string, bool, error) {
 	factoryDir, err := ResolveNamedFactoryDir(rootDir, name)
 	if err == nil {
-		return factoryDir, true, nil
+		upgradedDir, upgradeErr := upgradeMaterializedBuiltInNamedFactoryIfNeeded(rootDir, name, factoryDir)
+		if upgradeErr != nil {
+			return "", false, upgradeErr
+		}
+		return upgradedDir, true, nil
 	}
 	if errors.Is(err, ErrNamedFactoryNotFound) {
 		return "", false, nil
 	}
 	return "", false, err
+}
+
+func upgradeMaterializedBuiltInNamedFactoryIfNeeded(rootDir, canonicalName, factoryDir string) (string, error) {
+	payload, ok := builtInNamedFactoryCatalog[canonicalName]
+	if !ok || bytes.Contains(payload, []byte(legacyPromptWorkIDTemplateMarker)) {
+		return factoryDir, nil
+	}
+	upgradePaths, err := materializedBuiltInLegacyPromptWorkIDUpgradePaths(factoryDir)
+	if err != nil {
+		return "", fmt.Errorf("check materialized built-in named factory %q upgrade: %w", canonicalName, err)
+	}
+	if len(upgradePaths) == 0 {
+		return factoryDir, nil
+	}
+	if err := replaceLegacyPromptWorkIDAliasInFiles(upgradePaths); err != nil {
+		return "", fmt.Errorf("upgrade materialized built-in named factory %q in %s: %w", canonicalName, rootDir, err)
+	}
+	return factoryDir, nil
+}
+
+func materializedBuiltInLegacyPromptWorkIDUpgradePaths(factoryDir string) ([]string, error) {
+	loaded, err := LoadRuntimeConfigFromFactoryDir(factoryDir, nil)
+	if err != nil {
+		return nil, err
+	}
+	paths := map[string]struct{}{}
+	for _, workstation := range loaded.WorkstationConfigs() {
+		if workstation == nil {
+			continue
+		}
+		if !strings.Contains(workstation.Body, legacyPromptWorkIDTemplateMarker) &&
+			!strings.Contains(workstation.PromptTemplate, legacyPromptWorkIDTemplateMarker) {
+			continue
+		}
+		paths[filepath.Join(factoryDir, interfaces.FactoryConfigFile)] = struct{}{}
+		segment, err := safeFactoryLayoutSegment("workstation", workstation.Name)
+		if err != nil {
+			return nil, err
+		}
+		workstationDir := filepath.Join(factoryDir, interfaces.WorkstationsDir, segment)
+		paths[filepath.Join(workstationDir, interfaces.FactoryAgentsFileName)] = struct{}{}
+		if workstation.PromptFile != "" {
+			promptPath, err := safePromptFilePath(workstationDir, workstation.PromptFile)
+			if err != nil {
+				return nil, err
+			}
+			paths[promptPath] = struct{}{}
+		}
+	}
+	if len(paths) == 0 {
+		return nil, nil
+	}
+	ordered := make([]string, 0, len(paths))
+	for path := range paths {
+		ordered = append(ordered, path)
+	}
+	sort.Strings(ordered)
+	return ordered, nil
+}
+
+func replaceLegacyPromptWorkIDAliasInFiles(paths []string) error {
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", path, err)
+		}
+		updated := strings.ReplaceAll(
+			string(data),
+			legacyPromptWorkIDTemplateMarker,
+			legacyPromptWorkIDTemplateReplacement,
+		)
+		if updated == string(data) {
+			continue
+		}
+		if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+			return fmt.Errorf("write %s: %w", path, err)
+		}
+	}
+	return nil
 }
 
 func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool, error) {
@@ -944,7 +1031,11 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 		if err := requireFactoryConfig(targetDir); err != nil {
 			return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: existing target invalid: %w", canonicalName, globalRoot, err)
 		}
-		return targetDir, true, nil
+		upgradedDir, err := upgradeMaterializedBuiltInNamedFactoryIfNeeded(globalRoot, canonicalName, targetDir)
+		if err != nil {
+			return "", false, err
+		}
+		return upgradedDir, true, nil
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: check existing target: %w", canonicalName, globalRoot, err)
 	}

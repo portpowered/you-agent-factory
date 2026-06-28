@@ -144,7 +144,7 @@ func TestSubmit_Transport_StructuredAPIError(t *testing.T) {
 		w.WriteHeader(http.StatusBadRequest)
 		if err := json.NewEncoder(w).Encode(factoryapi.ErrorResponse{
 			Message: "workTypeName is required",
-			Code:    factoryapi.BADREQUEST,
+			Code:    factoryapi.ErrorResponseCodeBADREQUEST,
 			Family:  factoryapi.ErrorFamilyBadRequest,
 		}); err != nil {
 			t.Fatalf("encode error response: %v", err)

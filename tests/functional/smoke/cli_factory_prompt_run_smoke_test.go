@@ -576,6 +576,52 @@ func writeDefaultMockWorkersConfig(t *testing.T) string {
 	return path
 }
 
+func writePackagedGoalBuiltinMockWorkersConfig(t *testing.T) string {
+	t.Helper()
+
+	cfg := factoryconfig.MockWorkersConfig{
+		MockWorkers: []factoryconfig.MockWorkerConfig{
+			{
+				WorkerName:      "goal-planner",
+				WorkstationName: "plan-goal",
+				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+			},
+			{
+				WorkerName:      "goal-executor",
+				WorkstationName: "execute-goal",
+				RunType:         factoryconfig.MockWorkerRunTypeAccept,
+			},
+			{
+				WorkerName:      "goal-checker",
+				WorkstationName: "check-goal",
+				RunType:         factoryconfig.MockWorkerRunTypeScript,
+				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+					Command: "/bin/echo",
+					Args:    []string{"plain"},
+				},
+			},
+			{
+				WorkerName:      "goal-reviewer",
+				WorkstationName: "review-goal",
+				RunType:         factoryconfig.MockWorkerRunTypeScript,
+				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+					Command: "/bin/echo",
+					Args:    []string{"accepted"},
+				},
+			},
+		},
+	}
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal packaged goal mock-workers config: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "mock-workers-packaged-goal.json")
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write packaged goal mock-workers config: %v", err)
+	}
+	return path
+}
+
 func runFactoryPromptCLI(
 	t *testing.T,
 	dir string,

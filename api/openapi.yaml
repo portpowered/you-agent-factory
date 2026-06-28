@@ -252,14 +252,14 @@ paths:
         - Runtime
       operationId: getEventsBySessionId
       summary: Stream factory events for one session
-      description: Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      description: Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. When the request asks for application/json, the same route acts as a reconnect probe and returns a structured recovery outcome instead of opening Server-Sent Events. Probe responses classify cursor_stale separately from unknown-session failures and tell the dashboard when the next retry must omit after_event_id and after_sequence. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
       parameters:
         - $ref: '#/components/parameters/SessionID'
         - $ref: '#/components/parameters/AfterEventId'
         - $ref: '#/components/parameters/AfterSequence'
       responses:
         '200':
-          description: Factory event stream for the targeted session.
+          description: Factory event stream for the targeted session, or a JSON reconnect recovery probe result when Accept includes application/json.
           headers:
             X-Factory-Session-Stream-Generation-Id:
               description: Opaque invalidation token for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `streamGenerationID` values before reusing reconnect cursors or stream-derived projections.
@@ -271,6 +271,9 @@ paths:
                 type: string
                 description: Server-Sent Events where each data frame is serialized JSON matching FactoryEvent.
               x-event-schema: '#/components/schemas/FactoryEvent'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorySessionEventStreamRecovery'
         '400':
           $ref: '#/components/responses/BadRequest'
         '404':
@@ -1722,6 +1725,10 @@ components:
           type: string
           description: Stable machine-readable invocation failure code when status is not `COMPLETED`.
           enum:
+            - INVOCATION_BLOCKED
+            - INVOCATION_INTERRUPTED
+            - INVOCATION_NEEDS_HUMAN
+            - INVOCATION_PAUSED
             - INVOCATION_PRIMARY_RESULT_UNRESOLVED
             - INVOCATION_TIMED_OUT
             - INVOCATION_CANCELED
@@ -1731,6 +1738,18 @@ components:
         message:
           type: string
           description: Human-readable failure summary when status is not `COMPLETED`.
+        sessionId:
+          type: string
+          description: Session identifier for the invocation outcome when non-success context needs to point operators at the relevant factory session.
+        workId:
+          type: string
+          description: Relevant work identifier for a non-success invocation outcome when one scoped work item explains the stop condition.
+        workName:
+          type: string
+          description: Relevant work name for a non-success invocation outcome when one scoped work item explains the stop condition.
+        workState:
+          type: string
+          description: Current authored work state that best explains the non-success invocation outcome when one scoped work item is available.
     InvocationTerminalStatus:
       type: string
       description: Terminal status for a factory-session invocation.
@@ -2794,6 +2813,9 @@ components:
           $ref: '#/components/schemas/FactorySessionUsage'
         lifecycle:
           $ref: '#/components/schemas/FactorySessionLifecycle'
+        stopSummary:
+          $ref: '#/components/schemas/FactoryStopSummary'
+          description: Canonical stopped-state summary for paused, blocked, needs-human, and interrupted inspection paths on the existing Factory Session surface.
         streamIdentity:
           $ref: '#/components/schemas/FactorySessionStreamIdentity'
           description: Backend-authoritative identity for the current live session event stream. Clients must confirm this identity before reusing persisted reconnect cursors or timeline checkpoints.
@@ -2811,6 +2833,76 @@ components:
           items:
             $ref: '#/components/schemas/FactoryArtifact'
           description: Shared artifact projections for the session runtime.
+    FactoryStopKind:
+      type: string
+      description: Canonical inspect classification for stopped automation on existing Factory Session and Work surfaces.
+      enum:
+        - PAUSED
+        - BLOCKED
+        - NEEDS_HUMAN
+        - INTERRUPTED
+    FactoryStopDispatchSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - dispatchId
+        - status
+        - dispatchKind
+      properties:
+        dispatchId:
+          type: string
+          description: Stable dispatch identifier that most directly explains the stopped state.
+        status:
+          $ref: '#/components/schemas/FactoryDispatchStatus'
+        dispatchKind:
+          $ref: '#/components/schemas/FactoryDispatchKind'
+        workstationName:
+          type: string
+          description: Customer-authored workstation name when one existing workstation run explains the stop.
+        failureReason:
+          type: string
+          description: Stable failure or interruption reason when one is available from the latest relevant dispatch.
+        failureMessage:
+          type: string
+          description: Human-readable failure or interruption detail from the latest relevant dispatch when available.
+    FactoryStopSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - stopKind
+        - sessionId
+      properties:
+        stopKind:
+          $ref: '#/components/schemas/FactoryStopKind'
+        sessionId:
+          type: string
+          description: Stable Factory Session identifier that owns the stopped work.
+        workId:
+          type: string
+          description: Relevant work identifier when one work item best explains the stop.
+        workName:
+          type: string
+          description: Relevant work name when one work item best explains the stop.
+        workTypeName:
+          type: string
+          description: Relevant work type name when one work item best explains the stop.
+        workState:
+          type: string
+          description: Current authored work state label such as `goal:blocked` when one work item best explains the stop.
+        sessionLifecycleStatus:
+          $ref: '#/components/schemas/FactorySessionDurableLifecycleStatus'
+          description: Session lifecycle-control status when the stop is explained by pause or another session-level lifecycle condition.
+        latestDispatch:
+          $ref: '#/components/schemas/FactoryStopDispatchSummary'
+        latestResultSummary:
+          type: string
+          description: Short operator-readable summary of the latest relevant result when one explains the stop better than a dispatch identifier alone.
+        suggestedRecoverySurface:
+          type: string
+          description: Existing operator surface to use next, expressed with current Factory Session and Work vocabulary rather than a goal-specific control route.
+        suggestedRecoveryAction:
+          type: string
+          description: Human-readable next step that names the existing work or session action the operator should take to recover or continue automation.
     FactorySessionStreamIdentity:
       type: object
       additionalProperties: false
@@ -4589,6 +4681,52 @@ components:
         - Resolve a workflow file using documented workflow search order.
         - Resolve a workflow by authored workflow name using documented search order.
         - Resolve inline workflow source supplied directly in the execution request.
+    FactorySessionEventStreamRecovery:
+      type: object
+      additionalProperties: false
+      required:
+        - factorySessionId
+        - outcome
+        - retry
+      properties:
+        factorySessionId:
+          type: string
+          description: Session identifier for the event stream being probed.
+        outcome:
+          $ref: '#/components/schemas/FactorySessionEventStreamRecoveryOutcome'
+        retry:
+          $ref: '#/components/schemas/FactorySessionEventStreamRecoveryRetry'
+      example:
+        factorySessionId: session-alpha
+        outcome: CURSOR_STALE
+        retry:
+          omitAfterEventId: true
+          omitAfterSequence: true
+    FactorySessionEventStreamRecoveryOutcome:
+      type: string
+      description: Structured session event reconnect probe outcome for one session-scoped event stream.
+      enum:
+        - STREAM_READY
+        - CURSOR_STALE
+        - UNKNOWN_SESSION
+        - INTERNAL_ERROR
+      example: CURSOR_STALE
+    FactorySessionEventStreamRecoveryRetry:
+      type: object
+      additionalProperties: false
+      required:
+        - omitAfterEventId
+        - omitAfterSequence
+      properties:
+        omitAfterEventId:
+          type: boolean
+          description: True when the next reconnect must omit after_event_id and replay from the start of the session stream.
+        omitAfterSequence:
+          type: boolean
+          description: True when the next reconnect must omit after_sequence and replay from the start of the session stream.
+      example:
+        omitAfterEventId: true
+        omitAfterSequence: true
     FactorySessionExecutionInlineWorkflow:
       type: object
       additionalProperties: false
@@ -8433,6 +8571,9 @@ components:
           description: Current outbound relationships attached to this listed source work item when returned by read APIs.
           items:
             $ref: '#/components/schemas/Relation'
+        stopSummary:
+          $ref: '#/components/schemas/FactoryStopSummary'
+          description: Canonical stopped-state summary for existing work inspection reads when this work item explains paused, blocked, needs-human, or interrupted automation.
     WorkContent:
       type: array
       description: Ordered canonical content parts for one work item.

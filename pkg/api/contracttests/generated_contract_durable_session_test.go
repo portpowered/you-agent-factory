@@ -48,12 +48,12 @@ type durableSessionIdempotentReplayFixture struct {
 
 func TestGeneratedDurableSessionDispatchArtifactContracts_NotFoundJSON(t *testing.T) {
 	notFound := factoryapi.ErrorResponse{
-		Code:    factoryapi.NOTFOUND,
+		Code:    factoryapi.ErrorResponseCodeNOTFOUND,
 		Family:  factoryapi.ErrorFamilyNotFound,
 		Message: "factory session not found",
 	}
-	if notFound.Code != factoryapi.NOTFOUND || notFound.Family != factoryapi.ErrorFamilyNotFound {
-		t.Fatalf("generated not-found contract = %#v, want code %q and family %q", notFound, factoryapi.NOTFOUND, factoryapi.ErrorFamilyNotFound)
+	if notFound.Code != factoryapi.ErrorResponseCodeNOTFOUND || notFound.Family != factoryapi.ErrorFamilyNotFound {
+		t.Fatalf("generated not-found contract = %#v, want code %q and family %q", notFound, factoryapi.ErrorResponseCodeNOTFOUND, factoryapi.ErrorFamilyNotFound)
 	}
 
 	encoded, err := json.Marshal(notFound)
@@ -829,6 +829,7 @@ func assertDurableSessionEventSurfaceSchemas(t *testing.T, schemas map[string]an
 		t.Fatalf("paths./factory-sessions/{session_id}/events.get.operationId = %q, want getEventsBySessionId", got)
 	}
 	assertEventStreamSchemaRef(t, eventsOperation, "#/components/schemas/FactoryEvent")
+	assertResponseSchemaRef(t, eventsOperation, "200", "#/components/schemas/FactorySessionEventStreamRecovery")
 	assertResponseRef(t, eventsOperation, "400", "#/components/responses/BadRequest")
 	assertResponseRef(t, eventsOperation, "404", "#/components/responses/NotFound")
 	parameters, ok := eventsOperation["parameters"].([]any)
@@ -840,7 +841,7 @@ func assertDurableSessionEventSurfaceSchemas(t *testing.T, schemas map[string]an
 	assertParameterRef(t, parameters, "#/components/parameters/AfterSequence")
 
 	description, _ := eventsOperation["description"].(string)
-	for _, fragment := range []string{"after_event_id", "after_sequence", "sessionSequence"} {
+	for _, fragment := range []string{"after_event_id", "after_sequence", "sessionSequence", "application/json", "cursor_stale"} {
 		if !strings.Contains(description, fragment) {
 			t.Fatalf("paths./factory-sessions/{session_id}/events.get.description must document %q, got %q", fragment, description)
 		}
@@ -865,6 +866,19 @@ func assertDurableSessionEventSurfaceSchemas(t *testing.T, schemas map[string]an
 	eventContext := schemaObject(t, schemas, "FactoryEventContext")
 	eventContextProperties := schemaProperties(t, eventContext, "FactoryEventContext")
 	assertSchemaPropertiesPresent(t, eventContextProperties, "FactoryEventContext", "sessionId", "sessionSequence", "orchestratorKind")
+
+	recoverySchema := schemaObject(t, schemas, "FactorySessionEventStreamRecovery")
+	assertRequiredFields(t, recoverySchema, "factorySessionId", "outcome", "retry")
+	recoveryProperties := schemaProperties(t, recoverySchema, "FactorySessionEventStreamRecovery")
+	assertPropertyRef(t, recoveryProperties, "outcome", "#/components/schemas/FactorySessionEventStreamRecoveryOutcome")
+	assertPropertyRef(t, recoveryProperties, "retry", "#/components/schemas/FactorySessionEventStreamRecoveryRetry")
+
+	recoveryRetrySchema := schemaObject(t, schemas, "FactorySessionEventStreamRecoveryRetry")
+	assertRequiredFields(t, recoveryRetrySchema, "omitAfterEventId", "omitAfterSequence")
+
+	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionEventStreamRecoveryOutcome"), "FactorySessionEventStreamRecoveryOutcome", []string{
+		"STREAM_READY", "CURSOR_STALE", "UNKNOWN_SESSION", "INTERNAL_ERROR",
+	})
 }
 
 func assertRealBackendSessionAPISliceRoutes(t *testing.T, paths map[string]any) {

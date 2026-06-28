@@ -9,6 +9,11 @@ doc-id: agent-factory/guides/sessions
 Use this guide when you need to discover live factory sessions, confirm a
 service is listening, inspect the active factory on a running host, read session
 status from the API, or route submit and work commands to a non-default session.
+It also owns the operator path for the currently supported durable JavaScript
+`FactorySession` slice: validate source, start a durable session, inspect
+status, result, dispatches, artifacts, and `FactoryEvent` history, confirm the
+same session in the website detail surface, and apply lifecycle controls where
+the current surface supports them.
 
 Each live session owns its own runtime state. The service coordinates and
 routes requests between sessions, but runtime state such as loaded factory,
@@ -20,10 +25,115 @@ loop), see `you docs agents`. For submitted-work contracts
 after the factory is running, see `you docs work`. For `factory.json` topology,
 see `you docs config`.
 
+## Durable JavaScript Factory Session Path
+
+Use this bounded operator flow for the shipped JavaScript-orchestrated session
+path. `Dynamic workflow` remains shorthand only; the canonical runtime object is
+always a `FactorySession`.
+
+| Operator goal | Current surface | What to confirm |
+|---------------|-----------------|-----------------|
+| Validate JavaScript source before execution | CLI `you workflow validate`; API `POST /factories/preview` | Source resolution, validation, and policy checks pass before session start |
+| Start and inspect one durable JavaScript session | CLI `you workflow run`, `start`, `status`, `result` | One durable `FactorySession` id, lifecycle status, progress, and final or partial result availability |
+| Inspect child work performed by that session | CLI `you workflow dispatches`, `artifacts`, `events`; API durable session reads; event stream replay | Shared `Dispatch`, `FactoryArtifact`, and `FactoryEvent` records match the same session id |
+| Inspect the same session in the website | Dashboard Factory Session detail surface | Session status, JavaScript phase, checkpoint refs, dispatch counts, artifacts, and lifecycle banner line up with the API/CLI reads |
+| Pause, resume, cancel, or terminate where the current route supports it | Live session lifecycle routes and durable session lifecycle-control surfaces | Accepted lifecycle operations are reflected by status reads and `SESSION_LIFECYCLE_CONTROL` facts on the canonical event stream |
+
+### Supported scope today
+
+- Use `you workflow validate` or `POST /factories/preview` before execution when
+  you need a source or policy check without creating a session.
+- Use durable Factory Session reads for JavaScript execution inspection:
+  `you workflow status`, `you workflow result`, `you workflow dispatches`,
+  `you workflow artifacts`, and `you workflow events`.
+- Use `you session show`, `GET /factory-sessions/{session_id}`, and the
+  dashboard Factory Session detail surface when the session is also available
+  through the running host's live session projection.
+- Treat `Dispatch`, `FactoryArtifact`, and `FactoryEvent` as the shared
+  inspection nouns across CLI, API, dashboard, and MCP surfaces. Do not
+  introduce a separate workflow-run object model when comparing outputs.
+
+### Bounded operator verification matrix
+
+Use one durable JavaScript session id for the runtime checks below. The validate
+step comes first and does not create a session; every later row should inspect
+or control the same durable `FactorySession`.
+
+| Step | Surface | Check | Expected observable outcome |
+|------|---------|-------|-----------------------------|
+| 1 | CLI or API preview | Run `you workflow validate` or `POST /factories/preview` against the target JavaScript workflow source. | Validation succeeds without creating a session id, confirming the source and effective policy are ready for durable execution. |
+| 2 | CLI start plus durable status read | Start one durable JavaScript session with `you workflow run` or `you workflow start`, then read it with `you workflow status`. | One durable `FactorySession` id is returned and subsequent status reads show the same id, JavaScript lifecycle status, and progress for that session. |
+| 3 | Durable inspection reads | Read `you workflow dispatches`, `you workflow artifacts`, and `you workflow events` for that same session id. | The shared `Dispatch`, `FactoryArtifact`, and `FactoryEvent` outputs all point back to the same `FactorySession`, and the event history shows the lifecycle and child-work facts that explain the dispatch or artifact state. |
+| 4 | Website Factory Session detail | Open the dashboard Factory Session detail surface for the same session id. | The website shows the same session identity, JavaScript phase, checkpoint refs, dispatch counts, artifact visibility, and lifecycle banner state already observed through CLI or API reads. |
+| 5 | Lifecycle control on the same session | Apply the supported lifecycle control route for that session, then re-read status or events. | Pause, resume, cancel, or terminate outcomes are reflected by the session status read and by canonical `SESSION_LIFECYCLE_CONTROL` facts on the same durable session event stream. |
+
+#### What to compare across those checks
+
+- Session identity: the durable `FactorySession` id returned at start should
+  match the status, dispatch, artifact, event, and website detail reads.
+- Status and phase: lifecycle state, JavaScript phase, and progress should stay
+  aligned between `you workflow status`, durable API reads, and the dashboard
+  detail surface.
+- Child work evidence: dispatch counts, child dispatch summaries, artifact refs,
+  and any final or partial result refs should all describe the same session
+  history rather than different per-surface models.
+- Lifecycle control evidence: after a supported control is accepted, confirm the
+  new status through a durable session read and the matching
+  `SESSION_LIFECYCLE_CONTROL` event in the canonical event history.
+
+#### Scope guardrails for this matrix
+
+- Keep the matrix narrow. It is meant to revalidate one already supported
+  durable JavaScript session path, not to inventory every route or dashboard
+  widget.
+- Do not treat replay-resume, broader live-provider bridge parity, or broader
+  MCP host parity as required outcomes for this proof. Those remain explicit
+  follow-up scope outside the shipped operator slice.
+- If the chosen session is already terminal, start another supported durable
+  JavaScript session before attempting lifecycle-control confirmation so the
+  control outcome remains observable on the same session path.
+
+#### Reusable proof artifact for this matrix
+
+Use the smallest existing regression surfaces that already prove the shipped
+durable-session slice instead of building a one-off harness:
+
+| Surface proved | Existing artifact | Command |
+|----------------|-------------------|---------|
+| Validate-first source readiness | CLI workflow validation package tests | `go test ./pkg/cli/workflow -run 'TestValidate_(ValidWorkflowNameHumanOutput|JSONOutputMatchesCanonicalValidationResult)' -count=1 -timeout 300s` |
+| Durable lifecycle-control outcome and canonical lifecycle events | Service durable-session lifecycle tests | `go test ./pkg/service -run 'TestFactoryService_(CancelDurableFactorySession_RuntimeBackedSession|LiveSessionPauseResume_HTTPReturnsTypedLifecycleControl|LiveSessionPauseResume_HTTPEmitsSessionLifecycleControlEvents)' -count=1 -timeout 300s` |
+| Website Factory Session detail against a real backend durable session | Browser-backed dashboard integration using the existing harness plus durable workflow fixtures | `cd ui && bun vitest run integration/durable-session-real-backend.integration.test.mjs` |
+
+Treat those three commands as the bounded end-to-end closeout proof for this
+operator slice:
+
+- The CLI validation tests prove the validate-first path without creating a
+  session.
+- The service lifecycle tests prove accepted durable lifecycle control and the
+  canonical `SESSION_LIFECYCLE_CONTROL` event history.
+- The browser-backed dashboard integration proves the same durable-session path
+  through the Factory Session detail surface, including one running summary
+  path and one completed dispatch or artifact drilldown path backed by the real
+  API server harness.
+
+Record the exact UTC run time and command results in the lane progress log when
+you use this proof for closeout review.
+
+### Explicitly out of scope for this slice
+
+- Replay-resume or persistence-semantics expansion beyond the already shipped
+  durable session reads
+- Broader live-provider bridge parity than the current bounded dispatch,
+  artifact, and result inspection path
+- Broader MCP host parity follow-up beyond the currently documented
+  fixture-backed and runtime-backed host setup and smoke coverage
+
 ## When To Use This Guide
 
 | Need | Use |
 |------|-----|
+| Validate JavaScript source before durable execution | [Durable JavaScript Factory Session Path](#durable-javascript-factory-session-path) and `you docs orchestrators` |
+| Recover a stopped `@you/goal` run through existing session and work controls | [Stopped goal inspect and recovery](#stopped-goal-inspect-and-recovery) and `you docs packaged-goal` |
 | Confirm anything is listening before `you submit` or `POST /factory-sessions/{session_id}/work` | [Session list](#session-list) |
 | Read the active factory name and directory on a live host | [Factory query](#factory-query) |
 | Inspect lifecycle phase, engine activity, and token buckets | [Session status API](#session-status-api) |
@@ -108,6 +218,32 @@ show marking token counts and enabled transitions. JavaScript sessions show
 phase, checkpoint refs, child dispatch counts, and dynamic workflow shorthand
 only as JavaScript terminology. See `you docs orchestrators` for the accepted
 alias rules.
+
+## Stopped goal inspect and recovery
+
+Use this path when a shared invocation or one-shot `you run --named @you/goal`
+returns stopped-state recovery context instead of a primary result. Keep the
+operator flow on the existing `FactorySession`, `Work`, and `Dispatch`
+surfaces.
+
+1. Inspect the `FactorySession` with `you session show <session-id>` or
+   `GET /factory-sessions/{session_id}`.
+2. Inspect the affected `Work` with `you work show <work-id> --session <session-id>`
+   when the response or session stop summary identifies one work item.
+3. Read the stop summary fields to distinguish a paused session lifecycle from
+   blocked work, needs-human work, or an interrupted dispatch.
+4. Apply the existing lifecycle or work control that matches that stop reason,
+   then re-read the same session and work surfaces to confirm progress.
+
+| Stop reason | What to confirm during inspect | Existing next step |
+|-------------|--------------------------------|--------------------|
+| Paused `FactorySession` | Session lifecycle is paused; buffered work remains attached to the same session. | `you session resume <session-id>` |
+| Blocked `Work` | Work id, work state, latest dispatch or result summary, and suggested recovery surface. | Existing work repair, work move, or follow-up submission controls |
+| Needs-human `Work` | The human input, approval, or artifact review required for that work item. | Existing human-input, approval, or repair step in the current workflow |
+| Interrupted `Dispatch` or session | Interruption status and latest dispatch or result summary. | Existing dispatch retry, work repair, or session workflow controls |
+
+For the `@you/goal` packaged-factory examples and invocation-specific failure
+codes, use `you docs packaged-goal`.
 
 ## Session pause and resume
 
@@ -320,8 +456,13 @@ that field is omitted, the runtime uses the documented
 |------|--------|
 | Conflicting or ambiguous input sources | HTTP `400` with stable code `INVOCATION_INPUT_SOURCE_CONFLICT` |
 | Empty selected text input | HTTP `400` with stable code `INVOCATION_INPUT_EMPTY` |
-| No primary result can be resolved | `status: FAILED`, code `INVOCATION_PRIMARY_RESULT_UNRESOLVED`, no `primaryResult` |
-| Invocation times out or is canceled | `status: TIMED_OUT` or `status: CANCELED`, no success payload |
+| Goal work routed to a blocked state | `status: FAILED`, code `INVOCATION_BLOCKED`, with `sessionId` / `workId` / `workState` recovery context when available |
+| Goal work routed to a human-input-required state | `status: FAILED`, code `INVOCATION_NEEDS_HUMAN`, with the same shared recovery context |
+| Waiting stopped because the session was paused | `status: FAILED`, code `INVOCATION_PAUSED`, no success payload |
+| Interruption metadata explains the stop | `status: FAILED`, code `INVOCATION_INTERRUPTED`, no success payload |
+| Invocation scope failed before a primary result existed | `status: FAILED`, code `INVOCATION_RUNTIME_FAILURE`, no success payload |
+| No primary result can be resolved after work settles | `status: FAILED`, code `INVOCATION_PRIMARY_RESULT_UNRESOLVED`, no `primaryResult` |
+| Invocation times out or is canceled | `status: TIMED_OUT` with `INVOCATION_TIMED_OUT`, or `status: CANCELED` with `INVOCATION_CANCELED` |
 
 The CLI `you run --factory` mode uses the same invocation contract for input
 resolution and primary-result selection; it just writes the successful
@@ -335,7 +476,12 @@ When the service was started via `you` or `you run` without `--quiet`, open:
 
 Use the same host and port as the API unless you passed `--server` or `--port` on
 the process that bound the listener. The dashboard shows live session selection,
-work position, and factory activity alongside CLI inspection.
+work position, and factory activity alongside CLI inspection. For the shipped
+JavaScript durable-session slice, use the **Factory session** detail surface to
+compare the same `FactorySession` status, JavaScript phase, checkpoint refs,
+dispatch counts, artifacts, and lifecycle banner state that you can read
+through `you workflow status`, `you workflow result`, `you workflow dispatches`,
+`you workflow artifacts`, and `you workflow events`.
 
 ## `--server` and `--session` routing
 
@@ -392,8 +538,9 @@ API, CLI, dashboard, and future MCP tools observe the same canonical
 
 | Surface | How lifecycle is observed |
 |---------|---------------------------|
+| Validate-first setup | `you workflow validate` and `POST /factories/preview` confirm source and policy readiness before a durable session exists. |
 | API | `GET /events` and `GET /factory-sessions/{session_id}/events` stream canonical lifecycle variants; reconnect with `after_event_id` or `after_sequence`. |
-| CLI | `you session show` prints lifecycle timestamps, dispatch status, artifact refs, and best-effort partial/final result refs from the session API. |
+| CLI | `you session show` prints live-session lifecycle timestamps, dispatch status, artifact refs, and best-effort partial/final result refs from the session API; `you workflow status`, `result`, `dispatches`, `artifacts`, and `events` do the same for durable JavaScript session inspection. |
 | Dashboard | Replays lifecycle events into the timeline projection and shows reconnecting/stale, partial, and terminal states in the session lifecycle banner. |
 | MCP (planned) | Status/result/event tools should map `NOT_READY`, `PARTIAL`, `FINAL`, `FAILED_WITH_PARTIAL`, `INTERRUPTED`, and `RECONCILED` to the same `FactorySessionResultStatus` and dispatch status vocabulary as the session API and event stream. |
 

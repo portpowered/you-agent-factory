@@ -22,6 +22,7 @@ import (
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/events"
+	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
@@ -1123,30 +1124,40 @@ func (fs *FactoryService) buildSessionProjectionContext(
 		RuntimeStartedAt: liveSessionBundle(session).startedAtUTC,
 		Now:              time.Now().UTC(),
 	}
-	if interfaces.IsJavaScriptOrchestratorFactory(factoryCfg) {
-		checkpointStore := fs.javascriptCheckpointStore(session)
-		projectionCtx.JavaScript = factorysessions.JavaScriptRuntimeStateFromCheckpoints(
-			checkpointStore,
-			projectionCtx.JavaScript,
-		)
-		projectionCtx.JavaScriptCheckpoints = checkpointStore.List()
-	} else {
-		snapshot, err := fs.GetEngineStateSnapshotForSession(ctx, session.ID)
-		if err != nil {
-			return factorysessions.ProjectionContext{}, err
-		}
-		projectionCtx.Snapshot = snapshot
-		projectionCtx.LifecycleControlStatus = snapshot.LifecycleControlStatus
-		projectionCtx.Enabled = factorysessions.EnabledTransitionsForSnapshot(ctx, snapshot, runtimeCfg)
-		return projectionCtx, nil
-	}
 	snapshot, err := fs.GetEngineStateSnapshotForSession(ctx, session.ID)
 	if err != nil {
 		return factorysessions.ProjectionContext{}, err
 	}
 	projectionCtx.Snapshot = snapshot
 	projectionCtx.LifecycleControlStatus = snapshot.LifecycleControlStatus
+	checkpointStore := (*factorysessions.JavaScriptCheckpointStore)(nil)
+	if interfaces.IsJavaScriptOrchestratorFactory(factoryCfg) {
+		checkpointStore = fs.javascriptCheckpointStore(session)
+		projectionCtx.JavaScriptCheckpoints = checkpointStore.List()
+	}
+	projectionCtx.JavaScript, err = fs.projectJavaScriptRuntimeState(session, checkpointStore, snapshot.TickCount)
+	if err != nil {
+		return factorysessions.ProjectionContext{}, err
+	}
+	projectionCtx.Enabled = factorysessions.EnabledTransitionsForSnapshot(ctx, snapshot, runtimeCfg)
 	return projectionCtx, nil
+}
+
+func (fs *FactoryService) projectJavaScriptRuntimeState(
+	session *factorysessions.LiveSession,
+	checkpointStore *factorysessions.JavaScriptCheckpointStore,
+	selectedTick int,
+) (*interfaces.FactorySessionJavaScriptRuntimeState, error) {
+	state := (*interfaces.FactorySessionJavaScriptRuntimeState)(nil)
+	handle := liveSessionHandle(session)
+	if handle != nil && handle.runtime != nil && handle.runtime.eventHistory != nil {
+		worldState, err := projections.ReconstructFactoryWorldState(handle.runtime.eventHistory.Events(), selectedTick)
+		if err != nil {
+			return nil, err
+		}
+		state = worldState.JavaScriptRuntime
+	}
+	return factorysessions.JavaScriptRuntimeStateFromCheckpoints(checkpointStore, state), nil
 }
 
 func (fs *FactoryService) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error) {

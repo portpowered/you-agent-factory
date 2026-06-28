@@ -140,7 +140,7 @@ func TestMove_InFlightDispatchReturnsClearError(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		writeJSON(t, w, factoryapi.ErrorResponse{
-			Code:    factoryapi.BADREQUEST,
+			Code:    factoryapi.ErrorResponseCodeBADREQUEST,
 			Message: "work is in an active dispatch",
 		})
 	}))
@@ -176,7 +176,7 @@ func TestMove_Returns409ForDuplicateRequestId(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
 		writeJSON(t, w, factoryapi.ErrorResponse{
-			Code:    factoryapi.MOVEWORKREQUESTALREADYAPPLIED,
+			Code:    factoryapi.ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED,
 			Message: "Operator move request was already applied.",
 		})
 	}))

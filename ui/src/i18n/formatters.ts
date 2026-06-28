@@ -1,3 +1,4 @@
+import { formatGraphDurationToken } from "./graph-duration";
 import { resolveSupportedLocale } from "./locales";
 
 type DateInput = Date | number | string;
@@ -13,7 +14,7 @@ type RelativeTimeFormatterOptions = Intl.RelativeTimeFormatOptions & {
   fallback?: string;
 };
 
-export type DurationFormatStyle = "compact" | "verbose";
+export type DurationFormatStyle = "compact" | "verbose" | "graph";
 
 export interface DurationFormatterOptions {
   fallback?: string;
@@ -149,6 +150,10 @@ export function formatDuration(
     return formatVerboseDurationParts(units, resolvedLocale);
   }
 
+  if (style === "graph") {
+    return formatGraphDurationToken(safeDurationMillis, resolvedLocale);
+  }
+
   return formatCompactDurationParts(units, resolvedLocale);
 }
 
@@ -198,30 +203,10 @@ interface DurationUnits {
 }
 
 const COMPACT_DURATION_LABELS: Record<string, Record<DurationUnit, string>> = {
-  en: {
-    hour: "h",
-    minute: "m",
-    second: "s",
-    millisecond: "ms",
-  },
-  "zh-CN": {
-    hour: "小时",
-    minute: "分",
-    second: "秒",
-    millisecond: "毫秒",
-  },
-  ja: {
-    hour: "時間",
-    minute: "分",
-    second: "秒",
-    millisecond: "ミリ秒",
-  },
-  ko: {
-    hour: "시간",
-    minute: "분",
-    second: "초",
-    millisecond: "밀리초",
-  },
+  en: { hour: "h", minute: "m", second: "s", millisecond: "ms" },
+  "zh-CN": { hour: "小时", minute: "分", second: "秒", millisecond: "毫秒" },
+  ja: { hour: "時間", minute: "分", second: "秒", millisecond: "ミリ秒" },
+  ko: { hour: "시간", minute: "분", second: "초", millisecond: "밀리초" },
 };
 
 const VERBOSE_DURATION_LABELS: Record<

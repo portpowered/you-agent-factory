@@ -22,7 +22,7 @@ func ExecutionErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 		return http.StatusBadRequest, factoryapi.ErrorResponse{
 			Message: requestValidationErr.Error(),
 			Family:  factoryapi.ErrorFamilyBadRequest,
-			Code:    factoryapi.BADREQUEST,
+			Code:    factoryapi.ErrorResponseCodeBADREQUEST,
 		}, true
 	}
 
@@ -31,7 +31,7 @@ func ExecutionErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 		return http.StatusBadRequest, factoryapi.ErrorResponse{
 			Message: validationErr.Message,
 			Family:  factoryapi.ErrorFamilyBadRequest,
-			Code:    factoryapi.BADREQUEST,
+			Code:    factoryapi.ErrorResponseCodeBADREQUEST,
 		}, true
 	}
 
@@ -39,7 +39,7 @@ func ExecutionErrorResponse(err error) (int, factoryapi.ErrorResponse, bool) {
 		return http.StatusConflict, factoryapi.ErrorResponse{
 			Message: "requestId was already used with different execution inputs.",
 			Family:  factoryapi.ErrorFamilyConflict,
-			Code:    factoryapi.EXECUTIONREQUESTIDCONFLICT,
+			Code:    factoryapi.ErrorResponseCodeEXECUTIONREQUESTIDCONFLICT,
 		}, true
 	}
 

@@ -283,14 +283,15 @@ First-party built-ins such as `@you/goal` and `@you/tts` also use the
 named-factory path:
 
 ```bash
-you run --named @you/goal
+you run --named @you/goal "Ship the login fix by Friday"
 you run --named @you/tts
 ```
 
-Start with `@you/goal` when you want a minimal goal-oriented factory you can
-run immediately and customize on disk instead of authoring `factory.json` from
+Start with `@you/goal` when you want a goal-oriented factory you can run
+immediately and customize on disk instead of authoring `factory.json` from
 scratch. Start with `@you/tts` when you need the inference-oriented packaged
-TTS example. See `you docs packaged-goal` for the goal workflow and
+TTS example. See `you docs packaged-goal` for the goal batch workflow, stdout
+primary result, supported headless operator-interaction scope, and
 `you docs packaged-tts` for the full packaged TTS workflow, default
 metadata result, materialization path, and edit-after-materialize behavior.
 

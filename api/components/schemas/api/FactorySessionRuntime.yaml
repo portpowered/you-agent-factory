@@ -38,6 +38,11 @@ properties:
     $ref: './FactorySessionUsage.yaml'
   lifecycle:
     $ref: './FactorySessionLifecycle.yaml'
+  stopSummary:
+    $ref: './FactoryStopSummary.yaml'
+    description: >-
+      Canonical stopped-state summary for paused, blocked, needs-human, and
+      interrupted inspection paths on the existing Factory Session surface.
   streamIdentity:
     $ref: './FactorySessionStreamIdentity.yaml'
     description: >-

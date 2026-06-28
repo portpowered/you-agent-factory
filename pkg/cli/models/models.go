@@ -703,7 +703,7 @@ func managedRuntimePullResponseError(statusCode int, body []byte) error {
 func modelsRequestError(statusCode int, body []byte) error {
 	var errResp factoryapi.ErrorResponse
 	if json.Unmarshal(body, &errResp) == nil && errResp.Message != "" {
-		if statusCode == http.StatusNotFound && errResp.Code == factoryapi.NOTFOUND {
+		if statusCode == http.StatusNotFound && errResp.Code == factoryapi.ErrorResponseCodeNOTFOUND {
 			return fmt.Errorf("%w: %s", ErrModelNotFound, errResp.Message)
 		}
 		return fmt.Errorf("models request failed (%d): %s", statusCode, errResp.Message)

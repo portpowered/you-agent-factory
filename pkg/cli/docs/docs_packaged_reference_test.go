@@ -21,14 +21,47 @@ func TestMarkdown_PackagedGoalReturnsRawAuthoredMarkdown(t *testing.T) {
 	for _, want := range []string{
 		"# Packaged Goal (`@you/goal`)",
 		"you run --named @you/goal",
+		"browser or dashboard interaction",
+		"primaryResult",
+		"invocationReturn",
+		"avoids binding a localhost API listener",
 		"~/.you-agent-factory/factories",
 		"@you%2Fgoal",
-		"MODEL_WORKER",
-		"MODEL_WORKSTATION",
 		"goal-executor",
 		"execute-goal",
 		"INVOCATION_INPUT_SOURCE_CONFLICT",
+		"INVOCATION_BLOCKED",
+		"INVOCATION_NEEDS_HUMAN",
+		"INVOCATION_PAUSED",
+		"INVOCATION_INTERRUPTED",
+		"INVOCATION_RUNTIME_FAILURE",
+		"INVOCATION_TIMED_OUT",
+		"INVOCATION_PRIMARY_RESULT_UNRESOLVED",
+		"sessionId",
+		"workId",
+		"workState",
+		"you session resume <session-id>",
+		"make docs-reference-smoke",
 		"editable",
+		"## Goal flow topology",
+		"multi-stage flow",
+		"plan-goal",
+		"check-goal",
+		"review-goal",
+		"structured-review-goal",
+		"goal:init",
+		"goal:plan",
+		"goal:execute",
+		"goal:complete",
+		"goal:blocked",
+		"goal:needs-human",
+		"goal:interrupted",
+		"goal:failed",
+		"## Inspect-first recovery flow",
+		"FactorySession",
+		"goal-planner/AGENTS.md",
+		"structured-review-goal/AGENTS.md",
+		"does not add `/goal/inspect`",
 		"`you docs authoring-factories`",
 		"`you docs config`",
 		"`you docs sessions`",
@@ -37,6 +70,17 @@ func TestMarkdown_PackagedGoalReturnsRawAuthoredMarkdown(t *testing.T) {
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Markdown(packaged-goal) missing %q:\n%s", want, got)
+		}
+	}
+	for _, stale := range []string{
+		"MODEL_WORKER",
+		"MODEL_WORKSTATION",
+		"Workstation.workPropagation is absent",
+		"does not carry invocationReturn",
+		"automatic JSON detection",
+	} {
+		if strings.Contains(got, stale) {
+			t.Fatalf("Markdown(packaged-goal) still contains stale wording %q:\n%s", stale, got)
 		}
 	}
 	for _, wrapper := range []string{
