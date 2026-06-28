@@ -673,6 +673,98 @@ func runResponseStreamTerminalOutcomeSubtest(t *testing.T, tc responseStreamTerm
 	}
 }
 
+func slowStdoutResponseStreamInvoke(
+	attachable *recordingResponseStreamAttachable,
+	eventsFlooded chan<- struct{},
+	primaryText string,
+) func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+	return func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+		waitForResponseStreamSubscribe(attachable, 2*time.Second)
+		floodResponseStreamProgressEvents(attachable.stream, "dispatch-goal-1", "working")
+		eventsFlooded <- struct{}{}
+		return apisurface.FactoryInvocationResult{
+			RequestID: "req-1",
+			TraceID:   "trace-1",
+			Status:    factoryapi.InvocationTerminalStatusCompleted,
+			PrimaryResult: []interfaces.WorkContentPart{
+				{Type: interfaces.WorkContentPartTypeText, Text: primaryText},
+			},
+		}, nil
+	}
+}
+
+func waitForResponseStreamSubscribe(attachable *recordingResponseStreamAttachable, timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if len(attachable.subscribeCalls) > 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func floodResponseStreamProgressEvents(stream *factorysessions.SessionResponseStream, dispatchID, payload string) {
+	if stream == nil {
+		return
+	}
+	for i := 0; i < defaultResponseStreamProgressQueueCapacity+4; i++ {
+		stream.Append(responsestream.Event{
+			Kind:       responsestream.EventKindProgressFragment,
+			Type:       responsestream.EventTypeProgress,
+			DispatchID: dispatchID,
+			Payload:    payload,
+		})
+	}
+}
+
+func waitForResponseStreamProgressFlood(t *testing.T, eventsFlooded <-chan struct{}, done <-chan error) {
+	t.Helper()
+	select {
+	case <-eventsFlooded:
+	case err := <-done:
+		t.Fatalf("Run completed before progress events were flooded: %v", err)
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for response-stream progress flood")
+	}
+}
+
+func waitForBlockedStdoutWrites(t *testing.T, output *gatedResponseStreamWriter, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if output.blockedWriteAttemptsCount() > 0 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if output.blockedWriteAttemptsCount() == 0 {
+		t.Fatal("expected progress writer to block on slow stdout before release")
+	}
+}
+
+func waitForResponseStreamRunCompletion(t *testing.T, done <-chan error, timeout time.Duration) {
+	t.Helper()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+	case <-time.After(timeout):
+		t.Fatal("Run blocked after stdout was released")
+	}
+}
+
+func assertSlowStdoutResponseStreamOutput(t *testing.T, output *gatedResponseStreamWriter, text string) {
+	t.Helper()
+	got := output.String()
+	if !strings.Contains(got, "[you:progress] terminal output backlog") {
+		t.Fatalf("output missing terminal backlog notice:\n%s", got)
+	}
+	if !strings.HasSuffix(strings.TrimSpace(got), text) {
+		t.Fatalf("output missing final primary result:\n%s", got)
+	}
+}
+
 func TestRun_FactoryInvocationResponseStreamCompletesWithSlowStdout(t *testing.T) {
 	preserveRunGlobals(t)
 
@@ -690,34 +782,7 @@ func TestRun_FactoryInvocationResponseStreamCompletesWithSlowStdout(t *testing.T
 					<-ctx.Done()
 					return nil
 				},
-				invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
-					deadline := time.Now().Add(2 * time.Second)
-					for time.Now().Before(deadline) {
-						if len(attachable.subscribeCalls) > 0 {
-							break
-						}
-						time.Sleep(10 * time.Millisecond)
-					}
-					if attachable.stream != nil {
-						for i := 0; i < defaultResponseStreamProgressQueueCapacity+4; i++ {
-							attachable.stream.Append(responsestream.Event{
-								Kind:       responsestream.EventKindProgressFragment,
-								Type:       responsestream.EventTypeProgress,
-								DispatchID: "dispatch-goal-1",
-								Payload:    "working",
-							})
-						}
-					}
-					eventsFlooded <- struct{}{}
-					return apisurface.FactoryInvocationResult{
-						RequestID: "req-1",
-						TraceID:   "trace-1",
-						Status:    factoryapi.InvocationTerminalStatusCompleted,
-						PrimaryResult: []interfaces.WorkContentPart{
-							{Type: interfaces.WorkContentPartTypeText, Text: text},
-						},
-					}, nil
-				},
+				invoke: slowStdoutResponseStreamInvoke(attachable, eventsFlooded, text),
 			},
 			attachable: attachable,
 		}, nil
@@ -735,40 +800,9 @@ func TestRun_FactoryInvocationResponseStreamCompletesWithSlowStdout(t *testing.T
 		})
 	}()
 
-	select {
-	case <-eventsFlooded:
-	case err := <-done:
-		t.Fatalf("Run completed before progress events were flooded: %v", err)
-	case <-time.After(3 * time.Second):
-		t.Fatal("timed out waiting for response-stream progress flood")
-	}
-
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if output.blockedWriteAttemptsCount() > 0 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if output.blockedWriteAttemptsCount() == 0 {
-		t.Fatal("expected progress writer to block on slow stdout before release")
-	}
-
+	waitForResponseStreamProgressFlood(t, eventsFlooded, done)
+	waitForBlockedStdoutWrites(t, output, 2*time.Second)
 	output.release()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("Run: %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("Run blocked after stdout was released")
-	}
-
-	got := output.String()
-	if !strings.Contains(got, "[you:progress] terminal output backlog") {
-		t.Fatalf("output missing terminal backlog notice:\n%s", got)
-	}
-	if !strings.HasSuffix(strings.TrimSpace(got), text) {
-		t.Fatalf("output missing final primary result:\n%s", got)
-	}
+	waitForResponseStreamRunCompletion(t, done, 2*time.Second)
+	assertSlowStdoutResponseStreamOutput(t, output, text)
 }
