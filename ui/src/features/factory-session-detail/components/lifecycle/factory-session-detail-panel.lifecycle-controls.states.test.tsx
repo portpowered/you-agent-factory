@@ -8,7 +8,7 @@ import {
   createDeferred,
   jsonResponse,
   renderWithQueryClient,
-} from "../factory-session-detail-panel.test-helpers";
+} from "../test-support/factory-session-detail-panel.test-helpers";
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: lifecycle state regressions share one mocked panel harness.
 describe("factory session detail lifecycle control states", () => {
