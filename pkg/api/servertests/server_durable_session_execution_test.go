@@ -766,207 +766,195 @@ func assertDurableSessionPartialResultStillInspectable(
 	}
 }
 
-func TestLifecycleControls_PreserveInspectablePartialStateAcrossAllReadSurfaces(t *testing.T) {
-	t.Run("PauseResume", func(t *testing.T) {
-		service := newAPILifecycleRuntimeService(t, "busy-loop.workflow.js", "busy-loop")
-		started := startRuntimeBackedDurableSession(t, service)
+func startBusyLoopRuntimeBackedLifecycleServer(t *testing.T) (serverURL, sessionID string) {
+	t.Helper()
+	service := newAPILifecycleRuntimeService(t, "busy-loop.workflow.js", "busy-loop")
+	started := startRuntimeBackedDurableSession(t, service)
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	t.Cleanup(server.Close)
+	return server.URL, started.SessionID
+}
 
-		srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
-		server := httptest.NewServer(srv.Handler())
-		defer server.Close()
+func TestLifecycleControls_PauseResumePreservesInspectablePartialStateAcrossReadSurfaces(t *testing.T) {
+	serverURL, sessionID := startBusyLoopRuntimeBackedLifecycleServer(t)
 
-		before := captureDurableSessionInspectionSnapshot(t, server.URL, started.SessionID)
-		assertDurableSessionInspectionLinks(t, started.SessionID, before.read.Links)
+	before := captureDurableSessionInspectionSnapshot(t, serverURL, sessionID)
+	assertDurableSessionInspectionLinks(t, sessionID, before.read.Links)
 
-		pauseResp, pauseStatus := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "pause", nil)
-		if pauseStatus != http.StatusOK {
-			t.Fatalf("pause status = %d, want 200", pauseStatus)
-		}
-		assertLifecycleControlPreservesInspectionLinks(t, started.SessionID, pauseResp.Links)
+	pauseResp, pauseStatus := postFactorySessionLifecycleControl(t, serverURL, sessionID, "pause", nil)
+	if pauseStatus != http.StatusOK {
+		t.Fatalf("pause status = %d, want 200", pauseStatus)
+	}
+	assertLifecycleControlPreservesInspectionLinks(t, sessionID, pauseResp.Links)
 
-		afterPause := captureDurableSessionInspectionSnapshot(t, server.URL, started.SessionID)
-		assertDurableSessionPartialResultStillInspectable(
-			t,
-			before.result,
-			afterPause.result,
-			factoryapi.FactorySessionDurableLifecycleStatusPaused,
-		)
-		assertDispatchListUnchanged(t, before.dispatches, afterPause.dispatches)
-		assertArtifactListUnchanged(t, before.artifacts, afterPause.artifacts)
-		assertLifecycleEventsNonDecreasing(t, before.events, afterPause.events)
-		if afterPause.read.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
-			t.Fatalf("status after pause = %q, want PAUSED", afterPause.read.Status)
-		}
-		assertPostControlEventsAlignWithStatus(t, started.SessionID, afterPause.events, afterPause.read.Status)
-		assertEventReconnectStillWorks(t, server.URL, started.SessionID, afterPause.events)
+	afterPause := captureDurableSessionInspectionSnapshot(t, serverURL, sessionID)
+	assertDurableSessionPartialResultStillInspectable(
+		t,
+		before.result,
+		afterPause.result,
+		factoryapi.FactorySessionDurableLifecycleStatusPaused,
+	)
+	assertDispatchListUnchanged(t, before.dispatches, afterPause.dispatches)
+	assertArtifactListUnchanged(t, before.artifacts, afterPause.artifacts)
+	assertLifecycleEventsNonDecreasing(t, before.events, afterPause.events)
+	if afterPause.read.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+		t.Fatalf("status after pause = %q, want PAUSED", afterPause.read.Status)
+	}
+	assertPostControlEventsAlignWithStatus(t, sessionID, afterPause.events, afterPause.read.Status)
+	assertEventReconnectStillWorks(t, serverURL, sessionID, afterPause.events)
 
-		resumeResp, resumeStatus := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "resume", nil)
-		if resumeStatus != http.StatusOK {
-			t.Fatalf("resume status = %d, want 200", resumeStatus)
-		}
-		assertLifecycleControlPreservesInspectionLinks(t, started.SessionID, resumeResp.Links)
+	resumeResp, resumeStatus := postFactorySessionLifecycleControl(t, serverURL, sessionID, "resume", nil)
+	if resumeStatus != http.StatusOK {
+		t.Fatalf("resume status = %d, want 200", resumeStatus)
+	}
+	assertLifecycleControlPreservesInspectionLinks(t, sessionID, resumeResp.Links)
 
-		afterResume := captureDurableSessionInspectionSnapshot(t, server.URL, started.SessionID)
-		assertDurableSessionPartialResultStillInspectable(
-			t,
-			before.result,
-			afterResume.result,
-			factoryapi.FactorySessionDurableLifecycleStatusRunning,
-		)
-		assertDispatchListUnchanged(t, before.dispatches, afterResume.dispatches)
-		assertArtifactListUnchanged(t, before.artifacts, afterResume.artifacts)
-		assertLifecycleEventsNonDecreasing(t, afterPause.events, afterResume.events)
-		if afterResume.read.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
-			t.Fatalf("status after resume = %q, want RUNNING", afterResume.read.Status)
-		}
-		assertPostControlEventsAlignWithStatus(t, started.SessionID, afterResume.events, afterResume.read.Status)
-		assertEventReconnectStillWorks(t, server.URL, started.SessionID, afterResume.events)
+	afterResume := captureDurableSessionInspectionSnapshot(t, serverURL, sessionID)
+	assertDurableSessionPartialResultStillInspectable(
+		t,
+		before.result,
+		afterResume.result,
+		factoryapi.FactorySessionDurableLifecycleStatusRunning,
+	)
+	assertDispatchListUnchanged(t, before.dispatches, afterResume.dispatches)
+	assertArtifactListUnchanged(t, before.artifacts, afterResume.artifacts)
+	assertLifecycleEventsNonDecreasing(t, afterPause.events, afterResume.events)
+	if afterResume.read.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("status after resume = %q, want RUNNING", afterResume.read.Status)
+	}
+	assertPostControlEventsAlignWithStatus(t, sessionID, afterResume.events, afterResume.read.Status)
+	assertEventReconnectStillWorks(t, serverURL, sessionID, afterResume.events)
+}
+
+func TestLifecycleControls_RetryDispatchPreservesInspectablePartialStateAcrossReadSurfaces(t *testing.T) {
+	service := newAPILifecycleFailingChildRuntimeService(t)
+	sessionID, dispatchID := startRuntimeBackedFailedSessionWithDispatch(t, service)
+
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
+
+	before := captureDurableSessionInspectionSnapshot(t, server.URL, sessionID)
+	if before.read.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
+		t.Fatalf("pre-retry status = %q, want FAILED", before.read.Status)
+	}
+	if len(before.dispatches.Dispatches) == 0 {
+		t.Fatal("expected dispatch history before retry-dispatch")
+	}
+
+	response, status := postFactorySessionRetryDispatch(t, server.URL, sessionID, factoryapi.FactorySessionRetryDispatchRequest{
+		DispatchId: dispatchID,
 	})
+	if status != http.StatusOK {
+		t.Fatalf("retry-dispatch status = %d, want 200", status)
+	}
+	assertLifecycleControlPreservesInspectionLinks(t, sessionID, response.Links)
 
-	t.Run("RetryDispatch", func(t *testing.T) {
-		service := newAPILifecycleFailingChildRuntimeService(t)
-		sessionID, dispatchID := startRuntimeBackedFailedSessionWithDispatch(t, service)
+	after := captureDurableSessionInspectionSnapshot(t, server.URL, sessionID)
+	assertDurableSessionInspectionLinks(t, sessionID, after.read.Links)
+	if len(after.events) == 0 {
+		t.Fatal("expected canonical events after retry-dispatch")
+	}
+	if len(after.dispatches.Dispatches) < len(before.dispatches.Dispatches) {
+		t.Fatalf("dispatch history lost: before=%d after=%d", len(before.dispatches.Dispatches), len(after.dispatches.Dispatches))
+	}
+	getDurableDispatchDetail(t, server.URL, sessionID, dispatchID)
+	assertEventReconnectStillWorks(t, server.URL, sessionID, after.events)
+}
 
-		srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
-		server := httptest.NewServer(srv.Handler())
-		defer server.Close()
+func TestLifecycleControls_ApproveInvalidStatePreservesInspectablePartialStateAcrossReadSurfaces(t *testing.T) {
+	serverURL, sessionID := startBusyLoopRuntimeBackedLifecycleServer(t)
 
-		before := captureDurableSessionInspectionSnapshot(t, server.URL, sessionID)
-		if before.read.Status != factoryapi.FactorySessionDurableLifecycleStatusFailed {
-			t.Fatalf("pre-retry status = %q, want FAILED", before.read.Status)
-		}
-		if len(before.dispatches.Dispatches) == 0 {
-			t.Fatal("expected dispatch history before retry-dispatch")
-		}
+	before := captureDurableSessionInspectionSnapshot(t, serverURL, sessionID)
 
-		response, status := postFactorySessionRetryDispatch(t, server.URL, sessionID, factoryapi.FactorySessionRetryDispatchRequest{
-			DispatchId: dispatchID,
-		})
-		if status != http.StatusOK {
-			t.Fatalf("retry-dispatch status = %d, want 200", status)
-		}
-		assertLifecycleControlPreservesInspectionLinks(t, sessionID, response.Links)
+	_, approveStatus := postFactorySessionApprove(t, serverURL, sessionID, nil)
+	if approveStatus != http.StatusConflict {
+		t.Fatalf("approve status = %d, want 409", approveStatus)
+	}
 
-		after := captureDurableSessionInspectionSnapshot(t, server.URL, sessionID)
-		assertDurableSessionInspectionLinks(t, sessionID, after.read.Links)
-		if len(after.events) == 0 {
-			t.Fatal("expected canonical events after retry-dispatch")
-		}
-		if len(after.dispatches.Dispatches) < len(before.dispatches.Dispatches) {
-			t.Fatalf("dispatch history lost: before=%d after=%d", len(before.dispatches.Dispatches), len(after.dispatches.Dispatches))
-		}
-		getDurableDispatchDetail(t, server.URL, sessionID, dispatchID)
-		assertEventReconnectStillWorks(t, server.URL, sessionID, after.events)
+	after := captureDurableSessionInspectionSnapshot(t, serverURL, sessionID)
+	assertDurableSessionReadUnchanged(t, before.read, after.read)
+	assertDurableSessionResultUnchanged(t, before.result, after.result)
+	assertDispatchListUnchanged(t, before.dispatches, after.dispatches)
+	assertArtifactListUnchanged(t, before.artifacts, after.artifacts)
+	assertLifecycleEventsNonDecreasing(t, before.events, after.events)
+}
+
+func TestLifecycleControls_CancelPreservesInspectablePartialStateAcrossReadSurfaces(t *testing.T) {
+	serverURL, sessionID := startBusyLoopRuntimeBackedLifecycleServer(t)
+
+	before := captureDurableSessionInspectionSnapshot(t, serverURL, sessionID)
+
+	_, cancelStatus := postFactorySessionLifecycleControl(t, serverURL, sessionID, "cancel", nil)
+	if cancelStatus != http.StatusAccepted {
+		t.Fatalf("cancel status = %d, want 202", cancelStatus)
+	}
+
+	after := captureDurableSessionInspectionSnapshot(t, serverURL, sessionID)
+	assertDurableSessionInspectionLinks(t, sessionID, after.read.Links)
+	assertDispatchListUnchanged(t, before.dispatches, after.dispatches)
+	assertArtifactListUnchanged(t, before.artifacts, after.artifacts)
+	assertLifecycleEventsNonDecreasing(t, before.events, after.events)
+	assertEventReconnectStillWorks(t, serverURL, sessionID, after.events)
+}
+
+func TestLifecycleControls_TerminatePreservesInspectablePartialStateAcrossReadSurfaces(t *testing.T) {
+	serverURL, sessionID := startBusyLoopRuntimeBackedLifecycleServer(t)
+
+	before := captureDurableSessionInspectionSnapshot(t, serverURL, sessionID)
+
+	terminateResp, terminateStatus := postFactorySessionLifecycleControl(t, serverURL, sessionID, "terminate", nil)
+	if terminateStatus != http.StatusOK {
+		t.Fatalf("terminate status = %d, want 200", terminateStatus)
+	}
+	assertLifecycleControlPreservesInspectionLinks(t, sessionID, terminateResp.Links)
+
+	after := captureDurableSessionInspectionSnapshot(t, serverURL, sessionID)
+	assertDurableSessionInspectionLinks(t, sessionID, after.read.Links)
+	assertDispatchListUnchanged(t, before.dispatches, after.dispatches)
+	assertArtifactListUnchanged(t, before.artifacts, after.artifacts)
+	assertLifecycleEventsNonDecreasing(t, before.events, after.events)
+	assertEventReconnectStillWorks(t, serverURL, sessionID, after.events)
+}
+
+func TestLifecycleControls_TerminalSessionRejectedControlPreservesInspectablePartialStateAcrossReadSurfaces(t *testing.T) {
+	projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
+	service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
+		ProjectRoot: projectRoot,
 	})
-
-	t.Run("ApproveInvalidState", func(t *testing.T) {
-		service := newAPILifecycleRuntimeService(t, "busy-loop.workflow.js", "busy-loop")
-		started := startRuntimeBackedDurableSession(t, service)
-
-		srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
-		server := httptest.NewServer(srv.Handler())
-		defer server.Close()
-
-		before := captureDurableSessionInspectionSnapshot(t, server.URL, started.SessionID)
-
-		_, approveStatus := postFactorySessionApprove(t, server.URL, started.SessionID, nil)
-		if approveStatus != http.StatusConflict {
-			t.Fatalf("approve status = %d, want 409", approveStatus)
-		}
-
-		after := captureDurableSessionInspectionSnapshot(t, server.URL, started.SessionID)
-		assertDurableSessionReadUnchanged(t, before.read, after.read)
-		assertDurableSessionResultUnchanged(t, before.result, after.result)
-		assertDispatchListUnchanged(t, before.dispatches, after.dispatches)
-		assertArtifactListUnchanged(t, before.artifacts, after.artifacts)
-		assertLifecycleEventsNonDecreasing(t, before.events, after.events)
+	completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
+		RequestID: "req-api-lifecycle-all-surfaces-terminal-001",
+		Source: factorysessionexecution.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: "agent-run-fake-child",
+		},
+		Args: map[string]any{"subject": "workflows"},
 	})
+	if err != nil {
+		t.Fatalf("StartSync: %v", err)
+	}
 
-	t.Run("Cancel", func(t *testing.T) {
-		service := newAPILifecycleRuntimeService(t, "busy-loop.workflow.js", "busy-loop")
-		started := startRuntimeBackedDurableSession(t, service)
+	srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
+	server := httptest.NewServer(srv.Handler())
+	defer server.Close()
 
-		srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
-		server := httptest.NewServer(srv.Handler())
-		defer server.Close()
+	before := captureDurableSessionInspectionSnapshot(t, server.URL, completed.SessionID)
+	if len(before.dispatches.Dispatches) == 0 {
+		t.Fatal("expected dispatch history on completed agent-run-fake-child session")
+	}
 
-		before := captureDurableSessionInspectionSnapshot(t, server.URL, started.SessionID)
+	_, pauseStatus := postFactorySessionLifecycleControl(t, server.URL, completed.SessionID, "pause", nil)
+	if pauseStatus != http.StatusConflict {
+		t.Fatalf("pause on terminal session status = %d, want 409", pauseStatus)
+	}
 
-		_, cancelStatus := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "cancel", nil)
-		if cancelStatus != http.StatusAccepted {
-			t.Fatalf("cancel status = %d, want 202", cancelStatus)
-		}
-
-		after := captureDurableSessionInspectionSnapshot(t, server.URL, started.SessionID)
-		assertDurableSessionInspectionLinks(t, started.SessionID, after.read.Links)
-		assertDispatchListUnchanged(t, before.dispatches, after.dispatches)
-		assertArtifactListUnchanged(t, before.artifacts, after.artifacts)
-		assertLifecycleEventsNonDecreasing(t, before.events, after.events)
-		assertEventReconnectStillWorks(t, server.URL, started.SessionID, after.events)
-	})
-
-	t.Run("Terminate", func(t *testing.T) {
-		service := newAPILifecycleRuntimeService(t, "busy-loop.workflow.js", "busy-loop")
-		started := startRuntimeBackedDurableSession(t, service)
-
-		srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
-		server := httptest.NewServer(srv.Handler())
-		defer server.Close()
-
-		before := captureDurableSessionInspectionSnapshot(t, server.URL, started.SessionID)
-
-		terminateResp, terminateStatus := postFactorySessionLifecycleControl(t, server.URL, started.SessionID, "terminate", nil)
-		if terminateStatus != http.StatusOK {
-			t.Fatalf("terminate status = %d, want 200", terminateStatus)
-		}
-		assertLifecycleControlPreservesInspectionLinks(t, started.SessionID, terminateResp.Links)
-
-		after := captureDurableSessionInspectionSnapshot(t, server.URL, started.SessionID)
-		assertDurableSessionInspectionLinks(t, started.SessionID, after.read.Links)
-		assertDispatchListUnchanged(t, before.dispatches, after.dispatches)
-		assertArtifactListUnchanged(t, before.artifacts, after.artifacts)
-		assertLifecycleEventsNonDecreasing(t, before.events, after.events)
-		assertEventReconnectStillWorks(t, server.URL, started.SessionID, after.events)
-	})
-
-	t.Run("TerminalSessionRejectedControlPreservesDispatchArtifactReads", func(t *testing.T) {
-		projectRoot := setupAPIRuntimeWorkflowFixture(t, "agent-run-fake-child.workflow.js", "agent-run-fake-child")
-		service := factorysessionexecution.NewJavaScriptRuntimeService(factorysessionexecution.JavaScriptRuntimeServiceConfig{
-			ProjectRoot: projectRoot,
-		})
-		completed, err := service.StartSync(context.Background(), factorysessionexecution.StartRequest{
-			RequestID: "req-api-lifecycle-all-surfaces-terminal-001",
-			Source: factorysessionexecution.Source{
-				Kind:         workflowsource.KindWorkflowName,
-				WorkflowName: "agent-run-fake-child",
-			},
-			Args: map[string]any{"subject": "workflows"},
-		})
-		if err != nil {
-			t.Fatalf("StartSync: %v", err)
-		}
-
-		srv := newAPITestServer(&testutil.MockFactory{DurableExecutionService: service})
-		server := httptest.NewServer(srv.Handler())
-		defer server.Close()
-
-		before := captureDurableSessionInspectionSnapshot(t, server.URL, completed.SessionID)
-		if len(before.dispatches.Dispatches) == 0 {
-			t.Fatal("expected dispatch history on completed agent-run-fake-child session")
-		}
-
-		_, pauseStatus := postFactorySessionLifecycleControl(t, server.URL, completed.SessionID, "pause", nil)
-		if pauseStatus != http.StatusConflict {
-			t.Fatalf("pause on terminal session status = %d, want 409", pauseStatus)
-		}
-
-		after := captureDurableSessionInspectionSnapshot(t, server.URL, completed.SessionID)
-		assertDurableSessionReadUnchanged(t, before.read, after.read)
-		assertDurableSessionResultUnchanged(t, before.result, after.result)
-		assertDispatchListUnchanged(t, before.dispatches, after.dispatches)
-		assertArtifactListUnchanged(t, before.artifacts, after.artifacts)
-		assertLifecycleEventsNonDecreasing(t, before.events, after.events)
-		getDurableDispatchDetail(t, server.URL, completed.SessionID, "dispatch-1")
-		assertPostControlEventsAlignWithStatus(t, completed.SessionID, after.events, after.read.Status)
-	})
+	after := captureDurableSessionInspectionSnapshot(t, server.URL, completed.SessionID)
+	assertDurableSessionReadUnchanged(t, before.read, after.read)
+	assertDurableSessionResultUnchanged(t, before.result, after.result)
+	assertDispatchListUnchanged(t, before.dispatches, after.dispatches)
+	assertArtifactListUnchanged(t, before.artifacts, after.artifacts)
+	assertLifecycleEventsNonDecreasing(t, before.events, after.events)
+	getDurableDispatchDetail(t, server.URL, completed.SessionID, "dispatch-1")
+	assertPostControlEventsAlignWithStatus(t, completed.SessionID, after.events, after.read.Status)
 }
