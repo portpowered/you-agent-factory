@@ -3,7 +3,6 @@ package mcpcli_test
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -42,7 +41,9 @@ func runtimeSmokeProjectRoot(t *testing.T) string {
 	t.Helper()
 	projectRoot := t.TempDir()
 	t.Cleanup(func() {
-		_ = os.RemoveAll(filepath.Join(projectRoot, ".you-agent-factory"))
+		// Remove the full project root before t.TempDir teardown so runtime-backed
+		// durable-session persistence cannot leave the temp directory non-empty on Linux CI.
+		_ = os.RemoveAll(projectRoot)
 	})
 	return projectRoot
 }

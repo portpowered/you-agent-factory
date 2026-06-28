@@ -247,16 +247,28 @@ func runGoTestCoverageLane(args []string, failurePrefix string) (string, string,
 	testCmd.Stdout = &stdout
 	testCmd.Stderr = &stderr
 	if err := testCmd.Run(); err != nil {
-		detail := strings.TrimSpace(stderr.String())
-		if detail == "" {
-			detail = strings.TrimSpace(stdout.String())
-		}
+		detail := mergeGoTestFailureDetail(stderr.String(), stdout.String())
 		if detail != "" {
 			return "", "", fmt.Errorf("%s: %w\n%s", failurePrefix, err, detail)
 		}
 		return "", "", fmt.Errorf("%s: %w", failurePrefix, err)
 	}
 	return stdout.String(), stderr.String(), nil
+}
+
+func mergeGoTestFailureDetail(stderr string, stdout string) string {
+	stderr = strings.TrimSpace(stderr)
+	stdout = strings.TrimSpace(stdout)
+	switch {
+	case stdout == "":
+		return stderr
+	case stderr == "":
+		return stdout
+	case strings.Contains(stdout, "\nFAIL") || strings.Contains(stdout, "--- FAIL:"):
+		return stdout + "\n" + stderr
+	default:
+		return stderr + "\n" + stdout
+	}
 }
 
 func resolveCoverageLane(cfg config) ([]string, []string, error) {
