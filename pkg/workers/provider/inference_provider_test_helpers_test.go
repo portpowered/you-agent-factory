@@ -175,25 +175,38 @@ func writeTestFile(t *testing.T, dir, name, content string) {
 func writeExecutableTestScript(t *testing.T, path string, content string) {
 	t.Helper()
 
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+	dir := filepath.Dir(path)
+	tmpFile, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
 	if err != nil {
-		t.Fatalf("creating executable %s: %v", path, err)
+		t.Fatalf("creating executable temp %s: %v", path, err)
 	}
-	if _, err := file.WriteString(content); err != nil {
-		_ = file.Close()
-		t.Fatalf("writing %s: %v", path, err)
+	tmpPath := tmpFile.Name()
+	cleanup := func() {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
 	}
-	if err := file.Sync(); err != nil {
-		_ = file.Close()
-		t.Fatalf("syncing %s: %v", path, err)
+
+	if err := tmpFile.Chmod(0o755); err != nil {
+		cleanup()
+		t.Fatalf("chmod temp executable %s: %v", tmpPath, err)
 	}
-	if err := file.Close(); err != nil {
-		t.Fatalf("closing %s: %v", path, err)
+	if _, err := tmpFile.WriteString(content); err != nil {
+		cleanup()
+		t.Fatalf("writing %s: %v", tmpPath, err)
 	}
-	if err := os.Chmod(path, 0o755); err != nil {
-		t.Fatalf("chmod %s: %v", path, err)
+	if err := tmpFile.Sync(); err != nil {
+		cleanup()
+		t.Fatalf("syncing %s: %v", tmpPath, err)
 	}
-	syncDirectoryForExecutableWrite(t, filepath.Dir(path))
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		t.Fatalf("closing %s: %v", tmpPath, err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		t.Fatalf("renaming %s to %s: %v", tmpPath, path, err)
+	}
+	syncDirectoryForExecutableWrite(t, dir)
 }
 
 func syncDirectoryForExecutableWrite(t *testing.T, dir string) {

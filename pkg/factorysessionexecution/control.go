@@ -359,7 +359,7 @@ func (s *JavaScriptRuntimeService) recordAcceptedRuntimeInterrupt(
 	if applyRuntimeAcceptedLifecycleControl(s, state, LifecycleControlInterruptDispatch, RetryDispatchRequest{}, interrupt) && state.runCancel != nil {
 		state.runCancel()
 	}
-	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+	state.events = rebuildRuntimeSessionCanonicalEvents(state)
 	state.events = AppendDispatchInterruptedEvent(
 		state.events,
 		state.session,
@@ -492,7 +492,7 @@ func (s *JavaScriptRuntimeService) applyRuntimeExtendedLifecycleControl(
 					control.Reason,
 				)
 			} else {
-				state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+				state.events = rebuildRuntimeSessionCanonicalEvents(state)
 			}
 		}
 	}

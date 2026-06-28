@@ -2,12 +2,14 @@ package fixtures_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
 
 	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
@@ -591,4 +593,200 @@ func TestJavaScriptRuntimeService_ControlIdempotentReplayAndConflict(t *testing.
 	if controlErr.Status != fse.LifecycleStatusPaused {
 		t.Fatalf("conflict status = %q, want PAUSED unchanged", controlErr.Status)
 	}
+}
+
+func TestBuildCanonicalRuntimeSessionEvents_ProjectsLiveProviderDispatchLifecycle(t *testing.T) {
+	startedAt := time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC)
+	finishedAt := startedAt.Add(2 * time.Second)
+	sessionID := "dur-sess-dispatch-events-001"
+	session := fse.SessionReadResult{
+		SessionID:        sessionID,
+		Status:           fse.LifecycleStatusSucceeded,
+		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+		Dialect:          "you-workflow-v1",
+		Phase:            "execute",
+		ResolvedSource:   fse.ResolvedSource{SourceRef: "workflow/agent-run-fake-child"},
+		SourceHash:       "sha256:fixture",
+		Policy:           fse.PolicyProjection{EffectiveHash: "sha256:policy"},
+		ResultSummary: &fse.ResultSummary{
+			ResultStatus: string(fse.ResultStatusFinal),
+		},
+		Lifecycle: &fse.LifecycleTimestamps{
+			StartedAt:  &startedAt,
+			FinishedAt: &finishedAt,
+		},
+	}
+	result := fse.ResultReadResult{
+		SessionID:     sessionID,
+		ResultStatus:  fse.ResultStatusFinal,
+		SessionStatus: fse.LifecycleStatusSucceeded,
+	}
+	dispatch := fse.DispatchSummary{
+		ID:           "dispatch-1",
+		Status:       fse.DispatchStatusCompleted,
+		DispatchKind: "JAVASCRIPT_AGENT",
+		Phase:        "execute",
+		Label:        "summarize findings",
+		Provider:     "mock",
+		ProviderSessionRefs: []fse.ProviderSessionRef{{
+			Provider: "mock",
+			Kind:     "session_id",
+			ID:       "live-provider-session-1",
+		}},
+		OutputArtifactIDs: []string{"child-artifact-1"},
+		JavaScript: &fse.DispatchJavaScriptProjection{
+			TaskKind:      "AGENT",
+			TaskLabel:     "summarize findings",
+			ExecutionMode: fse.ChildExecutorModeLive,
+		},
+	}
+
+	events := fse.BuildCanonicalRuntimeSessionEvents(session, result, fse.RuntimeDispatchEventInput{
+		Dispatches: []fse.DispatchSummary{dispatch},
+	})
+
+	queued := findCanonicalDispatchEventByType(events, "DISPATCH_QUEUED", sessionID, "dispatch-1")
+	if queued == nil {
+		t.Fatalf("events = %#v, want DISPATCH_QUEUED", events)
+	}
+	var queuedPayload struct {
+		DispatchKind string `json:"dispatchKind"`
+		Provider     string `json:"provider"`
+	}
+	if err := json.Unmarshal(queued.Payload, &queuedPayload); err != nil {
+		t.Fatalf("unmarshal DISPATCH_QUEUED payload: %v", err)
+	}
+	if queuedPayload.DispatchKind != "JAVASCRIPT_AGENT" || queuedPayload.Provider != "mock" {
+		t.Fatalf("queued payload = %#v, want JAVASCRIPT_AGENT/mock", queuedPayload)
+	}
+
+	reconciled := findCanonicalDispatchEventByType(events, "DISPATCH_RECONCILED", sessionID, "dispatch-1")
+	if reconciled == nil {
+		t.Fatalf("events = %#v, want DISPATCH_RECONCILED", events)
+	}
+	var reconciledPayload struct {
+		ReconciledStatus     string   `json:"reconciledStatus"`
+		ReconciliationSource string   `json:"reconciliationSource"`
+		ArtifactIDs          []string `json:"artifactIds"`
+	}
+	if err := json.Unmarshal(reconciled.Payload, &reconciledPayload); err != nil {
+		t.Fatalf("unmarshal DISPATCH_RECONCILED payload: %v", err)
+	}
+	if reconciledPayload.ReconciledStatus != string(fse.DispatchStatusCompleted) {
+		t.Fatalf("reconciledStatus = %q, want COMPLETED", reconciledPayload.ReconciledStatus)
+	}
+	if reconciledPayload.ReconciliationSource != "PROVIDER_SESSION" {
+		t.Fatalf("reconciliationSource = %q, want PROVIDER_SESSION", reconciledPayload.ReconciliationSource)
+	}
+	if len(reconciledPayload.ArtifactIDs) != 1 || reconciledPayload.ArtifactIDs[0] != "child-artifact-1" {
+		t.Fatalf("artifactIds = %#v, want [child-artifact-1]", reconciledPayload.ArtifactIDs)
+	}
+}
+
+func TestBuildCanonicalRuntimeSessionEvents_ProjectsFailedDispatchReconciliation(t *testing.T) {
+	startedAt := time.Date(2026, 6, 29, 12, 0, 0, 0, time.UTC)
+	finishedAt := startedAt.Add(2 * time.Second)
+	sessionID := "dur-sess-dispatch-events-failed-001"
+	session := fse.SessionReadResult{
+		SessionID:        sessionID,
+		Status:           fse.LifecycleStatusFailed,
+		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
+		Dialect:          "you-workflow-v1",
+		Phase:            "execute",
+		Lifecycle:        &fse.LifecycleTimestamps{StartedAt: &startedAt, FinishedAt: &finishedAt},
+	}
+	result := fse.ResultReadResult{
+		SessionID:     sessionID,
+		ResultStatus:  fse.ResultStatusUnavailable,
+		SessionStatus: fse.LifecycleStatusFailed,
+	}
+	dispatch := fse.DispatchSummary{
+		ID:           "dispatch-1",
+		Status:       fse.DispatchStatusFailed,
+		DispatchKind: "JAVASCRIPT_AGENT",
+		Phase:        "execute",
+		Label:        "failing child",
+		JavaScript: &fse.DispatchJavaScriptProjection{
+			TaskKind:      "AGENT",
+			ExecutionMode: fse.ChildExecutorModeLive,
+		},
+		FailureDetail: &fse.DispatchFailureDetail{
+			Reason:     "permanent_bad_request",
+			Message:    "provider rejected child request",
+			ErrorClass: "terminal",
+		},
+	}
+
+	events := fse.BuildCanonicalRuntimeSessionEvents(session, result, fse.RuntimeDispatchEventInput{
+		Dispatches: []fse.DispatchSummary{dispatch},
+	})
+
+	reconciled := findCanonicalDispatchEventByType(events, "DISPATCH_RECONCILED", sessionID, "dispatch-1")
+	if reconciled == nil {
+		t.Fatalf("events = %#v, want DISPATCH_RECONCILED", events)
+	}
+	var reconciledPayload struct {
+		ReconciledStatus     string `json:"reconciledStatus"`
+		ReconciliationSource string `json:"reconciliationSource"`
+		FailureDetail        *struct {
+			Reason string `json:"reason"`
+		} `json:"failureDetail"`
+	}
+	if err := json.Unmarshal(reconciled.Payload, &reconciledPayload); err != nil {
+		t.Fatalf("unmarshal DISPATCH_RECONCILED payload: %v", err)
+	}
+	if reconciledPayload.ReconciledStatus != string(fse.DispatchStatusFailed) {
+		t.Fatalf("reconciledStatus = %q, want FAILED", reconciledPayload.ReconciledStatus)
+	}
+	if reconciledPayload.ReconciliationSource != "RUNTIME_RECONCILER" {
+		t.Fatalf("reconciliationSource = %q, want RUNTIME_RECONCILER", reconciledPayload.ReconciliationSource)
+	}
+	if reconciledPayload.FailureDetail == nil || reconciledPayload.FailureDetail.Reason != "permanent_bad_request" {
+		t.Fatalf("failureDetail = %#v, want permanent_bad_request", reconciledPayload.FailureDetail)
+	}
+}
+
+func findCanonicalDispatchEventByType(events []json.RawMessage, eventType, sessionID, dispatchID string) *struct {
+	Payload json.RawMessage `json:"payload"`
+	Context struct {
+		SessionID  *string `json:"sessionId"`
+		DispatchID *string `json:"dispatchId"`
+	} `json:"context"`
+	Type string `json:"type"`
+} {
+	for _, raw := range events {
+		var envelope struct {
+			Payload json.RawMessage `json:"payload"`
+			Context struct {
+				SessionID  *string `json:"sessionId"`
+				DispatchID *string `json:"dispatchId"`
+			} `json:"context"`
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(raw, &envelope); err != nil {
+			continue
+		}
+		if envelope.Type != eventType {
+			continue
+		}
+		if envelope.Context.SessionID == nil || *envelope.Context.SessionID != sessionID {
+			continue
+		}
+		if dispatchID != "" && (envelope.Context.DispatchID == nil || *envelope.Context.DispatchID != dispatchID) {
+			continue
+		}
+		return &struct {
+			Payload json.RawMessage `json:"payload"`
+			Context struct {
+				SessionID  *string `json:"sessionId"`
+				DispatchID *string `json:"dispatchId"`
+			} `json:"context"`
+			Type string `json:"type"`
+		}{
+			Payload: envelope.Payload,
+			Context: envelope.Context,
+			Type:    envelope.Type,
+		}
+	}
+	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -509,22 +510,21 @@ func assertReadSurfacesReachableAfterLifecycle(t *testing.T, serverURL, sessionI
 func assertEventReconnectStillWorks(
 	t *testing.T,
 	serverURL, sessionID string,
-	_ []factoryapi.FactoryEvent,
+	events []factoryapi.FactoryEvent,
 ) {
 	t.Helper()
-	currentEvents := getDurableFactorySessionEvents(t, serverURL, sessionID, "")
-	if len(currentEvents) == 0 {
+	if len(events) == 0 {
 		t.Fatal("expected at least one event for reconnect assertion")
 	}
-	firstID := currentEvents[0].Id
+	firstID := events[0].Id
 	afterStart := getDurableFactorySessionEvents(
 		t,
 		serverURL,
 		sessionID,
-		"after_event_id="+firstID,
+		"after_event_id="+url.QueryEscape(firstID),
 	)
-	if len(afterStart) != len(currentEvents)-1 {
-		t.Fatalf("reconnect event count = %d, want %d", len(afterStart), len(currentEvents)-1)
+	if len(afterStart) != len(events)-1 {
+		t.Fatalf("reconnect event count = %d, want %d", len(afterStart), len(events)-1)
 	}
 }
 

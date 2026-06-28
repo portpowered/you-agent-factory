@@ -13,6 +13,7 @@ import (
 )
 
 const runtimeSmokeSimpleFinalWorkflowSource = `// Runtime-backed MCP serve smoke fixture: terminal async completion.
+// runtimeSmokeProjectRoot removes persisted factory state before t.TempDir cleanup.
 return {
   label: meta.name,
   description: meta.description,
@@ -24,7 +25,7 @@ return {
 
 // pkgmaintcheck:ignore-cyclomatic-complexity runtime smoke keeps discovery, async start, polling, and result assertions on one documented stdio path.
 func TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult(t *testing.T) {
-	projectRoot := t.TempDir()
+	projectRoot := runtimeSmokeProjectRoot(t)
 	client, shutdown, serveErr := startRunServeRuntimeSmokeServer(t, projectRoot)
 	assertInstallSmokeInitialize(t, client)
 	assertInstallSmokeDiscovery(t, client)
@@ -34,6 +35,17 @@ func TestRunServe_RuntimeSmoke_DiscoveryAsyncPollAndResult(t *testing.T) {
 	waitRuntimeSmokeTerminalCompletion(t, client, sessionID)
 	shutdown()
 	closeRunServeSmokeServer(t, nil, serveErr)
+}
+
+func runtimeSmokeProjectRoot(t *testing.T) string {
+	t.Helper()
+	projectRoot := t.TempDir()
+	t.Cleanup(func() {
+		// Remove the full project root before t.TempDir teardown so runtime-backed
+		// durable-session persistence cannot leave the temp directory non-empty on Linux CI.
+		_ = os.RemoveAll(projectRoot)
+	})
+	return projectRoot
 }
 
 func startRunServeRuntimeSmokeServer(

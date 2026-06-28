@@ -82,7 +82,12 @@ func projectRuntimeSessionState(
 		}
 		projectRuntimeFailure(&state.session, &state.result, outcome)
 	}
-	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result, RuntimeDispatchEventInput{
+		Dispatches:                state.dispatches,
+		DispatchStatusTransitions: state.dispatchStatusTransitions,
+		DispatchJavaScript:        state.dispatchJavaScript,
+		Artifacts:                 state.artifacts,
+	})
 	return state
 }
 
@@ -128,7 +133,12 @@ func projectRuntimeRunningSessionState(
 		session: session,
 		result:  result,
 	}
-	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result)
+	state.events = BuildCanonicalRuntimeSessionEvents(state.session, state.result, RuntimeDispatchEventInput{
+		Dispatches:                state.dispatches,
+		DispatchStatusTransitions: state.dispatchStatusTransitions,
+		DispatchJavaScript:        state.dispatchJavaScript,
+		Artifacts:                 state.artifacts,
+	})
 	return state
 }
 
@@ -906,6 +916,7 @@ func (s *JavaScriptRuntimeService) applyRunningRuntimeRecord(sessionID string, r
 	state.session.ArtifactRefs = artifactRefsFromSummaries(state.artifacts)
 	state.session.ArtifactCount = len(state.session.ArtifactRefs)
 	restoreInterruptedDispatchResultSuppression(state, preservedInterrupted)
+	state.events = rebuildRuntimeSessionCanonicalEvents(state)
 }
 
 func validateLiveChildExecutorConfig(mode string, provider workers.Provider) error {
