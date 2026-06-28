@@ -4,6 +4,7 @@ import {
 import {
   DurableReplayDisclosure as durableReplayDisclosureStory,
   DurableReplayDisclosureAwaitingApproval as durableReplayDisclosureAwaitingApprovalStory,
+  DurableReplayDisclosureAwaitingApprovalMobile as durableReplayDisclosureAwaitingApprovalMobileStory,
   DurableReplayDisclosureUnavailable as durableReplayDisclosureUnavailableStory,
   DurableReplayDisclosureWarning as durableReplayDisclosureWarningStory,
   SessionError as sessionErrorStory,
@@ -20,6 +21,9 @@ export const DispatchDrilldownStates = { ...dispatchDrilldownStatesStory };
 export const DurableReplayDisclosure = { ...durableReplayDisclosureStory };
 export const DurableReplayDisclosureAwaitingApproval = {
   ...durableReplayDisclosureAwaitingApprovalStory,
+};
+export const DurableReplayDisclosureAwaitingApprovalMobile = {
+  ...durableReplayDisclosureAwaitingApprovalMobileStory,
 };
 export const DurableReplayDisclosureUnavailable = {
   ...durableReplayDisclosureUnavailableStory,
