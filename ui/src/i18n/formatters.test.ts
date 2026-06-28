@@ -163,6 +163,26 @@ describe("shared locale duration and relative-time formatters", () => {
         style: "graph",
       }),
     ).toBe("1만");
+    expect(
+      formatDuration(1_000_000 * 365 * 24 * 60 * 60 * 1000, "en", {
+        style: "graph",
+      }),
+    ).toBe("1M");
+    expect(
+      formatDuration(1_000_000 * 365 * 24 * 60 * 60 * 1000, "zh-CN", {
+        style: "graph",
+      }),
+    ).toBe("1百万");
+    expect(
+      formatDuration(1_000_000 * 365 * 24 * 60 * 60 * 1000, "ja", {
+        style: "graph",
+      }),
+    ).toBe("1百万");
+    expect(
+      formatDuration(1_000_000 * 365 * 24 * 60 * 60 * 1000, "ko", {
+        style: "graph",
+      }),
+    ).toBe("1백만");
   });
 });
 

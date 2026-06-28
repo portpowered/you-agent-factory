@@ -1,4 +1,12 @@
 type GraphDurationUnit =
+  | "hundredQuintillionYear"
+  | "quintillionYear"
+  | "hundredQuadrillionYear"
+  | "quadrillionYear"
+  | "hundredTrillionYear"
+  | "trillionYear"
+  | "tenBillionYear"
+  | "hundredMillionYear"
   | "myriadYear"
   | "millennium"
   | "century"
@@ -11,6 +19,14 @@ type GraphDurationUnit =
 
 const GRAPH_DURATION_LABELS: Record<string, Record<GraphDurationUnit, string>> = {
   en: {
+    hundredQuintillionYear: "Y",
+    quintillionYear: "Z",
+    hundredQuadrillionYear: "E",
+    quadrillionYear: "Q",
+    hundredTrillionYear: "T",
+    trillionYear: "B",
+    tenBillionYear: "H",
+    hundredMillionYear: "M",
     myriadYear: "q",
     millennium: "ky",
     century: "c",
@@ -22,6 +38,14 @@ const GRAPH_DURATION_LABELS: Record<string, Record<GraphDurationUnit, string>> =
     second: "s",
   },
   "zh-CN": {
+    hundredQuintillionYear: "垓",
+    quintillionYear: "百京",
+    hundredQuadrillionYear: "京",
+    quadrillionYear: "百兆",
+    hundredTrillionYear: "兆",
+    trillionYear: "百亿",
+    tenBillionYear: "亿",
+    hundredMillionYear: "百万",
     myriadYear: "万",
     millennium: "千年",
     century: "世纪",
@@ -33,6 +57,14 @@ const GRAPH_DURATION_LABELS: Record<string, Record<GraphDurationUnit, string>> =
     second: "秒",
   },
   ja: {
+    hundredQuintillionYear: "垓",
+    quintillionYear: "百京",
+    hundredQuadrillionYear: "京",
+    quadrillionYear: "百兆",
+    hundredTrillionYear: "兆",
+    trillionYear: "百億",
+    tenBillionYear: "億",
+    hundredMillionYear: "百万",
     myriadYear: "万",
     millennium: "千年",
     century: "世紀",
@@ -44,6 +76,14 @@ const GRAPH_DURATION_LABELS: Record<string, Record<GraphDurationUnit, string>> =
     second: "秒",
   },
   ko: {
+    hundredQuintillionYear: "해",
+    quintillionYear: "백경",
+    hundredQuadrillionYear: "경",
+    quadrillionYear: "백조",
+    hundredTrillionYear: "조",
+    trillionYear: "백억",
+    tenBillionYear: "억",
+    hundredMillionYear: "백만",
     myriadYear: "만",
     millennium: "천년",
     century: "세기",
@@ -57,6 +97,14 @@ const GRAPH_DURATION_LABELS: Record<string, Record<GraphDurationUnit, string>> =
 };
 
 const GRAPH_DURATION_UNITS: ReadonlyArray<{ millis: number; unit: GraphDurationUnit }> = [
+  { unit: "hundredQuintillionYear", millis: 100_000_000_000_000_000_000 * 365 * 24 * 60 * 60 * 1000 },
+  { unit: "quintillionYear", millis: 1_000_000_000_000_000_000 * 365 * 24 * 60 * 60 * 1000 },
+  { unit: "hundredQuadrillionYear", millis: 100_000_000_000_000_000 * 365 * 24 * 60 * 60 * 1000 },
+  { unit: "quadrillionYear", millis: 1_000_000_000_000_000 * 365 * 24 * 60 * 60 * 1000 },
+  { unit: "hundredTrillionYear", millis: 100_000_000_000_000 * 365 * 24 * 60 * 60 * 1000 },
+  { unit: "trillionYear", millis: 1_000_000_000_000 * 365 * 24 * 60 * 60 * 1000 },
+  { unit: "tenBillionYear", millis: 100_000_000 * 365 * 24 * 60 * 60 * 1000 },
+  { unit: "hundredMillionYear", millis: 1_000_000 * 365 * 24 * 60 * 60 * 1000 },
   { unit: "myriadYear", millis: 10_000 * 365 * 24 * 60 * 60 * 1000 },
   { unit: "millennium", millis: 1000 * 365 * 24 * 60 * 60 * 1000 },
   { unit: "century", millis: 100 * 365 * 24 * 60 * 60 * 1000 },
