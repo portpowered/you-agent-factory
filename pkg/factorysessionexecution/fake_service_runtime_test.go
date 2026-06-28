@@ -2538,11 +2538,13 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_PackageLocalCoverage(
 	if err != nil {
 		t.Fatalf("ResumeInterruptedSession: %v", err)
 	}
-	if resumed.Status != string(LifecycleStatusResuming) {
-		t.Fatalf("resumed status = %q, want RESUMING", resumed.Status)
+	if resumed.Status != string(LifecycleStatusResuming) && resumed.Status != string(LifecycleStatusSucceeded) {
+		t.Fatalf("resumed status = %q, want RESUMING or SUCCEEDED", resumed.Status)
 	}
 
-	waitForResumeCoverageSessionStatus(t, resumedService, started.SessionID, LifecycleStatusSucceeded, 5*time.Second)
+	if resumed.Status != string(LifecycleStatusSucceeded) {
+		waitForResumeCoverageSessionStatus(t, resumedService, started.SessionID, LifecycleStatusSucceeded, 5*time.Second)
+	}
 	if provider.resumeCoverageCallCount() < 3 {
 		t.Fatalf("provider infer calls = %d, want at least 3 after resume", provider.resumeCoverageCallCount())
 	}

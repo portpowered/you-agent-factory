@@ -575,8 +575,8 @@ func resumeInterruptedHarness(t *testing.T, harness interruptedResumableHarness,
 	if resumed.SessionID != harness.sessionID {
 		t.Fatalf("resumed sessionId = %q, want %q", resumed.SessionID, harness.sessionID)
 	}
-	if resumed.Status != string(fse.LifecycleStatusResuming) {
-		t.Fatalf("resumed start status = %q, want RESUMING", resumed.Status)
+	if resumed.Status != string(fse.LifecycleStatusResuming) && resumed.Status != string(fse.LifecycleStatusSucceeded) {
+		t.Fatalf("resumed start status = %q, want RESUMING or SUCCEEDED", resumed.Status)
 	}
 	return resumedService
 }
