@@ -507,20 +507,17 @@ func assertAPILiveProviderProviderSessionRef(
 	}
 }
 
-func assertAPILiveProviderArtifactLineage(
-	t *testing.T,
-	serverURL, sessionID string,
-	dispatchSummary factoryapi.FactorySessionDispatchSummary,
-	dispatchDetail factoryapi.FactoryDispatch,
-) {
+func assertAPILiveProviderSessionArtifactRef(t *testing.T, serverURL, sessionID string) {
 	t.Helper()
-
 	sessionRead := getDurableFactorySession(t, serverURL, sessionID)
 	if sessionRead.ArtifactRefs == nil || len(*sessionRead.ArtifactRefs) != 1 ||
 		(*sessionRead.ArtifactRefs)[0].Id != "child-artifact-1" {
 		t.Fatalf("session artifactRefs = %#v, want child-artifact-1", sessionRead.ArtifactRefs)
 	}
+}
 
+func assertAPILiveProviderArtifactListDetail(t *testing.T, serverURL, sessionID string) {
+	t.Helper()
 	artifactList := getDurableArtifactList(t, serverURL, sessionID)
 	if len(artifactList.Artifacts) != 1 {
 		t.Fatalf("artifact list = %#v, want one artifact", artifactList.Artifacts)
@@ -550,7 +547,14 @@ func assertAPILiveProviderArtifactLineage(
 	if artifactDetail.ContentRef == nil || artifactDetail.ContentRef.Href != wantHref {
 		t.Fatalf("artifact detail contentRef = %#v, want %q", artifactDetail.ContentRef, wantHref)
 	}
+}
 
+func assertAPILiveProviderDispatchArtifactCrossRefs(
+	t *testing.T,
+	dispatchSummary factoryapi.FactorySessionDispatchSummary,
+	dispatchDetail factoryapi.FactoryDispatch,
+) {
+	t.Helper()
 	if dispatchSummary.OutputArtifactIds == nil || len(*dispatchSummary.OutputArtifactIds) != 1 ||
 		(*dispatchSummary.OutputArtifactIds)[0] != "child-artifact-1" {
 		t.Fatalf("dispatch outputArtifactIds = %#v, want [child-artifact-1]", dispatchSummary.OutputArtifactIds)
@@ -559,6 +563,18 @@ func assertAPILiveProviderArtifactLineage(
 		(*dispatchDetail.ArtifactIds)[0] != "child-artifact-1" {
 		t.Fatalf("dispatch detail artifactIds = %#v, want [child-artifact-1]", dispatchDetail.ArtifactIds)
 	}
+}
+
+func assertAPILiveProviderArtifactLineage(
+	t *testing.T,
+	serverURL, sessionID string,
+	dispatchSummary factoryapi.FactorySessionDispatchSummary,
+	dispatchDetail factoryapi.FactoryDispatch,
+) {
+	t.Helper()
+	assertAPILiveProviderSessionArtifactRef(t, serverURL, sessionID)
+	assertAPILiveProviderArtifactListDetail(t, serverURL, sessionID)
+	assertAPILiveProviderDispatchArtifactCrossRefs(t, dispatchSummary, dispatchDetail)
 }
 
 func getDurableArtifactDetail(t *testing.T, serverURL, sessionID, artifactID string) factoryapi.FactorySessionArtifactDetail {
@@ -578,15 +594,8 @@ func getDurableArtifactDetail(t *testing.T, serverURL, sessionID, artifactID str
 	return response
 }
 
-func assertAPILiveProviderDispatchLifecycleEventsAlignWithReads(
-	t *testing.T,
-	events []factoryapi.FactoryEvent,
-	dispatchID string,
-	summary factoryapi.FactorySessionDispatchSummary,
-	detail factoryapi.FactoryDispatch,
-) {
+func assertAPIDispatchQueuedLifecycleEvent(t *testing.T, events []factoryapi.FactoryEvent, dispatchID string) {
 	t.Helper()
-
 	queued := findAPIFactoryEventByType(events, "DISPATCH_QUEUED", dispatchID)
 	if queued == nil {
 		t.Fatalf("events = %#v, want DISPATCH_QUEUED for %q", events, dispatchID)
@@ -607,11 +616,16 @@ func assertAPILiveProviderDispatchLifecycleEventsAlignWithReads(
 	if queuedBody.DispatchKind != string(factoryapi.FactoryDispatchKindJAVASCRIPTAGENT) {
 		t.Fatalf("DISPATCH_QUEUED dispatchKind = %q, want JAVASCRIPT_AGENT", queuedBody.DispatchKind)
 	}
+}
 
-	if !isTerminalFactoryDispatchStatus(detail.Status) {
-		return
-	}
-
+func assertAPIDispatchReconciledLifecycleEvent(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	dispatchID string,
+	summary factoryapi.FactorySessionDispatchSummary,
+	detail factoryapi.FactoryDispatch,
+) {
+	t.Helper()
 	reconciled := findAPIFactoryEventByType(events, "DISPATCH_RECONCILED", dispatchID)
 	if reconciled == nil {
 		t.Fatalf("events = %#v, want DISPATCH_RECONCILED for %q", events, dispatchID)
@@ -624,10 +638,10 @@ func assertAPILiveProviderDispatchLifecycleEventsAlignWithReads(
 		t.Fatalf("marshal DISPATCH_RECONCILED payload: %v", err)
 	}
 	var reconciledBody struct {
-		ReconciledStatus     factoryapi.FactoryDispatchStatus            `json:"reconciledStatus"`
-		ReconciliationSource factoryapi.DispatchReconciliationSource     `json:"reconciliationSource"`
-		ArtifactIds          *[]string                                   `json:"artifactIds"`
-		FailureDetail        *factoryapi.FactoryDispatchFailureDetail    `json:"failureDetail"`
+		ReconciledStatus     factoryapi.FactoryDispatchStatus         `json:"reconciledStatus"`
+		ReconciliationSource factoryapi.DispatchReconciliationSource `json:"reconciliationSource"`
+		ArtifactIds          *[]string                               `json:"artifactIds"`
+		FailureDetail        *factoryapi.FactoryDispatchFailureDetail `json:"failureDetail"`
 	}
 	if err := json.Unmarshal(reconciledPayload, &reconciledBody); err != nil {
 		t.Fatalf("unmarshal DISPATCH_RECONCILED payload: %v", err)
@@ -648,6 +662,21 @@ func assertAPILiveProviderDispatchLifecycleEventsAlignWithReads(
 		assertAPILiveProviderDispatchFailureDetail(t, reconciledBody.FailureDetail)
 		assertAPILiveProviderDispatchFailureDetail(t, detail.FailureDetail)
 	}
+}
+
+func assertAPILiveProviderDispatchLifecycleEventsAlignWithReads(
+	t *testing.T,
+	events []factoryapi.FactoryEvent,
+	dispatchID string,
+	summary factoryapi.FactorySessionDispatchSummary,
+	detail factoryapi.FactoryDispatch,
+) {
+	t.Helper()
+	assertAPIDispatchQueuedLifecycleEvent(t, events, dispatchID)
+	if !isTerminalFactoryDispatchStatus(detail.Status) {
+		return
+	}
+	assertAPIDispatchReconciledLifecycleEvent(t, events, dispatchID, summary, detail)
 }
 
 func findAPIFactoryEventByType(

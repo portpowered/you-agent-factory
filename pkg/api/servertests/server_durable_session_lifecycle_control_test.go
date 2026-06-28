@@ -891,10 +891,7 @@ func TestSimpleFinalDurableSessionReads_APIPreservesFinalResultWithoutChildDispa
 	assertAPIInspectionResponsesExcludeLiveProviderMarkers(t, snapshot, factoryapi.FactoryDispatch{})
 }
 
-func assertAPIFakeChildInspectionSnapshot(
-	t *testing.T,
-	snapshot durableSessionInspectionSnapshot,
-) {
+func assertAPIFakeChildSessionSucceeded(t *testing.T, snapshot durableSessionInspectionSnapshot) {
 	t.Helper()
 	if snapshot.read.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
 		t.Fatalf("session status = %q, want SUCCEEDED", snapshot.read.Status)
@@ -907,6 +904,10 @@ func assertAPIFakeChildInspectionSnapshot(
 	if snapshot.result.ResultStatus != factoryapi.FactorySessionResultStatusFinal {
 		t.Fatalf("result status = %q, want FINAL", snapshot.result.ResultStatus)
 	}
+}
+
+func assertAPIFakeChildDispatchArtifacts(t *testing.T, snapshot durableSessionInspectionSnapshot) {
+	t.Helper()
 	if len(snapshot.dispatches.Dispatches) != 1 {
 		t.Fatalf("dispatch list = %#v, want one dispatch", snapshot.dispatches.Dispatches)
 	}
@@ -925,6 +926,15 @@ func assertAPIFakeChildInspectionSnapshot(
 	if snapshot.artifacts.Artifacts[0].DispatchId == nil || *snapshot.artifacts.Artifacts[0].DispatchId != "dispatch-1" {
 		t.Fatalf("artifact dispatchId = %#v, want dispatch-1", snapshot.artifacts.Artifacts[0].DispatchId)
 	}
+}
+
+func assertAPIFakeChildInspectionSnapshot(
+	t *testing.T,
+	snapshot durableSessionInspectionSnapshot,
+) {
+	t.Helper()
+	assertAPIFakeChildSessionSucceeded(t, snapshot)
+	assertAPIFakeChildDispatchArtifacts(t, snapshot)
 }
 
 func assertAPIFakeChildDispatchDetail(t *testing.T, dispatchDetail factoryapi.FactoryDispatch) {
