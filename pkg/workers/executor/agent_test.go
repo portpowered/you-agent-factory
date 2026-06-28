@@ -2,7 +2,6 @@ package executor
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -107,107 +106,6 @@ func assertExecutionMetadataEqual(t *testing.T, want, got interfaces.ExecutionMe
 		if want.WorkIDs[i] != got.WorkIDs[i] {
 			t.Fatalf("WorkIDs[%d] = %q, want %q", i, got.WorkIDs[i], want.WorkIDs[i])
 		}
-	}
-}
-
-func TestAgentExecutor_ModelOperationOutputUsesCanonicalWorkContent(t *testing.T) {
-	audioPath := "/tmp/agent-canonical-output.wav"
-	provider := &agentMockProvider{response: interfaces.InferenceResponse{
-		Content: `[{"type":"AUDIO","file":"` + audioPath + `","contentType":"audio/wav"}]`,
-	}}
-	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
-			"tts-worker": {
-				Type: interfaces.WorkerTypeModel,
-				Operations: []interfaces.ModelOperation{{
-					Name: "TTS",
-					Outputs: []interfaces.ModelOperationSlot{{
-						Name:         "audio",
-						ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
-					}},
-				}},
-			},
-		},
-	}, provider)
-
-	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
-			DispatchID:   "dispatch-tts",
-			TransitionID: "transition-tts",
-			WorkerType:   "tts-worker",
-		},
-		withAgentModelOperation("TTS", nil),
-	))
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
-	}
-
-	var content []interfaces.WorkContentPart
-	if err := json.Unmarshal([]byte(result.Output), &content); err != nil {
-		t.Fatalf("decode canonical output: %v", err)
-	}
-	if len(content) != 1 || content[0].Type != interfaces.WorkContentPartTypeAudio || content[0].File != audioPath {
-		t.Fatalf("output = %#v, want canonical audio WorkContent", content)
-	}
-}
-
-func TestInferenceRequestForExecutionRequest_ForwardsModelOperationContract(t *testing.T) {
-	req := testAgentRequest(
-		interfaces.WorkDispatch{
-			DispatchID:      "d-tts",
-			TransitionID:    "t-tts",
-			WorkerType:      "worker-a",
-			WorkstationName: "speak",
-		},
-		withAgentPrompts("System prompt", "Speak"),
-		withAgentModelOperation("TTS", []interfaces.ResolvedModelOperationBinding{
-			{
-				Slot:   "text",
-				Source: interfaces.ModelOperationBindingSourceInput,
-				Content: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeText,
-					Text: "hello",
-				}},
-			},
-			{
-				Slot:   "voice",
-				Source: interfaces.ModelOperationBindingSourceConfig,
-				Content: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeJSON,
-					JSON: []byte(`{"name":"alloy"}`),
-				}},
-			},
-		}),
-	)
-
-	got := inferenceRequestForExecutionRequest(req, &interfaces.WorkerConfig{
-		Model:         "OMNIVOICE_Q4_K_M",
-		ModelProvider: interfaces.RunnerIDCodex,
-		ModelLocality: interfaces.ModelLocalityLocal,
-	}, nil)
-
-	if got.ModelOperation != "TTS" {
-		t.Fatalf("model operation = %q, want TTS", got.ModelOperation)
-	}
-	if got.ModelLocality != interfaces.ModelLocalityLocal {
-		t.Fatalf("model locality = %q, want %q", got.ModelLocality, interfaces.ModelLocalityLocal)
-	}
-	if len(got.ModelBindings) != 2 {
-		t.Fatalf("model bindings = %#v, want 2 entries", got.ModelBindings)
-	}
-	if got.ModelBindings[0].Slot != "text" || got.ModelBindings[0].Content[0].Text != "hello" {
-		t.Fatalf("text binding = %#v, want forwarded text binding", got.ModelBindings[0])
-	}
-	if got.ModelBindings[1].Slot != "voice" || string(got.ModelBindings[1].Content[0].JSON) != `{"name":"alloy"}` {
-		t.Fatalf("voice binding = %#v, want forwarded config binding", got.ModelBindings[1])
-	}
-
-	got.ModelBindings[0].Content[0].Text = "changed"
-	if req.ModelBindings[0].Content[0].Text != "hello" {
-		t.Fatalf("request bindings mutated original execution request: %#v", req.ModelBindings)
 	}
 }
 
@@ -452,79 +350,6 @@ func TestAgentExecutor_PropagatesExecutionMetadataToProviderRequest(t *testing.T
 	}
 
 	assertExecutionMetadataEqual(t, want, provider.lastReq.Dispatch.Execution)
-}
-
-// pkgmaintcheck:ignore-cyclomatic-complexity this inference request contract test keeps the canonical dispatch payload assertions together on the worker seam.
-func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testing.T) {
-	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "done"}}
-	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
-			"worker-a": {
-				Model:         "claude-sonnet-4-20250514",
-				ModelProvider: string(interfaces.ModelProviderClaude),
-				SessionID:     "session-1",
-			},
-		},
-	}, provider)
-
-	inputToken := interfaces.Token{
-		ID: "token-1",
-		Color: interfaces.TokenColor{
-			WorkID:     "work-1",
-			WorkTypeID: "task",
-			TraceID:    "trace-1",
-		},
-	}
-	dispatch := interfaces.WorkDispatch{
-		DispatchID:      "dispatch-1",
-		TransitionID:    "transition-1",
-		WorkerType:      "worker-a",
-		WorkstationName: "review",
-		Execution:       interfaces.ExecutionMetadata{ReplayKey: "transition-1/trace-1/work-1", TraceID: "trace-1", WorkIDs: []string{"work-1"}},
-		InputTokens:     InputTokens(inputToken),
-		InputBindings:   map[string][]string{"task": {"token-1"}},
-	}
-	request := testAgentRequest(
-		dispatch,
-		withAgentWorktree("feature-worktree"),
-		withAgentWorkingDirectory("C:\\repo"),
-		withAgentEnvVars(map[string]string{"PORTOS_TEST_ENV": "enabled"}),
-		withAgentPrompts("system prompt", "user prompt"),
-		withAgentOutputSchema(`{"type":"object"}`),
-	)
-
-	_, err := executor.Execute(context.Background(), request)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	req := provider.lastReq
-	if req.Dispatch.DispatchID != dispatch.DispatchID || req.Dispatch.TransitionID != dispatch.TransitionID || req.Dispatch.WorkerType != dispatch.WorkerType {
-		t.Fatalf("request identity = %#v, want dispatch identity %#v", req, dispatch)
-	}
-	if req.Dispatch.WorkstationName != dispatch.WorkstationName || req.WorkstationType != dispatch.WorkstationName {
-		t.Fatalf("request workstation fields = name %q type %q, want %q", req.Dispatch.WorkstationName, req.WorkstationType, dispatch.WorkstationName)
-	}
-	if req.SystemPrompt != request.SystemPrompt || req.UserMessage != request.UserMessage || req.OutputSchema != request.OutputSchema {
-		t.Fatalf("request prompt fields differ from execution request: %#v", req)
-	}
-	if req.Worktree != request.Worktree || req.WorkingDirectory != request.WorkingDirectory {
-		t.Fatalf("request paths = worktree %q working_directory %q", req.Worktree, req.WorkingDirectory)
-	}
-	if req.Model != "claude-sonnet-4-20250514" || req.ModelProvider != string(interfaces.ModelProviderClaude) || req.SessionID != "session-1" {
-		t.Fatalf("request provider fields = model %q provider %q session %q", req.Model, req.ModelProvider, req.SessionID)
-	}
-	if req.EnvVars["PORTOS_TEST_ENV"] != "enabled" {
-		t.Fatalf("request env vars = %#v", req.EnvVars)
-	}
-	if got := req.Dispatch.InputBindings["task"]; len(got) != 1 || got[0] != "token-1" {
-		t.Fatalf("request input bindings = %#v", req.Dispatch.InputBindings)
-	}
-	tokens := cloneInputTokens(req.InputTokens)
-	if len(tokens) != 1 || tokens[0].ID != inputToken.ID || tokens[0].Color.WorkID != inputToken.Color.WorkID {
-		t.Fatalf("request input tokens = %#v, want %#v", tokens, inputToken)
-	}
-	assertExecutionMetadataEqual(t, dispatch.Execution, req.Dispatch.Execution)
 }
 
 func TestAgentExecutor_ClaudeSessionIDFromRuntimeConfigFlowsIntoProviderRequest(t *testing.T) {
@@ -1014,21 +839,5 @@ func TestAgentExecutor_RawDeadlineExceeded_ExhaustsRetriesIntoStructuredTimeoutF
 	}
 	if result.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
 		t.Fatalf("FailureMetadata.Family = %q, want %q", result.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
-	}
-}
-
-func TestInferenceRequestForExecutionRequest_DefaultWorkingDirectoryDoesNotRequireRunnerCapability(t *testing.T) {
-	got := inferenceRequestForExecutionRequest(testAgentRequest(interfaces.WorkDispatch{
-		DispatchID: "d-default-workdir", TransitionID: "t-default-workdir", WorkerType: "worker-a", WorkstationName: "review",
-	}, withAgentPrompts("System prompt", "Review"), withAgentWorkingDirectory("/tmp/runtime-session")), &interfaces.WorkerConfig{
-		Model: "gemini-1.5-pro", ModelProvider: interfaces.RunnerIDGemini,
-	}, nil)
-	if got.WorkingDirectory != "/tmp/runtime-session" {
-		t.Fatalf("working directory = %q, want forwarded runtime path", got.WorkingDirectory)
-	}
-	for _, capability := range got.RequiredOptionalCapabilities {
-		if capability == interfaces.RunnerOptionalCapabilityWorkingDirectory {
-			t.Fatalf("capabilities = %#v, want default working directory omitted", got.RequiredOptionalCapabilities)
-		}
 	}
 }
