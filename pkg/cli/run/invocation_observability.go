@@ -1,17 +1,20 @@
 package run
 
 import (
+	"context"
 	"errors"
-	"strings"
-	"sync/atomic"
-	"time"
-
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
+	"io"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 )
 
 const (
@@ -266,4 +269,271 @@ func invocationSourceLabels(labels []invocations.InputSourceLabel) []string {
 		out = append(out, string(label))
 	}
 	return out
+}
+
+type sessionResponseStreamAttachable interface {
+	SubscribeSessionResponseStream(
+		sessionID string,
+		dispatchID string,
+		afterSequence int64,
+	) (*factorysessions.SessionResponseStreamSubscription, error)
+	SessionResponseStreamDispatchIDs(sessionID string) ([]string, error)
+}
+
+type responseStreamEventSink interface {
+	onStreamSegment(factorysessions.SessionResponseStreamReadResult)
+}
+
+type responseStreamAttachment struct {
+	cancel    context.CancelFunc
+	done      chan struct{}
+	consumers sync.WaitGroup
+}
+
+func startResponseStreamAttachment(
+	ctx context.Context,
+	attachable sessionResponseStreamAttachable,
+	sessionID string,
+	sink responseStreamEventSink,
+) *responseStreamAttachment {
+	if attachable == nil || sink == nil {
+		return nil
+	}
+	attachCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	attachment := &responseStreamAttachment{
+		cancel: cancel,
+		done:   done,
+	}
+	go func() {
+		defer close(done)
+		runResponseStreamAttachment(attachCtx, attachable, sessionID, sink, &attachment.consumers)
+	}()
+	return attachment
+}
+
+func (a *responseStreamAttachment) stop() {
+	if a == nil {
+		return
+	}
+	a.cancel()
+	<-a.done
+	a.consumers.Wait()
+}
+
+func runResponseStreamAttachment(
+	ctx context.Context,
+	attachable sessionResponseStreamAttachable,
+	sessionID string,
+	sink responseStreamEventSink,
+	consumers *sync.WaitGroup,
+) {
+	subscribed := make(map[string]*factorysessions.SessionResponseStreamSubscription)
+	var subscribedMu sync.Mutex
+
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		dispatchIDs, _ := attachable.SessionResponseStreamDispatchIDs(sessionID)
+		for _, dispatchID := range dispatchIDs {
+			subscribedMu.Lock()
+			_, alreadySubscribed := subscribed[dispatchID]
+			subscribedMu.Unlock()
+			if alreadySubscribed {
+				continue
+			}
+
+			subscription, err := attachable.SubscribeSessionResponseStream(sessionID, dispatchID, 0)
+			if err != nil {
+				continue
+			}
+
+			subscribedMu.Lock()
+			subscribed[dispatchID] = subscription
+			subscribedMu.Unlock()
+			consumers.Add(1)
+			go func() {
+				defer consumers.Done()
+				consumeResponseStreamSubscription(ctx, subscription, sink)
+			}()
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func consumeResponseStreamSubscription(
+	ctx context.Context,
+	subscription *factorysessions.SessionResponseStreamSubscription,
+	sink responseStreamEventSink,
+) {
+	defer subscription.Detach()
+	for {
+		result, err := subscription.Next(ctx)
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				drainResponseStreamSubscription(subscription, sink)
+			}
+			return
+		}
+		sink.onStreamSegment(result)
+	}
+}
+
+func drainResponseStreamSubscription(
+	subscription *factorysessions.SessionResponseStreamSubscription,
+	sink responseStreamEventSink,
+) {
+	drainCtx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+	for {
+		result, err := subscription.Next(drainCtx)
+		if err != nil {
+			return
+		}
+		if len(result.Events) == 0 && !result.BehindRetainedWindow && result.Compaction == nil {
+			return
+		}
+		sink.onStreamSegment(result)
+	}
+}
+
+const (
+	defaultResponseStreamProgressQueueCapacity = 64
+	responseStreamProgressDrainTimeout         = 250 * time.Millisecond
+)
+
+// responseStreamProgressWriter decouples internal stream consumption from
+// terminal stdout writes so a slow or blocked consumer does not stall provider
+// dispatch or invocation completion indefinitely.
+type responseStreamProgressWriter struct {
+	mu           sync.Mutex
+	output       io.Writer
+	queue        chan []byte
+	wg           sync.WaitGroup
+	closed       bool
+	droppedLines int
+}
+
+func newResponseStreamProgressWriter(output io.Writer) *responseStreamProgressWriter {
+	if output == nil {
+		panic("response stream progress writer output is nil")
+	}
+	writer := &responseStreamProgressWriter{
+		output: output,
+		queue:  make(chan []byte, defaultResponseStreamProgressQueueCapacity),
+	}
+	writer.wg.Add(1)
+	go writer.run()
+	return writer
+}
+
+func (w *responseStreamProgressWriter) enqueue(payload []byte) bool {
+	if w == nil {
+		return false
+	}
+	line := appendPayloadLine(payload)
+
+	w.mu.Lock()
+	if w.closed {
+		w.mu.Unlock()
+		return false
+	}
+	w.mu.Unlock()
+
+	select {
+	case w.queue <- line:
+		return true
+	default:
+		w.mu.Lock()
+		w.droppedLines++
+		w.mu.Unlock()
+		return false
+	}
+}
+
+func (w *responseStreamProgressWriter) enqueueNotice(payload []byte) {
+	if w == nil {
+		return
+	}
+	line := appendPayloadLine(payload)
+
+	w.mu.Lock()
+	if w.closed {
+		w.mu.Unlock()
+		_, _ = w.output.Write(line)
+		return
+	}
+	w.mu.Unlock()
+
+	select {
+	case w.queue <- line:
+		return
+	default:
+	}
+
+	select {
+	case w.queue <- line:
+	case <-time.After(50 * time.Millisecond):
+		go func() {
+			_, _ = w.output.Write(line)
+		}()
+	}
+}
+
+func (w *responseStreamProgressWriter) droppedProgressLines() int {
+	if w == nil {
+		return 0
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.droppedLines
+}
+
+func (w *responseStreamProgressWriter) stopAndDrain() {
+	if w == nil {
+		return
+	}
+
+	w.mu.Lock()
+	if w.closed {
+		w.mu.Unlock()
+		waitProgressWriter(&w.wg, responseStreamProgressDrainTimeout)
+		return
+	}
+	w.closed = true
+	w.mu.Unlock()
+	close(w.queue)
+	waitProgressWriter(&w.wg, responseStreamProgressDrainTimeout)
+}
+
+func waitProgressWriter(wg *sync.WaitGroup, timeout time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+	}
+}
+
+func (w *responseStreamProgressWriter) run() {
+	defer w.wg.Done()
+	for line := range w.queue {
+		_, _ = w.output.Write(line)
+	}
+}
+
+func appendPayloadLine(payload []byte) []byte {
+	line := make([]byte, len(payload)+1)
+	copy(line, payload)
+	line[len(payload)] = '\n'
+	return line
 }
