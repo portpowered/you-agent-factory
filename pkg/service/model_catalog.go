@@ -4,7 +4,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -224,12 +223,11 @@ func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string,
 			Content: inputContent,
 		},
 	}}
-	workstationDef := &interfaces.FactoryWorkstationConfig{
-		Type:              interfaces.WorkstationTypeInvoke,
-		Operation:         strings.TrimSpace(request.Operation),
-		OperationBindings: modelInvocationBindingsFromGenerated(request.Bindings),
-	}
-	resolvedBindings, err := workerexecutor.ResolveModelOperationBindings(workstationDef, workerDef, inputTokens)
+	workstationDef := invocations.DirectInferenceWorkstationConfig(
+		request.Operation,
+		invocations.OperationBindingsFromGenerated(request.Bindings),
+	)
+	resolvedBindings, err := invocations.ResolveInferenceOperationBindings(workstationDef, workerDef, inputTokens)
 	if err != nil {
 		return apisurface.ModelInvocationResult{}, err
 	}
@@ -255,7 +253,7 @@ func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string,
 		ModelOperation:        strings.TrimSpace(request.Operation),
 		ModelBindings:         resolvedBindings,
 		SystemPrompt:          workerDef.Body,
-		UserMessage:           directModelInvocationUserMessage(request.Operation, inputContent, resolvedBindings),
+		UserMessage:           invocations.InferenceOperationUserMessage(request.Operation, inputContent, resolvedBindings),
 	}
 
 	result, err := executor.Execute(ctx, workstationRequest)
@@ -266,7 +264,7 @@ func (s *runtimeModelService) InvokeModel(ctx context.Context, modelName string,
 		return apisurface.ModelInvocationResult{}, fmt.Errorf("provider execution failed: %s", strings.TrimSpace(result.Error))
 	}
 
-	outputContent, err := directModelInvocationOutputContent(result.Output, operation)
+	outputContent, err := invocations.WorkContentFromInferenceOutput(result.Output, operation)
 	if err != nil {
 		return apisurface.ModelInvocationResult{}, err
 	}
@@ -876,72 +874,6 @@ func (fs *FactoryService) commandRunnerOverride() workers.CommandRunner {
 	return fs.coordinatorPolicy().commandRunnerOverride
 }
 
-func modelInvocationBindingsFromGenerated(values *[]factoryapi.WorkstationOperationBinding) []interfaces.ModelOperationBinding {
-	if values == nil || len(*values) == 0 {
-		return nil
-	}
-	bindings := make([]interfaces.ModelOperationBinding, 0, len(*values))
-	for _, binding := range *values {
-		current := interfaces.ModelOperationBinding{
-			Slot:           strings.TrimSpace(binding.Slot),
-			Config:         workcontent.PartsFromGenerated(binding.Config),
-			DefaultContent: workcontent.PartsFromGenerated(binding.DefaultContent),
-		}
-		if binding.Selector != nil {
-			current.Selector = &interfaces.ModelOperationBindingSelector{
-				Slot:  stringValue(binding.Selector.Slot),
-				Label: stringValue(binding.Selector.Label),
-				Type:  stringValue(binding.Selector.Type),
-				Role:  stringValue(binding.Selector.Role),
-			}
-		}
-		bindings = append(bindings, current)
-	}
-	return bindings
-}
-
-func directModelInvocationUserMessage(operation string, inputContent []interfaces.WorkContentPart, bindings []interfaces.ResolvedModelOperationBinding) string {
-	payload := struct {
-		Operation string                                     `json:"operation"`
-		Input     []interfaces.WorkContentPart               `json:"input,omitempty"`
-		Bindings  []interfaces.ResolvedModelOperationBinding `json:"bindings,omitempty"`
-	}{
-		Operation: strings.TrimSpace(operation),
-		Input:     append([]interfaces.WorkContentPart(nil), inputContent...),
-		Bindings:  interfaces.CloneResolvedModelOperationBindings(bindings),
-	}
-	encoded, err := json.Marshal(payload)
-	if err != nil {
-		return strings.TrimSpace(operation)
-	}
-	return string(encoded)
-}
-
-func directModelInvocationOutputContent(raw string, operation interfaces.ModelOperation) ([]interfaces.WorkContentPart, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return nil, nil
-	}
-
-	var content factoryapi.WorkContent
-	if err := json.Unmarshal([]byte(trimmed), &content); err == nil {
-		return workcontent.PartsFromGenerated(&content), nil
-	}
-	var envelope struct {
-		Content factoryapi.WorkContent `json:"content"`
-	}
-	if err := json.Unmarshal([]byte(trimmed), &envelope); err == nil && envelope.Content != nil {
-		return workcontent.PartsFromGenerated(&envelope.Content), nil
-	}
-	if modelOperationHasOnlyTextOutputs(operation) {
-		return []interfaces.WorkContentPart{{
-			Type: interfaces.WorkContentPartTypeText,
-			Text: raw,
-		}}, nil
-	}
-	return nil, fmt.Errorf("model invocation response is not valid WorkContent JSON for operation %q", strings.TrimSpace(operation.Name))
-}
-
 func directModelInvocationStream(content []interfaces.WorkContentPart, options *factoryapi.ModelInvocationOptions) (string, string, error) {
 	if options == nil || options.ResponseMode == nil || *options.ResponseMode != factoryapi.AUDIOSTREAM {
 		return "", "", nil
@@ -957,23 +889,6 @@ func directModelInvocationStream(content []interfaces.WorkContentPart, options *
 		return part.File, contentType, nil
 	}
 	return "", "", fmt.Errorf("%w: invocation did not produce audio output", apisurface.ErrModelInvocationUnsupportedMode)
-}
-
-func modelOperationHasOnlyTextOutputs(operation interfaces.ModelOperation) bool {
-	if len(operation.Outputs) == 0 {
-		return true
-	}
-	for _, output := range operation.Outputs {
-		if len(output.ContentTypes) == 0 {
-			return false
-		}
-		for _, contentType := range output.ContentTypes {
-			if strings.TrimSpace(contentType) != interfaces.ModelOperationContentTypeText {
-				return false
-			}
-		}
-	}
-	return true
 }
 
 func stringValue[T ~string](value *T) string {

@@ -58,6 +58,13 @@ primary-result behavior.
   transport-specific empty-stdin errors. When `Stdin` is overridden away from
   `os.Stdin` (cobra `SetIn`, tests, or programmatic callers), treat it as piped
   input even if the process-level `os.Stdin` is still a TTY.
+- `pkg/invocations/inference.go` resolves inference-run operation bindings,
+  maps direct invocation request bindings, builds the provider-neutral inference
+  request envelope, and shapes inference responses into ordered canonical
+  `WorkContentPart` output shared by direct model invocation and factory-session
+  execution paths.
+- `pkg/workers/executor/model_operation_bindings.go` delegates inference binding
+  resolution to `pkg/invocations`.
 - `pkg/invocations/input.go` owns logical empty-text detection via
   `strings.TrimSpace` inside `ResolveTextInput` and `ResolveAPITextInputContent`;
   CLI and API adapters must not duplicate whitespace-only rejection.

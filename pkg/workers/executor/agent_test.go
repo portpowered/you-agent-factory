@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -106,6 +107,50 @@ func assertExecutionMetadataEqual(t *testing.T, want, got interfaces.ExecutionMe
 		if want.WorkIDs[i] != got.WorkIDs[i] {
 			t.Fatalf("WorkIDs[%d] = %q, want %q", i, got.WorkIDs[i], want.WorkIDs[i])
 		}
+	}
+}
+
+func TestAgentExecutor_ModelOperationOutputUsesCanonicalWorkContent(t *testing.T) {
+	audioPath := "/tmp/agent-canonical-output.wav"
+	provider := &agentMockProvider{response: interfaces.InferenceResponse{
+		Content: `[{"type":"AUDIO","file":"` + audioPath + `","contentType":"audio/wav"}]`,
+	}}
+	executor := NewAgentExecutor(staticRuntimeConfig{
+		Workers: map[string]*interfaces.WorkerConfig{
+			"tts-worker": {
+				Type: interfaces.WorkerTypeModel,
+				Operations: []interfaces.ModelOperation{{
+					Name: "TTS",
+					Outputs: []interfaces.ModelOperationSlot{{
+						Name:         "audio",
+						ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+					}},
+				}},
+			},
+		},
+	}, provider)
+
+	result, err := executor.Execute(context.Background(), testAgentRequest(
+		interfaces.WorkDispatch{
+			DispatchID:   "dispatch-tts",
+			TransitionID: "transition-tts",
+			WorkerType:   "tts-worker",
+		},
+		withAgentModelOperation("TTS", nil),
+	))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+
+	var content []interfaces.WorkContentPart
+	if err := json.Unmarshal([]byte(result.Output), &content); err != nil {
+		t.Fatalf("decode canonical output: %v", err)
+	}
+	if len(content) != 1 || content[0].Type != interfaces.WorkContentPartTypeAudio || content[0].File != audioPath {
+		t.Fatalf("output = %#v, want canonical audio WorkContent", content)
 	}
 }
 

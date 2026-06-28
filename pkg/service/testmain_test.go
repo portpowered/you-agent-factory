@@ -1692,7 +1692,7 @@ func assertModelInvokeAcceptedAudioOutput(t *testing.T, output string, audioPath
 
 func modelInvokeExecutionFixture(t *testing.T, model string, modelLocality string) (*providerCallRecorder, *workers.WorkstationExecutor) {
 	t.Helper()
-	provider := &providerCallRecorder{responses: []interfaces.InferenceResponse{{Content: "audio-ready"}}}
+	provider := &providerCallRecorder{responses: []interfaces.InferenceResponse{{Content: mustMarshalAudioContentResponse(t, filepath.Join(t.TempDir(), "speech.wav"))}}}
 	factoryCfg := &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "speak", WorkerTypeName: "tts-worker"}},
 		Workers:      []interfaces.WorkerConfig{{Name: "tts-worker"}},
@@ -2517,7 +2517,7 @@ func taxonomyModelInvokeExecutionFixtureFromRuntimeConfig(
 ) (*providerCallRecorder, *workers.WorkstationExecutor) {
 	t.Helper()
 
-	provider := &providerCallRecorder{responses: []interfaces.InferenceResponse{{Content: "audio-ready"}}}
+	provider := &providerCallRecorder{responses: []interfaces.InferenceResponse{{Content: mustMarshalAudioContentResponse(t, filepath.Join(t.TempDir(), "speech.wav"))}}}
 	runtimeCfg := newLoadedFactoryConfigForServiceTest(
 		t,
 		"",

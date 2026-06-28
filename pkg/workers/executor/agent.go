@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -85,7 +86,50 @@ func (ae *AgentExecutor) Execute(ctx context.Context, request interfaces.Worksta
 	}
 
 	outcome := ae.evaluateOutcome(resp, workerDef)
+	shapedContent, err := ae.canonicalInferenceOutput(resp.Content, workerDef, request.ModelOperation)
+	if err != nil {
+		return interfaces.WorkResult{
+			DispatchID:      request.Dispatch.DispatchID,
+			TransitionID:    request.Dispatch.TransitionID,
+			Outcome:         interfaces.OutcomeFailed,
+			Output:          resp.Content,
+			Error:           err.Error(),
+			ProviderSession: interfaces.CloneProviderSessionMetadata(resp.ProviderSession),
+			Diagnostics:     diagnostics,
+			Metrics:         agentWorkMetrics(start, retryCount),
+		}, nil
+	}
+	if shapedContent != "" {
+		resp.Content = shapedContent
+	}
 	return ae.workResultForInferenceResponse(request, resp, outcome, diagnostics, retryCount, start)
+}
+
+func (ae *AgentExecutor) canonicalInferenceOutput(raw string, workerDef *interfaces.WorkerConfig, operationName string) (string, error) {
+	operationName = strings.TrimSpace(operationName)
+	if operationName == "" || workerDef == nil {
+		return raw, nil
+	}
+	var operation interfaces.ModelOperation
+	var ok bool
+	for _, candidate := range workerDef.Operations {
+		if strings.TrimSpace(candidate.Name) == operationName {
+			operation = candidate
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return raw, nil
+	}
+	parts, err := invocations.WorkContentFromInferenceOutput(raw, operation)
+	if err != nil {
+		return "", fmt.Errorf("inference output shaping failed: %w", err)
+	}
+	if len(parts) == 0 {
+		return raw, nil
+	}
+	return invocations.MarshalWorkContentOutput(parts)
 }
 
 func decisionEnvelopeWorkResult(
