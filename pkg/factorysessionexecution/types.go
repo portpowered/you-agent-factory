@@ -60,6 +60,12 @@ type RuntimeOptions struct {
 	ChildExecutorMode string
 }
 
+// ResumeSessionRequest resumes one interrupted durable session from persisted
+// checkpoint summaries and shared session state.
+type ResumeSessionRequest struct {
+	RequestID string
+}
+
 // StartRequest is the normalized durable session execution request shared by async
 // and sync start across API, CLI, MCP, and UI.
 type StartRequest struct {

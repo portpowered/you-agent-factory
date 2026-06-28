@@ -39,13 +39,17 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 	vm := goja.New()
 	records := newRecordCollector()
 	sessionID := strings.TrimSpace(req.SessionID)
+	childExecutor := childExecutorForRun(sessionID, records, hooks)
+	if req.Resume != nil {
+		childExecutor = NewResumingChildExecutor(childExecutor, *req.Resume)
+	}
 	globals := &runtimeGlobals{
 		vm:            vm,
 		policy:        policy,
 		sessionID:     sessionID,
 		ctx:           ctx,
 		records:       records,
-		childExecutor: childExecutorForRun(sessionID, records, hooks),
+		childExecutor: childExecutor,
 		onArtifact:    hooks.OnArtifact,
 	}
 	if err := globals.bindWorkflowAPI(); err != nil {
@@ -65,7 +69,9 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 	value, runErr := vm.RunString(wrapWorkflowSource(req.Source))
 	close(interrupt)
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return contextTerminationOutcome(ctxErr), nil
+		outcome := contextTerminationOutcome(ctxErr)
+		outcome.Records = records.list()
+		return outcome, nil
 	}
 	if runErr != nil {
 		outcome := scriptErrorOutcome(vm, runErr)

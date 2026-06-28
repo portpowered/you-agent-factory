@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	jsstore "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
@@ -711,6 +712,7 @@ func timePtr(value time.Time) *time.Time {
 }
 
 func applyRuntimeSessionFields(target *runtimeSessionState, source runtimeSessionState) {
+	preservedResume := preserveRuntimeResumeState(*target)
 	target.session = source.session
 	target.result = source.result
 	target.dispatches = cloneDispatchSummaries(source.dispatches)
@@ -718,6 +720,44 @@ func applyRuntimeSessionFields(target *runtimeSessionState, source runtimeSessio
 	target.dispatchStatusTransitions = cloneDispatchStatusTransitions(source.dispatchStatusTransitions)
 	target.artifacts = cloneArtifactSummaries(source.artifacts)
 	target.events = source.events
+	restoreRuntimeResumeState(target, preservedResume)
+}
+
+type preservedRuntimeResumeState struct {
+	runtimeRecords    []workflowruntime.RuntimeRecord
+	checkpointSummary *jsstore.CheckpointSummary
+	startRequest      *StartRequest
+	resolvedSource    ResolvedSource
+	sourceContent     string
+}
+
+func preserveRuntimeResumeState(state runtimeSessionState) preservedRuntimeResumeState {
+	return preservedRuntimeResumeState{
+		runtimeRecords:    cloneRuntimeRecords(state.runtimeRecords),
+		checkpointSummary: cloneCheckpointSummary(state.checkpointSummary),
+		startRequest:      cloneStartRequestPtr(state.startRequest),
+		resolvedSource:    state.resolvedSource,
+		sourceContent:     state.sourceContent,
+	}
+}
+
+func restoreRuntimeResumeState(state *runtimeSessionState, preserved preservedRuntimeResumeState) {
+	if state == nil {
+		return
+	}
+	state.runtimeRecords = mergeRuntimeRecords(preserved.runtimeRecords, state.runtimeRecords)
+	if preserved.checkpointSummary != nil {
+		state.checkpointSummary = cloneCheckpointSummary(preserved.checkpointSummary)
+	}
+	if preserved.startRequest != nil {
+		state.startRequest = cloneStartRequestPtr(preserved.startRequest)
+	}
+	if preserved.resolvedSource.SourceRef != "" {
+		state.resolvedSource = preserved.resolvedSource
+	}
+	if preserved.sourceContent != "" {
+		state.sourceContent = preserved.sourceContent
+	}
 }
 
 func applyTerminalRuntimeProjection(
@@ -727,10 +767,14 @@ func applyTerminalRuntimeProjection(
 ) {
 	priorSession := cloneSessionRead(state.session)
 	priorResult := cloneResultRead(state.result)
+	priorStatus := state.session.Status
 	preserved := snapshotInterruptedDispatches(state)
 	preservedEvents := extractDispatchInterruptedEvents(state.events)
 	applyRuntimeSessionFields(state, terminal)
 	if len(preserved) == 0 {
+		return
+	}
+	if outcome.OK && priorStatus == LifecycleStatusResuming {
 		return
 	}
 	restoreInterruptedDispatchResultSuppression(state, preserved)
@@ -950,7 +994,7 @@ func artifactStatesFromSummaries(artifacts []ArtifactSummary) []interfaces.Facto
 }
 
 // PersistedRuntimeSessionState is a JSON-serializable durable runtime session snapshot
-// used to reload terminal JavaScript runtime sessions across CLI invocations.
+// used to reload terminal or recoverable JavaScript runtime sessions across CLI invocations.
 type PersistedRuntimeSessionState struct {
 	Session                   SessionReadResult
 	Result                    ResultReadResult
@@ -959,4 +1003,9 @@ type PersistedRuntimeSessionState struct {
 	DispatchStatusTransitions map[string][]DispatchStatus
 	Artifacts                 []ArtifactSummary
 	Events                    []json.RawMessage
+	RuntimeRecords            []workflowruntime.RuntimeRecord
+	CheckpointSummary         *jsstore.CheckpointSummary
+	StartRequest              *StartRequest
+	ResolvedSource            ResolvedSource
+	SourceContent             string
 }
