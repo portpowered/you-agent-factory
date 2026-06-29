@@ -97,14 +97,14 @@ func (e *FakeChildExecutor) Execute(ctx context.Context, req ChildExecutionReque
 
 	e.records.AppendChildDispatch(base, ChildDispatchStatusQueued)
 	e.records.AppendChildDispatch(base, ChildDispatchStatusRunning)
+	output := fakeChildOutput(req, dispatchID, providerSessionRef, artifactRef)
 	completed := base
 	completed.Status = ChildDispatchStatusCompleted
+	completed.Output = CloneOutputMap(output)
 	e.records.Append(RuntimeRecord{
 		Kind:          RecordKindChildDispatch,
 		ChildDispatch: &completed,
 	})
-
-	output := fakeChildOutput(req, dispatchID, providerSessionRef, artifactRef)
 	return ChildExecutionResult{
 		DispatchID:         dispatchID,
 		ChildIndex:         childIndex,
@@ -479,6 +479,10 @@ func childExecutionResultFromRecord(child ChildDispatchRecord) ChildExecutionRes
 	if executionMode == "" {
 		executionMode = ChildExecutionModeFake
 	}
+	output := CloneOutputMap(child.Output)
+	if len(output) == 0 {
+		output = syntheticChildOutputFromRecord(child, executionMode)
+	}
 	return ChildExecutionResult{
 		DispatchID:         child.DispatchID,
 		ChildIndex:         child.ChildIndex,
@@ -486,20 +490,35 @@ func childExecutionResultFromRecord(child ChildDispatchRecord) ChildExecutionRes
 		ExecutionMode:      executionMode,
 		ArtifactRef:        child.ArtifactRef,
 		ProviderSessionRef: child.ProviderSessionRef,
-		Output: map[string]any{
-			"text": fmt.Sprintf(
-				"fake:%s:%s:%s",
-				child.Label,
-				child.DispatchID,
-				childExecutionModeLabel(executionMode),
-			),
-			"label": child.Label,
-		},
+		Output:             output,
 		Request: ChildExecutionRequest{
 			Label: child.Label,
 			Model: child.Model,
 		},
 	}
+}
+
+func syntheticChildOutputFromRecord(child ChildDispatchRecord, executionMode string) map[string]any {
+	return map[string]any{
+		"text": fmt.Sprintf(
+			"fake:%s:%s:%s",
+			child.Label,
+			child.DispatchID,
+			childExecutionModeLabel(executionMode),
+		),
+		"label": child.Label,
+	}
+}
+
+func CloneOutputMap(output map[string]any) map[string]any {
+	if len(output) == 0 {
+		return nil
+	}
+	cloned, err := exportJSONMap(output)
+	if err != nil {
+		return output
+	}
+	return cloned
 }
 
 func childExecutionModeLabel(mode string) string {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,6 +41,22 @@ func TestJavaScriptRuntimeService_ResumeInterruptedSession_RehydratesCheckpointS
 	assertResumedCheckpointStateBranchResult(t, resumedService, harness.sessionID)
 }
 
+func TestJavaScriptRuntimeService_ResumeInterruptedSession_PreservesLiveChildOutput(t *testing.T) {
+	harness := startInterruptedResumableSessionForWorkflow(
+		t,
+		"req-runtime-resume-live-child-output-001",
+		"resumable-live-child-output.workflow.js",
+		"resumable-live-child-output",
+	)
+	assertInterruptedResumePreconditions(t, harness)
+
+	resumedService := resumeInterruptedHarness(t, harness, "req-runtime-resume-live-child-output-resume-001")
+	waitUntilSessionStatus(t, resumedService, harness.sessionID, fse.LifecycleStatusSucceeded, 5*time.Second)
+
+	assertProviderCallCount(t, harness.provider, 3)
+	assertResumedLiveChildOutputResult(t, resumedService, harness.sessionID, harness.provider.workflowName)
+}
+
 func assertResumedCheckpointStateBranchResult(t *testing.T, service *fse.JavaScriptRuntimeService, sessionID string) {
 	t.Helper()
 	result, err := service.GetResult(context.Background(), sessionID, fse.ResultRequest{
@@ -61,6 +78,31 @@ func assertResumedCheckpointStateBranchResult(t *testing.T, service *fse.JavaScr
 	second, ok := projected["second"].(map[string]any)
 	if !ok || second["label"] != "step-two" {
 		t.Fatalf("projected second = %#v, want step-two label", projected["second"])
+	}
+}
+
+func assertResumedLiveChildOutputResult(t *testing.T, service *fse.JavaScriptRuntimeService, sessionID, workflowName string) {
+	t.Helper()
+	result, err := service.GetResult(context.Background(), sessionID, fse.ResultRequest{
+		Mode: fse.ResultModeFinal,
+	})
+	if err != nil {
+		t.Fatalf("GetResult: %v", err)
+	}
+	projected := decodePrimaryResultMap(t, result.PrimaryResult)
+	firstOutputText, ok := projected["firstOutputText"].(string)
+	if !ok || firstOutputText == "" {
+		t.Fatalf("projected firstOutputText = %#v, want non-empty string", projected["firstOutputText"])
+	}
+	wantLiveOutput := fmt.Sprintf("live:%s:step-one:step-one:workflows", workflowName)
+	if !strings.Contains(firstOutputText, wantLiveOutput) {
+		t.Fatalf("projected firstOutputText = %q, want restored live provider output containing %q", firstOutputText, wantLiveOutput)
+	}
+	if strings.HasPrefix(firstOutputText, "fake:") {
+		t.Fatalf("projected firstOutputText = %q, want restored live provider output not synthetic fake replay", firstOutputText)
+	}
+	if projected["secondLabel"] != "step-two" {
+		t.Fatalf("projected secondLabel = %#v, want step-two", projected["secondLabel"])
 	}
 }
 

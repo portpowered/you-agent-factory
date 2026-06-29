@@ -870,3 +870,35 @@ func (c *countingChildExecutor) Execute(_ context.Context, req workflowruntime.C
 		},
 	}, nil
 }
+
+func TestCompletedChildResultsFromRecords_RestoresStoredLiveProviderOutput(t *testing.T) {
+	storedOutput := map[string]any{
+		"text":  "live:resumable:step-one",
+		"label": "step-one",
+	}
+	records := []workflowruntime.RuntimeRecord{
+		{
+			Kind: workflowruntime.RecordKindChildDispatch,
+			ChildDispatch: &workflowruntime.ChildDispatchRecord{
+				DispatchID:    "dispatch-1",
+				ChildIndex:    1,
+				Status:        workflowruntime.ChildDispatchStatusCompleted,
+				Label:         "step-one",
+				ExecutionMode: workflowruntime.ChildExecutionModeLive,
+				Output:        storedOutput,
+			},
+		},
+	}
+
+	completed := workflowruntime.CompletedChildResultsFromRecords(records)
+	result, ok := completed["dispatch-1"]
+	if !ok {
+		t.Fatal("expected completed child result for dispatch-1")
+	}
+	if result.Output["text"] != "live:resumable:step-one" {
+		t.Fatalf("restored output text = %#v, want live:resumable:step-one", result.Output["text"])
+	}
+	if result.ExecutionMode != workflowruntime.ChildExecutionModeLive {
+		t.Fatalf("executionMode = %q, want live-provider", result.ExecutionMode)
+	}
+}
