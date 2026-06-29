@@ -21,6 +21,7 @@ import (
 type Service interface {
 	StartAsync(ctx context.Context, req StartRequest) (AsyncStartResult, error)
 	StartSync(ctx context.Context, req StartRequest) (SyncStartResult, error)
+	ResumeInterruptedSession(ctx context.Context, sessionID string, req ResumeSessionRequest) (AsyncStartResult, error)
 	GetSession(ctx context.Context, sessionID string) (SessionReadResult, error)
 	Pause(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error)
 	Resume(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error)

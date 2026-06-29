@@ -1,0 +1,886 @@
+package factorysessionexecution
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
+	jsstore "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store"
+	"github.com/portpowered/infinite-you/pkg/workcontent"
+)
+
+// ResumeInterruptedSession reconstructs one interrupted checkpointed session from
+// persisted checkpoint summaries plus durable session state and continues execution.
+func (s *JavaScriptRuntimeService) ResumeInterruptedSession(
+	ctx context.Context,
+	sessionID string,
+	req ResumeSessionRequest,
+) (AsyncStartResult, error) {
+	if err := ctx.Err(); err != nil {
+		return AsyncStartResult{}, err
+	}
+	id, err := NormalizeSessionID(sessionID)
+	if err != nil {
+		return AsyncStartResult{}, err
+	}
+	if strings.TrimSpace(req.RequestID) == "" {
+		return AsyncStartResult{}, NewValidationError("requestId", "requestId is required")
+	}
+
+	state, err := s.loadResumeSessionState(id)
+	if err != nil {
+		return AsyncStartResult{}, err
+	}
+	if err := validateResumeSessionState(id, state); err != nil {
+		return AsyncStartResult{}, err
+	}
+
+	s.mu.Lock()
+	if existing, ok := s.sessions[id]; ok && existing.runCancel != nil {
+		s.mu.Unlock()
+		return AsyncStartResult{}, &ControlError{
+			Operation: LifecycleControlResume,
+			Outcome:   LifecycleControlOutcomeInvalidState,
+			Status:    existing.session.Status,
+			Message:   "session is already active in this runtime instance",
+		}
+	}
+	resumingAt := time.Now().UTC()
+	state.session.Status = LifecycleStatusResuming
+	state.result.SessionStatus = LifecycleStatusResuming
+	if state.session.Lifecycle == nil {
+		state.session.Lifecycle = &LifecycleTimestamps{}
+	}
+	state.session.Lifecycle.ResumedAt = &resumingAt
+	resumed := cloneRuntimeSessionState(&state)
+	resumed.events = rebuildRuntimeSessionCanonicalEvents(&resumed)
+	s.sessions[id] = &resumed
+	s.mu.Unlock()
+
+	normalized := *state.startRequest
+	resolved := state.resolvedSource
+	sourceContent := state.sourceContent
+	policyResolution := workflowpolicy.Resolution{
+		Policy: workflowPolicyFromSessionPolicy(state.session.Policy),
+		Hash:   strings.TrimSpace(state.session.Policy.EffectiveHash),
+	}
+
+	runCtx, runCancel := workflowRunContext(context.Background(), policyResolution.Policy)
+	s.mu.Lock()
+	if active, ok := s.sessions[id]; ok {
+		active.runCancel = runCancel
+	}
+	s.mu.Unlock()
+
+	go s.runResumedAsyncSession(
+		runCtx,
+		id,
+		normalized,
+		resolved,
+		sourceContent,
+		policyResolution,
+		state.checkpointSummary,
+		state.runtimeRecords,
+		resumingAt,
+	)
+
+	snapshot, err := s.snapshotSessionState(id)
+	if err != nil {
+		return AsyncStartResult{}, err
+	}
+	return s.asyncStartFromState(snapshot), nil
+}
+
+func (s *JavaScriptRuntimeService) loadResumeSessionState(sessionID string) (runtimeSessionState, error) {
+	s.mu.RLock()
+	if state, ok := s.sessions[sessionID]; ok {
+		cloned := cloneRuntimeSessionState(state)
+		s.mu.RUnlock()
+		return cloned, nil
+	}
+	persistDir := s.sessionPersistDir
+	s.mu.RUnlock()
+
+	if persistDir == "" {
+		return runtimeSessionState{}, ErrSessionNotFound
+	}
+
+	snapshot, err := runtimepersist.LoadBytes(persistDir, sessionID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return runtimeSessionState{}, ErrSessionNotFound
+		}
+		return runtimeSessionState{}, &ResumeError{
+			Outcome:   ResumeOutcomeCorruptedPersistence,
+			SessionID: sessionID,
+			Message:   "persisted session snapshot could not be read",
+		}
+	}
+	var persisted PersistedRuntimeSessionState
+	if err := json.Unmarshal(snapshot, &persisted); err != nil {
+		return runtimeSessionState{}, &ResumeError{
+			Outcome:   ResumeOutcomeCorruptedPersistence,
+			SessionID: sessionID,
+			Message:   "persisted session snapshot is corrupted and cannot be resumed",
+		}
+	}
+	loaded := runtimeStateFromPersistedSnapshot(persisted)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if existing, ok := s.sessions[sessionID]; ok {
+		return cloneRuntimeSessionState(existing), nil
+	}
+	cached := loaded
+	s.sessions[sessionID] = &cached
+	return cloneRuntimeSessionState(&cached), nil
+}
+
+func validateResumeSessionState(sessionID string, state runtimeSessionState) error {
+	if state.session.Status != LifecycleStatusInterrupted {
+		return &ResumeError{
+			Outcome:   ResumeOutcomeInvalidState,
+			Status:    state.session.Status,
+			SessionID: sessionID,
+			Message:   "session is not interrupted and cannot be resumed from checkpoint summaries",
+		}
+	}
+	if state.checkpointSummary == nil {
+		return &ResumeError{
+			Outcome:   ResumeOutcomeMissingCheckpoint,
+			Field:     "checkpointSummary",
+			SessionID: sessionID,
+			Message:   "persisted checkpoint summary is required to resume an interrupted session",
+		}
+	}
+	if err := validateCheckpointSummaryForResume(state.checkpointSummary, sessionID); err != nil {
+		return err
+	}
+	if state.startRequest == nil || strings.TrimSpace(state.sourceContent) == "" {
+		return &ResumeError{
+			Outcome:   ResumeOutcomeInvalidState,
+			Field:     "session",
+			SessionID: sessionID,
+			Message:   "persisted start metadata is required to resume an interrupted session",
+		}
+	}
+	return nil
+}
+
+func validateCheckpointSummaryForResume(summary *jsstore.CheckpointSummary, sessionID string) error {
+	if summary == nil {
+		return &ResumeError{
+			Outcome:   ResumeOutcomeMissingCheckpoint,
+			Field:     "checkpointSummary",
+			SessionID: sessionID,
+			Message:   "persisted checkpoint summary is required to resume an interrupted session",
+		}
+	}
+	if kind := strings.TrimSpace(summary.Kind); kind != "" && kind != jsstore.CheckpointSummaryKind {
+		return &ResumeError{
+			Outcome:   ResumeOutcomeInvalidState,
+			Field:     "checkpointSummary.kind",
+			SessionID: sessionID,
+			Message:   "persisted checkpoint summary has an invalid kind",
+		}
+	}
+	if summary.SchemaVersion != 0 && summary.SchemaVersion != jsstore.CheckpointSummarySchemaVersion {
+		return &ResumeError{
+			Outcome:   ResumeOutcomeInvalidState,
+			Field:     "checkpointSummary.schemaVersion",
+			SessionID: sessionID,
+			Message:   "persisted checkpoint summary has an unsupported schema version",
+		}
+	}
+	if strings.TrimSpace(summary.CheckpointID) == "" {
+		return &ResumeError{
+			Outcome:   ResumeOutcomeInvalidState,
+			Field:     "checkpointSummary.checkpointId",
+			SessionID: sessionID,
+			Message:   "persisted checkpoint summary is missing checkpointId",
+		}
+	}
+	if persistedSessionID := strings.TrimSpace(summary.SessionID); persistedSessionID != "" && persistedSessionID != sessionID {
+		return &ResumeError{
+			Outcome:   ResumeOutcomeInvalidState,
+			Field:     "checkpointSummary.sessionId",
+			SessionID: sessionID,
+			Message:   "persisted checkpoint summary sessionId does not match the interrupted session",
+		}
+	}
+	return nil
+}
+
+func (s *JavaScriptRuntimeService) runResumedAsyncSession(
+	runCtx context.Context,
+	sessionID string,
+	normalized StartRequest,
+	resolved ResolvedSource,
+	sourceContent string,
+	policyResolution workflowpolicy.Resolution,
+	checkpointSummary *jsstore.CheckpointSummary,
+	priorRecords []workflowruntime.RuntimeRecord,
+	startedAt time.Time,
+) {
+	defer func() {
+		s.mu.Lock()
+		if state, ok := s.sessions[sessionID]; ok {
+			state.runCancel = nil
+		}
+		s.mu.Unlock()
+	}()
+
+	resumeContext := workflowruntime.ResumeContextFromCheckpointSummary(
+		workflowruntime.CompletedCheckpointSummary{
+			CompletedDispatchIDs: checkpointSummary.CompletedDispatchIDs,
+			CheckpointState:      checkpointSummary.CheckpointState,
+		},
+		priorRecords,
+	)
+	outcome, err := s.invokeWorkflowRuntimeWithResume(
+		runCtx,
+		normalized,
+		resolved,
+		sourceContent,
+		policyResolution,
+		sessionID,
+		&resumeContext,
+	)
+
+	s.mu.Lock()
+	state, ok := s.sessions[sessionID]
+	if !ok {
+		s.mu.Unlock()
+		return
+	}
+	mergedRecords := mergeRuntimeRecords(priorRecords, outcome.Records)
+	outcome.Records = mergedRecords
+	state.runtimeRecords = mergedRecords
+	if checkpointSummary != nil {
+		state.checkpointSummary = cloneCheckpointSummary(checkpointSummary)
+	}
+
+	if err != nil {
+		failureOutcome := workflowruntime.Outcome{
+			OK: false,
+			Failure: workflowruntime.Failure{
+				Code:    workflowruntime.CodeScriptError,
+				Message: err.Error(),
+			},
+			Records: outcome.Records,
+		}
+		terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, failureOutcome, startedAt)
+		s.applyTerminalRuntimeState(state, terminal, failureOutcome, startedAt)
+		s.unlockRuntimeSessionAfterPersistence(state)
+		return
+	}
+
+	terminal := projectRuntimeSessionState(sessionID, normalized, resolved, policyResolution, outcome, startedAt)
+	s.applyTerminalRuntimeState(state, terminal, outcome, startedAt)
+	if state.checkpointSummary == nil {
+		state.checkpointSummary = latestCheckpointSummaryFromRuntime(sessionID, state, state.runtimeRecords)
+	}
+	s.unlockRuntimeSessionAfterPersistence(state)
+}
+
+func (s *JavaScriptRuntimeService) invokeWorkflowRuntimeWithResume(
+	ctx context.Context,
+	normalized StartRequest,
+	resolved ResolvedSource,
+	sourceContent string,
+	policyResolution workflowpolicy.Resolution,
+	sessionID string,
+	resume *workflowruntime.ResumeContext,
+) (workflowruntime.Outcome, error) {
+	argsJSON, err := marshalStartArgs(normalized.Args)
+	if err != nil {
+		return workflowruntime.Outcome{}, err
+	}
+	return workflowruntime.Run(ctx, workflowruntime.Request{
+		Source:    sourceContent,
+		SourceRef: resolved.SourceRef,
+		SessionID: sessionID,
+		Args:      argsJSON,
+		Metadata:  workflowMetadataFromResolved(resolved, normalized),
+		Policy:    policyResolution.Policy,
+		Resume:    resume,
+	}, s.childExecutorHooks(resolveChildExecutorMode(s.childExecutorMode, normalized)))
+}
+
+func mergeRuntimeRecords(existing, resumed []workflowruntime.RuntimeRecord) []workflowruntime.RuntimeRecord {
+	if len(existing) == 0 {
+		return cloneRuntimeRecords(resumed)
+	}
+	if len(resumed) == 0 {
+		return cloneRuntimeRecords(existing)
+	}
+	merged := make([]workflowruntime.RuntimeRecord, 0, len(existing)+len(resumed))
+	merged = append(merged, cloneRuntimeRecords(existing)...)
+	merged = append(merged, cloneRuntimeRecords(resumed)...)
+	return merged
+}
+
+func latestCheckpointSummaryFromRuntime(
+	sessionID string,
+	state *runtimeSessionState,
+	records []workflowruntime.RuntimeRecord,
+) *jsstore.CheckpointSummary {
+	if state == nil {
+		return nil
+	}
+	return jsstore.LatestCheckpointSummaryFromRecords(jsstore.CheckpointSummaryInput{
+		SessionID:  sessionID,
+		Phase:      state.session.Phase,
+		SourceHash: state.session.SourceHash,
+		PolicyHash: state.session.Policy.EffectiveHash,
+		Records:    records,
+	})
+}
+
+func cloneCheckpointSummary(summary *jsstore.CheckpointSummary) *jsstore.CheckpointSummary {
+	if summary == nil {
+		return nil
+	}
+	cloned := *summary
+	if len(summary.CompletedDispatchIDs) > 0 {
+		cloned.CompletedDispatchIDs = append([]string(nil), summary.CompletedDispatchIDs...)
+	}
+	if len(summary.PendingDispatchIDs) > 0 {
+		cloned.PendingDispatchIDs = append([]string(nil), summary.PendingDispatchIDs...)
+	}
+	if len(summary.ArtifactIDs) > 0 {
+		cloned.ArtifactIDs = append([]string(nil), summary.ArtifactIDs...)
+	}
+	if len(summary.CheckpointState) > 0 {
+		cloned.CheckpointState = make(map[string]any, len(summary.CheckpointState))
+		for key, value := range summary.CheckpointState {
+			cloned.CheckpointState[key] = value
+		}
+	}
+	return &cloned
+}
+
+func workflowPolicyFromSessionPolicy(policy PolicyProjection) workflowpolicy.EffectivePolicy {
+	if len(policy.Effective) == 0 {
+		return workflowpolicy.DefaultEffectivePolicy()
+	}
+	encoded, err := json.Marshal(policy.Effective)
+	if err != nil {
+		return workflowpolicy.DefaultEffectivePolicy()
+	}
+	var effective workflowpolicy.EffectivePolicy
+	if err := json.Unmarshal(encoded, &effective); err != nil {
+		return workflowpolicy.DefaultEffectivePolicy()
+	}
+	return effective
+}
+func applyRuntimeSessionFields(target *runtimeSessionState, source runtimeSessionState) {
+	preservedResume := preserveRuntimeResumeState(*target)
+	target.session = source.session
+	target.result = source.result
+	target.dispatches = cloneDispatchSummaries(source.dispatches)
+	target.dispatchJavaScript = cloneDispatchJavaScriptProjections(source.dispatchJavaScript)
+	target.dispatchStatusTransitions = cloneDispatchStatusTransitions(source.dispatchStatusTransitions)
+	target.artifacts = cloneArtifactSummaries(source.artifacts)
+	target.events = source.events
+	restoreRuntimeResumeState(target, preservedResume)
+}
+
+type preservedRuntimeResumeState struct {
+	runtimeRecords    []workflowruntime.RuntimeRecord
+	checkpointSummary *jsstore.CheckpointSummary
+	startRequest      *StartRequest
+	resolvedSource    ResolvedSource
+	sourceContent     string
+	lifecycle         *LifecycleTimestamps
+}
+
+func preserveRuntimeResumeState(state runtimeSessionState) preservedRuntimeResumeState {
+	return preservedRuntimeResumeState{
+		runtimeRecords:    cloneRuntimeRecords(state.runtimeRecords),
+		checkpointSummary: cloneCheckpointSummary(state.checkpointSummary),
+		startRequest:      cloneStartRequestPtr(state.startRequest),
+		resolvedSource:    state.resolvedSource,
+		sourceContent:     state.sourceContent,
+		lifecycle:         cloneLifecycleTimestamps(state.session.Lifecycle),
+	}
+}
+
+func restoreRuntimeResumeState(state *runtimeSessionState, preserved preservedRuntimeResumeState) {
+	if state == nil {
+		return
+	}
+	state.runtimeRecords = mergeRuntimeRecords(preserved.runtimeRecords, state.runtimeRecords)
+	if preserved.checkpointSummary != nil {
+		state.checkpointSummary = cloneCheckpointSummary(preserved.checkpointSummary)
+	}
+	if preserved.startRequest != nil {
+		state.startRequest = cloneStartRequestPtr(preserved.startRequest)
+	}
+	if preserved.resolvedSource.SourceRef != "" {
+		state.resolvedSource = preserved.resolvedSource
+	}
+	if preserved.sourceContent != "" {
+		state.sourceContent = preserved.sourceContent
+	}
+	mergeResumeLifecycleLineage(state, preserved.lifecycle)
+}
+
+func cloneLifecycleTimestamps(lifecycle *LifecycleTimestamps) *LifecycleTimestamps {
+	if lifecycle == nil {
+		return nil
+	}
+	cloned := &LifecycleTimestamps{}
+	if lifecycle.QueuedAt != nil {
+		cloned.QueuedAt = timePtr(lifecycle.QueuedAt.UTC())
+	}
+	if lifecycle.AwaitingApprovalAt != nil {
+		cloned.AwaitingApprovalAt = timePtr(lifecycle.AwaitingApprovalAt.UTC())
+	}
+	if lifecycle.StartedAt != nil {
+		cloned.StartedAt = timePtr(lifecycle.StartedAt.UTC())
+	}
+	if lifecycle.PausedAt != nil {
+		cloned.PausedAt = timePtr(lifecycle.PausedAt.UTC())
+	}
+	if lifecycle.ResumedAt != nil {
+		cloned.ResumedAt = timePtr(lifecycle.ResumedAt.UTC())
+	}
+	if lifecycle.FinishedAt != nil {
+		cloned.FinishedAt = timePtr(lifecycle.FinishedAt.UTC())
+	}
+	if lifecycle.InterruptedAt != nil {
+		cloned.InterruptedAt = timePtr(lifecycle.InterruptedAt.UTC())
+	}
+	if lifecycle.TerminatedAt != nil {
+		cloned.TerminatedAt = timePtr(lifecycle.TerminatedAt.UTC())
+	}
+	if lifecycle.UpdatedAt != nil {
+		cloned.UpdatedAt = timePtr(lifecycle.UpdatedAt.UTC())
+	}
+	return cloned
+}
+
+func mergeResumeLifecycleLineage(state *runtimeSessionState, preserved *LifecycleTimestamps) {
+	if state == nil || preserved == nil {
+		return
+	}
+	if state.session.Lifecycle == nil {
+		state.session.Lifecycle = &LifecycleTimestamps{}
+	}
+	if preserved.StartedAt != nil {
+		state.session.Lifecycle.StartedAt = timePtr(preserved.StartedAt.UTC())
+	}
+	if preserved.InterruptedAt != nil {
+		state.session.Lifecycle.InterruptedAt = timePtr(preserved.InterruptedAt.UTC())
+	}
+	if preserved.ResumedAt != nil {
+		state.session.Lifecycle.ResumedAt = timePtr(preserved.ResumedAt.UTC())
+	}
+	if preserved.PausedAt != nil {
+		state.session.Lifecycle.PausedAt = timePtr(preserved.PausedAt.UTC())
+	}
+}
+
+func applyTerminalRuntimeProjection(
+	state *runtimeSessionState,
+	terminal runtimeSessionState,
+	outcome workflowruntime.Outcome,
+) {
+	priorSession := cloneSessionRead(state.session)
+	priorResult := cloneResultRead(state.result)
+	priorStatus := state.session.Status
+	preserved := snapshotInterruptedDispatches(state)
+	preservedEvents := extractDispatchInterruptedEvents(state.events)
+	applyRuntimeSessionFields(state, terminal)
+	if len(preserved) == 0 {
+		return
+	}
+	if outcome.OK && priorStatus == LifecycleStatusResuming {
+		state.session.StaleLease = false
+		state.events = mergePreservedDispatchInterruptedEvents(
+			rebuildRuntimeSessionCanonicalEvents(state),
+			preservedEvents,
+		)
+		return
+	}
+	restoreInterruptedDispatchResultSuppression(state, preserved)
+	finalizeInterruptedTerminalSession(state, priorSession, priorResult)
+	state.events = mergePreservedDispatchInterruptedEvents(
+		BuildCanonicalRuntimeSessionEvents(
+			state.session,
+			state.result,
+			runtimeDispatchEventInputFromState(state),
+		),
+		preservedEvents,
+	)
+}
+
+func applyRuntimeExecutionRecordProjection(
+	state *runtimeSessionState,
+	sessionID string,
+	records []workflowruntime.RuntimeRecord,
+	finishedAt time.Time,
+) {
+	recordProjection := ProjectRuntimeExecutionRecords(sessionID, records, finishedAt)
+	if recordProjection.Phase != "" {
+		state.session.Phase = recordProjection.Phase
+	}
+	state.dispatches = cloneDispatchSummaries(recordProjection.Dispatches)
+	state.dispatchJavaScript = cloneDispatchJavaScriptProjections(recordProjection.DispatchJavaScript)
+	state.dispatchStatusTransitions = cloneDispatchStatusTransitions(recordProjection.DispatchStatusTransitions)
+	state.artifacts = cloneArtifactSummaries(recordProjection.Artifacts)
+	state.session.Progress = &recordProjection.Progress
+	state.session.ArtifactRefs = artifactRefsFromSummaries(state.artifacts)
+	state.session.ArtifactCount = len(state.session.ArtifactRefs)
+}
+
+func applyRuntimeSuccessProjection(
+	state *runtimeSessionState,
+	sessionID string,
+	outcome workflowruntime.Outcome,
+	finishedAt time.Time,
+) {
+	applyRuntimeExecutionRecordProjection(state, sessionID, outcome.Records, finishedAt)
+
+	projected, resultSummary, err := projectRuntimeSuccessResult(sessionID, outcome.Value, state.artifacts)
+	if err != nil {
+		state.session.Status = LifecycleStatusFailed
+		state.session.Failure = &FailureSummary{
+			Reason:  "WORKFLOW_RUNTIME_INVALID_RESULT",
+			Message: err.Error(),
+		}
+		state.session.ResultSummary = &ResultSummary{
+			ResultStatus: string(ResultStatusUnavailable),
+		}
+		state.result = ResultReadResult{
+			SessionID:     sessionID,
+			ResultStatus:  ResultStatusUnavailable,
+			SessionStatus: LifecycleStatusFailed,
+			Failure:       cloneFailureSummary(state.session.Failure),
+			Availability:  defaultUnavailableAvailability(),
+		}
+		return
+	}
+	state.session.Status = LifecycleStatusSucceeded
+	state.session.ResultSummary = resultSummary
+	state.result = projected
+}
+
+func projectRuntimeSuccessResult(
+	sessionID string,
+	value workflowresult.TypedValue,
+	artifacts []ArtifactSummary,
+) (ResultReadResult, *ResultSummary, error) {
+	parts, validation := workflowresult.ProjectPrimaryResult(sessionID, value, artifactStatesFromSummaries(artifacts))
+	if validation.HasIssues() {
+		return ResultReadResult{}, nil, fmt.Errorf("project primary result: %v", validation.Issues)
+	}
+
+	primaryJSON := workContentJSONFromParts(parts)
+	result := ResultReadResult{
+		SessionID:     sessionID,
+		ResultStatus:  ResultStatusFinal,
+		SessionStatus: LifecycleStatusSucceeded,
+		PrimaryResult: primaryJSON,
+		ArtifactIDs:   artifactIDsFromSummaries(artifacts),
+	}
+	summary := &ResultSummary{
+		ResultStatus: string(ResultStatusFinal),
+		Summary:      resultSummaryTextFromParts(parts),
+	}
+	return result, summary, nil
+}
+
+func finalizeInterruptedTerminalSession(
+	state *runtimeSessionState,
+	priorSession SessionReadResult,
+	priorResult ResultReadResult,
+) {
+	if state == nil {
+		return
+	}
+	interruptedAt := interruptedTerminalTimestamp(state.session, priorSession)
+	if state.session.Lifecycle == nil {
+		state.session.Lifecycle = &LifecycleTimestamps{}
+	}
+	if interruptedAt != nil {
+		state.session.Lifecycle.InterruptedAt = timePtr(*interruptedAt)
+		if state.session.Lifecycle.FinishedAt == nil {
+			state.session.Lifecycle.FinishedAt = timePtr(*interruptedAt)
+		}
+	}
+	state.session.Status = LifecycleStatusInterrupted
+	state.session.Failure = nil
+
+	canonicalStatus := canonicalResultStatus(priorResult, priorSession)
+	switch canonicalStatus {
+	case ResultStatusPartial, ResultStatusFailedWithPartial:
+		if priorSession.ResultSummary != nil {
+			summary := *priorSession.ResultSummary
+			state.session.ResultSummary = &summary
+		} else {
+			state.session.ResultSummary = nil
+		}
+		if state.session.ResultSummary == nil {
+			state.session.ResultSummary = &ResultSummary{ResultStatus: string(ResultStatusPartial)}
+		} else {
+			state.session.ResultSummary.ResultStatus = string(ResultStatusPartial)
+		}
+		state.result = cloneResultRead(priorResult)
+		state.result.ResultStatus = ResultStatusPartial
+		state.result.SessionStatus = LifecycleStatusInterrupted
+		state.result.Mode = ResultModeFinal
+		state.result.Availability = nil
+	case ResultStatusFinal:
+		fallthrough
+	case ResultStatusNotReady, ResultStatusUnavailable:
+		fallthrough
+	default:
+		state.session.ResultSummary = &ResultSummary{ResultStatus: string(ResultStatusUnavailable)}
+		state.result = ResultReadResult{
+			SessionID:     state.session.SessionID,
+			ResultStatus:  ResultStatusUnavailable,
+			SessionStatus: LifecycleStatusInterrupted,
+			Mode:          ResultModeFinal,
+			Availability: &ResultAvailabilityDetail{
+				Reason:    "SESSION_INTERRUPTED",
+				Message:   "Session was interrupted before a final result was available.",
+				Retryable: false,
+			},
+		}
+	}
+}
+
+func interruptedTerminalTimestamp(session, prior SessionReadResult) *time.Time {
+	if session.Lifecycle != nil {
+		if session.Lifecycle.InterruptedAt != nil {
+			return timePtr(session.Lifecycle.InterruptedAt.UTC())
+		}
+		if session.Lifecycle.FinishedAt != nil {
+			return timePtr(session.Lifecycle.FinishedAt.UTC())
+		}
+		if session.Lifecycle.UpdatedAt != nil {
+			return timePtr(session.Lifecycle.UpdatedAt.UTC())
+		}
+	}
+	if prior.Lifecycle != nil {
+		if prior.Lifecycle.InterruptedAt != nil {
+			return timePtr(prior.Lifecycle.InterruptedAt.UTC())
+		}
+		if prior.Lifecycle.UpdatedAt != nil {
+			return timePtr(prior.Lifecycle.UpdatedAt.UTC())
+		}
+		if prior.Lifecycle.StartedAt != nil {
+			return timePtr(prior.Lifecycle.StartedAt.UTC())
+		}
+	}
+	return nil
+}
+
+func workContentJSONFromParts(parts []interfaces.WorkContentPart) json.RawMessage {
+	content := workcontent.GeneratedPtrFromParts(parts)
+	if content == nil {
+		return nil
+	}
+	encoded, err := json.Marshal(content)
+	if err != nil {
+		return nil
+	}
+	return encoded
+}
+
+func resultSummaryTextFromParts(parts []interfaces.WorkContentPart) string {
+	for _, part := range parts {
+		if part.Type.Normalized() == interfaces.WorkContentPartTypeText {
+			if text := strings.TrimSpace(part.Text); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+func artifactStatesFromSummaries(artifacts []ArtifactSummary) []interfaces.FactorySessionArtifactState {
+	if len(artifacts) == 0 {
+		return nil
+	}
+	states := make([]interfaces.FactorySessionArtifactState, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		states = append(states, interfaces.FactorySessionArtifactState{
+			ID:          artifact.ID,
+			Kind:        artifact.Kind,
+			Visibility:  artifact.Visibility,
+			Label:       artifact.Label,
+			ContentHash: artifact.ContentHash,
+			SizeBytes:   artifact.SizeBytes,
+			AuditMode:   artifact.AuditMode,
+		})
+	}
+	return states
+}
+// PersistedRuntimeSessionState is a JSON-serializable durable runtime session snapshot
+// used to reload terminal or recoverable JavaScript runtime sessions across CLI invocations.
+type PersistedRuntimeSessionState struct {
+	Session                   SessionReadResult
+	Result                    ResultReadResult
+	Dispatches                []DispatchSummary
+	DispatchJavaScript        map[string]DispatchJavaScriptProjection
+	DispatchStatusTransitions map[string][]DispatchStatus
+	Artifacts                 []ArtifactSummary
+	Events                    []json.RawMessage
+	RuntimeRecords            []workflowruntime.RuntimeRecord
+	CheckpointSummary         *jsstore.CheckpointSummary
+	StartRequest              *StartRequest
+	ResolvedSource            ResolvedSource
+	SourceContent             string
+}
+
+func persistedSnapshotFromRuntimeState(state runtimeSessionState) PersistedRuntimeSessionState {
+	snapshot := PersistedRuntimeSessionState{
+		Session:           cloneSessionRead(state.session),
+		Result:            cloneResultRead(state.result),
+		Dispatches:        cloneDispatchSummaries(state.dispatches),
+		Artifacts:         cloneArtifactSummaries(state.artifacts),
+		RuntimeRecords:    cloneRuntimeRecords(state.runtimeRecords),
+		CheckpointSummary: cloneCheckpointSummary(state.checkpointSummary),
+		StartRequest:      cloneStartRequestPtr(state.startRequest),
+		ResolvedSource:    state.resolvedSource,
+		SourceContent:     state.sourceContent,
+	}
+	if len(state.dispatchJavaScript) > 0 {
+		snapshot.DispatchJavaScript = cloneDispatchJavaScriptProjections(state.dispatchJavaScript)
+	}
+	if len(state.dispatchStatusTransitions) > 0 {
+		snapshot.DispatchStatusTransitions = cloneDispatchStatusTransitions(state.dispatchStatusTransitions)
+	}
+	if len(state.events) > 0 {
+		snapshot.Events = make([]json.RawMessage, len(state.events))
+		for i, event := range state.events {
+			snapshot.Events[i] = append(json.RawMessage(nil), event...)
+		}
+	}
+	return snapshot
+}
+
+func runtimeStateFromPersistedSnapshot(snapshot PersistedRuntimeSessionState) runtimeSessionState {
+	state := runtimeSessionState{
+		session:           cloneSessionRead(snapshot.Session),
+		result:            cloneResultRead(snapshot.Result),
+		dispatches:        cloneDispatchSummaries(snapshot.Dispatches),
+		artifacts:         cloneArtifactSummaries(snapshot.Artifacts),
+		runtimeRecords:    cloneRuntimeRecords(snapshot.RuntimeRecords),
+		checkpointSummary: cloneCheckpointSummary(snapshot.CheckpointSummary),
+		startRequest:      cloneStartRequestPtr(snapshot.StartRequest),
+		resolvedSource:    snapshot.ResolvedSource,
+		sourceContent:     snapshot.SourceContent,
+	}
+	if len(snapshot.DispatchJavaScript) > 0 {
+		state.dispatchJavaScript = cloneDispatchJavaScriptProjections(snapshot.DispatchJavaScript)
+	}
+	if len(snapshot.DispatchStatusTransitions) > 0 {
+		state.dispatchStatusTransitions = cloneDispatchStatusTransitions(snapshot.DispatchStatusTransitions)
+	}
+	if len(snapshot.Events) > 0 {
+		state.events = make([]json.RawMessage, len(snapshot.Events))
+		for i, event := range snapshot.Events {
+			state.events[i] = append(json.RawMessage(nil), event...)
+		}
+	}
+	return state
+}
+
+func (s *JavaScriptRuntimeService) persistTerminalSessionState(state runtimeSessionState) error {
+	return s.persistSessionSnapshot(state)
+}
+
+func (s *JavaScriptRuntimeService) persistSessionSnapshot(state runtimeSessionState) error {
+	if s.sessionPersistDir == "" {
+		return nil
+	}
+	sessionID := strings.TrimSpace(state.session.SessionID)
+	if sessionID == "" {
+		return nil
+	}
+	if !shouldPersistSessionSnapshot(state) {
+		return nil
+	}
+	snapshot := persistedSnapshotFromRuntimeState(state)
+	encoded, err := json.MarshalIndent(snapshot, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal durable session snapshot: %w", err)
+	}
+	if err := runtimepersist.SaveBytes(s.sessionPersistDir, sessionID, encoded); err != nil {
+		return fmt.Errorf("persist durable session snapshot: %w", err)
+	}
+	return nil
+}
+
+func shouldPersistSessionSnapshot(state runtimeSessionState) bool {
+	if IsTerminalLifecycleStatus(state.session.Status) {
+		return true
+	}
+	if state.session.Status == LifecycleStatusInterrupted && state.checkpointSummary != nil {
+		return true
+	}
+	return false
+}
+
+func cloneStartRequest(req StartRequest) *StartRequest {
+	cloned := req
+	cloned.Source = cloneStartSource(req.Source)
+	cloned.Args = cloneArgs(req.Args)
+	cloned.RequestedPolicy = cloneArgs(req.RequestedPolicy)
+	if req.Orchestrator != nil {
+		orchestrator := *req.Orchestrator
+		cloned.Orchestrator = &orchestrator
+	}
+	if req.Runtime != nil {
+		runtime := *req.Runtime
+		cloned.Runtime = &runtime
+	}
+	if req.Wait != nil {
+		wait := *req.Wait
+		cloned.Wait = &wait
+	}
+	return &cloned
+}
+
+func cloneStartRequestPtr(req *StartRequest) *StartRequest {
+	if req == nil {
+		return nil
+	}
+	return cloneStartRequest(*req)
+}
+
+func cloneStartSource(source Source) Source {
+	cloned := source
+	if source.InlineWorkflow != nil {
+		inline := *source.InlineWorkflow
+		inline.Metadata = cloneStringStringMap(source.InlineWorkflow.Metadata)
+		cloned.InlineWorkflow = &inline
+	}
+	if len(source.FactoryInline) > 0 {
+		cloned.FactoryInline = append(json.RawMessage(nil), source.FactoryInline...)
+	}
+	return cloned
+}
+
+func cloneStringStringMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(values))
+	for key, value := range values {
+		cloned[key] = value
+	}
+	return cloned
+}

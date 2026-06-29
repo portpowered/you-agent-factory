@@ -565,6 +565,9 @@ const (
 	TypedFailureLifecycleConflict        TypedFailureKind = "LIFECYCLE_CONFLICT"
 	TypedFailureLifecycleInvalidState    TypedFailureKind = "LIFECYCLE_INVALID_STATE"
 	TypedFailureLifecycleTerminalSession TypedFailureKind = "LIFECYCLE_TERMINAL_SESSION"
+	TypedFailureResumeMissingCheckpoint  TypedFailureKind = "RESUME_MISSING_CHECKPOINT"
+	TypedFailureResumeInvalidState       TypedFailureKind = "RESUME_INVALID_STATE"
+	TypedFailureResumeCorruptedState     TypedFailureKind = "RESUME_CORRUPTED_PERSISTENCE"
 )
 
 // TypedFailureIdentity captures structured context for one fixture-provider failure.
@@ -597,7 +600,39 @@ func TypedFailureIdentityFromError(err error) (TypedFailureIdentity, bool) {
 	if identity, ok := typedFailureIdentityFromControlError(err); ok {
 		return identity, true
 	}
+	if identity, ok := typedFailureIdentityFromResumeError(err); ok {
+		return identity, true
+	}
 	return typedFailureIdentityFromSentinelError(err)
+}
+
+func typedFailureIdentityFromResumeError(err error) (TypedFailureIdentity, bool) {
+	var resumeErr *fse.ResumeError
+	if !errors.As(err, &resumeErr) {
+		return TypedFailureIdentity{}, false
+	}
+	kind, ok := typedFailureKindForResumeOutcome(resumeErr.Outcome)
+	if !ok {
+		return TypedFailureIdentity{}, false
+	}
+	return TypedFailureIdentity{
+		Kind:   kind,
+		Field:  resumeErr.Field,
+		Status: resumeErr.Status,
+	}, true
+}
+
+func typedFailureKindForResumeOutcome(outcome fse.ResumeOutcome) (TypedFailureKind, bool) {
+	switch outcome {
+	case fse.ResumeOutcomeMissingCheckpoint:
+		return TypedFailureResumeMissingCheckpoint, true
+	case fse.ResumeOutcomeInvalidState:
+		return TypedFailureResumeInvalidState, true
+	case fse.ResumeOutcomeCorruptedPersistence:
+		return TypedFailureResumeCorruptedState, true
+	default:
+		return "", false
+	}
 }
 
 func typedFailureIdentityFromControlError(err error) (TypedFailureIdentity, bool) {

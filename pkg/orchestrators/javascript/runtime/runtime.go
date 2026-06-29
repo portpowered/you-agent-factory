@@ -39,15 +39,17 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 	vm := goja.New()
 	records := newRecordCollector()
 	sessionID := strings.TrimSpace(req.SessionID)
+	childExecutor := childExecutorForRequest(sessionID, records, hooks, req.Resume)
 	globals := &runtimeGlobals{
 		vm:            vm,
 		policy:        policy,
 		sessionID:     sessionID,
 		ctx:           ctx,
 		records:       records,
-		childExecutor: childExecutorForRun(sessionID, records, hooks),
+		childExecutor: childExecutor,
 		onArtifact:    hooks.OnArtifact,
 	}
+	globals.bindResumeCheckpointState(req.Resume)
 	if err := globals.bindWorkflowAPI(); err != nil {
 		return Outcome{}, err
 	}
@@ -65,7 +67,9 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 	value, runErr := vm.RunString(wrapWorkflowSource(req.Source))
 	close(interrupt)
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return contextTerminationOutcome(ctxErr), nil
+		outcome := contextTerminationOutcome(ctxErr)
+		outcome.Records = records.list()
+		return outcome, nil
 	}
 	if runErr != nil {
 		outcome := scriptErrorOutcome(vm, runErr)
@@ -134,6 +138,14 @@ func childExecutorForRun(sessionID string, records *recordCollector, hooks Hooks
 		return hooks.NewChildExecutor(sessionID, childRecordSinkFromCollector(records))
 	}
 	return NewFakeChildExecutor(sessionID, childRecordSinkFromCollector(records))
+}
+
+func childExecutorForRequest(sessionID string, records *recordCollector, hooks Hooks, resume *ResumeContext) ChildExecutor {
+	childExecutor := childExecutorForRun(sessionID, records, hooks)
+	if resume != nil {
+		childExecutor = NewResumingChildExecutor(childExecutor, *resume)
+	}
+	return childExecutor
 }
 
 func watchContext(ctx context.Context, vm *goja.Runtime, done <-chan struct{}) {
