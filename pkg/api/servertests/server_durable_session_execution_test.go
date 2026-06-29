@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
@@ -528,6 +529,26 @@ func assertEventReconnectStillWorks(
 	}
 }
 
+func waitForDurableSessionStatus(
+	t *testing.T,
+	serverURL, sessionID string,
+	want ...factoryapi.FactorySessionDurableLifecycleStatus,
+) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		read := getDurableFactorySession(t, serverURL, sessionID)
+		for _, status := range want {
+			if read.Status == status {
+				return
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	last := getDurableFactorySession(t, serverURL, sessionID)
+	t.Fatalf("session %q did not reach status %#v before timeout (last=%q)", sessionID, want, last.Status)
+}
+
 func getDurableDispatchList(t *testing.T, serverURL, sessionID string) factoryapi.ListFactorySessionDispatchesResponse {
 	t.Helper()
 	resp, err := http.Get(serverURL + "/factory-sessions/" + sessionID + "/dispatches")
@@ -890,6 +911,7 @@ func TestLifecycleControls_CancelPreservesInspectablePartialStateAcrossReadSurfa
 	if cancelStatus != http.StatusAccepted {
 		t.Fatalf("cancel status = %d, want 202", cancelStatus)
 	}
+	waitForDurableSessionStatus(t, serverURL, sessionID, factoryapi.FactorySessionDurableLifecycleStatusCanceled)
 
 	after := captureDurableSessionInspectionSnapshot(t, serverURL, sessionID)
 	assertDurableSessionInspectionLinks(t, sessionID, after.read.Links)
