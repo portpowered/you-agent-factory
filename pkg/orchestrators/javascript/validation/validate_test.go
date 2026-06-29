@@ -3,6 +3,7 @@ package workflowvalidation_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
@@ -84,6 +85,31 @@ return resumed && resumed.step >= 1;
 	})
 	if result.HasIssues() {
 		t.Fatalf("validation issues = %#v, want none for local binding member access", result.Issues)
+	}
+}
+
+func TestValidate_RejectsShadowedLocalBindingDoesNotBypassHostMemberAccess(t *testing.T) {
+	result := workflowvalidation.Validate(workflowvalidation.Request{
+		Source: `(function(){
+  function shadow(foo) {
+    return foo && foo.bar;
+  }
+  return foo.bar;
+})();`,
+		SourceRef: "inline",
+	})
+	if !result.HasIssues() {
+		t.Fatal("expected forbidden host-access validation issue for outer foo.bar")
+	}
+	found := false
+	for _, issue := range result.Issues {
+		if issue.Code == workflowvalidation.CodeForbiddenHostAccess && strings.Contains(issue.Message, "foo.bar") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("issues = %#v, want forbidden host access for outer foo.bar", result.Issues)
 	}
 }
 

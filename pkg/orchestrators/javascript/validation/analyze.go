@@ -8,12 +8,11 @@ import (
 )
 
 type sourceAnalyzer struct {
-	source        string
-	ref           string
-	path          string
-	issues        []Issue
-	seen          map[string]struct{}
-	localBindings map[string]struct{}
+	source string
+	ref    string
+	path   string
+	issues []Issue
+	seen   map[string]struct{}
 }
 
 func analyzeJavaScriptSource(req Request) []Issue {
@@ -37,14 +36,7 @@ func (a *sourceAnalyzer) Enter(n js.INode) js.IVisitor {
 		a.inspectCall(node)
 	case *js.DotExpr:
 		a.inspectDot(node)
-	case *js.FuncDecl:
-		a.recordParams(node.Params)
-	case *js.ArrowFunc:
-		a.recordParams(node.Params)
 	case *js.Var:
-		if node.Decl != js.NoDecl {
-			a.recordLocalBinding(string(node.Name()))
-		}
 		a.inspectIdentifierUse(node)
 	}
 	return a
@@ -101,7 +93,7 @@ func (a *sourceAnalyzer) inspectDot(dot *js.DotExpr) {
 	if !ok {
 		return
 	}
-	if a.isLocalBinding(root) {
+	if rootVar, isVar := dot.X.(*js.Var); isVar && isDeclaredLocalBinding(rootVar) {
 		return
 	}
 	if msg, forbidden := forbiddenRootGlobals[root]; forbidden {
@@ -119,42 +111,18 @@ func (a *sourceAnalyzer) inspectDot(dot *js.DotExpr) {
 	}
 }
 
-func (a *sourceAnalyzer) recordParams(params js.Params) {
-	for _, element := range params.List {
-		a.recordBinding(element.Binding)
+func isDeclaredLocalBinding(v *js.Var) bool {
+	for v != nil {
+		if v.Decl != js.NoDecl {
+			return true
+		}
+		v = v.Link
 	}
-	a.recordBinding(params.Rest)
-}
-
-func (a *sourceAnalyzer) recordBinding(binding js.IBinding) {
-	if binding == nil {
-		return
-	}
-	if variable, ok := binding.(*js.Var); ok {
-		a.recordLocalBinding(string(variable.Name()))
-	}
-}
-
-func (a *sourceAnalyzer) recordLocalBinding(name string) {
-	if name == "" {
-		return
-	}
-	if a.localBindings == nil {
-		a.localBindings = make(map[string]struct{})
-	}
-	a.localBindings[name] = struct{}{}
-}
-
-func (a *sourceAnalyzer) isLocalBinding(name string) bool {
-	if a.localBindings == nil {
-		return false
-	}
-	_, ok := a.localBindings[name]
-	return ok
+	return false
 }
 
 func (a *sourceAnalyzer) inspectIdentifierUse(v *js.Var) {
-	if v.Decl != js.NoDecl {
+	if isDeclaredLocalBinding(v) {
 		return
 	}
 	name := string(v.Name())
