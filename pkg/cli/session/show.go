@@ -37,6 +37,9 @@ func Show(cfg ShowConfig) error {
 	if cfg.Output == nil {
 		cfg.Output = os.Stdout
 	}
+	if isDurableExecutionSessionID(cfg.SessionID) {
+		return showDurableSession(cfg)
+	}
 
 	endpoint, err := showEndpoint(cfg)
 	if err != nil {
