@@ -239,7 +239,7 @@ func newSessionDispatchesCommand(globals *cliGlobalOptions, diagnostics *cliDiag
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
 			cfg.Debug = diagnostics.debug
-			return sessioncli.Dispatches(cfg)
+			return listSessionDispatches(cfg)
 		},
 	}
 

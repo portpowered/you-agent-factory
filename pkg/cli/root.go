@@ -45,6 +45,7 @@ var listSessions = sessioncli.List
 var showSession = sessioncli.Show
 var pauseSession = sessioncli.Pause
 var resumeSession = sessioncli.Resume
+var listSessionDispatches = sessioncli.Dispatches
 var createSession = sessioncli.Create
 var deleteSession = sessioncli.Delete
 var queryFactory = factorycli.Query
