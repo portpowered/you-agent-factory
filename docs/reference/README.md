@@ -90,8 +90,14 @@ filesystem work around that invocation.
   step behavior, prompt/runtime fields, and workstation-scoped execution
   settings.
 - [Workers](workers.md) owns worker types, worker-scoped runtime fields,
-  model/script/hosted backend fields, hosted `auth.secretRef` guidance, and
-  split `workers/<name>/AGENTS.md` placement.
+  model/script/hosted backend fields, explicit `AGENT_WORKER` tool policy,
+  agent-run failure classes, hosted `auth.secretRef` guidance, and split
+  `workers/<name>/AGENTS.md` placement.
+- [Workstations](workstations.md) owns `AGENT_RUN` versus `INFERENCE_RUN`
+  runtime behavior in addition to workstation kinds, route fields, and
+  workstation-scoped execution settings.
+- [Sessions](sessions.md) owns agent-run dispatch inspection in addition to
+  live session discovery, status API fields, and dashboard routing.
 
 Use these canonical concept owners when you need the current contract.
 
