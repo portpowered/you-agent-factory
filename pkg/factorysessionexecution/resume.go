@@ -3,6 +3,7 @@ package factorysessionexecution
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -883,4 +884,106 @@ func cloneStringStringMap(values map[string]string) map[string]string {
 		cloned[key] = value
 	}
 	return cloned
+}
+
+func (s *JavaScriptRuntimeService) resumeInterruptedSessionViaLifecycleControl(
+	ctx context.Context,
+	sessionID string,
+	req ControlRequest,
+) (LifecycleControlResult, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return LifecycleControlResult{}, true, err
+	}
+	id, err := NormalizeSessionID(sessionID)
+	if err != nil {
+		return LifecycleControlResult{}, true, err
+	}
+	control, err := NormalizeControlRequest(req)
+	if err != nil {
+		return LifecycleControlResult{}, true, err
+	}
+
+	status, statusErr := s.peekSessionStatusForResume(id)
+	if statusErr != nil {
+		if errors.Is(statusErr, ErrSessionNotFound) {
+			return LifecycleControlResult{}, false, nil
+		}
+		return LifecycleControlResult{}, true, mapResumeFailureToControlError(id, statusErr)
+	}
+	if status != LifecycleStatusInterrupted {
+		return LifecycleControlResult{}, false, nil
+	}
+
+	requestID := control.RequestID
+	if requestID == "" {
+		requestID = fmt.Sprintf("lifecycle-resume-%s", id)
+	}
+	started, resumeErr := s.ResumeInterruptedSession(ctx, id, ResumeSessionRequest{
+		RequestID: requestID,
+	})
+	if resumeErr != nil {
+		return LifecycleControlResult{}, true, mapResumeFailureToControlError(id, resumeErr)
+	}
+	return lifecycleControlResultFromInterruptedResume(id, started), true, nil
+}
+
+func (s *JavaScriptRuntimeService) peekSessionStatusForResume(sessionID string) (LifecycleStatus, error) {
+	s.mu.RLock()
+	if state, ok := s.sessions[sessionID]; ok {
+		status := state.session.Status
+		s.mu.RUnlock()
+		return status, nil
+	}
+	persistDir := s.sessionPersistDir
+	s.mu.RUnlock()
+
+	if persistDir == "" {
+		return "", ErrSessionNotFound
+	}
+	state, err := s.loadResumeSessionState(sessionID)
+	if err != nil {
+		return "", err
+	}
+	return state.session.Status, nil
+}
+
+func lifecycleControlResultFromInterruptedResume(
+	sessionID string,
+	started AsyncStartResult,
+) LifecycleControlResult {
+	status := LifecycleStatus(strings.TrimSpace(started.Status))
+	if status == "" {
+		status = LifecycleStatusResuming
+	}
+	return LifecycleControlResult{
+		SessionID: sessionID,
+		Operation: LifecycleControlResume,
+		Outcome:   LifecycleControlOutcomeAccepted,
+		Status:    status,
+		Links:     LifecycleControlLinksForSession(sessionID, true),
+	}
+}
+
+func mapResumeFailureToControlError(sessionID string, err error) error {
+	if err == nil {
+		return nil
+	}
+	var controlErr *ControlError
+	if errors.As(err, &controlErr) {
+		return controlErr
+	}
+	var resumeErr *ResumeError
+	if errors.As(err, &resumeErr) {
+		status := resumeErr.Status
+		if status == "" {
+			status = LifecycleStatusInterrupted
+		}
+		return &ControlError{
+			Operation: LifecycleControlResume,
+			Outcome:   LifecycleControlOutcomeInvalidState,
+			Status:    status,
+			Message:   resumeErr.Error(),
+		}
+	}
+	return err
 }

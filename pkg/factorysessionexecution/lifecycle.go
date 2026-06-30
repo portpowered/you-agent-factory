@@ -104,6 +104,9 @@ func EvaluateLifecycleControl(operation LifecycleControlKind, status LifecycleSt
 	if status == "" {
 		return LifecycleControlOutcomeInvalidState
 	}
+	if status == LifecycleStatusInterrupted && operation == LifecycleControlResume {
+		return LifecycleControlOutcomeAccepted
+	}
 	if IsTerminalLifecycleStatus(status) {
 		switch operation {
 		case LifecycleControlRetryDispatch:
@@ -136,7 +139,7 @@ func EvaluateLifecycleControl(operation LifecycleControlKind, status LifecycleSt
 		}
 	case LifecycleControlResume:
 		switch status {
-		case LifecycleStatusPaused:
+		case LifecycleStatusPaused, LifecycleStatusInterrupted:
 			return LifecycleControlOutcomeAccepted
 		case LifecycleStatusResuming, LifecycleStatusRunning:
 			return LifecycleControlOutcomeNoOp

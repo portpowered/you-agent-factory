@@ -212,6 +212,9 @@ func (s *JavaScriptRuntimeService) Pause(ctx context.Context, sessionID string, 
 }
 
 func (s *JavaScriptRuntimeService) Resume(ctx context.Context, sessionID string, req ControlRequest) (LifecycleControlResult, error) {
+	if result, handled, err := s.resumeInterruptedSessionViaLifecycleControl(ctx, sessionID, req); handled {
+		return result, err
+	}
 	return s.applyRuntimeExtendedLifecycleControl(ctx, sessionID, LifecycleControlResume, req, ApproveRequest{}, RetryDispatchRequest{}, InterruptDispatchRequest{})
 }
 

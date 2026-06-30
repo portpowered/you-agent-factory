@@ -132,14 +132,13 @@ func newSessionCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 		Short: "List, open, and close factory sessions on a running host",
 		Long: "Manage factory sessions on a running you-agent-factory service.\n\n" +
 			"Subcommands:\n" +
-			"  list    list live workspace sessions or durable Factory Sessions with --scope live|persisted|all\n" +
-			"  show    show one live factory session from GET /factory-sessions/{session_id}\n" +
-			"  pause   pause one live or durable Factory Session through POST /factory-sessions/{session_id}/pause\n" +
-			"  resume  resume one paused live or durable Factory Session through POST /factory-sessions/{session_id}/resume\n" +
-			"  create  open another live session from a folder path\n" +
-			"  delete  close a live session by session id\n" +
-			"  pause   pause automatic progression for one live session\n" +
-			"  resume  resume a paused live session and drain buffered work\n\n" +
+			"  list       list live workspace sessions or durable Factory Sessions with --scope live|persisted|all\n" +
+			"  show       show one live or durable Factory Session from GET /factory-sessions/{session_id}\n" +
+			"  dispatches list durable Factory Session dispatches from GET /factory-sessions/{session_id}/dispatches\n" +
+			"  pause      pause one live or durable Factory Session through POST /factory-sessions/{session_id}/pause\n" +
+			"  resume     resume one paused live or durable Factory Session through POST /factory-sessions/{session_id}/resume\n" +
+			"  create     open another live session from a folder path\n" +
+			"  delete     close a live session by session id\n\n" +
 			"Durable list output uses Factory Session status, source identity, result availability, " +
 			"progress, and action availability. Session commands use the same default --port as work list. " +
 			"Use --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose " +
@@ -168,6 +167,7 @@ func newSessionCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 	sessionCmd.AddCommand(
 		newSessionListCommand(diagnostics),
 		newSessionShowCommand(globals, diagnostics),
+		newSessionDispatchesCommand(globals, diagnostics),
 		newSessionPauseCommand(globals, diagnostics),
 		newSessionResumeCommand(globals, diagnostics),
 		newSessionCreateCommand(diagnostics),
@@ -207,6 +207,39 @@ func newSessionShowCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 			cfg.Verbose = diagnostics.verboseEnabled()
 			cfg.Debug = diagnostics.debug
 			return showSession(cfg)
+		},
+	}
+
+	registerDeprecatedPortFlag(cmd)
+	return cmd
+}
+
+func newSessionDispatchesCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	cfg := sessioncli.DispatchesConfig{Server: globals.server}
+
+	cmd := &cobra.Command{
+		Use:   "dispatches [session-id]",
+		Short: "List durable Factory Session dispatches",
+		Long: "List durable Factory Session dispatches from GET /factory-sessions/{session_id}/dispatches.\n\n" +
+			"Human output uses FactorySession, Dispatch, and FactoryArtifact vocabulary for dispatch id, status, " +
+			"kind, label, and output artifact ids. The command requires a durable dur-sess-* session id. Use global " +
+			"--json for the API-shaped ListFactorySessionDispatchesResponse and global --server to target the same " +
+			"factory API base URI as session show and session resume.",
+		Example: "  # List dispatches for one interrupted durable Factory Session.\n" +
+			"  " + cliBinaryName + " session dispatches dur-sess-js-interrupted-001\n\n" +
+			"  # Emit API-shaped JSON for automation.\n" +
+			"  " + cliBinaryName + " --json session dispatches dur-sess-js-interrupted-001",
+		Args:    cobra.ExactArgs(1),
+		PreRunE: rejectDeprecatedPortFlag,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg.SessionID = args[0]
+			cfg.Server = globals.server
+			cfg.JSON = globals.json
+			cfg.Output = cmd.OutOrStdout()
+			cfg.Diagnostics = diagnostics.writer(cmd)
+			cfg.Verbose = diagnostics.verboseEnabled()
+			cfg.Debug = diagnostics.debug
+			return listSessionDispatches(cfg)
 		},
 	}
 
