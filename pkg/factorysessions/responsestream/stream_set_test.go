@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 )
@@ -120,6 +121,47 @@ func assertLateSubscriberDrainsRetainedDispatch(t *testing.T, set *responsestrea
 	}
 	if newStream := set.Stream("dispatch-3"); newStream == nil {
 		t.Fatal("Stream for unrelated dispatch = nil, want new dispatch stream")
+	}
+}
+
+func TestStreamSet_EvictsCompletedDispatchAfterRetentionWindow(t *testing.T) {
+	start := time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)
+	clock := &fixedClock{now: start}
+	set := responsestream.NewStreamSetWithFactoryAndRetention(
+		func() *responsestream.SessionResponseStream {
+			return responsestream.NewSessionResponseStreamWithClock(
+				clock,
+				responsestream.RetentionLimits{MaxAge: time.Minute},
+			)
+		},
+		time.Minute,
+		clock,
+	)
+	stream := set.Stream("dispatch-1")
+	if stream == nil {
+		t.Fatal("Stream = nil, want allocated dispatch stream")
+	}
+	stream.Append(responsestream.Event{
+		Kind:    responsestream.EventKindProgressFragment,
+		Type:    responsestream.EventTypeProgress,
+		Payload: "planning",
+	})
+	if closed := set.CloseDispatch("dispatch-1"); !closed {
+		t.Fatal("CloseDispatch returned false, want dispatch completed")
+	}
+	if got := set.Count(); got != 1 {
+		t.Fatalf("stream count before eviction = %d, want 1 retained dispatch", got)
+	}
+
+	clock.now = start.Add(2 * time.Minute)
+	if ids := set.DispatchIDs(); len(ids) != 0 {
+		t.Fatalf("dispatch ids after retention window = %#v, want eviction", ids)
+	}
+	if got := set.Count(); got != 0 {
+		t.Fatalf("stream count after eviction = %d, want 0", got)
+	}
+	if retained := set.Stream("dispatch-1"); retained != nil {
+		t.Fatal("Stream after eviction = non-nil, want completed dispatch removed")
 	}
 }
 

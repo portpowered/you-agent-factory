@@ -104,6 +104,7 @@ func (s *SessionResponseStream) CompleteDispatch() {
 		return
 	}
 	s.dispatchCompleted = true
+	s.completedAt = s.clock.Now().UTC()
 	subscribers := s.subscribersSnapshotLocked()
 	s.subscribers = make(map[int64]*streamSubscriber)
 	s.mu.Unlock()

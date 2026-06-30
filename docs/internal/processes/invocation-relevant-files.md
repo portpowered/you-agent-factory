@@ -68,8 +68,11 @@ primary-result behavior.
   CLI attachment belongs on `FactoryService.SessionResponseStreamDispatchIDs` in
   `pkg/service/runtime_sessions.go` alongside `SubscribeSessionResponseStream`.
   `responsestream.StreamSet.CloseDispatch` retains completed dispatch streams so
-  late CLI pollers can still subscribe and drain retained progress until session
-  teardown.
+  late CLI pollers can still subscribe and drain retained progress until the
+  completed-dispatch retention window expires; `StreamSet` evicts completed
+  streams after `DefaultCompletedDispatchRetention()` and re-enforces per-stream
+  retention through `SessionResponseStream.EnforceRetention()` without relying on
+  future `Append` calls.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin
   bytes into `invocations.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
   from the shared resolver instead of pre-trimming or short-circuiting with
