@@ -412,12 +412,13 @@ const (
 // terminal stdout writes so a slow or blocked consumer does not stall provider
 // dispatch or invocation completion indefinitely.
 type responseStreamProgressWriter struct {
-	mu           sync.Mutex
-	output       io.Writer
-	queue        chan []byte
-	wg           sync.WaitGroup
-	closed       bool
-	droppedLines int
+	mu            sync.Mutex
+	output        io.Writer
+	queue         chan []byte
+	wg            sync.WaitGroup
+	closed        bool
+	droppedLines  int
+	pendingNotice []byte
 }
 
 func newResponseStreamProgressWriter(output io.Writer) *responseStreamProgressWriter {
@@ -465,8 +466,8 @@ func (w *responseStreamProgressWriter) enqueueNotice(payload []byte) {
 
 	w.mu.Lock()
 	if w.closed {
+		w.pendingNotice = line
 		w.mu.Unlock()
-		_, _ = w.output.Write(line)
 		return
 	}
 	w.mu.Unlock()
@@ -479,10 +480,10 @@ func (w *responseStreamProgressWriter) enqueueNotice(payload []byte) {
 
 	select {
 	case w.queue <- line:
-	case <-time.After(50 * time.Millisecond):
-		go func() {
-			_, _ = w.output.Write(line)
-		}()
+	default:
+		w.mu.Lock()
+		w.pendingNotice = line
+		w.mu.Unlock()
 	}
 }
 
@@ -510,6 +511,7 @@ func (w *responseStreamProgressWriter) stopAndDrain() {
 	w.mu.Unlock()
 	close(w.queue)
 	waitProgressWriter(&w.wg, responseStreamProgressDrainTimeout)
+	w.flushPendingNoticeLocked()
 }
 
 func waitProgressWriter(wg *sync.WaitGroup, timeout time.Duration) {
@@ -528,6 +530,21 @@ func (w *responseStreamProgressWriter) run() {
 	defer w.wg.Done()
 	for line := range w.queue {
 		_, _ = w.output.Write(line)
+		w.flushPendingNoticeLocked()
+	}
+	w.flushPendingNoticeLocked()
+}
+
+func (w *responseStreamProgressWriter) flushPendingNoticeLocked() {
+	for {
+		w.mu.Lock()
+		notice := w.pendingNotice
+		w.pendingNotice = nil
+		w.mu.Unlock()
+		if notice == nil {
+			return
+		}
+		_, _ = w.output.Write(notice)
 	}
 }
 

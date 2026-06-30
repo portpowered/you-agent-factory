@@ -428,6 +428,29 @@ func (w *gatedResponseStreamWriter) blockedWriteAttemptsCount() int64 {
 	return w.blockedWriteAttempts.Load()
 }
 
+func floodResponseStreamProgress(sink responseStreamEventSink, count int) {
+	for i := 0; i < count; i++ {
+		sink.onStreamSegment(responsestream.ReadResult{
+			Events: []responsestream.Event{
+				{
+					Sequence:   int64(i + 1),
+					Kind:       responsestream.EventKindProgressFragment,
+					Type:       responsestream.EventTypeProgress,
+					DispatchID: "dispatch-1",
+					Payload:    "working",
+				},
+			},
+		})
+	}
+}
+
+var responseStreamBacklogSuccessResult = apisurface.FactoryInvocationResult{
+	Status: factoryapi.InvocationTerminalStatusCompleted,
+	PrimaryResult: []interfaces.WorkContentPart{
+		{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
+	},
+}
+
 func TestResponseStreamProgressWriter_EnqueueDoesNotBlockWhenOutputSlow(t *testing.T) {
 	t.Parallel()
 
@@ -858,25 +881,18 @@ func TestHumanResponseStreamRenderer_SurfacesTerminalOutputBacklog(t *testing.T)
 	output := &gatedResponseStreamWriter{}
 	output.block()
 	renderer := newHumanResponseStreamRenderer(output)
-	for i := 0; i < defaultResponseStreamProgressQueueCapacity+4; i++ {
-		renderer.onStreamSegment(responsestream.ReadResult{
-			Events: []responsestream.Event{
-				{
-					Sequence:   int64(i + 1),
-					Kind:       responsestream.EventKindProgressFragment,
-					Type:       responsestream.EventTypeProgress,
-					DispatchID: "dispatch-1",
-					Payload:    "working",
-				},
-			},
-		})
-	}
+	floodResponseStreamProgress(renderer, defaultResponseStreamProgressQueueCapacity+4)
 
 	output.release()
-	renderer.stopProgressRendering()
+	if err := renderer.writeFinalInvocationResult(responseStreamBacklogSuccessResult); err != nil {
+		t.Fatalf("writeFinalInvocationResult: %v", err)
+	}
+
 	got := output.String()
-	if !strings.Contains(got, "[you:progress] terminal output backlog") {
-		t.Fatalf("output missing terminal backlog notice:\n%s", got)
+	backlogIdx := strings.Index(got, "[you:progress] terminal output backlog")
+	primaryIdx := strings.Index(got, responseStreamPrimaryResultHeader)
+	if backlogIdx < 0 || primaryIdx < 0 || backlogIdx > primaryIdx {
+		t.Fatalf("want backlog before primary result:\n%s", got)
 	}
 }
 
@@ -886,28 +902,18 @@ func TestJSONResponseStreamRenderer_SurfacesTerminalOutputBacklogRecord(t *testi
 	output := &gatedResponseStreamWriter{}
 	output.block()
 	renderer := newJSONResponseStreamRenderer(output)
-	for i := 0; i < defaultResponseStreamProgressQueueCapacity+4; i++ {
-		renderer.onStreamSegment(responsestream.ReadResult{
-			Events: []responsestream.Event{
-				{
-					Sequence:   int64(i + 1),
-					Kind:       responsestream.EventKindProgressFragment,
-					Type:       responsestream.EventTypeProgress,
-					DispatchID: "dispatch-1",
-					Payload:    "working",
-				},
-			},
-		})
-	}
+	floodResponseStreamProgress(renderer, defaultResponseStreamProgressQueueCapacity+4)
 
 	output.release()
-	renderer.stopProgressRendering()
-	got := output.String()
-	if !strings.Contains(got, `"reason":"terminal_output_backlog"`) {
-		t.Fatalf("output missing terminal backlog record:\n%s", got)
+	if err := renderer.writeFinalInvocationResult(responseStreamBacklogSuccessResult); err != nil {
+		t.Fatalf("writeFinalInvocationResult: %v", err)
 	}
-	if !strings.Contains(got, `"recordType":"stream_gap"`) {
-		t.Fatalf("output missing stream_gap record:\n%s", got)
+
+	got := output.String()
+	backlogIdx := strings.Index(got, `"reason":"terminal_output_backlog"`)
+	primaryIdx := strings.Index(got, `"recordType":"primary_result"`)
+	if backlogIdx < 0 || !strings.Contains(got, `"recordType":"stream_gap"`) || primaryIdx < 0 || backlogIdx > primaryIdx {
+		t.Fatalf("want backlog record before primary_result:\n%s", got)
 	}
 }
 
