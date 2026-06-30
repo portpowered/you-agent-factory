@@ -76,6 +76,168 @@ func TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl(
 	closeRunServeSmokeServer(t, nil, serveErr)
 }
 
+func TestRunServe_RuntimeResumeSmoke_DispatchContinuityPreservesCompletedChildDispatchesWithoutReplay(t *testing.T) {
+	harness := newMCPRuntimeResumeSmokeHarness(t)
+	client, shutdown, serveErr := startRunServeWithRuntimeService(t, harness.service)
+	assertInstallSmokeInitialize(t, client)
+
+	sessionID := startMCPRuntimeResumeSmokeInterruptedSession(t, client, harness)
+
+	before := readMCPSessionDurableReadModel(t, client, sessionID)
+	assertMCPDurableProgressCounts(t, before.Progress, 1, 2, 0)
+
+	beforeDispatches := listMCPDispatches(t, client, sessionID)
+	dispatchOneBefore := requireMCPDispatchSummary(t, beforeDispatches, "dispatch-1", factoryapi.FactoryDispatchStatusCOMPLETED)
+	dispatchTwoBefore := requireMCPDispatchSummary(
+		t,
+		beforeDispatches,
+		"dispatch-2",
+		factoryapi.FactoryDispatchStatusINTERRUPTED,
+		factoryapi.FactoryDispatchStatusRUNNING,
+	)
+	if len(beforeDispatches.Dispatches) != 2 {
+		t.Fatalf("pre-resume dispatch count = %d, want 2", len(beforeDispatches.Dispatches))
+	}
+
+	resumeResponse := mcpControlResume(t, client, sessionID)
+	if resumeResponse.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("resume outcome = %q, want ACCEPTED", resumeResponse.Outcome)
+	}
+
+	after := waitForMCPSessionStatus(
+		t,
+		client,
+		sessionID,
+		factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
+		8*time.Second,
+	)
+	assertMCPDurableProgressCounts(t, after.Progress, 2, 2, 0)
+	if after.Lifecycle == nil || after.Lifecycle.InterruptedAt == nil || after.Lifecycle.ResumedAt == nil {
+		t.Fatalf("post-resume lifecycle = %#v, want interruptedAt and resumedAt continuity", after.Lifecycle)
+	}
+	if before.Lifecycle == nil || before.Lifecycle.InterruptedAt == nil {
+		t.Fatal("pre-resume lifecycle missing interruptedAt")
+	}
+	if !after.Lifecycle.InterruptedAt.Equal(*before.Lifecycle.InterruptedAt) {
+		t.Fatalf(
+			"interruptedAt changed across resume: before=%s after=%s",
+			before.Lifecycle.InterruptedAt,
+			after.Lifecycle.InterruptedAt,
+		)
+	}
+
+	afterDispatches := listMCPDispatches(t, client, sessionID)
+	if len(afterDispatches.Dispatches) != 2 {
+		t.Fatalf("post-resume dispatch count = %d, want 2 (no replayed child dispatches)", len(afterDispatches.Dispatches))
+	}
+	dispatchOneAfter := requireMCPDispatchSummary(t, afterDispatches, "dispatch-1", factoryapi.FactoryDispatchStatusCOMPLETED)
+	requireMCPDispatchSummary(t, afterDispatches, "dispatch-2", factoryapi.FactoryDispatchStatusCOMPLETED)
+	assertMCPDispatchSummaryParity(t, dispatchOneBefore, dispatchOneAfter)
+	if dispatchTwoBefore.Status == factoryapi.FactoryDispatchStatusINTERRUPTED {
+		dispatchTwoAfter := requireMCPDispatchSummary(t, afterDispatches, "dispatch-2", factoryapi.FactoryDispatchStatusCOMPLETED)
+		if dispatchTwoAfter.Id != dispatchTwoBefore.Id {
+			t.Fatalf("dispatch-2 id changed across resume: %q -> %q", dispatchTwoBefore.Id, dispatchTwoAfter.Id)
+		}
+	}
+
+	if harness.provider.callCount() != 3 {
+		t.Fatalf("provider infer calls = %d, want exactly 3 (step-one once, blocked step-two once, resumed step-two once)", harness.provider.callCount())
+	}
+
+	shutdown()
+	closeRunServeSmokeServer(t, nil, serveErr)
+}
+
+func TestRunServe_RuntimeResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead(t *testing.T) {
+	harness := newMCPRuntimeResumeSmokeSucceededHarness(t)
+	client, shutdown, serveErr := startRunServeWithRuntimeService(t, harness.service)
+	assertInstallSmokeInitialize(t, client)
+
+	sessionID := startMCPRuntimeResumeSmokeSucceededSession(t, client)
+
+	before := readMCPSessionDurableReadModel(t, client, sessionID)
+	if before.SessionId != sessionID {
+		t.Fatalf("pre-resume sessionId = %q, want %q", before.SessionId, sessionID)
+	}
+	if before.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("pre-resume status = %q, want SUCCEEDED", before.Status)
+	}
+
+	response := mcpControlResumeExpectingOutcome(
+		t,
+		client,
+		sessionID,
+		factoryapi.FactorySessionLifecycleControlOutcomeTerminalSession,
+	)
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindResume {
+		t.Fatalf("resume operation = %q, want RESUME", response.Operation)
+	}
+	if response.SessionId != sessionID {
+		t.Fatalf("resume sessionId = %q, want %q", response.SessionId, sessionID)
+	}
+
+	after := readMCPSessionDurableReadModel(t, client, sessionID)
+	if after.SessionId != sessionID {
+		t.Fatalf("post-resume sessionId = %q, want %q", after.SessionId, sessionID)
+	}
+	if after.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("post-resume status = %q, want SUCCEEDED unchanged", after.Status)
+	}
+	if before.ResultSummary == nil || after.ResultSummary == nil {
+		t.Fatal("expected result summary before and after rejected resume")
+	}
+	if after.ResultSummary.ResultStatus != before.ResultSummary.ResultStatus {
+		t.Fatalf(
+			"result status changed after rejected resume: before=%q after=%q",
+			before.ResultSummary.ResultStatus,
+			after.ResultSummary.ResultStatus,
+		)
+	}
+
+	shutdown()
+	closeRunServeSmokeServer(t, nil, serveErr)
+}
+
+func TestRunServe_RuntimeResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPreservesSessionRead(t *testing.T) {
+	harness := newMCPRuntimeResumeSmokeRunningHarness(t)
+	client, shutdown, serveErr := startRunServeWithRuntimeService(t, harness.service)
+	assertInstallSmokeInitialize(t, client)
+
+	sessionID := startMCPRuntimeResumeSmokeRunningSession(t, client)
+
+	before := readMCPSessionDurableReadModel(t, client, sessionID)
+	if before.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("pre-resume status = %q, want RUNNING", before.Status)
+	}
+
+	response := mcpControlResumeExpectingOutcome(
+		t,
+		client,
+		sessionID,
+		factoryapi.FactorySessionLifecycleControlOutcomeNoOp,
+	)
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindResume {
+		t.Fatalf("resume operation = %q, want RESUME", response.Operation)
+	}
+	if response.SessionId != sessionID {
+		t.Fatalf("resume sessionId = %q, want %q", response.SessionId, sessionID)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("resume status = %q, want RUNNING", response.Status)
+	}
+
+	after := readMCPSessionDurableReadModel(t, client, sessionID)
+	if after.SessionId != sessionID {
+		t.Fatalf("post-resume sessionId = %q, want %q", after.SessionId, sessionID)
+	}
+	if after.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("post-resume status = %q, want RUNNING unchanged", after.Status)
+	}
+
+	shutdown()
+	closeRunServeSmokeServer(t, nil, serveErr)
+}
+
 type mcpRuntimeResumeSmokeHarness struct {
 	service  fse.Service
 	provider *mcpRuntimeResumeSmokeBlockingProvider
@@ -102,6 +264,112 @@ func newMCPRuntimeResumeSmokeHarness(t *testing.T) *mcpRuntimeResumeSmokeHarness
 		service:  service,
 		provider: provider,
 	}
+}
+
+type mcpRuntimeResumeSmokeSucceededHarness struct {
+	service fse.Service
+}
+
+func newMCPRuntimeResumeSmokeSucceededHarness(t *testing.T) *mcpRuntimeResumeSmokeSucceededHarness {
+	t.Helper()
+
+	const workflowName = "simple-final"
+	projectRoot := setupMCPRuntimeResumeSmokeWorkflowFixture(t, "simple-final.workflow.js", workflowName)
+	service := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
+		ProjectRoot:     projectRoot,
+		PersistSessions: true,
+	})
+	t.Cleanup(func() {
+		drainRuntimeMCPResumeSmokeSessions(t, service)
+	})
+
+	return &mcpRuntimeResumeSmokeSucceededHarness{service: service}
+}
+
+type mcpRuntimeResumeSmokeRunningHarness struct {
+	service fse.Service
+}
+
+func newMCPRuntimeResumeSmokeRunningHarness(t *testing.T) *mcpRuntimeResumeSmokeRunningHarness {
+	t.Helper()
+
+	const workflowName = "busy-loop"
+	projectRoot := setupMCPRuntimeResumeSmokeWorkflowFixture(t, "busy-loop.workflow.js", workflowName)
+	service := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
+		ProjectRoot:     projectRoot,
+		PersistSessions: true,
+	})
+	t.Cleanup(func() {
+		drainRuntimeMCPResumeSmokeSessions(t, service)
+	})
+
+	return &mcpRuntimeResumeSmokeRunningHarness{service: service}
+}
+
+func startMCPRuntimeResumeSmokeSucceededSession(t *testing.T, client *stdioMCPClient) string {
+	t.Helper()
+
+	const workflowName = "simple-final"
+	workflowNamePtr := workflowName
+	args := map[string]any{"subject": "workflows", "count": 2, "prefix": "you"}
+	started := decodeToolResponse[factoryapi.FactorySessionExecutionResponse](
+		t,
+		client.callTool(mcpfactorysession.ToolStartAsync, factoryapi.FactorySessionExecutionRequest{
+			RequestId: "req-mcp-runtime-resume-smoke-succeeded-001",
+			Source: factoryapi.FactorySessionExecutionSource{
+				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
+				WorkflowName: &workflowNamePtr,
+			},
+			Args: &args,
+		}),
+	)
+	if started.Error != nil || started.Result == nil {
+		t.Fatalf("start_async = %#v, want success", started)
+	}
+	sessionID := started.Result.SessionId
+	if sessionID == "" {
+		t.Fatal("sessionId missing from async start response")
+	}
+	waitForMCPSessionStatus(
+		t,
+		client,
+		sessionID,
+		factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
+		15*time.Second,
+	)
+	return sessionID
+}
+
+func startMCPRuntimeResumeSmokeRunningSession(t *testing.T, client *stdioMCPClient) string {
+	t.Helper()
+
+	const workflowName = "busy-loop"
+	workflowNamePtr := workflowName
+	started := decodeToolResponse[factoryapi.FactorySessionExecutionResponse](
+		t,
+		client.callTool(mcpfactorysession.ToolStartAsync, factoryapi.FactorySessionExecutionRequest{
+			RequestId: "req-mcp-runtime-resume-smoke-running-001",
+			Source: factoryapi.FactorySessionExecutionSource{
+				Kind:         factoryapi.FactorySessionExecutionSourceKindWorkflowName,
+				WorkflowName: &workflowNamePtr,
+			},
+		}),
+	)
+	if started.Error != nil || started.Result == nil {
+		t.Fatalf("start_async = %#v, want success", started)
+	}
+	sessionID := started.Result.SessionId
+	if sessionID == "" {
+		t.Fatal("sessionId missing from async start response")
+	}
+	waitForMCPSessionStatus(
+		t,
+		client,
+		sessionID,
+		factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		5*time.Second,
+	)
+	return sessionID
 }
 
 func startRunServeWithRuntimeService(
@@ -260,6 +528,16 @@ func mcpControlResume(
 	sessionID string,
 ) factoryapi.FactorySessionLifecycleControlResponse {
 	t.Helper()
+	return mcpControlResumeExpectingOutcome(t, client, sessionID, factoryapi.FactorySessionLifecycleControlOutcomeAccepted)
+}
+
+func mcpControlResumeExpectingOutcome(
+	t *testing.T,
+	client *stdioMCPClient,
+	sessionID string,
+	want factoryapi.FactorySessionLifecycleControlOutcome,
+) factoryapi.FactorySessionLifecycleControlResponse {
+	t.Helper()
 	response := decodeToolResponse[factoryapi.FactorySessionLifecycleControlResponse](
 		t,
 		client.callTool(mcpfactorysession.ToolControl, map[string]any{
@@ -270,7 +548,109 @@ func mcpControlResume(
 	if response.Error != nil || response.Result == nil {
 		t.Fatalf("resume = %#v, want success", response)
 	}
+	if response.Result.Outcome != want {
+		t.Fatalf("resume outcome = %q, want %q", response.Result.Outcome, want)
+	}
 	return *response.Result
+}
+
+func listMCPDispatches(
+	t *testing.T,
+	client *stdioMCPClient,
+	sessionID string,
+) factoryapi.ListFactorySessionDispatchesResponse {
+	t.Helper()
+	listed := decodeToolResponse[factoryapi.ListFactorySessionDispatchesResponse](
+		t,
+		client.callTool(mcpfactorysession.ToolListDispatches, map[string]any{"sessionId": sessionID}),
+	)
+	if listed.Error != nil || listed.Result == nil {
+		t.Fatalf("list_dispatches = %#v, want success", listed)
+	}
+	if listed.Result.SessionId != sessionID {
+		t.Fatalf("dispatch sessionId = %q, want %q", listed.Result.SessionId, sessionID)
+	}
+	if listed.Result.Dispatches == nil {
+		t.Fatal("dispatch list unexpectedly missing")
+	}
+	return *listed.Result
+}
+
+func requireMCPDispatchSummary(
+	t *testing.T,
+	listed factoryapi.ListFactorySessionDispatchesResponse,
+	dispatchID string,
+	allowedStatuses ...factoryapi.FactoryDispatchStatus,
+) factoryapi.FactorySessionDispatchSummary {
+	t.Helper()
+
+	for _, dispatch := range listed.Dispatches {
+		if dispatch.Id != dispatchID {
+			continue
+		}
+		for _, want := range allowedStatuses {
+			if dispatch.Status == want {
+				return dispatch
+			}
+		}
+		t.Fatalf("dispatch %s status = %q, want one of %#v", dispatchID, dispatch.Status, allowedStatuses)
+	}
+	t.Fatalf("dispatch %s missing from %#v", dispatchID, listed.Dispatches)
+	return factoryapi.FactorySessionDispatchSummary{}
+}
+
+func assertMCPDispatchSummaryParity(
+	t *testing.T,
+	before, after factoryapi.FactorySessionDispatchSummary,
+) {
+	t.Helper()
+
+	if before.Id != after.Id {
+		t.Fatalf("dispatch id changed: %q -> %q", before.Id, after.Id)
+	}
+	if before.Status != after.Status && after.Status != factoryapi.FactoryDispatchStatusCOMPLETED {
+		t.Fatalf("dispatch %s status drifted unexpectedly: before=%q after=%q", before.Id, before.Status, after.Status)
+	}
+	if before.DispatchKind != after.DispatchKind {
+		t.Fatalf("dispatch %s kind changed: %q -> %q", before.Id, before.DispatchKind, after.DispatchKind)
+	}
+	if before.OutputArtifactIds != nil && after.OutputArtifactIds != nil {
+		if len(*before.OutputArtifactIds) != len(*after.OutputArtifactIds) {
+			t.Fatalf(
+				"dispatch %s outputArtifactIds length changed: before=%#v after=%#v",
+				before.Id,
+				*before.OutputArtifactIds,
+				*after.OutputArtifactIds,
+			)
+		}
+	}
+}
+
+func assertMCPDurableProgressCounts(
+	t *testing.T,
+	progress *factoryapi.FactorySessionDurableProgressCounts,
+	wantCompleted, wantTotal, wantInFlight int,
+) {
+	t.Helper()
+	if progress == nil {
+		t.Fatalf("progress = nil, want completed=%d total=%d inFlight=%d", wantCompleted, wantTotal, wantInFlight)
+	}
+	if mcpIntValueOrZero(progress.CompletedDispatches) != wantCompleted {
+		t.Fatalf("completedDispatches = %#v, want %d", progress.CompletedDispatches, wantCompleted)
+	}
+	if mcpIntValueOrZero(progress.TotalDispatches) != wantTotal {
+		t.Fatalf("totalDispatches = %#v, want %d", progress.TotalDispatches, wantTotal)
+	}
+	if mcpIntValueOrZero(progress.InFlightDispatches) != wantInFlight {
+		t.Fatalf("inFlightDispatches = %#v, want %d", progress.InFlightDispatches, wantInFlight)
+	}
+}
+
+func mcpIntValueOrZero(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
 }
 
 func waitForMCPSessionStatus(
