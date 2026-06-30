@@ -69,6 +69,184 @@ func TestCLIResumeSmoke_InterruptedJavaScriptFactorySessionResumesThroughSharedS
 	}
 }
 
+func TestCLIResumeSmoke_DurableResumeContinuityPreservesCompletedChildDispatchesWithoutReplay(t *testing.T) {
+	harness := newCLIResumeSmokeHarness(t)
+	sessionID := harness.startInterruptedSession(t)
+
+	beforeShow := readDurableSessionViaCLI(t, harness.serverURL, sessionID)
+	assertDurableProgressCounts(t, beforeShow.Progress, 1, 2, 0)
+
+	beforeDispatches := readDispatchesViaCLI(t, harness.serverURL, sessionID)
+	dispatchOneBefore := requireDispatchSummary(t, beforeDispatches, "dispatch-1", factoryapi.FactoryDispatchStatusCOMPLETED)
+	dispatchTwoBefore := requireDispatchSummary(t, beforeDispatches, "dispatch-2", factoryapi.FactoryDispatchStatusINTERRUPTED, factoryapi.FactoryDispatchStatusRUNNING)
+	if len(beforeDispatches.Dispatches) != 2 {
+		t.Fatalf("pre-resume dispatch count = %d, want 2", len(beforeDispatches.Dispatches))
+	}
+
+	resumeResponse := resumeSessionViaCLI(t, harness.serverURL, sessionID)
+	if resumeResponse.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+		t.Fatalf("resume outcome = %q, want ACCEPTED", resumeResponse.Outcome)
+	}
+
+	afterShow := waitForDurableSessionStatusViaCLI(
+		t,
+		harness.serverURL,
+		sessionID,
+		factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
+		8*time.Second,
+	)
+	assertDurableProgressCounts(t, afterShow.Progress, 2, 2, 0)
+	if afterShow.Lifecycle == nil || afterShow.Lifecycle.InterruptedAt == nil || afterShow.Lifecycle.ResumedAt == nil {
+		t.Fatalf("post-resume lifecycle = %#v, want interruptedAt and resumedAt continuity", afterShow.Lifecycle)
+	}
+	if beforeShow.Lifecycle == nil || beforeShow.Lifecycle.InterruptedAt == nil {
+		t.Fatal("pre-resume lifecycle missing interruptedAt")
+	}
+	if !afterShow.Lifecycle.InterruptedAt.Equal(*beforeShow.Lifecycle.InterruptedAt) {
+		t.Fatalf(
+			"interruptedAt changed across resume: before=%s after=%s",
+			beforeShow.Lifecycle.InterruptedAt,
+			afterShow.Lifecycle.InterruptedAt,
+		)
+	}
+
+	afterDispatches := readDispatchesViaCLI(t, harness.serverURL, sessionID)
+	if len(afterDispatches.Dispatches) != 2 {
+		t.Fatalf("post-resume dispatch count = %d, want 2 (no replayed child dispatches)", len(afterDispatches.Dispatches))
+	}
+	dispatchOneAfter := requireDispatchSummary(t, afterDispatches, "dispatch-1", factoryapi.FactoryDispatchStatusCOMPLETED)
+	requireDispatchSummary(t, afterDispatches, "dispatch-2", factoryapi.FactoryDispatchStatusCOMPLETED)
+	assertDispatchSummaryParity(t, dispatchOneBefore, dispatchOneAfter)
+	if dispatchTwoBefore.Status == factoryapi.FactoryDispatchStatusINTERRUPTED {
+		// Interrupted dispatch-2 should finish as the same dispatch id, not spawn a third dispatch.
+		dispatchTwoAfter := requireDispatchSummary(t, afterDispatches, "dispatch-2", factoryapi.FactoryDispatchStatusCOMPLETED)
+		if dispatchTwoAfter.Id != dispatchTwoBefore.Id {
+			t.Fatalf("dispatch-2 id changed across resume: %q -> %q", dispatchTwoBefore.Id, dispatchTwoAfter.Id)
+		}
+	}
+
+	if harness.provider.callCount() != 3 {
+		t.Fatalf("provider infer calls = %d, want exactly 3 (step-one once, blocked step-two once, resumed step-two once)", harness.provider.callCount())
+	}
+}
+
+func assertDurableProgressCounts(
+	t *testing.T,
+	progress *factoryapi.FactorySessionDurableProgressCounts,
+	wantCompleted, wantTotal, wantInFlight int,
+) {
+	t.Helper()
+	if progress == nil {
+		t.Fatalf("progress = nil, want completed=%d total=%d inFlight=%d", wantCompleted, wantTotal, wantInFlight)
+	}
+	if intValueOrZero(progress.CompletedDispatches) != wantCompleted {
+		t.Fatalf("completedDispatches = %#v, want %d", progress.CompletedDispatches, wantCompleted)
+	}
+	if intValueOrZero(progress.TotalDispatches) != wantTotal {
+		t.Fatalf("totalDispatches = %#v, want %d", progress.TotalDispatches, wantTotal)
+	}
+	if intValueOrZero(progress.InFlightDispatches) != wantInFlight {
+		t.Fatalf("inFlightDispatches = %#v, want %d", progress.InFlightDispatches, wantInFlight)
+	}
+}
+
+func intValueOrZero(value *int) int {
+	if value == nil {
+		return 0
+	}
+	return *value
+}
+
+func readDispatchesViaCLI(
+	t *testing.T,
+	serverURL string,
+	sessionID string,
+) factoryapi.ListFactorySessionDispatchesResponse {
+	t.Helper()
+
+	var out bytes.Buffer
+	if err := sessioncli.Dispatches(sessioncli.DispatchesConfig{
+		Server:    serverURL,
+		SessionID: sessionID,
+		JSON:      true,
+		Output:    &out,
+	}); err != nil {
+		t.Fatalf("session dispatches: %v", err)
+	}
+
+	var listed factoryapi.ListFactorySessionDispatchesResponse
+	if err := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &listed); err != nil {
+		t.Fatalf("decode session dispatches JSON: %v\n%s", err, out.String())
+	}
+	if listed.SessionId != sessionID {
+		t.Fatalf("dispatch sessionId = %q, want %q", listed.SessionId, sessionID)
+	}
+	if listed.Dispatches == nil {
+		t.Fatal("dispatch list unexpectedly missing")
+	}
+	return listed
+}
+
+func requireDispatchSummary(
+	t *testing.T,
+	listed factoryapi.ListFactorySessionDispatchesResponse,
+	dispatchID string,
+	allowedStatuses ...factoryapi.FactoryDispatchStatus,
+) factoryapi.FactorySessionDispatchSummary {
+	t.Helper()
+
+	for _, dispatch := range listed.Dispatches {
+		if dispatch.Id != dispatchID {
+			continue
+		}
+		for _, want := range allowedStatuses {
+			if dispatch.Status == want {
+				return dispatch
+			}
+		}
+		t.Fatalf("dispatch %s status = %q, want one of %#v", dispatchID, dispatch.Status, allowedStatuses)
+	}
+	t.Fatalf("dispatch %s missing from %#v", dispatchID, listed.Dispatches)
+	return factoryapi.FactorySessionDispatchSummary{}
+}
+
+func assertDispatchSummaryParity(
+	t *testing.T,
+	before, after factoryapi.FactorySessionDispatchSummary,
+) {
+	t.Helper()
+
+	if before.Id != after.Id {
+		t.Fatalf("dispatch id changed: %q -> %q", before.Id, after.Id)
+	}
+	if before.Status != after.Status && after.Status != factoryapi.FactoryDispatchStatusCOMPLETED {
+		t.Fatalf("dispatch %s status drifted unexpectedly: before=%q after=%q", before.Id, before.Status, after.Status)
+	}
+	if before.DispatchKind != after.DispatchKind {
+		t.Fatalf("dispatch %s kind changed: %q -> %q", before.Id, before.DispatchKind, after.DispatchKind)
+	}
+	if before.OutputArtifactIds != nil && after.OutputArtifactIds != nil {
+		if len(*before.OutputArtifactIds) != len(*after.OutputArtifactIds) {
+			t.Fatalf(
+				"dispatch %s outputArtifactIds length changed: before=%#v after=%#v",
+				before.Id,
+				*before.OutputArtifactIds,
+				*after.OutputArtifactIds,
+			)
+		}
+		for i := range *before.OutputArtifactIds {
+			if (*before.OutputArtifactIds)[i] != (*after.OutputArtifactIds)[i] {
+				t.Fatalf(
+					"dispatch %s outputArtifactIds changed: before=%#v after=%#v",
+					before.Id,
+					*before.OutputArtifactIds,
+					*after.OutputArtifactIds,
+				)
+			}
+		}
+	}
+}
+
 type cliResumeSmokeHarness struct {
 	serverURL string
 	service   fse.Service
