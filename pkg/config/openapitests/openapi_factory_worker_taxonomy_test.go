@@ -140,6 +140,50 @@ func TestMarshalCanonicalFactoryConfig_PrefersNewWorkerTaxonomyOnRoundTrip(t *te
 	}
 }
 
+func TestGeneratedFactoryFromOpenAPIJSON_PreservesExplicitAgentWorkerOnSaveRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	cfgJSON := []byte(`{
+		"name":"explicit-agent-worker",
+		"workTypes":[{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"},{"name":"failed","type":"FAILED"}]}],
+		"workers":[{"name":"executor","type":"AGENT_WORKER","model":"claude-sonnet","modelProvider":"CLAUDE"}],
+		"workstations":[{"name":"execute-story","type":"AGENT_RUN","worker":"executor","inputs":[{"workType":"story","state":"init"}],"outputs":[{"workType":"story","state":"complete"}],"onFailure":[{"workType":"story","state":"failed"}]}]
+	}`)
+
+	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON: %v", err)
+	}
+	worker := (*generated.Workers)[0]
+	if worker.Type == nil || string(*worker.Type) != interfaces.WorkerTypeAgent {
+		t.Fatalf("generated worker type = %#v, want %s", worker.Type, interfaces.WorkerTypeAgent)
+	}
+
+	runtimeCfg, err := FactoryConfigFromOpenAPI(generated)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPI: %v", err)
+	}
+	canonical, err := MarshalCanonicalFactoryConfig(&runtimeCfg)
+	if err != nil {
+		t.Fatalf("MarshalCanonicalFactoryConfig: %v", err)
+	}
+	if strings.Contains(string(canonical), `"type":"MODEL_WORKER"`) {
+		t.Fatalf("canonical save output downgraded explicit agent worker, got %s", string(canonical))
+	}
+	if !strings.Contains(string(canonical), `"type":"AGENT_WORKER"`) {
+		t.Fatalf("canonical save output missing AGENT_WORKER, got %s", string(canonical))
+	}
+
+	regenerated, err := GeneratedFactoryFromOpenAPIJSON(canonical)
+	if err != nil {
+		t.Fatalf("GeneratedFactoryFromOpenAPIJSON round trip: %v", err)
+	}
+	regeneratedWorker := (*regenerated.Workers)[0]
+	if regeneratedWorker.Type == nil || string(*regeneratedWorker.Type) != interfaces.WorkerTypeAgent {
+		t.Fatalf("round-tripped worker type = %#v, want %s", regeneratedWorker.Type, interfaces.WorkerTypeAgent)
+	}
+}
+
 func TestGeneratedFactoryFromOpenAPIJSON_PreservesExplicitInferenceWorkerOnSaveRoundTrip(t *testing.T) {
 	t.Parallel()
 

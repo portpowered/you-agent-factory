@@ -6869,7 +6869,7 @@ export type ResourceType = (typeof ResourceType)[keyof typeof ResourceType];
 export const WorkerType = {
   // Inference worker that performs one bounded model operation through the configured provider or managed runtime.
   WorkerTypeInferenceWorker: "INFERENCE_WORKER",
-  // Agent worker reserved for future agent-loop execution; not used for harnessless inference calls.
+  // Agent worker that executes prompt-rendered agent loops through AGENT_RUN workstations. Model capability declarations belong on INFERENCE_WORKER, not AGENT_WORKER.
   WorkerTypeAgentWorker: "AGENT_WORKER",
   // Script-backed worker that executes a configured command instead of calling a model provider.
   WorkerTypeScriptWorker: "SCRIPT_WORKER",
@@ -6971,7 +6971,7 @@ export type WorkstationKind =
 export const WorkstationType = {
   // One-shot inference workstation that resolves operation bindings and dispatches through an inference worker.
   WorkstationTypeInferenceRun: "INFERENCE_RUN",
-  // Agent-run workstation reserved for future agent-loop execution that renders prompts and dispatches through an agent worker.
+  // Agent-run workstation that renders prompts and dispatches through an agent worker for iterative agent-loop execution.
   WorkstationTypeAgentRun: "AGENT_RUN",
   // Script-run workstation that executes deterministic command or script behavior through a script worker.
   WorkstationTypeScriptRun: "SCRIPT_RUN",
