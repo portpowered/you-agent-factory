@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http/httptest"
 	"os"
@@ -127,6 +128,87 @@ func TestCLIResumeSmoke_DurableResumeContinuityPreservesCompletedChildDispatches
 
 	if harness.provider.callCount() != 3 {
 		t.Fatalf("provider infer calls = %d, want exactly 3 (step-one once, blocked step-two once, resumed step-two once)", harness.provider.callCount())
+	}
+}
+
+func TestCLIResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead(t *testing.T) {
+	harness := newCLIResumeSmokeSucceededHarness(t)
+	sessionID := harness.startSucceededSession(t)
+
+	before := readDurableSessionViaCLI(t, harness.serverURL, sessionID)
+	if before.SessionId != sessionID {
+		t.Fatalf("pre-resume sessionId = %q, want %q", before.SessionId, sessionID)
+	}
+	if before.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("pre-resume status = %q, want SUCCEEDED", before.Status)
+	}
+
+	response, err := resumeSessionViaCLIExpectingRejection(t, harness.serverURL, sessionID)
+	var rejected *sessioncli.LifecycleControlRejectedError
+	if !errors.As(err, &rejected) {
+		t.Fatalf("resume error = %v, want LifecycleControlRejectedError", err)
+	}
+	if rejected.Response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeTerminalSession {
+		t.Fatalf("resume outcome = %q, want TERMINAL_SESSION", rejected.Response.Outcome)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindResume {
+		t.Fatalf("resume operation = %q, want RESUME", response.Operation)
+	}
+	if response.SessionId != sessionID {
+		t.Fatalf("resume sessionId = %q, want %q", response.SessionId, sessionID)
+	}
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeTerminalSession {
+		t.Fatalf("stdout outcome = %q, want TERMINAL_SESSION", response.Outcome)
+	}
+
+	after := readDurableSessionViaCLI(t, harness.serverURL, sessionID)
+	if after.SessionId != sessionID {
+		t.Fatalf("post-resume sessionId = %q, want %q", after.SessionId, sessionID)
+	}
+	if after.Status != factoryapi.FactorySessionDurableLifecycleStatusSucceeded {
+		t.Fatalf("post-resume status = %q, want SUCCEEDED unchanged", after.Status)
+	}
+	if before.ResultSummary == nil || after.ResultSummary == nil {
+		t.Fatal("expected result summary before and after rejected resume")
+	}
+	if after.ResultSummary.ResultStatus != before.ResultSummary.ResultStatus {
+		t.Fatalf(
+			"result status changed after rejected resume: before=%q after=%q",
+			before.ResultSummary.ResultStatus,
+			after.ResultSummary.ResultStatus,
+		)
+	}
+}
+
+func TestCLIResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPreservesSessionRead(t *testing.T) {
+	harness := newCLIResumeSmokeRunningHarness(t)
+	sessionID := harness.startRunningSession(t)
+
+	before := readDurableSessionViaCLI(t, harness.serverURL, sessionID)
+	if before.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("pre-resume status = %q, want RUNNING", before.Status)
+	}
+
+	response := resumeSessionViaCLI(t, harness.serverURL, sessionID)
+	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeNoOp {
+		t.Fatalf("resume outcome = %q, want NO_OP", response.Outcome)
+	}
+	if response.Operation != factoryapi.FactorySessionLifecycleControlKindResume {
+		t.Fatalf("resume operation = %q, want RESUME", response.Operation)
+	}
+	if response.SessionId != sessionID {
+		t.Fatalf("resume sessionId = %q, want %q", response.SessionId, sessionID)
+	}
+	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("resume status = %q, want RUNNING", response.Status)
+	}
+
+	after := readDurableSessionViaCLI(t, harness.serverURL, sessionID)
+	if after.SessionId != sessionID {
+		t.Fatalf("post-resume sessionId = %q, want %q", after.SessionId, sessionID)
+	}
+	if after.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+		t.Fatalf("post-resume status = %q, want RUNNING unchanged", after.Status)
 	}
 }
 
@@ -279,6 +361,97 @@ func newCLIResumeSmokeHarness(t *testing.T) *cliResumeSmokeHarness {
 	}
 }
 
+func newCLIResumeSmokeSucceededHarness(t *testing.T) *cliResumeSmokeHarness {
+	t.Helper()
+
+	const workflowName = "simple-final"
+	projectRoot := setupCLIResumeSmokeWorkflowFixture(t, "simple-final.workflow.js", workflowName)
+	runtimeService := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
+		ProjectRoot:     projectRoot,
+		PersistSessions: true,
+	})
+
+	server := httptest.NewServer(api.NewServer(&testutil.MockFactory{
+		DurableExecutionService: runtimeService,
+	}, 0, zap.NewNop()).Handler())
+	t.Cleanup(server.Close)
+
+	return &cliResumeSmokeHarness{
+		serverURL: server.URL,
+		service:   runtimeService,
+	}
+}
+
+func newCLIResumeSmokeRunningHarness(t *testing.T) *cliResumeSmokeHarness {
+	t.Helper()
+
+	const workflowName = "busy-loop"
+	projectRoot := setupCLIResumeSmokeWorkflowFixture(t, "busy-loop.workflow.js", workflowName)
+	runtimeService := fse.NewJavaScriptRuntimeService(fse.JavaScriptRuntimeServiceConfig{
+		ProjectRoot:     projectRoot,
+		PersistSessions: true,
+	})
+
+	server := httptest.NewServer(api.NewServer(&testutil.MockFactory{
+		DurableExecutionService: runtimeService,
+	}, 0, zap.NewNop()).Handler())
+	t.Cleanup(server.Close)
+
+	return &cliResumeSmokeHarness{
+		serverURL: server.URL,
+		service:   runtimeService,
+	}
+}
+
+func (h *cliResumeSmokeHarness) startSucceededSession(t *testing.T) string {
+	t.Helper()
+
+	const workflowName = "simple-final"
+	started, err := h.service.StartAsync(context.Background(), fse.StartRequest{
+		RequestID: "req-cli-resume-smoke-succeeded-001",
+		Source: fse.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: workflowName,
+		},
+		Args: map[string]any{
+			"subject": "workflows",
+			"count":   2,
+			"prefix":  "you",
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+	sessionID := started.SessionID
+	if sessionID == "" {
+		t.Fatal("session id unexpectedly empty")
+	}
+	waitForCLIResumeSmokeSessionStatus(t, h.service, sessionID, fse.LifecycleStatusSucceeded, 15*time.Second)
+	return sessionID
+}
+
+func (h *cliResumeSmokeHarness) startRunningSession(t *testing.T) string {
+	t.Helper()
+
+	const workflowName = "busy-loop"
+	started, err := h.service.StartAsync(context.Background(), fse.StartRequest{
+		RequestID: "req-cli-resume-smoke-running-001",
+		Source: fse.Source{
+			Kind:         workflowsource.KindWorkflowName,
+			WorkflowName: workflowName,
+		},
+	})
+	if err != nil {
+		t.Fatalf("StartAsync: %v", err)
+	}
+	sessionID := started.SessionID
+	if sessionID == "" {
+		t.Fatal("session id unexpectedly empty")
+	}
+	waitForCLIResumeSmokeSessionStatus(t, h.service, sessionID, fse.LifecycleStatusRunning, 5*time.Second)
+	return sessionID
+}
+
 func (h *cliResumeSmokeHarness) startInterruptedSession(t *testing.T) string {
 	t.Helper()
 
@@ -379,6 +552,28 @@ func resumeSessionViaCLI(
 		t.Fatalf("decode session resume JSON: %v\n%s", err, out.String())
 	}
 	return response
+}
+
+func resumeSessionViaCLIExpectingRejection(
+	t *testing.T,
+	serverURL string,
+	sessionID string,
+) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	t.Helper()
+
+	var out bytes.Buffer
+	err := sessioncli.Resume(sessioncli.LifecycleControlConfig{
+		Server:    serverURL,
+		SessionID: sessionID,
+		JSON:      true,
+		Output:    &out,
+	})
+
+	var response factoryapi.FactorySessionLifecycleControlResponse
+	if decodeErr := json.Unmarshal(bytes.TrimSpace(out.Bytes()), &response); decodeErr != nil {
+		t.Fatalf("decode session resume JSON: %v\n%s", decodeErr, out.String())
+	}
+	return response, err
 }
 
 func waitForDurableSessionStatusViaCLI(
