@@ -38,6 +38,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service/ingest"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -1223,12 +1224,22 @@ func buildProviderBackedWorkerExecutor(
 	runner = wrapLocalModelRunner(runner, runtimeCfg, factoryCfg, def, modelDomain)
 	runner = modelDomain.resources.WrapRunner(runner, factoryCfg, def)
 	runner = newRecordingModelRunner(runner, factoryCfg, def, modelRecorder, now)
-	agentExec := workerexecutor.NewAgentExecutorWithRunner(
+	inferenceExecutor := workerexecutor.NewAgentExecutorWithRunner(
 		runtimeCfg,
 		runner,
 		workerexecutor.WithLogger(logger),
 	)
-	return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, agentExec, logger)
+	agentRunExecutor := workeragentrun.NewAgentRunExecutor(
+		runtimeCfg,
+		runner,
+		workeragentrun.WithAgentRunLogger(logger),
+	)
+	inner := &workerexecutor.WorkstationBehaviorRouter{
+		RuntimeConfig:     runtimeCfg,
+		InferenceExecutor: inferenceExecutor,
+		AgentRunExecutor:  agentRunExecutor,
+	}
+	return configuredWorkstationExecutor(runtimeCfg, factoryRunnerID, workflowContext, inner, logger)
 }
 
 func providerBackedRunner(

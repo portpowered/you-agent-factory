@@ -24,6 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -1231,8 +1232,12 @@ You are a helpful assistant.
 	if !ok {
 		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
 	}
-	if _, ok := wsExec.Executor.(*workers.AgentExecutor); !ok {
-		t.Fatalf("expected wrapped executor to be *workers.AgentExecutor, got %T", wsExec.Executor)
+	router, ok := wsExec.Executor.(*workerexecutor.WorkstationBehaviorRouter)
+	if !ok {
+		t.Fatalf("expected wrapped executor to be *executor.WorkstationBehaviorRouter, got %T", wsExec.Executor)
+	}
+	if _, ok := router.InferenceExecutor.(*workers.AgentExecutor); !ok {
+		t.Fatalf("expected inference executor to be *workers.AgentExecutor, got %T", router.InferenceExecutor)
 	}
 
 	workerDef, ok := wsExec.RuntimeConfig.Worker("worker-a")
