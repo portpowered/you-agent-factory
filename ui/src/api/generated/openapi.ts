@@ -3862,9 +3862,21 @@ export interface components {
       auth?: components["schemas"]["HostedWorkerAuth"];
       /** @description Provider-specific configuration for the built-in hosted LINEAR worker. */
       linear?: components["schemas"]["HostedLinearWorkerConfig"];
+      /** @description Explicit agent-loop tool policy for AGENT_WORKER definitions. Omit or set policy DISABLED to run agent loops without advertising or executing tools. */
+      agentTools?: components["schemas"]["AgentWorkerToolsConfig"];
       /** @description Inline worker instructions or script body when the worker is authored directly in factory config. */
       body?: string;
     };
+    /** @description Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy. */
+    AgentWorkerToolsConfig: {
+      /** @description Required executor policy for agent-loop tool use on this worker. */
+      policy: components["schemas"]["AgentWorkerToolPolicy"];
+    };
+    /**
+     * @description Explicit tool execution policy for AGENT_WORKER agent loops. DISABLED runs the harness in no-tools mode. READ_ONLY exposes bounded filesystem read tools. ENABLED adds bounded filesystem write capability for the first supported tool set.
+     * @enum {string}
+     */
+    AgentWorkerToolPolicy: AgentWorkerToolPolicy;
     /**
      * @description Worker implementation families supported by the public factory-config contract.
      * @enum {string}
@@ -6866,6 +6878,13 @@ export const ResourceType = {
   ResourceTypeInvocationSlot: "INVOCATION_SLOT",
 } as const;
 export type ResourceType = (typeof ResourceType)[keyof typeof ResourceType];
+export const AgentWorkerToolPolicy = {
+  AgentWorkerToolPolicyDISABLED: "DISABLED",
+  AgentWorkerToolPolicyREADONLY: "READ_ONLY",
+  AgentWorkerToolPolicyENABLED: "ENABLED",
+} as const;
+export type AgentWorkerToolPolicy =
+  (typeof AgentWorkerToolPolicy)[keyof typeof AgentWorkerToolPolicy];
 export const WorkerType = {
   // Inference worker that performs one bounded model operation through the configured provider or managed runtime.
   WorkerTypeInferenceWorker: "INFERENCE_WORKER",

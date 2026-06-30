@@ -7489,9 +7489,33 @@ components:
         linear:
           $ref: '#/components/schemas/HostedLinearWorkerConfig'
           description: Provider-specific configuration for the built-in hosted LINEAR worker.
+        agentTools:
+          $ref: '#/components/schemas/AgentWorkerToolsConfig'
+          description: Explicit agent-loop tool policy for AGENT_WORKER definitions. Omit or set policy DISABLED to run agent loops without advertising or executing tools.
         body:
           type: string
           description: Inline worker instructions or script body when the worker is authored directly in factory config.
+    AgentWorkerToolsConfig:
+      type: object
+      additionalProperties: false
+      description: Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy.
+      required:
+        - policy
+      properties:
+        policy:
+          $ref: '#/components/schemas/AgentWorkerToolPolicy'
+          description: Required executor policy for agent-loop tool use on this worker.
+    AgentWorkerToolPolicy:
+      type: string
+      description: Explicit tool execution policy for AGENT_WORKER agent loops. DISABLED runs the harness in no-tools mode. READ_ONLY exposes bounded filesystem read tools. ENABLED adds bounded filesystem write capability for the first supported tool set.
+      enum:
+        - DISABLED
+        - READ_ONLY
+        - ENABLED
+      x-enum-varnames:
+        - AgentWorkerToolPolicyDISABLED
+        - AgentWorkerToolPolicyREADONLY
+        - AgentWorkerToolPolicyENABLED
     WorkerType:
       type: string
       description: Worker implementation families supported by the public factory-config contract.

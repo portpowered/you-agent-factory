@@ -356,6 +356,7 @@ func workerInternalFromAPI(worker factoryapi.Worker) interfaces.WorkerConfig {
 		SkipPermissions:  boolValue(worker.SkipPermissions),
 		Auth:             hostedWorkerAuthInternalFromAPI(worker.Auth),
 		Linear:           hostedLinearWorkerInternalFromAPI(worker.Linear),
+		AgentTools:       agentWorkerToolsInternalFromAPI(worker.AgentTools),
 		Body:             stringValue(worker.Body),
 	}
 }
@@ -461,6 +462,15 @@ func hostedLinearWorkerClaimInternalFromAPI(claim *factoryapi.HostedLinearWorker
 	}
 	return &interfaces.HostedLinearWorkerClaimConfig{
 		AssigneeField: stringValue(claim.AssigneeField),
+	}
+}
+
+func agentWorkerToolsInternalFromAPI(cfg *factoryapi.AgentWorkerToolsConfig) *interfaces.AgentWorkerToolsConfig {
+	if cfg == nil {
+		return nil
+	}
+	return &interfaces.AgentWorkerToolsConfig{
+		Policy: string(cfg.Policy),
 	}
 }
 

@@ -138,6 +138,7 @@ func NewConfigValidator(opts ...ConfigValidatorOption) *ConfigValidator {
 		rulePollerWorkstations,
 		ruleHostedWorkers,
 		ruleWorkerModelOperations,
+		ruleAgentWorkerTools,
 		ruleModelInvokeWorkstations,
 		rulePerInputGuards,
 		ruleResourceDefinitions,
@@ -749,6 +750,48 @@ func ruleWorkerModelOperations(cfg *interfaces.FactoryConfig) []Finding {
 
 			findings = append(findings, validateModelOperationSlots(operation.Inputs, operationPath+".inputs", "input")...)
 			findings = append(findings, validateModelOperationSlots(operation.Outputs, operationPath+".outputs", "output")...)
+		}
+	}
+	return findings
+}
+
+func ruleAgentWorkerTools(cfg *interfaces.FactoryConfig) []Finding {
+	if cfg == nil || len(cfg.Workers) == 0 {
+		return nil
+	}
+
+	var findings []Finding
+	for workerIndex, worker := range cfg.Workers {
+		basePath := fmt.Sprintf("workers[%d](%s)", workerIndex, worker.Name)
+		if worker.AgentTools == nil {
+			continue
+		}
+		policy := strings.TrimSpace(worker.AgentTools.Policy)
+		if policy == "" {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     basePath + ".agentTools.policy",
+				Message:  "agent tool configuration requires an explicit policy",
+				Rule:     "agent-worker-tools-policy-required",
+			})
+			continue
+		}
+		if !interfaces.IsKnownAgentWorkerToolPolicy(policy) {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     basePath + ".agentTools.policy",
+				Message:  fmt.Sprintf("unsupported agent tool policy %q", policy),
+				Rule:     "agent-worker-tools-policy-supported",
+			})
+			continue
+		}
+		if !interfaces.IsAgentWorkerType(worker.Type) {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     basePath + ".agentTools",
+				Message:  "agent tool configuration is only supported on AGENT_WORKER definitions",
+				Rule:     "agent-worker-tools-worker-type",
+			})
 		}
 	}
 	return findings

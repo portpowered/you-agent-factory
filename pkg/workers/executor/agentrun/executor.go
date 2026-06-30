@@ -68,14 +68,21 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request interface
 
 	baseReq := agentRunInferenceRequest(request, workerDef)
 	inferencer := newRunnerInferencer(executor.runner, baseReq)
+	toolPolicy := interfaces.EffectiveAgentWorkerToolPolicy(workerDef.AgentTools)
+	toolRecorder := NewToolDiagnosticRecorder()
 	harnessResult, err := executor.harness.Execute(ctx, HarnessInput{
 		SystemPrompt: request.SystemPrompt,
 		UserMessage:  request.UserMessage,
 		Inferencer:   inferencer,
+		ToolPolicy:   toolPolicy,
+		WorkingDir:   request.WorkingDirectory,
+		ToolRecorder: toolRecorder,
 	})
 	if err != nil {
-		return agentRunFailureWorkResult(request.Dispatch, err, time.Since(start)), nil
+		return agentRunFailureWorkResult(request.Dispatch, err, time.Since(start), toolPolicy, toolRecorder), nil
 	}
+
+	toolMetadata := toolDiagnosticsMetadata(toolPolicy, toolRecorder)
 
 	workstationDef, _ := executor.runtimeConfig.Workstation(request.Dispatch.WorkstationName)
 	if goal.UsesGoalRoutingDecisionEnvelope(workstationDef) {
@@ -84,7 +91,7 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request interface
 			request.Dispatch.TransitionID,
 			harnessResult.FinalText,
 		)
-		result.Diagnostics = agentRunDiagnostics(nil)
+		result.Diagnostics = agentRunDiagnostics(toolMetadata)
 		result.Metrics = interfaces.WorkMetrics{Duration: time.Since(start)}
 		return result, nil
 	}
@@ -94,7 +101,7 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request interface
 			request.Dispatch.TransitionID,
 			harnessResult.FinalText,
 		)
-		result.Diagnostics = agentRunDiagnostics(nil)
+		result.Diagnostics = agentRunDiagnostics(toolMetadata)
 		result.Metrics = interfaces.WorkMetrics{Duration: time.Since(start)}
 		return result, nil
 	}
@@ -105,7 +112,7 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request interface
 		TransitionID: request.Dispatch.TransitionID,
 		Outcome:      outcome,
 		Output:       harnessResult.FinalText,
-		Diagnostics:  agentRunDiagnostics(nil),
+		Diagnostics:  agentRunDiagnostics(toolMetadata),
 		Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
 	}, nil
 }
@@ -153,14 +160,24 @@ func evaluateAgentRunOutcome(output string, workerDef *interfaces.WorkerConfig) 
 	return interfaces.OutcomeRejected
 }
 
-func agentRunFailureWorkResult(dispatch interfaces.WorkDispatch, err error, duration time.Duration) interfaces.WorkResult {
+func agentRunFailureWorkResult(
+	dispatch interfaces.WorkDispatch,
+	err error,
+	duration time.Duration,
+	toolPolicy string,
+	toolRecorder *ToolDiagnosticRecorder,
+) interfaces.WorkResult {
+	failureDiagnostics := agentRunFailureDiagnostics(err)
+	if toolRecorder != nil {
+		failureDiagnostics = mergeToolDiagnostics(failureDiagnostics, toolPolicy, toolRecorder)
+	}
 	return interfaces.WorkResult{
 		DispatchID:      dispatch.DispatchID,
 		TransitionID:    dispatch.TransitionID,
 		Outcome:         interfaces.OutcomeFailed,
 		Error:           formatAgentRunError(err),
 		FailureMetadata: interfaces.CloneWorkFailureMetadata(failureMetadataForError(err)),
-		Diagnostics:     agentRunDiagnostics(agentRunFailureDiagnostics(err)),
+		Diagnostics:     agentRunDiagnostics(failureDiagnostics),
 		Metrics:         interfaces.WorkMetrics{Duration: duration},
 	}
 }

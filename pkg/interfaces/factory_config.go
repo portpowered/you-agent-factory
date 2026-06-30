@@ -576,6 +576,7 @@ type WorkerConfig struct {
 	OpenCodeAgent    string                    `json:"openCodeAgent,omitempty" yaml:"openCodeAgent,omitempty"`
 	Auth             *HostedWorkerAuthConfig   `json:"auth,omitempty" yaml:"auth,omitempty"`
 	Linear           *HostedLinearWorkerConfig `json:"linear,omitempty" yaml:"linear,omitempty"`
+	AgentTools       *AgentWorkerToolsConfig   `json:"agentTools,omitempty" yaml:"agentTools,omitempty"`
 	Body             string                    `json:"body,omitempty" yaml:"-"`
 
 	// Internal-only runtime fields retained during contract cleanup.

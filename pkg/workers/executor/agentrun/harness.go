@@ -7,6 +7,8 @@ import (
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/agentloop"
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // HarnessInput is the factory-owned input for one agent-run harness execution.
@@ -14,6 +16,9 @@ type HarnessInput struct {
 	SystemPrompt string
 	UserMessage  string
 	Inferencer   messages.Inferencer
+	ToolPolicy   string
+	WorkingDir   string
+	ToolRecorder *ToolDiagnosticRecorder
 }
 
 // HarnessResult is the factory-owned result from one harness execution turn.
@@ -40,9 +45,21 @@ func (a *LibraryHarnessAdapter) Execute(ctx context.Context, input HarnessInput)
 		return HarnessResult{}, fmt.Errorf("agent run harness requires an inferencer")
 	}
 
+	policy := interfaces.NormalizeAgentWorkerToolPolicy(input.ToolPolicy)
 	opts := []agentloop.Option{
 		agentloop.WithInferencer(input.Inferencer),
-		agentloop.WithToolExecutionDisabled(),
+	}
+	if interfaces.AgentWorkerToolsAllowExecution(policy) {
+		recorder := input.ToolRecorder
+		if recorder == nil {
+			recorder = NewToolDiagnosticRecorder()
+		}
+		opts = append(opts,
+			agentloop.WithToolExecutor(NewPolicyToolExecutor(policy, input.WorkingDir, recorder)),
+			agentloop.WithTools(toolDefinitionsForPolicy(policy)),
+		)
+	} else {
+		opts = append(opts, agentloop.WithToolExecutionDisabled())
 	}
 	if systemPrompt := strings.TrimSpace(input.SystemPrompt); systemPrompt != "" {
 		opts = append(opts, agentloop.WithSystemPrompt(systemPrompt))

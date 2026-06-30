@@ -24,6 +24,9 @@ const (
 	FailureClassLeaseDenied    = "agent_run_lease_denied"
 	FailureClassModelNotReady  = "agent_run_model_not_ready"
 	FailureClassModelRuntime   = "agent_run_model_runtime_failure"
+	FailureClassToolDenied     = "agent_run_tool_denied"
+	FailureClassToolPolicy     = "agent_run_tool_policy_violation"
+	FailureClassToolRuntime    = "agent_run_tool_failure"
 )
 
 func agentRunDiagnostics(extra map[string]string) *interfaces.WorkDiagnostics {
@@ -42,6 +45,9 @@ func agentRunDiagnostics(extra map[string]string) *interfaces.WorkDiagnostics {
 func failureClassForError(err error) string {
 	if err == nil {
 		return ""
+	}
+	if class, ok := toolFailureClass(err); ok {
+		return class
 	}
 	if class, ok := modelhostFailureClass(err); ok {
 		return class
@@ -92,6 +98,10 @@ func formatAgentRunError(err error) string {
 		return "agent run model not ready: " + err.Error()
 	case FailureClassModelRuntime:
 		return "agent run model runtime failure: " + err.Error()
+	case FailureClassToolDenied, FailureClassToolPolicy:
+		return "agent run tool policy violation: " + err.Error()
+	case FailureClassToolRuntime:
+		return "agent run tool failure: " + err.Error()
 	default:
 		return "agent run harness failure: " + err.Error()
 	}
@@ -196,6 +206,19 @@ func modelhostOperationalFailureClass(err error) string {
 	default:
 		return FailureClassModelRuntime
 	}
+}
+
+func toolFailureClass(err error) (string, bool) {
+	if errors.Is(err, ErrToolPolicyDenied) {
+		return FailureClassToolPolicy, true
+	}
+	if errors.Is(err, ErrToolNotSupported) {
+		return FailureClassToolDenied, true
+	}
+	if isToolRuntimeError(err) {
+		return FailureClassToolRuntime, true
+	}
+	return "", false
 }
 
 func modelhostFailureMetadata(err error) *interfaces.WorkFailureMetadata {

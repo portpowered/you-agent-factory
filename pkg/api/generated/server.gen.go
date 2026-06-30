@@ -14,6 +14,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/api/apitypes"
 )
 
+// Defines values for AgentWorkerToolPolicy.
+const (
+	AgentWorkerToolPolicyDISABLED AgentWorkerToolPolicy = "DISABLED"
+	AgentWorkerToolPolicyENABLED  AgentWorkerToolPolicy = "ENABLED"
+	AgentWorkerToolPolicyREADONLY AgentWorkerToolPolicy = "READ_ONLY"
+)
+
 // Defines values for BundledFileType.
 const (
 	BundledFileTypeDOC        BundledFileType = "DOC"
@@ -783,6 +790,15 @@ const (
 const (
 	ListWorkBySessionIdParamsSortByStateType ListWorkBySessionIdParamsSortBy = "state.type"
 )
+
+// AgentWorkerToolPolicy Explicit tool execution policy for AGENT_WORKER agent loops. DISABLED runs the harness in no-tools mode. READ_ONLY exposes bounded filesystem read tools. ENABLED adds bounded filesystem write capability for the first supported tool set.
+type AgentWorkerToolPolicy string
+
+// AgentWorkerToolsConfig Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy.
+type AgentWorkerToolsConfig struct {
+	// Policy Explicit tool execution policy for AGENT_WORKER agent loops. DISABLED runs the harness in no-tools mode. READ_ONLY exposes bounded filesystem read tools. ENABLED adds bounded filesystem write capability for the first supported tool set.
+	Policy AgentWorkerToolPolicy `json:"policy"`
+}
 
 // ArtifactCreatedEventPayload Customer-visible artifact creation recorded on the canonical factory event stream. Artifact bodies remain orchestrator-owned and are not included in this payload.
 type ArtifactCreatedEventPayload struct {
@@ -4979,6 +4995,9 @@ type WorkTypeHandlingBehavior string
 
 // Worker A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script.
 type Worker struct {
+	// AgentTools Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy.
+	AgentTools *AgentWorkerToolsConfig `json:"agentTools,omitempty"`
+
 	// Args Additional command arguments passed to the configured command.
 	Args *[]string `json:"args,omitempty"`
 

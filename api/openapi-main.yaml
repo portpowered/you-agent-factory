@@ -1977,6 +1977,10 @@ components:
       $ref: './components/schemas/data-models/ResourceType.yaml'
     Worker:
       $ref: './components/schemas/data-models/Worker.yaml'
+    AgentWorkerToolsConfig:
+      $ref: './components/schemas/data-models/AgentWorkerToolsConfig.yaml'
+    AgentWorkerToolPolicy:
+      $ref: './components/schemas/data-models/AgentWorkerToolPolicy.yaml'
     WorkerType:
       $ref: './components/schemas/data-models/WorkerType.yaml'
     WorkerModelProvider:
