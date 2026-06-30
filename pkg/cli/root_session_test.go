@@ -20,6 +20,7 @@ func TestSessionCommand_RegistersSubcommands(t *testing.T) {
 	for _, path := range [][]string{
 		{"session", "list"},
 		{"session", "show"},
+		{"session", "dispatches"},
 		{"session", "pause"},
 		{"session", "resume"},
 		{"session", "create"},
