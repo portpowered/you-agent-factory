@@ -68,36 +68,19 @@ func (s *StreamSet) Stream(dispatchID string) *SessionResponseStream {
 	}
 	key := normalizeDispatchID(dispatchID)
 
-	s.mu.RLock()
-	stream := s.streams[key]
-	closed := s.closed
-	s.mu.RUnlock()
-	if stream != nil {
-		return stream
-	}
-	if closed {
-		return nil
-	}
-	s.mu.RLock()
-	_, dispatchClosed := s.closedDispatches[key]
-	s.mu.RUnlock()
-	if dispatchClosed {
-		return nil
-	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.evictExpiredCompletedDispatchesLocked()
-	if stream = s.streams[key]; stream != nil {
-		return stream
-	}
 	if s.closed {
 		return nil
 	}
-	if _, dispatchClosed = s.closedDispatches[key]; dispatchClosed {
+	if stream := s.streams[key]; stream != nil {
+		return stream
+	}
+	if _, dispatchClosed := s.closedDispatches[key]; dispatchClosed {
 		return nil
 	}
-	stream = s.newStream()
+	stream := s.newStream()
 	s.streams[key] = stream
 	return stream
 }

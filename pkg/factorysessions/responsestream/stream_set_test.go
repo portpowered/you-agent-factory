@@ -165,6 +165,70 @@ func TestStreamSet_EvictsCompletedDispatchAfterRetentionWindow(t *testing.T) {
 	}
 }
 
+func TestStreamSet_StreamEvictsExpiredCompletedDispatchOnDirectAccess(t *testing.T) {
+	start := time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)
+	clock := &fixedClock{now: start}
+	set := responsestream.NewStreamSetWithFactoryAndRetention(
+		func() *responsestream.SessionResponseStream {
+			return responsestream.NewSessionResponseStreamWithClock(
+				clock,
+				responsestream.RetentionLimits{MaxAge: time.Minute},
+			)
+		},
+		time.Minute,
+		clock,
+	)
+	stream := set.Stream("dispatch-1")
+	if stream == nil {
+		t.Fatal("Stream = nil, want allocated dispatch stream")
+	}
+	stream.Append(responsestream.Event{
+		Kind:    responsestream.EventKindProgressFragment,
+		Type:    responsestream.EventTypeProgress,
+		Payload: "planning",
+	})
+	if closed := set.CloseDispatch("dispatch-1"); !closed {
+		t.Fatal("CloseDispatch returned false, want dispatch completed")
+	}
+
+	clock.now = start.Add(2 * time.Minute)
+	if retained := set.Stream("dispatch-1"); retained != nil {
+		t.Fatal("Stream after retention window = non-nil, want completed dispatch evicted on direct access")
+	}
+}
+
+func TestStreamSet_SubscribeRejectsExpiredCompletedDispatchOnDirectAccess(t *testing.T) {
+	start := time.Date(2026, 6, 30, 0, 0, 0, 0, time.UTC)
+	clock := &fixedClock{now: start}
+	set := responsestream.NewStreamSetWithFactoryAndRetention(
+		func() *responsestream.SessionResponseStream {
+			return responsestream.NewSessionResponseStreamWithClock(
+				clock,
+				responsestream.RetentionLimits{MaxAge: time.Minute},
+			)
+		},
+		time.Minute,
+		clock,
+	)
+	stream := set.Stream("dispatch-1")
+	if stream == nil {
+		t.Fatal("Stream = nil, want allocated dispatch stream")
+	}
+	stream.Append(responsestream.Event{
+		Kind:    responsestream.EventKindProgressFragment,
+		Type:    responsestream.EventTypeProgress,
+		Payload: "planning",
+	})
+	if closed := set.CloseDispatch("dispatch-1"); !closed {
+		t.Fatal("CloseDispatch returned false, want dispatch completed")
+	}
+
+	clock.now = start.Add(2 * time.Minute)
+	if _, err := set.Subscribe("dispatch-1", 0); !errors.Is(err, responsestream.ErrSubscriptionClosed) {
+		t.Fatalf("Subscribe after retention window error = %v, want ErrSubscriptionClosed without prior DispatchIDs/Count", err)
+	}
+}
+
 func TestStreamSet_ClosePreventsStreamRecreation(t *testing.T) {
 	set := responsestream.NewStreamSet()
 	stream := set.Stream("dispatch-1")
