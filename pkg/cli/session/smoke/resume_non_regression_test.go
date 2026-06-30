@@ -47,7 +47,7 @@ func TestCLIResumeSmokeLane_NonResumeTerminalSessionShowPreservesShippedCLIReadS
 }
 
 func TestCLIResumeSmokeLane_NonResumeFixtureBackedListAndPauseRegression(t *testing.T) {
-	catalogPath := filepath.Join("..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	catalogPath := filepath.Join("..", "..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
 	service, err := fse.NewFakeServiceFromContractFixtures(catalogPath)
 	if err != nil {
 		t.Fatalf("NewFakeServiceFromContractFixtures: %v", err)

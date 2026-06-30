@@ -606,7 +606,7 @@ func setupCLIResumeSmokeWorkflowFixture(t *testing.T, fixtureName, workflowName 
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
 		t.Fatalf("mkdir workflows: %v", err)
 	}
-	raw, err := os.ReadFile(filepath.Join("..", "..", "orchestrators", "javascript", "runtime", "testdata", fixtureName))
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "orchestrators", "javascript", "runtime", "testdata", fixtureName))
 	if err != nil {
 		t.Fatalf("read fixture %s: %v", fixtureName, err)
 	}
