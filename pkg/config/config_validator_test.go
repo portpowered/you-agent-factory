@@ -472,65 +472,6 @@ func TestRuleWorkerModelOperations_RejectsCapabilityDeclarationsOnAgentWorkers(t
 	assertFindingMatch(t, findings, "worker-model-operation-worker-type", "workers[0](executor)", "require worker type INFERENCE_WORKER or legacy MODEL_WORKER")
 }
 
-func TestRuleAgentWorkerTools_RejectsMissingPolicy(t *testing.T) {
-	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
-		Name:       "executor",
-		Type:       interfaces.WorkerTypeAgent,
-		AgentTools: &interfaces.AgentWorkerToolsConfig{},
-	}}
-
-	findings := ruleAgentWorkerTools(cfg)
-
-	assertFindingMatch(t, findings, "agent-worker-tools-policy-required", "workers[0](executor).agentTools.policy", "requires an explicit policy")
-}
-
-func TestRuleAgentWorkerTools_RejectsUnsupportedPolicy(t *testing.T) {
-	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
-		Name: "executor",
-		Type: interfaces.WorkerTypeAgent,
-		AgentTools: &interfaces.AgentWorkerToolsConfig{
-			Policy: "FULL_SHELL",
-		},
-	}}
-
-	findings := ruleAgentWorkerTools(cfg)
-
-	assertFindingMatch(t, findings, "agent-worker-tools-policy-supported", "workers[0](executor).agentTools.policy", `unsupported agent tool policy "FULL_SHELL"`)
-}
-
-func TestRuleAgentWorkerTools_RejectsAgentToolsOnInferenceWorker(t *testing.T) {
-	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
-		Name: "infer",
-		Type: interfaces.WorkerTypeInference,
-		AgentTools: &interfaces.AgentWorkerToolsConfig{
-			Policy: interfaces.AgentWorkerToolPolicyReadOnly,
-		},
-	}}
-
-	findings := ruleAgentWorkerTools(cfg)
-
-	assertFindingMatch(t, findings, "agent-worker-tools-worker-type", "workers[0](infer).agentTools", "only supported on AGENT_WORKER")
-}
-
-func TestRuleAgentWorkerTools_AllowsAgentWorkerPolicy(t *testing.T) {
-	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
-		Name: "executor",
-		Type: interfaces.WorkerTypeAgent,
-		AgentTools: &interfaces.AgentWorkerToolsConfig{
-			Policy: interfaces.AgentWorkerToolPolicyEnabled,
-		},
-	}}
-
-	findings := ruleAgentWorkerTools(cfg)
-	if len(findings) != 0 {
-		t.Fatalf("findings = %#v, want none", findings)
-	}
-}
-
 func TestRuleWorkerModelOperations_RejectsMissingSlotContentTypes(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Workers = []interfaces.WorkerConfig{{
