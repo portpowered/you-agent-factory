@@ -207,6 +207,23 @@ func writeExecutableTestScript(t *testing.T, path string, content string) {
 		t.Fatalf("renaming %s to %s: %v", tmpPath, path, err)
 	}
 	syncDirectoryForExecutableWrite(t, dir)
+	releaseExecutableWriteLock(t, path)
+}
+
+func releaseExecutableWriteLock(t *testing.T, path string) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		return
+	}
+
+	executable, err := os.Open(path)
+	if err != nil {
+		t.Fatalf("opening executable %s after write: %v", path, err)
+	}
+	if err := executable.Close(); err != nil {
+		t.Fatalf("closing executable %s after write: %v", path, err)
+	}
 }
 
 func syncDirectoryForExecutableWrite(t *testing.T, dir string) {
