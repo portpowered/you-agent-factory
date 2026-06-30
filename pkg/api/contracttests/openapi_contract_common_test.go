@@ -24,6 +24,7 @@ var canonicalFactoryEventTypeValues = []string{
 	"INFERENCE_RESPONSE",
 	"SCRIPT_REQUEST",
 	"SCRIPT_RESPONSE",
+	"AGENT_RUN_RESPONSE",
 	"DISPATCH_RESPONSE",
 	"WORK_STATE_CHANGE",
 	"FACTORY_STATE_RESPONSE",
@@ -86,6 +87,10 @@ var bundledFactoryEventContractSchemaNames = []string{
 	"InferenceResponseEventPayload",
 	"ScriptRequestEventPayload",
 	"ScriptResponseEventPayload",
+	"AgentRunResponseEventPayload",
+	"SafeAgentRunDiagnostic",
+	"AgentRunToolDiagnosticEntry",
+	"AgentRunTranscriptEntry",
 	"ScriptExecutionOutcome",
 	"ScriptFailureType",
 	"DispatchResponseEventPayload",
@@ -126,6 +131,7 @@ var bundledFactoryEventPayloadRefs = []string{
 	"#/components/schemas/InferenceResponseEventPayload",
 	"#/components/schemas/ScriptRequestEventPayload",
 	"#/components/schemas/ScriptResponseEventPayload",
+	"#/components/schemas/AgentRunResponseEventPayload",
 	"#/components/schemas/DispatchResponseEventPayload",
 	"#/components/schemas/WorkStateChangeEventPayload",
 	"#/components/schemas/FactoryStateResponseEventPayload",
@@ -159,6 +165,7 @@ var canonicalFactoryEventPayloadSchemaNamesByType = map[string]string{
 	"INFERENCE_RESPONSE":          "InferenceResponseEventPayload",
 	"SCRIPT_REQUEST":              "ScriptRequestEventPayload",
 	"SCRIPT_RESPONSE":             "ScriptResponseEventPayload",
+	"AGENT_RUN_RESPONSE":          "AgentRunResponseEventPayload",
 	"DISPATCH_RESPONSE":           "DispatchResponseEventPayload",
 	"WORK_STATE_CHANGE":           "WorkStateChangeEventPayload",
 	"FACTORY_STATE_RESPONSE":      "FactoryStateResponseEventPayload",
@@ -683,6 +690,7 @@ func assertWorkstationRequestProjectionSchemasPresent(t *testing.T, schemas map[
 		"FactoryWorldWorkstationRequestProjectionSlice",
 		"FactoryWorldScriptRequestView",
 		"FactoryWorldScriptResponseView",
+		"FactoryWorldAgentRunInspectionView",
 		"FactoryWorldWorkstationRequestView",
 		"FactoryWorldWorkstationRequestCountView",
 		"FactoryWorldWorkstationRequestRequestView",
@@ -766,6 +774,7 @@ func assertWorkstationRequestPayloadSchemas(t *testing.T, schemas map[string]any
 	responsePayload := schemaObject(t, schemas, "FactoryWorldWorkstationRequestResponseView")
 	responsePayloadProperties := schemaProperties(t, responsePayload, "FactoryWorldWorkstationRequestResponseView")
 	assertPropertyRef(t, responsePayloadProperties, "scriptResponse", "#/components/schemas/FactoryWorldScriptResponseView")
+	assertPropertyRef(t, responsePayloadProperties, "agentRunInspection", "#/components/schemas/FactoryWorldAgentRunInspectionView")
 	assertArrayItemRef(t, responsePayloadProperties, "outputWorkItems", "#/components/schemas/FactoryWorldWorkItemRef")
 	assertArrayItemRef(t, responsePayloadProperties, "outputMutations", "#/components/schemas/FactoryWorldMutationView")
 	assertSchemaPropertiesPresent(t, responsePayloadProperties, "FactoryWorldWorkstationRequestResponseView", "outcome", "feedback", "failureReason", "failureMessage", "endTime", "durationMillis")
@@ -782,6 +791,10 @@ func assertWorkstationRequestScriptBoundarySchemas(t *testing.T, schemas map[str
 	scriptResponsePayload := schemaObject(t, schemas, "FactoryWorldScriptResponseView")
 	scriptResponsePayloadProperties := schemaProperties(t, scriptResponsePayload, "FactoryWorldScriptResponseView")
 	assertSchemaPropertiesPresent(t, scriptResponsePayloadProperties, "FactoryWorldScriptResponseView", "scriptRequestId", "attempt", "outcome", "stdout", "stderr", "durationMillis", "exitCode", "failureType")
+
+	agentRunInspectionPayload := schemaObject(t, schemas, "FactoryWorldAgentRunInspectionView")
+	agentRunInspectionPayloadProperties := schemaProperties(t, agentRunInspectionPayload, "FactoryWorldAgentRunInspectionView")
+	assertSchemaPropertiesPresent(t, agentRunInspectionPayloadProperties, "FactoryWorldAgentRunInspectionView", "executionBehavior", "failureClass", "recoveryAction", "toolPolicy", "toolCallCount", "toolDiagnostics", "transcript")
 }
 
 func assertWorkstationRequestResponseSchema(t *testing.T, schemas map[string]any) {

@@ -1463,6 +1463,7 @@ func executeModelWorkerProgressPublisherServiceTest(
 		recorder,
 		nil,
 		nil,
+		time.Now,
 		localModelDomain{},
 	)
 	if err != nil {
@@ -1642,6 +1643,7 @@ func modelInvokeWorkstationExecutorForLocalManagedRuntime(
 		logging.NoopLogger{},
 		true,
 		provider,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -2310,6 +2312,7 @@ func loadWorkersFromConfigForServiceTest(
 		inferenceRecorder,
 		nil,
 		nil,
+		nil,
 		localModelDomain{},
 	)
 }
@@ -2628,6 +2631,7 @@ func taxonomyOmniVoiceInferenceWorkstationExecutorWithEvents(
 		nil,
 		nil,
 		history.RecordModelEvent,
+		nil,
 		func() time.Time { return eventTime },
 		localModelDomain{
 			resources: newLocalModelResourceLimiter(),
@@ -2821,6 +2825,7 @@ func TestLoadWorkersFromConfig_InferenceWorkerUsesModelHostLeases(t *testing.T) 
 		nil,
 		logging.NoopLogger{},
 		true,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -3091,6 +3096,7 @@ func taxonomyOmniVoiceInferenceWorkstationExecutorWithModelHost(
 		nil,
 		nil,
 		history.RecordModelEvent,
+		nil,
 		func() time.Time { return eventTime },
 		domain,
 	)

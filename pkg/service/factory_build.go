@@ -429,6 +429,7 @@ func loadRuntimeBundleWorkerOptions(
 		eventHistory.RecordScriptEvent,
 		eventHistory.RecordInferenceEvent,
 		eventHistory.RecordModelEvent,
+		eventHistory.RecordAgentRunEvent,
 		input.clock.Now,
 		localModels,
 	)
@@ -1071,6 +1072,7 @@ func loadWorkersFromConfig(
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
 	modelRecorder modelEventRecorder,
+	agentRunRecorder workeragentrun.AgentRunEventRecorder,
 	now func() time.Time,
 	modelDomain localModelDomain,
 ) ([]factory.FactoryOption, error) {
@@ -1093,7 +1095,7 @@ func loadWorkersFromConfig(
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workerexecutor.NoopExecutor{}))
 			continue
 		}
-		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, workflowContext, logger, providerOverride, inferenceProgressPublisher, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, now, modelDomain)
+		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, workflowContext, logger, providerOverride, inferenceProgressPublisher, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, agentRunRecorder, now, modelDomain)
 		if executor != nil {
 			logger.Info("loaded worker", "worker", workerCfg.Name)
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, executor))
@@ -1155,6 +1157,7 @@ func buildWorkerExecutor(
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
 	modelRecorder modelEventRecorder,
+	agentRunRecorder workeragentrun.AgentRunEventRecorder,
 	now func() time.Time,
 	modelDomain localModelDomain,
 ) workers.WorkerExecutor {
@@ -1177,6 +1180,7 @@ func buildWorkerExecutor(
 			providerCommandRunner,
 			inferenceRecorder,
 			modelRecorder,
+			agentRunRecorder,
 			now,
 			modelDomain,
 		)
@@ -1209,6 +1213,7 @@ func buildProviderBackedWorkerExecutor(
 	providerCommandRunner workers.CommandRunner,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
 	modelRecorder modelEventRecorder,
+	agentRunRecorder workeragentrun.AgentRunEventRecorder,
 	now func() time.Time,
 	modelDomain localModelDomain,
 ) workers.WorkerExecutor {
@@ -1233,6 +1238,8 @@ func buildProviderBackedWorkerExecutor(
 		runtimeCfg,
 		runner,
 		workeragentrun.WithAgentRunLogger(logger),
+		workeragentrun.WithAgentRunEventRecorder(agentRunRecorder),
+		workeragentrun.WithAgentRunClock(now),
 	)
 	inner := &workerexecutor.WorkstationBehaviorRouter{
 		RuntimeConfig:     runtimeCfg,

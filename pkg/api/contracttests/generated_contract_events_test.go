@@ -552,13 +552,54 @@ func generatedFactoryWorkEvents(t *testing.T) []factoryapi.FactoryEvent {
 
 func generatedFactoryExecutionEvents(t *testing.T) []factoryapi.FactoryEvent {
 	t.Helper()
-	events := make([]factoryapi.FactoryEvent, 0, 9)
+	events := make([]factoryapi.FactoryEvent, 0, 10)
 	events = append(events, generatedFactoryDispatchEvents(t)...)
 	events = append(events, generatedFactoryWorkStateChangeEvents(t)...)
 	events = append(events, generatedFactoryModelEvents(t)...)
 	events = append(events, generatedFactoryInferenceEvents(t)...)
 	events = append(events, generatedFactoryScriptEvents(t)...)
+	events = append(events, generatedFactoryAgentRunEvents(t)...)
 	return events
+}
+
+func generatedFactoryAgentRunEvents(t *testing.T) []factoryapi.FactoryEvent {
+	t.Helper()
+	eventTime := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
+	traceIDs := []string{"trace-1"}
+	workIDs := []string{"work-1"}
+	agentDispatchID := "dispatch-agent-1"
+	toolPolicy := "DISABLED"
+	executionBehavior := factoryapi.AgentRun
+	toolCallCount := int32(0)
+	return []factoryapi.FactoryEvent{
+		{
+			SchemaVersion: factoryapi.AgentFactoryEventV1,
+			Id:            "event-agent-run-response",
+			Type:          factoryapi.FactoryEventTypeAgentRunResponse,
+			Context: factoryapi.FactoryEventContext{
+				Sequence:   11,
+				Tick:       2,
+				EventTime:  eventTime,
+				TraceIds:   &traceIDs,
+				WorkIds:    &workIDs,
+				DispatchId: &agentDispatchID,
+			},
+			Payload: factoryEventPayload(t, factoryapi.AgentRunResponseEventPayload{
+				AgentRunId:     "agent-run-1",
+				Outcome:        factoryapi.WorkOutcomeAccepted,
+				DurationMillis: 420,
+				Diagnostics: &factoryapi.SafeWorkDiagnostics{
+					AgentRun: &factoryapi.SafeAgentRunDiagnostic{
+						ExecutionBehavior: &executionBehavior,
+						ToolPolicy:        &toolPolicy,
+						ToolCallCount:     &toolCallCount,
+						ToolDiagnostics:   &[]factoryapi.AgentRunToolDiagnosticEntry{},
+						Transcript:        &[]factoryapi.AgentRunTranscriptEntry{},
+					},
+				},
+			}),
+		},
+	}
 }
 
 func generatedFactoryDispatchEvents(t *testing.T) []factoryapi.FactoryEvent {

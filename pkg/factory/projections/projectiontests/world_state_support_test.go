@@ -629,6 +629,10 @@ func assignGeneratedProjectionPayload(event *factoryapi.FactoryEvent, payload an
 		if err := event.Payload.FromScriptResponseEventPayload(typed); err != nil {
 			panic(err)
 		}
+	case factoryapi.AgentRunResponseEventPayload:
+		if err := event.Payload.FromAgentRunResponseEventPayload(typed); err != nil {
+			panic(err)
+		}
 	case factoryapi.DispatchResponseEventPayload:
 		if err := event.Payload.FromDispatchResponseEventPayload(typed); err != nil {
 			panic(err)

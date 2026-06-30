@@ -12,6 +12,7 @@ import (
 type SafeWorkDiagnostics struct {
 	RenderedPrompt *SafeRenderedPromptDiagnostic `json:"rendered_prompt,omitempty"`
 	Provider       *SafeProviderDiagnostic       `json:"provider,omitempty"`
+	AgentRun       *SafeAgentRunDiagnostic       `json:"agent_run,omitempty"`
 }
 
 // SafeRenderedPromptDiagnostic carries prompt hashes and allowlisted variables.
@@ -38,8 +39,9 @@ func SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics *WorkDiagnostics) *SafeW
 	out := &SafeWorkDiagnostics{
 		RenderedPrompt: safeRenderedPromptDiagnosticFromWorkDiagnostics(diagnostics.RenderedPrompt),
 		Provider:       safeProviderDiagnosticFromWorkDiagnostics(diagnostics.Provider),
+		AgentRun:       SafeAgentRunDiagnosticFromWorkDiagnostics(diagnostics),
 	}
-	if out.RenderedPrompt == nil && out.Provider == nil {
+	if out.RenderedPrompt == nil && out.Provider == nil && out.AgentRun == nil {
 		return nil
 	}
 	return out
@@ -54,8 +56,9 @@ func SafeWorkDiagnosticsFromGenerated(diagnostics *factoryapi.SafeWorkDiagnostic
 	out := &SafeWorkDiagnostics{
 		RenderedPrompt: safeRenderedPromptDiagnosticFromGenerated(diagnostics.RenderedPrompt),
 		Provider:       safeProviderDiagnosticFromGenerated(diagnostics.Provider),
+		AgentRun:       SafeAgentRunDiagnosticFromGenerated(diagnostics.AgentRun),
 	}
-	if out.RenderedPrompt == nil && out.Provider == nil {
+	if out.RenderedPrompt == nil && out.Provider == nil && out.AgentRun == nil {
 		return nil
 	}
 	return out
@@ -70,8 +73,9 @@ func GeneratedSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *factoryapi.
 	out := &factoryapi.SafeWorkDiagnostics{
 		RenderedPrompt: generatedSafeRenderedPromptDiagnostic(diagnostics.RenderedPrompt),
 		Provider:       generatedSafeProviderDiagnostic(diagnostics.Provider),
+		AgentRun:       GeneratedSafeAgentRunDiagnostic(diagnostics.AgentRun),
 	}
-	if out.RenderedPrompt == nil && out.Provider == nil {
+	if out.RenderedPrompt == nil && out.Provider == nil && out.AgentRun == nil {
 		return nil
 	}
 	return out
@@ -94,7 +98,10 @@ func WorkDiagnosticsFromSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *W
 		RenderedPrompt: renderedPromptDiagnosticFromSafeWorkDiagnostics(diagnostics.RenderedPrompt),
 		Provider:       providerDiagnosticFromSafeWorkDiagnostics(diagnostics.Provider),
 	}
-	if out.RenderedPrompt == nil && out.Provider == nil {
+	if agentRun := diagnostics.AgentRun; agentRun != nil {
+		out.Metadata = agentRunMetadataFromSafeDiagnostic(agentRun)
+	}
+	if out.RenderedPrompt == nil && out.Provider == nil && len(out.Metadata) == 0 {
 		return nil
 	}
 	return out

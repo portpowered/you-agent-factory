@@ -114,6 +114,35 @@ export interface DashboardProviderSession {
 export interface DashboardWorkDiagnostics {
   rendered_prompt?: DashboardRenderedPromptDiagnostic;
   provider?: DashboardProviderDiagnostic;
+  agent_run?: DashboardAgentRunInspection;
+}
+
+export interface DashboardAgentRunInspection {
+  execution_behavior?: string;
+  executionBehavior?: string;
+  failure_class?: string;
+  failureClass?: string;
+  recovery_action?: string;
+  recoveryAction?: string;
+  tool_policy?: string;
+  toolPolicy?: string;
+  tool_call_count?: number;
+  toolCallCount?: number;
+  tool_diagnostics?: DashboardAgentRunToolDiagnostic[];
+  toolDiagnostics?: DashboardAgentRunToolDiagnostic[];
+  transcript?: DashboardAgentRunTranscriptEntry[];
+}
+
+export interface DashboardAgentRunToolDiagnostic {
+  tool_name?: string;
+  toolName?: string;
+  phase?: string;
+  detail?: string;
+}
+
+export interface DashboardAgentRunTranscriptEntry {
+  role?: string;
+  summary?: string;
 }
 
 export interface DashboardRenderedPromptDiagnostic {
@@ -250,6 +279,8 @@ export interface DashboardRuntimeWorkstationRequestResponse {
   failure_message?: string;
   scriptResponse?: DashboardScriptResponse;
   script_response?: DashboardScriptResponse;
+  agentRunInspection?: DashboardAgentRunInspection;
+  agent_run_inspection?: DashboardAgentRunInspection;
   endTime?: string;
   end_time?: string;
   durationMillis?: number;
@@ -312,6 +343,7 @@ export interface DashboardWorkstationRequest {
   response_metadata?: Record<string, string>;
   script_request?: DashboardScriptRequest;
   script_response?: DashboardScriptResponse;
+  agent_run_inspection?: DashboardAgentRunInspection;
   started_at?: string;
   total_duration_millis?: number;
   trace_ids?: string[];

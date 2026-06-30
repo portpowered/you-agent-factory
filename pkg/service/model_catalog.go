@@ -865,6 +865,7 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 		nil,
 		nil,
 		nil,
+		nil,
 		time.Now,
 		modelDomain,
 	)

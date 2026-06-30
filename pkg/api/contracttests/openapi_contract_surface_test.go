@@ -351,6 +351,7 @@ func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *test
 		"FactoryWorldMutationView",
 		"FactoryWorldScriptRequestView",
 		"FactoryWorldScriptResponseView",
+		"FactoryWorldAgentRunInspectionView",
 		"FactoryWorldWorkstationRequestCountView",
 		"FactoryWorldWorkstationRequestRequestView",
 		"FactoryWorldWorkstationRequestResponseView",

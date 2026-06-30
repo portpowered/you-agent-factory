@@ -1,4 +1,5 @@
 import type {
+  DashboardAgentRunInspection,
   DashboardInferenceAttempt,
   DashboardProviderSessionAttempt,
   DashboardRuntimeWorkstationRequest,
@@ -282,6 +283,9 @@ export function toDashboardWorkstationRequest(
       request.request.scriptRequest ?? request.request.script_request,
     script_response:
       request.response?.scriptResponse ?? request.response?.script_response,
+    agent_run_inspection: toDashboardAgentRunInspection(
+      request.response?.agentRunInspection ?? request.response?.agent_run_inspection,
+    ),
     started_at: request.request.startedAt ?? request.request.started_at,
     total_duration_millis:
       request.response?.durationMillis ?? request.response?.duration_millis,
@@ -290,6 +294,31 @@ export function toDashboardWorkstationRequest(
     work_items: requestWorkItems(request),
     workstation_name: request.workstationName ?? request.workstation_name,
     workstation_node_id: request.transitionId ?? request.transition_id ?? "",
+  };
+}
+
+function toDashboardAgentRunInspection(
+  inspection: DashboardAgentRunInspection | undefined,
+): DashboardAgentRunInspection | undefined {
+  if (!inspection) {
+    return undefined;
+  }
+  const toolDiagnostics = (
+    inspection.tool_diagnostics ?? inspection.toolDiagnostics
+  )?.map((entry) => ({
+    tool_name: entry.tool_name ?? entry.toolName,
+    phase: entry.phase,
+    detail: entry.detail,
+  }));
+  return {
+    execution_behavior:
+      inspection.execution_behavior ?? inspection.executionBehavior,
+    failure_class: inspection.failure_class ?? inspection.failureClass,
+    recovery_action: inspection.recovery_action ?? inspection.recoveryAction,
+    tool_policy: inspection.tool_policy ?? inspection.toolPolicy,
+    tool_call_count: inspection.tool_call_count ?? inspection.toolCallCount,
+    tool_diagnostics: toolDiagnostics,
+    transcript: inspection.transcript,
   };
 }
 

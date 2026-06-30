@@ -5568,6 +5568,8 @@ components:
           $ref: '#/components/schemas/FactoryWorldRenderedPromptDiagnostic'
         provider:
           $ref: '#/components/schemas/FactoryWorldProviderDiagnostic'
+        agentRun:
+          $ref: '#/components/schemas/SafeAgentRunDiagnostic'
     FactoryWorldWorkItemRef:
       type: object
       additionalProperties: false
@@ -5708,6 +5710,38 @@ components:
           type: integer
         failureType:
           type: string
+    FactoryWorldAgentRunInspectionView:
+      type: object
+      additionalProperties: false
+      description: Customer-visible agent-run inspection for one workstation dispatch response.
+      properties:
+        executionBehavior:
+          type: string
+          description: Stable execution behavior marker for agent-loop runs.
+        failureClass:
+          type: string
+          description: Stable agent-run failure class when execution failed.
+        recoveryAction:
+          type: string
+          description: Customer-visible recovery guidance for actionable agent-run failures.
+        toolPolicy:
+          type: string
+          description: Effective agent tool policy for the run.
+        toolCallCount:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of recorded tool lifecycle events for the run.
+        toolDiagnostics:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentRunToolDiagnosticEntry'
+          description: Bounded tool diagnostics separate from final agent output.
+        transcript:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentRunTranscriptEntry'
+          description: Bounded transcript metadata separate from tool diagnostics and final output.
     FactoryWorldSelectedRunnerView:
       type: object
       additionalProperties: false
@@ -5834,6 +5868,8 @@ components:
           type: string
         scriptResponse:
           $ref: '#/components/schemas/FactoryWorldScriptResponseView'
+        agentRunInspection:
+          $ref: '#/components/schemas/FactoryWorldAgentRunInspectionView'
         endTime:
           type: string
           format: date-time
@@ -5909,6 +5945,7 @@ components:
             - $ref: '#/components/schemas/InferenceResponseEventPayload'
             - $ref: '#/components/schemas/ScriptRequestEventPayload'
             - $ref: '#/components/schemas/ScriptResponseEventPayload'
+            - $ref: '#/components/schemas/AgentRunResponseEventPayload'
             - $ref: '#/components/schemas/DispatchResponseEventPayload'
             - $ref: '#/components/schemas/WorkStateChangeEventPayload'
             - $ref: '#/components/schemas/FactoryStateResponseEventPayload'
@@ -5943,6 +5980,7 @@ components:
         - FactoryEventTypeInferenceResponse
         - FactoryEventTypeScriptRequest
         - FactoryEventTypeScriptResponse
+        - FactoryEventTypeAgentRunResponse
         - FactoryEventTypeDispatchResponse
         - FactoryEventTypeWorkStateChange
         - FactoryEventTypeFactoryStateResponse
@@ -5974,6 +6012,7 @@ components:
         - INFERENCE_RESPONSE
         - SCRIPT_REQUEST
         - SCRIPT_RESPONSE
+        - AGENT_RUN_RESPONSE
         - DISPATCH_RESPONSE
         - WORK_STATE_CHANGE
         - FACTORY_STATE_RESPONSE
@@ -6005,6 +6044,7 @@ components:
         - A model-worker provider attempt returned from the provider boundary.
         - A script-backed worker is about to invoke one concrete command attempt.
         - A script-backed worker command attempt returned or failed before a normal exit.
+        - An AGENT_RUN workstation agent loop completed and returned bounded inspection metadata.
         - A workstation response finished processing and produced an outcome.
         - A work item moved between authored marking states.
         - The factory lifecycle state response was recorded.
@@ -6496,6 +6536,27 @@ components:
           description: Process exit code when the command returned one.
         failureType:
           $ref: '#/components/schemas/ScriptFailureType'
+    AgentRunResponseEventPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - agentRunId
+        - outcome
+        - durationMillis
+      description: Response details captured after an AGENT_RUN workstation completes an agent loop. Final output stays on DispatchResponse; bounded agent-run diagnostics and transcript metadata stay on this agent-boundary event instead of being copied onto provider-session inspection surfaces.
+      properties:
+        agentRunId:
+          type: string
+          description: Stable identifier for this agent-run boundary event.
+        outcome:
+          $ref: '#/components/schemas/WorkOutcome'
+        durationMillis:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Agent-loop execution duration in milliseconds.
+        diagnostics:
+          $ref: '#/components/schemas/SafeWorkDiagnostics'
     DispatchResponseEventPayload:
       type: object
       additionalProperties: false
@@ -6856,6 +6917,69 @@ components:
           $ref: '#/components/schemas/RenderedPromptDiagnostic'
         provider:
           $ref: '#/components/schemas/ProviderDiagnostic'
+        agentRun:
+          $ref: '#/components/schemas/SafeAgentRunDiagnostic'
+    SafeAgentRunDiagnostic:
+      type: object
+      additionalProperties: false
+      description: Dashboard-safe agent-run inspection metadata distinct from provider-session transcript ownership.
+      properties:
+        executionBehavior:
+          type: string
+          description: Stable execution behavior marker for agent-loop runs.
+          enum:
+            - agent_run
+          x-enum-descriptions:
+            - Agent-loop execution through AGENT_RUN workstations.
+        failureClass:
+          type: string
+          description: Stable agent-run failure class when execution failed.
+        recoveryAction:
+          type: string
+          description: Customer-visible recovery guidance for actionable agent-run failures.
+        toolPolicy:
+          type: string
+          description: Effective agent tool policy for the run.
+        toolCallCount:
+          type: integer
+          format: int32
+          minimum: 0
+          description: Number of recorded tool lifecycle events for the run.
+        toolDiagnostics:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentRunToolDiagnosticEntry'
+          description: Bounded tool diagnostics separate from final agent output.
+        transcript:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentRunTranscriptEntry'
+          description: Bounded transcript metadata separate from tool diagnostics and final output.
+    AgentRunToolDiagnosticEntry:
+      type: object
+      additionalProperties: false
+      description: Bounded summary for one agent tool lifecycle event.
+      properties:
+        toolName:
+          type: string
+          description: Tool name invoked by the agent loop.
+        phase:
+          type: string
+          description: Tool lifecycle phase such as start, success, failure, or denied.
+        detail:
+          type: string
+          description: Safe diagnostic detail without raw process output or secrets.
+    AgentRunTranscriptEntry:
+      type: object
+      additionalProperties: false
+      description: Bounded transcript metadata for one agent-loop message without exposing full prompt bodies.
+      properties:
+        role:
+          type: string
+          description: Message role such as system, user, assistant, or tool.
+        summary:
+          type: string
+          description: Bounded summary of the message content for inspection.
     WallClock:
       type: object
       additionalProperties: false

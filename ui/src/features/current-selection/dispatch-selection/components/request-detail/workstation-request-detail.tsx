@@ -18,6 +18,7 @@ import {
   WorkItemPayloadList,
 } from "../../../work-selection/public";
 import type { WorkstationRequestDetailCardProps } from "../../lib/detail-card-types";
+import { AgentRunInspectionSection } from "../sections/agent-run-inspection-section";
 import { RequestMetadataSection } from "../sections/request-metadata-section";
 import {
   ErrorDetailsSection,
@@ -37,7 +38,7 @@ export function WorkstationRequestDetailCard({
   const messages = useCurrentSelectionDetailMessages();
   const shellMessages = useCurrentSelectionShellMessages();
   const view = buildWorkstationRequestDetailView(request);
-  const showInferenceAttempts = !view.isScriptBackedRequest;
+  const showInferenceAttempts = !view.isScriptBackedRequest && !view.isAgentBackedRequest;
 
   return (
     <SelectionDetailLayout widgetId={widgetId}>
@@ -69,6 +70,15 @@ export function WorkstationRequestDetailCard({
           />
         ) : null}
         <ErrorDetailsSection view={view} />
+        {view.isAgentBackedRequest ? (
+          <AgentRunInspectionSection
+            inspection={
+              request.agent_run_inspection ??
+              request.response_view?.agent_run_inspection ??
+              request.response_view?.agentRunInspection
+            }
+          />
+        ) : null}
         {showInferenceAttempts ? (
           <CurrentSelectionExpandableSection
             defaultExpanded

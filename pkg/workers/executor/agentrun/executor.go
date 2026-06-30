@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
@@ -17,6 +18,8 @@ type AgentRunExecutor struct {
 	runner        runnerContract
 	harness       HarnessAdapter
 	logger        logging.Logger
+	recorder      AgentRunEventRecorder
+	now           func() time.Time
 }
 
 var _ workstationRequestExecutor = (*AgentRunExecutor)(nil)
@@ -40,6 +43,22 @@ func WithAgentRunHarness(harness HarnessAdapter) AgentRunExecutorOption {
 	}
 }
 
+func WithAgentRunEventRecorder(recorder AgentRunEventRecorder) AgentRunExecutorOption {
+	return func(executor *AgentRunExecutor) {
+		if recorder != nil {
+			executor.recorder = recorder
+		}
+	}
+}
+
+func WithAgentRunClock(now func() time.Time) AgentRunExecutorOption {
+	return func(executor *AgentRunExecutor) {
+		if now != nil {
+			executor.now = now
+		}
+	}
+}
+
 // NewAgentRunExecutor creates an executor that runs agent loops through the harness adapter.
 func NewAgentRunExecutor(
 	runtimeConfig interfaces.RuntimeDefinitionLookup,
@@ -59,7 +78,7 @@ func NewAgentRunExecutor(
 }
 
 func (executor *AgentRunExecutor) Execute(ctx context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
-	start := time.Now()
+	start := executor.clockNow()
 	workerType := workerTypeForExecutionRequest(request)
 	workerDef, ok := executor.runtimeConfig.Worker(workerType)
 	if !ok {
@@ -79,7 +98,9 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request interface
 		ToolRecorder: toolRecorder,
 	})
 	if err != nil {
-		return agentRunFailureWorkResult(request.Dispatch, err, time.Since(start), toolPolicy, toolRecorder), nil
+		result := agentRunFailureWorkResult(request.Dispatch, err, time.Since(start), toolPolicy, toolRecorder)
+		executor.recordAgentRunResponse(request.Dispatch, result, time.Since(start), harnessResult.Messages)
+		return result, nil
 	}
 
 	toolMetadata := toolDiagnosticsMetadata(toolPolicy, toolRecorder)
@@ -93,6 +114,7 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request interface
 		)
 		result.Diagnostics = agentRunDiagnostics(toolMetadata)
 		result.Metrics = interfaces.WorkMetrics{Duration: time.Since(start)}
+		executor.recordAgentRunResponse(request.Dispatch, result, time.Since(start), harnessResult.Messages)
 		return result, nil
 	}
 	if goal.UsesDecisionEnvelopeOutcome(workstationDef) {
@@ -103,18 +125,40 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request interface
 		)
 		result.Diagnostics = agentRunDiagnostics(toolMetadata)
 		result.Metrics = interfaces.WorkMetrics{Duration: time.Since(start)}
+		executor.recordAgentRunResponse(request.Dispatch, result, time.Since(start), harnessResult.Messages)
 		return result, nil
 	}
 
 	outcome := evaluateAgentRunOutcome(harnessResult.FinalText, workerDef)
-	return interfaces.WorkResult{
+	result := interfaces.WorkResult{
 		DispatchID:   request.Dispatch.DispatchID,
 		TransitionID: request.Dispatch.TransitionID,
 		Outcome:      outcome,
 		Output:       harnessResult.FinalText,
 		Diagnostics:  agentRunDiagnostics(toolMetadata),
 		Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
-	}, nil
+	}
+	executor.recordAgentRunResponse(request.Dispatch, result, time.Since(start), harnessResult.Messages)
+	return result, nil
+}
+
+func (executor *AgentRunExecutor) recordAgentRunResponse(
+	dispatch interfaces.WorkDispatch,
+	result interfaces.WorkResult,
+	duration time.Duration,
+	transcript []messages.Message,
+) {
+	if executor == nil || executor.recorder == nil || dispatch.DispatchID == "" {
+		return
+	}
+	executor.recorder(agentRunResponseEvent(dispatch, result, duration, transcript, executor.clockNow()))
+}
+
+func (executor *AgentRunExecutor) clockNow() time.Time {
+	if executor != nil && executor.now != nil {
+		return executor.now()
+	}
+	return time.Now()
 }
 
 func agentRunInferenceRequest(

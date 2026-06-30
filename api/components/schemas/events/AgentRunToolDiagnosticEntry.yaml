@@ -1,0 +1,13 @@
+type: object
+additionalProperties: false
+description: Bounded summary for one agent tool lifecycle event.
+properties:
+  toolName:
+    type: string
+    description: Tool name invoked by the agent loop.
+  phase:
+    type: string
+    description: Tool lifecycle phase such as start, success, failure, or denied.
+  detail:
+    type: string
+    description: Safe diagnostic detail without raw process output or secrets.

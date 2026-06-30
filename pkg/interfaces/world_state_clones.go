@@ -95,6 +95,7 @@ func CloneSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *SafeWorkDiagnos
 	return &SafeWorkDiagnostics{
 		RenderedPrompt: cloneSafeRenderedPromptDiagnostic(diagnostics.RenderedPrompt),
 		Provider:       cloneSafeProviderDiagnostic(diagnostics.Provider),
+		AgentRun:       cloneSafeAgentRunDiagnostic(diagnostics.AgentRun),
 	}
 }
 

@@ -2811,6 +2811,7 @@ export interface components {
     FactoryWorldWorkDiagnostics: {
       renderedPrompt?: components["schemas"]["FactoryWorldRenderedPromptDiagnostic"];
       provider?: components["schemas"]["FactoryWorldProviderDiagnostic"];
+      agentRun?: components["schemas"]["SafeAgentRunDiagnostic"];
     };
     FactoryWorldWorkItemRef: {
       workId: string;
@@ -2869,6 +2870,26 @@ export interface components {
       exitCode?: number;
       failureType?: string;
     };
+    /** @description Customer-visible agent-run inspection for one workstation dispatch response. */
+    FactoryWorldAgentRunInspectionView: {
+      /** @description Stable execution behavior marker for agent-loop runs. */
+      executionBehavior?: string;
+      /** @description Stable agent-run failure class when execution failed. */
+      failureClass?: string;
+      /** @description Customer-visible recovery guidance for actionable agent-run failures. */
+      recoveryAction?: string;
+      /** @description Effective agent tool policy for the run. */
+      toolPolicy?: string;
+      /**
+       * Format: int32
+       * @description Number of recorded tool lifecycle events for the run.
+       */
+      toolCallCount?: number;
+      /** @description Bounded tool diagnostics separate from final agent output. */
+      toolDiagnostics?: components["schemas"]["AgentRunToolDiagnosticEntry"][];
+      /** @description Bounded transcript metadata separate from tool diagnostics and final output. */
+      transcript?: components["schemas"]["AgentRunTranscriptEntry"][];
+    };
     FactoryWorldSelectedRunnerView: {
       runnerId?: components["schemas"]["RunnerID"];
       displayName?: string;
@@ -2915,6 +2936,7 @@ export interface components {
       failureReason?: string;
       failureMessage?: string;
       scriptResponse?: components["schemas"]["FactoryWorldScriptResponseView"];
+      agentRunInspection?: components["schemas"]["FactoryWorldAgentRunInspectionView"];
       /** Format: date-time */
       endTime?: string;
       /** Format: int64 */
@@ -2954,6 +2976,7 @@ export interface components {
         | components["schemas"]["InferenceResponseEventPayload"]
         | components["schemas"]["ScriptRequestEventPayload"]
         | components["schemas"]["ScriptResponseEventPayload"]
+        | components["schemas"]["AgentRunResponseEventPayload"]
         | components["schemas"]["DispatchResponseEventPayload"]
         | components["schemas"]["WorkStateChangeEventPayload"]
         | components["schemas"]["FactoryStateResponseEventPayload"]
@@ -3220,6 +3243,18 @@ export interface components {
       exitCode?: number;
       failureType?: components["schemas"]["ScriptFailureType"];
     };
+    /** @description Response details captured after an AGENT_RUN workstation completes an agent loop. Final output stays on DispatchResponse; bounded agent-run diagnostics and transcript metadata stay on this agent-boundary event instead of being copied onto provider-session inspection surfaces. */
+    AgentRunResponseEventPayload: {
+      /** @description Stable identifier for this agent-run boundary event. */
+      agentRunId: string;
+      outcome: components["schemas"]["WorkOutcome"];
+      /**
+       * Format: int64
+       * @description Agent-loop execution duration in milliseconds.
+       */
+      durationMillis: number;
+      diagnostics?: components["schemas"]["SafeWorkDiagnostics"];
+    };
     /** @description Customer-visible dispatch completion event. Output work is represented with the same Work schema used by request submission rather than token or marking-mutation internals. FactoryEvent.context owns dispatch, trace, and work identity; workstation and worker topology must be derived from the matching dispatch-request event plus the initial structure. Provider-attempt session and safe diagnostic facts stay on inference response events instead of being copied onto dispatch completion payloads. */
     DispatchResponseEventPayload: {
       completionId?: string;
@@ -3374,6 +3409,46 @@ export interface components {
     SafeWorkDiagnostics: {
       renderedPrompt?: components["schemas"]["RenderedPromptDiagnostic"];
       provider?: components["schemas"]["ProviderDiagnostic"];
+      agentRun?: components["schemas"]["SafeAgentRunDiagnostic"];
+    };
+    /** @description Dashboard-safe agent-run inspection metadata distinct from provider-session transcript ownership. */
+    SafeAgentRunDiagnostic: {
+      /**
+       * @description Stable execution behavior marker for agent-loop runs.
+       * @enum {string}
+       */
+      executionBehavior?: SafeAgentRunDiagnosticExecutionBehavior;
+      /** @description Stable agent-run failure class when execution failed. */
+      failureClass?: string;
+      /** @description Customer-visible recovery guidance for actionable agent-run failures. */
+      recoveryAction?: string;
+      /** @description Effective agent tool policy for the run. */
+      toolPolicy?: string;
+      /**
+       * Format: int32
+       * @description Number of recorded tool lifecycle events for the run.
+       */
+      toolCallCount?: number;
+      /** @description Bounded tool diagnostics separate from final agent output. */
+      toolDiagnostics?: components["schemas"]["AgentRunToolDiagnosticEntry"][];
+      /** @description Bounded transcript metadata separate from tool diagnostics and final output. */
+      transcript?: components["schemas"]["AgentRunTranscriptEntry"][];
+    };
+    /** @description Bounded summary for one agent tool lifecycle event. */
+    AgentRunToolDiagnosticEntry: {
+      /** @description Tool name invoked by the agent loop. */
+      toolName?: string;
+      /** @description Tool lifecycle phase such as start, success, failure, or denied. */
+      phase?: string;
+      /** @description Safe diagnostic detail without raw process output or secrets. */
+      detail?: string;
+    };
+    /** @description Bounded transcript metadata for one agent-loop message without exposing full prompt bodies. */
+    AgentRunTranscriptEntry: {
+      /** @description Message role such as system, user, assistant, or tool. */
+      role?: string;
+      /** @description Bounded summary of the message content for inspection. */
+      summary?: string;
     };
     WallClock: {
       /** Format: date-time */
@@ -6681,6 +6756,8 @@ export const FactoryEventType = {
   FactoryEventTypeScriptRequest: "SCRIPT_REQUEST",
   // A script-backed worker command attempt returned or failed before a normal exit.
   FactoryEventTypeScriptResponse: "SCRIPT_RESPONSE",
+  // An AGENT_RUN workstation agent loop completed and returned bounded inspection metadata.
+  FactoryEventTypeAgentRunResponse: "AGENT_RUN_RESPONSE",
   // A workstation response finished processing and produced an outcome.
   FactoryEventTypeDispatchResponse: "DISPATCH_RESPONSE",
   // A work item moved between authored marking states.
@@ -6811,6 +6888,12 @@ export const WorkFailureType = {
 } as const;
 export type WorkFailureType =
   (typeof WorkFailureType)[keyof typeof WorkFailureType];
+export const SafeAgentRunDiagnosticExecutionBehavior = {
+  // Agent-loop execution through AGENT_RUN workstations.
+  agent_run: "agent_run",
+} as const;
+export type SafeAgentRunDiagnosticExecutionBehavior =
+  (typeof SafeAgentRunDiagnosticExecutionBehavior)[keyof typeof SafeAgentRunDiagnosticExecutionBehavior];
 export const FactorySaveMode = {
   // Replace the factory already current in the selected live session.
   FactorySaveModeReplaceCurrent: "REPLACE_CURRENT",

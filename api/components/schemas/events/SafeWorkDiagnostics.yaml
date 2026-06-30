@@ -6,3 +6,5 @@ properties:
     $ref: './RenderedPromptDiagnostic.yaml'
   provider:
     $ref: './ProviderDiagnostic.yaml'
+  agentRun:
+    $ref: './SafeAgentRunDiagnostic.yaml'

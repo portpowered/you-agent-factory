@@ -98,7 +98,7 @@ func assertUnifiedEventSchemasPresent(t *testing.T, schemas map[string]any) {
 		"FactoryEvent", "FactoryEventContext", "FactoryEventType", "DispatchConsumedWorkRef", "DispatchRequestEventMetadata",
 		"RunRequestEventPayload", "InitialStructureRequestEventPayload", "FactoryChangeEventPayload", "WorkRequestEventPayload",
 		"RelationshipChangeRequestEventPayload", "DispatchRequestEventPayload", "ModelRequestEventPayload", "ModelResponseEventPayload", "InferenceRequestEventPayload", "InferenceResponseEventPayload",
-		"ScriptRequestEventPayload", "ScriptResponseEventPayload", "InferenceOutcome", "ScriptExecutionOutcome", "ScriptFailureType",
+		"ScriptRequestEventPayload", "ScriptResponseEventPayload", "AgentRunResponseEventPayload", "SafeAgentRunDiagnostic", "AgentRunToolDiagnosticEntry", "AgentRunTranscriptEntry", "InferenceOutcome", "ScriptExecutionOutcome", "ScriptFailureType",
 		"DispatchResponseEventPayload", "WorkStateChangeEventPayload", "WorkStateChangeSource",
 		"FactoryStateResponseEventPayload", "RunResponseEventPayload",
 		"FactoryEventSessionResultStatus", "OrchestratorPhaseStatus", "CheckpointResumabilityStatus", "DispatchReconciliationSource",

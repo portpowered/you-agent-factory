@@ -325,3 +325,47 @@ func (cfg staticRuntimeConfig) Workstation(string) (*interfaces.FactoryWorkstati
 
 func (cfg staticRuntimeConfig) RuntimeBaseDir() string { return "" }
 func (cfg staticRuntimeConfig) FactoryDir() string     { return "" }
+
+func TestAgentRunExecutor_RecordsAgentRunResponseEvent(t *testing.T) {
+	t.Parallel()
+
+	var recorded []factoryapi.FactoryEvent
+	executor := NewAgentRunExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"agent-worker": {Type: interfaces.WorkerTypeAgent},
+			},
+		},
+		&stubRunner{response: "done"},
+		WithAgentRunHarness(&recordingHarnessAdapter{
+			result: HarnessResult{FinalText: "done"},
+		}),
+		WithAgentRunEventRecorder(func(event factoryapi.FactoryEvent) {
+			recorded = append(recorded, event)
+		}),
+		WithAgentRunClock(func() time.Time {
+			return time.Date(2026, 6, 30, 12, 0, 0, 0, time.UTC)
+		}),
+	)
+
+	result, err := executor.Execute(context.Background(), testAgentRunRequest())
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	}
+	if len(recorded) != 1 {
+		t.Fatalf("recorded events = %d, want 1", len(recorded))
+	}
+	if recorded[0].Type != factoryapi.FactoryEventTypeAgentRunResponse {
+		t.Fatalf("event type = %s, want %s", recorded[0].Type, factoryapi.FactoryEventTypeAgentRunResponse)
+	}
+	payload, err := recorded[0].Payload.AsAgentRunResponseEventPayload()
+	if err != nil {
+		t.Fatalf("AsAgentRunResponseEventPayload: %v", err)
+	}
+	if payload.Diagnostics == nil || payload.Diagnostics.AgentRun == nil {
+		t.Fatalf("payload diagnostics = %#v, want agentRun inspection", payload.Diagnostics)
+	}
+}

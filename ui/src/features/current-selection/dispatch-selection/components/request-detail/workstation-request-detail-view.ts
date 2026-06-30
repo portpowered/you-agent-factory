@@ -6,6 +6,7 @@ import type { WorkstationRequestDetailCardProps } from "../../lib/detail-card-ty
 export interface WorkstationRequestDetailView {
   hasFailureDetails: boolean;
   hasFailedOutcome: boolean;
+  isAgentBackedRequest: boolean;
   isScriptBackedRequest: boolean;
   normalizedFailureMessage: string | undefined;
   normalizedFailureReason: string | undefined;
@@ -23,6 +24,10 @@ export function buildWorkstationRequestDetailView(
   const isScriptBackedRequest =
     request.script_request !== undefined ||
     request.script_response !== undefined;
+  const isAgentBackedRequest =
+    request.agent_run_inspection !== undefined ||
+    request.response_view?.agent_run_inspection !== undefined ||
+    request.response_view?.agentRunInspection !== undefined;
   const normalizedFailureReason = normalizeDetailText(request.failure_reason);
   const normalizedFailureMessage = normalizeDetailText(request.failure_message);
   const hasFailureDetails =
@@ -42,6 +47,7 @@ export function buildWorkstationRequestDetailView(
   return {
     hasFailureDetails,
     hasFailedOutcome,
+    isAgentBackedRequest,
     isScriptBackedRequest,
     normalizedFailureMessage,
     normalizedFailureReason,
