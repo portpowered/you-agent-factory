@@ -4,6 +4,7 @@ import {
   workstationRequest,
 } from "../../../base/components/detail-card/detail-card-test-helpers";
 import { WorkstationRequestDetailCard } from "./workstation-request-detail";
+import { buildWorkstationRequestDetailView } from "./workstation-request-detail-view";
 
 describe("WorkstationRequestDetailCard failed outcomes", () => {
   it("surfaces failed outcome reason and message in the top-level outcome row", () => {
@@ -93,5 +94,106 @@ describe("WorkstationRequestDetailCard failed outcomes", () => {
       ),
     ).toBeTruthy();
     expect(screen.getAllByText("FAILED").length).toBeGreaterThan(0);
+  });
+});
+
+describe("WorkstationRequestDetailCard agent run inspection", () => {
+  function renderAgentRunRequestDetailCard(
+    overrides: Parameters<typeof workstationRequest>[1] = {},
+  ) {
+    render(
+      <WorkstationRequestDetailCard
+        request={workstationRequest("dispatch-agent-run-inspection", {
+          request_id: "request-agent-run-story",
+          responded_request_count: 0,
+          workstation_name: "agent-review",
+          workstation_type: "AGENT_RUN",
+          ...overrides,
+        })}
+      />,
+    );
+  }
+
+  function getAgentRunInspectionRegion() {
+    return within(
+      screen.getByRole("region", { name: "Agent run inspection" }),
+    );
+  }
+
+  it("renders an explicit empty state for AGENT_RUN requests without inspection metadata", () => {
+    renderAgentRunRequestDetailCard();
+
+    expect(
+      getAgentRunInspectionRegion().getByText(
+        "Agent run inspection metadata is not available for this workstation request yet.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "Inference attempts" }),
+    ).toBeNull();
+  });
+
+  it("renders populated agent-run inspection metadata separately from inference attempts", () => {
+    renderAgentRunRequestDetailCard({
+      agent_run_inspection: {
+        execution_behavior: "agent_run",
+        failure_class: "agent_run_tool_denied",
+        recovery_action: "review_tool_policy",
+        tool_policy: "READ_ONLY",
+        tool_diagnostics: [
+          {
+            detail: "write_file is not allowed in read-only mode",
+            phase: "denied",
+            tool_name: "write_file",
+          },
+        ],
+        transcript: [
+          {
+            role: "assistant",
+            summary: "Attempted to write output file.",
+          },
+        ],
+      },
+      responded_request_count: 1,
+    });
+
+    const inspection = getAgentRunInspectionRegion();
+
+    expect(inspection.getByText("READ_ONLY")).toBeTruthy();
+    expect(inspection.getByText("agent_run_tool_denied")).toBeTruthy();
+    expect(inspection.getByText("review_tool_policy")).toBeTruthy();
+    expect(inspection.getByText("write_file · denied")).toBeTruthy();
+    expect(
+      inspection.getByText("write_file is not allowed in read-only mode"),
+    ).toBeTruthy();
+    expect(inspection.getByText("assistant")).toBeTruthy();
+    expect(
+      inspection.getByText("Attempted to write output file."),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "Inference attempts" }),
+    ).toBeNull();
+  });
+});
+
+describe("buildWorkstationRequestDetailView agent taxonomy", () => {
+  it("treats AGENT_RUN requests as agent-backed even when inspection metadata is missing", () => {
+    const view = buildWorkstationRequestDetailView(
+      workstationRequest("dispatch-agent-run-empty", {
+        workstation_type: "AGENT_RUN",
+      }),
+    );
+
+    expect(view.isAgentBackedRequest).toBe(true);
+  });
+
+  it("does not treat inference requests as agent-backed when inspection metadata is absent", () => {
+    const view = buildWorkstationRequestDetailView(
+      workstationRequest("dispatch-inference-empty", {
+        workstation_type: "INFERENCE_RUN",
+      }),
+    );
+
+    expect(view.isAgentBackedRequest).toBe(false);
   });
 });

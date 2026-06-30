@@ -1,5 +1,7 @@
+// biome-ignore lint/nursery/noExcessiveLinesPerFile: dashboard snapshot types stay centralized so runtime projection consumers share one import seam.
 import type { FactoryDefinition, InferenceOutcome } from "../events";
 import type { components } from "../generated/openapi";
+import type { DashboardAgentRunInspection } from "./agent-run-inspection-types";
 import type { DashboardSessionBracket } from "./session-lifecycle-types";
 
 export type { DashboardSessionBracket } from "./session-lifecycle-types";
@@ -115,34 +117,6 @@ export interface DashboardWorkDiagnostics {
   rendered_prompt?: DashboardRenderedPromptDiagnostic;
   provider?: DashboardProviderDiagnostic;
   agent_run?: DashboardAgentRunInspection;
-}
-
-export interface DashboardAgentRunInspection {
-  execution_behavior?: string;
-  executionBehavior?: string;
-  failure_class?: string;
-  failureClass?: string;
-  recovery_action?: string;
-  recoveryAction?: string;
-  tool_policy?: string;
-  toolPolicy?: string;
-  tool_call_count?: number;
-  toolCallCount?: number;
-  tool_diagnostics?: DashboardAgentRunToolDiagnostic[];
-  toolDiagnostics?: DashboardAgentRunToolDiagnostic[];
-  transcript?: DashboardAgentRunTranscriptEntry[];
-}
-
-export interface DashboardAgentRunToolDiagnostic {
-  tool_name?: string;
-  toolName?: string;
-  phase?: string;
-  detail?: string;
-}
-
-export interface DashboardAgentRunTranscriptEntry {
-  role?: string;
-  summary?: string;
 }
 
 export interface DashboardRenderedPromptDiagnostic {
@@ -352,6 +326,7 @@ export interface DashboardWorkstationRequest {
   working_directory?: string;
   workstation_name?: string;
   workstation_node_id: string;
+  workstation_type?: string;
   worktree?: string;
 }
 

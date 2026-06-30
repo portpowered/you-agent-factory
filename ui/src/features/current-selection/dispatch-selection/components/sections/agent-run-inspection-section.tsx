@@ -1,4 +1,4 @@
-import type { DashboardAgentRunInspection } from "../../../../../api/dashboard/types";
+import type { DashboardAgentRunInspection } from "../../../../../api/dashboard/agent-run-inspection-types";
 import {
   CurrentSelectionDescriptionList,
   CurrentSelectionDetailItem,
@@ -86,10 +86,10 @@ function AgentRunToolDiagnosticsList({
     <div className="grid gap-2">
       <CurrentSelectionLabel>{heading}</CurrentSelectionLabel>
       <ul className="grid gap-2">
-        {diagnostics.map((entry, index) => (
+        {diagnostics.map((entry) => (
           <li
             className="rounded-md border border-border px-3 py-2 text-sm"
-            key={`${entry.tool_name ?? "tool"}-${entry.phase ?? "phase"}-${index}`}
+            key={`${entry.tool_name ?? "tool"}::${entry.phase ?? "phase"}::${entry.detail ?? ""}`}
           >
             <div className="font-medium">
               {[entry.tool_name, entry.phase].filter(Boolean).join(" · ")}
@@ -128,10 +128,10 @@ function AgentRunTranscriptList({
     <div className="grid gap-2">
       <CurrentSelectionLabel>{heading}</CurrentSelectionLabel>
       <ul className="grid gap-2">
-        {entries.map((entry, index) => (
+        {entries.map((entry) => (
           <li
             className="rounded-md border border-border px-3 py-2 text-sm"
-            key={`${entry.role ?? "role"}-${index}`}
+            key={`${entry.role ?? "role"}::${entry.summary ?? ""}`}
           >
             <div className="font-medium">{entry.role ?? "message"}</div>
             {entry.summary ? (

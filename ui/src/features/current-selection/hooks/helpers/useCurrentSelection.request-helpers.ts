@@ -1,5 +1,4 @@
 import type {
-  DashboardAgentRunInspection,
   DashboardInferenceAttempt,
   DashboardProviderSessionAttempt,
   DashboardRuntimeWorkstationRequest,
@@ -7,6 +6,8 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
+import { toDashboardAgentRunInspection } from "../../../../api/dashboard/agent-run-inspection-types";
+import { enrichWorkstationRequestWithWorkstationType } from "./useCurrentSelection.workstation-type-helpers";
 
 export type DispatchWorkstationRequest =
   | DashboardRuntimeWorkstationRequest
@@ -34,10 +35,11 @@ export function resolveProjectedWorkstationRequestsByDispatchID(
     workstationRequestsByDispatchID &&
     Object.keys(workstationRequestsByDispatchID).length > 0
   ) {
-    return hydrateProjectedInferenceAttempts(
+    const hydrated = hydrateProjectedInferenceAttempts(
       workstationRequestsByDispatchID,
       inferenceAttemptsByDispatchID,
     );
+    return enrichProjectedWorkstationRequests(hydrated, snapshot);
   }
 
   if (!snapshot?.runtime.workstation_requests_by_dispatch_id) {
@@ -48,13 +50,37 @@ export function resolveProjectedWorkstationRequestsByDispatchID(
     Object.entries(snapshot.runtime.workstation_requests_by_dispatch_id).map(
       ([dispatchID, request]) => [
         dispatchID,
-        toDashboardWorkstationRequest(
-          request,
-          inferenceAttemptsByDispatchID?.[dispatchID],
+        enrichWorkstationRequestWithWorkstationType(
+          toDashboardWorkstationRequest(
+            request,
+            inferenceAttemptsByDispatchID?.[dispatchID],
+          ),
+          snapshot,
         ),
       ],
     ),
   );
+}
+
+function enrichProjectedWorkstationRequests(
+  workstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest>,
+  snapshot: DashboardSnapshot | null | undefined,
+): Record<string, DashboardWorkstationRequest> {
+  let changed = false;
+  const entries = Object.entries(workstationRequestsByDispatchID).map(
+    ([dispatchID, request]) => {
+      const enriched = enrichWorkstationRequestWithWorkstationType(
+        request,
+        snapshot,
+      );
+      if (enriched !== request) {
+        changed = true;
+      }
+      return [dispatchID, enriched] as const;
+    },
+  );
+
+  return changed ? Object.fromEntries(entries) : workstationRequestsByDispatchID;
 }
 
 function hydrateProjectedInferenceAttempts(
@@ -294,31 +320,6 @@ export function toDashboardWorkstationRequest(
     work_items: requestWorkItems(request),
     workstation_name: request.workstationName ?? request.workstation_name,
     workstation_node_id: request.transitionId ?? request.transition_id ?? "",
-  };
-}
-
-function toDashboardAgentRunInspection(
-  inspection: DashboardAgentRunInspection | undefined,
-): DashboardAgentRunInspection | undefined {
-  if (!inspection) {
-    return undefined;
-  }
-  const toolDiagnostics = (
-    inspection.tool_diagnostics ?? inspection.toolDiagnostics
-  )?.map((entry) => ({
-    tool_name: entry.tool_name ?? entry.toolName,
-    phase: entry.phase,
-    detail: entry.detail,
-  }));
-  return {
-    execution_behavior:
-      inspection.execution_behavior ?? inspection.executionBehavior,
-    failure_class: inspection.failure_class ?? inspection.failureClass,
-    recovery_action: inspection.recovery_action ?? inspection.recoveryAction,
-    tool_policy: inspection.tool_policy ?? inspection.toolPolicy,
-    tool_call_count: inspection.tool_call_count ?? inspection.toolCallCount,
-    tool_diagnostics: toolDiagnostics,
-    transcript: inspection.transcript,
   };
 }
 

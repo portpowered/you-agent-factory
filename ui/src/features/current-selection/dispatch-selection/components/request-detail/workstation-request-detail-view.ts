@@ -1,4 +1,5 @@
 import type { DashboardSelectedRunner } from "../../../../../api/dashboard/types";
+import { WorkstationType } from "../../../../../api/generated/openapi";
 import { formatWorkItemLabel } from "../../../../../components/ui/formatters";
 import { normalizeDetailText } from "../../../base/components/detail-card/detail-card-shared";
 import type { WorkstationRequestDetailCardProps } from "../../lib/detail-card-types";
@@ -25,9 +26,8 @@ export function buildWorkstationRequestDetailView(
     request.script_request !== undefined ||
     request.script_response !== undefined;
   const isAgentBackedRequest =
-    request.agent_run_inspection !== undefined ||
-    request.response_view?.agent_run_inspection !== undefined ||
-    request.response_view?.agentRunInspection !== undefined;
+    request.workstation_type === WorkstationType.WorkstationTypeAgentRun ||
+    request.workstation_type === WorkstationType.WorkstationTypeModelWorkstation;
   const normalizedFailureReason = normalizeDetailText(request.failure_reason);
   const normalizedFailureMessage = normalizeDetailText(request.failure_message);
   const hasFailureDetails =
