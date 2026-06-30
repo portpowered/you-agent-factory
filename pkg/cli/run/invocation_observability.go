@@ -331,10 +331,7 @@ func runResponseStreamAttachment(
 	subscribed := make(map[string]*factorysessions.SessionResponseStreamSubscription)
 	var subscribedMu sync.Mutex
 
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
+	discover := func() {
 		dispatchIDs, _ := attachable.SessionResponseStreamDispatchIDs(sessionID)
 		for _, dispatchID := range dispatchIDs {
 			subscribedMu.Lock()
@@ -358,9 +355,17 @@ func runResponseStreamAttachment(
 				consumeResponseStreamSubscription(ctx, subscription, sink)
 			}()
 		}
+	}
+
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		discover()
 
 		select {
 		case <-ctx.Done():
+			discover()
 			return
 		case <-ticker.C:
 		}
