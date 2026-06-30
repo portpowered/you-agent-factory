@@ -139,6 +139,8 @@ The repository already proves the following without manual host UI smoke:
 | Factory Session MCP catalog | `pkg/mcp/factorysession/registry.go` (`DiscoverTools`) |
 | Shared fixture-backed stdio install smoke for validate plus async polling | `pkg/cli/mcp/serve_smoke_test.go` |
 | Runtime-backed stdio install smoke for async start, status, and result | `pkg/cli/mcp/serve_runtime_smoke_test.go` |
+| Runtime-backed stdio resume smoke for interrupted-to-resumed continuity | `pkg/cli/mcp/serve_runtime_resume_smoke_test.go` |
+| Additive non-resume MCP serve regression after resume smoke | `pkg/cli/mcp/serve_runtime_resume_non_regression_test.go` |
 | Packaged recovery scope and serve-mode boundaries | `tests/functional/smoke/cli_docs_smoke_test.go` |
 
 Run focused verification locally:
@@ -157,6 +159,8 @@ into website inspection, HTTP/SSE transport, or a broader host-matrix expansion.
 |----------|--------|
 | Default fixture-backed `you mcp serve` install smoke | **Automated in-repo** via `serve_smoke_test.go` |
 | Runtime-backed `you mcp serve --runtime` async start/status/result smoke | **Automated in-repo** via `serve_runtime_smoke_test.go` |
+| Runtime-backed interrupted-to-resumed MCP resume smoke | **Automated in-repo** via `serve_runtime_resume_smoke_test.go` |
+| Additive fixture/runtime MCP serve regression after resume smoke | **Automated in-repo** via `serve_runtime_resume_non_regression_test.go` |
 | Multi-host parity matrices across every MCP client UI | Out of scope for this lane |
 | HTTP or SSE MCP transport | Unsupported; `you mcp serve` is stdio-only |
 | Dashboard or website inspection of MCP sessions | Out of scope for this lane |
