@@ -452,6 +452,8 @@ func (r *humanResponseStreamRenderer) writeFinalInvocationResult(
 		return fmt.Errorf("response-stream renderer is nil")
 	}
 	r.stopProgressRendering()
+	r.progress.acquireOutputExclusive()
+	defer r.progress.releaseOutputExclusive()
 	if result.Status == factoryapi.InvocationTerminalStatusCompleted {
 		text, err := invocationPrimaryResultText(result.PrimaryResult)
 		if err != nil {
@@ -695,6 +697,8 @@ func (r *jsonResponseStreamRenderer) writeFinalInvocationResult(
 		return fmt.Errorf("response-stream renderer is nil")
 	}
 	r.stopProgressRendering()
+	r.progress.acquireOutputExclusive()
+	defer r.progress.releaseOutputExclusive()
 	return r.writeRecord(responseStreamJSONPrimaryResultRecord{
 		RecordType: responseStreamJSONRecordPrimaryResult,
 		Invocation: apisurface.InvocationResponseFromResult(result),

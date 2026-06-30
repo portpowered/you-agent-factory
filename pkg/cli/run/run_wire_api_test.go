@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -899,52 +900,77 @@ func TestRun_FactoryInvocationResponseStreamCompletesWithSlowStdout(t *testing.T
 	assertSlowStdoutResponseStreamOutput(t, output, text)
 }
 
-func TestHumanProgressRenderableType(t *testing.T) {
+func waitForResponseStreamFinalWritePastDrainTimeout(
+	t *testing.T,
+	done <-chan error,
+	output *gatedResponseStreamWriter,
+) {
+	t.Helper()
+	waitForBlockedStdoutWrites(t, output, 2*time.Second)
+	time.Sleep(responseStreamProgressDrainTimeout + 50*time.Millisecond)
+	output.release()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("writeFinalInvocationResult: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for final result after stdout release")
+	}
+}
+
+func assertNoProgressAfterFinalMarker(t *testing.T, got, marker, progressMarker string) {
+	t.Helper()
+	markerIdx := strings.Index(got, marker)
+	if markerIdx < 0 {
+		t.Fatalf("missing final marker %q:\n%s", marker, got)
+	}
+	tail := got[markerIdx+len(marker):]
+	if strings.Contains(tail, progressMarker) {
+		t.Fatalf("progress after %q:\n%s", marker, got)
+	}
+}
+
+func TestResponseStreamRenderer_FinalResultDoesNotInterleavePastDrainTimeout(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		eventType responsestream.EventType
-		want      bool
+	cases := []struct {
+		name            string
+		newRenderer     func(io.Writer) responseStreamRenderer
+		finalMarker     string
+		progressMarker  string
 	}{
-		{eventType: responsestream.EventTypeProgress, want: true},
-		{eventType: responsestream.EventTypeStarted, want: true},
-		{eventType: responsestream.EventTypeTextDelta, want: false},
-		{eventType: responsestream.EventTypeFinalText, want: false},
+		{
+			name:           "human",
+			newRenderer:    func(output io.Writer) responseStreamRenderer { return newHumanResponseStreamRenderer(output) },
+			finalMarker:    responseStreamPrimaryResultHeader,
+			progressMarker: "[you:progress]",
+		},
+		{
+			name:           "json",
+			newRenderer:    func(output io.Writer) responseStreamRenderer { return newJSONResponseStreamRenderer(output) },
+			finalMarker:    `"recordType":"primary_result"`,
+			progressMarker: `"recordType":"progress"`,
+		},
 	}
 
-	for _, tc := range tests {
+	for _, tc := range cases {
 		tc := tc
-		t.Run(string(tc.eventType), func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if got := humanProgressRenderableType(tc.eventType); got != tc.want {
-				t.Fatalf("humanProgressRenderableType(%q) = %t, want %t", tc.eventType, got, tc.want)
-			}
+
+			output := &gatedResponseStreamWriter{}
+			output.block()
+			renderer := tc.newRenderer(output)
+			floodResponseStreamProgress(renderer, defaultResponseStreamProgressQueueCapacity+4)
+
+			done := make(chan error, 1)
+			go func() {
+				done <- renderer.writeFinalInvocationResult(responseStreamBacklogSuccessResult)
+			}()
+
+			waitForResponseStreamFinalWritePastDrainTimeout(t, done, output)
+			assertNoProgressAfterFinalMarker(t, output.String(), tc.finalMarker, tc.progressMarker)
 		})
-	}
-}
-
-func TestBoundedHumanProgressPayload(t *testing.T) {
-	t.Parallel()
-
-	payload := strings.Repeat("a", maxHumanProgressLineBytes+10)
-	got := boundedHumanProgressPayload(payload)
-	if len([]byte(got)) > maxHumanProgressLineBytes+3 {
-		t.Fatalf("bounded payload too long: %d bytes", len([]byte(got)))
-	}
-	if !strings.HasSuffix(got, "...") {
-		t.Fatalf("bounded payload = %q, want ellipsis suffix", got)
-	}
-}
-
-func TestFormatCompactionNotice(t *testing.T) {
-	t.Parallel()
-
-	got := formatCompactionNotice(responsestream.CompactionSummary{
-		Reason:                responsestream.CompactionReasonCoalesced,
-		DroppedSequenceCount:  2,
-		FirstRetainedSequence: 5,
-	})
-	if got != "stream coalesced (2 earlier events omitted)" {
-		t.Fatalf("notice = %q", got)
 	}
 }

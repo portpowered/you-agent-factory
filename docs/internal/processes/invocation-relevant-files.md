@@ -76,7 +76,10 @@ primary-result behavior.
   returns. `StreamSet` evicts completed streams after
   `DefaultCompletedDispatchRetention()` and re-enforces per-stream retention
   through `SessionResponseStream.EnforceRetention()` without relying on future
-  `Append` calls.
+  `Append` calls. `responseStreamProgressWriter` serializes all stdout writes
+  through `outputMu`; after a drain timeout it abandons further progress writes
+  and `writeFinalInvocationResult` acquires the same lock so final
+  primary-result/outcome output cannot interleave with an in-flight progress write.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin
   bytes into `invocations.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
   from the shared resolver instead of pre-trimming or short-circuiting with
