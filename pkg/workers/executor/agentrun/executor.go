@@ -154,17 +154,14 @@ func evaluateAgentRunOutcome(output string, workerDef *interfaces.WorkerConfig) 
 }
 
 func agentRunFailureWorkResult(dispatch interfaces.WorkDispatch, err error, duration time.Duration) interfaces.WorkResult {
-	failureClass := failureClassForError(err)
 	return interfaces.WorkResult{
 		DispatchID:      dispatch.DispatchID,
 		TransitionID:    dispatch.TransitionID,
 		Outcome:         interfaces.OutcomeFailed,
 		Error:           formatAgentRunError(err),
 		FailureMetadata: interfaces.CloneWorkFailureMetadata(failureMetadataForError(err)),
-		Diagnostics: agentRunDiagnostics(map[string]string{
-			DiagnosticFailureClass: failureClass,
-		}),
-		Metrics: interfaces.WorkMetrics{Duration: duration},
+		Diagnostics:     agentRunDiagnostics(agentRunFailureDiagnostics(err)),
+		Metrics:         interfaces.WorkMetrics{Duration: duration},
 	}
 }
 

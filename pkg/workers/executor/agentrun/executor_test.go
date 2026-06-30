@@ -7,9 +7,11 @@ import (
 	"testing"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/modelhost"
 )
 
 type staticInferencer struct {
@@ -210,6 +212,74 @@ func TestAgentRunExecutor_HarnessFailureSurfacesAgentRunFailureClass(t *testing.
 	}
 	if result.Error == "" || result.Error == "provider error" {
 		t.Fatalf("Error = %q, want agent run harness failure wording", result.Error)
+	}
+}
+
+func TestAgentRunExecutor_ModelhostLeaseDeniedSurfacesAgentRunLeaseFailureClass(t *testing.T) {
+	t.Parallel()
+
+	harness := &recordingHarnessAdapter{err: modelhost.ErrCapacityExhausted}
+	executor := NewAgentRunExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"agent-worker": {
+					Type:          interfaces.WorkerTypeAgent,
+					Model:         "OMNIVOICE_Q4_K_M",
+					ModelLocality: interfaces.ModelLocalityLocal,
+				},
+			},
+		},
+		&stubRunner{},
+		WithAgentRunHarness(harness),
+	)
+
+	result, err := executor.Execute(context.Background(), testAgentRunRequest())
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Outcome != interfaces.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	}
+	if result.Diagnostics == nil || result.Diagnostics.Metadata[DiagnosticFailureClass] != FailureClassLeaseDenied {
+		t.Fatalf("failure class = %#v, want %s", result.Diagnostics, FailureClassLeaseDenied)
+	}
+	if result.Diagnostics.Metadata[DiagnosticRecoveryAction] == "" {
+		t.Fatal("expected recovery action for lease denial")
+	}
+}
+
+func TestAgentRunExecutor_ModelhostReadinessFailureSurfacesAgentRunModelNotReadyClass(t *testing.T) {
+	t.Parallel()
+
+	readinessErr := &modelhost.ReadinessError{
+		Snapshot: modelhost.ReadinessSnapshot{
+			Identity:       modelhost.Identity{Name: "OMNIVOICE_Q4_K_M"},
+			ReadinessState: factoryapi.ManagedRuntimeReadinessStateMISSING,
+			FailureClass:   modelhost.FailureClassMissingAssets,
+		},
+		Cause: modelhost.ErrRuntimeNotReady,
+	}
+	harness := &recordingHarnessAdapter{err: readinessErr}
+	executor := NewAgentRunExecutor(
+		staticRuntimeConfig{
+			Workers: map[string]*interfaces.WorkerConfig{
+				"agent-worker": {
+					Type:          interfaces.WorkerTypeAgent,
+					Model:         "OMNIVOICE_Q4_K_M",
+					ModelLocality: interfaces.ModelLocalityLocal,
+				},
+			},
+		},
+		&stubRunner{},
+		WithAgentRunHarness(harness),
+	)
+
+	result, err := executor.Execute(context.Background(), testAgentRunRequest())
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Diagnostics == nil || result.Diagnostics.Metadata[DiagnosticFailureClass] != FailureClassModelNotReady {
+		t.Fatalf("failure class = %#v, want %s", result.Diagnostics, FailureClassModelNotReady)
 	}
 }
 
