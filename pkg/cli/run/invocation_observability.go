@@ -511,7 +511,6 @@ func (w *responseStreamProgressWriter) stopAndDrain() {
 	w.mu.Unlock()
 	close(w.queue)
 	waitProgressWriter(&w.wg, responseStreamProgressDrainTimeout)
-	w.flushPendingNoticeLocked()
 }
 
 func waitProgressWriter(wg *sync.WaitGroup, timeout time.Duration) {
