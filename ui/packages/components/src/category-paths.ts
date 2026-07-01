@@ -1,0 +1,20 @@
+/** Planned deep import paths for `youagentfactory/components` category entrypoints. */
+export const COMPONENT_CATEGORY_EXPORT_PATHS = [
+  "primitives",
+  "forms",
+  "layout",
+  "feedback",
+  "data-display",
+  "navigation",
+  "overlays",
+  "charts",
+  "graphs",
+  "recipes",
+  "icons",
+  "utilities",
+  "testing",
+  "tokens",
+] as const;
+
+export type ComponentCategoryExportPath =
+  (typeof COMPONENT_CATEGORY_EXPORT_PATHS)[number];
