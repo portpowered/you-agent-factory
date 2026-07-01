@@ -1,0 +1,9 @@
+/*
+ * Host-app fixture for package token behavioral coverage.
+ * Mirrors a consumer importing tailwindcss plus the package styles entrypoint.
+ */
+
+@import "tailwindcss";
+@import "youagentfactory/components/styles.css";
+
+@source "./package-token-fixture-usage.ts";

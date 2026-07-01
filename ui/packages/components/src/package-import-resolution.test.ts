@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment happy-dom
+
+import { beforeAll, describe, expect, it } from "vitest";
 
 import {
   COMPONENT_CATEGORY_EXPORT_PATHS,
@@ -18,7 +20,13 @@ import * as primitives from "youagentfactory/components/primitives";
 import * as recipes from "youagentfactory/components/recipes";
 import * as testing from "youagentfactory/components/testing";
 import * as tokens from "youagentfactory/components/tokens";
+import { cn, COMPONENTS_CATEGORY as utilitiesCategory } from "youagentfactory/components/utilities";
 import * as utilities from "youagentfactory/components/utilities";
+
+import {
+  injectCompiledPackageTokenStyles,
+  readDocumentCssVariable,
+} from "./styles/compile-package-token-styles";
 
 const categoryModules = {
   primitives,
@@ -38,14 +46,23 @@ const categoryModules = {
 } as const;
 
 describe("youagentfactory/components package import resolution", () => {
+  let documentRoot: HTMLElement;
+
+  beforeAll(async () => {
+    documentRoot = await injectCompiledPackageTokenStyles(document);
+  });
+
   it("imports the package root through the configured package path", () => {
     expect(COMPONENTS_PACKAGE_NAME).toBe("youagentfactory/components");
   });
 
   it("imports the CSS entrypoint through the configured package path", () => {
     expect(typeof stylesCss).toBe("string");
-    // Comment-only placeholder CSS may inline as an empty string before token migration.
     expect(stylesCss).not.toMatch(/@import\s+["'].*\/ui\/src\//);
+    expect(readDocumentCssVariable(documentRoot, "--color-primary")).toBeTruthy();
+    expect(readDocumentCssVariable(documentRoot, "--text-body-medium")).toBeTruthy();
+    expect(readDocumentCssVariable(documentRoot, "--text-title-large")).toBeTruthy();
+    expect(readDocumentCssVariable(documentRoot, "--color-af-foundation-background")).toBeTruthy();
   });
 
   it.each(COMPONENT_CATEGORY_EXPORT_PATHS)(
@@ -55,4 +72,10 @@ describe("youagentfactory/components package import resolution", () => {
       expect(categoryModule.COMPONENTS_CATEGORY).toBe(categoryPath);
     },
   );
+
+  it("imports cn from the utilities category surface", () => {
+    expect(utilitiesCategory).toBe("utilities");
+    expect(cn("alpha", false, "beta")).toBe("alpha beta");
+    expect(typeof utilities.cn).toBe("function");
+  });
 });
