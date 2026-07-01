@@ -34,11 +34,12 @@ func TestLoadFileDefaults_MalformedFileNamesPath(t *testing.T) {
 	}
 }
 
-func TestParseFileDefaults_IgnoresUnrecognizedTopLevelFields(t *testing.T) {
+func TestParseFileDefaults_AcceptsBackendScopeIDWithoutAffectingDefaults(t *testing.T) {
 	defaults, err := ParseFileDefaults([]byte(`{
-		"backendScopeID": "local-scope-id",
+		"backendScopeID": "local-11111111-2222-4333-8444-555555555555",
 		"defaults": {
-			"workerModelProvider": "codex"
+			"workerModelProvider": "codex",
+			"workerModel": "gpt-5-codex"
 		}
 	}`))
 	if err != nil {
@@ -46,6 +47,9 @@ func TestParseFileDefaults_IgnoresUnrecognizedTopLevelFields(t *testing.T) {
 	}
 	if defaults.WorkerModelProvider != "codex" {
 		t.Fatalf("provider = %q, want codex", defaults.WorkerModelProvider)
+	}
+	if defaults.WorkerModel != "gpt-5-codex" {
+		t.Fatalf("model = %q, want gpt-5-codex", defaults.WorkerModel)
 	}
 }
 

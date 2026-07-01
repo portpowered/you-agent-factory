@@ -12,10 +12,13 @@ import {
   type FactorySessionLifecycleControlResponse,
 } from "../../../api/factory-sessions";
 import { normalizeFactorySessionGetResponse } from "../../../api/factory-sessions/normalize-session-get";
+import { useDashboardStreamStore } from "../../dashboard/public/runtime-cache-scope";
 import type { FactorySessionDetailData } from "./use-factory-session-detail";
 import type { LifecycleControlFeedbackState } from "../lib/lifecycle/factory-session-lifecycle-feedback";
 import type { FactorySessionLifecycleActionID } from "../lib/factory-session-lifecycle-controls";
-import { FACTORY_SESSION_DETAIL_QUERY_KEY } from "./use-factory-session-detail";
+import {
+  factorySessionDetailQueryKey,
+} from "./use-factory-session-detail";
 
 interface LifecycleControlMutationInput {
   actionID: FactorySessionLifecycleActionID;
@@ -37,10 +40,16 @@ export function useFactorySessionLifecycleControl({
   sessionID: string;
 }): UseFactorySessionLifecycleControlResult {
   const queryClient = useQueryClient();
+  const backendRuntimeCacheScope = useDashboardStreamStore(
+    (state) => state.backendRuntimeCacheScope,
+  );
   const [feedback, setFeedback] = useState<LifecycleControlFeedbackState | null>(
     null,
   );
-  const detailQueryKey = [...FACTORY_SESSION_DETAIL_QUERY_KEY, sessionID] as const;
+  const detailQueryKey = factorySessionDetailQueryKey(
+    sessionID,
+    backendRuntimeCacheScope,
+  );
   const mutation = useMutation({
     mutationFn: async ({
       actionID,

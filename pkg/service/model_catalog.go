@@ -212,8 +212,8 @@ func (fs *FactoryService) modelHost() modelhost.Host {
 			return host
 		}
 	}
-	if bundle := fs.currentRuntimeBundle(); bundle != nil && bundle.modelHost != nil {
-		return bundle.modelHost
+	if bundle := fs.currentRuntimeBundle(); bundle != nil && bundle.ModelHost != nil {
+		return bundle.ModelHost
 	}
 	return nil
 }
@@ -1057,15 +1057,15 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 	var modelDomain localModelDomain
 	var workflowContext *factory_context.FactoryContext
 	if bundle != nil {
-		modelDomain = localModelDomain{
-			resources:      bundle.modelResources,
-			assets:         bundle.modelAssets,
-			runtime:        bundle.localModelRuntime,
-			host:           bundle.modelHost,
-			manager:        bundle.localModels,
-			leaseExecution: bundle.leaseExecution,
+		modelDomain = LocalModelDomain{
+			Resources:      bundle.ModelResources,
+			Assets:         bundle.ModelAssets,
+			Runtime:        bundle.LocalModelRuntime,
+			Host:           bundle.ModelHost,
+			Manager:        bundle.LocalModels,
+			LeaseExecution: bundle.LeaseExecution,
 		}
-		workflowContext = runtime.WorkflowContext(bundle.factory)
+		workflowContext = runtime.WorkflowContext(bundle.Factory)
 	}
 	executor := buildWorkerExecutor(
 		runtimeCfg,
@@ -1078,6 +1078,7 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 		nil,
 		fs.providerCommandRunnerOverride(),
 		fs.commandRunnerOverride(),
+		nil,
 		nil,
 		nil,
 		nil,

@@ -17,7 +17,10 @@ import (
 	"go.uber.org/zap"
 )
 
-const sessionEventStreamGenerationHeader = "X-Factory-Session-Stream-Generation-Id"
+const (
+	sessionEventStreamBackendScopeHeader   = "X-Factory-Session-Backend-Scope-Id"
+	sessionEventStreamGenerationHeader     = "X-Factory-Session-Stream-Generation-Id"
+)
 
 // GetStatus handles GET /status as the supported runtime status read model.
 func (s *Server) GetStatus(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +56,7 @@ func (s *Server) getStatus(
 	s.writeJSON(w, http.StatusOK, statusFromEngineStateSnapshot(*snapshot))
 }
 
-// GetEvents handles GET /events as a canonical factory event SSE stream.
+// GetEvents handles compatibility-only process-global GET /events.
 func (s *Server) GetEvents(w http.ResponseWriter, r *http.Request, params factoryapi.GetEventsParams) {
 	reconnect := reconnectCursorFromParams(params.AfterEventId, params.AfterSequence)
 	s.getEvents(w, r, false, func(ctx context.Context) (*interfaces.FactoryEventStream, error) {
@@ -222,6 +225,18 @@ func afterSequenceParam(cursor *interfaces.FactoryEventReconnectCursor) *factory
 	return &value
 }
 
+func writeSessionEventStreamHandshakeHeaders(
+	w http.ResponseWriter,
+	stream *interfaces.FactoryEventStream,
+) {
+	if backendScopeID := strings.TrimSpace(stream.BackendScopeID); backendScopeID != "" {
+		w.Header().Set(sessionEventStreamBackendScopeHeader, backendScopeID)
+	}
+	if streamGenerationID := strings.TrimSpace(stream.StreamGenerationID); streamGenerationID != "" {
+		w.Header().Set(sessionEventStreamGenerationHeader, streamGenerationID)
+	}
+}
+
 func (s *Server) getEvents(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -254,9 +269,7 @@ func (s *Server) getEvents(
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 	if includeSessionHandshake {
-		if streamGenerationID := strings.TrimSpace(stream.StreamGenerationID); streamGenerationID != "" {
-			w.Header().Set(sessionEventStreamGenerationHeader, streamGenerationID)
-		}
+		writeSessionEventStreamHandshakeHeaders(w, stream)
 	}
 
 	for _, event := range stream.History {

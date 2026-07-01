@@ -807,4 +807,46 @@ func validateBlockingFactoryLoad(cfg *interfaces.FactoryConfig) error {
 	)
 }
 
+func ruleAgentWorkerTools(cfg *interfaces.FactoryConfig) []Finding {
+	if cfg == nil || len(cfg.Workers) == 0 {
+		return nil
+	}
+
+	var findings []Finding
+	for workerIndex, worker := range cfg.Workers {
+		basePath := fmt.Sprintf("workers[%d](%s)", workerIndex, worker.Name)
+		if worker.AgentTools == nil {
+			continue
+		}
+		policy := strings.TrimSpace(worker.AgentTools.Policy)
+		if policy == "" {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     basePath + ".agentTools.policy",
+				Message:  "agent tool configuration requires an explicit policy",
+				Rule:     "agent-worker-tools-policy-required",
+			})
+			continue
+		}
+		if !interfaces.IsKnownAgentWorkerToolPolicy(policy) {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     basePath + ".agentTools.policy",
+				Message:  fmt.Sprintf("unsupported agent tool policy %q", policy),
+				Rule:     "agent-worker-tools-policy-supported",
+			})
+			continue
+		}
+		if !interfaces.IsAgentWorkerType(worker.Type) {
+			findings = append(findings, Finding{
+				Severity: SeverityError,
+				Path:     basePath + ".agentTools",
+				Message:  "agent tool configuration is only supported on AGENT_WORKER definitions",
+				Rule:     "agent-worker-tools-worker-type",
+			})
+		}
+	}
+	return findings
+}
+
 // --- Rule: resource usage validation ---

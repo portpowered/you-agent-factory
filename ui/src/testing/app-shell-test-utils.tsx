@@ -53,6 +53,7 @@ import {
   isSessionFactoryRequest,
   mockGetSessionFactory,
   sessionFactoryDocumentFromSnapshot,
+  sessionFactoryNamedExportDocument,
 } from "./session-factory-mocks";
 
 export {
@@ -64,6 +65,28 @@ export {
   type FetchMock,
   type RenderAppFetchOverride,
 } from "./app-shell-fetch-test-utils";
+
+function testBackendScopeForSession(summary: FactorySessionSummary): string {
+  return `${summary.folderPath}::test-backend`;
+}
+
+function seedCurrentFactoryDocumentForAppShell(
+  queryClient: QueryClient,
+  _snapshot: DashboardSnapshot,
+  sessionID: string,
+  sessionSummary: FactorySessionSummary,
+): void {
+  const provenBackendScope = testBackendScopeForSession(sessionSummary);
+  const document = sessionFactoryNamedExportDocument;
+  queryClient.setQueryData(
+    currentFactoryDocumentQueryKey(sessionID),
+    document,
+  );
+  queryClient.setQueryData(
+    currentFactoryDocumentQueryKey(sessionID, provenBackendScope),
+    document,
+  );
+}
 
 export {
   renderWithDashboardSessionTest,
@@ -242,6 +265,10 @@ export function renderApp({
   workstationRequestsByDispatchID = {},
 }: RenderAppOptions): RenderAppResult {
   const availableFactorySessions = factorySessions ?? [defaultFactorySessionSummary];
+  const resolvedSessionID = sessionID ?? DEFAULT_FACTORY_SESSION_ID;
+  const sessionSummary =
+    availableFactorySessions.find((session) => session.id === resolvedSessionID) ??
+    availableFactorySessions[0];
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -252,9 +279,11 @@ export function renderApp({
   });
   queryClients.push(queryClient);
   if (seedCurrentFactoryDocument) {
-    queryClient.setQueryData(
-      currentFactoryDocumentQueryKey(sessionID ?? DEFAULT_FACTORY_SESSION_ID),
-      sessionFactoryDocumentFromSnapshot(snapshot),
+    seedCurrentFactoryDocumentForAppShell(
+      queryClient,
+      snapshot,
+      resolvedSessionID,
+      sessionSummary,
     );
   }
 
@@ -395,6 +424,7 @@ export function registerAppDashboardTestLifecycle(): void {
       isExportDialogOpen: false,
     });
     useDashboardStreamStore.setState({
+      backendRuntimeCacheScope: null,
       streamState: createDefaultDashboardStreamState(),
     });
     useDashboardSessionStore.setState({

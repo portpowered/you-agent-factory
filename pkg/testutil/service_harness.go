@@ -195,6 +195,7 @@ func NewServiceTestHarness(t *testing.T, dir string, opts ...ServiceTestHarnessO
 		serviceConfig: service.FactoryServiceConfig{
 			Dir:                      dir,
 			RuntimeFileLoggingPolicy: service.RuntimeFileLoggingPolicyDisabled,
+			SystemConfigHomeDir:      t.TempDir(),
 		},
 	}
 	for _, opt := range opts {

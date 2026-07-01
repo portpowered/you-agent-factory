@@ -12,6 +12,7 @@ import {
   currentFactoryDefinitionQueryKey,
   currentFactoryDocumentQueryKey,
 } from "../../current-factory-definition/hooks/useCurrentFactoryDefinition";
+import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 
 export function clearQueuedFlush(
   flushHandleRef: RefObject<number | null>,
@@ -66,12 +67,14 @@ function cachedFactoryWithBundledFiles(
   queryClient: QueryClient,
   sessionID: string,
 ): CanonicalFactoryDefinition | null | undefined {
+  const backendRuntimeCacheScope =
+    useDashboardStreamStore.getState().backendRuntimeCacheScope;
   return (
     queryClient.getQueryData<CurrentFactoryDocument>(
-      currentFactoryDocumentQueryKey(sessionID),
+      currentFactoryDocumentQueryKey(sessionID, backendRuntimeCacheScope),
     ) ??
     queryClient.getQueryData<CanonicalFactoryDefinition>(
-      currentFactoryDefinitionQueryKey(sessionID),
+      currentFactoryDefinitionQueryKey(sessionID, backendRuntimeCacheScope),
     )
   );
 }
@@ -88,6 +91,8 @@ export function syncCurrentFactoryDefinition(
   if (payloadFactory == null) {
     return;
   }
+  const backendRuntimeCacheScope =
+    useDashboardStreamStore.getState().backendRuntimeCacheScope;
   try {
     const normalizedFactory = normalizeFactoryDefinition(payloadFactory);
     const factoryWithBundledFiles = preserveExistingBundledFilesWhenAbsent(
@@ -95,7 +100,7 @@ export function syncCurrentFactoryDefinition(
       cachedFactoryWithBundledFiles(queryClient, sessionID),
     );
     queryClient.setQueryData(
-      currentFactoryDefinitionQueryKey(sessionID),
+      currentFactoryDefinitionQueryKey(sessionID, backendRuntimeCacheScope),
       factoryWithBundledFiles,
     );
     const factoryForDocumentCache = preserveExistingBundledFilesWhenAbsent(
@@ -107,7 +112,7 @@ export function syncCurrentFactoryDefinition(
     );
     if (document) {
       queryClient.setQueryData(
-        currentFactoryDocumentQueryKey(sessionID),
+        currentFactoryDocumentQueryKey(sessionID, backendRuntimeCacheScope),
         document,
       );
     }

@@ -61,7 +61,7 @@ func (l *LeaseExecution) WrapRunner(
 	if inner == nil || l == nil || runtimeCfg == nil || factoryCfg == nil || workerDef == nil {
 		return inner
 	}
-	if !interfaces.IsInferenceWorkerType(workerDef.Type) || workerDef.ModelLocality != interfaces.ModelLocalityLocal {
+	if !interfaces.UsesModelhostLease(workerDef.Type, workerDef.ModelLocality) {
 		return inner
 	}
 	return &leaseBoundRunner{

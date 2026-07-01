@@ -15,7 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
+	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
@@ -23,10 +23,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
 	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/service/ingest"
+	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -79,44 +77,11 @@ type localModelRuntime = localmodels.Runtime
 type localModelResourceLimiter = localmodels.ResourceLimiter
 type managedLocalModelManager = localmodels.Manager
 
-// factoryRuntimeBundle is the single runtime wiring struct produced by
-// buildRuntimeBundle and referenced from liveRuntimeHandle.
-type factoryRuntimeBundle struct {
-	dir                  string
-	folderPath           string
-	runtimeInstanceID    string
-	startedAtUTC         time.Time
-	eventHistory         *factoryevents.FactoryEventHistory
-	factory              factory.Factory
-	listener             *ingest.FileWatcher
-	net                  *state.Net
-	runtimeCfg           *factoryconfig.LoadedFactoryConfig
-	modelResources       *localModelResourceLimiter
-	modelAssets          modelAssetPuller
-	localModels          *managedLocalModelManager
-	localModelRuntime    localModelRuntime
-	modelHost            modelhost.Host
-	leaseExecution       *modelhost.LeaseExecution
-	logger               *zap.Logger
-	logSink              *logging.RuntimeLogSink
-	metricsSink          *logging.RuntimeMetricsSink
-	recording            *replay.Recorder
-	recordPath           string
-	dispatchMetricFields sync.Map
-	dispatchCompleted    func(string)
-}
+// factoryRuntimeBundle is the runtime host bundle owned by pkg/factory/service.
+type factoryRuntimeBundle = factoryservice.Bundle
 
-type liveRuntimeHandle struct {
-	runtime              *factoryRuntimeBundle
-	runCancel            context.CancelFunc
-	runDone              chan struct{}
-	sidecarCancel        context.CancelFunc
-	sidecars             sync.WaitGroup
-	runErrMu             sync.RWMutex
-	runErr               error
-	sidecarMu            sync.Mutex
-	lifecycleMetricsOnce sync.Once
-}
+// liveRuntimeHandle is the single-runtime host handle owned by pkg/factory/service.
+type liveRuntimeHandle = factoryservice.Handle
 
 type serviceRunState struct {
 	ctx       context.Context
@@ -206,6 +171,12 @@ type FactoryServiceConfig struct {
 	// RuntimeInstanceID identifies this runtime process for file-backed logs.
 	// Empty generates a UUID.
 	RuntimeInstanceID string
+	// BackendScopeID is the stable session/cache namespace; empty local backends persist local-<uuid> during construction.
+	BackendScopeID string
+	// SystemConfigHomeDir overrides the home directory for backendScopeID system config resolution.
+	SystemConfigHomeDir string
+	// SystemConfigPath overrides the system config file path for backendScopeID persistence.
+	SystemConfigPath string
 	// RuntimeLogDir optionally overrides the default
 	// ~/.you-agent-factory/logs directory. Tests use this to keep file-backed
 	// logs isolated.
@@ -346,28 +317,11 @@ func (c *runtimeFactoryCoordinator) ActivateNamedFactory(ctx context.Context, na
 	if fs == nil {
 		return fmt.Errorf("factory service is required")
 	}
-	fs.activationMu.Lock()
-	defer fs.activationMu.Unlock()
-
-	sessionID := fs.runSessionID()
-	session := fs.sessionByID(sessionID)
-	persistRoot, folderPath := fs.namedFactoryActivationPaths(session)
-
-	if err := fs.requireIdleBeforeNamedFactoryActivation(ctx, sessionID, session); err != nil {
-		return err
+	svc := fs.definitionService()
+	if svc == nil {
+		return fmt.Errorf("factory definition service is required")
 	}
-
-	factoryDir, err := factoryconfig.ResolveNamedFactoryDir(persistRoot, name)
-	if err != nil {
-		return err
-	}
-
-	replacement, err := fs.buildReplacementFactoryRuntime(ctx, folderPath, factoryDir, sessionID)
-	if err != nil {
-		return fmt.Errorf("%w: build replacement factory %q: %w", ErrInvalidNamedFactory, name, err)
-	}
-
-	return fs.applyNamedFactoryReplacement(ctx, sessionID, session, persistRoot, name, replacement)
+	return svc.ActivateNamedFactory(ctx, name)
 }
 
 func (fs *FactoryService) namedFactoryActivationPaths(session *factorysessions.LiveSession) (persistRoot, folderPath string) {
@@ -476,7 +430,7 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 			return
 		}
 		if bundle := fs.startupRuntimeBundle(); bundle != nil {
-			if err := closeRuntimeBundleSinks(bundle.logSink, bundle.metricsSink); err != nil {
+			if err := closeRuntimeBundleSinks(bundle.LogSink, bundle.MetricsSink); err != nil {
 				fs.logger.Warn("runtime artifact close failed", zap.Error(err))
 			}
 		}
@@ -540,9 +494,9 @@ func (fs *FactoryService) startRunRuntime(
 
 func (fs *FactoryService) startRunSidecars(runCtx context.Context, sidecars *sync.WaitGroup, serviceMode bool) {
 	if !serviceMode {
-		var listener *ingest.FileWatcher
+		var listener *factoryingest.FileWatcher
 		if bundle := fs.currentRuntimeBundle(); bundle != nil {
-			listener = bundle.listener
+			listener = bundle.Listener
 		}
 		fs.startListenerSidecar(runCtx, sidecars, listener, fs.logger)
 	}
@@ -552,7 +506,7 @@ func (fs *FactoryService) startRunSidecars(runCtx context.Context, sidecars *syn
 func (fs *FactoryService) startListenerSidecar(
 	runCtx context.Context,
 	sidecars *sync.WaitGroup,
-	listener *ingest.FileWatcher,
+	listener *factoryingest.FileWatcher,
 	logger *zap.Logger,
 ) {
 	sidecars.Add(1)
@@ -669,15 +623,15 @@ func (fs *FactoryService) startAPIServerSidecar(runCtx context.Context, sidecars
 
 func (fs *FactoryService) logServiceStartup() {
 	bundle := fs.currentRuntimeBundle()
-	if bundle == nil || bundle.logSink == nil {
+	if bundle == nil || bundle.LogSink == nil {
 		return
 	}
-	runtimeLogConfig := bundle.logSink.Config()
+	runtimeLogConfig := bundle.LogSink.Config()
 	fs.logger.Info("factory started",
 		zap.String("dir", fs.cfg.Dir),
-		zap.String("runtime_log_path", bundle.logSink.Path()),
-		zap.String("runtime_log_root", bundle.logSink.RootDir()),
-		zap.String("runtime_log_start_time_utc", runtimeLogStartTimeString(bundle.logSink.StartTimeUTC())),
+		zap.String("runtime_log_path", bundle.LogSink.Path()),
+		zap.String("runtime_log_root", bundle.LogSink.RootDir()),
+		zap.String("runtime_log_start_time_utc", runtimeLogStartTimeString(bundle.LogSink.StartTimeUTC())),
 		zap.String("runtime_log_appender", logging.RuntimeLogAppenderZapRollingFile),
 		zap.Int("runtime_log_max_size_mb", runtimeLogConfig.MaxSize),
 		zap.Int("runtime_log_max_backups", runtimeLogConfig.MaxBackups),
@@ -731,11 +685,11 @@ func (fs *FactoryService) currentRuntimeBundle() *factoryRuntimeBundle {
 		return nil
 	}
 	if runState := fs.currentRunState(); runState != nil && runState.runtime != nil {
-		return runState.runtime.runtime
+		return runState.runtime.Bundle
 	}
 	if session := fs.defaultSession(); session != nil {
 		if handle := liveSessionHandle(session); handle != nil {
-			return handle.runtime
+			return handle.Bundle
 		}
 	}
 	return fs.startupRuntimeBundle()
@@ -746,56 +700,32 @@ func (fs *FactoryService) publishFactoryChangeEvent(
 	currentRuntime *liveRuntimeHandle,
 	replacement *factoryRuntimeBundle,
 ) {
-	if replacement == nil || replacement.eventHistory == nil {
+	if replacement == nil || replacement.EventHistory == nil {
 		return
 	}
 
-	payload, ok := replacementFactoryChangePayload(replacement.eventHistory.Events())
+	payload, ok := replacementFactoryChangePayload(replacement.EventHistory.Events())
 	if !ok {
 		return
 	}
 
 	eventTime := factory.EnsureClock(fs.clock).Now()
-	replacement.eventHistory.RecordFactoryChange(1, payload, eventTime)
+	replacement.EventHistory.RecordFactoryChange(1, payload, eventTime)
 
-	if currentRuntime == nil || currentRuntime.runtime == nil || currentRuntime.runtime.eventHistory == nil {
+	if currentRuntime == nil || currentRuntime.Bundle == nil || currentRuntime.Bundle.EventHistory == nil {
 		return
 	}
 
-	snapshot, err := currentRuntime.runtime.factory.GetEngineStateSnapshot(ctx)
+	snapshot, err := currentRuntime.Bundle.Factory.GetEngineStateSnapshot(ctx)
 	if err != nil {
 		fs.logger.Warn("read current runtime tick for factory-change event failed", zap.Error(err))
 		return
 	}
-	currentRuntime.runtime.eventHistory.RecordFactoryChange(snapshot.TickCount+1, payload, eventTime)
+	currentRuntime.Bundle.EventHistory.RecordFactoryChange(snapshot.TickCount+1, payload, eventTime)
 }
 
 func (fs *FactoryService) startLiveRuntime(ctx context.Context, runtimeBundle *factoryRuntimeBundle) *liveRuntimeHandle {
-	if runtimeBundle == nil {
-		return nil
-	}
-	runCtx, runCancel := context.WithCancel(ctx)
-	handle := &liveRuntimeHandle{
-		runtime:   runtimeBundle,
-		runCancel: runCancel,
-		runDone:   make(chan struct{}),
-	}
-	if runtimeBundle.recording != nil {
-		runtimeBundle.recording.Start(runCtx)
-		if err := runtimeBundle.recording.Flush(); err != nil {
-			handle.setRunResult(err)
-			return handle
-		}
-	}
-	runtimeBundle.emitRuntimeLifecycleStart()
-	go func() {
-		err := runtimeBundle.factory.Run(runCtx)
-		if err == nil && runCtx.Err() != nil {
-			err = context.Canceled
-		}
-		handle.setRunResult(err)
-	}()
-	return handle
+	return factoryservice.Start(ctx, runtimeBundle)
 }
 
 func (fs *FactoryService) startLiveRuntimeSidecars(ctx context.Context, handle *liveRuntimeHandle) error {
@@ -804,46 +734,46 @@ func (fs *FactoryService) startLiveRuntimeSidecars(ctx context.Context, handle *
 
 func (c *runtimeFactoryCoordinator) startLiveRuntimeSidecars(ctx context.Context, handle *liveRuntimeHandle) error {
 	fs := c.service
-	if handle == nil || handle.runtime == nil {
+	if handle == nil || handle.Bundle == nil {
 		return fmt.Errorf("runtime handle is required")
 	}
 
-	handle.sidecarMu.Lock()
-	defer handle.sidecarMu.Unlock()
-	if handle.sidecarCancel != nil {
+	handle.SidecarMu.Lock()
+	defer handle.SidecarMu.Unlock()
+	if handle.SidecarCancel != nil {
 		return nil
 	}
 
 	sidecarCtx, sidecarCancel := context.WithCancel(ctx)
-	handle.sidecarCancel = sidecarCancel
-	handle.sidecars.Add(1)
+	handle.SidecarCancel = sidecarCancel
+	handle.Sidecars.Add(1)
 	go func() {
-		defer handle.sidecars.Done()
-		fs.observeRuntimeMetrics(sidecarCtx, handle)
+		defer handle.Sidecars.Done()
+		factoryservice.ObserveRuntimeMetrics(sidecarCtx, handle)
 	}()
-	if handle.runtime.listener != nil {
-		handle.sidecars.Add(1)
+	if handle.Bundle.Listener != nil {
+		handle.Sidecars.Add(1)
 		go func() {
-			defer handle.sidecars.Done()
-			if err := handle.runtime.listener.Watch(sidecarCtx); err != nil && !errors.Is(err, context.Canceled) {
-				handle.runtime.runtimeLogger().Error("file watcher error", zap.Error(err))
+			defer handle.Sidecars.Done()
+			if err := handle.Bundle.Listener.Watch(sidecarCtx); err != nil && !errors.Is(err, context.Canceled) {
+				handle.Bundle.RuntimeLogger().Error("file watcher error", zap.Error(err))
 			}
 		}()
 	}
 
 	fs.startSchedulerSidecarsForRuntime(
 		sidecarCtx,
-		&handle.sidecars,
-		handle.runtime.runtimeCfg.FactoryDir(),
-		handle.runtime.runtimeCfg.FactoryConfig(),
-		handle.runtime.runtimeCfg,
-		submitWorkRequestWithFactory(handle.runtime.factory),
+		&handle.Sidecars,
+		handle.Bundle.RuntimeCfg.FactoryDir(),
+		handle.Bundle.RuntimeCfg.FactoryConfig(),
+		handle.Bundle.RuntimeCfg,
+		submitWorkRequestWithFactory(handle.Bundle.Factory),
 	)
-	if handle.runtime.listener != nil {
-		if err := handle.runtime.listener.PreseedInputs(sidecarCtx); err != nil {
+	if handle.Bundle.Listener != nil {
+		if err := handle.Bundle.Listener.PreseedInputs(sidecarCtx); err != nil {
 			sidecarCancel()
-			handle.sidecars.Wait()
-			handle.sidecarCancel = nil
+			handle.Sidecars.Wait()
+			handle.SidecarCancel = nil
 			return fmt.Errorf("preseed inputs: %w", err)
 		}
 	}
@@ -855,32 +785,7 @@ func (fs *FactoryService) stopLiveRuntimeSidecars(handle *liveRuntimeHandle) {
 }
 
 func (c *runtimeFactoryCoordinator) stopLiveRuntimeSidecars(handle *liveRuntimeHandle) {
-	if handle == nil {
-		return
-	}
-	handle.sidecarMu.Lock()
-	cancel := handle.sidecarCancel
-	handle.sidecarCancel = nil
-	handle.sidecarMu.Unlock()
-	if cancel == nil {
-		return
-	}
-	cancel()
-	handle.sidecars.Wait()
-}
-
-func (fs *FactoryService) restoreLiveRuntimeSidecars(runState *serviceRunState) {
-	fs.requireCoordinator().restoreLiveRuntimeSidecars(runState)
-}
-
-func (c *runtimeFactoryCoordinator) restoreLiveRuntimeSidecars(runState *serviceRunState) {
-	fs := c.service
-	if runState == nil || runState.ctx == nil || runState.runtime == nil {
-		return
-	}
-	if err := fs.startLiveRuntimeSidecars(runState.ctx, runState.runtime); err != nil {
-		fs.logger.Error("restore prior runtime sidecars failed", zap.Error(err))
-	}
+	factoryservice.StopSidecars(handle)
 }
 
 func (fs *FactoryService) stopLiveRuntime(handle *liveRuntimeHandle) error {
@@ -892,13 +797,9 @@ func (c *runtimeFactoryCoordinator) stopLiveRuntime(handle *liveRuntimeHandle) e
 	if handle == nil {
 		return nil
 	}
-	if handle.runCancel != nil && !handle.completed() {
-		handle.runCancel()
-	}
-	runErr := handle.wait()
-	fs.finalizeRuntimeLifecycleMetrics(handle, runtimeMetricsObservation{})
+	err := factoryservice.Stop(handle, fs.clock)
 	fs.stopLiveRuntimeSidecars(handle)
-	return errors.Join(runErr, fs.finalizeRuntimeArtifacts(handle.runtime))
+	return err
 }
 
 func (fs *FactoryService) shutdownOtherLiveSessions(except *liveRuntimeHandle) error {
@@ -931,63 +832,5 @@ func (c *runtimeFactoryCoordinator) shutdownOtherLiveSessions(except *liveRuntim
 }
 
 func (fs *FactoryService) waitForLiveRuntimeStart(ctx context.Context, handle *liveRuntimeHandle) error {
-	if handle == nil || handle.runtime == nil {
-		return fmt.Errorf("runtime handle is required")
-	}
-
-	startCtx, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-startCtx.Done():
-			if handle.completed() {
-				return handle.result()
-			}
-			return startCtx.Err()
-		case <-handle.runDone:
-			return handle.result()
-		case <-ticker.C:
-			snap, err := handle.runtime.factory.GetEngineStateSnapshot(context.Background())
-			if err != nil {
-				continue
-			}
-			if snap.FactoryState == string(interfaces.FactoryStateRunning) {
-				return nil
-			}
-		}
-	}
-}
-
-func isCanceledServiceStartup(ctx context.Context, err error) bool {
-	return ctx != nil && ctx.Err() != nil && errors.Is(err, context.Canceled)
-}
-
-func (fs *FactoryService) waitForActiveRuntime(ctx context.Context) error {
-	for {
-		handle := fs.currentLiveRuntime()
-		if handle == nil {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(25 * time.Millisecond):
-				continue
-			}
-		}
-		select {
-		case <-ctx.Done():
-			_ = handle.wait()
-		case <-handle.runDone:
-		}
-		if fs.currentLiveRuntime() != handle {
-			continue
-		}
-		if runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService &&
-			fs.sessions != nil && fs.sessions.Count() == 0 {
-			continue
-		}
-		return handle.result()
-	}
+	return factoryservice.WaitForStart(ctx, handle)
 }

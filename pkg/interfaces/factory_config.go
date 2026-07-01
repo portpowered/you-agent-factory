@@ -619,6 +619,7 @@ type WorkerConfig struct {
 	OpenCodeAgent    string                    `json:"openCodeAgent,omitempty" yaml:"openCodeAgent,omitempty"`
 	Auth             *HostedWorkerAuthConfig   `json:"auth,omitempty" yaml:"auth,omitempty"`
 	Linear           *HostedLinearWorkerConfig `json:"linear,omitempty" yaml:"linear,omitempty"`
+	AgentTools       *AgentWorkerToolsConfig   `json:"agentTools,omitempty" yaml:"agentTools,omitempty"`
 	Body             string                    `json:"body,omitempty" yaml:"-"`
 
 	// Internal-only runtime fields retained during contract cleanup.
@@ -754,4 +755,57 @@ var publicFactoryOrchestratorKindAliases = map[string]string{
 // GeneratedPublicFactoryOrchestratorKind returns the generated orchestrator kind enum.
 func GeneratedPublicFactoryOrchestratorKind(kind string) factoryapi.FactoryOrchestratorKind {
 	return factoryapi.FactoryOrchestratorKind(StrictPublicFactoryOrchestratorKind(kind))
+}
+
+const (
+	AgentWorkerToolPolicyDisabled = "DISABLED"
+	AgentWorkerToolPolicyReadOnly = "READ_ONLY"
+	AgentWorkerToolPolicyEnabled  = "ENABLED"
+)
+
+// AgentWorkerToolsConfig carries explicit tool policy for AGENT_WORKER definitions.
+type AgentWorkerToolsConfig struct {
+	Policy string `json:"policy" yaml:"policy"`
+}
+
+// EffectiveAgentWorkerToolPolicy returns the configured policy or DISABLED when unset.
+func EffectiveAgentWorkerToolPolicy(cfg *AgentWorkerToolsConfig) string {
+	if cfg == nil || strings.TrimSpace(cfg.Policy) == "" {
+		return AgentWorkerToolPolicyDisabled
+	}
+	return strings.TrimSpace(cfg.Policy)
+}
+
+// NormalizeAgentWorkerToolPolicy maps public API values onto canonical runtime strings.
+func NormalizeAgentWorkerToolPolicy(policy string) string {
+	switch strings.TrimSpace(policy) {
+	case "", AgentWorkerToolPolicyDisabled:
+		return AgentWorkerToolPolicyDisabled
+	case AgentWorkerToolPolicyReadOnly:
+		return AgentWorkerToolPolicyReadOnly
+	case AgentWorkerToolPolicyEnabled:
+		return AgentWorkerToolPolicyEnabled
+	default:
+		return strings.TrimSpace(policy)
+	}
+}
+
+// IsKnownAgentWorkerToolPolicy reports whether policy is one of the supported modes.
+func IsKnownAgentWorkerToolPolicy(policy string) bool {
+	switch NormalizeAgentWorkerToolPolicy(policy) {
+	case AgentWorkerToolPolicyDisabled, AgentWorkerToolPolicyReadOnly, AgentWorkerToolPolicyEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// AgentWorkerToolsAllowExecution reports whether the policy permits tool execution.
+func AgentWorkerToolsAllowExecution(policy string) bool {
+	switch NormalizeAgentWorkerToolPolicy(policy) {
+	case AgentWorkerToolPolicyReadOnly, AgentWorkerToolPolicyEnabled:
+		return true
+	default:
+		return false
+	}
 }

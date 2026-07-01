@@ -20,7 +20,7 @@ enum:
   - CLASSIFIER_WORKSTATION
 x-enum-descriptions:
   - One-shot inference workstation that resolves operation bindings and dispatches through an inference worker.
-  - Agent-run workstation reserved for future agent-loop execution that renders prompts and dispatches through an agent worker.
+  - Agent-run workstation that renders prompts and dispatches through an agent worker for iterative agent-loop execution.
   - Script-run workstation that executes deterministic command or script behavior through a script worker.
   - Poller-run workstation that supervises ingress polling through a poller worker.
   - Legacy alias for agent-run behavior during the migration window.

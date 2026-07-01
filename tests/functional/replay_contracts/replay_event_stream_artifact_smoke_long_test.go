@@ -114,7 +114,7 @@ func assertReplayArtifactReplaysOverSSEWithRuntimeMirroring(
 		cfg.Logger = zap.NewNop()
 	})
 
-	stream := openFactoryEventHTTPStream(t, server.URL()+"/events")
+	stream := openFactoryEventHTTPStream(t, support.DefaultSessionEventsURL(server.URL()))
 	runStarted, first := requireFunctionalEventStreamPrelude(t, stream)
 	streamedEvents := collectUnifiedSmokeEventsUntilRunResponse(
 		t,

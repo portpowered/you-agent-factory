@@ -136,8 +136,8 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * Stream factory events
-     * @description Streams current-process canonical factory events as default Server-Sent Events. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
+     * Stream process-global factory events (compatibility-only)
+     * @description Compatibility-only process-global event stream retained for legacy tooling and operator diagnostics. New dashboard, Factory Session, and durable replay consumers should use GET /factory-sessions/{session_id}/events so reconnect cursors and stream recovery have explicit session context. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point.
      */
     get: operations["getEvents"];
     put?: never;
@@ -157,7 +157,7 @@ export interface paths {
     };
     /**
      * Stream factory events for one session
-     * @description Streams canonical factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. When the request asks for application/json, the same route acts as a reconnect probe and returns a structured recovery outcome instead of opening Server-Sent Events. Probe responses classify cursor_stale separately from unknown-session failures and tell the dashboard when the next retry must omit after_event_id and after_sequence. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+     * @description Canonical event stream for dashboard, Factory Session, and durable replay traffic. Streams factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. When the request asks for application/json, the same route acts as a reconnect probe and returns a structured recovery outcome instead of opening Server-Sent Events. Probe responses classify cursor_stale separately from unknown-session failures and tell the dashboard when the next retry must omit after_event_id and after_sequence. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
      */
     get: operations["getEventsBySessionId"];
     put?: never;
@@ -2826,6 +2826,7 @@ export interface components {
     FactoryWorldWorkDiagnostics: {
       renderedPrompt?: components["schemas"]["FactoryWorldRenderedPromptDiagnostic"];
       provider?: components["schemas"]["FactoryWorldProviderDiagnostic"];
+      agentRun?: components["schemas"]["SafeAgentRunDiagnostic"];
       invocation?: components["schemas"]["FactoryWorldInvocationDiagnostic"];
     };
     FactoryWorldWorkItemRef: {
@@ -2885,6 +2886,26 @@ export interface components {
       exitCode?: number;
       failureType?: string;
     };
+    /** @description Customer-visible agent-run inspection for one workstation dispatch response. */
+    FactoryWorldAgentRunInspectionView: {
+      /** @description Stable execution behavior marker for agent-loop runs. */
+      executionBehavior?: string;
+      /** @description Stable agent-run failure class when execution failed. */
+      failureClass?: string;
+      /** @description Customer-visible recovery guidance for actionable agent-run failures. */
+      recoveryAction?: string;
+      /** @description Effective agent tool policy for the run. */
+      toolPolicy?: string;
+      /**
+       * Format: int32
+       * @description Number of recorded tool lifecycle events for the run.
+       */
+      toolCallCount?: number;
+      /** @description Bounded tool diagnostics separate from final agent output. */
+      toolDiagnostics?: components["schemas"]["AgentRunToolDiagnosticEntry"][];
+      /** @description Bounded transcript metadata separate from tool diagnostics and final output. */
+      transcript?: components["schemas"]["AgentRunTranscriptEntry"][];
+    };
     FactoryWorldSelectedRunnerView: {
       runnerId?: components["schemas"]["RunnerID"];
       displayName?: string;
@@ -2931,6 +2952,7 @@ export interface components {
       failureReason?: string;
       failureMessage?: string;
       scriptResponse?: components["schemas"]["FactoryWorldScriptResponseView"];
+      agentRunInspection?: components["schemas"]["FactoryWorldAgentRunInspectionView"];
       /** Format: date-time */
       endTime?: string;
       /** Format: int64 */
@@ -2970,6 +2992,7 @@ export interface components {
         | components["schemas"]["InferenceResponseEventPayload"]
         | components["schemas"]["ScriptRequestEventPayload"]
         | components["schemas"]["ScriptResponseEventPayload"]
+        | components["schemas"]["AgentRunResponseEventPayload"]
         | components["schemas"]["DispatchResponseEventPayload"]
         | components["schemas"]["WorkStateChangeEventPayload"]
         | components["schemas"]["FactoryStateResponseEventPayload"]
@@ -3236,6 +3259,18 @@ export interface components {
       exitCode?: number;
       failureType?: components["schemas"]["ScriptFailureType"];
     };
+    /** @description Response details captured after an AGENT_RUN workstation completes an agent loop. Final output stays on DispatchResponse; bounded agent-run diagnostics and transcript metadata stay on this agent-boundary event instead of being copied onto provider-session inspection surfaces. */
+    AgentRunResponseEventPayload: {
+      /** @description Stable identifier for this agent-run boundary event. */
+      agentRunId: string;
+      outcome: components["schemas"]["WorkOutcome"];
+      /**
+       * Format: int64
+       * @description Agent-loop execution duration in milliseconds.
+       */
+      durationMillis: number;
+      diagnostics?: components["schemas"]["SafeWorkDiagnostics"];
+    };
     /** @description Customer-visible dispatch completion event. Output work is represented with the same Work schema used by request submission rather than token or marking-mutation internals. FactoryEvent.context owns dispatch, trace, and work identity; workstation and worker topology must be derived from the matching dispatch-request event plus the initial structure. Provider-attempt session and safe diagnostic facts stay on inference response events instead of being copied onto dispatch completion payloads. */
     DispatchResponseEventPayload: {
       completionId?: string;
@@ -3402,7 +3437,47 @@ export interface components {
     SafeWorkDiagnostics: {
       renderedPrompt?: components["schemas"]["RenderedPromptDiagnostic"];
       provider?: components["schemas"]["ProviderDiagnostic"];
+      agentRun?: components["schemas"]["SafeAgentRunDiagnostic"];
       invocation?: components["schemas"]["InvocationDiagnostic"];
+    };
+    /** @description Dashboard-safe agent-run inspection metadata distinct from provider-session transcript ownership. */
+    SafeAgentRunDiagnostic: {
+      /**
+       * @description Stable execution behavior marker for agent-loop runs.
+       * @enum {string}
+       */
+      executionBehavior?: SafeAgentRunDiagnosticExecutionBehavior;
+      /** @description Stable agent-run failure class when execution failed. */
+      failureClass?: string;
+      /** @description Customer-visible recovery guidance for actionable agent-run failures. */
+      recoveryAction?: string;
+      /** @description Effective agent tool policy for the run. */
+      toolPolicy?: string;
+      /**
+       * Format: int32
+       * @description Number of recorded tool lifecycle events for the run.
+       */
+      toolCallCount?: number;
+      /** @description Bounded tool diagnostics separate from final agent output. */
+      toolDiagnostics?: components["schemas"]["AgentRunToolDiagnosticEntry"][];
+      /** @description Bounded transcript metadata separate from tool diagnostics and final output. */
+      transcript?: components["schemas"]["AgentRunTranscriptEntry"][];
+    };
+    /** @description Bounded summary for one agent tool lifecycle event. */
+    AgentRunToolDiagnosticEntry: {
+      /** @description Tool name invoked by the agent loop. */
+      toolName?: string;
+      /** @description Tool lifecycle phase such as start, success, failure, or denied. */
+      phase?: string;
+      /** @description Safe diagnostic detail without raw process output or secrets. */
+      detail?: string;
+    };
+    /** @description Bounded transcript metadata for one agent-loop message without exposing full prompt bodies. */
+    AgentRunTranscriptEntry: {
+      /** @description Message role such as system, user, assistant, or tool. */
+      role?: string;
+      /** @description Bounded summary of the message content for inspection. */
+      summary?: string;
     };
     WallClock: {
       /** Format: date-time */
@@ -3987,9 +4062,21 @@ export interface components {
       auth?: components["schemas"]["HostedWorkerAuth"];
       /** @description Provider-specific configuration for the built-in hosted LINEAR worker. */
       linear?: components["schemas"]["HostedLinearWorkerConfig"];
+      /** @description Explicit agent-loop tool policy for AGENT_WORKER definitions. Omit or set policy DISABLED to run agent loops without advertising or executing tools. */
+      agentTools?: components["schemas"]["AgentWorkerToolsConfig"];
       /** @description Inline worker instructions or script body when the worker is authored directly in factory config. */
       body?: string;
     };
+    /** @description Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy. */
+    AgentWorkerToolsConfig: {
+      /** @description Required executor policy for agent-loop tool use on this worker. */
+      policy: components["schemas"]["AgentWorkerToolPolicy"];
+    };
+    /**
+     * @description Explicit tool execution policy for AGENT_WORKER agent loops. DISABLED runs the harness in no-tools mode. READ_ONLY exposes bounded filesystem read tools. ENABLED adds bounded filesystem write capability for the first supported tool set.
+     * @enum {string}
+     */
+    AgentWorkerToolPolicy: AgentWorkerToolPolicy;
     /**
      * @description Worker implementation families supported by the public factory-config contract.
      * @enum {string}
@@ -5175,6 +5262,8 @@ export interface operations {
       /** @description Factory event stream for the targeted session, or a JSON reconnect recovery probe result when Accept includes application/json. */
       200: {
         headers: {
+          /** @description Stable backend scope identifier for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `backendScopeId` values before reusing reconnect cursors or stream-derived projections. */
+          "X-Factory-Session-Backend-Scope-Id"?: string;
           /** @description Opaque invalidation token for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `streamGenerationID` values before reusing reconnect cursors or stream-derived projections. */
           "X-Factory-Session-Stream-Generation-Id"?: string;
           [name: string]: unknown;
@@ -6794,6 +6883,8 @@ export const FactoryEventType = {
   FactoryEventTypeScriptRequest: "SCRIPT_REQUEST",
   // A script-backed worker command attempt returned or failed before a normal exit.
   FactoryEventTypeScriptResponse: "SCRIPT_RESPONSE",
+  // An AGENT_RUN workstation agent loop completed and returned bounded inspection metadata.
+  FactoryEventTypeAgentRunResponse: "AGENT_RUN_RESPONSE",
   // A workstation response finished processing and produced an outcome.
   FactoryEventTypeDispatchResponse: "DISPATCH_RESPONSE",
   // A work item moved between authored marking states.
@@ -6924,6 +7015,12 @@ export const WorkFailureType = {
 } as const;
 export type WorkFailureType =
   (typeof WorkFailureType)[keyof typeof WorkFailureType];
+export const SafeAgentRunDiagnosticExecutionBehavior = {
+  // Agent-loop execution through AGENT_RUN workstations.
+  agent_run: "agent_run",
+} as const;
+export type SafeAgentRunDiagnosticExecutionBehavior =
+  (typeof SafeAgentRunDiagnosticExecutionBehavior)[keyof typeof SafeAgentRunDiagnosticExecutionBehavior];
 export const FactorySaveMode = {
   // Replace the factory already current in the selected live session.
   FactorySaveModeReplaceCurrent: "REPLACE_CURRENT",
@@ -7051,10 +7148,17 @@ export const ResourceType = {
   ResourceTypeInvocationSlot: "INVOCATION_SLOT",
 } as const;
 export type ResourceType = (typeof ResourceType)[keyof typeof ResourceType];
+export const AgentWorkerToolPolicy = {
+  AgentWorkerToolPolicyDISABLED: "DISABLED",
+  AgentWorkerToolPolicyREADONLY: "READ_ONLY",
+  AgentWorkerToolPolicyENABLED: "ENABLED",
+} as const;
+export type AgentWorkerToolPolicy =
+  (typeof AgentWorkerToolPolicy)[keyof typeof AgentWorkerToolPolicy];
 export const WorkerType = {
   // Inference worker that performs one bounded model operation through the configured provider or managed runtime.
   WorkerTypeInferenceWorker: "INFERENCE_WORKER",
-  // Agent worker reserved for future agent-loop execution; not used for harnessless inference calls.
+  // Agent worker that executes prompt-rendered agent loops through AGENT_RUN workstations. Model capability declarations belong on INFERENCE_WORKER, not AGENT_WORKER.
   WorkerTypeAgentWorker: "AGENT_WORKER",
   // Script-backed worker that executes a configured command instead of calling a model provider.
   WorkerTypeScriptWorker: "SCRIPT_WORKER",
@@ -7156,7 +7260,7 @@ export type WorkstationKind =
 export const WorkstationType = {
   // One-shot inference workstation that resolves operation bindings and dispatches through an inference worker.
   WorkstationTypeInferenceRun: "INFERENCE_RUN",
-  // Agent-run workstation reserved for future agent-loop execution that renders prompts and dispatches through an agent worker.
+  // Agent-run workstation that renders prompts and dispatches through an agent worker for iterative agent-loop execution.
   WorkstationTypeAgentRun: "AGENT_RUN",
   // Script-run workstation that executes deterministic command or script behavior through a script worker.
   WorkstationTypeScriptRun: "SCRIPT_RUN",

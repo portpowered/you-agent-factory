@@ -204,6 +204,9 @@ func TestInferenceProgressPublishingCommandRunner_MapsUnknownAndMalformedCodexEv
 }
 
 func TestInferenceProgressPublishingCommandRunner_MapsFailureCancelAndTruncation(t *testing.T) {
+	// Do not run in parallel: Linux CI can return "text file busy" when executing
+	// the freshly written shell script under heavy parallel package load.
+
 	progressPayload := strings.Repeat("p", codexRetainedProgressBytes+73)
 	deltaPayload := strings.Repeat("d", codexRetainedTextBytes+29)
 	finalPayload := strings.Repeat("f", codexRetainedTextBytes+41)
