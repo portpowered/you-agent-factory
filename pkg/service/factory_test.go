@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
@@ -4349,9 +4350,9 @@ func TestRuntimeModelService_PullModel_RecordsManagedRuntimeMetrics(t *testing.T
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	svc := newModelService(modelServiceDependencies{
-		runtimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		modelAssetPuller: func() modelAssetPuller {
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelAssetPuller: func() localmodels.AssetPuller {
 			return &managedPullMetricsAssetPuller{
 				result: apisurface.ModelPullResult{
 					ModelName: "OMNIVOICE_Q4_K_M",
@@ -4367,7 +4368,9 @@ func TestRuntimeModelService_PullModel_RecordsManagedRuntimeMetrics(t *testing.T
 				},
 			}
 		},
-		modelPullMetrics: func() ModelPullMetricsRecorder { return recorder },
+		ModelPullMetrics: func() modelsservice.PullMetricsRecorder {
+			return modelPullMetricsTestAdapter{inner: recorder}
+		},
 	})
 
 	if _, err := svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M"); err != nil {
@@ -4403,14 +4406,16 @@ func TestRuntimeModelService_PullModel_RecordsSourceFailureMetric(t *testing.T) 
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	svc := newModelService(modelServiceDependencies{
-		runtimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
-		modelAssetPuller: func() modelAssetPuller {
+	svc := modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
+		ModelAssetPuller: func() localmodels.AssetPuller {
 			return &managedPullMetricsAssetPuller{
 				err: apisurface.ErrManagedRuntimeSourceFetchFailed,
 			}
 		},
-		modelPullMetrics: func() ModelPullMetricsRecorder { return recorder },
+		ModelPullMetrics: func() modelsservice.PullMetricsRecorder {
+			return modelPullMetricsTestAdapter{inner: recorder}
+		},
 	})
 
 	_, err = svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
@@ -4443,6 +4448,14 @@ func (r *capturingModelPullMetricsRecorder) RecordModelPullMetric(metric Invocat
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.metrics = append(r.metrics, metric)
+}
+
+type modelPullMetricsTestAdapter struct {
+	inner *capturingModelPullMetricsRecorder
+}
+
+func (a modelPullMetricsTestAdapter) RecordModelPullMetric(metric modelsservice.PullMetric) {
+	a.inner.RecordModelPullMetric(InvocationMetric{Name: metric.Name, Labels: metric.Labels})
 }
 
 func (r *capturingModelPullMetricsRecorder) assertContainsMetric(t *testing.T, name string, labels map[string]string) {
@@ -4773,13 +4786,15 @@ func TestFactoryService_ComposeCollaboratorSnapshot_ReflectsCoreAndFactorySave(t
 	}
 
 	svc := NewFactoryServiceFromCore(core)
+	shell := FactoryServiceShell{Service: svc}
+	svc = AttachModelServiceCollaborator(shell, ProvideModelServiceCollaborator(shell, core.cfg))
 	svc.factorySave = &recordingFactorySaveSaver{}
 
 	snapshot := svc.ComposeCollaboratorSnapshot()
 	if !snapshot.SessionsInitialized || !snapshot.RuntimeBuildInitialized || !snapshot.LocalModelsInitialized {
 		t.Fatalf("snapshot missing core collaborators: %+v", snapshot)
 	}
-	if !snapshot.ModelAssetsInitialized || !snapshot.FactorySaveInitialized || !snapshot.DefinitionsInitialized {
+	if !snapshot.ModelAssetsInitialized || !snapshot.ModelServiceInitialized || !snapshot.FactorySaveInitialized || !snapshot.DefinitionsInitialized {
 		t.Fatalf("snapshot missing service collaborators: %+v", snapshot)
 	}
 	if !snapshot.HostedWorkersLoggerReady || !snapshot.BundleModelResources || !snapshot.BundleLocalModels {
