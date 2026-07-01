@@ -8,6 +8,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 )
 
@@ -147,4 +148,62 @@ func TestValidateFactoryAPI_ProfilePrePersist_ValidFactory_NoTargets(t *testing.
 	if result.HasTargets() {
 		t.Fatalf("valid factory targets = %#v, want none", result.Targets)
 	}
+}
+
+func TestValidateFactoryAPI_ProfileTopology_RejectsInvalidInvocationSignature(t *testing.T) {
+	t.Parallel()
+
+	cfg := &interfaces.FactoryConfig{
+		Name: "signature-invalid",
+		InvocationSignature: &interfaces.InvocationSignatureConfig{
+			UnknownNamedArgumentPolicy: "COLLECT",
+			Parameters: []interfaces.InvocationParameterConfig{
+				{
+					Name:         "items",
+					ExternalName: "items",
+					ValueMode:    "REPEATED",
+					Bindings: []interfaces.InvocationParameterBindingConfig{
+						{Kind: "NAMED"},
+					},
+				},
+			},
+			OutputContract: &interfaces.InvocationOutputContractConfig{
+				Mode:          "FILE",
+				PathParameter: "missing-output",
+			},
+		},
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "task",
+			States: []interfaces.StateConfig{
+				{Name: "queued", Type: interfaces.StateTypeInitial},
+				{Name: "done", Type: interfaces.StateTypeTerminal},
+				{Name: "failed", Type: interfaces.StateTypeFailed},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{
+			Name:  "worker-a",
+			Type:  interfaces.WorkerTypeInference,
+			Model: "${missing}",
+		}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "process",
+			WorkerTypeName: "worker-a",
+			Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "queued"}},
+			Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
+			OnFailure:      []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}},
+			Body:           "Use ${items}",
+		}},
+	}
+	factory := factoryconfig.FactoryConfigToOpenAPI(cfg)
+
+	result, err := validationentry.ValidateFactoryAPI(context.Background(), factory, factoryvalidation.Options{
+		Profile: factoryvalidation.ProfileTopology,
+	})
+	if err != nil {
+		t.Fatalf("ValidateFactoryAPI: %v", err)
+	}
+
+	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureUnknownOutputPathParameter)
+	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureInvalidInterpolationReference)
+	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeInvocationSignatureIncompatibleInterpolationReference)
 }

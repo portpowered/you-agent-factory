@@ -43,6 +43,48 @@ export interface SubmitWorkMessages {
     success: (traceId: string) => string;
     workTypeOnly: string;
   };
+  invocation: {
+    addRepeatedValue: (label: string) => string;
+    aliases: (aliases: string[]) => string;
+    booleanFalseAction: string;
+    booleanTrueAction: string;
+    booleanUnsetAction: string;
+    cardTitle: string;
+    defaultValue: (values: string[]) => string;
+    directoryPathPlaceholder: string;
+    emptyParametersState: string;
+    exampleStdin: (value: string) => string;
+    examplesTitle: string;
+    filePathPlaceholder: string;
+    loadingState: string;
+    namedBinding: (name: string) => string;
+    outputContentType: (value: string) => string;
+    outputFileExtension: (value: string) => string;
+    outputHintTitle: string;
+    outputModeLabel: (mode: string) => string;
+    outputPathParameter: (name: string) => string;
+    pathPlaceholder: string;
+    positionalBinding: (position: number) => string;
+    primaryResultReady: string;
+    removeRepeatedValue: (label: string, position: number) => string;
+    requiredAffordance: string;
+    selectOptionPlaceholder: string;
+    statusMessages: {
+      errorFallback: string;
+      runtimeFailed: (status: string) => string;
+      submitting: string;
+      success: (traceId: string) => string;
+      validationFailed: string;
+    };
+    stdinBinding: string;
+    submitAction: string;
+    submittingAction: string;
+    textPlaceholder: string;
+    validationMessages: {
+      repeatedItemRequired: string;
+      requiredField: (label: string) => string;
+    };
+  };
   validationMessages: {
     bothMissing: string;
     fileItemNeedsStaging: string;
@@ -116,6 +158,52 @@ const submitWorkMessagesByLocale = {
       success: (traceId) => `Your request was submitted. Trace ID: ${traceId}.`,
       workTypeOnly: "Choose a work type to continue.",
     },
+    invocation: {
+      addRepeatedValue: (label) => `Add ${label}`,
+      aliases: (aliases) => `Aliases: ${aliases.join(", ")}`,
+      booleanFalseAction: "False",
+      booleanTrueAction: "True",
+      booleanUnsetAction: "Use default",
+      cardTitle: "Run factory",
+      defaultValue: (values) =>
+        `Default: ${values.length === 1 ? values[0] : values.join(", ")}`,
+      directoryPathPlaceholder: "Enter a directory path.",
+      emptyParametersState:
+        "This factory can be invoked without additional arguments.",
+      exampleStdin: (value) => `stdin: ${value}`,
+      examplesTitle: "Examples",
+      filePathPlaceholder: "Enter a file path.",
+      loadingState: "Loading the current factory invocation contract...",
+      namedBinding: (name) => `Named argument: --${name}`,
+      outputContentType: (value) => `Content type: ${value}`,
+      outputFileExtension: (value) => `File extension: ${value}`,
+      outputHintTitle: "Output hint",
+      outputModeLabel: (mode) => `Output mode: ${mode}`,
+      outputPathParameter: (name) => `Output path argument: ${name}`,
+      pathPlaceholder: "Enter a path.",
+      positionalBinding: (position) => `Positional argument ${position}`,
+      primaryResultReady: "Primary result",
+      removeRepeatedValue: (label, position) =>
+        `Remove ${label} value ${position}`,
+      requiredAffordance: "required",
+      selectOptionPlaceholder: "Select a value",
+      statusMessages: {
+        errorFallback:
+          "We couldn't invoke this factory. Try again in a moment.",
+        runtimeFailed: (status) => `Invocation finished with status ${status}.`,
+        submitting: "Invoking the current factory...",
+        success: (traceId) => `Factory invocation started. Trace ID: ${traceId}.`,
+        validationFailed: "Fix the highlighted arguments before invoking.",
+      },
+      stdinBinding: "Accepts stdin input.",
+      submitAction: "Run factory",
+      submittingAction: "Running...",
+      textPlaceholder: "Enter a value.",
+      validationMessages: {
+        repeatedItemRequired: "Each repeated value must be non-empty.",
+        requiredField: (label) => `Enter ${label} before invoking.`,
+      },
+    },
     validationMessages: {
       bothMissing:
         "Choose a work type and enter a request name before submitting.",
@@ -178,6 +266,49 @@ const submitWorkMessagesByLocale = {
       submitting: "正在发送你的请求...",
       success: (traceId) => `你的请求已提交。追踪 ID：${traceId}。`,
       workTypeOnly: "先选择一个工作类型，然后即可继续。",
+    },
+    invocation: {
+      addRepeatedValue: (label) => `添加${label}`,
+      aliases: (aliases) => `别名：${aliases.join("、")}`,
+      booleanFalseAction: "否",
+      booleanTrueAction: "是",
+      booleanUnsetAction: "使用默认值",
+      cardTitle: "运行工厂",
+      defaultValue: (values) =>
+        `默认值：${values.length === 1 ? values[0] : values.join("、")}`,
+      directoryPathPlaceholder: "输入目录路径。",
+      emptyParametersState: "这个工厂无需额外参数即可运行。",
+      exampleStdin: (value) => `stdin：${value}`,
+      examplesTitle: "示例",
+      filePathPlaceholder: "输入文件路径。",
+      loadingState: "正在加载当前工厂的调用契约...",
+      namedBinding: (name) => `命名参数：--${name}`,
+      outputContentType: (value) => `内容类型：${value}`,
+      outputFileExtension: (value) => `文件扩展名：${value}`,
+      outputHintTitle: "输出提示",
+      outputModeLabel: (mode) => `输出模式：${mode}`,
+      outputPathParameter: (name) => `输出路径参数：${name}`,
+      pathPlaceholder: "输入路径。",
+      positionalBinding: (position) => `位置参数 ${position}`,
+      primaryResultReady: "主要结果",
+      removeRepeatedValue: (label, position) => `移除${label}值 ${position}`,
+      requiredAffordance: "必填",
+      selectOptionPlaceholder: "选择一个值",
+      statusMessages: {
+        errorFallback: "无法运行该工厂。请稍后再试。",
+        runtimeFailed: (status) => `调用以 ${status} 状态结束。`,
+        submitting: "正在调用当前工厂...",
+        success: (traceId) => `工厂调用已开始。追踪 ID：${traceId}。`,
+        validationFailed: "调用前请先修正高亮参数。",
+      },
+      stdinBinding: "支持从 stdin 读取输入。",
+      submitAction: "运行工厂",
+      submittingAction: "正在运行...",
+      textPlaceholder: "输入一个值。",
+      validationMessages: {
+        repeatedItemRequired: "每个重复值都必须为非空。",
+        requiredField: (label) => `调用前请输入${label}。`,
+      },
     },
     validationMessages: {
       bothMissing: "提交前请选择工作类型并填写请求名称。",

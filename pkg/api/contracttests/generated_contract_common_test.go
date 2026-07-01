@@ -270,8 +270,33 @@ var generatedFactoryEventPayloadEncoders = map[reflect.Type]func(*factoryapi.Fac
 }
 
 func generatedNamedFactoryFixture() factoryapi.Factory {
+	unknownNamedPolicy := factoryapi.FactoryInvocationUnknownNamedArgumentPolicyReject
+	parameterTypeHint := factoryapi.FactoryInvocationParameterTypeHintString
+	parameterValueMode := factoryapi.FactoryInvocationParameterValueModeExact
+	bindingKind := factoryapi.FactoryInvocationParameterBindingKindPositional
+	outputContractMode := factoryapi.FactoryInvocationOutputContractModeInline
 	return factoryapi.Factory{
 		Name: "customer-support-triage",
+		InvocationSignature: &factoryapi.FactoryInvocationSignature{
+			UnknownNamedArgumentPolicy: &unknownNamedPolicy,
+			Parameters: &[]factoryapi.FactoryInvocationParameter{{
+				Name:         "input",
+				ExternalName: stringPtr("input"),
+				TypeHint:     &parameterTypeHint,
+				ValueMode:    &parameterValueMode,
+				Bindings: &[]factoryapi.FactoryInvocationParameterBinding{{
+					Kind:     bindingKind,
+					Position: intPtr(1),
+				}},
+			}},
+			OutputContract: &factoryapi.FactoryInvocationOutputContract{
+				Mode: &outputContractMode,
+			},
+			Examples: &[]factoryapi.FactoryInvocationExample{{
+				Name: "basic",
+				Argv: &[]string{"brief.md"},
+			}},
+		},
 		WorkTypes: &[]factoryapi.WorkType{{
 			Name: "task",
 			States: []factoryapi.WorkState{

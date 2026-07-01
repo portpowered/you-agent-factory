@@ -229,20 +229,21 @@ const (
 
 // TokenColor carries the domain data attached to a token.
 type TokenColor struct {
-	Name                     string            `json:"name"`
-	RequestID                string            `json:"request_id"`
-	WorkID                   string            `json:"work_id"`
-	WorkTypeID               string            `json:"work_type_id"`
-	DataType                 DataType          `json:"data_type"`
-	ChainingTraceDepth       int               `json:"chaining_trace_depth,omitempty"`
-	CurrentChainingTraceID   string            `json:"current_chaining_trace_id,omitempty"`
-	PreviousChainingTraceIDs []string          `json:"previous_chaining_trace_ids,omitempty"`
-	TraceID                  string            `json:"trace_id"`
-	ParentID                 string            `json:"parent_id"`
-	Tags                     map[string]string `json:"tags"`
-	Relations                []Relation        `json:"relations"`
-	Content                  []WorkContentPart `json:"content,omitempty"`
-	Payload                  []byte            `json:"payload"`
+	Name                     string               `json:"name"`
+	RequestID                string               `json:"request_id"`
+	WorkID                   string               `json:"work_id"`
+	WorkTypeID               string               `json:"work_type_id"`
+	DataType                 DataType             `json:"data_type"`
+	ChainingTraceDepth       int                  `json:"chaining_trace_depth,omitempty"`
+	CurrentChainingTraceID   string               `json:"current_chaining_trace_id,omitempty"`
+	PreviousChainingTraceIDs []string             `json:"previous_chaining_trace_ids,omitempty"`
+	TraceID                  string               `json:"trace_id"`
+	ParentID                 string               `json:"parent_id"`
+	Tags                     map[string]string    `json:"tags"`
+	Relations                []Relation           `json:"relations"`
+	Content                  []WorkContentPart    `json:"content,omitempty"`
+	Payload                  []byte               `json:"payload"`
+	InvocationArguments      *InvocationArguments `json:"-"`
 }
 
 // Token is a colored token: a work item or resource with data flowing through
@@ -340,22 +341,22 @@ const (
 // FactorySessionDispatchState carries one orchestrator-aware dispatch projection
 // input for factory session runtime reads.
 type FactorySessionDispatchState struct {
-	ID             string                              `json:"id"`
-	DispatchKind   string                              `json:"dispatchKind"`
-	Status         string                              `json:"status"`
-	Phase          string                              `json:"phase,omitempty"`
-	Label          string                              `json:"label,omitempty"`
-	RunnerID       string                              `json:"runnerId,omitempty"`
-	Model          string                              `json:"model,omitempty"`
-	Provider       string                              `json:"provider,omitempty"`
-	PromptDigest   string                              `json:"promptDigest,omitempty"`
-	SchemaDigest   string                              `json:"schemaDigest,omitempty"`
-	RelatedWorkIDs []string                            `json:"relatedWorkIds,omitempty"`
-	ArtifactIDs    []string                            `json:"artifactIds,omitempty"`
-	Usage          *FactorySessionDispatchUsage        `json:"usage,omitempty"`
-	Warnings       []FactorySessionDispatchWarning     `json:"warnings,omitempty"`
-	FailureDetail  *FactorySessionDispatchFailureDetail `json:"failureDetail,omitempty"`
-	Petri          *FactorySessionDispatchPetriState   `json:"petri,omitempty"`
+	ID             string                                 `json:"id"`
+	DispatchKind   string                                 `json:"dispatchKind"`
+	Status         string                                 `json:"status"`
+	Phase          string                                 `json:"phase,omitempty"`
+	Label          string                                 `json:"label,omitempty"`
+	RunnerID       string                                 `json:"runnerId,omitempty"`
+	Model          string                                 `json:"model,omitempty"`
+	Provider       string                                 `json:"provider,omitempty"`
+	PromptDigest   string                                 `json:"promptDigest,omitempty"`
+	SchemaDigest   string                                 `json:"schemaDigest,omitempty"`
+	RelatedWorkIDs []string                               `json:"relatedWorkIds,omitempty"`
+	ArtifactIDs    []string                               `json:"artifactIds,omitempty"`
+	Usage          *FactorySessionDispatchUsage           `json:"usage,omitempty"`
+	Warnings       []FactorySessionDispatchWarning        `json:"warnings,omitempty"`
+	FailureDetail  *FactorySessionDispatchFailureDetail   `json:"failureDetail,omitempty"`
+	Petri          *FactorySessionDispatchPetriState      `json:"petri,omitempty"`
 	JavaScript     *FactorySessionDispatchJavaScriptState `json:"javascript,omitempty"`
 }
 

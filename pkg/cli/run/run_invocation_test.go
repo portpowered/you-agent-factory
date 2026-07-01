@@ -1,3 +1,5 @@
+// backendsizecheck:ignore-file consolidated run invocation tests remain together until dedicated CLI invocation test seams split.
+// pkgmaintcheck:ignore-file-lines consolidated run invocation tests remain together until dedicated CLI invocation test seams split.
 package run
 
 import (
@@ -109,6 +111,37 @@ func TestResolveFactoryInvocationRequest_NamedFactoryStdinText(t *testing.T) {
 	}
 	if got := extractInvocationText(t, request); got != stdinText {
 		t.Fatalf("invocation text = %q, want %q", got, stdinText)
+	}
+}
+
+func TestResolveFactoryInvocationRequest_UsesNormalizedSignatureArgs(t *testing.T) {
+	request, invocationMode, err := resolveFactoryInvocationRequest(RunConfig{
+		Dir: "/tmp/signature-factory",
+		InvocationNormalizedArguments: &invocations.NormalizedArguments{
+			Arguments: map[string]invocations.NormalizedArgument{
+				"input": {Values: []string{"draft"}},
+				"mode":  {Values: []string{"fast", "review"}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("resolveFactoryInvocationRequest: %v", err)
+	}
+	if !invocationMode {
+		t.Fatal("expected invocation mode for normalized signature args")
+	}
+	if request == nil || request.Args == nil {
+		t.Fatalf("request = %#v, want args request", request)
+	}
+	if got := (*request.Args)["input"]; got != "draft" {
+		t.Fatalf("args[input] = %#v, want %q", got, "draft")
+	}
+	values, ok := (*request.Args)["mode"].([]string)
+	if !ok {
+		t.Fatalf("args[mode] = %#v, want []string", (*request.Args)["mode"])
+	}
+	if len(values) != 2 || values[0] != "fast" || values[1] != "review" {
+		t.Fatalf("args[mode] = %#v, want [fast review]", values)
 	}
 }
 
@@ -948,7 +981,10 @@ func extractInvocationText(t *testing.T, request *factoryapi.InvocationRequest) 
 	if request == nil {
 		t.Fatal("invocation request = nil")
 	}
-	parts := request.Content
+	if request.Content == nil {
+		t.Fatal("content = nil, want one text part")
+	}
+	parts := *request.Content
 	if len(parts) != 1 {
 		t.Fatalf("content parts = %d, want 1", len(parts))
 	}

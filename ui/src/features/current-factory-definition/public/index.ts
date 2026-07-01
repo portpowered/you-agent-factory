@@ -10,6 +10,12 @@ export {
   useFactoryDocumentSave,
 } from "../hooks/useFactoryDocumentSave";
 export {
+  currentFactoryDefinitionQueryKey,
+  currentFactoryDocumentQueryKey,
+  useCurrentFactoryDefinition,
+  useCurrentFactoryDocument,
+} from "../hooks/useCurrentFactoryDefinition";
+export {
   DEFAULT_WORKER_TYPE,
   DEFAULT_FACTORY_GRAPH_ADD_WORKSTATION_TYPE,
   DEFAULT_WORKSTATION_TYPE,

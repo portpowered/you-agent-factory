@@ -3,18 +3,20 @@ package run
 import (
 	"context"
 	"errors"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
-	"github.com/portpowered/infinite-you/pkg/petri"
-	"github.com/portpowered/infinite-you/pkg/service"
-	"go.uber.org/zap"
 	"io"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
+	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/service"
+	"go.uber.org/zap"
 )
 
 const (
@@ -616,4 +618,30 @@ func appendPayloadLine(payload []byte) []byte {
 	copy(line, payload)
 	line[len(payload)] = '\n'
 	return line
+}
+
+func isPackagedTTSRun(cfg RunConfig) bool {
+	return strings.TrimSpace(cfg.NamedFactoryName) == tts.PackagedFactoryName
+}
+
+func logPackagedTTSInvocationStart(cfg RunConfig) {
+	if !isPackagedTTSRun(cfg) {
+		return
+	}
+	logger := cfg.Logger
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+	fields := []zap.Field{
+		zap.String("packaged_factory_name", tts.PackagedFactoryName),
+		zap.String("tts_backend", tts.BackendRuntimeLabel()),
+		zap.String("readiness_outcome", tts.FailureClassLoading),
+	}
+	if resolution := cfg.NamedFactoryResolution; resolution != nil {
+		fields = append(fields,
+			zap.String("named_factory_resolution_source", string(resolution.Source)),
+			zap.String("named_factory_dir", resolution.FactoryDir),
+		)
+	}
+	logger.Info("packaged tts invocation started", fields...)
 }
