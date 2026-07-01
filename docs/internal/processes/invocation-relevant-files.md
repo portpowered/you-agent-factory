@@ -5,6 +5,31 @@ primary-result behavior.
 
 - `pkg/invocations/` contains shared pure invocation contract logic used by CLI
   and API adapters.
+- `pkg/invocations/arguments.go` owns signature-backed invocation argument
+  normalization for positional, named, stdin, defaulted, repeated, variadic,
+  alias-backed, and compatibility fallback inputs. Transport stories should
+  adapt CLI or API payloads into `NormalizeArgumentsInput` rather than
+  re-implementing binding, default, or validation rules at the boundary.
+- `pkg/invocations/interpolation.go` owns runtime `${parameter}` interpolation
+  for signature-backed worker and workstation fields plus pre-dispatch
+  interpolation validation. Keep file-contents substitution, omitted-exact-field
+  behavior, and interpolation error codes there instead of duplicating
+  string-replacement rules in service or worker executors. The same package also
+  owns replay-safe invocation diagnostics such as `InvocationSignatureHash` and
+  `InvocationDiagnostic`; execution layers should reuse that summary instead of
+  inventing transport- or worker-specific argument telemetry.
+- `pkg/config/openapi_factory.go` must preserve exact `${parameter}` placeholders
+  on enum-backed authored fields that support invocation interpolation (for
+  example `workers[].modelProvider`) instead of rejecting them as invalid public
+  enum values at the JSON boundary. Keep ordinary non-placeholder values on the
+  existing strict enum normalization path so packaged and customer-authored
+  factories can use the same interpolation-enabled authored fields.
+- `pkg/config/operatordefaultsruntime/operator_defaults_runtime.go` is the
+  startup-time runtime-validation seam for operator-defaulted model workers.
+  When a model-worker `modelProvider` uses exact `${parameter}` invocation
+  interpolation, validate that it references a declared signature parameter
+  rather than forcing the authored placeholder through concrete provider
+  validation during session startup.
 - `pkg/invocations/primary_result.go` resolves invocation `primaryResult`
   against selected-tick `FactoryWorldState` using `WorkRequestsByID`,
   `TerminalWorkByID`, and payload-lineage scope rather than transport-specific
@@ -33,12 +58,37 @@ primary-result behavior.
   item, polls selected-tick world state, and maps timeout/cancel/unresolved
   outcomes into `InvocationResponse`; it also owns invocation boundary logs and
   optional `InvocationMetricsRecorder` counter emission for runtime outcomes.
+- Live-session invocation request normalization lives in
+  `pkg/service/model_catalog.go` (`resolveSessionInvocationInput`). Keep API
+  `InvocationRequest.content` compatibility handling and
+  `InvocationRequest.args` signature handling as thin adapters into
+  `pkg/invocations.NormalizeArguments`; API structured args should use the
+  direct structured-argument carrier rather than being reinterpreted as CLI
+  named flags, so canonical parameter-name keys still work for positional-only
+  or stdin-bound parameters. Do not duplicate required-input, source-conflict,
+  alias, or string-shape rules in HTTP handlers. When signature-backed runtime
+  behavior needs per-invocation authored-field interpolation, carry the
+  normalized argument set on runtime-only `interfaces.InvocationArguments`
+  metadata and validate it through
+  `invocations.ValidateInvocationInterpolation` before submitting work. Treat
+  `args: {}` as an explicit structured invocation request, not as omitted args,
+  so all-optional or defaulted signatures stay transport-equivalent with CLI
+  invocation.
 - `pkg/cli/run/` is the `you run --factory` CLI boundary.
 - Canonical default-path ownership for operator config
   (`~/.you-agent-factory/config.json`) and generated live replay recording roots
   (`~/.you-agent-factory/recordings/...`) belongs in `pkg/config/defaultpaths`;
   `pkg/config/operatorconfig` and `pkg/cli/run` should keep only precedence,
   filename, and reporting behavior around those defaults.
+- Persisted local `backendScopeID` values live in the same
+  `~/.you-agent-factory/config.json` system config file. Keep load/generate/persist
+  logic in `pkg/config/systemconfig`, resolve it during `service.BuildFactoryCore`
+  before session identity is exposed, and keep `pkg/config/operatorconfig` tolerant
+  of the top-level `backendScopeID` field so operator-default parsing still works.
+  Local backend scope policy: blank values generate `local-<uuid>` once and persist
+  it; valid `local-<uuid>` and other explicit non-empty scopes are reused across
+  restarts; values starting with `local-` that are not valid `local-<uuid>` fail
+  startup with a config error instead of being silently replaced.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
@@ -97,6 +147,12 @@ primary-result behavior.
   shared by direct model invocation and HTTP handlers.
 - `pkg/workers/executor/model_operation_bindings.go` delegates inference binding
   resolution to `pkg/invocations`.
+- `pkg/cli/root_run_args.go` owns the `you run` manual flag split that preserves
+  known run and inherited flags while leaving unknown `--factory-arg` tokens
+  intact for signature-backed parsing; keep factory-argument normalization
+  itself in `pkg/cli/run/factory_invocation_signature_input.go` plus
+  `pkg/invocations/arguments.go` rather than re-implementing binding logic in
+  Cobra parsing.
 - `pkg/invocations/input.go` owns logical empty-text detection via
   `strings.TrimSpace` inside `ResolveTextInput` and `ResolveAPITextInputContent`;
   CLI and API adapters must not duplicate whitespace-only rejection.
@@ -104,6 +160,14 @@ primary-result behavior.
   invocation input-source rules and the canonical pointers into packaged docs.
   `runInvocationModes` and `resolveRunFactoryPrompt` also treat `you run --named`
   as an invocation factory selector for positional/stdin text.
+  `runFactory` resolves `--named` / `--factory` / `--dir` conflicts and portable
+  `--factory` preflight before loading operator defaults so flag and path failures
+  stay independent of `~/.you-agent-factory/config.json` contents.
+- `pkg/cli/root_run_test.go` isolates `HOME` for the whole CLI package so `make test`
+  does not depend on the developer's real operator config file.
+- `internal/releasesmoke/harness.go` isolates spawned `you run` smoke processes from
+  the developer's real `HOME` so `tests/release` stays hermetic through
+  `make test`.
 -   `pkg/config/layout.go` owns the built-in `@you/goal` and `@you/tts` factory JSON
   (`BuiltInGoalFactoryJSON`, `BuiltInTTSFactoryJSON`) registered from
   `builtInNamedFactoryCatalog` in `pkg/config/layout.go`. Packaged `@you/goal`
@@ -124,6 +188,16 @@ primary-result behavior.
   canonical templates, and those repairs must patch the specific legacy prompt
   files in place rather than replacing the whole materialized named-factory
   directory so customer edits survive later `you run --named` reuse.
+  `@you/fusion` factory JSON (`BuiltInFusionFactoryJSON`) is also registered from
+  `builtInNamedFactoryCatalog`.
+- `pkg/cli/run/factory_invocation_help.go` owns the factory-aware help renderer
+  for `you run --named <factory> --help` and `you run --factory <factory.json> --help`.
+  Keep usage lines, parameter descriptions, defaults, accepted values, output
+  hints, and example rendering derived from `interfaces.InvocationSignatureConfig`
+  instead of hard-coding packaged-factory argument inventories in CLI help.
+- `docs/reference/packaged-fusion.md` is the packaged `you docs packaged-fusion`
+  customer guide for `@you/fusion` invocation, signature-aware help, examples,
+  materialization, and edit-after-materialize behavior.
 - `pkg/packagedfactories/goal/` owns packaged goal factory metadata constants and
   config-load regression coverage for the authored `invocationReturn` policy that
   selects terminal `goal:complete` work content as the primary result.
@@ -212,6 +286,23 @@ primary-result behavior.
 - `pkg/api/server_factory_sessions_test.go` proves the session invocation API
   returns the same observable request and primary-result behavior for packaged
   `@you/goal` text input and source-conflict failures as the CLI parity tests.
+- Dashboard signature-backed invocation submission belongs in
+  `ui/src/api/session-factory/` plus `ui/src/features/submit-work/`. Keep the
+  transport wrapper on `POST /factory-sessions/{session_id}/invocations`,
+  generated field projection/serialization in feature-local pure helpers, and
+  dev/preview proxy coverage aligned in `ui/vite.config.ts` +
+  `ui/vite.config.test.ts` so local dashboard submits use the same session API
+  route outside production builds. For signature-backed submits, preserve
+  `args: {}` when the user leaves every field empty; collapsing that payload to
+  omitted args changes backend behavior by re-entering the legacy compatibility
+  path instead of the explicit structured-invocation path. When a successful
+  invocation triggers a same-session dashboard refresh, invalidate the
+  current-factory query instead of removing it so the signature-backed widget
+  can preserve visible success state while still refetching the current factory
+  contract, and skip resuming the event stream from a persisted reconnect cursor
+  on that same-session refresh via `shouldResumeFromPersistedCheckpoint` in
+  `ui/src/features/dashboard/lib/dashboard-session-lifecycle.ts` plus
+  `useDashboardInitialReconnectCursor`.
 - `pkg/service/model_catalog.go` owns the session invocation wait loop, packaged TTS
   loading/completion/failure logs, and packaged-factory metrics while polling for
   primary results.
@@ -232,4 +323,11 @@ primary-result behavior.
 - `docs/reference/config.md` and `docs/reference/sessions.md` are the packaged
   `you docs` reference topics for invocation input sources, return policy, and
   the session-scoped invocation API.
+- Dashboard current-factory decoding for signature-backed invocation widgets
+  lives in `ui/src/api/factory-definition/api.ts` and
+  `ui/src/api/current-factory-definition/api.test.ts`; keep exact
+  `${parameter}` placeholders accepted on invocation-interpolated enum-backed
+  authored fields when the current factory payload also declares that parameter
+  in `invocationSignature`, or live session pages will fall back to legacy UI
+  flows even when backend runtime validation already accepts the factory.
 - Managed-runtime invocation readiness gating lives in `pkg/modelhost/managed_runtime_compat.go` (`EnsureInvocationReady`) and `pkg/apisurface/managed_runtime_invocation.go`; direct model invocation wires through `pkg/service/model_catalog.go` and factory worker execution through `pkg/modelhost/execution.go` (`LeaseExecution.WrapRunner`) when a process-wide host is configured, otherwise `pkg/localmodels/runtime.go` manager fallback. `EnsureInvocationReady` consumes live host readiness via `InspectReadiness` so supervised loading and crash outcomes gate invocation. Supervised leases pass `lease.Endpoint` into `localmodels.LoadRequest.ServingEndpoint` for host-owned HTTP execution. Process-wide local-runtime ownership and lease boundaries belong in `pkg/modelhost`; keep `pkg/localmodels` as the managed-runtime catalog compatibility projection layer. Model host operator diagnostics for pull/load/lease/unload/crash paths live in `pkg/modelhost/diagnostics.go`; see `docs/architecture/model-host.md`. Focused modelhost lease coverage for INFERENCE_WORKER/INFERENCE_RUN lives in `pkg/service/inference_modelhost_test.go`.

@@ -69,6 +69,11 @@ properties:
   linear:
     $ref: './HostedLinearWorkerConfig.yaml'
     description: Provider-specific configuration for the built-in hosted LINEAR worker.
+  agentTools:
+    $ref: './AgentWorkerToolsConfig.yaml'
+    description: >-
+      Explicit agent-loop tool policy for AGENT_WORKER definitions. Omit or set
+      policy DISABLED to run agent loops without advertising or executing tools.
   body:
     type: string
     description: Inline worker instructions or script body when the worker is authored directly in factory config.

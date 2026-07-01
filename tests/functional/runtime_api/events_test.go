@@ -12,6 +12,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 type factoryEventHTTPStream struct {
@@ -22,6 +23,14 @@ type factoryEventHTTPStream struct {
 	errs   chan error
 }
 
+func openDefaultSessionFactoryEventHTTPStream(t *testing.T, baseURL string) *factoryEventHTTPStream {
+	t.Helper()
+	return openFactoryEventHTTPStream(t, support.DefaultSessionEventsURL(baseURL))
+}
+
+// openFactoryEventHTTPStream opens one explicit factory event SSE endpoint. Runtime
+// API smokes that represent dashboard, Factory Session, or replay behavior should
+// call openDefaultSessionFactoryEventHTTPStream instead of process-global /events.
 func openFactoryEventHTTPStream(t *testing.T, endpoint string) *factoryEventHTTPStream {
 	t.Helper()
 
@@ -29,22 +38,22 @@ func openFactoryEventHTTPStream(t *testing.T, endpoint string) *factoryEventHTTP
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		cancel()
-		t.Fatalf("build /events request: %v", err)
+		t.Fatalf("build event stream request: %v", err)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		cancel()
-		t.Fatalf("GET /events: %v", err)
+		t.Fatalf("GET event stream: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		cancel()
-		t.Fatalf("GET /events status = %d, want 200", resp.StatusCode)
+		t.Fatalf("GET event stream status = %d, want 200", resp.StatusCode)
 	}
 	if !strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
 		defer resp.Body.Close()
 		cancel()
-		t.Fatalf("GET /events content type = %q, want text/event-stream", resp.Header.Get("Content-Type"))
+		t.Fatalf("GET event stream content type = %q, want text/event-stream", resp.Header.Get("Content-Type"))
 	}
 
 	stream := &factoryEventHTTPStream{

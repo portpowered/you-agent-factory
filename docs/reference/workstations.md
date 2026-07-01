@@ -144,6 +144,47 @@ Additional `INFERENCE_RUN` rules:
 Legacy `MODEL_INVOKE` remains accepted during the migration window and
 projects to the same inference-run behavior.
 
+## `AGENT_RUN` Execution
+
+Use `AGENT_RUN` when a workstation should render a prompt and run an agent
+loop through a bound `AGENT_WORKER`. This is distinct from `INFERENCE_RUN`,
+which dispatches one bounded model operation without an agent loop.
+
+Agent-run execution behavior:
+
+- The factory runtime starts or resumes one agent loop per dispatch through an
+  internal library adapter. Customers configure agent behavior through factory
+  vocabulary; there is no supported external harness CLI to invoke directly.
+- Factory-session cancellation and workstation or worker timeouts stop the
+  agent loop and route through `onFailure` without leaving the dispatch stuck
+  in a running state.
+- Local model calls borrow ready capacity from the model host through
+  inferencer leases. See `you docs workers` for tool policy and failure
+  classes and `you docs models` for managed-runtime readiness.
+- Final accepted output follows the same routing contract as other worker
+  dispatches: `outputs`, `onContinue`, `onRejection`, or `onFailure`.
+  Bounded agent diagnostics (tool summaries and transcript metadata) are
+  exposed separately from final output through dispatch inspection. See
+  `you docs sessions`.
+
+```json
+{
+  "name": "execute-story",
+  "behavior": "REPEATER",
+  "type": "AGENT_RUN",
+  "worker": "executor",
+  "inputs": [{ "workType": "story", "state": "init" }],
+  "outputs": [{ "workType": "story", "state": "in-review" }],
+  "onContinue": { "workType": "story", "state": "init" },
+  "onFailure": { "workType": "story", "state": "failed" },
+  "limits": { "maxExecutionTime": "1h" }
+}
+```
+
+Legacy `MODEL_WORKSTATION` remains accepted during the migration window and
+projects to the same agent-run behavior when paired with a compatible agent
+worker.
+
 ## Topology Fields
 
 A workstation entry wires input places to output places and names the worker to

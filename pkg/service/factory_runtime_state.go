@@ -15,6 +15,7 @@ import (
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -533,10 +534,10 @@ func (fs *FactoryService) currentRuntimeSubmitter() workRequestSubmitter {
 
 func (fs *FactoryService) preseedCurrentRuntimeInputs(ctx context.Context) error {
 	runtimeBundle := fs.currentRuntimeBundle()
-	if runtimeBundle == nil || runtimeBundle.listener == nil {
+	if runtimeBundle == nil || runtimeBundle.Listener == nil {
 		return nil
 	}
-	if err := runtimeBundle.listener.PreseedInputs(ctx); err != nil {
+	if err := runtimeBundle.Listener.PreseedInputs(ctx); err != nil {
 		return fmt.Errorf("preseed inputs: %w", err)
 	}
 	return nil
@@ -575,13 +576,13 @@ func (fs *FactoryService) syncActiveSessionDir(runtimeBundle *factoryRuntimeBund
 	}
 	fs.runtimeMu.Lock()
 	defer fs.runtimeMu.Unlock()
-	if runtimeBundle == nil || strings.TrimSpace(runtimeBundle.dir) == "" {
+	if runtimeBundle == nil || strings.TrimSpace(runtimeBundle.Dir) == "" {
 		if strings.TrimSpace(fs.factoryRootDir) != "" {
 			fs.cfg.Dir = fs.factoryRootDir
 		}
 		return
 	}
-	fs.cfg.Dir = runtimeBundle.dir
+	fs.cfg.Dir = runtimeBundle.Dir
 }
 
 func (fs *FactoryService) currentRunState() *serviceRunState {
@@ -619,93 +620,31 @@ func (fs *FactoryService) clearRunState() {
 	fs.runState = nil
 }
 
-func (h *liveRuntimeHandle) completed() bool {
-	if h == nil {
-		return true
-	}
-	select {
-	case <-h.runDone:
-		return true
-	default:
-		return false
-	}
-}
-
-func (h *liveRuntimeHandle) result() error {
-	if h == nil {
-		return nil
-	}
-	h.runErrMu.RLock()
-	defer h.runErrMu.RUnlock()
-	return h.runErr
-}
-
-func (h *liveRuntimeHandle) setRunResult(err error) {
-	h.runErrMu.Lock()
-	h.runErr = err
-	h.runErrMu.Unlock()
-	close(h.runDone)
-}
-
-func (h *liveRuntimeHandle) wait() error {
-	if h == nil {
-		return nil
-	}
-	<-h.runDone
-	return h.result()
-}
-
 // SubmitWorkRequest submits a canonical work request batch to the factory.
 func (fs *FactoryService) SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
 	fs.activationMu.RLock()
 	defer fs.activationMu.RUnlock()
 
-	activeFactory := fs.currentFactory()
-	if activeFactory == nil {
-		return interfaces.WorkRequestSubmitResult{}, fmt.Errorf("factory service runtime is not available")
-	}
-	return activeFactory.SubmitWorkRequest(ctx, request)
+	return factoryservice.SubmitWorkRequest(ctx, fs.currentRuntimeBundle(), request)
 }
 
 // SubscribeFactoryEvents returns canonical factory event history followed by
 // live events from the current service-owned runtime.
 func (fs *FactoryService) SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
-	activeFactory := fs.currentFactory()
-	if activeFactory == nil {
-		return nil, fmt.Errorf("factory service runtime is not available")
-	}
-	stream, err := activeFactory.SubscribeFactoryEvents(ctx, reconnect, scope)
-	if err != nil {
-		return nil, fmt.Errorf("subscribe factory events: %w", err)
-	}
-	return stream, nil
+	return factoryservice.SubscribeFactoryEvents(ctx, fs.currentRuntimeBundle(), reconnect, scope)
 }
 
 // WaitToComplete returns a channel that is closed when all tokens reach
 // terminal or failed places and no dispatches are in flight. Delegates to
 // the underlying factory's termination signal.
 func (fs *FactoryService) WaitToComplete() <-chan struct{} {
-	activeFactory := fs.currentFactory()
-	if activeFactory == nil {
-		ch := make(chan struct{})
-		close(ch)
-		return ch
-	}
-	return activeFactory.WaitToComplete()
+	return factoryservice.WaitToComplete(fs.currentRuntimeBundle())
 }
 
 // GetEngineStateSnapshot returns the factory boundary's aggregate
 // observability snapshot.
 func (fs *FactoryService) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-	activeFactory := fs.currentFactory()
-	if activeFactory == nil {
-		return nil, fmt.Errorf("factory service runtime is not available")
-	}
-	snap, err := activeFactory.GetEngineStateSnapshot(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get engine state snapshot: %w", err)
-	}
-	return snap, nil
+	return factoryservice.GetEngineStateSnapshot(ctx, fs.currentRuntimeBundle())
 }
 
 // Pause pauses the current runtime instance.
@@ -768,14 +707,14 @@ func (fs *FactoryService) submitWorkFile(ctx context.Context) error {
 
 func (fs *FactoryService) currentFactory() factory.Factory {
 	if bundle := fs.currentRuntimeBundle(); bundle != nil {
-		return bundle.factory
+		return bundle.Factory
 	}
 	return nil
 }
 
 func (fs *FactoryService) currentRuntimeConfig() *factoryconfig.LoadedFactoryConfig {
 	if bundle := fs.currentRuntimeBundle(); bundle != nil {
-		return bundle.runtimeCfg
+		return bundle.RuntimeCfg
 	}
 	if session := fs.defaultSession(); session != nil {
 		if spec := liveSessionBuildSpec(session); spec != nil {
@@ -896,68 +835,8 @@ func runtimeWorkflowContext(cfg *interfaces.FactoryConfig, sessionID string) *fa
 	}
 }
 
-func newRecordingArtifact(
-	cfg *FactoryServiceConfig,
-	factoryDir string,
-	factoryCfg *interfaces.FactoryConfig,
-	runtimeCfg interfaces.RuntimeDefinitionLookup,
-	clock factory.Clock,
-) (*interfaces.ReplayArtifact, error) {
-	if cfg.RecordPath == "" {
-		return nil, nil
-	}
-	now := factory.EnsureClock(clock).Now().UTC()
-	generatedFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
-		factoryDir,
-		factoryCfg,
-		runtimeCfg,
-		replay.WithGeneratedFactorySourceDirectory(factoryDir),
-		replay.WithGeneratedFactoryWorkflowID(cfg.WorkflowID),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("build replay artifact config: %w", err)
-	}
-	return replay.NewEventLogArtifactFromFactory(now, generatedFactory, &interfaces.ReplayWallClockMetadata{
-		StartedAt: now,
-	}, interfaces.ReplayDiagnostics{})
-}
-
-func (fs *FactoryService) finalizeRuntimeArtifacts(runtimeBundle *factoryRuntimeBundle) error {
-	if runtimeBundle == nil {
-		return nil
-	}
-	var errs []error
-	if runtimeBundle.recording != nil {
-		runtimeBundle.recording.Finish(factory.EnsureClock(fs.clock).Now().UTC())
-		if err := runtimeBundle.recording.Flush(); err != nil {
-			errs = append(errs, err)
-		}
-		if err := runtimeBundle.recording.Err(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if runtimeBundle.logSink != nil {
-		if err := runtimeBundle.logSink.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if runtimeBundle.metricsSink != nil {
-		if err := runtimeBundle.metricsSink.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
-}
-
 func sessionScopedRecordPath(basePath string, sessionID string) string {
 	return runtimebuild.SessionScopedRecordPath(basePath, sessionID)
-}
-
-func (r *factoryRuntimeBundle) runtimeLogger() *zap.Logger {
-	if r == nil || r.logger == nil {
-		return zap.NewNop()
-	}
-	return r.logger
 }
 
 func runtimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
@@ -965,4 +844,35 @@ func runtimeModeOrDefault(mode interfaces.RuntimeMode) interfaces.RuntimeMode {
 		return interfaces.RuntimeModeBatch
 	}
 	return mode
+}
+
+func isCanceledServiceStartup(ctx context.Context, err error) bool {
+	return ctx != nil && ctx.Err() != nil && errors.Is(err, context.Canceled)
+}
+
+func (fs *FactoryService) waitForActiveRuntime(ctx context.Context) error {
+	for {
+		handle := fs.currentLiveRuntime()
+		if handle == nil {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(25 * time.Millisecond):
+				continue
+			}
+		}
+		select {
+		case <-ctx.Done():
+			_ = handle.Wait()
+		case <-handle.RunDone:
+		}
+		if fs.currentLiveRuntime() != handle {
+			continue
+		}
+		if runtimeModeOrDefault(fs.cfg.RuntimeMode) == interfaces.RuntimeModeService &&
+			fs.sessions != nil && fs.sessions.Count() == 0 {
+			continue
+		}
+		return handle.Result()
+	}
 }

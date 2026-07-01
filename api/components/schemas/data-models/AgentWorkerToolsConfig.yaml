@@ -1,0 +1,11 @@
+type: object
+additionalProperties: false
+description: >-
+  Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution
+  stays disabled unless this block is present with a non-DISABLED policy.
+required:
+  - policy
+properties:
+  policy:
+    $ref: './AgentWorkerToolPolicy.yaml'
+    description: Required executor policy for agent-loop tool use on this worker.

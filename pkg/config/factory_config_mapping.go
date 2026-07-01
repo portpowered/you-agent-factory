@@ -146,20 +146,132 @@ func factoryAPIFromInternalConfig(cfg *interfaces.FactoryConfig) factoryapi.Fact
 	}
 
 	return factoryapi.Factory{
-		Name:             factoryReferenceName(cfg),
-		Id:               stringPtrIfNotEmpty(cfg.Project),
-		Version:          hybridLogicalTimestampPtr(cfg.Version),
-		Guards:           factoryGuardsAPIFromInternal(cfg.Guards),
-		InputTypes:       inputTypesAPIFromInternal(cfg.InputTypes),
-		InvocationReturn: invocationReturnAPIFromInternal(cfg.InvocationReturn),
-		Orchestrator:     orchestratorAPIFromInternal(cfg),
-		WorkTypes:        workTypesAPIFromInternal(cfg.WorkTypes),
-		Resources:        resourcesAPIFromInternal(cfg.Resources),
-		SupportingFiles:  resourceManifestAPIFromInternal(cfg.ResourceManifest),
-		Layout:           factoryLayoutAPIFromInternal(cfg.Layout),
-		Workers:          workersAPIFromInternal(cfg.Workers, cfg.Workstations),
-		Workstations:     workstationsAPIFromInternal(cfg.Workstations, workerTypesByName(cfg.Workers)),
+		Name:                factoryReferenceName(cfg),
+		Id:                  stringPtrIfNotEmpty(cfg.Project),
+		Version:             hybridLogicalTimestampPtr(cfg.Version),
+		Guards:              factoryGuardsAPIFromInternal(cfg.Guards),
+		InputTypes:          inputTypesAPIFromInternal(cfg.InputTypes),
+		InvocationReturn:    invocationReturnAPIFromInternal(cfg.InvocationReturn),
+		InvocationSignature: invocationSignatureAPIFromInternal(cfg.InvocationSignature),
+		Orchestrator:        orchestratorAPIFromInternal(cfg),
+		WorkTypes:           workTypesAPIFromInternal(cfg.WorkTypes),
+		Resources:           resourcesAPIFromInternal(cfg.Resources),
+		SupportingFiles:     resourceManifestAPIFromInternal(cfg.ResourceManifest),
+		Layout:              factoryLayoutAPIFromInternal(cfg.Layout),
+		Workers:             workersAPIFromInternal(cfg.Workers, cfg.Workstations),
+		Workstations:        workstationsAPIFromInternal(cfg.Workstations, workerTypesByName(cfg.Workers)),
 	}
+}
+
+func invocationSignatureAPIFromInternal(value *interfaces.InvocationSignatureConfig) *factoryapi.FactoryInvocationSignature {
+	if value == nil {
+		return nil
+	}
+	return &factoryapi.FactoryInvocationSignature{
+		Parameters:                 invocationParametersAPIFromInternal(value.Parameters),
+		UnknownNamedArgumentPolicy: invocationUnknownNamedArgumentPolicyPtr(value.UnknownNamedArgumentPolicy),
+		OutputContract:             invocationOutputContractAPIFromInternal(value.OutputContract),
+		Examples:                   invocationExamplesAPIFromInternal(value.Examples),
+	}
+}
+
+func invocationParametersAPIFromInternal(parameters []interfaces.InvocationParameterConfig) *[]factoryapi.FactoryInvocationParameter {
+	if len(parameters) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.FactoryInvocationParameter, len(parameters))
+	for i, parameter := range parameters {
+		values[i] = factoryapi.FactoryInvocationParameter{
+			Name:          parameter.Name,
+			Description:   stringPtrIfNotEmpty(parameter.Description),
+			ExternalName:  stringPtrIfNotEmpty(parameter.ExternalName),
+			Aliases:       stringSlicePtr(parameter.Aliases),
+			TypeHint:      invocationParameterTypeHintPtr(parameter.TypeHint),
+			ValueMode:     invocationParameterValueModePtr(parameter.ValueMode),
+			Required:      boolPtrIfTrue(parameter.Required),
+			Sensitive:     boolPtrIfTrue(parameter.Sensitive),
+			Choices:       stringSlicePtr(parameter.Choices),
+			DefaultValue:  stringPtrIfNotEmpty(parameter.DefaultValue),
+			DefaultValues: stringSlicePtr(parameter.DefaultValues),
+			Bindings:      invocationParameterBindingsAPIFromInternal(parameter.Bindings),
+		}
+	}
+	return &values
+}
+
+func invocationParameterBindingsAPIFromInternal(bindings []interfaces.InvocationParameterBindingConfig) *[]factoryapi.FactoryInvocationParameterBinding {
+	if len(bindings) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.FactoryInvocationParameterBinding, len(bindings))
+	for i, binding := range bindings {
+		values[i] = factoryapi.FactoryInvocationParameterBinding{
+			Kind:     factoryapi.FactoryInvocationParameterBindingKind(binding.Kind),
+			Position: intPtrIfNonZero(binding.Position),
+		}
+	}
+	return &values
+}
+
+func invocationUnknownNamedArgumentPolicyPtr(value string) *factoryapi.FactoryInvocationUnknownNamedArgumentPolicy {
+	if value == "" {
+		return nil
+	}
+	policy := factoryapi.FactoryInvocationUnknownNamedArgumentPolicy(value)
+	return &policy
+}
+
+func invocationParameterTypeHintPtr(value string) *factoryapi.FactoryInvocationParameterTypeHint {
+	if value == "" {
+		return nil
+	}
+	typeHint := factoryapi.FactoryInvocationParameterTypeHint(value)
+	return &typeHint
+}
+
+func invocationParameterValueModePtr(value string) *factoryapi.FactoryInvocationParameterValueMode {
+	if value == "" {
+		return nil
+	}
+	valueMode := factoryapi.FactoryInvocationParameterValueMode(value)
+	return &valueMode
+}
+
+func invocationOutputContractAPIFromInternal(value *interfaces.InvocationOutputContractConfig) *factoryapi.FactoryInvocationOutputContract {
+	if value == nil {
+		return nil
+	}
+	return &factoryapi.FactoryInvocationOutputContract{
+		Mode:          invocationOutputContractModePtr(value.Mode),
+		PathParameter: stringPtrIfNotEmpty(value.PathParameter),
+		ContentType:   stringPtrIfNotEmpty(value.ContentType),
+		FileExtension: stringPtrIfNotEmpty(value.FileExtension),
+		Description:   stringPtrIfNotEmpty(value.Description),
+	}
+}
+
+func invocationOutputContractModePtr(value string) *factoryapi.FactoryInvocationOutputContractMode {
+	if value == "" {
+		return nil
+	}
+	mode := factoryapi.FactoryInvocationOutputContractMode(value)
+	return &mode
+}
+
+func invocationExamplesAPIFromInternal(examples []interfaces.InvocationExampleConfig) *[]factoryapi.FactoryInvocationExample {
+	if len(examples) == 0 {
+		return nil
+	}
+	values := make([]factoryapi.FactoryInvocationExample, len(examples))
+	for i, example := range examples {
+		values[i] = factoryapi.FactoryInvocationExample{
+			Name:        example.Name,
+			Description: stringPtrIfNotEmpty(example.Description),
+			Argv:        stringSlicePtr(example.Argv),
+			Stdin:       stringPtrIfNotEmpty(example.Stdin),
+		}
+	}
+	return &values
 }
 
 func validatePortableLayoutBoundaryJSON(data []byte) error {
@@ -928,6 +1040,7 @@ func workerDefinitionAPIFromInternalWithUsage(def *interfaces.WorkerConfig, work
 		Body:             stringPtrIfNotEmpty(def.Body),
 		Command:          stringPtrIfNotEmpty(def.Command),
 		Linear:           hostedLinearWorkerAPIFromInternal(def.Linear),
+		AgentTools:       agentWorkerToolsAPIFromInternal(def.AgentTools),
 		Model:            stringPtrIfNotEmpty(def.Model),
 		ModelProvider:    workerModelProviderPtrIfNotEmpty(def.ModelProvider),
 		ModelLocality:    workerModelLocalityPtrIfNotEmpty(def.ModelLocality),
@@ -976,6 +1089,32 @@ func hostedLinearWorkerClaimAPIFromInternal(claim *interfaces.HostedLinearWorker
 	}
 	return &factoryapi.HostedLinearWorkerClaim{
 		AssigneeField: stringPtrIfNotEmpty(claim.AssigneeField),
+	}
+}
+
+func agentWorkerToolsAPIFromInternal(cfg *interfaces.AgentWorkerToolsConfig) *factoryapi.AgentWorkerToolsConfig {
+	if cfg == nil {
+		return nil
+	}
+	policy := interfaces.NormalizeAgentWorkerToolPolicy(cfg.Policy)
+	if policy == interfaces.AgentWorkerToolPolicyDisabled {
+		return &factoryapi.AgentWorkerToolsConfig{
+			Policy: factoryapi.AgentWorkerToolPolicyDISABLED,
+		}
+	}
+	switch policy {
+	case interfaces.AgentWorkerToolPolicyReadOnly:
+		return &factoryapi.AgentWorkerToolsConfig{
+			Policy: factoryapi.AgentWorkerToolPolicyREADONLY,
+		}
+	case interfaces.AgentWorkerToolPolicyEnabled:
+		return &factoryapi.AgentWorkerToolsConfig{
+			Policy: factoryapi.AgentWorkerToolPolicyENABLED,
+		}
+	default:
+		return &factoryapi.AgentWorkerToolsConfig{
+			Policy: factoryapi.AgentWorkerToolPolicy(policy),
+		}
 	}
 }
 

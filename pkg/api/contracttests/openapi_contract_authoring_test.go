@@ -82,6 +82,10 @@ func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 		"InferenceResponseEventPayload":             "./components/schemas/events/payloads/InferenceResponseEventPayload.yaml",
 		"ScriptRequestEventPayload":                 "./components/schemas/events/payloads/ScriptRequestEventPayload.yaml",
 		"ScriptResponseEventPayload":                "./components/schemas/events/payloads/ScriptResponseEventPayload.yaml",
+		"AgentRunResponseEventPayload":              "./components/schemas/events/payloads/AgentRunResponseEventPayload.yaml",
+		"SafeAgentRunDiagnostic":                    "./components/schemas/events/SafeAgentRunDiagnostic.yaml",
+		"AgentRunToolDiagnosticEntry":               "./components/schemas/events/AgentRunToolDiagnosticEntry.yaml",
+		"AgentRunTranscriptEntry":                   "./components/schemas/events/AgentRunTranscriptEntry.yaml",
 		"DispatchResponseEventPayload":              "./components/schemas/events/payloads/DispatchResponseEventPayload.yaml",
 		"WorkStateChangeEventPayload":               "./components/schemas/events/payloads/WorkStateChangeEventPayload.yaml",
 		"WorkStateChangeSource":                     "./components/schemas/events/WorkStateChangeSource.yaml",
@@ -115,6 +119,8 @@ func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 		"WorkDiagnostics":                           "./components/schemas/events/WorkDiagnostics.yaml",
 		"RenderedPromptDiagnostic":                  "./components/schemas/events/RenderedPromptDiagnostic.yaml",
 		"ProviderDiagnostic":                        "./components/schemas/events/ProviderDiagnostic.yaml",
+		"InvocationDiagnostic":                      "./components/schemas/events/InvocationDiagnostic.yaml",
+		"InvocationParameterDiagnostic":             "./components/schemas/events/InvocationParameterDiagnostic.yaml",
 		"Diagnostics":                               "./components/schemas/events/Diagnostics.yaml",
 		"SafeWorkDiagnostics":                       "./components/schemas/events/SafeWorkDiagnostics.yaml",
 		"WallClock":                                 "./components/schemas/events/WallClock.yaml",
@@ -142,12 +148,15 @@ func TestOpenAPIAuthoring_FactoryWorldSchemasUseDedicatedFragments(t *testing.T)
 		"FactoryWorldWorkMoveOperationView":             "./components/schemas/factory-world/FactoryWorldWorkMoveOperationView.yaml",
 		"FactoryWorldRenderedPromptDiagnostic":          "./components/schemas/factory-world/FactoryWorldRenderedPromptDiagnostic.yaml",
 		"FactoryWorldProviderDiagnostic":                "./components/schemas/factory-world/FactoryWorldProviderDiagnostic.yaml",
+		"FactoryWorldInvocationDiagnostic":              "./components/schemas/factory-world/FactoryWorldInvocationDiagnostic.yaml",
+		"FactoryWorldInvocationParameterDiagnostic":     "./components/schemas/factory-world/FactoryWorldInvocationParameterDiagnostic.yaml",
 		"FactoryWorldWorkDiagnostics":                   "./components/schemas/factory-world/FactoryWorldWorkDiagnostics.yaml",
 		"FactoryWorldWorkItemRef":                       "./components/schemas/factory-world/FactoryWorldWorkItemRef.yaml",
 		"FactoryWorldTokenView":                         "./components/schemas/factory-world/FactoryWorldTokenView.yaml",
 		"FactoryWorldMutationView":                      "./components/schemas/factory-world/FactoryWorldMutationView.yaml",
 		"FactoryWorldScriptRequestView":                 "./components/schemas/factory-world/FactoryWorldScriptRequestView.yaml",
 		"FactoryWorldScriptResponseView":                "./components/schemas/factory-world/FactoryWorldScriptResponseView.yaml",
+		"FactoryWorldAgentRunInspectionView":            "./components/schemas/factory-world/FactoryWorldAgentRunInspectionView.yaml",
 		"FactoryWorldWorkstationRequestCountView":       "./components/schemas/factory-world/FactoryWorldWorkstationRequestCountView.yaml",
 		"FactoryWorldWorkstationRequestRequestView":     "./components/schemas/factory-world/FactoryWorldWorkstationRequestRequestView.yaml",
 		"FactoryWorldWorkstationRequestResponseView":    "./components/schemas/factory-world/FactoryWorldWorkstationRequestResponseView.yaml",
@@ -569,15 +578,22 @@ func TestOpenAPIContract_FactorySessionExposesRuntimeProjectionSchema(t *testing
 	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionStatus"), "FactorySessionStatus", []string{"ACTIVE", "IDLE", "FINISHED"})
 }
 
-func TestOpenAPIContract_SessionEventStreamHandshakeExposesStreamGenerationHeader(t *testing.T) {
+func TestOpenAPIContract_SessionEventStreamHandshakeExposesIdentityHeaders(t *testing.T) {
 	doc := loadBundledOpenAPIDocument(t)
 	paths, ok := doc["paths"].(map[string]any)
 	if !ok {
 		t.Fatal("bundled OpenAPI paths are missing")
 	}
+	operation := pathOperation(t, paths, "/factory-sessions/{session_id}/events", "get")
 	assertResponseHeaderString(
 		t,
-		pathOperation(t, paths, "/factory-sessions/{session_id}/events", "get"),
+		operation,
+		"200",
+		"X-Factory-Session-Backend-Scope-Id",
+	)
+	assertResponseHeaderString(
+		t,
+		operation,
 		"200",
 		"X-Factory-Session-Stream-Generation-Id",
 	)

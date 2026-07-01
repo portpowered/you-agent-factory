@@ -19,12 +19,36 @@ import {
   DashboardSessionTestProvider,
   renderWithDashboardSessionTest,
 } from "../../../testing";
+import { useCurrentFactoryDefinition } from "../../current-factory-definition/public";
 import { DashboardSessionProvider } from "../../dashboard/session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../../dashboard/state/dashboardSessionStore";
 import { useSubmitWorkWidget } from "../hooks/use-submit-work-widget";
 import { getSubmitWorkMessages } from "../messages/submit-work";
 import { SubmitWorkCard } from "./submit-work-card";
 import { SubmitWorkWidget } from "./submit-work-widget";
+
+vi.mock("../../current-factory-definition/public", async () => {
+  const actual = (await vi.importActual(
+    "../../current-factory-definition/public"
+  )) as typeof import("../../current-factory-definition/public");
+
+  return {
+    ...actual,
+    useCurrentFactoryDefinition: vi.fn(() => ({
+      data: undefined,
+      error: null,
+      isLoading: false,
+    })),
+  };
+});
+
+vi.mock("./invocation/factory-invocation-widget", () => ({
+  FactoryInvocationWidget: ({
+    sessionID,
+  }: {
+    sessionID: string | null | undefined;
+  }) => <div>FactoryInvocationWidget {sessionID}</div>,
+}));
 
 let restoreBrowserShims: (() => void) | undefined;
 let user: ReturnType<typeof userEvent.setup>;
@@ -38,6 +62,11 @@ async function selectWorkType(
 
 describe("SubmitWorkWidget form behavior", () => {
   beforeEach(() => {
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
+      data: undefined,
+      error: null,
+      isLoading: false,
+    });
     restoreBrowserShims = installDashboardBrowserTestShims();
     user = userEvent.setup();
     useDashboardSessionStore.setState({
@@ -101,6 +130,24 @@ describe("SubmitWorkWidget form behavior", () => {
     expect(form?.className).toContain("gap-3");
     expect(submitButton.className).toContain("w-full");
     expect(submitButton.className).toContain("justify-center");
+  });
+
+  it("switches the dashboard slot to the signature-backed invocation widget when the current factory declares invocationSignature", () => {
+    vi.mocked(useCurrentFactoryDefinition).mockReturnValue({
+      data: {
+        invocationSignature: {
+          parameters: [{ name: "input" }],
+        },
+      } as never,
+      error: null,
+      isLoading: false,
+    });
+
+    renderSubmitWorkWidget(
+      <SubmitWorkWidget submitWorkTypes={[{ work_type_name: "story" }]} />,
+    );
+
+    expect(screen.getByText("FactoryInvocationWidget ~default")).toBeTruthy();
   });
 
   it("keeps primary form content in page flow without a nested vertical scrollport", () => {

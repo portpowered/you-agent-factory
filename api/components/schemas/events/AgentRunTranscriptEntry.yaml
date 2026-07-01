@@ -1,0 +1,10 @@
+type: object
+additionalProperties: false
+description: Bounded transcript metadata for one agent-loop message without exposing full prompt bodies.
+properties:
+  role:
+    type: string
+    description: Message role such as system, user, assistant, or tool.
+  summary:
+    type: string
+    description: Bounded summary of the message content for inspection.

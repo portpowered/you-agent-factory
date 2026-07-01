@@ -245,7 +245,7 @@ const streamedGraphChangeEvents = [
 describe("App streamed replay rendering flows", () => {
   registerAppDashboardTestLifecycle();
 
-  it("smoke tests /events replay rendering without the removed dashboard snapshot route", async () => {
+  it("smoke tests session-scoped event replay rendering without the removed dashboard snapshot route", async () => {
     const { fetchMock } = renderApp({ snapshot: historicalTimelineSnapshot });
 
     const stream = await requireEventStream();

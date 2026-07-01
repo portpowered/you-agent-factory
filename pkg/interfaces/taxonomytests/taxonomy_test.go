@@ -66,6 +66,13 @@ func TestWorkerTaxonomyBehaviorProjection(t *testing.T) {
 			if got := interfaces.IsProviderBackedWorkerType(tt.workerType); got != (tt.inference || tt.agent) {
 				t.Fatalf("IsProviderBackedWorkerType(%q) = %v, want %v", tt.workerType, got, tt.inference || tt.agent)
 			}
+			wantLease := (tt.inference || tt.agent)
+			if got := interfaces.UsesModelhostLease(tt.workerType, interfaces.ModelLocalityLocal); got != wantLease {
+				t.Fatalf("UsesModelhostLease(%q, LOCAL) = %v, want %v", tt.workerType, got, wantLease)
+			}
+			if got := interfaces.UsesModelhostLease(tt.workerType, interfaces.ModelLocalityCloud); got {
+				t.Fatalf("UsesModelhostLease(%q, CLOUD) = true, want false", tt.workerType)
+			}
 			if got := interfaces.IsScriptWorkerType(tt.workerType); got != tt.script {
 				t.Fatalf("IsScriptWorkerType(%q) = %v, want %v", tt.workerType, got, tt.script)
 			}

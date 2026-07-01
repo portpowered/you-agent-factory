@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"github.com/portpowered/infinite-you/pkg/workers/worktree"
@@ -119,6 +120,22 @@ func (we *WorkstationExecutor) executeLogicalMove(dispatch interfaces.WorkDispat
 // executeModelWorkstation renders the prompt and calls the configured worker executor.
 func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, dispatch interfaces.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time) (interfaces.WorkResult, error) {
 	logger := logging.EnsureLogger(we.Logger)
+	invocationArgs := invocationArgumentsFromDispatch(dispatch)
+	invocationDiagnostics := invocationDiagnosticsForDispatch(we.RuntimeConfig, invocationArgs)
+	if invocationArgs != nil {
+		interpolatedWorkstation, err := invocations.InterpolateWorkstationConfig(*workstationDef, invocationArgs)
+		if err != nil {
+			return interfaces.WorkResult{
+				DispatchID:   dispatch.DispatchID,
+				TransitionID: dispatch.TransitionID,
+				Outcome:      interfaces.OutcomeFailed,
+				Error:        err.Error(),
+				Diagnostics:  invocationDiagnostics,
+				Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
+			}, nil
+		}
+		workstationDef = &interpolatedWorkstation
+	}
 	workerName := workstationWorkerName(workstationDef, dispatch)
 	workerDef, ok := we.RuntimeConfig.Worker(workerName)
 	if !ok {
@@ -129,6 +146,20 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 			Error:        "worker config not found: " + workerName,
 			Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
 		}, nil
+	}
+	if invocationArgs != nil {
+		interpolatedWorker, err := invocations.InterpolateWorkerConfig(*workerDef, invocationArgs)
+		if err != nil {
+			return interfaces.WorkResult{
+				DispatchID:   dispatch.DispatchID,
+				TransitionID: dispatch.TransitionID,
+				Outcome:      interfaces.OutcomeFailed,
+				Error:        err.Error(),
+				Diagnostics:  invocationDiagnostics,
+				Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
+			}, nil
+		}
+		workerDef = &interpolatedWorker
 	}
 
 	resolvedContext, failed := we.resolveWorkstationExecutionContext(dispatch, workstationDef, start, logger)
@@ -145,6 +176,7 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 	}
 
 	result, err := we.executeInnerWorker(ctx, request, workerDef, workstationDef, start, logger)
+	result.Diagnostics = mergeWorkDiagnostics(result.Diagnostics, invocationDiagnostics)
 	if err != nil {
 		return result, err
 	}
@@ -152,6 +184,40 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 		return normalizeClassifierWorkResult(result), nil
 	}
 	return result, nil
+}
+
+func invocationDiagnosticsForDispatch(
+	runtimeCfg interfaces.RuntimeFactoryConfigLookup,
+	args *interfaces.InvocationArguments,
+) *interfaces.WorkDiagnostics {
+	if args == nil {
+		return nil
+	}
+	var signature *interfaces.InvocationSignatureConfig
+	if runtimeCfg != nil && runtimeCfg.FactoryConfig() != nil {
+		signature = runtimeCfg.FactoryConfig().InvocationSignature
+	}
+	diagnostic := invocations.InvocationDiagnostic(signature, args)
+	if diagnostic == nil {
+		return nil
+	}
+	return &interfaces.WorkDiagnostics{Invocation: diagnostic}
+}
+
+func invocationArgumentsFromDispatch(dispatch interfaces.WorkDispatch) *interfaces.InvocationArguments {
+	for _, raw := range dispatch.InputTokens {
+		token, ok := raw.(interfaces.Token)
+		if !ok {
+			continue
+		}
+		if token.Color.DataType == interfaces.DataTypeResource {
+			continue
+		}
+		if token.Color.InvocationArguments != nil {
+			return interfaces.CloneInvocationArguments(token.Color.InvocationArguments)
+		}
+	}
+	return nil
 }
 
 func (we *WorkstationExecutor) resolveWorkstationExecutionContext(dispatch interfaces.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time, logger logging.Logger) (resolvedWorkstationExecutionContext, *interfaces.WorkResult) {

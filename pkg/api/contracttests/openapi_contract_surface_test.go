@@ -364,6 +364,7 @@ func TestOpenAPIContract_PublicRuntimeAndFactoryWorldSchemasUseCamelCase(t *test
 		"FactoryWorldMutationView",
 		"FactoryWorldScriptRequestView",
 		"FactoryWorldScriptResponseView",
+		"FactoryWorldAgentRunInspectionView",
 		"FactoryWorldWorkstationRequestCountView",
 		"FactoryWorldWorkstationRequestRequestView",
 		"FactoryWorldWorkstationRequestResponseView",
@@ -526,11 +527,10 @@ func assertInvocationSurfaceSchemas(t *testing.T, schemas map[string]any, paths 
 	assertResponseRef(t, invokeOperation, "404", "#/components/responses/NotFound")
 
 	requestSchema := schemaObject(t, schemas, "InvocationRequest")
-	assertRequiredFields(t, requestSchema, "sourceKind", "content")
 	requestProperties := schemaProperties(t, requestSchema, "InvocationRequest")
 	assertPropertyRef(t, requestProperties, "sourceKind", "#/components/schemas/InvocationInputSourceKind")
 	assertPropertyRef(t, requestProperties, "content", "#/components/schemas/WorkContent")
-	assertSchemaPropertiesPresent(t, requestProperties, "InvocationRequest", "sourceKind", "content", "requestId", "timeoutMillis")
+	assertSchemaPropertiesPresent(t, requestProperties, "InvocationRequest", "sourceKind", "content", "args", "requestId", "timeoutMillis")
 
 	assertEnumValues(t, schemaObject(t, schemas, "InvocationInputSourceKind"), "InvocationInputSourceKind", []string{"text", "fileRef", "audioStream"})
 	assertEnumValues(t, schemaObject(t, schemas, "InvocationTerminalStatus"), "InvocationTerminalStatus", []string{"COMPLETED", "FAILED", "CANCELED", "TIMED_OUT"})
@@ -877,4 +877,86 @@ func assertFactoryResponseExamples(t *testing.T, responses map[string]any) {
 	assertResponseExampleCodeFamilies(t, responses, "MoveWorkConflict", map[string]string{
 		"MOVE_WORK_REQUEST_ALREADY_APPLIED": "CONFLICT",
 	})
+}
+
+func assertRealBackendSessionAPISliceRoutes(t *testing.T, paths map[string]any) {
+	t.Helper()
+
+	requiredRoutes := map[string][]string{
+		"/factory-sessions/async":                                 {"post"},
+		"/factory-sessions/sync":                                  {"post"},
+		"/factory-sessions":                                         {"get"},
+		"/factory-sessions/{session_id}":                            {"get"},
+		"/factory-sessions/{session_id}/results":                    {"get"},
+		"/factory-sessions/{session_id}/events":                     {"get"},
+		"/factory-sessions/{session_id}/dispatches":                 {"get"},
+		"/factory-sessions/{session_id}/dispatches/{dispatch_id}":   {"get"},
+		"/factory-sessions/{session_id}/artifacts":                  {"get"},
+		"/factory-sessions/{session_id}/artifacts/{artifact_id}":    {"get"},
+		"/factory-sessions/{session_id}/approve":                    {"post"},
+		"/factory-sessions/{session_id}/pause":                      {"post"},
+		"/factory-sessions/{session_id}/resume":                     {"post"},
+		"/factory-sessions/{session_id}/cancel":                     {"post"},
+		"/factory-sessions/{session_id}/terminate":                  {"post"},
+		"/factory-sessions/{session_id}/retry-dispatch":             {"post"},
+		"/factory-sessions/{session_id}/interrupt-dispatch":         {"post"},
+	}
+	for path, methods := range requiredRoutes {
+		pathItem, ok := paths[path].(map[string]any)
+		if !ok {
+			t.Fatalf("paths.%s is missing for real-backend session API slice", path)
+		}
+		for _, method := range methods {
+			if _, ok := pathItem[method].(map[string]any); !ok {
+				t.Fatalf("paths.%s.%s is missing for real-backend session API slice", path, method)
+			}
+		}
+	}
+
+	for path := range paths {
+		lower := strings.ToLower(path)
+		if strings.Contains(lower, "workflow-run") || strings.Contains(lower, "workflow-runs") {
+			t.Fatalf("paths.%s must not introduce standalone workflow-run API routes", path)
+		}
+	}
+}
+
+func assertDeferredRealBackendSessionRouteFamilies(t *testing.T, paths map[string]any) {
+	t.Helper()
+
+	deferredRoutes := map[string][]string{}
+	inScopeRoutes := map[string]struct{}{
+		"/factory-sessions/async":                                   {},
+		"/factory-sessions/sync":                                    {},
+		"/factory-sessions":                                         {},
+		"/factory-sessions/{session_id}":                            {},
+		"/factory-sessions/{session_id}/results":                    {},
+		"/factory-sessions/{session_id}/events":                     {},
+		"/factory-sessions/{session_id}/dispatches":                 {},
+		"/factory-sessions/{session_id}/dispatches/{dispatch_id}":   {},
+		"/factory-sessions/{session_id}/artifacts":                  {},
+		"/factory-sessions/{session_id}/artifacts/{artifact_id}":    {},
+		"/factory-sessions/{session_id}/approve":                    {},
+		"/factory-sessions/{session_id}/pause":                      {},
+		"/factory-sessions/{session_id}/resume":                     {},
+		"/factory-sessions/{session_id}/cancel":                     {},
+		"/factory-sessions/{session_id}/terminate":                  {},
+		"/factory-sessions/{session_id}/retry-dispatch":             {},
+		"/factory-sessions/{session_id}/interrupt-dispatch":         {},
+	}
+
+	for path, methods := range deferredRoutes {
+		if _, inScope := inScopeRoutes[path]; inScope {
+			t.Fatalf("paths.%s is both in-scope and deferred for the real-backend API slice", path)
+		}
+		pathItem, ok := paths[path].(map[string]any)
+		if !ok {
+			t.Fatalf("paths.%s is missing for deferred real-backend session route family", path)
+		}
+		for _, method := range methods {
+			if _, ok := pathItem[method].(map[string]any); !ok {
+				t.Fatalf("paths.%s.%s is missing for deferred real-backend session route family", path, method)
+			}
+		}
+	}
 }

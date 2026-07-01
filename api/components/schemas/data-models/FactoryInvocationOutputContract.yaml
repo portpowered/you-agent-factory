@@ -1,0 +1,19 @@
+type: object
+additionalProperties: false
+description: Customer-facing output hint for a factory invocation signature.
+properties:
+  mode:
+    $ref: './FactoryInvocationOutputContractMode.yaml'
+    description: High-level output contract mode exposed to callers.
+  pathParameter:
+    type: string
+    description: Parameter name that controls the destination path when the factory writes output to disk.
+  contentType:
+    type: string
+    description: Output media type hint for docs, API consumers, and dashboard affordances.
+  fileExtension:
+    type: string
+    description: Suggested file extension when the output mode writes a file.
+  description:
+    type: string
+    description: Human-readable summary of the primary output contract.

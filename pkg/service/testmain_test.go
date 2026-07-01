@@ -24,6 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -148,10 +149,10 @@ func TestBuildFactoryService_InitializesManagedLocalModelFields(t *testing.T) {
 	if bundle == nil {
 		t.Fatal("expected startup runtime bundle")
 	}
-	if bundle.modelResources == nil {
+	if bundle.ModelResources == nil {
 		t.Fatal("expected startup bundle to initialize modelResources")
 	}
-	if bundle.localModels == nil {
+	if bundle.LocalModels == nil {
 		t.Fatal("expected startup bundle to initialize localModels")
 	}
 	if svc.sessions == nil {
@@ -254,7 +255,11 @@ func startLocalModelInferenceTestServer(
 		healthServer.Close()
 		t.Fatalf("ComposeFactoryService: %v", err)
 	}
-	svc := AttachFactorySaveCollaborator(shell, ProvideFactorySaveCollaborator(shell, cfg))
+	svc := AttachModelServiceCollaborator(shell, ProvideModelServiceCollaborator(shell, cfg))
+	svc = AttachFactorySaveCollaborator(
+		FactoryServiceShell{Service: svc},
+		ProvideFactorySaveCollaborator(FactoryServiceShell{Service: svc}, cfg),
+	)
 
 	runErrCh := make(chan error, 1)
 	go func() { runErrCh <- svc.Run(ctx) }()
@@ -1231,8 +1236,12 @@ You are a helpful assistant.
 	if !ok {
 		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
 	}
-	if _, ok := wsExec.Executor.(*workers.AgentExecutor); !ok {
-		t.Fatalf("expected wrapped executor to be *workers.AgentExecutor, got %T", wsExec.Executor)
+	router, ok := wsExec.Executor.(*workerexecutor.WorkstationBehaviorRouter)
+	if !ok {
+		t.Fatalf("expected wrapped executor to be *executor.WorkstationBehaviorRouter, got %T", wsExec.Executor)
+	}
+	if _, ok := router.InferenceExecutor.(*workers.AgentExecutor); !ok {
+		t.Fatalf("expected inference executor to be *workers.AgentExecutor, got %T", router.InferenceExecutor)
 	}
 
 	workerDef, ok := wsExec.RuntimeConfig.Worker("worker-a")
@@ -1458,7 +1467,8 @@ func executeModelWorkerProgressPublisherServiceTest(
 		recorder,
 		nil,
 		nil,
-		localModelDomain{},
+		time.Now,
+		LocalModelDomain{},
 	)
 	if err != nil {
 		t.Fatalf("loadWorkersFromConfig: %v", err)
@@ -1644,11 +1654,12 @@ func modelInvokeWorkstationExecutorForLocalManagedRuntime(
 		nil,
 		nil,
 		nil,
-		localModelDomain{
-			resources: newLocalModelResourceLimiter(),
-			assets:    staticModelAssetPuller{cache: cache},
-			runtime:   runtime,
-			manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+		nil,
+		LocalModelDomain{
+			Resources: newLocalModelResourceLimiter(),
+			Assets:    staticModelAssetPuller{cache: cache},
+			Runtime:   runtime,
+			Manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
 		},
 	)
 	if err != nil {
@@ -2305,7 +2316,8 @@ func loadWorkersFromConfigForServiceTest(
 		inferenceRecorder,
 		nil,
 		nil,
-		localModelDomain{},
+		nil,
+		LocalModelDomain{},
 	)
 }
 
@@ -2623,12 +2635,13 @@ func taxonomyOmniVoiceInferenceWorkstationExecutorWithEvents(
 		nil,
 		nil,
 		history.RecordModelEvent,
+		nil,
 		func() time.Time { return eventTime },
-		localModelDomain{
-			resources: newLocalModelResourceLimiter(),
-			assets:    staticModelAssetPuller{cache: cache},
-			runtime:   runtime,
-			manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
+		LocalModelDomain{
+			Resources: newLocalModelResourceLimiter(),
+			Assets:    staticModelAssetPuller{cache: cache},
+			Runtime:   runtime,
+			Manager:   newManagedLocalModelManager(staticModelAssetPuller{cache: cache}, runtime),
 		},
 	)
 	if err != nil {
@@ -2824,6 +2837,7 @@ func TestLoadWorkersFromConfig_InferenceWorkerUsesModelHostLeases(t *testing.T) 
 		nil,
 		nil,
 		nil,
+		nil,
 		domain,
 	)
 	if err != nil {
@@ -2877,11 +2891,14 @@ func TestFactorySessionInvocation_LocalLlamaCppInferenceUsesModelHostLeases(t *t
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	content := factoryapi.WorkContent{
+		mustGeneratedLocalModelHTTPTextPart(t, "hello factory session inference"),
+	}
+
 	result, err := svc.InvokeFactorySession(ctx, factorysessions.DefaultSessionID, factoryapi.InvocationRequest{
-		SourceKind: factoryapi.InvocationInputSourceKindText,
-		Content: factoryapi.WorkContent{
-			mustGeneratedLocalModelHTTPTextPart(t, "hello factory session inference"),
-		},
+		SourceKind: &sourceKind,
+		Content:    &content,
 	})
 	if err != nil {
 		t.Fatalf("InvokeFactorySession: %v", err)
@@ -2956,13 +2973,13 @@ func modelHostBackedLocalModelDomain(
 	t.Helper()
 	host := newServiceTestSupervisedModelHost(t, puller, launcher)
 	leaseExec := modelhost.NewLeaseExecution(host, puller, runtime, localModelHooks())
-	return localModelDomain{
-		resources:      newLocalModelResourceLimiter(),
-		assets:         puller,
-		runtime:        runtime,
-		manager:        newManagedLocalModelManager(puller, runtime),
-		host:           host,
-		leaseExecution: leaseExec,
+	return LocalModelDomain{
+		Resources:      newLocalModelResourceLimiter(),
+		Assets:         puller,
+		Runtime:        runtime,
+		Manager:        newManagedLocalModelManager(puller, runtime),
+		Host:           host,
+		LeaseExecution: leaseExec,
 	}
 }
 
@@ -3086,6 +3103,7 @@ func taxonomyOmniVoiceInferenceWorkstationExecutorWithModelHost(
 		nil,
 		nil,
 		history.RecordModelEvent,
+		nil,
 		func() time.Time { return eventTime },
 		domain,
 	)

@@ -455,6 +455,23 @@ func TestRuleWorkerModelOperations_RejectsCapabilityDeclarationsOnScriptWorkers(
 	assertFindingMatch(t, findings, "worker-model-operation-worker-type", "workers[0](scripted)", "require worker type INFERENCE_WORKER or legacy MODEL_WORKER")
 }
 
+func TestRuleWorkerModelOperations_RejectsCapabilityDeclarationsOnAgentWorkers(t *testing.T) {
+	cfg := testBaseConfig()
+	cfg.Workers = []interfaces.WorkerConfig{{
+		Name: "executor",
+		Type: interfaces.WorkerTypeAgent,
+		Operations: []interfaces.ModelOperation{{
+			Name:    "TTS",
+			Inputs:  []interfaces.ModelOperationSlot{{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeText}}},
+			Outputs: []interfaces.ModelOperationSlot{{Name: "audio", ContentTypes: []string{interfaces.ModelOperationContentTypeAudio}}},
+		}},
+	}}
+
+	findings := ruleWorkerModelOperations(cfg)
+
+	assertFindingMatch(t, findings, "worker-model-operation-worker-type", "workers[0](executor)", "require worker type INFERENCE_WORKER or legacy MODEL_WORKER")
+}
+
 func TestRuleWorkerModelOperations_RejectsMissingSlotContentTypes(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Workers = []interfaces.WorkerConfig{{

@@ -6,6 +6,8 @@ import type {
   DashboardWorkItemRef,
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
+import { toDashboardAgentRunInspection } from "../../../../api/dashboard/agent-run-inspection-types";
+import { enrichWorkstationRequestWithWorkstationType } from "./useCurrentSelection.workstation-type-helpers";
 
 export type DispatchWorkstationRequest =
   | DashboardRuntimeWorkstationRequest
@@ -33,10 +35,11 @@ export function resolveProjectedWorkstationRequestsByDispatchID(
     workstationRequestsByDispatchID &&
     Object.keys(workstationRequestsByDispatchID).length > 0
   ) {
-    return hydrateProjectedInferenceAttempts(
+    const hydrated = hydrateProjectedInferenceAttempts(
       workstationRequestsByDispatchID,
       inferenceAttemptsByDispatchID,
     );
+    return enrichProjectedWorkstationRequests(hydrated, snapshot);
   }
 
   if (!snapshot?.runtime.workstation_requests_by_dispatch_id) {
@@ -47,13 +50,37 @@ export function resolveProjectedWorkstationRequestsByDispatchID(
     Object.entries(snapshot.runtime.workstation_requests_by_dispatch_id).map(
       ([dispatchID, request]) => [
         dispatchID,
-        toDashboardWorkstationRequest(
-          request,
-          inferenceAttemptsByDispatchID?.[dispatchID],
+        enrichWorkstationRequestWithWorkstationType(
+          toDashboardWorkstationRequest(
+            request,
+            inferenceAttemptsByDispatchID?.[dispatchID],
+          ),
+          snapshot,
         ),
       ],
     ),
   );
+}
+
+function enrichProjectedWorkstationRequests(
+  workstationRequestsByDispatchID: Record<string, DashboardWorkstationRequest>,
+  snapshot: DashboardSnapshot | null | undefined,
+): Record<string, DashboardWorkstationRequest> {
+  let changed = false;
+  const entries = Object.entries(workstationRequestsByDispatchID).map(
+    ([dispatchID, request]) => {
+      const enriched = enrichWorkstationRequestWithWorkstationType(
+        request,
+        snapshot,
+      );
+      if (enriched !== request) {
+        changed = true;
+      }
+      return [dispatchID, enriched] as const;
+    },
+  );
+
+  return changed ? Object.fromEntries(entries) : workstationRequestsByDispatchID;
 }
 
 function hydrateProjectedInferenceAttempts(
@@ -282,6 +309,9 @@ export function toDashboardWorkstationRequest(
       request.request.scriptRequest ?? request.request.script_request,
     script_response:
       request.response?.scriptResponse ?? request.response?.script_response,
+    agent_run_inspection: toDashboardAgentRunInspection(
+      request.response?.agentRunInspection ?? request.response?.agent_run_inspection,
+    ),
     started_at: request.request.startedAt ?? request.request.started_at,
     total_duration_millis:
       request.response?.durationMillis ?? request.response?.duration_millis,

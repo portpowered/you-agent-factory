@@ -815,19 +815,21 @@ func CloneFactoryConfig(cfg *interfaces.FactoryConfig) (*interfaces.FactoryConfi
 		return nil, nil
 	}
 	cloned := &interfaces.FactoryConfig{
-		Name:             cfg.Name,
-		Project:          cfg.Project,
-		Version:          cloneFactoryVersion(cfg.Version),
-		Guards:           cloneFactoryGuardConfigs(cfg.Guards),
-		InputTypes:       cloneInputTypeConfigs(cfg.InputTypes),
-		InvocationReturn: cloneInvocationReturnConfig(cfg.InvocationReturn),
-		Orchestrator:     cloneFactoryOrchestratorConfig(cfg.Orchestrator),
-		WorkTypes:        cloneWorkTypeConfigs(cfg.WorkTypes),
-		Resources:        cloneResourceConfigs(cfg.Resources),
-		ResourceManifest: clonePortableResourceManifestConfig(cfg.ResourceManifest),
-		Layout:           cloneFactoryLayoutConfig(cfg.Layout),
-		Workers:          cloneWorkerConfigs(cfg.Workers),
-		Workstations:     cloneWorkstationConfigs(cfg.Workstations),
+		Name:                cfg.Name,
+		Project:             cfg.Project,
+		Version:             cloneFactoryVersion(cfg.Version),
+		Runner:              cfg.Runner,
+		Guards:              cloneFactoryGuardConfigs(cfg.Guards),
+		InputTypes:          cloneInputTypeConfigs(cfg.InputTypes),
+		InvocationReturn:    cloneInvocationReturnConfig(cfg.InvocationReturn),
+		InvocationSignature: cloneInvocationSignatureConfig(cfg.InvocationSignature),
+		Orchestrator:        cloneFactoryOrchestratorConfig(cfg.Orchestrator),
+		WorkTypes:           cloneWorkTypeConfigs(cfg.WorkTypes),
+		Resources:           cloneResourceConfigs(cfg.Resources),
+		ResourceManifest:    clonePortableResourceManifestConfig(cfg.ResourceManifest),
+		Layout:              cloneFactoryLayoutConfig(cfg.Layout),
+		Workers:             cloneWorkerConfigs(cfg.Workers),
+		Workstations:        cloneWorkstationConfigs(cfg.Workstations),
 	}
 	return cloned, nil
 }
@@ -855,6 +857,56 @@ func cloneInvocationReturnConfig(config *interfaces.InvocationReturnConfig) *int
 	}
 	cloned := *config
 	return &cloned
+}
+
+func cloneInvocationSignatureConfig(config *interfaces.InvocationSignatureConfig) *interfaces.InvocationSignatureConfig {
+	if config == nil {
+		return nil
+	}
+	cloned := &interfaces.InvocationSignatureConfig{
+		UnknownNamedArgumentPolicy: config.UnknownNamedArgumentPolicy,
+		OutputContract:             cloneInvocationOutputContractConfig(config.OutputContract),
+		Examples:                   cloneInvocationExampleConfigs(config.Examples),
+	}
+	if len(config.Parameters) > 0 {
+		cloned.Parameters = make([]interfaces.InvocationParameterConfig, len(config.Parameters))
+		for i, parameter := range config.Parameters {
+			cloned.Parameters[i] = cloneInvocationParameterConfig(parameter)
+		}
+	}
+	return cloned
+}
+
+func cloneInvocationParameterConfig(config interfaces.InvocationParameterConfig) interfaces.InvocationParameterConfig {
+	cloned := config
+	cloned.Aliases = append([]string(nil), config.Aliases...)
+	cloned.Choices = append([]string(nil), config.Choices...)
+	cloned.DefaultValues = append([]string(nil), config.DefaultValues...)
+	if len(config.Bindings) > 0 {
+		cloned.Bindings = make([]interfaces.InvocationParameterBindingConfig, len(config.Bindings))
+		copy(cloned.Bindings, config.Bindings)
+	}
+	return cloned
+}
+
+func cloneInvocationOutputContractConfig(config *interfaces.InvocationOutputContractConfig) *interfaces.InvocationOutputContractConfig {
+	if config == nil {
+		return nil
+	}
+	cloned := *config
+	return &cloned
+}
+
+func cloneInvocationExampleConfigs(configs []interfaces.InvocationExampleConfig) []interfaces.InvocationExampleConfig {
+	if len(configs) == 0 {
+		return nil
+	}
+	cloned := make([]interfaces.InvocationExampleConfig, len(configs))
+	for i, config := range configs {
+		cloned[i] = config
+		cloned[i].Argv = append([]string(nil), config.Argv...)
+	}
+	return cloned
 }
 
 // CloneWorkerConfig returns a copy of a worker runtime definition.
