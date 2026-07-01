@@ -154,8 +154,11 @@ primary-result behavior.
   `runFactory` resolves `--named` / `--factory` / `--dir` conflicts and portable
   `--factory` preflight before loading operator defaults so flag and path failures
   stay independent of `~/.you-agent-factory/config.json` contents.
-- `pkg/cli/main_test.go` isolates `HOME` for the whole CLI package so `make test`
+- `pkg/cli/root_run_test.go` isolates `HOME` for the whole CLI package so `make test`
   does not depend on the developer's real operator config file.
+- `internal/releasesmoke/harness.go` isolates spawned `you run` smoke processes from
+  the developer's real `HOME` so `tests/release` stays hermetic through
+  `make test`.
 -   `pkg/config/layout.go` owns the built-in `@you/goal` and `@you/tts` factory JSON
   (`BuiltInGoalFactoryJSON`, `BuiltInTTSFactoryJSON`) registered from
   `builtInNamedFactoryCatalog` in `pkg/config/layout.go`. Packaged `@you/goal`
