@@ -12,11 +12,13 @@ import (
 
 // Dependencies carries runtime inputs for model-domain catalog operations.
 type Dependencies struct {
-	RuntimeConfig    func() *factoryconfig.LoadedFactoryConfig
-	ModelHost        func() modelhost.Host
-	ModelAssetPuller func() localmodels.AssetPuller
-	Logger           func() *zap.Logger
-	ModelPullMetrics func() PullMetricsRecorder
+	RuntimeConfig           func() *factoryconfig.LoadedFactoryConfig
+	ModelHost               func() modelhost.Host
+	ModelAssetPuller        func() localmodels.AssetPuller
+	Logger                  func() *zap.Logger
+	ModelPullMetrics        func() PullMetricsRecorder
+	ModelInvocationExecutor ModelInvocationExecutor
+	FactoryRunnerID         func() string
 }
 
 // Service owns direct model catalog, pull, and invocation behavior.

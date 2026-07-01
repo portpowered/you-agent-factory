@@ -1704,27 +1704,6 @@ const (
 	modelPullMetricSourceFailure = "managed_runtime.pull.source_failure"
 )
 
-func (s *runtimeModelService) recordManagedRuntimeInvocationReadiness(
-	modelName string,
-	managed factoryapi.ManagedRuntime,
-	err error,
-) {
-	if s == nil || s.deps.logger == nil {
-		return
-	}
-	fields := []zap.Field{
-		zap.String("model_name", modelName),
-		zap.String("managed_runtime_identity", managed.Identity),
-		zap.String("readiness_state", string(managed.ReadinessState)),
-		zap.String("lifecycle_state", string(managed.LifecycleState)),
-	}
-	if err != nil {
-		s.deps.logger.Warn("managed runtime invocation blocked", append(fields, zap.Error(err))...)
-		return
-	}
-	s.deps.logger.Info("managed runtime invocation readiness satisfied", fields...)
-}
-
 func (fs *FactoryService) modelPullMetricsRecorder() ModelPullMetricsRecorder {
 	if fs == nil || fs.cfg == nil {
 		return nil
