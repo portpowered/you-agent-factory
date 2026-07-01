@@ -1513,6 +1513,8 @@ type stubSessionGateway struct {
 	getSessionResult   factoryapi.FactorySession
 	pauseResult        factoryapi.FactorySessionLifecycleControlResponse
 	resumeResult       factoryapi.FactorySessionLifecycleControlResponse
+	durablePauseResult factoryapi.FactorySessionLifecycleControlResponse
+	durableCancelResult factoryapi.FactorySessionLifecycleControlResponse
 	calls              []string
 	folderPaths        []string
 	sessionIDs           []string
@@ -1562,6 +1564,48 @@ func (s *stubSessionGateway) CloseFactorySession(_ context.Context, sessionID st
 	s.calls = append(s.calls, "close-session")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
 	return nil
+}
+
+func (s *stubSessionGateway) PauseDurableFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	s.calls = append(s.calls, "pause-durable-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.durablePauseResult, nil
+}
+
+func (s *stubSessionGateway) ResumeDurableFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	s.calls = append(s.calls, "resume-durable-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.durablePauseResult, nil
+}
+
+func (s *stubSessionGateway) CancelDurableFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	s.calls = append(s.calls, "cancel-durable-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.durableCancelResult, nil
+}
+
+func (s *stubSessionGateway) TerminateDurableFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	s.calls = append(s.calls, "terminate-durable-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.durableCancelResult, nil
+}
+
+func (s *stubSessionGateway) ApproveDurableFactorySession(_ context.Context, sessionID string, _ factoryapi.FactorySessionApproveRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	s.calls = append(s.calls, "approve-durable-session")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.durablePauseResult, nil
+}
+
+func (s *stubSessionGateway) RetryDurableFactorySessionDispatch(_ context.Context, sessionID string, _ factoryapi.FactorySessionRetryDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	s.calls = append(s.calls, "retry-durable-dispatch")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.durablePauseResult, nil
+}
+
+func (s *stubSessionGateway) InterruptDurableFactorySessionDispatch(_ context.Context, sessionID string, _ factoryapi.FactorySessionInterruptDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error) {
+	s.calls = append(s.calls, "interrupt-durable-dispatch")
+	s.sessionIDs = append(s.sessionIDs, sessionID)
+	return s.durablePauseResult, nil
 }
 
 type stubFactoryCoordinator struct {
@@ -1796,6 +1840,12 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	if _, err := svc.ResumeLiveFactorySession(context.Background(), "session-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
 		t.Fatalf("ResumeLiveFactorySession: %v", err)
 	}
+	if _, err := svc.PauseDurableFactorySession(context.Background(), "dur-sess-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
+		t.Fatalf("PauseDurableFactorySession: %v", err)
+	}
+	if _, err := svc.CancelDurableFactorySession(context.Background(), "dur-sess-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
+		t.Fatalf("CancelDurableFactorySession: %v", err)
+	}
 	if err := svc.ActivateNamedFactory(context.Background(), "gamma"); err != nil {
 		t.Fatalf("ActivateNamedFactory: %v", err)
 	}
@@ -1829,8 +1879,8 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	if strings.Join(stub.calls, ",") != "activate,submit-session-work,move-session-work,subscribe-session-events,snapshot-session" {
 		t.Fatalf("coordinator calls = %#v, want delegated lifecycle sequence without open, read, or close methods", stub.calls)
 	}
-	if strings.Join(gatewayStub.calls, ",") != "list-sessions,open-session,open-session-from-folder,close-session,pause-session,resume-session" {
-		t.Fatalf("session gateway calls = %#v, want delegated read, open, and live lifecycle sequence", gatewayStub.calls)
+	if strings.Join(gatewayStub.calls, ",") != "list-sessions,open-session,open-session-from-folder,close-session,pause-session,resume-session,pause-durable-session,cancel-durable-session" {
+		t.Fatalf("session gateway calls = %#v, want delegated read, open, live lifecycle, and durable lifecycle sequence", gatewayStub.calls)
 	}
 	if len(stub.runtimeNames) != 1 || stub.runtimeNames[0] != "gamma" {
 		t.Fatalf("activation targets = %#v, want gamma", stub.runtimeNames)

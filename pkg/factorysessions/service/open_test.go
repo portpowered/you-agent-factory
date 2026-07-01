@@ -90,6 +90,10 @@ func (h *openTestHost) ObserveLiveLifecycleControl(
 ) {
 }
 
+func (h *openTestHost) DurableExecution() factorysessionexecution.Service {
+	return nil
+}
+
 func TestService_OpenFactorySessionFromFolder_AutoOpensSingleTarget(t *testing.T) {
 	t.Parallel()
 

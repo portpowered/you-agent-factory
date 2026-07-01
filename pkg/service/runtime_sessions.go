@@ -1592,15 +1592,7 @@ func (fs *FactoryService) PauseDurableFactorySession(
 	sessionID string,
 	request factoryapi.FactorySessionLifecycleControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	control, err := factorysession.ControlRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	result, err := fs.durableExecutionService().Pause(ctx, sessionID, control)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	return factorysession.LifecycleControlResponseToAPI(result), nil
+	return fs.requireSessionGateway().PauseDurableFactorySession(ctx, sessionID, request)
 }
 
 func (fs *FactoryService) ResumeDurableFactorySession(
@@ -1608,15 +1600,7 @@ func (fs *FactoryService) ResumeDurableFactorySession(
 	sessionID string,
 	request factoryapi.FactorySessionLifecycleControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	control, err := factorysession.ControlRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	result, err := fs.durableExecutionService().Resume(ctx, sessionID, control)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	return factorysession.LifecycleControlResponseToAPI(result), nil
+	return fs.requireSessionGateway().ResumeDurableFactorySession(ctx, sessionID, request)
 }
 
 func (fs *FactoryService) CancelDurableFactorySession(
@@ -1624,15 +1608,7 @@ func (fs *FactoryService) CancelDurableFactorySession(
 	sessionID string,
 	request factoryapi.FactorySessionLifecycleControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	control, err := factorysession.ControlRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	result, err := fs.durableExecutionService().Cancel(ctx, sessionID, control)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	return factorysession.LifecycleControlResponseToAPI(result), nil
+	return fs.requireSessionGateway().CancelDurableFactorySession(ctx, sessionID, request)
 }
 
 func (fs *FactoryService) TerminateDurableFactorySession(
@@ -1640,15 +1616,7 @@ func (fs *FactoryService) TerminateDurableFactorySession(
 	sessionID string,
 	request factoryapi.FactorySessionLifecycleControlRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	control, err := factorysession.ControlRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	result, err := fs.durableExecutionService().Terminate(ctx, sessionID, control)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	return factorysession.LifecycleControlResponseToAPI(result), nil
+	return fs.requireSessionGateway().TerminateDurableFactorySession(ctx, sessionID, request)
 }
 
 func (fs *FactoryService) ApproveDurableFactorySession(
@@ -1656,15 +1624,7 @@ func (fs *FactoryService) ApproveDurableFactorySession(
 	sessionID string,
 	request factoryapi.FactorySessionApproveRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	approve, err := factorysession.ApproveRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	result, err := fs.durableExecutionService().Approve(ctx, sessionID, approve)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	return factorysession.LifecycleControlResponseToAPI(result), nil
+	return fs.requireSessionGateway().ApproveDurableFactorySession(ctx, sessionID, request)
 }
 
 func (fs *FactoryService) RetryDurableFactorySessionDispatch(
@@ -1672,15 +1632,7 @@ func (fs *FactoryService) RetryDurableFactorySessionDispatch(
 	sessionID string,
 	request factoryapi.FactorySessionRetryDispatchRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	retry, err := factorysession.RetryDispatchRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	result, err := fs.durableExecutionService().RetryDispatch(ctx, sessionID, retry)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	return factorysession.LifecycleControlResponseToAPI(result), nil
+	return fs.requireSessionGateway().RetryDurableFactorySessionDispatch(ctx, sessionID, request)
 }
 
 func (fs *FactoryService) InterruptDurableFactorySessionDispatch(
@@ -1688,15 +1640,7 @@ func (fs *FactoryService) InterruptDurableFactorySessionDispatch(
 	sessionID string,
 	request factoryapi.FactorySessionInterruptDispatchRequest,
 ) (factoryapi.FactorySessionLifecycleControlResponse, error) {
-	interrupt, err := factorysession.InterruptDispatchRequestFromAPI(request)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	result, err := fs.durableExecutionService().InterruptDispatch(ctx, sessionID, interrupt)
-	if err != nil {
-		return factoryapi.FactorySessionLifecycleControlResponse{}, err
-	}
-	return factorysession.LifecycleControlResponseToAPI(result), nil
+	return fs.requireSessionGateway().InterruptDurableFactorySessionDispatch(ctx, sessionID, request)
 }
 func (fs *FactoryService) PauseLiveFactorySession(
 	ctx context.Context,

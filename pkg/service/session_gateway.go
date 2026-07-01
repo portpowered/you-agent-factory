@@ -22,6 +22,13 @@ type sessionGateway interface {
 	PauseLiveFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 	ResumeLiveFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 	CloseFactorySession(context.Context, string) error
+	PauseDurableFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	ResumeDurableFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	CancelDurableFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	TerminateDurableFactorySession(context.Context, string, factoryapi.FactorySessionLifecycleControlRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	ApproveDurableFactorySession(context.Context, string, factoryapi.FactorySessionApproveRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	RetryDurableFactorySessionDispatch(context.Context, string, factoryapi.FactorySessionRetryDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
+	InterruptDurableFactorySessionDispatch(context.Context, string, factoryapi.FactorySessionInterruptDispatchRequest) (factoryapi.FactorySessionLifecycleControlResponse, error)
 }
 
 var _ sessionGateway = (*factorysessionservice.Service)(nil)
@@ -117,6 +124,13 @@ func (h sessionGatewayHost) ObserveLiveLifecycleControl(
 		return
 	}
 	h.FactoryService.observeLiveLifecycleControl(sessionID, operation, control, outcome, status, err)
+}
+
+func (h sessionGatewayHost) DurableExecution() factorysessionexecution.Service {
+	if h.FactoryService == nil {
+		return nil
+	}
+	return h.FactoryService.durableExecutionService()
 }
 
 func newSessionGatewayService(fs *FactoryService) *factorysessionservice.Service {
