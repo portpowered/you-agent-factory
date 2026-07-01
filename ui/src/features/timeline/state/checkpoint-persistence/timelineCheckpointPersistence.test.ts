@@ -1,8 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
+import {
+  readSessionPersistenceInvalidationRecords,
+  resetSessionPersistenceInvalidationRecords,
+} from "../../../dashboard/public/session-persistence-diagnostics";
 import { emptyReplayWorldState } from "../timeline/replayWorldStateSupport";
 import type { FactoryTimelineCheckpoint } from "../timeline/storeState";
 import {
+  clearTimelineCheckpoint,
   persistTimelineCheckpoint,
   purgeLegacyTimelineCheckpoints,
   readTimelineCheckpoint,
@@ -188,6 +193,64 @@ describe("timeline checkpoint persistence", () => {
       logicalSessionKeyId: "logical-a",
       streamGenerationId: "stream-a",
     });
+  });
+
+  it("records user-initiated checkpoint clears through session persistence diagnostics", async () => {
+    resetSessionPersistenceInvalidationRecords();
+    const { indexedDB, records } = createIndexedDBTestDouble();
+    const streamIdentity = streamIdentityFixture();
+
+    await persistTimelineCheckpoint(
+      indexedDB,
+      checkpointFixture(),
+      streamIdentity,
+    );
+    await clearTimelineCheckpoint(indexedDB, streamIdentity, {
+      requestedSessionID: streamIdentity.factorySessionID,
+      userInitiated: true,
+    });
+
+    expect(records.has(checkpointStorageKey(streamIdentity))).toBe(false);
+    expect(readSessionPersistenceInvalidationRecords()).toEqual([
+      {
+        reason: "user_cleared_sessions",
+        recoveryAction: "clear_checkpoint",
+        requestedSessionID: streamIdentity.factorySessionID,
+        scope: {
+          backendScopeID: streamIdentity.backendScopeID,
+          factorySessionID: streamIdentity.factorySessionID,
+          streamGenerationID: streamIdentity.streamGenerationID,
+        },
+      },
+    ]);
+  });
+
+  it("records identity mismatch diagnostics when stored checkpoint scope drifts", async () => {
+    resetSessionPersistenceInvalidationRecords();
+    const { indexedDB, records } = createIndexedDBTestDouble();
+    const streamIdentity = streamIdentityFixture();
+    const storageKey = checkpointStorageKey(streamIdentity);
+
+    records.set(storageKey, {
+      checkpoint: checkpointFixture(),
+      schemaVersion: 3,
+      storageKey,
+      streamIdentity: {
+        ...streamIdentity,
+        streamGenerationID: "2026-06-27T00:00:00Z",
+      },
+    });
+
+    await expect(
+      readTimelineCheckpoint(indexedDB, streamIdentity),
+    ).resolves.toBe(null);
+    expect(readSessionPersistenceInvalidationRecords()).toEqual([
+      expect.objectContaining({
+        reason: "stream_generation_changed",
+        recoveryAction: "clear_stream_derived_state",
+        requestedSessionID: streamIdentity.factorySessionID,
+      }),
+    ]);
   });
 
   it("drops invalid stored checkpoints and ignores missing persistence inputs", async () => {
