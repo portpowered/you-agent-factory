@@ -240,6 +240,7 @@ func startLocalModelInferenceTestServer(
 			newInferenceProgressPublisherFactory(sessions, root.BaseLogger),
 			newSessionDispatchCompletionObserverFactory(sessions),
 		),
+		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, root.BaseLogger, buildHostedWorkersConfig(cfg, root.BaseLogger, clock)),
 	}
 	shell, err := ComposeFactoryService(
 		ctx,
