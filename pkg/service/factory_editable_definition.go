@@ -550,6 +550,14 @@ type FactoryCore struct {
 	modelAssets   modelAssetPuller
 }
 
+// ServiceConfig returns the normalized service config used to compose the core.
+func (core *FactoryCore) ServiceConfig() *FactoryServiceConfig {
+	if core == nil {
+		return nil
+	}
+	return core.cfg
+}
+
 // FactoryRootDir returns the canonical factory root selected at build time.
 func (core *FactoryCore) FactoryRootDir() string {
 	if core == nil {
