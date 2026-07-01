@@ -1398,6 +1398,8 @@ export interface components {
     FactorySessionStreamIdentity: {
       /** @description Stable backend process or scope identity for the current live session stream. */
       backendScopeID: string;
+      /** @description Canonical logical-session key for the resolved session target. This remains stable across live-session remaps for the same folder and target selector. */
+      logicalSessionKeyID: string;
       /** @description Stable live Factory Session identifier for the current stream. */
       factorySessionID: string;
       /** @description Stable generation identifier for the current live session stream incarnation. */

@@ -684,6 +684,7 @@ func TestOpenAPIContract_FactoryDispatchAndArtifactSchemasExposeSharedProjection
 	runtimeProperties, _ := runtimeSchema["properties"].(map[string]any)
 	assertSchemaPropertyRef(t, schemas, "FactorySessionRuntime", "streamIdentity", "#/components/schemas/FactorySessionStreamIdentity")
 	streamIdentityProperties := schemaProperties(t, schemaObject(t, schemas, "FactorySessionStreamIdentity"), "FactorySessionStreamIdentity")
+	assertRequiredFields(t, schemaObject(t, schemas, "FactorySessionStreamIdentity"), "backendScopeID", "logicalSessionKeyID", "factorySessionID", "streamGenerationID")
 	streamGenerationID, ok := streamIdentityProperties["streamGenerationID"].(map[string]any)
 	if !ok {
 		t.Fatal("FactorySessionStreamIdentity.streamGenerationID schema is missing")

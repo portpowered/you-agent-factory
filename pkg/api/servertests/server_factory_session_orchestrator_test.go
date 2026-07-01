@@ -27,6 +27,7 @@ func stringPointerForFactorySessionTest(value string) *string {
 func TestFactorySessionsAPI_GetFactorySession(t *testing.T) {
 	phase := "review"
 	backendScopeID := "backend-scope-live"
+	logicalSessionKeyID := "/workspace/root::named::beta"
 	streamGenerationID := "stream-gen-live-001"
 	srv := newMockFactorySessionTestServer(&testutil.MockFactory{
 		FactorySession: factoryapi.FactorySession{
@@ -41,9 +42,10 @@ func TestFactorySessionsAPI_GetFactorySession(t *testing.T) {
 			Runtime: factoryapi.FactorySessionRuntime{
 				OrchestratorKind: factoryapi.JAVASCRIPT,
 				StreamIdentity: &factoryapi.FactorySessionStreamIdentity{
-					BackendScopeID:     backendScopeID,
-					FactorySessionID:   "session-beta",
-					StreamGenerationID: streamGenerationID,
+					BackendScopeID:      backendScopeID,
+					LogicalSessionKeyID: logicalSessionKeyID,
+					FactorySessionID:    "session-beta",
+					StreamGenerationID:  streamGenerationID,
 				},
 				Status: factoryapi.FactorySessionStatusIDLE,
 				Progress: factoryapi.FactorySessionProgress{

@@ -224,6 +224,11 @@ func TestOpenAPIContract_DefinesFactorySessionSyncPreflightSurface(t *testing.T)
 	properties := schemaProperties(t, response, "FactorySessionSyncPreflightResponse")
 	assertPropertyRef(t, properties, "reasonCode", "#/components/schemas/FactorySessionSyncPreflightReasonCode")
 	assertPropertyRef(t, properties, "reconnectCursor", "#/components/schemas/FactorySessionSyncPreflightReconnectCursor")
+	for _, field := range []string{"backendScopeId", "logicalSessionKeyId", "factorySessionId", "streamGenerationId"} {
+		if _, ok := properties[field]; !ok {
+			t.Fatalf("FactorySessionSyncPreflightResponse.properties.%s is missing", field)
+		}
+	}
 
 	reasonCode := schemaObject(t, schemas, "FactorySessionSyncPreflightReasonCode")
 	assertEnumValues(t, reasonCode, "FactorySessionSyncPreflightReasonCode", []string{"ok", "cursor_stale", "session_not_found", "logical_session_remap"})

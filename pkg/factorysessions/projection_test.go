@@ -126,9 +126,10 @@ func TestProjectRuntime_JavaScriptWorkflowSessionIncludesPhaseAndCheckpointRefs(
 		t.Fatal("stream identity = nil, want identity for javascript session")
 	}
 	if runtime.StreamIdentity.BackendScopeID != "backend-scope-1" ||
+		runtime.StreamIdentity.LogicalSessionKeyID != "::default::" ||
 		runtime.StreamIdentity.FactorySessionID != "session-js" ||
 		runtime.StreamIdentity.StreamGenerationID != startedAt.Format(time.RFC3339Nano) {
-		t.Fatalf("stream identity = %#v, want stable backend/session/start tuple", runtime.StreamIdentity)
+		t.Fatalf("stream identity = %#v, want stable backend/logical/session/start tuple", runtime.StreamIdentity)
 	}
 }
 

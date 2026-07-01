@@ -1013,20 +1013,33 @@ func factorySessionBackendScopeID(fs *FactoryService, session *factorysessions.L
 	return ""
 }
 
-func factorySessionStreamGenerationID(fs *FactoryService, session *factorysessions.LiveSession) string {
-	factorySessionID := ""
-	if session != nil {
-		factorySessionID = strings.TrimSpace(session.ID)
+func factorySessionLogicalSessionKeyID(session *factorysessions.LiveSession) string {
+	return factorysessions.LogicalSessionKeyID(session)
+}
+
+func factorySessionStreamGenerationID(_ *FactoryService, session *factorysessions.LiveSession) string {
+	if session == nil {
+		return ""
 	}
-	backendScopeID := factorySessionBackendScopeID(fs, session)
-	switch {
-	case backendScopeID != "" && factorySessionID != "":
-		return backendScopeID + "::" + factorySessionID
-	case factorySessionID != "":
-		return factorySessionID
-	default:
-		return backendScopeID
+	if handle := liveSessionHandle(session); handle != nil && handle.runtime != nil {
+		if handle.runtime.eventHistory != nil {
+			if streamGenerationID := strings.TrimSpace(handle.runtime.eventHistory.StreamGenerationID()); streamGenerationID != "" {
+				return streamGenerationID
+			}
+		}
+		if handle.runtime.factory != nil {
+			snapshot, err := handle.runtime.factory.GetEngineStateSnapshot(context.Background())
+			if err == nil && snapshot != nil {
+				if streamGenerationID := strings.TrimSpace(snapshot.StreamGenerationID); streamGenerationID != "" {
+					return streamGenerationID
+				}
+			}
+		}
 	}
+	if startedAt := liveSessionBundle(session).startedAtUTC; !startedAt.IsZero() {
+		return startedAt.UTC().Format(time.RFC3339Nano)
+	}
+	return ""
 }
 
 func newInferenceProgressPublisherFactory(

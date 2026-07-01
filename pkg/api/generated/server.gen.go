@@ -2729,6 +2729,9 @@ type FactorySessionStreamIdentity struct {
 	// FactorySessionID Stable live Factory Session identifier for the current stream.
 	FactorySessionID string `json:"factorySessionID"`
 
+	// LogicalSessionKeyID Canonical logical-session key for the resolved session target. This remains stable across live-session remaps for the same folder and target selector.
+	LogicalSessionKeyID string `json:"logicalSessionKeyID"`
+
 	// StreamGenerationID Stable generation identifier for the current live session stream incarnation.
 	StreamGenerationID string `json:"streamGenerationID"`
 }

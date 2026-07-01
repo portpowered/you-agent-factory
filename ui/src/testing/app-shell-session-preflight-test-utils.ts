@@ -52,6 +52,7 @@ export function buildFactorySessionResponse(
       streamIdentity: {
         backendScopeID: `${summary.folderPath}::test-backend`,
         factorySessionID: summary.id,
+        logicalSessionKeyID: `${summary.folderPath}::${summary.target.kind}${summary.target.name ? `::${summary.target.name}` : "::"}`,
         streamGenerationID: lifecycleTimestamp,
       },
       usage: { resources: [] },
