@@ -290,7 +290,7 @@ describe("timeline checkpoint guard migration", () => {
     );
   });
 
-  it("does not fall back to session-only storage when the stream identity changes", async () => {
+  it("does not fall back to session-only storage when the stream generation changes", async () => {
     const { indexedDB } = createIndexedDBTestDouble();
     const checkpoint = checkpointFixture();
     const identityA = streamIdentityFixture();
@@ -304,6 +304,30 @@ describe("timeline checkpoint guard migration", () => {
     await expect(
       readTimelineCheckpoint(indexedDB, "session-a", identityB),
     ).resolves.toBe(null);
+  });
+
+  it("does not reuse checkpoints saved under a different backend scope", async () => {
+    const { indexedDB } = createIndexedDBTestDouble();
+    const checkpoint = checkpointFixture();
+    const identityA = streamIdentityFixture();
+    const identityB = {
+      ...identityA,
+      backendScopeID: "backend-scope-b",
+    } satisfies TimelineCheckpointStreamIdentity;
+
+    await persistTimelineCheckpoint(indexedDB, "session-a", checkpoint, identityA);
+
+    await expect(
+      readTimelineCheckpoint(indexedDB, "session-a", identityB),
+    ).resolves.toBe(null);
+    await expect(
+      readTimelineCheckpoint(indexedDB, "session-a", identityA),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        afterEventId: "event-7",
+        selectedTick: 7,
+      }),
+    );
   });
 });
 

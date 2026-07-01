@@ -11,11 +11,14 @@ import {
   type TimelineCheckpointStreamIdentity,
   useFactoryTimelineStore,
 } from "../../timeline/public";
+import {
+  normalizeBackendRuntimeCacheScope,
+} from "../lib/backend-runtime-cache-scope";
 import { useDashboardSession } from "../session/dashboard-session-provider";
 import {
   recordSessionPersistenceInvalidation,
   silentReplayRecoveryDiagnostic,
-} from "../lib/session-persistence-diagnostics";
+} from "../lib/session-persistence/diagnostics";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
 import { useDashboardInitialReconnectCursor } from "./useDashboardInitialReconnectCursor";
@@ -40,11 +43,13 @@ function useGuardedTimelineCheckpointBootstrap({
   checkpointsDisabled,
   rawSessionID,
   restoreCheckpoint,
+  setBackendRuntimeCacheScope,
 }: {
   checkpointHydrationKey: string | null;
   checkpointsDisabled: boolean;
   rawSessionID: string | null;
   restoreCheckpoint: (checkpoint: FactoryTimelineCheckpoint) => void;
+  setBackendRuntimeCacheScope: (backendRuntimeCacheScope: string | null) => void;
 }) {
   const setStreamState = useDashboardStreamStore((state) => state.setStreamState);
   const [checkpointHydratedKey, setCheckpointHydratedKey] =
@@ -90,6 +95,11 @@ function useGuardedTimelineCheckpointBootstrap({
           response.session,
         );
         setStreamIdentity(checkpointStreamIdentity);
+        setBackendRuntimeCacheScope(
+          normalizeBackendRuntimeCacheScope(
+            checkpointStreamIdentity?.backendScopeID,
+          ),
+        );
         setPreflightReadyKey(checkpointHydrationKey);
         const checkpoint = await readTimelineCheckpoint(
           window.indexedDB,
@@ -129,6 +139,7 @@ function useGuardedTimelineCheckpointBootstrap({
     checkpointsDisabled,
     rawSessionID,
     restoreCheckpoint,
+    setBackendRuntimeCacheScope,
     setStreamState,
   ]);
 
@@ -215,6 +226,9 @@ export function useDashboardSnapshot({
   const { error, isInitialLoading, snapshot, streamState } =
     useDashboardWorldView();
   const { isPaused, rawSessionID } = useDashboardSession();
+  const setBackendRuntimeCacheScope = useDashboardStreamStore(
+    (state) => state.setBackendRuntimeCacheScope,
+  );
   const debugOptions = useMemo(() => readFactoryTimelineDebugOptions(), []);
   const checkpointHydrationKey = useMemo(
     () => (rawSessionID == null ? null : `${rawSessionID}::${refreshToken}`),
@@ -246,6 +260,7 @@ export function useDashboardSnapshot({
     checkpointsDisabled: debugOptions.disableTimelineCheckpoint,
     rawSessionID,
     restoreCheckpoint,
+    setBackendRuntimeCacheScope,
   });
 
   const resumedReconnectCursor = useDashboardInitialReconnectCursor({
@@ -317,6 +332,7 @@ export function useDashboardSnapshot({
     onInvalidReconnectCursor: handleInvalidReconnectCursor,
     refreshToken,
     sessionID: rawSessionID,
+    streamIdentity,
   });
 
   useDashboardTimelineMemoryDebug({ debugOptions, eventCount });

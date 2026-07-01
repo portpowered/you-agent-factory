@@ -9,7 +9,6 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/sessionpersistence"
 )
 
 func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
@@ -671,305 +670,129 @@ func assertJSONKeysPresent(t *testing.T, object map[string]any, name string, key
 	}
 }
 
-type syncPreflightRecoveryFixtureCatalog struct {
-	Scenarios                []syncPreflightRecoveryScenario      `json:"scenarios"`
-	IdentityScopeComparisons []syncPreflightIdentityScopeScenario `json:"identityScopeComparisons"`
-}
+func assertDurableSessionFixtureInspectionEventLinksAreSessionScoped(t *testing.T, scenario durableSessionContractScenario) {
+	t.Helper()
 
-type syncPreflightRecoveryScenario struct {
-	ID       string                    `json:"id"`
-	Tags     syncPreflightRecoveryTags `json:"tags"`
-	Response map[string]any            `json:"response"`
-}
-
-type syncPreflightRecoveryTags struct {
-	ReasonCode         string `json:"reasonCode"`
-	CheckpointReusable string `json:"checkpointReusable,omitempty"`
-	CursorValid        string `json:"cursorValid,omitempty"`
-}
-
-type syncPreflightIdentityScopeScenario struct {
-	ID                 string         `json:"id"`
-	Previous           map[string]any `json:"previous"`
-	Current            map[string]any `json:"current"`
-	WantClassification string         `json:"wantClassification"`
-}
-
-// TestOpenAPIContract_SyncPreflightRecoveryFixturesValidateAndRoundTrip keeps
-// sync-preflight recovery contract coverage in this file to satisfy pkg-file-count.
-func TestOpenAPIContract_SyncPreflightRecoveryFixturesValidateAndRoundTrip(t *testing.T) {
-	doc := loadValidatedOpenAPIContract(t)
-	catalog := loadSyncPreflightRecoveryFixtureCatalog(t)
-
-	seenReasonCodes := map[string]struct{}{}
-	for _, scenario := range catalog.Scenarios {
-		t.Run(scenario.ID, func(t *testing.T) {
-			assertSyncPreflightRecoveryScenarioFixture(t, doc, scenario)
-			seenReasonCodes[scenario.Tags.ReasonCode] = struct{}{}
-		})
+	sessionID, _ := scenario.Session["sessionId"].(string)
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return
 	}
+	wantEventsLink := "/factory-sessions/" + sessionID + "/events"
 
-	for _, reasonCode := range []string{"ok", "cursor_stale", "session_not_found", "logical_session_remap"} {
-		if _, ok := seenReasonCodes[reasonCode]; !ok {
-			t.Fatalf("sync preflight recovery fixture coverage for %s = missing, want scenario", reasonCode)
+	for _, container := range []map[string]any{
+		scenario.AsyncResponse,
+		scenario.SyncResponse,
+		scenario.Session,
+		scenario.LifecycleControl,
+	} {
+		if container == nil {
+			continue
 		}
-	}
-}
-
-func TestOpenAPIContract_SyncPreflightIdentityScopeComparisonsDistinguishBackendAndStreamChanges(t *testing.T) {
-	catalog := loadSyncPreflightRecoveryFixtureCatalog(t)
-
-	for _, scenario := range catalog.IdentityScopeComparisons {
-		t.Run(scenario.ID, func(t *testing.T) {
-			previous := identityScopeFromFixtureMap(scenario.Previous)
-			current := identityScopeFromFixtureMap(scenario.Current)
-
-			reason, ok := sessionpersistence.ClassifyIdentityMismatch(previous, current)
-			if !ok {
-				t.Fatal("ClassifyIdentityMismatch = false, want mismatch")
-			}
-			if string(reason) != scenario.WantClassification {
-				t.Fatalf("classification = %q, want %q", reason, scenario.WantClassification)
-			}
-
-			if previous.BackendScopeID == current.BackendScopeID &&
-				scenario.WantClassification == string(sessionpersistence.ReasonBackendScopeChanged) {
-				t.Fatal("backend scope classification requires backendScopeId change")
-			}
-			if previous.StreamGenerationID == current.StreamGenerationID &&
-				scenario.WantClassification == string(sessionpersistence.ReasonStreamGenerationChanged) {
-				t.Fatal("stream generation classification requires streamGenerationId change")
-			}
-			if previous.BackendScopeID != current.BackendScopeID &&
-				scenario.WantClassification == string(sessionpersistence.ReasonStreamGenerationChanged) &&
-				previous.FactorySessionID == current.FactorySessionID {
-				if previous.BackendScopeID == current.BackendScopeID {
-					t.Fatal("stream-only classification should not change backendScopeId")
-				}
-			}
-		})
-	}
-}
-
-// Gate evidence for session-persistence-hardening-and-observability-005: proves the
-// verification gates still protect observable recovery behavior, not only compile-time
-// contract shape.
-func TestSessionPersistenceHardeningGateEvidence_RecoveryOutcomesControlCheckpointReuse(t *testing.T) {
-	doc := loadValidatedOpenAPIContract(t)
-	catalog := loadSyncPreflightRecoveryFixtureCatalog(t)
-
-	var reusableScenario *syncPreflightRecoveryScenario
-	var staleScenario *syncPreflightRecoveryScenario
-	for index := range catalog.Scenarios {
-		scenario := catalog.Scenarios[index]
-		switch scenario.Tags.ReasonCode {
-		case "ok":
-			reusableScenario = &scenario
-		case "cursor_stale":
-			staleScenario = &scenario
-		}
-	}
-	if reusableScenario == nil || staleScenario == nil {
-		t.Fatal("sync preflight recovery fixtures missing ok or cursor_stale scenario")
-	}
-
-	assertSyncPreflightRecoveryScenarioFixture(t, doc, *reusableScenario)
-	assertSyncPreflightRecoveryScenarioFixture(t, doc, *staleScenario)
-
-	var reusableResponse generated.FactorySessionSyncPreflightResponse
-	assertGeneratedFixtureRoundTrip(t, reusableScenario.Response, "FactorySessionSyncPreflightResponse", func(raw []byte) {
-		decodeRoundTripJSON(t, raw, &reusableResponse, reusableScenario.ID+" reusable response")
-	})
-	var staleResponse generated.FactorySessionSyncPreflightResponse
-	assertGeneratedFixtureRoundTrip(t, staleScenario.Response, "FactorySessionSyncPreflightResponse", func(raw []byte) {
-		decodeRoundTripJSON(t, raw, &staleResponse, staleScenario.ID+" stale response")
-	})
-
-	if !reusableResponse.CheckpointReusable {
-		t.Fatal("reusable recovery outcome checkpointReusable = false, want true")
-	}
-	if staleResponse.CheckpointReusable {
-		t.Fatal("stale cursor recovery outcome checkpointReusable = true, want false")
-	}
-
-	staleDiagnostic, ok := sessionpersistence.InvalidationFromSyncPreflight(staleResponse)
-	if !ok {
-		t.Fatal("stale cursor recovery outcome missing invalidation diagnostic")
-	}
-	if staleDiagnostic.Reason != sessionpersistence.ReasonCursorStale {
-		t.Fatalf("stale cursor diagnostic reason = %q, want %q", staleDiagnostic.Reason, sessionpersistence.ReasonCursorStale)
-	}
-	if staleDiagnostic.RecoveryAction != sessionpersistence.RecoveryReplayWithoutCursor {
-		t.Fatalf(
-			"stale cursor diagnostic recovery = %q, want %q",
-			staleDiagnostic.RecoveryAction,
-			sessionpersistence.RecoveryReplayWithoutCursor,
-		)
-	}
-}
-
-func assertSyncPreflightRecoveryScenarioFixture(
-	t *testing.T,
-	doc *openapi3.T,
-	scenario syncPreflightRecoveryScenario,
-) {
-	t.Helper()
-
-	assertOpenAPIFixtureValidates(t, doc, "FactorySessionSyncPreflightResponse", scenario.Response)
-	assertGeneratedFixtureRoundTrip(t, scenario.Response, "FactorySessionSyncPreflightResponse", func(raw []byte) {
-		var value generated.FactorySessionSyncPreflightResponse
-		decodeRoundTripJSON(t, raw, &value, scenario.ID+" sync preflight response")
-		assertSyncPreflightRecoveryOutcome(t, scenario, value)
-	})
-}
-
-func assertSyncPreflightRecoveryOutcome(
-	t *testing.T,
-	scenario syncPreflightRecoveryScenario,
-	response generated.FactorySessionSyncPreflightResponse,
-) {
-	t.Helper()
-
-	if string(response.ReasonCode) != scenario.Tags.ReasonCode {
-		t.Fatalf("%s reasonCode = %q, want %q", scenario.ID, response.ReasonCode, scenario.Tags.ReasonCode)
-	}
-
-	switch response.ReasonCode {
-	case generated.Ok:
-		assertSyncPreflightOkOutcome(t, scenario.ID, response)
-	case generated.CursorStale:
-		assertSyncPreflightCursorStaleOutcome(t, scenario.ID, response)
-	case generated.SessionNotFound:
-		assertSyncPreflightSessionNotFoundOutcome(t, scenario.ID, response)
-	case generated.LogicalSessionRemap:
-		assertSyncPreflightLogicalSessionRemapOutcome(t, scenario.ID, response)
-	default:
-		t.Fatalf("%s reasonCode = %q, want supported recovery outcome", scenario.ID, response.ReasonCode)
-	}
-
-	assertSyncPreflightInvalidationDiagnostic(t, scenario.ID, response)
-}
-
-func assertSyncPreflightOkOutcome(
-	t *testing.T,
-	scenarioID string,
-	response generated.FactorySessionSyncPreflightResponse,
-) {
-	t.Helper()
-
-	if !response.CheckpointReusable {
-		t.Fatalf("%s checkpointReusable = false, want true", scenarioID)
-	}
-	if !response.ReconnectCursor.ValidForStreamGeneration {
-		t.Fatalf("%s reconnect cursor validForStreamGeneration = false, want true", scenarioID)
-	}
-	if response.BackendScopeId == nil || response.FactorySessionId == nil || response.StreamGenerationId == nil {
-		t.Fatalf("%s identity fields = %#v, want full identity set", scenarioID, response)
-	}
-}
-
-func assertSyncPreflightCursorStaleOutcome(
-	t *testing.T,
-	scenarioID string,
-	response generated.FactorySessionSyncPreflightResponse,
-) {
-	t.Helper()
-
-	if response.CheckpointReusable {
-		t.Fatalf("%s checkpointReusable = true, want false", scenarioID)
-	}
-	if response.ReconnectCursor.ValidForStreamGeneration {
-		t.Fatalf("%s reconnect cursor validForStreamGeneration = true, want false", scenarioID)
-	}
-	if response.BackendScopeId == nil || response.FactorySessionId == nil || response.StreamGenerationId == nil {
-		t.Fatalf("%s identity fields = %#v, want full identity set for stale cursor", scenarioID, response)
-	}
-}
-
-func assertSyncPreflightSessionNotFoundOutcome(
-	t *testing.T,
-	scenarioID string,
-	response generated.FactorySessionSyncPreflightResponse,
-) {
-	t.Helper()
-
-	if response.CheckpointReusable {
-		t.Fatalf("%s checkpointReusable = true, want false", scenarioID)
-	}
-	if response.BackendScopeId != nil || response.FactorySessionId != nil || response.StreamGenerationId != nil {
-		t.Fatalf("%s identity fields = %#v, want nil for missing session", scenarioID, response)
-	}
-}
-
-func assertSyncPreflightLogicalSessionRemapOutcome(
-	t *testing.T,
-	scenarioID string,
-	response generated.FactorySessionSyncPreflightResponse,
-) {
-	t.Helper()
-
-	if response.CheckpointReusable {
-		t.Fatalf("%s checkpointReusable = true, want false", scenarioID)
-	}
-	if response.BackendScopeId == nil || response.FactorySessionId == nil || response.StreamGenerationId == nil {
-		t.Fatalf("%s identity fields = %#v, want full identity set for remap", scenarioID, response)
-	}
-}
-
-func assertSyncPreflightInvalidationDiagnostic(
-	t *testing.T,
-	scenarioID string,
-	response generated.FactorySessionSyncPreflightResponse,
-) {
-	t.Helper()
-
-	diagnostic, ok := sessionpersistence.InvalidationFromSyncPreflight(response)
-	switch response.ReasonCode {
-	case generated.Ok:
-		if ok {
-			t.Fatalf("%s invalidation diagnostic = %#v, want none for ok", scenarioID, diagnostic)
-		}
-	default:
+		links, ok := container["links"].(map[string]any)
 		if !ok {
-			t.Fatalf("%s invalidation diagnostic missing for %q", scenarioID, response.ReasonCode)
+			continue
+		}
+		eventsLink, ok := links["events"].(string)
+		if !ok || strings.TrimSpace(eventsLink) == "" {
+			continue
+		}
+		if eventsLink != wantEventsLink {
+			t.Fatalf(
+				"%s fixture links.events = %q, want session-scoped %q (not compatibility-only GET /events)",
+				scenario.ID,
+				eventsLink,
+				wantEventsLink,
+			)
 		}
 	}
 }
 
-func identityScopeFromFixtureMap(payload map[string]any) sessionpersistence.IdentityScope {
-	return sessionpersistence.IdentityScope{
-		BackendScopeID:      stringFixtureValue(payload, "backendScopeId"),
-		LogicalSessionKeyID: stringFixtureValue(payload, "logicalSessionKeyId"),
-		FactorySessionID:    stringFixtureValue(payload, "factorySessionId"),
-		StreamGenerationID:  stringFixtureValue(payload, "streamGenerationId"),
+func assertDurableSessionScenarioEventFixtures(t *testing.T, doc *openapi3.T, scenario durableSessionContractScenario) {
+	t.Helper()
+	if len(scenario.Events) == 0 {
+		return
+	}
+	for index, event := range scenario.Events {
+		assertOpenAPIFixtureValidates(t, doc, "FactoryEvent", event)
+		assertGeneratedFixtureRoundTrip(t, event, "FactoryEvent", func(raw []byte) {
+			var value generated.FactoryEvent
+			decodeRoundTripJSON(t, raw, &value, scenario.ID+" event")
+		})
+		assertCanonicalFactoryEventFixtureEntry(t, doc, index, event)
 	}
 }
 
-func stringFixtureValue(payload map[string]any, key string) string {
-	value, ok := payload[key].(string)
-	if !ok {
-		return ""
-	}
-	return value
-}
-
-func loadSyncPreflightRecoveryFixtureCatalog(t *testing.T) syncPreflightRecoveryFixtureCatalog {
+func assertDurableSessionEventSurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {
 	t.Helper()
 
-	fixtureBytes, err := os.ReadFile("../testdata/sync-preflight-recovery-contract-fixtures.json")
-	if err != nil {
-		t.Fatalf("read sync preflight recovery contract fixtures: %v", err)
+	eventsOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/events", "get")
+	if got, _ := eventsOperation["operationId"].(string); got != "getEventsBySessionId" {
+		t.Fatalf("paths./factory-sessions/{session_id}/events.get.operationId = %q, want getEventsBySessionId", got)
+	}
+	assertEventStreamSchemaRef(t, eventsOperation, "#/components/schemas/FactoryEvent")
+	assertResponseSchemaRef(t, eventsOperation, "200", "#/components/schemas/FactorySessionEventStreamRecovery")
+	assertResponseRef(t, eventsOperation, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, eventsOperation, "404", "#/components/responses/NotFound")
+	parameters, ok := eventsOperation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("paths./factory-sessions/{session_id}/events.get.parameters is missing")
+	}
+	assertParameterRef(t, parameters, "#/components/parameters/SessionID")
+	assertParameterRef(t, parameters, "#/components/parameters/AfterEventId")
+	assertParameterRef(t, parameters, "#/components/parameters/AfterSequence")
+
+	description, _ := eventsOperation["description"].(string)
+	for _, fragment := range []string{"after_event_id", "after_sequence", "sessionSequence", "application/json", "cursor_stale"} {
+		if !strings.Contains(description, fragment) {
+			t.Fatalf("paths./factory-sessions/{session_id}/events.get.description must document %q, got %q", fragment, description)
+		}
+	}
+	for _, fragment := range []string{"canonical", "dashboard", "factory session", "durable replay"} {
+		if !strings.Contains(strings.ToLower(description), fragment) {
+			t.Fatalf("paths./factory-sessions/{session_id}/events.get.description must document canonical session-scoped stream guidance %q, got %q", fragment, description)
+		}
 	}
 
-	var catalog syncPreflightRecoveryFixtureCatalog
-	if err := json.Unmarshal(fixtureBytes, &catalog); err != nil {
-		t.Fatalf("decode sync preflight recovery contract fixtures: %v", err)
+	globalEventsOperation := pathOperation(t, paths, "/events", "get")
+	assertEventStreamSchemaRef(t, globalEventsOperation, "#/components/schemas/FactoryEvent")
+	globalDescription, _ := globalEventsOperation["description"].(string)
+	for _, fragment := range []string{"compatibility-only", "get /factory-sessions/{session_id}/events", "dashboard", "factory session"} {
+		if !strings.Contains(strings.ToLower(globalDescription), fragment) {
+			t.Fatalf("paths./events.get.description must document compatibility-only session-scoped migration guidance %q, got %q", fragment, globalDescription)
+		}
 	}
-	if len(catalog.Scenarios) == 0 {
-		t.Fatal("sync preflight recovery contract fixtures contain no scenarios")
+	if strings.Contains(strings.ToLower(globalDescription), "canonical dashboard") {
+		t.Fatalf("paths./events.get.description must not present GET /events as the canonical dashboard stream, got %q", globalDescription)
 	}
-	if len(catalog.IdentityScopeComparisons) == 0 {
-		t.Fatal("sync preflight recovery contract fixtures contain no identity scope comparisons")
+	assertResponseRef(t, globalEventsOperation, "400", "#/components/responses/BadRequest")
+	globalParameters, ok := globalEventsOperation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("paths./events.get.parameters is missing")
 	}
-	return catalog
+	assertParameterRef(t, globalParameters, "#/components/parameters/AfterEventId")
+	assertParameterRef(t, globalParameters, "#/components/parameters/AfterSequence")
+
+	factoryEvent := schemaObject(t, schemas, "FactoryEvent")
+	assertRequiredFields(t, factoryEvent, "schemaVersion", "id", "type", "context", "payload")
+	factoryEventProperties := schemaProperties(t, factoryEvent, "FactoryEvent")
+	assertPropertyRef(t, factoryEventProperties, "type", "#/components/schemas/FactoryEventType")
+	assertPropertyRef(t, factoryEventProperties, "context", "#/components/schemas/FactoryEventContext")
+
+	eventContext := schemaObject(t, schemas, "FactoryEventContext")
+	eventContextProperties := schemaProperties(t, eventContext, "FactoryEventContext")
+	assertSchemaPropertiesPresent(t, eventContextProperties, "FactoryEventContext", "sessionId", "sessionSequence", "orchestratorKind")
+
+	recoverySchema := schemaObject(t, schemas, "FactorySessionEventStreamRecovery")
+	assertRequiredFields(t, recoverySchema, "factorySessionId", "outcome", "retry")
+	recoveryProperties := schemaProperties(t, recoverySchema, "FactorySessionEventStreamRecovery")
+	assertPropertyRef(t, recoveryProperties, "outcome", "#/components/schemas/FactorySessionEventStreamRecoveryOutcome")
+	assertPropertyRef(t, recoveryProperties, "retry", "#/components/schemas/FactorySessionEventStreamRecoveryRetry")
+
+	recoveryRetrySchema := schemaObject(t, schemas, "FactorySessionEventStreamRecoveryRetry")
+	assertRequiredFields(t, recoveryRetrySchema, "omitAfterEventId", "omitAfterSequence")
+
+	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionEventStreamRecoveryOutcome"), "FactorySessionEventStreamRecoveryOutcome", []string{
+		"STREAM_READY", "CURSOR_STALE", "UNKNOWN_SESSION", "INTERNAL_ERROR",
+	})
 }

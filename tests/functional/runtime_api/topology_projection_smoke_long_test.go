@@ -66,7 +66,7 @@ Process {{ (index .Inputs 0).WorkID }}.
 `)
 
 	server := startFunctionalServer(t, dir, false, factory.WithServiceMode())
-	stream := openFactoryEventHTTPStream(t, server.URL()+"/events")
+	stream := openDefaultSessionFactoryEventHTTPStream(t, server.URL())
 	requireFunctionalEventStreamPrelude(t, stream)
 	events := server.GetFactoryEvents(t)
 	if len(events) == 0 {

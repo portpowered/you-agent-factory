@@ -18,7 +18,6 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
-	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
@@ -358,37 +357,6 @@ func (fs *FactoryService) GetCurrentFactoryForSession(ctx context.Context, sessi
 
 func (c *runtimeFactoryCoordinator) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
 	return c.service.requireDefinitions().GetCurrentFactoryForSession(ctx, sessionID)
-}
-
-func (s *runtimeFactoryDefinitionService) GetCurrentFactoryForSession(_ context.Context, sessionID string) (factoryapi.Factory, error) {
-	fs := s.service
-	session, err := fs.requireSession(sessionID)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	runtimeCfg, err := fs.sessionRuntimeConfig(sessionID)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	rootDir := factorysessions.SessionFactoryRootDir(fs.factoryRootDir, session)
-	factoryName := factorysessions.FactoryName(rootDir, runtimeCfg)
-	versionRootDir := rootDir
-	if persistRoot := sessionFactoryPersistRoot(fs.factoryRootDir, session); persistRoot != "" {
-		if pointerName, err := configpersist.ReadCurrentFactoryPointer(persistRoot); err == nil {
-			pointerFactoryName := factoryapi.FactoryName(pointerName)
-			if session.IsDefault || pointerFactoryName == factoryName {
-				factoryName = pointerFactoryName
-			}
-		}
-		if sameFactoryDir(persistRoot, rootDir) {
-			versionRootDir = persistRoot
-		}
-	}
-	serialized, err := fs.serializeNamedFactory(factoryName, runtimeCfg, true)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	return fs.withCurrentFactoryVersion(versionRootDir, serialized.Name, serialized)
 }
 
 func (fs *FactoryService) OpenFactorySession(ctx context.Context, request factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error) {
@@ -913,7 +881,7 @@ func (fs *FactoryService) buildSessionProjectionContext(
 	projectionCtx := factorysessions.ProjectionContext{
 		Session:          session,
 		FactoryCfg:       factoryCfg,
-		BackendScopeID:   strings.TrimSpace(liveSessionBundle(session).RuntimeInstanceID),
+		BackendScopeID:   factorySessionBackendScopeID(fs, session),
 		RuntimeStartedAt: liveSessionBundle(session).StartedAtUTC,
 		Now:              time.Now().UTC(),
 	}
@@ -1057,28 +1025,30 @@ func (fs *FactoryService) newSessionResponseStreamSetInstance() *factorysessions
 }
 
 func factorySessionBackendScopeID(fs *FactoryService, session *factorysessions.LiveSession) string {
+	_ = session
 	if fs != nil && fs.cfg != nil {
-		if runtimeInstanceID := strings.TrimSpace(fs.cfg.RuntimeInstanceID); runtimeInstanceID != "" {
-			return runtimeInstanceID
+		if backendScopeID := strings.TrimSpace(fs.cfg.BackendScopeID); backendScopeID != "" {
+			return backendScopeID
 		}
+	}
+	if bundle := liveSessionBundle(session); bundle != nil {
+		return strings.TrimSpace(bundle.BackendScopeID)
 	}
 	return ""
 }
 
 func factorySessionStreamGenerationID(fs *FactoryService, session *factorysessions.LiveSession) string {
-	factorySessionID := ""
-	if session != nil {
-		factorySessionID = strings.TrimSpace(session.ID)
+	if fs != nil && session != nil {
+		if snapshot, err := fs.GetEngineStateSnapshotForSession(context.Background(), session.ID); err == nil {
+			if streamGenerationID := strings.TrimSpace(snapshot.StreamGenerationID); streamGenerationID != "" {
+				return streamGenerationID
+			}
+		}
 	}
-	backendScopeID := factorySessionBackendScopeID(fs, session)
-	switch {
-	case backendScopeID != "" && factorySessionID != "":
-		return backendScopeID + "::" + factorySessionID
-	case factorySessionID != "":
-		return factorySessionID
-	default:
-		return backendScopeID
+	if bundle := liveSessionBundle(session); bundle != nil && !bundle.StartedAtUTC.IsZero() {
+		return bundle.StartedAtUTC.UTC().Format(time.RFC3339Nano)
 	}
+	return ""
 }
 
 func newInferenceProgressPublisherFactory(

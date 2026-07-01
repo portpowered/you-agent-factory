@@ -106,7 +106,7 @@ func TestInferenceEvents_HTTPStreamAndDashboardProjectionCorrelateRetryAttempts(
 		factory.WithServiceMode(),
 	)
 
-	stream := openFactoryEventHTTPStream(t, server.URL()+"/events")
+	stream := openDefaultSessionFactoryEventHTTPStream(t, server.URL())
 	_, _ = requireFunctionalEventStreamPrelude(t, stream)
 
 	traceID := submitGeneratedWork(t, server.URL(), factoryapi.SubmitWorkRequest{

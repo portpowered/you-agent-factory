@@ -5,11 +5,14 @@ import type {
   FactoryEventReconnectCursor,
   probeFactoryEventStreamRecovery,
 } from "../../../../api/events";
-import { deleteTimelineCheckpoint } from "../../../timeline/public";
+import {
+  clearTimelineCheckpoint,
+  type TimelineCheckpointStreamIdentity,
+} from "../../../timeline/public";
 import {
   recordSessionPersistenceInvalidation,
   silentReplayRecoveryDiagnostic,
-} from "../../lib/session-persistence-diagnostics";
+} from "../../lib/session-persistence/diagnostics";
 import { recoverDashboardSessionScopedState } from "../../lib/dashboard-session-lifecycle";
 import { getDashboardSessionLifecycleMessages } from "../../messages/dashboard-session-lifecycle";
 import type { useDashboardStreamStore } from "../../state/dashboardStreamStore";
@@ -115,6 +118,7 @@ async function recoverStaleCursor({
   resetTimeline,
   setStreamState,
   staleCursorRecoveryAttemptedRef,
+  streamIdentity,
   streamSessionID,
 }: {
   cursor: FactoryEventReconnectCursor;
@@ -134,6 +138,7 @@ async function recoverStaleCursor({
     >["streamState"],
   ) => void;
   staleCursorRecoveryAttemptedRef: RefObject<boolean>;
+  streamIdentity?: TimelineCheckpointStreamIdentity | null;
   streamSessionID: string;
 }): Promise<boolean> {
   try {
@@ -161,9 +166,10 @@ async function recoverStaleCursor({
       queryClient,
       streamSessionID,
       resetTimeline,
+      streamIdentity?.backendScopeID,
     );
     if (typeof window !== "undefined") {
-      await deleteTimelineCheckpoint(window.indexedDB, streamSessionID);
+      await clearTimelineCheckpoint(window.indexedDB, streamIdentity ?? null);
     }
     setStreamState(reconnectingStreamState(locale));
     openDashboardStream(undefined);
@@ -185,6 +191,7 @@ export async function reconnectAfterStreamError({
   refs,
   resetTimeline,
   setStreamState,
+  streamIdentity,
   streamSessionID,
 }: {
   cursor: FactoryEventReconnectCursor;
@@ -202,6 +209,7 @@ export async function reconnectAfterStreamError({
       typeof useDashboardStreamStore.getState
     >["streamState"],
   ) => void;
+  streamIdentity?: TimelineCheckpointStreamIdentity | null;
   streamSessionID: string;
 }): Promise<void> {
   if (!refs.staleCursorRecoveryAttemptedRef.current) {
@@ -221,6 +229,7 @@ export async function reconnectAfterStreamError({
         resetTimeline,
         setStreamState,
         staleCursorRecoveryAttemptedRef: refs.staleCursorRecoveryAttemptedRef,
+        streamIdentity,
         streamSessionID,
       });
       if (recovered) {

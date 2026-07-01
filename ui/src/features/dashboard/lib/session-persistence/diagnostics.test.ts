@@ -4,7 +4,7 @@ import {
   classifyCheckpointIdentityMismatch,
   identityMismatchDiagnostic,
   silentReplayRecoveryDiagnostic,
-} from "./session-persistence-diagnostics";
+} from "./diagnostics";
 
 describe("session-persistence-diagnostics", () => {
   it("classifies backend scope changes separately from stream generation changes", () => {

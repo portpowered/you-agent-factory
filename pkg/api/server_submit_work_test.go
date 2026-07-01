@@ -859,18 +859,22 @@ func assertSubmitSurfaceSmokeCurrentFactory(t *testing.T, serverURL string) {
 func assertSubmitSurfaceSmokeEvents(t *testing.T, serverURL string) {
 	t.Helper()
 
-	eventsReq, err := http.NewRequest(http.MethodGet, serverURL+"/events", nil)
+	eventsReq, err := http.NewRequest(
+		http.MethodGet,
+		serverURL+"/factory-sessions/"+factorysessions.DefaultSessionID+"/events",
+		nil,
+	)
 	if err != nil {
-		t.Fatalf("new /events request: %v", err)
+		t.Fatalf("new session-scoped /events request: %v", err)
 	}
 	eventsResp, err := http.DefaultClient.Do(eventsReq)
 	if err != nil {
-		t.Fatalf("GET /events: %v", err)
+		t.Fatalf("GET session-scoped /events: %v", err)
 	}
 	defer eventsResp.Body.Close()
 	if eventsResp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(eventsResp.Body)
-		t.Fatalf("GET /events status = %d, want 200: %s", eventsResp.StatusCode, string(body))
+		t.Fatalf("GET session-scoped /events status = %d, want 200: %s", eventsResp.StatusCode, string(body))
 	}
 
 	streamed := readSSEFactoryEvent(t, bufio.NewReader(eventsResp.Body))
