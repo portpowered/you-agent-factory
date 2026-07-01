@@ -537,6 +537,7 @@ type ComposeCollaboratorSnapshot struct {
 	WorkersSchedulerInitialized  bool
 	LocalModelsInitialized       bool
 	ModelAssetsInitialized   bool
+	ModelServiceInitialized  bool
 	FactorySaveInitialized   bool
 	DefinitionsInitialized   bool
 	HostedWorkersLoggerReady bool
@@ -683,11 +684,13 @@ func (fs *FactoryService) ComposeCollaboratorSnapshot() ComposeCollaboratorSnaps
 		return ComposeCollaboratorSnapshot{}
 	}
 	snapshot := ComposeCollaboratorSnapshot{
-		FactorySaveInitialized: fs.factorySave != nil,
-		DefinitionsInitialized: fs.definitions != nil,
+		ModelServiceInitialized: fs.modelService != nil,
+		FactorySaveInitialized:  fs.factorySave != nil,
+		DefinitionsInitialized:  fs.definitions != nil,
 	}
 	if fs.core != nil {
 		coreSnapshot := fs.core.ComposeCollaboratorSnapshot()
+		coreSnapshot.ModelServiceInitialized = snapshot.ModelServiceInitialized
 		coreSnapshot.FactorySaveInitialized = snapshot.FactorySaveInitialized
 		coreSnapshot.DefinitionsInitialized = snapshot.DefinitionsInitialized
 		return coreSnapshot
@@ -879,7 +882,6 @@ func NewFactoryServiceFromCore(core *FactoryCore) *FactoryService {
 		runtimeBuild:     core.RuntimeBuild(),
 		workersScheduler: core.WorkersScheduler(),
 	}
-	svc.modelService = newFactoryModelService(svc)
 	svc.coordinator = newFactoryCoordinator(svc)
 	svc.definitions = newFactoryDefinitionService(svc)
 	return svc

@@ -27,6 +27,7 @@ func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig
 		cfg.InputTypes = inputTypesInternalFromAPI(*apiCfg.InputTypes)
 	}
 	cfg.InvocationReturn = invocationReturnInternalFromAPI(apiCfg.InvocationReturn)
+	cfg.InvocationSignature = invocationSignatureInternalFromAPI(apiCfg.InvocationSignature)
 	orchestrator, err := orchestratorInternalFromAPI(apiCfg.Orchestrator)
 	if err != nil {
 		return interfaces.FactoryConfig{}, err
@@ -88,6 +89,85 @@ func invocationReturnInternalFromAPI(value *factoryapi.InvocationReturn) *interf
 		TerminalState: stringValue(value.TerminalState),
 		WorkName:      stringValue(value.WorkName),
 	}
+}
+
+func invocationSignatureInternalFromAPI(value *factoryapi.FactoryInvocationSignature) *interfaces.InvocationSignatureConfig {
+	if value == nil {
+		return nil
+	}
+	return &interfaces.InvocationSignatureConfig{
+		Parameters:                 invocationParametersInternalFromAPI(value.Parameters),
+		UnknownNamedArgumentPolicy: enumStringValue(value.UnknownNamedArgumentPolicy),
+		OutputContract:             invocationOutputContractInternalFromAPI(value.OutputContract),
+		Examples:                   invocationExamplesInternalFromAPI(value.Examples),
+	}
+}
+
+func invocationParametersInternalFromAPI(parameters *[]factoryapi.FactoryInvocationParameter) []interfaces.InvocationParameterConfig {
+	if parameters == nil {
+		return nil
+	}
+	values := make([]interfaces.InvocationParameterConfig, len(*parameters))
+	for i, parameter := range *parameters {
+		values[i] = interfaces.InvocationParameterConfig{
+			Name:          parameter.Name,
+			Description:   stringValue(parameter.Description),
+			ExternalName:  stringValue(parameter.ExternalName),
+			Aliases:       stringSliceValue(parameter.Aliases),
+			TypeHint:      enumStringValue(parameter.TypeHint),
+			ValueMode:     enumStringValue(parameter.ValueMode),
+			Required:      boolValue(parameter.Required),
+			Sensitive:     boolValue(parameter.Sensitive),
+			Choices:       stringSliceValue(parameter.Choices),
+			DefaultValue:  stringValue(parameter.DefaultValue),
+			DefaultValues: stringSliceValue(parameter.DefaultValues),
+			Bindings:      invocationParameterBindingsInternalFromAPI(parameter.Bindings),
+		}
+	}
+	return values
+}
+
+func invocationParameterBindingsInternalFromAPI(bindings *[]factoryapi.FactoryInvocationParameterBinding) []interfaces.InvocationParameterBindingConfig {
+	if bindings == nil {
+		return nil
+	}
+	values := make([]interfaces.InvocationParameterBindingConfig, len(*bindings))
+	for i, binding := range *bindings {
+		values[i] = interfaces.InvocationParameterBindingConfig{
+			Kind:     string(binding.Kind),
+			Position: intValue(binding.Position),
+		}
+	}
+	return values
+}
+
+func invocationOutputContractInternalFromAPI(value *factoryapi.FactoryInvocationOutputContract) *interfaces.InvocationOutputContractConfig {
+	if value == nil {
+		return nil
+	}
+	return &interfaces.InvocationOutputContractConfig{
+		Mode:          enumStringValue(value.Mode),
+		PathParameter: stringValue(value.PathParameter),
+		ContentType:   stringValue(value.ContentType),
+		FileExtension: stringValue(value.FileExtension),
+		Description:   stringValue(value.Description),
+	}
+}
+
+func invocationExamplesInternalFromAPI(examples *[]factoryapi.FactoryInvocationExample) []interfaces.InvocationExampleConfig {
+	if examples == nil {
+		return nil
+	}
+	values := make([]interfaces.InvocationExampleConfig, len(*examples))
+	for i, example := range *examples {
+		values[i] = interfaces.InvocationExampleConfig{
+			Name:        example.Name,
+			Description: stringValue(example.Description),
+			Argv:        stringSliceValue(example.Argv),
+			Stdin:       stringValue(example.Stdin),
+		}
+	}
+	return values
 }
 
 func workTypeHandlingBehaviorInternalFromAPI(behaviors *[]factoryapi.WorkTypeHandlingBehavior) []string {

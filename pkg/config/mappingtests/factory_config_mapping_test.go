@@ -308,6 +308,77 @@ func TestFactoryConfigFromOpenAPI_MapsInvocationReturn(t *testing.T) {
 	}
 }
 
+func TestFactoryConfigInvocationSignature_RoundTripsThroughGeneratedBoundary(t *testing.T) {
+	mapper := NewFactoryConfigMapper()
+
+	original := &interfaces.FactoryConfig{
+		Name: "invocation-signature-factory",
+		InvocationSignature: &interfaces.InvocationSignatureConfig{
+			Parameters: []interfaces.InvocationParameterConfig{
+				{
+					Name:          "input",
+					Description:   "Primary input",
+					ExternalName:  "input",
+					Aliases:       []string{"prompt"},
+					TypeHint:      "PATH",
+					ValueMode:     "FILE_CONTENTS",
+					Required:      true,
+					Sensitive:     true,
+					Choices:       []string{"story.md"},
+					DefaultValue:  "story.md",
+					DefaultValues: []string{"story.md", "story-2.md"},
+					Bindings: []interfaces.InvocationParameterBindingConfig{
+						{Kind: "POSITIONAL", Position: 1},
+						{Kind: "NAMED"},
+					},
+				},
+			},
+			UnknownNamedArgumentPolicy: "COLLECT",
+			OutputContract: &interfaces.InvocationOutputContractConfig{
+				Mode:          "FILE",
+				PathParameter: "output",
+				ContentType:   "text/markdown",
+				FileExtension: ".md",
+				Description:   "Writes markdown to disk",
+			},
+			Examples: []interfaces.InvocationExampleConfig{{
+				Name:        "basic",
+				Description: "Basic invocation",
+				Argv:        []string{"brief.md", "--output=result.md"},
+				Stdin:       "stdin prompt",
+			}},
+		},
+		WorkTypes: []interfaces.WorkTypeConfig{{
+			Name: "story",
+			States: []interfaces.StateConfig{
+				{Name: "init", Type: interfaces.StateTypeInitial},
+				{Name: "done", Type: interfaces.StateTypeTerminal},
+			},
+		}},
+		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{{
+			Name:           "execute-story",
+			WorkerTypeName: "executor",
+			Inputs:         []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
+			Outputs:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "done"}},
+		}},
+	}
+
+	flattened, err := mapper.Flatten(original)
+	if err != nil {
+		t.Fatalf("mapper.Flatten: %v", err)
+	}
+
+	expanded, err := mapper.Expand(flattened)
+	if err != nil {
+		t.Fatalf("mapper.Expand: %v", err)
+	}
+
+	if !reflect.DeepEqual(expanded.InvocationSignature, original.InvocationSignature) {
+		t.Fatalf("expanded invocationSignature = %#v, want %#v", expanded.InvocationSignature, original.InvocationSignature)
+	}
+}
+
 func TestFactoryConfigMapper_ExpandSupportsCanonicalBoundaryKeysAndCapacity(t *testing.T) {
 	mapper := NewFactoryConfigMapper()
 

@@ -52,7 +52,11 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryService(t *testing.T
 	if err != nil {
 		t.Fatalf("ComposeFactoryService: %v", err)
 	}
-	composed := service.AttachFactorySaveCollaborator(shell, service.ProvideFactorySaveCollaborator(shell, composeCfg))
+	composed := service.AttachModelServiceCollaborator(shell, service.ProvideModelServiceCollaborator(shell, composeCfg))
+	composed = service.AttachFactorySaveCollaborator(
+		service.FactoryServiceShell{Service: composed},
+		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, composeCfg),
+	)
 
 	if built.ComposeCollaboratorSnapshot() != composed.ComposeCollaboratorSnapshot() {
 		t.Fatalf("compose snapshot mismatch: built=%+v composed=%+v", built.ComposeCollaboratorSnapshot(), composed.ComposeCollaboratorSnapshot())
@@ -161,7 +165,11 @@ func TestFactoryServiceComposeCollaboratorsMatchBuildFactoryServiceWithOperatorD
 	if err != nil {
 		t.Fatalf("ComposeFactoryService: %v", err)
 	}
-	composed := service.AttachFactorySaveCollaborator(shell, service.ProvideFactorySaveCollaborator(shell, cfg))
+	composed := service.AttachModelServiceCollaborator(shell, service.ProvideModelServiceCollaborator(shell, cfg))
+	composed = service.AttachFactorySaveCollaborator(
+		service.FactoryServiceShell{Service: composed},
+		service.ProvideFactorySaveCollaborator(service.FactoryServiceShell{Service: composed}, cfg),
+	)
 
 	if built.ComposeCollaboratorSnapshot() != composed.ComposeCollaboratorSnapshot() {
 		t.Fatalf("compose snapshot mismatch: built=%+v composed=%+v", built.ComposeCollaboratorSnapshot(), composed.ComposeCollaboratorSnapshot())

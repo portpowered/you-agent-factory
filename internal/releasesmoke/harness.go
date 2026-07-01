@@ -123,6 +123,7 @@ type harnessSession struct {
 	binaryPath    string
 	fixturePath   string
 	workspacePath string
+	homePath      string
 	port          int
 	baseURL       string
 	dashboardURL  string
@@ -146,11 +147,23 @@ func newHarnessSession(binaryPath string, fixturePath string, workspacePath stri
 		}
 	}
 
+	homePath, err := os.MkdirTemp("", "agent-factory-release-smoke-home-*")
+	if err != nil {
+		return nil, &Failure{
+			Phase:         "prepare_home",
+			Message:       fmt.Errorf("create isolated home directory: %w", err).Error(),
+			BinaryPath:    binaryPath,
+			FixturePath:   fixturePath,
+			WorkspacePath: workspacePath,
+		}
+	}
+
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 	return &harnessSession{
 		binaryPath:    binaryPath,
 		fixturePath:   fixturePath,
 		workspacePath: workspacePath,
+		homePath:      homePath,
 		port:          port,
 		baseURL:       baseURL,
 		dashboardURL:  baseURL + "/dashboard/ui",
@@ -177,7 +190,7 @@ func (s *harnessSession) Start(ctx context.Context) error {
 	s.cmd.Stdout = s.stdoutBuf
 	s.cmd.Stderr = s.stderrBuf
 	s.cmd.Dir = s.workspacePath
-	s.cmd.Env = append(os.Environ(), "HOME="+s.workspacePath)
+	s.cmd.Env = processEnvForIsolatedHome(s.homePath)
 
 	if err := s.cmd.Start(); err != nil {
 		return s.failure(nil, "start_binary", err)
@@ -257,6 +270,31 @@ func (s *harnessSession) Close() {
 	if s.workspacePath != "" {
 		_ = os.RemoveAll(s.workspacePath)
 	}
+	if s.homePath != "" {
+		_ = os.RemoveAll(s.homePath)
+	}
+}
+
+func processEnvForIsolatedHome(homeDir string) []string {
+	env := make([]string, 0, len(os.Environ())+4)
+	for _, entry := range os.Environ() {
+		key, _, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		switch key {
+		case "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH":
+			continue
+		}
+		env = append(env, entry)
+	}
+	env = append(env,
+		"HOME="+homeDir,
+		"USERPROFILE="+homeDir,
+		"HOMEDRIVE="+filepath.VolumeName(homeDir),
+		"HOMEPATH="+string(os.PathSeparator),
+	)
+	return env
 }
 
 func validatePaths(cfg Config) (string, string, error) {

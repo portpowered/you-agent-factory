@@ -601,6 +601,82 @@ describe("useDashboardSnapshot composer", () => {
     ).resolves.toBe(null);
     expect(indexedDBRecords.has(checkpointStorageKey())).toBe(false);
   });
+
+  it("reopens the stream without a stale persisted cursor after same-session refresh", async () => {
+    useFactoryTimelineStore.getState().reset();
+
+    const { rerender } = renderHook(
+      ({ refreshToken }: { refreshToken: number }) =>
+        useDashboardSnapshot({ refreshToken }),
+      {
+        initialProps: { refreshToken: 0 },
+        wrapper: createWrapper(queryClient),
+      },
+    );
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    const stream = replayHarness.getStreams()[0];
+
+    await act(async () => {
+      stream.emit("message", {
+        context: {
+          eventTime: "2026-04-25T20:00:01Z",
+          sequence: 29,
+          sessionSequence: 29,
+          tick: 29,
+        },
+        id: "factory-event/dispatch-completed/stale-cursor",
+        payload: {
+          factory: {
+            workTypes: [
+              {
+                name: "story",
+                states: [{ name: "new", type: "INITIAL" }],
+              },
+            ],
+            workstations: [],
+            workers: [],
+          },
+        },
+        type: FACTORY_EVENT_TYPES.initialStructureRequest,
+      });
+      await new Promise<void>((resolve) => {
+        window.setTimeout(() => resolve(), 20);
+      });
+    });
+
+    await waitFor(async () => {
+      await expect(
+        readTimelineCheckpoint(
+          window.indexedDB,
+          DEFAULT_FACTORY_SESSION_ID,
+          {
+            backendScopeID: "backend-scope-a",
+            factorySessionID: DEFAULT_FACTORY_SESSION_ID,
+            streamGenerationID: "2026-06-26T00:00:00Z",
+          },
+        ),
+      ).resolves.toEqual(
+        expect.objectContaining({
+          afterEventId: "factory-event/dispatch-completed/stale-cursor",
+          afterSequence: 29,
+        }),
+      );
+    });
+
+    act(() => {
+      rerender({ refreshToken: 1 });
+    });
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(2);
+    });
+    expect(replayHarness.getStreams().at(-1)?.url).toBe(
+      `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
+    );
+  });
 });
 
 function createWrapper(queryClient: QueryClient) {

@@ -41,6 +41,7 @@ type SubmitRequest struct {
 	Tags                     map[string]string `json:"tags"`
 	Relations                []Relation        `json:"relations"`
 	ExecutionID              string            `json:"executionId,omitempty"`
+	InvocationArguments      *InvocationArguments
 }
 
 // WorkRequestType identifies the canonical request contract accepted by factory submit surfaces.
@@ -121,6 +122,29 @@ const (
 	WorkContentPartTypeJSON   WorkContentPartType = "JSON"
 	WorkContentPartTypeBinary WorkContentPartType = "BINARY"
 )
+
+// InvocationArguments carries transport-independent invocation parameter
+// normalization data through runtime-only work and dispatch paths.
+type InvocationArguments struct {
+	Arguments map[string]InvocationArgument `json:"-"`
+}
+
+// InvocationArgument is one canonical invocation parameter value bundle keyed
+// by authored internal parameter name.
+type InvocationArgument struct {
+	Values    []string                   `json:"-"`
+	ValueMode string                     `json:"-"`
+	Sensitive bool                       `json:"-"`
+	Sources   []InvocationArgumentSource `json:"-"`
+}
+
+// InvocationArgumentSource records where one canonical invocation parameter was
+// resolved from without exposing raw values.
+type InvocationArgumentSource struct {
+	Kind   string `json:"-"`
+	Name   string `json:"-"`
+	Redact bool   `json:"-"`
+}
 
 // CanonicalEventTime normalizes runtime event boundary timestamps to UTC while
 // preserving zero values so optional/fallback handling remains explicit.
