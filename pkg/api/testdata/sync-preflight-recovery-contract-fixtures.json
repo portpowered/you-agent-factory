@@ -1,0 +1,119 @@
+{
+  "scenarios": [
+    {
+      "id": "valid-cursor-reusable",
+      "tags": {
+        "reasonCode": "ok",
+        "checkpointReusable": "true",
+        "cursorValid": "true"
+      },
+      "response": {
+        "requestedSessionId": "~default",
+        "reasonCode": "ok",
+        "backendScopeId": "runtime-instance-a",
+        "logicalSessionKeyId": "/workspace/root::default::",
+        "factorySessionId": "live-session-default-001",
+        "streamGenerationId": "runtime-instance-a::live-session-default-001",
+        "checkpointReusable": true,
+        "reconnectCursor": {
+          "provided": true,
+          "validForStreamGeneration": true,
+          "afterEventId": "factory-event/initial-structure/0",
+          "afterSequence": 1
+        }
+      }
+    },
+    {
+      "id": "stale-cursor-typed-outcome",
+      "tags": {
+        "reasonCode": "cursor_stale",
+        "checkpointReusable": "false",
+        "cursorValid": "false"
+      },
+      "response": {
+        "requestedSessionId": "~default",
+        "reasonCode": "cursor_stale",
+        "backendScopeId": "runtime-instance-a",
+        "logicalSessionKeyId": "/workspace/root::default::",
+        "factorySessionId": "live-session-default-001",
+        "streamGenerationId": "runtime-instance-a::live-session-default-001",
+        "checkpointReusable": false,
+        "reconnectCursor": {
+          "provided": true,
+          "validForStreamGeneration": false,
+          "afterEventId": "factory-event/missing-preflight-cursor"
+        }
+      }
+    },
+    {
+      "id": "missing-session-typed-outcome",
+      "tags": {
+        "reasonCode": "session_not_found",
+        "checkpointReusable": "false"
+      },
+      "response": {
+        "requestedSessionId": "live-session-missing-001",
+        "reasonCode": "session_not_found",
+        "checkpointReusable": false,
+        "reconnectCursor": {
+          "provided": false,
+          "validForStreamGeneration": false
+        }
+      }
+    },
+    {
+      "id": "logical-session-remap-typed-outcome",
+      "tags": {
+        "reasonCode": "logical_session_remap",
+        "checkpointReusable": "false"
+      },
+      "response": {
+        "requestedSessionId": "~default",
+        "reasonCode": "logical_session_remap",
+        "backendScopeId": "runtime-instance-a",
+        "logicalSessionKeyId": "/workspace/root::default::",
+        "factorySessionId": "live-session-beta-001",
+        "streamGenerationId": "runtime-instance-a::live-session-beta-001",
+        "checkpointReusable": false,
+        "reconnectCursor": {
+          "provided": false,
+          "validForStreamGeneration": false
+        }
+      }
+    }
+  ],
+  "identityScopeComparisons": [
+    {
+      "id": "backend-scope-change",
+      "previous": {
+        "backendScopeId": "runtime-instance-a",
+        "logicalSessionKeyId": "/workspace/root::default::",
+        "factorySessionId": "live-session-default-001",
+        "streamGenerationId": "runtime-instance-a::live-session-default-001"
+      },
+      "current": {
+        "backendScopeId": "runtime-instance-b",
+        "logicalSessionKeyId": "/workspace/root::default::",
+        "factorySessionId": "live-session-default-001",
+        "streamGenerationId": "runtime-instance-b::live-session-default-001"
+      },
+      "wantClassification": "backend_scope_changed"
+    },
+    {
+      "id": "stream-generation-only-change",
+      "previous": {
+        "backendScopeId": "runtime-instance-a",
+        "logicalSessionKeyId": "/workspace/root::default::",
+        "factorySessionId": "live-session-default-001",
+        "streamGenerationId": "runtime-instance-a::live-session-default-001"
+      },
+      "current": {
+        "backendScopeId": "runtime-instance-a",
+        "logicalSessionKeyId": "/workspace/root::default::",
+        "factorySessionId": "live-session-default-001",
+        "streamGenerationId": "runtime-instance-a::live-session-default-001-v2"
+      },
+      "wantClassification": "stream_generation_changed"
+    }
+  ]
+}
