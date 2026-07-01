@@ -1885,6 +1885,73 @@ func TestWireModelServiceCollaborator_UsesModelsServiceByDefault(t *testing.T) {
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this delegation test keeps the session-lifecycle facade sequence and collaborator assertions together on one compatibility seam.
+func invokeLifecycleDelegationMethods(
+	t *testing.T,
+	svc *FactoryService,
+) (factoryapi.ListFactorySessionsResponse, factoryapi.Factory, *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) {
+	t.Helper()
+	ctx := context.Background()
+	listed, err := svc.ListFactorySessions(ctx)
+	if err != nil {
+		t.Fatalf("ListFactorySessions: %v", err)
+	}
+	folderPath := "/tmp/factory"
+	if _, err := svc.OpenFactorySession(ctx, factoryapi.OpenFactorySessionRequest{FolderPath: folderPath}); err != nil {
+		t.Fatalf("OpenFactorySession: %v", err)
+	}
+	if _, err := svc.OpenFactorySessionFromFolder(ctx, folderPath, nil, false, false); err != nil {
+		t.Fatalf("OpenFactorySessionFromFolder: %v", err)
+	}
+	if err := svc.CloseFactorySession(ctx, "session-a"); err != nil {
+		t.Fatalf("CloseFactorySession: %v", err)
+	}
+	if _, err := svc.PauseLiveFactorySession(ctx, "session-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
+		t.Fatalf("PauseLiveFactorySession: %v", err)
+	}
+	if _, err := svc.ResumeLiveFactorySession(ctx, "session-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
+		t.Fatalf("ResumeLiveFactorySession: %v", err)
+	}
+	if _, err := svc.PauseDurableFactorySession(ctx, "dur-sess-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
+		t.Fatalf("PauseDurableFactorySession: %v", err)
+	}
+	if _, err := svc.CancelDurableFactorySession(ctx, "dur-sess-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
+		t.Fatalf("CancelDurableFactorySession: %v", err)
+	}
+	if _, err := svc.GetFactorySessionSyncPreflight(ctx, "session-a", nil); err != nil {
+		t.Fatalf("GetFactorySessionSyncPreflight: %v", err)
+	}
+	if _, err := svc.GetFactorySessionResult(ctx, "session-a"); err != nil {
+		t.Fatalf("GetFactorySessionResult: %v", err)
+	}
+	if _, err := svc.GetFactorySessionPartialResult(ctx, "session-a"); err != nil {
+		t.Fatalf("GetFactorySessionPartialResult: %v", err)
+	}
+	if _, err := svc.SubscribeSessionResponseStream("session-a", "dispatch-1", 0); err != nil {
+		t.Fatalf("SubscribeSessionResponseStream: %v", err)
+	}
+	if err := svc.ActivateNamedFactory(ctx, "gamma"); err != nil {
+		t.Fatalf("ActivateNamedFactory: %v", err)
+	}
+	current, err := svc.GetCurrentFactoryForSession(ctx, "session-a")
+	if err != nil {
+		t.Fatalf("GetCurrentFactoryForSession: %v", err)
+	}
+	if _, err := svc.SubmitWorkRequestForSession(ctx, "session-a", interfaces.WorkRequest{}); err != nil {
+		t.Fatalf("SubmitWorkRequestForSession: %v", err)
+	}
+	if _, err := svc.MoveWorkForSession(ctx, "session-a", "work-1", "done", "request-2"); err != nil {
+		t.Fatalf("MoveWorkForSession: %v", err)
+	}
+	if _, err := svc.SubscribeFactoryEventsForSession(ctx, "session-a", nil); err != nil {
+		t.Fatalf("SubscribeFactoryEventsForSession: %v", err)
+	}
+	snapshot, err := svc.GetEngineStateSnapshotForSession(ctx, "session-a")
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshotForSession: %v", err)
+	}
+	return listed, current, snapshot
+}
+
 func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	t.Parallel()
 
@@ -1907,64 +1974,7 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	svc.SetDefinitionsForTest(definitions)
 	svc.SetSessionGatewayForTest(gatewayStub)
 
-	listed, err := svc.ListFactorySessions(context.Background())
-	if err != nil {
-		t.Fatalf("ListFactorySessions: %v", err)
-	}
-	folderPath := "/tmp/factory"
-	if _, err := svc.OpenFactorySession(context.Background(), factoryapi.OpenFactorySessionRequest{FolderPath: folderPath}); err != nil {
-		t.Fatalf("OpenFactorySession: %v", err)
-	}
-	if _, err := svc.OpenFactorySessionFromFolder(context.Background(), folderPath, nil, false, false); err != nil {
-		t.Fatalf("OpenFactorySessionFromFolder: %v", err)
-	}
-	if err := svc.CloseFactorySession(context.Background(), "session-a"); err != nil {
-		t.Fatalf("CloseFactorySession: %v", err)
-	}
-	if _, err := svc.PauseLiveFactorySession(context.Background(), "session-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
-		t.Fatalf("PauseLiveFactorySession: %v", err)
-	}
-	if _, err := svc.ResumeLiveFactorySession(context.Background(), "session-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
-		t.Fatalf("ResumeLiveFactorySession: %v", err)
-	}
-	if _, err := svc.PauseDurableFactorySession(context.Background(), "dur-sess-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
-		t.Fatalf("PauseDurableFactorySession: %v", err)
-	}
-	if _, err := svc.CancelDurableFactorySession(context.Background(), "dur-sess-a", factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
-		t.Fatalf("CancelDurableFactorySession: %v", err)
-	}
-	if _, err := svc.GetFactorySessionSyncPreflight(context.Background(), "session-a", nil); err != nil {
-		t.Fatalf("GetFactorySessionSyncPreflight: %v", err)
-	}
-	if _, err := svc.GetFactorySessionResult(context.Background(), "session-a"); err != nil {
-		t.Fatalf("GetFactorySessionResult: %v", err)
-	}
-	if _, err := svc.GetFactorySessionPartialResult(context.Background(), "session-a"); err != nil {
-		t.Fatalf("GetFactorySessionPartialResult: %v", err)
-	}
-	if _, err := svc.SubscribeSessionResponseStream("session-a", "dispatch-1", 0); err != nil {
-		t.Fatalf("SubscribeSessionResponseStream: %v", err)
-	}
-	if err := svc.ActivateNamedFactory(context.Background(), "gamma"); err != nil {
-		t.Fatalf("ActivateNamedFactory: %v", err)
-	}
-	current, err := svc.GetCurrentFactoryForSession(context.Background(), "session-a")
-	if err != nil {
-		t.Fatalf("GetCurrentFactoryForSession: %v", err)
-	}
-	if _, err := svc.SubmitWorkRequestForSession(context.Background(), "session-a", interfaces.WorkRequest{}); err != nil {
-		t.Fatalf("SubmitWorkRequestForSession: %v", err)
-	}
-	if _, err := svc.MoveWorkForSession(context.Background(), "session-a", "work-1", "done", "request-2"); err != nil {
-		t.Fatalf("MoveWorkForSession: %v", err)
-	}
-	if _, err := svc.SubscribeFactoryEventsForSession(context.Background(), "session-a", nil); err != nil {
-		t.Fatalf("SubscribeFactoryEventsForSession: %v", err)
-	}
-	snapshot, err := svc.GetEngineStateSnapshotForSession(context.Background(), "session-a")
-	if err != nil {
-		t.Fatalf("GetEngineStateSnapshotForSession: %v", err)
-	}
+	listed, current, snapshot := invokeLifecycleDelegationMethods(t, svc)
 
 	if len(listed.Sessions) != 1 || listed.Sessions[0].Id != "session-a" {
 		t.Fatalf("ListFactorySessions result = %#v, want delegated session summary", listed)
