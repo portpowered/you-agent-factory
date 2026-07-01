@@ -1,0 +1,24 @@
+type: object
+additionalProperties: false
+required:
+  - agentRunId
+  - outcome
+  - durationMillis
+description: >-
+  Response details captured after an AGENT_RUN workstation completes an
+  agent loop. Final output stays on DispatchResponse; bounded agent-run
+  diagnostics and transcript metadata stay on this agent-boundary event
+  instead of being copied onto provider-session inspection surfaces.
+properties:
+  agentRunId:
+    type: string
+    description: Stable identifier for this agent-run boundary event.
+  outcome:
+    $ref: '../../../../openapi-main.yaml#/components/schemas/WorkOutcome'
+  durationMillis:
+    type: integer
+    format: int64
+    minimum: 0
+    description: Agent-loop execution duration in milliseconds.
+  diagnostics:
+    $ref: '../../../../openapi-main.yaml#/components/schemas/SafeWorkDiagnostics'

@@ -237,6 +237,84 @@ Legacy `MODEL_WORKER` remains accepted for agent-loop workers during the
 migration window. When paired with `AGENT_RUN` (or legacy `MODEL_WORKSTATION`),
 it projects to `AGENT_WORKER` behavior.
 
+#### Agent loop runtime
+
+`AGENT_WORKER` pairs with `AGENT_RUN` workstations to start or resume one
+agent loop per dispatch. The factory runtime owns session cancellation,
+timeout, and final-result selection. Agent-loop execution is implemented
+inside the service through a library adapter; customers configure agent
+behavior through factory vocabulary (`AGENT_WORKER`, `AGENT_RUN`, worker and
+workstation fields) rather than by invoking an external harness CLI.
+
+Do not treat `INFERENCE_WORKER` or `operations` as a substitute for agent
+loops. Inference workers declare one-shot model operations for
+`INFERENCE_RUN` workstations. Agent workers do not declare `operations`;
+validation rejects model capability declarations on `AGENT_WORKER`.
+
+#### Local model capacity
+
+Local `AGENT_WORKER` definitions borrow ready model capacity from the
+process-wide model host through inferencer leases. Factory sessions acquire
+and release those leases around agent model calls; they do not own supervised
+local model subprocess lifecycle. Use `you docs models` for managed-runtime
+readiness, pull, and `/models` inspection. Modelhost surfaces report
+readiness, lifecycle, and lease state only; they do not own agent transcript
+metadata.
+
+#### Explicit tool policy
+
+Agent tool use is disabled unless the worker declares an explicit
+`agentTools.policy`. Omit `agentTools` to keep the default `DISABLED`
+behavior.
+
+| Policy | Behavior |
+|--------|----------|
+| `DISABLED` | Default. The agent loop runs with tool execution disabled. Tool calls are denied with stable diagnostics instead of being silently ignored. |
+| `READ_ONLY` | Allows bounded filesystem inspection tools: `read_file` and `list_directory` under the dispatch working directory. Write tools are denied. |
+| `ENABLED` | Allows `read_file`, `list_directory`, and `write_file` under the dispatch working directory. Paths outside the working directory are rejected. |
+
+`agentTools` is valid only on `AGENT_WORKER`. Validation fails when tool
+configuration is present without a policy, when the policy is unsupported,
+or when `agentTools` appears on non-agent worker types.
+
+```yaml
+---
+type: AGENT_WORKER
+model: gpt-5-codex
+modelProvider: CODEX
+agentTools:
+  policy: READ_ONLY
+---
+
+You are a software engineer. Use read-only filesystem tools only when the
+workstation prompt requires repository inspection.
+```
+
+Allowed tool execution records bounded `tool_diagnostics` summaries for tool
+start, success, and failure. Diagnostics do not expose raw process output,
+secrets, or unrestricted host paths as primary customer results.
+
+#### Agent-run failure classes
+
+Agent dispatches surface stable `failure_class` values in work and session
+inspection metadata. These classes identify agent execution separately from
+generic inference failures:
+
+| `failure_class` | Typical cause | Recovery hint |
+|-----------------|---------------|---------------|
+| `agent_run_lease_denied` | Managed runtime capacity exhausted | Retry later or increase `MODEL` resource capacity |
+| `agent_run_model_not_ready` | Managed runtime missing or still loading | Pull or wait for readiness before retrying |
+| `agent_run_model_runtime_failure` | Managed runtime failed or is unsupported | Resolve runtime failure or adjust worker configuration |
+| `agent_run_tool_policy_violation` | Tool call denied by `agentTools.policy` | Change tool policy or workstation prompt expectations |
+| `agent_run_tool_denied` | Unsupported tool name requested | Use only the supported tool set for the configured policy |
+| `agent_run_tool_failure` | Allowed tool execution failed | Inspect bounded tool diagnostics and fix the underlying path or content issue |
+| `agent_run_harness_failure` | Agent loop runtime failure | Inspect dispatch failure details and factory logs |
+| `agent_run_canceled` | Factory session or dispatch canceled | Resubmit or resume according to workflow policy |
+| `agent_run_timeout` | Dispatch or worker timeout exceeded | Increase limits or narrow workstation scope |
+
+See `you docs sessions` for dispatch inspection fields that separate final
+output from tool diagnostics and transcript metadata.
+
 ### `SCRIPT_WORKER`
 
 Use a script worker when the workstation should run a command instead of a
@@ -360,6 +438,7 @@ Use `you docs workstations` for `behavior: "POLLER"` lifecycle semantics and
 | `modelLocality` | inference workers | `LOCAL` or `CLOUD` execution locality for model operations and diagnostics |
 | `operations` | inference workers | Provider-agnostic capability declarations with uppercase operation names and typed slots |
 | `openCodeAgent` | agent workers | Named OpenCode agent profile for dispatches that resolve to runner `opencode` |
+| `agentTools.policy` | agent workers | Explicit tool policy: `DISABLED`, `READ_ONLY`, or `ENABLED` |
 
 ## Provider Fields
 

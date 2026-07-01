@@ -14,6 +14,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/api/apitypes"
 )
 
+// Defines values for AgentWorkerToolPolicy.
+const (
+	AgentWorkerToolPolicyDISABLED AgentWorkerToolPolicy = "DISABLED"
+	AgentWorkerToolPolicyENABLED  AgentWorkerToolPolicy = "ENABLED"
+	AgentWorkerToolPolicyREADONLY AgentWorkerToolPolicy = "READ_ONLY"
+)
+
 // Defines values for BundledFileType.
 const (
 	BundledFileTypeDOC        BundledFileType = "DOC"
@@ -137,6 +144,7 @@ const (
 
 // Defines values for FactoryEventType.
 const (
+	FactoryEventTypeAgentRunResponse              FactoryEventType = "AGENT_RUN_RESPONSE"
 	FactoryEventTypeArtifactCreated               FactoryEventType = "ARTIFACT_CREATED"
 	FactoryEventTypeDispatchInterrupted           FactoryEventType = "DISPATCH_INTERRUPTED"
 	FactoryEventTypeDispatchQueued                FactoryEventType = "DISPATCH_QUEUED"
@@ -667,6 +675,11 @@ const (
 	RunnerSelectionSourceWorkstation    RunnerSelectionSource = "workstation"
 )
 
+// Defines values for SafeAgentRunDiagnosticExecutionBehavior.
+const (
+	AgentRun SafeAgentRunDiagnosticExecutionBehavior = "agent_run"
+)
+
 // Defines values for ScriptExecutionOutcome.
 const (
 	ScriptExecutionOutcomeFailedExitCode ScriptExecutionOutcome = "FAILED_EXIT_CODE"
@@ -823,6 +836,51 @@ const (
 const (
 	ListWorkBySessionIdParamsSortByStateType ListWorkBySessionIdParamsSortBy = "state.type"
 )
+
+// AgentRunResponseEventPayload Response details captured after an AGENT_RUN workstation completes an agent loop. Final output stays on DispatchResponse; bounded agent-run diagnostics and transcript metadata stay on this agent-boundary event instead of being copied onto provider-session inspection surfaces.
+type AgentRunResponseEventPayload struct {
+	// AgentRunId Stable identifier for this agent-run boundary event.
+	AgentRunId string `json:"agentRunId"`
+
+	// Diagnostics Dashboard-facing execution diagnostics that omit raw prompts, command stdin, and command environment values.
+	Diagnostics *SafeWorkDiagnostics `json:"diagnostics,omitempty"`
+
+	// DurationMillis Agent-loop execution duration in milliseconds.
+	DurationMillis int64 `json:"durationMillis"`
+
+	// Outcome Result category returned by a workstation execution.
+	Outcome WorkOutcome `json:"outcome"`
+}
+
+// AgentRunToolDiagnosticEntry Bounded summary for one agent tool lifecycle event.
+type AgentRunToolDiagnosticEntry struct {
+	// Detail Safe diagnostic detail without raw process output or secrets.
+	Detail *string `json:"detail,omitempty"`
+
+	// Phase Tool lifecycle phase such as start, success, failure, or denied.
+	Phase *string `json:"phase,omitempty"`
+
+	// ToolName Tool name invoked by the agent loop.
+	ToolName *string `json:"toolName,omitempty"`
+}
+
+// AgentRunTranscriptEntry Bounded transcript metadata for one agent-loop message without exposing full prompt bodies.
+type AgentRunTranscriptEntry struct {
+	// Role Message role such as system, user, assistant, or tool.
+	Role *string `json:"role,omitempty"`
+
+	// Summary Bounded summary of the message content for inspection.
+	Summary *string `json:"summary,omitempty"`
+}
+
+// AgentWorkerToolPolicy Explicit tool execution policy for AGENT_WORKER agent loops. DISABLED runs the harness in no-tools mode. READ_ONLY exposes bounded filesystem read tools. ENABLED adds bounded filesystem write capability for the first supported tool set.
+type AgentWorkerToolPolicy string
+
+// AgentWorkerToolsConfig Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy.
+type AgentWorkerToolsConfig struct {
+	// Policy Explicit tool execution policy for AGENT_WORKER agent loops. DISABLED runs the harness in no-tools mode. READ_ONLY exposes bounded filesystem read tools. ENABLED adds bounded filesystem write capability for the first supported tool set.
+	Policy AgentWorkerToolPolicy `json:"policy"`
+}
 
 // ArtifactCreatedEventPayload Customer-visible artifact creation recorded on the canonical factory event stream. Artifact bodies remain orchestrator-owned and are not included in this payload.
 type ArtifactCreatedEventPayload struct {
@@ -2917,6 +2975,30 @@ type FactoryValidationTarget struct {
 	Subject  FactoryValidationSubject  `json:"subject"`
 }
 
+// FactoryWorldAgentRunInspectionView Customer-visible agent-run inspection for one workstation dispatch response.
+type FactoryWorldAgentRunInspectionView struct {
+	// ExecutionBehavior Stable execution behavior marker for agent-loop runs.
+	ExecutionBehavior *string `json:"executionBehavior,omitempty"`
+
+	// FailureClass Stable agent-run failure class when execution failed.
+	FailureClass *string `json:"failureClass,omitempty"`
+
+	// RecoveryAction Customer-visible recovery guidance for actionable agent-run failures.
+	RecoveryAction *string `json:"recoveryAction,omitempty"`
+
+	// ToolCallCount Number of recorded tool lifecycle events for the run.
+	ToolCallCount *int32 `json:"toolCallCount,omitempty"`
+
+	// ToolDiagnostics Bounded tool diagnostics separate from final agent output.
+	ToolDiagnostics *[]AgentRunToolDiagnosticEntry `json:"toolDiagnostics,omitempty"`
+
+	// ToolPolicy Effective agent tool policy for the run.
+	ToolPolicy *string `json:"toolPolicy,omitempty"`
+
+	// Transcript Bounded transcript metadata separate from tool diagnostics and final output.
+	Transcript *[]AgentRunTranscriptEntry `json:"transcript,omitempty"`
+}
+
 // FactoryWorldInvocationDiagnostic defines model for FactoryWorldInvocationDiagnostic.
 type FactoryWorldInvocationDiagnostic struct {
 	Parameters    *[]FactoryWorldInvocationParameterDiagnostic `json:"parameters,omitempty"`
@@ -3026,6 +3108,8 @@ type FactoryWorldTokenView struct {
 
 // FactoryWorldWorkDiagnostics defines model for FactoryWorldWorkDiagnostics.
 type FactoryWorldWorkDiagnostics struct {
+	// AgentRun Dashboard-safe agent-run inspection metadata distinct from provider-session transcript ownership.
+	AgentRun       *SafeAgentRunDiagnostic               `json:"agentRun,omitempty"`
 	Invocation     *FactoryWorldInvocationDiagnostic     `json:"invocation,omitempty"`
 	Provider       *FactoryWorldProviderDiagnostic       `json:"provider,omitempty"`
 	RenderedPrompt *FactoryWorldRenderedPromptDiagnostic `json:"renderedPrompt,omitempty"`
@@ -3110,17 +3194,19 @@ type FactoryWorldWorkstationRequestRequestView struct {
 
 // FactoryWorldWorkstationRequestResponseView defines model for FactoryWorldWorkstationRequestResponseView.
 type FactoryWorldWorkstationRequestResponseView struct {
-	DurationMillis              *int64                          `json:"durationMillis,omitempty"`
-	EndTime                     *time.Time                      `json:"endTime,omitempty"`
-	FailureMessage              *string                         `json:"failureMessage,omitempty"`
-	FailureReason               *string                         `json:"failureReason,omitempty"`
-	Feedback                    *string                         `json:"feedback,omitempty"`
-	Outcome                     *string                         `json:"outcome,omitempty"`
-	OutputMutations             *[]FactoryWorldMutationView     `json:"outputMutations,omitempty"`
-	OutputWorkItems             *[]FactoryWorldWorkItemRef      `json:"outputWorkItems,omitempty"`
-	Runner                      *FactoryWorldSelectedRunnerView `json:"runner,omitempty"`
-	ScriptResponse              *FactoryWorldScriptResponseView `json:"scriptResponse,omitempty"`
-	SelectedClassificationLabel *string                         `json:"selectedClassificationLabel,omitempty"`
+	// AgentRunInspection Customer-visible agent-run inspection for one workstation dispatch response.
+	AgentRunInspection          *FactoryWorldAgentRunInspectionView `json:"agentRunInspection,omitempty"`
+	DurationMillis              *int64                              `json:"durationMillis,omitempty"`
+	EndTime                     *time.Time                          `json:"endTime,omitempty"`
+	FailureMessage              *string                             `json:"failureMessage,omitempty"`
+	FailureReason               *string                             `json:"failureReason,omitempty"`
+	Feedback                    *string                             `json:"feedback,omitempty"`
+	Outcome                     *string                             `json:"outcome,omitempty"`
+	OutputMutations             *[]FactoryWorldMutationView         `json:"outputMutations,omitempty"`
+	OutputWorkItems             *[]FactoryWorldWorkItemRef          `json:"outputWorkItems,omitempty"`
+	Runner                      *FactoryWorldSelectedRunnerView     `json:"runner,omitempty"`
+	ScriptResponse              *FactoryWorldScriptResponseView     `json:"scriptResponse,omitempty"`
+	SelectedClassificationLabel *string                             `json:"selectedClassificationLabel,omitempty"`
 }
 
 // FactoryWorldWorkstationRequestView defines model for FactoryWorldWorkstationRequestView.
@@ -4383,8 +4469,37 @@ type RunnerID string
 // RunnerSelectionSource Configuration layer that supplied the resolved built-in runner selection for a dispatch.
 type RunnerSelectionSource string
 
+// SafeAgentRunDiagnostic Dashboard-safe agent-run inspection metadata distinct from provider-session transcript ownership.
+type SafeAgentRunDiagnostic struct {
+	// ExecutionBehavior Stable execution behavior marker for agent-loop runs.
+	ExecutionBehavior *SafeAgentRunDiagnosticExecutionBehavior `json:"executionBehavior,omitempty"`
+
+	// FailureClass Stable agent-run failure class when execution failed.
+	FailureClass *string `json:"failureClass,omitempty"`
+
+	// RecoveryAction Customer-visible recovery guidance for actionable agent-run failures.
+	RecoveryAction *string `json:"recoveryAction,omitempty"`
+
+	// ToolCallCount Number of recorded tool lifecycle events for the run.
+	ToolCallCount *int32 `json:"toolCallCount,omitempty"`
+
+	// ToolDiagnostics Bounded tool diagnostics separate from final agent output.
+	ToolDiagnostics *[]AgentRunToolDiagnosticEntry `json:"toolDiagnostics,omitempty"`
+
+	// ToolPolicy Effective agent tool policy for the run.
+	ToolPolicy *string `json:"toolPolicy,omitempty"`
+
+	// Transcript Bounded transcript metadata separate from tool diagnostics and final output.
+	Transcript *[]AgentRunTranscriptEntry `json:"transcript,omitempty"`
+}
+
+// SafeAgentRunDiagnosticExecutionBehavior Stable execution behavior marker for agent-loop runs.
+type SafeAgentRunDiagnosticExecutionBehavior string
+
 // SafeWorkDiagnostics Dashboard-facing execution diagnostics that omit raw prompts, command stdin, and command environment values.
 type SafeWorkDiagnostics struct {
+	// AgentRun Dashboard-safe agent-run inspection metadata distinct from provider-session transcript ownership.
+	AgentRun       *SafeAgentRunDiagnostic   `json:"agentRun,omitempty"`
 	Invocation     *InvocationDiagnostic     `json:"invocation,omitempty"`
 	Provider       *ProviderDiagnostic       `json:"provider,omitempty"`
 	RenderedPrompt *RenderedPromptDiagnostic `json:"renderedPrompt,omitempty"`
@@ -5167,6 +5282,9 @@ type WorkTypeHandlingBehavior string
 
 // Worker A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script.
 type Worker struct {
+	// AgentTools Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy.
+	AgentTools *AgentWorkerToolsConfig `json:"agentTools,omitempty"`
+
 	// Args Additional command arguments passed to the configured command.
 	Args *[]string `json:"args,omitempty"`
 
@@ -6198,6 +6316,32 @@ func (t *FactoryEvent_Payload) MergeScriptResponseEventPayload(v ScriptResponseE
 	return err
 }
 
+// AsAgentRunResponseEventPayload returns the union data inside the FactoryEvent_Payload as a AgentRunResponseEventPayload
+func (t FactoryEvent_Payload) AsAgentRunResponseEventPayload() (AgentRunResponseEventPayload, error) {
+	var body AgentRunResponseEventPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromAgentRunResponseEventPayload overwrites any union data inside the FactoryEvent_Payload as the provided AgentRunResponseEventPayload
+func (t *FactoryEvent_Payload) FromAgentRunResponseEventPayload(v AgentRunResponseEventPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeAgentRunResponseEventPayload performs a merge with any union data inside the FactoryEvent_Payload, using the provided AgentRunResponseEventPayload
+func (t *FactoryEvent_Payload) MergeAgentRunResponseEventPayload(v AgentRunResponseEventPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
 // AsDispatchResponseEventPayload returns the union data inside the FactoryEvent_Payload as a DispatchResponseEventPayload
 func (t FactoryEvent_Payload) AsDispatchResponseEventPayload() (DispatchResponseEventPayload, error) {
 	var body DispatchResponseEventPayload
@@ -7082,7 +7226,7 @@ func (t *FactorySessionLifecycleControlConflict) UnmarshalJSON(b []byte) error {
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
-	// Stream factory events
+	// Stream process-global factory events (compatibility-only)
 	// (GET /events)
 	GetEvents(w http.ResponseWriter, r *http.Request, params GetEventsParams)
 	// Preview JavaScript orchestrator factory source

@@ -86,6 +86,15 @@ available through the workflow activity graph; JavaScript sessions show phase,
 checkpoint refs, child dispatch counts, artifacts, warnings, and final or
 partial result refs without raw checkpoint bodies.
 
+## Factory Event Stream
+
+`GET /factory-sessions/{session_id}/events` is the normal Server-Sent Events
+route for observing `FactoryEvent` lifecycle, dispatch, phase, checkpoint, and
+artifact facts for one `FactorySession`. Reconnect with `after_event_id` or
+`after_sequence` on that same session-scoped URL. `GET /events` is retained only
+as a **compatibility-only** process-global stream for legacy tooling—not for new
+dashboard or Factory Session integrations.
+
 ## Operator Scope Boundaries
 
 The current canonical operator story is intentionally bounded:

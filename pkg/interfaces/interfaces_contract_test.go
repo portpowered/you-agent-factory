@@ -1421,3 +1421,49 @@ func testWorkerBehaviorProjectionLabelsAndMessages(t *testing.T) {
 		t.Fatalf("non-model worker type projection = %q, want %q", got, WorkerTypeAgent)
 	}
 }
+
+func TestSafeAgentRunDiagnosticFromWorkDiagnostics_ProjectsMetadata(t *testing.T) {
+	diagnostics := &WorkDiagnostics{
+		Metadata: map[string]string{
+			AgentRunMetadataExecutionBehavior: AgentRunExecutionBehavior,
+			AgentRunMetadataFailureClass:      "agent_run_timeout",
+			AgentRunMetadataRecoveryAction:    "retry later",
+			AgentRunMetadataToolPolicy:        AgentWorkerToolPolicyDisabled,
+			AgentRunMetadataToolCallCount:     "2",
+			AgentRunMetadataToolDiagnostics:   "read_file:denied:policy=disabled,write_file:start",
+		},
+	}
+
+	got := SafeAgentRunDiagnosticFromWorkDiagnostics(diagnostics)
+	if got == nil || got.ExecutionBehavior != AgentRunExecutionBehavior {
+		t.Fatalf("SafeAgentRunDiagnosticFromWorkDiagnostics() = %#v, want agent_run behavior", got)
+	}
+	if got.FailureClass != "agent_run_timeout" || got.RecoveryAction != "retry later" {
+		t.Fatalf("failure metadata = %#v, want timeout + retry later", got)
+	}
+	if got.ToolPolicy != AgentWorkerToolPolicyDisabled || got.ToolCallCount != 2 {
+		t.Fatalf("tool metadata = %#v, want disabled policy and count 2", got)
+	}
+	if len(got.ToolDiagnostics) != 2 || got.ToolDiagnostics[0].ToolName != "read_file" {
+		t.Fatalf("tool diagnostics = %#v, want parsed entries", got.ToolDiagnostics)
+	}
+}
+
+func TestGeneratedSafeWorkDiagnostics_IncludesAgentRun(t *testing.T) {
+	safe := &SafeWorkDiagnostics{
+		AgentRun: &SafeAgentRunDiagnostic{
+			ExecutionBehavior: AgentRunExecutionBehavior,
+			ToolPolicy:        AgentWorkerToolPolicyReadOnly,
+			Transcript: []AgentRunTranscriptEntry{
+				{Role: "assistant", Summary: "final answer"},
+			},
+		},
+	}
+	generated := GeneratedSafeWorkDiagnostics(safe)
+	if generated == nil || generated.AgentRun == nil {
+		t.Fatalf("GeneratedSafeWorkDiagnostics() = %#v, want agentRun populated", generated)
+	}
+	if generated.AgentRun.ToolPolicy == nil || *generated.AgentRun.ToolPolicy != AgentWorkerToolPolicyReadOnly {
+		t.Fatalf("generated tool policy = %#v, want read_only", generated.AgentRun.ToolPolicy)
+	}
+}

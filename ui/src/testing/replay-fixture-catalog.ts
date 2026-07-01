@@ -1,7 +1,7 @@
 export const replayCoverageSurfaceCatalog = [
   {
     description:
-      "Dashboard-shell rendering from a live `/events` replay stream.",
+      "Dashboard-shell rendering from a live session-scoped `GET /factory-sessions/{session_id}/events` replay stream.",
     id: "dashboard-shell",
   },
   {

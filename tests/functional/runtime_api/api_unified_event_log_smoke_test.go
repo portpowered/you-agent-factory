@@ -23,7 +23,7 @@ func TestAPIUnifiedEventLogSmoke_LiveRecordReplayProjectionAndDivergenceUseSameT
 	}
 	fixture := newUnifiedEventLogSmokeFixture(t)
 	server := fixture.server
-	stream := openFactoryEventHTTPStream(t, server.URL()+"/events")
+	stream := openDefaultSessionFactoryEventHTTPStream(t, server.URL())
 	runStarted, first := requireFunctionalEventStreamPrelude(t, stream)
 	assertUnifiedEventLogUpsert(t, server, fixture)
 

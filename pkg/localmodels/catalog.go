@@ -62,7 +62,7 @@ func BuildCatalogWithOptions(runtimeCfg *factoryconfig.LoadedFactoryConfig, opts
 
 	aggregates := make(map[string]*catalogAggregate)
 	for _, worker := range factoryCfg.Workers {
-		if !interfaces.IsInferenceWorkerType(worker.Type) {
+		if !catalogWorkerIncludesModel(worker) {
 			continue
 		}
 		key := canonicalModelName(worker.Model)
@@ -132,6 +132,15 @@ func BuildCatalogWithOptions(runtimeCfg *factoryconfig.LoadedFactoryConfig, opts
 		}
 	}
 	return catalog
+}
+
+func catalogWorkerIncludesModel(worker interfaces.WorkerConfig) bool {
+	if interfaces.IsInferenceWorkerType(worker.Type) {
+		return true
+	}
+	return interfaces.IsAgentWorkerType(worker.Type) &&
+		strings.TrimSpace(worker.ModelLocality) == interfaces.ModelLocalityLocal &&
+		strings.TrimSpace(worker.Model) != ""
 }
 
 func capabilityFromWorker(worker interfaces.WorkerConfig) factoryapi.ModelCapability {
