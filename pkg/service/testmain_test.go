@@ -2877,11 +2877,14 @@ func TestFactorySessionInvocation_LocalLlamaCppInferenceUsesModelHostLeases(t *t
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	sourceKind := factoryapi.InvocationInputSourceKindText
+	content := factoryapi.WorkContent{
+		mustGeneratedLocalModelHTTPTextPart(t, "hello factory session inference"),
+	}
+
 	result, err := svc.InvokeFactorySession(ctx, factorysessions.DefaultSessionID, factoryapi.InvocationRequest{
-		SourceKind: factoryapi.InvocationInputSourceKindText,
-		Content: factoryapi.WorkContent{
-			mustGeneratedLocalModelHTTPTextPart(t, "hello factory session inference"),
-		},
+		SourceKind: &sourceKind,
+		Content:    &content,
 	})
 	if err != nil {
 		t.Fatalf("InvokeFactorySession: %v", err)
