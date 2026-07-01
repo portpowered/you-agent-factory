@@ -8,8 +8,10 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/apitypes"
 	generatedapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 )
 
 func workerTypeModel() *generatedapi.WorkerType {
@@ -169,5 +171,54 @@ func TestService_PreparePersistedFactoryPayload_PreservesUnsupportedSchemaVersio
 	}
 	if prepared.Config.Layout.SchemaVersion != 99 {
 		t.Fatalf("layout schemaVersion = %d, want 99 preserved on save", prepared.Config.Layout.SchemaVersion)
+	}
+}
+
+func TestService_PersistPayloadFromView_StampsVersionMetadata(t *testing.T) {
+	t.Parallel()
+
+	body := "inline worker body"
+	factory := generatedapi.Factory{
+		Name: "alpha",
+		Workers: &[]generatedapi.Worker{{
+			Name: "worker-a",
+			Type: workerTypeModel(),
+			Body: &body,
+		}},
+	}
+	view, err := New(stubDefinitionHost{}).PrepareEditableFactoryPersistView("alpha", factory)
+	if err != nil {
+		t.Fatalf("PrepareEditableFactoryPersistView: %v", err)
+	}
+	version := generatedapi.HybridLogicalTimestamp{
+		Logical:  factoryapi.Int64String(9),
+		Physical: time.Date(2026, 6, 8, 8, 0, 0, 0, time.UTC),
+	}
+
+	prepared, err := New(stubDefinitionHost{}).PersistPayloadFromView(view, version)
+	if err != nil {
+		t.Fatalf("PersistPayloadFromView: %v", err)
+	}
+	if !strings.Contains(string(prepared.Canonical), `"logical":"9"`) {
+		t.Fatalf("canonical payload = %s, want stamped version logical=9", prepared.Canonical)
+	}
+}
+
+func TestService_SerializeNamedFactory_ReturnsLoadedRuntime(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, rootDir, factoryfixtures.MinimalFactoryConfig())
+	runtimeCfg, err := config.LoadRuntimeConfig(rootDir, nil)
+	if err != nil {
+		t.Fatalf("LoadRuntimeConfig: %v", err)
+	}
+
+	got, err := New(stubDefinitionHost{}).SerializeNamedFactory("alpha", runtimeCfg, true)
+	if err != nil {
+		t.Fatalf("SerializeNamedFactory: %v", err)
+	}
+	if got.Name != "alpha" {
+		t.Fatalf("factory name = %q, want alpha", got.Name)
 	}
 }

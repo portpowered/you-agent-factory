@@ -2,7 +2,9 @@ package factorydefinition
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +13,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
@@ -184,6 +187,153 @@ func TestSaveReplaceCurrentForSession_PersistsSplitLayout(t *testing.T) {
 	}
 }
 
+func TestSaveReplaceCurrentForSession_ReplacesNamedCurrentFactoryLayout(t *testing.T) {
+	t.Parallel()
+
+	sessionRoot := t.TempDir()
+	versionTime := time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC)
+	payload := namedFactoryPayload(t, "alpha")
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("Unmarshal payload: %v", err)
+	}
+	decoded["version"] = map[string]any{
+		"logical":  float64(1),
+		"physical": versionTime.Format(time.RFC3339Nano),
+	}
+	versioned, err := json.Marshal(decoded)
+	if err != nil {
+		t.Fatalf("Marshal versioned payload: %v", err)
+	}
+	if _, err := config.PersistNamedFactory(sessionRoot, "alpha", versioned); err != nil {
+		t.Fatalf("PersistNamedFactory(alpha): %v", err)
+	}
+	if err := config.WriteCurrentFactoryPointer(sessionRoot, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer(alpha): %v", err)
+	}
+
+	host := &splitLayoutSaveHost{
+		sessionRootDir: sessionRoot,
+		current: factoryapi.Factory{
+			Name: "alpha",
+			Id:   saveStringPointer("alpha"),
+			Version: &factoryapi.HybridLogicalTimestamp{
+				Logical:  1,
+				Physical: versionTime,
+			},
+		},
+	}
+	svc := New(host)
+	replacement := factoryapi.Factory{
+		Name: "alpha",
+		Id:   saveStringPointer("alpha"),
+		Version: &factoryapi.HybridLogicalTimestamp{
+			Logical:  2,
+			Physical: versionTime.Add(time.Second),
+		},
+		WorkTypes: &[]factoryapi.WorkType{{
+			Name: "story",
+			States: []factoryapi.WorkState{
+				{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+				{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+				{Name: "failed", Type: factoryapi.WorkStateTypeFAILED},
+			},
+		}},
+		Workers: &[]factoryapi.Worker{{
+			Name: "planner",
+			Type: saveWorkerTypeModel(),
+			Body: saveStringPointer("named replacement planner"),
+		}},
+		Workstations: &[]factoryapi.Workstation{{
+			Name:   "plan-task",
+			Worker: "planner",
+			Type:   saveWorkstationTypeModel(),
+			Body:   saveStringPointer("Plan the named story."),
+			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},
+			Outputs: &[]factoryapi.WorkstationIO{
+				{WorkType: "story", State: "complete"},
+			},
+			OnFailure: &[]factoryapi.WorkstationIO{
+				{WorkType: "story", State: "failed"},
+			},
+		}},
+	}
+
+	if _, err := svc.SaveReplaceCurrentForSession(context.Background(), factorysessions.DefaultSessionID, replacement); err != nil {
+		t.Fatalf("SaveReplaceCurrentForSession: %v", err)
+	}
+	if !host.replaceCalled {
+		t.Fatal("expected split-layout replacement for named current factory")
+	}
+}
+
+func TestSaveReplaceCurrentForSession_RestoresLayoutWhenActivationFails(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	initialPath := filepath.Join(rootDir, interfaces.FactoryConfigFile)
+	initial := []byte(`{"name":"root","id":"root-runtime","version":{"logical":"1","physical":"2026-05-31T12:00:00Z"},"workTypes":[{"name":"task","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],"workers":[{"name":"worker-a","type":"MODEL_WORKER","body":"initial worker"}],"workstations":[{"name":"process","worker":"worker-a","type":"MODEL_WORKSTATION","body":"initial workstation","inputs":[{"workType":"task","state":"init"}],"outputs":[{"workType":"task","state":"complete"}]}]}`)
+	if err := os.WriteFile(initialPath, initial, 0o644); err != nil {
+		t.Fatalf("WriteFile(factory.json): %v", err)
+	}
+
+	host := &splitLayoutSaveHost{
+		sessionRootDir: rootDir,
+		activateErr:    errors.New("activation failed"),
+		current: factoryapi.Factory{
+			Name: apisurface.DefaultCurrentFactoryName,
+			Id:   saveStringPointer("root-runtime"),
+			Version: &factoryapi.HybridLogicalTimestamp{
+				Logical:  1,
+				Physical: time.Date(2026, 5, 31, 12, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+	svc := New(host)
+	replacement := factoryapi.Factory{
+		Name: apisurface.DefaultCurrentFactoryName,
+		Id:   saveStringPointer("root-runtime"),
+		Version: &factoryapi.HybridLogicalTimestamp{
+			Logical:  2,
+			Physical: time.Date(2026, 5, 31, 12, 0, 1, 0, time.UTC),
+		},
+		WorkTypes: &[]factoryapi.WorkType{{
+			Name: "story",
+			States: []factoryapi.WorkState{
+				{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+				{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+				{Name: "failed", Type: factoryapi.WorkStateTypeFAILED},
+			},
+		}},
+		Workers: &[]factoryapi.Worker{{
+			Name: "planner",
+			Type: saveWorkerTypeModel(),
+			Body: saveStringPointer("You are the planner."),
+		}},
+		Workstations: &[]factoryapi.Workstation{{
+			Name:   "plan-task",
+			Worker: "planner",
+			Type:   saveWorkstationTypeModel(),
+			Body:   saveStringPointer("Plan the story."),
+			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},
+			Outputs: &[]factoryapi.WorkstationIO{
+				{WorkType: "story", State: "complete"},
+			},
+			OnFailure: &[]factoryapi.WorkstationIO{
+				{WorkType: "story", State: "failed"},
+			},
+		}},
+	}
+
+	_, err := svc.SaveReplaceCurrentForSession(context.Background(), factorysessions.DefaultSessionID, replacement)
+	if err == nil || err.Error() != "activation failed" {
+		t.Fatalf("SaveReplaceCurrentForSession error = %v, want activation failed", err)
+	}
+	if !host.restoreCalled {
+		t.Fatal("expected layout restore after activation failure")
+	}
+}
+
 type splitLayoutSaveHost struct {
 	sessionRootDir string
 	current        factoryapi.Factory
@@ -237,8 +387,16 @@ func (h *splitLayoutSaveHost) ActivateSessionEditableFactory(context.Context, *f
 
 func (h *splitLayoutSaveHost) ReplaceFactoryLayoutAtDir(targetDir string, prepared *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
 	h.replaceCalled = true
-	if targetDir != h.sessionRootDir {
-		return nil, errors.New("unexpected replace target dir")
+	expectedDir := h.sessionRootDir
+	if h.current.Name != apisurface.DefaultCurrentFactoryName {
+		namedDir, err := factoryconfig.ResolveNamedFactoryDir(h.sessionRootDir, string(h.current.Name))
+		if err != nil {
+			return nil, err
+		}
+		expectedDir = namedDir
+	}
+	if targetDir != expectedDir {
+		return nil, fmt.Errorf("unexpected replace target dir %q, want %q", targetDir, expectedDir)
 	}
 	result, err := factoryconfig.ReplaceFactoryLayoutAtDirWithPreparedWithResult(
 		targetDir,

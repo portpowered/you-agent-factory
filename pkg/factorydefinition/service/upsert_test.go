@@ -2,6 +2,7 @@ package factorydefinition
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
@@ -84,6 +86,75 @@ func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testin
 	if !strings.Contains(string(factoryJSON), `"name": "imported-target"`) &&
 		!strings.Contains(string(factoryJSON), `"name":"imported-target"`) {
 		t.Fatalf("factory.json name = %s, want imported-target", factoryJSON)
+	}
+}
+
+func TestSaveUpsertNamedAndActivateForSession_ReplacesExistingNamedFactory(t *testing.T) {
+	sessionRoot := t.TempDir()
+	versionTime := time.Date(2026, 5, 31, 11, 0, 0, 0, time.UTC)
+	payload := namedFactoryPayload(t, "imported-target")
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("Unmarshal payload: %v", err)
+	}
+	decoded["version"] = map[string]any{
+		"logical":  float64(2),
+		"physical": versionTime.Format(time.RFC3339Nano),
+	}
+	versioned, err := json.Marshal(decoded)
+	if err != nil {
+		t.Fatalf("Marshal versioned payload: %v", err)
+	}
+	if _, err := config.PersistNamedFactory(sessionRoot, "imported-target", versioned); err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+
+	host := &upsertDefinitionHost{sessionRootDir: sessionRoot}
+	svc := New(host)
+	replacement := factoryapi.Factory{
+		Name: "imported-target",
+		Id:   upsertStringPointer("embedded-runtime"),
+		Version: &factoryapi.HybridLogicalTimestamp{
+			Logical:  3,
+			Physical: versionTime.Add(time.Second),
+		},
+		WorkTypes: &[]factoryapi.WorkType{{
+			Name: "story",
+			States: []factoryapi.WorkState{
+				{Name: "init", Type: factoryapi.WorkStateTypeINITIAL},
+				{Name: "complete", Type: factoryapi.WorkStateTypeTERMINAL},
+				{Name: "failed", Type: factoryapi.WorkStateTypeFAILED},
+			},
+		}},
+		Workers: &[]factoryapi.Worker{{
+			Name: "planner",
+			Type: upsertWorkerTypeModel(),
+			Body: upsertStringPointer("replacement planner"),
+		}},
+		Workstations: &[]factoryapi.Workstation{{
+			Name:   "plan-task",
+			Worker: "planner",
+			Type:   upsertWorkstationTypeModel(),
+			Body:   upsertStringPointer("replacement workstation"),
+			Inputs: []factoryapi.WorkstationIO{{WorkType: "story", State: "init"}},
+			Outputs: &[]factoryapi.WorkstationIO{
+				{WorkType: "story", State: "complete"},
+			},
+			OnFailure: &[]factoryapi.WorkstationIO{
+				{WorkType: "story", State: "failed"},
+			},
+		}},
+	}
+
+	saved, err := svc.SaveUpsertNamedAndActivateForSession(context.Background(), "session-alpha", replacement)
+	if err != nil {
+		t.Fatalf("SaveUpsertNamedAndActivateForSession: %v", err)
+	}
+	if saved.Name != "imported-target" {
+		t.Fatalf("saved factory name = %q, want imported-target", saved.Name)
+	}
+	if host.activatedName != "imported-target" {
+		t.Fatalf("activated factory name = %q, want imported-target", host.activatedName)
 	}
 }
 
