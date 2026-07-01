@@ -159,6 +159,56 @@ func TestInitializeMCPTransport_RuntimeBackedSelectsJavaScriptRuntimeService(t *
 	}
 }
 
+func TestInitializeMCPTransport_NilConfigUsesFixtureDefaults(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(filepath.Join("..", ".."))
+	t.Chdir(repoRoot)
+
+	transport, err := initializer.InitializeMCPTransport(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("InitializeMCPTransport(nil): %v", err)
+	}
+	if transport.SessionExecution == nil {
+		t.Fatal("expected durable session execution service")
+	}
+}
+
+func TestInitializeMCPTransport_RuntimeBackedDiscoversFactoryConfig(t *testing.T) {
+	t.Parallel()
+
+	projectRoot := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, projectRoot, factoryfixtures.MinimalFactoryConfig())
+
+	transport, err := initializer.InitializeMCPTransport(context.Background(), &initializer.MCPConfig{
+		Options: initializer.MCPOptions{
+			RuntimeBacked: true,
+			ProjectRoot:   projectRoot,
+		},
+	})
+	if err != nil {
+		t.Fatalf("InitializeMCPTransport: %v", err)
+	}
+	if transport.Services == nil || transport.Services.Models == nil {
+		t.Fatal("expected initializer to compose model service from discovered factory.json")
+	}
+}
+
+func TestInitializeMCPTransport_ResolvesFixtureCatalogFromRepoRoot(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := filepath.Clean(filepath.Join("..", ".."))
+	t.Chdir(repoRoot)
+
+	transport, err := initializer.InitializeMCPTransport(context.Background(), &initializer.MCPConfig{})
+	if err != nil {
+		t.Fatalf("InitializeMCPTransport: %v", err)
+	}
+	if transport.SessionExecution == nil {
+		t.Fatal("expected fixture-backed session execution service")
+	}
+}
+
 func TestInjectMCPTransport_MatchesInitializeMCPTransport(t *testing.T) {
 	t.Parallel()
 
