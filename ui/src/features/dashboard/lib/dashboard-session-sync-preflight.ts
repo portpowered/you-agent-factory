@@ -152,7 +152,7 @@ async function attemptStoredCheckpointLogicalRemap({
 function readyAfterLogicalRemap(
   response: FactorySessionSyncPreflightResponse,
   streamIdentity: StreamDerivedCacheIdentity,
-): DashboardSessionSyncPreflightOutcome {
+): { kind: "ready"; result: DashboardSessionSyncPreflightBootstrap } {
   return {
     kind: "ready",
     result: {
