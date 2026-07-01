@@ -8,8 +8,31 @@ import {
   resetSessionPersistenceInvalidationRecords,
   silentReplayRecoveryDiagnostic,
 } from "./diagnostics";
+import { userClearedSessionsDiagnostic } from "../../public/session-persistence-diagnostics";
 
 describe("session-persistence-diagnostics", () => {
+  it("re-exports diagnostics through the narrow public barrel", () => {
+    expect(
+      userClearedSessionsDiagnostic(
+        {
+          backendScopeID: "backend-a",
+          factorySessionID: "session-a",
+          streamGenerationID: "stream-a",
+        },
+        "session-a",
+      ),
+    ).toEqual({
+      reason: "user_cleared_sessions",
+      recoveryAction: "clear_checkpoint",
+      requestedSessionID: "session-a",
+      scope: {
+        backendScopeID: "backend-a",
+        factorySessionID: "session-a",
+        streamGenerationID: "stream-a",
+      },
+    });
+  });
+
   it("records and resets invalidation diagnostics for test inspection", () => {
     resetSessionPersistenceInvalidationRecords();
     recordSessionPersistenceInvalidation(
