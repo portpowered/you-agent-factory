@@ -8,13 +8,13 @@ import {
   persistTimelineCheckpoint,
   readFactoryTimelineDebugOptions,
   readTimelineCheckpoint,
-  reconnectCursorFromCheckpoint,
   type TimelineCheckpointStreamIdentity,
   useFactoryTimelineStore,
 } from "../../timeline/public";
 import { useDashboardSession } from "../session/dashboard-session-provider";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
+import { useDashboardInitialReconnectCursor } from "./useDashboardInitialReconnectCursor";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
 import { useDashboardTimelineMemoryDebug } from "./useDashboardTimelineMemoryDebug";
 import { useDashboardWorldView } from "./useDashboardWorldView";
@@ -244,6 +244,12 @@ export function useDashboardSnapshot({
     restoreCheckpoint,
   });
 
+  const resumedReconnectCursor = useDashboardInitialReconnectCursor({
+    persistedCheckpoint,
+    refreshToken,
+    sessionID: rawSessionID,
+  });
+
   if (
     lastPersistedCheckpointRef.current !== persistedCheckpoint ||
     lastSessionIDRef.current !== rawSessionID
@@ -257,8 +263,8 @@ export function useDashboardSnapshot({
     () =>
       invalidatedReconnectCursorRef.current
         ? undefined
-        : reconnectCursorFromCheckpoint(persistedCheckpoint),
-    [persistedCheckpoint],
+        : resumedReconnectCursor,
+    [resumedReconnectCursor],
   );
 
   const handleInvalidReconnectCursor = useCallback(() => {

@@ -44,6 +44,8 @@ func (s *Server) InvokeFactorySessionBySessionId(w http.ResponseWriter, r *http.
 		switch typed := err.(type) {
 		case *invocations.InputError:
 			s.writeError(w, http.StatusBadRequest, typed.Message, string(typed.Code))
+		case *invocations.ArgumentError:
+			s.writeError(w, http.StatusBadRequest, typed.Message, string(typed.Code))
 		case *apisurface.RequestValidationError:
 			s.writeError(w, http.StatusBadRequest, typed.Message, "BAD_REQUEST")
 		default:

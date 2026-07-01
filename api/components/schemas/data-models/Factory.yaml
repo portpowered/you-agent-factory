@@ -143,6 +143,12 @@ properties:
       and API entrypoints. When omitted, runtimes use the
       SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for
       the work item originally submitted by the invocation.
+  invocationSignature:
+    $ref: './FactoryInvocationSignature.yaml'
+    description: >-
+      Optional canonical callable argument contract shared by CLI, API,
+      dashboard, docs, and packaged factories. When omitted, callers use the
+      factory's compatibility invocation behavior.
   guards:
     type: array
     description: Root-level guards that apply across the factory instead of one specific workstation or input.

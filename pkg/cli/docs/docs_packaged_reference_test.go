@@ -93,6 +93,41 @@ func TestMarkdown_PackagedGoalReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
+func TestMarkdown_PackagedFusionReturnsRawAuthoredMarkdown(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("packaged-fusion")
+	if err != nil {
+		t.Fatalf("Markdown(packaged-fusion) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Packaged Fusion (`@you/fusion`)",
+		"you run --named @you/fusion --help",
+		"you run --named @you/fusion \"Draft a release summary\"",
+		"~/.you-agent-factory/factories",
+		"@you%2Ffusion",
+		"`invocationSignature`",
+		"`FILE` output contract",
+		"`medium`",
+		"`you docs config`",
+		"`you docs sessions`",
+		"`you docs authoring-factories`",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(packaged-fusion) missing %q:\n%s", want, got)
+		}
+	}
+	for _, wrapper := range []string{
+		"# Docs",
+		"Run `you docs packaged-fusion`.",
+	} {
+		if strings.Contains(got, wrapper) {
+			t.Fatalf("Markdown(packaged-fusion) included wrapper text %q:\n%s", wrapper, got)
+		}
+	}
+}
+
 func TestMarkdown_PackagedTTSReturnsRawAuthoredMarkdown(t *testing.T) {
 	t.Parallel()
 

@@ -88,17 +88,18 @@ paths:
       operationId: invokeFactorySessionBySessionId
       summary: Invoke one factory session and return its primary result
       description: >-
-        Live-session compatibility API for text-first invocations against an
-        already-open factory session. This route is not the primary durable
-        workflow execution entrypoint; use POST /factory-sessions/async or POST
+        Live-session compatibility API for invocations against an already-open
+        factory session. This route is not the primary durable workflow
+        execution entrypoint; use POST /factory-sessions/async or POST
         /factory-sessions/sync for dynamic workflow-backed durable execution.
-        Resolves one text-first invocation input, submits it to the selected live
-        factory session, waits for terminal primary-result selection, and returns
-        the result using the factory's invocationReturn policy. When
-        invocationReturn is omitted, runtimes use the documented
-        SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous input sources is
-        rejected with INVOCATION_INPUT_SOURCE_CONFLICT. Empty selected text input
-        is rejected with INVOCATION_INPUT_EMPTY. If no primary output can be
+        Requests may use legacy text-first compatibility content or structured
+        invocationSignature args. Structured args normalize through the shared
+        backend argument resolver, while content preserves the legacy
+        compatibility carrier. When invocationReturn is omitted, runtimes use
+        the documented SUBMITTED_WORK_TERMINAL fallback. Supplying ambiguous
+        input sources is rejected with INVOCATION_INPUT_SOURCE_CONFLICT or
+        INVOCATION_ARGUMENT_SOURCE_CONFLICT. Empty selected text input is
+        rejected with INVOCATION_INPUT_EMPTY. If no primary output can be
         resolved, the response status is FAILED with
         INVOCATION_PRIMARY_RESULT_UNRESOLVED and no primaryResult.
       parameters:
@@ -1815,6 +1816,10 @@ components:
       $ref: './components/schemas/factory-world/FactoryWorldRenderedPromptDiagnostic.yaml'
     FactoryWorldProviderDiagnostic:
       $ref: './components/schemas/factory-world/FactoryWorldProviderDiagnostic.yaml'
+    FactoryWorldInvocationDiagnostic:
+      $ref: './components/schemas/factory-world/FactoryWorldInvocationDiagnostic.yaml'
+    FactoryWorldInvocationParameterDiagnostic:
+      $ref: './components/schemas/factory-world/FactoryWorldInvocationParameterDiagnostic.yaml'
     FactoryWorldWorkDiagnostics:
       $ref: './components/schemas/factory-world/FactoryWorldWorkDiagnostics.yaml'
     FactoryWorldWorkItemRef:
@@ -1919,6 +1924,10 @@ components:
       $ref: './components/schemas/events/RenderedPromptDiagnostic.yaml'
     ProviderDiagnostic:
       $ref: './components/schemas/events/ProviderDiagnostic.yaml'
+    InvocationDiagnostic:
+      $ref: './components/schemas/events/InvocationDiagnostic.yaml'
+    InvocationParameterDiagnostic:
+      $ref: './components/schemas/events/InvocationParameterDiagnostic.yaml'
     CommandDiagnostic:
       $ref: './components/schemas/shared/CommandDiagnostic.yaml'
     PanicDiagnostic:
@@ -1947,6 +1956,26 @@ components:
       $ref: './components/schemas/data-models/FactoryOrchestratorJavaScriptConfig.yaml'
     FactoryOrchestratorJavaScriptInlineSource:
       $ref: './components/schemas/data-models/FactoryOrchestratorJavaScriptInlineSource.yaml'
+    FactoryInvocationSignature:
+      $ref: './components/schemas/data-models/FactoryInvocationSignature.yaml'
+    FactoryInvocationParameter:
+      $ref: './components/schemas/data-models/FactoryInvocationParameter.yaml'
+    FactoryInvocationParameterBinding:
+      $ref: './components/schemas/data-models/FactoryInvocationParameterBinding.yaml'
+    FactoryInvocationParameterBindingKind:
+      $ref: './components/schemas/data-models/FactoryInvocationParameterBindingKind.yaml'
+    FactoryInvocationParameterTypeHint:
+      $ref: './components/schemas/data-models/FactoryInvocationParameterTypeHint.yaml'
+    FactoryInvocationParameterValueMode:
+      $ref: './components/schemas/data-models/FactoryInvocationParameterValueMode.yaml'
+    FactoryInvocationUnknownNamedArgumentPolicy:
+      $ref: './components/schemas/data-models/FactoryInvocationUnknownNamedArgumentPolicy.yaml'
+    FactoryInvocationOutputContract:
+      $ref: './components/schemas/data-models/FactoryInvocationOutputContract.yaml'
+    FactoryInvocationOutputContractMode:
+      $ref: './components/schemas/data-models/FactoryInvocationOutputContractMode.yaml'
+    FactoryInvocationExample:
+      $ref: './components/schemas/data-models/FactoryInvocationExample.yaml'
     InvocationReturn:
       $ref: './components/schemas/data-models/InvocationReturn.yaml'
     InvocationReturnPolicy:
