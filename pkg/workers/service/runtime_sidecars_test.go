@@ -95,3 +95,65 @@ func TestStartSchedulerSidecarsForRuntime_AttachesCronAndScriptPollerSupervision
 	cancel()
 	sidecars.Wait()
 }
+
+func TestStartSchedulerSidecarsForRuntime_CronCadenceSubmitsScheduledTicks(t *testing.T) {
+	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+	fakeClock := clockwork.NewFakeClockAt(start)
+	factoryDir := t.TempDir()
+
+	cronWS := cronWorkstationConfigForTest("scheduled-task")
+	cronWS.Cron.TriggerAtStart = true
+
+	factoryCfg := &interfaces.FactoryConfig{
+		WorkTypes:    []interfaces.WorkTypeConfig{{Name: "task"}},
+		Workstations: []interfaces.FactoryWorkstationConfig{cronWS},
+	}
+	loaded, err := config.NewLoadedFactoryConfig(factoryDir, factoryCfg, runtimefixtures.RuntimeDefinitionLookupFixture{
+		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
+			cronWS.Name: &cronWS,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewLoadedFactoryConfig: %v", err)
+	}
+
+	observedRequests := make(chan interfaces.WorkRequest, 8)
+	svc := workersservice.New(workersservice.Config{
+		Logger: zap.NewNop(),
+		Clock:  fakeClock,
+	})
+
+	sidecarCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var sidecars sync.WaitGroup
+	svc.StartSchedulerSidecarsForRuntime(
+		sidecarCtx,
+		&sidecars,
+		workersservice.RuntimeSidecarsInput{
+			FactoryDir: factoryDir,
+			FactoryCfg: factoryCfg,
+			RuntimeCfg: loaded,
+			Submitter: func(_ context.Context, request interfaces.WorkRequest) error {
+				select {
+				case observedRequests <- request:
+				default:
+					t.Fatalf("cron request channel overflow")
+				}
+				return nil
+			},
+		},
+	)
+	t.Cleanup(func() {
+		cancel()
+		sidecars.Wait()
+	})
+
+	startupRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
+	assertCronWorkRequestForWorkstation(t, startupRequest, start, cronWS.Name)
+
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	assertNoCronWorkRequestQueued(t, observedRequests)
+	fakeClock.Advance(time.Minute)
+	scheduledRequest := waitForCronWorkRequest(t, observedRequests, time.Second)
+	assertCronWorkRequestForWorkstation(t, scheduledRequest, start.Add(time.Minute), cronWS.Name)
+}

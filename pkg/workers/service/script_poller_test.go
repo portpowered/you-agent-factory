@@ -3,16 +3,21 @@ package service_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
-	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 const (
@@ -22,13 +27,17 @@ const (
 )
 
 type recordingSubmitter struct {
-	calls       int
-	submissions []interfaces.WorkRequest
+	calls          int
+	submissions    []interfaces.WorkRequest
+	submitOverride func(context.Context, interfaces.WorkRequest) error
 }
 
-func (r *recordingSubmitter) submit(_ context.Context, request interfaces.WorkRequest) error {
+func (r *recordingSubmitter) submit(ctx context.Context, request interfaces.WorkRequest) error {
 	r.calls++
 	r.submissions = append(r.submissions, request)
+	if r.submitOverride != nil {
+		return r.submitOverride(ctx, request)
+	}
 	return nil
 }
 
@@ -199,6 +208,168 @@ func TestParseScriptPollerOutput_RejectsMalformedStdout(t *testing.T) {
 	}
 }
 
+func TestRunScriptPoller_CommandFailureReturnsExecutionError(t *testing.T) {
+	runErr := errors.New("shell command unavailable")
+	runner := &pollerSequenceCommandRunner{
+		outcomes: []pollerRunOutcome{{err: runErr}},
+	}
+	submitted := &recordingSubmitter{}
+	svc := workersservice.New(workersservice.Config{
+		Logger:        zap.NewNop(),
+		CommandRunner: runner,
+	})
+	poller := newCanonicalScriptPollerWorkstation()
+	worker := newCanonicalScriptPollerWorker()
+	runtimeCfg := newScriptPollerLoadedRuntimeConfig(
+		t,
+		t.TempDir(),
+		scriptPollerRuntimeConfigOptions{poller: poller},
+	)
+
+	err := svc.RunScriptPoller(
+		context.Background(),
+		runner,
+		runtimeCfg,
+		poller,
+		worker,
+		submitted.submit,
+	)
+	if err == nil || !strings.Contains(err.Error(), "execution failed") {
+		t.Fatalf("RunScriptPoller error = %v, want execution failed", err)
+	}
+	if submitted.calls != 0 {
+		t.Fatalf("submit calls = %d, want 0 on command failure", submitted.calls)
+	}
+}
+
+func TestRunScriptPoller_NonZeroExitReturnsErrorWithoutSubmit(t *testing.T) {
+	runner := &pollerSequenceCommandRunner{
+		outcomes: []pollerRunOutcome{{result: workers.CommandResult{ExitCode: 2}}},
+	}
+	submitted := &recordingSubmitter{}
+	svc := workersservice.New(workersservice.Config{
+		Logger:        zap.NewNop(),
+		CommandRunner: runner,
+	})
+	poller := newCanonicalScriptPollerWorkstation()
+	worker := newCanonicalScriptPollerWorker()
+	runtimeCfg := newScriptPollerLoadedRuntimeConfig(
+		t,
+		t.TempDir(),
+		scriptPollerRuntimeConfigOptions{poller: poller},
+	)
+
+	err := svc.RunScriptPoller(
+		context.Background(),
+		runner,
+		runtimeCfg,
+		poller,
+		worker,
+		submitted.submit,
+	)
+	if err == nil || !strings.Contains(err.Error(), "exited with code 2") {
+		t.Fatalf("RunScriptPoller error = %v, want non-zero exit", err)
+	}
+	if submitted.calls != 0 {
+		t.Fatalf("submit calls = %d, want 0 on non-zero exit", submitted.calls)
+	}
+}
+
+func TestRunScriptPoller_SubmitFailureReturnsSubmitError(t *testing.T) {
+	factoryDir := t.TempDir()
+	workRequestJSON := []byte(`{
+		"requestId":"linear-issue-batch-submit-fail",
+		"type":"FACTORY_REQUEST_BATCH",
+		"works":[{"name":"issue-999","workTypeName":"task","payload":{"id":"ISSUE-999"}}]
+	}`)
+	runner := &pollerSequenceCommandRunner{
+		outcomes: []pollerRunOutcome{{result: workers.CommandResult{Stdout: workRequestJSON}}},
+	}
+	submitErr := errors.New("ingress unavailable")
+	submitted := &recordingSubmitter{
+		submitOverride: func(_ context.Context, _ interfaces.WorkRequest) error {
+			return submitErr
+		},
+	}
+	svc := workersservice.New(workersservice.Config{
+		Logger:        zap.NewNop(),
+		CommandRunner: runner,
+	})
+	poller := newCanonicalScriptPollerWorkstation()
+	worker := newCanonicalScriptPollerWorker()
+	runtimeCfg := newScriptPollerLoadedRuntimeConfig(
+		t,
+		factoryDir,
+		scriptPollerRuntimeConfigOptions{poller: poller},
+	)
+
+	err := svc.RunScriptPoller(
+		context.Background(),
+		runner,
+		runtimeCfg,
+		poller,
+		worker,
+		submitted.submit,
+	)
+	if err == nil || !strings.Contains(err.Error(), "submit failed") {
+		t.Fatalf("RunScriptPoller error = %v, want submit failed", err)
+	}
+	if submitted.calls != 1 {
+		t.Fatalf("submit calls = %d, want 1 before submit failure", submitted.calls)
+	}
+}
+
+func TestStartScriptPoller_RestartsOnMalformedOutputWithBackoff(t *testing.T) {
+	fakeClock := clockwork.NewFakeClock()
+	runner := &pollerSequenceCommandRunner{
+		outcomes: []pollerRunOutcome{
+			{result: workers.CommandResult{Stdout: []byte("not-json\n")}},
+			{waitForCancel: true},
+		},
+	}
+	logCore, observedLogs := observer.New(zap.InfoLevel)
+	svc := workersservice.New(workersservice.Config{
+		Logger:        zap.New(logCore),
+		Clock:         fakeClock,
+		CommandRunner: runner,
+	})
+	poller := newCanonicalScriptPollerWorkstation()
+	worker := newCanonicalScriptPollerWorker()
+	runtimeCfg := newScriptPollerLoadedRuntimeConfig(
+		t,
+		t.TempDir(),
+		scriptPollerRuntimeConfigOptions{poller: poller},
+	)
+
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	var sidecars sync.WaitGroup
+	svc.StartScriptPoller(
+		runCtx,
+		&sidecars,
+		runtimeCfg,
+		poller,
+		worker,
+		func(_ context.Context, _ interfaces.WorkRequest) error { return nil },
+	)
+	t.Cleanup(func() {
+		cancelRun()
+		sidecars.Wait()
+	})
+
+	waitForPollerRunnerCalls(t, runner, 1, time.Second)
+	waitForFakeClockWaiters(t, fakeClock, 1)
+	fakeClock.Advance(workersservice.ScriptPollerRestartBackoffMin)
+	waitForPollerRunnerCalls(t, runner, 2, time.Second)
+
+	if observedLogs.FilterMessage("script poller restarting").Len() == 0 {
+		t.Fatal("expected restart log for malformed poller output")
+	}
+	entry := observedLogs.FilterMessage("script poller restarting").All()[0]
+	if got := entry.ContextMap()["error"]; got == nil || !strings.Contains(got.(string), "malformed stdout") {
+		t.Fatalf("restart error = %#v, want malformed stdout context", got)
+	}
+}
+
 func newCanonicalScriptPollerWorkstation() interfaces.FactoryWorkstationConfig {
 	return interfaces.FactoryWorkstationConfig{
 		Name:           canonicalScriptPollerWorkstationName,
@@ -286,4 +457,16 @@ func (r *pollerSequenceCommandRunner) Run(ctx context.Context, req workers.Comma
 		return outcome.result, ctx.Err()
 	}
 	return outcome.result, outcome.err
+}
+
+func waitForPollerRunnerCalls(t *testing.T, runner *pollerSequenceCommandRunner, want int, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if runner.calls >= want {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %d poller runner call(s); got %d", want, runner.calls)
 }
