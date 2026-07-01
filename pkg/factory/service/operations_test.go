@@ -120,9 +120,7 @@ func TestRuntimeOperations_ReportUnavailableWithoutBundle(t *testing.T) {
 	}
 }
 
-func TestRuntimeOperations_DelegateToHostedFactoryWithoutRootService(t *testing.T) {
-	t.Parallel()
-
+func newOperationsTestBundle() (*operationsFactory, *factoryservice.Bundle, chan struct{}) {
 	factoryStub := &operationsFactory{
 		wantScopeSessionID: "session-alpha",
 		wantReconnectID:    "evt-1",
@@ -133,9 +131,11 @@ func TestRuntimeOperations_DelegateToHostedFactoryWithoutRootService(t *testing.
 	})
 	waitCh := make(chan struct{})
 	factoryStub.waitCh = waitCh
+	return factoryStub, &factoryservice.Bundle{Factory: factoryStub}, waitCh
+}
 
-	bundle := &factoryservice.Bundle{Factory: factoryStub}
-
+func assertSubmitDelegated(t *testing.T, bundle *factoryservice.Bundle) {
+	t.Helper()
 	submitResult, err := factoryservice.SubmitWorkRequest(context.Background(), bundle, interfaces.WorkRequest{
 		Works: []interfaces.Work{{WorkID: "work-1"}},
 	})
@@ -145,7 +145,10 @@ func TestRuntimeOperations_DelegateToHostedFactoryWithoutRootService(t *testing.
 	if len(submitResult.Works) != 1 || submitResult.Works[0].WorkID != "work-1" {
 		t.Fatalf("submit result = %#v, want work-1", submitResult)
 	}
+}
 
+func assertMoveDelegated(t *testing.T, bundle *factoryservice.Bundle) {
+	t.Helper()
 	moveResult, err := factoryservice.MoveWork(context.Background(), bundle, "work-1", "done", interfaces.WorkStateChangeSourceAPI, "req-1")
 	if err != nil {
 		t.Fatalf("MoveWork: %v", err)
@@ -153,7 +156,10 @@ func TestRuntimeOperations_DelegateToHostedFactoryWithoutRootService(t *testing.
 	if moveResult.WorkID != "work-1" || moveResult.ToState != "done" {
 		t.Fatalf("move result = %#v, want work-1 done", moveResult)
 	}
+}
 
+func assertSubscribeDelegated(t *testing.T, bundle *factoryservice.Bundle) {
+	t.Helper()
 	stream, err := factoryservice.SubscribeFactoryEventsForSession(
 		context.Background(),
 		bundle,
@@ -166,7 +172,10 @@ func TestRuntimeOperations_DelegateToHostedFactoryWithoutRootService(t *testing.
 	if stream == nil || stream.StreamGenerationID != "gen-1" {
 		t.Fatalf("subscribe stream = %#v, want generation gen-1", stream)
 	}
+}
 
+func assertSnapshotDelegated(t *testing.T, bundle *factoryservice.Bundle) {
+	t.Helper()
 	snapshot, err := factoryservice.GetEngineStateSnapshot(context.Background(), bundle)
 	if err != nil {
 		t.Fatalf("GetEngineStateSnapshot: %v", err)
@@ -174,13 +183,31 @@ func TestRuntimeOperations_DelegateToHostedFactoryWithoutRootService(t *testing.
 	if snapshot.RuntimeStatus != interfaces.RuntimeStatusActive {
 		t.Fatalf("snapshot runtime status = %q, want active", snapshot.RuntimeStatus)
 	}
+}
 
+func assertWaitDelegated(t *testing.T, bundle *factoryservice.Bundle, waitCh chan struct{}) {
+	t.Helper()
 	if got := factoryservice.WaitToComplete(bundle); got != waitCh {
 		t.Fatalf("WaitToComplete channel = %p, want %p", got, waitCh)
 	}
+}
 
+func assertSingleDelegateCalls(t *testing.T, factoryStub *operationsFactory) {
+	t.Helper()
 	if factoryStub.submitCalls != 1 || factoryStub.moveCalls != 1 || factoryStub.subscribeCalls != 1 || factoryStub.snapshotCalls != 1 {
 		t.Fatalf("factory calls = submit:%d move:%d subscribe:%d snapshot:%d, want 1 each",
 			factoryStub.submitCalls, factoryStub.moveCalls, factoryStub.subscribeCalls, factoryStub.snapshotCalls)
 	}
+}
+
+func TestRuntimeOperations_DelegateToHostedFactoryWithoutRootService(t *testing.T) {
+	t.Parallel()
+
+	factoryStub, bundle, waitCh := newOperationsTestBundle()
+	assertSubmitDelegated(t, bundle)
+	assertMoveDelegated(t, bundle)
+	assertSubscribeDelegated(t, bundle)
+	assertSnapshotDelegated(t, bundle)
+	assertWaitDelegated(t, bundle, waitCh)
+	assertSingleDelegateCalls(t, factoryStub)
 }
