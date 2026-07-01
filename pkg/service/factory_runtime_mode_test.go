@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
@@ -1254,6 +1255,31 @@ func TestBuildFactoryService_ConstructsExplicitCollaborators(t *testing.T) {
 	}
 	if svc.coordinatorPolicy().dir != alphaDir {
 		t.Fatalf("service dir = %q, want %q", svc.coordinatorPolicy().dir, alphaDir)
+	}
+}
+
+func TestBuildFactoryService_WiresSessionGatewayCollaborator(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	writeNamedFactoryFixture(t, rootDir, "alpha")
+	if err := config.WriteCurrentFactoryPointer(rootDir, "alpha"); err != nil {
+		t.Fatalf("WriteCurrentFactoryPointer: %v", err)
+	}
+
+	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
+		Dir:               rootDir,
+		RuntimeMode:       interfaces.RuntimeModeService,
+		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
+	})
+	if err != nil {
+		t.Fatalf("BuildFactoryService: %v", err)
+	}
+	if svc.sessionGateway == nil {
+		t.Fatal("expected session gateway collaborator on FactoryService")
+	}
+	if _, ok := svc.sessionGateway.(*factorysessionservice.Service); !ok {
+		t.Fatalf("session gateway type = %T, want *factorysessionservice.Service", svc.sessionGateway)
 	}
 }
 
