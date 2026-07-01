@@ -10,12 +10,14 @@ import {
   type TimelineCheckpointStreamIdentity,
   useFactoryTimelineStore,
 } from "../../timeline/public";
-import { useDashboardSession } from "../session/dashboard-session-provider";
+import {
+  useDashboardSession,
+  useSetDashboardSessionID,
+} from "../session/dashboard-session-provider";
 import {
   bootstrapDashboardSessionSyncPreflight,
   type DashboardSessionRecoveryState,
 } from "../lib/dashboard-session-sync-preflight";
-import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
@@ -47,6 +49,7 @@ function useGuardedTimelineCheckpointBootstrap({
     streamIdentity: TimelineCheckpointStreamIdentity | null,
   ) => void;
 }) {
+  const setSelectedSessionID = useSetDashboardSessionID();
   const setStreamState = useDashboardStreamStore((state) => state.setStreamState);
   const [checkpointHydratedKey, setCheckpointHydratedKey] =
     useState<string | null>(null);
@@ -122,9 +125,7 @@ function useGuardedTimelineCheckpointBootstrap({
           remappedFactorySessionId != null &&
           remappedFactorySessionId !== rawSessionID
         ) {
-          useDashboardSessionStore
-            .getState()
-            .setSelectedSessionID(remappedFactorySessionId);
+          setSelectedSessionID(remappedFactorySessionId);
         }
         await purgeLegacyTimelineCheckpoints(window.indexedDB);
         setPreflightReadyKey(checkpointHydrationKey);
@@ -160,6 +161,7 @@ function useGuardedTimelineCheckpointBootstrap({
     refreshToken,
     restoreCheckpoint,
     setResolvedStreamIdentity,
+    setSelectedSessionID,
     setStreamState,
   ]);
 

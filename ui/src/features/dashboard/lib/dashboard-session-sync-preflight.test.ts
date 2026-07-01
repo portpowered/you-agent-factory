@@ -100,7 +100,7 @@ function installIndexedDBTestDouble() {
   return records;
 }
 
-describe("bootstrapDashboardSessionSyncPreflight", () => {
+describe("bootstrapDashboardSessionSyncPreflight recovery", () => {
   let getSyncPreflightSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
@@ -210,6 +210,21 @@ describe("bootstrapDashboardSessionSyncPreflight", () => {
         streamIdentity: identity,
       },
     });
+  });
+});
+
+describe("bootstrapDashboardSessionSyncPreflight cursor validation", () => {
+  let getSyncPreflightSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    installIndexedDBTestDouble();
+    getSyncPreflightSpy = vi
+      .spyOn(syncPreflightAPI, "getFactorySessionSyncPreflight")
+      .mockResolvedValue(okPreflightResponse());
+  });
+
+  afterEach(() => {
+    getSyncPreflightSpy.mockRestore();
   });
 
   it("clears checkpoint state when cursor validation is stale", async () => {
